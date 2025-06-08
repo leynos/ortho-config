@@ -2,6 +2,7 @@ use thiserror::Error;
 
 /// Errors that can occur while loading configuration.
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum OrthoError {
     /// Error parsing command-line arguments.
     #[error("Failed to parse command-line arguments: {0}")]
