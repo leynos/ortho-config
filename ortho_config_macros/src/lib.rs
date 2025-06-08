@@ -84,16 +84,21 @@ pub fn derive_ortho_config(input: TokenStream) -> TokenStream {
 
         impl #ident {
             #[allow(dead_code)]
-            pub fn load_from_iter<I>(args: I) -> Result<Self, ortho_config::OrthoError>
+            pub fn load_from_iter<I, S>(args: I) -> Result<Self, ortho_config::OrthoError>
             where
-                I: IntoIterator,
-                I::Item: Into<std::ffi::OsString> + Clone,
+                I: IntoIterator<Item = S>,
+                S: AsRef<std::ffi::OsStr>,
             {
                 use clap::Parser as _;
                 use figment::{Figment, providers::{Toml, Env, Serialized, Format}, Profile};
                 use uncased::Uncased;
 
-                let cli = #cli_mod::#cli_ident::try_parse_from(args)
+                let cli_args: Vec<std::ffi::OsString> = args
+                    .into_iter()
+                    .map(|a| a.as_ref().to_os_string())
+                    .collect();
+
+                let cli = #cli_mod::#cli_ident::try_parse_from(cli_args)
                     .map_err(ortho_config::OrthoError::CliParsing)?;
 
                 Figment::new()
