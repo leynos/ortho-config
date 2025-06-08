@@ -137,11 +137,7 @@ fn vec_inner(ty: &Type) -> Option<&Type> {
 fn build_override_struct(
     base: &syn::Ident,
     fields: &[(syn::Ident, &Type)],
-) -> (
-    syn::Ident,
-    proc_macro2::TokenStream,
-    proc_macro2::TokenStream,
-) {
+) -> (proc_macro2::TokenStream, proc_macro2::TokenStream) {
     let ident = format_ident!("__{}VecOverride", base);
     let struct_fields = fields.iter().map(|(name, ty)| {
         quote! {
@@ -157,7 +153,7 @@ fn build_override_struct(
         }
     };
     let init_ts = quote! { #ident { #( #init, )* } };
-    (ident, ts, init_ts)
+    (ts, init_ts)
 }
 
 fn build_append_logic(fields: &[(syn::Ident, &Type)]) -> proc_macro2::TokenStream {
@@ -297,8 +293,7 @@ pub fn derive_ortho_config(input: TokenStream) -> TokenStream {
         })
         .collect();
 
-    let (_override_ident, override_struct_ts, override_init_ts) =
-        build_override_struct(&ident, &append_fields);
+    let (override_struct_ts, override_init_ts) = build_override_struct(&ident, &append_fields);
     let append_logic = build_append_logic(&append_fields);
 
     let expanded = quote! {
