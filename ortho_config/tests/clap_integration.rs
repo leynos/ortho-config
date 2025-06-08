@@ -12,6 +12,11 @@ struct TestConfig {
 #[allow(non_camel_case_types, non_snake_case)]
 type TestConfigCli = __TestConfigCliMod::__TestConfigCli;
 
+#[derive(Debug, Deserialize, OrthoConfig)]
+struct OptionConfig {
+    maybe: Option<u32>,
+}
+
 #[test]
 fn parses_kebab_case_flags() {
     use clap::Parser;
@@ -75,4 +80,16 @@ fn merges_cli_into_figment() {
 
     assert_eq!(cfg.sample_value, "hi");
     assert_eq!(cfg.other, "there");
+}
+
+#[test]
+fn option_field_cli_present() {
+    let cfg = OptionConfig::load_from_iter(["prog", "--maybe", "5"]).expect("load");
+    assert_eq!(cfg.maybe, Some(5));
+}
+
+#[test]
+fn option_field_cli_absent() {
+    let cfg = OptionConfig::load_from_iter(["prog"]).expect("load");
+    assert_eq!(cfg.maybe, None);
 }

@@ -8,7 +8,22 @@
 
 use proc_macro::TokenStream;
 use quote::{format_ident, quote};
-use syn::{Data, DeriveInput, Fields, parse_macro_input};
+use syn::{Data, DeriveInput, Fields, GenericArgument, PathArguments, Type, parse_macro_input};
+
+fn option_inner(ty: &Type) -> Option<&Type> {
+    if let Type::Path(p) = ty {
+        if let Some(seg) = p.path.segments.last() {
+            if seg.ident == "Option" {
+                if let PathArguments::AngleBracketed(args) = &seg.arguments {
+                    if let Some(GenericArgument::Type(inner)) = args.args.first() {
+                        return Some(inner);
+                    }
+                }
+            }
+        }
+    }
+    None
+}
 
 /// Derive macro for [`ortho_config::OrthoConfig`].
 #[proc_macro_derive(OrthoConfig)]
@@ -41,15 +56,22 @@ pub fn derive_ortho_config(input: TokenStream) -> TokenStream {
     let cli_fields = fields.iter().map(|f| {
         let name = f.ident.as_ref().expect("named field");
         let ty = &f.ty;
+        let inner = option_inner(ty);
+        let cli_ty = if let Some(inner) = inner {
+            quote! { Option<#inner> }
+        } else {
+            quote! { Option<#ty> }
+        };
         quote! {
             #[arg(long, required = false)]
             #[serde(skip_serializing_if = "Option::is_none")]
-            pub(super) #name: ::core::option::Option<#ty>
+            pub(super) #name: #cli_ty
         }
     });
 
     let expanded = quote! {
         mod #cli_mod {
+            use std::option::Option as Option;
             #[derive(clap::Parser, serde::Serialize)]
             #[command(rename_all = "kebab-case")]
             pub(super) struct #cli_ident {
@@ -59,8 +81,8 @@ pub fn derive_ortho_config(input: TokenStream) -> TokenStream {
 
         impl #ident {
             #[allow(dead_code)]
-            fn load_from_iter<I>(args: I) -> Result<Self, ortho_config::OrthoError>
-            where
+                S: Into<std::ffi::OsString> + Clone,
+                Self::load_from_iter(std::env::args_os())
                 I: IntoIterator,
                 I::Item: AsRef<::std::ffi::OsStr>,
             {
