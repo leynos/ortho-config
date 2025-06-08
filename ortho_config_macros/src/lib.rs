@@ -52,6 +52,7 @@ pub fn derive_ortho_config(input: TokenStream) -> TokenStream {
 
     let cli_ident = format_ident!("__{}Cli", ident);
     let cli_mod = format_ident!("__{}CliMod", ident);
+    let cli_pub_ident = format_ident!("{}Cli", ident);
 
     let cli_fields = fields.iter().map(|f| {
         let name = f.ident.as_ref().expect("named field");
@@ -78,6 +79,8 @@ pub fn derive_ortho_config(input: TokenStream) -> TokenStream {
                 #( #cli_fields, )*
             }
         }
+
+        pub type #cli_pub_ident = #cli_mod::#cli_ident;
 
         impl #ident {
             #[allow(dead_code)]
