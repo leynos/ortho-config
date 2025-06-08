@@ -9,9 +9,6 @@ struct TestConfig {
     other: String,
 }
 
-#[allow(non_camel_case_types, non_snake_case)]
-type TestConfigCli = __TestConfigCliMod::__TestConfigCli;
-
 #[derive(Debug, Deserialize, OrthoConfig)]
 struct OptionConfig {
     maybe: Option<u32>,

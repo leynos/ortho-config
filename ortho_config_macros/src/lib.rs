@@ -52,6 +52,7 @@ pub fn derive_ortho_config(input: TokenStream) -> TokenStream {
 
     let cli_ident = format_ident!("__{}Cli", ident);
     let cli_mod = format_ident!("__{}CliMod", ident);
+    let cli_pub_ident = format_ident!("{}Cli", ident);
 
     let cli_fields = fields.iter().map(|f| {
         let name = f.ident.as_ref().expect("named field");
@@ -74,10 +75,12 @@ pub fn derive_ortho_config(input: TokenStream) -> TokenStream {
             use std::option::Option as Option;
             #[derive(clap::Parser, serde::Serialize)]
             #[command(rename_all = "kebab-case")]
-            pub(super) struct #cli_ident {
+            pub struct #cli_ident {
                 #( #cli_fields, )*
             }
         }
+
+        pub use #cli_mod::#cli_ident as #cli_pub_ident;
 
         impl #ident {
             #[allow(dead_code)]
