@@ -36,40 +36,55 @@ pub fn derive_ortho_config(input: TokenStream) -> TokenStream {
     };
 
     let cli_ident = format_ident!("__{}Cli", ident);
+    let cli_mod = format_ident!("__{}CliMod", ident);
 
     let cli_fields = fields.iter().map(|f| {
         let name = f.ident.as_ref().expect("named field");
         let ty = &f.ty;
         quote! {
-            #[arg(long)]
+            #[arg(long, required = false)]
             #[serde(skip_serializing_if = "Option::is_none")]
-            #name: ::core::option::Option<#ty>
+            pub(super) #name: ::core::option::Option<#ty>
         }
     });
 
     let expanded = quote! {
-        #[derive(clap::Parser, serde::Serialize)]
-        #[command(rename_all = "kebab-case")]
-        struct #cli_ident {
-            #( #cli_fields, )*
+        mod #cli_mod {
+            #[derive(clap::Parser, serde::Serialize)]
+            #[command(rename_all = "kebab-case")]
+            pub(super) struct #cli_ident {
+                #( #cli_fields, )*
+            }
         }
 
-        impl ortho_config::OrthoConfig for #ident {
-            fn load() -> Result<Self, ortho_config::OrthoError> {
+        impl #ident {
+            #[allow(dead_code)]
+            fn load_from_iter<I, S>(args: I) -> Result<Self, ortho_config::OrthoError>
+            where
+                I: IntoIterator<Item = S>,
+                S: Into<::std::ffi::OsString> + Clone,
+            {
                 use clap::Parser as _;
-                use figment::{Figment, providers::{Toml, Env, Serialized, Format}};
+                use figment::{Figment, providers::{Toml, Env, Serialized, Format}, Profile};
                 use uncased::Uncased;
 
-                let cli = #cli_ident::try_parse().map_err(ortho_config::OrthoError::CliParsing)?;
+                let cli = #cli_mod::#cli_ident::try_parse_from(args)
+                    .map_err(ortho_config::OrthoError::CliParsing)?;
 
                 Figment::new()
                     .merge(Toml::file("config.toml"))
                     .merge(Env::raw()
                         .map(|k| Uncased::new(k.as_str().to_ascii_uppercase()))
                         .split("__"))
-                    .merge(Serialized::defaults(cli))
+                    .merge(Serialized::from(cli, Profile::Default))
                     .extract()
                     .map_err(ortho_config::OrthoError::Gathering)
+            }
+        }
+
+        impl ortho_config::OrthoConfig for #ident {
+            fn load() -> Result<Self, ortho_config::OrthoError> {
+                Self::load_from_iter(::std::env::args_os())
             }
         }
     };

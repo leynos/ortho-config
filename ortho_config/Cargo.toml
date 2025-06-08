@@ -8,7 +8,7 @@ ortho_config_macros = { path = "../ortho_config_macros" }
 serde = { version = "1", features = ["derive"] }
 thiserror = "1"
 clap = { version = "4", features = ["derive"] }
-figment = { version = "0.10", features = ["toml", "env"] }
+figment = { version = "0.10", features = ["toml", "env", "test"] }
 
 [dev-dependencies]
 clap = { version = "4", features = ["derive"] }
