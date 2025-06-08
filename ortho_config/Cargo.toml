@@ -9,9 +9,8 @@ serde = { version = "1", features = ["derive"] }
 thiserror = "1"
 clap = { version = "4", features = ["derive"] }
 figment = { version = "0.10", features = ["toml", "env", "test"] }
+uncased = "0.9"
 
 [dev-dependencies]
-clap = { version = "4", features = ["derive"] }
 figment = { version = "0.10", features = ["toml", "env"] }
 serde = { version = "1", features = ["derive"] }
-uncased = "0.9"
