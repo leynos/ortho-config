@@ -90,3 +90,29 @@ fn option_field_cli_absent() {
     let cfg = OptionConfig::load_from_iter(["prog"]).expect("load");
     assert_eq!(cfg.maybe, None);
 }
+
+#[test]
+fn config_path_env_var() {
+    figment::Jail::expect_with(|j| {
+        j.create_file("alt.toml", "sample_value = \"from_env\"\nother = \"val\"")?;
+        j.set_env("CONFIG_PATH", "alt.toml");
+
+        let cfg = TestConfig::load_from_iter(["prog"]).expect("load");
+        assert_eq!(cfg.sample_value, "from_env");
+        assert_eq!(cfg.other, "val");
+        Ok(())
+    });
+}
+
+#[test]
+fn missing_config_file_is_ignored() {
+    figment::Jail::expect_with(|j| {
+        j.set_env("CONFIG_PATH", "nope.toml");
+
+        let cfg = TestConfig::load_from_iter(["prog", "--sample-value", "cli", "--other", "val"])
+            .expect("load");
+        assert_eq!(cfg.sample_value, "cli");
+        assert_eq!(cfg.other, "val");
+        Ok(())
+    });
+}
