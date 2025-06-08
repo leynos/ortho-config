@@ -38,7 +38,7 @@ pub fn derive_ortho_config(input: TokenStream) -> TokenStream {
     let cli_ident = format_ident!("__{}Cli", ident);
 
     let cli_fields = fields.iter().map(|f| {
-        let name = &f.ident;
+        let name = f.ident.as_ref().expect("named field");
         let ty = &f.ty;
         quote! {
             #[arg(long)]
@@ -65,7 +65,7 @@ pub fn derive_ortho_config(input: TokenStream) -> TokenStream {
                 Figment::new()
                     .merge(Toml::file("config.toml"))
                     .merge(Env::raw()
-                        .map(|k| Uncased::new(k.to_string().to_ascii_uppercase()))
+                        .map(|k| Uncased::new(k.as_str().to_ascii_uppercase()))
                         .split("__"))
                     .merge(Serialized::defaults(cli))
                     .extract()

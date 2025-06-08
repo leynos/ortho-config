@@ -17,3 +17,18 @@ fn parses_kebab_case_flags() {
     let cli = TestConfigCli::parse_from(["prog", "--sample-value", "hello"]);
     assert_eq!(cli.sample_value.as_deref(), Some("hello"));
 }
+
+#[test]
+fn merges_cli_into_figment() {
+    use clap::Parser;
+    use figment::{Figment, providers::Serialized};
+
+    let cli = TestConfigCli::parse_from(["prog", "--sample-value", "world"]);
+
+    let cfg: TestConfig = Figment::new()
+        .merge(Serialized::defaults(cli))
+        .extract()
+        .expect("figment extraction");
+
+    assert_eq!(cfg.sample_value, "world");
+}
