@@ -60,3 +60,19 @@ fn invalid_cli_input_maps_error() {
     let err = TestConfig::load_from_iter(["prog", "--bogus"]).unwrap_err();
     matches!(err, OrthoError::CliParsing(_));
 }
+
+#[test]
+fn merges_cli_into_figment() {
+    use clap::Parser;
+    use figment::{Figment, Profile, providers::Serialized};
+
+    let cli = TestConfigCli::parse_from(["prog", "--sample-value", "hi", "--other", "there"]);
+
+    let cfg: TestConfig = Figment::new()
+        .merge(Serialized::from(cli, Profile::Default))
+        .extract()
+        .expect("extract");
+
+    assert_eq!(cfg.sample_value, "hi");
+    assert_eq!(cfg.other, "there");
+}
