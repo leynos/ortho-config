@@ -23,6 +23,7 @@ struct FieldAttrs {
     cli_long: Option<String>,
     cli_short: Option<char>,
     default: Option<Expr>,
+    merge_strategy: Option<String>,
 }
 
 fn parse_struct_attrs(attrs: &[Attribute]) -> Result<StructAttrs, syn::Error> {
@@ -70,6 +71,16 @@ fn parse_field_attrs(attrs: &[Attribute]) -> Result<FieldAttrs, syn::Error> {
             } else if meta.path.is_ident("default") {
                 let expr = meta.value()?.parse::<Expr>()?;
                 out.default = Some(expr);
+            } else if meta.path.is_ident("merge_strategy") {
+                let val = meta.value()?.parse::<Lit>()?;
+                if let Lit::Str(s) = val {
+                    out.merge_strategy = Some(s.value());
+                } else {
+                    return Err(syn::Error::new(
+                        val.span(),
+                        "merge_strategy must be a string",
+                    ));
+                }
             }
             Ok(())
         })?;
@@ -81,6 +92,21 @@ fn option_inner(ty: &Type) -> Option<&Type> {
     if let Type::Path(p) = ty {
         if let Some(seg) = p.path.segments.last() {
             if seg.ident == "Option" {
+                if let PathArguments::AngleBracketed(args) = &seg.arguments {
+                    if let Some(GenericArgument::Type(inner)) = args.args.first() {
+                        return Some(inner);
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
+fn vec_inner(ty: &Type) -> Option<&Type> {
+    if let Type::Path(p) = ty {
+        if let Some(seg) = p.path.segments.last() {
+            if seg.ident == "Vec" {
                 if let PathArguments::AngleBracketed(args) = &seg.arguments {
                     if let Some(GenericArgument::Type(inner)) = args.args.first() {
                         return Some(inner);
@@ -190,6 +216,55 @@ pub fn derive_ortho_config(input: TokenStream) -> TokenStream {
         quote! { Env::raw() }
     };
 
+    let append_fields: Vec<_> = fields
+        .iter()
+        .zip(field_attrs.iter())
+        .filter_map(|(f, attr)| {
+            let ty = &f.ty;
+            let name = f.ident.as_ref().unwrap();
+            let vec_ty = vec_inner(ty);
+            let strategy = attr.merge_strategy.as_deref().or_else(|| {
+                if vec_ty.is_some() {
+                    Some("append")
+                } else {
+                    None
+                }
+            });
+            if strategy == Some("append") {
+                Some((name.clone(), vec_ty.expect("vec inner")))
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    let override_ident = format_ident!("__{}VecOverride", ident);
+    let override_struct_fields = append_fields.iter().map(|(name, ty)| {
+        quote! {
+            #[serde(skip_serializing_if = "Option::is_none")]
+            pub #name: Option<Vec<#ty>>
+        }
+    });
+    let override_struct_init = append_fields.iter().map(|(name, _)| {
+        quote! { #name: None }
+    });
+    let append_logic = append_fields.iter().map(|(name, ty)| {
+        quote! {
+            {
+                let mut vec_acc: Vec<#ty> = Vec::new();
+                if let Some(val) = &defaults.#name { vec_acc.extend(val.clone()); }
+                if let Some(f) = &file_fig {
+                    if let Ok(v) = f.extract_inner::<Vec<#ty>>(stringify!(#name)) { vec_acc.extend(v); }
+                }
+                if let Ok(v) = env_fig.extract_inner::<Vec<#ty>>(stringify!(#name)) { vec_acc.extend(v); }
+                if let Ok(v) = cli_fig.extract_inner::<Vec<#ty>>(stringify!(#name)) { vec_acc.extend(v); }
+                if !vec_acc.is_empty() {
+                    overrides.#name = Some(vec_acc);
+                }
+            }
+        }
+    });
+
     let expanded = quote! {
         mod #cli_mod {
             use std::option::Option as Option;
@@ -205,6 +280,11 @@ pub fn derive_ortho_config(input: TokenStream) -> TokenStream {
             #( #default_struct_fields, )*
         }
 
+        #[derive(serde::Serialize)]
+        struct #override_ident {
+            #( #override_struct_fields, )*
+        }
+
         pub use #cli_mod::#cli_ident as #cli_pub_ident;
 
         impl #ident {
@@ -216,7 +296,12 @@ pub fn derive_ortho_config(input: TokenStream) -> TokenStream {
             {
                 use clap::Parser as _;
                 use figment::{Figment, providers::{Toml, Env, Serialized, Format}, Profile};
+                #[cfg(feature = "json")] use figment::providers::Json;
+                #[cfg(feature = "yaml")] use figment::providers::Yaml;
                 use uncased::Uncased;
+                #[cfg(feature = "json")] use serde_json;
+                #[cfg(feature = "yaml")] use serde_yaml;
+                #[cfg(feature = "toml")] use toml;
 
                 let cli = #cli_mod::#cli_ident::try_parse_from(
                     args.into_iter().map(|a| a.as_ref().to_os_string())
@@ -231,11 +316,67 @@ pub fn derive_ortho_config(input: TokenStream) -> TokenStream {
                     #( #default_struct_init, )*
                 };
 
-                fig = fig.merge(Serialized::defaults(defaults));
+                let mut overrides = #override_ident {
+                    #( #override_struct_init, )*
+                };
 
-                if std::path::Path::new(&cfg_path).is_file() {
-                    fig = fig.merge(Toml::file(&cfg_path));
-                }
+                fig = fig.merge(Serialized::defaults(&defaults));
+
+                let file_fig = if std::path::Path::new(&cfg_path).is_file() {
+                    let data = std::fs::read_to_string(&cfg_path)
+                        .map_err(|e| ortho_config::OrthoError::File {
+                            path: std::path::PathBuf::from(&cfg_path),
+                            source: Box::new(e),
+                        })?;
+                    #[allow(unused_mut)]
+                    let mut figment = Figment::new();
+                    if cfg_path.ends_with(".json") {
+                        #[cfg(feature = "json")]
+                        {
+                            serde_json::from_str::<serde_json::Value>(&data)
+                                .map_err(|e| ortho_config::OrthoError::File {
+                                    path: std::path::PathBuf::from(&cfg_path),
+                                    source: Box::new(e),
+                                })?;
+                            figment = Figment::from(Json::string(&data));
+                        }
+                        #[cfg(not(feature = "json"))]
+                        {
+                            return Err(ortho_config::OrthoError::File {
+                                path: std::path::PathBuf::from(&cfg_path),
+                                source: Box::new(std::io::Error::new(std::io::ErrorKind::Other, "json feature disabled")),
+                            });
+                        }
+                    } else if cfg_path.ends_with(".yaml") || cfg_path.ends_with(".yml") {
+                        #[cfg(feature = "yaml")]
+                        {
+                            serde_yaml::from_str::<serde_yaml::Value>(&data)
+                                .map_err(|e| ortho_config::OrthoError::File {
+                                    path: std::path::PathBuf::from(&cfg_path),
+                                    source: Box::new(e),
+                                })?;
+                            figment = Figment::from(Yaml::string(&data));
+                        }
+                        #[cfg(not(feature = "yaml"))]
+                        {
+                            return Err(ortho_config::OrthoError::File {
+                                path: std::path::PathBuf::from(&cfg_path),
+                                source: Box::new(std::io::Error::new(std::io::ErrorKind::Other, "yaml feature disabled")),
+                            });
+                        }
+                    } else {
+                        toml::from_str::<toml::Value>(&data)
+                            .map_err(|e| ortho_config::OrthoError::File {
+                                path: std::path::PathBuf::from(&cfg_path),
+                                source: Box::new(e),
+                            })?;
+                        figment = Figment::from(Toml::string(&data));
+                    }
+                    fig = fig.merge(figment.clone());
+                    Some(figment)
+                } else {
+                    None
+                };
 
                 let env_provider = {
                     #env_provider
@@ -243,11 +384,16 @@ pub fn derive_ortho_config(input: TokenStream) -> TokenStream {
                         .split("__")
                 };
 
-                fig
-                    .merge(env_provider)
-                    .merge(Serialized::from(cli, Profile::Default))
-                    .extract()
-                    .map_err(ortho_config::OrthoError::Gathering)
+                let env_fig = Figment::from(env_provider.clone());
+                let cli_fig = Figment::from(Serialized::from(&cli, Profile::Default));
+
+                fig = fig.merge(env_provider).merge(Serialized::from(&cli, Profile::Default));
+
+                #( #append_logic )*
+
+                fig = fig.merge(Serialized::defaults(overrides));
+
+                fig.extract().map_err(ortho_config::OrthoError::Gathering)
             }
         }
 
