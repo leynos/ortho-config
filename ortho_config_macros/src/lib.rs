@@ -81,10 +81,12 @@ pub fn derive_ortho_config(input: TokenStream) -> TokenStream {
 
         impl #ident {
             #[allow(dead_code)]
+            pub fn load_from_iter<I, S>(
+                args: I,
+            ) -> Result<Self, ortho_config::OrthoError>
+            where
+                I: IntoIterator<Item = S>,
                 S: Into<std::ffi::OsString> + Clone,
-                Self::load_from_iter(std::env::args_os())
-                I: IntoIterator,
-                I::Item: AsRef<::std::ffi::OsStr>,
             {
                 use clap::Parser as _;
                 use figment::{Figment, providers::{Toml, Env, Serialized, Format}, Profile};
@@ -96,8 +98,12 @@ pub fn derive_ortho_config(input: TokenStream) -> TokenStream {
                 let cfg_path = std::env::var("CONFIG_PATH")
                     .unwrap_or_else(|_| "config.toml".to_string());
 
-                Figment::new()
-                    .merge(Toml::file(&cfg_path))
+                let mut fig = Figment::new();
+                if std::path::Path::new(&cfg_path).is_file() {
+                    fig = fig.merge(Toml::file(&cfg_path));
+                }
+
+                fig
                     .merge(Env::raw()
                         .map(|k| Uncased::new(k.as_str().to_ascii_uppercase()))
                         .split("__"))
