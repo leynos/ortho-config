@@ -93,8 +93,11 @@ pub fn derive_ortho_config(input: TokenStream) -> TokenStream {
                 let cli = #cli_mod::#cli_ident::try_parse_from(args)
                     .map_err(ortho_config::OrthoError::CliParsing)?;
 
+                let cfg_path = std::env::var("CONFIG_PATH")
+                    .unwrap_or_else(|_| "config.toml".to_string());
+
                 Figment::new()
-                    .merge(Toml::file("config.toml"))
+                    .merge(Toml::file(&cfg_path))
                     .merge(Env::raw()
                         .map(|k| Uncased::new(k.as_str().to_ascii_uppercase()))
                         .split("__"))
