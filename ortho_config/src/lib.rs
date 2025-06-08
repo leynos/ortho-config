@@ -7,8 +7,10 @@
 pub use ortho_config_macros::OrthoConfig;
 
 mod error;
+mod file;
 
 pub use error::OrthoError;
+pub use file::load_config_file;
 
 /// Trait implemented for structs that represent application configuration.
 pub trait OrthoConfig: Sized + serde::de::DeserializeOwned {
