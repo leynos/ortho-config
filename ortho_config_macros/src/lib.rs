@@ -59,10 +59,10 @@ pub fn derive_ortho_config(input: TokenStream) -> TokenStream {
 
         impl #ident {
             #[allow(dead_code)]
-            fn load_from_iter<I, S>(args: I) -> Result<Self, ortho_config::OrthoError>
+            fn load_from_iter<I>(args: I) -> Result<Self, ortho_config::OrthoError>
             where
-                I: IntoIterator<Item = S>,
-                S: Into<::std::ffi::OsString> + Clone,
+                I: IntoIterator,
+                I::Item: AsRef<::std::ffi::OsStr>,
             {
                 use clap::Parser as _;
                 use figment::{Figment, providers::{Toml, Env, Serialized, Format}, Profile};
