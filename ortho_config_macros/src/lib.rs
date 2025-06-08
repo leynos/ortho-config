@@ -1,7 +1,9 @@
 //! Procedural macros for `ortho_config`.
 //!
-//! At this stage the [`OrthoConfig`] derive generates an empty `load` method
-//! which will be fleshed out in later versions.
+//! The current implementation of the [`OrthoConfig`] derive provides a basic
+//! `load` method that layers configuration from a `config.toml` file and
+//! environment variables. Environment variable names are automatically mapped
+//! from `snake_case` field names to `UPPER_SNAKE_CASE`.
 
 use proc_macro::TokenStream;
 use quote::quote;
@@ -16,7 +18,15 @@ pub fn derive_ortho_config(input: TokenStream) -> TokenStream {
     let expanded = quote! {
         impl ortho_config::OrthoConfig for #ident {
             fn load() -> Result<Self, ortho_config::OrthoError> {
-                todo!()
+                use figment::{Figment, providers::{Toml, Env}};
+
+                Figment::new()
+                    .merge(Toml::file("config.toml"))
+                    .merge(Env::raw()
+                        .map(|k| k.to_ascii_uppercase())
+                        .split("__"))
+                    .extract()
+                    .map_err(ortho_config::OrthoError::Gathering)
             }
         }
     };
