@@ -1,0 +1,6 @@
+[workspace]
+members = [
+    "ortho_config",
+    "ortho_config_macros"
+]
+resolver = "2"

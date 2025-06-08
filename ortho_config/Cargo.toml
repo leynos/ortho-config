@@ -1,0 +1,11 @@
+[package]
+name = "ortho_config"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+ortho_config_macros = { path = "../ortho_config_macros" }
+serde = { version = "1", features = ["derive"] }
+thiserror = "1"
+clap = { version = "4", features = ["derive"] }
+figment = "0.10"
