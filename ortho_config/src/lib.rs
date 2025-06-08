@@ -14,6 +14,10 @@ pub use error::OrthoError;
 pub trait OrthoConfig: Sized + serde::de::DeserializeOwned {
     /// Loads, merges, and deserializes configuration from all available
     /// sources according to predefined precedence rules.
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`OrthoError`] if configuration loading fails at any step.
     #[allow(clippy::result_large_err)]
     fn load() -> Result<Self, OrthoError>;
 }

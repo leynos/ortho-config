@@ -93,7 +93,13 @@ fn option_inner(ty: &Type) -> Option<&Type> {
 }
 
 /// Derive macro for [`ortho_config::OrthoConfig`].
+///
+/// # Panics
+///
+/// Panics if the macro is used on a non-struct item or on a struct with
+/// unnamed fields.
 #[proc_macro_derive(OrthoConfig, attributes(ortho_config))]
+#[allow(clippy::too_many_lines)]
 pub fn derive_ortho_config(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let ident = input.ident;
