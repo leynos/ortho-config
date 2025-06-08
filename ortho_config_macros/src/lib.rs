@@ -75,19 +75,19 @@ pub fn derive_ortho_config(input: TokenStream) -> TokenStream {
             use std::option::Option as Option;
             #[derive(clap::Parser, serde::Serialize)]
             #[command(rename_all = "kebab-case")]
-            pub(super) struct #cli_ident {
+            pub struct #cli_ident {
                 #( #cli_fields, )*
             }
         }
 
-        pub type #cli_pub_ident = #cli_mod::#cli_ident;
+        pub use #cli_mod::#cli_ident as #cli_pub_ident;
 
         impl #ident {
             #[allow(dead_code)]
-                S: Into<std::ffi::OsString> + Clone,
-                Self::load_from_iter(std::env::args_os())
+            pub fn load_from_iter<I>(args: I) -> Result<Self, ortho_config::OrthoError>
+            where
                 I: IntoIterator,
-                I::Item: AsRef<::std::ffi::OsStr>,
+                I::Item: Into<std::ffi::OsString> + Clone,
             {
                 use clap::Parser as _;
                 use figment::{Figment, providers::{Toml, Env, Serialized, Format}, Profile};
