@@ -120,7 +120,7 @@ TOML parsing is enabled by default. Enable the `json` and `yaml` features to sup
 ortho_config = { version = "0.1.0", features = ["json", "yaml"] }
 ```
 
-The file loader selects the parser based on the extension (`.toml`, `.json`, `.yaml`).
+The file loader selects the parser based on the extension (`.toml`, `.json`, `.yaml`, `.yml`).
 
 ## Orthographic Naming
 

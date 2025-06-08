@@ -330,39 +330,57 @@ pub fn derive_ortho_config(input: TokenStream) -> TokenStream {
                         })?;
                     #[allow(unused_mut)]
                     let mut figment = Figment::new();
-                    if cfg_path.ends_with(".json") {
-                        #[cfg(feature = "json")]
-                        {
-                            serde_json::from_str::<serde_json::Value>(&data)
-                                .map_err(|e| ortho_config::OrthoError::File {
-                                    path: std::path::PathBuf::from(&cfg_path),
-                                    source: Box::new(e),
-                                })?;
-                            figment = Figment::from(Json::string(&data));
-                        }
-                        #[cfg(not(feature = "json"))]
-                        {
-                            return Err(ortho_config::OrthoError::File {
-                                path: std::path::PathBuf::from(&cfg_path),
-                                source: Box::new(std::io::Error::new(std::io::ErrorKind::Other, "json feature disabled")),
-                            });
-                        }
-                    } else if cfg_path.ends_with(".yaml") || cfg_path.ends_with(".yml") {
-                        #[cfg(feature = "yaml")]
-                        {
-                            serde_yaml::from_str::<serde_yaml::Value>(&data)
-                                .map_err(|e| ortho_config::OrthoError::File {
-                                    path: std::path::PathBuf::from(&cfg_path),
-                                    source: Box::new(e),
-                                })?;
-                            figment = Figment::from(Yaml::string(&data));
-                        }
-                        #[cfg(not(feature = "yaml"))]
-                        {
-                            return Err(ortho_config::OrthoError::File {
-                                path: std::path::PathBuf::from(&cfg_path),
-                                source: Box::new(std::io::Error::new(std::io::ErrorKind::Other, "yaml feature disabled")),
-                            });
+                    let path = std::path::Path::new(&cfg_path);
+                    let ext = path
+                        .extension()
+                        .and_then(|e| e.to_str())
+                        .map(|e| e.to_ascii_lowercase());
+                    if let Some(ext) = ext.as_deref() {
+                        match ext {
+                            "json" => {
+                                #[cfg(feature = "json")]
+                                {
+                                    serde_json::from_str::<serde_json::Value>(&data)
+                                        .map_err(|e| ortho_config::OrthoError::File {
+                                            path: std::path::PathBuf::from(&cfg_path),
+                                            source: Box::new(e),
+                                        })?;
+                                    figment = Figment::from(Json::string(&data));
+                                }
+                                #[cfg(not(feature = "json"))]
+                                {
+                                    return Err(ortho_config::OrthoError::File {
+                                        path: std::path::PathBuf::from(&cfg_path),
+                                        source: Box::new(std::io::Error::new(std::io::ErrorKind::Other, "json feature disabled")),
+                                    });
+                                }
+                            }
+                            "yaml" | "yml" => {
+                                #[cfg(feature = "yaml")]
+                                {
+                                    serde_yaml::from_str::<serde_yaml::Value>(&data)
+                                        .map_err(|e| ortho_config::OrthoError::File {
+                                            path: std::path::PathBuf::from(&cfg_path),
+                                            source: Box::new(e),
+                                        })?;
+                                    figment = Figment::from(Yaml::string(&data));
+                                }
+                                #[cfg(not(feature = "yaml"))]
+                                {
+                                    return Err(ortho_config::OrthoError::File {
+                                        path: std::path::PathBuf::from(&cfg_path),
+                                        source: Box::new(std::io::Error::new(std::io::ErrorKind::Other, "yaml feature disabled")),
+                                    });
+                                }
+                            }
+                            _ => {
+                                toml::from_str::<toml::Value>(&data)
+                                    .map_err(|e| ortho_config::OrthoError::File {
+                                        path: std::path::PathBuf::from(&cfg_path),
+                                        source: Box::new(e),
+                                    })?;
+                                figment = Figment::from(Toml::string(&data));
+                            }
                         }
                     } else {
                         toml::from_str::<toml::Value>(&data)
