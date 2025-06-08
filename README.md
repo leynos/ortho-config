@@ -111,6 +111,17 @@ OrthoConfig loads configuration from the following sources, with later sources o
 3.  **Environment Variables:** Variables prefixed with the string specified in `#[ortho_config(prefix = "...")]` (e.g., `APP_`). Nested struct fields are typically accessed using double underscores (e.g., `APP_DATABASE__URL` if `prefix = "APP"` on `AppConfig` and no prefix on `DatabaseConfig`, or `APP_DB_URL` with `#` on `DatabaseConfig`).
 4.  **Command-Line Arguments:** Parsed using `clap` conventions. Long flags are derived from field names (e.g., `my_field` becomes `--my-field`).
 
+### File Format Support
+
+TOML parsing is enabled by default. Enable the `json` and `yaml` features to support additional formats:
+
+```toml
+[dependencies]
+ortho_config = { version = "0.1.0", features = ["json", "yaml"] }
+```
+
+The file loader selects the parser based on the extension (`.toml`, `.json`, `.yaml`, `.yml`).
+
 ## Orthographic Naming
 
 A key goal of OrthoConfig is to make configuration natural from any source. A field like `max_connections: u32` in your Rust struct will, by default, be configurable via:

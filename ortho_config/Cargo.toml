@@ -8,9 +8,19 @@ ortho_config_macros = { path = "../ortho_config_macros" }
 serde = { version = "1", features = ["derive"] }
 thiserror = "1"
 clap = { version = "4", features = ["derive"] }
-figment = { version = "0.10", features = ["toml", "env", "test"] }
+figment = { version = "0.10", default-features = false, features = ["env", "test"] }
 uncased = "0.9"
+toml = { version = "0.8", optional = true }
+serde_json = { version = "1", optional = true }
+serde_yaml = { version = "0.9", optional = true }
+
+[features]
+default = ["toml"]
+toml = ["figment/toml", "dep:toml"]
+json = ["figment/json", "dep:serde_json"]
+yaml = ["figment/yaml", "dep:serde_yaml"]
 
 [dev-dependencies]
 figment = { version = "0.10", features = ["toml", "env"] }
 serde = { version = "1", features = ["derive"] }
+trybuild = "1"
