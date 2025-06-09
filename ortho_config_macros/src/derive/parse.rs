@@ -90,29 +90,33 @@ pub(crate) fn parse_field_attrs(attrs: &[Attribute]) -> Result<FieldAttrs, syn::
 }
 
 pub(crate) fn option_inner(ty: &Type) -> Option<&Type> {
-    if let Type::Path(p) = ty
-        && let Some(seg) = p.path.segments.last()
-        && seg.ident == "Option"
-        && let PathArguments::AngleBracketed(args) = &seg.arguments
-        && let Some(GenericArgument::Type(inner)) = args.args.first()
-    {
-        Some(inner)
-    } else {
-        None
+    if let Type::Path(p) = ty {
+        if let Some(seg) = p.path.segments.last() {
+            if seg.ident == "Option" {
+                if let PathArguments::AngleBracketed(args) = &seg.arguments {
+                    if let Some(GenericArgument::Type(inner)) = args.args.first() {
+                        return Some(inner);
+                    }
+                }
+            }
+        }
     }
+    None
 }
 
 pub(crate) fn vec_inner(ty: &Type) -> Option<&Type> {
-    if let Type::Path(p) = ty
-        && let Some(seg) = p.path.segments.last()
-        && seg.ident == "Vec"
-        && let PathArguments::AngleBracketed(args) = &seg.arguments
-        && let Some(GenericArgument::Type(inner)) = args.args.first()
-    {
-        Some(inner)
-    } else {
-        None
+    if let Type::Path(p) = ty {
+        if let Some(seg) = p.path.segments.last() {
+            if seg.ident == "Vec" {
+                if let PathArguments::AngleBracketed(args) = &seg.arguments {
+                    if let Some(GenericArgument::Type(inner)) = args.args.first() {
+                        return Some(inner);
+                    }
+                }
+            }
+        }
     }
+    None
 }
 
 pub(crate) fn parse_input(

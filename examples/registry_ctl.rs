@@ -80,7 +80,9 @@ fn main() -> Result<(), String> {
             Commands::AddUser(merged)
         }
         Commands::ListItems(args) => {
-            let defaults: ListItemsArgs = load_subcommand_config("REGCTL_", "list").unwrap_or_default();
+            // `ListItems` becomes `list-items` when parsed by clap
+            let defaults: ListItemsArgs =
+                load_subcommand_config("REGCTL_", "list-items").unwrap_or_default();
             let merged = merge(defaults, args);
             Commands::ListItems(merged)
         }
