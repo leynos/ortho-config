@@ -14,13 +14,13 @@ clap = { version = "4", features = ["derive"] }
 figment = { version = "0.10", default-features = false, features = ["env", "test"] }
 uncased = "0.9"
 toml = { version = "0.8", optional = true }
-serde_json = { version = "1", optional = true }
+figment-json5 = { version = "0.1", optional = true }
 serde_yaml = { version = "0.9", optional = true }
 
 [features]
 default = ["toml"]
 toml = ["figment/toml", "dep:toml"]
-json = ["figment/json", "dep:serde_json"]
+json5 = ["dep:figment-json5"]
 yaml = ["figment/yaml", "dep:serde_yaml"]
 
 [dev-dependencies]

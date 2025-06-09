@@ -217,10 +217,9 @@ pub(crate) fn build_load_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStre
             {
                 use clap::Parser as _;
                 use figment::{Figment, providers::{Toml, Env, Serialized, Format}, Profile};
-                #[cfg(feature = "json")] use figment::providers::Json;
+                #[cfg(feature = "json5")] use figment_json5::Json5;
                 #[cfg(feature = "yaml")] use figment::providers::Yaml;
                 use uncased::Uncased;
-                #[cfg(feature = "json")] use serde_json;
                 #[cfg(feature = "yaml")] use serde_yaml;
                 #[cfg(feature = "toml")] use toml;
 

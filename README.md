@@ -112,20 +112,27 @@ OrthoConfig loads configuration from the following sources, with later sources o
     2. `[PREFIX]CONFIG_PATH` environment variable
     3. `.<prefix>.toml` in the current directory
     4. `.<prefix>.toml` in the user's home directory
-    (where `<prefix>` comes from `#[ortho_config(prefix = "...")]` and defaults to `config`). JSON and YAML support are feature gated.
+    (where `<prefix>` comes from `#[ortho_config(prefix = "...")]` and defaults to `config`). JSON5 and YAML support are feature gated.
 3.  **Environment Variables:** Variables prefixed with the string specified in `#[ortho_config(prefix = "...")]` (e.g., `APP_`). Nested struct fields are typically accessed using double underscores (e.g., `APP_DATABASE__URL` if `prefix = "APP"` on `AppConfig` and no prefix on `DatabaseConfig`, or `APP_DB_URL` with `#` on `DatabaseConfig`).
 4.  **Command-Line Arguments:** Parsed using `clap` conventions. Long flags are derived from field names (e.g., `my_field` becomes `--my-field`).
 
 ### File Format Support
 
-TOML parsing is enabled by default. Enable the `json` and `yaml` features to support additional formats:
+TOML parsing is enabled by default. Enable the `json5` and `yaml` features to support additional formats:
 
 ```toml
 [dependencies]
-ortho_config = { version = "0.1.0", features = ["json", "yaml"] }
+ortho_config = { version = "0.1.0", features = ["json5", "yaml"] }
 ```
 
-The file loader selects the parser based on the extension (`.toml`, `.json`, `.yaml`, `.yml`).
+The file loader selects the parser based on the extension (`.toml`, `.json`, `.json5`, `.yaml`, `.yml`).
+When the `json5` feature is active, both `.json` and `.json5` files are parsed
+using the JSON5 format. Standard JSON is valid JSON5, so existing `.json` files
+continue to work. Without this feature enabled, attempting to load a `.json` or
+`.json5` file will result in an error.
+
+JSON5 extends JSON with conveniences such as comments, trailing commas,
+single-quoted strings, and unquoted keys.
 
 ## Orthographic Naming
 
@@ -134,7 +141,7 @@ A key goal of OrthoConfig is to make configuration natural from any source. A fi
   * CLI: `--max-connections <value>`
   * Environment (assuming `#[ortho_config(prefix = "MYAPP")]`): `MYAPP_MAX_CONNECTIONS=<value>`
   * TOML file: `max_connections = <value>`
-  * JSON file: `max_connections` or `maxConnections` (configurable)
+  * JSON5 file: `max_connections` or `maxConnections` (configurable)
 
 You can customize these mappings using `#[ortho_config(...)]` attributes.
 
