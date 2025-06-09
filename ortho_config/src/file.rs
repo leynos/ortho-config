@@ -16,6 +16,10 @@ use std::path::Path;
 /// Load configuration from a file, selecting the parser based on extension.
 ///
 /// Returns `Ok(None)` if the file does not exist.
+///
+/// # Errors
+///
+/// Returns an [`OrthoError`] if reading or parsing the file fails.
 #[allow(clippy::result_large_err)]
 pub fn load_config_file(path: &Path) -> Result<Option<Figment>, OrthoError> {
     if !path.is_file() {
@@ -28,7 +32,7 @@ pub fn load_config_file(path: &Path) -> Result<Option<Figment>, OrthoError> {
     let ext = path
         .extension()
         .and_then(|e| e.to_str())
-        .map(|e| e.to_ascii_lowercase());
+        .map(str::to_ascii_lowercase);
     let figment = match ext.as_deref() {
         Some("json") => {
             #[cfg(feature = "json")]
@@ -47,6 +51,7 @@ pub fn load_config_file(path: &Path) -> Result<Option<Figment>, OrthoError> {
                 });
             }
         }
+        #[allow(clippy::unnested_or_patterns)]
         Some("yaml") | Some("yml") => {
             #[cfg(feature = "yaml")]
             {

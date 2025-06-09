@@ -4,3 +4,8 @@ members = [
     "ortho_config_macros"
 ]
 resolver = "2"
+
+# `cargo clippy` lints configuration
+[workspace.lints.clippy]
+# make every pedantic lint emit a warning
+pedantic = "warn"
