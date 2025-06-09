@@ -33,7 +33,7 @@ fn cli_only_source() {
 #[test]
 fn cli_overrides_other_sources() {
     figment::Jail::expect_with(|j| {
-        j.create_file("config.toml", "sample_value = \"file\"\nother = \"f\"")?;
+        j.create_file(".config.toml", "sample_value = \"file\"\nother = \"f\"")?;
         j.set_env("SAMPLE_VALUE", "env");
         j.set_env("OTHER", "e");
         let cfg = TestConfig::load_from_iter(["prog", "--sample-value", "cli", "--other", "cli2"])
@@ -47,7 +47,7 @@ fn cli_overrides_other_sources() {
 #[test]
 fn cli_combines_with_file() {
     figment::Jail::expect_with(|j| {
-        j.create_file("config.toml", "other = \"file\"")?;
+        j.create_file(".config.toml", "other = \"file\"")?;
         let cfg = TestConfig::load_from_iter(["prog", "--sample-value", "cli", "--other", "cli2"])
             .expect("load");
         assert_eq!(cfg.sample_value, "cli");
