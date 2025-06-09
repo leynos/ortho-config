@@ -31,12 +31,41 @@ The core principle is **orthographic option naming**: a single field in your Rus
 4.  **Define your configuration struct:**
 
     ```rust
-    use ortho_config::{OrthoConfig, OrthoConfigError};
-    use serde::Deserialize; // Required for OrthoConfig derive
+    use ortho_config::{OrthoConfig, OrthoError};
+    use serde::{Deserialize, Serialize}; // Required for OrthoConfig derive
 
+    #[derive(Debug, Clone, Deserialize, Serialize, OrthoConfig)]
+    #[ortho_config(prefix = "DB")] // Nested prefix: e.g., APP_DB_URL
+    struct DatabaseConfig {
+        // Automatically maps to:
+        // CLI: --database-url <value> (if clap flattens) or via file/env
+        // Env: APP_DB_URL=<value>
+        // File: [database] url = <value>
+        url: String,
+
+        #[ortho_config(default = 5)]
+        pool_size: Option<u32>, // Optional value, defaults to `Some(5)`
+    }
+
+    impl std::str::FromStr for DatabaseConfig {
+        type Err = String;
+
+        fn from_str(s: &str) -> Result<Self, Self::Err> {
+            let mut parts = s.splitn(2, ',');
+            let url = parts
+                .next()
+                .ok_or_else(|| "missing url".to_string())?
+                .to_string();
+            let pool_size = parts
+                .next()
+                .and_then(|p| p.parse::<u32>().ok());
+            Ok(DatabaseConfig { url, pool_size })
+        }
+    }
+
+    #[derive(Debug, Deserialize, Serialize, OrthoConfig)]
     #[ortho_config(prefix = "APP")] // Prefix for environment variables (e.g., APP_LOG_LEVEL)
     struct AppConfig {
-        #
         log_level: String,
 
         // Automatically maps to:
@@ -56,19 +85,7 @@ The core principle is **orthographic option naming**: a single field in your Rus
         verbose: bool, // Defaults to false if not specified
     }
 
-    # // Nested prefix: e.g., APP_DB_URL
-    struct DatabaseConfig {
-        // Automatically maps to:
-        // CLI: --database-url <value> (if clap flattens) or via file/env
-        // Env: APP_DB_URL=<value>
-        // File: [database] url = <value>
-        url: String,
-
-        #[ortho_config(default = 5)]
-        pool_size: Option<u32>, // Optional value, defaults to Some(5) then None
-    }
-
-    fn main() -> Result<(), OrthoConfigError> {
+    fn main() -> Result<(), OrthoError> {
         let config = AppConfig::load()?; // Load configuration
 
         println!("Loaded configuration: {:#?}", config);
