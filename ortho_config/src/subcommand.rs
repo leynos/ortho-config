@@ -1,3 +1,4 @@
+use crate::normalize_prefix;
 use crate::{OrthoError, load_config_file};
 use figment::{Figment, providers::Env};
 use serde::de::DeserializeOwned;
@@ -7,7 +8,7 @@ use xdg::BaseDirectories;
 
 /// Return possible configuration file paths for a subcommand.
 fn candidate_paths(prefix: &str) -> Vec<PathBuf> {
-    let base = prefix.trim_end_matches('_').to_ascii_lowercase();
+    let base = normalize_prefix(prefix);
     let mut paths = Vec::new();
 
     if let Some(home) = std::env::var_os("HOME") {

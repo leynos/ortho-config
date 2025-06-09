@@ -105,23 +105,17 @@ pub(crate) fn build_dotfile_name(struct_attrs: &StructAttrs) -> proc_macro2::Tok
 }
 
 pub(crate) fn build_xdg_snippet(struct_attrs: &StructAttrs) -> proc_macro2::TokenStream {
-    if let Some(prefix) = &struct_attrs.prefix {
-        let base = prefix.trim_end_matches('_').to_ascii_lowercase();
-        quote! {
-            if file_fig.is_none() {
-                let xdg_dirs = xdg::BaseDirectories::with_prefix(#base);
-                if let Some(p) = xdg_dirs.find_config_file("config.toml") {
-                    file_fig = ortho_config::load_config_file(&p)?;
-                }
-            }
-        }
-    } else {
-        quote! {
-            if file_fig.is_none() {
-                let xdg_dirs = xdg::BaseDirectories::new();
-                if let Some(p) = xdg_dirs.find_config_file("config.toml") {
-                    file_fig = ortho_config::load_config_file(&p)?;
-                }
+    let prefix_lit = struct_attrs.prefix.as_deref().unwrap_or("");
+    quote! {
+        if file_fig.is_none() {
+            let xdg_base = ortho_config::normalize_prefix(#prefix_lit);
+            let xdg_dirs = if xdg_base.is_empty() {
+                xdg::BaseDirectories::new()
+            } else {
+                xdg::BaseDirectories::with_prefix(&xdg_base)
+            };
+            if let Some(p) = xdg_dirs.find_config_file("config.toml") {
+                file_fig = ortho_config::load_config_file(&p)?;
             }
         }
     }

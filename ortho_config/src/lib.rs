@@ -13,6 +13,13 @@ pub mod subcommand;
 pub use merge::merge_cli_over_defaults;
 pub use subcommand::load_subcommand_config;
 
+/// Normalize a prefix by trimming trailing underscores and converting
+/// to lowercase ASCII.
+#[must_use]
+pub fn normalize_prefix(prefix: &str) -> String {
+    prefix.trim_end_matches('_').to_ascii_lowercase()
+}
+
 pub use error::OrthoError;
 pub use file::load_config_file;
 
