@@ -135,7 +135,7 @@ The implementation must be careful to wrap errors from `clap`, `figment`, and fi
     * `clap`: For CLI parsing. Choose a version with the `derive` feature.
     * `figment`: As the core layering engine.
     * `serde`: For serialization/deserialization.
-    * `toml`, `figment-json5`, `serde_yaml`: As optional feature-gated dependencies for different file formats. `toml` should be a default feature.
+    * `toml`, `figment-json5`, `serde_yaml`: As optional feature-gated dependencies for different file formats. `toml` should be a default feature. The `json5` feature uses `figment-json5` to parse `.json` and `.json5` files; loading these formats without enabling `json5` should produce an error so users aren't surprised by silent TOML parsing.
     * `thiserror`: For ergonomic error type definitions.
 
 ## 6. Implementation Roadmap
