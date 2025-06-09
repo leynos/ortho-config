@@ -8,8 +8,9 @@
 
 use proc_macro::TokenStream;
 use quote::{format_ident, quote};
+use syn::punctuated::Punctuated;
 use syn::{
-    Attribute, Data, DeriveInput, Expr, Fields, GenericArgument, Lit, PathArguments, Type,
+    Attribute, Data, DeriveInput, Expr, Field, Fields, GenericArgument, Lit, PathArguments, Type,
     parse_macro_input,
 };
 
@@ -92,6 +93,115 @@ fn option_inner(ty: &Type) -> Option<&Type> {
     None
 }
 
+fn extract_fields(input: &DeriveInput) -> Result<Punctuated<Field, syn::token::Comma>, syn::Error> {
+    match &input.data {
+        Data::Struct(data) => match &data.fields {
+            Fields::Named(named) => Ok(named.named.clone()),
+            _ => Err(syn::Error::new_spanned(
+                data.struct_token,
+                "OrthoConfig requires named fields",
+            )),
+        },
+        _ => Err(syn::Error::new_spanned(
+            input.ident.clone(),
+            "OrthoConfig can only be derived for structs",
+        )),
+    }
+}
+
+fn parse_field_attr_list(
+    fields: &Punctuated<Field, syn::token::Comma>,
+) -> Result<Vec<FieldAttrs>, syn::Error> {
+    let mut attrs = Vec::new();
+    for f in fields {
+        attrs.push(parse_field_attrs(&f.attrs)?);
+    }
+    Ok(attrs)
+}
+
+fn build_cli_fields(
+    fields: &Punctuated<Field, syn::token::Comma>,
+    attrs: &[FieldAttrs],
+) -> Vec<proc_macro2::TokenStream> {
+    fields
+        .iter()
+        .zip(attrs.iter())
+        .map(|(f, attr)| {
+            let name = f.ident.as_ref().expect("named field");
+            let ty = &f.ty;
+            let inner = option_inner(ty);
+            let cli_ty = if let Some(inner) = inner {
+                quote! { Option<#inner> }
+            } else {
+                quote! { Option<#ty> }
+            };
+
+            let mut arg_tokens = quote! { long };
+            if let Some(ref long) = attr.cli_long {
+                arg_tokens = quote! { long = #long };
+            }
+            if let Some(ch) = attr.cli_short {
+                let short_token = quote! { short = #ch };
+                arg_tokens = quote! { #arg_tokens, #short_token };
+            }
+
+            quote! {
+                #[arg(#arg_tokens, required = false)]
+                #[serde(skip_serializing_if = "Option::is_none")]
+                pub #name: #cli_ty
+            }
+        })
+        .collect()
+}
+
+fn build_default_fields(
+    fields: &Punctuated<Field, syn::token::Comma>,
+) -> Vec<proc_macro2::TokenStream> {
+    fields
+        .iter()
+        .map(|f| {
+            let name = f.ident.as_ref().expect("named field");
+            let ty = &f.ty;
+            let inner = option_inner(ty);
+            let default_ty = if let Some(inner) = inner {
+                quote! { Option<#inner> }
+            } else {
+                quote! { Option<#ty> }
+            };
+            quote! {
+                #[serde(skip_serializing_if = "Option::is_none")]
+                pub #name: #default_ty
+            }
+        })
+        .collect()
+}
+
+fn build_default_init(
+    fields: &Punctuated<Field, syn::token::Comma>,
+    attrs: &[FieldAttrs],
+) -> Vec<proc_macro2::TokenStream> {
+    fields
+        .iter()
+        .zip(attrs.iter())
+        .map(|(f, attr)| {
+            let name = f.ident.as_ref().expect("named field");
+            if let Some(expr) = &attr.default {
+                quote! { #name: Some(#expr) }
+            } else {
+                quote! { #name: None }
+            }
+        })
+        .collect()
+}
+
+fn env_provider_tokens(struct_attrs: &StructAttrs) -> proc_macro2::TokenStream {
+    if let Some(prefix) = &struct_attrs.prefix {
+        quote! { Env::prefixed(#prefix) }
+    } else {
+        quote! { Env::raw() }
+    }
+}
+
 /// Derive macro for [`ortho_config::OrthoConfig`].
 ///
 /// # Panics
@@ -99,102 +209,33 @@ fn option_inner(ty: &Type) -> Option<&Type> {
 /// Panics if the macro is used on a non-struct item or on a struct with
 /// unnamed fields.
 #[proc_macro_derive(OrthoConfig, attributes(ortho_config))]
-#[allow(clippy::too_many_lines)]
 pub fn derive_ortho_config(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
-    let ident = input.ident;
-    let struct_attrs = match parse_struct_attrs(&input.attrs) {
-        Ok(a) => a,
-        Err(e) => return e.to_compile_error().into(),
-    };
+    match expand_derive(&input) {
+        Ok(tokens) => tokens.into(),
+        Err(e) => e.to_compile_error().into(),
+    }
+}
 
-    let fields = match input.data {
-        Data::Struct(data) => match data.fields {
-            Fields::Named(named) => named.named,
-            _ => {
-                return syn::Error::new_spanned(
-                    data.struct_token,
-                    "OrthoConfig requires named fields",
-                )
-                .to_compile_error()
-                .into();
-            }
-        },
-        _ => {
-            return syn::Error::new_spanned(ident, "OrthoConfig can only be derived for structs")
-                .to_compile_error()
-                .into();
-        }
-    };
+fn expand_derive(input: &DeriveInput) -> Result<proc_macro2::TokenStream, syn::Error> {
+    let ident = input.ident.clone();
+    let struct_attrs = parse_struct_attrs(&input.attrs)?;
 
+    let fields = extract_fields(input)?;
     let cli_ident = format_ident!("__{}Cli", ident);
     let cli_mod = format_ident!("__{}CliMod", ident);
     let cli_pub_ident = format_ident!("{}Cli", ident);
 
-    let mut field_attrs = Vec::new();
-    for f in &fields {
-        match parse_field_attrs(&f.attrs) {
-            Ok(a) => field_attrs.push(a),
-            Err(e) => return e.to_compile_error().into(),
-        }
-    }
+    let field_attrs = parse_field_attr_list(&fields)?;
 
-    let cli_fields = fields.iter().zip(field_attrs.iter()).map(|(f, attr)| {
-        let name = f.ident.as_ref().expect("named field");
-        let ty = &f.ty;
-        let inner = option_inner(ty);
-        let cli_ty = if let Some(inner) = inner {
-            quote! { Option<#inner> }
-        } else {
-            quote! { Option<#ty> }
-        };
-
-        let mut arg_tokens = quote! { long };
-        if let Some(ref long) = attr.cli_long {
-            arg_tokens = quote! { long = #long };
-        }
-        if let Some(ch) = attr.cli_short {
-            let short_token = quote! { short = #ch };
-            arg_tokens = quote! { #arg_tokens, #short_token };
-        }
-
-        quote! {
-            #[arg(#arg_tokens, required = false)]
-            #[serde(skip_serializing_if = "Option::is_none")]
-            pub #name: #cli_ty
-        }
-    });
+    let cli_fields = build_cli_fields(&fields, &field_attrs);
 
     let defaults_ident = format_ident!("__{}Defaults", ident);
-    let default_struct_fields = fields.iter().map(|f| {
-        let name = f.ident.as_ref().expect("named field");
-        let ty = &f.ty;
-        let inner = option_inner(ty);
-        let default_ty = if let Some(inner) = inner {
-            quote! { Option<#inner> }
-        } else {
-            quote! { Option<#ty> }
-        };
-        quote! {
-            #[serde(skip_serializing_if = "Option::is_none")]
-            pub #name: #default_ty
-        }
-    });
+    let default_struct_fields = build_default_fields(&fields);
 
-    let default_struct_init = fields.iter().zip(field_attrs.iter()).map(|(f, attr)| {
-        let name = f.ident.as_ref().expect("named field");
-        if let Some(expr) = &attr.default {
-            quote! { #name: Some(#expr) }
-        } else {
-            quote! { #name: None }
-        }
-    });
+    let default_struct_init = build_default_init(&fields, &field_attrs);
 
-    let env_provider = if let Some(prefix) = &struct_attrs.prefix {
-        quote! { Env::prefixed(#prefix) }
-    } else {
-        quote! { Env::raw() }
-    };
+    let env_provider = env_provider_tokens(&struct_attrs);
 
     let expanded = quote! {
         mod #cli_mod {
@@ -264,5 +305,5 @@ pub fn derive_ortho_config(input: TokenStream) -> TokenStream {
         }
     };
 
-    TokenStream::from(expanded)
+    Ok(expanded)
 }
