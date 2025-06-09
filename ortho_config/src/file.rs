@@ -7,10 +7,7 @@ use figment::{
     Figment,
     providers::{Format, Toml},
 };
-#[cfg(feature = "json")]
-use serde_json;
-#[cfg(feature = "yaml")]
-use serde_yaml;
+
 use std::path::Path;
 
 /// Load configuration from a file, selecting the parser based on extension.
