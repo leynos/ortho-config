@@ -8,7 +8,9 @@ pub use ortho_config_macros::OrthoConfig;
 
 mod error;
 mod file;
+mod merge;
 pub mod subcommand;
+pub use merge::merge_cli_over_defaults;
 pub use subcommand::load_subcommand_config;
 
 pub use error::OrthoError;
