@@ -15,29 +15,34 @@ pub(crate) fn build_cli_fields(
     fields: &[syn::Field],
     field_attrs: &[FieldAttrs],
 ) -> Vec<proc_macro2::TokenStream> {
-    fields
-        .iter()
-        .zip(field_attrs.iter())
-        .map(|(f, attr)| {
-            let name = f.ident.as_ref().expect("named field");
-            let ty = option_type_tokens(&f.ty);
+    let mut out = Vec::new();
+    out.push(quote! {
+        #[arg(long = "config-path")]
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub config_path: Option<std::path::PathBuf>
+    });
 
-            let mut arg_tokens = quote! { long };
-            if let Some(ref long) = attr.cli_long {
-                arg_tokens = quote! { long = #long };
-            }
-            if let Some(ch) = attr.cli_short {
-                let short_token = quote! { short = #ch };
-                arg_tokens = quote! { #arg_tokens, #short_token };
-            }
+    out.extend(fields.iter().zip(field_attrs.iter()).map(|(f, attr)| {
+        let name = f.ident.as_ref().expect("named field");
+        let ty = option_type_tokens(&f.ty);
 
-            quote! {
-                #[arg(#arg_tokens, required = false)]
-                #[serde(skip_serializing_if = "Option::is_none")]
-                pub #name: #ty
-            }
-        })
-        .collect()
+        let mut arg_tokens = quote! { long };
+        if let Some(ref long) = attr.cli_long {
+            arg_tokens = quote! { long = #long };
+        }
+        if let Some(ch) = attr.cli_short {
+            let short_token = quote! { short = #ch };
+            arg_tokens = quote! { #arg_tokens, #short_token };
+        }
+
+        quote! {
+            #[arg(#arg_tokens, required = false)]
+            #[serde(skip_serializing_if = "Option::is_none")]
+            pub #name: #ty
+        }
+    }));
+
+    out
 }
 
 pub(crate) fn build_default_struct_fields(fields: &[syn::Field]) -> Vec<proc_macro2::TokenStream> {
@@ -78,6 +83,25 @@ pub(crate) fn build_env_provider(struct_attrs: &StructAttrs) -> proc_macro2::Tok
     } else {
         quote! { Env::raw() }
     }
+}
+
+pub(crate) fn build_config_env_var(struct_attrs: &StructAttrs) -> proc_macro2::TokenStream {
+    if let Some(prefix) = &struct_attrs.prefix {
+        let var = format!("{prefix}CONFIG_PATH");
+        quote! { #var }
+    } else {
+        quote! { "CONFIG_PATH" }
+    }
+}
+
+pub(crate) fn build_dotfile_name(struct_attrs: &StructAttrs) -> proc_macro2::TokenStream {
+    let base = if let Some(prefix) = &struct_attrs.prefix {
+        let base = prefix.trim_end_matches('_').to_ascii_lowercase();
+        format!(".{base}.toml")
+    } else {
+        ".config.toml".to_string()
+    };
+    quote! { #base }
 }
 
 pub(crate) fn collect_append_fields<'a>(
@@ -157,6 +181,8 @@ pub(crate) struct LoadImplTokens<'a> {
     pub default_struct_init: &'a [proc_macro2::TokenStream],
     pub override_init_ts: &'a proc_macro2::TokenStream,
     pub append_logic: &'a proc_macro2::TokenStream,
+    pub config_env_var: &'a proc_macro2::TokenStream,
+    pub dotfile_name: &'a proc_macro2::TokenStream,
 }
 
 pub(crate) struct LoadImplArgs<'a> {
@@ -177,6 +203,8 @@ pub(crate) fn build_load_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStre
         default_struct_init,
         override_init_ts,
         append_logic,
+        config_env_var,
+        dotfile_name,
     } = tokens;
 
     quote! {
@@ -201,8 +229,24 @@ pub(crate) fn build_load_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStre
                 )
                 .map_err(ortho_config::OrthoError::CliParsing)?;
 
-                let cfg_path = std::env::var("CONFIG_PATH")
-                    .unwrap_or_else(|_| "config.toml".to_string());
+                let mut file_fig = None;
+                if let Some(path) = &cli.config_path {
+                    file_fig = ortho_config::load_config_file(path)?;
+                }
+                if file_fig.is_none() {
+                    if let Ok(p) = std::env::var(#config_env_var) {
+                        file_fig = ortho_config::load_config_file(std::path::Path::new(&p))?;
+                    }
+                }
+                if file_fig.is_none() {
+                    file_fig = ortho_config::load_config_file(std::path::Path::new(#dotfile_name))?;
+                }
+                if file_fig.is_none() {
+                    if let Some(home) = std::env::var_os("HOME") {
+                        let p = std::path::PathBuf::from(home).join(#dotfile_name);
+                        file_fig = ortho_config::load_config_file(&p)?;
+                    }
+                }
 
                 let mut fig = Figment::new();
                 let defaults = #defaults_ident {
@@ -213,7 +257,6 @@ pub(crate) fn build_load_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStre
 
                 fig = fig.merge(Serialized::defaults(&defaults));
 
-                let file_fig = ortho_config::load_config_file(std::path::Path::new(&cfg_path))?;
                 if let Some(ref f) = file_fig {
                     fig = fig.merge(f.clone());
                 }

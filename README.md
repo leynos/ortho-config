@@ -90,9 +90,9 @@ The core principle is **orthographic option naming**: a single field in your Rus
 
       * With CLI arguments: `cargo run -- --log-level debug --port 3000 -v --features extra_cli_feature`
       * With environment variables: `APP_LOG_LEVEL=warn APP_PORT=4000 APP_DB_URL="postgres://localhost/mydb" APP_FEATURES="env_feat1,env_feat2" cargo run`
-      * With a `config.toml` file (OrthoConfig will look for `OrthoConfig.toml` or `config.toml` by default):
+     * With a `.app.toml` file (assuming `#[ortho_config(prefix = "APP_")]`; adjust for your prefix):
         ```toml
-        # config.toml
+        # .app.toml
         log_level = "file_level"
         port = 5000
         features = ["file_feat_a", "file_feat_b"]
@@ -107,7 +107,12 @@ The core principle is **orthographic option naming**: a single field in your Rus
 OrthoConfig loads configuration from the following sources, with later sources overriding earlier ones:
 
 1.  **Application-Defined Defaults:** Specified using `#[ortho_config(default =...)]` or `Option<T>` fields (which default to `None`).
-2.  **Configuration File:** Looks for `OrthoConfig.toml` or `config.toml` in the current directory or a path specified by the `CONFIG_PATH` environment variable. (Support for JSON and YAML can be enabled via features).
+2.  **Configuration File:** Resolved in this order:
+    1. `--config-path` CLI option
+    2. `[PREFIX]CONFIG_PATH` environment variable
+    3. `.<prefix>.toml` in the current directory
+    4. `.<prefix>.toml` in the user's home directory
+    (where `<prefix>` comes from `#[ortho_config(prefix = "...")]` and defaults to `config`). JSON and YAML support are feature gated.
 3.  **Environment Variables:** Variables prefixed with the string specified in `#[ortho_config(prefix = "...")]` (e.g., `APP_`). Nested struct fields are typically accessed using double underscores (e.g., `APP_DATABASE__URL` if `prefix = "APP"` on `AppConfig` and no prefix on `DatabaseConfig`, or `APP_DB_URL` with `#` on `DatabaseConfig`).
 4.  **Command-Line Arguments:** Parsed using `clap` conventions. Long flags are derived from field names (e.g., `my_field` becomes `--my-field`).
 
