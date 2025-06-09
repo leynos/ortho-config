@@ -30,3 +30,16 @@ fn loads_from_home() {
         Ok(())
     });
 }
+
+#[test]
+fn local_overrides_home() {
+    figment::Jail::expect_with(|j| {
+        let home = j.create_dir("home")?;
+        j.create_file(home.join(".app.toml"), "[cmds.test]\nfoo = \"home\"")?;
+        j.set_env("HOME", home.to_str().unwrap());
+        j.create_file(".app.toml", "[cmds.test]\nfoo = \"local\"")?;
+        let cfg: CmdCfg = load_subcommand_config("APP_", "test").expect("load");
+        assert_eq!(cfg.foo.as_deref(), Some("local"));
+        Ok(())
+    });
+}

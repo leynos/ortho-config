@@ -26,20 +26,20 @@ where
         ".{}.toml",
         prefix.trim_end_matches('_').to_ascii_lowercase()
     );
-    if let Some(file_fig) = load_config_file(Path::new(&dotfile))? {
-        fig = fig.merge(file_fig.focus(&format!("cmds.{name}")));
-    }
     if let Some(home) = std::env::var_os("HOME") {
         let p = std::path::PathBuf::from(home).join(&dotfile);
         if let Some(file_fig) = load_config_file(&p)? {
             fig = fig.merge(file_fig.focus(&format!("cmds.{name}")));
         }
     }
+    if let Some(file_fig) = load_config_file(Path::new(&dotfile))? {
+        fig = fig.merge(file_fig.focus(&format!("cmds.{name}")));
+    }
 
     let env_name = name.replace('-', "_").to_ascii_uppercase();
     let env_prefix = format!("{prefix}CMDS_{env_name}_");
     let env_provider = Env::prefixed(&env_prefix)
-        .map(|k| Uncased::new(k.as_str().to_ascii_uppercase()))
+        .map(|k| Uncased::from(k))
         .split("__");
     fig = fig.merge(env_provider);
 
