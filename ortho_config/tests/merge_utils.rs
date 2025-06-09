@@ -3,7 +3,9 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, Default, PartialEq)]
 struct Sample {
+    #[serde(skip_serializing_if = "Option::is_none")]
     a: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     b: Option<String>,
 }
 
@@ -17,7 +19,7 @@ fn cli_overrides_defaults() {
         a: None,
         b: Some("cli".into()),
     };
-    let merged = merge_cli_over_defaults(defaults, cli);
+    let merged = merge_cli_over_defaults(&defaults, &cli);
     assert_eq!(
         merged,
         Sample {
