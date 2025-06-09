@@ -114,8 +114,12 @@ pub(crate) fn build_xdg_snippet(struct_attrs: &StructAttrs) -> proc_macro2::Toke
             } else {
                 xdg::BaseDirectories::with_prefix(&xdg_base)
             };
-            if let Some(p) = xdg_dirs.find_config_file("config.toml") {
-                file_fig = ortho_config::load_config_file(&p)?;
+            for ext in &["toml", "json5"] {
+                let filename = format!("config.{}", ext);
+                if let Some(p) = xdg_dirs.find_config_file(&filename) {
+                    file_fig = ortho_config::load_config_file(&p)?;
+                    break;
+                }
             }
         }
     }
