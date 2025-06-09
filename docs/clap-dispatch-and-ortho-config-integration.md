@@ -616,13 +616,8 @@ impl Run for ListArgs {
 }
 
 // --- Merging Logic ---
-// A simplified merge. Real merging would be more granular.
-fn merge_list_args(ortho_default: ListArgs, cli_parsed: ListArgs) -> ListArgs {
-    ListArgs {
-        hide_foo: cli_parsed.hide_foo.or(ortho_default.hide_foo),
-        default_format: cli_parsed.default_format.or(ortho_default.default_format),
-    }
-}
+// `ortho_config` provides a helper to merge CLI values over defaults.
+use ortho_config::merge_cli_over_defaults;
 
 
 fn main() -> Result<(), String> {
@@ -639,7 +634,7 @@ fn main() -> Result<(), String> {
             let ortho_default_list_args: ListArgs = ortho_config_store.get_subcommand_config_struct("list");
 
             // 5. Merge clap-parsed args over ortho-config defaults
-            let final_list_args = merge_list_args(ortho_default_list_args, clap_parsed_list_args);
+            let final_list_args = merge_cli_over_defaults(ortho_default_list_args, clap_parsed_list_args);
             Commands::List(final_list_args)
         }
         // Commands::Add(clap_parsed_add_args) => { /* similar logic for Add command */ }
@@ -654,7 +649,7 @@ fn main() -> Result<(), String> {
 }
 ```
 
-This conceptual code illustrates the key stages: loading `ortho-config` defaults, parsing CLI arguments with `clap`, merging these layers with defined precedence, and finally dispatching the command using the method provided by `clap-dispatch`. The critical merging step (here, `merge_list_args`) needs to inspect which CLI arguments were actually provided by the user (often by checking if `Option` fields in the `clap`-parsed struct are `Some(...)`) to ensure CLI values override `ortho-config` values. A more generic merging strategy might involve reflection or a trait implemented by all argument structs.
+This conceptual code illustrates the key stages: loading `ortho-config` defaults, parsing CLI arguments with `clap`, merging these layers with defined precedence, and finally dispatching the command using the method provided by `clap-dispatch`. The critical merging step now uses `merge_cli_over_defaults`, which inspects which CLI arguments were actually provided by the user (often by checking if `Option` fields in the `clap`-parsed struct are `Some(...)`) to ensure CLI values override `ortho-config` values. A more generic merging strategy might involve reflection or a trait implemented by all argument structs.
 
 ### E. Benefits and Rationale for the Proposed Design
 
