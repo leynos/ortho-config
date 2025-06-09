@@ -150,3 +150,33 @@ pub(crate) fn parse_input(
     }
     Ok((ident, fields, struct_attrs, field_attrs))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use syn::parse_quote;
+
+    #[test]
+    fn parses_struct_and_field_attributes() {
+        let input: DeriveInput = parse_quote! {
+            #[ortho_config(prefix = "CFG_")]
+            struct Demo {
+                #[ortho_config(cli_long = "opt", cli_short = 'o', default = 5)]
+                field1: Option<u32>,
+                #[ortho_config(merge_strategy = "append")]
+                field2: Vec<String>,
+            }
+        };
+
+        let (ident, fields, struct_attrs, field_attrs) =
+            parse_input(&input).expect("parse_input");
+
+        assert_eq!(ident.to_string(), "Demo");
+        assert_eq!(fields.len(), 2);
+        assert_eq!(struct_attrs.prefix.as_deref(), Some("CFG_"));
+        assert_eq!(field_attrs.len(), 2);
+        assert_eq!(field_attrs[0].cli_long.as_deref(), Some("opt"));
+        assert_eq!(field_attrs[0].cli_short, Some('o'));
+        assert!(matches!(field_attrs[1].merge_strategy, Some(MergeStrategy::Append)));
+    }
+}

@@ -51,7 +51,7 @@ pub fn load_config_file(path: &Path) -> Result<Option<Figment>, OrthoError> {
                 });
             }
         }
-        Some("yaml" | "yml") => {
+        Some("yaml") | Some("yml") => {
             #[cfg(feature = "yaml")]
             {
                 serde_yaml::from_str::<serde_yaml::Value>(&data).map_err(|e| OrthoError::File {

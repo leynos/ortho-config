@@ -231,3 +231,48 @@ pub(crate) fn build_load_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStre
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use syn::parse_quote;
+
+    fn demo_input() -> (Vec<syn::Field>, Vec<FieldAttrs>, StructAttrs) {
+        let input: syn::DeriveInput = parse_quote! {
+            #[ortho_config(prefix = "CFG_")]
+            struct Demo {
+                #[ortho_config(cli_long = "opt", cli_short = 'o', default = 5)]
+                field1: Option<u32>,
+                #[ortho_config(merge_strategy = "append")]
+                field2: Vec<String>,
+            }
+        };
+        let (_, fields, struct_attrs, field_attrs) =
+            super::parse::parse_input(&input).expect("parse_input");
+        (fields, field_attrs, struct_attrs)
+    }
+
+    #[test]
+    fn env_provider_tokens() {
+        let (_, _, struct_attrs) = demo_input();
+        let ts = build_env_provider(&struct_attrs);
+        assert_eq!(ts.to_string(), "Env :: prefixed ( \"CFG_\" )");
+    }
+
+    #[test]
+    fn collect_append_fields_selects_vec_fields() {
+        let (fields, field_attrs, _) = demo_input();
+        let out = collect_append_fields(&fields, &field_attrs);
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].0.to_string(), "field2");
+    }
+
+    #[test]
+    fn build_override_struct_creates_struct() {
+        let (fields, field_attrs, _) = demo_input();
+        let append = collect_append_fields(&fields, &field_attrs);
+        let (ts, init_ts) = build_override_struct(&syn::parse_quote!(Demo), &append);
+        assert!(ts.to_string().contains("struct __DemoVecOverride"));
+        assert!(init_ts.to_string().contains("__DemoVecOverride"));
+    }
+}
