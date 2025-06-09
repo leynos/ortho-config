@@ -51,6 +51,7 @@ pub fn load_config_file(path: &Path) -> Result<Option<Figment>, OrthoError> {
                 });
             }
         }
+        #[allow(clippy::unnested_or_patterns)]
         Some("yaml") | Some("yml") => {
             #[cfg(feature = "yaml")]
             {

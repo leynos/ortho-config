@@ -168,8 +168,7 @@ mod tests {
             }
         };
 
-        let (ident, fields, struct_attrs, field_attrs) =
-            parse_input(&input).expect("parse_input");
+        let (ident, fields, struct_attrs, field_attrs) = parse_input(&input).expect("parse_input");
 
         assert_eq!(ident.to_string(), "Demo");
         assert_eq!(fields.len(), 2);
@@ -177,6 +176,9 @@ mod tests {
         assert_eq!(field_attrs.len(), 2);
         assert_eq!(field_attrs[0].cli_long.as_deref(), Some("opt"));
         assert_eq!(field_attrs[0].cli_short, Some('o'));
-        assert!(matches!(field_attrs[1].merge_strategy, Some(MergeStrategy::Append)));
+        assert!(matches!(
+            field_attrs[1].merge_strategy,
+            Some(MergeStrategy::Append)
+        ));
     }
 }

@@ -248,7 +248,7 @@ mod tests {
             }
         };
         let (_, fields, struct_attrs, field_attrs) =
-            super::parse::parse_input(&input).expect("parse_input");
+            crate::derive::parse::parse_input(&input).expect("parse_input");
         (fields, field_attrs, struct_attrs)
     }
 
@@ -256,7 +256,7 @@ mod tests {
     fn env_provider_tokens() {
         let (_, _, struct_attrs) = demo_input();
         let ts = build_env_provider(&struct_attrs);
-        assert_eq!(ts.to_string(), "Env :: prefixed ( \"CFG_\" )");
+        assert_eq!(ts.to_string(), "Env :: prefixed (\"CFG_\")");
     }
 
     #[test]
