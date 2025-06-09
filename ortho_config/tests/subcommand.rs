@@ -43,3 +43,17 @@ fn local_overrides_home() {
         Ok(())
     });
 }
+
+#[test]
+fn loads_from_xdg_config() {
+    figment::Jail::expect_with(|j| {
+        let xdg = j.create_dir("xdg")?;
+        let abs = std::fs::canonicalize(&xdg).unwrap();
+        j.create_dir(abs.join("app"))?;
+        j.create_file(abs.join("app/config.toml"), "[cmds.test]\nfoo = \"xdg\"")?;
+        j.set_env("XDG_CONFIG_HOME", abs.to_str().unwrap());
+        let cfg: CmdCfg = load_subcommand_config("APP_", "test").expect("load");
+        assert_eq!(cfg.foo.as_deref(), Some("xdg"));
+        Ok(())
+    });
+}

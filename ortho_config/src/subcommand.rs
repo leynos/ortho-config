@@ -3,6 +3,7 @@ use figment::{Figment, providers::Env};
 use serde::de::DeserializeOwned;
 use std::path::Path;
 use uncased::Uncased;
+use xdg::BaseDirectories;
 
 /// Load configuration for a specific subcommand.
 ///
@@ -28,6 +29,17 @@ where
     );
     if let Some(home) = std::env::var_os("HOME") {
         let p = std::path::PathBuf::from(home).join(&dotfile);
+        if let Some(file_fig) = load_config_file(&p)? {
+            fig = fig.merge(file_fig.focus(&format!("cmds.{name}")));
+        }
+    }
+    let xdg_base = prefix.trim_end_matches('_').to_ascii_lowercase();
+    let xdg_dirs = if xdg_base.is_empty() {
+        BaseDirectories::new()
+    } else {
+        BaseDirectories::with_prefix(&xdg_base)
+    };
+    if let Some(p) = xdg_dirs.find_config_file("config.toml") {
         if let Some(file_fig) = load_config_file(&p)? {
             fig = fig.merge(file_fig.focus(&format!("cmds.{name}")));
         }

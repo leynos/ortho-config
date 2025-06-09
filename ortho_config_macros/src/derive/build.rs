@@ -104,6 +104,29 @@ pub(crate) fn build_dotfile_name(struct_attrs: &StructAttrs) -> proc_macro2::Tok
     quote! { #base }
 }
 
+pub(crate) fn build_xdg_snippet(struct_attrs: &StructAttrs) -> proc_macro2::TokenStream {
+    if let Some(prefix) = &struct_attrs.prefix {
+        let base = prefix.trim_end_matches('_').to_ascii_lowercase();
+        quote! {
+            if file_fig.is_none() {
+                let xdg_dirs = xdg::BaseDirectories::with_prefix(#base);
+                if let Some(p) = xdg_dirs.find_config_file("config.toml") {
+                    file_fig = ortho_config::load_config_file(&p)?;
+                }
+            }
+        }
+    } else {
+        quote! {
+            if file_fig.is_none() {
+                let xdg_dirs = xdg::BaseDirectories::new();
+                if let Some(p) = xdg_dirs.find_config_file("config.toml") {
+                    file_fig = ortho_config::load_config_file(&p)?;
+                }
+            }
+        }
+    }
+}
+
 pub(crate) fn collect_append_fields<'a>(
     fields: &'a [syn::Field],
     field_attrs: &'a [FieldAttrs],
@@ -183,6 +206,7 @@ pub(crate) struct LoadImplTokens<'a> {
     pub append_logic: &'a proc_macro2::TokenStream,
     pub config_env_var: &'a proc_macro2::TokenStream,
     pub dotfile_name: &'a proc_macro2::TokenStream,
+    pub xdg_snippet: &'a proc_macro2::TokenStream,
 }
 
 pub(crate) struct LoadImplArgs<'a> {
@@ -205,6 +229,7 @@ pub(crate) fn build_load_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStre
         append_logic,
         config_env_var,
         dotfile_name,
+        xdg_snippet,
     } = tokens;
 
     quote! {
@@ -246,6 +271,7 @@ pub(crate) fn build_load_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStre
                         file_fig = ortho_config::load_config_file(&p)?;
                     }
                 }
+                #xdg_snippet
 
                 let mut fig = Figment::new();
                 let defaults = #defaults_ident {
