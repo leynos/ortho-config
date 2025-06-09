@@ -31,7 +31,7 @@ pub fn load_config_file(path: &Path) -> Result<Option<Figment>, OrthoError> {
         .and_then(|e| e.to_str())
         .map(str::to_ascii_lowercase);
     let figment = match ext.as_deref() {
-        Some("json") | Some("json5") => {
+        Some("json" | "json5") => {
             #[cfg(feature = "json5")]
             {
                 Figment::from(Json5::string(&data))

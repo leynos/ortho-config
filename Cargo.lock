@@ -105,6 +105,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "clap-dispatch"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0a558b9547b590c876e46e301da15d3b0e93b0384fd50d2c7870f7ea86760df5"
+dependencies = [
+ "heck",
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "clap_builder"
 version = "4.5.39"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -343,6 +355,7 @@ name = "ortho_config"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "clap-dispatch",
  "figment",
  "figment-json5",
  "ortho_config_macros",

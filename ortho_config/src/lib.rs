@@ -8,6 +8,8 @@ pub use ortho_config_macros::OrthoConfig;
 
 mod error;
 mod file;
+pub mod subcommand;
+pub use subcommand::load_subcommand_config;
 
 pub use error::OrthoError;
 pub use file::load_config_file;
