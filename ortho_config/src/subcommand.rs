@@ -36,7 +36,8 @@ where
         }
     }
 
-    let env_prefix = format!("{}CMDS_{}_", prefix, name.to_ascii_uppercase());
+    let env_name = name.replace('-', "_").to_ascii_uppercase();
+    let env_prefix = format!("{prefix}CMDS_{env_name}_");
     let env_provider = Env::prefixed(&env_prefix)
         .map(|k| Uncased::new(k.as_str().to_ascii_uppercase()))
         .split("__");
