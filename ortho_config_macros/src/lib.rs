@@ -19,7 +19,7 @@ use derive::build::{
     LoadImplArgs, LoadImplIdents, LoadImplTokens, build_append_logic, build_cli_fields,
     build_config_env_var, build_default_struct_fields, build_default_struct_init,
     build_dotfile_name, build_env_provider, build_load_impl, build_override_struct,
-    collect_append_fields,
+    build_xdg_snippet, collect_append_fields,
 };
 use derive::parse::parse_input;
 
@@ -47,6 +47,7 @@ pub fn derive_ortho_config(input: TokenStream) -> TokenStream {
     let env_provider = build_env_provider(&struct_attrs);
     let config_env_var = build_config_env_var(&struct_attrs);
     let dotfile_name = build_dotfile_name(&struct_attrs);
+    let xdg_snippet = build_xdg_snippet(&struct_attrs);
     let append_fields = collect_append_fields(&fields, &field_attrs);
     let (override_struct_ts, override_init_ts) = build_override_struct(&ident, &append_fields);
     let append_logic = build_append_logic(&append_fields);
@@ -64,6 +65,7 @@ pub fn derive_ortho_config(input: TokenStream) -> TokenStream {
             append_logic: &append_logic,
             config_env_var: &config_env_var,
             dotfile_name: &dotfile_name,
+            xdg_snippet: &xdg_snippet,
         },
     });
 

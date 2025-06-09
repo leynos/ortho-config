@@ -116,3 +116,21 @@ fn missing_config_file_is_ignored() {
         Ok(())
     });
 }
+
+#[test]
+fn loads_from_xdg_config() {
+    figment::Jail::expect_with(|j| {
+        let dir = j.create_dir("xdg")?;
+        let abs = std::fs::canonicalize(&dir).unwrap();
+        j.create_file(
+            dir.join("config.toml"),
+            "sample_value = \"xdg\"\nother = \"val\"",
+        )?;
+        j.set_env("XDG_CONFIG_HOME", abs.to_str().unwrap());
+
+        let cfg = TestConfig::load_from_iter(["prog"]).expect("load");
+        assert_eq!(cfg.sample_value, "xdg");
+        assert_eq!(cfg.other, "val");
+        Ok(())
+    });
+}
