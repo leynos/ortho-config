@@ -1,12 +1,12 @@
 use crate::OrthoError;
-#[cfg(feature = "json")]
-use figment::providers::Json;
 #[cfg(feature = "yaml")]
 use figment::providers::Yaml;
 use figment::{
     Figment,
     providers::{Format, Toml},
 };
+#[cfg(feature = "json5")]
+use figment_json5::Json5;
 
 use std::path::Path;
 
@@ -31,20 +31,16 @@ pub fn load_config_file(path: &Path) -> Result<Option<Figment>, OrthoError> {
         .and_then(|e| e.to_str())
         .map(str::to_ascii_lowercase);
     let figment = match ext.as_deref() {
-        Some("json") => {
-            #[cfg(feature = "json")]
+        Some("json") | Some("json5") => {
+            #[cfg(feature = "json5")]
             {
-                serde_json::from_str::<serde_json::Value>(&data).map_err(|e| OrthoError::File {
-                    path: path.to_path_buf(),
-                    source: Box::new(e),
-                })?;
-                Figment::from(Json::string(&data))
+                Figment::from(Json5::string(&data))
             }
-            #[cfg(not(feature = "json"))]
+            #[cfg(not(feature = "json5"))]
             {
                 return Err(OrthoError::File {
                     path: path.to_path_buf(),
-                    source: Box::new(std::io::Error::other("json feature disabled")),
+                    source: Box::new(std::io::Error::other("json5 feature disabled")),
                 });
             }
         }
