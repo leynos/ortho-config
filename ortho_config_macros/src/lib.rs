@@ -177,124 +177,40 @@ fn build_append_logic(fields: &[(syn::Ident, &Type)]) -> proc_macro2::TokenStrea
 }
 
 /// Derive macro for [`ortho_config::OrthoConfig`].
+///
+/// # Panics
+///
+/// Panics if invoked on a struct that contains unnamed fields.
 #[proc_macro_derive(OrthoConfig, attributes(ortho_config))]
 pub fn derive_ortho_config(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
-    let ident = input.ident;
-    let struct_attrs = match parse_struct_attrs(&input.attrs) {
-        Ok(a) => a,
-        Err(e) => return e.to_compile_error().into(),
-    };
-
-    let fields = match input.data {
-        Data::Struct(data) => match data.fields {
-            Fields::Named(named) => named.named,
-            _ => {
-                return syn::Error::new_spanned(
-                    data.struct_token,
-                    "OrthoConfig requires named fields",
-                )
-                .to_compile_error()
-                .into();
-            }
-        },
-        _ => {
-            return syn::Error::new_spanned(ident, "OrthoConfig can only be derived for structs")
-                .to_compile_error()
-                .into();
-        }
+    let (ident, fields, struct_attrs, field_attrs) = match parse_input(&input) {
+        Ok(v) => v,
+        Err(ts) => return ts,
     };
 
     let cli_ident = format_ident!("__{}Cli", ident);
     let cli_mod = format_ident!("__{}CliMod", ident);
     let cli_pub_ident = format_ident!("{}Cli", ident);
 
-    let mut field_attrs = Vec::new();
-    for f in &fields {
-        match parse_field_attrs(&f.attrs) {
-            Ok(a) => field_attrs.push(a),
-            Err(e) => return e.to_compile_error().into(),
-        }
-    }
-
-    let cli_fields = fields.iter().zip(field_attrs.iter()).map(|(f, attr)| {
-        let name = f.ident.as_ref().expect("named field");
-        let ty = &f.ty;
-        let inner = option_inner(ty);
-        let cli_ty = if let Some(inner) = inner {
-            quote! { Option<#inner> }
-        } else {
-            quote! { Option<#ty> }
-        };
-
-        let mut arg_tokens = quote! { long };
-        if let Some(ref long) = attr.cli_long {
-            arg_tokens = quote! { long = #long };
-        }
-        if let Some(ch) = attr.cli_short {
-            let short_token = quote! { short = #ch };
-            arg_tokens = quote! { #arg_tokens, #short_token };
-        }
-
-        quote! {
-            #[arg(#arg_tokens, required = false)]
-            #[serde(skip_serializing_if = "Option::is_none")]
-            pub #name: #cli_ty
-        }
-    });
-
+    let cli_fields = build_cli_fields(&fields, &field_attrs);
     let defaults_ident = format_ident!("__{}Defaults", ident);
-    let default_struct_fields = fields.iter().map(|f| {
-        let name = f.ident.as_ref().expect("named field");
-        let ty = &f.ty;
-        let inner = option_inner(ty);
-        let default_ty = if let Some(inner) = inner {
-            quote! { Option<#inner> }
-        } else {
-            quote! { Option<#ty> }
-        };
-        quote! {
-            #[serde(skip_serializing_if = "Option::is_none")]
-            pub #name: #default_ty
-        }
-    });
-
-    let default_struct_init = fields.iter().zip(field_attrs.iter()).map(|(f, attr)| {
-        let name = f.ident.as_ref().expect("named field");
-        if let Some(expr) = &attr.default {
-            quote! { #name: Some(#expr) }
-        } else {
-            quote! { #name: None }
-        }
-    });
-
-    let env_provider = if let Some(prefix) = &struct_attrs.prefix {
-        quote! { Env::prefixed(#prefix) }
-    } else {
-        quote! { Env::raw() }
-    };
-
-    let append_fields: Vec<_> = fields
-        .iter()
-        .zip(field_attrs.iter())
-        .filter_map(|(f, attr)| {
-            let ty = &f.ty;
-            let name = f.ident.as_ref().unwrap();
-            let vec_ty = match vec_inner(ty) {
-                Some(v) => v,
-                None => return None,
-            };
-            let strategy = attr.merge_strategy.unwrap_or(MergeStrategy::Append);
-            if strategy == MergeStrategy::Append {
-                Some((name.clone(), vec_ty))
-            } else {
-                None
-            }
-        })
-        .collect();
-
+    let default_struct_fields = build_default_struct_fields(&fields);
+    let default_struct_init = build_default_struct_init(&fields, &field_attrs);
+    let env_provider = build_env_provider(&struct_attrs);
+    let append_fields = collect_append_fields(&fields, &field_attrs);
     let (override_struct_ts, override_init_ts) = build_override_struct(&ident, &append_fields);
     let append_logic = build_append_logic(&append_fields);
+    let load_impl = build_load_impl(
+        &ident,
+        &cli_mod,
+        &cli_ident,
+        &defaults_ident,
+        &env_provider,
+        &default_struct_init,
+        &override_init_ts,
+        &append_logic,
+    );
 
     let expanded = quote! {
         mod #cli_mod {
@@ -315,6 +231,172 @@ pub fn derive_ortho_config(input: TokenStream) -> TokenStream {
 
         pub use #cli_mod::#cli_ident as #cli_pub_ident;
 
+        #load_impl
+
+        impl ortho_config::OrthoConfig for #ident {
+            fn load() -> Result<Self, ortho_config::OrthoError> {
+                Self::load_from_iter(::std::env::args_os())
+            }
+        }
+    };
+
+    TokenStream::from(expanded)
+}
+
+fn parse_input(
+    input: &DeriveInput,
+) -> Result<(syn::Ident, Vec<syn::Field>, StructAttrs, Vec<FieldAttrs>), TokenStream> {
+    let ident = input.ident.clone();
+    let struct_attrs = match parse_struct_attrs(&input.attrs) {
+        Ok(a) => a,
+        Err(e) => return Err(e.to_compile_error().into()),
+    };
+    let fields = match &input.data {
+        Data::Struct(data) => match &data.fields {
+            Fields::Named(named) => named.named.iter().cloned().collect::<Vec<_>>(),
+            _ => {
+                return Err(syn::Error::new_spanned(
+                    data.struct_token,
+                    "OrthoConfig requires named fields",
+                )
+                .to_compile_error()
+                .into());
+            }
+        },
+        _ => {
+            return Err(syn::Error::new_spanned(
+                ident.clone(),
+                "OrthoConfig can only be derived for structs",
+            )
+            .to_compile_error()
+            .into());
+        }
+    };
+
+    let mut field_attrs = Vec::new();
+    for f in &fields {
+        match parse_field_attrs(&f.attrs) {
+            Ok(a) => field_attrs.push(a),
+            Err(e) => return Err(e.to_compile_error().into()),
+        }
+    }
+    Ok((ident, fields, struct_attrs, field_attrs))
+}
+
+fn build_cli_fields(
+    fields: &[syn::Field],
+    field_attrs: &[FieldAttrs],
+) -> Vec<proc_macro2::TokenStream> {
+    fields
+        .iter()
+        .zip(field_attrs.iter())
+        .map(|(f, attr)| {
+            let name = f.ident.as_ref().expect("named field");
+            let ty = &f.ty;
+            let inner = option_inner(ty);
+            let cli_ty = if let Some(inner) = inner {
+                quote! { Option<#inner> }
+            } else {
+                quote! { Option<#ty> }
+            };
+
+            let mut arg_tokens = quote! { long };
+            if let Some(ref long) = attr.cli_long {
+                arg_tokens = quote! { long = #long };
+            }
+            if let Some(ch) = attr.cli_short {
+                let short_token = quote! { short = #ch };
+                arg_tokens = quote! { #arg_tokens, #short_token };
+            }
+
+            quote! {
+                #[arg(#arg_tokens, required = false)]
+                #[serde(skip_serializing_if = "Option::is_none")]
+                pub #name: #cli_ty
+            }
+        })
+        .collect()
+}
+
+fn build_default_struct_fields(fields: &[syn::Field]) -> Vec<proc_macro2::TokenStream> {
+    fields
+        .iter()
+        .map(|f| {
+            let name = f.ident.as_ref().expect("named field");
+            let ty = &f.ty;
+            let inner = option_inner(ty);
+            let default_ty = if let Some(inner) = inner {
+                quote! { Option<#inner> }
+            } else {
+                quote! { Option<#ty> }
+            };
+            quote! {
+                #[serde(skip_serializing_if = "Option::is_none")]
+                pub #name: #default_ty
+            }
+        })
+        .collect()
+}
+
+fn build_default_struct_init(
+    fields: &[syn::Field],
+    field_attrs: &[FieldAttrs],
+) -> Vec<proc_macro2::TokenStream> {
+    fields
+        .iter()
+        .zip(field_attrs.iter())
+        .map(|(f, attr)| {
+            let name = f.ident.as_ref().expect("named field");
+            if let Some(expr) = &attr.default {
+                quote! { #name: Some(#expr) }
+            } else {
+                quote! { #name: None }
+            }
+        })
+        .collect()
+}
+
+fn build_env_provider(struct_attrs: &StructAttrs) -> proc_macro2::TokenStream {
+    if let Some(prefix) = &struct_attrs.prefix {
+        quote! { Env::prefixed(#prefix) }
+    } else {
+        quote! { Env::raw() }
+    }
+}
+
+fn collect_append_fields<'a>(
+    fields: &'a [syn::Field],
+    field_attrs: &'a [FieldAttrs],
+) -> Vec<(syn::Ident, &'a Type)> {
+    fields
+        .iter()
+        .zip(field_attrs.iter())
+        .filter_map(|(f, attr)| {
+            let ty = &f.ty;
+            let name = f.ident.as_ref().unwrap();
+            let vec_ty = vec_inner(ty)?;
+            let strategy = attr.merge_strategy.unwrap_or(MergeStrategy::Append);
+            if strategy == MergeStrategy::Append {
+                Some((name.clone(), vec_ty))
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
+#[allow(clippy::too_many_arguments)]
+fn build_load_impl(
+    ident: &syn::Ident,
+    cli_mod: &syn::Ident,
+    cli_ident: &syn::Ident,
+    defaults_ident: &syn::Ident,
+    env_provider: &proc_macro2::TokenStream,
+    default_struct_init: &[proc_macro2::TokenStream],
+    override_init_ts: &proc_macro2::TokenStream,
+    append_logic: &proc_macro2::TokenStream,
+) -> proc_macro2::TokenStream {
+    quote! {
         impl #ident {
             #[allow(dead_code)]
             pub fn load_from_iter<I>(args: I) -> Result<Self, ortho_config::OrthoError>
@@ -371,13 +453,5 @@ pub fn derive_ortho_config(input: TokenStream) -> TokenStream {
                 fig.extract().map_err(ortho_config::OrthoError::Gathering)
             }
         }
-
-        impl ortho_config::OrthoConfig for #ident {
-            fn load() -> Result<Self, ortho_config::OrthoError> {
-                Self::load_from_iter(::std::env::args_os())
-            }
-        }
-    };
-
-    TokenStream::from(expanded)
+    }
 }

@@ -17,5 +17,9 @@ pub trait OrthoConfig: Sized + serde::de::DeserializeOwned {
     /// Loads, merges, and deserializes configuration from all available
     /// sources according to predefined precedence rules.
     #[allow(clippy::result_large_err)]
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`OrthoError`] if gathering or deserialization fails.
     fn load() -> Result<Self, OrthoError>;
 }
