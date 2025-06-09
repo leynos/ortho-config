@@ -16,9 +16,9 @@ mod derive {
 }
 
 use derive::build::{
-    LoadImplArgs, build_append_logic, build_cli_fields, build_default_struct_fields,
-    build_default_struct_init, build_env_provider, build_load_impl, build_override_struct,
-    collect_append_fields,
+    LoadImplArgs, LoadImplIdents, LoadImplTokens, build_append_logic, build_cli_fields,
+    build_default_struct_fields, build_default_struct_init, build_env_provider, build_load_impl,
+    build_override_struct, collect_append_fields,
 };
 use derive::parse::parse_input;
 
@@ -48,14 +48,18 @@ pub fn derive_ortho_config(input: TokenStream) -> TokenStream {
     let (override_struct_ts, override_init_ts) = build_override_struct(&ident, &append_fields);
     let append_logic = build_append_logic(&append_fields);
     let load_impl = build_load_impl(&LoadImplArgs {
-        ident: &ident,
-        cli_mod: &cli_mod,
-        cli_ident: &cli_ident,
-        defaults_ident: &defaults_ident,
-        env_provider: &env_provider,
-        default_struct_init: &default_struct_init,
-        override_init_ts: &override_init_ts,
-        append_logic: &append_logic,
+        idents: LoadImplIdents {
+            ident: &ident,
+            cli_mod: &cli_mod,
+            cli_ident: &cli_ident,
+            defaults_ident: &defaults_ident,
+        },
+        tokens: LoadImplTokens {
+            env_provider: &env_provider,
+            default_struct_init: &default_struct_init,
+            override_init_ts: &override_init_ts,
+            append_logic: &append_logic,
+        },
     });
 
     let expanded = quote! {

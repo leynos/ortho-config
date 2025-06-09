@@ -142,7 +142,7 @@ Customize behavior for each field:
   * `#[ortho_config(cli_short = 'c')]`: Specifies a short CLI flag (e.g., `-c`).
   * `#`: Specifies a custom environment variable suffix (appended to the struct-level prefix).
   * `#[ortho_config(file_key = "customKey")]`: Specifies a custom key name for configuration files.
-  * `#[ortho_config(merge_strategy = "replace" | "append")]`: For `Vec<T>` fields, defines how values from different sources are combined. Defaults to `"append"`.
+  * `#[ortho_config(merge_strategy = "append")]`: For `Vec<T>` fields, defines how values from different sources are combined. Defaults to `"append"`.
   * `#[ortho_config(flatten)]`: Similar to `serde(flatten)`, useful for inlining fields from a nested struct into the parent's namespace for CLI or environment variables.
 
 ## Why OrthoConfig?

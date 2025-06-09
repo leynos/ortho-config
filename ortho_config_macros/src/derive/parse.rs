@@ -15,14 +15,12 @@ pub(crate) struct FieldAttrs {
 
 #[derive(Clone, Copy, PartialEq)]
 pub(crate) enum MergeStrategy {
-    Replace,
     Append,
 }
 
 impl MergeStrategy {
     pub(crate) fn parse(s: &str, span: proc_macro2::Span) -> Result<Self, syn::Error> {
         match s {
-            "replace" => Ok(MergeStrategy::Replace),
             "append" => Ok(MergeStrategy::Append),
             _ => Err(syn::Error::new(span, "unknown merge_strategy")),
         }

@@ -3,6 +3,14 @@ use syn::{Ident, Type};
 
 use super::parse::{FieldAttrs, StructAttrs, option_inner, vec_inner};
 
+fn option_type_tokens(ty: &Type) -> proc_macro2::TokenStream {
+    if let Some(inner) = option_inner(ty) {
+        quote! { Option<#inner> }
+    } else {
+        quote! { Option<#ty> }
+    }
+}
+
 pub(crate) fn build_cli_fields(
     fields: &[syn::Field],
     field_attrs: &[FieldAttrs],
@@ -12,13 +20,7 @@ pub(crate) fn build_cli_fields(
         .zip(field_attrs.iter())
         .map(|(f, attr)| {
             let name = f.ident.as_ref().expect("named field");
-            let ty = &f.ty;
-            let inner = option_inner(ty);
-            let cli_ty = if let Some(inner) = inner {
-                quote! { Option<#inner> }
-            } else {
-                quote! { Option<#ty> }
-            };
+            let ty = option_type_tokens(&f.ty);
 
             let mut arg_tokens = quote! { long };
             if let Some(ref long) = attr.cli_long {
@@ -32,7 +34,7 @@ pub(crate) fn build_cli_fields(
             quote! {
                 #[arg(#arg_tokens, required = false)]
                 #[serde(skip_serializing_if = "Option::is_none")]
-                pub #name: #cli_ty
+                pub #name: #ty
             }
         })
         .collect()
@@ -43,16 +45,10 @@ pub(crate) fn build_default_struct_fields(fields: &[syn::Field]) -> Vec<proc_mac
         .iter()
         .map(|f| {
             let name = f.ident.as_ref().expect("named field");
-            let ty = &f.ty;
-            let inner = option_inner(ty);
-            let default_ty = if let Some(inner) = inner {
-                quote! { Option<#inner> }
-            } else {
-                quote! { Option<#ty> }
-            };
+            let ty = option_type_tokens(&f.ty);
             quote! {
                 #[serde(skip_serializing_if = "Option::is_none")]
-                pub #name: #default_ty
+                pub #name: #ty
             }
         })
         .collect()
@@ -149,28 +145,39 @@ pub(crate) fn build_append_logic(fields: &[(Ident, &Type)]) -> proc_macro2::Toke
     quote! { #( #logic )* }
 }
 
-pub(crate) struct LoadImplArgs<'a> {
+pub(crate) struct LoadImplIdents<'a> {
     pub ident: &'a Ident,
     pub cli_mod: &'a Ident,
     pub cli_ident: &'a Ident,
     pub defaults_ident: &'a Ident,
+}
+
+pub(crate) struct LoadImplTokens<'a> {
     pub env_provider: &'a proc_macro2::TokenStream,
     pub default_struct_init: &'a [proc_macro2::TokenStream],
     pub override_init_ts: &'a proc_macro2::TokenStream,
     pub append_logic: &'a proc_macro2::TokenStream,
 }
 
+pub(crate) struct LoadImplArgs<'a> {
+    pub idents: LoadImplIdents<'a>,
+    pub tokens: LoadImplTokens<'a>,
+}
+
 pub(crate) fn build_load_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStream {
-    let LoadImplArgs {
+    let LoadImplArgs { idents, tokens } = args;
+    let LoadImplIdents {
         ident,
         cli_mod,
         cli_ident,
         defaults_ident,
+    } = idents;
+    let LoadImplTokens {
         env_provider,
         default_struct_init,
         override_init_ts,
         append_logic,
-    } = args;
+    } = tokens;
 
     quote! {
         impl #ident {

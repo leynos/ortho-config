@@ -84,8 +84,7 @@ The macro must enforce naming conventions automatically.
 
 This is a key user-experience feature.
 
-* **`merge_strategy = "replace"` (Default):** This is `figment`'s standard behaviour. The highest-precedence source that defines the `Vec` wins; all others are ignored. This is simple to implement.
-* **`merge_strategy = "append"`:** This is more complex. The generated `load()` function cannot simply use `figment::extract()`. It must:
+* **`merge_strategy = "append"` (Default):** The generated `load()` function cannot simply use `figment::extract()` when merging arrays. It must:
     1.  Create separate `figment` instances for each source layer (File, Env, CLI).
     2.  Extract the `Vec<T>` field from each layer individually, ignoring errors if the field is absent.
     3.  Concatenate the resulting `Vec`s in the correct order (File -> Env -> CLI).
