@@ -24,9 +24,9 @@ use derive::parse::parse_input;
 
 /// Derive macro for [`ortho_config::OrthoConfig`].
 ///
-/// # Panics
+/// # Errors
 ///
-/// Panics if invoked on a struct that contains unnamed fields.
+/// Returns a compile-time error if invoked on a struct that contains unnamed fields.
 #[proc_macro_derive(OrthoConfig, attributes(ortho_config))]
 pub fn derive_ortho_config(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
