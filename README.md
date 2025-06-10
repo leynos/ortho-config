@@ -177,16 +177,17 @@ Customize behavior for each field:
 ## Subcommand Configuration
 
 Applications using `clap` subcommands can keep per-command defaults in a
-dedicated `cmds` namespace. The helper `load_subcommand_config` loads these
+dedicated `cmds` namespace. The helper `load_subcommand_config_for` loads these
 values from configuration files and environment variables, which can then be
 merged with CLI arguments.
 
 ```rust
 use clap::Parser;
 use serde::Deserialize;
-use ortho_config::{load_subcommand_config, merge_cli_over_defaults};
+use ortho_config::{load_subcommand_config_for, merge_cli_over_defaults, OrthoConfig};
 
-#[derive(Parser, Deserialize, Default, Debug)]
+#[derive(Parser, Deserialize, Default, Debug, OrthoConfig)]
+#[ortho_config(prefix = "APP_")]
 pub struct AddUserArgs {
     #[arg(long)]
     username: Option<String>,
@@ -198,7 +199,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = AddUserArgs::parse();
 
     // Reads `[cmds.add-user]` sections and `APP_CMDS_ADD_USER_*` variables
-    let defaults: AddUserArgs = load_subcommand_config("APP_", "add-user")?;
+    let defaults: AddUserArgs = load_subcommand_config_for("add-user")?;
     let args = merge_cli_over_defaults(&defaults, &cli)?;
 
     println!("Final args: {args:?}");
@@ -231,7 +232,7 @@ Subcommands can be executed with defaults applied using
 use clap::Parser;
 use clap_dispatch::clap_dispatch;
 use serde::Deserialize;
-use ortho_config::{load_subcommand_config, merge_cli_over_defaults};
+use ortho_config::{load_subcommand_config_for, merge_cli_over_defaults};
 
 #[derive(Parser, Deserialize, Default, Debug)]
 pub struct ListItemsArgs {
@@ -263,11 +264,11 @@ fn main() -> Result<(), String> {
     // merge per-command defaults
     let cmd = match cli {
         Commands::AddUser(args) => {
-            let defaults = load_subcommand_config("APP_", "add-user")?;
+            let defaults = load_subcommand_config_for::<AddUserArgs>("add-user")?;
             Commands::AddUser(merge_cli_over_defaults(&defaults, &args)?)
         }
         Commands::ListItems(args) => {
-            let defaults = load_subcommand_config("APP_", "list-items")?;
+            let defaults = load_subcommand_config_for::<ListItemsArgs>("list-items")?;
             Commands::ListItems(merge_cli_over_defaults(&defaults, &args)?)
         }
     };

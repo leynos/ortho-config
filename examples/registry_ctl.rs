@@ -1,9 +1,10 @@
 use clap::Parser;
 use clap_dispatch::clap_dispatch;
 use serde::Deserialize;
-use ortho_config::{load_subcommand_config, merge_cli_over_defaults};
+use ortho_config::{load_subcommand_config_for, merge_cli_over_defaults, OrthoConfig};
 
-#[derive(Parser, Deserialize, Default, Debug, Clone)]
+#[derive(Parser, Deserialize, Default, Debug, Clone, OrthoConfig)]
+#[ortho_config(prefix = "REGCTL_")]
 pub struct AddUserArgs {
     #[arg(long)]
     username: Option<String>,
@@ -11,7 +12,8 @@ pub struct AddUserArgs {
     admin: Option<bool>,
 }
 
-#[derive(Parser, Deserialize, Default, Debug, Clone)]
+#[derive(Parser, Deserialize, Default, Debug, Clone, OrthoConfig)]
+#[ortho_config(prefix = "REGCTL_")]
 pub struct ListItemsArgs {
     #[arg(long)]
     category: Option<String>,
@@ -57,7 +59,7 @@ fn main() -> Result<(), String> {
     let final_cmd = match cli {
         Commands::AddUser(args) => {
             let defaults: AddUserArgs =
-                load_subcommand_config("REGCTL_", "add-user").unwrap_or_default();
+                load_subcommand_config_for::<AddUserArgs>("add-user").unwrap_or_default();
             let merged = merge_cli_over_defaults(&defaults, &args)
                 .map_err(|e| e.to_string())?;
             Commands::AddUser(merged)
@@ -65,7 +67,7 @@ fn main() -> Result<(), String> {
         Commands::ListItems(args) => {
             // `ListItems` becomes `list-items` when parsed by clap
             let defaults: ListItemsArgs =
-                load_subcommand_config("REGCTL_", "list-items").unwrap_or_default();
+                load_subcommand_config_for::<ListItemsArgs>("list-items").unwrap_or_default();
             let merged = merge_cli_over_defaults(&defaults, &args)
                 .map_err(|e| e.to_string())?;
             Commands::ListItems(merged)

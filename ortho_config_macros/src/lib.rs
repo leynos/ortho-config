@@ -68,6 +68,7 @@ pub fn derive_ortho_config(input: TokenStream) -> TokenStream {
             xdg_snippet: &xdg_snippet,
         },
     });
+    let prefix_value = struct_attrs.prefix.as_deref().unwrap_or("");
 
     let expanded = quote! {
         mod #cli_mod {
@@ -93,6 +94,9 @@ pub fn derive_ortho_config(input: TokenStream) -> TokenStream {
         impl ortho_config::OrthoConfig for #ident {
             fn load() -> Result<Self, ortho_config::OrthoError> {
                 Self::load_from_iter(::std::env::args_os())
+            }
+            fn prefix() -> &'static str {
+                #prefix_value
             }
         }
     };

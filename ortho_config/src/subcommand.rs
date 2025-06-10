@@ -76,3 +76,16 @@ where
 
     fig.extract().map_err(OrthoError::Gathering)
 }
+
+/// Load configuration for a subcommand using `T`'s configured prefix.
+///
+/// # Errors
+///
+/// Returns an [`OrthoError`] if file loading or deserialization fails.
+#[allow(clippy::result_large_err)]
+pub fn load_subcommand_config_for<T>(name: &str) -> Result<T, OrthoError>
+where
+    T: crate::OrthoConfig + Default,
+{
+    load_subcommand_config(T::prefix(), name)
+}
