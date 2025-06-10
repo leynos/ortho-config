@@ -222,6 +222,60 @@ APP_CMDS_ADD_USER_USERNAME=env_user
 APP_CMDS_ADD_USER_ADMIN=false
 ```
 
+### Dispatching Subcommands
+
+Subcommands can be executed with defaults applied using
+[`clap-dispatch`](https://docs.rs/clap-dispatch):
+
+```rust
+use clap::Parser;
+use clap_dispatch::clap_dispatch;
+use serde::Deserialize;
+use ortho_config::{load_subcommand_config, merge_cli_over_defaults};
+
+#[derive(Parser, Deserialize, Default, Debug)]
+pub struct ListItemsArgs {
+    #[arg(long)]
+    category: Option<String>,
+    #[arg(long)]
+    all: Option<bool>,
+}
+
+trait Run {
+    fn run(&self, db_url: &str) -> Result<(), String>;
+}
+
+impl Run for AddUserArgs { /* your logic here */ }
+impl Run for ListItemsArgs { /* your logic here */ }
+
+#[derive(Parser)]
+#[command(name = "registry-ctl")]
+#[clap_dispatch(fn run(self, db_url: &str) -> Result<(), String>)]
+enum Commands {
+    AddUser(AddUserArgs),
+    ListItems(ListItemsArgs),
+}
+
+fn main() -> Result<(), String> {
+    let cli = Commands::parse();
+    let db_url = "postgres://user:pass@localhost/registry";
+
+    // merge per-command defaults
+    let cmd = match cli {
+        Commands::AddUser(args) => {
+            let defaults = load_subcommand_config("APP_", "add-user")?;
+            Commands::AddUser(merge_cli_over_defaults(&defaults, &args)?)
+        }
+        Commands::ListItems(args) => {
+            let defaults = load_subcommand_config("APP_", "list-items")?;
+            Commands::ListItems(merge_cli_over_defaults(&defaults, &args)?)
+        }
+    };
+
+    cmd.run(db_url)
+}
+```
+
 ## Why OrthoConfig?
 
   * **Reduced Boilerplate:** Define your configuration schema once and let OrthoConfig handle the multi-source loading and mapping.
