@@ -24,7 +24,7 @@ The core principle is **orthographic option naming**: a single field in your Rus
 
     ```toml
     [dependencies]
-    ortho_config = "0.1.0" # Replace with the latest version
+    ortho_config = "0.2.0" # Replace with the latest version
     serde = { version = "1.0", features = ["derive"] }
     ```
 
@@ -139,7 +139,7 @@ TOML parsing is enabled by default. Enable the `json5` and `yaml` features to su
 
 ```toml
 [dependencies]
-ortho_config = { version = "0.1.0", features = ["json5", "yaml"] }
+ortho_config = { version = "0.2.0", features = ["json5", "yaml"] }
 ```
 
 The file loader selects the parser based on the extension (`.toml`, `.json`, `.json5`, `.yaml`, `.yml`).
@@ -284,6 +284,19 @@ fn main() -> Result<(), String> {
   * **Developer Ergonomics:** Intuitive mapping from external sources to your Rust code.
   * **Flexibility:** Users of your application can configure it in the way that best suits their environment (CLI for quick overrides, env vars for CI/CD, files for persistent settings).
   * **Clear Precedence:** Predictable configuration resolution.
+
+## Migrating from 0.1 to 0.2
+
+Version 0.2 introduces a small API refinement:
+
+* `load_subcommand_config_for` now only loads default values from files and
+  environment variables. Merge these defaults with CLI arguments using
+  [`merge_cli_over_defaults`](#subcommand-configuration).
+* Types deriving `OrthoConfig` expose an associated `prefix()` function. Use
+  this if you need the configured prefix directly.
+
+Update your `Cargo.toml` to depend on `ortho_config = "0.2"` and adjust code to
+call `merge_cli_over_defaults` explicitly after loading subcommand defaults.
 
 ## Contributing
 

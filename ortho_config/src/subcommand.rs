@@ -77,10 +77,12 @@ where
     fig.extract().map_err(OrthoError::Gathering)
 }
 
-/// Load configuration for a subcommand using `T`'s configured prefix.
+/// Load default values for a subcommand using `T`'s configured prefix.
 ///
 /// The prefix is provided by [`OrthoConfig::prefix`]. If the struct does not
 /// specify `#[ortho_config(prefix = "...")]`, the default empty prefix is used.
+/// Combine the returned defaults with CLI arguments using
+/// [`merge_cli_over_defaults`](crate::merge_cli_over_defaults).
 ///
 /// # Errors
 ///

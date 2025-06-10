@@ -46,7 +46,7 @@ impl Run for ListItemsArgs {
 }
 
 #[derive(Parser)]
-#[command(name = "registry-ctl", version = "0.1.0", about = "Manages a registry")]
+#[command(name = "registry-ctl", version = "0.2.0", about = "Manages a registry")]
 #[clap_dispatch(fn run(self, db_url: &str) -> Result<(), String>)]
 enum Commands {
     AddUser(AddUserArgs),

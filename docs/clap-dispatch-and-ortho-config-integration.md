@@ -106,7 +106,7 @@ use clap::Parser;
 // Assuming EncodeArgs and DecodeArgs are defined as above
 
 #
-#[command(name = "mytool", version = "0.1.0", about = "A tool with dispatched subcommands")]
+#[command(name = "mytool", version = "0.2.0", about = "A tool with dispatched subcommands")]
 pub enum MyToolCli {
     Encode(EncodeArgs),
     Decode(DecodeArgs),
@@ -129,7 +129,7 @@ use clap_dispatch::clap_dispatch;
 // Assuming EncodeArgs, DecodeArgs, and MyToolCli (without clap_dispatch yet) are defined
 
 #
-#[command(name = "mytool", version = "0.1.0", about = "A tool with dispatched subcommands")]
+#[command(name = "mytool", version = "0.2.0", about = "A tool with dispatched subcommands")]
 #
 pub enum MyToolCli {
     Encode(EncodeArgs),
@@ -233,7 +233,7 @@ pub struct DecodeArgs {
 
 // 2. Define Subcommand Enum and Apply clap_dispatch
 #
-#[command(name = "mytool", version = "0.1.0", about = "A tool with dispatched subcommands")]
+#[command(name = "mytool", version = "0.2.0", about = "A tool with dispatched subcommands")]
 #
 pub enum MyToolCli {
     Encode(EncodeArgs),
@@ -340,7 +340,7 @@ pub struct ListItemsArgs {
 
 // 2. Define Subcommand Enum and Apply clap_dispatch
 #
-#[command(name = "registry-ctl", version = "0.1.0", about = "Manages a registry")]
+#[command(name = "registry-ctl", version = "0.2.0", about = "Manages a registry")]
 #
 pub enum RegistryCommands {
     AddUser(AddUserArgs),
