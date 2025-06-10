@@ -79,6 +79,9 @@ where
 
 /// Load configuration for a subcommand using `T`'s configured prefix.
 ///
+/// The prefix is provided by [`OrthoConfig::prefix`]. If the struct does not
+/// specify `#[ortho_config(prefix = "...")]`, the default empty prefix is used.
+///
 /// # Errors
 ///
 /// Returns an [`OrthoError`] if file loading or deserialization fails.
