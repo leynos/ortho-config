@@ -13,7 +13,13 @@ fn candidate_paths(prefix: &str) -> Vec<PathBuf> {
 
     if let Some(home) = std::env::var_os("HOME") {
         let home = PathBuf::from(home);
-        for ext in ["toml", "json5"] {
+        paths.push(home.join(format!(".{base}.toml")));
+        #[cfg(feature = "json5")]
+        for ext in ["json", "json5"] {
+            paths.push(home.join(format!(".{base}.{ext}")));
+        }
+        #[cfg(feature = "yaml")]
+        for ext in ["yaml", "yml"] {
             paths.push(home.join(format!(".{base}.{ext}")));
         }
     }
@@ -23,13 +29,29 @@ fn candidate_paths(prefix: &str) -> Vec<PathBuf> {
     } else {
         BaseDirectories::with_prefix(&base)
     };
-    for ext in ["toml", "json5"] {
+    if let Some(p) = xdg_dirs.find_config_file("config.toml") {
+        paths.push(p);
+    }
+    #[cfg(feature = "json5")]
+    for ext in ["json", "json5"] {
+        if let Some(p) = xdg_dirs.find_config_file(format!("config.{ext}")) {
+            paths.push(p);
+        }
+    }
+    #[cfg(feature = "yaml")]
+    for ext in ["yaml", "yml"] {
         if let Some(p) = xdg_dirs.find_config_file(format!("config.{ext}")) {
             paths.push(p);
         }
     }
 
-    for ext in ["toml", "json5"] {
+    paths.push(PathBuf::from(format!(".{base}.toml")));
+    #[cfg(feature = "json5")]
+    for ext in ["json", "json5"] {
+        paths.push(PathBuf::from(format!(".{base}.{ext}")));
+    }
+    #[cfg(feature = "yaml")]
+    for ext in ["yaml", "yml"] {
         paths.push(PathBuf::from(format!(".{base}.{ext}")));
     }
 

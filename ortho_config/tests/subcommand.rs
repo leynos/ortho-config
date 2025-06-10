@@ -57,3 +57,14 @@ fn loads_from_xdg_config() {
         Ok(())
     });
 }
+
+#[cfg(feature = "yaml")]
+#[test]
+fn loads_yaml_file() {
+    figment::Jail::expect_with(|j| {
+        j.create_file(".app.yml", "cmds:\n  test:\n    foo: yaml")?;
+        let cfg: CmdCfg = load_subcommand_config("APP_", "test").expect("load");
+        assert_eq!(cfg.foo.as_deref(), Some("yaml"));
+        Ok(())
+    });
+}
