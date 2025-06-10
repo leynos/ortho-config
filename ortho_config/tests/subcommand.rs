@@ -1,4 +1,7 @@
+#![allow(non_snake_case)]
+use ortho_config::OrthoConfig;
 use ortho_config::load_subcommand_config;
+use ortho_config::load_subcommand_config_for;
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize, Default, PartialEq)]
@@ -54,6 +57,24 @@ fn loads_from_xdg_config() {
         j.set_env("XDG_CONFIG_HOME", abs.to_str().unwrap());
         let cfg: CmdCfg = load_subcommand_config("APP_", "test").expect("load");
         assert_eq!(cfg.foo.as_deref(), Some("xdg"));
+        Ok(())
+    });
+}
+
+#[derive(Debug, Deserialize, OrthoConfig, Default, PartialEq)]
+#[allow(non_snake_case)]
+#[ortho_config(prefix = "APP_")]
+struct PrefixedCfg {
+    foo: Option<String>,
+}
+
+#[test]
+fn wrapper_uses_struct_prefix() {
+    figment::Jail::expect_with(|j| {
+        j.create_file(".app.toml", "[cmds.test]\nfoo = \"val\"")?;
+        j.set_env("APP_CMDS_TEST_FOO", "env");
+        let cfg: PrefixedCfg = load_subcommand_config_for("test").expect("load");
+        assert_eq!(cfg.foo.as_deref(), Some("env"));
         Ok(())
     });
 }

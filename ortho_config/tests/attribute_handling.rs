@@ -46,3 +46,8 @@ fn default_value_applied() {
     let cfg = Defaulted::load_from_iter(["prog"]).expect("load");
     assert_eq!(cfg.num, 5);
 }
+
+#[test]
+fn exposes_prefix() {
+    assert_eq!(Prefixed::prefix(), "CFG_");
+}

@@ -11,7 +11,7 @@ mod file;
 mod merge;
 pub mod subcommand;
 pub use merge::merge_cli_over_defaults;
-pub use subcommand::load_subcommand_config;
+pub use subcommand::{load_subcommand_config, load_subcommand_config_for};
 
 /// Normalize a prefix by trimming trailing underscores and converting
 /// to lowercase ASCII.
@@ -33,4 +33,11 @@ pub trait OrthoConfig: Sized + serde::de::DeserializeOwned {
     ///
     /// Returns an [`OrthoError`] if gathering or deserialization fails.
     fn load() -> Result<Self, OrthoError>;
+
+    /// Prefix used for environment variables and subcommand configuration.
+    #[must_use]
+    #[allow(clippy::missing_const_for_fn)]
+    fn prefix() -> &'static str {
+        ""
+    }
 }

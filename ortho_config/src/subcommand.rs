@@ -98,3 +98,21 @@ where
 
     fig.extract().map_err(OrthoError::Gathering)
 }
+
+/// Load default values for a subcommand using `T`'s configured prefix.
+///
+/// The prefix is provided by [`OrthoConfig::prefix`]. If the struct does not
+/// specify `#[ortho_config(prefix = "...")]`, the default empty prefix is used.
+/// Combine the returned defaults with CLI arguments using
+/// [`merge_cli_over_defaults`](crate::merge_cli_over_defaults).
+///
+/// # Errors
+///
+/// Returns an [`OrthoError`] if file loading or deserialization fails.
+#[allow(clippy::result_large_err)]
+pub fn load_subcommand_config_for<T>(name: &str) -> Result<T, OrthoError>
+where
+    T: crate::OrthoConfig + Default,
+{
+    load_subcommand_config(T::prefix(), name)
+}

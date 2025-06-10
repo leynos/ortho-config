@@ -24,7 +24,7 @@ The core principle is **orthographic option naming**: a single field in your Rus
 
     ```toml
     [dependencies]
-    ortho_config = "0.1.0" # Replace with the latest version
+    ortho_config = "0.2.0" # Replace with the latest version
     serde = { version = "1.0", features = ["derive"] }
     ```
 
@@ -139,7 +139,7 @@ TOML parsing is enabled by default. Enable the `json5` and `yaml` features to su
 
 ```toml
 [dependencies]
-ortho_config = { version = "0.1.0", features = ["json5", "yaml"] }
+ortho_config = { version = "0.2.0", features = ["json5", "yaml"] }
 ```
 
 The file loader selects the parser based on the extension (`.toml`, `.json`, `.json5`, `.yaml`, `.yml`).
@@ -178,16 +178,18 @@ Customize behavior for each field:
 ## Subcommand Configuration
 
 Applications using `clap` subcommands can keep per-command defaults in a
-dedicated `cmds` namespace. The helper `load_subcommand_config` loads these
-values from configuration files and environment variables, which can then be
-merged with CLI arguments.
+dedicated `cmds` namespace. The helper `load_subcommand_config_for` loads these
+values from configuration files and environment variables using the struct's
+`prefix()` function (which defaults to an empty string). Merge the returned
+defaults with CLI arguments using `merge_cli_over_defaults`.
 
 ```rust
 use clap::Parser;
 use serde::Deserialize;
-use ortho_config::{load_subcommand_config, merge_cli_over_defaults};
+use ortho_config::{load_subcommand_config_for, merge_cli_over_defaults, OrthoConfig};
 
-#[derive(Parser, Deserialize, Default, Debug)]
+#[derive(Parser, Deserialize, Default, Debug, OrthoConfig)]
+#[ortho_config(prefix = "APP_")]
 pub struct AddUserArgs {
     #[arg(long)]
     username: Option<String>,
@@ -199,7 +201,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = AddUserArgs::parse();
 
     // Reads `[cmds.add-user]` sections and `APP_CMDS_ADD_USER_*` variables
-    let defaults: AddUserArgs = load_subcommand_config("APP_", "add-user")?;
+    let defaults: AddUserArgs = load_subcommand_config_for("add-user")?;
     let args = merge_cli_over_defaults(&defaults, &cli)?;
 
     println!("Final args: {args:?}");
@@ -232,7 +234,7 @@ Subcommands can be executed with defaults applied using
 use clap::Parser;
 use clap_dispatch::clap_dispatch;
 use serde::Deserialize;
-use ortho_config::{load_subcommand_config, merge_cli_over_defaults};
+use ortho_config::{load_subcommand_config_for, merge_cli_over_defaults};
 
 #[derive(Parser, Deserialize, Default, Debug)]
 pub struct ListItemsArgs {
@@ -264,11 +266,11 @@ fn main() -> Result<(), String> {
     // merge per-command defaults
     let cmd = match cli {
         Commands::AddUser(args) => {
-            let defaults = load_subcommand_config("APP_", "add-user")?;
+            let defaults = load_subcommand_config_for::<AddUserArgs>("add-user")?;
             Commands::AddUser(merge_cli_over_defaults(&defaults, &args)?)
         }
         Commands::ListItems(args) => {
-            let defaults = load_subcommand_config("APP_", "list-items")?;
+            let defaults = load_subcommand_config_for::<ListItemsArgs>("list-items")?;
             Commands::ListItems(merge_cli_over_defaults(&defaults, &args)?)
         }
     };
@@ -283,6 +285,19 @@ fn main() -> Result<(), String> {
   * **Developer Ergonomics:** Intuitive mapping from external sources to your Rust code.
   * **Flexibility:** Users of your application can configure it in the way that best suits their environment (CLI for quick overrides, env vars for CI/CD, files for persistent settings).
   * **Clear Precedence:** Predictable configuration resolution.
+
+## Migrating from 0.1 to 0.2
+
+Version 0.2 introduces a small API refinement:
+
+* `load_subcommand_config_for` now only loads default values from files and
+  environment variables. Merge these defaults with CLI arguments using
+  [`merge_cli_over_defaults`](#subcommand-configuration).
+* Types deriving `OrthoConfig` expose an associated `prefix()` function. Use
+  this if you need the configured prefix directly.
+
+Update your `Cargo.toml` to depend on `ortho_config = "0.2"` and adjust code to
+call `merge_cli_over_defaults` explicitly after loading subcommand defaults.
 
 ## Contributing
 
