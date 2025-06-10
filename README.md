@@ -178,9 +178,9 @@ Customize behavior for each field:
 
 Applications using `clap` subcommands can keep per-command defaults in a
 dedicated `cmds` namespace. The helper `load_subcommand_config_for` loads these
-values from configuration files and environment variables and merges them with
-CLI arguments. It determines the environment variable prefix using the
-struct's `prefix()` function, which defaults to an empty string.
+values from configuration files and environment variables using the struct's
+`prefix()` function (which defaults to an empty string). Merge the returned
+defaults with CLI arguments using `merge_cli_over_defaults`.
 
 ```rust
 use clap::Parser;
