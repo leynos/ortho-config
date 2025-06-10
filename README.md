@@ -147,6 +147,7 @@ When the `json5` feature is active, both `.json` and `.json5` files are parsed
 using the JSON5 format. Standard JSON is valid JSON5, so existing `.json` files
 continue to work. Without this feature enabled, attempting to load a `.json` or
 `.json5` file will result in an error.
+When the `yaml` feature is enabled, `.yaml` and `.yml` files are also discovered and parsed. Without this feature, those extensions are ignored during path discovery.
 
 JSON5 extends JSON with conveniences such as comments, trailing commas,
 single-quoted strings, and unquoted keys.
