@@ -11,6 +11,7 @@ use serde::{Serialize, de::DeserializeOwned};
 ///
 /// Returns any [`figment::Error`] produced while extracting the merged
 /// configuration.
+#[deprecated(note = "use `load_and_merge_subcommand` instead")]
 #[allow(clippy::result_large_err)]
 pub fn merge_cli_over_defaults<T>(defaults: &T, cli: &T) -> Result<T, figment::Error>
 where

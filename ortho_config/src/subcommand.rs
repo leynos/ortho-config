@@ -1,3 +1,5 @@
+#[allow(deprecated)]
+use crate::merge_cli_over_defaults;
 use crate::normalize_prefix;
 use crate::{OrthoError, load_config_file};
 use figment::{Figment, providers::Env};
@@ -82,6 +84,7 @@ fn load_from_files(paths: &[PathBuf], name: &str) -> Result<Figment, OrthoError>
 ///
 /// Returns an [`OrthoError`] if file loading or deserialization fails.
 #[allow(clippy::result_large_err)]
+#[deprecated(note = "use `load_and_merge_subcommand` instead")]
 pub fn load_subcommand_config<T>(prefix: &str, name: &str) -> Result<T, OrthoError>
 where
     T: DeserializeOwned + Default,
@@ -114,5 +117,41 @@ pub fn load_subcommand_config_for<T>(name: &str) -> Result<T, OrthoError>
 where
     T: crate::OrthoConfig + Default,
 {
-    load_subcommand_config(T::prefix(), name)
+    #[allow(deprecated)]
+    {
+        load_subcommand_config(T::prefix(), name)
+    }
+}
+
+/// Load defaults for a subcommand and merge CLI-provided values over them.
+///
+/// This convenience function combines [`load_subcommand_config`] and
+/// [`merge_cli_over_defaults`](crate::merge_cli_over_defaults) to reduce
+/// boilerplate when working with `clap` subcommands.
+///
+/// # Errors
+///
+/// Returns an [`OrthoError`] if file loading or deserialization fails.
+#[allow(clippy::result_large_err)]
+pub fn load_and_merge_subcommand<T>(prefix: &str, name: &str, cli: &T) -> Result<T, OrthoError>
+where
+    T: serde::Serialize + DeserializeOwned + Default,
+{
+    #[allow(deprecated)]
+    let defaults: T = load_subcommand_config(prefix, name)?;
+    #[allow(deprecated)]
+    merge_cli_over_defaults(&defaults, cli).map_err(OrthoError::Gathering)
+}
+
+/// Wrapper around [`load_and_merge_subcommand`] using the struct's configured prefix.
+///
+/// # Errors
+///
+/// Returns an [`OrthoError`] if file loading or deserialization fails.
+#[allow(clippy::result_large_err)]
+pub fn load_and_merge_subcommand_for<T>(name: &str, cli: &T) -> Result<T, OrthoError>
+where
+    T: crate::OrthoConfig + serde::Serialize + Default,
+{
+    load_and_merge_subcommand(T::prefix(), name, cli)
 }

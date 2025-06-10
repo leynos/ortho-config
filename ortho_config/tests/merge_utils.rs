@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use ortho_config::merge_cli_over_defaults;
 use serde::{Deserialize, Serialize};
 
