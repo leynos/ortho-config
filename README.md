@@ -174,6 +174,54 @@ Customize behavior for each field:
   * `#[ortho_config(merge_strategy = "append")]`: For `Vec<T>` fields, defines how values from different sources are combined. Defaults to `"append"`.
   * `#[ortho_config(flatten)]`: Similar to `serde(flatten)`, useful for inlining fields from a nested struct into the parent's namespace for CLI or environment variables.
 
+## Subcommand Configuration
+
+Applications using `clap` subcommands can keep per-command defaults in a
+dedicated `cmds` namespace. The helper `load_subcommand_config` loads these
+values from configuration files and environment variables, which can then be
+merged with CLI arguments.
+
+```rust
+use clap::Parser;
+use serde::Deserialize;
+use ortho_config::{load_subcommand_config, merge_cli_over_defaults};
+
+#[derive(Parser, Deserialize, Default, Debug)]
+pub struct AddUserArgs {
+    #[arg(long)]
+    username: Option<String>,
+    #[arg(long)]
+    admin: Option<bool>,
+}
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let cli = AddUserArgs::parse();
+
+    // Reads `[cmds.add-user]` sections and `APP_CMDS_ADD_USER_*` variables
+    let defaults: AddUserArgs = load_subcommand_config("APP_", "add-user")?;
+    let args = merge_cli_over_defaults(&defaults, &cli)?;
+
+    println!("Final args: {args:?}");
+    Ok(())
+}
+```
+
+Configuration file example:
+
+```toml
+[cmds.add-user]
+username = "file_user"
+admin = true
+```
+
+Environment variables override file values using the pattern
+`<PREFIX>CMDS_<SUBCOMMAND>_`:
+
+```bash
+APP_CMDS_ADD_USER_USERNAME=env_user
+APP_CMDS_ADD_USER_ADMIN=false
+```
+
 ## Why OrthoConfig?
 
   * **Reduced Boilerplate:** Define your configuration schema once and let OrthoConfig handle the multi-source loading and mapping.
