@@ -10,8 +10,13 @@ mod error;
 mod file;
 mod merge;
 pub mod subcommand;
+#[allow(deprecated)]
 pub use merge::merge_cli_over_defaults;
-pub use subcommand::{load_subcommand_config, load_subcommand_config_for};
+#[allow(deprecated)]
+pub use subcommand::{
+    load_and_merge_subcommand, load_and_merge_subcommand_for, load_subcommand_config,
+    load_subcommand_config_for,
+};
 
 /// Normalize a prefix by trimming trailing underscores and converting
 /// to lowercase ASCII.

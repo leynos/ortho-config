@@ -1,7 +1,7 @@
 use clap::Parser;
 use clap_dispatch::clap_dispatch;
 use serde::Deserialize;
-use ortho_config::{load_subcommand_config_for, merge_cli_over_defaults, OrthoConfig};
+use ortho_config::{load_and_merge_subcommand_for, OrthoConfig};
 
 #[derive(Parser, Deserialize, Default, Debug, Clone, OrthoConfig)]
 #[ortho_config(prefix = "REGCTL_")]
@@ -58,17 +58,12 @@ fn main() -> Result<(), String> {
     let db_url = "postgres://user:pass@localhost/registry";
     let final_cmd = match cli {
         Commands::AddUser(args) => {
-            let defaults: AddUserArgs =
-                load_subcommand_config_for::<AddUserArgs>("add-user").unwrap_or_default();
-            let merged = merge_cli_over_defaults(&defaults, &args)
+            let merged = load_and_merge_subcommand_for::<AddUserArgs>("add-user", &args)
                 .map_err(|e| e.to_string())?;
             Commands::AddUser(merged)
         }
         Commands::ListItems(args) => {
-            // `ListItems` becomes `list-items` when parsed by clap
-            let defaults: ListItemsArgs =
-                load_subcommand_config_for::<ListItemsArgs>("list-items").unwrap_or_default();
-            let merged = merge_cli_over_defaults(&defaults, &args)
+            let merged = load_and_merge_subcommand_for::<ListItemsArgs>("list-items", &args)
                 .map_err(|e| e.to_string())?;
             Commands::ListItems(merged)
         }

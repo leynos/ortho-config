@@ -178,15 +178,15 @@ Customize behavior for each field:
 ## Subcommand Configuration
 
 Applications using `clap` subcommands can keep per-command defaults in a
-dedicated `cmds` namespace. The helper `load_subcommand_config_for` loads these
-values from configuration files and environment variables using the struct's
-`prefix()` function (which defaults to an empty string). Merge the returned
-defaults with CLI arguments using `merge_cli_over_defaults`.
+dedicated `cmds` namespace. The helper `load_and_merge_subcommand_for` reads
+these values from configuration files and environment variables using the
+struct's `prefix()` function (which defaults to an empty string) and merges them
+underneath the CLI arguments.
 
 ```rust
 use clap::Parser;
 use serde::Deserialize;
-use ortho_config::{load_subcommand_config_for, merge_cli_over_defaults, OrthoConfig};
+use ortho_config::{load_and_merge_subcommand_for, OrthoConfig};
 
 #[derive(Parser, Deserialize, Default, Debug, OrthoConfig)]
 #[ortho_config(prefix = "APP_")]
@@ -200,9 +200,8 @@ pub struct AddUserArgs {
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = AddUserArgs::parse();
 
-    // Reads `[cmds.add-user]` sections and `APP_CMDS_ADD_USER_*` variables
-    let defaults: AddUserArgs = load_subcommand_config_for("add-user")?;
-    let args = merge_cli_over_defaults(&defaults, &cli)?;
+    // Reads `[cmds.add-user]` sections and `APP_CMDS_ADD_USER_*` variables then merges with CLI
+    let args = load_and_merge_subcommand_for("add-user", &cli)?;
 
     println!("Final args: {args:?}");
     Ok(())
@@ -234,7 +233,7 @@ Subcommands can be executed with defaults applied using
 use clap::Parser;
 use clap_dispatch::clap_dispatch;
 use serde::Deserialize;
-use ortho_config::{load_subcommand_config_for, merge_cli_over_defaults};
+use ortho_config::load_and_merge_subcommand_for;
 
 #[derive(Parser, Deserialize, Default, Debug)]
 pub struct ListItemsArgs {
@@ -266,12 +265,10 @@ fn main() -> Result<(), String> {
     // merge per-command defaults
     let cmd = match cli {
         Commands::AddUser(args) => {
-            let defaults = load_subcommand_config_for::<AddUserArgs>("add-user")?;
-            Commands::AddUser(merge_cli_over_defaults(&defaults, &args)?)
+            Commands::AddUser(load_and_merge_subcommand_for("add-user", &args)?)
         }
         Commands::ListItems(args) => {
-            let defaults = load_subcommand_config_for::<ListItemsArgs>("list-items")?;
-            Commands::ListItems(merge_cli_over_defaults(&defaults, &args)?)
+            Commands::ListItems(load_and_merge_subcommand_for("list-items", &args)?)
         }
     };
 
@@ -291,13 +288,13 @@ fn main() -> Result<(), String> {
 Version 0.2 introduces a small API refinement:
 
 * `load_subcommand_config_for` now only loads default values from files and
-  environment variables. Merge these defaults with CLI arguments using
-  [`merge_cli_over_defaults`](#subcommand-configuration).
+  environment variables. Use [`load_and_merge_subcommand_for`](#subcommand-configuration)
+  to merge these defaults with CLI arguments.
 * Types deriving `OrthoConfig` expose an associated `prefix()` function. Use
   this if you need the configured prefix directly.
 
 Update your `Cargo.toml` to depend on `ortho_config = "0.2"` and adjust code to
-call `merge_cli_over_defaults` explicitly after loading subcommand defaults.
+call `load_and_merge_subcommand_for` instead of manually merging defaults.
 
 ## Contributing
 

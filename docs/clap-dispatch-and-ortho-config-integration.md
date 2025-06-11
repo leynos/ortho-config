@@ -616,8 +616,7 @@ impl Run for ListArgs {
 }
 
 // --- Merging Logic ---
-// `ortho_config` provides a helper to merge CLI values over defaults.
-use ortho_config::merge_cli_over_defaults;
+use ortho_config::load_and_merge_subcommand_for;
 
 
 fn main() -> Result<(), String> {
@@ -630,11 +629,8 @@ fn main() -> Result<(), String> {
     // 3. Determine subcommand and merge configurations
     let final_command = match cli_args.command {
         Commands::List(clap_parsed_list_args) => {
-            // 4. Get subcommand defaults from ortho-config
-            let ortho_default_list_args: ListArgs = ortho_config_store.get_subcommand_config_struct("list");
-
-            // 5. Merge clap-parsed args over ortho-config defaults
-            let final_list_args = merge_cli_over_defaults(ortho_default_list_args, clap_parsed_list_args);
+            // 4. Merge CLI values over ortho-config defaults for the subcommand
+            let final_list_args = load_and_merge_subcommand_for("list", &clap_parsed_list_args)?;
             Commands::List(final_list_args)
         }
         // Commands::Add(clap_parsed_add_args) => { /* similar logic for Add command */ }
@@ -649,7 +645,7 @@ fn main() -> Result<(), String> {
 }
 ```
 
-This conceptual code illustrates the key stages: loading `ortho-config` defaults, parsing CLI arguments with `clap`, merging these layers with defined precedence, and finally dispatching the command using the method provided by `clap-dispatch`. The critical merging step now uses `merge_cli_over_defaults`, which inspects which CLI arguments were actually provided by the user (often by checking if `Option` fields in the `clap`-parsed struct are `Some(...)`) to ensure CLI values override `ortho-config` values. A more generic merging strategy might involve reflection or a trait implemented by all argument structs.
+This conceptual code illustrates the key stages: loading `ortho-config` defaults, parsing CLI arguments with `clap`, merging these layers with defined precedence, and finally dispatching the command using the method provided by `clap-dispatch`. The critical merging step now uses `load_and_merge_subcommand_for`, which loads the subcommand defaults and applies any CLI overrides. A more generic merging strategy might involve reflection or a trait implemented by all argument structs.
 
 ### E. Benefits and Rationale for the Proposed Design
 
