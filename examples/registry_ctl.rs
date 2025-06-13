@@ -58,12 +58,12 @@ fn main() -> Result<(), String> {
     let db_url = "postgres://user:pass@localhost/registry";
     let final_cmd = match cli {
         Commands::AddUser(args) => {
-            let merged = load_and_merge_subcommand_for::<AddUserArgs>("add-user", &args)
+            let merged = load_and_merge_subcommand_for::<AddUserArgs>(&args)
                 .map_err(|e| e.to_string())?;
             Commands::AddUser(merged)
         }
         Commands::ListItems(args) => {
-            let merged = load_and_merge_subcommand_for::<ListItemsArgs>("list-items", &args)
+            let merged = load_and_merge_subcommand_for::<ListItemsArgs>(&args)
                 .map_err(|e| e.to_string())?;
             Commands::ListItems(merged)
         }

@@ -630,7 +630,7 @@ fn main() -> Result<(), String> {
     let final_command = match cli_args.command {
         Commands::List(clap_parsed_list_args) => {
             // 4. Merge CLI values over ortho-config defaults for the subcommand
-            let final_list_args = load_and_merge_subcommand_for("list", &clap_parsed_list_args)?;
+            let final_list_args = load_and_merge_subcommand_for::<ListArgs>(&clap_parsed_list_args)?;
             Commands::List(final_list_args)
         }
         // Commands::Add(clap_parsed_add_args) => { /* similar logic for Add command */ }

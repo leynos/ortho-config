@@ -201,7 +201,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = AddUserArgs::parse();
 
     // Reads `[cmds.add-user]` sections and `APP_CMDS_ADD_USER_*` variables then merges with CLI
-    let args = load_and_merge_subcommand_for("add-user", &cli)?;
+    let args = load_and_merge_subcommand_for::<AddUserArgs>(&cli)?;
 
     println!("Final args: {args:?}");
     Ok(())
@@ -265,10 +265,10 @@ fn main() -> Result<(), String> {
     // merge per-command defaults
     let cmd = match cli {
         Commands::AddUser(args) => {
-            Commands::AddUser(load_and_merge_subcommand_for("add-user", &args)?)
+            Commands::AddUser(load_and_merge_subcommand_for::<AddUserArgs>(&args)?)
         }
         Commands::ListItems(args) => {
-            Commands::ListItems(load_and_merge_subcommand_for("list-items", &args)?)
+            Commands::ListItems(load_and_merge_subcommand_for::<ListItemsArgs>(&args)?)
         }
     };
 

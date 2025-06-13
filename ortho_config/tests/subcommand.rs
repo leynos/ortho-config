@@ -1,5 +1,6 @@
 #![allow(non_snake_case)]
 #![allow(deprecated)]
+use clap::Parser;
 use ortho_config::OrthoConfig;
 use ortho_config::load_subcommand_config;
 use ortho_config::load_subcommand_config_for;
@@ -119,7 +120,8 @@ fn loads_yaml_file() {
     assert_eq!(cfg.foo.as_deref(), Some("yaml"));
 }
 
-#[derive(Debug, Deserialize, serde::Serialize, Default, PartialEq)]
+#[derive(Debug, Deserialize, serde::Serialize, Default, PartialEq, Parser)]
+#[command(name = "test")]
 struct MergeArgs {
     #[serde(skip_serializing_if = "Option::is_none")]
     foo: Option<String>,
@@ -135,14 +137,15 @@ fn merge_helper_combines_defaults_and_cli() {
             foo: Some("cli".into()),
             bar: None,
         };
-        let merged: MergeArgs = load_and_merge_subcommand("APP_", "test", &cli).expect("merge");
+        let merged: MergeArgs = load_and_merge_subcommand("APP_", &cli).expect("merge");
         assert_eq!(merged.foo.as_deref(), Some("cli"));
         assert_eq!(merged.bar, None);
         Ok(())
     });
 }
 
-#[derive(Debug, Deserialize, serde::Serialize, OrthoConfig, Default, PartialEq)]
+#[derive(Debug, Deserialize, serde::Serialize, OrthoConfig, Default, PartialEq, Parser)]
+#[command(name = "test")]
 #[ortho_config(prefix = "APP_")]
 struct MergePrefixed {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -154,7 +157,7 @@ fn merge_wrapper_respects_prefix() {
     figment::Jail::expect_with(|j| {
         j.create_file(".app.toml", "[cmds.test]\nfoo = \"file\"")?;
         let cli = MergePrefixed { foo: None };
-        let merged = load_and_merge_subcommand_for::<MergePrefixed>("test", &cli).expect("merge");
+        let merged = load_and_merge_subcommand_for::<MergePrefixed>(&cli).expect("merge");
         assert_eq!(merged.foo.as_deref(), Some("file"));
         Ok(())
     });

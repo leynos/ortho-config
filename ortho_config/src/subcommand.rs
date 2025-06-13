@@ -2,6 +2,7 @@
 use crate::merge_cli_over_defaults;
 use crate::normalize_prefix;
 use crate::{OrthoError, load_config_file};
+use clap::CommandFactory;
 use figment::{Figment, providers::Env};
 use serde::de::DeserializeOwned;
 use std::path::PathBuf;
@@ -133,12 +134,13 @@ where
 ///
 /// Returns an [`OrthoError`] if file loading or deserialization fails.
 #[allow(clippy::result_large_err)]
-pub fn load_and_merge_subcommand<T>(prefix: &str, name: &str, cli: &T) -> Result<T, OrthoError>
+pub fn load_and_merge_subcommand<T>(prefix: &str, cli: &T) -> Result<T, OrthoError>
 where
-    T: serde::Serialize + DeserializeOwned + Default,
+    T: serde::Serialize + DeserializeOwned + Default + CommandFactory,
 {
+    let name = T::command().get_name().to_owned();
     #[allow(deprecated)]
-    let defaults: T = load_subcommand_config(prefix, name)?;
+    let defaults: T = load_subcommand_config(prefix, &name)?;
     #[allow(deprecated)]
     merge_cli_over_defaults(&defaults, cli).map_err(OrthoError::Gathering)
 }
@@ -149,9 +151,9 @@ where
 ///
 /// Returns an [`OrthoError`] if file loading or deserialization fails.
 #[allow(clippy::result_large_err)]
-pub fn load_and_merge_subcommand_for<T>(name: &str, cli: &T) -> Result<T, OrthoError>
+pub fn load_and_merge_subcommand_for<T>(cli: &T) -> Result<T, OrthoError>
 where
-    T: crate::OrthoConfig + serde::Serialize + Default,
+    T: crate::OrthoConfig + serde::Serialize + Default + CommandFactory,
 {
-    load_and_merge_subcommand(T::prefix(), name, cli)
+    load_and_merge_subcommand(T::prefix(), cli)
 }
