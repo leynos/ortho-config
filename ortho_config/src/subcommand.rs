@@ -84,8 +84,13 @@ fn load_from_files(paths: &[PathBuf], name: &str) -> Result<Figment, OrthoError>
 /// # Errors
 ///
 /// Returns an [`OrthoError`] if file loading or deserialization fails.
+///
+/// # Deprecated
+///
+/// Use [`load_and_merge_subcommand`] or [`load_and_merge_subcommand_for`] instead
+/// to load defaults and apply CLI overrides in one step.
 #[allow(clippy::result_large_err)]
-#[deprecated(note = "use `load_and_merge_subcommand` instead")]
+#[deprecated(note = "use `load_and_merge_subcommand` or `load_and_merge_subcommand_for` instead")]
 pub fn load_subcommand_config<T>(prefix: &str, name: &str) -> Result<T, OrthoError>
 where
     T: DeserializeOwned + Default,
