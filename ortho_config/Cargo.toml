@@ -19,6 +19,9 @@ toml = { version = "0.8", optional = true }
 figment-json5 = { version = "0.1", optional = true }
 serde_yaml = { version = "0.9", optional = true }
 
+[target.'cfg(not(any(unix, target_os = "redox")))'.dependencies]
+directories = "6"
+
 [features]
 default = ["toml"]
 toml = ["figment/toml", "dep:toml"]
