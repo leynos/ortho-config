@@ -25,6 +25,17 @@ impl Prefix {
     /// Create a new `Prefix` from `raw`. The `raw` value is kept as-is for
     /// environment variables while a normalized version is used for file paths.
     #[must_use]
+    /// Creates a new `Prefix` from a raw string, storing both the original and a normalised lowercase version.
+    ///
+    /// The raw string is preserved for use in environment variable names, while the normalised form is used for file path lookups.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let prefix = Prefix::new("MyApp");
+    /// assert_eq!(prefix.raw(), "MyApp");
+    /// assert_eq!(prefix.as_str(), "myapp");
+    /// ```
     pub fn new(raw: &str) -> Self {
         Self {
             raw: raw.to_owned(),
@@ -33,11 +44,13 @@ impl Prefix {
     }
 
     #[must_use]
+    /// Returns the normalised, lowercase form of the prefix as a string slice.
     fn as_str(&self) -> &str {
         &self.normalized
     }
 
     #[must_use]
+    /// Returns the original, unmodified prefix string as provided by the user.
     fn raw(&self) -> &str {
         &self.raw
     }
@@ -50,21 +63,51 @@ pub struct CmdName(String);
 impl CmdName {
     /// Create a new command name from `raw`.
     #[must_use]
+    /// Creates a new `CmdName` from the provided raw string.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let name = CmdName::new("my-subcommand");
+    /// assert_eq!(name.as_str(), "my-subcommand");
+    /// ```
     pub fn new(raw: &str) -> Self {
         Self(raw.to_owned())
     }
 
     #[must_use]
+    /// Returns the normalised string representation of the prefix.
     fn as_str(&self) -> &str {
         &self.0
     }
 
     #[must_use]
+    /// Returns the subcommand name formatted as an uppercase environment variable key.
+    ///
+    /// Hyphens are replaced with underscores and all characters are converted to uppercase.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let name = CmdName::new("my-cmd");
+    /// assert_eq!(name.env_key(), "MY_CMD");
+    /// ```
     fn env_key(&self) -> String {
         self.0.replace('-', "_").to_ascii_uppercase()
     }
 }
 
+/// Adds candidate configuration file paths with supported extensions to the provided vector.
+///
+/// Appends file paths with `.toml` extension, and conditionally `.json`, `.json5`, `.yaml`, and `.yml` extensions if the corresponding features are enabled. The `to_path` closure is used to construct each `PathBuf` from the filename.
+///
+/// # Examples
+///
+/// ```
+/// let mut paths = Vec::new();
+/// push_candidates(&mut paths, "config", |s| std::path::PathBuf::from(s));
+/// assert!(paths.iter().any(|p| p.ends_with("config.toml")));
+/// ```
 fn push_candidates<F>(paths: &mut Vec<PathBuf>, base: &str, mut to_path: F)
 where
     F: FnMut(String) -> PathBuf,
@@ -80,20 +123,65 @@ where
     }
 }
 
+/// Adds candidate configuration file paths in the user's home directory, using the normalised prefix as a filename prefix.
+///
+/// The generated paths are based on the normalised prefix from `base`, prefixed with a dot, and appended with supported configuration file extensions. Each candidate is constructed relative to the provided `home` directory. The resulting paths are added to the `paths` vector.
+///
+/// # Examples
+///
+/// ```
+/// use std::path::PathBuf;
+/// let home = PathBuf::from("/home/alice");
+/// let prefix = Prefix::new("MyApp");
+/// let mut candidates = Vec::new();
+/// push_home_candidates(&home, &prefix, &mut candidates);
+/// assert!(candidates.iter().any(|p| p.ends_with(".myapp.toml")));
+/// ```
 fn push_home_candidates(home: &Path, base: &Prefix, paths: &mut Vec<PathBuf>) {
     push_candidates(paths, &format!(".{}", base.as_str()), |f| home.join(f));
 }
 
 #[cfg(not(any(unix, target_os = "redox")))]
+/// Adds candidate configuration file paths named "config" with supported extensions in the specified directory.
+///
+/// This function appends possible configuration file paths (e.g., `config.toml`, `config.json`, etc.) to the provided vector, using the given directory as the base location. The set of extensions considered depends on enabled features. Intended for use on non-Unix platforms.
 fn push_cfg_candidates(dir: &Path, paths: &mut Vec<PathBuf>) {
     push_candidates(paths, "config", |f| dir.join(f));
 }
 
+/// Adds candidate configuration file paths in the current directory using the given prefix.
+///
+/// The generated file names are prefixed with a dot and the normalised prefix, supporting multiple configuration file extensions.
+/// 
+/// # Examples
+///
+/// ```
+/// let mut paths = Vec::new();
+/// let prefix = Prefix::new("myapp");
+/// push_local_candidates(&prefix, &mut paths);
+/// assert!(paths.iter().any(|p| p.to_string_lossy().starts_with(".myapp")));
+/// ```
 fn push_local_candidates(base: &Prefix, paths: &mut Vec<PathBuf>) {
     push_candidates(paths, &format!(".{}", base.as_str()), PathBuf::from);
 }
 
-/// Return possible configuration file paths for a subcommand.
+/// Returns a list of possible configuration file paths for a subcommand, based on the provided prefix.
+///
+/// The search includes standard locations such as the user's home directory, platform-specific configuration directories, and the current working directory. The function considers multiple file formats and adapts its search strategy according to the operating system and enabled features.
+///
+/// # Parameters
+/// - `prefix`: The configuration prefix, which determines the subdirectory or filename pattern used in path generation.
+///
+/// # Returns
+/// A vector of candidate `PathBuf`s representing possible configuration file locations.
+///
+/// # Examples
+///
+/// ```
+/// let prefix = Prefix::new("myapp");
+/// let paths = candidate_paths(&prefix);
+/// assert!(!paths.is_empty());
+/// ```
 fn candidate_paths(prefix: &Prefix) -> Vec<PathBuf> {
     let mut paths = Vec::new();
 
@@ -146,6 +234,16 @@ fn candidate_paths(prefix: &Prefix) -> Vec<PathBuf> {
 
 /// Load and merge `[cmds.<name>]` sections from the given paths.
 #[allow(clippy::result_large_err)]
+/// Loads and merges configuration for a subcommand from the specified files.
+///
+/// For each provided path, loads the configuration file and merges the `[cmds.<name>]` section into a single `Figment` instance. Only the focused section for the given subcommand is merged from each file.
+///
+/// # Parameters
+/// - `paths`: Slice of file paths to search for configuration.
+/// - `name`: The subcommand name whose configuration section to load.
+///
+/// # Returns
+/// A `Figment` instance containing the merged configuration for the subcommand, or an error if loading fails.
 fn load_from_files(paths: &[PathBuf], name: &CmdName) -> Result<Figment, OrthoError> {
     let mut fig = Figment::new();
     for p in paths {
@@ -174,6 +272,25 @@ fn load_from_files(paths: &[PathBuf], name: &CmdName) -> Result<Figment, OrthoEr
 /// to load defaults and apply CLI overrides in one step.
 #[allow(clippy::result_large_err)]
 #[deprecated(note = "use `load_and_merge_subcommand` or `load_and_merge_subcommand_for` instead")]
+/// Loads configuration for a specific subcommand from files and environment variables.
+///
+/// Searches for configuration files using the provided prefix, loads the `[cmds.<name>]` section from each file, and merges them. Then overlays environment variables prefixed with `<PREFIX>CMDS_<NAME>_` (case-insensitive, double underscore for nesting). Returns the merged configuration as type `T`.
+///
+/// # Deprecated
+///
+/// This function is deprecated. Use the newer combined loading and merging functions instead.
+///
+/// # Errors
+///
+/// Returns an error if configuration files cannot be loaded or if deserialisation fails.
+///
+/// # Examples
+///
+/// ```
+/// let prefix = Prefix::new("myapp");
+/// let name = CmdName::new("serve");
+/// let config: MyServeConfig = load_subcommand_config(&prefix, &name)?;
+/// ```
 pub fn load_subcommand_config<T>(prefix: &Prefix, name: &CmdName) -> Result<T, OrthoError>
 where
     T: DeserializeOwned + Default,
@@ -202,6 +319,16 @@ where
 ///
 /// Returns an [`OrthoError`] if file loading or deserialization fails.
 #[allow(clippy::result_large_err)]
+/// Loads configuration defaults for a subcommand using the prefix defined by the type.
+///
+/// This function retrieves the configuration for the specified subcommand, using the prefix provided by the `OrthoConfig` implementation of `T`. It loads and merges configuration from files and environment variables, returning the resulting configuration as type `T`.
+///
+/// # Examples
+///
+/// ```
+/// # use ortho_config::{CmdName, load_subcommand_config_for, MySubcommandConfig};
+/// let config = load_subcommand_config_for::<MySubcommandConfig>(&CmdName::new("serve"))?;
+/// ```
 pub fn load_subcommand_config_for<T>(name: &CmdName) -> Result<T, OrthoError>
 where
     T: crate::OrthoConfig + Default,
@@ -222,6 +349,30 @@ where
 ///
 /// Returns an [`OrthoError`] if file loading or deserialization fails.
 #[allow(clippy::result_large_err)]
+/// Loads configuration defaults for a subcommand and merges CLI-provided values over them.
+///
+/// This function determines the subcommand name from the type `T`, loads its default configuration from files and environment variables using the given prefix, and overlays values provided via the CLI. The resulting configuration is returned as type `T`.
+///
+/// # Returns
+///
+/// The merged configuration for the subcommand, or an error if loading or merging fails.
+///
+/// # Examples
+///
+/// ```
+/// # use ortho_config::{Prefix, load_and_merge_subcommand};
+/// # use clap::Parser;
+/// #[derive(clap::Parser, serde::Serialize, serde::Deserialize, Default)]
+/// struct MyCmd {
+///     #[clap(long)]
+///     value: Option<String>,
+/// }
+///
+/// let prefix = Prefix::new("MYAPP");
+/// let cli = MyCmd { value: Some("cli".to_string()) };
+/// let config = load_and_merge_subcommand(&prefix, &cli)?;
+/// assert_eq!(config.value.as_deref(), Some("cli"));
+/// ```
 pub fn load_and_merge_subcommand<T>(prefix: &Prefix, cli: &T) -> Result<T, OrthoError>
 where
     T: serde::Serialize + DeserializeOwned + Default + CommandFactory,
@@ -239,6 +390,27 @@ where
 ///
 /// Returns an [`OrthoError`] if file loading or deserialization fails.
 #[allow(clippy::result_large_err)]
+/// Loads and merges configuration for a subcommand using the prefix defined by its type.
+///
+/// Loads default configuration values for the subcommand from files and environment variables, then merges CLI-provided values over these defaults. The prefix is determined by the `OrthoConfig` implementation of the type.
+///
+/// # Returns
+///
+/// The merged configuration for the subcommand, or an error if loading or merging fails.
+///
+/// # Examples
+///
+/// ```
+/// # use ortho_config::load_and_merge_subcommand_for;
+/// # use clap::Parser;
+/// #[derive(clap::Parser, serde::Serialize, serde::Deserialize, Default)]
+/// struct MyCmd { /* fields */ }
+/// impl ortho_config::OrthoConfig for MyCmd {
+///     fn prefix() -> &'static str { "myapp" }
+/// }
+/// let cli = MyCmd::parse_from(&["mycmd"]);
+/// let config = load_and_merge_subcommand_for(&cli)?;
+/// ```
 pub fn load_and_merge_subcommand_for<T>(cli: &T) -> Result<T, OrthoError>
 where
     T: crate::OrthoConfig + serde::Serialize + Default + CommandFactory,
