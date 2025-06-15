@@ -1,7 +1,6 @@
 #[allow(deprecated)]
 use crate::merge_cli_over_defaults;
-use crate::normalize_prefix;
-use crate::{OrthoError, load_config_file};
+use crate::{OrthoError, load_config_file, normalize_prefix};
 use clap::CommandFactory;
 #[cfg(not(any(unix, target_os = "redox")))]
 use directories::BaseDirs;
@@ -12,58 +11,102 @@ use uncased::Uncased;
 #[cfg(any(unix, target_os = "redox"))]
 use xdg::BaseDirectories;
 
-fn push_home_candidates(home: &Path, base: &str, paths: &mut Vec<PathBuf>) {
-    paths.push(home.join(format!(".{base}.toml")));
+/// Prefix used when constructing configuration paths and environment variables.
+///
+/// Stores the raw prefix as provided by the user alongside a normalized
+/// lowercase version used for file lookups.
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct Prefix {
+    raw: String,
+    normalized: String,
+}
+
+impl Prefix {
+    /// Create a new `Prefix` from `raw`. The `raw` value is kept as-is for
+    /// environment variables while a normalized version is used for file paths.
+    #[must_use]
+    pub fn new(raw: &str) -> Self {
+        Self {
+            raw: raw.to_owned(),
+            normalized: normalize_prefix(raw),
+        }
+    }
+
+    #[must_use]
+    fn as_str(&self) -> &str {
+        &self.normalized
+    }
+
+    #[must_use]
+    fn raw(&self) -> &str {
+        &self.raw
+    }
+}
+
+/// Name of a subcommand.
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct CmdName(String);
+
+impl CmdName {
+    /// Create a new command name from `raw`.
+    #[must_use]
+    pub fn new(raw: &str) -> Self {
+        Self(raw.to_owned())
+    }
+
+    #[must_use]
+    fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    #[must_use]
+    fn env_key(&self) -> String {
+        self.0.replace('-', "_").to_ascii_uppercase()
+    }
+}
+
+fn push_candidates<F>(paths: &mut Vec<PathBuf>, base: &str, mut to_path: F)
+where
+    F: FnMut(String) -> PathBuf,
+{
+    paths.push(to_path(format!("{base}.toml")));
     #[cfg(feature = "json5")]
     for ext in ["json", "json5"] {
-        paths.push(home.join(format!(".{base}.{ext}")));
+        paths.push(to_path(format!("{base}.{ext}")));
     }
     #[cfg(feature = "yaml")]
     for ext in ["yaml", "yml"] {
-        paths.push(home.join(format!(".{base}.{ext}")));
+        paths.push(to_path(format!("{base}.{ext}")));
     }
+}
+
+fn push_home_candidates(home: &Path, base: &Prefix, paths: &mut Vec<PathBuf>) {
+    push_candidates(paths, &format!(".{}", base.as_str()), |f| home.join(f));
 }
 
 #[cfg(not(any(unix, target_os = "redox")))]
 fn push_cfg_candidates(dir: &Path, paths: &mut Vec<PathBuf>) {
-    paths.push(dir.join("config.toml"));
-    #[cfg(feature = "json5")]
-    for ext in ["json", "json5"] {
-        paths.push(dir.join(format!("config.{ext}")));
-    }
-    #[cfg(feature = "yaml")]
-    for ext in ["yaml", "yml"] {
-        paths.push(dir.join(format!("config.{ext}")));
-    }
+    push_candidates(paths, "config", |f| dir.join(f));
 }
 
-fn push_local_candidates(base: &str, paths: &mut Vec<PathBuf>) {
-    paths.push(PathBuf::from(format!(".{base}.toml")));
-    #[cfg(feature = "json5")]
-    for ext in ["json", "json5"] {
-        paths.push(PathBuf::from(format!(".{base}.{ext}")));
-    }
-    #[cfg(feature = "yaml")]
-    for ext in ["yaml", "yml"] {
-        paths.push(PathBuf::from(format!(".{base}.{ext}")));
-    }
+fn push_local_candidates(base: &Prefix, paths: &mut Vec<PathBuf>) {
+    push_candidates(paths, &format!(".{}", base.as_str()), PathBuf::from);
 }
 
 /// Return possible configuration file paths for a subcommand.
-fn candidate_paths(prefix: &str) -> Vec<PathBuf> {
-    let base = normalize_prefix(prefix);
+fn candidate_paths(prefix: &Prefix) -> Vec<PathBuf> {
     let mut paths = Vec::new();
 
     #[cfg(any(unix, target_os = "redox"))]
     {
         if let Some(home) = std::env::var_os("HOME") {
-            push_home_candidates(Path::new(&home), &base, &mut paths);
+            push_home_candidates(Path::new(&home), prefix, &mut paths);
         }
 
-        let xdg_dirs = if base.is_empty() {
+        let xdg_dirs = if prefix.as_str().is_empty() {
             BaseDirectories::new()
         } else {
-            BaseDirectories::with_prefix(&base)
+            BaseDirectories::with_prefix(prefix.as_str())
         };
         if let Some(p) = xdg_dirs.find_config_file("config.toml") {
             paths.push(p);
@@ -85,29 +128,29 @@ fn candidate_paths(prefix: &str) -> Vec<PathBuf> {
     #[cfg(not(any(unix, target_os = "redox")))]
     {
         if let Some(dirs) = BaseDirs::new() {
-            push_home_candidates(dirs.home_dir(), &base, &mut paths);
-            let cfg_dir = if base.is_empty() {
+            push_home_candidates(dirs.home_dir(), prefix, &mut paths);
+            let cfg_dir = if prefix.as_str().is_empty() {
                 dirs.config_dir().to_path_buf()
             } else {
-                dirs.config_dir().join(&base)
+                dirs.config_dir().join(prefix.as_str())
             };
             push_cfg_candidates(&cfg_dir, &mut paths);
         } else if let Some(home) = std::env::var_os("HOME") {
-            push_home_candidates(Path::new(&home), &base, &mut paths);
+            push_home_candidates(Path::new(&home), prefix, &mut paths);
         }
     }
 
-    push_local_candidates(&base, &mut paths);
+    push_local_candidates(prefix, &mut paths);
     paths
 }
 
 /// Load and merge `[cmds.<name>]` sections from the given paths.
 #[allow(clippy::result_large_err)]
-fn load_from_files(paths: &[PathBuf], name: &str) -> Result<Figment, OrthoError> {
+fn load_from_files(paths: &[PathBuf], name: &CmdName) -> Result<Figment, OrthoError> {
     let mut fig = Figment::new();
     for p in paths {
         if let Some(file_fig) = load_config_file(p)? {
-            fig = fig.merge(file_fig.focus(&format!("cmds.{name}")));
+            fig = fig.merge(file_fig.focus(&format!("cmds.{}", name.as_str())));
         }
     }
     Ok(fig)
@@ -131,15 +174,15 @@ fn load_from_files(paths: &[PathBuf], name: &str) -> Result<Figment, OrthoError>
 /// to load defaults and apply CLI overrides in one step.
 #[allow(clippy::result_large_err)]
 #[deprecated(note = "use `load_and_merge_subcommand` or `load_and_merge_subcommand_for` instead")]
-pub fn load_subcommand_config<T>(prefix: &str, name: &str) -> Result<T, OrthoError>
+pub fn load_subcommand_config<T>(prefix: &Prefix, name: &CmdName) -> Result<T, OrthoError>
 where
     T: DeserializeOwned + Default,
 {
     let paths = candidate_paths(prefix);
     let mut fig = load_from_files(&paths, name)?;
 
-    let env_name = name.replace('-', "_").to_ascii_uppercase();
-    let env_prefix = format!("{prefix}CMDS_{env_name}_");
+    let env_name = name.env_key();
+    let env_prefix = format!("{}CMDS_{env_name}_", prefix.raw());
     let env_provider = Env::prefixed(&env_prefix)
         .map(|k| Uncased::from(k))
         .split("__");
@@ -159,13 +202,13 @@ where
 ///
 /// Returns an [`OrthoError`] if file loading or deserialization fails.
 #[allow(clippy::result_large_err)]
-pub fn load_subcommand_config_for<T>(name: &str) -> Result<T, OrthoError>
+pub fn load_subcommand_config_for<T>(name: &CmdName) -> Result<T, OrthoError>
 where
     T: crate::OrthoConfig + Default,
 {
     #[allow(deprecated)]
     {
-        load_subcommand_config(T::prefix(), name)
+        load_subcommand_config(&Prefix::new(T::prefix()), name)
     }
 }
 
@@ -179,11 +222,11 @@ where
 ///
 /// Returns an [`OrthoError`] if file loading or deserialization fails.
 #[allow(clippy::result_large_err)]
-pub fn load_and_merge_subcommand<T>(prefix: &str, cli: &T) -> Result<T, OrthoError>
+pub fn load_and_merge_subcommand<T>(prefix: &Prefix, cli: &T) -> Result<T, OrthoError>
 where
     T: serde::Serialize + DeserializeOwned + Default + CommandFactory,
 {
-    let name = T::command().get_name().to_owned();
+    let name = CmdName::new(T::command().get_name());
     #[allow(deprecated)]
     let defaults: T = load_subcommand_config(prefix, &name)?;
     #[allow(deprecated)]
@@ -200,5 +243,5 @@ pub fn load_and_merge_subcommand_for<T>(cli: &T) -> Result<T, OrthoError>
 where
     T: crate::OrthoConfig + serde::Serialize + Default + CommandFactory,
 {
-    load_and_merge_subcommand(T::prefix(), cli)
+    load_and_merge_subcommand(&Prefix::new(T::prefix()), cli)
 }

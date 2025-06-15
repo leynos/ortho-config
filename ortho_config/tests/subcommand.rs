@@ -4,6 +4,7 @@ use clap::Parser;
 use ortho_config::OrthoConfig;
 use ortho_config::load_subcommand_config;
 use ortho_config::load_subcommand_config_for;
+use ortho_config::subcommand::{CmdName, Prefix};
 use ortho_config::{load_and_merge_subcommand, load_and_merge_subcommand_for};
 use serde::Deserialize;
 
@@ -22,7 +23,8 @@ where
     let result = RefCell::new(None);
     figment::Jail::expect_with(|j| {
         setup(j)?;
-        let cfg = load_subcommand_config("APP_", "test").expect("load");
+        let cfg =
+            load_subcommand_config(&Prefix::new("APP_"), &CmdName::new("test")).expect("load");
         result.replace(Some(cfg));
         Ok(())
     });
@@ -39,7 +41,7 @@ where
     let result = RefCell::new(None);
     figment::Jail::expect_with(|j| {
         setup(j)?;
-        let cfg = load_subcommand_config_for::<T>("test").expect("load");
+        let cfg = load_subcommand_config_for::<T>(&CmdName::new("test")).expect("load");
         result.replace(Some(cfg));
         Ok(())
     });
@@ -137,7 +139,8 @@ fn merge_helper_combines_defaults_and_cli() {
             foo: Some("cli".into()),
             bar: None,
         };
-        let merged: MergeArgs = load_and_merge_subcommand("APP_", &cli).expect("merge");
+        let merged: MergeArgs =
+            load_and_merge_subcommand(&Prefix::new("APP_"), &cli).expect("merge");
         assert_eq!(merged.foo.as_deref(), Some("cli"));
         assert_eq!(merged.bar, None);
         Ok(())
