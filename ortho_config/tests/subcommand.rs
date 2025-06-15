@@ -4,6 +4,7 @@ use clap::Parser;
 use ortho_config::OrthoConfig;
 use ortho_config::load_subcommand_config;
 use ortho_config::load_subcommand_config_for;
+use ortho_config::subcommand::{CmdName, Prefix};
 use ortho_config::{load_and_merge_subcommand, load_and_merge_subcommand_for};
 use serde::Deserialize;
 
@@ -13,6 +14,23 @@ struct CmdCfg {
     bar: Option<bool>,
 }
 
+/// Loads the `CmdCfg` configuration for the "test" subcommand after applying a custom setup to a jailed environment.
+///
+/// The provided closure is used to configure the environment (such as creating files or setting environment variables) within a `figment::Jail`. The function then loads the configuration for the "test" subcommand using the "APP_" prefix, returning the resulting `CmdCfg`.
+///
+/// # Panics
+///
+/// Panics if configuration loading fails.
+///
+/// # Examples
+///
+/// ```
+/// let cfg = with_cfg(|jail| {
+///     jail.create_file(".app.toml", "[cmds.test]\nfoo = \"bar\"")?;
+///     Ok(())
+/// });
+/// assert_eq!(cfg.foo, Some("bar".to_string()));
+/// ```
 fn with_cfg<F>(setup: F) -> CmdCfg
 where
     F: FnOnce(&mut figment::Jail) -> figment::error::Result<()>,
@@ -22,13 +40,31 @@ where
     let result = RefCell::new(None);
     figment::Jail::expect_with(|j| {
         setup(j)?;
-        let cfg = load_subcommand_config("APP_", "test").expect("load");
+        let cfg =
+            load_subcommand_config(&Prefix::new("APP_"), &CmdName::new("test")).expect("load");
         result.replace(Some(cfg));
         Ok(())
     });
     result.into_inner().unwrap()
 }
 
+/// Loads a subcommand configuration of type `T` for the "test" command after running a setup closure in a jailed environment.
+///
+/// The `setup` closure can modify the configuration environment (e.g., create files, set environment variables) before loading the config. The function panics if loading the configuration fails.
+///
+/// # Type Parameters
+///
+/// - `T`: The configuration type to load, which must implement `OrthoConfig` and `Default`.
+///
+/// # Examples
+///
+/// ```
+/// let cfg = with_cfg_wrapper::<_, MyConfig>(|jail| {
+///     // Setup config files or environment variables in the jail
+///     Ok(())
+/// });
+/// assert_eq!(cfg, MyConfig::default());
+/// ```
 fn with_cfg_wrapper<F, T>(setup: F) -> T
 where
     F: FnOnce(&mut figment::Jail) -> figment::error::Result<()>,
@@ -39,7 +75,7 @@ where
     let result = RefCell::new(None);
     figment::Jail::expect_with(|j| {
         setup(j)?;
-        let cfg = load_subcommand_config_for::<T>("test").expect("load");
+        let cfg = load_subcommand_config_for::<T>(&CmdName::new("test")).expect("load");
         result.replace(Some(cfg));
         Ok(())
     });
@@ -130,6 +166,15 @@ struct MergeArgs {
 }
 
 #[test]
+/// Tests that merging CLI arguments with configuration file values prioritises CLI values and preserves unset fields.
+///
+/// This test creates a configuration file with a default value for `foo`, then merges it with CLI arguments that override `foo` and leave `bar` unset. It asserts that the merged configuration uses the CLI value for `foo` and retains `None` for `bar`.
+///
+/// # Examples
+///
+/// ```
+/// merge_helper_combines_defaults_and_cli();
+/// ```
 fn merge_helper_combines_defaults_and_cli() {
     figment::Jail::expect_with(|j| {
         j.create_file(".app.toml", "[cmds.test]\nfoo = \"file\"")?;
@@ -137,7 +182,8 @@ fn merge_helper_combines_defaults_and_cli() {
             foo: Some("cli".into()),
             bar: None,
         };
-        let merged: MergeArgs = load_and_merge_subcommand("APP_", &cli).expect("merge");
+        let merged: MergeArgs =
+            load_and_merge_subcommand(&Prefix::new("APP_"), &cli).expect("merge");
         assert_eq!(merged.foo.as_deref(), Some("cli"));
         assert_eq!(merged.bar, None);
         Ok(())
