@@ -3,19 +3,20 @@ use crate::merge_cli_over_defaults;
 use crate::normalize_prefix;
 use crate::{OrthoError, load_config_file};
 use clap::CommandFactory;
+use directories::BaseDirs;
 use figment::{Figment, providers::Env};
 use serde::de::DeserializeOwned;
 use std::path::PathBuf;
 use uncased::Uncased;
+#[cfg(any(unix, target_os = "redox"))]
 use xdg::BaseDirectories;
 
 /// Return possible configuration file paths for a subcommand.
 fn candidate_paths(prefix: &str) -> Vec<PathBuf> {
     let base = normalize_prefix(prefix);
     let mut paths = Vec::new();
-
-    if let Some(home) = std::env::var_os("HOME") {
-        let home = PathBuf::from(home);
+    if let Some(dirs) = BaseDirs::new() {
+        let home = dirs.home_dir();
         paths.push(home.join(format!(".{base}.toml")));
         #[cfg(feature = "json5")]
         for ext in ["json", "json5"] {
@@ -25,26 +26,47 @@ fn candidate_paths(prefix: &str) -> Vec<PathBuf> {
         for ext in ["yaml", "yml"] {
             paths.push(home.join(format!(".{base}.{ext}")));
         }
-    }
 
-    let xdg_dirs = if base.is_empty() {
-        BaseDirectories::new()
-    } else {
-        BaseDirectories::with_prefix(&base)
-    };
-    if let Some(p) = xdg_dirs.find_config_file("config.toml") {
-        paths.push(p);
-    }
-    #[cfg(feature = "json5")]
-    for ext in ["json", "json5"] {
-        if let Some(p) = xdg_dirs.find_config_file(format!("config.{ext}")) {
-            paths.push(p);
+        #[cfg(any(unix, target_os = "redox"))]
+        {
+            let xdg_dirs = if base.is_empty() {
+                BaseDirectories::new()
+            } else {
+                BaseDirectories::with_prefix(&base)
+            };
+            if let Some(p) = xdg_dirs.find_config_file("config.toml") {
+                paths.push(p);
+            }
+            #[cfg(feature = "json5")]
+            for ext in ["json", "json5"] {
+                if let Some(p) = xdg_dirs.find_config_file(format!("config.{ext}")) {
+                    paths.push(p);
+                }
+            }
+            #[cfg(feature = "yaml")]
+            for ext in ["yaml", "yml"] {
+                if let Some(p) = xdg_dirs.find_config_file(format!("config.{ext}")) {
+                    paths.push(p);
+                }
+            }
         }
-    }
-    #[cfg(feature = "yaml")]
-    for ext in ["yaml", "yml"] {
-        if let Some(p) = xdg_dirs.find_config_file(format!("config.{ext}")) {
-            paths.push(p);
+
+        #[cfg(not(any(unix, target_os = "redox")))]
+        {
+            let cfg_dir = if base.is_empty() {
+                dirs.config_dir().to_path_buf()
+            } else {
+                dirs.config_dir().join(&base)
+            };
+            paths.push(cfg_dir.join("config.toml"));
+            #[cfg(feature = "json5")]
+            for ext in ["json", "json5"] {
+                paths.push(cfg_dir.join(format!("config.{ext}")));
+            }
+            #[cfg(feature = "yaml")]
+            for ext in ["yaml", "yml"] {
+                paths.push(cfg_dir.join(format!("config.{ext}")));
+            }
         }
     }
 

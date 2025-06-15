@@ -107,6 +107,7 @@ pub(crate) fn build_dotfile_name(struct_attrs: &StructAttrs) -> proc_macro2::Tok
 pub(crate) fn build_xdg_snippet(struct_attrs: &StructAttrs) -> proc_macro2::TokenStream {
     let prefix_lit = struct_attrs.prefix.as_deref().unwrap_or("");
     quote! {
+        #[cfg(any(unix, target_os = "redox"))]
         if file_fig.is_none() {
             let xdg_base = ortho_config::normalize_prefix(#prefix_lit);
             let xdg_dirs = if xdg_base.is_empty() {
