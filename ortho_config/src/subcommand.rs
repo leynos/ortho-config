@@ -152,7 +152,7 @@ fn push_cfg_candidates(dir: &Path, paths: &mut Vec<PathBuf>) {
 /// Adds candidate configuration file paths in the current directory using the given prefix.
 ///
 /// The generated file names are prefixed with a dot and the normalised prefix, supporting multiple configuration file extensions.
-/// 
+///
 /// # Examples
 ///
 /// ```
