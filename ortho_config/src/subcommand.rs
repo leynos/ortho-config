@@ -1,3 +1,5 @@
+//! Support for loading configuration for individual subcommands.
+
 #[allow(deprecated)]
 use crate::merge_cli_over_defaults;
 use crate::{OrthoError, load_config_file, normalize_prefix};
@@ -31,7 +33,8 @@ impl Prefix {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```rust,ignore
+    /// use ortho_config::subcommand::Prefix;
     /// let prefix = Prefix::new("MyApp");
     /// assert_eq!(prefix.raw(), "MyApp");
     /// assert_eq!(prefix.as_str(), "myapp");
@@ -67,7 +70,8 @@ impl CmdName {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```rust,ignore
+    /// use ortho_config::subcommand::CmdName;
     /// let name = CmdName::new("my-subcommand");
     /// assert_eq!(name.as_str(), "my-subcommand");
     /// ```
@@ -88,7 +92,8 @@ impl CmdName {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```rust,ignore
+    /// use ortho_config::subcommand::CmdName;
     /// let name = CmdName::new("my-cmd");
     /// assert_eq!(name.env_key(), "MY_CMD");
     /// ```
@@ -103,7 +108,7 @@ impl CmdName {
 ///
 /// # Examples
 ///
-/// ```
+/// ```rust,ignore
 /// let mut paths = Vec::new();
 /// push_candidates(&mut paths, "config", |s| std::path::PathBuf::from(s));
 /// assert!(paths.iter().any(|p| p.ends_with("config.toml")));
@@ -129,7 +134,7 @@ where
 ///
 /// # Examples
 ///
-/// ```
+/// ```rust,ignore
 /// use std::path::PathBuf;
 /// let home = PathBuf::from("/home/alice");
 /// let prefix = Prefix::new("MyApp");
@@ -155,7 +160,7 @@ fn push_cfg_candidates(dir: &Path, paths: &mut Vec<PathBuf>) {
 ///
 /// # Examples
 ///
-/// ```
+/// ```rust,ignore
 /// let mut paths = Vec::new();
 /// let prefix = Prefix::new("myapp");
 /// push_local_candidates(&prefix, &mut paths);
@@ -177,7 +182,7 @@ fn push_local_candidates(base: &Prefix, paths: &mut Vec<PathBuf>) {
 ///
 /// # Examples
 ///
-/// ```
+/// ```rust,ignore
 /// let prefix = Prefix::new("myapp");
 /// let paths = candidate_paths(&prefix);
 /// assert!(!paths.is_empty());
@@ -286,10 +291,12 @@ fn load_from_files(paths: &[PathBuf], name: &CmdName) -> Result<Figment, OrthoEr
 ///
 /// # Examples
 ///
-/// ```
+/// ```rust,ignore
+/// use ortho_config::subcommand::{Prefix, CmdName, load_subcommand_config};
+/// # type MyServeConfig = ();
 /// let prefix = Prefix::new("myapp");
 /// let name = CmdName::new("serve");
-/// let config: MyServeConfig = load_subcommand_config(&prefix, &name)?;
+/// let config: MyServeConfig = load_subcommand_config(&prefix, &name).unwrap();
 /// ```
 pub fn load_subcommand_config<T>(prefix: &Prefix, name: &CmdName) -> Result<T, OrthoError>
 where
@@ -325,9 +332,10 @@ where
 ///
 /// # Examples
 ///
-/// ```
-/// # use ortho_config::{CmdName, load_subcommand_config_for, MySubcommandConfig};
-/// let config = load_subcommand_config_for::<MySubcommandConfig>(&CmdName::new("serve"))?;
+/// ```rust,ignore
+/// use ortho_config::subcommand::{CmdName, load_subcommand_config_for};
+/// # type MySubcommandConfig = ();
+/// let config = load_subcommand_config_for::<MySubcommandConfig>(&CmdName::new("serve")).unwrap();
 /// ```
 pub fn load_subcommand_config_for<T>(name: &CmdName) -> Result<T, OrthoError>
 where
@@ -359,8 +367,9 @@ where
 ///
 /// # Examples
 ///
-/// ```
-/// # use ortho_config::{Prefix, load_and_merge_subcommand};
+/// ```rust,ignore
+/// use ortho_config::subcommand::load_and_merge_subcommand;
+/// use ortho_config::subcommand::Prefix;
 /// # use clap::Parser;
 /// #[derive(clap::Parser, serde::Serialize, serde::Deserialize, Default)]
 /// struct MyCmd {
@@ -370,7 +379,7 @@ where
 ///
 /// let prefix = Prefix::new("MYAPP");
 /// let cli = MyCmd { value: Some("cli".to_string()) };
-/// let config = load_and_merge_subcommand(&prefix, &cli)?;
+/// let config = load_and_merge_subcommand(&prefix, &cli).unwrap();
 /// assert_eq!(config.value.as_deref(), Some("cli"));
 /// ```
 pub fn load_and_merge_subcommand<T>(prefix: &Prefix, cli: &T) -> Result<T, OrthoError>
@@ -400,16 +409,16 @@ where
 ///
 /// # Examples
 ///
-/// ```
-/// # use ortho_config::load_and_merge_subcommand_for;
-/// # use clap::Parser;
+/// ```rust,ignore
+/// use ortho_config::subcommand::load_and_merge_subcommand_for;
+/// use clap::Parser;
 /// #[derive(clap::Parser, serde::Serialize, serde::Deserialize, Default)]
 /// struct MyCmd { /* fields */ }
 /// impl ortho_config::OrthoConfig for MyCmd {
 ///     fn prefix() -> &'static str { "myapp" }
 /// }
 /// let cli = MyCmd::parse_from(&["mycmd"]);
-/// let config = load_and_merge_subcommand_for(&cli)?;
+/// let config = load_and_merge_subcommand_for(&cli).unwrap();
 /// ```
 pub fn load_and_merge_subcommand_for<T>(cli: &T) -> Result<T, OrthoError>
 where

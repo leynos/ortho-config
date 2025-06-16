@@ -1,3 +1,5 @@
+//! Utilities for merging command-line arguments with configuration defaults.
+
 use figment::{Figment, providers::Serialized};
 use serde::{Serialize, de::DeserializeOwned};
 

@@ -1,3 +1,5 @@
+//! Tests for the append merge strategy on vectors.
+
 #![allow(non_snake_case)]
 use ortho_config::OrthoConfig;
 use serde::Deserialize;

@@ -1,3 +1,5 @@
+//! Helpers for reading configuration files into Figment.
+
 use crate::OrthoError;
 #[cfg(feature = "yaml")]
 use figment::providers::Yaml;
