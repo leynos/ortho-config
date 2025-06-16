@@ -1,3 +1,5 @@
+//! Example CLI demonstrating subcommand configuration loading.
+
 use clap::Parser;
 use clap_dispatch::clap_dispatch;
 use serde::Deserialize;

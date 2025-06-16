@@ -1,5 +1,5 @@
 error: unknown merge_strategy
- --> tests/ui/invalid_merge_strategy.rs:6:37
+ --> tests/ui/invalid_merge_strategy.rs:8:37
   |
-6 |     #[ortho_config(merge_strategy = "bogus")]
+8 |     #[ortho_config(merge_strategy = "bogus")]
   |                                     ^^^^^^^

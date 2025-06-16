@@ -1,3 +1,5 @@
+//! Tests for attribute handling in the derive macro.
+
 #![allow(non_snake_case)]
 
 use ortho_config::OrthoConfig;

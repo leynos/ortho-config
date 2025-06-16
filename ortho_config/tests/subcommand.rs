@@ -1,3 +1,5 @@
+//! Tests for subcommand configuration helpers.
+
 #![allow(non_snake_case)]
 #![allow(deprecated)]
 use clap::Parser;

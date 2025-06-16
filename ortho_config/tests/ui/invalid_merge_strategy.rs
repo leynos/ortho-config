@@ -1,3 +1,5 @@
+//! Test case exercising an invalid merge strategy.
+
 use ortho_config::OrthoConfig;
 use serde::Deserialize;
 

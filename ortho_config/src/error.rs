@@ -1,3 +1,5 @@
+//! Error types produced by the configuration loader.
+
 use thiserror::Error;
 
 /// Errors that can occur while loading configuration.

@@ -1,3 +1,5 @@
+//! Code generation helpers for the `OrthoConfig` derive macro.
+
 use quote::{format_ident, quote};
 use syn::{Ident, Type};
 

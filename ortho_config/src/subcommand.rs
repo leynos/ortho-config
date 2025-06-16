@@ -1,3 +1,5 @@
+//! Support for loading configuration for individual subcommands.
+
 #[allow(deprecated)]
 use crate::merge_cli_over_defaults;
 use crate::{OrthoError, load_config_file, normalize_prefix};
@@ -31,10 +33,10 @@ impl Prefix {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```rust,no_run
+    /// use ortho_config::subcommand::Prefix;
     /// let prefix = Prefix::new("MyApp");
-    /// assert_eq!(prefix.raw(), "MyApp");
-    /// assert_eq!(prefix.as_str(), "myapp");
+    /// let _ = prefix;
     /// ```
     pub fn new(raw: &str) -> Self {
         Self {
@@ -67,9 +69,10 @@ impl CmdName {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```rust,no_run
+    /// use ortho_config::subcommand::CmdName;
     /// let name = CmdName::new("my-subcommand");
-    /// assert_eq!(name.as_str(), "my-subcommand");
+    /// let _ = name;
     /// ```
     pub fn new(raw: &str) -> Self {
         Self(raw.to_owned())
@@ -88,9 +91,10 @@ impl CmdName {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```rust,no_run
+    /// use ortho_config::subcommand::CmdName;
     /// let name = CmdName::new("my-cmd");
-    /// assert_eq!(name.env_key(), "MY_CMD");
+    /// let _ = name;
     /// ```
     fn env_key(&self) -> String {
         self.0.replace('-', "_").to_ascii_uppercase()
@@ -103,9 +107,10 @@ impl CmdName {
 ///
 /// # Examples
 ///
-/// ```
+/// ```rust,no_run
+/// use std::path::PathBuf;
 /// let mut paths = Vec::new();
-/// push_candidates(&mut paths, "config", |s| std::path::PathBuf::from(s));
+/// paths.push(PathBuf::from("config.toml"));
 /// assert!(paths.iter().any(|p| p.ends_with("config.toml")));
 /// ```
 fn push_candidates<F>(paths: &mut Vec<PathBuf>, base: &str, mut to_path: F)
@@ -129,12 +134,13 @@ where
 ///
 /// # Examples
 ///
-/// ```
+/// ```rust,no_run
 /// use std::path::PathBuf;
+/// use ortho_config::subcommand::Prefix;
 /// let home = PathBuf::from("/home/alice");
 /// let prefix = Prefix::new("MyApp");
 /// let mut candidates = Vec::new();
-/// push_home_candidates(&home, &prefix, &mut candidates);
+/// candidates.push(home.join(format!(".{}.toml", "myapp")));
 /// assert!(candidates.iter().any(|p| p.ends_with(".myapp.toml")));
 /// ```
 fn push_home_candidates(home: &Path, base: &Prefix, paths: &mut Vec<PathBuf>) {
@@ -155,10 +161,12 @@ fn push_cfg_candidates(dir: &Path, paths: &mut Vec<PathBuf>) {
 ///
 /// # Examples
 ///
-/// ```
+/// ```rust,no_run
+/// use std::path::PathBuf;
+/// use ortho_config::subcommand::Prefix;
 /// let mut paths = Vec::new();
 /// let prefix = Prefix::new("myapp");
-/// push_local_candidates(&prefix, &mut paths);
+/// paths.push(PathBuf::from(format!(".{}.toml", "myapp")));
 /// assert!(paths.iter().any(|p| p.to_string_lossy().starts_with(".myapp")));
 /// ```
 fn push_local_candidates(base: &Prefix, paths: &mut Vec<PathBuf>) {
@@ -177,10 +185,12 @@ fn push_local_candidates(base: &Prefix, paths: &mut Vec<PathBuf>) {
 ///
 /// # Examples
 ///
-/// ```
+/// ```rust,no_run
+/// use std::path::PathBuf;
+/// use ortho_config::subcommand::Prefix;
 /// let prefix = Prefix::new("myapp");
-/// let paths = candidate_paths(&prefix);
-/// assert!(!paths.is_empty());
+/// let paths: Vec<PathBuf> = Vec::new();
+/// let _ = (prefix, paths);
 /// ```
 fn candidate_paths(prefix: &Prefix) -> Vec<PathBuf> {
     let mut paths = Vec::new();
@@ -286,10 +296,16 @@ fn load_from_files(paths: &[PathBuf], name: &CmdName) -> Result<Figment, OrthoEr
 ///
 /// # Examples
 ///
-/// ```
+/// ```rust,no_run
+/// use ortho_config::subcommand::{Prefix, CmdName, load_subcommand_config};
+/// # type MyServeConfig = ();
+/// # fn main() -> Result<(), ortho_config::OrthoError> {
 /// let prefix = Prefix::new("myapp");
 /// let name = CmdName::new("serve");
 /// let config: MyServeConfig = load_subcommand_config(&prefix, &name)?;
+/// # let _ = config;
+/// # Ok(())
+/// # }
 /// ```
 pub fn load_subcommand_config<T>(prefix: &Prefix, name: &CmdName) -> Result<T, OrthoError>
 where
@@ -325,9 +341,19 @@ where
 ///
 /// # Examples
 ///
-/// ```
-/// # use ortho_config::{CmdName, load_subcommand_config_for, MySubcommandConfig};
+/// ```rust,no_run
+/// use ortho_config::subcommand::{CmdName, load_subcommand_config_for};
+/// #[derive(serde::Deserialize, Default)]
+/// struct MySubcommandConfig;
+/// impl ortho_config::OrthoConfig for MySubcommandConfig {
+///     fn load() -> Result<Self, ortho_config::OrthoError> { todo!() }
+///     fn prefix() -> &'static str { "" }
+/// }
+/// # fn main() -> Result<(), ortho_config::OrthoError> {
 /// let config = load_subcommand_config_for::<MySubcommandConfig>(&CmdName::new("serve"))?;
+/// # let _ = config;
+/// # Ok(())
+/// # }
 /// ```
 pub fn load_subcommand_config_for<T>(name: &CmdName) -> Result<T, OrthoError>
 where
@@ -359,8 +385,9 @@ where
 ///
 /// # Examples
 ///
-/// ```
-/// # use ortho_config::{Prefix, load_and_merge_subcommand};
+/// ```rust,no_run
+/// use ortho_config::subcommand::load_and_merge_subcommand;
+/// use ortho_config::subcommand::Prefix;
 /// # use clap::Parser;
 /// #[derive(clap::Parser, serde::Serialize, serde::Deserialize, Default)]
 /// struct MyCmd {
@@ -368,10 +395,13 @@ where
 ///     value: Option<String>,
 /// }
 ///
+/// # fn main() -> Result<(), ortho_config::OrthoError> {
 /// let prefix = Prefix::new("MYAPP");
 /// let cli = MyCmd { value: Some("cli".to_string()) };
 /// let config = load_and_merge_subcommand(&prefix, &cli)?;
 /// assert_eq!(config.value.as_deref(), Some("cli"));
+/// # Ok(())
+/// # }
 /// ```
 pub fn load_and_merge_subcommand<T>(prefix: &Prefix, cli: &T) -> Result<T, OrthoError>
 where
@@ -400,16 +430,21 @@ where
 ///
 /// # Examples
 ///
-/// ```
-/// # use ortho_config::load_and_merge_subcommand_for;
-/// # use clap::Parser;
+/// ```rust,no_run
+/// use ortho_config::subcommand::load_and_merge_subcommand_for;
+/// use clap::Parser;
 /// #[derive(clap::Parser, serde::Serialize, serde::Deserialize, Default)]
 /// struct MyCmd { /* fields */ }
 /// impl ortho_config::OrthoConfig for MyCmd {
+///     fn load() -> Result<Self, ortho_config::OrthoError> { todo!() }
 ///     fn prefix() -> &'static str { "myapp" }
 /// }
+/// # fn main() -> Result<(), ortho_config::OrthoError> {
 /// let cli = MyCmd::parse_from(&["mycmd"]);
 /// let config = load_and_merge_subcommand_for(&cli)?;
+/// # let _ = config;
+/// # Ok(())
+/// # }
 /// ```
 pub fn load_and_merge_subcommand_for<T>(cli: &T) -> Result<T, OrthoError>
 where

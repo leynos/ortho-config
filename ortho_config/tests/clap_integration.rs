@@ -1,3 +1,5 @@
+//! Tests covering CLI integration and error handling.
+
 #![allow(non_snake_case)]
 
 use ortho_config::{OrthoConfig, OrthoError};
