@@ -291,12 +291,16 @@ fn load_from_files(paths: &[PathBuf], name: &CmdName) -> Result<Figment, OrthoEr
 ///
 /// # Examples
 ///
-/// ```rust,ignore
+/// ```rust,no_run
 /// use ortho_config::subcommand::{Prefix, CmdName, load_subcommand_config};
 /// # type MyServeConfig = ();
+/// # fn main() -> Result<(), ortho_config::OrthoError> {
 /// let prefix = Prefix::new("myapp");
 /// let name = CmdName::new("serve");
-/// let config: MyServeConfig = load_subcommand_config(&prefix, &name).unwrap();
+/// let config: MyServeConfig = load_subcommand_config(&prefix, &name)?;
+/// # let _ = config;
+/// # Ok(())
+/// # }
 /// ```
 pub fn load_subcommand_config<T>(prefix: &Prefix, name: &CmdName) -> Result<T, OrthoError>
 where
@@ -332,10 +336,19 @@ where
 ///
 /// # Examples
 ///
-/// ```rust,ignore
+/// ```rust,no_run
 /// use ortho_config::subcommand::{CmdName, load_subcommand_config_for};
-/// # type MySubcommandConfig = ();
-/// let config = load_subcommand_config_for::<MySubcommandConfig>(&CmdName::new("serve")).unwrap();
+/// #[derive(serde::Deserialize, Default)]
+/// struct MySubcommandConfig;
+/// impl ortho_config::OrthoConfig for MySubcommandConfig {
+///     fn load() -> Result<Self, ortho_config::OrthoError> { todo!() }
+///     fn prefix() -> &'static str { "" }
+/// }
+/// # fn main() -> Result<(), ortho_config::OrthoError> {
+/// let config = load_subcommand_config_for::<MySubcommandConfig>(&CmdName::new("serve"))?;
+/// # let _ = config;
+/// # Ok(())
+/// # }
 /// ```
 pub fn load_subcommand_config_for<T>(name: &CmdName) -> Result<T, OrthoError>
 where
@@ -367,7 +380,7 @@ where
 ///
 /// # Examples
 ///
-/// ```rust,ignore
+/// ```rust,no_run
 /// use ortho_config::subcommand::load_and_merge_subcommand;
 /// use ortho_config::subcommand::Prefix;
 /// # use clap::Parser;
@@ -377,10 +390,13 @@ where
 ///     value: Option<String>,
 /// }
 ///
+/// # fn main() -> Result<(), ortho_config::OrthoError> {
 /// let prefix = Prefix::new("MYAPP");
 /// let cli = MyCmd { value: Some("cli".to_string()) };
-/// let config = load_and_merge_subcommand(&prefix, &cli).unwrap();
+/// let config = load_and_merge_subcommand(&prefix, &cli)?;
 /// assert_eq!(config.value.as_deref(), Some("cli"));
+/// # Ok(())
+/// # }
 /// ```
 pub fn load_and_merge_subcommand<T>(prefix: &Prefix, cli: &T) -> Result<T, OrthoError>
 where
@@ -409,16 +425,21 @@ where
 ///
 /// # Examples
 ///
-/// ```rust,ignore
+/// ```rust,no_run
 /// use ortho_config::subcommand::load_and_merge_subcommand_for;
 /// use clap::Parser;
 /// #[derive(clap::Parser, serde::Serialize, serde::Deserialize, Default)]
 /// struct MyCmd { /* fields */ }
 /// impl ortho_config::OrthoConfig for MyCmd {
+///     fn load() -> Result<Self, ortho_config::OrthoError> { todo!() }
 ///     fn prefix() -> &'static str { "myapp" }
 /// }
+/// # fn main() -> Result<(), ortho_config::OrthoError> {
 /// let cli = MyCmd::parse_from(&["mycmd"]);
-/// let config = load_and_merge_subcommand_for(&cli).unwrap();
+/// let config = load_and_merge_subcommand_for(&cli)?;
+/// # let _ = config;
+/// # Ok(())
+/// # }
 /// ```
 pub fn load_and_merge_subcommand_for<T>(cli: &T) -> Result<T, OrthoError>
 where
