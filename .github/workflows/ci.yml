@@ -27,7 +27,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@v1.0.2
+        uses: leynos/shared-actions/.github/actions/setup-rust@v1.0.3
       - name: Cache CodeScene CLI
         if: matrix.coverage && env.CS_ACCESS_TOKEN
         uses: actions/cache@v4
