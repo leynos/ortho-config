@@ -40,7 +40,7 @@ aliasing.
 
    ```toml
    [dependencies]
-   ortho_config = "0.2.0" # Replace with the latest version
+   ortho_config = "0.3.0" # Replace with the latest version
    serde = { version = "1.0", features = ["derive"] }
    ```
 
@@ -171,7 +171,7 @@ support additional formats:
 
 ```toml
 [dependencies]
-ortho_config = { version = "0.2.0", features = ["json5", "yaml"] }
+ortho_config = { version = "0.3.0", features = ["json5", "yaml"] }
 ```
 
 The file loader selects the parser based on the extension (`.toml`, `.json`,
