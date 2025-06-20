@@ -101,6 +101,8 @@ fn loads_from_home() {
         let home = j.create_dir("home")?;
         j.create_file(home.join(".app.toml"), "[cmds.test]\nfoo = \"home\"")?;
         j.set_env("HOME", home.to_str().unwrap());
+        #[cfg(windows)]
+        j.set_env("USERPROFILE", home.to_str().unwrap());
         Ok(())
     });
     assert_eq!(cfg.foo.as_deref(), Some("home"));
@@ -112,6 +114,8 @@ fn local_overrides_home() {
         let home = j.create_dir("home")?;
         j.create_file(home.join(".app.toml"), "[cmds.test]\nfoo = \"home\"")?;
         j.set_env("HOME", home.to_str().unwrap());
+        #[cfg(windows)]
+        j.set_env("USERPROFILE", home.to_str().unwrap());
         j.create_file(".app.toml", "[cmds.test]\nfoo = \"local\"")?;
         Ok(())
     });
