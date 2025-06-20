@@ -9,7 +9,10 @@ on:
 
 jobs:
   build-test:
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     permissions:
       contents: read
     env:
@@ -46,12 +49,15 @@ jobs:
         run: cargo clippy --all-targets --all-features -- -D warnings
       - name: Test
         run: RUSTFLAGS="-D warnings" cargo test --tests
+        shell: bash
       - name: Install cargo-tarpaulin
+        if: matrix.os == 'ubuntu-latest'
         run: cargo install cargo-tarpaulin --version 0.32.7
       - name: Run coverage
+        if: matrix.os == 'ubuntu-latest'
         run: cargo tarpaulin --out lcov
       - name: Install CodeScene coverage tool
-        if: env.CS_ACCESS_TOKEN
+        if: env.CS_ACCESS_TOKEN && matrix.os == 'ubuntu-latest'
         run: |
           set -euo pipefail
           curl -fsSL -o install-cs-coverage-tool.sh https://downloads.codescene.io/enterprise/cli/install-cs-coverage-tool.sh
@@ -61,5 +67,5 @@ jobs:
           bash install-cs-coverage-tool.sh -y
           rm install-cs-coverage-tool.sh
       - name: Upload coverage data to CodeScene
-        if: env.CS_ACCESS_TOKEN
+        if: env.CS_ACCESS_TOKEN && matrix.os == 'ubuntu-latest'
         run: cs-coverage upload --format "lcov" --metric "line-coverage" "lcov.info"
