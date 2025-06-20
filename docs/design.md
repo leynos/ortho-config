@@ -196,6 +196,18 @@ The implementation must be careful to wrap errors from `clap`, `figment`, and
 file IO into this enum, adding contextual information (like file paths) where
 possible.
 
+### 4.6. Configuration File Discovery
+
+On Unix-like systems and Redox, the crate uses the `xdg` crate to locate
+configuration directories. It respects `XDG_CONFIG_HOME` and falls back to
+`$HOME/.config` when the variable is unset.
+
+On Windows and other platforms, the `directories` crate provides the standard
+paths. These paths currently ignore `XDG_CONFIG_HOME` entirely.
+
+Support for `XDG_CONFIG_HOME` on Windows could be added later using
+`directories` to mimic the XDG specification.
+
 ## 5. Dependency Strategy
 
 - **`ortho_config_macros`:**
