@@ -15,13 +15,15 @@ clap = { version = "4", features = ["derive"] }
 clap-dispatch = "0.1"
 figment = { version = "0.10", default-features = false, features = ["env", "test"] }
 uncased = "0.9"
-xdg = "3"
 toml = { version = "0.8", optional = true }
 figment-json5 = { version = "0.1", optional = true }
 serde_yaml = { version = "0.9", optional = true }
 
 [target.'cfg(not(any(unix, target_os = "redox")))'.dependencies]
 directories = "6"
+
+[target.'cfg(any(unix, target_os = "redox"))'.dependencies]
+xdg = "3"
 
 [features]
 default = ["toml"]

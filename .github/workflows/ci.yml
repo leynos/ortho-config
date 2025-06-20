@@ -9,9 +9,6 @@ on:
 
 jobs:
   build-test:
-    strategy:
-      matrix:
-        os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     permissions:
       contents: read
@@ -19,6 +16,22 @@ jobs:
       CARGO_TERM_COLOR: always
       CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}
       CODESCENE_CLI_SHA256: ${{ vars.CODESCENE_CLI_SHA256 }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            cache-path: |
+              ~/.cargo/registry
+              ~/.cargo/git
+              target
+            coverage: true
+          - os: windows-latest
+            cache-path: |
+              ~/.cargo/registry
+              ~/.cargo/git
+              target
+            coverage: false
     steps:
       - uses: actions/checkout@v4
       - name: Install rust stable
@@ -30,34 +43,36 @@ jobs:
       - name: Cache cargo registry
         uses: actions/cache@v4
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
+          path: ${{ matrix['cache-path'] }}
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-cargo-
       - name: Cache CodeScene CLI
-        if: env.CS_ACCESS_TOKEN
+        if: matrix.coverage && env.CS_ACCESS_TOKEN
         uses: actions/cache@v4
         with:
           path: ~/.local/bin/cs-coverage
           key: ${{ runner.os }}-cs-cli-${{ env.CODESCENE_CLI_SHA256 }}
       - name: Format
+        shell: bash
         run: cargo fmt --all -- --check
       - name: Lint
+        shell: bash
         run: cargo clippy --all-targets --all-features -- -D warnings
       - name: Test
-        run: RUSTFLAGS="-D warnings" cargo test --tests
         shell: bash
+        run: RUSTFLAGS="-D warnings" cargo test --tests
       - name: Install cargo-tarpaulin
-        if: matrix.os == 'ubuntu-latest'
+        if: matrix.coverage
+        shell: bash
         run: cargo install cargo-tarpaulin --version 0.32.7
       - name: Run coverage
-        if: matrix.os == 'ubuntu-latest'
+        if: matrix.coverage
+        shell: bash
         run: cargo tarpaulin --out lcov
       - name: Install CodeScene coverage tool
-        if: env.CS_ACCESS_TOKEN && matrix.os == 'ubuntu-latest'
+        if: matrix.coverage && env.CS_ACCESS_TOKEN
+        shell: bash
         run: |
           set -euo pipefail
           curl -fsSL -o install-cs-coverage-tool.sh https://downloads.codescene.io/enterprise/cli/install-cs-coverage-tool.sh
@@ -68,4 +83,6 @@ jobs:
           rm install-cs-coverage-tool.sh
       - name: Upload coverage data to CodeScene
         if: env.CS_ACCESS_TOKEN && matrix.os == 'ubuntu-latest'
+        shell: bash
         run: cs-coverage upload --format "lcov" --metric "line-coverage" "lcov.info"
+
