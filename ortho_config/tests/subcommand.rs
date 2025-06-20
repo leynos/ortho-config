@@ -118,6 +118,7 @@ fn local_overrides_home() {
     assert_eq!(cfg.foo.as_deref(), Some("local"));
 }
 
+#[cfg(any(unix, target_os = "redox"))]
 #[test]
 fn loads_from_xdg_config() {
     let cfg = with_cfg(|j| {
