@@ -192,61 +192,70 @@ fn push_local_candidates(base: &Prefix, paths: &mut Vec<PathBuf>) {
 /// let paths: Vec<PathBuf> = Vec::new();
 /// let _ = (prefix, paths);
 /// ```
+#[cfg(any(unix, target_os = "redox"))]
+fn collect_unix_paths(prefix: &Prefix, paths: &mut Vec<PathBuf>) {
+    if let Some(home) = std::env::var_os("HOME") {
+        push_home_candidates(Path::new(&home), prefix, paths);
+    }
+
+    let xdg_dirs = if prefix.as_str().is_empty() {
+        BaseDirectories::new()
+    } else {
+        BaseDirectories::with_prefix(prefix.as_str())
+    };
+
+    if let Some(p) = xdg_dirs.find_config_file("config.toml") {
+        paths.push(p);
+    }
+
+    #[cfg(feature = "json5")]
+    for ext in ["json", "json5"] {
+        if let Some(p) = xdg_dirs.find_config_file(format!("config.{ext}")) {
+            paths.push(p);
+        }
+    }
+
+    #[cfg(feature = "yaml")]
+    for ext in ["yaml", "yml"] {
+        if let Some(p) = xdg_dirs.find_config_file(format!("config.{ext}")) {
+            paths.push(p);
+        }
+    }
+}
+
+#[cfg(not(any(unix, target_os = "redox")))]
+fn collect_non_unix_paths(prefix: &Prefix, paths: &mut Vec<PathBuf>) {
+    // Prefer an explicit HOME or USERPROFILE if provided. These variables allow
+    // callers to override the detected home directory on Windows where
+    // `BaseDirs` otherwise queries the system API.
+    if let Some(home) = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")) {
+        push_home_candidates(Path::new(&home), prefix, paths);
+    }
+
+    if let Some(dirs) = BaseDirs::new() {
+        // If the home directory wasn't overridden above, include the one
+        // reported by `BaseDirs` as well.
+        if std::env::var_os("HOME").is_none() && std::env::var_os("USERPROFILE").is_none() {
+            push_home_candidates(dirs.home_dir(), prefix, paths);
+        }
+
+        let cfg_dir = if prefix.as_str().is_empty() {
+            dirs.config_dir().to_path_buf()
+        } else {
+            dirs.config_dir().join(prefix.as_str())
+        };
+        push_cfg_candidates(&cfg_dir, paths);
+    }
+}
+
 fn candidate_paths(prefix: &Prefix) -> Vec<PathBuf> {
     let mut paths = Vec::new();
 
     #[cfg(any(unix, target_os = "redox"))]
-    {
-        if let Some(home) = std::env::var_os("HOME") {
-            push_home_candidates(Path::new(&home), prefix, &mut paths);
-        }
-
-        let xdg_dirs = if prefix.as_str().is_empty() {
-            BaseDirectories::new()
-        } else {
-            BaseDirectories::with_prefix(prefix.as_str())
-        };
-        if let Some(p) = xdg_dirs.find_config_file("config.toml") {
-            paths.push(p);
-        }
-        #[cfg(feature = "json5")]
-        for ext in ["json", "json5"] {
-            if let Some(p) = xdg_dirs.find_config_file(format!("config.{ext}")) {
-                paths.push(p);
-            }
-        }
-        #[cfg(feature = "yaml")]
-        for ext in ["yaml", "yml"] {
-            if let Some(p) = xdg_dirs.find_config_file(format!("config.{ext}")) {
-                paths.push(p);
-            }
-        }
-    }
+    collect_unix_paths(prefix, &mut paths);
 
     #[cfg(not(any(unix, target_os = "redox")))]
-    {
-        // Prefer an explicit HOME or USERPROFILE if provided. These variables
-        // allow tests and callers to override the detected home directory on
-        // Windows where `BaseDirs` otherwise queries the system API.
-        if let Some(home) = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")) {
-            push_home_candidates(Path::new(&home), prefix, &mut paths);
-        }
-
-        if let Some(dirs) = BaseDirs::new() {
-            // If the home directory wasn't overridden above, include the one
-            // reported by `BaseDirs` as well.
-            if std::env::var_os("HOME").is_none() && std::env::var_os("USERPROFILE").is_none() {
-                push_home_candidates(dirs.home_dir(), prefix, &mut paths);
-            }
-
-            let cfg_dir = if prefix.as_str().is_empty() {
-                dirs.config_dir().to_path_buf()
-            } else {
-                dirs.config_dir().join(prefix.as_str())
-            };
-            push_cfg_candidates(&cfg_dir, &mut paths);
-        }
-    }
+    collect_non_unix_paths(prefix, &mut paths);
 
     push_local_candidates(prefix, &mut paths);
     paths
