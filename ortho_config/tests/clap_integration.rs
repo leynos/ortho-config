@@ -119,6 +119,8 @@ fn missing_config_file_is_ignored() {
     });
 }
 
+// Windows lacks XDG support
+#[cfg(any(unix, target_os = "redox"))]
 #[test]
 fn loads_from_xdg_config() {
     figment::Jail::expect_with(|j| {
@@ -137,6 +139,8 @@ fn loads_from_xdg_config() {
     });
 }
 
+// Windows lacks XDG support
+#[cfg(any(unix, target_os = "redox"))]
 #[cfg(feature = "yaml")]
 #[test]
 fn loads_from_xdg_yaml_config() {
