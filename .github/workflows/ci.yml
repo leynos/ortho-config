@@ -21,32 +21,13 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            cache-path: |
-              ~/.cargo/registry
-              ~/.cargo/git
-              target
             coverage: true
           - os: windows-latest
-            cache-path: |
-              ~/.cargo/registry
-              ~/.cargo/git
-              target
             coverage: false
     steps:
       - uses: actions/checkout@v4
-      - name: Install rust stable
-        uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af
-        with:
-            toolchain: stable
-            override: true
-            components: rustfmt, clippy
-      - name: Cache cargo registry
-        uses: actions/cache@v4
-        with:
-          path: ${{ matrix['cache-path'] }}
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-
+      - name: Setup Rust
+        uses: leynos/shared-actions/.github/actions/setup-rust@v1
       - name: Cache CodeScene CLI
         if: matrix.coverage && env.CS_ACCESS_TOKEN
         uses: actions/cache@v4
