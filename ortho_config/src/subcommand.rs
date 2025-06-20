@@ -225,16 +225,26 @@ fn candidate_paths(prefix: &Prefix) -> Vec<PathBuf> {
 
     #[cfg(not(any(unix, target_os = "redox")))]
     {
+        // Prefer an explicit HOME or USERPROFILE if provided. These variables
+        // allow tests and callers to override the detected home directory on
+        // Windows where `BaseDirs` otherwise queries the system API.
+        if let Some(home) = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")) {
+            push_home_candidates(Path::new(&home), prefix, &mut paths);
+        }
+
         if let Some(dirs) = BaseDirs::new() {
-            push_home_candidates(dirs.home_dir(), prefix, &mut paths);
+            // If the home directory wasn't overridden above, include the one
+            // reported by `BaseDirs` as well.
+            if std::env::var_os("HOME").is_none() && std::env::var_os("USERPROFILE").is_none() {
+                push_home_candidates(dirs.home_dir(), prefix, &mut paths);
+            }
+
             let cfg_dir = if prefix.as_str().is_empty() {
                 dirs.config_dir().to_path_buf()
             } else {
                 dirs.config_dir().join(prefix.as_str())
             };
             push_cfg_candidates(&cfg_dir, &mut paths);
-        } else if let Some(home) = std::env::var_os("HOME") {
-            push_home_candidates(Path::new(&home), prefix, &mut paths);
         }
     }
 
