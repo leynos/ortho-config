@@ -103,3 +103,24 @@ features: Vec<String>,
 Overall, OrthoConfig covers layered loading and CLI integration. It would need
 enhancements for string list parsing and configuration extension to fully
 satisfy ddlint's design.
+
+## Next Steps
+
+The following steps are ordered by impact on ddlint's user experience:
+
+1. **Comma-Separated Lists** – add support for parsing comma-separated
+   environment variables as string lists. This allows `DDLINT_RULES=A,B,C`
+   without JSON syntax.
+2. **Configuration Inheritance** – design an `extends` mechanism so one file can
+   pull defaults from another. Leverage the existing layering logic described in
+   `docs/design.md`.
+3. **Flag Name Overrides** – provide examples showing how to rename
+   `--config-path` to `--config` using struct field attributes.
+4. **Dynamic Tables** – explore using a map type (e.g., `BTreeMap`) to handle
+   arbitrary rule names under `[rules]`.
+5. **Ignore Pattern Lists** – after implementing comma-separated parsing,
+   document usage for `ignore_patterns` to keep CLI and environment
+   configuration consistent.
+
+These improvements will align OrthoConfig with ddlint's planned interface while
+maintaining compatibility with the crate's existing architecture.
