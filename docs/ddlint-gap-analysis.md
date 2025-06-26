@@ -63,19 +63,26 @@ overriding earlier ones:
    derived from field names (e.g., `my_field` becomes `--my-field`).
 ```
 
-Subcommands can load defaults from a `cmds` namespace:
+Subcommands can load defaults from a `cmds` namespace. The helper below merges
+the relevant configuration file sections and environment variables before
+applying CLI arguments.
 
-```text
+```rust
 // Reads `[cmds.add-user]` sections and `APP_CMDS_ADD_USER_*` variables then merges with CLI
 let args = load_and_merge_subcommand_for::<AddUserArgs>(&cli)?;
+```
 
 Configuration file example:
+
+```toml
 [cmds.add-user]
 username = "file_user"
 admin = true
+```
 
-Environment variables override file values using the pattern
-`<PREFIX>CMDS_<SUBCOMMAND>_`:
+Environment variable overrides use the pattern `<PREFIX>CMDS_<SUBCOMMAND>_`:
+
+```bash
 APP_CMDS_ADD_USER_USERNAME=env_user
 APP_CMDS_ADD_USER_ADMIN=false
 ```
