@@ -1,8 +1,8 @@
 # Gap Analysis: OrthoConfig vs ddlint Configuration Requirements
 
 This document compares OrthoConfig's current capabilities with the
-command-line and configuration interface described in the [`ddlint` design
-document](https://raw.githubusercontent.com/leynos/ddlint/refs/heads/main/docs/ddlint-design-and-road-map.md).
+command-line and configuration interface described in the
+[ddlint design document](https://raw.githubusercontent.com/leynos/ddlint/refs/heads/main/docs/ddlint-design-and-road-map.md).
 
 ## Relevant ddlint Requirements
 
@@ -36,13 +36,8 @@ The configuration schema includes:
 
 ## Current OrthoConfig Features
 
-OrthoConfig layers configuration sources in this order:
-
-```text
-## Configuration Sources and Precedence
-
-OrthoConfig loads configuration from the following sources, with later sources
-overriding earlier ones:
+OrthoConfig layers configuration sources in this order. Later sources override
+earlier ones:
 
 1. **Application-Defined Defaults:** Specified using
    `#[ortho_config(default =...)]` or `Option<T>` fields (which default to
@@ -61,7 +56,6 @@ overriding earlier ones:
    `APP_DB_URL` with `#` on `DatabaseConfig`).
 1. **Command-Line Arguments:** Parsed using `clap` conventions. Long flags are
    derived from field names (e.g., `my_field` becomes `--my-field`).
-```
 
 Subcommands can load defaults from a `cmds` namespace. The helper below merges
 the relevant configuration file sections and environment variables before
@@ -89,20 +83,18 @@ APP_CMDS_ADD_USER_ADMIN=false
 
 Vectors support an `append` merge strategy:
 
-```text
+```rust
 #[ortho_config(merge_strategy = "append")] // Default for Vec<T> is append
-features: Vec<String>,
+features: Vec<String>
 ```
 
 ## Observed Gaps
 
-| Gap | Potential Mitigation |
-| --- | --- |
-| Array Environment Variables | Support comma-separated lists such as `DDLINT_RULES=A,B,C`. |
-| Extends Support | Implement an `extends` mechanism for configuration inheritance. |
-| Custom Option Names | Document renaming `--config-path` to `--config`. |
-| Dynamic Rule Tables | Use a map type to accept arbitrary rule entries. |
-| Ignore Patterns | Allow comma-separated lists for environment variables. |
+- [ ] **Array Environment Variables** – support comma-separated lists such as `DDLINT_RULES=A,B,C`.
+- [ ] **Extends Support** – implement an `extends` mechanism for configuration inheritance.
+- [ ] **Custom Option Names** – document renaming `--config-path` to `--config`.
+- [ ] **Dynamic Rule Tables** – use a map type to accept arbitrary rule entries.
+- [ ] **Ignore Patterns** – allow comma-separated lists for environment variables.
 
 Overall, OrthoConfig covers layered loading and CLI integration. It would need
 enhancements for string list parsing and configuration extension to fully
