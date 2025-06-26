@@ -1,8 +1,8 @@
 # Gap Analysis: OrthoConfig vs ddlint Configuration Requirements
 
 This document compares OrthoConfig's current capabilities with the
-command-line and configuration interface described in the `ddlint` design
-document.
+command-line and configuration interface described in the [`ddlint` design
+document](https://raw.githubusercontent.com/leynos/ddlint/refs/heads/main/docs/ddlint-design-and-road-map.md).
 
 ## Relevant ddlint Requirements
 
@@ -13,10 +13,12 @@ The design describes a `clap` based CLI and a `ddlint.toml` configuration file:
 >
 > The core commands will be:
 >
-> - `ddlint <FILES...>`
-> - `ddlint --fix <FILES...>`
-> - `ddlint rules`
-> - `ddlint explain <RULE_NAME>`
+```bash
+ddlint <FILES...>
+ddlint --fix <FILES...>
+ddlint rules
+ddlint explain <RULE_NAME>
+```
 >
 >
 > Key flags include `--format <compact|json|rich>`, `--config <PATH>` and
@@ -87,18 +89,13 @@ features: Vec<String>,
 
 ## Observed Gaps
 
-- **Array Environment Variables** – the ddlint design expects comma-separated
-  lists such as `DDLINT_RULES=A,B,C`. OrthoConfig currently requires arrays in
-  environment variables to be JSON like `["val"]`.
-- **Extends Support** – `ddlint.toml` allows an `extends` key to pull defaults
-  from another file. OrthoConfig has no built-in mechanism for this.
-- **Custom Option Names** – ddlint uses `--config` while OrthoConfig generates
-  `--config-path`. Field attributes can rename the flag, but the defaults differ.
-- **Dynamic Rule Tables** – the `[rules]` table permits arbitrary rule names.
-  OrthoConfig structs need explicit fields, so dynamic keys would require using
-  a map.
-- **Ignore Patterns** – arrays of glob patterns work in files, but parsing
-  comma-separated environment variables would need custom handling.
+| Gap | Potential Mitigation |
+| --- | --- |
+| Array Environment Variables | Support comma-separated lists such as `DDLINT_RULES=A,B,C`. |
+| Extends Support | Implement an `extends` mechanism for configuration inheritance. |
+| Custom Option Names | Document renaming `--config-path` to `--config`. |
+| Dynamic Rule Tables | Use a map type to accept arbitrary rule entries. |
+| Ignore Patterns | Allow comma-separated lists for environment variables. |
 
 Overall, OrthoConfig covers layered loading and CLI integration. It would need
 enhancements for string list parsing and configuration extension to fully
