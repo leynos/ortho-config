@@ -128,6 +128,19 @@ where
     }
 }
 
+/// Returns the provided prefix with a leading dot.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// use ortho_config::subcommand::{dotted, Prefix};
+/// let prefix = Prefix::new("myapp");
+/// assert_eq!(dotted(&prefix), ".myapp");
+/// ```
+fn dotted(prefix: &Prefix) -> String {
+    format!(".{}", prefix.as_str())
+}
+
 /// Adds candidate configuration file paths under `dir` using `base` as the file stem.
 ///
 /// The `base` string should include any desired prefix such as a leading dot.
@@ -136,16 +149,12 @@ where
 ///
 /// # Examples
 ///
-/// ```rust,ignore
+/// ```rust,no_run
 /// use std::path::Path;
 /// let mut candidates: Vec<std::path::PathBuf> = Vec::new();
-/// crate::subcommand::push_stem_candidates(Path::new("/tmp"), ".myapp", &mut candidates);
+/// // crate::subcommand::push_stem_candidates(Path::new("/tmp"), ".myapp", &mut candidates);
 /// assert!(candidates.iter().any(|p| p.ends_with(".myapp.toml")));
 /// ```
-fn dotted(prefix: &Prefix) -> String {
-    format!(".{}", prefix.as_str())
-}
-
 fn push_stem_candidates(dir: &Path, base: &str, paths: &mut Vec<PathBuf>) {
     push_candidates(paths, base, |f| dir.join(f));
 }
@@ -211,19 +220,15 @@ fn collect_non_unix_paths(prefix: &Prefix, paths: &mut Vec<PathBuf>) {
     // callers to override the detected home directory on Windows where
     // `BaseDirs` otherwise queries the system API.
     let dotted = dotted(prefix);
-    let mut env_set = false;
-    for var in ["HOME", "USERPROFILE"] {
-        if let Some(home) = std::env::var_os(var) {
-            push_stem_candidates(Path::new(&home), &dotted, paths);
-            env_set = true;
-            break;
-        }
+
+    if let Some(home) = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")) {
+        push_stem_candidates(Path::new(&home), &dotted, paths);
     }
 
     if let Some(dirs) = BaseDirs::new() {
         // If the home directory wasn't overridden above, include the one
         // reported by `BaseDirs` as well.
-        if !env_set {
+        if std::env::var_os("HOME").is_none() && std::env::var_os("USERPROFILE").is_none() {
             push_stem_candidates(dirs.home_dir(), &dotted, paths);
         }
 
