@@ -128,49 +128,32 @@ where
     }
 }
 
-/// Adds candidate configuration file paths in the user's home directory, using the normalised prefix as a filename prefix.
+/// Adds candidate configuration file paths under `dir` using `base` as the file stem.
 ///
-/// The generated paths are based on the normalised prefix from `base`, prefixed with a dot, and appended with supported configuration file extensions. Each candidate is constructed relative to the provided `home` directory. The resulting paths are added to the `paths` vector.
+/// The `base` string should include any desired prefix such as a leading dot.
+/// Supported configuration extensions are appended and each candidate is joined
+/// with `dir` before being pushed onto `paths`.
 ///
 /// # Examples
 ///
-/// ```rust,no_run
-/// use std::path::PathBuf;
-/// use ortho_config::subcommand::Prefix;
-/// let home = PathBuf::from("/home/alice");
-/// let prefix = Prefix::new("MyApp");
-/// let mut candidates = Vec::new();
-/// candidates.push(home.join(format!(".{}.toml", "myapp")));
+/// ```rust,ignore
+/// use std::path::Path;
+/// let mut candidates: Vec<std::path::PathBuf> = Vec::new();
+/// crate::subcommand::push_dir_candidates(Path::new("/tmp"), ".myapp", &mut candidates);
 /// assert!(candidates.iter().any(|p| p.ends_with(".myapp.toml")));
 /// ```
-fn push_home_candidates(home: &Path, base: &Prefix, paths: &mut Vec<PathBuf>) {
-    push_candidates(paths, &format!(".{}", base.as_str()), |f| home.join(f));
+fn push_dir_candidates(dir: &Path, base: &str, paths: &mut Vec<PathBuf>) {
+    push_candidates(paths, base, |f| dir.join(f));
 }
 
-#[cfg(not(any(unix, target_os = "redox")))]
-/// Adds candidate configuration file paths named "config" with supported extensions in the specified directory.
-///
-/// This function appends possible configuration file paths (e.g., `config.toml`, `config.json`, etc.) to the provided vector, using the given directory as the base location. The set of extensions considered depends on enabled features. Intended for use on non-Unix platforms.
-fn push_cfg_candidates(dir: &Path, paths: &mut Vec<PathBuf>) {
-    push_candidates(paths, "config", |f| dir.join(f));
-}
-
-/// Adds candidate configuration file paths in the current directory using the given prefix.
-///
-/// The generated file names are prefixed with a dot and the normalised prefix, supporting multiple configuration file extensions.
-///
-/// # Examples
-///
-/// ```rust,no_run
-/// use std::path::PathBuf;
-/// use ortho_config::subcommand::Prefix;
-/// let mut paths = Vec::new();
-/// let prefix = Prefix::new("myapp");
-/// paths.push(PathBuf::from(format!(".{}.toml", "myapp")));
-/// assert!(paths.iter().any(|p| p.to_string_lossy().starts_with(".myapp")));
-/// ```
-fn push_local_candidates(base: &Prefix, paths: &mut Vec<PathBuf>) {
-    push_candidates(paths, &format!(".{}", base.as_str()), PathBuf::from);
+fn push_home_from_env(vars: &[&str], prefix: &Prefix, paths: &mut Vec<PathBuf>) -> bool {
+    for var in vars {
+        if let Some(home) = std::env::var_os(var) {
+            push_dir_candidates(Path::new(&home), &format!(".{}", prefix.as_str()), paths);
+            return true;
+        }
+    }
+    false
 }
 
 /// Returns a list of possible configuration file paths for a subcommand, based on the provided prefix.
@@ -194,9 +177,7 @@ fn push_local_candidates(base: &Prefix, paths: &mut Vec<PathBuf>) {
 /// ```
 #[cfg(any(unix, target_os = "redox"))]
 fn collect_unix_paths(prefix: &Prefix, paths: &mut Vec<PathBuf>) {
-    if let Some(home) = std::env::var_os("HOME") {
-        push_home_candidates(Path::new(&home), prefix, paths);
-    }
+    let _ = push_home_from_env(&["HOME"], prefix, paths);
 
     let xdg_dirs = if prefix.as_str().is_empty() {
         BaseDirectories::new()
@@ -228,15 +209,13 @@ fn collect_non_unix_paths(prefix: &Prefix, paths: &mut Vec<PathBuf>) {
     // Prefer an explicit HOME or USERPROFILE if provided. These variables allow
     // callers to override the detected home directory on Windows where
     // `BaseDirs` otherwise queries the system API.
-    if let Some(home) = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")) {
-        push_home_candidates(Path::new(&home), prefix, paths);
-    }
+    let env_set = push_home_from_env(&["HOME", "USERPROFILE"], prefix, paths);
 
     if let Some(dirs) = BaseDirs::new() {
         // If the home directory wasn't overridden above, include the one
         // reported by `BaseDirs` as well.
-        if std::env::var_os("HOME").is_none() && std::env::var_os("USERPROFILE").is_none() {
-            push_home_candidates(dirs.home_dir(), prefix, paths);
+        if !env_set {
+            push_dir_candidates(dirs.home_dir(), &format!(".{}", prefix.as_str()), paths);
         }
 
         let cfg_dir = if prefix.as_str().is_empty() {
@@ -244,7 +223,7 @@ fn collect_non_unix_paths(prefix: &Prefix, paths: &mut Vec<PathBuf>) {
         } else {
             dirs.config_dir().join(prefix.as_str())
         };
-        push_cfg_candidates(&cfg_dir, paths);
+        push_dir_candidates(&cfg_dir, "config", paths);
     }
 }
 
@@ -257,7 +236,7 @@ fn candidate_paths(prefix: &Prefix) -> Vec<PathBuf> {
     #[cfg(not(any(unix, target_os = "redox")))]
     collect_non_unix_paths(prefix, &mut paths);
 
-    push_local_candidates(prefix, &mut paths);
+    push_dir_candidates(Path::new(""), &format!(".{}", prefix.as_str()), &mut paths);
     paths
 }
 
