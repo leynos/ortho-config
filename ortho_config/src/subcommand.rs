@@ -139,21 +139,19 @@ where
 /// ```rust,ignore
 /// use std::path::Path;
 /// let mut candidates: Vec<std::path::PathBuf> = Vec::new();
-/// crate::subcommand::push_dir_candidates(Path::new("/tmp"), ".myapp", &mut candidates);
+/// crate::subcommand::push_stem_candidates(Path::new("/tmp"), ".myapp", &mut candidates);
 /// assert!(candidates.iter().any(|p| p.ends_with(".myapp.toml")));
 /// ```
-fn push_dir_candidates(dir: &Path, base: &str, paths: &mut Vec<PathBuf>) {
+fn dotted(prefix: &Prefix) -> String {
+    format!(".{}", prefix.as_str())
+}
+
+fn push_stem_candidates(dir: &Path, base: &str, paths: &mut Vec<PathBuf>) {
     push_candidates(paths, base, |f| dir.join(f));
 }
 
-fn push_home_from_env(vars: &[&str], prefix: &Prefix, paths: &mut Vec<PathBuf>) -> bool {
-    for var in vars {
-        if let Some(home) = std::env::var_os(var) {
-            push_dir_candidates(Path::new(&home), &format!(".{}", prefix.as_str()), paths);
-            return true;
-        }
-    }
-    false
+fn push_local_candidates(prefix: &Prefix, paths: &mut Vec<PathBuf>) {
+    push_stem_candidates(Path::new("."), &dotted(prefix), paths);
 }
 
 /// Returns a list of possible configuration file paths for a subcommand, based on the provided prefix.
@@ -177,7 +175,10 @@ fn push_home_from_env(vars: &[&str], prefix: &Prefix, paths: &mut Vec<PathBuf>) 
 /// ```
 #[cfg(any(unix, target_os = "redox"))]
 fn collect_unix_paths(prefix: &Prefix, paths: &mut Vec<PathBuf>) {
-    let _ = push_home_from_env(&["HOME"], prefix, paths);
+    let dotted = dotted(prefix);
+    if let Some(home) = std::env::var_os("HOME") {
+        push_stem_candidates(Path::new(&home), &dotted, paths);
+    }
 
     let xdg_dirs = if prefix.as_str().is_empty() {
         BaseDirectories::new()
@@ -209,13 +210,21 @@ fn collect_non_unix_paths(prefix: &Prefix, paths: &mut Vec<PathBuf>) {
     // Prefer an explicit HOME or USERPROFILE if provided. These variables allow
     // callers to override the detected home directory on Windows where
     // `BaseDirs` otherwise queries the system API.
-    let env_set = push_home_from_env(&["HOME", "USERPROFILE"], prefix, paths);
+    let dotted = dotted(prefix);
+    let mut env_set = false;
+    for var in ["HOME", "USERPROFILE"] {
+        if let Some(home) = std::env::var_os(var) {
+            push_stem_candidates(Path::new(&home), &dotted, paths);
+            env_set = true;
+            break;
+        }
+    }
 
     if let Some(dirs) = BaseDirs::new() {
         // If the home directory wasn't overridden above, include the one
         // reported by `BaseDirs` as well.
         if !env_set {
-            push_dir_candidates(dirs.home_dir(), &format!(".{}", prefix.as_str()), paths);
+            push_stem_candidates(dirs.home_dir(), &dotted, paths);
         }
 
         let cfg_dir = if prefix.as_str().is_empty() {
@@ -223,7 +232,7 @@ fn collect_non_unix_paths(prefix: &Prefix, paths: &mut Vec<PathBuf>) {
         } else {
             dirs.config_dir().join(prefix.as_str())
         };
-        push_dir_candidates(&cfg_dir, "config", paths);
+        push_stem_candidates(&cfg_dir, "config", paths);
     }
 }
 
@@ -236,7 +245,7 @@ fn candidate_paths(prefix: &Prefix) -> Vec<PathBuf> {
     #[cfg(not(any(unix, target_os = "redox")))]
     collect_non_unix_paths(prefix, &mut paths);
 
-    push_dir_candidates(Path::new(""), &format!(".{}", prefix.as_str()), &mut paths);
+    push_local_candidates(prefix, &mut paths);
     paths
 }
 
