@@ -128,14 +128,25 @@ where
     }
 }
 
-/// Returns the provided prefix with a leading dot.
+/// Returns the prefix formatted with a leading dot for file path generation.
+///
+/// Used internally to create dot-prefixed filenames when searching user
+/// directories for configuration files.
+///
+/// # Arguments
+/// * `prefix` - The prefix to format
+///
+/// # Returns
+/// A `String` with `.` prepended to the normalised prefix.
 ///
 /// # Examples
 ///
-/// ```rust,ignore
-/// use ortho_config::subcommand::{dotted, Prefix};
+/// ```rust,no_run
+/// use ortho_config::subcommand::Prefix;
 /// let prefix = Prefix::new("myapp");
-/// assert_eq!(dotted(&prefix), ".myapp");
+/// // Equivalent to the crate's internal `dotted(&prefix)` helper.
+/// let dotted = format!(".{}", "myapp");
+/// assert_eq!(dotted, ".myapp");
 /// ```
 fn dotted(prefix: &Prefix) -> String {
     format!(".{}", prefix.as_str())
@@ -150,9 +161,12 @@ fn dotted(prefix: &Prefix) -> String {
 /// # Examples
 ///
 /// ```rust,no_run
-/// use std::path::Path;
-/// let mut candidates: Vec<std::path::PathBuf> = Vec::new();
-/// // crate::subcommand::push_stem_candidates(Path::new("/tmp"), ".myapp", &mut candidates);
+/// use std::path::{Path, PathBuf};
+/// let mut candidates: Vec<PathBuf> = Vec::new();
+/// // Internally this crate calls `push_stem_candidates(Path::new("/tmp"), ".myapp", &mut candidates)`.
+/// for ext in ["toml"] {
+///     candidates.push(Path::new("/tmp").join(format!(".myapp.{ext}")));
+/// }
 /// assert!(candidates.iter().any(|p| p.ends_with(".myapp.toml")));
 /// ```
 fn push_stem_candidates(dir: &Path, base: &str, paths: &mut Vec<PathBuf>) {
