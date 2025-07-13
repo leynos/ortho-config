@@ -231,23 +231,121 @@ pub(crate) struct LoadImplArgs<'a> {
     pub tokens: LoadImplTokens<'a>,
 }
 
-pub(crate) fn build_load_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStream {
-    let LoadImplArgs { idents, tokens } = args;
+/// Generate the `clap` parsing snippet for `load_from_iter`.
+///
+/// The design document outlines that CLI arguments are parsed first into a
+/// temporary struct before merging with other providers so they take highest
+/// precedence. See `docs/design.md` lines 65-78 for the full flow.
+pub(crate) fn build_cli_parsing(idents: &LoadImplIdents<'_>) -> proc_macro2::TokenStream {
     let LoadImplIdents {
-        ident,
-        cli_mod,
-        cli_ident,
-        defaults_ident,
-    } = idents;
+        cli_mod, cli_ident, ..
+    } = *idents;
+    quote! {
+        let cli = #cli_mod::#cli_ident::try_parse_from(
+            args.into_iter().map(|a| a.as_ref().to_os_string())
+        )
+        .map_err(ortho_config::OrthoError::CliParsing)?;
+    }
+}
+
+/// Generate the file discovery logic section.
+///
+/// Configuration files are searched in multiple locations as described in
+/// `docs/design.md` lines 199-212. This mirrors standard XDG behaviour on
+/// Unix-like systems and uses `directories` on Windows.
+pub(crate) fn build_file_discovery(tokens: &LoadImplTokens<'_>) -> proc_macro2::TokenStream {
     let LoadImplTokens {
-        env_provider,
-        default_struct_init,
-        override_init_ts,
-        append_logic,
         config_env_var,
         dotfile_name,
         xdg_snippet,
+        ..
     } = tokens;
+    quote! {
+        let mut file_fig = None;
+        if let Some(path) = &cli.config_path {
+            file_fig = ortho_config::load_config_file(path)?;
+        }
+        if file_fig.is_none() {
+            if let Ok(p) = std::env::var(#config_env_var) {
+                file_fig = ortho_config::load_config_file(std::path::Path::new(&p))?;
+            }
+        }
+        if file_fig.is_none() {
+            file_fig = ortho_config::load_config_file(std::path::Path::new(#dotfile_name))?;
+        }
+        if file_fig.is_none() {
+            if let Some(home) = std::env::var_os("HOME") {
+                let p = std::path::PathBuf::from(home).join(#dotfile_name);
+                file_fig = ortho_config::load_config_file(&p)?;
+            }
+        }
+        #xdg_snippet
+    }
+}
+
+/// Build the environment provider setup.
+///
+/// Environment variables sit just below CLI arguments in the precedence order,
+/// using a prefix if one was supplied in the macro input. See
+/// `docs/design.md` lines 65-78 and 120-125.
+pub(crate) fn build_env_section(tokens: &LoadImplTokens<'_>) -> proc_macro2::TokenStream {
+    let env_provider = tokens.env_provider;
+    quote! {
+        let env_provider = {
+            #env_provider
+                .map(|k| Uncased::new(k.as_str().to_ascii_uppercase()))
+                .split("__")
+        };
+
+        let env_fig = Figment::from(env_provider.clone());
+        let cli_fig = Figment::from(Serialized::from(&cli, Profile::Default));
+    }
+}
+
+/// Build the merging and final extraction portion of `load_from_iter`.
+///
+/// Providers are layered following the order described in the design document:
+/// defaults, file, environment, then CLI. See `docs/design.md` lines 69-78.
+pub(crate) fn build_merge_section(
+    idents: &LoadImplIdents<'_>,
+    tokens: &LoadImplTokens<'_>,
+) -> proc_macro2::TokenStream {
+    let LoadImplIdents { defaults_ident, .. } = *idents;
+    let LoadImplTokens {
+        default_struct_init,
+        override_init_ts,
+        append_logic,
+        ..
+    } = tokens;
+    quote! {
+        let mut fig = Figment::new();
+        let defaults = #defaults_ident { #( #default_struct_init, )* };
+
+        let mut overrides = #override_init_ts;
+
+        fig = fig.merge(Serialized::defaults(&defaults));
+
+        if let Some(ref f) = file_fig {
+            fig = fig.merge(f.clone());
+        }
+
+        fig = fig.merge(env_provider).merge(Serialized::from(&cli, Profile::Default));
+
+        #append_logic
+
+        fig = fig.merge(Serialized::defaults(overrides));
+
+        fig.extract().map_err(ortho_config::OrthoError::Gathering)
+    }
+}
+
+pub(crate) fn build_load_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStream {
+    let LoadImplArgs { idents, tokens } = args;
+    let LoadImplIdents { ident, .. } = idents;
+    let cli_parsing = build_cli_parsing(idents);
+    let file_discovery = build_file_discovery(tokens);
+    let env_section = build_env_section(tokens);
+    let merge_section = build_merge_section(idents, tokens);
 
     quote! {
         impl #ident {
@@ -265,60 +363,10 @@ pub(crate) fn build_load_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStre
                 #[cfg(feature = "yaml")] use serde_yaml;
                 #[cfg(feature = "toml")] use toml;
 
-                let cli = #cli_mod::#cli_ident::try_parse_from(
-                    args.into_iter().map(|a| a.as_ref().to_os_string())
-                )
-                .map_err(ortho_config::OrthoError::CliParsing)?;
-
-                let mut file_fig = None;
-                if let Some(path) = &cli.config_path {
-                    file_fig = ortho_config::load_config_file(path)?;
-                }
-                if file_fig.is_none() {
-                    if let Ok(p) = std::env::var(#config_env_var) {
-                        file_fig = ortho_config::load_config_file(std::path::Path::new(&p))?;
-                    }
-                }
-                if file_fig.is_none() {
-                    file_fig = ortho_config::load_config_file(std::path::Path::new(#dotfile_name))?;
-                }
-                if file_fig.is_none() {
-                    if let Some(home) = std::env::var_os("HOME") {
-                        let p = std::path::PathBuf::from(home).join(#dotfile_name);
-                        file_fig = ortho_config::load_config_file(&p)?;
-                    }
-                }
-                #xdg_snippet
-
-                let mut fig = Figment::new();
-                let defaults = #defaults_ident {
-                    #( #default_struct_init, )*
-                };
-
-                let mut overrides = #override_init_ts;
-
-                fig = fig.merge(Serialized::defaults(&defaults));
-
-                if let Some(ref f) = file_fig {
-                    fig = fig.merge(f.clone());
-                }
-
-                let env_provider = {
-                    #env_provider
-                        .map(|k| Uncased::new(k.as_str().to_ascii_uppercase()))
-                        .split("__")
-                };
-
-                let env_fig = Figment::from(env_provider.clone());
-                let cli_fig = Figment::from(Serialized::from(&cli, Profile::Default));
-
-                fig = fig.merge(env_provider).merge(Serialized::from(&cli, Profile::Default));
-
-                #append_logic
-
-                fig = fig.merge(Serialized::defaults(overrides));
-
-                fig.extract().map_err(ortho_config::OrthoError::Gathering)
+                #cli_parsing
+                #file_discovery
+                #env_section
+                #merge_section
             }
         }
     }
