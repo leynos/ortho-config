@@ -160,14 +160,15 @@ fn dotted(prefix: &Prefix) -> String {
 ///
 /// # Examples
 ///
-/// ```rust,ignore
+/// ```rust,no_run
 /// use std::path::{Path, PathBuf};
+/// use ortho_config::subcommand::push_stem_candidates;
 /// let mut candidates: Vec<PathBuf> = Vec::new();
-/// // Calls `push_stem_candidates` to populate typical file names.
+/// // Populate the vector with common configuration file names under `/tmp`.
 /// push_stem_candidates(Path::new("/tmp"), ".myapp", &mut candidates);
 /// assert!(candidates.iter().any(|p| p.ends_with(".myapp.toml")));
 /// ```
-fn push_stem_candidates(dir: &Path, base: &str, paths: &mut Vec<PathBuf>) {
+pub fn push_stem_candidates(dir: &Path, base: &str, paths: &mut Vec<PathBuf>) {
     push_candidates(paths, base, |f| dir.join(f));
 }
 
