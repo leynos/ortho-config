@@ -160,13 +160,11 @@ fn dotted(prefix: &Prefix) -> String {
 ///
 /// # Examples
 ///
-/// ```rust,no_run
+/// ```rust,ignore
 /// use std::path::{Path, PathBuf};
 /// let mut candidates: Vec<PathBuf> = Vec::new();
-/// // Internally this crate calls `push_stem_candidates(Path::new("/tmp"), ".myapp", &mut candidates)`.
-/// for ext in ["toml"] {
-///     candidates.push(Path::new("/tmp").join(format!(".myapp.{ext}")));
-/// }
+/// // Calls `push_stem_candidates` to populate typical file names.
+/// push_stem_candidates(Path::new("/tmp"), ".myapp", &mut candidates);
 /// assert!(candidates.iter().any(|p| p.ends_with(".myapp.toml")));
 /// ```
 fn push_stem_candidates(dir: &Path, base: &str, paths: &mut Vec<PathBuf>) {
