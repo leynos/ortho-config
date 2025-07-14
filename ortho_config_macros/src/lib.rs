@@ -12,15 +12,16 @@ use syn::{DeriveInput, parse_macro_input};
 
 mod derive {
     pub(crate) mod build;
+    pub(crate) mod load_impl;
     pub(crate) mod parse;
 }
 
 use derive::build::{
-    LoadImplArgs, LoadImplIdents, LoadImplTokens, build_append_logic, build_cli_fields,
-    build_config_env_var, build_default_struct_fields, build_default_struct_init,
-    build_dotfile_name, build_env_provider, build_load_impl, build_override_struct,
+    build_append_logic, build_cli_fields, build_config_env_var, build_default_struct_fields,
+    build_default_struct_init, build_dotfile_name, build_env_provider, build_override_struct,
     build_xdg_snippet, collect_append_fields,
 };
+use derive::load_impl::{LoadImplArgs, LoadImplIdents, LoadImplTokens, build_load_impl};
 use derive::parse::parse_input;
 
 /// Derive macro for [`ortho_config::OrthoConfig`].
