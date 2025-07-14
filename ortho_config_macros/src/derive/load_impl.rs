@@ -65,9 +65,15 @@ pub(crate) fn build_file_discovery(tokens: &LoadImplTokens<'_>) -> proc_macro2::
         let mut file_fig = None;
         let candidates = std::iter::empty()
             .chain(cli.config_path.clone())
-            .chain(std::env::var_os(#config_env_var).map(std::path::PathBuf::from))
+            .chain(
+                std::env::var_os(#config_env_var)
+                    .map(std::path::PathBuf::from),
+            )
             .chain(Some(std::path::PathBuf::from(#dotfile_name)))
-            .chain(std::env::var_os("HOME").map(|h| std::path::PathBuf::from(h).join(#dotfile_name)));
+            .chain(
+                std::env::var_os("HOME")
+                    .map(|h| std::path::PathBuf::from(h).join(#dotfile_name)),
+            );
         for path in candidates {
             if let Some(fig) = ortho_config::load_config_file(&path)? {
                 file_fig = Some(fig);
@@ -121,7 +127,9 @@ pub(crate) fn build_merge_section(
             fig = fig.merge(f);
         }
 
-        fig = fig.merge(env_provider.clone()).merge(figment::providers::Serialized::from(&cli, figment::Profile::Default));
+        fig = fig
+            .merge(env_provider.clone())
+            .merge(figment::providers::Serialized::from(&cli, figment::Profile::Default));
 
         #append_logic
 
@@ -142,7 +150,7 @@ pub(crate) fn build_load_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStre
 
     quote! {
         impl #ident {
-            #[allow(dead_code)]
+            #[expect(dead_code, reason = "Generated method may not be used in all builds")]
             pub fn load_from_iter<I>(args: I) -> Result<Self, ortho_config::OrthoError>
             where
                 I: IntoIterator,
