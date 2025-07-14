@@ -194,6 +194,10 @@ pub(crate) fn build_override_struct(
 }
 
 pub(crate) fn build_append_logic(fields: &[(Ident, &Type)]) -> proc_macro2::TokenStream {
+    if fields.is_empty() {
+        return quote! {};
+    }
+
     let logic = fields.iter().map(|(name, ty)| {
         quote! {
             {
@@ -202,15 +206,19 @@ pub(crate) fn build_append_logic(fields: &[(Ident, &Type)]) -> proc_macro2::Toke
                 if let Some(f) = &file_fig {
                     if let Ok(v) = f.extract_inner::<Vec<#ty>>(stringify!(#name)) { vec_acc.extend(v); }
                 }
-                if let Ok(v) = Figment::from(env_provider.clone()).extract_inner::<Vec<#ty>>(stringify!(#name)) { vec_acc.extend(v); }
-                if let Ok(v) = Figment::from(Serialized::from(&cli, Profile::Default)).extract_inner::<Vec<#ty>>(stringify!(#name)) { vec_acc.extend(v); }
+                if let Ok(v) = env_figment.extract_inner::<Vec<#ty>>(stringify!(#name)) { vec_acc.extend(v); }
+                if let Ok(v) = cli_figment.extract_inner::<Vec<#ty>>(stringify!(#name)) { vec_acc.extend(v); }
                 if !vec_acc.is_empty() {
                     overrides.#name = Some(vec_acc);
                 }
             }
         }
     });
-    quote! { #( #logic )* }
+    quote! {
+        let env_figment = Figment::from(env_provider.clone());
+        let cli_figment = Figment::from(Serialized::from(&cli, Profile::Default));
+        #( #logic )*
+    }
 }
 
 #[cfg(test)]
