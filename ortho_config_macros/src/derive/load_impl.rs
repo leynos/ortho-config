@@ -157,7 +157,7 @@ pub(crate) fn build_load_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStre
                 I::Item: AsRef<std::ffi::OsStr>,
             {
                 use clap::Parser as _;
-                use figment::{Figment, providers::{Toml, Env, Serialized, Format}, Profile};
+                use figment::{Figment, providers::{Toml, Env, Serialized}, Profile};
                 #[cfg(feature = "json5")] use figment_json5::Json5;
                 #[cfg(feature = "yaml")] use figment::providers::Yaml;
                 use uncased::Uncased;
