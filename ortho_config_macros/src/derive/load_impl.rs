@@ -2,7 +2,8 @@
 //!
 //! These functions assemble the configuration loading logic by piecing together
 //! CLI parsing, file discovery, environment provider setup, and final merging
-//! according to the order described in the design document.
+//! according to the order described in the design document. See
+//! [`docs/design.md`](../../docs/design.md) for the high-level architecture.
 
 use quote::quote;
 use syn::Ident;
