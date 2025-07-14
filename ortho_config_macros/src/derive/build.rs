@@ -1,4 +1,8 @@
 //! Code generation helpers for the `OrthoConfig` derive macro.
+//!
+//! This module contains utilities shared across the code generation
+//! routines. The `load_impl` submodule houses the helpers that build the
+//! `load_from_iter` implementation used by the derive macro.
 
 use quote::{format_ident, quote};
 use syn::{Ident, Type};
@@ -190,6 +194,10 @@ pub(crate) fn build_override_struct(
 }
 
 pub(crate) fn build_append_logic(fields: &[(Ident, &Type)]) -> proc_macro2::TokenStream {
+    if fields.is_empty() {
+        return quote! {};
+    }
+
     let logic = fields.iter().map(|(name, ty)| {
         quote! {
             {
@@ -198,129 +206,18 @@ pub(crate) fn build_append_logic(fields: &[(Ident, &Type)]) -> proc_macro2::Toke
                 if let Some(f) = &file_fig {
                     if let Ok(v) = f.extract_inner::<Vec<#ty>>(stringify!(#name)) { vec_acc.extend(v); }
                 }
-                if let Ok(v) = env_fig.extract_inner::<Vec<#ty>>(stringify!(#name)) { vec_acc.extend(v); }
-                if let Ok(v) = cli_fig.extract_inner::<Vec<#ty>>(stringify!(#name)) { vec_acc.extend(v); }
+                if let Ok(v) = env_figment.extract_inner::<Vec<#ty>>(stringify!(#name)) { vec_acc.extend(v); }
+                if let Ok(v) = cli_figment.extract_inner::<Vec<#ty>>(stringify!(#name)) { vec_acc.extend(v); }
                 if !vec_acc.is_empty() {
                     overrides.#name = Some(vec_acc);
                 }
             }
         }
     });
-    quote! { #( #logic )* }
-}
-
-pub(crate) struct LoadImplIdents<'a> {
-    pub ident: &'a Ident,
-    pub cli_mod: &'a Ident,
-    pub cli_ident: &'a Ident,
-    pub defaults_ident: &'a Ident,
-}
-
-pub(crate) struct LoadImplTokens<'a> {
-    pub env_provider: &'a proc_macro2::TokenStream,
-    pub default_struct_init: &'a [proc_macro2::TokenStream],
-    pub override_init_ts: &'a proc_macro2::TokenStream,
-    pub append_logic: &'a proc_macro2::TokenStream,
-    pub config_env_var: &'a proc_macro2::TokenStream,
-    pub dotfile_name: &'a proc_macro2::TokenStream,
-    pub xdg_snippet: &'a proc_macro2::TokenStream,
-}
-
-pub(crate) struct LoadImplArgs<'a> {
-    pub idents: LoadImplIdents<'a>,
-    pub tokens: LoadImplTokens<'a>,
-}
-
-pub(crate) fn build_load_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStream {
-    let LoadImplArgs { idents, tokens } = args;
-    let LoadImplIdents {
-        ident,
-        cli_mod,
-        cli_ident,
-        defaults_ident,
-    } = idents;
-    let LoadImplTokens {
-        env_provider,
-        default_struct_init,
-        override_init_ts,
-        append_logic,
-        config_env_var,
-        dotfile_name,
-        xdg_snippet,
-    } = tokens;
-
     quote! {
-        impl #ident {
-            #[allow(dead_code)]
-            pub fn load_from_iter<I>(args: I) -> Result<Self, ortho_config::OrthoError>
-            where
-                I: IntoIterator,
-                I::Item: AsRef<std::ffi::OsStr>,
-            {
-                use clap::Parser as _;
-                use figment::{Figment, providers::{Toml, Env, Serialized, Format}, Profile};
-                #[cfg(feature = "json5")] use figment_json5::Json5;
-                #[cfg(feature = "yaml")] use figment::providers::Yaml;
-                use uncased::Uncased;
-                #[cfg(feature = "yaml")] use serde_yaml;
-                #[cfg(feature = "toml")] use toml;
-
-                let cli = #cli_mod::#cli_ident::try_parse_from(
-                    args.into_iter().map(|a| a.as_ref().to_os_string())
-                )
-                .map_err(ortho_config::OrthoError::CliParsing)?;
-
-                let mut file_fig = None;
-                if let Some(path) = &cli.config_path {
-                    file_fig = ortho_config::load_config_file(path)?;
-                }
-                if file_fig.is_none() {
-                    if let Ok(p) = std::env::var(#config_env_var) {
-                        file_fig = ortho_config::load_config_file(std::path::Path::new(&p))?;
-                    }
-                }
-                if file_fig.is_none() {
-                    file_fig = ortho_config::load_config_file(std::path::Path::new(#dotfile_name))?;
-                }
-                if file_fig.is_none() {
-                    if let Some(home) = std::env::var_os("HOME") {
-                        let p = std::path::PathBuf::from(home).join(#dotfile_name);
-                        file_fig = ortho_config::load_config_file(&p)?;
-                    }
-                }
-                #xdg_snippet
-
-                let mut fig = Figment::new();
-                let defaults = #defaults_ident {
-                    #( #default_struct_init, )*
-                };
-
-                let mut overrides = #override_init_ts;
-
-                fig = fig.merge(Serialized::defaults(&defaults));
-
-                if let Some(ref f) = file_fig {
-                    fig = fig.merge(f.clone());
-                }
-
-                let env_provider = {
-                    #env_provider
-                        .map(|k| Uncased::new(k.as_str().to_ascii_uppercase()))
-                        .split("__")
-                };
-
-                let env_fig = Figment::from(env_provider.clone());
-                let cli_fig = Figment::from(Serialized::from(&cli, Profile::Default));
-
-                fig = fig.merge(env_provider).merge(Serialized::from(&cli, Profile::Default));
-
-                #append_logic
-
-                fig = fig.merge(Serialized::defaults(overrides));
-
-                fig.extract().map_err(ortho_config::OrthoError::Gathering)
-            }
-        }
+        let env_figment = Figment::from(env_provider.clone());
+        let cli_figment = Figment::from(Serialized::from(&cli, Profile::Default));
+        #( #logic )*
     }
 }
 
