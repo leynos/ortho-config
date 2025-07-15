@@ -116,12 +116,12 @@ pub(crate) fn build_merge_section(
         ..
     } = tokens;
     quote! {
-        let mut fig = figment::Figment::new();
+        let mut fig = Figment::new();
         let defaults = #defaults_ident { #( #default_struct_init, )* };
 
         let mut overrides = #override_init_ts;
 
-        fig = fig.merge(figment::providers::Serialized::defaults(&defaults));
+        fig = fig.merge(Serialized::defaults(&defaults));
 
         if let Some(ref f) = file_fig {
             fig = fig.merge(f);
@@ -129,11 +129,11 @@ pub(crate) fn build_merge_section(
 
         fig = fig
             .merge(env_provider.clone())
-            .merge(figment::providers::Serialized::from(&cli, figment::Profile::Default));
+            .merge(Serialized::from(&cli, Profile::Default));
 
         #append_logic
 
-        fig = fig.merge(figment::providers::Serialized::defaults(overrides));
+        fig = fig.merge(Serialized::defaults(overrides));
 
         fig.extract().map_err(ortho_config::OrthoError::Gathering)
     }
