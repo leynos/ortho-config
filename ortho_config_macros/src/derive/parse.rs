@@ -29,72 +29,74 @@ impl MergeStrategy {
     }
 }
 
+/// Iterate all `#[ortho_config(...)]` attributes once and apply a callback.
+fn parse_ortho_config<F>(attrs: &[Attribute], mut f: F) -> syn::Result<()>
+where
+    F: FnMut(&syn::meta::ParseNestedMeta) -> syn::Result<()>,
+{
+    for attr in attrs.iter().filter(|a| a.path().is_ident("ortho_config")) {
+        attr.parse_nested_meta(|meta| f(&meta))?;
+    }
+    Ok(())
+}
+
 pub(crate) fn parse_struct_attrs(attrs: &[Attribute]) -> Result<StructAttrs, syn::Error> {
     let mut out = StructAttrs::default();
-    for attr in attrs {
-        if !attr.path().is_ident("ortho_config") {
-            continue;
-        }
-        attr.parse_nested_meta(|meta| {
-            if meta.path.is_ident("prefix") {
-                let val = meta.value()?.parse::<Lit>()?;
-                if let Lit::Str(s) = val {
-                    out.prefix = Some(s.value());
-                } else {
-                    return Err(syn::Error::new(val.span(), "prefix must be a string"));
-                }
+    parse_ortho_config(attrs, |meta| {
+        if meta.path.is_ident("prefix") {
+            let val = meta.value()?.parse::<Lit>()?;
+            if let Lit::Str(s) = val {
+                out.prefix = Some(s.value());
+            } else {
+                return Err(syn::Error::new(val.span(), "prefix must be a string"));
             }
-            Ok(())
-        })?;
-    }
+        }
+        Ok(())
+    })?;
     Ok(out)
 }
 
 pub(crate) fn parse_field_attrs(attrs: &[Attribute]) -> Result<FieldAttrs, syn::Error> {
     let mut out = FieldAttrs::default();
-    for attr in attrs {
-        if !attr.path().is_ident("ortho_config") {
-            continue;
-        }
-        attr.parse_nested_meta(|meta| {
-            if meta.path.is_ident("cli_long") {
-                let val = meta.value()?.parse::<Lit>()?;
-                if let Lit::Str(s) = val {
-                    out.cli_long = Some(s.value());
-                } else {
-                    return Err(syn::Error::new(val.span(), "cli_long must be a string"));
-                }
-            } else if meta.path.is_ident("cli_short") {
-                let val = meta.value()?.parse::<Lit>()?;
-                if let Lit::Char(c) = val {
-                    out.cli_short = Some(c.value());
-                } else {
-                    return Err(syn::Error::new(val.span(), "cli_short must be a char"));
-                }
-            } else if meta.path.is_ident("default") {
-                let expr = meta.value()?.parse::<Expr>()?;
-                out.default = Some(expr);
-            } else if meta.path.is_ident("merge_strategy") {
-                let val = meta.value()?.parse::<Lit>()?;
-                if let Lit::Str(s) = val {
-                    out.merge_strategy = Some(MergeStrategy::parse(&s.value(), s.span())?);
-                } else {
-                    return Err(syn::Error::new(
-                        val.span(),
-                        "merge_strategy must be a string",
-                    ));
-                }
+    parse_ortho_config(attrs, |meta| {
+        if meta.path.is_ident("cli_long") {
+            let val = meta.value()?.parse::<Lit>()?;
+            if let Lit::Str(s) = val {
+                out.cli_long = Some(s.value());
+            } else {
+                return Err(syn::Error::new(val.span(), "cli_long must be a string"));
             }
-            Ok(())
-        })?;
-    }
+        } else if meta.path.is_ident("cli_short") {
+            let val = meta.value()?.parse::<Lit>()?;
+            if let Lit::Char(c) = val {
+                out.cli_short = Some(c.value());
+            } else {
+                return Err(syn::Error::new(val.span(), "cli_short must be a char"));
+            }
+        } else if meta.path.is_ident("default") {
+            let expr = meta.value()?.parse::<Expr>()?;
+            out.default = Some(expr);
+        } else if meta.path.is_ident("merge_strategy") {
+            let val = meta.value()?.parse::<Lit>()?;
+            if let Lit::Str(s) = val {
+                out.merge_strategy = Some(MergeStrategy::parse(&s.value(), s.span())?);
+            } else {
+                return Err(syn::Error::new(
+                    val.span(),
+                    "merge_strategy must be a string",
+                ));
+            }
+        }
+        Ok(())
+    })?;
     Ok(out)
 }
 
-pub(crate) fn option_inner(ty: &Type) -> Option<&Type> {
+/// Generic extraction of `Wrapper<T>`.
+fn type_inner<'a>(ty: &'a Type, wrapper: &str) -> Option<&'a Type> {
     if let Type::Path(p) = ty {
         if let Some(seg) = p.path.segments.last() {
-            if seg.ident == "Option" {
+            if seg.ident == wrapper {
                 if let PathArguments::AngleBracketed(args) = &seg.arguments {
                     if let Some(GenericArgument::Type(inner)) = args.args.first() {
                         return Some(inner);
@@ -106,19 +108,12 @@ pub(crate) fn option_inner(ty: &Type) -> Option<&Type> {
     None
 }
 
+pub(crate) fn option_inner(ty: &Type) -> Option<&Type> {
+    type_inner(ty, "Option")
+}
+
 pub(crate) fn vec_inner(ty: &Type) -> Option<&Type> {
-    if let Type::Path(p) = ty {
-        if let Some(seg) = p.path.segments.last() {
-            if seg.ident == "Vec" {
-                if let PathArguments::AngleBracketed(args) = &seg.arguments {
-                    if let Some(GenericArgument::Type(inner)) = args.args.first() {
-                        return Some(inner);
-                    }
-                }
-            }
-        }
-    }
-    None
+    type_inner(ty, "Vec")
 }
 
 pub(crate) fn parse_input(
