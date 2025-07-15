@@ -19,24 +19,13 @@ fn option_type_tokens(ty: &Type) -> proc_macro2::TokenStream {
 
 /// Generates the fields for the hidden `clap::Parser` struct.
 ///
-/// Each user field becomes `Option<T>` to record whether the CLI
-/// provided a value. This lets the configuration merge logic keep
-/// track of which layer supplied each setting. A dedicated
-/// `config_path` field is inserted to allow overriding the path to the
-/// configuration file.
+/// Each user field becomes `Option<T>` to record whether the CLI provided
+/// a value. This lets the configuration merge logic keep track of which
+/// layer supplied each setting. A dedicated `config_path` field is
+/// inserted to allow overriding the path to the configuration file.
 ///
-/// # Examples
-///
-/// ```
-/// use syn::parse_quote;
-/// use ortho_config_macros::derive::build::build_cli_fields;
-/// use ortho_config_macros::derive::parse::FieldAttrs;
-///
-/// let fields = &[parse_quote!(pub port: u16)];
-/// let attrs = &[FieldAttrs::default()];
-/// let tokens = build_cli_fields(fields, attrs);
-/// assert!(tokens[1].to_string().contains("Option"));
-/// ```
+/// This function is used internally by the derive macro to transform
+/// user-defined struct fields into CLI-compatible equivalents.
 pub(crate) fn build_cli_fields(
     fields: &[syn::Field],
     field_attrs: &[FieldAttrs],

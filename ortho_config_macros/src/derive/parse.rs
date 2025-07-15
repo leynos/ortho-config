@@ -29,22 +29,16 @@ impl MergeStrategy {
     }
 }
 
-/// Extracts struct-level `#[ortho_config(...)]` metadata.
+/// Extracts `#[ortho_config(...)]` metadata applied to a struct.
 ///
-/// Only the `prefix` key is currently recognised. Additional keys are
-/// ignored so that callers continue to compile when new attributes are
-/// introduced.
+/// Only the `prefix` key is currently recognised. Unknown keys are
+/// ignored so callers keep compiling when new attributes appear. This
+/// improves forwards compatibility at the cost of allowing silent typos.
+/// If stricter validation is desired, a custom `compile_error!` guard can
+/// reject unexpected keys.
 ///
-/// # Examples
-///
-/// ```
-/// use syn::parse_quote;
-/// use ortho_config_macros::derive::parse::parse_struct_attrs;
-///
-/// let attrs = parse_quote!(#[ortho_config(prefix = "APP_")]);
-/// let parsed = parse_struct_attrs(&[attrs]).unwrap();
-/// assert_eq!(parsed.prefix.as_deref(), Some("APP_"));
-/// ```
+/// Used internally by the derive macro to extract configuration metadata
+/// from struct-level attributes.
 pub(crate) fn parse_struct_attrs(attrs: &[Attribute]) -> Result<StructAttrs, syn::Error> {
     let mut out = StructAttrs::default();
     for attr in attrs {
@@ -68,20 +62,14 @@ pub(crate) fn parse_struct_attrs(attrs: &[Attribute]) -> Result<StructAttrs, syn
 
 /// Parses field-level `#[ortho_config(...)]` attributes.
 ///
-/// Recognised keys include `cli_long`, `cli_short`, `default`, and
-/// `merge_strategy`. Any others are ignored, mirroring the behaviour of
-/// [`parse_struct_attrs`].
+/// Recognised keys include `cli_long`, `cli_short`, `default` and
+/// `merge_strategy`. Unknown keys are ignored, matching
+/// [`parse_struct_attrs`] for forwards compatibility. This lenience may
+/// permit misspelt attribute names; users wanting stricter validation can
+/// insert a manual `compile_error!` guard.
 ///
-/// # Examples
-///
-/// ```
-/// use syn::parse_quote;
-/// use ortho_config_macros::derive::parse::parse_field_attrs;
-///
-/// let attrs = parse_quote!(#[ortho_config(cli_long = "name")]);
-/// let parsed = parse_field_attrs(&[attrs]).unwrap();
-/// assert_eq!(parsed.cli_long.as_deref(), Some("name"));
-/// ```
+/// Used internally by the derive macro to extract configuration metadata
+/// from field-level attributes.
 pub(crate) fn parse_field_attrs(attrs: &[Attribute]) -> Result<FieldAttrs, syn::Error> {
     let mut out = FieldAttrs::default();
     for attr in attrs {
@@ -125,18 +113,8 @@ pub(crate) fn parse_field_attrs(attrs: &[Attribute]) -> Result<FieldAttrs, syn::
 
 /// Returns the inner type `T` if `ty` is `Option<T>`.
 ///
-/// This helps the macro wrap CLI fields with `Option<T>` only when they
-/// are not already optional.
-///
-/// # Examples
-///
-/// ```
-/// use syn::parse_quote;
-/// use ortho_config_macros::derive::parse::option_inner;
-///
-/// let ty: syn::Type = parse_quote!(Option<u32>);
-/// assert!(option_inner(&ty).is_some());
-/// ```
+/// This is used internally by the derive macro to wrap CLI fields in an
+/// `Option<T>` only when they are not already optional.
 pub(crate) fn option_inner(ty: &Type) -> Option<&Type> {
     if let Type::Path(p) = ty {
         if let Some(seg) = p.path.segments.last() {
@@ -154,18 +132,8 @@ pub(crate) fn option_inner(ty: &Type) -> Option<&Type> {
 
 /// Extracts the element type `T` if `ty` is `Vec<T>`.
 ///
-/// Used to determine which fields require special merge logic for the
-/// `append` strategy.
-///
-/// # Examples
-///
-/// ```
-/// use syn::parse_quote;
-/// use ortho_config_macros::derive::parse::vec_inner;
-///
-/// let ty: syn::Type = parse_quote!(Vec<String>);
-/// assert!(vec_inner(&ty).is_some());
-/// ```
+/// Used internally by the derive macro to identify vector fields that
+/// require special append merge logic.
 pub(crate) fn vec_inner(ty: &Type) -> Option<&Type> {
     if let Type::Path(p) = ty {
         if let Some(seg) = p.path.segments.last() {
@@ -187,6 +155,12 @@ pub(crate) fn vec_inner(ty: &Type) -> Option<&Type> {
 /// attribute metadata in one pass. Returning these components together
 /// keeps the `derive` implementation simple and validates invalid input
 /// eagerly so expansion can fail fast.
+///
+/// The returned tuple contains:
+/// - `ident`: the struct identifier
+/// - `fields`: the struct's fields
+/// - `struct_attrs`: parsed struct-level attributes
+/// - `field_attrs`: parsed field-level attributes
 pub(crate) fn parse_input(
     input: &DeriveInput,
 ) -> Result<(syn::Ident, Vec<syn::Field>, StructAttrs, Vec<FieldAttrs>), syn::Error> {
