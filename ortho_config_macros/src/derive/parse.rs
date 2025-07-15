@@ -29,6 +29,21 @@ impl MergeStrategy {
     }
 }
 
+/// Extracts `#[ortho_config(...)]` metadata applied to a struct.
+///
+/// Unknown keys are skipped so that adding new attributes in future
+/// versions does not break existing callers.
+///
+/// # Examples
+///
+/// ```
+/// use syn::parse_quote;
+/// use ortho_config_macros::derive::parse::parse_struct_attrs;
+///
+/// let attrs = parse_quote!(#[ortho_config(prefix = "APP_")]);
+/// let parsed = parse_struct_attrs(&[attrs]).unwrap();
+/// assert_eq!(parsed.prefix.as_deref(), Some("APP_"));
+/// ```
 pub(crate) fn parse_struct_attrs(attrs: &[Attribute]) -> Result<StructAttrs, syn::Error> {
     let mut out = StructAttrs::default();
     for attr in attrs {
@@ -50,6 +65,21 @@ pub(crate) fn parse_struct_attrs(attrs: &[Attribute]) -> Result<StructAttrs, syn
     Ok(out)
 }
 
+/// Parses field-level `#[ortho_config(...)]` attributes.
+///
+/// Unrecognised keys are ignored, mirroring the behaviour of
+/// `parse_struct_attrs`.
+///
+/// # Examples
+///
+/// ```
+/// use syn::parse_quote;
+/// use ortho_config_macros::derive::parse::parse_field_attrs;
+///
+/// let attrs = parse_quote!(#[ortho_config(cli_long = "name")]);
+/// let parsed = parse_field_attrs(&[attrs]).unwrap();
+/// assert_eq!(parsed.cli_long.as_deref(), Some("name"));
+/// ```
 pub(crate) fn parse_field_attrs(attrs: &[Attribute]) -> Result<FieldAttrs, syn::Error> {
     let mut out = FieldAttrs::default();
     for attr in attrs {
@@ -91,6 +121,10 @@ pub(crate) fn parse_field_attrs(attrs: &[Attribute]) -> Result<FieldAttrs, syn::
     Ok(out)
 }
 
+/// Returns the inner type `T` if `ty` is `Option<T>`.
+///
+/// This helps the macro wrap CLI fields with `Option<T>` only when they
+/// are not already optional.
 pub(crate) fn option_inner(ty: &Type) -> Option<&Type> {
     if let Type::Path(p) = ty {
         if let Some(seg) = p.path.segments.last() {
@@ -106,6 +140,10 @@ pub(crate) fn option_inner(ty: &Type) -> Option<&Type> {
     None
 }
 
+/// Extracts the element type `T` if `ty` is `Vec<T>`.
+///
+/// Used to determine which fields require special merge logic for the
+/// `append` strategy.
 pub(crate) fn vec_inner(ty: &Type) -> Option<&Type> {
     if let Type::Path(p) = ty {
         if let Some(seg) = p.path.segments.last() {
@@ -121,6 +159,11 @@ pub(crate) fn vec_inner(ty: &Type) -> Option<&Type> {
     None
 }
 
+/// Gathers information from the user-provided struct.
+///
+/// Returns the struct identifier, its fields, and parsed attribute
+/// metadata in a single step. Errors surface invalid input early
+/// so the macro expansion can fail with a helpful message.
 pub(crate) fn parse_input(
     input: &DeriveInput,
 ) -> Result<(syn::Ident, Vec<syn::Field>, StructAttrs, Vec<FieldAttrs>), syn::Error> {

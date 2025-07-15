@@ -17,6 +17,12 @@ fn option_type_tokens(ty: &Type) -> proc_macro2::TokenStream {
     }
 }
 
+/// Generates the fields for the hidden `clap::Parser` struct.
+///
+/// Every field is wrapped in `Option<T>` so we can tell whether the
+/// user supplied a value on the command line. An extra `config_path`
+/// field is always added to support overriding the configuration file
+/// location.
 pub(crate) fn build_cli_fields(
     fields: &[syn::Field],
     field_attrs: &[FieldAttrs],
