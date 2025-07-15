@@ -29,10 +29,11 @@ impl MergeStrategy {
     }
 }
 
-/// Extracts `#[ortho_config(...)]` metadata applied to a struct.
+/// Extracts struct-level `#[ortho_config(...)]` metadata.
 ///
-/// Unknown keys are skipped so that adding new attributes in future
-/// versions does not break existing callers.
+/// Only the `prefix` key is currently recognised. Additional keys are
+/// ignored so that callers continue to compile when new attributes are
+/// introduced.
 ///
 /// # Examples
 ///
@@ -67,8 +68,9 @@ pub(crate) fn parse_struct_attrs(attrs: &[Attribute]) -> Result<StructAttrs, syn
 
 /// Parses field-level `#[ortho_config(...)]` attributes.
 ///
-/// Unrecognised keys are ignored, mirroring the behaviour of
-/// `parse_struct_attrs`.
+/// Recognised keys include `cli_long`, `cli_short`, `default`, and
+/// `merge_strategy`. Any others are ignored, mirroring the behaviour of
+/// [`parse_struct_attrs`].
 ///
 /// # Examples
 ///
@@ -125,6 +127,16 @@ pub(crate) fn parse_field_attrs(attrs: &[Attribute]) -> Result<FieldAttrs, syn::
 ///
 /// This helps the macro wrap CLI fields with `Option<T>` only when they
 /// are not already optional.
+///
+/// # Examples
+///
+/// ```
+/// use syn::parse_quote;
+/// use ortho_config_macros::derive::parse::option_inner;
+///
+/// let ty: syn::Type = parse_quote!(Option<u32>);
+/// assert!(option_inner(&ty).is_some());
+/// ```
 pub(crate) fn option_inner(ty: &Type) -> Option<&Type> {
     if let Type::Path(p) = ty {
         if let Some(seg) = p.path.segments.last() {
@@ -144,6 +156,16 @@ pub(crate) fn option_inner(ty: &Type) -> Option<&Type> {
 ///
 /// Used to determine which fields require special merge logic for the
 /// `append` strategy.
+///
+/// # Examples
+///
+/// ```
+/// use syn::parse_quote;
+/// use ortho_config_macros::derive::parse::vec_inner;
+///
+/// let ty: syn::Type = parse_quote!(Vec<String>);
+/// assert!(vec_inner(&ty).is_some());
+/// ```
 pub(crate) fn vec_inner(ty: &Type) -> Option<&Type> {
     if let Type::Path(p) = ty {
         if let Some(seg) = p.path.segments.last() {
@@ -161,9 +183,10 @@ pub(crate) fn vec_inner(ty: &Type) -> Option<&Type> {
 
 /// Gathers information from the user-provided struct.
 ///
-/// Returns the struct identifier, its fields, and parsed attribute
-/// metadata in a single step. Errors surface invalid input early
-/// so the macro expansion can fail with a helpful message.
+/// The helper collects the struct identifier, its fields, and all
+/// attribute metadata in one pass. Returning these components together
+/// keeps the `derive` implementation simple and validates invalid input
+/// eagerly so expansion can fail fast.
 pub(crate) fn parse_input(
     input: &DeriveInput,
 ) -> Result<(syn::Ident, Vec<syn::Field>, StructAttrs, Vec<FieldAttrs>), syn::Error> {
