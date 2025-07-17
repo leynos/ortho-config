@@ -13,8 +13,8 @@ complex merge logic, all of which must be recreated for each new project.
 configuration solution inspired by the developer experience of tools like
 `esbuild`. By using a single `derive` macro, developers will define their
 configuration *once* in a plain Rust struct. The crate will then handle the
-entire lifecycle of parsing, layering, merging, and deserializing from
-command-line arguments, environment variables, and configuration files.
+entire lifecycle of parsing, layering, merging, and deserializing from command-
+line arguments, environment variables, and configuration files.
 
 **1.3. Foreseen Benefits:**
 
@@ -33,8 +33,8 @@ command-line arguments, environment variables, and configuration files.
 The implementation must adhere to the following principles:
 
 - **Convention over Configuration:** The crate should have sensible defaults for
-  everything: CLI flag names, environment variable names, file discovery paths,
-  and merge strategies. The user should only need to add attributes for
+  everything: CLI flag names, environment variable names, file discovery
+  paths, and merge strategies. The user should only need to add attributes for
   exceptional cases.
 - **Ergonomic API:** The primary user-facing API will be a single procedural
   macro, `#[derive(OrthoConfig)]`. All functionality should flow from this.
@@ -43,8 +43,8 @@ The implementation must adhere to the following principles:
   their original source (e.g., "Error in `config.toml` at line 5: invalid type
   for `port`").
 - **Performance:** The configuration process happens once at startup, so raw
-  performance is secondary to correctness and developer experience. However, the
-  implementation should be reasonably efficient and avoid unnecessary
+  performance is secondary to correctness and developer experience. However,
+  the implementation should be reasonably efficient and avoid unnecessary
   allocations or processing.
 
 ## 3. High-Level Architecture
@@ -129,9 +129,8 @@ This is the most complex component. It needs to perform the following using
 The macro must enforce naming conventions automatically.
 
 - **Struct Field to CLI Flag:** A field `listen_port` should automatically
-  become `--listen-port` unless overridden by
-  `#[ortho_config(cli_long = "...")]`. This involves converting `snake_case` to
-  `kebab-case`.
+  become `--listen-port` unless overridden by `#[ortho_config(cli_long =
+  "...")]`. This involves converting `snake_case` to `kebab-case`.
 - **Struct Field to Env Var:** A field `listen_port` within a struct with
   `#[ortho_config(prefix = "MY_APP")]` should become `MY_APP_LISTEN_PORT`.
   Nested structs (e.g., `database.url`) should become `MY_APP_DATABASE__URL`
@@ -139,9 +138,9 @@ The macro must enforce naming conventions automatically.
   `UPPER_SNAKE_CASE`.
 - **Struct Field to File Key:** This is handled by `serde` and `figment`. By
   default, `serde` expects file keys to match Rust field names (`snake_case`).
-  We can consider adding a struct-level attribute
-  `#[ortho_config(rename_all = "kebab-case")]` which would pass the
-  corresponding `#[serde(rename_all = "...")]` attribute to the user's struct.
+  We can consider adding a struct-level attribute `#[ortho_config(rename_all
+  = "kebab-case")]` which would pass the corresponding `#[serde(rename_all =
+  "...")]` attribute to the user's struct.
 
 ### 4.4. Array (`Vec<T>`) Merging
 
@@ -204,9 +203,8 @@ configuration directories. It respects `XDG_CONFIG_HOME` and falls back to
 
 On Windows and other platforms, the `directories` crate provides the standard
 paths for configuration files. On Windows this uses the Known Folder API and
-resolves to `%APPDATA%` (a.k.a. `FOLDERID_RoamingAppData`) and
-`%LOCALAPPDATA%` (`FOLDERID_LocalAppData`). The crate does not consult
-`XDG_CONFIG_HOME` at all.
+resolves to `%APPDATA%` (a.k.a. `FOLDERID_RoamingAppData`) and `%LOCALAPPDATA%`
+(`FOLDERID_LocalAppData`). The crate does not consult `XDG_CONFIG_HOME` at all.
 
 Support for `XDG_CONFIG_HOME` on Windows could be added later using
 `directories` to mimic the XDG specification.
