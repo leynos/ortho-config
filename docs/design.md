@@ -2,12 +2,13 @@
 
 ## 1. Motivation & Vision
 
-**1.1. The Problem:** Rust application configuration is powerful but fragmented.
-Developers typically hand-roll solutions by combining `clap` for CLI, `serde`
-for deserialization, and `figment` or `config-rs` for layered file/environment
-loading. This process involves significant boilerplate, manual mapping of
-disparate naming conventions (e.g., `--kebab-case` vs. `SNAKE_CASE`), and
-complex merge logic, all of which must be recreated for each new project.
+**1.1. The Problem:** Rust application configuration is powerful but
+fragmented. Developers typically hand-roll solutions by combining `clap` for
+CLI, `serde` for deserialization, and `figment` or `config-rs` for layered
+file/environment loading. This process involves significant boilerplate, manual
+mapping of disparate naming conventions (e.g., `--kebab-case` vs.
+`SNAKE_CASE`), and complex merge logic, all of which must be recreated for each
+new project.
 
 **1.2. The Vision:** `OrthoConfig` will provide a "batteries-included"
 configuration solution inspired by the developer experience of tools like
@@ -39,12 +40,12 @@ The implementation must adhere to the following principles:
 - **Ergonomic API:** The primary user-facing API will be a single procedural
   macro, `#[derive(OrthoConfig)]`. All functionality should flow from this.
 - **Transparency:** While the crate abstracts complexity, it must not be a black
-  box. Error messages must be rich, informative, and clearly attribute issues to
-  their original source (e.g., "Error in `config.toml` at line 5: invalid type
-  for `port`").
+  box. Error messages must be rich, informative, and clearly attribute issues
+  to their original source (e.g., "Error in `config.toml` at line 5: invalid
+  type for `port`").
 - **Performance:** The configuration process happens once at startup, so raw
-  performance is secondary to correctness and developer experience. However, the
-  implementation should be reasonably efficient and avoid unnecessary
+  performance is secondary to correctness and developer experience. However,
+  the implementation should be reasonably efficient and avoid unnecessary
   allocations or processing.
 
 ## 3. High-Level Architecture
@@ -109,8 +110,8 @@ This is the most complex component. It needs to perform the following using
 `syn` and `quote`:
 
 1. **Parse Attributes:** Define `#[ortho_config(...)]` attributes for both
-   struct-level (e.g., `prefix`, `file_name`) and field-level (e.g., `cli_long`,
-   `env`, `default`, `merge_strategy`).
+   struct-level (e.g., `prefix`, `file_name`) and field-level (e.g.,
+   `cli_long`, `env`, `default`, `merge_strategy`).
 2. **Generate a `clap`-aware Struct:** In the generated code, create a hidden
    struct derived from `clap::Parser`. Its fields should correspond to the main
    struct's fields but be wrapped in `Option<T>` to capture only user-provided
@@ -156,8 +157,8 @@ This is a key user-experience feature.
   4. Create a final "override" `figment` provider containing only the merged
      `Vec`.
   5. Merge this override provider on top of the main `figment` instance before
-     calling `extract()` on the final result. This ensures the combined `Vec` is
-     present for deserialization.
+     calling `extract()` on the final result. This ensures the combined `Vec`
+     is present for deserialization.
 
 ### 4.5. Error Handling
 
@@ -204,9 +205,8 @@ configuration directories. It respects `XDG_CONFIG_HOME` and falls back to
 
 On Windows and other platforms, the `directories` crate provides the standard
 paths for configuration files. On Windows this uses the Known Folder API and
-resolves to `%APPDATA%` (a.k.a. `FOLDERID_RoamingAppData`) and
-`%LOCALAPPDATA%` (`FOLDERID_LocalAppData`). The crate does not consult
-`XDG_CONFIG_HOME` at all.
+resolves to `%APPDATA%` (a.k.a. `FOLDERID_RoamingAppData`) and `%LOCALAPPDATA%`
+(`FOLDERID_LocalAppData`). The crate does not consult `XDG_CONFIG_HOME` at all.
 
 Support for `XDG_CONFIG_HOME` on Windows could be added later using
 `directories` to mimic the XDG specification.
@@ -222,10 +222,10 @@ Support for `XDG_CONFIG_HOME` on Windows could be added later using
   - `figment`: As the core layering engine.
   - `serde`: For serialization/deserialization.
   - `toml`, `figment-json5`, `serde_yaml`: As optional feature-gated
-    dependencies for different file formats. `toml` should be a default feature.
-    The `json5` feature uses `figment-json5` to parse `.json` and `.json5`
-    files; loading these formats without enabling `json5` should produce an
-    error so users aren't surprised by silent TOML parsing.
+    dependencies for different file formats. `toml` should be a default
+    feature. The `json5` feature uses `figment-json5` to parse `.json` and
+    `.json5` files; loading these formats without enabling `json5` should
+    produce an error so users aren't surprised by silent TOML parsing.
   - `thiserror`: For ergonomic error type definitions.
 
 ## 6. Implementation Roadmap
