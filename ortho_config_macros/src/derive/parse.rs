@@ -43,6 +43,16 @@ where
     Ok(())
 }
 
+/// Extracts `#[ortho_config(...)]` metadata applied to a struct.
+///
+/// Only the `prefix` key is currently recognised. Unknown keys are
+/// ignored so callers keep compiling when new attributes appear. This
+/// improves forwards compatibility at the cost of allowing silent typos.
+/// If stricter validation is desired, a custom `compile_error!` guard can
+/// reject unexpected keys.
+///
+/// Used internally by the derive macro to extract configuration metadata
+/// from struct-level attributes.
 pub(crate) fn parse_struct_attrs(attrs: &[Attribute]) -> Result<StructAttrs, syn::Error> {
     let mut out = StructAttrs::default();
     parse_ortho_config(attrs, |meta| {
@@ -64,6 +74,16 @@ pub(crate) fn parse_struct_attrs(attrs: &[Attribute]) -> Result<StructAttrs, syn
     Ok(out)
 }
 
+/// Parses field-level `#[ortho_config(...)]` attributes.
+///
+/// Recognised keys include `cli_long`, `cli_short`, `default` and
+/// `merge_strategy`. Unknown keys are ignored, matching
+/// [`parse_struct_attrs`] for forwards compatibility. This lenience may
+/// permit misspelt attribute names; users wanting stricter validation can
+/// insert a manual `compile_error!` guard.
+///
+/// Used internally by the derive macro to extract configuration metadata
+/// from field-level attributes.
 pub(crate) fn parse_field_attrs(attrs: &[Attribute]) -> Result<FieldAttrs, syn::Error> {
     let mut out = FieldAttrs::default();
     parse_ortho_config(attrs, |meta| {
@@ -152,10 +172,26 @@ pub(crate) fn option_inner(ty: &Type) -> Option<&Type> {
     type_inner(ty, "Option")
 }
 
+/// Extracts the element type `T` if `ty` is `Vec<T>`.
+///
+/// Used internally by the derive macro to identify vector fields that
+/// require special append merge logic.
 pub(crate) fn vec_inner(ty: &Type) -> Option<&Type> {
     type_inner(ty, "Vec")
 }
 
+/// Gathers information from the user-provided struct.
+///
+/// The helper collects the struct identifier, its fields, and all
+/// attribute metadata in one pass. Returning these components together
+/// keeps the `derive` implementation simple and validates invalid input
+/// eagerly so expansion can fail fast.
+///
+/// The returned tuple contains:
+/// - `ident`: the struct identifier
+/// - `fields`: the struct's fields
+/// - `struct_attrs`: parsed struct-level attributes
+/// - `field_attrs`: parsed field-level attributes
 pub(crate) fn parse_input(
     input: &DeriveInput,
 ) -> Result<(syn::Ident, Vec<syn::Field>, StructAttrs, Vec<FieldAttrs>), syn::Error> {
