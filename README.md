@@ -2,13 +2,13 @@
 
 **OrthoConfig** is a Rust configuration management library designed for
 simplicity and power, inspired by the flexible configuration mechanisms found
-in tools like `esbuild`. It allows your application to seamlessly load
+in tools like `esbuild`. It allows applications to seamlessly load
 configuration from command-line arguments, environment variables, and
 configuration files, all with a clear order of precedence and minimal
 boilerplate.
 
-The core principle is **orthographic option naming**: a single field in your
-Rust configuration struct can be set through idiomatic naming conventions from
+The core principle is **orthographic option naming**: a single field in a Rust
+configuration struct can be set through idiomatic naming conventions from
 various sources (e.g., `--my-option` for CLI, `MY_APP_MY_OPTION` for
 environment variables, `my_option` in a TOML file) without requiring extensive
 manual aliasing.
@@ -22,12 +22,12 @@ manual aliasing.
   3. Configuration File (e.g., `config.toml`)
   4. Application-Defined Defaults (Lowest)
 - **Orthographic Option Naming:** Automatically maps diverse external naming
-  conventions (kebab-case, UPPER_SNAKE_CASE, etc.) to your Rust struct's
+  conventions (kebab-case, UPPER_SNAKE_CASE, etc.) to a Rust struct's
   snake_case fields.
 - **Type-Safe Deserialization:** Uses `serde` to deserialize configuration into
-  your strongly-typed Rust structs.
-- **Easy to Use:** A simple `#[derive(OrthoConfig)]` macro gets you started
-  quickly.
+  strongly typed Rust structs.
+- **Easy to Use:** A simple `#[derive(OrthoConfig)]` macro provides a quick
+  start.
 - **Customizable:** Field-level attributes allow fine-grained control over
   naming, defaults, and merging behavior.
 - **Nested Configuration:** Naturally supports nested structs for organized
@@ -36,12 +36,12 @@ manual aliasing.
 
 ## Quick Start
 
-1. **Add `OrthoConfig` to your `Cargo.toml`:**
+1. **Add `OrthoConfig` to `Cargo.toml`:**
 
    ```toml [dependencies] ortho_config = "0.3.0" # Replace with the latest
    version serde = { version = "1.0", features = ["derive"] } ```
 
-2. **Define your configuration struct:**
+2. **Define the configuration struct:**
 
    ```rust use ortho_config::{OrthoConfig, OrthoError}; use
    serde::{Deserialize, Serialize}; // Required for OrthoConfig derive
@@ -93,7 +93,7 @@ manual aliasing.
 
        Ok(()) } ```
 
-3. **Run your application:**
+3. **Run the application:**
 
    - With CLI arguments:
      `cargo run -- --log-level debug --port 3000 -v --features
@@ -103,7 +103,7 @@ manual aliasing.
      `APP_DB_URL="postgres://localhost/mydb"`
      `APP_FEATURES="env_feat1,env_feat2" cargo run`
    - With a `.app.toml` file (assuming `#[ortho_config(prefix = "APP_")]`;
-     adjust for your prefix):
+     adjust for the prefix):
 
      ```toml
      # .app.toml
@@ -160,7 +160,7 @@ single-quoted strings, and unquoted keys.
 ## Orthographic Naming
 
 A key goal of OrthoConfig is to make configuration natural from any source. A
-field like `max_connections: u32` in your Rust struct will, by default, be
+field such as `max_connections: u32` in a Rust struct will, by default, be
 configurable via:
 
 - CLI: `--max-connections <value>`
@@ -169,7 +169,7 @@ configurable via:
 - TOML file: `max_connections = <value>`
 - JSON5 file: `max_connections` or `maxConnections` (configurable)
 
-You can customize these mappings using `#[ortho_config(...)]` attributes.
+These mappings can be customised using `#[ortho_config(...)]` attributes.
 
 ## Field Attributes `#[ortho_config(...)]`
 
@@ -263,8 +263,8 @@ trait Run {
     fn run(&self, db_url: &str) -> Result<(), String>;
 }
 
-impl Run for AddUserArgs { /* your logic here */ }
-impl Run for ListItemsArgs { /* your logic here */ }
+impl Run for AddUserArgs { /* logic here */ }
+impl Run for ListItemsArgs { /* logic here */ }
 
 #[derive(Parser)]
 #[command(name = "registry-ctl")]
@@ -294,13 +294,13 @@ fn main() -> Result<(), String> {
 
 ## Why OrthoConfig?
 
-- **Reduced Boilerplate:** Define your configuration schema once and let
+- **Reduced Boilerplate:** Define the configuration schema once and let
   OrthoConfig handle the multi-source loading and mapping.
-- **Developer Ergonomics:** Intuitive mapping from external sources to your Rust
+- **Developer Ergonomics:** Intuitive mapping from external sources to Rust
   code.
-- **Flexibility:** Users of your application can configure it in the way that
-  best suits their environment (CLI for quick overrides, env vars for CI/CD,
-  files for persistent settings).
+- **Flexibility:** Users can configure the application in the way that best
+  suits their environment (CLI for quick overrides, env vars for CI/CD, files
+  for persistent settings).
 - **Clear Precedence:** Predictable configuration resolution.
 
 ## Migrating from 0.1 to 0.2
@@ -312,10 +312,10 @@ Version 0.2 introduces a small API refinement:
   [`load_and_merge_subcommand_for`](#subcommand-configuration) to merge these
   defaults with CLI arguments.
 - Types deriving `OrthoConfig` expose an associated `prefix()` function. Use
-  this if you need the configured prefix directly.
+  this function when the configured prefix is required directly.
 
-Update your `Cargo.toml` to depend on `ortho_config = "0.2"` and adjust code to
-call `load_and_merge_subcommand_for` instead of manually merging defaults.
+Update `Cargo.toml` to depend on `ortho_config = "0.2"` and adjust code to call
+`load_and_merge_subcommand_for` instead of manually merging defaults.
 
 ## Contributing
 
