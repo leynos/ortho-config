@@ -29,10 +29,10 @@ manual aliasing.
 - **Easy to Use:** A simple `#[derive(OrthoConfig)]` macro provides a quick
   start.
 - **Customizable:** Field-level attributes allow fine-grained control over
-  naming, defaults, and merging behavior.
-- **Nested Configuration:** Naturally supports nested structs for organized
+  naming, defaults, and merging behaviour.
+- **Nested Configuration:** Naturally supports nested structs for organised
   configuration.
-- **Sensible Defaults:** Aims for intuitive behavior out-of-the-box.
+- **Sensible Defaults:** Aims for intuitive behaviour out-of-the-box.
 
 ## Quick Start
 
@@ -173,7 +173,7 @@ These mappings can be customised using `#[ortho_config(...)]` attributes.
 
 ## Field Attributes `#[ortho_config(...)]`
 
-Customize behavior for each field:
+Customize behaviour for each field:
 
 - `#[ortho_config(default =...)]`: Sets a default value. Can be a literal (e.g.,
   `"debug"`, `123`, `true`) or a path to a function (e.g.,
