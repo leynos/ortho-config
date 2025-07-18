@@ -390,13 +390,18 @@ String>`.
 ```rust
 use clap::Parser; use clap_dispatch::clap_dispatch;
 
-// Mock DbPool for demonstration struct DbPool; impl DbPool { fn new(url: &str)
--> Self { println!("Connecting to database at: {}", url); DbPool } // Mock
-methods fn add_user(&self, username: &str, is_admin: bool) { println!("Adding
-user: {}, Admin: {}", username, is_admin); } fn list_items(&self, category:
-Option<&String>, list_all: bool) { match category { Some(cat) =>
-println!("Listing items in category '{}', All: {}", cat, list_all), None =>
-println!("Listing items (no category specified), All: {}", list_all), } } }
+// Mock DbPool for demonstration struct DbPool;
+
+impl DbPool { fn new(url: &str) -> Self { println!("Connecting to database at:
+{}", url); DbPool }
+
+    // Mock methods fn add_user(&self, username: &str, is_admin: bool) {
+    println!("Adding user: {}, Admin: {}", username, is_admin); }
+
+    fn list_items(&self, category: Option<&String>, list_all: bool) { match
+    category { Some(cat) => println!("Listing items in category '{}', All: {}",
+    cat, list_all), None => println!("Listing items (no category specified),
+    All: {}", list_all), } } }
 
 
 // 1. Define Argument Structs pub struct AddUserArgs {

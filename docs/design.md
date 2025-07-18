@@ -70,7 +70,7 @@ The primary data flow for a user calling `AppConfig::load()` will be:
 3. It then constructs a `figment` instance, adding providers in reverse order of
    precedence:
    - **Defaults Provider:** A struct containing default values defined in
-     `#[ortho_config(default = ...)]`.
+    `#[ortho_config(default = …)]`.
    - **File Provider:** A `Toml` (or other format) provider that discovers and
      loads the configuration file.
    - **Environment Provider:** An `Env` provider configured with the correct
@@ -115,15 +115,15 @@ This is the most complex component. It needs to perform the following using
 2. **Generate a `clap`-aware Struct:** In the generated code, create a hidden
    struct derived from `clap::Parser`. Its fields should correspond to the main
    struct's fields but be wrapped in `Option<T>` to capture only user-provided
-   values. The macro will translate `#[ortho_config(cli_long="...")]` into
-   `#[clap(long="...")]`.
+   values. The macro will translate `#[ortho_config(cli_long="…")]` into
+   `#[clap(long="…")]`.
 3. **Generate `impl OrthoConfig for UserStruct`:**
    - This block will contain the `load()` method.
    - The generated `load()` will perform the architectural flow described in
      section 3.
    - It will need to dynamically generate the `figment` profile based on the
      parsed attributes. For example, it will use the `prefix` attribute for
-     `figment::providers::Env::prefixed(...)`.
+     `figment::providers::Env::prefixed(…)`.
 
 ### 4.3. Orthographic Name Mapping
 
@@ -131,7 +131,7 @@ The macro must enforce naming conventions automatically.
 
 - **Struct Field to CLI Flag:** A field `listen_port` should automatically
   become `--listen-port` unless overridden by
-  `#[ortho_config(cli_long = "...")]`. This involves converting `snake_case` to
+  `#[ortho_config(cli_long = "…")]`. This involves converting `snake_case` to
   `kebab-case`.
 - **Struct Field to Env Var:** A field `listen_port` within a struct with
   `#[ortho_config(prefix = "MY_APP")]` should become `MY_APP_LISTEN_PORT`.
@@ -142,7 +142,7 @@ The macro must enforce naming conventions automatically.
   default, `serde` expects file keys to match Rust field names (`snake_case`).
   We can consider adding a struct-level attribute
   `#[ortho_config(rename_all = "kebab-case")]` which would pass the
-  corresponding `#[serde(rename_all = "...")]` attribute to the user's struct.
+  corresponding `#[serde(rename_all = "…")]` attribute to the user's struct.
 
 ### 4.4. Array (`Vec<T>`) Merging
 
@@ -225,7 +225,7 @@ Support for `XDG_CONFIG_HOME` on Windows could be added later using
     dependencies for different file formats. `toml` should be a default
     feature. The `json5` feature uses `figment-json5` to parse `.json` and
     `.json5` files; loading these formats without enabling `json5` should
-    produce an error so users aren't surprised by silent TOML parsing.
+    produce an error, so users aren't surprised by silent TOML parsing.
   - `thiserror`: For ergonomic error type definitions.
 
 ## 6. Implementation Roadmap

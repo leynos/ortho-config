@@ -1,8 +1,8 @@
 # Behavioural Testing Design for `ortho-config`
 
-This document outlines high-level behavioural tests for the `ortho-config` \
+This document outlines high-level behavioural tests for the `ortho-config`
 crate using the [cucumber] framework. Scenarios follow the **Given/When/Then**
-\ pattern and reference [`docs/design.md`](design.md) and \
+pattern and reference [`docs/design.md`](design.md) and
 [`docs/ddlint-gap-analysis.md`](ddlint-gap-analysis.md).
 
 ## 1. Goals
@@ -15,9 +15,9 @@ crate using the [cucumber] framework. Scenarios follow the **Given/When/Then**
 
 ## 2. Cucumber Setup
 
-Scenarios live under `tests/features/`. Step implementations in `tests` share \
-a common `World` struct that uses `figment::Jail` for isolation. Each scenario
-\ executes asynchronously with `tokio`.
+Scenarios live under `tests/features/`. Step implementations in `tests` share a
+common `World` struct that uses `figment::Jail` for isolation. Each scenario
+executes asynchronously with `tokio`.
 
 ```rust
 #[derive(Debug, Default, cucumber::World)]

@@ -1,14 +1,14 @@
 # OrthoConfig
 
 **OrthoConfig** is a Rust configuration management library designed for
-simplicity and power, inspired by the flexible configuration mechanisms found
-in tools like `esbuild`. It allows your application to seamlessly load
-configuration from command-line arguments, environment variables, and
-configuration files, all with a clear order of precedence and minimal
-boilerplate.
+simplicity and power. It draws inspiration from the flexible configuration
+mechanisms found in tools like `esbuild`. The crate enables seamless loading of
+configuration from command-line arguments, environment variables and
+configuration files. Loading follows a clear order of precedence and requires
+minimal boilerplate.
 
-The core principle is **orthographic option naming**: a single field in your
-Rust configuration struct can be set through idiomatic naming conventions from
+The core principle is **orthographic option naming**. A single field in a Rust
+configuration struct can be set through idiomatic naming conventions from
 various sources (e.g., `--my-option` for CLI, `MY_APP_MY_OPTION` for
 environment variables, `my_option` in a TOML file) without requiring extensive
 manual aliasing.
@@ -132,15 +132,19 @@ fn main() -> Result<(), OrthoError> {
      `APP_FEATURES="env_feat1,env_feat2" cargo run`
 
 <!-- markdownlint-enable MD029 -->
-- With a `.app.toml` file (assuming `#[ortho_config(prefix = "APP_")]`;
-     adjust for your prefix):
+- With a `.app.toml` file (assuming `#[ortho_config(prefix = "APP_")]`; adjust
+  for your prefix):
 
-     ```toml
-     # .app.toml
-     log_level = "file_level" port = 5000 features = ["file_feat_a",
-     "file_feat_b"]
+```toml
+# .app.toml
+log_level = "file_level"
+port = 5000
+features = ["file_feat_a", "file_feat_b"]
 
-     [database] url = "mysql://localhost/prod_db" pool_size = 10 ```
+[database]
+url = "mysql://localhost/prod_db"
+pool_size = 10
+```
 
 ## Configuration Sources and Precedence
 
@@ -148,17 +152,17 @@ OrthoConfig loads configuration from the following sources, with later sources
 overriding earlier ones:
 
 1. **Application-Defined Defaults:** Specified using
-   `#[ortho_config(default =...)]` or `Option<T>` fields (which default to
+   `#[ortho_config(default =…)]` or `Option<T>` fields (which default to
    `None`).
 2. **Configuration File:** Resolved in this order:
    1. `--config-path` CLI option
    2. `[PREFIX]CONFIG_PATH` environment variable
    3. `.<prefix>.toml` in the current directory
    4. `.<prefix>.toml` in the user's home directory (where `<prefix>` comes from
-      `#[ortho_config(prefix = "...")]` and defaults to `config`). JSON5 and
-      YAML support are feature gated.
+      `#[ortho_config(prefix = "…")]` and defaults to `config`). JSON5 and YAML
+      support are feature gated.
 3. **Environment Variables:** Variables prefixed with the string specified in
-   `#[ortho_config(prefix = "...")]` (e.g., `APP_`). Nested struct fields are
+   `#[ortho_config(prefix = "…")]` (e.g., `APP_`). Nested struct fields are
    typically accessed using double underscores (e.g., `APP_DATABASE__URL` if
    `prefix = "APP"` on `AppConfig` and no prefix on `DatabaseConfig`, or
    `APP_DB_URL` with `#` on `DatabaseConfig`).
@@ -199,13 +203,13 @@ configurable via:
 - TOML file: `max_connections = <value>`
 - JSON5 file: `max_connections` or `maxConnections` (configurable)
 
-You can customize these mappings using `#[ortho_config(...)]` attributes.
+You can customise these mappings using `#[ortho_config(…)]` attributes.
 
-## Field Attributes `#[ortho_config(...)]`
+## Field Attributes `#[ortho_config(…)]`
 
 Customize behavior for each field:
 
-- `#[ortho_config(default =...)]`: Sets a default value. Can be a literal (e.g.,
+- `#[ortho_config(default =…)]`: Sets a default value. Can be a literal (e.g.,
   `"debug"`, `123`, `true`) or a path to a function (e.g.,
   `default = "my_default_fn"`).
 - `#[ortho_config(cli_long = "custom-name")]`: Specifies a custom long CLI flag

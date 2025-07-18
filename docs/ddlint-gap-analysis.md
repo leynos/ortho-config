@@ -2,7 +2,7 @@
 
 This document compares OrthoConfig's current capabilities with the command-line
 and configuration interface described in the [ddlint design
-document](https://raw.githubusercontent.com/leynos/ddlint/refs/heads/main/docs/ddlint-design-and-road-map.md).
+document][ddlint-design].
 
 ## Relevant ddlint Requirements
 
@@ -40,17 +40,17 @@ OrthoConfig layers configuration sources in this order. Later sources override
 earlier ones:
 
 1. **Application-Defined Defaults:** Specified using
-   `#[ortho_config(default =...)]` or `Option<T>` fields (which default to
+   `#[ortho_config(default =…)]` or `Option<T>` fields (which default to
    `None`).
 2. **Configuration File:** Resolved in this order:
    1. `--config-path` CLI option
    2. `[PREFIX]CONFIG_PATH` environment variable
    3. `.<prefix>.toml` in the current directory
-   4. `.<prefix>.toml` in the user's home directory (where `<prefix>` comes from
-      `#[ortho_config(prefix = "...")]` and defaults to `config`). JSON5 and
+   4. `.<prefix>.toml` in the user's home directory (where `<prefix>` comes
+      from `#[ortho_config(prefix = "…")]` and defaults to `config`). JSON5 and
       YAML support are feature gated.
 3. **Environment Variables:** Variables prefixed with the string specified in
-   `#[ortho_config(prefix = "...")]` (e.g., `APP_`). Nested struct fields are
+   `#[ortho_config(prefix = "…")]` (e.g., `APP_`). Nested struct fields are
    typically accessed using double underscores (e.g., `APP_DATABASE__URL` if
    `prefix = "APP"` on `AppConfig` and no prefix on `DatabaseConfig`, or
    `APP_DB_URL` with `#` on `DatabaseConfig`).
@@ -123,3 +123,6 @@ The following steps are ordered by impact on ddlint's user experience:
 
 These improvements will align OrthoConfig with ddlint's planned interface while
 maintaining compatibility with the crate's existing architecture.
+
+[ddlint-design]:
+https://raw.githubusercontent.com/leynos/ddlint/refs/heads/main/docs/ddlint-design-and-road-map.md
