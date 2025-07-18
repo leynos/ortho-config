@@ -30,7 +30,7 @@ manual aliasing.
   start.
 - **Customizable:** Field-level attributes allow fine-grained control over
   naming, defaults, and merging behaviour.
-- **Nested Configuration:** Naturally supports nested structs for organised
+- **Nested Configuration:** Naturally supports nested structs for organized
   configuration.
 - **Sensible Defaults:** Aims for intuitive behaviour out-of-the-box.
 
@@ -44,54 +44,55 @@ manual aliasing.
 2. **Define the configuration struct:**
 
    ```rust use ortho_config::{OrthoConfig, OrthoError}; use
-   serde::{Deserialize, Serialize}; // Required for OrthoConfig derive
+   serde::{Deserialize, Serialize};
 
    #[derive(Debug, Clone, Deserialize, Serialize, OrthoConfig)]
    #[ortho_config(prefix = "DB")] // Nested prefix: e.g., APP_DB_URL
    struct DatabaseConfig { // Automatically maps to: //   CLI: --database-url
-   <value> (if clap flattens) //   Env: APP_DB_URL=<value> //   File:
-   [database] url = <value> url: String,
+   <value> //   Env: APP_DB_URL=<value> //   File: [database] url = <value>
+   url: String,
 
-       #[ortho_config(default = 5)]
-       pool_size: Option<u32>, // Optional value, defaults to `Some(5)` }
+    #[ortho_config(default = 5)]
+    pool_size: Option<u32>, // Optional value, defaults to `Some(5)` }
 
    impl std::str::FromStr for DatabaseConfig { type Err = String;
 
-       fn from_str(s: &str) -> Result<Self, Self::Err> { let mut parts =
-       s.splitn(2, ','); let url = parts .next() .ok_or_else(|| "missing
-       url".to_string())? .to_string(); let pool_size =
-       parts.next().and_then(|p| p.parse::<u32>().ok()); Ok(DatabaseConfig {
-       url, pool_size }) } }
+    fn from_str(s: &str) -> Result<Self, Self::Err> { let mut parts =
+    s.splitn(2, ','); let url = parts .next() .ok_or_else(|| "missing
+    url".to_string())? .to_string(); let pool_size = parts.next().and_then(|p|
+    p.parse::<u32>().ok()); Ok(DatabaseConfig { url, pool_size }) } }
 
    #[derive(Debug, Deserialize, Serialize, OrthoConfig)]
    #[ortho_config(prefix = "APP")] // Prefix for environment variables (e.g., APP_LOG_LEVEL)
    struct AppConfig { log_level: String,
 
-       // Automatically maps to: //   CLI: --port <value> //   Env:
-       APP_PORT=<value> //   File: port = <value>
-       #[ortho_config(default = 8080)]
-       port: u16,
+    // Automatically maps to: //   CLI: --port <value> //   Env:
+    APP_PORT=<value> //   File: port = <value>
+    #[ortho_config(default = 8080)]
+    port: u16,
 
-       #[ortho_config(merge_strategy = "append")] // Default for Vec<T> is append
-       features: Vec<String>,
+    #[ortho_config(merge_strategy = "append")] // Default for Vec<T> is append
+    features: Vec<String>,
 
-       // Nested configuration database: DatabaseConfig,
+    // Nested configuration database: DatabaseConfig,
 
-       #[ortho_config(cli_short = 'v')] // Enable a short flag: -v
-       verbose: bool, // Defaults to false if not specified }
+    #[ortho_config(cli_short = 'v')] // Enable a short flag: -v
+    verbose: bool, // Defaults to false if not specified }
 
    fn main() -> Result<(), OrthoError> { let config = AppConfig::load()?; //
    Load configuration
 
-       println!("Loaded configuration: {:#?}", config);
+    println!("Loaded configuration: {:#?}", config);
 
-       if config.verbose { println!("Verbose mode enabled!"); } println!("Log
-       level: {}", config.log_level); println!("Listening on port: {}",
-       config.port); println!("Enabled features: {:?}", config.features);
-       println!("Database URL: {}", config.database.url); println!("Database
-       pool size: {:?}", config.database.pool_size);
+    if config.verbose { println!("Verbose mode enabled!"); } println!("Log
+    level: {}", config.log_level); println!("Listening on port: {}",
+    config.port); println!("Enabled features: {:?}", config.features);
+    println!("Database URL: {}", config.database.url); println!("Database pool
+    size: {:?}", config.database.pool_size);
 
-       Ok(()) } ```
+    Ok(())
+
+   } ```
 
 3. **Run the application:**
 
@@ -105,12 +106,12 @@ manual aliasing.
    - With a `.app.toml` file (assuming `#[ortho_config(prefix = "APP_")]`;
      adjust for the prefix):
 
-     ```toml
-     # .app.toml
-     log_level = "file_level" port = 5000 features = ["file_feat_a",
-     "file_feat_b"]
+   ```toml
+   # .app.toml
+   log_level = "file_level" port = 5000 features = ["file_feat_a",
+   "file_feat_b"]
 
-     [database] url = "mysql://localhost/prod_db" pool_size = 10 ```
+   [database] url = "mysql://localhost/prod_db" pool_size = 10 ```
 
 ## Configuration Sources and Precedence
 

@@ -24,10 +24,16 @@ pub fn load_config_file(path: &Path) -> Result<Option<Figment>, OrthoError> {
     if !path.is_file() {
         return Ok(None);
     }
-    let data = std::fs::read_to_string(path).map_err(|e| OrthoError::File {
-        path: path.to_path_buf(),
-        source: Box::new(e),
-    })?;
+    let data = match std::fs::read_to_string(path) {
+        Ok(d) => d,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(e) => {
+            return Err(OrthoError::File {
+                path: path.to_path_buf(),
+                source: Box::new(e),
+            });
+        }
+    };
     let ext = path
         .extension()
         .and_then(|e| e.to_str())
