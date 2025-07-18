@@ -38,18 +38,18 @@ manual aliasing.
 
 1. **Add `OrthoConfig` to `Cargo.toml`:**
 
-    ```toml [dependencies] ortho_config = "0.3.0"  # Replace with the latest
-    version serde = { version = "1.0", features = ["derive"] } ```
+   ```toml [dependencies] ortho_config = "0.3.0" # Replace with the latest
+   version serde = { version = "1.0", features = ["derive"] } ```
 
 2. **Define the configuration struct:**
 
-    ```rust use ortho_config::{OrthoConfig, OrthoError}; use
-    serde::{Deserialize, Serialize}; // Required for OrthoConfig derive
+   ```rust use ortho_config::{OrthoConfig, OrthoError}; use
+   serde::{Deserialize, Serialize}; // Required for OrthoConfig derive
 
    #[derive(Debug, Clone, Deserialize, Serialize, OrthoConfig)]
    #[ortho_config(prefix = "DB")] // Nested prefix: e.g., APP_DB_URL
    struct DatabaseConfig { // Automatically maps to: //   CLI: --database-url
-   <value>   (if clap flattens) //   Env: APP_DB_URL=<value> //   File:
+   <value> (if clap flattens) //   Env: APP_DB_URL=<value> //   File:
    [database] url = <value> url: String,
 
        #[ortho_config(default = 5)]
@@ -83,7 +83,7 @@ manual aliasing.
    fn main() -> Result<(), OrthoError> { let config = AppConfig::load()?; //
    Load configuration
 
-       println!("Loaded configuration: {config:#?}");
+       println!("Loaded configuration: {:#?}", config);
 
        if config.verbose { println!("Verbose mode enabled!"); } println!("Log
        level: {}", config.log_level); println!("Listening on port: {}",
@@ -105,12 +105,12 @@ manual aliasing.
    - With a `.app.toml` file (assuming `#[ortho_config(prefix = "APP_")]`;
      adjust for the prefix):
 
-    ```toml
-    # .app.toml
-    log_level = "file_level" port = 5000 features = ["file_feat_a",
-    "file_feat_b"]
+     ```toml
+     # .app.toml
+     log_level = "file_level" port = 5000 features = ["file_feat_a",
+     "file_feat_b"]
 
-    [database] url = "mysql://localhost/prod_db" pool_size = 10 ```
+     [database] url = "mysql://localhost/prod_db" pool_size = 10 ```
 
 ## Configuration Sources and Precedence
 
