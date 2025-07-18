@@ -24,13 +24,13 @@ ddlint explain <RULE_NAME>
 
 The configuration schema includes:
 
-| Key | Type | Default | Description |
-| --- | --- | --- | --- |
-| extends | String | (none) | A path to a base configuration file. Settings from the current file will override settings from the extended file. |
-| ignore_patterns | Array of Strings | [".git/", "build/", "target/"] | Patterns of files and directories to exclude from linting. |
-| [rules] | Table | (empty) | Location for configuring rule severities and options. |
-| [rules].`<rule-name>` | String | (rule default) | Sets the severity for a rule (`allow`, `warn`, or `error`). |
-| [rules.consistent-casing] | Table | { level = "allow", relation_style = "PascalCase" } | Example of a rule with options. |
+| Key                       | Type             | Default                                            | Description                                                                                                        |
+| ------------------------- | ---------------- | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| extends                   | String           | (none)                                             | A path to a base configuration file. Settings from the current file will override settings from the extended file. |
+| ignore_patterns           | Array of Strings | [".git/", "build/", "target/"]                     | Patterns of files and directories to exclude from linting.                                                         |
+| [rules]                   | Table            | (empty)                                            | Location for configuring rule severities and options.                                                              |
+| [rules].`<rule-name>`     | String           | (rule default)                                     | Sets the severity for a rule (`allow`, `warn`, or `error`).                                                        |
+| [rules.consistent-casing] | Table            | { level = "allow", relation_style = "PascalCase" } | Example of a rule with options.                                                                                    |
 
 ## Current OrthoConfig Features
 
@@ -97,8 +97,8 @@ features: Vec<String>
 - [ ] **Ignore Patterns** – allow comma-separated lists for environment
   variables.
 
-Overall, OrthoConfig covers layered loading and CLI integration. It would
-need enhancements for string list parsing and configuration extension to fully
+Overall, OrthoConfig covers layered loading and CLI integration. It would need
+enhancements for string list parsing and configuration extension to fully
 satisfy ddlint's design.
 
 ## Next Steps

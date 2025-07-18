@@ -2,8 +2,8 @@
 
 This document outlines high-level behavioural tests for the `ortho-config` \
 crate using the [cucumber] framework. Scenarios follow the **Given/When/Then**
-\ pattern and reference [`docs/design.md`](design.md) and \ [`docs/ddlint-gap-
-analysis.md`](ddlint-gap-analysis.md).
+\ pattern and reference [`docs/design.md`](design.md) and \
+[`docs/ddlint-gap- analysis.md`](ddlint-gap-analysis.md).
 
 ## 1. Goals
 
@@ -16,8 +16,8 @@ analysis.md`](ddlint-gap-analysis.md).
 ## 2. Cucumber Setup
 
 Scenarios live under `tests/features/`. Step implementations in `tests` share \
-a common `World` struct that uses `figment::Jail` for isolation. Each scenario \
-executes asynchronously with `tokio`.
+a common `World` struct that uses `figment::Jail` for isolation. Each scenario
+\ executes asynchronously with `tokio`.
 
 ```rust
 #[derive(Debug, Default, cucumber::World)]
@@ -61,8 +61,8 @@ from CLI, env, and file merge into the `CmdCfg` struct
 ### 3.6 Append Merge Strategy
 
 **Given** vector fields with `merge_strategy = "append"` in several sources
-**When** configuration is loaded **Then** the vectors are concatenated in file →
-env → CLI order
+**When** configuration is loaded **Then** the vectors are concatenated in file
+→ env → CLI order
 
 ### 3.7 Comma-Separated Lists (Gap)
 
@@ -81,8 +81,8 @@ specifies `--config` **Then** the file is loaded from the provided path
 
 ### 3.10 Dynamic Rule Tables (Gap)
 
-**Given** arbitrary `[rules.*]` entries in a file **When** they deserialize into
-a `BTreeMap<String, RuleCfg>` **Then** unknown keys are preserved
+**Given** arbitrary `[rules.*]` entries in a file **When** they deserialize
+into a `BTreeMap<String, RuleCfg>` **Then** unknown keys are preserved
 
 ### 3.11 Ignore Pattern Lists (Gap)
 
@@ -91,7 +91,7 @@ loading `ignore_patterns` as a vector **Then** it becomes `[".git/", "build/"]`
 
 ## 4. Future Scenarios
 
-The design document lists potential future work such as async loading and custom
-providers. Add scenarios as those features land.
+The design document lists potential future work such as async loading and
+custom providers. Add scenarios as those features land.
 
 [cucumber]: https://github.com/cucumber-rs/cucumber

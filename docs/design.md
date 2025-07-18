@@ -2,12 +2,13 @@
 
 ## 1. Motivation & Vision
 
-**1.1. The Problem:** Rust application configuration is powerful but fragmented.
-Developers typically hand-roll solutions by combining `clap` for CLI, `serde`
-for deserialization, and `figment` or `config-rs` for layered file/environment
-loading. This process involves significant boilerplate, manual mapping of
-disparate naming conventions (e.g., `--kebab-case` vs. `SNAKE_CASE`), and
-complex merge logic, all of which must be recreated for each new project.
+**1.1. The Problem:** Rust application configuration is powerful but
+fragmented. Developers typically hand-roll solutions by combining `clap` for
+CLI, `serde` for deserialization, and `figment` or `config-rs` for layered
+file/environment loading. This process involves significant boilerplate, manual
+mapping of disparate naming conventions (e.g., `--kebab-case` vs.
+`SNAKE_CASE`), and complex merge logic, all of which must be recreated for each
+new project.
 
 **1.2. The Vision:** `OrthoConfig` will provide a "batteries-included"
 configuration solution inspired by the developer experience of tools like
@@ -33,15 +34,15 @@ line arguments, environment variables, and configuration files.
 The implementation must adhere to the following principles:
 
 - **Convention over Configuration:** The crate should have sensible defaults for
-  everything: CLI flag names, environment variable names, file discovery
-  paths, and merge strategies. The user should only need to add attributes for
+  everything: CLI flag names, environment variable names, file discovery paths,
+  and merge strategies. The user should only need to add attributes for
   exceptional cases.
 - **Ergonomic API:** The primary user-facing API will be a single procedural
   macro, `#[derive(OrthoConfig)]`. All functionality should flow from this.
 - **Transparency:** While the crate abstracts complexity, it must not be a black
-  box. Error messages must be rich, informative, and clearly attribute issues to
-  their original source (e.g., "Error in `config.toml` at line 5: invalid type
-  for `port`").
+  box. Error messages must be rich, informative, and clearly attribute issues
+  to their original source (e.g., "Error in `config.toml` at line 5: invalid
+  type for `port`").
 - **Performance:** The configuration process happens once at startup, so raw
   performance is secondary to correctness and developer experience. However,
   the implementation should be reasonably efficient and avoid unnecessary
@@ -109,8 +110,8 @@ This is the most complex component. It needs to perform the following using
 `syn` and `quote`:
 
 1. **Parse Attributes:** Define `#[ortho_config(...)]` attributes for both
-   struct-level (e.g., `prefix`, `file_name`) and field-level (e.g., `cli_long`,
-   `env`, `default`, `merge_strategy`).
+   struct-level (e.g., `prefix`, `file_name`) and field-level (e.g.,
+   `cli_long`, `env`, `default`, `merge_strategy`).
 2. **Generate a `clap`-aware Struct:** In the generated code, create a hidden
    struct derived from `clap::Parser`. Its fields should correspond to the main
    struct's fields but be wrapped in `Option<T>` to capture only user-provided
@@ -129,8 +130,9 @@ This is the most complex component. It needs to perform the following using
 The macro must enforce naming conventions automatically.
 
 - **Struct Field to CLI Flag:** A field `listen_port` should automatically
-  become `--listen-port` unless overridden by `#[ortho_config(cli_long =
-  "...")]`. This involves converting `snake_case` to `kebab-case`.
+  become `--listen-port` unless overridden by
+  `#[ortho_config(cli_long = "...")]`. This involves converting `snake_case` to
+  `kebab-case`.
 - **Struct Field to Env Var:** A field `listen_port` within a struct with
   `#[ortho_config(prefix = "MY_APP")]` should become `MY_APP_LISTEN_PORT`.
   Nested structs (e.g., `database.url`) should become `MY_APP_DATABASE__URL`
@@ -138,9 +140,9 @@ The macro must enforce naming conventions automatically.
   `UPPER_SNAKE_CASE`.
 - **Struct Field to File Key:** This is handled by `serde` and `figment`. By
   default, `serde` expects file keys to match Rust field names (`snake_case`).
-  We can consider adding a struct-level attribute `#[ortho_config(rename_all
-  = "kebab-case")]` which would pass the corresponding `#[serde(rename_all =
-  "...")]` attribute to the user's struct.
+  We can consider adding a struct-level attribute
+  `#[ortho_config(rename_all = "kebab-case")]` which would pass the
+  corresponding `#[serde(rename_all = "...")]` attribute to the user's struct.
 
 ### 4.4. Array (`Vec<T>`) Merging
 
@@ -155,8 +157,8 @@ This is a key user-experience feature.
   4. Create a final "override" `figment` provider containing only the merged
      `Vec`.
   5. Merge this override provider on top of the main `figment` instance before
-     calling `extract()` on the final result. This ensures the combined `Vec` is
-     present for deserialization.
+     calling `extract()` on the final result. This ensures the combined `Vec`
+     is present for deserialization.
 
 ### 4.5. Error Handling
 
@@ -220,10 +222,10 @@ Support for `XDG_CONFIG_HOME` on Windows could be added later using
   - `figment`: As the core layering engine.
   - `serde`: For serialization/deserialization.
   - `toml`, `figment-json5`, `serde_yaml`: As optional feature-gated
-    dependencies for different file formats. `toml` should be a default feature.
-    The `json5` feature uses `figment-json5` to parse `.json` and `.json5`
-    files; loading these formats without enabling `json5` should produce an
-    error so users aren't surprised by silent TOML parsing.
+    dependencies for different file formats. `toml` should be a default
+    feature. The `json5` feature uses `figment-json5` to parse `.json` and
+    `.json5` files; loading these formats without enabling `json5` should
+    produce an error so users aren't surprised by silent TOML parsing.
   - `thiserror`: For ergonomic error type definitions.
 
 ## 6. Implementation Roadmap

@@ -8,7 +8,7 @@ use clap::Parser;
 use ortho_config::subcommand::Prefix;
 use ortho_config::{OrthoConfig, load_and_merge_subcommand, load_and_merge_subcommand_for};
 use serde::Deserialize;
-use util::{with_cfg, with_cfg_wrapper};
+use util::{with_subcommand_config, with_typed_subcommand_config};
 
 #[derive(Debug, Deserialize, Default, PartialEq)]
 struct CmdCfg {
@@ -27,7 +27,7 @@ struct CmdCfg {
 /// # Examples
 ///
 /// ```
-/// let cfg = with_cfg(|jail| {
+/// let cfg = with_subcommand_config(|jail| {
 ///     jail.create_file(".app.toml", "[cmds.test]\nfoo = \"bar\"")?;
 ///     Ok(())
 /// });
@@ -36,7 +36,7 @@ struct CmdCfg {
 
 #[test]
 fn file_and_env_loading() {
-    let cfg: CmdCfg = with_cfg(|j| {
+    let cfg: CmdCfg = with_subcommand_config(|j| {
         j.create_file(".app.toml", "[cmds.test]\nfoo = \"file\"\nbar = true")?;
         j.set_env("APP_CMDS_TEST_FOO", "env");
         Ok(())
@@ -47,7 +47,7 @@ fn file_and_env_loading() {
 
 #[test]
 fn loads_from_home() {
-    let cfg: CmdCfg = with_cfg(|j| {
+    let cfg: CmdCfg = with_subcommand_config(|j| {
         let home = j.create_dir("home")?;
         j.create_file(home.join(".app.toml"), "[cmds.test]\nfoo = \"home\"")?;
         j.set_env("HOME", home.to_str().unwrap());
@@ -60,7 +60,7 @@ fn loads_from_home() {
 
 #[test]
 fn local_overrides_home() {
-    let cfg: CmdCfg = with_cfg(|j| {
+    let cfg: CmdCfg = with_subcommand_config(|j| {
         let home = j.create_dir("home")?;
         j.create_file(home.join(".app.toml"), "[cmds.test]\nfoo = \"home\"")?;
         j.set_env("HOME", home.to_str().unwrap());
@@ -76,7 +76,7 @@ fn local_overrides_home() {
 #[cfg(any(unix, target_os = "redox"))]
 #[test]
 fn loads_from_xdg_config() {
-    let cfg: CmdCfg = with_cfg(|j| {
+    let cfg: CmdCfg = with_subcommand_config(|j| {
         let xdg = j.create_dir("xdg")?;
         let abs = std::fs::canonicalize(&xdg).unwrap();
         j.create_dir(abs.join("app"))?;
@@ -96,7 +96,7 @@ struct PrefixedCfg {
 
 #[test]
 fn wrapper_uses_struct_prefix() {
-    let cfg: PrefixedCfg = with_cfg_wrapper(|j| {
+    let cfg: PrefixedCfg = with_typed_subcommand_config(|j| {
         j.create_file(".app.toml", "[cmds.test]\nfoo = \"val\"")?;
         j.set_env("APP_CMDS_TEST_FOO", "env");
         Ok(())
@@ -107,7 +107,7 @@ fn wrapper_uses_struct_prefix() {
 #[cfg(feature = "yaml")]
 #[test]
 fn loads_yaml_file() {
-    let cfg: CmdCfg = with_cfg(|j| {
+    let cfg: CmdCfg = with_subcommand_config(|j| {
         j.create_file(".app.yml", "cmds:\n  test:\n    foo: yaml")?;
         Ok(())
     });

@@ -9,28 +9,36 @@ use ortho_config::subcommand::{CmdName, Prefix};
 use ortho_config::{OrthoConfig, load_subcommand_config, load_subcommand_config_for};
 use serde::de::DeserializeOwned;
 
-/// Runs `setup` in a jailed environment then loads a subcommand
-/// configuration for the `test` command using the `APP_` prefix.
-///
-/// # Panics
-///
-/// Panics if configuration loading fails.
-pub fn with_cfg<F, T>(setup: F) -> T
+fn with_jail<F, L, T>(setup: F, loader: L) -> T
 where
     F: FnOnce(&mut figment::Jail) -> figment::error::Result<()>,
-    T: DeserializeOwned + Default,
+    L: FnOnce() -> T,
 {
     use std::cell::RefCell;
 
     let result = RefCell::new(None);
     figment::Jail::expect_with(|j| {
         setup(j)?;
-        let cfg =
-            load_subcommand_config::<T>(&Prefix::new("APP_"), &CmdName::new("test")).expect("load");
-        result.replace(Some(cfg));
+        result.replace(Some(loader()));
         Ok(())
     });
     result.into_inner().unwrap()
+}
+
+/// Runs `setup` in a jailed environment then loads a subcommand
+/// configuration for the `test` command using the `APP_` prefix.
+///
+/// # Panics
+///
+/// Panics if configuration loading fails.
+pub fn with_subcommand_config<F, T>(setup: F) -> T
+where
+    F: FnOnce(&mut figment::Jail) -> figment::error::Result<()>,
+    T: DeserializeOwned + Default,
+{
+    with_jail(setup, || {
+        load_subcommand_config::<T>(&Prefix::new("APP_"), &CmdName::new("test")).expect("load")
+    })
 }
 
 /// Runs `setup` in a jailed environment and loads a subcommand
@@ -39,19 +47,12 @@ where
 /// # Panics
 ///
 /// Panics if configuration loading fails.
-pub fn with_cfg_wrapper<F, T>(setup: F) -> T
+pub fn with_typed_subcommand_config<F, T>(setup: F) -> T
 where
     F: FnOnce(&mut figment::Jail) -> figment::error::Result<()>,
     T: OrthoConfig + Default,
 {
-    use std::cell::RefCell;
-
-    let result = RefCell::new(None);
-    figment::Jail::expect_with(|j| {
-        setup(j)?;
-        let cfg = load_subcommand_config_for::<T>(&CmdName::new("test")).expect("load");
-        result.replace(Some(cfg));
-        Ok(())
-    });
-    result.into_inner().unwrap()
+    with_jail(setup, || {
+        load_subcommand_config_for::<T>(&CmdName::new("test")).expect("load")
+    })
 }
