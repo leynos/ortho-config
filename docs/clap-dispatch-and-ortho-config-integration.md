@@ -127,9 +127,8 @@ building CLIs with dispatchable subcommands.
 
 ### A. Project Setup and Dependencies
 
-To begin, ensure your Rust project is set up with the necessary dependencies.
-You will need `clap` for argument parsing (specifically with the `derive`
-feature for ergonomic struct-based parsing) and `clap-dispatch` itself.
+Begin by adding the required dependencies: `clap` for argument parsing (with
+the `derive` feature) and `clap-dispatch`.
 
 Add the following to your `Cargo.toml` file:
 
@@ -388,8 +387,7 @@ arguments themselves.
 - `list-items` takes an optional `--category <String>` and an optional `--all`
   flag.
 - Both are dispatched via `fn execute(&self, db_connection_url: &str) ->
-  Result<(),
-String>`.
+  Result<(), String>`.
 
 **Full** `src/main.rs`**:**
 

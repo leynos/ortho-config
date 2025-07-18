@@ -26,10 +26,10 @@ manual aliasing.
   fields.
 - **Type-Safe Deserialization:** Uses `serde` to deserialize configuration into
   strongly typed Rust structs.
-- **Easy to Use:** A simple `#[derive(OrthoConfig)]` macro gets you started
-  quickly.
-- **Customisable:** Field-level attributes allow fine-grained control over
-  naming, defaults, and merging behaviour.
+- **Easy to Use:** A simple `#[derive(OrthoConfig)]` macro enables a quick
+  start.
+- **Customizable:** Field-level attributes allow fine-grained control over
+  naming, defaults, and merging behavior.
 - **Nested Configuration:** Naturally supports nested structs for organized
   configuration.
 - **Sensible Defaults:** Aims for intuitive behavior out-of-the-box.
