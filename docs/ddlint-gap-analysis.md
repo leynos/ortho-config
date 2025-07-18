@@ -9,18 +9,20 @@ document](https://raw.githubusercontent.com/leynos/ddlint/refs/heads/main/docs/d
 The design describes a `clap` based CLI and a `ddlint.toml` configuration file:
 
 > The primary user interaction with the linter will be through its command-line
-> binary, `ddlint`. The CLI will be built using the `clap` crate. > > The core
-commands will be: >
-
+> binary, `ddlint`. The CLI will be built using the `clap` crate.
+>
+> The core commands will be:
+>
 ```bash
 ddlint <FILES...>
 ddlint --fix <FILES...>
 ddlint rules
 ddlint explain <RULE_NAME>
 ```
-
-> > > Key flags include `--format <compact|json|rich>`, `--config <PATH>` and >
-`--no-ignore`.
+>
+>
+> Key flags include `--format <compact|json|rich>`, `--config <PATH>` and
+> `--no-ignore`.
 
 The configuration schema includes:
 

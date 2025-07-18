@@ -20,9 +20,9 @@ step-by-step guidance on utilizing `clap-dispatch` for creating and managing
 subcommands, complete with worked examples and command-line usage
 demonstrations. Secondly, it presents a detailed design proposal for
 incorporating `clap-dispatch` into the `ortho-config` library. The
-`ortho- config` library, as per its design philosophy, facilitates layered,
+`ortho-config` library, as per its design philosophy, facilitates layered,
 orthographic configuration where settings can be defined consistently across
-command- line arguments, environment variables, and configuration files. The
+command-line arguments, environment variables, and configuration files. The
 proposal outlines how subcommand configurations can be seamlessly integrated
 into this orthographic model, primarily through a dedicated "cmds" namespace.
 
@@ -56,7 +56,7 @@ single method representing the core action these subcommands perform.3
 
 For instance, if a CLI has subcommands for `quicksort` and `mergesort`, both
 are types of sorting operations. `clap-dispatch` enables defining a `Sort`
-trait with a `sort(…)` method. Each subcommand's argument structure
+trait with a `sort(...)` method. Each subcommand's argument structure
 (`QuickArgs`, `MergeArgs`) would then implement this `Sort` trait.3 This
 approach promotes a clean separation of concerns: `clap` handles the parsing of
 arguments unique to `quicksort` (e.g., pivot selection strategy) or `mergesort`
@@ -97,7 +97,7 @@ signature) and generate the new trait and implementation code, respectively.3
 ### D. Advantages in Complex CLI Scenarios
 
 In CLIs with numerous subcommands or deeply nested subcommand trees,
-`clap- dispatch` offers significant advantages:
+`clap-dispatch` offers significant advantages:
 
 - **Improved Code Organization:** It centralizes the dispatch logic definition
   (via the macro) and encourages a clear separation between argument parsing
@@ -111,7 +111,8 @@ In CLIs with numerous subcommands or deeply nested subcommand trees,
 - **Promotion of a Common Interface Pattern:** The library encourages treating
   subcommands as distinct implementations of a shared conceptual action. This
   abstraction is powerful for managing complexity, as highlighted by its
-  utility when subcommands "do the same kind of action, just differently".3
+  utility when subcommands "do the same kind of action, just in a different
+  way".3
 - **Increased Testability:** The core logic of each subcommand, encapsulated
   within its implementation of the dispatch trait method, can be unit-tested
   more easily. For example, the `sort` method of `QuickArgs` can be called
@@ -393,9 +394,9 @@ use clap::Parser; use clap_dispatch::clap_dispatch;
 -> Self { println!("Connecting to database at: {}", url); DbPool } // Mock
 methods fn add_user(&self, username: &str, is_admin: bool) { println!("Adding
 user: {}, Admin: {}", username, is_admin); } fn list_items(&self, category:
-Option<&String>, list_all: bool) { match category { Some(cat) => println!
-("Listing items in category '{}', All: {}", cat, list_all), None => println!
-("Listing items (no category specified), All: {}", list_all), } } }
+Option<&String>, list_all: bool) { match category { Some(cat) =>
+println!("Listing items in category '{}', All: {}", cat, list_all), None =>
+println!("Listing items (no category specified), All: {}", list_all), } } }
 
 
 // 1. Define Argument Structs pub struct AddUserArgs {
@@ -425,8 +426,8 @@ Result<(), String> { let pool = DbPool::new(db_connection_url);
 pool.list_items(self.category.as_ref(), self.all); Ok(()) } }
 
 // 4. Main function to parse and dispatch fn main() -> Result<(), String> { let
-cli_instance = RegistryCommands::parse(); let db_url = "postgres://
-user:pass@localhost/registry"; cli_instance.execute(db_url) }
+cli_instance = RegistryCommands::parse(); let db_url =
+"postgres://user:pass@localhost/registry"; cli_instance.execute(db_url) }
 ````
 
 **Command-line invocation and expected output:**
@@ -479,7 +480,7 @@ execution.
 ### A. Understanding `ortho-config`'s Orthographic Configuration
 
 `ortho-config`'s core tenet is layered configuration with consistent naming
-across sources. This is conceptually similar to libraries like `config- rs`,
+across sources. This is conceptually similar to libraries like `config-rs`,
 which support merging configurations from various file formats (TOML, YAML,
 JSON) and environment variables, allowing access to nested fields via a
 path-like string.6 The "orthographic" aspect implies that a configuration
@@ -622,7 +623,7 @@ The process would be:
    present.
 3. A merge step then resolves the final value: CLI value > Environment value >
    File value > clap's default_value_t (if applicable and not overridden by
-   CLI/ Env/File) > Code-defined default (e.g. Option::unwrap_or_else).
+   CLI/Env/File) > Code-defined default (e.g. Option::unwrap_or_else).
 
 This nuanced handling ensures that ortho-config provides a flexible layer of
 defaults without interfering with clap's primary role of parsing explicit user
@@ -630,8 +631,8 @@ input.
 
 3\. Handling serde::Deserialize for argument structs.
 
-The argument structs (e.g., ListArgs, AddArgs) must derive both # (for ortho-
-config) and #[derive(clap::Parser)] (for clap).
+The argument structs (e.g., ListArgs, AddArgs) must derive both # (for
+ortho-config) and #[derive(clap::Parser)] (for clap).
 
 ```rust
 use clap::Parser;
@@ -782,7 +783,7 @@ methods.
 }
 ```
 
-This conceptual code illustrates the key stages: loading `ortho- config`
+This conceptual code illustrates the key stages: loading `ortho-config`
 defaults, parsing CLI arguments with `clap`, merging these layers with defined
 precedence, and finally dispatching the command using the method provided by
 `clap-dispatch`. The critical merging step now uses
@@ -824,15 +825,15 @@ Several aspects require careful consideration during implementation:
   assumes subcommands are statically defined at compile time (as variants of a
   Rust enum). If `ortho-config` were to support defining *new* subcommands
   entirely through configuration files (not known at compile time),
-  `clap- dispatch` would not be directly applicable, and a different dispatch
+  `clap-dispatch` would not be directly applicable, and a different dispatch
   mechanism would be needed. This proposal focuses on statically defined
   subcommands.
 - **Performance:** For CLIs with extremely complex configurations or a vast
   number of configuration sources, the initial load and parsing time by
-  `ortho- config` could be a factor, though likely minor for most applications.
+  `ortho-config` could be a factor, though likely minor for most applications.
 - **Interaction with** `clap`**'s** `flatten` **attribute:** If global options
   (applicable to all subcommands or the main app) are also loaded via
-  `ortho- config` and then `#[clap(flatten)]`-ed into `clap`'s main argument
+  `ortho-config` and then `#[clap(flatten)]`-ed into `clap`'s main argument
   struct, ensuring these interact predictably with subcommand-specific
   configurations from the `cmds` namespace will be important.
 
@@ -857,7 +858,7 @@ While the implementation, particularly the merging logic between `clap`-parsed
 arguments and `ortho-config` defaults, presents challenges, the benefits in
 terms of developer ergonomics, user flexibility, and overall application
 maintainability are substantial. By adopting such a structured approach,
-`ortho- config` can evolve into an even more comprehensive framework for
+`ortho-config` can evolve into an even more comprehensive framework for
 building sophisticated and highly configurable command-line applications in
 Rust. The path forward involves careful implementation of the merging strategy
 and robust error handling to realize the full potential of this integrated

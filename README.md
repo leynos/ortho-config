@@ -36,62 +36,90 @@ manual aliasing.
 
 ## Quick Start
 
+<!-- markdownlint-disable MD029 -->
+
 1. **Add `OrthoConfig` to your `Cargo.toml`:**
 
-   ```toml [dependencies] ortho_config = "0.3.0" # Replace with the latest
-   version serde = { version = "1.0", features = ["derive"] } ```
+```toml
+[dependencies]
+ortho_config = "0.3.0" # Replace with the latest version
+serde = { version = "1.0", features = ["derive"] }
+```
 
 2. **Define your configuration struct:**
 
-   ```rust use ortho_config::{OrthoConfig, OrthoError}; use
-   serde::{Deserialize, Serialize}; // Required for OrthoConfig derive
+```rust
+use ortho_config::{OrthoConfig, OrthoError};
+use serde::{Deserialize, Serialize}; // Required for OrthoConfig derive
 
-   #[derive(Debug, Clone, Deserialize, Serialize, OrthoConfig)]
-   #[ortho_config(prefix = "DB")] // Nested prefix: e.g., APP_DB_URL
-   struct DatabaseConfig { // Automatically maps to: // CLI: --database-url
-   <value> (if clap flattens) or via file/env // Env: APP_DB_URL=<value> //
-   File: [database] url = <value> url: String,
+#[derive(Debug, Clone, Deserialize, Serialize, OrthoConfig)]
+#[ortho_config(prefix = "DB")] // Nested prefix: e.g., APP_DB_URL
+struct DatabaseConfig {
+    // Automatically maps to:
+    // CLI: --database-url <value> (if clap flattens) or via file/env
+    // Env: APP_DB_URL=<value>
+    // File: [database] url = <value>
+    url: String,
 
-       #[ortho_config(default = 5)]
-       pool_size: Option<u32>, // Optional value, defaults to `Some(5)` }
+    #[ortho_config(default = 5)]
+    pool_size: Option<u32>, // Optional value, defaults to `Some(5)`
+}
 
-   impl std::str::FromStr for DatabaseConfig { type Err = String;
+impl std::str::FromStr for DatabaseConfig {
+    type Err = String;
 
-       fn from_str(s: &str) -> Result<Self, Self::Err> { let mut parts =
-       s.splitn(2, ','); let url = parts .next() .ok_or_else(|| "missing
-       url".to_string())? .to_string(); let pool_size = parts .next()
-       .and_then(|p| p.parse::<u32>().ok()); Ok(DatabaseConfig { url, pool_size
-       }) } }
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mut parts = s.splitn(2, ',');
+        let url = parts
+            .next()
+            .ok_or_else(|| "missing url".to_string())?
+            .to_string();
+        let pool_size = parts
+            .next()
+            .and_then(|p| p.parse::<u32>().ok());
+        Ok(DatabaseConfig { url, pool_size })
+    }
+}
 
-   #[derive(Debug, Deserialize, Serialize, OrthoConfig)]
-   #[ortho_config(prefix = "APP")] // Prefix for environment variables (e.g., APP_LOG_LEVEL)
-   struct AppConfig { log_level: String,
+#[derive(Debug, Deserialize, Serialize, OrthoConfig)]
+#[ortho_config(prefix = "APP")] // Prefix for environment variables (e.g., APP_LOG_LEVEL)
+struct AppConfig {
+    log_level: String,
 
-       // Automatically maps to: // CLI: --port <value> // Env:
-       APP_PORT=<value> // File: port = <value>
-       #[ortho_config(default = 8080)]
-       port: u16,
+    // Automatically maps to:
+    // CLI: --port <value>
+    // Env: APP_PORT=<value>
+    // File: port = <value>
+    #[ortho_config(default = 8080)]
+    port: u16,
 
-       #[ortho_config(merge_strategy = "append")] // Default for Vec<T> is append
-       features: Vec<String>,
+    #[ortho_config(merge_strategy = "append")] // Default for Vec<T> is append
+    features: Vec<String>,
 
-       // Nested configuration database: DatabaseConfig,
+    // Nested configuration
+    database: DatabaseConfig,
 
-       #[ortho_config(cli_short = 'v')] // Enable a short flag: -v
-       verbose: bool, // Defaults to false if not specified }
+    #[ortho_config(cli_short = 'v')] // Enable a short flag: -v
+    verbose: bool, // Defaults to false if not specified
+}
 
-   fn main() -> Result<(), OrthoError> { let config = AppConfig::load()?; //
-   Load configuration
+fn main() -> Result<(), OrthoError> {
+    let config = AppConfig::load()?; // Load configuration
 
-       println!("Loaded configuration: {:#?}", config);
+    println!("Loaded configuration: {:#?}", config);
 
-       if config.verbose { println!("Verbose mode enabled!"); } println! ("Log
-       level: {}", config.log_level); println!("Listening on port: {}",
-       config.port); println!("Enabled features: {:?}", config.features);
-       println!("Database URL: {}", config.database.url); println!("Database
-       pool size: {:?}", config.database.pool_size);
+    if config.verbose {
+        println!("Verbose mode enabled!");
+    }
+    println!("Log level: {}", config.log_level);
+    println!("Listening on port: {}", config.port);
+    println!("Enabled features: {:?}", config.features);
+    println!("Database URL: {}", config.database.url);
+    println!("Database pool size: {:?}", config.database.pool_size);
 
-       Ok(()) } ```
+    Ok(())
+}
+```
 
 3. **Run your application:**
 
@@ -102,7 +130,9 @@ manual aliasing.
      `APP_LOG_LEVEL=warn APP_PORT=4000`
      `APP_DB_URL="postgres://localhost/mydb"`
      `APP_FEATURES="env_feat1,env_feat2" cargo run`
-   - With a `.app.toml` file (assuming `#[ortho_config(prefix = "APP_")]`;
+
+<!-- markdownlint-enable MD029 -->
+- With a `.app.toml` file (assuming `#[ortho_config(prefix = "APP_")]`;
      adjust for your prefix):
 
      ```toml
@@ -147,15 +177,15 @@ ortho_config = { version = "0.3.0", features = ["json5", "yaml"] }
 
 The file loader selects the parser based on the extension (`.toml`, `.json`,
 `.json5`, `.yaml`, `.yml`). When the `json5` feature is active, both `.json`
-and `.json5` files are parsed using the JSON5 format. Standard JSON is valid
+and `.json5` files are parsed using the JSON5 format. Standard JSON conforms to
 JSON5 syntax, so existing `.json` files continue to work. Without this feature
 enabled, attempting to load a `.json` or `.json5` file will result in an error.
 When the `yaml` feature is enabled, `.yaml` and `.yml` files are also
 discovered and parsed. Without this feature, those extensions are ignored
 during path discovery.
 
-JSON5 extends JSON with conveniences such as comments, trailing commas, single-
-quoted strings, and unquoted keys.
+JSON5 extends JSON with conveniences such as comments, trailing commas,
+single-quoted strings, and unquoted keys.
 
 ## Orthographic Naming
 
@@ -242,8 +272,8 @@ APP_CMDS_ADD_USER_ADMIN=false
 
 ### Dispatching Subcommands
 
-Subcommands can be executed with defaults applied using [`clap-dispatch`]
-(<https://docs.rs/clap-dispatch>):
+Subcommands can be executed with defaults applied using
+[`clap-dispatch`](https://docs.rs/clap-dispatch):
 
 ```rust
 use clap::Parser;
@@ -308,8 +338,9 @@ fn main() -> Result<(), String> {
 Version 0.2 introduces a small API refinement:
 
 - `load_subcommand_config_for` now only loads default values from files and
-  environment variables. Use [`load_and_merge_subcommand_for`](#subcommand-
-  configuration) to merge these defaults with CLI arguments.
+  environment variables. Use
+  [`load_and_merge_subcommand_for`](#subcommand-configuration) to merge these
+  defaults with CLI arguments.
 - Types deriving `OrthoConfig` expose an associated `prefix()` function. Use
   this if you need the configured prefix directly.
 

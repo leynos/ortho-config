@@ -14,8 +14,8 @@ new project.
 configuration solution inspired by the developer experience of tools like
 `esbuild`. By using a single `derive` macro, developers will define their
 configuration *once* in a plain Rust struct. The crate will then handle the
-entire lifecycle of parsing, layering, merging, and deserializing from command-
-line arguments, environment variables, and configuration files.
+entire lifecycle of parsing, layering, merging, and deserializing from
+command-line arguments, environment variables, and configuration files.
 
 **1.3. Foreseen Benefits:**
 

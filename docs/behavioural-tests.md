@@ -3,7 +3,7 @@
 This document outlines high-level behavioural tests for the `ortho-config` \
 crate using the [cucumber] framework. Scenarios follow the **Given/When/Then**
 \ pattern and reference [`docs/design.md`](design.md) and \
-[`docs/ddlint-gap- analysis.md`](ddlint-gap-analysis.md).
+[`docs/ddlint-gap-analysis.md`](ddlint-gap-analysis.md).
 
 ## 1. Goals
 
