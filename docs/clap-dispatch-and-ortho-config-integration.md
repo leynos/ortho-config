@@ -12,7 +12,7 @@ the dispatch logic can become cumbersome.
 
 The `clap-dispatch` crate aims to alleviate this by providing an ergonomic
 mechanism for dispatching CLI subcommands.3 It leverages Rust's trait system
-and procedural macros to reduce boilerplate and improve code organisation when
+and procedural macros to reduce boilerplate and improve code organization when
 subcommands represent different ways of performing a similar action.
 
 This report serves a dual purpose. Firstly, it provides comprehensive,
@@ -56,7 +56,7 @@ single method representing the core action these subcommands perform.3
 
 For instance, if a CLI has subcommands for `quicksort` and `mergesort`, both
 are types of sorting operations. `clap-dispatch` enables defining a `Sort`
-trait with a `sort(...)` method. Each subcommand's argument structure
+trait with a `sort(…)` method. Each subcommand's argument structure
 (`QuickArgs`, `MergeArgs`) would then implement this `Sort` trait.3 This
 approach promotes a clean separation of concerns: `clap` handles the parsing of
 arguments unique to `quicksort` (e.g., pivot selection strategy) or `mergesort`
@@ -67,8 +67,8 @@ of calling the correct implementation based on the subcommand parsed by `clap`.
 ### C. The `#[clap_dispatch]` Macro and Generated Trait
 
 The central component of `clap-dispatch` is its procedural macro,
-`#[clap_dispatch(...)]`. This macro is applied to a Rust enum where each
-variant typically encapsulates an argument struct parsed by `clap::Parser`
+`#[clap_dispatch(…)]`. This macro is applied to a Rust enum where each variant
+typically encapsulates an argument struct parsed by `clap::Parser`
 (representing a specific subcommand).3
 
 When the macro is invoked, for example, as `#` on an enum `CliCommands`, it
@@ -83,7 +83,7 @@ performs two key actions:
    for the enum itself (e.g., `impl Execute for CliCommands`). This
    implementation contains the `match` logic that dispatches the method call to
    the appropriate variant of the enum. So, calling
-   `cli_commands_instance.execute(...)` will internally match on the specific
+   `cli_commands_instance.execute(…)` will internally match on the specific
    variant of `cli_commands_instance` and call the `execute` method on that
    variant's contained data.
 
@@ -99,7 +99,7 @@ signature) and generate the new trait and implementation code, respectively.3
 In CLIs with numerous subcommands or deeply nested subcommand trees,
 `clap-dispatch` offers significant advantages:
 
-- **Improved Code Organisation:** It centralises the dispatch logic definition
+- **Improved Code Organization:** It centralizes the dispatch logic definition
   (via the macro) and encourages a clear separation between argument parsing
   (handled by `clap` structs) and command execution logic (handled by trait
   implementations).
@@ -194,9 +194,9 @@ This `MyToolCli` enum is the structure upon which `clap-dispatch` will operate.3
 
 ### D. Applying `#[clap_dispatch]` to the Subcommand Enum
 
-Now, apply the `#[clap_dispatch(...)]` macro to the subcommand enum. In the
-macro attribute, specify the function signature that all dispatched subcommands
-must implement. This signature defines the common "action" interface.
+Now, apply the `#[clap_dispatch(…)]` macro to the subcommand enum. In the macro
+attribute, specify the function signature that all dispatched subcommands must
+implement. This signature defines the common "action" interface.
 
 Example:
 
@@ -228,7 +228,7 @@ Example:
 
 ```rust
 // Continuing from the previous example
-// The #[clap_dispatch(...)] macro implicitly defines a trait, let's call it `Process`
+// The #[clap_dispatch(…)] macro implicitly defines a trait, let's call it `Process`
 // for this example, though the actual name is `Process` due to `fn process`.
 
 impl Process for EncodeArgs {
@@ -368,7 +368,7 @@ This example clearly demonstrates the reduction in boilerplate. Without
     MyToolCli::Encode(args) => args.process_encoding_logic(prefix_for_output),
     MyToolCli::Decode(args) => args.process_decoding_logic(prefix_for_output)
 }`.
-`clap-dispatch` abstracts this matching away into the `cli_instance.process(...)`
+`clap-dispatch` abstracts this matching away into the `cli_instance.process(…)`
 call.
 
 ### H. Worked Example 2: Subcommands with More Distinct Arguments (e.g., a "manage"
@@ -601,7 +601,7 @@ The order of precedence for configuration values must be clearly defined:
    hide_foo = true, parsed by ortho-config).
 
 4. Hardcoded defaults in clap structs: defaults defined using
-   `[arg(default_value = "...")]` or `default_value_t` in the clap argument
+   `[arg(default_value = "…")]` or `default_value_t` in the clap argument
    struct have the lowest precedence.
 
 This layering implies a careful interaction between clap's defaulting
@@ -649,7 +649,7 @@ pub struct ListArgs {
 
    #[arg(long)]
    pub page_size: Option<u32>,
-   //... other args
+   //… other args
 }
 ```
 
@@ -801,7 +801,7 @@ This design offers several advantages:
   method: CLI flags for ad-hoc changes, environment variables for CI/CD or
   containerized environments, or configuration files for persistent settings.
 - **Reduced Boilerplate:** `clap-dispatch` handles the command dispatch logic,
-  while `ortho-config` centralises configuration loading and merging.
+  while `ortho-config` centralizes configuration loading and merging.
 - **Clarity:** The `cmds` namespace offers a clear and intuitive structure for
   subcommand configurations within files and environment variables.
 - **Maintainability:** Decouples argument parsing (`clap`), configuration
