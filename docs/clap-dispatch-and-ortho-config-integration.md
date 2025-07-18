@@ -347,12 +347,10 @@ fn main() -> Result<(), String> {
     let prefix_for_output = "FILE";
     cli_instance.process(prefix_for_output)
 }
-
 ```
 
 **Command-line invocation and expected output:**
 
-````text
 - `cargo run -- encode --input "hello world" --strength 10`
   - Output: `Encoding 'hello world' with strength 10 to 'FILE_encoded.dat'`
 - `cargo run -- decode --input "secretdata" --fast-mode`
@@ -363,10 +361,14 @@ fn main() -> Result<(), String> {
 
 This example clearly demonstrates the reduction in boilerplate. Without
 `clap-dispatch`, the `main` function would require a long `match` expression:
+
+```rust
 `match cli_instance {
     MyToolCli::Encode(args) => args.process_encoding_logic(prefix_for_output),
     MyToolCli::Decode(args) => args.process_decoding_logic(prefix_for_output)
 }`.
+```
+
 `clap-dispatch` abstracts this matching away into the `cli_instance.process(...)`
 call.
 
@@ -384,7 +386,6 @@ of the dispatched method, not necessarily in the CLI arguments themselves.
 String>`.
 
 **Full** `src/main.rs`**:**
-
 
 ```rust
 use clap::Parser;
@@ -456,33 +457,30 @@ fn main() -> Result<(), String> {
     let db_url = "postgres://user:pass@localhost/registry";
     cli_instance.execute(db_url)
 }
-````
+```
 
 **Command-line invocation and expected output:**
 
 - `cargo run -- add-user --username alice --admin`
   - Output:
 
-````text
+    ```text
     Connecting to database at: postgres://user:pass@localhost/registry
     Adding user: alice, Admin: true
-    
     ```
 - `cargo run -- list-items --category electronics`
   - Output:
 
-```text
+    ```text
     Connecting to database at: postgres://user:pass@localhost/registry
     Listing items in category 'electronics', All: false
-    
     ```
 - `cargo run -- list-items --all`
   - Output:
 
-```text
+    ```text
     Connecting to database at: postgres://user:pass@localhost/registry
     Listing items (no category specified), All: true
-    
     ```
 
 This example highlights a key aspect: while the *dispatched function signature* (`fn
@@ -545,7 +543,7 @@ page_size = 20
 default_priority = 10
 enable_confirmation = false
 # api_key = "from_file_for_add_cmd"
-````
+```
 
 Here, `[cmds.list]` and `[cmds.add]` define configuration blocks specific to the
 `list` and `add` subcommands, respectively.
