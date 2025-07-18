@@ -56,7 +56,7 @@ single method representing the core action these subcommands perform.3
 
 For instance, if a CLI has subcommands for `quicksort` and `mergesort`, both
 are types of sorting operations. `clap-dispatch` enables defining a `Sort`
-trait with a `sort(…)` method. Each subcommand's argument structure
+trait with a `sort(...)` method. Each subcommand's argument structure
 (`QuickArgs`, `MergeArgs`) would then implement this `Sort` trait.3 This
 approach promotes a clean separation of concerns: `clap` handles the parsing of
 arguments unique to `quicksort` (e.g., pivot selection strategy) or `mergesort`
@@ -67,8 +67,8 @@ of calling the correct implementation based on the subcommand parsed by `clap`.
 ### C. The `#[clap_dispatch]` Macro and Generated Trait
 
 The central component of `clap-dispatch` is its procedural macro,
-`#[clap_dispatch(…)]`. This macro is applied to a Rust enum where each variant
-typically encapsulates an argument struct parsed by `clap::Parser`
+`#[clap_dispatch(...)]`. This macro is applied to a Rust enum where each
+variant typically encapsulates an argument struct parsed by `clap::Parser`
 (representing a specific subcommand).3
 
 When the macro is invoked, for example, as `#` on an enum `CliCommands`, it
@@ -370,20 +370,25 @@ match cli_instance {
 }
 ```
 
-`clap-dispatch` abstracts this matching away into the `cli_instance.process(...)`
-call.
+`clap-dispatch` abstracts this matching away into the
+`cli_instance.process(...)` call.
 
 ### H. Worked Example 2: Subcommands with More Distinct Arguments (e.g., a "manage"
+
 command)
 
-This example demonstrates `clap-dispatch`'s flexibility when subcommands under the
-same dispatch group have varied arguments. The commonality is in the *action signature*
-of the dispatched method, not necessarily in the CLI arguments themselves.
+This example demonstrates `clap-dispatch`'s flexibility when subcommands under
+the same dispatch group have varied arguments. The commonality is in the
+*action signature* of the dispatched method, not necessarily in the CLI
+arguments themselves.
 
 **Scenario:** A CLI `registry-ctl` with subcommands `add-user` and `list-items`.
+
 - `add-user` takes `--username <String>` and an optional `--admin` flag.
-- `list-items` takes an optional `--category <String>` and an optional `--all` flag.
-- Both are dispatched via `fn execute(&self, db_connection_url: &str) -> Result<(),
+- `list-items` takes an optional `--category <String>` and an optional `--all`
+  flag.
+- Both are dispatched via `fn execute(&self, db_connection_url: &str) ->
+  Result<(),
 String>`.
 
 **Full** `src/main.rs`**:**
@@ -479,6 +484,7 @@ cli_instance.execute(db_url) } **Command-line invocation and expected output:**
     Listing items in category 'electronics', All: false
     
     ```
+
 - `cargo run -- list-items --all`
   - Output:
 

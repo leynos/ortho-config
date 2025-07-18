@@ -1,14 +1,14 @@
 # OrthoConfig
 
 **OrthoConfig** is a Rust configuration management library designed for
-simplicity and power. It draws inspiration from the flexible configuration
-mechanisms found in tools like `esbuild`. The crate enables seamless loading of
-configuration from command-line arguments, environment variables and
-configuration files. Loading follows a clear order of precedence and requires
-minimal boilerplate.
+simplicity and power, inspired by the flexible configuration mechanisms found
+in tools like `esbuild`. It allows your application to seamlessly load
+configuration from command-line arguments, environment variables, and
+configuration files, all with a clear order of precedence and minimal
+boilerplate.
 
-The core principle is **orthographic option naming**. A single field in a Rust
-configuration struct can be set through idiomatic naming conventions from
+The core principle is **orthographic option naming**: a single field in your
+Rust configuration struct can be set through idiomatic naming conventions from
 various sources (e.g., `--my-option` for CLI, `MY_APP_MY_OPTION` for
 environment variables, `my_option` in a TOML file) without requiring extensive
 manual aliasing.
@@ -130,6 +130,8 @@ fn main() -> Result<(), OrthoError> {
      `APP_LOG_LEVEL=warn APP_PORT=4000`
      `APP_DB_URL="postgres://localhost/mydb"`
      `APP_FEATURES="env_feat1,env_feat2" cargo run`
+   - With a `.app.toml` file (assuming `#[ortho_config(prefix = "APP_")]`;
+     adjust for your prefix):
 
 <!-- markdownlint-enable MD029 -->
 - With a `.app.toml` file (assuming `#[ortho_config(prefix = "APP_")]`; adjust
@@ -159,10 +161,10 @@ overriding earlier ones:
    2. `[PREFIX]CONFIG_PATH` environment variable
    3. `.<prefix>.toml` in the current directory
    4. `.<prefix>.toml` in the user's home directory (where `<prefix>` comes from
-      `#[ortho_config(prefix = "…")]` and defaults to `config`). JSON5 and YAML
-      support are feature gated.
+      `#[ortho_config(prefix = "...")]` and defaults to `config`). JSON5 and
+      YAML support are feature gated.
 3. **Environment Variables:** Variables prefixed with the string specified in
-   `#[ortho_config(prefix = "…")]` (e.g., `APP_`). Nested struct fields are
+   `#[ortho_config(prefix = "...")]` (e.g., `APP_`). Nested struct fields are
    typically accessed using double underscores (e.g., `APP_DATABASE__URL` if
    `prefix = "APP"` on `AppConfig` and no prefix on `DatabaseConfig`, or
    `APP_DB_URL` with `#` on `DatabaseConfig`).
@@ -181,8 +183,8 @@ ortho_config = { version = "0.3.0", features = ["json5", "yaml"] }
 
 The file loader selects the parser based on the extension (`.toml`, `.json`,
 `.json5`, `.yaml`, `.yml`). When the `json5` feature is active, both `.json`
-and `.json5` files are parsed using the JSON5 format. Standard JSON conforms to
-JSON5 syntax, so existing `.json` files continue to work. Without this feature
+and `.json5` files are parsed using the JSON5 format. Standard JSON is valid
+JSON5, so existing `.json` files continue to work. Without this feature
 enabled, attempting to load a `.json` or `.json5` file will result in an error.
 When the `yaml` feature is enabled, `.yaml` and `.yml` files are also
 discovered and parsed. Without this feature, those extensions are ignored
