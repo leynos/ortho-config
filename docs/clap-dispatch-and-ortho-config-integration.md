@@ -56,7 +56,7 @@ single method representing the core action these subcommands perform.3
 
 For instance, if a CLI has subcommands for `quicksort` and `mergesort`, both
 are types of sorting operations. `clap-dispatch` enables defining a `Sort`
-trait with a `sort(...)` method. Each subcommand's argument structure
+trait with a `sort(…)` method. Each subcommand's argument structure
 (`QuickArgs`, `MergeArgs`) would then implement this `Sort` trait.3 This
 approach promotes a clean separation of concerns: `clap` handles the parsing of
 arguments unique to `quicksort` (e.g., pivot selection strategy) or `mergesort`
@@ -111,8 +111,7 @@ In CLIs with numerous subcommands or deeply nested subcommand trees,
 - **Promotion of a Common Interface Pattern:** The library encourages treating
   subcommands as distinct implementations of a shared conceptual action. This
   abstraction is powerful for managing complexity, as highlighted by its
-  utility when subcommands "do the same kind of action, just in a different
-  way".3
+  utility when subcommands "do the same kind of action, just differently".3
 - **Increased Testability:** The core logic of each subcommand, encapsulated
   within its implementation of the dispatch trait method, can be unit-tested
   more easily. For example, the `sort` method of `QuickArgs` can be called
