@@ -2,13 +2,13 @@
 
 #![allow(non_snake_case)]
 #![allow(deprecated)]
+mod util;
+
 use clap::Parser;
-use ortho_config::OrthoConfig;
-use ortho_config::load_subcommand_config;
-use ortho_config::load_subcommand_config_for;
-use ortho_config::subcommand::{CmdName, Prefix};
-use ortho_config::{load_and_merge_subcommand, load_and_merge_subcommand_for};
+use ortho_config::subcommand::Prefix;
+use ortho_config::{OrthoConfig, load_and_merge_subcommand, load_and_merge_subcommand_for};
 use serde::Deserialize;
+use util::{with_subcommand_config, with_typed_subcommand_config};
 
 #[derive(Debug, Deserialize, Default, PartialEq)]
 struct CmdCfg {
@@ -27,66 +27,16 @@ struct CmdCfg {
 /// # Examples
 ///
 /// ```
-/// let cfg = with_cfg(|jail| {
+/// let cfg = with_subcommand_config(|jail| {
 ///     jail.create_file(".app.toml", "[cmds.test]\nfoo = \"bar\"")?;
 ///     Ok(())
 /// });
 /// assert_eq!(cfg.foo, Some("bar".to_string()));
 /// ```
-fn with_cfg<F>(setup: F) -> CmdCfg
-where
-    F: FnOnce(&mut figment::Jail) -> figment::error::Result<()>,
-{
-    use std::cell::RefCell;
-
-    let result = RefCell::new(None);
-    figment::Jail::expect_with(|j| {
-        setup(j)?;
-        let cfg =
-            load_subcommand_config(&Prefix::new("APP_"), &CmdName::new("test")).expect("load");
-        result.replace(Some(cfg));
-        Ok(())
-    });
-    result.into_inner().unwrap()
-}
-
-/// Loads a subcommand configuration of type `T` for the "test" command after running a setup closure in a jailed environment.
-///
-/// The `setup` closure can modify the configuration environment (e.g., create files, set environment variables) before loading the config. The function panics if loading the configuration fails.
-///
-/// # Type Parameters
-///
-/// - `T`: The configuration type to load, which must implement `OrthoConfig` and `Default`.
-///
-/// # Examples
-///
-/// ```
-/// let cfg = with_cfg_wrapper::<_, MyConfig>(|jail| {
-///     // Setup config files or environment variables in the jail
-///     Ok(())
-/// });
-/// assert_eq!(cfg, MyConfig::default());
-/// ```
-fn with_cfg_wrapper<F, T>(setup: F) -> T
-where
-    F: FnOnce(&mut figment::Jail) -> figment::error::Result<()>,
-    T: OrthoConfig + Default,
-{
-    use std::cell::RefCell;
-
-    let result = RefCell::new(None);
-    figment::Jail::expect_with(|j| {
-        setup(j)?;
-        let cfg = load_subcommand_config_for::<T>(&CmdName::new("test")).expect("load");
-        result.replace(Some(cfg));
-        Ok(())
-    });
-    result.into_inner().unwrap()
-}
 
 #[test]
 fn file_and_env_loading() {
-    let cfg = with_cfg(|j| {
+    let cfg: CmdCfg = with_subcommand_config(|j| {
         j.create_file(".app.toml", "[cmds.test]\nfoo = \"file\"\nbar = true")?;
         j.set_env("APP_CMDS_TEST_FOO", "env");
         Ok(())
@@ -97,7 +47,7 @@ fn file_and_env_loading() {
 
 #[test]
 fn loads_from_home() {
-    let cfg = with_cfg(|j| {
+    let cfg: CmdCfg = with_subcommand_config(|j| {
         let home = j.create_dir("home")?;
         j.create_file(home.join(".app.toml"), "[cmds.test]\nfoo = \"home\"")?;
         j.set_env("HOME", home.to_str().unwrap());
@@ -110,7 +60,7 @@ fn loads_from_home() {
 
 #[test]
 fn local_overrides_home() {
-    let cfg = with_cfg(|j| {
+    let cfg: CmdCfg = with_subcommand_config(|j| {
         let home = j.create_dir("home")?;
         j.create_file(home.join(".app.toml"), "[cmds.test]\nfoo = \"home\"")?;
         j.set_env("HOME", home.to_str().unwrap());
@@ -126,7 +76,7 @@ fn local_overrides_home() {
 #[cfg(any(unix, target_os = "redox"))]
 #[test]
 fn loads_from_xdg_config() {
-    let cfg = with_cfg(|j| {
+    let cfg: CmdCfg = with_subcommand_config(|j| {
         let xdg = j.create_dir("xdg")?;
         let abs = std::fs::canonicalize(&xdg).unwrap();
         j.create_dir(abs.join("app"))?;
@@ -146,7 +96,7 @@ struct PrefixedCfg {
 
 #[test]
 fn wrapper_uses_struct_prefix() {
-    let cfg: PrefixedCfg = with_cfg_wrapper(|j| {
+    let cfg: PrefixedCfg = with_typed_subcommand_config(|j| {
         j.create_file(".app.toml", "[cmds.test]\nfoo = \"val\"")?;
         j.set_env("APP_CMDS_TEST_FOO", "env");
         Ok(())
@@ -157,7 +107,7 @@ fn wrapper_uses_struct_prefix() {
 #[cfg(feature = "yaml")]
 #[test]
 fn loads_yaml_file() {
-    let cfg = with_cfg(|j| {
+    let cfg: CmdCfg = with_subcommand_config(|j| {
         j.create_file(".app.yml", "cmds:\n  test:\n    foo: yaml")?;
         Ok(())
     });
