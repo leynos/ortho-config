@@ -5,14 +5,14 @@
 Command-Line Interface (CLI) applications are a cornerstone of software
 development and system administration. In the Rust ecosystem, the `clap` crate
 stands out as a powerful and widely adopted library for parsing command-line
-arguments, offering features like automatic help generation, subcommand support,
-and robust validation.1 As CLIs grow in complexity, particularly those with
-numerous subcommands that perform variations of a common task, managing the
-dispatch logic can become cumbersome.
+arguments, offering features like automatic help generation, subcommand
+support, and robust validation.1 As CLIs grow in complexity, particularly those
+with numerous subcommands that perform variations of a common task, managing
+the dispatch logic can become cumbersome.
 
 The `clap-dispatch` crate aims to alleviate this by providing an ergonomic
-mechanism for dispatching CLI subcommands.3 It leverages Rust's trait system and
-procedural macros to reduce boilerplate and improve code organization when
+mechanism for dispatching CLI subcommands.3 It leverages Rust's trait system
+and procedural macros to reduce boilerplate and improve code organization when
 subcommands represent different ways of performing a similar action.
 
 This report serves a dual purpose. Firstly, it provides comprehensive,
@@ -29,10 +29,10 @@ into this orthographic model, primarily through a dedicated "cmds" namespace.
 ## II. Understanding `clap-dispatch`
 
 `clap-dispatch` is a Rust crate designed to simplify the implementation of
-command-line interfaces where multiple subcommands essentially trigger different
-variations of the same underlying action or function.3 Its utility becomes
-particularly apparent in applications with a growing number of subcommands or
-nested subcommand structures.
+command-line interfaces where multiple subcommands essentially trigger
+different variations of the same underlying action or function.3 Its utility
+becomes particularly apparent in applications with a growing number of
+subcommands or nested subcommand structures.
 
 ### A. Purpose and Motivation
 
@@ -54,31 +54,31 @@ It allows developers to define a common interface (a Rust trait) that all
 related subcommands must implement. This interface typically consists of a
 single method representing the core action these subcommands perform.3
 
-For instance, if a CLI has subcommands for `quicksort` and `mergesort`, both are
-types of sorting operations. `clap-dispatch` enables defining a `Sort` trait
-with a `sort(...)` method. Each subcommand's argument structure (`QuickArgs`,
-`MergeArgs`) would then implement this `Sort` trait.3 This approach promotes a
-clean separation of concerns: `clap` handles the parsing of arguments unique to
-`quicksort` (e.g., pivot selection strategy) or `mergesort` (e.g., parallel
-execution flag), while the `Sort` trait ensures they both conform to a common
-execution pattern. The library then automates the process of calling the correct
-implementation based on the subcommand parsed by `clap`.
+For instance, if a CLI has subcommands for `quicksort` and `mergesort`, both
+are types of sorting operations. `clap-dispatch` enables defining a `Sort`
+trait with a `sort(…)` method. Each subcommand's argument structure
+(`QuickArgs`, `MergeArgs`) would then implement this `Sort` trait.3 This
+approach promotes a clean separation of concerns: `clap` handles the parsing of
+arguments unique to `quicksort` (e.g., pivot selection strategy) or `mergesort`
+(e.g., parallel execution flag), while the `Sort` trait ensures they both
+conform to a common execution pattern. The library then automates the process
+of calling the correct implementation based on the subcommand parsed by `clap`.
 
 ### C. The `#[clap_dispatch]` Macro and Generated Trait
 
 The central component of `clap-dispatch` is its procedural macro,
-`#[clap_dispatch(...)]`. This macro is applied to a Rust enum where each variant
-typically encapsulates an argument struct parsed by `clap::Parser` (representing
-a specific subcommand).3
+`#[clap_dispatch(…)]`. This macro is applied to a Rust enum where each variant
+typically encapsulates an argument struct parsed by `clap::Parser`
+(representing a specific subcommand).3
 
 When the macro is invoked, for example, as `#` on an enum `CliCommands`, it
 performs two key actions:
 
 1. **Trait Definition:** It automatically defines a new Rust trait. The name of
    this trait is derived from the function name provided in the macro attribute
-   (e.g., `execute` would lead to a trait named `Execute`). The signature of the
-   method(s) in this trait matches the function signature specified in the macro
-   attribute.
+   (e.g., `execute` would lead to a trait named `Execute`). The signature of
+   the method(s) in this trait matches the function signature specified in the
+   macro attribute.
 2. **Enum Implementation:** It automatically implements this newly defined trait
    for the enum itself (e.g., `impl Execute for CliCommands`). This
    implementation contains the `match` logic that dispatches the method call to
@@ -88,11 +88,11 @@ performs two key actions:
    variant's contained data.
 
 The developer's responsibility is then to implement this generated trait (e.g.,
-`Execute`) for each of the argument structs corresponding to the enum's variants
-(e.g., `impl Execute for QuickArgs`, `impl Execute for MergeArgs`).3 The
-dependencies `syn` and `quote`, listed for `clap-dispatch`, are standard tools
-for procedural macros, used to parse the Rust code (the function signature) and
-generate the new trait and implementation code, respectively.3
+`Execute`) for each of the argument structs corresponding to the enum's
+variants (e.g., `impl Execute for QuickArgs`, `impl Execute for MergeArgs`).3
+The dependencies `syn` and `quote`, listed for `clap-dispatch`, are standard
+tools for procedural macros, used to parse the Rust code (the function
+signature) and generate the new trait and implementation code, respectively.3
 
 ### D. Advantages in Complex CLI Scenarios
 
@@ -110,8 +110,9 @@ In CLIs with numerous subcommands or deeply nested subcommand trees,
   struct, adding a variant to the enum, and implementing the dispatch trait.
 - **Promotion of a Common Interface Pattern:** The library encourages treating
   subcommands as distinct implementations of a shared conceptual action. This
-  abstraction is powerful for managing complexity, as highlighted by its utility
-  when subcommands "do the same kind of action, just in a different way".3
+  abstraction is powerful for managing complexity, as highlighted by its
+  utility when subcommands "do the same kind of action, just in a different
+  way".3
 - **Increased Testability:** The core logic of each subcommand, encapsulated
   within its implementation of the dispatch trait method, can be unit-tested
   more easily. For example, the `sort` method of `QuickArgs` can be called
@@ -121,8 +122,8 @@ In CLIs with numerous subcommands or deeply nested subcommand trees,
 
 ## III. Practical Guide: Implementing Subcommands with `clap-dispatch`
 
-This section provides a step-by-step guide to using `clap-dispatch` for building
-CLIs with dispatchable subcommands.
+This section provides a step-by-step guide to using `clap-dispatch` for
+building CLIs with dispatchable subcommands.
 
 ### A. Project Setup and Dependencies
 
@@ -138,10 +139,10 @@ clap = { version = "4.5", features = ["derive"] } # Use a recent version of clap
 clap-dispatch = "0.1.1" # Or the latest version available on crates.io [3]
 ```
 
-The command `cargo add clap -F derive` can be used to add `clap` with the derive
-feature.5 `clap-dispatch` itself depends on crates like `syn`, `quote`, and
-`proc-macro2` for its procedural macro functionality, but these are transitive
-dependencies and do not need to be added explicitly by the end-user.3
+The command `cargo add clap -F derive` can be used to add `clap` with the
+derive feature.5 `clap-dispatch` itself depends on crates like `syn`, `quote`,
+and `proc-macro2` for its procedural macro functionality, but these are
+transitive dependencies and do not need to be added explicitly by the end-user.3
 
 ### B. Defining Argument Structs with `clap::Parser`
 
@@ -166,17 +167,17 @@ pub struct DecodeArgs {
 }
 ```
 
-These structs (`EncodeArgs`, `DecodeArgs`) will encapsulate the arguments unique
-to the `encode` and `decode` subcommands, respectively. This is a standard
-approach when using `clap`'s derive API.5
+These structs (`EncodeArgs`, `DecodeArgs`) will encapsulate the arguments
+unique to the `encode` and `decode` subcommands, respectively. This is a
+standard approach when using `clap`'s derive API.5
 
 ### C. Structuring CLI with an Enum for Subcommands
 
 Next, define a top-level enum where each variant corresponds to one of your
 subcommands. Each variant will hold an instance of the argument struct defined
 in the previous step. This enum will also derive `clap::Parser` (if it's the
-top-level CLI definition) or `clap::Subcommand` (if it's part of a larger `clap`
-structure).
+top-level CLI definition) or `clap::Subcommand` (if it's part of a larger
+`clap` structure).
 
 Example:
 
@@ -193,9 +194,9 @@ This `MyToolCli` enum is the structure upon which `clap-dispatch` will operate.3
 
 ### D. Applying `#[clap_dispatch]` to the Subcommand Enum
 
-Now, apply the `#[clap_dispatch(...)]` macro to the subcommand enum. In the
-macro attribute, specify the function signature that all dispatched subcommands
-must implement. This signature defines the common "action" interface.
+Now, apply the `#[clap_dispatch(…)]` macro to the subcommand enum. In the macro
+attribute, specify the function signature that all dispatched subcommands must
+implement. This signature defines the common "action" interface.
 
 Example:
 
@@ -220,14 +221,14 @@ implement `Process` for `MyToolCli` to handle the dispatch.
 ### E. Implementing the `Dispatch` Trait for Each Subcommand's Logic
 
 With the trait generated by `clap-dispatch`, you must now implement this trait
-for each of your subcommand argument structs (e.g., `EncodeArgs`, `DecodeArgs`).
-This is where the specific logic for each subcommand resides.
+for each of your subcommand argument structs (e.g., `EncodeArgs`,
+`DecodeArgs`). This is where the specific logic for each subcommand resides.
 
 Example:
 
 ```rust
 // Continuing from the previous example
-// The #[clap_dispatch(...)] macro implicitly defines a trait, let's call it `Process`
+// The #[clap_dispatch(…)] macro implicitly defines a trait, let's call it `Process`
 // for this example, though the actual name is `Process` due to `fn process`.
 
 impl Process for EncodeArgs {
@@ -363,10 +364,10 @@ This example clearly demonstrates the reduction in boilerplate. Without
 `clap-dispatch`, the `main` function would require a long `match` expression:
 
 ```rust
-`match cli_instance {
+match cli_instance {
     MyToolCli::Encode(args) => args.process_encoding_logic(prefix_for_output),
     MyToolCli::Decode(args) => args.process_decoding_logic(prefix_for_output)
-}`.
+}
 ```
 
 `clap-dispatch` abstracts this matching away into the `cli_instance.process(...)`
@@ -388,6 +389,7 @@ String>`.
 **Full** `src/main.rs`**:**
 
 ```rust
+
 use clap::Parser;
 use clap_dispatch::clap_dispatch;
 
@@ -404,13 +406,11 @@ impl DbPool {
     }
     fn list_items(&self, category: Option<&String>, list_all: bool) {
         match category {
-            Some(cat) => println!("Listing items in category '{}', All: {}", cat,
-list_all),
+            Some(cat) => println!("Listing items in category '{}', All: {}", cat, list_all),
             None => println!("Listing items (no category specified), All: {}", list_all),
-}
+        }
     }
 }
-
 
 // 1. Define Argument Structs
 pub struct AddUserArgs {
@@ -459,7 +459,9 @@ fn main() -> Result<(), String> {
 }
 ```
 
-**Command-line invocation and expected output:**
+fn main() -> Result<(), String> { let cli_instance = RegistryCommands::parse();
+let db_url = "postgres://user:pass@localhost/registry";
+cli_instance.execute(db_url) } **Command-line invocation and expected output:**
 
 - `cargo run -- add-user --username alice --admin`
   - Output:
@@ -468,12 +470,14 @@ fn main() -> Result<(), String> {
     Connecting to database at: postgres://user:pass@localhost/registry
     Adding user: alice, Admin: true
     ```
+
 - `cargo run -- list-items --category electronics`
   - Output:
 
     ```text
     Connecting to database at: postgres://user:pass@localhost/registry
     Listing items in category 'electronics', All: false
+    
     ```
 - `cargo run -- list-items --all`
   - Output:
@@ -483,47 +487,50 @@ fn main() -> Result<(), String> {
     Listing items (no category specified), All: true
     ```
 
-This example highlights a key aspect: while the *dispatched function signature* (`fn
-execute(&self, db_connection_url: &str)`) is common, the `self` parameter (which
-resolves to either `AddUserArgs` or `ListItemsArgs`) contains all the unique arguments
-parsed by `clap` for that specific subcommand. `clap-dispatch` does not impose restrictions
-on the subcommand's own arguments; it standardizes the call signature *after* `clap`
-has parsed those unique arguments into their respective structs. The `clap-dispatch`
-documentation notes that "The `self` is there so that they can make use of the special
-arguments passed for the respective algorithm" 3, underscoring that the unique, subcommand-specific
+This example highlights a key aspect: while the *dispatched function signature*
+(`fn execute(&self, db_connection_url: &str)`) is common, the `self` parameter
+(which resolves to either `AddUserArgs` or `ListItemsArgs`) contains all the
+unique arguments parsed by `clap` for that specific subcommand. `clap-dispatch`
+does not impose restrictions on the subcommand's own arguments; it standardizes
+the call signature *after* `clap` has parsed those unique arguments into their
+respective structs. The `clap-dispatch` documentation notes that "The `self` is
+there so that they can make use of the special arguments passed for the
+respective algorithm" 3, underscoring that the unique, subcommand-specific
 parsed data is available within the trait implementation.
 
 ## IV. Design Proposal: Integrating `clap-dispatch` into `ortho-config`
 
-The `ortho-config` library aims to provide an "orthographic" configuration system,
-where configuration values maintain a consistent identity and can be sourced from
-command-line arguments, environment variables, or configuration files. This section
-proposes a design for extending this orthographic principle to subcommand configurations,
-leveraging `clap-dispatch` for subcommand execution.
+The `ortho-config` library aims to provide an "orthographic" configuration
+system, where configuration values maintain a consistent identity and can be
+sourced from command-line arguments, environment variables, or configuration
+files. This section proposes a design for extending this orthographic principle
+to subcommand configurations, leveraging `clap-dispatch` for subcommand
+execution.
 
 ### A. Understanding `ortho-config`'s Orthographic Configuration
 
-`ortho-config`'s core tenet is layered configuration with consistent naming across
-sources. This is conceptually similar to libraries like `config-rs`, which support
-merging configurations from various file formats (TOML, YAML, JSON) and environment
-variables, allowing access to nested fields via a path-like string.6 The "orthographic"
-aspect implies that a configuration parameter, say `feature_x.enabled`, would have
-a predictable representation whether specified as a CLI flag (`--feature-x-enabled`),
-an environment variable (`APP_FEATURE_X_ENABLED`), or an entry in a config file (`[feature_x]
-enabled = true`). This consistency suggests that `ortho-config` likely employs a
-hierarchical data structure internally (e.g., a map or a `serde_json::Value`-like
-structure) to store the merged configuration, enabling this path-based access and
-consistent interpretation. The goal is to extend this existing paradigm to subcommand-specific
-configurations.
+`ortho-config`'s core tenet is layered configuration with consistent naming
+across sources. This is conceptually similar to libraries like `config-rs`,
+which support merging configurations from various file formats (TOML, YAML,
+JSON) and environment variables, allowing access to nested fields via a
+path-like string.6 The "orthographic" aspect implies that a configuration
+parameter, say `feature_x.enabled`, would have a predictable representation
+whether specified as a CLI flag (`--feature-x-enabled`), an environment
+variable (`APP_FEATURE_X_ENABLED`), or an entry in a config file
+(`[feature_x] enabled = true`). This consistency suggests that `ortho-config`
+likely employs a hierarchical data structure internally (e.g., a map or a
+`serde_json::Value`-like structure) to store the merged configuration, enabling
+this path-based access and consistent interpretation. The goal is to extend
+this existing paradigm to subcommand-specific configurations.
 
 ### B. Proposed "cmds" Namespace for Subcommand Configuration
 
-To integrate subcommand configuration orthographically, a dedicated namespace within
-the configuration structure is proposed: `cmds`. This namespace will reside at the
-root level of the `ortho-config` hierarchy. Each key directly under `cmds` will correspond
-to a subcommand's name (e.g., `list`, `add`). The value associated with each such
-key will be a table or map containing the specific configuration options for that
-subcommand.
+To integrate subcommand configuration orthographically, a dedicated namespace
+within the configuration structure is proposed: `cmds`. This namespace will
+reside at the root level of the `ortho-config` hierarchy. Each key directly
+under `cmds` will correspond to a subcommand's name (e.g., `list`, `add`). The
+value associated with each such key will be a table or map containing the
+specific configuration options for that subcommand.
 
 1\. Configuration File Structure (TOML Example)
 
@@ -534,19 +541,14 @@ Following the user's request, a TOML configuration file might look like this:
 # main_option = "global_value"
 # log_level = "info"
 
-[cmds.list]
-hide_foo = true
-default_format = "json"
-page_size = 20
+[cmds.list] hide_foo = true default_format = "json" page_size = 20
 
-[cmds.add]
-default_priority = 10
-enable_confirmation = false
+[cmds.add] default_priority = 10 enable_confirmation = false
 # api_key = "from_file_for_add_cmd"
 ```
 
-Here, `[cmds.list]` and `[cmds.add]` define configuration blocks specific to the
-`list` and `add` subcommands, respectively.
+Here, `[cmds.list]` and `[cmds.add]` define configuration blocks specific to
+the `list` and `add` subcommands, respectively.
 
 2\. Environment Variable Naming Convention
 
@@ -565,24 +567,24 @@ to the nested structure defined in the configuration files.
 
 3\. Illustrative Mapping (CLI -> Config -> Env)
 
-The following table demonstrates how a single conceptual option for a subcommand
-is represented across different configuration layers and how it would map to a
-field in a Rust struct used by clap.
+The following table demonstrates how a single conceptual option for a
+subcommand is represented across different configuration layers and how it
+would map to a field in a Rust struct used by clap.
 
-| Feature               | CLI Example                              | Config File (TOML)                       | Environment Variable                     | clap Struct Field (Conceptual) |
-| --------------------- | ---------------------------------------- | ---------------------------------------- | ---------------------------------------- | ------------------------------ |
-| List: Hide Foo        | mycli list --hide-foo                    | [cmds.list] hide_foo = true              | MYCLI_CMDS_LIST_HIDE_FOO=true            | hide_foo: bool                 |
-| List: Show Bar        | mycli list --show-bar                    | [cmds.list] show_bar = true              | MYCLI_CMDS_LIST_SHOW_BAR=true            | show_bar: bool                 |
-| List: Page Size       | mycli list --page-size 30                | [cmds.list] page_size = 20               | MYCLI_CMDS_LIST_PAGE_SIZE=20             | page_size: u32                 |
-| Add: Priority         | mycli add item --priority 5              | [cmds.add] priority = 10                 | MYCLI_CMDS_ADD_PRIORITY=10               | priority: u32                  |
-| Add: Confirm (no CLI) | mycli add item (uses config)             | [cmds.add] enable_confirmation = false   | MYCLI_CMDS_ADD_ENABLE_CONFIRMATION=false | enable_confirmation: bool      |
+| Feature               | CLI Example                  | Config File (TOML)                     | Environment Variable                     | clap Struct Field (Conceptual) |
+| --------------------- | ---------------------------- | -------------------------------------- | ---------------------------------------- | ------------------------------ |
+| List: Hide Foo        | mycli list --hide-foo        | [cmds.list] hide_foo = true            | MYCLI_CMDS_LIST_HIDE_FOO=true            | hide_foo: bool                 |
+| List: Show Bar        | mycli list --show-bar        | [cmds.list] show_bar = true            | MYCLI_CMDS_LIST_SHOW_BAR=true            | show_bar: bool                 |
+| List: Page Size       | mycli list --page-size 30    | [cmds.list] page_size = 20             | MYCLI_CMDS_LIST_PAGE_SIZE=20             | page_size: u32                 |
+| Add: Priority         | mycli add item --priority 5  | [cmds.add] priority = 10               | MYCLI_CMDS_ADD_PRIORITY=10               | priority: u32                  |
+| Add: Confirm (no CLI) | mycli add item (uses config) | [cmds.add] enable_confirmation = false | MYCLI_CMDS_ADD_ENABLE_CONFIRMATION=false | enable_confirmation: bool      |
 
 This table is instrumental in visualizing the orthographic principle applied to
 subcommands. It clarifies how an option like `hide_foo` for the `list`
 subcommand maintains its semantic identity across the CLI, environment
 variables, and configuration files, ultimately mapping to a field within a Rust
-data structure. This systematic approach is key to the proposed design's clarity
-and predictability.
+data structure. This systematic approach is key to the proposed design's
+clarity and predictability.
 
 ### C. Bridging `clap-dispatch` Arguments with `ortho-config`
 
@@ -591,9 +593,9 @@ inform the argument structs that `clap` parses and `clap-dispatch` uses.
 
 1\. Populating clap-parsed structs from ortho-config sources.
 
-The argument structs used by clap (e.g., ListArgs, AddArgs from the table above)
-must derive serde::Deserialize in addition to clap::Parser. The workflow would
-be:
+The argument structs used by clap (e.g., ListArgs, AddArgs from the table
+above) must derive serde::Deserialize in addition to clap::Parser. The workflow
+would be:
 
 a. ortho-config loads all configurations from files and environment variables
 into its internal, hierarchical representation.
@@ -627,13 +629,13 @@ The order of precedence for configuration values must be clearly defined:
    `[arg(default_value = "...")]` or `default_value_t` in the clap argument
    struct have the lowest precedence.
 
-This layering implies a careful interaction between clap's defaulting mechanisms
-and ortho-config. For ortho-config defaults to correctly slot in between CLI
-arguments and clap's hardcoded defaults, fields in the clap argument structs
-that can be configured by ortho-config should ideally be Option\<T>. This allows
-distinguishing between a value not being set, being set to a specific value by
-clap's parser (either from CLI or a clap default), or needing a default from
-ortho-config.
+This layering implies a careful interaction between clap's defaulting
+mechanisms and ortho-config. For ortho-config defaults to correctly slot in
+between CLI arguments and clap's hardcoded defaults, fields in the clap
+argument structs that can be configured by ortho-config should ideally be
+Option\<T>. This allows distinguishing between a value not being set, being set
+to a specific value by clap's parser (either from CLI or a clap default), or
+needing a default from ortho-config.
 
 The process would be:
 
@@ -658,8 +660,7 @@ The argument structs (e.g., ListArgs, AddArgs) must derive both # (for
 ortho-config) and #[derive(clap::Parser)] (for clap).
 
 ```rust
-use clap::Parser;
-use serde::Deserialize;
+use clap::Parser; use serde::Deserialize;
 
 # // Default for initial ortho-config load
 #[serde(default)] // Important for serde to use Default::default() for missing fields
@@ -671,18 +672,17 @@ pub struct ListArgs {
    pub default_format: Option<String>,
 
    #[arg(long)]
-   pub page_size: Option<u32>,
-   //... other args
-}
+   pub page_size: Option<u32>, //... other args }
 ```
 
 Fields in these structs should correspond to the keys used in the TOML/JSON
-configuration and the suffixes of environment variables. `serde` attributes like
-`#[serde(default)]` (to use `Default::default()` for missing fields during
-deserialization from config files/env vars) or `#[serde(rename = "other-name")]`
-can be used to map Rust field names to different configuration key names if
-necessary. The `Default` trait is also useful for creating an initial "empty" or
-"base default" instance before layering configurations.
+configuration and the suffixes of environment variables. `serde` attributes
+like `#[serde(default)]` (to use `Default::default()` for missing fields during
+deserialization from config files/env vars) or
+`#[serde(rename = "other-name")]` can be used to map Rust field names to
+different configuration key names if necessary. The `Default` trait is also
+useful for creating an initial "empty" or "base default" instance before
+layering configurations.
 
 ### D. Conceptual Code Snippets for Integration Logic
 
@@ -692,126 +692,88 @@ representation; actual implementation would involve more robust error handling
 and generic type management.
 
 ```rust
-use clap::Parser;
-use serde::Deserialize;
-use clap_dispatch::clap_dispatch;
-use std::collections::HashMap; // For ortho-config's internal representation
+use clap::Parser; use serde::Deserialize; use clap_dispatch::clap_dispatch; use
+std::collections::HashMap; // For ortho-config's internal representation
 
-// --- Mocked ortho-config components ---
-// Represents the loaded configuration from files/env
-struct OrthoConfigStore {
-    global_config: HashMap<String, serde_json::Value>,
-    subcommand_configs: HashMap<String, HashMap<String, serde_json::Value>>,
-}
+// --- Mocked ortho-config components --- // Represents the loaded
+configuration from files/env struct OrthoConfigStore { global_config:
+HashMap<String, serde_json::Value>, subcommand_configs: HashMap<String,
+HashMap<String, serde_json::Value>>, }
 
-impl OrthoConfigStore {
-    fn load(app_name: &str) -> Result<Self, String> {
-        // In a real scenario, this loads from files and environment variables.
-        // Populates global_config and subcommand_configs (e.g., from [cmds.*] sections)
-println!("OrthoConfigStore: Loading for app '{}'", app_name);
-        // Example:
-        // let list_conf_json = serde_json::json!({ "hide_foo": true, "default_format":
-"env_json" });
-        // let mut list_cmd_conf = HashMap::new();
-        // if let serde_json::Value::Object(map) = list_conf_json {
-        //     for (k, v) in map {
-        //         list_cmd_conf.insert(k, v);
-        //     }
-        // }
-        // let mut sub_configs = HashMap::new();
-        // sub_configs.insert("list".to_string(), list_cmd_conf);
+impl OrthoConfigStore { fn load(app_name: &str) -> Result<Self, String> { // In
+a real scenario, this loads from files and environment variables. // Populates
+global_config and subcommand_configs (e.g., from [cmds.*] sections)
+println!("OrthoConfigStore: Loading for app '{}'", app_name); // Example: //
+let list_conf_json = serde_json::json!({ "hide_foo": true, "default_format":
+"env_json" }); // let mut list_cmd_conf = HashMap::new(); // if let
+serde_json::Value::Object(map) = list_conf_json { //     for (k, v) in map {
+//         list_cmd_conf.insert(k, v); //     } // } // let mut sub_configs =
+HashMap::new(); // sub_configs.insert("list".to_string(), list_cmd_conf);
 
-        Ok(Self {
-            global_config: HashMap::new(), // Populate with global settings
-            subcommand_configs: HashMap::new(), // Populate with subcommand settings
-from [cmds.*]
-        })
-    }
+        Ok(Self { global_config: HashMap::new(), // Populate with global
+        settings subcommand_configs: HashMap::new(), // Populate with
+        subcommand settings from [cmds.*] }) }
 
-    fn get_subcommand_config_struct<T: for<'de> Deserialize<'de> + Default>(&self,
-cmd_name: &str) -> T {
-        self.subcommand_configs.get(cmd_name)
-           .and_then(|config_map| {
-                // Convert HashMap<String, serde_json::Value> to a single serde_json::Value::Object
-let json_object = serde_json::Value::Object(config_map.clone().into_iter().collect());
-serde_json::from_value(json_object).ok()
-            })
-           .unwrap_or_default()
-    }
-}
+    fn get_subcommand_config_struct<T: for<'de> Deserialize<'de> +
+    Default>(&self, cmd_name: &str) -> T {
+    self.subcommand_configs.get(cmd_name) .and_then(|config_map| { // Convert
+    HashMap<String, serde_json::Value> to a single serde_json::Value::Object
+    let json_object =
+    serde_json::Value::Object(config_map.clone().into_iter().collect());
+    serde_json::from_value(json_object).ok() }) .unwrap_or_default() } }
 
-// --- Application Structs ---
-struct Cli {
+// --- Application Structs --- struct Cli {
     #[command(subcommand)]
-    command: Commands,
-    // Global CLI args could be flattened here
-    // #[clap(flatten)]
-    // global_opts: GlobalOpts,
-}
+    command: Commands, // Global CLI args could be flattened here //
+    #[clap(flatten)] // global_opts: GlobalOpts, }
 
 # // Clone for merging example
-enum Commands {
-    List(ListArgs),
-    // Add(AddArgs), // AddArgs would be defined similarly to ListArgs
-}
+enum Commands { List(ListArgs), // Add(AddArgs), // AddArgs would be defined
+similarly to ListArgs }
 
 #[serde(default)]
 pub struct ListArgs {
    #[arg(long)]
    hide_foo: Option<bool>,
    #[arg(long)]
-   default_format: Option<String>,
-}
-// Implement the dispatch trait for ListArgs
-impl Run for ListArgs {
-    fn run(&self, _global_conf_val: &serde_json::Value) -> Result<(), String> {
-        println!("Running List command:");
-        println!("  Hide Foo: {:?}", self.hide_foo.unwrap_or(false)); // Example
-of final resolution
-        println!("  Default Format: {:?}", self.default_format.as_deref().unwrap_or("text"));
-Ok(())
-    }
-}
+   default_format: Option<String>, } // Implement the dispatch trait for
+   ListArgs impl Run for ListArgs { fn run(&self, _global_conf_val:
+   &serde_json::Value) -> Result<(), String> { println!("Running List
+   command:"); println!("  Hide Foo: {:?}", self.hide_foo.unwrap_or(false)); //
+   Example of final resolution println!("  Default Format: {:?}",
+   self.default_format.as_deref().unwrap_or("text")); Ok(()) } }
 
-// --- Merging Logic ---
-use ortho_config::load_and_merge_subcommand_for;
+// --- Merging Logic --- use ortho_config::load_and_merge_subcommand_for;
 
 
-fn main() -> Result<(), String> {
-    // 1. Initialize ortho-config (load files, env vars)
-    let ortho_config_store = OrthoConfigStore::load("mycli")?;
+fn main() -> Result<(), String> { // 1. Initialize ortho-config (load files,
+env vars) let ortho_config_store = OrthoConfigStore::load("mycli")?;
 
-    // 2. Parse CLI arguments using clap
-    let cli_args = Cli::parse();
+    // 2. Parse CLI arguments using clap let cli_args = Cli::parse();
 
-    // 3. Determine subcommand and merge configurations
-    let final_command = match cli_args.command {
-        Commands::List(clap_parsed_list_args) => {
-            // 4. Merge CLI values over ortho-config defaults for the subcommand
-let final_list_args = load_and_merge_subcommand_for::<ListArgs>(&clap_parsed_list_args)?;
-Commands::List(final_list_args)
-        }
-        // Commands::Add(clap_parsed_add_args) => { /* similar logic for Add command
-*/ }
-    };
+    // 3. Determine subcommand and merge configurations let final_command =
+    match cli_args.command { Commands::List(clap_parsed_list_args) => { // 4.
+    Merge CLI values over ortho-config defaults for the subcommand let
+    final_list_args =
+    load_and_merge_subcommand_for::<ListArgs>(&clap_parsed_list_args)?;
+    Commands::List(final_list_args) } // Commands::Add(clap_parsed_add_args) =>
+    { /* similar logic for Add command */ } };
 
-    // 6. Dispatch using clap-dispatch
-    //    Pass any global configuration loaded by ortho-config if needed by the run
-methods.
-    let dummy_global_conf = serde_json::Value::Null; // Placeholder
+    // 6. Dispatch using clap-dispatch //    Pass any global configuration
+    loaded by ortho-config if needed by the run methods. let dummy_global_conf
+    = serde_json::Value::Null; // Placeholder
     final_command.run(&dummy_global_conf)?;
 
-    Ok(())
-}
+    Ok(()) }
 ```
 
 This conceptual code illustrates the key stages: loading `ortho-config`
 defaults, parsing CLI arguments with `clap`, merging these layers with defined
 precedence, and finally dispatching the command using the method provided by
 `clap-dispatch`. The critical merging step now uses
-`load_and_merge_subcommand_for`, which loads the subcommand defaults and applies
-any CLI overrides. A more generic merging strategy might involve reflection or a
-trait implemented by all argument structs.
+`load_and_merge_subcommand_for`, which loads the subcommand defaults and
+applies any CLI overrides. A more generic merging strategy might involve
+reflection or a trait implemented by all argument structs.
 
 ### E. Benefits and Rationale for the Proposed Design
 
@@ -827,8 +789,8 @@ This design offers several advantages:
 - **Clarity:** The `cmds` namespace offers a clear and intuitive structure for
   subcommand configurations within files and environment variables.
 - **Maintainability:** Decouples argument parsing (`clap`), configuration
-  management (`ortho-config`), and actual command logic (trait implementations),
-  leading to more modular and maintainable code.
+  management (`ortho-config`), and actual command logic (trait
+  implementations), leading to more modular and maintainable code.
 
 ### F. Considerations and Potential Implementation Challenges
 
@@ -862,27 +824,27 @@ Several aspects require careful consideration during implementation:
 ## V. Conclusion
 
 `clap-dispatch` offers a compelling solution for Rust developers seeking to
-create more ergonomic and maintainable CLIs with multiple subcommands that share
-a common action pattern. By leveraging trait-based dispatch and procedural
-macros, it significantly reduces boilerplate and promotes cleaner code
-architecture.3 The practical examples provided illustrate its ease of use and
-effectiveness in structuring subcommand logic.
+create more ergonomic and maintainable CLIs with multiple subcommands that
+share a common action pattern. By leveraging trait-based dispatch and
+procedural macros, it significantly reduces boilerplate and promotes cleaner
+code architecture.3 The practical examples provided illustrate its ease of use
+and effectiveness in structuring subcommand logic.
 
 The proposed integration of `clap-dispatch` with `ortho-config` via a "cmds"
 namespace aims to extend `ortho-config`'s powerful orthographic configuration
-capabilities to subcommands. This design promises enhanced consistency, allowing
-users to configure subcommand behavior through CLI arguments, environment
-variables, or configuration files in a predictable manner. The layering of these
-configuration sources, with clear precedence rules, ensures flexibility while
-maintaining control.
+capabilities to subcommands. This design promises enhanced consistency,
+allowing users to configure subcommand behavior through CLI arguments,
+environment variables, or configuration files in a predictable manner. The
+layering of these configuration sources, with clear precedence rules, ensures
+flexibility while maintaining control.
 
 While the implementation, particularly the merging logic between `clap`-parsed
 arguments and `ortho-config` defaults, presents challenges, the benefits in
 terms of developer ergonomics, user flexibility, and overall application
 maintainability are substantial. By adopting such a structured approach,
-`ortho-config` can evolve into an even more comprehensive framework for building
-sophisticated and highly configurable command-line applications in Rust. The
-path forward involves careful implementation of the merging strategy and robust
-error handling to realize the full potential of this integrated system,
-ultimately leading to a CLI framework that is both powerful for the end-user and
-a pleasure for the developer to work with.
+`ortho-config` can evolve into an even more comprehensive framework for
+building sophisticated and highly configurable command-line applications in
+Rust. The path forward involves careful implementation of the merging strategy
+and robust error handling to realize the full potential of this integrated
+system, ultimately leading to a CLI framework that is both powerful for the
+end-user and a pleasure for the developer to work with.
