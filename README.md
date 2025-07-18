@@ -38,61 +38,60 @@ manual aliasing.
 
 1. **Add `OrthoConfig` to `Cargo.toml`:**
 
-   ```toml [dependencies] ortho_config = "0.3.0" # Replace with the latest
-   version serde = { version = "1.0", features = ["derive"] } ```
+    ```toml [dependencies] ortho_config = "0.3.0" # Replace with the latest
+    version serde = { version = "1.0", features = ["derive"] } ```
 
 2. **Define the configuration struct:**
 
-   ```rust use ortho_config::{OrthoConfig, OrthoError}; use
-   serde::{Deserialize, Serialize};
+    ```rust use ortho_config::{OrthoConfig, OrthoError}; use
+    serde::{Deserialize, Serialize};
 
-   #[derive(Debug, Clone, Deserialize, Serialize, OrthoConfig)]
-   #[ortho_config(prefix = "DB")] // Nested prefix: e.g., APP_DB_URL
-   struct DatabaseConfig { // Automatically maps to: //   CLI: --database-url
-   <value> //   Env: APP_DB_URL=<value> //   File: [database] url = <value>
-   url: String,
+    #[derive(Debug, Clone, Deserialize, Serialize, OrthoConfig)]
+    #[ortho_config(prefix = "DB")] // Nested prefix: e.g., APP_DB_URL
+    struct DatabaseConfig { // Automatically maps to: //   CLI: --database-url
+    <value> //   Env: APP_DB_URL=<value> //   File: [database] url = <value>
+    url: String,
 
-    #[ortho_config(default = 5)]
-    pool_size: Option<u32>, // Optional value, defaults to `Some(5)` }
+        #[ortho_config(default = 5)]
+        pool_size: Option<u32>, // Optional value defaults to `Some(5)` }
 
-   impl std::str::FromStr for DatabaseConfig { type Err = String;
+    impl std::str::FromStr for DatabaseConfig { type Err = String;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> { let mut parts =
-    s.splitn(2, ','); let url = parts .next() .ok_or_else(|| "missing
-    url".to_string())? .to_string(); let pool_size = parts.next().and_then(|p|
-    p.parse::<u32>().ok()); Ok(DatabaseConfig { url, pool_size }) } }
+        fn from_str(s: &str) -> Result<Self, Self::Err> { let mut parts =
+        s.splitn(2, ','); let url = parts .next() .ok_or_else(|| "missing
+        url".to_string())? .to_string(); let pool_size =
+        parts.next().and_then(|p| p.parse::<u32>().ok()); Ok(DatabaseConfig {
+        url, pool_size }) } }
 
-   #[derive(Debug, Deserialize, Serialize, OrthoConfig)]
-   #[ortho_config(prefix = "APP")] // Prefix for environment variables (e.g., APP_LOG_LEVEL)
-   struct AppConfig { log_level: String,
+    #[derive(Debug, Deserialize, Serialize, OrthoConfig)]
+    #[ortho_config(prefix = "APP")] // Prefix for environment variables (e.g., APP_LOG_LEVEL)
+    struct AppConfig { log_level: String,
 
-    // Automatically maps to: //   CLI: --port <value> //   Env:
-    APP_PORT=<value> //   File: port = <value>
-    #[ortho_config(default = 8080)]
-    port: u16,
+        // Automatically maps to: //   CLI: --port <value> //   Env:
+        APP_PORT=<value> //   File: port = <value>
+        #[ortho_config(default = 8080)]
+        port: u16,
 
-    #[ortho_config(merge_strategy = "append")] // Default for Vec<T> is append
-    features: Vec<String>,
+        #[ortho_config(merge_strategy = "append")] // Default for Vec<T> is append
+        features: Vec<String>,
 
-    // Nested configuration database: DatabaseConfig,
+        // Nested configuration database: DatabaseConfig,
 
-    #[ortho_config(cli_short = 'v')] // Enable a short flag: -v
-    verbose: bool, // Defaults to false if not specified }
+        #[ortho_config(cli_short = 'v')] // Enable a short flag: -v
+        verbose: bool, // Defaults to false if not specified }
 
-   fn main() -> Result<(), OrthoError> { let config = AppConfig::load()?; //
-   Load configuration
+    fn main() -> Result<(), OrthoError> { let config = AppConfig::load()?; //
+    Load configuration
 
-    println!("Loaded configuration: {:#?}", config);
+        println!("Loaded configuration: {:#?}", config);
 
-    if config.verbose { println!("Verbose mode enabled!"); } println!("Log
-    level: {}", config.log_level); println!("Listening on port: {}",
-    config.port); println!("Enabled features: {:?}", config.features);
-    println!("Database URL: {}", config.database.url); println!("Database pool
-    size: {:?}", config.database.pool_size);
+        if config.verbose { println!("Verbose mode enabled!"); } println!("Log
+        level: {}", config.log_level); println!("Listening on port: {}",
+        config.port); println!("Enabled features: {:?}", config.features);
+        println!("Database URL: {}", config.database.url); println!("Database
+        pool size: {:?}", config.database.pool_size);
 
-    Ok(())
-
-   } ```
+        Ok(()) } ```
 
 3. **Run the application:**
 
@@ -104,14 +103,15 @@ manual aliasing.
      `APP_DB_URL="postgres://localhost/mydb"`
      `APP_FEATURES="env_feat1,env_feat2" cargo run`
    - With a `.app.toml` file (assuming `#[ortho_config(prefix = "APP_")]`;
-     adjust for the prefix):
+     adjust
+     for the prefix):
 
-   ```toml
-   # .app.toml
-   log_level = "file_level" port = 5000 features = ["file_feat_a",
-   "file_feat_b"]
+    ```toml
+    # .app.toml
+    log_level = "file_level" port = 5000 features = ["file_feat_a",
+    "file_feat_b"]
 
-   [database] url = "mysql://localhost/prod_db" pool_size = 10 ```
+    [database] url = "mysql://localhost/prod_db" pool_size = 10 ```
 
 ## Configuration Sources and Precedence
 
@@ -142,8 +142,8 @@ TOML parsing is enabled by default. Enable the `json5` and `yaml` features to
 support additional formats:
 
 ```toml
-[dependencies]
-ortho_config = { version = "0.3.0", features = ["json5", "yaml"] }
+[dependencies] ortho_config = { version = "0.3.0", features = ["json5", "yaml"]
+}
 ```
 
 The file loader selects the parser based on the extension (`.toml`, `.json`,
@@ -170,7 +170,7 @@ configurable via:
 - TOML file: `max_connections = <value>`
 - JSON5 file: `max_connections` or `maxConnections` (configurable)
 
-These mappings can be customised using `#[ortho_config(...)]` attributes.
+These mappings can be customized using `#[ortho_config(...)]` attributes.
 
 ## Field Attributes `#[ortho_config(...)]`
 
@@ -201,9 +201,8 @@ struct's `prefix()` function (which defaults to an empty string) and merges
 them underneath the CLI arguments.
 
 ```rust
-use clap::Parser;
-use serde::Deserialize;
-use ortho_config::{load_and_merge_subcommand_for, OrthoConfig};
+use clap::Parser; use serde::Deserialize; use
+ortho_config::{load_and_merge_subcommand_for, OrthoConfig};
 
 #[derive(Parser, Deserialize, Default, Debug, OrthoConfig)]
 #[ortho_config(prefix = "APP_")]
@@ -211,34 +210,29 @@ pub struct AddUserArgs {
     #[arg(long)]
     username: Option<String>,
     #[arg(long)]
-    admin: Option<bool>,
-}
+    admin: Option<bool>, }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let cli = AddUserArgs::parse();
+fn main() -> Result<(), Box<dyn std::error::Error>> { let cli =
+AddUserArgs::parse();
 
-    // Reads `[cmds.add-user]` sections and `APP_CMDS_ADD_USER_*` variables then merges with CLI
-    let args = load_and_merge_subcommand_for::<AddUserArgs>(&cli)?;
+    // Reads `[cmds.add-user]` sections and `APP_CMDS_ADD_USER_*` variables
+    then merges with CLI let args =
+    load_and_merge_subcommand_for::<AddUserArgs>(&cli)?;
 
-    println!("Final args: {args:?}");
-    Ok(())
-}
+    println!("Final args: {args:?}"); Ok(()) }
 ```
 
 Configuration file example:
 
 ```toml
-[cmds.add-user]
-username = "file_user"
-admin = true
+[cmds.add-user] username = "file_user" admin = true
 ```
 
 Environment variables override file values using the pattern
 `<PREFIX>CMDS_<SUBCOMMAND>_`:
 
 ```bash
-APP_CMDS_ADD_USER_USERNAME=env_user
-APP_CMDS_ADD_USER_ADMIN=false
+APP_CMDS_ADD_USER_USERNAME=env_user APP_CMDS_ADD_USER_ADMIN=false
 ```
 
 ### Dispatching Subcommands
@@ -247,50 +241,37 @@ Subcommands can be executed with defaults applied using
 [`clap-dispatch`](https://docs.rs/clap-dispatch):
 
 ```rust
-use clap::Parser;
-use clap_dispatch::clap_dispatch;
-use serde::Deserialize;
-use ortho_config::load_and_merge_subcommand_for;
+use clap::Parser; use clap_dispatch::clap_dispatch; use serde::Deserialize; use
+ortho_config::load_and_merge_subcommand_for;
 
 #[derive(Parser, Deserialize, Default, Debug)]
 pub struct ListItemsArgs {
     #[arg(long)]
     category: Option<String>,
     #[arg(long)]
-    all: Option<bool>,
-}
+    all: Option<bool>, }
 
-trait Run {
-    fn run(&self, db_url: &str) -> Result<(), String>;
-}
+trait Run { fn run(&self, db_url: &str) -> Result<(), String>; }
 
-impl Run for AddUserArgs { /* logic here */ }
-impl Run for ListItemsArgs { /* logic here */ }
+impl Run for AddUserArgs { /* logic here */ } impl Run for ListItemsArgs { /*
+logic here */ }
 
 #[derive(Parser)]
 #[command(name = "registry-ctl")]
 #[clap_dispatch(fn run(self, db_url: &str) -> Result<(), String>)]
-enum Commands {
-    AddUser(AddUserArgs),
-    ListItems(ListItemsArgs),
-}
+enum Commands { AddUser(AddUserArgs), ListItems(ListItemsArgs), }
 
-fn main() -> Result<(), String> {
-    let cli = Commands::parse();
-    let db_url = "postgres://user:pass@localhost/registry";
+fn main() -> Result<(), String> { let cli = Commands::parse(); let db_url =
+"postgres://user:pass@localhost/registry";
 
-    // merge per-command defaults
-    let cmd = match cli {
-        Commands::AddUser(args) => {
-            Commands::AddUser(load_and_merge_subcommand_for::<AddUserArgs>(&args)?)
-        }
-        Commands::ListItems(args) => {
-            Commands::ListItems(load_and_merge_subcommand_for::<ListItemsArgs>(&args)?)
-        }
-    };
+    // merge per-command defaults let cmd = match cli { Commands::AddUser(args)
+    => {
+    Commands::AddUser(load_and_merge_subcommand_for::<AddUserArgs>(&args)?) }
+    Commands::ListItems(args) => {
+    Commands::ListItems(load_and_merge_subcommand_for::<ListItemsArgs>(&args)?)
+    } };
 
-    cmd.run(db_url)
-}
+    cmd.run(db_url) }
 ```
 
 ## Why OrthoConfig?
