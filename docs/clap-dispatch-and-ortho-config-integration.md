@@ -127,10 +127,11 @@ building CLIs with dispatchable subcommands.
 
 ### A. Project Setup and Dependencies
 
-Begin by adding the required dependencies: `clap` for argument parsing (with
-the `derive` feature) and `clap-dispatch`.
+Begin by setting up the Rust project with the required dependencies. The
+project needs `clap` for argument parsing (with the `derive` feature for
+ergonomic struct-based parsing) and `clap-dispatch`.
 
-Add the following to your `Cargo.toml` file:
+Add the following to the project’s `Cargo.toml` file:
 
 ```toml
 [dependencies]
@@ -138,10 +139,10 @@ clap = { version = "4.5", features = ["derive"] } # Use a recent version of clap
 clap-dispatch = "0.1.1" # Or the latest version available on crates.io [3]
 ```
 
-Run `cargo add clap -F derive` to add `clap` with the derive feature.5
-`clap-dispatch` itself depends on crates like `syn`, `quote`, and `proc-macro2`
-for its procedural macro functionality, but these are transitive dependencies
-and do not need to be added explicitly by the end-user.3
+The command `cargo add clap -F derive` adds `clap` with the derive feature.
+`clap-dispatch` depends on crates such as `syn`, `quote`, and `proc-macro2` for
+its procedural macro functionality, but these dependencies are transitive and
+do not need to be added manually.3
 
 ### B. Defining Argument Structs with `clap::Parser`
 

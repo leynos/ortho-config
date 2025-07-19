@@ -2,37 +2,22 @@
 
 #![allow(non_snake_case)]
 #![allow(deprecated)]
+//! Utilities for subcommand test setup and loading.
 mod util;
 
 use clap::Parser;
-use ortho_config::subcommand::Prefix;
-use ortho_config::{OrthoConfig, load_and_merge_subcommand, load_and_merge_subcommand_for};
+use ortho_config::OrthoConfig;
 use serde::Deserialize;
-use util::{with_subcommand_config, with_typed_subcommand_config};
+use util::{
+    with_merged_subcommand_cli, with_merged_subcommand_cli_for, with_subcommand_config,
+    with_typed_subcommand_config,
+};
 
 #[derive(Debug, Deserialize, Default, PartialEq)]
 struct CmdCfg {
     foo: Option<String>,
     bar: Option<bool>,
 }
-
-/// Loads the `CmdCfg` configuration for the "test" subcommand after applying a custom setup to a jailed environment.
-///
-/// The provided closure is used to configure the environment (such as creating files or setting environment variables) within a `figment::Jail`. The function then loads the configuration for the "test" subcommand using the "APP_" prefix, returning the resulting `CmdCfg`.
-///
-/// # Errors
-///
-/// Returns an error if configuration loading fails.
-///
-/// # Examples
-///
-/// ```
-/// let cfg = with_subcommand_config(|jail| {
-///     jail.create_file(".app.toml", "[cmds.test]\nfoo = \"bar\"")?;
-///     Ok(())
-/// }).unwrap();
-/// assert_eq!(cfg.foo, Some("bar".to_string()));
-/// ```
 
 #[test]
 fn file_and_env_loading() {
@@ -140,18 +125,20 @@ struct MergeArgs {
 /// merge_helper_combines_defaults_and_cli();
 /// ```
 fn merge_helper_combines_defaults_and_cli() {
-    figment::Jail::expect_with(|j| {
-        j.create_file(".app.toml", "[cmds.test]\nfoo = \"file\"")?;
-        let cli = MergeArgs {
-            foo: Some("cli".into()),
-            bar: None,
-        };
-        let merged: MergeArgs =
-            load_and_merge_subcommand(&Prefix::new("APP_"), &cli).expect("merge");
-        assert_eq!(merged.foo.as_deref(), Some("cli"));
-        assert_eq!(merged.bar, None);
-        Ok(())
-    });
+    let cli = MergeArgs {
+        foo: Some("cli".into()),
+        bar: None,
+    };
+    let merged: MergeArgs = with_merged_subcommand_cli(
+        |j| {
+            j.create_file(".app.toml", "[cmds.test]\nfoo = \"file\"")?;
+            Ok(())
+        },
+        &cli,
+    )
+    .expect("merge");
+    assert_eq!(merged.foo.as_deref(), Some("cli"));
+    assert_eq!(merged.bar, None);
 }
 
 #[derive(Debug, Deserialize, serde::Serialize, OrthoConfig, Default, PartialEq, Parser)]
@@ -164,11 +151,14 @@ struct MergePrefixed {
 
 #[test]
 fn merge_wrapper_respects_prefix() {
-    figment::Jail::expect_with(|j| {
-        j.create_file(".app.toml", "[cmds.test]\nfoo = \"file\"")?;
-        let cli = MergePrefixed { foo: None };
-        let merged = load_and_merge_subcommand_for::<MergePrefixed>(&cli).expect("merge");
-        assert_eq!(merged.foo.as_deref(), Some("file"));
-        Ok(())
-    });
+    let cli = MergePrefixed { foo: None };
+    let merged = with_merged_subcommand_cli_for(
+        |j| {
+            j.create_file(".app.toml", "[cmds.test]\nfoo = \"file\"")?;
+            Ok(())
+        },
+        &cli,
+    )
+    .expect("merge");
+    assert_eq!(merged.foo.as_deref(), Some("file"));
 }

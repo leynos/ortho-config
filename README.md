@@ -119,7 +119,7 @@ fn main() -> Result<(), OrthoError> {
 }
 ```
 
-3. **Run the application:**
+3. **Running the application**:
 
 - With CLI arguments:
     `cargo run -- --log-level debug --port 3000 -v --features extra_cli_feature`
@@ -157,9 +157,9 @@ overriding earlier ones:
    1. `--config-path` CLI option
    2. `[PREFIX]CONFIG_PATH` environment variable
    3. `.<prefix>.toml` in the current directory
-   4. `.<prefix>.toml` in the user's home directory (where `<prefix>` comes from
-      `#[ortho_config(prefix = "...")]` and defaults to `config`). JSON5 and
-      YAML support are feature gated.
+   4. `.<prefix>.toml` in the user's home directory
+      (where `<prefix>` comes from `#[ortho_config(prefix = "…")]` and defaults
+      to `config`). JSON5 and YAML support are feature gated.
 3. **Environment Variables:** Variables prefixed with the string specified in
    `#[ortho_config(prefix = "...")]` (e.g., `APP_`). Nested struct fields are
    typically accessed using double underscores (e.g., `APP_DATABASE__URL` if

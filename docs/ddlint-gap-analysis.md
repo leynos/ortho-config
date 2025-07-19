@@ -123,5 +123,7 @@ The following steps are ordered by impact on ddlint's user experience:
 These improvements will align OrthoConfig with ddlint's planned interface while
 maintaining compatibility with the crate's existing architecture.
 
+<!-- markdownlint-disable-next-line MD013 -->
+
 [ddlint-design]:
 https://raw.githubusercontent.com/leynos/ddlint/refs/heads/main/docs/ddlint-design-and-road-map.md
