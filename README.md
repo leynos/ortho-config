@@ -2,7 +2,7 @@
 
 **OrthoConfig** is a Rust configuration management library designed for
 simplicity and power, inspired by the flexible configuration mechanisms found
-in tools like `esbuild`. It allows your application to seamlessly load
+in tools like `esbuild`. This enables an application to seamlessly load
 configuration from command-line arguments, environment variables, and
 configuration files, all with a clear order of precedence and minimal
 boilerplate.
@@ -46,7 +46,7 @@ ortho_config = "0.3.0" # Replace with the latest version
 serde = { version = "1.0", features = ["derive"] }
 ```
 
-2. **Define your configuration struct:**
+2. **Define the configuration struct:**
 
 ```rust
 use ortho_config::{OrthoConfig, OrthoError};
@@ -121,7 +121,7 @@ fn main() -> Result<(), OrthoError> {
 }
 ```
 
-3. **Run your application:**
+3. **Run the application:**
 
    - With CLI arguments:
      `cargo run -- --log-level debug --port 3000 -v --features

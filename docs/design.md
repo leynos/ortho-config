@@ -225,7 +225,7 @@ Support for `XDG_CONFIG_HOME` on Windows could be added later using
     dependencies for different file formats. `toml` should be a default
     feature. The `json5` feature uses `figment-json5` to parse `.json` and
     `.json5` files; loading these formats without enabling `json5` should
-    produce an error so users aren't surprised by silent TOML parsing.
+    produce an error, so users aren't surprised by silent TOML parsing.
   - `thiserror`: For ergonomic error type definitions.
 
 ## 6. Implementation Roadmap

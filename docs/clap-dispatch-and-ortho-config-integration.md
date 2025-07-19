@@ -138,10 +138,10 @@ clap = { version = "4.5", features = ["derive"] } # Use a recent version of clap
 clap-dispatch = "0.1.1" # Or the latest version available on crates.io [3]
 ```
 
-The command `cargo add clap -F derive` can be used to add `clap` with the
-derive feature.5 `clap-dispatch` itself depends on crates like `syn`, `quote`,
-and `proc-macro2` for its procedural macro functionality, but these are
-transitive dependencies and do not need to be added explicitly by the end-user.3
+Run `cargo add clap -F derive` to add `clap` with the derive feature.5
+`clap-dispatch` itself depends on crates like `syn`, `quote`, and `proc-macro2`
+for its procedural macro functionality, but these are transitive dependencies
+and do not need to be added explicitly by the end-user.3
 
 ### B. Defining Argument Structs with `clap::Parser`
 
