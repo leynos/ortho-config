@@ -61,18 +61,13 @@ from CLI, env, and file merge into the `CmdCfg` struct
 ### 3.6 Append Merge Strategy
 
 **Given** vector fields with `merge_strategy = "append"` in several sources
-
-**When** configuration is loaded
-
-**Then** the vectors are concatenated in file → env → CLI order
+**When** configuration is loaded **Then** the vectors are concatenated in file
+→ env → CLI order
 
 ### 3.7 Comma-Separated Lists (Gap)
 
-**Given** `DDLINT_RULES=A,B,C` in the environment
-
-**When** loading a vector field
-
-**Then** it is parsed as `["A", "B", "C"]`
+**Given** `DDLINT_RULES=A,B,C` in the environment **When** loading a vector
+field **Then** it is parsed as `["A", "B", "C"]`
 
 ### 3.8 Configuration Inheritance (Gap)
 
