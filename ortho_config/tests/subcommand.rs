@@ -20,9 +20,9 @@ struct CmdCfg {
 ///
 /// The provided closure is used to configure the environment (such as creating files or setting environment variables) within a `figment::Jail`. The function then loads the configuration for the "test" subcommand using the "APP_" prefix, returning the resulting `CmdCfg`.
 ///
-/// # Panics
+/// # Errors
 ///
-/// Panics if configuration loading fails.
+/// Returns an error if configuration loading fails.
 ///
 /// # Examples
 ///
@@ -30,7 +30,7 @@ struct CmdCfg {
 /// let cfg = with_subcommand_config(|jail| {
 ///     jail.create_file(".app.toml", "[cmds.test]\nfoo = \"bar\"")?;
 ///     Ok(())
-/// });
+/// }).unwrap();
 /// assert_eq!(cfg.foo, Some("bar".to_string()));
 /// ```
 
@@ -40,7 +40,8 @@ fn file_and_env_loading() {
         j.create_file(".app.toml", "[cmds.test]\nfoo = \"file\"\nbar = true")?;
         j.set_env("APP_CMDS_TEST_FOO", "env");
         Ok(())
-    });
+    })
+    .expect("config");
     assert_eq!(cfg.foo.as_deref(), Some("env"));
     assert_eq!(cfg.bar, Some(true));
 }
@@ -54,7 +55,8 @@ fn loads_from_home() {
         #[cfg(windows)]
         j.set_env("USERPROFILE", home.to_str().unwrap());
         Ok(())
-    });
+    })
+    .expect("config");
     assert_eq!(cfg.foo.as_deref(), Some("home"));
 }
 
@@ -68,7 +70,8 @@ fn local_overrides_home() {
         j.set_env("USERPROFILE", home.to_str().unwrap());
         j.create_file(".app.toml", "[cmds.test]\nfoo = \"local\"")?;
         Ok(())
-    });
+    })
+    .expect("config");
     assert_eq!(cfg.foo.as_deref(), Some("local"));
 }
 
@@ -83,7 +86,8 @@ fn loads_from_xdg_config() {
         j.create_file(abs.join("app/config.toml"), "[cmds.test]\nfoo = \"xdg\"")?;
         j.set_env("XDG_CONFIG_HOME", abs.to_str().unwrap());
         Ok(())
-    });
+    })
+    .expect("config");
     assert_eq!(cfg.foo.as_deref(), Some("xdg"));
 }
 
@@ -100,7 +104,8 @@ fn wrapper_uses_struct_prefix() {
         j.create_file(".app.toml", "[cmds.test]\nfoo = \"val\"")?;
         j.set_env("APP_CMDS_TEST_FOO", "env");
         Ok(())
-    });
+    })
+    .expect("config");
     assert_eq!(cfg.foo.as_deref(), Some("env"));
 }
 
@@ -110,7 +115,8 @@ fn loads_yaml_file() {
     let cfg: CmdCfg = with_subcommand_config(|j| {
         j.create_file(".app.yml", "cmds:\n  test:\n    foo: yaml")?;
         Ok(())
-    });
+    })
+    .expect("config");
     assert_eq!(cfg.foo.as_deref(), Some("yaml"));
 }
 
