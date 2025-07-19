@@ -7,8 +7,8 @@ configuration from command-line arguments, environment variables, and
 configuration files, all with a clear order of precedence and minimal
 boilerplate.
 
-The core principle is **orthographic option naming**: a single field in your
-Rust configuration struct can be set through idiomatic naming conventions from
+The core principle is **orthographic option naming**: a single field in a Rust
+configuration struct can be set through idiomatic naming conventions from
 various sources (e.g., `--my-option` for CLI, `MY_APP_MY_OPTION` for
 environment variables, `my_option` in a TOML file) without requiring extensive
 manual aliasing.
@@ -22,8 +22,8 @@ manual aliasing.
   3. Configuration File (e.g., `config.toml`)
   4. Application-Defined Defaults (Lowest)
 - **Orthographic Option Naming:** Automatically maps diverse external naming
-  conventions (kebab-case, UPPER_SNAKE_CASE, etc.) to Rust struct `snake_case`
-  fields.
+  conventions (kebab-case, UPPER_SNAKE_CASE, etc.) to a Rust struct's
+  snake_case fields.
 - **Type-Safe Deserialization:** Uses `serde` to deserialize configuration into
   strongly typed Rust structs.
 - **Easy to Use:** A simple `#[derive(OrthoConfig)]` macro enables a quick
@@ -36,9 +36,7 @@ manual aliasing.
 
 ## Quick Start
 
-<!-- markdownlint-disable MD029 -->
-
-1. **Add `OrthoConfig` to your `Cargo.toml`:**
+1. **Add `OrthoConfig` to the project `Cargo.toml`:**
 
 ```toml
 [dependencies]
@@ -131,7 +129,7 @@ fn main() -> Result<(), OrthoError> {
      `APP_DB_URL="postgres://localhost/mydb"`
      `APP_FEATURES="env_feat1,env_feat2" cargo run`
    - With a `.app.toml` file (assuming `#[ortho_config(prefix = "APP_")]`;
-     adjust for your prefix):
+     adjust for the chosen prefix):
 
 <!-- markdownlint-enable MD029 -->
 - With a `.app.toml` file (assuming `#[ortho_config(prefix = "APP_")]`; adjust
@@ -196,7 +194,7 @@ single-quoted strings, and unquoted keys.
 ## Orthographic Naming
 
 A key goal of OrthoConfig is to make configuration natural from any source. A
-field like `max_connections: u32` in your Rust struct will, by default, be
+field like `max_connections: u32` in a Rust struct will, by default, be
 configurable via:
 
 - CLI: `--max-connections <value>`
@@ -299,8 +297,8 @@ trait Run {
     fn run(&self, db_url: &str) -> Result<(), String>;
 }
 
-impl Run for AddUserArgs { /* your logic here */ }
-impl Run for ListItemsArgs { /* your logic here */ }
+impl Run for AddUserArgs { /* application logic here */ }
+impl Run for ListItemsArgs { /* application logic here */ }
 
 #[derive(Parser)]
 #[command(name = "registry-ctl")]
@@ -330,12 +328,13 @@ fn main() -> Result<(), String> {
 
 ## Why OrthoConfig?
 
-- **Reduced Boilerplate:** Define your configuration schema once and let
-  OrthoConfig handle the multi-source loading and mapping.
+- **Reduced Boilerplate:** Define the configuration schema once and let
+  OrthoConfig handle multi-source loading and mapping.
 - **Developer Ergonomics:** Intuitive mapping from external sources to Rust
   code.
-- **Flexibility:** End-users can configure the application via CLI overrides,
-  environment variables in CI/CD pipelines, or files for persistent settings.
+- **Flexibility:** Users of the application can configure it in the way that
+  best suits their environment (CLI for quick overrides, env vars for CI/CD,
+  files for persistent settings).
 - **Clear Precedence:** Predictable configuration resolution.
 
 ## Migrating from 0.1 to 0.2
@@ -349,7 +348,7 @@ Version 0.2 introduces a small API refinement:
 - Types deriving `OrthoConfig` expose an associated `prefix()` function. Use
   this if you need the configured prefix directly.
 
-Update your `Cargo.toml` to depend on `ortho_config = "0.2"` and adjust code to
+Update the `Cargo.toml` to depend on `ortho_config = "0.2"` and adjust code to
 call `load_and_merge_subcommand_for` instead of manually merging defaults.
 
 ## Contributing

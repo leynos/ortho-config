@@ -67,7 +67,7 @@ of calling the correct implementation based on the subcommand parsed by `clap`.
 ### C. The `#[clap_dispatch]` Macro and Generated Trait
 
 The central component of `clap-dispatch` is its procedural macro,
-`#[clap_dispatch(...)]`. This macro is applied to a Rust enum where each
+`#[clap_dispatch(...)]`. This macro is applied to a Rust enum, where each
 variant typically encapsulates an argument struct parsed by `clap::Parser`
 (representing a specific subcommand).3
 
