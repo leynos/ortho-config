@@ -121,14 +121,13 @@ fn main() -> Result<(), OrthoError> {
 
 3. **Run the application:**
 
-   - With CLI arguments:
-     `cargo run -- --log-level debug --port 3000 -v --features
-     extra_cli_feature`
-   - With environment variables:
+- With CLI arguments:
+    `cargo run -- --log-level debug --port 3000 -v --features extra_cli_feature`
+- With environment variables:
      `APP_LOG_LEVEL=warn APP_PORT=4000`
      `APP_DB_URL="postgres://localhost/mydb"`
      `APP_FEATURES="env_feat1,env_feat2" cargo run`
-   - With a `.app.toml` file (assuming `#[ortho_config(prefix = "APP_")]`;
+- With a `.app.toml` file (assuming `#[ortho_config(prefix = "APP_")]`;
      adjust for the chosen prefix):
 
 <!-- markdownlint-enable MD029 -->
