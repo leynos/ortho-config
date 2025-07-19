@@ -8,8 +8,12 @@
     reason = "figment's Jail uses deprecated APIs for test isolation"
 )]
 
+use clap::CommandFactory;
 use ortho_config::subcommand::{CmdName, Prefix};
-use ortho_config::{OrthoConfig, OrthoError, load_subcommand_config, load_subcommand_config_for};
+use ortho_config::{
+    OrthoConfig, OrthoError, load_and_merge_subcommand, load_and_merge_subcommand_for,
+    load_subcommand_config, load_subcommand_config_for,
+};
 use serde::de::DeserializeOwned;
 
 #[expect(
@@ -71,4 +75,42 @@ where
     with_jail(setup, || {
         load_subcommand_config_for::<T>(&CmdName::new("test"))
     })
+}
+
+/// Runs `setup` in a jailed environment, then loads defaults for the `test`
+/// subcommand and merges them with `cli` using the `APP_` prefix.
+///
+/// # Errors
+///
+/// Returns an error if configuration loading or merging fails.
+#[expect(
+    clippy::result_large_err,
+    reason = "tests need full error details for assertions"
+)]
+pub fn with_merged_subcommand_cli<F, T>(setup: F, cli: &T) -> Result<T, OrthoError>
+where
+    F: FnOnce(&mut figment::Jail) -> figment::error::Result<()>,
+    T: serde::Serialize + DeserializeOwned + Default + CommandFactory,
+{
+    with_jail(setup, || {
+        load_and_merge_subcommand(&Prefix::new("APP_"), cli)
+    })
+}
+
+/// Runs `setup` in a jailed environment, then loads defaults for the `test`
+/// subcommand using `T`'s prefix and merges them with `cli`.
+///
+/// # Errors
+///
+/// Returns an error if configuration loading or merging fails.
+#[expect(
+    clippy::result_large_err,
+    reason = "tests need full error details for assertions"
+)]
+pub fn with_merged_subcommand_cli_for<F, T>(setup: F, cli: &T) -> Result<T, OrthoError>
+where
+    F: FnOnce(&mut figment::Jail) -> figment::error::Result<()>,
+    T: OrthoConfig + serde::Serialize + Default + CommandFactory,
+{
+    with_jail(setup, || load_and_merge_subcommand_for(cli))
 }
