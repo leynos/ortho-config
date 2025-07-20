@@ -17,7 +17,7 @@ mod derive {
 }
 
 use derive::build::{
-    build_append_logic, build_cli_fields, build_config_env_var, build_default_struct_fields,
+    build_append_logic, build_config_env_var, build_default_struct_fields,
     build_default_struct_init, build_dotfile_name, build_env_provider, build_override_struct,
     build_xdg_snippet, collect_append_fields,
 };
@@ -37,11 +37,6 @@ pub fn derive_ortho_config(input: TokenStream) -> TokenStream {
         Err(e) => return e.to_compile_error().into(),
     };
 
-    let cli_ident = format_ident!("__{}Cli", ident);
-    let cli_mod = format_ident!("__{}CliMod", ident);
-    let cli_pub_ident = format_ident!("{}Cli", ident);
-
-    let cli_fields = build_cli_fields(&fields, &field_attrs);
     let defaults_ident = format_ident!("__{}Defaults", ident);
     let default_struct_fields = build_default_struct_fields(&fields);
     let default_struct_init = build_default_struct_init(&fields, &field_attrs);
@@ -52,11 +47,12 @@ pub fn derive_ortho_config(input: TokenStream) -> TokenStream {
     let append_fields = collect_append_fields(&fields, &field_attrs);
     let (override_struct_ts, override_init_ts) = build_override_struct(&ident, &append_fields);
     let append_logic = build_append_logic(&append_fields);
+    let has_config_path = fields
+        .iter()
+        .any(|f| f.ident.as_ref().is_some_and(|id| id == "config_path"));
     let load_impl = build_load_impl(&LoadImplArgs {
         idents: LoadImplIdents {
             ident: &ident,
-            cli_mod: &cli_mod,
-            cli_ident: &cli_ident,
             defaults_ident: &defaults_ident,
         },
         tokens: LoadImplTokens {
@@ -68,6 +64,7 @@ pub fn derive_ortho_config(input: TokenStream) -> TokenStream {
             dotfile_name: &dotfile_name,
             xdg_snippet: &xdg_snippet,
         },
+        has_config_path,
     });
     let prefix_fn = struct_attrs.prefix.as_ref().map(|prefix| {
         quote! {
@@ -78,15 +75,6 @@ pub fn derive_ortho_config(input: TokenStream) -> TokenStream {
     });
 
     let expanded = quote! {
-        mod #cli_mod {
-            use std::option::Option as Option;
-            #[derive(clap::Parser, serde::Serialize)]
-            #[command(rename_all = "kebab-case")]
-            pub struct #cli_ident {
-                #( #cli_fields, )*
-            }
-        }
-
         #[derive(serde::Serialize)]
         struct #defaults_ident {
             #( #default_struct_fields, )*
@@ -94,13 +82,25 @@ pub fn derive_ortho_config(input: TokenStream) -> TokenStream {
 
         #override_struct_ts
 
-        pub use #cli_mod::#cli_ident as #cli_pub_ident;
-
         #load_impl
 
         impl ortho_config::OrthoConfig for #ident {
+            fn load_and_merge(&self) -> Result<Self, ortho_config::OrthoError>
+            where
+                Self: serde::Serialize,
+            {
+                self.load_and_merge()
+            }
+
+            #[deprecated(
+                since = "0.4.0",
+                note = "Use `YourConfig::parse().load_and_merge()` instead"
+            )]
             fn load() -> Result<Self, ortho_config::OrthoError> {
-                Self::load_from_iter(::std::env::args_os())
+                use clap::Parser as _;
+                Self::try_parse()
+                    .map_err(ortho_config::OrthoError::CliParsing)?
+                    .load_and_merge()
             }
             #prefix_fn
         }

@@ -26,6 +26,7 @@ fn option_type_tokens(ty: &Type) -> proc_macro2::TokenStream {
 ///
 /// This function is used internally by the derive macro to transform
 /// user-defined struct fields into CLI-compatible equivalents.
+#[allow(dead_code)]
 pub(crate) fn build_cli_fields(
     fields: &[syn::Field],
     field_attrs: &[FieldAttrs],
@@ -225,7 +226,7 @@ pub(crate) fn build_append_logic(fields: &[(Ident, &Type)]) -> proc_macro2::Toke
     });
     quote! {
         let env_figment = Figment::from(env_provider.clone());
-        let cli_figment = Figment::from(Serialized::from(&cli, Profile::Default));
+        let cli_figment = Figment::from(Serialized::defaults(self));
         #( #logic )*
     }
 }

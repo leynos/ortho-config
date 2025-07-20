@@ -1,4 +1,4 @@
-//! Helpers for generating the `load_from_iter` implementation.
+//! Helpers for generating the `load_and_merge` implementation.
 //!
 //! These functions assemble the configuration loading logic by piecing together
 //! CLI parsing, file discovery, environment provider setup, and final merging
@@ -11,8 +11,6 @@ use syn::Ident;
 /// Identifiers used when generating the load implementation.
 pub(crate) struct LoadImplIdents<'a> {
     pub ident: &'a Ident,
-    pub cli_mod: &'a Ident,
-    pub cli_ident: &'a Ident,
     pub defaults_ident: &'a Ident,
 }
 
@@ -31,40 +29,35 @@ pub(crate) struct LoadImplTokens<'a> {
 pub(crate) struct LoadImplArgs<'a> {
     pub idents: LoadImplIdents<'a>,
     pub tokens: LoadImplTokens<'a>,
+    pub has_config_path: bool,
 }
 
-/// Generate the `clap` parsing snippet for `load_from_iter`.
+/// CLI parsing is performed outside the generated method.
 ///
-/// The design document's "Primary data flow" section explains that CLI
-/// arguments are parsed first so they can override all other sources.
-pub(crate) fn build_cli_parsing(idents: &LoadImplIdents<'_>) -> proc_macro2::TokenStream {
-    let LoadImplIdents {
-        cli_mod, cli_ident, ..
-    } = *idents;
-    quote! {
-        let cli = #cli_mod::#cli_ident::try_parse_from(
-            args.into_iter().map(|a| a.as_ref().to_os_string())
-        )
-        .map_err(ortho_config::OrthoError::CliParsing)?;
-    }
-}
-
 /// Generate the file discovery logic section.
 ///
 /// Configuration files are searched in multiple locations as described in the
 /// "Configuration File Discovery" section of the design document. This mirrors
 /// standard XDG behaviour on Unix-like systems and uses `directories` on Windows.
-pub(crate) fn build_file_discovery(tokens: &LoadImplTokens<'_>) -> proc_macro2::TokenStream {
+pub(crate) fn build_file_discovery(
+    tokens: &LoadImplTokens<'_>,
+    has_config_path: bool,
+) -> proc_macro2::TokenStream {
     let LoadImplTokens {
         config_env_var,
         dotfile_name,
         xdg_snippet,
         ..
     } = tokens;
+    let config_path_chain = if has_config_path {
+        quote! { .chain(self.config_path.clone()) }
+    } else {
+        quote! {}
+    };
     quote! {
         let mut file_fig = None;
         let candidates = std::iter::empty()
-            .chain(cli.config_path.clone())
+            #config_path_chain
             .chain(
                 std::env::var_os(#config_env_var)
                     .map(std::path::PathBuf::from),
@@ -100,7 +93,7 @@ pub(crate) fn build_env_section(tokens: &LoadImplTokens<'_>) -> proc_macro2::Tok
     }
 }
 
-/// Build the merging and final extraction portion of `load_from_iter`.
+/// Build the merging and final extraction portion of `load_and_merge`.
 ///
 /// Providers are layered as defaults, file, environment, then CLI as described
 /// in the design document's "Primary data flow" section.
@@ -129,7 +122,7 @@ pub(crate) fn build_merge_section(
 
         fig = fig
             .merge(env_provider.clone())
-            .merge(Serialized::from(&cli, Profile::Default));
+            .merge(Serialized::defaults(self));
 
         #append_logic
 
@@ -141,22 +134,23 @@ pub(crate) fn build_merge_section(
 
 /// Assemble the final `load_from_iter` method using the helper snippets.
 pub(crate) fn build_load_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStream {
-    let LoadImplArgs { idents, tokens } = args;
+    let LoadImplArgs {
+        idents,
+        tokens,
+        has_config_path,
+    } = args;
     let LoadImplIdents { ident, .. } = idents;
-    let cli_parsing = build_cli_parsing(idents);
-    let file_discovery = build_file_discovery(tokens);
+    let file_discovery = build_file_discovery(tokens, *has_config_path);
     let env_section = build_env_section(tokens);
     let merge_section = build_merge_section(idents, tokens);
 
     quote! {
         impl #ident {
             #[expect(dead_code, reason = "Generated method may not be used in all builds")]
-            pub fn load_from_iter<I>(args: I) -> Result<Self, ortho_config::OrthoError>
+            pub fn load_and_merge(&self) -> Result<Self, ortho_config::OrthoError>
             where
-                I: IntoIterator,
-                I::Item: AsRef<std::ffi::OsStr>,
+                Self: serde::Serialize,
             {
-                use clap::Parser as _;
                 use figment::{Figment, providers::{Toml, Env, Serialized}, Profile};
                 #[cfg(feature = "json5")] use figment_json5::Json5;
                 #[cfg(feature = "yaml")] use figment::providers::Yaml;
@@ -164,7 +158,6 @@ pub(crate) fn build_load_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStre
                 #[cfg(feature = "yaml")] use serde_yaml;
                 #[cfg(feature = "toml")] use toml;
 
-                #cli_parsing
                 #file_discovery
                 #env_section
                 #merge_section
