@@ -26,41 +26,6 @@ fn option_type_tokens(ty: &Type) -> proc_macro2::TokenStream {
 ///
 /// This function is used internally by the derive macro to transform
 /// user-defined struct fields into CLI-compatible equivalents.
-#[allow(dead_code)]
-pub(crate) fn build_cli_fields(
-    fields: &[syn::Field],
-    field_attrs: &[FieldAttrs],
-) -> Vec<proc_macro2::TokenStream> {
-    let mut out = Vec::new();
-    out.push(quote! {
-        #[arg(long = "config-path")]
-        #[serde(skip_serializing_if = "Option::is_none")]
-        pub config_path: Option<std::path::PathBuf>
-    });
-
-    out.extend(fields.iter().zip(field_attrs.iter()).map(|(f, attr)| {
-        let name = f.ident.as_ref().expect("named field");
-        let ty = option_type_tokens(&f.ty);
-
-        let mut arg_tokens = quote! { long };
-        if let Some(ref long) = attr.cli_long {
-            arg_tokens = quote! { long = #long };
-        }
-        if let Some(ch) = attr.cli_short {
-            let short_token = quote! { short = #ch };
-            arg_tokens = quote! { #arg_tokens, #short_token };
-        }
-
-        quote! {
-            #[arg(#arg_tokens, required = false)]
-            #[serde(skip_serializing_if = "Option::is_none")]
-            pub #name: #ty
-        }
-    }));
-
-    out
-}
-
 pub(crate) fn build_default_struct_fields(fields: &[syn::Field]) -> Vec<proc_macro2::TokenStream> {
     fields
         .iter()
