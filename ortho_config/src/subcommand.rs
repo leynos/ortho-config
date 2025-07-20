@@ -1,7 +1,5 @@
 //! Support for loading configuration for individual subcommands.
 
-#[allow(deprecated)]
-use crate::merge_cli_over_defaults;
 use crate::{OrthoError, load_config_file, normalize_prefix};
 use clap::CommandFactory;
 #[cfg(not(any(unix, target_os = "redox")))]
@@ -368,9 +366,10 @@ where
 ///
 /// ```rust,no_run
 /// use ortho_config::subcommand::{CmdName, load_subcommand_config_for};
-/// #[derive(serde::Deserialize, Default)]
+/// #[derive(clap::Parser, serde::Serialize, serde::Deserialize, Default)]
 /// struct MySubcommandConfig;
 /// impl ortho_config::OrthoConfig for MySubcommandConfig {
+///     fn load_and_merge(&self) -> Result<Self, ortho_config::OrthoError> where Self: serde::Serialize { todo!() }
 ///     fn load() -> Result<Self, ortho_config::OrthoError> { todo!() }
 ///     fn prefix() -> &'static str { "" }
 /// }
@@ -432,11 +431,16 @@ pub fn load_and_merge_subcommand<T>(prefix: &Prefix, cli: &T) -> Result<T, Ortho
 where
     T: serde::Serialize + DeserializeOwned + Default + CommandFactory,
 {
+    use figment::{Figment, providers::Serialized};
+
     let name = CmdName::new(T::command().get_name());
     #[allow(deprecated)]
     let defaults: T = load_subcommand_config(prefix, &name)?;
-    #[allow(deprecated)]
-    merge_cli_over_defaults(&defaults, cli).map_err(OrthoError::Gathering)
+
+    Figment::from(Serialized::defaults(&defaults))
+        .merge(Serialized::defaults(cli))
+        .extract()
+        .map_err(OrthoError::Gathering)
 }
 
 /// Wrapper around [`load_and_merge_subcommand`] using the struct's configured prefix.
@@ -461,6 +465,7 @@ where
 /// #[derive(clap::Parser, serde::Serialize, serde::Deserialize, Default)]
 /// struct MyCmd { /* fields */ }
 /// impl ortho_config::OrthoConfig for MyCmd {
+///     fn load_and_merge(&self) -> Result<Self, ortho_config::OrthoError> where Self: serde::Serialize { todo!() }
 ///     fn load() -> Result<Self, ortho_config::OrthoError> { todo!() }
 ///     fn prefix() -> &'static str { "myapp" }
 /// }

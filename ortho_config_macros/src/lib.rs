@@ -17,7 +17,7 @@ mod derive {
 }
 
 use derive::build::{
-    build_append_logic, build_cli_fields, build_config_env_var, build_default_struct_fields,
+    build_append_logic, build_config_env_var, build_default_struct_fields,
     build_default_struct_init, build_dotfile_name, build_env_provider, build_override_struct,
     build_xdg_snippet, collect_append_fields,
 };
@@ -37,26 +37,56 @@ pub fn derive_ortho_config(input: TokenStream) -> TokenStream {
         Err(e) => return e.to_compile_error().into(),
     };
 
-    let cli_ident = format_ident!("__{}Cli", ident);
-    let cli_mod = format_ident!("__{}CliMod", ident);
-    let cli_pub_ident = format_ident!("{}Cli", ident);
+    let components = build_macro_components(&ident, &fields, &struct_attrs, &field_attrs);
+    let defaults_struct = generate_defaults_struct(
+        &components.defaults_ident,
+        &components.default_struct_fields,
+    );
+    let trait_impl =
+        generate_trait_implementation(&ident, &components.load_impl, components.prefix_fn);
+    let override_struct_ts = components.override_struct_ts;
 
-    let cli_fields = build_cli_fields(&fields, &field_attrs);
+    let expanded = quote! {
+        #defaults_struct
+        #override_struct_ts
+        #trait_impl
+    };
+
+    TokenStream::from(expanded)
+}
+
+/// Internal data generated during macro expansion.
+struct MacroComponents {
+    defaults_ident: syn::Ident,
+    default_struct_fields: Vec<proc_macro2::TokenStream>,
+    override_struct_ts: proc_macro2::TokenStream,
+    load_impl: proc_macro2::TokenStream,
+    prefix_fn: Option<proc_macro2::TokenStream>,
+}
+
+/// Build all components required for macro output.
+fn build_macro_components(
+    ident: &syn::Ident,
+    fields: &[syn::Field],
+    struct_attrs: &derive::parse::StructAttrs,
+    field_attrs: &[derive::parse::FieldAttrs],
+) -> MacroComponents {
     let defaults_ident = format_ident!("__{}Defaults", ident);
-    let default_struct_fields = build_default_struct_fields(&fields);
-    let default_struct_init = build_default_struct_init(&fields, &field_attrs);
-    let env_provider = build_env_provider(&struct_attrs);
-    let config_env_var = build_config_env_var(&struct_attrs);
-    let dotfile_name = build_dotfile_name(&struct_attrs);
-    let xdg_snippet = build_xdg_snippet(&struct_attrs);
-    let append_fields = collect_append_fields(&fields, &field_attrs);
-    let (override_struct_ts, override_init_ts) = build_override_struct(&ident, &append_fields);
+    let default_struct_fields = build_default_struct_fields(fields);
+    let default_struct_init = build_default_struct_init(fields, field_attrs);
+    let env_provider = build_env_provider(struct_attrs);
+    let config_env_var = build_config_env_var(struct_attrs);
+    let dotfile_name = build_dotfile_name(struct_attrs);
+    let xdg_snippet = build_xdg_snippet(struct_attrs);
+    let append_fields = collect_append_fields(fields, field_attrs);
+    let (override_struct_ts, override_init_ts) = build_override_struct(ident, &append_fields);
     let append_logic = build_append_logic(&append_fields);
+    let has_config_path = fields
+        .iter()
+        .any(|f| f.ident.as_ref().is_some_and(|id| id == "config_path"));
     let load_impl = build_load_impl(&LoadImplArgs {
         idents: LoadImplIdents {
-            ident: &ident,
-            cli_mod: &cli_mod,
-            cli_ident: &cli_ident,
+            ident,
             defaults_ident: &defaults_ident,
         },
         tokens: LoadImplTokens {
@@ -68,6 +98,7 @@ pub fn derive_ortho_config(input: TokenStream) -> TokenStream {
             dotfile_name: &dotfile_name,
             xdg_snippet: &xdg_snippet,
         },
+        has_config_path,
     });
     let prefix_fn = struct_attrs.prefix.as_ref().map(|prefix| {
         quote! {
@@ -77,34 +108,63 @@ pub fn derive_ortho_config(input: TokenStream) -> TokenStream {
         }
     });
 
-    let expanded = quote! {
-        mod #cli_mod {
-            use std::option::Option as Option;
-            #[derive(clap::Parser, serde::Serialize)]
-            #[command(rename_all = "kebab-case")]
-            pub struct #cli_ident {
-                #( #cli_fields, )*
-            }
-        }
+    MacroComponents {
+        defaults_ident,
+        default_struct_fields,
+        override_struct_ts,
+        load_impl,
+        prefix_fn,
+    }
+}
 
+/// Generate the hidden defaults struct for the macro output.
+fn generate_defaults_struct(
+    ident: &syn::Ident,
+    fields: &[proc_macro2::TokenStream],
+) -> proc_macro2::TokenStream {
+    quote! {
         #[derive(serde::Serialize)]
-        struct #defaults_ident {
-            #( #default_struct_fields, )*
+        struct #ident {
+            #( #fields, )*
         }
+    }
+}
 
-        #override_struct_ts
-
-        pub use #cli_mod::#cli_ident as #cli_pub_ident;
-
+/// Generate the `OrthoConfig` trait implementation.
+fn generate_trait_implementation(
+    ident: &syn::Ident,
+    load_impl: &proc_macro2::TokenStream,
+    prefix_fn: Option<proc_macro2::TokenStream>,
+) -> proc_macro2::TokenStream {
+    let prefix_fn = prefix_fn.unwrap_or_else(|| quote! {});
+    quote! {
         #load_impl
 
         impl ortho_config::OrthoConfig for #ident {
-            fn load() -> Result<Self, ortho_config::OrthoError> {
-                Self::load_from_iter(::std::env::args_os())
+            fn load_and_merge(&self) -> Result<Self, ortho_config::OrthoError>
+            where
+                Self: serde::Serialize,
+            {
+                #ident::load_and_merge(self)
             }
+
+            #[deprecated(
+                since = "0.4.0",
+                note = "Use `YourConfig::parse().load_and_merge()` instead",
+            )]
+            fn load() -> Result<Self, ortho_config::OrthoError> {
+                use clap::Parser as _;
+                Self::try_parse()
+                    .map_err(ortho_config::OrthoError::CliParsing)?
+                    .load_and_merge()
+            }
+
             #prefix_fn
         }
-    };
 
-    TokenStream::from(expanded)
+        const _: () = {
+            fn _assert_serialize<T: serde::Serialize>() {}
+            let _ = _assert_serialize::<#ident>;
+        };
+    }
 }

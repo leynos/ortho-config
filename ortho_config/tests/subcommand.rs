@@ -7,7 +7,7 @@ mod util;
 
 use clap::Parser;
 use ortho_config::OrthoConfig;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use util::{
     with_merged_subcommand_cli, with_merged_subcommand_cli_for, with_subcommand_config,
     with_typed_subcommand_config,
@@ -76,7 +76,7 @@ fn loads_from_xdg_config() {
     assert_eq!(cfg.foo.as_deref(), Some("xdg"));
 }
 
-#[derive(Debug, Deserialize, OrthoConfig, Default, PartialEq)]
+#[derive(Debug, Deserialize, Serialize, Parser, OrthoConfig, Default, PartialEq)]
 #[allow(non_snake_case)]
 #[ortho_config(prefix = "APP_")]
 struct PrefixedCfg {
