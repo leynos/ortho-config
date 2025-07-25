@@ -2,11 +2,11 @@ The following is a proposed roadmap for the remaining work on **OrthoConfig**, d
 
 - **Add a dedicated error for missing required values**
 
-  - Introduce a `MissingRequiredValues` variant to `OrthoError` and update the derive macro to check for missing required fields before deserialization. [[Improved Error Message Design](improved-error-message-design.md#:~:text=,OrthoError)]
+  - Introduce a `MissingRequiredValues` variant to `OrthoError` and update the derive macro to check for missing required fields before deserialization. [[Improved Error Message Design](improved-error-message-design.md)]
 
-  - Aggregate all missing fields, then generate a single, user‑friendly error message listing each missing path and showing how to supply it via CLI flags, environment variables and file entries. [[Improved Error Message Design](improved-error-message-design.md#:~:text=,Friendly%20Error%20Message)]
+  - Aggregate all missing fields, then generate a single, user‑friendly error message listing each missing path and showing how to supply it via CLI flags, environment variables and file entries. [[Improved Error Message Design](improved-error-message-design.md)]
 
-  - Write unit and `trybuild` tests to ensure the new error behaves correctly. [[Improved Error Message Design](improved-error-message-design.md#:~:text=,Tests)]
+  - Write unit and `trybuild` tests to ensure the new error behaves correctly. [[Improved Error Message Design](improved-error-message-design.md)]
 
 - **Implement comma‑separated list parsing for environment variables**
 
