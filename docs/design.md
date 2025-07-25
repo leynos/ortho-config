@@ -111,7 +111,12 @@ This is the most complex component. It needs to perform the following using
 
 1. **Parse Attributes:** Define `#[ortho_config(...)]` attributes for both
    struct-level (e.g., `prefix`, `file_name`) and field-level (e.g.,
-   `cli_long`, `env`, `default`, `merge_strategy`).
+   `cli_long`, `env`, `default`, `merge_strategy`). A small helper named
+   `parse_ortho_config` walks all attributes once and delegates each nested
+   meta item to a callback. Both struct- and field-level parsers call this
+   helper so the iteration logic is not duplicated. The inner type extraction
+   uses a generic `type_inner` function that accepts the wrapper name, with
+   thin wrappers like `option_inner` forwarding to it.
 2. **Generate a `clap`-aware Struct:** In the generated code, create a hidden
    struct derived from `clap::Parser`. Its fields should correspond to the main
    struct's fields but be wrapped in `Option<T>` to capture only user-provided
