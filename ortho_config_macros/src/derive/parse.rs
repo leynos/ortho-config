@@ -1,9 +1,6 @@
 //! Parsing utilities for the `OrthoConfig` derive macro.
 
-use syn::{
-    Attribute, Data, DeriveInput, Expr, Fields, GenericArgument, Lit, PathArguments, Type,
-    spanned::Spanned,
-};
+use syn::{Attribute, Data, DeriveInput, Expr, Fields, GenericArgument, Lit, PathArguments, Type};
 
 #[derive(Default)]
 pub(crate) struct StructAttrs {
@@ -65,10 +62,10 @@ pub(crate) fn parse_struct_attrs(attrs: &[Attribute]) -> Result<StructAttrs, syn
             }
             Ok(())
         } else {
-            Err(syn::Error::new(
-                meta.path.span(),
-                "unexpected ortho_config key",
-            ))
+            // Silently consume unexpected keys so new attributes can be added
+            // without breaking existing callers. Unknown metadata is parsed
+            // and discarded to avoid a trailing token error from `syn`.
+            meta.input.parse::<proc_macro2::TokenStream>().map(|_| ())
         }
     })?;
     Ok(out)
@@ -119,10 +116,10 @@ pub(crate) fn parse_field_attrs(attrs: &[Attribute]) -> Result<FieldAttrs, syn::
             }
             Ok(())
         } else {
-            Err(syn::Error::new(
-                meta.path.span(),
-                "unexpected ortho_config key",
-            ))
+            // Future versions may introduce additional keys. By parsing and
+            // ignoring unknown metadata we remain forwards compatible and avoid
+            // hard failure on unrecognised attributes.
+            meta.input.parse::<proc_macro2::TokenStream>().map(|_| ())
         }
     })?;
     Ok(out)
@@ -251,5 +248,22 @@ mod tests {
             field_attrs[1].merge_strategy,
             Some(MergeStrategy::Append)
         ));
+    }
+
+    #[test]
+    fn ignores_unknown_keys() {
+        let input: DeriveInput = parse_quote! {
+            #[ortho_config(prefix = "CFG_", unknown = "ignored")]
+            struct Demo {
+                #[ortho_config(bad_key)]
+                field1: String,
+            }
+        };
+
+        let (_ident, fields, struct_attrs, field_attrs) = parse_input(&input).expect("parse_input");
+
+        assert_eq!(fields.len(), 1);
+        assert_eq!(struct_attrs.prefix.as_deref(), Some("CFG_"));
+        assert!(field_attrs[0].cli_long.is_none());
     }
 }
