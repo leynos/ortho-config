@@ -1,6 +1,9 @@
 //! Parsing utilities for the `OrthoConfig` derive macro.
 
-use syn::{Attribute, Data, DeriveInput, Expr, Fields, GenericArgument, Lit, PathArguments, Type};
+use syn::{
+    Attribute, Data, DeriveInput, Expr, Fields, GenericArgument, Lit, PathArguments, Token, Type,
+    parenthesized,
+};
 
 #[derive(Default)]
 pub(crate) struct StructAttrs {
@@ -40,6 +43,18 @@ where
     Ok(())
 }
 
+/// Consumes an unrecognised key-value or list without recording it.
+fn discard_unknown(meta: &syn::meta::ParseNestedMeta) -> syn::Result<()> {
+    if meta.input.peek(Token![=]) {
+        meta.value()?.parse::<proc_macro2::TokenStream>()?;
+    } else if meta.input.peek(syn::token::Paren) {
+        let content;
+        parenthesized!(content in meta.input);
+        content.parse::<proc_macro2::TokenStream>()?;
+    }
+    Ok(())
+}
+
 /// Extracts `#[ortho_config(...)]` metadata applied to a struct.
 ///
 /// Only the `prefix` key is currently recognised. Unknown keys are
@@ -62,10 +77,9 @@ pub(crate) fn parse_struct_attrs(attrs: &[Attribute]) -> Result<StructAttrs, syn
             }
             Ok(())
         } else {
-            // Silently consume unexpected keys so new attributes can be added
-            // without breaking existing callers. Unknown metadata is parsed
-            // and discarded to avoid a trailing token error from `syn`.
-            meta.input.parse::<proc_macro2::TokenStream>().map(|_| ())
+            // Unknown attributes are discarded so new keys can be introduced
+            // without breaking existing callers.
+            discard_unknown(meta)
         }
     })?;
     Ok(out)
@@ -116,10 +130,9 @@ pub(crate) fn parse_field_attrs(attrs: &[Attribute]) -> Result<FieldAttrs, syn::
             }
             Ok(())
         } else {
-            // Future versions may introduce additional keys. By parsing and
-            // ignoring unknown metadata we remain forwards compatible and avoid
-            // hard failure on unrecognised attributes.
-            meta.input.parse::<proc_macro2::TokenStream>().map(|_| ())
+            // Ignore unknown attributes so that future versions can add new
+            // keys without breaking callers.
+            discard_unknown(meta)
         }
     })?;
     Ok(out)
@@ -265,5 +278,56 @@ mod tests {
         assert_eq!(fields.len(), 1);
         assert_eq!(struct_attrs.prefix.as_deref(), Some("CFG_"));
         assert!(field_attrs[0].cli_long.is_none());
+    }
+
+    #[test]
+    fn ignores_unknown_key_with_value() {
+        let input: DeriveInput = parse_quote! {
+            #[ortho_config(prefix = "CFG_", unexpected = 42)]
+            struct Demo {
+                #[ortho_config(cli_long = "f1", extra = true)]
+                field1: String,
+            }
+        };
+
+        let (_ident, fields, struct_attrs, field_attrs) = parse_input(&input).expect("parse_input");
+
+        assert_eq!(fields.len(), 1);
+        assert_eq!(struct_attrs.prefix.as_deref(), Some("CFG_"));
+        assert_eq!(field_attrs[0].cli_long.as_deref(), Some("f1"));
+    }
+
+    #[test]
+    fn handles_multiple_unknown_keys() {
+        let input: DeriveInput = parse_quote! {
+            #[ortho_config(foo, bar, prefix = "CFG_")]
+            struct Demo {
+                #[ortho_config(baz, qux, cli_long = "f1")]
+                field1: String,
+            }
+        };
+
+        let (_ident, fields, struct_attrs, field_attrs) = parse_input(&input).expect("parse_input");
+
+        assert_eq!(fields.len(), 1);
+        assert_eq!(struct_attrs.prefix.as_deref(), Some("CFG_"));
+        assert_eq!(field_attrs[0].cli_long.as_deref(), Some("f1"));
+    }
+
+    #[test]
+    fn mixed_unknown_and_valid_keys_order() {
+        let input: DeriveInput = parse_quote! {
+            #[ortho_config(alpha, prefix = "CFG_", omega)]
+            struct Demo {
+                #[ortho_config(beta, cli_long = "f1", gamma)]
+                field1: String,
+            }
+        };
+
+        let (_ident, fields, struct_attrs, field_attrs) = parse_input(&input).expect("parse_input");
+
+        assert_eq!(fields.len(), 1);
+        assert_eq!(struct_attrs.prefix.as_deref(), Some("CFG_"));
+        assert_eq!(field_attrs[0].cli_long.as_deref(), Some("f1"));
     }
 }
