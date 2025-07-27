@@ -1,8 +1,8 @@
 //! Parsing utilities for the `OrthoConfig` derive macro.
 
 use syn::{
-    Attribute, Data, DeriveInput, Expr, Fields, GenericArgument, Lit, PathArguments, Token, Type,
-    parenthesized,
+    parenthesized, Attribute, Data, DeriveInput, Expr, Fields, GenericArgument, Lit,
+    PathArguments, Token, Type,
 };
 
 #[derive(Default)]

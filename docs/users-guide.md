@@ -3,7 +3,7 @@
 `OrthoConfig` is a Rust library that unifies command‑line arguments,
 environment variables and configuration files into a single, strongly typed
 configuration struct. It is inspired by tools such as `esbuild` and is designed
-to minimise boiler‑plate. The library uses `serde` for deserialisation and
+to minimize boiler‑plate. The library uses `serde` for deserialization and
 `clap` for argument parsing, while `figment` provides layered configuration
 management. This guide covers the functionality currently implemented in the
 repository.
@@ -28,7 +28,7 @@ values from multiple sources. The core features are:
   with a prefix), and a file key (snake case). This removes the need for manual
   aliasing.
 
-- **Type‑safe deserialisation** – Values are deserialised into strongly typed
+- **Type‑safe deserialization** – Values are deserialized into strongly typed
   Rust structs using `serde`.
 
 - **Easy adoption** – A procedural macro `#[derive(OrthoConfig)]` adds the
@@ -36,7 +36,7 @@ values from multiple sources. The core features are:
   their configuration struct and call a generated method to load the
   configuration.
 
-- **Customisable behaviour** – Attributes such as `default`, `cli_long`,
+- **Customizable behaviour** – Attributes such as `default`, `cli_long`,
   `cli_short` and `merge_strategy` provide fine‑grained control over naming and
   merging behaviour.
 
@@ -98,7 +98,7 @@ Field attributes modify how a field is sourced or merged:
 | `cli_short = 'c'`           | Adds a single‑letter short flag for the field.                                                                                                                                |
 | `merge_strategy = "append"` | For `Vec<T>` fields, specifies that values from different sources should be concatenated. This is currently the only supported strategy and is the default for vector fields. |
 
-Unrecognised keys are ignored by the derive macro for forwards compatibility.
+Unrecognized keys are ignored by the derive macro for forwards compatibility.
 Unknown keys will therefore silently do nothing. Developers who require
 stricter validation may add manual `compile_error!` guards.
 
@@ -345,7 +345,7 @@ for a complete example.
 
 `load_and_merge` and `load_and_merge_subcommand_for` return a
 `Result<T, OrthoError>`. `OrthoError` wraps errors from `clap`, file I/O and
-`figment`. When configuration cannot be gathered or deserialised, the error
+`figment`. When configuration cannot be gathered or deserialized, the error
 propagates up to the caller. Consumers should handle these errors
 appropriately, for example by printing them to stderr and exiting. Future
 releases may include improved missing‑value error messages, but currently the

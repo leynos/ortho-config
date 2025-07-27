@@ -21,4 +21,4 @@ yaml = []
 toml = []
 
 [dev-dependencies]
-rstest = "0.18"
+rstest = "0.25.0"
