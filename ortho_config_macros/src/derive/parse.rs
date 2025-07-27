@@ -235,6 +235,7 @@ pub(crate) fn parse_input(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rstest::rstest;
     use syn::parse_quote;
 
     #[test]
@@ -263,71 +264,52 @@ mod tests {
         ));
     }
 
-    #[test]
-    fn ignores_unknown_keys() {
-        let input: DeriveInput = parse_quote! {
+    #[rstest]
+    #[case::unknown_key(
+        parse_quote! {
             #[ortho_config(prefix = "CFG_", unknown = "ignored")]
             struct Demo {
                 #[ortho_config(bad_key)]
                 field1: String,
             }
-        };
-
-        let (_ident, fields, struct_attrs, field_attrs) = parse_input(&input).expect("parse_input");
-
-        assert_eq!(fields.len(), 1);
-        assert_eq!(struct_attrs.prefix.as_deref(), Some("CFG_"));
-        assert!(field_attrs[0].cli_long.is_none());
-    }
-
-    #[test]
-    fn ignores_unknown_key_with_value() {
-        let input: DeriveInput = parse_quote! {
+        },
+        None
+    )]
+    #[case::unknown_key_with_value(
+        parse_quote! {
             #[ortho_config(prefix = "CFG_", unexpected = 42)]
             struct Demo {
                 #[ortho_config(cli_long = "f1", extra = true)]
                 field1: String,
             }
-        };
-
-        let (_ident, fields, struct_attrs, field_attrs) = parse_input(&input).expect("parse_input");
-
-        assert_eq!(fields.len(), 1);
-        assert_eq!(struct_attrs.prefix.as_deref(), Some("CFG_"));
-        assert_eq!(field_attrs[0].cli_long.as_deref(), Some("f1"));
-    }
-
-    #[test]
-    fn handles_multiple_unknown_keys() {
-        let input: DeriveInput = parse_quote! {
+        },
+        Some("f1")
+    )]
+    #[case::multiple_unknown_keys(
+        parse_quote! {
             #[ortho_config(foo, bar, prefix = "CFG_")]
             struct Demo {
                 #[ortho_config(baz, qux, cli_long = "f1")]
                 field1: String,
             }
-        };
-
-        let (_ident, fields, struct_attrs, field_attrs) = parse_input(&input).expect("parse_input");
-
-        assert_eq!(fields.len(), 1);
-        assert_eq!(struct_attrs.prefix.as_deref(), Some("CFG_"));
-        assert_eq!(field_attrs[0].cli_long.as_deref(), Some("f1"));
-    }
-
-    #[test]
-    fn mixed_unknown_and_valid_keys_order() {
-        let input: DeriveInput = parse_quote! {
+        },
+        Some("f1")
+    )]
+    #[case::mixed_order(
+        parse_quote! {
             #[ortho_config(alpha, prefix = "CFG_", omega)]
             struct Demo {
                 #[ortho_config(beta, cli_long = "f1", gamma)]
                 field1: String,
             }
-        };
-
+        },
+        Some("f1")
+    )]
+    fn test_unknown_keys_handling(#[case] input: DeriveInput, #[case] cli_long: Option<&str>) {
         let (_ident, fields, struct_attrs, field_attrs) = parse_input(&input).expect("parse_input");
 
         assert_eq!(fields.len(), 1);
         assert_eq!(struct_attrs.prefix.as_deref(), Some("CFG_"));
-        assert_eq!(field_attrs[0].cli_long.as_deref(), Some("f1"));
+        assert_eq!(field_attrs[0].cli_long.as_deref(), cli_long);
     }
 }
