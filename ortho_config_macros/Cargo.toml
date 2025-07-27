@@ -19,3 +19,6 @@ default = []
 json5 = []
 yaml = []
 toml = []
+
+[dev-dependencies]
+rstest = "0.25.0"

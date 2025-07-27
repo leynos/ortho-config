@@ -35,6 +35,7 @@ manual aliasing.
 - **Sensible Defaults:** Aims for intuitive behavior out-of-the-box.
 
 ## Quick Start
+<!-- markdownlint-disable MD029 -->
 
 1. **Add `OrthoConfig` to the project `Cargo.toml`:**
 

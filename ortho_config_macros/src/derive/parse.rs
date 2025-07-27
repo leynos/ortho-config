@@ -1,8 +1,8 @@
 //! Parsing utilities for the `OrthoConfig` derive macro.
 
+use syn::parenthesized;
 use syn::{
-    Attribute, Data, DeriveInput, Expr, Fields, GenericArgument, Lit, PathArguments, Type,
-    spanned::Spanned,
+    Attribute, Data, DeriveInput, Expr, Fields, GenericArgument, Lit, PathArguments, Token, Type,
 };
 
 #[derive(Default)]
@@ -43,6 +43,18 @@ where
     Ok(())
 }
 
+/// Consumes an unrecognised key-value or list without recording it.
+fn discard_unknown(meta: &syn::meta::ParseNestedMeta) -> syn::Result<()> {
+    if meta.input.peek(Token![=]) {
+        meta.value()?.parse::<proc_macro2::TokenStream>()?;
+    } else if meta.input.peek(syn::token::Paren) {
+        let content;
+        parenthesized!(content in meta.input);
+        content.parse::<proc_macro2::TokenStream>()?;
+    }
+    Ok(())
+}
+
 /// Extracts `#[ortho_config(...)]` metadata applied to a struct.
 ///
 /// Only the `prefix` key is currently recognised. Unknown keys are
@@ -65,10 +77,11 @@ pub(crate) fn parse_struct_attrs(attrs: &[Attribute]) -> Result<StructAttrs, syn
             }
             Ok(())
         } else {
-            Err(syn::Error::new(
-                meta.path.span(),
-                "unexpected ortho_config key",
-            ))
+            // Unknown attributes are intentionally discarded to preserve
+            // backwards compatibility. This allows new keys to be added without
+            // breaking callers, but unrecognized attributes will be silently
+            // ignored.
+            discard_unknown(meta)
         }
     })?;
     Ok(out)
@@ -119,10 +132,9 @@ pub(crate) fn parse_field_attrs(attrs: &[Attribute]) -> Result<FieldAttrs, syn::
             }
             Ok(())
         } else {
-            Err(syn::Error::new(
-                meta.path.span(),
-                "unexpected ortho_config key",
-            ))
+            // Ignore unknown attributes so that future versions can add new
+            // keys without breaking callers.
+            discard_unknown(meta)
         }
     })?;
     Ok(out)
@@ -225,6 +237,7 @@ pub(crate) fn parse_input(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rstest::rstest;
     use syn::parse_quote;
 
     #[test]
@@ -251,5 +264,54 @@ mod tests {
             field_attrs[1].merge_strategy,
             Some(MergeStrategy::Append)
         ));
+    }
+
+    #[rstest]
+    #[case::unknown_key(
+        parse_quote! {
+            #[ortho_config(prefix = "CFG_", unknown = "ignored")]
+            struct Demo {
+                #[ortho_config(bad_key)]
+                field1: String,
+            }
+        },
+        None
+    )]
+    #[case::unknown_key_with_value(
+        parse_quote! {
+            #[ortho_config(prefix = "CFG_", unexpected = 42)]
+            struct Demo {
+                #[ortho_config(cli_long = "f1", extra = true)]
+                field1: String,
+            }
+        },
+        Some("f1")
+    )]
+    #[case::multiple_unknown_keys(
+        parse_quote! {
+            #[ortho_config(foo, bar, prefix = "CFG_")]
+            struct Demo {
+                #[ortho_config(baz, qux, cli_long = "f1")]
+                field1: String,
+            }
+        },
+        Some("f1")
+    )]
+    #[case::mixed_order(
+        parse_quote! {
+            #[ortho_config(alpha, prefix = "CFG_", omega)]
+            struct Demo {
+                #[ortho_config(beta, cli_long = "f1", gamma)]
+                field1: String,
+            }
+        },
+        Some("f1")
+    )]
+    fn test_unknown_keys_handling(#[case] input: DeriveInput, #[case] cli_long: Option<&str>) {
+        let (_ident, fields, struct_attrs, field_attrs) = parse_input(&input).expect("parse_input");
+
+        assert_eq!(fields.len(), 1);
+        assert_eq!(struct_attrs.prefix.as_deref(), Some("CFG_"));
+        assert_eq!(field_attrs[0].cli_long.as_deref(), cli_long);
     }
 }
