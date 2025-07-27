@@ -77,8 +77,10 @@ pub(crate) fn parse_struct_attrs(attrs: &[Attribute]) -> Result<StructAttrs, syn
             }
             Ok(())
         } else {
-            // Unknown attributes are discarded so new keys can be introduced
-            // without breaking existing callers.
+            // Unknown attributes are intentionally discarded to preserve
+            // backwards compatibility. This allows new keys to be added without
+            // breaking callers, but unrecognized attributes will be silently
+            // ignored.
             discard_unknown(meta)
         }
     })?;
