@@ -60,9 +60,9 @@ pub(crate) fn build_default_struct_init(
 
 pub(crate) fn build_env_provider(struct_attrs: &StructAttrs) -> proc_macro2::TokenStream {
     if let Some(prefix) = &struct_attrs.prefix {
-        quote! { Env::prefixed(#prefix) }
+        quote! { ortho_config::CsvEnv::prefixed(#prefix) }
     } else {
-        quote! { Env::raw() }
+        quote! { ortho_config::CsvEnv::raw() }
     }
 }
 
@@ -220,7 +220,10 @@ mod tests {
     fn env_provider_tokens() {
         let (_, _, struct_attrs) = demo_input();
         let ts = build_env_provider(&struct_attrs);
-        assert_eq!(ts.to_string(), "Env :: prefixed (\"CFG_\")");
+        assert_eq!(
+            ts.to_string(),
+            "ortho_config :: CsvEnv :: prefixed (\"CFG_\")"
+        );
     }
 
     #[test]

@@ -16,6 +16,10 @@ readme = "README.md"
 keywords = ["config", "configuration", "cli", "env", "settings"]
 categories = ["config", "command-line-interface"]
 
+[workspace.dev-dependencies]
+cucumber = "0.20"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+
 # `cargo clippy` lints configuration
 [workspace.lints.clippy]
 # make every pedantic lint emit a warning
