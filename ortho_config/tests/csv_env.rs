@@ -1,4 +1,7 @@
-//! Tests for the `CsvEnv` provider.
+//! Unit tests for the `CsvEnv` provider.
+//!
+//! Ensure that comma-separated environment variables are parsed into arrays
+//! and that existing JSON strings remain intact.
 
 use figment::Figment;
 use ortho_config::CsvEnv;
@@ -13,12 +16,28 @@ struct Cfg {
 #[rstest]
 #[case("A,B,C", vec!["A", "B", "C"])]
 #[case("[\"x\",\"y\"]", vec!["x", "y"])]
+#[case("A, B, C", vec!["A", "B", "C"])]
+#[case("A,B,", vec!["A", "B", ""])]
+#[case(",A,B", vec!["", "A", "B"])]
 fn parses_lists(#[case] raw: &str, #[case] expected: Vec<&str>) {
     figment::Jail::expect_with(|j| {
         j.set_env("VALUES", raw);
         let cfg: Cfg = Figment::from(CsvEnv::raw()).extract().expect("extract");
         let want: Vec<String> = expected.into_iter().map(str::to_string).collect();
         assert_eq!(cfg.values, want);
+        Ok(())
+    });
+}
+
+#[rstest]
+#[case("")]
+#[case("single")]
+#[allow(clippy::should_panic_without_expect)]
+#[should_panic]
+fn fails_on_non_lists(#[case] raw: &str) {
+    figment::Jail::expect_with(|j| {
+        j.set_env("VALUES", raw);
+        let _cfg: Cfg = Figment::from(CsvEnv::raw()).extract().unwrap();
         Ok(())
     });
 }

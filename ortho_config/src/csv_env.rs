@@ -17,8 +17,12 @@ use std::ops::Deref;
 use uncased::{Uncased, UncasedStr};
 
 /// Environment provider with CSV list support.
+///
+/// Wraps the standard [`Env`] provider to interpret comma-separated
+/// values as arrays, whilst leaving JSON strings untouched.
 #[derive(Clone)]
 pub struct CsvEnv {
+    /// Inner environment provider that performs the actual variable access.
     inner: Env,
 }
 

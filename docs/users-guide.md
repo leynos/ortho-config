@@ -254,10 +254,10 @@ example above, valid environment variables include `APP_LOG_LEVEL`, `APP_PORT`,
 own prefix (`DB`), then the environment variable becomes `APP_DB_URL`.
 
 Comma-separated values such as `DDLINT_RULES=A,B,C` are parsed as lists. The
-loader converts these strings into arrays before merging so array fields behave
-the same across environment variables, CLI arguments and configuration files.
-Values containing literal commas must be wrapped in quotes or brackets to
-disable list parsing.
+loader converts these strings into arrays before merging, so array fields
+behave the same across environment variables, CLI arguments and configuration
+files. Values containing literal commas must be wrapped in quotes or brackets
+to disable list parsing.
 
 ## Subcommand configuration
 

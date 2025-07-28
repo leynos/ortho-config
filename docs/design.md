@@ -225,7 +225,7 @@ resembles structured data. This preserves JSON syntax while allowing variables
 like `DDLINT_RULES=A,B,C` to deserialize as `["A", "B", "C"]`. Values
 containing literal commas must be wrapped in quotes or brackets to avoid being
 split. The derive macro now uses `CsvEnv` instead of `Env` so list handling is
-consistent across files, environment and CLI inputs.
+consistent across files, environment, and CLI inputs.
 
 ## 5. Dependency Strategy
 

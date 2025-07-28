@@ -35,9 +35,9 @@ yaml = ["figment/yaml", "dep:serde_yaml"]
 figment = { version = "0.10", features = ["toml", "env"] }
 serde = { version = "1", features = ["derive"] }
 trybuild = "1"
-cucumber = "0.20"
+cucumber = "0.21.1"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
-rstest = "0.25.0"
+rstest = "0.26.1"
 
 [[test]]
 name = "cucumber"

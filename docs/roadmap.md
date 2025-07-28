@@ -32,7 +32,7 @@ references the relevant design guidance.
 
 - **Add configuration inheritance (extends)**
 
-  - [ ] Design and implement an `extends` key for configuration files so a
+  - [ ] Design and implement an `extends` key for configuration files, so a
     config can inherit from a base file, with current settings overriding those
     from the base. [[DDLint Gap Analysis](ddlint-gap-analysis.md)]
 
@@ -87,7 +87,7 @@ references the relevant design guidance.
 
   - [ ] Generate a hidden `clap::Parser` struct that automatically derives long
     and short option names from field names (snake_case → kebab‑case) unless
-    overridden via `#[ortho_config(cli_long = "...")]`. [[Design](design.md)]
+    overridden via `#[ortho_config(cli_long = "…")]`. [[Design](design.md)]
 
   - [ ] Ensure the macro sets appropriate `#[clap(long, short)]` attributes and
     respects default values specified in struct attributes.
