@@ -76,6 +76,21 @@ impl CsvEnv {
     fn iter(&self) -> impl Iterator<Item = (Uncased<'static>, String)> + '_ {
         self.inner.iter()
     }
+
+    /// Determine if a value should be parsed as comma-separated rather than
+    /// structured data.
+    ///
+    /// The value is treated as CSV when it contains a comma and does not start
+    /// with `[` , `{`, `"` or `'`. This avoids misinterpreting JSON or quoted
+    /// strings as lists.
+    fn should_parse_as_csv(value: &str) -> bool {
+        let trimmed = value.trim();
+        trimmed.contains(',')
+            && !trimmed.starts_with('[')
+            && !trimmed.starts_with('{')
+            && !trimmed.starts_with('"')
+            && !trimmed.starts_with('\'')
+    }
 }
 
 impl Provider for CsvEnv {
@@ -91,12 +106,7 @@ impl Provider for CsvEnv {
         let mut dict = Dict::new();
         for (k, v) in self.iter() {
             let trimmed = v.trim();
-            let value = if trimmed.contains(',')
-                && !trimmed.starts_with('[')
-                && !trimmed.starts_with('{')
-                && !trimmed.starts_with('"')
-                && !trimmed.starts_with('\'')
-            {
+            let value = if Self::should_parse_as_csv(&v) {
                 let arr = trimmed
                     .split(',')
                     .map(|s| Value::from(s.trim().to_string()))
