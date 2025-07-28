@@ -3,7 +3,8 @@
 //! Wraps `figment::providers::Env` and converts values containing commas
 //! into arrays unless they look like structured data (starting with `[` or
 //! `{` or a quote). This allows environment variables such as
-//! `DDLINT_RULES=A,B,C` to be deserialised as `Vec<String>`.
+//! `DDLINT_RULES=A,B,C` to be deserialised as `Vec<String>`. Values with
+//! embedded commas must be wrapped in quotes or brackets to avoid being split.
 
 use figment::providers::Env;
 use figment::{
@@ -12,6 +13,7 @@ use figment::{
     util::nest,
     value::{Dict, Map, Value},
 };
+use std::ops::Deref;
 use uncased::{Uncased, UncasedStr};
 
 /// Environment provider with CSV list support.
@@ -85,11 +87,22 @@ impl CsvEnv {
     /// strings as lists.
     fn should_parse_as_csv(value: &str) -> bool {
         let trimmed = value.trim();
-        trimmed.contains(',')
-            && !trimmed.starts_with('[')
-            && !trimmed.starts_with('{')
-            && !trimmed.starts_with('"')
-            && !trimmed.starts_with('\'')
+        trimmed.contains(',') && !matches!(trimmed.chars().next(), Some('[' | '{' | '"' | '\''))
+    }
+
+    fn parse_value(raw: &str) -> Value {
+        let trimmed = raw.trim();
+        if Self::should_parse_as_csv(trimmed) {
+            trimmed
+                .split(',')
+                .map(|s| Value::from(s.trim().to_string()))
+                .collect::<Vec<_>>()
+                .into()
+        } else {
+            trimmed
+                .parse()
+                .unwrap_or_else(|_| Value::from(trimmed.to_string()))
+        }
     }
 }
 
@@ -105,21 +118,26 @@ impl Provider for CsvEnv {
     fn data(&self) -> Result<Map<Profile, Dict>, Error> {
         let mut dict = Dict::new();
         for (k, v) in self.iter() {
-            let trimmed = v.trim();
-            let value = if Self::should_parse_as_csv(&v) {
-                let arr = trimmed
-                    .split(',')
-                    .map(|s| Value::from(s.trim().to_string()))
-                    .collect::<Vec<_>>();
-                Value::from(arr)
-            } else {
-                v.parse().expect("infallible")
-            };
+            let value = Self::parse_value(&v);
             let nested = nest(k.as_str(), value)
                 .into_dict()
                 .expect("key is non-empty: must have dict");
             dict.extend(nested);
         }
         Ok(self.inner.profile.collect(dict))
+    }
+}
+
+impl From<Env> for CsvEnv {
+    fn from(inner: Env) -> Self {
+        Self { inner }
+    }
+}
+
+impl Deref for CsvEnv {
+    type Target = Env;
+
+    fn deref(&self) -> &Env {
+        &self.inner
     }
 }

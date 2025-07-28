@@ -152,7 +152,7 @@ pub(crate) fn build_load_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStre
                 Self: serde::Serialize,
             {
                 use figment::{Figment, providers::{Toml, Serialized}, Profile};
-                use ortho_config::CsvEnv as Env;
+                use ortho_config::CsvEnv;
                 #[cfg(feature = "json5")] use figment_json5::Json5;
                 #[cfg(feature = "yaml")] use figment::providers::Yaml;
                 use uncased::Uncased;
