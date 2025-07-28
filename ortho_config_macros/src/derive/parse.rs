@@ -147,29 +147,31 @@ pub(crate) fn parse_field_attrs(attrs: &[Attribute]) -> Result<FieldAttrs, syn::
 /// not recursive.
 fn type_inner<'a>(ty: &'a Type, wrapper: &str) -> Option<&'a Type> {
     if let Type::Path(p) = ty {
-        let segs: Vec<_> = p
-            .path
-            .segments
-            .iter()
-            .map(|s| s.ident.to_string())
-            .collect();
-        let matches_wrapper = match segs.as_slice() {
-            [id] => id == wrapper,
-            [first, mid, last] => {
-                (first == "std" || first == "core" || first == "alloc")
-                    && last == wrapper
-                    && ((wrapper == "Option" && mid == "option")
-                        || (wrapper == "Vec" && mid == "vec"))
+        // Grab the final two segments (if available) to match paths such as
+        // `std::option::Option<T>` or `crate::option::Option<T>` without caring
+        // about the full prefix.
+        let mut segs = p.path.segments.iter().rev();
+        let last = segs.next()?;
+        if last.ident != wrapper {
+            return None;
+        }
+
+        // The immediate parent segment may be `option` or `vec`. If absent,
+        // assume a shorthand like `Option<T>`.
+        if let Some(prev) = segs.next() {
+            let expected = match wrapper {
+                "Option" => "option",
+                "Vec" => "vec",
+                _ => "",
+            };
+            if !expected.is_empty() && prev.ident != expected {
+                return None;
             }
-            _ => false,
-        };
-        if matches_wrapper {
-            if let Some(seg) = p.path.segments.last() {
-                if let PathArguments::AngleBracketed(args) = &seg.arguments {
-                    if let Some(GenericArgument::Type(inner)) = args.args.first() {
-                        return Some(inner);
-                    }
-                }
+        }
+
+        if let PathArguments::AngleBracketed(args) = &last.arguments {
+            if let Some(GenericArgument::Type(inner)) = args.args.first() {
+                return Some(inner);
             }
         }
     }
