@@ -156,18 +156,9 @@ fn type_inner<'a>(ty: &'a Type, wrapper: &str) -> Option<&'a Type> {
             return None;
         }
 
-        // The immediate parent segment may be `option` or `vec`. If absent,
-        // assume a shorthand like `Option<T>`.
-        if let Some(prev) = segs.next() {
-            let expected = match wrapper {
-                "Option" => "option",
-                "Vec" => "vec",
-                _ => "",
-            };
-            if !expected.is_empty() && prev.ident != expected {
-                return None;
-            }
-        }
+        // Ignore the parent segment so crate-relative forms such as
+        // `crate::option::Option<T>` and custom module paths match.
+        let _ = segs.next();
 
         if let PathArguments::AngleBracketed(args) = &last.arguments {
             if let Some(GenericArgument::Type(inner)) = args.args.first() {
@@ -315,5 +306,27 @@ mod tests {
         assert_eq!(fields.len(), 1);
         assert_eq!(struct_attrs.prefix.as_deref(), Some("CFG_"));
         assert_eq!(field_attrs[0].cli_long.as_deref(), cli_long);
+    }
+
+    #[rstest]
+    #[case(parse_quote!(Option<u32>))]
+    #[case(parse_quote!(std::option::Option<u32>))]
+    #[case(parse_quote!(core::option::Option<u32>))]
+    #[case(parse_quote!(crate::option::Option<u32>))]
+    fn option_inner_matches_various_prefixes(#[case] ty: Type) {
+        let expected: Type = parse_quote!(u32);
+        let inner = option_inner(&ty).expect("should extract");
+        assert_eq!(inner, &expected);
+    }
+
+    #[rstest]
+    #[case(parse_quote!(Vec<u8>))]
+    #[case(parse_quote!(std::vec::Vec<u8>))]
+    #[case(parse_quote!(alloc::vec::Vec<u8>))]
+    #[case(parse_quote!(crate::vec::Vec<u8>))]
+    fn vec_inner_matches_various_prefixes(#[case] ty: Type) {
+        let expected: Type = parse_quote!(u8);
+        let inner = vec_inner(&ty).expect("should extract");
+        assert_eq!(inner, &expected);
     }
 }
