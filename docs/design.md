@@ -229,6 +229,24 @@ containing literal commas must be wrapped in quotes or brackets to avoid being
 split. The derive macro now uses `CsvEnv` instead of `Env` so list handling is
 consistent across files, environment, and CLI inputs.
 
+### 4.8. Configuration Inheritance
+
+Some projects require a base configuration that is shared across multiple
+environments. A file can include an `extends` key whose value is a path to
+another configuration file. When present, the loader reads the referenced file
+first and then merges the current file over it. The path is resolved relative
+to the file containing the `extends` key. Cycles result in an error.
+
+The overall precedence becomes:
+
+1. Base file specified by `extends`
+2. The extending file itself
+3. Environment variables
+4. Command‑line arguments
+
+Prefixes and subcommand namespaces apply normally at each layer; inheritance
+only affects the file portion of the configuration.
+
 ## 5. Dependency Strategy
 
 - **`ortho_config_macros`:**

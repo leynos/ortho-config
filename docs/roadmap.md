@@ -32,14 +32,14 @@ references the relevant design guidance.
 
 - **Add configuration inheritance (extends)**
 
-  - [ ] Design and implement an `extends` key for configuration files, so a
+  - [x] Design and implement an `extends` key for configuration files, so a
     config can inherit from a base file, with current settings overriding those
     from the base. [[DDLint Gap Analysis](ddlint-gap-analysis.md)]
 
-  - [ ] Define the layering semantics (base file → extended file → env → CLI)
+  - [x] Define the layering semantics (base file → extended file → env → CLI)
     and update the loader accordingly.
 
-  - [ ] Document how inheritance interacts with prefixes and subcommand
+  - [x] Document how inheritance interacts with prefixes and subcommand
     namespaces.
 
 - **Support custom option names for the configuration path**
