@@ -6,6 +6,7 @@
 
 pub use ortho_config_macros::OrthoConfig;
 
+mod csv_env;
 mod error;
 mod file;
 mod merge;
@@ -25,6 +26,7 @@ pub fn normalize_prefix(prefix: &str) -> String {
     prefix.trim_end_matches('_').to_ascii_lowercase()
 }
 
+pub use csv_env::CsvEnv;
 pub use error::OrthoError;
 pub use file::load_config_file;
 

@@ -218,6 +218,17 @@ resolves to `%APPDATA%` (a.k.a. `FOLDERID_RoamingAppData`) and `%LOCALAPPDATA%`
 Support for `XDG_CONFIG_HOME` on Windows could be added later using
 `directories` to mimic the XDG specification.
 
+### 4.7. Comma-Separated Environment Lists
+
+Environment variables often provide simple comma-separated strings for lists.
+The crate introduces a `CsvEnv` provider that wraps `figment::providers::Env`
+and converts comma-separated values into arrays unless the value already
+resembles structured data. This preserves JSON syntax while allowing variables
+like `DDLINT_RULES=A,B,C` to deserialize as `["A", "B", "C"]`. Values
+containing literal commas must be wrapped in quotes or brackets to avoid being
+split. The derive macro now uses `CsvEnv` instead of `Env` so list handling is
+consistent across files, environment, and CLI inputs.
+
 ## 5. Dependency Strategy
 
 - **`ortho_config_macros`:**
