@@ -116,7 +116,9 @@ This is the most complex component. It needs to perform the following using
    meta item to a callback. Both struct- and field-level parsers call this
    helper, so the iteration logic is not duplicated. The inner type extraction
    uses a generic `type_inner` function that accepts the wrapper name, with
-   thin wrappers such as `option_inner` forwarding to it.
+   thin wrappers such as `option_inner` forwarding to it. The matcher focuses
+   on the final path segments, so crate-relative forms like
+   `crate::option::Option<T>` are recognized.
 2. **Generate a `clap`-aware Struct:** In the generated code, create a hidden
    struct derived from `clap::Parser`. Its fields should correspond to the main
    struct's fields but be wrapped in `Option<T>` to capture only user-provided
