@@ -18,6 +18,10 @@ pub enum OrthoError {
         source: Box<dyn std::error::Error + Send + Sync>,
     },
 
+    /// Cycle detected while resolving `extends`.
+    #[error("cyclic extends detected: {cycle}")]
+    CyclicExtends { cycle: String },
+
     /// Error while gathering configuration from providers.
     #[error("Failed to gather configuration: {0}")]
     Gathering(#[from] figment::Error),

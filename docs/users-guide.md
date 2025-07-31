@@ -259,6 +259,16 @@ behave the same across environment variables, CLI arguments and configuration
 files. Values containing literal commas must be wrapped in quotes or brackets
 to disable list parsing.
 
+## Configuration inheritance
+
+A configuration file may specify an `extends` key pointing to another file. The
+referenced file is loaded first and the current file's values override it. The
+path is resolved relative to the file containing the `extends` directive.
+Precedence across all sources becomes base file → extending file → environment
+variables → CLI flags. Cycles are detected and reported via a `CyclicExtends`
+error. Prefix handling and subcommand namespaces work as normal when
+inheritance is in use.
+
 ## Subcommand configuration
 
 Many CLI applications use `clap` subcommands to perform different operations.
