@@ -13,6 +13,12 @@ use serde::{Deserialize, Serialize};
 pub struct World {
     /// Environment variable value set during the scenario.
     env_value: Option<String>,
+    /// Whether the scenario requires an extended configuration file.
+    extends: bool,
+    /// Whether to create a cyclic inheritance scenario.
+    cyclic: bool,
+    /// Whether the base file is missing.
+    missing_base: bool,
     /// Result of attempting to load configuration.
     pub result: Option<Result<RulesConfig, ortho_config::OrthoError>>,
 }
