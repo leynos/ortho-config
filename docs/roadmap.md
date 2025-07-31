@@ -42,32 +42,6 @@ references the relevant design guidance.
   - [x] Document how inheritance interacts with prefixes and subcommand
     namespaces.
 
-- **Support custom option names for the configuration path**
-
-  - [ ] Allow renaming of the auto‑generated `--config-path` flag and its
-    environment variable (e.g. to `--config`) via an attribute on the
-    configuration struct. [[DDLint Gap Analysis](ddlint-gap-analysis.md)]
-
-  - [ ] Update documentation and examples to illustrate this override.
-
-- **Enable dynamic tables for arbitrary keys**
-
-  - [ ] Accept map types (e.g. `BTreeMap<String, RuleConfig>`) in configuration
-    structs to support dynamic rule tables such as `[rules.consistent-casing]`.
-    [[DDLint Gap Analysis](ddlint-gap-analysis.md)]
-
-  - [ ] Ensure these maps deserialise correctly from files, environment
-    variables and CLI.
-
-- **Implement ignore‑pattern list handling**
-
-  - [ ] Provide support for ignore pattern lists using comma‑separated
-    environment variables and CLI flags.
-    [[DDLint Gap Analysis](ddlint-gap-analysis.md)]
-
-  - [ ] Document the precedence rules and the relationship to defaults (e.g.
-    `[".git/", "build/", "target/"]`).
-
 - **Refine subcommand merging behaviour**
 
   - [ ] Simplify `load_and_merge` for subcommands to merge CLI‑provided values
@@ -83,7 +57,7 @@ references the relevant design guidance.
   - [ ] Deprecate and eventually remove `load_subcommand_config` and its `_for`
     variant in favour of a unified `load_and_merge` API.
 
-- **Finish** `clap` **integration in the derive macro**
+- **Finish `clap` integration in the derive macro**
 
   - [ ] Generate a hidden `clap::Parser` struct that automatically derives long
     and short option names from field names (snake_case → kebab‑case) unless
@@ -120,6 +94,32 @@ references the relevant design guidance.
   - [ ] Provide worked examples demonstrating how to rename the config path
     flag, how to use subcommand defaults via the `cmds` namespace, and how to
     interpret improved error messages.
+
+- **Support custom option names for the configuration path**
+
+  - [ ] Allow renaming of the auto‑generated `--config-path` flag and its
+    environment variable (e.g. to `--config`) via an attribute on the
+    configuration struct. [[DDLint Gap Analysis](ddlint-gap-analysis.md)]
+
+  - [ ] Update documentation and examples to illustrate this override.
+
+- **Enable dynamic tables for arbitrary keys**
+
+  - [ ] Accept map types (e.g. `BTreeMap<String, RuleConfig>`) in configuration
+    structs to support dynamic rule tables such as `[rules.consistent-casing]`.
+    [[DDLint Gap Analysis](ddlint-gap-analysis.md)]
+
+  - [ ] Ensure these maps deserialise correctly from files, environment
+    variables and CLI.
+
+- **Implement ignore‑pattern list handling**
+
+  - [ ] Provide support for ignore pattern lists using comma‑separated
+    environment variables and CLI flags.
+    [[DDLint Gap Analysis](ddlint-gap-analysis.md)]
+
+  - [ ] Document the precedence rules and the relationship to defaults (e.g.
+    `[".git/", "build/", "target/"]`).
 
 - **Address future enhancements**
 
