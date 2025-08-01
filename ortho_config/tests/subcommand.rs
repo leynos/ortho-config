@@ -162,3 +162,20 @@ fn merge_wrapper_respects_prefix() {
     .expect("merge");
     assert_eq!(merged.foo.as_deref(), Some("file"));
 }
+
+#[derive(Debug, Deserialize, serde::Serialize, Parser, Default, PartialEq)]
+#[command(name = "test")]
+struct RequiredCli {
+    #[arg(long, required = true)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    ref_id: Option<String>,
+}
+
+#[rstest::rstest]
+fn cli_only_values_are_accepted() {
+    let cli = RequiredCli {
+        ref_id: Some("cli".into()),
+    };
+    let merged: RequiredCli = with_merged_subcommand_cli(|_j| Ok(()), &cli).expect("merge");
+    assert_eq!(merged.ref_id.as_deref(), Some("cli"));
+}
