@@ -3,6 +3,11 @@ use clap::Parser;
 use cucumber::{given, then, when};
 use ortho_config::subcommand::load_and_merge_subcommand_for;
 
+/// Check if all configuration sources are absent.
+fn has_no_config_sources(world: &World) -> bool {
+    world.sub_ref.is_none() && world.sub_file.is_none() && world.sub_env.is_none()
+}
+
 #[given(expr = "a CLI reference {string}")]
 fn set_cli_ref(world: &mut World, val: String) {
     world.sub_ref = Some(val);
@@ -26,7 +31,7 @@ fn env_ref(world: &mut World, val: String) {
 #[when("the subcommand configuration is loaded without defaults")]
 fn load_sub(world: &mut World) {
     let mut result = None;
-    if world.sub_ref.is_none() && world.sub_file.is_none() && world.sub_env.is_none() {
+    if has_no_config_sources(world) {
         result = Some(PrArgs::try_parse_from(["test"]).map_err(Into::into));
     } else {
         let cli = PrArgs {
