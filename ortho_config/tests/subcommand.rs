@@ -162,3 +162,60 @@ fn merge_wrapper_respects_prefix() {
     .expect("merge");
     assert_eq!(merged.foo.as_deref(), Some("file"));
 }
+
+#[derive(Debug, Deserialize, serde::Serialize, Parser, Default, PartialEq)]
+#[command(name = "test")]
+struct RequiredCli {
+    #[arg(long, required = true)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    ref_id: Option<String>,
+}
+
+#[rstest::rstest]
+fn cli_only_values_are_accepted() {
+    let cli = RequiredCli {
+        ref_id: Some("cli".into()),
+    };
+    let merged: RequiredCli = with_merged_subcommand_cli(|_j| Ok(()), &cli).expect("merge");
+    assert_eq!(merged.ref_id.as_deref(), Some("cli"));
+}
+
+#[test]
+fn error_when_required_cli_value_missing() {
+    let result = RequiredCli::try_parse_from(["test"]);
+    assert!(
+        result.is_err(),
+        "parsing should fail without required value"
+    );
+}
+
+#[test]
+fn conflicting_values_cli_takes_precedence() {
+    let cli = RequiredCli {
+        ref_id: Some("cli".into()),
+    };
+    let merged: RequiredCli = with_merged_subcommand_cli(
+        |j| {
+            j.create_file(".app.toml", "[cmds.test]\nref_id = \"config\"")?;
+            j.set_env("APP_CMDS_TEST_REF_ID", "env");
+            Ok(())
+        },
+        &cli,
+    )
+    .expect("merge");
+    assert_eq!(merged.ref_id.as_deref(), Some("cli"));
+}
+
+#[test]
+fn env_value_used_when_cli_missing() {
+    let cli = RequiredCli { ref_id: None };
+    let merged: RequiredCli = with_merged_subcommand_cli(
+        |j| {
+            j.set_env("APP_CMDS_TEST_REF_ID", "from-env");
+            Ok(())
+        },
+        &cli,
+    )
+    .expect("merge");
+    assert_eq!(merged.ref_id.as_deref(), Some("from-env"));
+}

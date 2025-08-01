@@ -379,6 +379,7 @@ where
 /// # Ok(())
 /// # }
 /// ```
+#[deprecated(note = "use `load_and_merge_subcommand_for` instead")]
 pub fn load_subcommand_config_for<T>(name: &CmdName) -> Result<T, OrthoError>
 where
     T: crate::OrthoConfig + Default,
@@ -431,14 +432,20 @@ pub fn load_and_merge_subcommand<T>(prefix: &Prefix, cli: &T) -> Result<T, Ortho
 where
     T: serde::Serialize + DeserializeOwned + Default + CommandFactory,
 {
-    use figment::{Figment, providers::Serialized};
+    use figment::providers::Serialized;
 
     let name = CmdName::new(T::command().get_name());
-    #[allow(deprecated)]
-    let defaults: T = load_subcommand_config(prefix, &name)?;
+    let paths = candidate_paths(prefix);
+    let mut fig = load_from_files(&paths, &name)?;
 
-    Figment::from(Serialized::defaults(&defaults))
-        .merge(Serialized::defaults(cli))
+    let env_name = name.env_key();
+    let env_prefix = format!("{}CMDS_{env_name}_", prefix.raw());
+    let env_provider = Env::prefixed(&env_prefix)
+        .map(|k| Uncased::from(k))
+        .split("__");
+    fig = fig.merge(env_provider);
+
+    fig.merge(Serialized::defaults(cli))
         .extract()
         .map_err(OrthoError::Gathering)
 }

@@ -21,6 +21,24 @@ pub struct World {
     missing_base: bool,
     /// Result of attempting to load configuration.
     pub result: Option<Result<RulesConfig, ortho_config::OrthoError>>,
+    /// CLI reference value for subcommand scenarios.
+    sub_ref: Option<String>,
+    /// Configuration file reference for subcommand scenarios.
+    sub_file: Option<String>,
+    /// Environment variable reference for subcommand scenarios.
+    sub_env: Option<String>,
+    /// Result of subcommand configuration loading.
+    pub sub_result: Option<Result<PrArgs, ortho_config::OrthoError>>,
+}
+
+/// CLI struct used for subcommand behavioural tests.
+#[derive(Debug, Deserialize, Serialize, Parser, OrthoConfig, Default, Clone)]
+#[command(name = "test")]
+#[ortho_config(prefix = "APP_")]
+pub struct PrArgs {
+    #[arg(long, required = true)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reference: Option<String>,
 }
 
 /// Configuration struct used in integration tests.

@@ -89,6 +89,11 @@ into a `BTreeMap<String, RuleCfg>` **Then** unknown keys are preserved
 **Given** `DDLINT_IGNORE_PATTERNS=.git/,build/` in the environment **When**
 loading `ignore_patterns` as a vector **Then** it becomes `[".git/", "build/"]`
 
+### 3.12 CLI-only Required Values
+
+**Given** a CLI reference is provided and no defaults exist **When** loading
+the subcommand configuration **Then** the CLI value is used without error
+
 ## 4. Future Scenarios
 
 The design document lists potential future work such as async loading and

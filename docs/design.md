@@ -248,6 +248,17 @@ Precedence across all sources becomes:
 Prefixes and subcommand namespaces are applied at each layer just as they would
 be without inheritance.
 
+### 4.9. Improved Subcommand Merging
+
+Earlier versions extracted subcommand defaults before applying CLI overrides.
+Missing required fields in `[cmds.<name>]` caused deserialization failures even
+when the CLI supplied those values. The revised implementation builds the
+`Figment` from file and environment sources first, then merges the already
+parsed CLI struct before extraction. This ensures that required CLI arguments
+fulfil missing defaults and eliminates workarounds like
+`load_with_reference_fallback`. The legacy `load_subcommand_config` helpers are
+retained but deprecated.
+
 ## 5. Dependency Strategy
 
 - **`ortho_config_macros`:**
