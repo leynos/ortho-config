@@ -50,7 +50,9 @@ fn parse_config_by_format(path: &Path, data: &str) -> Result<Figment, OrthoError
             {
                 return Err(file_error(
                     path,
-                    std::io::Error::other("json5 feature disabled"),
+                    std::io::Error::other(
+                        "json5 feature disabled: enable the 'json5' feature to support this file format",
+                    ),
                 ));
             }
         }
@@ -97,11 +99,20 @@ fn process_extends(
     match figment.find_value("extends") {
         Ok(val) => {
             let base = val.as_str().ok_or_else(|| {
+                let actual_type = match &val {
+                    figment::value::Value::String(..) => "string",
+                    figment::value::Value::Char(..) => "char",
+                    figment::value::Value::Bool(..) => "bool",
+                    figment::value::Value::Num(..) => "number",
+                    figment::value::Value::Empty(..) => "null",
+                    figment::value::Value::Dict(..) => "object",
+                    figment::value::Value::Array(..) => "array",
+                };
                 file_error(
                     current_path,
                     std::io::Error::new(
                         std::io::ErrorKind::InvalidData,
-                        "'extends' key must be a string",
+                        format!("'extends' key must be a string, but found type: {actual_type}",),
                     ),
                 )
             })?;
