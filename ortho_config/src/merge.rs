@@ -9,6 +9,23 @@ use serde::{Serialize, de::DeserializeOwned};
 /// value from `defaults` intact. This function is intended for simple
 /// "CLI over defaults" merging in example code and small projects.
 ///
+/// # Examples
+///
+/// ```rust,no_run
+/// use ortho_config::merge_cli_over_defaults;
+/// use serde::{Deserialize, Serialize};
+///
+/// #[derive(Default, Serialize, Deserialize)]
+/// struct Config {
+///     count: Option<u32>,
+/// }
+///
+/// let defaults = Config { count: Some(1) };
+/// let cli = Config { count: Some(2) };
+/// let merged = merge_cli_over_defaults(&defaults, &cli).unwrap();
+/// assert_eq!(merged.count, Some(2));
+/// ```
+///
 /// # Errors
 ///
 /// Returns any [`figment::Error`] produced while extracting the merged
