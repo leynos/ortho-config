@@ -150,6 +150,29 @@ fn process_extends(
 ///
 /// Returns `Ok(None)` if the file does not exist.
 ///
+/// # Examples
+///
+/// ```rust,no_run
+/// use ortho_config::load_config_file;
+/// use serde::Deserialize;
+/// use std::path::Path;
+///
+/// #[derive(Deserialize)]
+/// struct Config {
+///     host: String,
+/// }
+///
+/// # fn run() -> Result<(), ortho_config::OrthoError> {
+/// if let Some(figment) = load_config_file(Path::new("config.toml"))? {
+///     let config: Config = figment
+///         .extract()
+///         .expect("invalid configuration file");
+///     assert_eq!(config.host, "localhost");
+/// }
+/// # Ok(())
+/// # }
+/// ```
+///
 /// # Errors
 ///
 /// Returns an [`OrthoError`] if reading or parsing the file fails.
