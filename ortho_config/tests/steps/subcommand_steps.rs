@@ -1,3 +1,10 @@
+//! Cucumber step definitions for testing subcommand configuration loading and
+//! merging behaviour.
+//!
+//! This module provides step definitions that verify the correct precedence and
+//! merging of configuration sources (CLI arguments, environment variables, and
+//! configuration files) when loading subcommand configurations.
+
 use crate::{PrArgs, World};
 use clap::Parser;
 use cucumber::{given, then, when};
@@ -30,27 +37,37 @@ fn env_ref(world: &mut World, val: String) {
 
 #[when("the subcommand configuration is loaded without defaults")]
 fn load_sub(world: &mut World) {
-    let mut result = None;
-    if has_no_config_sources(world) {
-        result = Some(PrArgs::try_parse_from(["test"]).map_err(Into::into));
+    let result = if has_no_config_sources(world) {
+        PrArgs::try_parse_from(["test"]).map_err(Into::into)
     } else {
         let cli = PrArgs {
             reference: world.sub_ref.clone(),
         };
-        figment::Jail::expect_with(|j| {
-            if let Some(ref val) = world.sub_file {
-                j.create_file(".app.toml", &format!("[cmds.test]\nreference = \"{val}\""))?;
-            }
-            if let Some(ref val) = world.sub_env {
-                j.set_env("APP_CMDS_TEST_REFERENCE", val);
-            }
-            result = Some(load_and_merge_subcommand_for::<PrArgs>(&cli));
-            Ok(())
-        });
-    }
-    world.sub_result = result;
+        setup_test_environment(world, &cli)
+    };
+    world.sub_result = Some(result);
     world.sub_file = None;
     world.sub_env = None;
+}
+
+/// Set up test environment with configuration file and environment variables.
+#[expect(
+    clippy::result_large_err,
+    reason = "OrthoError size is acceptable in test helper"
+)]
+fn setup_test_environment(world: &World, cli: &PrArgs) -> Result<PrArgs, ortho_config::OrthoError> {
+    let mut result = None;
+    figment::Jail::expect_with(|j| {
+        if let Some(ref val) = world.sub_file {
+            j.create_file(".app.toml", &format!("[cmds.test]\nreference = \"{val}\""))?;
+        }
+        if let Some(ref val) = world.sub_env {
+            j.set_env("APP_CMDS_TEST_REFERENCE", val);
+        }
+        result = Some(load_and_merge_subcommand_for::<PrArgs>(cli));
+        Ok(())
+    });
+    result.expect("jail setup should complete")
 }
 
 #[then(expr = "the merged reference is {string}")]
@@ -65,5 +82,9 @@ fn check_ref(world: &mut World, expected: String) {
 
 #[then("the subcommand load fails")]
 fn sub_error(world: &mut World) {
-    assert!(world.sub_result.take().expect("result").is_err());
+    let result = world.sub_result.take().expect("result");
+    match result {
+        Err(_) => {}
+        Ok(_) => panic!("Expected subcommand load to fail, but it succeeded"),
+    }
 }
