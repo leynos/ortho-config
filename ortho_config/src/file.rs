@@ -11,7 +11,16 @@ use figment::{
 use figment_json5::Json5;
 
 use std::collections::HashSet;
+use std::error::Error;
 use std::path::{Path, PathBuf};
+
+/// Construct an [`OrthoError::File`] for a configuration path.
+fn file_error(path: &Path, err: impl Into<Box<dyn Error + Send + Sync>>) -> OrthoError {
+    OrthoError::File {
+        path: path.to_path_buf(),
+        source: err.into(),
+    }
+}
 
 /// Parse configuration data according to the file extension.
 ///
@@ -39,35 +48,31 @@ fn parse_config_by_format(path: &Path, data: &str) -> Result<Figment, OrthoError
             }
             #[cfg(not(feature = "json5"))]
             {
-                return Err(OrthoError::File {
-                    path: path.to_path_buf(),
-                    source: Box::new(std::io::Error::other("json5 feature disabled")),
-                });
+                return Err(file_error(
+                    path,
+                    std::io::Error::other(
+                        "json5 feature disabled: enable the 'json5' feature to support this file format",
+                    ),
+                ));
             }
         }
         #[allow(clippy::unnested_or_patterns)]
         Some("yaml") | Some("yml") => {
             #[cfg(feature = "yaml")]
             {
-                serde_yaml::from_str::<serde_yaml::Value>(data).map_err(|e| OrthoError::File {
-                    path: path.to_path_buf(),
-                    source: Box::new(e),
-                })?;
+                serde_yaml::from_str::<serde_yaml::Value>(data).map_err(|e| file_error(path, e))?;
                 Figment::from(Yaml::string(data))
             }
             #[cfg(not(feature = "yaml"))]
             {
-                return Err(OrthoError::File {
-                    path: path.to_path_buf(),
-                    source: Box::new(std::io::Error::other("yaml feature disabled")),
-                });
+                return Err(file_error(
+                    path,
+                    std::io::Error::other("yaml feature disabled"),
+                ));
             }
         }
         _ => {
-            toml::from_str::<toml::Value>(data).map_err(|e| OrthoError::File {
-                path: path.to_path_buf(),
-                source: Box::new(e),
-            })?;
+            toml::from_str::<toml::Value>(data).map_err(|e| file_error(path, e))?;
             Figment::from(Toml::string(data))
         }
     };
@@ -93,20 +98,33 @@ fn process_extends(
 ) -> Result<Figment, OrthoError> {
     match figment.find_value("extends") {
         Ok(val) => {
-            let base = val.as_str().ok_or_else(|| OrthoError::File {
-                path: current_path.to_path_buf(),
-                source: Box::new(std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    "'extends' key must be a string",
-                )),
+            let base = val.as_str().ok_or_else(|| {
+                let actual_type = match &val {
+                    figment::value::Value::String(..) => "string",
+                    figment::value::Value::Char(..) => "char",
+                    figment::value::Value::Bool(..) => "bool",
+                    figment::value::Value::Num(..) => "number",
+                    figment::value::Value::Empty(..) => "null",
+                    figment::value::Value::Dict(..) => "object",
+                    figment::value::Value::Array(..) => "array",
+                };
+                file_error(
+                    current_path,
+                    std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        format!("'extends' key must be a string, but found type: {actual_type}",),
+                    ),
+                )
             })?;
 
-            let parent = current_path.parent().ok_or_else(|| OrthoError::File {
-                path: current_path.to_path_buf(),
-                source: Box::new(std::io::Error::new(
-                    std::io::ErrorKind::InvalidInput,
-                    "Cannot determine parent directory for config file when resolving 'extends'",
-                )),
+            let parent = current_path.parent().ok_or_else(|| {
+                file_error(
+                    current_path,
+                    std::io::Error::new(
+                        std::io::ErrorKind::InvalidInput,
+                        "Cannot determine parent directory for config file when resolving 'extends'",
+                    ),
+                )
             })?;
 
             let base_path = if Path::new(base).is_absolute() {
@@ -115,10 +133,8 @@ fn process_extends(
                 parent.join(base)
             };
 
-            let canonical = std::fs::canonicalize(&base_path).map_err(|e| OrthoError::File {
-                path: base_path.clone(),
-                source: Box::new(e),
-            })?;
+            let canonical =
+                std::fs::canonicalize(&base_path).map_err(|e| file_error(&base_path, e))?;
 
             if let Some(base_fig) = load_config_file_inner(&canonical, visited, stack)? {
                 figment = base_fig.merge(figment);
@@ -126,10 +142,7 @@ fn process_extends(
             Ok(figment)
         }
         Err(e) if e.missing() => Ok(figment),
-        Err(e) => Err(OrthoError::File {
-            path: current_path.to_path_buf(),
-            source: Box::new(e),
-        }),
+        Err(e) => Err(file_error(current_path, e)),
     }
 }
 
@@ -159,10 +172,7 @@ fn load_config_file_inner(
     if !path.is_file() {
         return Ok(None);
     }
-    let canonical = std::fs::canonicalize(path).map_err(|e| OrthoError::File {
-        path: path.to_path_buf(),
-        source: Box::new(e),
-    })?;
+    let canonical = std::fs::canonicalize(path).map_err(|e| file_error(path, e))?;
     if !visited.insert(canonical.clone()) {
         let mut cycle: Vec<String> = stack.iter().map(|p| p.display().to_string()).collect();
         cycle.push(canonical.display().to_string());
@@ -172,10 +182,7 @@ fn load_config_file_inner(
     }
     stack.push(canonical.clone());
     let result = (|| {
-        let data = std::fs::read_to_string(&canonical).map_err(|e| OrthoError::File {
-            path: canonical.clone(),
-            source: Box::new(e),
-        })?;
+        let data = std::fs::read_to_string(&canonical).map_err(|e| file_error(&canonical, e))?;
         let figment = parse_config_by_format(&canonical, &data)?;
         process_extends(figment, &canonical, visited, stack)
     })();
