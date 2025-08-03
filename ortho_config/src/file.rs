@@ -141,11 +141,20 @@ fn process_extends(
 ///
 /// ```rust,no_run
 /// use ortho_config::load_config_file;
+/// use serde::Deserialize;
 /// use std::path::Path;
+///
+/// #[derive(Deserialize)]
+/// struct Config {
+///     host: String,
+/// }
 ///
 /// # fn run() -> Result<(), ortho_config::OrthoError> {
 /// if let Some(figment) = load_config_file(Path::new("config.toml"))? {
-///     let _ = figment;
+///     let config: Config = figment
+///         .extract()
+///         .expect("invalid configuration file");
+///     assert_eq!(config.host, "localhost");
 /// }
 /// # Ok(())
 /// # }

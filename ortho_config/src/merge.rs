@@ -22,7 +22,8 @@ use serde::{Serialize, de::DeserializeOwned};
 ///
 /// let defaults = Config { count: Some(1) };
 /// let cli = Config { count: Some(2) };
-/// let merged = merge_cli_over_defaults(&defaults, &cli).unwrap();
+/// let merged = merge_cli_over_defaults(&defaults, &cli)
+///     .expect("failed to merge configuration");
 /// assert_eq!(merged.count, Some(2));
 /// ```
 ///
