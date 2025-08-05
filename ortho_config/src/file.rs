@@ -13,6 +13,57 @@ use figment_json5::Json5;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
+#[expect(clippy::result_large_err, reason = "propagating parsing errors")]
+fn wrap_parse<T, E>(path: &Path, res: Result<T, E>) -> Result<T, OrthoError>
+where
+    E: std::error::Error + Send + Sync + 'static,
+{
+    res.map_err(|e| OrthoError::File {
+        path: path.to_path_buf(),
+        source: Box::new(e),
+    })
+}
+
+#[cfg(any(not(feature = "json5"), not(feature = "yaml")))]
+fn feature_disabled(path: &Path, feature: &str) -> OrthoError {
+    OrthoError::File {
+        path: path.to_path_buf(),
+        source: Box::new(std::io::Error::other(format!("{feature} feature disabled"))),
+    }
+}
+
+#[cfg(feature = "json5")]
+#[expect(clippy::result_large_err, reason = "propagating parsing errors")]
+fn parse_json(path: &Path, data: &str) -> Result<Figment, OrthoError> {
+    wrap_parse(path, json5::from_str::<serde_json::Value>(data))?;
+    Ok(Figment::from(Json5::string(data)))
+}
+
+#[cfg(not(feature = "json5"))]
+#[expect(clippy::result_large_err, reason = "feature-gated parsing")]
+fn parse_json(path: &Path, _data: &str) -> Result<Figment, OrthoError> {
+    Err(feature_disabled(path, "json5"))
+}
+
+#[cfg(feature = "yaml")]
+#[expect(clippy::result_large_err, reason = "propagating parsing errors")]
+fn parse_yaml(path: &Path, data: &str) -> Result<Figment, OrthoError> {
+    wrap_parse(path, serde_yaml::from_str::<serde_yaml::Value>(data))?;
+    Ok(Figment::from(Yaml::string(data)))
+}
+
+#[cfg(not(feature = "yaml"))]
+#[expect(clippy::result_large_err, reason = "feature-gated parsing")]
+fn parse_yaml(path: &Path, _data: &str) -> Result<Figment, OrthoError> {
+    Err(feature_disabled(path, "yaml"))
+}
+
+#[expect(clippy::result_large_err, reason = "propagating parsing errors")]
+fn parse_toml(path: &Path, data: &str) -> Result<Figment, OrthoError> {
+    wrap_parse(path, toml::from_str::<toml::Value>(data))?;
+    Ok(Figment::from(Toml::string(data)))
+}
+
 /// Parse configuration data according to the file extension.
 ///
 /// Supported formats are JSON5, YAML and TOML. The `json5` and `yaml`
@@ -31,48 +82,11 @@ fn parse_config_by_format(path: &Path, data: &str) -> Result<Figment, OrthoError
         .extension()
         .and_then(|e| e.to_str())
         .map(str::to_ascii_lowercase);
-    let figment = match ext.as_deref() {
-        Some("json" | "json5") => {
-            #[cfg(feature = "json5")]
-            {
-                Figment::from(Json5::string(data))
-            }
-            #[cfg(not(feature = "json5"))]
-            {
-                return Err(OrthoError::File {
-                    path: path.to_path_buf(),
-                    source: Box::new(std::io::Error::other("json5 feature disabled")),
-                });
-            }
-        }
-        #[allow(clippy::unnested_or_patterns)]
-        Some("yaml") | Some("yml") => {
-            #[cfg(feature = "yaml")]
-            {
-                serde_yaml::from_str::<serde_yaml::Value>(data).map_err(|e| OrthoError::File {
-                    path: path.to_path_buf(),
-                    source: Box::new(e),
-                })?;
-                Figment::from(Yaml::string(data))
-            }
-            #[cfg(not(feature = "yaml"))]
-            {
-                return Err(OrthoError::File {
-                    path: path.to_path_buf(),
-                    source: Box::new(std::io::Error::other("yaml feature disabled")),
-                });
-            }
-        }
-        _ => {
-            toml::from_str::<toml::Value>(data).map_err(|e| OrthoError::File {
-                path: path.to_path_buf(),
-                source: Box::new(e),
-            })?;
-            Figment::from(Toml::string(data))
-        }
-    };
-
-    Ok(figment)
+    match ext.as_deref() {
+        Some("json" | "json5") => parse_json(path, data),
+        Some("yaml" | "yml") => parse_yaml(path, data),
+        _ => parse_toml(path, data),
+    }
 }
 
 /// Apply inheritance using the `extends` key.
