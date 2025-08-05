@@ -13,50 +13,54 @@ use figment_json5::Json5;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
+#[expect(clippy::result_large_err, reason = "propagating parsing errors")]
+fn wrap_parse<T, E>(path: &Path, res: Result<T, E>) -> Result<T, OrthoError>
+where
+    E: std::error::Error + Send + Sync + 'static,
+{
+    res.map_err(|e| OrthoError::File {
+        path: path.to_path_buf(),
+        source: Box::new(e),
+    })
+}
+
+#[cfg(any(not(feature = "json5"), not(feature = "yaml")))]
+fn feature_disabled(path: &Path, feature: &str) -> OrthoError {
+    OrthoError::File {
+        path: path.to_path_buf(),
+        source: Box::new(std::io::Error::other(format!("{feature} feature disabled"))),
+    }
+}
+
 #[cfg(feature = "json5")]
-#[expect(
-    clippy::unnecessary_wraps,
-    clippy::result_large_err,
-    reason = "Uniform Result type across parsers"
-)]
-fn parse_json(_path: &Path, data: &str) -> Result<Figment, OrthoError> {
+#[expect(clippy::result_large_err, reason = "propagating parsing errors")]
+fn parse_json(path: &Path, data: &str) -> Result<Figment, OrthoError> {
+    wrap_parse(path, json5::from_str::<serde_json::Value>(data))?;
     Ok(Figment::from(Json5::string(data)))
 }
 
 #[cfg(not(feature = "json5"))]
-#[expect(clippy::result_large_err, reason = "propagating parsing errors")]
+#[expect(clippy::result_large_err, reason = "feature-gated parsing")]
 fn parse_json(path: &Path, _data: &str) -> Result<Figment, OrthoError> {
-    Err(OrthoError::File {
-        path: path.to_path_buf(),
-        source: Box::new(std::io::Error::other("json5 feature disabled")),
-    })
+    Err(feature_disabled(path, "json5"))
 }
 
 #[cfg(feature = "yaml")]
 #[expect(clippy::result_large_err, reason = "propagating parsing errors")]
 fn parse_yaml(path: &Path, data: &str) -> Result<Figment, OrthoError> {
-    serde_yaml::from_str::<serde_yaml::Value>(data).map_err(|e| OrthoError::File {
-        path: path.to_path_buf(),
-        source: Box::new(e),
-    })?;
+    wrap_parse(path, serde_yaml::from_str::<serde_yaml::Value>(data))?;
     Ok(Figment::from(Yaml::string(data)))
 }
 
 #[cfg(not(feature = "yaml"))]
 #[expect(clippy::result_large_err, reason = "feature-gated parsing")]
 fn parse_yaml(path: &Path, _data: &str) -> Result<Figment, OrthoError> {
-    Err(OrthoError::File {
-        path: path.to_path_buf(),
-        source: Box::new(std::io::Error::other("yaml feature disabled")),
-    })
+    Err(feature_disabled(path, "yaml"))
 }
 
 #[expect(clippy::result_large_err, reason = "propagating parsing errors")]
 fn parse_toml(path: &Path, data: &str) -> Result<Figment, OrthoError> {
-    toml::from_str::<toml::Value>(data).map_err(|e| OrthoError::File {
-        path: path.to_path_buf(),
-        source: Box::new(e),
-    })?;
+    wrap_parse(path, toml::from_str::<toml::Value>(data))?;
     Ok(Figment::from(Toml::string(data)))
 }
 
