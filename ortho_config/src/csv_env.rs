@@ -28,12 +28,28 @@ pub struct CsvEnv {
 
 impl CsvEnv {
     /// Create an unprefixed provider.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// use ortho_config::CsvEnv;
+    /// let env = CsvEnv::raw();
+    /// let _ = env;
+    /// ```
     #[must_use]
     pub fn raw() -> Self {
         Self { inner: Env::raw() }
     }
 
     /// Create a provider using `prefix`.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// use ortho_config::CsvEnv;
+    /// let env = CsvEnv::prefixed("APP_");
+    /// let _ = env;
+    /// ```
     #[must_use]
     pub fn prefixed(prefix: &str) -> Self {
         Self {
@@ -42,6 +58,14 @@ impl CsvEnv {
     }
 
     /// Split keys at `pattern`.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// use ortho_config::CsvEnv;
+    /// let env = CsvEnv::raw().split("__");
+    /// let _ = env;
+    /// ```
     #[must_use]
     pub fn split(self, pattern: &str) -> Self {
         Self {
@@ -50,6 +74,15 @@ impl CsvEnv {
     }
 
     /// Map keys using `mapper`.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// use ortho_config::CsvEnv;
+    /// use uncased::Uncased;
+    /// let env = CsvEnv::raw().map(|k| Uncased::from(format!("APP_{k}")));
+    /// let _ = env;
+    /// ```
     #[must_use]
     pub fn map<F>(self, mapper: F) -> Self
     where
@@ -61,6 +94,15 @@ impl CsvEnv {
     }
 
     /// Filter and map keys using `f`.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// use ortho_config::CsvEnv;
+    /// use uncased::Uncased;
+    /// let env = CsvEnv::raw().filter_map(|k| k.strip_prefix("APP_").map(Uncased::from));
+    /// let _ = env;
+    /// ```
     #[must_use]
     pub fn filter_map<F>(self, f: F) -> Self
     where
@@ -72,6 +114,14 @@ impl CsvEnv {
     }
 
     /// Whether to lowercase keys before emitting them.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// use ortho_config::CsvEnv;
+    /// let env = CsvEnv::raw().lowercase(true);
+    /// let _ = env;
+    /// ```
     #[must_use]
     pub fn lowercase(self, lowercase: bool) -> Self {
         Self {

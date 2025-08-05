@@ -44,17 +44,17 @@ references the relevant design guidance.
 
 - **Refine subcommand merging behaviour**
 
-  - [ ] Simplify `load_and_merge` for subcommands to merge CLI‑provided values
+  - [x] Simplify `load_and_merge` for subcommands to merge CLI‑provided values
     over file/env defaults without requiring all fields to exist in the
     lower‑precedence layers.
     [[Subcommand Refinements](subcommand-refinements.md)]
 
-  - [ ] Remove the need for workarounds such as `load_with_reference_fallback`
+  - [x] Remove the need for workarounds such as `load_with_reference_fallback`
     in client applications by ensuring missing required values can be satisfied
     by the already‑parsed CLI struct.
     [[Subcommand Refinements](subcommand-refinements.md)]
 
-  - [ ] Deprecate and eventually remove `load_subcommand_config` and its `_for`
+  - [x] Deprecate and eventually remove `load_subcommand_config` and its `_for`
     variant in favour of a unified `load_and_merge` API.
 
 - **Finish `clap` integration in the derive macro**
