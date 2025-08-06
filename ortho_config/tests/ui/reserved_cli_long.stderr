@@ -1,0 +1,11 @@
+error: reserved `cli_long` value 'help': conflicts with global clap flags
+ --> tests/ui/reserved_cli_long.rs:6:5
+  |
+6 |     field: String,
+  |     ^^^^^
+
+error[E0601]: `main` function not found in crate `$CRATE`
+ --> tests/ui/reserved_cli_long.rs:7:2
+  |
+7 | }
+  |  ^ consider adding a `main` function to `$DIR/tests/ui/reserved_cli_long.rs`

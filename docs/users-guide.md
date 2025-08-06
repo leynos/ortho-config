@@ -103,7 +103,10 @@ stricter validation may add manual `compile_error!` guards.
 By default, each field receives a long flag derived from its name in kebab-case
 and a short flag from its first letter. If that letter is already used, the
 macro assigns the upper-case variant to the next field. Further collisions
-require specifying `cli_short` explicitly.
+require specifying `cli_short` explicitly. Short flags must be ASCII
+alphanumeric and may not use clap's global `-h` or `-V` options. Long flags
+must contain only ASCII alphanumeric characters, hyphens or underscores and
+cannot be named `help` or `version`.
 
 ### Example configuration struct
 

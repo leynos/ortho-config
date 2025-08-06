@@ -50,8 +50,7 @@ pub trait OrthoConfig: Sized + serde::de::DeserializeOwned {
     /// }
     ///
     /// # fn main() -> Result<(), OrthoError> {
-    /// let cfg = AppConfig::load()?;
-    /// # let _ = cfg;
+    /// let _cfg = AppConfig::load()?;
     /// # Ok(())
     /// # }
     /// ```

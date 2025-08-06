@@ -10,6 +10,9 @@ use syn::{Ident, Type};
 use super::parse::{FieldAttrs, StructAttrs, option_inner, vec_inner};
 use std::collections::HashSet;
 
+const RESERVED_SHORTS: &[char] = &['h', 'V'];
+const RESERVED_LONGS: &[&str] = &["help", "version"];
+
 fn option_type_tokens(ty: &Type) -> proc_macro2::TokenStream {
     if let Some(inner) = option_inner(ty) {
         quote! { Option<#inner> }
@@ -74,6 +77,42 @@ pub(crate) fn build_cli_struct_fields(
                 }
             } else if !used_shorts.insert(short_ch) {
                 return Err(syn::Error::new_spanned(name, "duplicate `cli_short` value"));
+            }
+            if !short_ch.is_ascii_alphanumeric() {
+                return Err(syn::Error::new_spanned(
+                    name,
+                    format!(
+                        "invalid `cli_short` value '{short_ch}': must be an ASCII alphanumeric character"
+                    ),
+                ));
+            }
+            if RESERVED_SHORTS.contains(&short_ch) {
+                return Err(syn::Error::new_spanned(
+                    name,
+                    format!(
+                        "reserved `cli_short` value '{short_ch}': conflicts with global clap flags"
+                    ),
+                ));
+            }
+            if long.is_empty()
+                || !long
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+            {
+                return Err(syn::Error::new_spanned(
+                    name,
+                    format!(
+                        "invalid `cli_long` value '{long}': must be non-empty and contain only ASCII alphanumeric, '-' or '_'"
+                    ),
+                ));
+            }
+            if RESERVED_LONGS.contains(&long.as_str()) {
+                return Err(syn::Error::new_spanned(
+                    name,
+                    format!(
+                        "reserved `cli_long` value '{long}': conflicts with global clap flags"
+                    ),
+                ));
             }
             let long_lit = syn::LitStr::new(&long, proc_macro2::Span::call_site());
             let short_lit = syn::LitChar::new(short_ch, proc_macro2::Span::call_site());

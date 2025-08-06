@@ -81,20 +81,20 @@ fn cli_combines_with_file() {
 #[rstest]
 fn invalid_cli_input_maps_error() {
     let err = TestConfig::load_from_iter(["prog", "--bogus"]).unwrap_err();
-    matches!(err, OrthoError::CliParsing(_));
+    assert!(matches!(err, OrthoError::CliParsing(_)));
 }
 
 #[rstest]
 fn invalid_cli_wrong_type_maps_error() {
     let err = OptionConfig::load_from_iter(["prog", "--maybe", "notanumber"]).unwrap_err();
-    matches!(err, OrthoError::CliParsing(_));
+    assert!(matches!(err, OrthoError::CliParsing(_)));
 }
 
 #[rstest]
 fn invalid_cli_missing_required_maps_error() {
     figment::Jail::expect_with(|_| {
         let err = RequiredConfig::load_from_iter(["prog"]).unwrap_err();
-        matches!(err, OrthoError::CliParsing(_));
+        assert!(matches!(err, OrthoError::Gathering(_)));
         Ok(())
     });
 }
@@ -104,7 +104,7 @@ fn invalid_cli_duplicate_flag_maps_error() {
     let err =
         TestConfig::load_from_iter(["prog", "--sample-value", "foo", "--sample-value", "bar"])
             .unwrap_err();
-    matches!(err, OrthoError::CliParsing(_));
+    assert!(matches!(err, OrthoError::CliParsing(_)));
 }
 
 #[rstest]
@@ -153,6 +153,19 @@ fn config_path_env_var() {
         let cfg = TestConfig::load_from_iter(["prog"]).expect("load");
         assert_eq!(cfg.sample_value.as_deref(), Some("from_env"));
         assert_eq!(cfg.other.as_deref(), Some("val"));
+        Ok(())
+    });
+}
+
+#[rstest]
+fn config_path_cli_overrides_default() {
+    figment::Jail::expect_with(|j| {
+        j.create_file(".config.toml", "sample_value = \"default\"\nother = \"d\"")?;
+        j.create_file("alt.toml", "sample_value = \"alt\"\nother = \"a\"")?;
+
+        let cfg = TestConfig::load_from_iter(["prog", "--config-path", "alt.toml"]).expect("load");
+        assert_eq!(cfg.sample_value.as_deref(), Some("alt"));
+        assert_eq!(cfg.other.as_deref(), Some("a"));
         Ok(())
     });
 }
