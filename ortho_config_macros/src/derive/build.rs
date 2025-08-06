@@ -21,6 +21,64 @@ fn option_type_tokens(ty: &Type) -> proc_macro2::TokenStream {
     }
 }
 
+/// Resolves a short CLI flag ensuring uniqueness and validity.
+///
+/// # Examples
+///
+/// ```ignore
+/// use std::collections::HashSet;
+/// use ortho_config_macros::derive::build::resolve_short_flag;
+/// use ortho_config_macros::derive::parse::FieldAttrs;
+/// use syn::parse_quote;
+///
+/// let name: syn::Ident = parse_quote!(field);
+/// let attrs = FieldAttrs::default();
+/// let mut used = HashSet::new();
+/// let ch = resolve_short_flag(&name, &attrs, &mut used).unwrap();
+/// assert_eq!(ch, 'f');
+/// ```
+fn resolve_short_flag(
+    name: &Ident,
+    attrs: &FieldAttrs,
+    used_shorts: &mut HashSet<char>,
+) -> syn::Result<char> {
+    let mut ch = attrs
+        .cli_short
+        .unwrap_or_else(|| name.to_string().chars().next().unwrap());
+
+    if !ch.is_ascii_alphanumeric() {
+        return Err(syn::Error::new_spanned(
+            name,
+            format!("invalid `cli_short` value '{ch}': must be an ASCII alphanumeric character",),
+        ));
+    }
+
+    if RESERVED_SHORTS.contains(&ch) {
+        return Err(syn::Error::new_spanned(
+            name,
+            format!("reserved `cli_short` value '{ch}': conflicts with global clap flags",),
+        ));
+    }
+
+    if !used_shorts.insert(ch) {
+        if attrs.cli_short.is_none() {
+            let upper = ch.to_ascii_uppercase();
+            if used_shorts.insert(upper) {
+                ch = upper;
+            } else {
+                return Err(syn::Error::new_spanned(
+                    name,
+                    "short flag collision; supply `cli_short`",
+                ));
+            }
+        } else {
+            return Err(syn::Error::new_spanned(name, "duplicate `cli_short` value"));
+        }
+    }
+
+    Ok(ch)
+}
+
 /// Generates fields for the defaults struct used to hold attribute-specified
 /// default values.
 pub(crate) fn build_default_struct_fields(fields: &[syn::Field]) -> Vec<proc_macro2::TokenStream> {
@@ -48,81 +106,44 @@ pub(crate) fn build_cli_struct_fields(
     field_attrs: &[FieldAttrs],
 ) -> syn::Result<Vec<proc_macro2::TokenStream>> {
     let mut used_shorts = HashSet::new();
-    fields
-        .iter()
-        .zip(field_attrs.iter())
-        .map(|(f, attrs)| {
-            let name = f.ident.as_ref().expect("named field");
-            let ty = option_type_tokens(&f.ty);
-            let long = attrs
-                .cli_long
-                .clone()
-                .unwrap_or_else(|| name.to_string().replace('_', "-"));
-            let mut short_ch = attrs.cli_short.unwrap_or_else(|| {
-                name.to_string()
-                    .chars()
-                    .next()
-                    .expect("field name cannot be empty")
-            });
-            if attrs.cli_short.is_none() {
-                if !used_shorts.insert(short_ch) {
-                    let upper = short_ch.to_ascii_uppercase();
-                    if !used_shorts.insert(upper) {
-                        return Err(syn::Error::new_spanned(
-                            name,
-                            "short flag collision; supply `cli_short`",
-                        ));
-                    }
-                    short_ch = upper;
-                }
-            } else if !used_shorts.insert(short_ch) {
-                return Err(syn::Error::new_spanned(name, "duplicate `cli_short` value"));
-            }
-            if !short_ch.is_ascii_alphanumeric() {
-                return Err(syn::Error::new_spanned(
-                    name,
-                    format!(
-                        "invalid `cli_short` value '{short_ch}': must be an ASCII alphanumeric character"
-                    ),
-                ));
-            }
-            if RESERVED_SHORTS.contains(&short_ch) {
-                return Err(syn::Error::new_spanned(
-                    name,
-                    format!(
-                        "reserved `cli_short` value '{short_ch}': conflicts with global clap flags"
-                    ),
-                ));
-            }
-            if long.is_empty()
-                || !long
-                    .chars()
-                    .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
-            {
-                return Err(syn::Error::new_spanned(
-                    name,
-                    format!(
-                        "invalid `cli_long` value '{long}': must be non-empty and contain only ASCII alphanumeric, '-' or '_'"
-                    ),
-                ));
-            }
-            if RESERVED_LONGS.contains(&long.as_str()) {
-                return Err(syn::Error::new_spanned(
-                    name,
-                    format!(
-                        "reserved `cli_long` value '{long}': conflicts with global clap flags"
-                    ),
-                ));
-            }
-            let long_lit = syn::LitStr::new(&long, proc_macro2::Span::call_site());
-            let short_lit = syn::LitChar::new(short_ch, proc_macro2::Span::call_site());
-            Ok(quote! {
-                #[arg(long = #long_lit, short = #short_lit)]
-                #[serde(skip_serializing_if = "Option::is_none")]
-                pub #name: #ty
-            })
-        })
-        .collect()
+    let mut result = Vec::with_capacity(fields.len());
+
+    for (f, attrs) in fields.iter().zip(field_attrs) {
+        let name = f.ident.as_ref().expect("named field");
+        let ty = option_type_tokens(&f.ty);
+        let long = attrs
+            .cli_long
+            .clone()
+            .unwrap_or_else(|| name.to_string().replace('_', "-"));
+        if long.is_empty()
+            || !long
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+        {
+            return Err(syn::Error::new_spanned(
+                name,
+                format!(
+                    "invalid `cli_long` value '{long}': must be non-empty and contain only ASCII alphanumeric, '-' or '_'",
+                ),
+            ));
+        }
+        if RESERVED_LONGS.contains(&long.as_str()) {
+            return Err(syn::Error::new_spanned(
+                name,
+                format!("reserved `cli_long` value '{long}': conflicts with global clap flags",),
+            ));
+        }
+        let short_ch = resolve_short_flag(name, attrs, &mut used_shorts)?;
+        let long_lit = syn::LitStr::new(&long, proc_macro2::Span::call_site());
+        let short_lit = syn::LitChar::new(short_ch, proc_macro2::Span::call_site());
+        result.push(quote! {
+            #[arg(long = #long_lit, short = #short_lit)]
+            #[serde(skip_serializing_if = "Option::is_none")]
+            pub #name: #ty
+        });
+    }
+
+    Ok(result)
 }
 
 pub(crate) fn build_default_struct_init(
@@ -170,8 +191,37 @@ pub(crate) fn build_dotfile_name(struct_attrs: &StructAttrs) -> proc_macro2::Tok
     quote! { #base }
 }
 
+fn build_xdg_config_discovery() -> proc_macro2::TokenStream {
+    quote! {
+        if let Some(p) = xdg_dirs.find_config_file("config.toml") {
+            file_fig = ortho_config::load_config_file(&p)?;
+        }
+        #[cfg(feature = "json5")]
+        if file_fig.is_none() {
+            for ext in &["json", "json5"] {
+                let filename = format!("config.{}", ext);
+                if let Some(p) = xdg_dirs.find_config_file(&filename) {
+                    file_fig = ortho_config::load_config_file(&p)?;
+                    break;
+                }
+            }
+        }
+        #[cfg(feature = "yaml")]
+        if file_fig.is_none() {
+            for ext in &["yaml", "yml"] {
+                let filename = format!("config.{}", ext);
+                if let Some(p) = xdg_dirs.find_config_file(&filename) {
+                    file_fig = ortho_config::load_config_file(&p)?;
+                    break;
+                }
+            }
+        }
+    }
+}
+
 pub(crate) fn build_xdg_snippet(struct_attrs: &StructAttrs) -> proc_macro2::TokenStream {
     let prefix_lit = struct_attrs.prefix.as_deref().unwrap_or("");
+    let config_discovery = build_xdg_config_discovery();
     quote! {
         #[cfg(any(unix, target_os = "redox"))]
         if file_fig.is_none() {
@@ -181,29 +231,7 @@ pub(crate) fn build_xdg_snippet(struct_attrs: &StructAttrs) -> proc_macro2::Toke
             } else {
                 xdg::BaseDirectories::with_prefix(&xdg_base)
             };
-            if let Some(p) = xdg_dirs.find_config_file("config.toml") {
-                file_fig = ortho_config::load_config_file(&p)?;
-            }
-            #[cfg(feature = "json5")]
-            if file_fig.is_none() {
-                for ext in &["json", "json5"] {
-                    let filename = format!("config.{}", ext);
-                    if let Some(p) = xdg_dirs.find_config_file(&filename) {
-                        file_fig = ortho_config::load_config_file(&p)?;
-                        break;
-                    }
-                }
-            }
-            #[cfg(feature = "yaml")]
-            if file_fig.is_none() {
-                for ext in &["yaml", "yml"] {
-                    let filename = format!("config.{}", ext);
-                    if let Some(p) = xdg_dirs.find_config_file(&filename) {
-                        file_fig = ortho_config::load_config_file(&p)?;
-                        break;
-                    }
-                }
-            }
+            #config_discovery
         }
     }
 }
