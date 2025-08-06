@@ -102,7 +102,7 @@ alt text describing the content. Add a brief description before each Mermaid
 diagram, so screen readers can understand it.
 
 ```mermaid
-flowchart TD
+graph TD
     A[Start] --> B[Draft]
     B --> C[Review]
     C --> D[Merge]
