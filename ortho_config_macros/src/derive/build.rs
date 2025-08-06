@@ -95,6 +95,26 @@ pub(crate) fn build_default_struct_fields(fields: &[syn::Field]) -> Vec<proc_mac
         .collect()
 }
 
+/// Returns whether a long CLI flag is valid.
+///
+/// A valid flag is non-empty and contains only ASCII alphanumeric, hyphen or
+/// underscore characters.
+///
+/// # Examples
+///
+/// ```ignore
+/// use ortho_config_macros::derive::build::is_valid_cli_long;
+/// assert!(is_valid_cli_long("alpha-1"));
+/// assert!(!is_valid_cli_long(""));
+/// assert!(!is_valid_cli_long("bad/flag"));
+/// ```
+fn is_valid_cli_long(long: &str) -> bool {
+    !long.is_empty()
+        && long
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+}
+
 /// Generates the fields for the hidden `clap::Parser` struct.
 ///
 /// Each user field becomes `Option<T>` to record whether the CLI provided a
@@ -115,11 +135,7 @@ pub(crate) fn build_cli_struct_fields(
             .cli_long
             .clone()
             .unwrap_or_else(|| name.to_string().replace('_', "-"));
-        if long.is_empty()
-            || !long
-                .chars()
-                .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
-        {
+        if !is_valid_cli_long(&long) {
             return Err(syn::Error::new_spanned(
                 name,
                 format!(
