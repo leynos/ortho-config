@@ -13,6 +13,8 @@ use serde::{Deserialize, Serialize};
 pub struct World {
     /// Environment variable value set during the scenario.
     env_value: Option<String>,
+    /// Configuration file value set during the scenario.
+    file_value: Option<String>,
     /// Whether the scenario requires an extended configuration file.
     extends: bool,
     /// Whether to create a cyclic inheritance scenario.
@@ -45,11 +47,10 @@ pub struct PrArgs {
 ///
 /// The `DDLINT_` prefix is applied to environment variables and rule lists may
 /// be specified as comma-separated strings via [`CsvEnv`].
-#[derive(Debug, Deserialize, Serialize, Parser, OrthoConfig, Default)]
+#[derive(Debug, Deserialize, Serialize, OrthoConfig, Default)]
 #[ortho_config(prefix = "DDLINT_")]
 pub struct RulesConfig {
     /// List of lint rules parsed from CLI or environment.
-    #[arg(long)]
     rules: Vec<String>,
 }
 

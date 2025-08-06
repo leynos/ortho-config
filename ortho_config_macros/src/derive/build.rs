@@ -8,6 +8,7 @@ use quote::{format_ident, quote};
 use syn::{Ident, Type};
 
 use super::parse::{FieldAttrs, StructAttrs, option_inner, vec_inner};
+use std::collections::HashSet;
 
 fn option_type_tokens(ty: &Type) -> proc_macro2::TokenStream {
     if let Some(inner) = option_inner(ty) {
@@ -17,15 +18,8 @@ fn option_type_tokens(ty: &Type) -> proc_macro2::TokenStream {
     }
 }
 
-/// Generates the fields for the hidden `clap::Parser` struct.
-///
-/// Each user field becomes `Option<T>` to record whether the CLI provided
-/// a value. This lets the configuration merge logic keep track of which
-/// layer supplied each setting. A dedicated `config_path` field is
-/// inserted to allow overriding the path to the configuration file.
-///
-/// This function is used internally by the derive macro to transform
-/// user-defined struct fields into CLI-compatible equivalents.
+/// Generates fields for the defaults struct used to hold attribute-specified
+/// default values.
 pub(crate) fn build_default_struct_fields(fields: &[syn::Field]) -> Vec<proc_macro2::TokenStream> {
     fields
         .iter()
@@ -36,6 +30,58 @@ pub(crate) fn build_default_struct_fields(fields: &[syn::Field]) -> Vec<proc_mac
                 #[serde(skip_serializing_if = "Option::is_none")]
                 pub #name: #ty
             }
+        })
+        .collect()
+}
+
+/// Generates the fields for the hidden `clap::Parser` struct.
+///
+/// Each user field becomes `Option<T>` to record whether the CLI provided a
+/// value. Long names default to the field name converted to kebab-case and
+/// short names default to the first character of the field. These may be
+/// overridden via `cli_long` and `cli_short` attributes.
+pub(crate) fn build_cli_struct_fields(
+    fields: &[syn::Field],
+    field_attrs: &[FieldAttrs],
+) -> syn::Result<Vec<proc_macro2::TokenStream>> {
+    let mut used_shorts = HashSet::new();
+    fields
+        .iter()
+        .zip(field_attrs.iter())
+        .map(|(f, attrs)| {
+            let name = f.ident.as_ref().expect("named field");
+            let ty = option_type_tokens(&f.ty);
+            let long = attrs
+                .cli_long
+                .clone()
+                .unwrap_or_else(|| name.to_string().replace('_', "-"));
+            let mut short_ch = attrs.cli_short.unwrap_or_else(|| {
+                name.to_string()
+                    .chars()
+                    .next()
+                    .expect("field name cannot be empty")
+            });
+            if attrs.cli_short.is_none() {
+                if !used_shorts.insert(short_ch) {
+                    let upper = short_ch.to_ascii_uppercase();
+                    if !used_shorts.insert(upper) {
+                        return Err(syn::Error::new_spanned(
+                            name,
+                            "short flag collision; supply `cli_short`",
+                        ));
+                    }
+                    short_ch = upper;
+                }
+            } else if !used_shorts.insert(short_ch) {
+                return Err(syn::Error::new_spanned(name, "duplicate `cli_short` value"));
+            }
+            let long_lit = syn::LitStr::new(&long, proc_macro2::Span::call_site());
+            let short_lit = syn::LitChar::new(short_ch, proc_macro2::Span::call_site());
+            Ok(quote! {
+                #[arg(long = #long_lit, short = #short_lit)]
+                #[serde(skip_serializing_if = "Option::is_none")]
+                pub #name: #ty
+            })
         })
         .collect()
 }
@@ -191,7 +237,7 @@ pub(crate) fn build_append_logic(fields: &[(Ident, &Type)]) -> proc_macro2::Toke
     });
     quote! {
         let env_figment = Figment::from(env_provider.clone());
-        let cli_figment = Figment::from(Serialized::defaults(self));
+        let cli_figment = Figment::from(Serialized::defaults(&cli));
         #( #logic )*
     }
 }

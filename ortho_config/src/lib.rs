@@ -31,21 +31,27 @@ pub use error::OrthoError;
 pub use file::load_config_file;
 
 /// Trait implemented for structs that represent application configuration.
-pub trait OrthoConfig: Sized + serde::de::DeserializeOwned + clap::Parser {
-    /// Loads configuration from files and environment variables, then merges the
-    /// command-line arguments from `self` over the top.
+pub trait OrthoConfig: Sized + serde::de::DeserializeOwned {
+    /// Loads configuration from command-line arguments, environment variables
+    /// and configuration files using the standard precedence rules.
     ///
-    /// This is the recommended way to load configuration. It requires the
-    /// struct to also derive `clap::Parser`.
+    /// Command-line arguments have the highest precedence, followed by
+    /// environment variables and finally configuration files. Default values
+    /// specified via `#[ortho_config(default = ...)]` sit at the lowest
+    /// precedence level.
     ///
     /// ```rust,no_run
-    /// # use ortho_config::{OrthoConfig, OrthoError};
-    /// # use clap::Parser;
-    /// # #[derive(Parser, OrthoConfig, serde::Deserialize, serde::Serialize)]
-    /// # struct AppConfig {};
+    /// use ortho_config::{OrthoConfig, OrthoError};
+    /// use serde::Deserialize;
+    ///
+    /// #[derive(Deserialize, OrthoConfig)]
+    /// struct AppConfig {
+    ///     port: u16,
+    /// }
+    ///
     /// # fn main() -> Result<(), OrthoError> {
-    /// let cli_args = AppConfig::parse();
-    /// let config = cli_args.load_and_merge()?;
+    /// let cfg = AppConfig::load()?;
+    /// # let _ = cfg;
     /// # Ok(())
     /// # }
     /// ```
@@ -53,25 +59,24 @@ pub trait OrthoConfig: Sized + serde::de::DeserializeOwned + clap::Parser {
     ///
     /// # Errors
     ///
-    /// Returns an [`OrthoError`] if gathering or deserialization fails.
-    fn load_and_merge(&self) -> Result<Self, OrthoError>
-    where
-        Self: serde::Serialize;
+    /// Returns an [`OrthoError`] if parsing command-line arguments, reading
+    /// files or deserialising configuration fails.
+    fn load() -> Result<Self, OrthoError> {
+        Self::load_from_iter(std::env::args_os())
+    }
 
-    /// DEPRECATED: Loads configuration by re-parsing command-line arguments.
-    ///
-    /// This method is inefficient and can cause issues with `clap` subcommands.
-    /// It is recommended to use `load_and_merge` instead.
-    #[deprecated(
-        since = "0.4.0",
-        note = "Use `YourConfig::parse().load_and_merge()` instead"
-    )]
+    /// Loads configuration from the provided iterator of command-line
+    /// arguments.
     #[allow(clippy::result_large_err)]
     ///
     /// # Errors
     ///
-    /// Returns an [`OrthoError`] if gathering or deserialization fails.
-    fn load() -> Result<Self, OrthoError>;
+    /// Returns an [`OrthoError`] if parsing command-line arguments, reading
+    /// files or deserialising configuration fails.
+    fn load_from_iter<I, T>(iter: I) -> Result<Self, OrthoError>
+    where
+        I: IntoIterator<Item = T>,
+        T: Into<std::ffi::OsString> + Clone;
 
     /// Prefix used for environment variables and subcommand configuration.
     #[must_use]
