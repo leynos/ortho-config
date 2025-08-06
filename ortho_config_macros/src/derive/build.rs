@@ -8,6 +8,10 @@ use quote::{format_ident, quote};
 use syn::{Ident, Type};
 
 use super::parse::{FieldAttrs, StructAttrs, option_inner, vec_inner};
+use std::collections::HashSet;
+
+const RESERVED_SHORTS: &[char] = &['h', 'V'];
+const RESERVED_LONGS: &[&str] = &["help", "version"];
 
 fn option_type_tokens(ty: &Type) -> proc_macro2::TokenStream {
     if let Some(inner) = option_inner(ty) {
@@ -17,15 +21,66 @@ fn option_type_tokens(ty: &Type) -> proc_macro2::TokenStream {
     }
 }
 
-/// Generates the fields for the hidden `clap::Parser` struct.
+/// Resolves a short CLI flag ensuring uniqueness and validity.
 ///
-/// Each user field becomes `Option<T>` to record whether the CLI provided
-/// a value. This lets the configuration merge logic keep track of which
-/// layer supplied each setting. A dedicated `config_path` field is
-/// inserted to allow overriding the path to the configuration file.
+/// # Examples
 ///
-/// This function is used internally by the derive macro to transform
-/// user-defined struct fields into CLI-compatible equivalents.
+/// ```ignore
+/// use std::collections::HashSet;
+/// use ortho_config_macros::derive::build::resolve_short_flag;
+/// use ortho_config_macros::derive::parse::FieldAttrs;
+/// use syn::parse_quote;
+///
+/// let name: syn::Ident = parse_quote!(field);
+/// let attrs = FieldAttrs::default();
+/// let mut used = HashSet::new();
+/// let ch = resolve_short_flag(&name, &attrs, &mut used).unwrap();
+/// assert_eq!(ch, 'f');
+/// ```
+fn resolve_short_flag(
+    name: &Ident,
+    attrs: &FieldAttrs,
+    used_shorts: &mut HashSet<char>,
+) -> syn::Result<char> {
+    let mut ch = attrs
+        .cli_short
+        .unwrap_or_else(|| name.to_string().chars().next().unwrap());
+
+    if !ch.is_ascii_alphanumeric() {
+        return Err(syn::Error::new_spanned(
+            name,
+            format!("invalid `cli_short` value '{ch}': must be an ASCII alphanumeric character",),
+        ));
+    }
+
+    if RESERVED_SHORTS.contains(&ch) {
+        return Err(syn::Error::new_spanned(
+            name,
+            format!("reserved `cli_short` value '{ch}': conflicts with global clap flags",),
+        ));
+    }
+
+    if !used_shorts.insert(ch) {
+        if attrs.cli_short.is_none() {
+            let upper = ch.to_ascii_uppercase();
+            if used_shorts.insert(upper) {
+                ch = upper;
+            } else {
+                return Err(syn::Error::new_spanned(
+                    name,
+                    "short flag collision; supply `cli_short`",
+                ));
+            }
+        } else {
+            return Err(syn::Error::new_spanned(name, "duplicate `cli_short` value"));
+        }
+    }
+
+    Ok(ch)
+}
+
+/// Generates fields for the defaults struct used to hold attribute-specified
+/// default values.
 pub(crate) fn build_default_struct_fields(fields: &[syn::Field]) -> Vec<proc_macro2::TokenStream> {
     fields
         .iter()
@@ -38,6 +93,73 @@ pub(crate) fn build_default_struct_fields(fields: &[syn::Field]) -> Vec<proc_mac
             }
         })
         .collect()
+}
+
+/// Returns whether a long CLI flag is valid.
+///
+/// A valid flag is non-empty and contains only ASCII alphanumeric, hyphen or
+/// underscore characters.
+///
+/// # Examples
+///
+/// ```ignore
+/// use ortho_config_macros::derive::build::is_valid_cli_long;
+/// assert!(is_valid_cli_long("alpha-1"));
+/// assert!(!is_valid_cli_long(""));
+/// assert!(!is_valid_cli_long("bad/flag"));
+/// ```
+fn is_valid_cli_long(long: &str) -> bool {
+    !long.is_empty()
+        && long
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+}
+
+/// Generates the fields for the hidden `clap::Parser` struct.
+///
+/// Each user field becomes `Option<T>` to record whether the CLI provided a
+/// value. Long names default to the field name converted to kebab-case and
+/// short names default to the first character of the field. These may be
+/// overridden via `cli_long` and `cli_short` attributes.
+pub(crate) fn build_cli_struct_fields(
+    fields: &[syn::Field],
+    field_attrs: &[FieldAttrs],
+) -> syn::Result<Vec<proc_macro2::TokenStream>> {
+    let mut used_shorts = HashSet::new();
+    let mut result = Vec::with_capacity(fields.len());
+
+    for (f, attrs) in fields.iter().zip(field_attrs) {
+        let name = f.ident.as_ref().expect("named field");
+        let ty = option_type_tokens(&f.ty);
+        let long = attrs
+            .cli_long
+            .clone()
+            .unwrap_or_else(|| name.to_string().replace('_', "-"));
+        if !is_valid_cli_long(&long) {
+            return Err(syn::Error::new_spanned(
+                name,
+                format!(
+                    "invalid `cli_long` value '{long}': must be non-empty and contain only ASCII alphanumeric, '-' or '_'",
+                ),
+            ));
+        }
+        if RESERVED_LONGS.contains(&long.as_str()) {
+            return Err(syn::Error::new_spanned(
+                name,
+                format!("reserved `cli_long` value '{long}': conflicts with global clap flags",),
+            ));
+        }
+        let short_ch = resolve_short_flag(name, attrs, &mut used_shorts)?;
+        let long_lit = syn::LitStr::new(&long, proc_macro2::Span::call_site());
+        let short_lit = syn::LitChar::new(short_ch, proc_macro2::Span::call_site());
+        result.push(quote! {
+            #[arg(long = #long_lit, short = #short_lit)]
+            #[serde(skip_serializing_if = "Option::is_none")]
+            pub #name: #ty
+        });
+    }
+
+    Ok(result)
 }
 
 pub(crate) fn build_default_struct_init(
@@ -85,8 +207,37 @@ pub(crate) fn build_dotfile_name(struct_attrs: &StructAttrs) -> proc_macro2::Tok
     quote! { #base }
 }
 
+fn build_xdg_config_discovery() -> proc_macro2::TokenStream {
+    quote! {
+        if let Some(p) = xdg_dirs.find_config_file("config.toml") {
+            file_fig = ortho_config::load_config_file(&p)?;
+        }
+        #[cfg(feature = "json5")]
+        if file_fig.is_none() {
+            for ext in &["json", "json5"] {
+                let filename = format!("config.{}", ext);
+                if let Some(p) = xdg_dirs.find_config_file(&filename) {
+                    file_fig = ortho_config::load_config_file(&p)?;
+                    break;
+                }
+            }
+        }
+        #[cfg(feature = "yaml")]
+        if file_fig.is_none() {
+            for ext in &["yaml", "yml"] {
+                let filename = format!("config.{}", ext);
+                if let Some(p) = xdg_dirs.find_config_file(&filename) {
+                    file_fig = ortho_config::load_config_file(&p)?;
+                    break;
+                }
+            }
+        }
+    }
+}
+
 pub(crate) fn build_xdg_snippet(struct_attrs: &StructAttrs) -> proc_macro2::TokenStream {
     let prefix_lit = struct_attrs.prefix.as_deref().unwrap_or("");
+    let config_discovery = build_xdg_config_discovery();
     quote! {
         #[cfg(any(unix, target_os = "redox"))]
         if file_fig.is_none() {
@@ -96,29 +247,7 @@ pub(crate) fn build_xdg_snippet(struct_attrs: &StructAttrs) -> proc_macro2::Toke
             } else {
                 xdg::BaseDirectories::with_prefix(&xdg_base)
             };
-            if let Some(p) = xdg_dirs.find_config_file("config.toml") {
-                file_fig = ortho_config::load_config_file(&p)?;
-            }
-            #[cfg(feature = "json5")]
-            if file_fig.is_none() {
-                for ext in &["json", "json5"] {
-                    let filename = format!("config.{}", ext);
-                    if let Some(p) = xdg_dirs.find_config_file(&filename) {
-                        file_fig = ortho_config::load_config_file(&p)?;
-                        break;
-                    }
-                }
-            }
-            #[cfg(feature = "yaml")]
-            if file_fig.is_none() {
-                for ext in &["yaml", "yml"] {
-                    let filename = format!("config.{}", ext);
-                    if let Some(p) = xdg_dirs.find_config_file(&filename) {
-                        file_fig = ortho_config::load_config_file(&p)?;
-                        break;
-                    }
-                }
-            }
+            #config_discovery
         }
     }
 }
@@ -191,7 +320,7 @@ pub(crate) fn build_append_logic(fields: &[(Ident, &Type)]) -> proc_macro2::Toke
     });
     quote! {
         let env_figment = Figment::from(env_provider.clone());
-        let cli_figment = Figment::from(Serialized::defaults(self));
+        let cli_figment = Figment::from(Serialized::defaults(&cli));
         #( #logic )*
     }
 }

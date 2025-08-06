@@ -1,5 +1,5 @@
 use clap::{Parser, Subcommand};
-use ortho_config::OrthoConfig;
+use ortho_config::{OrthoConfig, subcommand::load_and_merge_subcommand_for};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Parser)]
@@ -27,8 +27,7 @@ fn merge_works_for_subcommand() {
         j.create_file(".config.toml", "[cmds.run]\noption = \"file\"")?;
         let cli = Cli::parse_from(["prog", "run", "--option", "cli"]);
         let Commands::Run(args) = cli.cmd;
-        let cfg = args
-            .load_and_merge()
+        let cfg = load_and_merge_subcommand_for(&args)
             .map_err(|e| figment::error::Error::from(e.to_string()))?;
         assert_eq!(cfg.option.as_deref(), Some("cli"));
         Ok(())

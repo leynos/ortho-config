@@ -4,8 +4,8 @@
 //! using [`CsvEnv`], and verifying parsed results.
 
 use crate::{RulesConfig, World};
-use clap::Parser;
 use cucumber::{given, then, when};
+use ortho_config::OrthoConfig;
 
 /// Sets `DDLINT_RULES` in the test environment.
 #[given(expr = "the environment variable DDLINT_RULES is {string}")]
@@ -19,8 +19,7 @@ fn load_config(world: &mut World) {
     let mut result = None;
     figment::Jail::expect_with(|j| {
         j.set_env("DDLINT_RULES", &val);
-        let cli = RulesConfig::parse_from(["prog"]);
-        result = Some(cli.load_and_merge());
+        result = Some(RulesConfig::load_from_iter(["prog"]));
         Ok(())
     });
     world.result = result;

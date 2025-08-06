@@ -1,8 +1,8 @@
 //! Steps for testing configuration inheritance.
 
 use crate::{RulesConfig, World};
-use clap::Parser;
 use cucumber::{given, then, when};
+use ortho_config::OrthoConfig;
 
 #[given("a configuration file extending a base file")]
 fn create_files(world: &mut World) {
@@ -30,8 +30,7 @@ fn load_extended(world: &mut World) {
                 "extends = \"base.toml\"\nrules = [\"child\"]",
             )?;
         }
-        let cli = RulesConfig::parse_from(["prog"]);
-        result = Some(cli.load_and_merge());
+        result = Some(RulesConfig::load_from_iter(["prog"]));
         Ok(())
     });
     world.result = result;
@@ -45,8 +44,7 @@ fn load_cyclic(world: &mut World) {
         j.create_file("a.toml", "extends = \"b.toml\"\nrules = [\"a\"]")?;
         j.create_file("b.toml", "extends = \"a.toml\"\nrules = [\"b\"]")?;
         j.create_file(".ddlint.toml", "extends = \"a.toml\"")?;
-        let cli = RulesConfig::parse_from(["prog"]);
-        result = Some(cli.load_and_merge());
+        result = Some(RulesConfig::load_from_iter(["prog"]));
         Ok(())
     });
     world.result = result;
@@ -61,8 +59,7 @@ fn load_missing_base(world: &mut World) {
             ".ddlint.toml",
             "extends = \"missing.toml\"\nrules = [\"main\"]",
         )?;
-        let cli = RulesConfig::parse_from(["prog"]);
-        result = Some(cli.load_and_merge());
+        result = Some(RulesConfig::load_from_iter(["prog"]));
         Ok(())
     });
     world.result = result;

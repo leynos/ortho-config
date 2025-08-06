@@ -122,14 +122,24 @@ This is the most complex component. It needs to perform the following using
 2. **Generate a `clap`-aware Struct:** In the generated code, create a hidden
    struct derived from `clap::Parser`. Its fields should correspond to the main
    struct's fields but be wrapped in `Option<T>` to capture only user-provided
-   values. The macro will translate `#[ortho_config(cli_long="…")]` into
-   `#[clap(long="…")]`.
+   values. The macro translates `#[ortho_config(cli_long="…")]` and
+   `#[ortho_config(cli_short='x')]` attributes into `#[arg(long=…, short=…)]`
+   on this struct. When these attributes are absent, long names are derived
+   automatically from the field name using `kebab-case` and short names default
+   to the field's first character. If the short letter is already used, the
+   macro tries the upper-case variant. A further collision triggers a compile
+   error and requires the user to supply `cli_short`. Short flags must be ASCII
+   alphanumeric and cannot reuse clap's `-h` or `-V`. Long flags must contain
+   only ASCII alphanumeric characters plus `-` or `_` and may not be `help` or
+   `version`.
 3. **Generate `impl OrthoConfig for UserStruct`:**
-   - This block will contain the `load()` method.
-   - The generated `load()` will perform the architectural flow described in
-     section 3.
-   - It will need to dynamically generate the `figment` profile based on the
-     parsed attributes. For example, it will use the `prefix` attribute for
+   - This block contains the `load_from_iter` method used by the `load`
+     convenience function.
+   - The generated loader performs the architectural flow described in section
+     3, parsing the CLI into the hidden struct before layering file and
+     environment sources.
+   - It dynamically generates the `figment` profile based on parsed attributes.
+     For example, it uses the `prefix` attribute for
      `figment::providers::Env::prefixed(…)`.
 
 ### 4.3. Orthographic Name Mapping
