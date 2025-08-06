@@ -59,14 +59,14 @@ references the relevant design guidance.
 
 - **Finish `clap` integration in the derive macro**
 
-  - [ ] Generate a hidden `clap::Parser` struct that automatically derives long
+  - [x] Generate a hidden `clap::Parser` struct that automatically derives long
     and short option names from field names (snake_case → kebab‑case) unless
     overridden via `#[ortho_config(cli_long = "…")]`. [[Design](design.md)]
 
-  - [ ] Ensure the macro sets appropriate `#[clap(long, short)]` attributes and
+  - [x] Ensure the macro sets appropriate `#[clap(long, short)]` attributes and
     respects default values specified in struct attributes.
 
-  - [ ] Confirm that CLI arguments override environment variables and file
+  - [x] Confirm that CLI arguments override environment variables and file
     values in the correct order. [[Design](design.md)]
 
 - **Improve merging and error reporting when combining CLI and configuration

@@ -9,8 +9,10 @@ use quote::quote;
 use syn::Ident;
 
 /// Identifiers used when generating the load implementation.
+#[allow(clippy::struct_field_names)]
 pub(crate) struct LoadImplIdents<'a> {
-    pub ident: &'a Ident,
+    pub cli_ident: &'a Ident,
+    pub config_ident: &'a Ident,
     pub defaults_ident: &'a Ident,
 }
 
@@ -50,7 +52,7 @@ pub(crate) fn build_file_discovery(
         ..
     } = tokens;
     let config_path_chain = if has_config_path {
-        quote! { .chain(self.config_path.clone()) }
+        quote! { .chain(cli.config_path.clone()) }
     } else {
         quote! {}
     };
@@ -101,7 +103,11 @@ pub(crate) fn build_merge_section(
     idents: &LoadImplIdents<'_>,
     tokens: &LoadImplTokens<'_>,
 ) -> proc_macro2::TokenStream {
-    let LoadImplIdents { defaults_ident, .. } = *idents;
+    let LoadImplIdents {
+        defaults_ident,
+        config_ident,
+        ..
+    } = *idents;
     let LoadImplTokens {
         default_struct_init,
         override_init_ts,
@@ -122,13 +128,13 @@ pub(crate) fn build_merge_section(
 
         fig = fig
             .merge(env_provider.clone())
-            .merge(Serialized::defaults(self));
+            .merge(Serialized::defaults(&cli));
 
         #append_logic
 
         fig = fig.merge(Serialized::defaults(overrides));
 
-        fig.extract().map_err(ortho_config::OrthoError::Gathering)
+        fig.extract::<#config_ident>().map_err(ortho_config::OrthoError::Gathering)
     }
 }
 
@@ -139,18 +145,24 @@ pub(crate) fn build_load_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStre
         tokens,
         has_config_path,
     } = args;
-    let LoadImplIdents { ident, .. } = idents;
+    let LoadImplIdents {
+        cli_ident,
+        config_ident,
+        ..
+    } = idents;
     let file_discovery = build_file_discovery(tokens, *has_config_path);
     let env_section = build_env_section(tokens);
     let merge_section = build_merge_section(idents, tokens);
 
     quote! {
-        impl #ident {
+        impl #cli_ident {
             #[expect(dead_code, reason = "Generated method may not be used in all builds")]
-            pub fn load_and_merge(&self) -> Result<Self, ortho_config::OrthoError>
+            pub fn load_from_iter<I, T>(iter: I) -> Result<#config_ident, ortho_config::OrthoError>
             where
-                Self: serde::Serialize,
+                I: IntoIterator<Item = T>,
+                T: Into<std::ffi::OsString> + Clone,
             {
+                use clap::Parser as _;
                 use figment::{Figment, providers::{Toml, Serialized}, Profile};
                 use ortho_config::CsvEnv;
                 #[cfg(feature = "json5")] use figment_json5::Json5;
@@ -158,6 +170,9 @@ pub(crate) fn build_load_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStre
                 use uncased::Uncased;
                 #[cfg(feature = "yaml")] use serde_yaml;
                 #[cfg(feature = "toml")] use toml;
+
+                let cli = Self::try_parse_from(iter)
+                    .map_err(ortho_config::OrthoError::CliParsing)?;
 
                 #file_discovery
                 #env_section

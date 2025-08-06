@@ -73,9 +73,8 @@ A configuration is represented by a plain Rust struct. To take advantage of
 - `serde::Deserialize` and `serde::Serialize` – required for deserialising
   values and merging overrides.
 
-- `clap::Parser` – required for generating CLI parsing code. Fields may be
-  annotated with standard `clap` attributes such as `#[arg(long)]` or
-  `#[arg(short)]`.
+- The derive macro generates a hidden `clap::Parser` implementation, so
+  no manual `clap` annotations are needed.
 
 - `OrthoConfig` – provided by the library. This derive macro generates the code
   to load and merge configuration from multiple sources.
@@ -107,16 +106,14 @@ stricter validation may add manual `compile_error!` guards.
 The following example illustrates many of these features:
 
 ```rust
-use ortho_config::{OrthoConfig, OrthoError};
-use serde::{Deserialize, Serialize};
-use clap::Parser;
+  use ortho_config::{OrthoConfig, OrthoError};
+  use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Deserialize, Serialize, OrthoConfig, Parser)]
-#[ortho_config(prefix = "APP")]                // environment variables start with APP_
-struct AppConfig {
-    /// Logging verbosity
-    #[arg(long)]
-    log_level: String,
+  #[derive(Debug, Clone, Deserialize, Serialize, OrthoConfig)]
+  #[ortho_config(prefix = "APP")]                // environment variables start with APP_
+  struct AppConfig {
+      /// Logging verbosity
+      log_level: String,
 
     /// Port to bind on – defaults to 8080 when unspecified
     #[arg(long)]
@@ -151,8 +148,7 @@ struct DatabaseConfig {
 
 fn main() -> Result<(), OrthoError> {
     // Parse CLI arguments and merge with defaults, file and environment
-    let cli_args = AppConfig::parse();
-    let config = cli_args.load_and_merge()?;
+    let config = AppConfig::load()?;
     println!("Final config: {:#?}", config);
     Ok(())
 }
@@ -165,12 +161,10 @@ will accumulate values from multiple sources rather than overwriting them.
 
 ## Loading configuration and precedence rules
 
-### The `load_and_merge()` method
+### How loading works
 
-The `OrthoConfig` derive macro generates a method
-`load_and_merge(&self) -> Result<Self, OrthoError>`. It takes the struct
-populated by `clap` parsing and returns a fully populated configuration
-instance. Internally, it performs the following steps:
+The `load_from_iter` method (used by the convenience `load`) performs the
+following steps:
 
 1. Builds a `figment` configuration profile. A defaults provider constructed
    from the `#[ortho_config(default = …)]` attributes is added first.
@@ -359,13 +353,13 @@ for a complete example.
 
 ## Error handling
 
-`load_and_merge` and `load_and_merge_subcommand_for` return a
-`Result<T, OrthoError>`. `OrthoError` wraps errors from `clap`, file I/O and
-`figment`. When configuration cannot be gathered or deserialized, the error
-propagates up to the caller. Consumers should handle these errors
-appropriately, for example by printing them to stderr and exiting. Future
-releases may include improved missing‑value error messages, but currently the
-crate simply returns the underlying error.
+`load` and `load_and_merge_subcommand_for` return a `Result<T, OrthoError>`.
+`OrthoError` wraps errors from `clap`, file I/O and `figment`. When
+configuration cannot be gathered or deserialized, the error propagates up to
+the caller. Consumers should handle these errors appropriately, for example by
+printing them to stderr and exiting. Future releases may include improved
+missing‑value error messages, but currently the crate simply returns the
+underlying error.
 
 ## Additional notes
 
