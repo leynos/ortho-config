@@ -21,23 +21,6 @@ fn option_type_tokens(ty: &Type) -> proc_macro2::TokenStream {
     }
 }
 
-fn short_flag_candidates(name: &Ident, attrs: &FieldAttrs) -> impl Iterator<Item = char> {
-    if let Some(user_short) = attrs.cli_short {
-        vec![user_short].into_iter()
-    } else {
-        let default = name
-            .to_string()
-            .chars()
-            .next()
-            .expect("field has at least one char");
-        vec![default, default.to_ascii_uppercase()].into_iter()
-    }
-}
-
-fn is_valid_short_flag(ch: char, used_shorts: &HashSet<char>) -> bool {
-    ch.is_ascii_alphanumeric() && !RESERVED_SHORTS.contains(&ch) && !used_shorts.contains(&ch)
-}
-
 /// Resolves a short CLI flag ensuring uniqueness and validity.
 ///
 /// # Examples
@@ -59,35 +42,46 @@ fn resolve_short_flag(
     attrs: &FieldAttrs,
     used_shorts: &mut HashSet<char>,
 ) -> syn::Result<char> {
-    if let Some(ch) =
-        short_flag_candidates(name, attrs).find(|&ch| is_valid_short_flag(ch, used_shorts))
-    {
-        used_shorts.insert(ch);
-        Ok(ch)
-    } else {
-        if let Some(user) = attrs.cli_short {
-            if !user.is_ascii_alphanumeric() {
-                return Err(syn::Error::new_spanned(
-                    name,
-                    format!("invalid `cli_short` '{user}': must be ASCII alphanumeric"),
-                ));
-            }
-            if RESERVED_SHORTS.contains(&user) {
-                return Err(syn::Error::new_spanned(
-                    name,
-                    format!("reserved `cli_short` '{user}' conflicts with global flags"),
-                ));
-            }
+    // Handle user-supplied cli_short first
+    if let Some(user) = attrs.cli_short {
+        if !user.is_ascii_alphanumeric() {
+            return Err(syn::Error::new_spanned(
+                name,
+                format!("invalid `cli_short` '{user}': must be ASCII alphanumeric"),
+            ));
+        }
+        if RESERVED_SHORTS.contains(&user) {
+            return Err(syn::Error::new_spanned(
+                name,
+                format!("reserved `cli_short` '{user}' conflicts with global flags"),
+            ));
+        }
+        if !used_shorts.insert(user) {
             return Err(syn::Error::new_spanned(
                 name,
                 "short flag collision; choose a different `cli_short` value",
             ));
         }
-        Err(syn::Error::new_spanned(
-            name,
-            "short flag collision; supply `cli_short` to disambiguate",
-        ))
+        return Ok(user);
     }
+
+    // Try default lowercase then uppercase
+    let default = name
+        .to_string()
+        .chars()
+        .next()
+        .expect("field has at least one char");
+    for &candidate in &[default, default.to_ascii_uppercase()] {
+        if !RESERVED_SHORTS.contains(&candidate) && used_shorts.insert(candidate) {
+            return Ok(candidate);
+        }
+    }
+
+    // Both defaults failed, must be a collision
+    Err(syn::Error::new_spanned(
+        name,
+        "short flag collision; supply `cli_short` to disambiguate",
+    ))
 }
 
 /// Generates fields for the defaults struct used to hold attribute-specified
