@@ -1,4 +1,4 @@
-error: invalid `cli_short` value '?': must be an ASCII alphanumeric character
+error: invalid `cli_short` '?': must be ASCII alphanumeric
  --> tests/ui/invalid_cli_short.rs:6:5
   |
 6 |     field: String,

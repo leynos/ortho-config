@@ -161,9 +161,10 @@ fn type_inner<'a>(ty: &'a Type, wrapper: &str) -> Option<&'a Type> {
         let _ = segs.next();
 
         if let PathArguments::AngleBracketed(args) = &last.arguments {
-            if let Some(GenericArgument::Type(inner)) = args.args.first() {
-                return Some(inner);
-            }
+            return args.args.first().and_then(|arg| match arg {
+                GenericArgument::Type(inner) => Some(inner),
+                _ => None,
+            });
         }
     }
     None
