@@ -42,7 +42,7 @@ fn resolve_short_flag(
     attrs: &FieldAttrs,
     used_shorts: &mut HashSet<char>,
 ) -> syn::Result<char> {
-    // Handle user-supplied cli_short first
+    // 1) If the user explicitly set `cli_short`, handle that first:
     if let Some(user) = attrs.cli_short {
         if !user.is_ascii_alphanumeric() {
             return Err(syn::Error::new_spanned(
@@ -57,15 +57,12 @@ fn resolve_short_flag(
             ));
         }
         if !used_shorts.insert(user) {
-            return Err(syn::Error::new_spanned(
-                name,
-                "short flag collision; choose a different `cli_short` value",
-            ));
+            return Err(syn::Error::new_spanned(name, "duplicate `cli_short` value"));
         }
         return Ok(user);
     }
 
-    // Try default lowercase then uppercase
+    // 2) Otherwise, try default lowercase then uppercase:
     let default = name
         .to_string()
         .chars()
@@ -77,7 +74,7 @@ fn resolve_short_flag(
         }
     }
 
-    // Both defaults failed, must be a collision
+    // 3) If both default attempts fail, it must be a collision:
     Err(syn::Error::new_spanned(
         name,
         "short flag collision; supply `cli_short` to disambiguate",
@@ -363,7 +360,7 @@ mod tests {
     #[case(
         'f',
         HashSet::from(['f']),
-        "short flag collision; choose a different `cli_short` value",
+        "duplicate `cli_short` value",
     )]
     fn rejects_invalid_short_flags(
         #[case] cli_short: char,
