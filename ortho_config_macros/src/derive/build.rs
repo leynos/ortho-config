@@ -27,6 +27,76 @@ fn option_type_tokens(ty: &Type) -> proc_macro2::TokenStream {
 ///
 /// ```ignore
 /// use std::collections::HashSet;
+/// Validates a user-supplied short flag and records it if free.
+///
+/// ```ignore
+/// use std::collections::HashSet;
+/// use ortho_config_macros::derive::build::validate_user_cli_short;
+/// use syn::parse_quote;
+///
+/// let name: syn::Ident = parse_quote!(field);
+/// let mut used = HashSet::new();
+/// let ch = validate_user_cli_short(&name, 'f', &mut used).expect("short flag");
+/// assert_eq!(ch, 'f');
+/// ```
+fn validate_user_cli_short(
+    name: &Ident,
+    user: char,
+    used_shorts: &mut HashSet<char>,
+) -> syn::Result<char> {
+    if !user.is_ascii_alphanumeric() {
+        return Err(syn::Error::new_spanned(
+            name,
+            format!("invalid `cli_short` '{user}': must be ASCII alphanumeric"),
+        ));
+    }
+    if RESERVED_SHORTS.contains(&user) {
+        return Err(syn::Error::new_spanned(
+            name,
+            format!("reserved `cli_short` '{user}' conflicts with global flags"),
+        ));
+    }
+    if !used_shorts.insert(user) {
+        return Err(syn::Error::new_spanned(name, "duplicate `cli_short` value"));
+    }
+    Ok(user)
+}
+
+/// Derives a default short flag from the field name.
+///
+/// ```ignore
+/// use std::collections::HashSet;
+/// use ortho_config_macros::derive::build::find_default_short_flag;
+/// use syn::parse_quote;
+///
+/// let name: syn::Ident = parse_quote!(field);
+/// let mut used = HashSet::new();
+/// let ch = find_default_short_flag(&name, &mut used).expect("short flag");
+/// assert_eq!(ch, 'f');
+/// ```
+fn find_default_short_flag(name: &Ident, used_shorts: &mut HashSet<char>) -> syn::Result<char> {
+    let default = name
+        .to_string()
+        .chars()
+        .next()
+        .expect("field has at least one char");
+    for &candidate in &[default, default.to_ascii_uppercase()] {
+        if !RESERVED_SHORTS.contains(&candidate) && used_shorts.insert(candidate) {
+            return Ok(candidate);
+        }
+    }
+    Err(syn::Error::new_spanned(
+        name,
+        "short flag collision; supply `cli_short` to disambiguate",
+    ))
+}
+
+/// Resolves a short CLI flag ensuring uniqueness and validity.
+///
+/// # Examples
+///
+/// ```ignore
+/// use std::collections::HashSet;
 /// use ortho_config_macros::derive::build::resolve_short_flag;
 /// use ortho_config_macros::derive::parse::FieldAttrs;
 /// use syn::parse_quote;
@@ -42,43 +112,10 @@ fn resolve_short_flag(
     attrs: &FieldAttrs,
     used_shorts: &mut HashSet<char>,
 ) -> syn::Result<char> {
-    // 1) If the user explicitly set `cli_short`, handle that first:
     if let Some(user) = attrs.cli_short {
-        if !user.is_ascii_alphanumeric() {
-            return Err(syn::Error::new_spanned(
-                name,
-                format!("invalid `cli_short` '{user}': must be ASCII alphanumeric"),
-            ));
-        }
-        if RESERVED_SHORTS.contains(&user) {
-            return Err(syn::Error::new_spanned(
-                name,
-                format!("reserved `cli_short` '{user}' conflicts with global flags"),
-            ));
-        }
-        if !used_shorts.insert(user) {
-            return Err(syn::Error::new_spanned(name, "duplicate `cli_short` value"));
-        }
-        return Ok(user);
+        return validate_user_cli_short(name, user, used_shorts);
     }
-
-    // 2) Otherwise, try default lowercase then uppercase:
-    let default = name
-        .to_string()
-        .chars()
-        .next()
-        .expect("field has at least one char");
-    for &candidate in &[default, default.to_ascii_uppercase()] {
-        if !RESERVED_SHORTS.contains(&candidate) && used_shorts.insert(candidate) {
-            return Ok(candidate);
-        }
-    }
-
-    // 3) If both default attempts fail, it must be a collision:
-    Err(syn::Error::new_spanned(
-        name,
-        "short flag collision; supply `cli_short` to disambiguate",
-    ))
+    find_default_short_flag(name, used_shorts)
 }
 
 /// Generates fields for the defaults struct used to hold attribute-specified
