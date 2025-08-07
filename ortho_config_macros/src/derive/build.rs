@@ -21,6 +21,23 @@ fn option_type_tokens(ty: &Type) -> proc_macro2::TokenStream {
     }
 }
 
+fn short_flag_candidates(name: &Ident, attrs: &FieldAttrs) -> impl Iterator<Item = char> {
+    let default = name
+        .to_string()
+        .chars()
+        .next()
+        .expect("field has at least one char");
+    attrs.cli_short.into_iter().chain(
+        [default, default.to_ascii_uppercase()]
+            .into_iter()
+            .take(if attrs.cli_short.is_some() { 0 } else { 2 }),
+    )
+}
+
+fn is_valid_short_flag(ch: char, used_shorts: &HashSet<char>) -> bool {
+    ch.is_ascii_alphanumeric() && !RESERVED_SHORTS.contains(&ch) && !used_shorts.contains(&ch)
+}
+
 /// Resolves a short CLI flag ensuring uniqueness and validity.
 ///
 /// # Examples
@@ -42,20 +59,8 @@ fn resolve_short_flag(
     attrs: &FieldAttrs,
     used_shorts: &mut HashSet<char>,
 ) -> syn::Result<char> {
-    let default = name
-        .to_string()
-        .chars()
-        .next()
-        .expect("field has at least one char");
-    if let Some(ch) = attrs
-        .cli_short
-        .map_or_else(|| vec![default, default.to_ascii_uppercase()], |c| vec![c])
-        .into_iter()
-        .find(|&ch| {
-            ch.is_ascii_alphanumeric()
-                && !RESERVED_SHORTS.contains(&ch)
-                && !used_shorts.contains(&ch)
-        })
+    if let Some(ch) =
+        short_flag_candidates(name, attrs).find(|&ch| is_valid_short_flag(ch, used_shorts))
     {
         used_shorts.insert(ch);
         Ok(ch)
@@ -73,6 +78,10 @@ fn resolve_short_flag(
                     format!("reserved `cli_short` '{user}' conflicts with global flags",),
                 ));
             }
+            return Err(syn::Error::new_spanned(
+                name,
+                "short flag collision; choose a different `cli_short` value",
+            ));
         }
         Err(syn::Error::new_spanned(
             name,
@@ -355,42 +364,25 @@ mod tests {
     }
 
     #[rstest]
-    fn rejects_invalid_cli_short() {
+    #[case('*', HashSet::new(), "invalid `cli_short`")]
+    #[case('h', HashSet::new(), "reserved `cli_short`")]
+    #[case(
+        'f',
+        HashSet::from(['f']),
+        "short flag collision; choose a different `cli_short` value",
+    )]
+    fn rejects_invalid_short_flags(
+        #[case] cli_short: char,
+        #[case] mut used: HashSet<char>,
+        #[case] expected_error: &str,
+    ) {
         let name: Ident = parse_quote!(field);
         let attrs = FieldAttrs {
-            cli_short: Some('*'),
+            cli_short: Some(cli_short),
             ..FieldAttrs::default()
         };
-        let mut used = HashSet::new();
-        let err = resolve_short_flag(&name, &attrs, &mut used).expect_err("invalid char");
-        assert!(err.to_string().contains("invalid `cli_short`"));
-    }
-
-    #[rstest]
-    fn rejects_reserved_cli_short() {
-        let name: Ident = parse_quote!(field);
-        let attrs = FieldAttrs {
-            cli_short: Some('h'),
-            ..FieldAttrs::default()
-        };
-        let mut used = HashSet::new();
-        let err = resolve_short_flag(&name, &attrs, &mut used).expect_err("reserved char");
-        assert!(err.to_string().contains("reserved `cli_short`"));
-    }
-
-    #[rstest]
-    fn rejects_duplicate_cli_short() {
-        let name: Ident = parse_quote!(field);
-        let attrs = FieldAttrs {
-            cli_short: Some('f'),
-            ..FieldAttrs::default()
-        };
-        let mut used = HashSet::from(['f']);
-        let err = resolve_short_flag(&name, &attrs, &mut used).expect_err("duplicate char");
-        assert!(
-            err.to_string()
-                .contains("short flag collision; supply `cli_short` to disambiguate")
-        );
+        let err = resolve_short_flag(&name, &attrs, &mut used).expect_err("should fail");
+        assert!(err.to_string().contains(expected_error));
     }
 
     fn demo_input() -> (Vec<syn::Field>, Vec<FieldAttrs>, StructAttrs) {
