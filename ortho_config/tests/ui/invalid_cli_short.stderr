@@ -1,11 +1,11 @@
-error: invalid `cli_short` '?': must be ASCII alnum
- --> tests/ui/invalid_cli_short.rs:7:5
+error: invalid `cli_short` '?': must be ASCII alphanumeric
+ --> tests/ui/invalid_cli_short.rs:6:5
   |
-7 |     field: String,
+6 |     field: String,
   |     ^^^^^
 
 error[E0601]: `main` function not found in crate `$CRATE`
- --> tests/ui/invalid_cli_short.rs:8:2
+ --> tests/ui/invalid_cli_short.rs:7:2
   |
-8 | }
+7 | }
   |  ^ consider adding a `main` function to `$DIR/tests/ui/invalid_cli_short.rs`

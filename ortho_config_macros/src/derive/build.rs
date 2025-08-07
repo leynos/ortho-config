@@ -22,16 +22,16 @@ fn option_type_tokens(ty: &Type) -> proc_macro2::TokenStream {
 }
 
 fn short_flag_candidates(name: &Ident, attrs: &FieldAttrs) -> impl Iterator<Item = char> {
-    let default = name
-        .to_string()
-        .chars()
-        .next()
-        .expect("field has at least one char");
-    attrs.cli_short.into_iter().chain(
-        [default, default.to_ascii_uppercase()]
-            .into_iter()
-            .take(if attrs.cli_short.is_some() { 0 } else { 2 }),
-    )
+    if let Some(user_short) = attrs.cli_short {
+        vec![user_short].into_iter()
+    } else {
+        let default = name
+            .to_string()
+            .chars()
+            .next()
+            .expect("field has at least one char");
+        vec![default, default.to_ascii_uppercase()].into_iter()
+    }
 }
 
 fn is_valid_short_flag(ch: char, used_shorts: &HashSet<char>) -> bool {
@@ -69,13 +69,13 @@ fn resolve_short_flag(
             if !user.is_ascii_alphanumeric() {
                 return Err(syn::Error::new_spanned(
                     name,
-                    format!("invalid `cli_short` '{user}': must be ASCII alnum",),
+                    format!("invalid `cli_short` '{user}': must be ASCII alphanumeric"),
                 ));
             }
             if RESERVED_SHORTS.contains(&user) {
                 return Err(syn::Error::new_spanned(
                     name,
-                    format!("reserved `cli_short` '{user}' conflicts with global flags",),
+                    format!("reserved `cli_short` '{user}' conflicts with global flags"),
                 ));
             }
             return Err(syn::Error::new_spanned(
@@ -157,7 +157,7 @@ pub(crate) fn build_cli_struct_fields(
         if RESERVED_LONGS.contains(&long.as_str()) {
             return Err(syn::Error::new_spanned(
                 name,
-                format!("reserved `cli_long` value '{long}': conflicts with global clap flags",),
+                format!("reserved `cli_long` value '{long}': conflicts with global clap flags"),
             ));
         }
         let short_ch = resolve_short_flag(name, attrs, &mut used_shorts)?;
