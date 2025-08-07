@@ -34,7 +34,7 @@ fn option_type_tokens(ty: &Type) -> proc_macro2::TokenStream {
 /// let name: syn::Ident = parse_quote!(field);
 /// let attrs = FieldAttrs::default();
 /// let mut used = HashSet::new();
-/// let ch = resolve_short_flag(&name, &attrs, &mut used).unwrap();
+/// let ch = resolve_short_flag(&name, &attrs, &mut used).expect("short flag");
 /// assert_eq!(ch, 'f');
 /// ```
 fn resolve_short_flag(
@@ -42,41 +42,43 @@ fn resolve_short_flag(
     attrs: &FieldAttrs,
     used_shorts: &mut HashSet<char>,
 ) -> syn::Result<char> {
-    let mut ch = attrs
+    let default = name
+        .to_string()
+        .chars()
+        .next()
+        .expect("field has at least one char");
+    if let Some(ch) = attrs
         .cli_short
-        .unwrap_or_else(|| name.to_string().chars().next().unwrap());
-
-    if !ch.is_ascii_alphanumeric() {
-        return Err(syn::Error::new_spanned(
-            name,
-            format!("invalid `cli_short` value '{ch}': must be an ASCII alphanumeric character",),
-        ));
-    }
-
-    if RESERVED_SHORTS.contains(&ch) {
-        return Err(syn::Error::new_spanned(
-            name,
-            format!("reserved `cli_short` value '{ch}': conflicts with global clap flags",),
-        ));
-    }
-
-    if !used_shorts.insert(ch) {
-        if attrs.cli_short.is_none() {
-            let upper = ch.to_ascii_uppercase();
-            if used_shorts.insert(upper) {
-                ch = upper;
-            } else {
+        .map_or_else(|| vec![default, default.to_ascii_uppercase()], |c| vec![c])
+        .into_iter()
+        .find(|&ch| {
+            ch.is_ascii_alphanumeric()
+                && !RESERVED_SHORTS.contains(&ch)
+                && !used_shorts.contains(&ch)
+        })
+    {
+        used_shorts.insert(ch);
+        Ok(ch)
+    } else {
+        if let Some(user) = attrs.cli_short {
+            if !user.is_ascii_alphanumeric() {
                 return Err(syn::Error::new_spanned(
                     name,
-                    "short flag collision; supply `cli_short`",
+                    format!("invalid `cli_short` '{user}': must be ASCII alnum",),
                 ));
             }
-        } else {
-            return Err(syn::Error::new_spanned(name, "duplicate `cli_short` value"));
+            if RESERVED_SHORTS.contains(&user) {
+                return Err(syn::Error::new_spanned(
+                    name,
+                    format!("reserved `cli_short` '{user}' conflicts with global flags",),
+                ));
+            }
         }
+        Err(syn::Error::new_spanned(
+            name,
+            "short flag collision; supply `cli_short` to disambiguate",
+        ))
     }
-
-    Ok(ch)
 }
 
 /// Generates fields for the defaults struct used to hold attribute-specified
@@ -328,7 +330,68 @@ pub(crate) fn build_append_logic(fields: &[(Ident, &Type)]) -> proc_macro2::Toke
 #[cfg(test)]
 mod tests {
     use super::*;
-    use syn::parse_quote;
+    use rstest::rstest;
+    use std::collections::HashSet;
+    use syn::{Ident, parse_quote};
+
+    #[rstest]
+    fn selects_default_lowercase() {
+        let name: Ident = parse_quote!(field);
+        let attrs = FieldAttrs::default();
+        let mut used = HashSet::new();
+        let ch = resolve_short_flag(&name, &attrs, &mut used).expect("short flag");
+        assert_eq!(ch, 'f');
+        assert!(used.contains(&'f'));
+    }
+
+    #[rstest]
+    fn falls_back_to_uppercase() {
+        let name: Ident = parse_quote!(field);
+        let attrs = FieldAttrs::default();
+        let mut used = HashSet::from(['f']);
+        let ch = resolve_short_flag(&name, &attrs, &mut used).expect("short flag");
+        assert_eq!(ch, 'F');
+        assert!(used.contains(&'F'));
+    }
+
+    #[rstest]
+    fn rejects_invalid_cli_short() {
+        let name: Ident = parse_quote!(field);
+        let attrs = FieldAttrs {
+            cli_short: Some('*'),
+            ..FieldAttrs::default()
+        };
+        let mut used = HashSet::new();
+        let err = resolve_short_flag(&name, &attrs, &mut used).expect_err("invalid char");
+        assert!(err.to_string().contains("invalid `cli_short`"));
+    }
+
+    #[rstest]
+    fn rejects_reserved_cli_short() {
+        let name: Ident = parse_quote!(field);
+        let attrs = FieldAttrs {
+            cli_short: Some('h'),
+            ..FieldAttrs::default()
+        };
+        let mut used = HashSet::new();
+        let err = resolve_short_flag(&name, &attrs, &mut used).expect_err("reserved char");
+        assert!(err.to_string().contains("reserved `cli_short`"));
+    }
+
+    #[rstest]
+    fn rejects_duplicate_cli_short() {
+        let name: Ident = parse_quote!(field);
+        let attrs = FieldAttrs {
+            cli_short: Some('f'),
+            ..FieldAttrs::default()
+        };
+        let mut used = HashSet::from(['f']);
+        let err = resolve_short_flag(&name, &attrs, &mut used).expect_err("duplicate char");
+        assert!(
+            err.to_string()
+                .contains("short flag collision; supply `cli_short` to disambiguate")
+        );
+    }
 
     fn demo_input() -> (Vec<syn::Field>, Vec<FieldAttrs>, StructAttrs) {
         let input: syn::DeriveInput = parse_quote! {
