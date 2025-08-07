@@ -22,12 +22,11 @@ pub struct Prefix {
 }
 
 impl Prefix {
-    /// Create a new `Prefix` from `raw`. The `raw` value is kept as-is for
-    /// environment variables while a normalized version is used for file paths.
-    #[must_use]
-    /// Creates a new `Prefix` from a raw string, storing both the original and a normalised lowercase version.
+    /// Creates a new `Prefix` from a raw string, storing both the original and
+    /// a normalised lowercase version.
     ///
-    /// The raw string is preserved for use in environment variable names, while the normalised form is used for file path lookups.
+    /// The raw string is preserved for use in environment variable names, while
+    /// the normalised form is used for file path lookups.
     ///
     /// # Examples
     ///
@@ -36,6 +35,7 @@ impl Prefix {
     /// let prefix = Prefix::new("MyApp");
     /// let _ = prefix;
     /// ```
+    #[must_use]
     pub fn new(raw: &str) -> Self {
         Self {
             raw: raw.to_owned(),
