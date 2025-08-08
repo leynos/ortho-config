@@ -100,41 +100,47 @@ pub(crate) fn parse_struct_attrs(attrs: &[Attribute]) -> Result<StructAttrs, syn
 pub(crate) fn parse_field_attrs(attrs: &[Attribute]) -> Result<FieldAttrs, syn::Error> {
     let mut out = FieldAttrs::default();
     parse_ortho_config(attrs, |meta| {
-        if meta.path.is_ident("cli_long") {
-            let val = meta.value()?.parse::<Lit>()?;
-            if let Lit::Str(s) = val {
-                out.cli_long = Some(s.value());
-            } else {
-                return Err(syn::Error::new(val.span(), "cli_long must be a string"));
+        match meta.path.get_ident().map(syn::Ident::to_string).as_deref() {
+            Some("cli_long") => {
+                let val = meta.value()?.parse::<Lit>()?;
+                if let Lit::Str(s) = val {
+                    out.cli_long = Some(s.value());
+                } else {
+                    return Err(syn::Error::new(val.span(), "cli_long must be a string"));
+                }
+                Ok(())
             }
-            Ok(())
-        } else if meta.path.is_ident("cli_short") {
-            let val = meta.value()?.parse::<Lit>()?;
-            if let Lit::Char(c) = val {
-                out.cli_short = Some(c.value());
-            } else {
-                return Err(syn::Error::new(val.span(), "cli_short must be a char"));
+            Some("cli_short") => {
+                let val = meta.value()?.parse::<Lit>()?;
+                if let Lit::Char(c) = val {
+                    out.cli_short = Some(c.value());
+                } else {
+                    return Err(syn::Error::new(val.span(), "cli_short must be a char"));
+                }
+                Ok(())
             }
-            Ok(())
-        } else if meta.path.is_ident("default") {
-            let expr = meta.value()?.parse::<Expr>()?;
-            out.default = Some(expr);
-            Ok(())
-        } else if meta.path.is_ident("merge_strategy") {
-            let val = meta.value()?.parse::<Lit>()?;
-            if let Lit::Str(s) = val {
-                out.merge_strategy = Some(MergeStrategy::parse(&s.value(), s.span())?);
-            } else {
-                return Err(syn::Error::new(
-                    val.span(),
-                    "merge_strategy must be a string",
-                ));
+            Some("default") => {
+                let expr = meta.value()?.parse::<Expr>()?;
+                out.default = Some(expr);
+                Ok(())
             }
-            Ok(())
-        } else {
-            // Ignore unknown attributes so that future versions can add new
-            // keys without breaking callers.
-            discard_unknown(meta)
+            Some("merge_strategy") => {
+                let val = meta.value()?.parse::<Lit>()?;
+                if let Lit::Str(s) = val {
+                    out.merge_strategy = Some(MergeStrategy::parse(&s.value(), s.span())?);
+                } else {
+                    return Err(syn::Error::new(
+                        val.span(),
+                        "merge_strategy must be a string",
+                    ));
+                }
+                Ok(())
+            }
+            _ => {
+                // Ignore unknown attributes so that future versions can add new
+                // keys without breaking callers.
+                discard_unknown(meta)
+            }
         }
     })?;
     Ok(out)
