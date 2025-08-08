@@ -43,14 +43,14 @@ impl Prefix {
         }
     }
 
+    /// Returns the normalized, lowercase form of the prefix as a string slice.
     #[must_use]
-    /// Returns the normalised, lowercase form of the prefix as a string slice.
     fn as_str(&self) -> &str {
         &self.normalized
     }
 
-    #[must_use]
     /// Returns the original, unmodified prefix string as provided by the user.
+    #[must_use]
     fn raw(&self) -> &str {
         &self.raw
     }
@@ -61,8 +61,6 @@ impl Prefix {
 pub struct CmdName(String);
 
 impl CmdName {
-    /// Create a new command name from `raw`.
-    #[must_use]
     /// Creates a new `CmdName` from the provided raw string.
     ///
     /// # Examples
@@ -72,17 +70,17 @@ impl CmdName {
     /// let name = CmdName::new("my-subcommand");
     /// let _ = name;
     /// ```
+    #[must_use]
     pub fn new(raw: &str) -> Self {
         Self(raw.to_owned())
     }
 
-    #[must_use]
     /// Returns the normalised string representation of the prefix.
+    #[must_use]
     fn as_str(&self) -> &str {
         &self.0
     }
 
-    #[must_use]
     /// Returns the subcommand name formatted as an uppercase environment variable key.
     ///
     /// Hyphens are replaced with underscores and all characters are converted to uppercase.
@@ -94,6 +92,7 @@ impl CmdName {
     /// let name = CmdName::new("my-cmd");
     /// let _ = name;
     /// ```
+    #[must_use]
     fn env_key(&self) -> String {
         self.0.replace('-', "_").to_ascii_uppercase()
     }
