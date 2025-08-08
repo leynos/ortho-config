@@ -21,6 +21,14 @@ pub use subcommand::{
 
 /// Normalize a prefix by trimming trailing underscores and converting
 /// to lowercase ASCII.
+///
+/// # Examples
+///
+/// ```rust
+/// use ortho_config::normalize_prefix;
+///
+/// assert_eq!(normalize_prefix("FOO__"), "foo");
+/// ```
 #[must_use]
 pub fn normalize_prefix(prefix: &str) -> String {
     prefix.trim_end_matches('_').to_ascii_lowercase()
