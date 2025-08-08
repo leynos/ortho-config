@@ -27,6 +27,11 @@ pub struct CsvEnv {
 }
 
 impl CsvEnv {
+    // Wrap an `Env` into `CsvEnv` to avoid repeated struct construction.
+    fn from_env(env: Env) -> Self {
+        Self { inner: env }
+    }
+
     /// Create an unprefixed provider.
     ///
     /// # Examples
@@ -38,7 +43,7 @@ impl CsvEnv {
     /// ```
     #[must_use]
     pub fn raw() -> Self {
-        Self { inner: Env::raw() }
+        Self::from_env(Env::raw())
     }
 
     /// Create a provider using `prefix`.
@@ -52,9 +57,7 @@ impl CsvEnv {
     /// ```
     #[must_use]
     pub fn prefixed(prefix: &str) -> Self {
-        Self {
-            inner: Env::prefixed(prefix),
-        }
+        Self::from_env(Env::prefixed(prefix))
     }
 
     /// Split keys at `pattern`.
@@ -68,9 +71,7 @@ impl CsvEnv {
     /// ```
     #[must_use]
     pub fn split(self, pattern: &str) -> Self {
-        Self {
-            inner: self.inner.split(pattern),
-        }
+        Self::from_env(self.inner.split(pattern))
     }
 
     /// Map keys using `mapper`.
@@ -88,9 +89,7 @@ impl CsvEnv {
     where
         F: Fn(&UncasedStr) -> Uncased<'_> + Clone + 'static,
     {
-        Self {
-            inner: self.inner.map(mapper),
-        }
+        Self::from_env(self.inner.map(mapper))
     }
 
     /// Filter and map keys using `f`.
@@ -108,9 +107,7 @@ impl CsvEnv {
     where
         F: Fn(&UncasedStr) -> Option<Uncased<'_>> + Clone + 'static,
     {
-        Self {
-            inner: self.inner.filter_map(f),
-        }
+        Self::from_env(self.inner.filter_map(f))
     }
 
     /// Whether to lowercase keys before emitting them.
@@ -124,9 +121,7 @@ impl CsvEnv {
     /// ```
     #[must_use]
     pub fn lowercase(self, lowercase: bool) -> Self {
-        Self {
-            inner: self.inner.lowercase(lowercase),
-        }
+        Self::from_env(self.inner.lowercase(lowercase))
     }
 
     fn iter(&self) -> impl Iterator<Item = (Uncased<'static>, String)> + '_ {
@@ -184,7 +179,7 @@ impl Provider for CsvEnv {
 
 impl From<Env> for CsvEnv {
     fn from(inner: Env) -> Self {
-        Self { inner }
+        Self::from_env(inner)
     }
 }
 
