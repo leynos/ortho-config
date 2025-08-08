@@ -27,11 +27,6 @@ pub struct CsvEnv {
 }
 
 impl CsvEnv {
-    // Wrap an `Env` into `CsvEnv` to avoid repeated struct construction.
-    fn from_env(env: Env) -> Self {
-        Self { inner: env }
-    }
-
     /// Create an unprefixed provider.
     ///
     /// # Examples
@@ -43,7 +38,7 @@ impl CsvEnv {
     /// ```
     #[must_use]
     pub fn raw() -> Self {
-        Self::from_env(Env::raw())
+        Env::raw().into()
     }
 
     /// Create a provider using `prefix`.
@@ -57,7 +52,7 @@ impl CsvEnv {
     /// ```
     #[must_use]
     pub fn prefixed(prefix: &str) -> Self {
-        Self::from_env(Env::prefixed(prefix))
+        Env::prefixed(prefix).into()
     }
 
     /// Split keys at `pattern`.
@@ -71,7 +66,7 @@ impl CsvEnv {
     /// ```
     #[must_use]
     pub fn split(self, pattern: &str) -> Self {
-        Self::from_env(self.inner.split(pattern))
+        self.inner.split(pattern).into()
     }
 
     /// Map keys using `mapper`.
@@ -89,7 +84,7 @@ impl CsvEnv {
     where
         F: Fn(&UncasedStr) -> Uncased<'_> + Clone + 'static,
     {
-        Self::from_env(self.inner.map(mapper))
+        self.inner.map(mapper).into()
     }
 
     /// Filter and map keys using `f`.
@@ -107,7 +102,7 @@ impl CsvEnv {
     where
         F: Fn(&UncasedStr) -> Option<Uncased<'_>> + Clone + 'static,
     {
-        Self::from_env(self.inner.filter_map(f))
+        self.inner.filter_map(f).into()
     }
 
     /// Whether to lowercase keys before emitting them.
@@ -121,7 +116,7 @@ impl CsvEnv {
     /// ```
     #[must_use]
     pub fn lowercase(self, lowercase: bool) -> Self {
-        Self::from_env(self.inner.lowercase(lowercase))
+        self.inner.lowercase(lowercase).into()
     }
 
     fn iter(&self) -> impl Iterator<Item = (Uncased<'static>, String)> + '_ {
@@ -179,7 +174,7 @@ impl Provider for CsvEnv {
 
 impl From<Env> for CsvEnv {
     fn from(inner: Env) -> Self {
-        Self::from_env(inner)
+        Self { inner }
     }
 }
 
