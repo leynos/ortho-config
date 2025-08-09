@@ -75,7 +75,15 @@ impl CmdName {
         Self(raw.to_owned())
     }
 
-    /// Returns the normalised string representation of the prefix.
+    /// Returns the stored subcommand name as a string slice.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// use ortho_config::subcommand::CmdName;
+    /// let name = CmdName::new("my-cmd");
+    /// let _ = name;
+    /// ```
     #[must_use]
     fn as_str(&self) -> &str {
         &self.0
