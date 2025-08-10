@@ -3,7 +3,7 @@
 //! Wraps `figment::providers::Env` and converts values containing commas
 //! into arrays unless they look like structured data (starting with `[` or
 //! `{` or a quote). This allows environment variables such as
-//! `DDLINT_RULES=A,B,C` to be deserialised as `Vec<String>`. Values with
+//! `DDLINT_RULES=A,B,C` to be deserialized as `Vec<String>`. Values with
 //! embedded commas must be wrapped in quotes or brackets to avoid being split.
 
 use figment::providers::Env;

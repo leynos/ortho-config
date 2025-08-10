@@ -69,7 +69,7 @@ parsing.
 A configuration is represented by a plain Rust struct. To take advantage of
 `OrthoConfig`, derive the following traits:
 
-- `serde::Deserialize` and `serde::Serialize` – required for deserialising
+- `serde::Deserialize` and `serde::Serialize` – required for deserializing
   values and merging overrides.
 
 - The derive macro generates a hidden `clap::Parser` implementation, so

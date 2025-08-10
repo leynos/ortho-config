@@ -59,7 +59,7 @@ pub trait OrthoConfig: Sized + serde::de::DeserializeOwned {
     /// # Errors
     ///
     /// Returns an [`OrthoError`] if parsing command-line arguments, reading
-    /// files or deserialising configuration fails.
+    /// files or deserializing configuration fails.
     fn load() -> Result<Self, OrthoError> {
         Self::load_from_iter(std::env::args_os())
     }
@@ -71,7 +71,7 @@ pub trait OrthoConfig: Sized + serde::de::DeserializeOwned {
     /// # Errors
     ///
     /// Returns an [`OrthoError`] if parsing command-line arguments, reading
-    /// files or deserialising configuration fails.
+    /// files or deserializing configuration fails.
     fn load_from_iter<I, T>(iter: I) -> Result<Self, OrthoError>
     where
         I: IntoIterator<Item = T>,

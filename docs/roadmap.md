@@ -109,7 +109,7 @@ references the relevant design guidance.
     structs to support dynamic rule tables such as `[rules.consistent-casing]`.
     [[DDLint Gap Analysis](ddlint-gap-analysis.md)]
 
-  - [ ] Ensure these maps deserialise correctly from files, environment
+  - [ ] Ensure these maps deserialize correctly from files, environment
     variables and CLI.
 
 - **Implement ignore‑pattern list handling**
