@@ -82,7 +82,7 @@ impl CmdName {
     /// ```rust,no_run
     /// use ortho_config::subcommand::CmdName;
     /// let name = CmdName::new("my-cmd");
-    /// let _ = name;
+    /// assert_eq!(name.as_str(), "my-cmd");
     /// ```
     #[must_use]
     fn as_str(&self) -> &str {
@@ -98,7 +98,7 @@ impl CmdName {
     /// ```rust,no_run
     /// use ortho_config::subcommand::CmdName;
     /// let name = CmdName::new("my-cmd");
-    /// let _ = name;
+    /// assert_eq!(name.env_key(), "MY_CMD");
     /// ```
     #[must_use]
     fn env_key(&self) -> String {
