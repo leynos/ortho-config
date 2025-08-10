@@ -23,10 +23,10 @@ pub struct Prefix {
 
 impl Prefix {
     /// Creates a new `Prefix` from a raw string, storing both the original and
-    /// a normalised lowercase version.
+    /// a normalized lowercase version.
     ///
     /// The raw string is preserved for use in environment variable names, while
-    /// the normalised form is used for file path lookups.
+    /// the normalized form is used for file path lookups.
     ///
     /// # Examples
     ///
@@ -142,7 +142,7 @@ where
 /// * `prefix` - The prefix to format
 ///
 /// # Returns
-/// A `String` with `.` prepended to the normalised prefix.
+/// A `String` with `.` prepended to the normalized prefix.
 ///
 /// # Examples
 ///
@@ -322,7 +322,7 @@ fn load_from_files(paths: &[PathBuf], name: &CmdName) -> Result<Figment, OrthoEr
 ///
 /// # Errors
 ///
-/// Returns an error if configuration files cannot be loaded or if deserialisation fails.
+/// Returns an error if configuration files cannot be loaded or if deserialization fails.
 ///
 /// # Examples
 ///
