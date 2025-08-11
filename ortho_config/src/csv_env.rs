@@ -38,7 +38,7 @@ impl CsvEnv {
     /// ```
     #[must_use]
     pub fn raw() -> Self {
-        Self { inner: Env::raw() }
+        Env::raw().into()
     }
 
     /// Create a provider using `prefix`.
@@ -52,9 +52,7 @@ impl CsvEnv {
     /// ```
     #[must_use]
     pub fn prefixed(prefix: &str) -> Self {
-        Self {
-            inner: Env::prefixed(prefix),
-        }
+        Env::prefixed(prefix).into()
     }
 
     /// Split keys at `pattern`.
@@ -68,9 +66,7 @@ impl CsvEnv {
     /// ```
     #[must_use]
     pub fn split(self, pattern: &str) -> Self {
-        Self {
-            inner: self.inner.split(pattern),
-        }
+        self.inner.split(pattern).into()
     }
 
     /// Map keys using `mapper`.
@@ -88,9 +84,7 @@ impl CsvEnv {
     where
         F: Fn(&UncasedStr) -> Uncased<'_> + Clone + 'static,
     {
-        Self {
-            inner: self.inner.map(mapper),
-        }
+        self.inner.map(mapper).into()
     }
 
     /// Filter and map keys using `f`.
@@ -108,9 +102,7 @@ impl CsvEnv {
     where
         F: Fn(&UncasedStr) -> Option<Uncased<'_>> + Clone + 'static,
     {
-        Self {
-            inner: self.inner.filter_map(f),
-        }
+        self.inner.filter_map(f).into()
     }
 
     /// Whether to lowercase keys before emitting them.
@@ -124,9 +116,7 @@ impl CsvEnv {
     /// ```
     #[must_use]
     pub fn lowercase(self, lowercase: bool) -> Self {
-        Self {
-            inner: self.inner.lowercase(lowercase),
-        }
+        self.inner.lowercase(lowercase).into()
     }
 
     fn iter(&self) -> impl Iterator<Item = (Uncased<'static>, String)> + '_ {
