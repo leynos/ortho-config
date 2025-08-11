@@ -2,8 +2,8 @@
 
 use syn::parenthesized;
 use syn::{
-    Attribute, Data, DeriveInput, Expr, Fields, GenericArgument, Lit, LitStr, PathArguments,
-    Token, Type,
+    Attribute, Data, DeriveInput, Expr, Fields, GenericArgument, Lit, LitStr, PathArguments, Token,
+    Type,
 };
 
 #[derive(Default)]
@@ -88,6 +88,45 @@ pub(crate) fn parse_struct_attrs(attrs: &[Attribute]) -> Result<StructAttrs, syn
     Ok(out)
 }
 
+/// Parses a literal from a field attribute using `extractor`.
+///
+/// # Examples
+///
+/// ```ignore
+/// # use syn::meta::ParseNestedMeta;
+/// # use syn::{Lit, LitStr};
+/// # fn demo(meta: &ParseNestedMeta) -> syn::Result<()> {
+/// let s: LitStr = parse_lit(meta, "cli_long", |lit| match lit {
+///     Lit::Str(s) => Some(s),
+///     _ => None,
+/// })?;
+/// # Ok(())
+/// # }
+/// ```
+fn parse_lit<T, F>(
+    meta: &syn::meta::ParseNestedMeta,
+    key: &str,
+    extractor: F,
+) -> Result<T, syn::Error>
+where
+    F: FnOnce(Lit) -> Option<T>,
+{
+    let lit = meta.value()?.parse::<Lit>()?;
+    let span = lit.span();
+    extractor(lit).ok_or_else(|| {
+        let ty = std::any::type_name::<T>()
+            .rsplit("::")
+            .next()
+            .unwrap_or("literal")
+            .to_lowercase();
+        let ty = match ty.as_str() {
+            "litstr" => "string",
+            other => other,
+        };
+        syn::Error::new(span, format!("{key} must be a {ty}"))
+    })
+}
+
 /// Parses a string literal from a field attribute.
 ///
 /// # Examples
@@ -101,14 +140,10 @@ pub(crate) fn parse_struct_attrs(attrs: &[Attribute]) -> Result<StructAttrs, syn
 /// # }
 /// ```
 fn lit_str(meta: &syn::meta::ParseNestedMeta, key: &str) -> Result<LitStr, syn::Error> {
-    let lit = meta.value()?.parse::<Lit>()?;
-    match lit {
-        Lit::Str(s) => Ok(s),
-        other => Err(syn::Error::new(
-            other.span(),
-            format!("{key} must be a string"),
-        )),
-    }
+    parse_lit(meta, key, |lit| match lit {
+        Lit::Str(s) => Some(s),
+        _ => None,
+    })
 }
 
 /// Parses a character literal from a field attribute.
@@ -124,14 +159,10 @@ fn lit_str(meta: &syn::meta::ParseNestedMeta, key: &str) -> Result<LitStr, syn::
 /// # }
 /// ```
 fn lit_char(meta: &syn::meta::ParseNestedMeta, key: &str) -> Result<char, syn::Error> {
-    let lit = meta.value()?.parse::<Lit>()?;
-    match lit {
-        Lit::Char(c) => Ok(c.value()),
-        other => Err(syn::Error::new(
-            other.span(),
-            format!("{key} must be a char"),
-        )),
-    }
+    parse_lit(meta, key, |lit| match lit {
+        Lit::Char(c) => Some(c.value()),
+        _ => None,
+    })
 }
 
 /// Applies a recognised field attribute, returning `true` if handled.
