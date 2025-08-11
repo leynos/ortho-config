@@ -28,6 +28,7 @@ pub use subcommand::{
 /// use ortho_config::normalize_prefix;
 ///
 /// assert_eq!(normalize_prefix("FOO__"), "foo");
+/// assert_eq!(normalize_prefix("foo"), "foo");
 /// ```
 #[must_use]
 pub fn normalize_prefix(prefix: &str) -> String {
