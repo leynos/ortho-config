@@ -29,6 +29,7 @@ pub use subcommand::{
 ///
 /// assert_eq!(normalize_prefix("FOO__"), "foo");
 /// assert_eq!(normalize_prefix("foo"), "foo");
+/// assert_eq!(normalize_prefix("Another_App_"), "another_app");
 /// ```
 #[must_use]
 pub fn normalize_prefix(prefix: &str) -> String {
