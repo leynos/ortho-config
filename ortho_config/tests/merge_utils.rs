@@ -2,7 +2,6 @@
 
 #![allow(deprecated)]
 use ortho_config::merge_cli_over_defaults;
-use rstest::rstest;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, Default, PartialEq)]
@@ -11,7 +10,7 @@ struct Sample {
     b: Option<String>,
 }
 
-#[rstest]
+#[test]
 fn cli_overrides_defaults() {
     let defaults = Sample {
         a: Some(1),
@@ -36,12 +35,49 @@ struct Nested {
     inner: Option<Sample>,
 }
 
-#[rstest]
+#[test]
 fn nested_structs_merge_deeply() {
     let defaults = Nested {
         inner: Some(Sample {
             a: Some(1),
             b: Some("def".into()),
+        }),
+    };
+    let cli = Nested {
+        inner: Some(Sample {
+            a: None,
+            b: Some("cli".into()),
+        }),
+    };
+    let merged = merge_cli_over_defaults(&defaults, &cli).expect("merge");
+    assert_eq!(
+        merged,
+        Nested {
+            inner: Some(Sample {
+                a: Some(1),
+                b: Some("cli".into()),
+            })
+        }
+    );
+}
+
+#[test]
+fn cli_none_fields_do_not_override_defaults() {
+    let defaults = Sample {
+        a: Some(42),
+        b: Some("default".into()),
+    };
+    let cli = Sample { a: None, b: None };
+    let merged = merge_cli_over_defaults(&defaults, &cli).expect("merge");
+    assert_eq!(merged, defaults);
+}
+
+#[test]
+fn nested_structs_partial_none_merge() {
+    let defaults = Nested {
+        inner: Some(Sample {
+            a: Some(1),
+            b: None,
         }),
     };
     let cli = Nested {

@@ -1,5 +1,6 @@
 //! Utilities for merging command-line arguments with configuration defaults.
 
+use crate::OrthoError;
 use figment::{Figment, providers::Serialized};
 use serde::{Serialize, de::DeserializeOwned};
 use serde_json::Value;
@@ -19,7 +20,10 @@ fn strip_nulls(value: &mut Value) {
                 strip_nulls(v);
             }
         }
-        Value::Array(arr) => arr.iter_mut().for_each(strip_nulls),
+        Value::Array(arr) => {
+            arr.retain(|v| !v.is_null());
+            arr.iter_mut().for_each(strip_nulls);
+        }
         _ => {}
     }
 }
@@ -33,6 +37,37 @@ pub fn value_without_nones<T: Serialize>(cli: &T) -> Result<Value, serde_json::E
     let mut value = serde_json::to_value(cli)?;
     strip_nulls(&mut value);
     Ok(value)
+}
+
+fn convert_gathering_error(e: &serde_json::Error) -> OrthoError {
+    OrthoError::Gathering(figment::Error::from(e.to_string()))
+}
+
+/// Serialise `value` to JSON, pruning `None` fields and mapping errors to
+/// [`OrthoError`].
+///
+/// # Examples
+///
+/// ```rust
+/// use ortho_config::sanitize_value;
+/// use serde::Serialize;
+///
+/// #[derive(Serialize)]
+/// struct Args { count: Option<u32> }
+///
+/// let v = sanitize_value(&Args { count: None }).unwrap();
+/// assert_eq!(v, serde_json::json!({}));
+/// ```
+///
+/// # Errors
+///
+/// Returns an [`OrthoError`] if serialisation fails.
+#[allow(
+    clippy::result_large_err,
+    reason = "OrthoError is acceptable for library error handling"
+)]
+pub fn sanitize_value<T: Serialize>(value: &T) -> Result<Value, OrthoError> {
+    value_without_nones(value).map_err(|e| convert_gathering_error(&e))
 }
 
 /// Merge CLI-provided values over application defaults using Figment.

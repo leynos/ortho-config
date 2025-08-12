@@ -129,18 +129,14 @@ pub(crate) fn build_merge_section(
             fig = fig.merge(f);
         }
 
-        let cli_value = ortho_config::value_without_nones(&cli).map_err(|e| {
-            ortho_config::OrthoError::Gathering(figment::Error::from(e.to_string()))
-        })?;
+        let cli_value = ortho_config::sanitize_value(&cli)?;
         fig = fig
             .merge(env_provider.clone())
             .merge(Serialized::defaults(&cli_value));
 
         #append_logic
 
-        let overrides_value = ortho_config::value_without_nones(&overrides).map_err(|e| {
-            ortho_config::OrthoError::Gathering(figment::Error::from(e.to_string()))
-        })?;
+        let overrides_value = ortho_config::sanitize_value(&overrides)?;
         fig = fig.merge(Serialized::defaults(&overrides_value));
 
         fig.extract::<#config_ident>().map_err(ortho_config::OrthoError::Gathering)
