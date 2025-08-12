@@ -19,7 +19,7 @@ toml = { version = "0.8", optional = true }
 figment-json5 = { version = "0.1", optional = true }
 serde_yaml = { version = "0.9", optional = true }
 json5 = { version = "0.4", optional = true }
-serde_json = { version = "1", optional = true }
+serde_json = { version = "1" }
 
 [target.'cfg(not(any(unix, target_os = "redox")))'.dependencies]
 directories = "6"
@@ -30,7 +30,7 @@ xdg = "3"
 [features]
 default = ["toml"]
 toml = ["figment/toml", "dep:toml"]
-json5 = ["dep:figment-json5", "dep:json5", "dep:serde_json"]
+json5 = ["dep:figment-json5", "dep:json5"]
 yaml = ["figment/yaml", "dep:serde_yaml"]
 
 [dev-dependencies]
