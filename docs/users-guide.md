@@ -277,7 +277,8 @@ Many CLI applications use `clap` subcommands to perform different operations.
 namespace. The helper function `load_and_merge_subcommand_for` loads defaults
 for a specific subcommand and merges them beneath the CLI values. The merged
 struct is returned as a new instance; the original `cli` struct remains
-unchanged.
+unchanged. CLI fields left unset (`None`) do not override environment or file
+defaults, avoiding accidental loss of configuration.
 
 ### How it works
 

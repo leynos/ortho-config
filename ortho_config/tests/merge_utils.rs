@@ -2,17 +2,16 @@
 
 #![allow(deprecated)]
 use ortho_config::merge_cli_over_defaults;
+use rstest::rstest;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, Default, PartialEq)]
 struct Sample {
-    #[serde(skip_serializing_if = "Option::is_none")]
     a: Option<u32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     b: Option<String>,
 }
 
-#[test]
+#[rstest]
 fn cli_overrides_defaults() {
     let defaults = Sample {
         a: Some(1),
@@ -34,11 +33,10 @@ fn cli_overrides_defaults() {
 
 #[derive(Debug, Serialize, Deserialize, Default, PartialEq)]
 struct Nested {
-    #[serde(skip_serializing_if = "Option::is_none")]
     inner: Option<Sample>,
 }
 
-#[test]
+#[rstest]
 fn nested_structs_merge_deeply() {
     let defaults = Nested {
         inner: Some(Sample {

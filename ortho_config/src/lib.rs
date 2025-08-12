@@ -12,7 +12,7 @@ mod file;
 mod merge;
 pub mod subcommand;
 #[allow(deprecated)]
-pub use merge::merge_cli_over_defaults;
+pub use merge::{merge_cli_over_defaults, value_without_nones};
 #[allow(deprecated)]
 pub use subcommand::{
     load_and_merge_subcommand, load_and_merge_subcommand_for, load_subcommand_config,

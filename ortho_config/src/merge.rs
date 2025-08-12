@@ -2,6 +2,38 @@
 
 use figment::{Figment, providers::Serialized};
 use serde::{Serialize, de::DeserializeOwned};
+use serde_json::Value;
+
+fn strip_nulls(value: &mut Value) {
+    match value {
+        Value::Object(map) => {
+            let keys: Vec<_> = map
+                .iter()
+                .filter(|(_, v)| v.is_null())
+                .map(|(k, _)| k.clone())
+                .collect();
+            for key in keys {
+                map.remove(&key);
+            }
+            for v in map.values_mut() {
+                strip_nulls(v);
+            }
+        }
+        Value::Array(arr) => arr.iter_mut().for_each(strip_nulls),
+        _ => {}
+    }
+}
+
+/// Serialise a CLI struct to JSON, removing fields set to `None`.
+///
+/// # Errors
+///
+/// Returns any [`serde_json::Error`] encountered during serialisation.
+pub fn value_without_nones<T: Serialize>(cli: &T) -> Result<Value, serde_json::Error> {
+    let mut value = serde_json::to_value(cli)?;
+    strip_nulls(&mut value);
+    Ok(value)
+}
 
 /// Merge CLI-provided values over application defaults using Figment.
 ///
@@ -37,7 +69,8 @@ pub fn merge_cli_over_defaults<T>(defaults: &T, cli: &T) -> Result<T, figment::E
 where
     T: Serialize + DeserializeOwned + Default,
 {
+    let cli_value = value_without_nones(cli).map_err(|e| figment::Error::from(e.to_string()))?;
     Figment::from(Serialized::defaults(defaults))
-        .merge(Serialized::defaults(cli))
+        .merge(Serialized::defaults(&cli_value))
         .extract()
 }

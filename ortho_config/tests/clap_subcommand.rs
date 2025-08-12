@@ -1,5 +1,6 @@
 use clap::{Parser, Subcommand};
 use ortho_config::{OrthoConfig, subcommand::load_and_merge_subcommand_for};
+use rstest::rstest;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Parser)]
@@ -17,11 +18,10 @@ enum Commands {
 #[command(name = "run")]
 struct RunArgs {
     #[arg(long)]
-    #[serde(skip_serializing_if = "Option::is_none")]
     option: Option<String>,
 }
 
-#[test]
+#[rstest]
 fn merge_works_for_subcommand() {
     figment::Jail::expect_with(|j| {
         j.create_file(".config.toml", "[cmds.run]\noption = \"file\"")?;

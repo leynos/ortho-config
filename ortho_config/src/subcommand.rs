@@ -1,6 +1,6 @@
 //! Support for loading configuration for individual subcommands.
 
-use crate::{OrthoError, load_config_file, normalize_prefix};
+use crate::{OrthoError, load_config_file, normalize_prefix, value_without_nones};
 use clap::CommandFactory;
 #[cfg(not(any(unix, target_os = "redox")))]
 use directories::BaseDirs;
@@ -452,7 +452,10 @@ where
         .split("__");
     fig = fig.merge(env_provider);
 
-    fig.merge(Serialized::defaults(cli))
+    let cli_value = value_without_nones(cli)
+        .map_err(|e| OrthoError::Gathering(figment::Error::from(e.to_string())))?;
+
+    fig.merge(Serialized::defaults(&cli_value))
         .extract()
         .map_err(OrthoError::Gathering)
 }
