@@ -2,7 +2,8 @@
 
 use syn::parenthesized;
 use syn::{
-    Attribute, Data, DeriveInput, Expr, Fields, GenericArgument, Lit, PathArguments, Token, Type,
+    Attribute, Data, DeriveInput, Expr, Fields, GenericArgument, Lit, LitStr, PathArguments, Token,
+    Type,
 };
 
 #[derive(Default)]
@@ -87,6 +88,125 @@ pub(crate) fn parse_struct_attrs(attrs: &[Attribute]) -> Result<StructAttrs, syn
     Ok(out)
 }
 
+/// Parses a literal from a field attribute using `extractor`.
+///
+/// # Examples
+///
+/// ```ignore
+/// # use syn::meta::ParseNestedMeta;
+/// # use syn::{Lit, LitStr};
+/// # fn demo(meta: &ParseNestedMeta) -> syn::Result<()> {
+/// let s: LitStr = parse_lit(meta, "cli_long", |lit| match lit {
+///     Lit::Str(s) => Some(s),
+///     _ => None,
+/// })?;
+/// # Ok(())
+/// # }
+/// ```
+fn parse_lit<T, F>(
+    meta: &syn::meta::ParseNestedMeta,
+    key: &str,
+    extractor: F,
+) -> Result<T, syn::Error>
+where
+    F: FnOnce(Lit) -> Option<T>,
+{
+    let lit = meta.value()?.parse::<Lit>()?;
+    let span = lit.span();
+    extractor(lit).ok_or_else(|| {
+        let ty = std::any::type_name::<T>()
+            .rsplit("::")
+            .next()
+            .unwrap_or("literal")
+            .to_lowercase();
+        let ty = match ty.as_str() {
+            "litstr" => "string",
+            other => other,
+        };
+        syn::Error::new(span, format!("{key} must be a {ty}"))
+    })
+}
+
+/// Parses a string literal from a field attribute.
+///
+/// # Examples
+///
+/// ```
+/// # use syn::meta::ParseNestedMeta;
+/// # fn demo(meta: &ParseNestedMeta) -> syn::Result<()> {
+/// let s = lit_str(meta, "cli_long")?;
+/// assert_eq!(s.value(), "name");
+/// # Ok(())
+/// # }
+/// ```
+fn lit_str(meta: &syn::meta::ParseNestedMeta, key: &str) -> Result<LitStr, syn::Error> {
+    parse_lit(meta, key, |lit| match lit {
+        Lit::Str(s) => Some(s),
+        _ => None,
+    })
+}
+
+/// Parses a character literal from a field attribute.
+///
+/// # Examples
+///
+/// ```
+/// # use syn::meta::ParseNestedMeta;
+/// # fn demo(meta: &ParseNestedMeta) -> syn::Result<()> {
+/// let c = lit_char(meta, "cli_short")?;
+/// assert_eq!(c, 'n');
+/// # Ok(())
+/// # }
+/// ```
+fn lit_char(meta: &syn::meta::ParseNestedMeta, key: &str) -> Result<char, syn::Error> {
+    parse_lit(meta, key, |lit| match lit {
+        Lit::Char(c) => Some(c.value()),
+        _ => None,
+    })
+}
+
+/// Applies a recognised field attribute, returning `true` if handled.
+///
+/// # Examples
+///
+/// ```
+/// # use syn::meta::ParseNestedMeta;
+/// # fn demo(meta: &ParseNestedMeta) -> syn::Result<()> {
+/// let mut out = FieldAttrs::default();
+/// if !apply_field_attr(meta, &mut out)? {
+///     // unknown attribute
+/// }
+/// # Ok(())
+/// # }
+/// ```
+fn apply_field_attr(
+    meta: &syn::meta::ParseNestedMeta,
+    out: &mut FieldAttrs,
+) -> Result<bool, syn::Error> {
+    match () {
+        () if meta.path.is_ident("cli_long") => {
+            let s = lit_str(meta, "cli_long")?;
+            out.cli_long = Some(s.value());
+            Ok(true)
+        }
+        () if meta.path.is_ident("cli_short") => {
+            let c = lit_char(meta, "cli_short")?;
+            out.cli_short = Some(c);
+            Ok(true)
+        }
+        () if meta.path.is_ident("default") => {
+            out.default = Some(meta.value()?.parse()?);
+            Ok(true)
+        }
+        () if meta.path.is_ident("merge_strategy") => {
+            let s = lit_str(meta, "merge_strategy")?;
+            out.merge_strategy = Some(MergeStrategy::parse(&s.value(), s.span())?);
+            Ok(true)
+        }
+        () => Ok(false),
+    }
+}
+
 /// Parses field-level `#[ortho_config(...)]` attributes.
 ///
 /// Recognised keys include `cli_long`, `cli_short`, `default` and
@@ -100,42 +220,13 @@ pub(crate) fn parse_struct_attrs(attrs: &[Attribute]) -> Result<StructAttrs, syn
 pub(crate) fn parse_field_attrs(attrs: &[Attribute]) -> Result<FieldAttrs, syn::Error> {
     let mut out = FieldAttrs::default();
     parse_ortho_config(attrs, |meta| {
-        if meta.path.is_ident("cli_long") {
-            let val = meta.value()?.parse::<Lit>()?;
-            if let Lit::Str(s) = val {
-                out.cli_long = Some(s.value());
-            } else {
-                return Err(syn::Error::new(val.span(), "cli_long must be a string"));
-            }
-            Ok(())
-        } else if meta.path.is_ident("cli_short") {
-            let val = meta.value()?.parse::<Lit>()?;
-            if let Lit::Char(c) = val {
-                out.cli_short = Some(c.value());
-            } else {
-                return Err(syn::Error::new(val.span(), "cli_short must be a char"));
-            }
-            Ok(())
-        } else if meta.path.is_ident("default") {
-            let expr = meta.value()?.parse::<Expr>()?;
-            out.default = Some(expr);
-            Ok(())
-        } else if meta.path.is_ident("merge_strategy") {
-            let val = meta.value()?.parse::<Lit>()?;
-            if let Lit::Str(s) = val {
-                out.merge_strategy = Some(MergeStrategy::parse(&s.value(), s.span())?);
-            } else {
-                return Err(syn::Error::new(
-                    val.span(),
-                    "merge_strategy must be a string",
-                ));
-            }
-            Ok(())
-        } else {
-            // Ignore unknown attributes so that future versions can add new
-            // keys without breaking callers.
-            discard_unknown(meta)
+        if !apply_field_attr(meta, &mut out)? {
+            // Unknown attributes are intentionally discarded to preserve
+            // forwards compatibility while still allowing callers to add
+            // new keys in future versions.
+            discard_unknown(meta)?;
         }
+        Ok(())
     })?;
     Ok(out)
 }
