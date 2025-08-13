@@ -77,7 +77,11 @@ The primary data flow for a user calling `AppConfig::load()` will be:
      prefix and key-mapping rules.
    - **CLI Provider:** The `clap`-parsed arguments are serialized into a
      `figment` provider and merged last. Fields left as `None` are removed
-     before merging so that environment or file defaults remain untouched.
+     before merging so that environment or file defaults remain untouched. This
+     serialisation step relies on `serde_json` and introduces a small overhead;
+     if configuration loading becomes a hotspot, benchmark to evaluate a more
+     direct approach.
+
 4. `figment`'s `extract()` method is called to deserialize the merged
    configuration into the user's `AppConfig` struct.
 5. Array merging logic is applied post-deserialization if the "append" strategy

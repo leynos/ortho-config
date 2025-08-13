@@ -2,6 +2,7 @@
 
 #![allow(deprecated)]
 use ortho_config::merge_cli_over_defaults;
+use rstest::rstest;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, Default, PartialEq)]
@@ -10,7 +11,7 @@ struct Sample {
     b: Option<String>,
 }
 
-#[test]
+#[rstest]
 fn cli_overrides_defaults() {
     let defaults = Sample {
         a: Some(1),
@@ -35,7 +36,7 @@ struct Nested {
     inner: Option<Sample>,
 }
 
-#[test]
+#[rstest]
 fn nested_structs_merge_deeply() {
     let defaults = Nested {
         inner: Some(Sample {
@@ -61,7 +62,7 @@ fn nested_structs_merge_deeply() {
     );
 }
 
-#[test]
+#[rstest]
 fn cli_none_fields_do_not_override_defaults() {
     let defaults = Sample {
         a: Some(42),
@@ -72,7 +73,7 @@ fn cli_none_fields_do_not_override_defaults() {
     assert_eq!(merged, defaults);
 }
 
-#[test]
+#[rstest]
 fn nested_structs_partial_none_merge() {
     let defaults = Nested {
         inner: Some(Sample {

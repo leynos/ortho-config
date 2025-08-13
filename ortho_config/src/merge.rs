@@ -8,14 +8,7 @@ use serde_json::Value;
 fn strip_nulls(value: &mut Value) {
     match value {
         Value::Object(map) => {
-            let keys: Vec<_> = map
-                .iter()
-                .filter(|(_, v)| v.is_null())
-                .map(|(k, _)| k.clone())
-                .collect();
-            for key in keys {
-                map.remove(&key);
-            }
+            map.retain(|_, v| !v.is_null());
             for v in map.values_mut() {
                 strip_nulls(v);
             }
@@ -28,11 +21,11 @@ fn strip_nulls(value: &mut Value) {
     }
 }
 
-/// Serialise a CLI struct to JSON, removing fields set to `None`.
+/// Serialize a CLI struct to JSON, removing fields set to `None`.
 ///
 /// # Errors
 ///
-/// Returns any [`serde_json::Error`] encountered during serialisation.
+/// Returns any [`serde_json::Error`] encountered during serialization.
 pub fn value_without_nones<T: Serialize>(cli: &T) -> Result<Value, serde_json::Error> {
     let mut value = serde_json::to_value(cli)?;
     strip_nulls(&mut value);
@@ -43,7 +36,7 @@ fn convert_gathering_error(e: &serde_json::Error) -> OrthoError {
     OrthoError::Gathering(figment::Error::from(e.to_string()))
 }
 
-/// Serialise `value` to JSON, pruning `None` fields and mapping errors to
+/// Serialize `value` to JSON, pruning `None` fields and mapping errors to
 /// [`OrthoError`].
 ///
 /// # Examples
@@ -61,10 +54,10 @@ fn convert_gathering_error(e: &serde_json::Error) -> OrthoError {
 ///
 /// # Errors
 ///
-/// Returns an [`OrthoError`] if serialisation fails.
-#[allow(
+/// Returns an [`OrthoError`] if serialization fails.
+#[expect(
     clippy::result_large_err,
-    reason = "OrthoError is acceptable for library error handling"
+    reason = "Return OrthoError to keep a single error type across the public API"
 )]
 pub fn sanitize_value<T: Serialize>(value: &T) -> Result<Value, OrthoError> {
     value_without_nones(value).map_err(|e| convert_gathering_error(&e))
@@ -99,7 +92,10 @@ pub fn sanitize_value<T: Serialize>(value: &T) -> Result<Value, OrthoError> {
 /// Returns any [`figment::Error`] produced while extracting the merged
 /// configuration.
 #[deprecated(note = "use `load_and_merge_subcommand` instead", since = "0.4.0")]
-#[allow(clippy::result_large_err)]
+#[expect(
+    clippy::result_large_err,
+    reason = "Return figment::Error for backward compatibility"
+)]
 pub fn merge_cli_over_defaults<T>(defaults: &T, cli: &T) -> Result<T, figment::Error>
 where
     T: Serialize + DeserializeOwned + Default,

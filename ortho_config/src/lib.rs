@@ -11,9 +11,9 @@ mod error;
 mod file;
 mod merge;
 pub mod subcommand;
-#[allow(deprecated)]
+#[expect(deprecated, reason = "Retain helpers for backwards compatibility")]
 pub use merge::{merge_cli_over_defaults, sanitize_value, value_without_nones};
-#[allow(deprecated)]
+#[expect(deprecated, reason = "Re-export deprecated subcommand helpers")]
 pub use subcommand::{
     load_and_merge_subcommand, load_and_merge_subcommand_for, load_subcommand_config,
     load_subcommand_config_for,
@@ -66,7 +66,10 @@ pub trait OrthoConfig: Sized + serde::de::DeserializeOwned {
     /// # Ok(())
     /// # }
     /// ```
-    #[allow(clippy::result_large_err)]
+    #[expect(
+        clippy::result_large_err,
+        reason = "Return OrthoError to keep a single error type across the public API"
+    )]
     ///
     /// # Errors
     ///

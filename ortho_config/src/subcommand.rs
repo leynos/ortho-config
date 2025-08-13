@@ -452,9 +452,9 @@ where
         .split("__");
     fig = fig.merge(env_provider);
 
-    let cli_value = sanitize_value(cli)?;
+    let sanitized_cli = sanitize_value(cli)?;
 
-    fig.merge(Serialized::defaults(&cli_value))
+    fig.merge(Serialized::defaults(&sanitized_cli))
         .extract()
         .map_err(OrthoError::Gathering)
 }
