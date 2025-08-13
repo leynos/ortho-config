@@ -63,6 +63,39 @@ pub fn sanitize_value<T: Serialize>(value: &T) -> Result<Value, OrthoError> {
     value_without_nones(value).map_err(|e| convert_gathering_error(&e))
 }
 
+/// Produce a Figment provider from `value` with `None` fields removed.
+///
+/// This helper wraps [`sanitize_value`] and avoids repeating the
+/// `Serialized::defaults` pattern when layering providers.
+///
+/// # Examples
+///
+/// ```rust
+/// use figment::Figment;
+/// use ortho_config::sanitized_provider;
+/// use serde::Serialize;
+///
+/// #[derive(Serialize)]
+/// struct Args { count: Option<u32> }
+///
+/// let provider = sanitized_provider(&Args { count: None }).unwrap();
+/// let value: serde_json::Value = Figment::from(provider).extract().unwrap();
+/// assert_eq!(value, serde_json::json!({}));
+/// ```
+///
+/// # Errors
+///
+/// Returns an [`OrthoError`] if serialisation fails.
+#[expect(
+    clippy::result_large_err,
+    reason = "Return OrthoError to keep a single error type across the public API"
+)]
+pub fn sanitized_provider<T: Serialize>(
+    value: &T,
+) -> Result<Serialized<serde_json::Value>, OrthoError> {
+    sanitize_value(value).map(Serialized::defaults)
+}
+
 /// Merge CLI-provided values over application defaults using Figment.
 ///
 /// Any field set to `None` in the `cli` argument will leave the corresponding

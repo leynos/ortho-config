@@ -398,6 +398,10 @@ underlying error.
   argument vectors to exercise the merge logic. The `figment` crate makes it
   easy to inject additional providers when writing unit tests.
 
+- **Sanitised providers** – The `sanitized_provider` helper returns a `Figment`
+  provider with `None` fields removed. It aids manual layering when bypassing
+  the derive macro.
+
 ## Conclusion
 
 `OrthoConfig` streamlines configuration management in Rust applications. By

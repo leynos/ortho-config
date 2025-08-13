@@ -80,7 +80,8 @@ The primary data flow for a user calling `AppConfig::load()` will be:
      before merging so that environment or file defaults remain untouched. This
      serialisation step relies on `serde_json` and introduces a small overhead;
      if configuration loading becomes a hotspot, benchmark to evaluate a more
-     direct approach.
+     direct approach. A helper, `sanitized_provider`, wraps sanitisation and
+     provider construction to avoid repeating the pattern.
 
 4. `figment`'s `extract()` method is called to deserialize the merged
    configuration into the user's `AppConfig` struct.

@@ -12,7 +12,7 @@ mod file;
 mod merge;
 pub mod subcommand;
 #[expect(deprecated, reason = "Retain helpers for backwards compatibility")]
-pub use merge::{merge_cli_over_defaults, sanitize_value, value_without_nones};
+pub use merge::{merge_cli_over_defaults, sanitize_value, sanitized_provider, value_without_nones};
 #[expect(deprecated, reason = "Re-export deprecated subcommand helpers")]
 pub use subcommand::{
     load_and_merge_subcommand, load_and_merge_subcommand_for, load_subcommand_config,
