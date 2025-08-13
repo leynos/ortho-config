@@ -15,6 +15,7 @@ enum Commands {
 
 #[derive(Debug, Deserialize, Serialize, Parser, OrthoConfig, Default)]
 #[command(name = "run")]
+#[ortho_config(prefix = "APP_")]
 struct RunArgs {
     #[arg(long)]
     option: Option<String>,
@@ -27,7 +28,7 @@ fn to_figment(e: &ortho_config::OrthoError) -> figment::error::Error {
 #[test]
 fn merge_works_for_subcommand() {
     figment::Jail::expect_with(|j| {
-        j.create_file("config.toml", "[cmds.run]\noption = \"file\"")?;
+        j.create_file(".app.toml", "[cmds.run]\noption = \"file\"")?;
         let cli = Cli::parse_from(["prog", "run", "--option", "cli"]);
         let Commands::Run(args) = cli.cmd;
         let cfg = load_and_merge_subcommand_for(&args).map_err(|e| to_figment(&e))?;
@@ -39,11 +40,23 @@ fn merge_works_for_subcommand() {
 #[test]
 fn merge_falls_back_to_env_when_cli_none() {
     figment::Jail::expect_with(|j| {
-        j.set_env("CMDS_RUN_OPTION", "env");
+        j.set_env("APP_CMDS_RUN_OPTION", "env");
         let cli = Cli::parse_from(["prog", "run"]);
         let Commands::Run(args) = cli.cmd;
         let cfg = load_and_merge_subcommand_for(&args).map_err(|e| to_figment(&e))?;
         assert_eq!(cfg.option.as_deref(), Some("env"));
+        Ok(())
+    });
+}
+
+#[test]
+fn merge_falls_back_to_file_when_cli_none() {
+    figment::Jail::expect_with(|j| {
+        j.create_file(".app.toml", "[cmds.run]\noption = \"file\"")?;
+        let cli = Cli::parse_from(["prog", "run"]);
+        let Commands::Run(args) = cli.cmd;
+        let cfg = load_and_merge_subcommand_for(&args).map_err(|e| to_figment(&e))?;
+        assert_eq!(cfg.option.as_deref(), Some("file"));
         Ok(())
     });
 }
