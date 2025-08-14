@@ -66,7 +66,10 @@ pub trait OrthoConfig: Sized + serde::de::DeserializeOwned {
     /// # Ok(())
     /// # }
     /// ```
-    #[allow(clippy::result_large_err)]
+    #[expect(
+        clippy::result_large_err,
+        reason = "Return OrthoError to keep a single error type across the public API"
+    )]
     ///
     /// # Errors
     ///
@@ -78,7 +81,10 @@ pub trait OrthoConfig: Sized + serde::de::DeserializeOwned {
 
     /// Loads configuration from the provided iterator of command-line
     /// arguments.
-    #[allow(clippy::result_large_err)]
+    #[expect(
+        clippy::result_large_err,
+        reason = "Return OrthoError to keep a single error type across the public API"
+    )]
     ///
     /// # Errors
     ///
@@ -91,7 +97,11 @@ pub trait OrthoConfig: Sized + serde::de::DeserializeOwned {
 
     /// Prefix used for environment variables and subcommand configuration.
     #[must_use]
-    #[allow(clippy::missing_const_for_fn)]
+    #[expect(
+        clippy::missing_const_for_fn,
+        reason = "Trait method uses runtime information (intended to be overridable); keeping signature stable"
+    )]
+    #[allow(unfulfilled_lint_expectations)] // Clippy no longer emits this lint for trait methods
     fn prefix() -> &'static str {
         ""
     }
