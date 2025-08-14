@@ -52,10 +52,8 @@ fn merge_falls_back_to_env_when_cli_none() {
 #[test]
 fn merge_falls_back_to_file_when_cli_none() {
     figment::Jail::expect_with(|j| {
-        // Strip all env vars so file fallback is deterministic. `Jail::clear_env`
-        // is infallible, so wrap its unit return in a `Result` to satisfy the
-        // `?` operator and remain robust if the API adds error reporting.
-        figment::Result::Ok(j.clear_env())?;
+        // Strip all env vars so file fallback is deterministic.
+        j.clear_env();
         j.create_file(".app.toml", "[cmds.run]\noption = \"file\"")?;
         let cli = Cli::parse_from(["prog", "run"]);
         let Commands::Run(args) = cli.cmd;
