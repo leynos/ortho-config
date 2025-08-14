@@ -1,7 +1,7 @@
 //! Tests for merging CLI values with defaults.
 
 use figment::{Figment, providers::Serialized};
-use ortho_config::sanitize_value;
+use ortho_config::sanitized_provider;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, Default, PartialEq)]
@@ -98,13 +98,30 @@ fn nested_structs_partial_none_merge() {
     );
 }
 
+#[test]
+fn arrays_nulls_are_pruned_in_cli_layer() {
+    #[derive(Debug, Serialize, Deserialize, Default, PartialEq)]
+    struct WithVec {
+        #[serde(default)]
+        items: Vec<Option<u32>>,
+    }
+
+    let defaults = WithVec {
+        items: vec![Some(1)],
+    };
+    let cli = WithVec {
+        items: vec![None, Some(2), None, Some(3)],
+    };
+    let merged = merge_via_sanitized_cli(&defaults, &cli);
+    assert_eq!(merged.items, vec![Some(2), Some(3)]);
+}
+
 fn merge_via_sanitized_cli<T>(defaults: &T, cli: &T) -> T
 where
     T: Serialize + serde::de::DeserializeOwned + Default,
 {
-    let sanitized = sanitize_value(cli).expect("sanitize");
     Figment::from(Serialized::defaults(defaults))
-        .merge(Serialized::defaults(&sanitized))
+        .merge(sanitized_provider(cli).expect("sanitize"))
         .extract()
         .expect("merge")
 }

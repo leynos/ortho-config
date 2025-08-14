@@ -31,6 +31,19 @@ fn strip_nulls(value: &mut Value) {
 
 /// Serialize a CLI struct to JSON, removing fields set to `None`.
 ///
+/// # Examples
+///
+/// ```rust
+/// use ortho_config::value_without_nones;
+/// use serde::Serialize;
+///
+/// #[derive(Serialize)]
+/// struct Args { count: Option<u32> }
+///
+/// let v = value_without_nones(&Args { count: None }).unwrap();
+/// assert_eq!(v, serde_json::json!({}));
+/// ```
+///
 /// # Errors
 ///
 /// Returns any [`serde_json::Error`] encountered during serialization.

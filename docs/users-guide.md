@@ -400,7 +400,16 @@ underlying error.
 
 - **Sanitized providers** – The `sanitized_provider` helper returns a `Figment`
   provider with `None` fields removed. It aids manual layering when bypassing
-  the derive macro.
+  the derive macro. For example:
+
+  ```rust
+  use figment::{Figment, providers::Serialized};
+  use ortho_config::sanitized_provider;
+
+  let fig = Figment::from(Serialized::defaults(&Defaults::default()))
+      .merge(sanitized_provider(&cli)?);
+  let cfg: Defaults = fig.extract()?;
+  ```
 
 ## Conclusion
 
