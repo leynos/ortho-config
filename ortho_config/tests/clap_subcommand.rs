@@ -1,3 +1,7 @@
+//! Integration tests for subcommand merge behaviour:
+//! - CLI values override file/env.
+//! - CLI None must not override file/env defaults (sanitised provider).
+
 use clap::{Parser, Subcommand};
 use ortho_config::{OrthoConfig, subcommand::load_and_merge_subcommand_for};
 use serde::{Deserialize, Serialize};
