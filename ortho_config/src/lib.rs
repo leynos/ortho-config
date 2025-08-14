@@ -101,11 +101,7 @@ pub trait OrthoConfig: Sized + serde::de::DeserializeOwned {
 
     /// Prefix used for environment variables and subcommand configuration.
     #[must_use]
-    #[expect(
-        clippy::missing_const_for_fn,
-        reason = "Trait method uses runtime information (intended to be overridable); keeping signature stable"
-    )]
-    #[allow(unfulfilled_lint_expectations)] // Clippy no longer emits this lint for trait methods
+    // Intentionally non-const so implementations can read runtime information.
     fn prefix() -> &'static str {
         ""
     }
