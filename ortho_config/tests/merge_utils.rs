@@ -118,7 +118,7 @@ fn arrays_nulls_are_pruned_in_cli_layer() {
 
 fn merge_via_sanitized_cli<T>(defaults: &T, cli: &T) -> T
 where
-    T: Serialize + serde::de::DeserializeOwned + Default,
+    T: Serialize + serde::de::DeserializeOwned,
 {
     Figment::from(Serialized::defaults(defaults))
         .merge(sanitized_provider(cli).expect("sanitize"))

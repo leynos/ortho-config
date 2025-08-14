@@ -11,9 +11,9 @@ mod error;
 mod file;
 mod merge;
 pub mod subcommand;
-pub use merge::{sanitize_value, sanitized_provider, value_without_nones};
 #[expect(deprecated, reason = "Retain helper for backwards compatibility")]
 pub use merge::merge_cli_over_defaults;
+pub use merge::{sanitize_value, sanitized_provider, value_without_nones};
 #[expect(
     deprecated,
     reason = "Re-export deprecated subcommand helpers for back-compat. FIXME: remove in the next minor release"
