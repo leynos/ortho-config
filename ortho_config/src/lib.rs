@@ -85,7 +85,10 @@ pub trait OrthoConfig: Sized + serde::de::DeserializeOwned {
 
     /// Loads configuration from the provided iterator of command-line
     /// arguments.
-    #[allow(clippy::result_large_err)]
+    #[expect(
+        clippy::result_large_err,
+        reason = "Return OrthoError to keep a single error type across the public API"
+    )]
     ///
     /// # Errors
     ///

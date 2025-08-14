@@ -99,7 +99,7 @@ fn nested_structs_partial_none_merge() {
 }
 
 #[test]
-fn arrays_nulls_are_pruned_in_cli_layer() {
+fn arrays_nulls_are_pruned_and_replace_defaults_in_cli_layer() {
     #[derive(Debug, Serialize, Deserialize, Default, PartialEq)]
     struct WithVec {
         #[serde(default)]
@@ -113,6 +113,7 @@ fn arrays_nulls_are_pruned_in_cli_layer() {
         items: vec![None, Some(2), None, Some(3)],
     };
     let merged = merge_via_sanitized_cli(&defaults, &cli);
+    // Arrays are replaced at the CLI layer, not appended.
     assert_eq!(merged.items, vec![Some(2), Some(3)]);
 }
 
