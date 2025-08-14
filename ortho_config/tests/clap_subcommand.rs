@@ -21,17 +21,13 @@ struct RunArgs {
     option: Option<String>,
 }
 
-fn into_figment_error(e: &ortho_config::OrthoError) -> figment::error::Error {
-    figment::error::Error::from(e.to_string())
-}
-
 #[test]
 fn merge_works_for_subcommand() {
     figment::Jail::expect_with(|j| {
         j.create_file(".app.toml", "[cmds.run]\noption = \"file\"")?;
         let cli = Cli::parse_from(["prog", "run", "--option", "cli"]);
         let Commands::Run(args) = cli.cmd;
-        let cfg = load_and_merge_subcommand_for(&args).map_err(|e| into_figment_error(&e))?;
+        let cfg = load_and_merge_subcommand_for(&args)?;
         assert_eq!(cfg.option.as_deref(), Some("cli"));
         Ok(())
     });
@@ -43,7 +39,7 @@ fn merge_falls_back_to_env_when_cli_none() {
         j.set_env("APP_CMDS_RUN_OPTION", "env");
         let cli = Cli::parse_from(["prog", "run"]);
         let Commands::Run(args) = cli.cmd;
-        let cfg = load_and_merge_subcommand_for(&args).map_err(|e| into_figment_error(&e))?;
+        let cfg = load_and_merge_subcommand_for(&args)?;
         assert_eq!(cfg.option.as_deref(), Some("env"));
         Ok(())
     });
@@ -57,7 +53,7 @@ fn merge_falls_back_to_file_when_cli_none() {
         j.create_file(".app.toml", "[cmds.run]\noption = \"file\"")?;
         let cli = Cli::parse_from(["prog", "run"]);
         let Commands::Run(args) = cli.cmd;
-        let cfg = load_and_merge_subcommand_for(&args).map_err(|e| into_figment_error(&e))?;
+        let cfg = load_and_merge_subcommand_for(&args)?;
         assert_eq!(cfg.option.as_deref(), Some("file"));
         Ok(())
     });
