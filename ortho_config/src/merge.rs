@@ -75,7 +75,7 @@ fn convert_gathering_error(e: &serde_json::Error) -> OrthoError {
 ///
 /// # Errors
 ///
-/// Returns an [`OrthoError`] if serialization fails.
+/// Returns an [`OrthoError`] if JSON serialization fails.
 #[expect(
     clippy::result_large_err,
     reason = "Return OrthoError to keep a single error type across the public API"
@@ -106,7 +106,7 @@ pub fn sanitize_value<T: Serialize>(value: &T) -> Result<Value, OrthoError> {
 ///
 /// # Errors
 ///
-/// Returns an [`OrthoError`] if serialization fails.
+/// Returns an [`OrthoError`] if JSON serialization fails.
 #[expect(
     clippy::result_large_err,
     reason = "Return OrthoError to keep a single error type across the public API"
