@@ -35,6 +35,12 @@ pub enum OrthoError {
 impl From<OrthoError> for FigmentError {
     /// Allow using `?` in tests and examples that return `figment::Error`.
     fn from(e: OrthoError) -> Self {
-        FigmentError::from(e.to_string())
+        match e {
+            // Preserve the original Figment error (keeps kind, metadata, and
+            // sources).
+            OrthoError::Gathering(fe) => fe,
+            // Fall back to a message for other variants.
+            other => FigmentError::from(other.to_string()),
+        }
     }
 }
