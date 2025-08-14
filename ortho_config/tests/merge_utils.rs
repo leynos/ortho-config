@@ -1,9 +1,7 @@
 //! Tests for merging CLI values with defaults.
 
-#![allow(deprecated)]
 use figment::{Figment, providers::Serialized};
-use ortho_config::{merge_cli_over_defaults, sanitize_value};
-use rstest::rstest;
+use ortho_config::sanitize_value;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, Default, PartialEq)]
@@ -12,7 +10,7 @@ struct Sample {
     b: Option<String>,
 }
 
-#[rstest]
+#[test]
 fn cli_overrides_defaults() {
     let defaults = Sample {
         a: Some(1),
@@ -22,7 +20,7 @@ fn cli_overrides_defaults() {
         a: None,
         b: Some("cli".into()),
     };
-    let merged = merge_cli_over_defaults(&defaults, &cli).expect("merge");
+    let merged = merge_via_sanitized_cli(&defaults, &cli);
     assert_eq!(
         merged,
         Sample {
@@ -37,7 +35,7 @@ struct Nested {
     inner: Option<Sample>,
 }
 
-#[rstest]
+#[test]
 fn nested_structs_merge_deeply() {
     let defaults = Nested {
         inner: Some(Sample {
@@ -51,7 +49,7 @@ fn nested_structs_merge_deeply() {
             b: Some("cli".into()),
         }),
     };
-    let merged = merge_cli_over_defaults(&defaults, &cli).expect("merge");
+    let merged = merge_via_sanitized_cli(&defaults, &cli);
     assert_eq!(
         merged,
         Nested {
@@ -63,7 +61,7 @@ fn nested_structs_merge_deeply() {
     );
 }
 
-#[rstest]
+#[test]
 fn cli_none_fields_do_not_override_defaults() {
     let defaults = Sample {
         a: Some(42),
@@ -74,7 +72,7 @@ fn cli_none_fields_do_not_override_defaults() {
     assert_eq!(merged, defaults);
 }
 
-#[rstest]
+#[test]
 fn nested_structs_partial_none_merge() {
     let defaults = Nested {
         inner: Some(Sample {
@@ -104,7 +102,7 @@ fn merge_via_sanitized_cli<T>(defaults: &T, cli: &T) -> T
 where
     T: Serialize + serde::de::DeserializeOwned + Default,
 {
-    let sanitized = sanitize_value(cli).expect("sanitise");
+    let sanitized = sanitize_value(cli).expect("sanitize");
     Figment::from(Serialized::defaults(defaults))
         .merge(Serialized::defaults(&sanitized))
         .extract()

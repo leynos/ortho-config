@@ -78,9 +78,9 @@ The primary data flow for a user calling `AppConfig::load()` will be:
    - **CLI Provider:** The `clap`-parsed arguments are serialized into a
      `figment` provider and merged last. Fields left as `None` are removed
      before merging so that environment or file defaults remain untouched. This
-     serialisation step relies on `serde_json` and introduces a small overhead;
+     serialization step relies on `serde_json` and introduces a small overhead;
      if configuration loading becomes a hotspot, benchmark to evaluate a more
-     direct approach. A helper, `sanitized_provider`, wraps sanitisation and
+     direct approach. A helper, `sanitized_provider`, wraps sanitization and
      provider construction to avoid repeating the pattern.
 
 4. `figment`'s `extract()` method is called to deserialize the merged
@@ -284,7 +284,7 @@ retained but deprecated.
 - **`ortho_config` (Core):**
   - `clap`: For CLI parsing. Choose a version with the `derive` feature.
   - `figment`: As the core layering engine.
-  - `serde`: For serialisation/deserialisation.
+  - `serde`: For serialization/deserialization.
   - `serde_json`: For manipulating configuration when pruning `None` CLI
     values.
   - `toml`, `figment-json5`, `json5`, `serde_yaml`: As optional feature-gated

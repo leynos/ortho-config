@@ -5,6 +5,14 @@ use figment::{Figment, providers::Serialized};
 use serde::{Serialize, de::DeserializeOwned};
 use serde_json::Value;
 
+/// Recursively remove all [`Value::Null`] entries.
+///
+/// - Object fields equal to null are removed.
+/// - Array elements equal to null are removed, dropping `None` entries in
+///   `Vec<_>`.
+///
+/// This is intended for CLI sanitization so unset [`Option`] fields do not
+/// override defaults from files or environment variables.
 fn strip_nulls(value: &mut Value) {
     match value {
         Value::Object(map) => {
@@ -85,7 +93,7 @@ pub fn sanitize_value<T: Serialize>(value: &T) -> Result<Value, OrthoError> {
 ///
 /// # Errors
 ///
-/// Returns an [`OrthoError`] if serialisation fails.
+/// Returns an [`OrthoError`] if serialization fails.
 #[expect(
     clippy::result_large_err,
     reason = "Return OrthoError to keep a single error type across the public API"

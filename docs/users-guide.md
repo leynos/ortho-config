@@ -11,7 +11,7 @@ repository.
 ## Core concepts and motivation
 
 Rust projects often wire together `clap` for CLI parsing, `serde` for
-de/serialisation, and ad‑hoc code for loading `*.toml` files or reading
+de/serialization, and ad‑hoc code for loading `*.toml` files or reading
 environment variables. Mapping between different naming conventions (kebab‑case
 flags, `UPPER_SNAKE_CASE` environment variables, and `snake_case` struct
 fields) can be tedious. `OrthoConfig` addresses these problems by letting
@@ -398,7 +398,7 @@ underlying error.
   argument vectors to exercise the merge logic. The `figment` crate makes it
   easy to inject additional providers when writing unit tests.
 
-- **Sanitised providers** – The `sanitized_provider` helper returns a `Figment`
+- **Sanitized providers** – The `sanitized_provider` helper returns a `Figment`
   provider with `None` fields removed. It aids manual layering when bypassing
   the derive macro.
 
