@@ -11,9 +11,13 @@ mod error;
 mod file;
 mod merge;
 pub mod subcommand;
-#[allow(deprecated)]
+#[expect(deprecated, reason = "Retain helper for backwards compatibility")]
 pub use merge::merge_cli_over_defaults;
-#[allow(deprecated)]
+pub use merge::{sanitize_value, sanitized_provider, value_without_nones};
+#[expect(
+    deprecated,
+    reason = "Re-export deprecated subcommand helpers for back-compat. FIXME: remove in the next minor release"
+)]
 pub use subcommand::{
     load_and_merge_subcommand, load_and_merge_subcommand_for, load_subcommand_config,
     load_subcommand_config_for,

@@ -1,5 +1,6 @@
 //! Error types produced by the configuration loader.
 
+use figment::error::Error as FigmentError;
 use thiserror::Error;
 
 /// Errors that can occur while loading configuration.
@@ -29,4 +30,17 @@ pub enum OrthoError {
     /// Validation failures when building configuration.
     #[error("Validation failed for '{key}': {message}")]
     Validation { key: String, message: String },
+}
+
+impl From<OrthoError> for FigmentError {
+    /// Allow using `?` in tests and examples that return `figment::Error`.
+    fn from(e: OrthoError) -> Self {
+        match e {
+            // Preserve the original Figment error (keeps kind, metadata, and
+            // sources).
+            OrthoError::Gathering(fe) => fe,
+            // Fall back to a message for other variants.
+            other => FigmentError::from(other.to_string()),
+        }
+    }
 }

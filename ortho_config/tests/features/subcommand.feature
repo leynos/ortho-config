@@ -20,3 +20,9 @@ Feature: Subcommand defaults
     And a configuration reference "https://example.com/file"
     When the subcommand configuration is loaded without defaults
     Then the merged reference is "https://example.com/cli"
+
+  Scenario: configuration file provides reference
+    Given no CLI reference
+    And a configuration reference "https://example.com/file"
+    When the subcommand configuration is loaded without defaults
+    Then the merged reference is "https://example.com/file"

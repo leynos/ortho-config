@@ -39,7 +39,6 @@ pub struct World {
 #[ortho_config(prefix = "APP_")]
 pub struct PrArgs {
     #[arg(long, required = true)]
-    #[serde(skip_serializing_if = "Option::is_none")]
     reference: Option<String>,
 }
 

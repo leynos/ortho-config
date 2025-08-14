@@ -72,7 +72,7 @@ references the relevant design guidance.
 - **Improve merging and error reporting when combining CLI and configuration
   sources**
 
-  - [ ] Distinguish between values explicitly provided on the command line and
+  - [x] Distinguish between values explicitly provided on the command line and
     those left as `None` so that default values from env/file are not
     incorrectly overridden.
     [[Clap Dispatch](clap-dispatch-and-ortho-config-integration.md)]

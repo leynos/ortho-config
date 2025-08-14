@@ -11,7 +11,7 @@ repository.
 ## Core concepts and motivation
 
 Rust projects often wire together `clap` for CLI parsing, `serde` for
-de/serialisation, and ad‑hoc code for loading `*.toml` files or reading
+de/serialization, and ad‑hoc code for loading `*.toml` files or reading
 environment variables. Mapping between different naming conventions (kebab‑case
 flags, `UPPER_SNAKE_CASE` environment variables, and `snake_case` struct
 fields) can be tedious. `OrthoConfig` addresses these problems by letting
@@ -277,7 +277,8 @@ Many CLI applications use `clap` subcommands to perform different operations.
 namespace. The helper function `load_and_merge_subcommand_for` loads defaults
 for a specific subcommand and merges them beneath the CLI values. The merged
 struct is returned as a new instance; the original `cli` struct remains
-unchanged.
+unchanged. CLI fields left unset (`None`) do not override environment or file
+defaults, avoiding accidental loss of configuration.
 
 ### How it works
 
@@ -396,6 +397,19 @@ underlying error.
   runtime, integration tests should set environment variables and construct CLI
   argument vectors to exercise the merge logic. The `figment` crate makes it
   easy to inject additional providers when writing unit tests.
+
+- **Sanitized providers** – The `sanitized_provider` helper returns a `Figment`
+  provider with `None` fields removed. It aids manual layering when bypassing
+  the derive macro. For example:
+
+  ```rust
+  use figment::{Figment, providers::Serialized};
+  use ortho_config::sanitized_provider;
+
+  let fig = Figment::from(Serialized::defaults(&Defaults::default()))
+      .merge(sanitized_provider(&cli)?);
+  let cfg: Defaults = fig.extract()?;
+  ```
 
 ## Conclusion
 

@@ -76,7 +76,13 @@ The primary data flow for a user calling `AppConfig::load()` will be:
    - **Environment Provider:** An `Env` provider configured with the correct
      prefix and key-mapping rules.
    - **CLI Provider:** The `clap`-parsed arguments are serialized into a
-     `figment` provider and merged last.
+     `figment` provider and merged last. Fields left as `None` are removed
+     before merging so that environment or file defaults remain untouched. This
+     serialization step relies on `serde_json` and introduces a small overhead;
+     if configuration loading becomes a hotspot, benchmark to evaluate a more
+     direct approach. A helper, `sanitized_provider`, wraps sanitization and
+     provider construction to avoid repeating the pattern.
+
 4. `figment`'s `extract()` method is called to deserialize the merged
    configuration into the user's `AppConfig` struct.
 5. Array merging logic is applied post-deserialization if the "append" strategy
@@ -279,12 +285,14 @@ retained but deprecated.
   - `clap`: For CLI parsing. Choose a version with the `derive` feature.
   - `figment`: As the core layering engine.
   - `serde`: For serialization/deserialization.
-  - `toml`, `figment-json5`, `json5`, `serde_json`, `serde_yaml`: As
-    optional feature-gated dependencies for different file formats. `toml`
-    should be a default feature. The `json5` feature uses `figment-json5` and
-    `json5` to parse `.json` and `.json5` files and `serde_json` for
-    validation; loading these formats without enabling `json5` should produce
-    an error, so users aren't surprised by silent TOML parsing.
+  - `serde_json`: For manipulating configuration when pruning `None` CLI
+    values.
+  - `toml`, `figment-json5`, `json5`, `serde_yaml`: As optional feature-gated
+    dependencies for different file formats. `toml` should be a default
+    feature. The `json5` feature uses `figment-json5` and `json5` to parse
+    `.json` and `.json5` files and relies on `serde_json` for validation.
+    Loading these formats without enabling `json5` should produce an error, so
+    users aren't surprised by silent TOML parsing.
   - `thiserror`: For ergonomic error type definitions.
 
 ## 6. Implementation Roadmap

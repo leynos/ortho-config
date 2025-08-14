@@ -1,6 +1,6 @@
 //! Support for loading configuration for individual subcommands.
 
-use crate::{OrthoError, load_config_file, normalize_prefix};
+use crate::{OrthoError, load_config_file, normalize_prefix, sanitized_provider};
 use clap::CommandFactory;
 #[cfg(not(any(unix, target_os = "redox")))]
 use directories::BaseDirs;
@@ -439,8 +439,6 @@ pub fn load_and_merge_subcommand<T>(prefix: &Prefix, cli: &T) -> Result<T, Ortho
 where
     T: serde::Serialize + DeserializeOwned + Default + CommandFactory,
 {
-    use figment::providers::Serialized;
-
     let name = CmdName::new(T::command().get_name());
     let paths = candidate_paths(prefix);
     let mut fig = load_from_files(&paths, &name)?;
@@ -452,7 +450,7 @@ where
         .split("__");
     fig = fig.merge(env_provider);
 
-    fig.merge(Serialized::defaults(cli))
+    fig.merge(sanitized_provider(cli)?)
         .extract()
         .map_err(OrthoError::Gathering)
 }

@@ -15,21 +15,46 @@ enum Commands {
 
 #[derive(Debug, Deserialize, Serialize, Parser, OrthoConfig, Default)]
 #[command(name = "run")]
+#[ortho_config(prefix = "APP_")]
 struct RunArgs {
     #[arg(long)]
-    #[serde(skip_serializing_if = "Option::is_none")]
     option: Option<String>,
 }
 
 #[test]
 fn merge_works_for_subcommand() {
     figment::Jail::expect_with(|j| {
-        j.create_file(".config.toml", "[cmds.run]\noption = \"file\"")?;
+        j.create_file(".app.toml", "[cmds.run]\noption = \"file\"")?;
         let cli = Cli::parse_from(["prog", "run", "--option", "cli"]);
         let Commands::Run(args) = cli.cmd;
-        let cfg = load_and_merge_subcommand_for(&args)
-            .map_err(|e| figment::error::Error::from(e.to_string()))?;
+        let cfg = load_and_merge_subcommand_for(&args)?;
         assert_eq!(cfg.option.as_deref(), Some("cli"));
+        Ok(())
+    });
+}
+
+#[test]
+fn merge_falls_back_to_env_when_cli_none() {
+    figment::Jail::expect_with(|j| {
+        j.set_env("APP_CMDS_RUN_OPTION", "env");
+        let cli = Cli::parse_from(["prog", "run"]);
+        let Commands::Run(args) = cli.cmd;
+        let cfg = load_and_merge_subcommand_for(&args)?;
+        assert_eq!(cfg.option.as_deref(), Some("env"));
+        Ok(())
+    });
+}
+
+#[test]
+fn merge_falls_back_to_file_when_cli_none() {
+    figment::Jail::expect_with(|j| {
+        // Strip all env vars so file fallback is deterministic.
+        j.clear_env();
+        j.create_file(".app.toml", "[cmds.run]\noption = \"file\"")?;
+        let cli = Cli::parse_from(["prog", "run"]);
+        let Commands::Run(args) = cli.cmd;
+        let cfg = load_and_merge_subcommand_for(&args)?;
+        assert_eq!(cfg.option.as_deref(), Some("file"));
         Ok(())
     });
 }

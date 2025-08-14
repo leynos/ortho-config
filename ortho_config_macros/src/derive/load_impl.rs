@@ -128,14 +128,13 @@ pub(crate) fn build_merge_section(
         if let Some(ref f) = file_fig {
             fig = fig.merge(f);
         }
-
         fig = fig
             .merge(env_provider.clone())
-            .merge(Serialized::defaults(&cli));
+            .merge(ortho_config::sanitized_provider(&cli)?);
 
         #append_logic
 
-        fig = fig.merge(Serialized::defaults(overrides));
+        fig = fig.merge(ortho_config::sanitized_provider(&overrides)?);
 
         fig.extract::<#config_ident>().map_err(ortho_config::OrthoError::Gathering)
     }
