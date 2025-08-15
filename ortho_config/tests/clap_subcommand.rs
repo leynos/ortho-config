@@ -1,10 +1,10 @@
 //! Integration tests for subcommand merge behaviour:
 //! - CLI values override file/env.
-//! - CLI None must not override file/env defaults (sanitised provider).
+//! - CLI None must not override file/env defaults (sanitized provider).
 //!
-//! Precedence (lowest → highest): struct defaults < file < env < CLI.
+//! Precedence (lowest -> highest): struct defaults < file < env < CLI.
 //! Omitting a CLI flag (yielding `None`) must not shadow values from file/env;
-//! the sanitised provider ignores `None` and preserves the prior source.
+//! the sanitized provider ignores `None` and preserves the prior source.
 
 use clap::{Parser, Subcommand};
 use ortho_config::{OrthoConfig, subcommand::load_and_merge_subcommand_for};
