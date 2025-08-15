@@ -1,3 +1,21 @@
+//! Integration tests for subcommand merge behaviour:
+//!
+//! - CLI values override file/environment.
+//! - CLI-provided `None` must not override file/environment values (sanitized provider).
+//!
+//! Precedence (lowest -> highest): struct defaults < file < environment < CLI.
+//! Omitting a CLI flag (yielding `None`) must not shadow values from file/environment;
+//! the sanitized provider ignores `None` and preserves the prior source.
+//!
+//! Example:
+//! - Given `.app.toml` with:
+//!   `[cmds.run]`
+//!   `option = "file"`
+//! - And `APP_CMDS_RUN_OPTION=env` in the environment:
+//!   - `prog run --option cli` => `option = "cli"` (CLI wins)
+//!   - `prog run`              => `option = "env"` (CLI is `None`, environment wins)
+//!   - no CLI, no environment  => `option = "file"` (file wins)
+
 use clap::{Parser, Subcommand};
 use ortho_config::{OrthoConfig, subcommand::load_and_merge_subcommand_for};
 use serde::{Deserialize, Serialize};
