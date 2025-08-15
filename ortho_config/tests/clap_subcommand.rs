@@ -1,9 +1,9 @@
 //! Integration tests for subcommand merge behaviour:
-//! - CLI values override file/env.
-//! - CLI None must not override file/env values (sanitized provider).
+//! - CLI values override file/environment.
+//! - CLI None must not override file/environment values (sanitized provider).
 //!
-//! Precedence (lowest -> highest): struct defaults < file < env < CLI.
-//! Omitting a CLI flag (yielding `None`) must not shadow values from file/env;
+//! Precedence (lowest -> highest): struct defaults < file < environment < CLI.
+//! Omitting a CLI flag (yielding `None`) must not shadow values from file/environment;
 //! the sanitized provider ignores `None` and preserves the prior source.
 
 use clap::{Parser, Subcommand};
