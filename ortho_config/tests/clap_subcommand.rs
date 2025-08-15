@@ -1,6 +1,6 @@
 //! Integration tests for subcommand merge behaviour:
 //! - CLI values override file/env.
-//! - CLI None must not override file/env defaults (sanitized provider).
+//! - CLI None must not override file/env values (sanitized provider).
 //!
 //! Precedence (lowest -> highest): struct defaults < file < env < CLI.
 //! Omitting a CLI flag (yielding `None`) must not shadow values from file/env;
