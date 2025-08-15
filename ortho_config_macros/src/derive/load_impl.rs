@@ -102,6 +102,33 @@ pub(crate) fn build_env_section(tokens: &LoadImplTokens<'_>) -> proc_macro2::Tok
     }
 }
 
+/// Build tokens that merge a sanitised CLI provider into a `Figment`.
+///
+/// The generated code merges the provider when present and pushes any
+/// resulting errors onto the supplied collection.
+///
+/// # Examples
+/// ```ignore
+/// use quote::quote;
+/// let fig = quote!(fig);
+/// let errors = quote!(errors);
+/// let tokens = merge_cli_provider_tokens(&fig, &errors);
+/// # let _ = tokens;
+/// ```
+fn merge_cli_provider_tokens(
+    fig_var: &proc_macro2::TokenStream,
+    errors_var: &proc_macro2::TokenStream,
+) -> proc_macro2::TokenStream {
+    quote! {
+        if let Some(ref cli) = cli {
+            match ortho_config::sanitized_provider(cli) {
+                Ok(p) => #fig_var = #fig_var.merge(p),
+                Err(e) => #errors_var.push(e),
+            }
+        }
+    }
+}
+
 /// Build the merging and final extraction portion of `load_and_merge`.
 ///
 /// Providers are layered as defaults, file, environment, then CLI as described
@@ -121,6 +148,9 @@ pub(crate) fn build_merge_section(
         append_logic,
         ..
     } = tokens;
+    let fig_ts = quote!(fig);
+    let errors_ts = quote!(errors);
+    let cli_merge = merge_cli_provider_tokens(&fig_ts, &errors_ts);
     quote! {
         let mut fig = Figment::new();
         let defaults = #defaults_ident { #( #default_struct_init, )* };
@@ -134,12 +164,7 @@ pub(crate) fn build_merge_section(
         }
         let env_figment = Figment::from(env_provider);
         fig = fig.merge(env_figment.clone());
-        if let Some(ref cli) = cli {
-            match ortho_config::sanitized_provider(cli) {
-                Ok(p) => fig = fig.merge(p),
-                Err(e) => errors.push(e),
-            }
-        }
+        #cli_merge
 
         #append_logic
 
