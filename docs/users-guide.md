@@ -362,12 +362,12 @@ for a complete example.
 ## Error handling
 
 `load` and `load_and_merge_subcommand_for` return a `Result<T, OrthoError>`.
-`OrthoError` wraps errors from `clap`, file I/O and `figment`. When
-configuration cannot be gathered or deserialized, the error propagates up to
-the caller. Consumers should handle these errors appropriately, for example by
-printing them to stderr and exiting. Future releases may include improved
-missing‑value error messages, but currently the crate simply returns the
-underlying error.
+`OrthoError` wraps errors from `clap`, file I/O and `figment`. When multiple
+sources fail, the errors are collected into the `Aggregate` variant so callers
+can inspect each individual failure. Consumers should handle these errors
+appropriately, for example by printing them to stderr and exiting. Future
+releases may include improved missing‑value error messages, but currently the
+crate simply returns the underlying error information.
 
 ## Additional notes
 

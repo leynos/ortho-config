@@ -73,9 +73,13 @@ pub(crate) fn build_file_discovery(
                     .map(|h| std::path::PathBuf::from(h).join(#dotfile_name)),
             );
         for path in candidates {
-            if let Some(fig) = ortho_config::load_config_file(&path)? {
-                file_fig = Some(fig);
-                break;
+            match ortho_config::load_config_file(&path) {
+                Ok(Some(fig)) => {
+                    file_fig = Some(fig);
+                    break;
+                }
+                Ok(None) => {}
+                Err(e) => errors.push(e),
             }
         }
         #xdg_snippet
@@ -128,15 +132,32 @@ pub(crate) fn build_merge_section(
         if let Some(ref f) = file_fig {
             fig = fig.merge(f);
         }
-        fig = fig
-            .merge(env_provider.clone())
-            .merge(ortho_config::sanitized_provider(&cli)?);
+        fig = fig.merge(env_provider.clone());
+        match ortho_config::sanitized_provider(&cli) {
+            Ok(p) => fig = fig.merge(p),
+            Err(e) => errors.push(e),
+        }
 
         #append_logic
 
-        fig = fig.merge(ortho_config::sanitized_provider(&overrides)?);
+        match ortho_config::sanitized_provider(&overrides) {
+            Ok(p) => fig = fig.merge(p),
+            Err(e) => errors.push(e),
+        }
 
-        fig.extract::<#config_ident>().map_err(ortho_config::OrthoError::Gathering)
+        match fig.extract::<#config_ident>() {
+            Ok(cfg) => {
+                if errors.is_empty() {
+                    Ok(cfg)
+                } else {
+                    Err(ortho_config::OrthoError::aggregate(errors))
+                }
+            }
+            Err(e) => {
+                errors.push(ortho_config::OrthoError::Gathering(e));
+                Err(ortho_config::OrthoError::aggregate(errors))
+            }
+        }
     }
 }
 
@@ -173,8 +194,14 @@ pub(crate) fn build_load_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStre
                 #[cfg(feature = "yaml")] use serde_yaml;
                 #[cfg(feature = "toml")] use toml;
 
-                let cli = Self::try_parse_from(iter)
-                    .map_err(ortho_config::OrthoError::CliParsing)?;
+                let mut errors: Vec<ortho_config::OrthoError> = Vec::new();
+                let cli = match Self::try_parse_from(iter) {
+                    Ok(c) => c,
+                    Err(e) => {
+                        errors.push(ortho_config::OrthoError::CliParsing(e));
+                        Self::default()
+                    }
+                };
 
                 #file_discovery
                 #env_section

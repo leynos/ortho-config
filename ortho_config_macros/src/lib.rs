@@ -132,7 +132,7 @@ fn generate_cli_struct(components: &MacroComponents) -> proc_macro2::TokenStream
         ..
     } = components;
     quote! {
-        #[derive(clap::Parser, serde::Serialize)]
+        #[derive(clap::Parser, serde::Serialize, Default)]
         struct #cli_ident {
             #( #cli_struct_fields, )*
         }

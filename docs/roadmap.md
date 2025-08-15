@@ -77,7 +77,7 @@ references the relevant design guidance.
     incorrectly overridden.
     [[Clap Dispatch](clap-dispatch-and-ortho-config-integration.md)]
 
-  - [ ] Aggregate errors from `clap` parsing, file loading and environment
+  - [x] Aggregate errors from `clap` parsing, file loading and environment
     deserialization into a coherent `OrthoError` chain.
     [[Clap Dispatch](clap-dispatch-and-ortho-config-integration.md)]
 

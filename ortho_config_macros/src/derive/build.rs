@@ -249,15 +249,21 @@ pub(crate) fn build_dotfile_name(struct_attrs: &StructAttrs) -> proc_macro2::Tok
 fn build_xdg_config_discovery() -> proc_macro2::TokenStream {
     quote! {
         if let Some(p) = xdg_dirs.find_config_file("config.toml") {
-            file_fig = ortho_config::load_config_file(&p)?;
+            match ortho_config::load_config_file(&p) {
+                Ok(fig) => file_fig = fig,
+                Err(e) => errors.push(e),
+            }
         }
         #[cfg(feature = "json5")]
         if file_fig.is_none() {
             for ext in &["json", "json5"] {
                 let filename = format!("config.{}", ext);
                 if let Some(p) = xdg_dirs.find_config_file(&filename) {
-                    file_fig = ortho_config::load_config_file(&p)?;
-                    break;
+                    match ortho_config::load_config_file(&p) {
+                        Ok(fig) => file_fig = fig,
+                        Err(e) => errors.push(e),
+                    }
+                    if file_fig.is_some() { break; }
                 }
             }
         }
@@ -266,8 +272,11 @@ fn build_xdg_config_discovery() -> proc_macro2::TokenStream {
             for ext in &["yaml", "yml"] {
                 let filename = format!("config.{}", ext);
                 if let Some(p) = xdg_dirs.find_config_file(&filename) {
-                    file_fig = ortho_config::load_config_file(&p)?;
-                    break;
+                    match ortho_config::load_config_file(&p) {
+                        Ok(fig) => file_fig = fig,
+                        Err(e) => errors.push(e),
+                    }
+                    if file_fig.is_some() { break; }
                 }
             }
         }

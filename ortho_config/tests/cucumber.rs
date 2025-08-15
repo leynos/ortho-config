@@ -31,6 +31,8 @@ pub struct World {
     sub_env: Option<String>,
     /// Result of subcommand configuration loading.
     pub sub_result: Option<Result<PrArgs, ortho_config::OrthoError>>,
+    /// Result of aggregated error scenario.
+    pub agg_result: Option<Result<ErrorConfig, ortho_config::OrthoError>>,
 }
 
 /// CLI struct used for subcommand behavioural tests.
@@ -51,6 +53,13 @@ pub struct PrArgs {
 pub struct RulesConfig {
     /// List of lint rules parsed from CLI or environment.
     rules: Vec<String>,
+}
+
+/// Configuration used to verify aggregated error reporting.
+#[derive(Debug, Deserialize, Serialize, OrthoConfig, Default)]
+#[ortho_config(prefix = "DDLINT_")]
+pub struct ErrorConfig {
+    port: u32,
 }
 
 mod steps;

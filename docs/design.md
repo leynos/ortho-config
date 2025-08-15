@@ -206,6 +206,9 @@ pub enum OrthoError {
     
     #[error("Failed to gather configuration: {0}")]
     Gathering(#[from] figment::Error),
+
+    #[error("multiple configuration errors: {0:?}")]
+    Aggregate(Vec<OrthoError>),
     
     // More specific errors as needed
     #[error("Validation failed for '{key}': {message}")]
