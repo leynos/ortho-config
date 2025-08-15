@@ -246,30 +246,86 @@ pub(crate) fn build_dotfile_name(struct_attrs: &StructAttrs) -> proc_macro2::Tok
     quote! { #base }
 }
 
+/// Builds discovery code for TOML configuration files.
+///
+/// # Examples
+///
+/// ```ignore
+/// let tokens = build_toml_discovery();
+/// assert!(!tokens.is_empty());
+/// ```
+fn build_toml_discovery() -> proc_macro2::TokenStream {
+    quote! { try_load_config(&mut file_fig, &["toml"], &mut discovery_errors); }
+}
+
+/// Builds discovery code for JSON and JSON5 configuration files.
+///
+/// # Examples
+///
+/// ```ignore
+/// let tokens = build_json_discovery();
+/// assert!(!tokens.is_empty());
+/// ```
+fn build_json_discovery() -> proc_macro2::TokenStream {
+    quote! { try_load_config(&mut file_fig, &["json", "json5"], &mut discovery_errors); }
+}
+
+/// Builds discovery code for YAML configuration files.
+///
+/// # Examples
+///
+/// ```ignore
+/// let tokens = build_yaml_discovery();
+/// assert!(!tokens.is_empty());
+/// ```
+fn build_yaml_discovery() -> proc_macro2::TokenStream {
+    quote! { try_load_config(&mut file_fig, &["yaml", "yml"], &mut discovery_errors); }
+}
+
+/// Builds the XDG base directory configuration discovery snippet.
+///
+/// # Examples
+///
+/// ```ignore
+/// let tokens = build_xdg_config_discovery();
+/// assert!(!tokens.is_empty());
+/// ```
 fn build_xdg_config_discovery() -> proc_macro2::TokenStream {
+    let toml = build_toml_discovery();
+    let json = build_json_discovery();
+    let yaml = build_yaml_discovery();
     quote! {
-        if let Some(p) = xdg_dirs.find_config_file("config.toml") {
-            file_fig = ortho_config::load_config_file(&p)?;
+        let try_load_config = |
+            fig: &mut Option<figment::Figment>,
+            exts: &[&str],
+            errors: &mut Vec<ortho_config::OrthoError>,
+        | {
+            for ext in exts {
+                let filename = format!("config.{}", ext);
+                let path = match xdg_dirs.find_config_file(&filename) {
+                    Some(p) => p,
+                    None => continue,
+                };
+                match ortho_config::load_config_file(&path) {
+                    Ok(new_fig) => {
+                        *fig = new_fig;
+                        break;
+                    }
+                    Err(e) => errors.push(e),
+                }
+            }
+        };
+
+        if file_fig.is_none() {
+            #toml
         }
         #[cfg(feature = "json5")]
         if file_fig.is_none() {
-            for ext in &["json", "json5"] {
-                let filename = format!("config.{}", ext);
-                if let Some(p) = xdg_dirs.find_config_file(&filename) {
-                    file_fig = ortho_config::load_config_file(&p)?;
-                    break;
-                }
-            }
+            #json
         }
         #[cfg(feature = "yaml")]
         if file_fig.is_none() {
-            for ext in &["yaml", "yml"] {
-                let filename = format!("config.{}", ext);
-                if let Some(p) = xdg_dirs.find_config_file(&filename) {
-                    file_fig = ortho_config::load_config_file(&p)?;
-                    break;
-                }
-            }
+            #yaml
         }
     }
 }
@@ -358,7 +414,6 @@ pub(crate) fn build_append_logic(fields: &[(Ident, &Type)]) -> proc_macro2::Toke
         }
     });
     quote! {
-        let env_figment = Figment::from(env_provider.clone());
         let cli_figment = Figment::from(Serialized::defaults(&cli));
         #( #logic )*
     }

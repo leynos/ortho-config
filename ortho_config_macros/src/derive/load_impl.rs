@@ -55,7 +55,7 @@ pub(crate) fn build_file_discovery(
         ..
     } = tokens;
     let config_path_chain = if has_config_path {
-        quote! { .chain(cli.config_path.clone()) }
+        quote! { .chain(cli.as_ref().and_then(|c| c.config_path.clone())) }
     } else {
         quote! {}
     };
@@ -73,12 +73,18 @@ pub(crate) fn build_file_discovery(
                     .map(|h| std::path::PathBuf::from(h).join(#dotfile_name)),
             );
         for path in candidates {
-            if let Some(fig) = ortho_config::load_config_file(&path)? {
-                file_fig = Some(fig);
-                break;
+            match ortho_config::load_config_file(&path) {
+                Ok(Some(fig)) => {
+                    file_fig = Some(fig);
+                    break;
+                }
+                Ok(None) => {}
+                Err(e) => errors.push(e),
             }
         }
+        let mut discovery_errors: Vec<ortho_config::OrthoError> = Vec::new();
         #xdg_snippet
+        errors.extend(discovery_errors);
     }
 }
 
@@ -95,6 +101,33 @@ pub(crate) fn build_env_section(tokens: &LoadImplTokens<'_>) -> proc_macro2::Tok
                 .map(|k| uncased::Uncased::new(k.as_str().to_ascii_uppercase()))
                 .split("__")
         };
+    }
+}
+
+/// Build tokens that merge a sanitised CLI provider into a `Figment`.
+///
+/// The generated code merges the provider when present and pushes any
+/// resulting errors onto the supplied collection.
+///
+/// # Examples
+/// ```ignore
+/// use quote::quote;
+/// let fig = quote!(fig);
+/// let errors = quote!(errors);
+/// let tokens = merge_cli_provider_tokens(&fig, &errors);
+/// # let _ = tokens;
+/// ```
+fn merge_cli_provider_tokens(
+    fig_var: &proc_macro2::TokenStream,
+    errors_var: &proc_macro2::TokenStream,
+) -> proc_macro2::TokenStream {
+    quote! {
+        if let Some(ref cli) = cli {
+            match ortho_config::sanitized_provider(cli) {
+                Ok(p) => #fig_var = #fig_var.merge(p),
+                Err(e) => #errors_var.push(e),
+            }
+        }
     }
 }
 
@@ -117,6 +150,9 @@ pub(crate) fn build_merge_section(
         append_logic,
         ..
     } = tokens;
+    let fig_ts = quote!(fig);
+    let errors_ts = quote!(errors);
+    let cli_merge = merge_cli_provider_tokens(&fig_ts, &errors_ts);
     quote! {
         let mut fig = Figment::new();
         let defaults = #defaults_ident { #( #default_struct_init, )* };
@@ -128,15 +164,30 @@ pub(crate) fn build_merge_section(
         if let Some(ref f) = file_fig {
             fig = fig.merge(f);
         }
-        fig = fig
-            .merge(env_provider.clone())
-            .merge(ortho_config::sanitized_provider(&cli)?);
+        let env_figment = Figment::from(env_provider);
+        fig = fig.merge(env_figment.clone());
+        #cli_merge
 
         #append_logic
 
-        fig = fig.merge(ortho_config::sanitized_provider(&overrides)?);
+        match ortho_config::sanitized_provider(&overrides) {
+            Ok(p) => fig = fig.merge(p),
+            Err(e) => errors.push(e),
+        }
 
-        fig.extract::<#config_ident>().map_err(ortho_config::OrthoError::Gathering)
+        match fig.extract::<#config_ident>() {
+            Ok(cfg) => {
+                if errors.is_empty() {
+                    Ok(cfg)
+                } else {
+                    Err(ortho_config::OrthoError::aggregate(errors))
+                }
+            }
+            Err(e) => {
+                errors.push(ortho_config::OrthoError::Gathering(e));
+                Err(ortho_config::OrthoError::aggregate(errors))
+            }
+        }
     }
 }
 
@@ -173,8 +224,14 @@ pub(crate) fn build_load_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStre
                 #[cfg(feature = "yaml")] use serde_yaml;
                 #[cfg(feature = "toml")] use toml;
 
-                let cli = Self::try_parse_from(iter)
-                    .map_err(ortho_config::OrthoError::CliParsing)?;
+                let mut errors: Vec<ortho_config::OrthoError> = Vec::new();
+                let cli = match Self::try_parse_from(iter) {
+                    Ok(c) => Some(c),
+                    Err(e) => {
+                        errors.push(ortho_config::OrthoError::CliParsing(e));
+                        None
+                    }
+                };
 
                 #file_discovery
                 #env_section

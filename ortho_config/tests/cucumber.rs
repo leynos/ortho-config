@@ -31,6 +31,8 @@ pub struct World {
     sub_env: Option<String>,
     /// Result of subcommand configuration loading.
     pub sub_result: Option<Result<PrArgs, ortho_config::OrthoError>>,
+    /// Result of aggregated error scenario.
+    pub agg_result: Option<Result<ErrorConfig, ortho_config::OrthoError>>,
 }
 
 /// CLI struct used for subcommand behavioural tests.
@@ -51,6 +53,28 @@ pub struct PrArgs {
 pub struct RulesConfig {
     /// List of lint rules parsed from CLI or environment.
     rules: Vec<String>,
+}
+
+/// Configuration used to verify aggregated error reporting.
+///
+/// # Examples
+/// Load from environment variable `DDLINT_PORT`:
+/// ```
+/// std::env::set_var("DDLINT_PORT", "8080");
+/// let cfg = ErrorConfig::load().expect("load ErrorConfig");
+/// assert_eq!(cfg.port, Some(8080));
+/// ```
+///
+/// Invalid values contribute to an aggregated error:
+/// ```
+/// std::env::set_var("DDLINT_PORT", "not-a-number");
+/// let err = ErrorConfig::load().expect_err("expect aggregated error");
+/// assert!(matches!(err, ortho_config::OrthoError::Aggregate(_)));
+/// ```
+#[derive(Debug, Deserialize, Serialize, OrthoConfig, Default)]
+#[ortho_config(prefix = "DDLINT_")]
+pub struct ErrorConfig {
+    pub port: Option<u32>,
 }
 
 mod steps;

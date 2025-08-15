@@ -809,7 +809,10 @@ Several aspects require careful consideration during implementation:
   accurately determine if a CLI flag was explicitly provided.
 - **Error Handling:** A robust strategy for aggregating and reporting errors
   from both `clap` parsing and `ortho-config` loading (e.g., file not found,
-  malformed config, invalid environment variable) is essential.
+  malformed config, invalid environment variable) is essential. The current
+  implementation collects such failures and exposes them via the
+  `OrthoError::Aggregate` variant, so callers can surface every issue in a
+  single report.
 - **Dynamic Subcommands:** The proposed design, relying on `clap-dispatch`,
   assumes subcommands are statically defined at compile time (as variants of a
   Rust enum). If `ortho-config` were to support defining *new* subcommands
