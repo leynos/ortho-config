@@ -222,7 +222,7 @@ pub enum OrthoError {
     #[error("Failed to gather configuration: {0}")]
     Gathering(#[from] figment::Error),
 
-    #[error("multiple configuration errors: {0}")]
+    #[error("multiple configuration errors:\n{0}")]
     Aggregate(AggregatedErrors),
 
     // More specific errors as needed

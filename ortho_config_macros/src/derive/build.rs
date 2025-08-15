@@ -255,7 +255,7 @@ pub(crate) fn build_dotfile_name(struct_attrs: &StructAttrs) -> proc_macro2::Tok
 /// assert!(!tokens.is_empty());
 /// ```
 fn build_toml_discovery() -> proc_macro2::TokenStream {
-    quote! { try_load_config(&mut file_fig, &["toml"]); }
+    quote! { try_load_config(&mut file_fig, &["toml"], &mut discovery_errors); }
 }
 
 /// Builds discovery code for JSON and JSON5 configuration files.
@@ -267,7 +267,7 @@ fn build_toml_discovery() -> proc_macro2::TokenStream {
 /// assert!(!tokens.is_empty());
 /// ```
 fn build_json_discovery() -> proc_macro2::TokenStream {
-    quote! { try_load_config(&mut file_fig, &["json", "json5"]); }
+    quote! { try_load_config(&mut file_fig, &["json", "json5"], &mut discovery_errors); }
 }
 
 /// Builds discovery code for YAML configuration files.
@@ -279,7 +279,7 @@ fn build_json_discovery() -> proc_macro2::TokenStream {
 /// assert!(!tokens.is_empty());
 /// ```
 fn build_yaml_discovery() -> proc_macro2::TokenStream {
-    quote! { try_load_config(&mut file_fig, &["yaml", "yml"]); }
+    quote! { try_load_config(&mut file_fig, &["yaml", "yml"], &mut discovery_errors); }
 }
 
 /// Builds the XDG base directory configuration discovery snippet.
@@ -295,7 +295,11 @@ fn build_xdg_config_discovery() -> proc_macro2::TokenStream {
     let json = build_json_discovery();
     let yaml = build_yaml_discovery();
     quote! {
-        let mut try_load_config = |fig: &mut Option<figment::Figment>, exts: &[&str]| {
+        let try_load_config = |
+            fig: &mut Option<figment::Figment>,
+            exts: &[&str],
+            errors: &mut Vec<ortho_config::OrthoError>,
+        | {
             for ext in exts {
                 let filename = format!("config.{}", ext);
                 let path = match xdg_dirs.find_config_file(&filename) {
@@ -307,7 +311,7 @@ fn build_xdg_config_discovery() -> proc_macro2::TokenStream {
                         *fig = new_fig;
                         break;
                     }
-                    Err(e) => discovery_errors.push(e),
+                    Err(e) => errors.push(e),
                 }
             }
         };
@@ -338,11 +342,7 @@ pub(crate) fn build_xdg_snippet(struct_attrs: &StructAttrs) -> proc_macro2::Toke
             } else {
                 xdg::BaseDirectories::with_prefix(&xdg_base)
             };
-            let mut discovery_errors: Vec<ortho_config::OrthoError> = Vec::new();
             #config_discovery
-            if file_fig.is_none() {
-                errors.extend(discovery_errors);
-            }
         }
     }
 }

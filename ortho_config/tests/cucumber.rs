@@ -61,20 +61,20 @@ pub struct RulesConfig {
 /// Load from environment variable `DDLINT_PORT`:
 /// ```
 /// std::env::set_var("DDLINT_PORT", "8080");
-/// let cfg = ErrorConfig::load().unwrap();
-/// assert_eq!(cfg.port, 8080);
+/// let cfg = ErrorConfig::load().expect("load ErrorConfig");
+/// assert_eq!(cfg.port, Some(8080));
 /// ```
 ///
 /// Invalid values contribute to an aggregated error:
 /// ```
 /// std::env::set_var("DDLINT_PORT", "not-a-number");
-/// let err = ErrorConfig::load().unwrap_err();
+/// let err = ErrorConfig::load().expect_err("expect aggregated error");
 /// assert!(matches!(err, ortho_config::OrthoError::Aggregate(_)));
 /// ```
 #[derive(Debug, Deserialize, Serialize, OrthoConfig, Default)]
 #[ortho_config(prefix = "DDLINT_")]
 pub struct ErrorConfig {
-    port: u32,
+    pub port: Option<u32>,
 }
 
 mod steps;

@@ -52,8 +52,23 @@ fn cli_file_env_errors(world: &mut World) {
                     _ => {}
                 }
             }
-            assert!(saw_cli && saw_file && saw_env);
+            assert!(saw_cli, "expected CLI parsing error in aggregate");
+            assert!(saw_file, "expected file error in aggregate");
+            assert!(saw_env, "expected environment error in aggregate");
         }
+        other => panic!("unexpected error: {other:?}"),
+    }
+}
+
+#[then("a CLI parsing error is returned")]
+fn cli_error_only(world: &mut World) {
+    let err = world
+        .agg_result
+        .take()
+        .expect("missing test result")
+        .expect_err("expected CLI parsing error");
+    match err {
+        ortho_config::OrthoError::CliParsing(_) => {}
         other => panic!("unexpected error: {other:?}"),
     }
 }

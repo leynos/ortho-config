@@ -82,7 +82,9 @@ pub(crate) fn build_file_discovery(
                 Err(e) => errors.push(e),
             }
         }
+        let mut discovery_errors: Vec<ortho_config::OrthoError> = Vec::new();
         #xdg_snippet
+        errors.extend(discovery_errors);
     }
 }
 
