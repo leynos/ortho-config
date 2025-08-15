@@ -363,7 +363,7 @@ for a complete example.
 
 `load` and `load_and_merge_subcommand_for` return a `Result<T, OrthoError>`.
 `OrthoError` wraps errors from `clap`, file I/O and `figment`. When multiple
-sources fail, the errors are collected into the `Aggregate` variant so callers
+sources fail, the errors are collected into the `Aggregate` variant, so callers
 can inspect each individual failure. Consumers should handle these errors
 appropriately, for example by printing them to stderr and exiting. Future
 releases may include improved missing‑value error messages, but currently the

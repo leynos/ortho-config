@@ -6,7 +6,10 @@ use serde::Deserialize;
 
 #[derive(Debug, Deserialize, OrthoConfig)]
 struct AggConfig {
-    #[allow(dead_code)]
+    #[expect(
+        dead_code,
+        reason = "Field is read via deserialisation only in this test"
+    )]
     port: u32,
 }
 
@@ -15,7 +18,8 @@ fn aggregates_cli_file_env_errors() {
     figment::Jail::expect_with(|j| {
         j.create_file(".config.toml", "port = ")?; // invalid TOML
         j.set_env("PORT", "notanumber");
-        let err = AggConfig::load_from_iter(["prog", "--bogus"]).unwrap_err();
+        let err = AggConfig::load_from_iter(["prog", "--bogus"])
+            .expect_err("expected aggregated error from CLI/file/env sources");
         match err {
             OrthoError::Aggregate(agg) => {
                 assert_eq!(agg.len(), 3);

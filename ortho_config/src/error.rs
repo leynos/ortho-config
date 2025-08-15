@@ -38,6 +38,19 @@ pub enum OrthoError {
 }
 
 /// Collection of [`OrthoError`]s produced during a single load attempt.
+///
+/// # Examples
+///
+/// ```
+/// use ortho_config::OrthoError;
+/// let e = OrthoError::aggregate(vec![
+///     OrthoError::Validation { key: "port".into(), message: "must be positive".into() },
+///     OrthoError::CliParsing(clap::Error::raw(clap::error::ErrorKind::InvalidValue, "bad flag")),
+/// ]);
+/// if let OrthoError::Aggregate(agg) = e {
+///     assert_eq!(agg.len(), 2);
+/// }
+/// ```
 #[derive(Debug, Default)]
 pub struct AggregatedErrors(Vec<OrthoError>);
 
@@ -49,6 +62,7 @@ impl AggregatedErrors {
     }
 
     /// Iterate over the contained errors.
+    #[must_use = "iterators should be consumed to inspect errors"]
     pub fn iter(&self) -> impl Iterator<Item = &OrthoError> {
         self.0.iter()
     }
@@ -63,7 +77,10 @@ impl AggregatedErrors {
 impl fmt::Display for AggregatedErrors {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for (i, e) in self.0.iter().enumerate() {
-            writeln!(f, "{i}: {e}")?;
+            if i > 0 {
+                writeln!(f)?;
+            }
+            write!(f, "{}: {e}", i + 1)?;
         }
         Ok(())
     }
@@ -79,6 +96,7 @@ impl OrthoError {
     /// Panics if `errors` is empty.
     #[must_use]
     pub fn aggregate(errors: Vec<OrthoError>) -> Self {
+        assert!(!errors.is_empty(), "aggregate requires at least one error");
         if errors.len() == 1 {
             errors.into_iter().next().expect("one error")
         } else {
@@ -97,5 +115,16 @@ impl From<OrthoError> for FigmentError {
             // Fall back to a message for other variants.
             other => FigmentError::from(other.to_string()),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::OrthoError;
+
+    #[test]
+    #[should_panic(expected = "aggregate requires at least one error")]
+    fn aggregate_panics_on_empty() {
+        let _ = OrthoError::aggregate(vec![]);
     }
 }

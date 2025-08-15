@@ -192,6 +192,21 @@ A custom, comprehensive error enum is non-negotiable for a good user experience.
 
 use thiserror::Error;
 
+/// Wraps multiple configuration errors and implements [`Display`].
+pub struct AggregatedErrors(pub Vec<OrthoError>);
+
+impl std::fmt::Display for AggregatedErrors {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for (i, err) in self.0.iter().enumerate() {
+            if i > 0 {
+                writeln!(f)?;
+            }
+            write!(f, "{}: {err}", i + 1)?;
+        }
+        Ok(())
+    }
+}
+
 #[derive(Debug, Error)]
 pub enum OrthoError {
     #[error("Failed to parse command-line arguments: {0}")]
@@ -203,13 +218,13 @@ pub enum OrthoError {
         #[source]
         source: Box<dyn std::error::Error + Send + Sync>, // Wraps IO, TOML parsing errors
     },
-    
+
     #[error("Failed to gather configuration: {0}")]
     Gathering(#[from] figment::Error),
 
-    #[error("multiple configuration errors: {0:?}")]
-    Aggregate(Vec<OrthoError>),
-    
+    #[error("multiple configuration errors: {0}")]
+    Aggregate(AggregatedErrors),
+
     // More specific errors as needed
     #[error("Validation failed for '{key}': {message}")]
     Validation {

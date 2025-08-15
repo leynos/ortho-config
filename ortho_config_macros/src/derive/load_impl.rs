@@ -55,7 +55,7 @@ pub(crate) fn build_file_discovery(
         ..
     } = tokens;
     let config_path_chain = if has_config_path {
-        quote! { .chain(cli.config_path.clone()) }
+        quote! { .chain(cli.as_ref().and_then(|c| c.config_path.clone())) }
     } else {
         quote! {}
     };
@@ -132,10 +132,13 @@ pub(crate) fn build_merge_section(
         if let Some(ref f) = file_fig {
             fig = fig.merge(f);
         }
-        fig = fig.merge(env_provider.clone());
-        match ortho_config::sanitized_provider(&cli) {
-            Ok(p) => fig = fig.merge(p),
-            Err(e) => errors.push(e),
+        let env_figment = Figment::from(env_provider);
+        fig = fig.merge(env_figment.clone());
+        if let Some(ref cli) = cli {
+            match ortho_config::sanitized_provider(cli) {
+                Ok(p) => fig = fig.merge(p),
+                Err(e) => errors.push(e),
+            }
         }
 
         #append_logic
@@ -196,10 +199,10 @@ pub(crate) fn build_load_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStre
 
                 let mut errors: Vec<ortho_config::OrthoError> = Vec::new();
                 let cli = match Self::try_parse_from(iter) {
-                    Ok(c) => c,
+                    Ok(c) => Some(c),
                     Err(e) => {
                         errors.push(ortho_config::OrthoError::CliParsing(e));
-                        Self::default()
+                        None
                     }
                 };
 

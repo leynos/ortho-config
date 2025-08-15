@@ -32,12 +32,27 @@ fn load_invalid_cli(world: &mut World) {
     world.agg_result = result;
 }
 
-#[then("multiple errors are returned")]
-fn multiple_errors(world: &mut World) {
-    let err = world.agg_result.take().expect("result").unwrap_err();
+#[then("CLI, file and environment errors are returned")]
+fn cli_file_env_errors(world: &mut World) {
+    let err = world
+        .agg_result
+        .take()
+        .expect("missing test result")
+        .expect_err("expected aggregated error");
     match err {
         ortho_config::OrthoError::Aggregate(ref agg) => {
-            assert!(agg.len() > 1);
+            let mut saw_cli = false;
+            let mut saw_file = false;
+            let mut saw_env = false;
+            for e in agg.iter() {
+                match e {
+                    ortho_config::OrthoError::CliParsing(_) => saw_cli = true,
+                    ortho_config::OrthoError::File { .. } => saw_file = true,
+                    ortho_config::OrthoError::Gathering(_) => saw_env = true,
+                    _ => {}
+                }
+            }
+            assert!(saw_cli && saw_file && saw_env);
         }
         other => panic!("unexpected error: {other:?}"),
     }

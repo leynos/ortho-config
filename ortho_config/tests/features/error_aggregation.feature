@@ -3,4 +3,4 @@ Feature: Error aggregation
     Given an invalid configuration file
     And the environment variable DDLINT_PORT is "notanumber"
     When the config is loaded with an invalid CLI argument
-    Then multiple errors are returned
+    Then CLI, file and environment errors are returned

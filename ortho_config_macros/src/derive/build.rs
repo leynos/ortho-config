@@ -307,7 +307,7 @@ fn build_xdg_config_discovery() -> proc_macro2::TokenStream {
                         *fig = new_fig;
                         break;
                     }
-                    Err(e) => errors.push(e),
+                    Err(e) => discovery_errors.push(e),
                 }
             }
         };
@@ -338,7 +338,11 @@ pub(crate) fn build_xdg_snippet(struct_attrs: &StructAttrs) -> proc_macro2::Toke
             } else {
                 xdg::BaseDirectories::with_prefix(&xdg_base)
             };
+            let mut discovery_errors: Vec<ortho_config::OrthoError> = Vec::new();
             #config_discovery
+            if file_fig.is_none() {
+                errors.extend(discovery_errors);
+            }
         }
     }
 }
@@ -410,7 +414,6 @@ pub(crate) fn build_append_logic(fields: &[(Ident, &Type)]) -> proc_macro2::Toke
         }
     });
     quote! {
-        let env_figment = Figment::from(env_provider.clone());
         let cli_figment = Figment::from(Serialized::defaults(&cli));
         #( #logic )*
     }
