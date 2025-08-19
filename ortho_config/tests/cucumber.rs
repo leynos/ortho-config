@@ -33,10 +33,10 @@ pub struct World {
     pub sub_result: Option<Result<PrArgs, ortho_config::OrthoError>>,
     /// Result of aggregated error scenario.
     pub agg_result: Option<Result<ErrorConfig, ortho_config::OrthoError>>,
-    /// File value for flattened merging scenarios.
+    /// File contents for flattened merging scenarios.
     flat_file: Option<String>,
     /// Result of flattened configuration loading.
-    pub flat_result: Option<Result<FlatArgs, ortho_config::OrthoError>>,
+    pub(crate) flat_result: Option<Result<FlatArgs, ortho_config::OrthoError>>,
 }
 
 /// CLI struct used for subcommand behavioural tests.
@@ -50,15 +50,16 @@ pub struct PrArgs {
 
 /// CLI struct used for flattened merging tests.
 #[derive(Debug, Deserialize, Serialize, Parser, Default, Clone)]
-pub struct FlatArgs {
+pub(crate) struct FlatArgs {
     #[command(flatten)]
-    pub nested: NestedArgs,
+    pub(crate) nested: NestedArgs,
 }
 
+/// Nested group flattened into [`FlatArgs`]; mimics `#[command(flatten)]` usage.
 #[derive(Debug, Deserialize, Serialize, Args, Default, Clone)]
-pub struct NestedArgs {
+pub(crate) struct NestedArgs {
     #[arg(long)]
-    pub value: Option<String>,
+    pub(crate) value: Option<String>,
 }
 
 /// Configuration struct used in integration tests.

@@ -238,7 +238,7 @@ prefix is used for its fields (e.g. `APP_DB_URL`).
 
 When `clap`'s `flatten` attribute is employed to compose argument groups, the
 flattened struct is initialised even if no CLI flags within the group are
-specified. During merging, `ortho-config` discards these empty groups so that
+specified. During merging, `ortho_config` discards these empty groups so that
 values from configuration files or the environment remain in place unless a
 field is explicitly supplied on the command line.
 

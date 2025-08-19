@@ -110,6 +110,21 @@ impl OrthoError {
             OrthoError::Aggregate(AggregatedErrors::new(errors))
         }
     }
+
+    /// Construct a merge error from a [`figment::Error`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ortho_config::OrthoError;
+    /// let fe = figment::Error::from("boom");
+    /// let e = OrthoError::merge(fe);
+    /// assert!(matches!(e, OrthoError::Merge { .. }));
+    /// ```
+    #[must_use]
+    pub fn merge(source: figment::Error) -> Self {
+        OrthoError::Merge { source }
+    }
 }
 
 impl From<OrthoError> for FigmentError {
