@@ -91,6 +91,33 @@ The primary data flow for a user calling `AppConfig::load()` will be:
    is used.
 6. The result, either `Ok(AppConfig)` or `Err(OrthoError)`, is returned.
 
+### CLI and Configuration Merge Flow
+
+```mermaid
+flowchart TD
+    CLI[CLI Arguments]
+    Flattened[Flattened Groups]
+    Prune[Prune Empty Objects]
+    Config[Config File/Env]
+    Merge[Merged Config]
+    Error[OrthoError::Merge on Failure]
+
+    CLI --> Flattened
+    Flattened --> Prune
+    Prune --> Merge
+    Config --> Merge
+    Merge -->|Success| Merged
+    Merge -->|Failure| Error
+```
+
+```mermaid
+erDiagram
+    CLI_ARGS ||--o{ FLATTENED_GROUPS : contains
+    FLATTENED_GROUPS ||--o| CONFIG : merged_into
+    CONFIG ||--o| MERGED_CONFIG : produces
+    MERGED_CONFIG ||--o| ORTHOERROR : error_on_failure
+```
+
 ## 4. Component Deep Dive
 
 ### 4.1. The `OrthoConfig` Trait
