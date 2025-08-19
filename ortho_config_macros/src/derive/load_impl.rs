@@ -184,7 +184,7 @@ pub(crate) fn build_merge_section(
                 }
             }
             Err(e) => {
-                errors.push(ortho_config::OrthoError::Gathering(e));
+                errors.push(ortho_config::OrthoError::Merge { source: e });
                 Err(ortho_config::OrthoError::aggregate(errors))
             }
         }

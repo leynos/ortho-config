@@ -81,7 +81,7 @@ references the relevant design guidance.
     deserialization into a coherent `OrthoError` chain.
     [[Clap Dispatch](clap-dispatch-and-ortho-config-integration.md)]
 
-  - [ ] Consider interactions with `#[clap(flatten)]` and nested argument
+  - [x] Consider interactions with `#[clap(flatten)]` and nested argument
     structs to ensure predictable behaviour.
     [[Clap Dispatch](clap-dispatch-and-ortho-config-integration.md)]
 

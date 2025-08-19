@@ -452,7 +452,7 @@ where
 
     fig.merge(sanitized_provider(cli)?)
         .extract()
-        .map_err(OrthoError::Gathering)
+        .map_err(|e| OrthoError::Merge { source: e })
 }
 
 /// Wrapper around [`load_and_merge_subcommand`] using the struct's configured prefix.

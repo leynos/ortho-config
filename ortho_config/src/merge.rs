@@ -5,27 +5,34 @@ use figment::{Figment, providers::Serialized};
 use serde::{Serialize, de::DeserializeOwned};
 use serde_json::Value;
 
-/// Recursively remove all [`Value::Null`] entries.
+/// Recursively remove all [`Value::Null`] entries, pruning empty objects.
 ///
 /// - Object fields equal to null are removed.
+/// - Nested objects containing no non-null fields are also removed so empty
+///   `#[clap(flatten)]` groups do not clobber defaults.
 /// - Array elements equal to null are removed, dropping `None` entries in
-///   `Vec<_>`.
+///   `Vec<_>` but retaining empty arrays to allow deliberate clearing.
 ///
-/// This is intended for CLI sanitization so unset [`Option`] fields do not
-/// override defaults from files or environment variables.
-fn strip_nulls(value: &mut Value) {
+/// This is intended for CLI sanitisation so unset [`Option`] fields and
+/// untouched flattened structs do not override defaults from files or
+/// environment variables.
+fn strip_nulls(value: &mut Value) -> bool {
     match value {
         Value::Object(map) => {
-            map.retain(|_, v| !v.is_null());
-            for v in map.values_mut() {
-                strip_nulls(v);
-            }
+            map.retain(|_, v| !strip_nulls(v));
+            map.is_empty()
         }
         Value::Array(arr) => {
+            for v in arr.iter_mut() {
+                if strip_nulls(v) {
+                    *v = Value::Null;
+                }
+            }
             arr.retain(|v| !v.is_null());
-            arr.iter_mut().for_each(strip_nulls);
+            false
         }
-        _ => {}
+        Value::Null => true,
+        _ => false,
     }
 }
 
@@ -49,7 +56,7 @@ fn strip_nulls(value: &mut Value) {
 /// Returns any [`serde_json::Error`] encountered during serialization.
 pub fn value_without_nones<T: Serialize>(cli: &T) -> Result<Value, serde_json::Error> {
     let mut value = serde_json::to_value(cli)?;
-    strip_nulls(&mut value);
+    let _ = strip_nulls(&mut value);
     Ok(value)
 }
 

@@ -28,7 +28,7 @@ fn aggregates_cli_file_env_errors() {
                     .map(|e| match e {
                         OrthoError::CliParsing(_) => 1,
                         OrthoError::File { .. } => 2,
-                        OrthoError::Gathering(_) => 3,
+                        OrthoError::Merge { .. } | OrthoError::Gathering(_) => 3,
                         _ => 0,
                     })
                     .collect::<Vec<_>>();

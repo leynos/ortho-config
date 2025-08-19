@@ -3,7 +3,7 @@
 //! Exercises end-to-end configuration loading using [`CsvEnv`] and the
 //! derive macro.
 
-use clap::Parser;
+use clap::{Args, Parser};
 use cucumber::World as _;
 use ortho_config::OrthoConfig;
 use serde::{Deserialize, Serialize};
@@ -33,6 +33,10 @@ pub struct World {
     pub sub_result: Option<Result<PrArgs, ortho_config::OrthoError>>,
     /// Result of aggregated error scenario.
     pub agg_result: Option<Result<ErrorConfig, ortho_config::OrthoError>>,
+    /// File value for flattened merging scenarios.
+    flat_file: Option<String>,
+    /// Result of flattened configuration loading.
+    pub flat_result: Option<Result<FlatArgs, ortho_config::OrthoError>>,
 }
 
 /// CLI struct used for subcommand behavioural tests.
@@ -42,6 +46,19 @@ pub struct World {
 pub struct PrArgs {
     #[arg(long, required = true)]
     reference: Option<String>,
+}
+
+/// CLI struct used for flattened merging tests.
+#[derive(Debug, Deserialize, Serialize, Parser, Default, Clone)]
+pub struct FlatArgs {
+    #[command(flatten)]
+    pub nested: NestedArgs,
+}
+
+#[derive(Debug, Deserialize, Serialize, Args, Default, Clone)]
+pub struct NestedArgs {
+    #[arg(long)]
+    pub value: Option<String>,
 }
 
 /// Configuration struct used in integration tests.
