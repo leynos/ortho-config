@@ -80,22 +80,25 @@ fn parse_config_by_format(path: &Path, data: &str) -> Result<Figment, OrthoError
     Ok(figment)
 }
 
-/// Apply inheritance using the `extends` key.
+/// Validate and extract the `extends` value from `figment`.
 ///
-/// The referenced file is loaded first and the current [`Figment`] is merged
-/// over it. Cycles are detected using `visited`.
+/// Returns `Ok(None)` if the key is absent.
 ///
-/// # Errors
+/// # Examples
 ///
-/// Returns an [`OrthoError`] if the extended file fails to load or the `extends`
-/// key is malformed.
-#[expect(clippy::result_large_err, reason = "propagating file loading errors")]
-fn process_extends(
-    mut figment: Figment,
-    current_path: &Path,
-    visited: &mut HashSet<PathBuf>,
-    stack: &mut Vec<PathBuf>,
-) -> Result<Figment, OrthoError> {
+/// ```rust,ignore
+/// # use figment::{Figment, providers::{Format, Toml}};
+/// # use std::path::Path;
+/// # use ortho_config::file::get_extends;
+/// let figment = Figment::from(Toml::string("extends = \"base.toml\""));
+/// let extends = get_extends(&figment, Path::new("cfg.toml")).unwrap();
+/// assert_eq!(extends, Some("base.toml".to_string()));
+/// ```
+#[expect(
+    clippy::result_large_err,
+    reason = "Error type is library specific and intentionally large"
+)]
+fn get_extends(figment: &Figment, current_path: &Path) -> Result<Option<String>, OrthoError> {
     match figment.find_value("extends") {
         Ok(val) => {
             let base = val.as_str().ok_or_else(|| {
@@ -112,37 +115,105 @@ fn process_extends(
                     current_path,
                     std::io::Error::new(
                         std::io::ErrorKind::InvalidData,
-                        format!("'extends' key must be a string, but found type: {actual_type}",),
+                        format!("'extends' key must be a string, but found type: {actual_type}"),
                     ),
                 )
             })?;
-
-            let parent = current_path.parent().ok_or_else(|| {
-                file_error(
-                    current_path,
-                    std::io::Error::new(
-                        std::io::ErrorKind::InvalidInput,
-                        "Cannot determine parent directory for config file when resolving 'extends'",
-                    ),
-                )
-            })?;
-
-            let base_path = if Path::new(base).is_absolute() {
-                PathBuf::from(base)
-            } else {
-                parent.join(base)
-            };
-
-            let canonical =
-                std::fs::canonicalize(&base_path).map_err(|e| file_error(&base_path, e))?;
-
-            if let Some(base_fig) = load_config_file_inner(&canonical, visited, stack)? {
-                figment = base_fig.merge(figment);
-            }
-            Ok(figment)
+            Ok(Some(base.to_owned()))
         }
-        Err(e) if e.missing() => Ok(figment),
+        Err(e) if e.missing() => Ok(None),
         Err(e) => Err(file_error(current_path, e)),
+    }
+}
+
+/// Resolve the base configuration file path relative to `current_path`.
+///
+/// The returned path is canonicalised.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// # use std::path::Path;
+/// # use ortho_config::file::resolve_base_path;
+/// let path = resolve_base_path("base.toml", Path::new("dir/config.toml"))?;
+/// ```
+#[expect(
+    clippy::result_large_err,
+    reason = "propagating path resolution errors"
+)]
+fn resolve_base_path(base: &str, current_path: &Path) -> Result<PathBuf, OrthoError> {
+    let parent = current_path.parent().ok_or_else(|| {
+        file_error(
+            current_path,
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "Cannot determine parent directory for config file when resolving 'extends'",
+            ),
+        )
+    })?;
+
+    let base_path = if Path::new(base).is_absolute() {
+        PathBuf::from(base)
+    } else {
+        parent.join(base)
+    };
+
+    std::fs::canonicalize(&base_path).map_err(|e| file_error(&base_path, e))
+}
+
+/// Load and merge the parent configuration specified by `canonical`.
+///
+/// The parent is loaded and then merged with `figment`, allowing the current
+/// configuration to override base settings.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// # use figment::{Figment, providers::{Format, Toml}};
+/// # use std::collections::HashSet;
+/// # use std::path::Path;
+/// # use ortho_config::file::merge_parent;
+/// # let figment = Figment::from(Toml::string("foo = \"bar\""));
+/// # let mut visited = HashSet::new();
+/// # let mut stack = Vec::new();
+/// # let base = Path::new("base.toml");
+/// let merged = merge_parent(figment, base, &mut visited, &mut stack)?;
+/// ```
+#[expect(clippy::result_large_err, reason = "propagating file loading errors")]
+fn merge_parent(
+    figment: Figment,
+    canonical: &Path,
+    visited: &mut HashSet<PathBuf>,
+    stack: &mut Vec<PathBuf>,
+) -> Result<Figment, OrthoError> {
+    if let Some(base_fig) = load_config_file_inner(canonical, visited, stack)? {
+        Ok(base_fig.merge(figment))
+    } else {
+        Ok(figment)
+    }
+}
+
+/// Apply inheritance using the `extends` key.
+///
+/// The referenced file is loaded first and the current [`Figment`] is merged
+/// over it. Cycles are detected using `visited`.
+///
+/// # Errors
+///
+/// Returns an [`OrthoError`] if the extended file fails to load or the `extends`
+/// key is malformed.
+#[expect(clippy::result_large_err, reason = "propagating file loading errors")]
+fn process_extends(
+    figment: Figment,
+    current_path: &Path,
+    visited: &mut HashSet<PathBuf>,
+    stack: &mut Vec<PathBuf>,
+) -> Result<Figment, OrthoError> {
+    if let Some(base) = get_extends(&figment, current_path)? {
+        let canonical = resolve_base_path(&base, current_path)?;
+        merge_parent(figment, &canonical, visited, stack)
+    } else {
+        Ok(figment)
     }
 }
 
@@ -212,4 +283,65 @@ fn load_config_file_inner(
     visited.remove(&canonical);
     stack.pop();
     result.map(Some)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use figment::{Figment, Jail, providers::Format, providers::Toml};
+
+    #[test]
+    fn get_extends_returns_string() {
+        let figment = Figment::from(Toml::string("extends = \"base.toml\""));
+        let extends = get_extends(&figment, Path::new("cfg.toml")).expect("extends");
+        assert_eq!(extends, Some("base.toml".to_string()));
+    }
+
+    #[test]
+    fn get_extends_none_when_missing() {
+        let figment = Figment::from(Toml::string("foo = \"bar\""));
+        let extends = get_extends(&figment, Path::new("cfg.toml")).expect("extends");
+        assert!(extends.is_none());
+    }
+
+    #[test]
+    fn get_extends_errors_on_non_string() {
+        let figment = Figment::from(Toml::string("extends = 1"));
+        let err = get_extends(&figment, Path::new("cfg.toml")).unwrap_err();
+        let msg = format!("{err}");
+        assert!(msg.contains("must be a string"));
+    }
+
+    #[test]
+    fn resolve_base_path_handles_relative_and_absolute() {
+        Jail::expect_with(|j| {
+            j.create_file("base.toml", "")?;
+            let root = std::fs::canonicalize(".").expect("canonicalise root");
+            let current = root.join("config.toml");
+            let rel = resolve_base_path("base.toml", &current).expect("resolve relative");
+            assert_eq!(rel, root.join("base.toml"));
+
+            let abs_str = root.join("base.toml").to_str().expect("str").to_owned();
+            let abs = resolve_base_path(&abs_str, &current).expect("resolve absolute");
+            assert_eq!(abs, root.join("base.toml"));
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn merge_parent_overrides_base() {
+        Jail::expect_with(|j| {
+            j.create_file("base.toml", "foo = \"base\"")?;
+            let canonical = std::fs::canonicalize("base.toml").expect("canonicalise base");
+            let figment = Figment::from(Toml::string("foo = \"child\""));
+            let mut visited = HashSet::new();
+            let mut stack = Vec::new();
+            let merged =
+                merge_parent(figment, &canonical, &mut visited, &mut stack).expect("merge");
+            let value = merged.find_value("foo").expect("foo");
+            let foo = value.as_str().expect("string");
+            assert_eq!(foo, "child");
+            Ok(())
+        });
+    }
 }

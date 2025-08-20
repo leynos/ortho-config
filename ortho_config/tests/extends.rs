@@ -55,3 +55,14 @@ fn missing_base_file_errors() {
         Ok(())
     });
 }
+
+#[rstest]
+fn non_string_extends_errors() {
+    figment::Jail::expect_with(|j| {
+        j.create_file(".config.toml", "extends = 1")?;
+        let err = ExtendsCfg::load_from_iter(["prog"]).unwrap_err();
+        let msg = format!("{err}");
+        assert!(msg.contains("must be a string"));
+        Ok(())
+    });
+}
