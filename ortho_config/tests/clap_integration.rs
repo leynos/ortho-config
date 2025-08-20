@@ -220,3 +220,35 @@ fn loads_from_xdg_yaml_config() {
         Ok(())
     });
 }
+
+#[derive(Debug, Deserialize, Serialize, OrthoConfig)]
+struct RenamedPathConfig {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    sample: Option<String>,
+    #[serde(skip)]
+    #[ortho_config(cli_long = "config")]
+    #[expect(dead_code, reason = "field is populated via CLI in tests")]
+    config_path: Option<std::path::PathBuf>,
+}
+
+#[rstest]
+fn config_path_custom_flag() {
+    figment::Jail::expect_with(|j| {
+        j.create_file("alt.toml", "sample = \"file\"")?;
+        let cfg =
+            RenamedPathConfig::load_from_iter(["prog", "--config", "alt.toml"]).expect("load");
+        assert_eq!(cfg.sample.as_deref(), Some("file"));
+        Ok(())
+    });
+}
+
+#[rstest]
+fn config_path_custom_env() {
+    figment::Jail::expect_with(|j| {
+        j.create_file("alt.toml", "sample = \"env\"")?;
+        j.set_env("CONFIG_PATH", "alt.toml");
+        let cfg = RenamedPathConfig::load_from_iter(["prog"]).expect("load");
+        assert_eq!(cfg.sample.as_deref(), Some("env"));
+        Ok(())
+    });
+}

@@ -87,11 +87,11 @@ references the relevant design guidance.
 
 - **Enhance documentation and examples**
 
-  - [ ] Expand user and developer documentation to cover new features such as
+  - [x] Expand user and developer documentation to cover new features such as
     extends, comma‑separated lists, dynamic tables and ignore patterns.
     [[Design](design.md)]
 
-  - [ ] Provide worked examples demonstrating how to rename the config path
+  - [x] Provide worked examples demonstrating how to rename the config path
     flag, how to use subcommand defaults via the `cmds` namespace, and how to
     interpret improved error messages.
 

@@ -65,12 +65,23 @@ pub(crate) struct NestedArgs {
 /// Configuration struct used in integration tests.
 ///
 /// The `DDLINT_` prefix is applied to environment variables and rule lists may
-/// be specified as comma-separated strings via [`CsvEnv`].
+/// be specified as comma-separated strings via [`CsvEnv`]. Dynamic rule tables
+/// and ignore pattern lists are also supported.
 #[derive(Debug, Deserialize, Serialize, OrthoConfig, Default)]
 #[ortho_config(prefix = "DDLINT_")]
 pub struct RulesConfig {
     /// List of lint rules parsed from CLI or environment.
+    #[serde(default)]
     rules: Vec<String>,
+    /// Patterns to exclude when scanning files.
+    #[serde(default)]
+    #[ortho_config(merge_strategy = "append")]
+    ignore_patterns: Vec<String>,
+    /// Optional configuration path using a custom flag name.
+    #[serde(skip)]
+    #[ortho_config(cli_long = "config")]
+    #[expect(dead_code, reason = "used indirectly via CLI flag in tests")]
+    config_path: Option<std::path::PathBuf>,
 }
 
 /// Configuration used to verify aggregated error reporting.

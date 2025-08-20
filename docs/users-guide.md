@@ -276,6 +276,36 @@ variables → CLI flags. Cycles are detected and reported via a `CyclicExtends`
 error. Prefix handling and subcommand namespaces work as normal when
 inheritance is in use.
 
+## Dynamic rule tables
+
+Map fields such as `BTreeMap<String, RuleConfig>` allow configuration files to
+declare arbitrary rule keys. Any table nested under `rules.<name>` is
+deserialised into the map without prior knowledge of the key names. This
+enables use cases like:
+
+```toml
+[rules.consistent-casing]
+enabled = true
+[rules.no-tabs]
+enabled = false
+```
+
+Each entry becomes a map key with its associated struct value.
+
+## Ignore patterns
+
+Lists of files or directories to exclude can be specified via comma-separated
+environment variables and CLI flags. Values are merged using the `append`
+strategy so configuration defaults are extended by environment variables and
+finally by the CLI. For example:
+
+```bash
+DDLINT_IGNORE_PATTERNS=".git/,build/"
+mytool --ignore-patterns target/
+```
+
+results in `ignore_patterns = [".git/", "build/", "target/"]`.
+
 ## Subcommand configuration
 
 Many CLI applications use `clap` subcommands to perform different operations.
@@ -373,9 +403,15 @@ the final merge of CLI values over configuration sources surface as the `Merge`
 variant, providing clearer diagnostics when the combined data is invalid. When
 multiple sources fail, the errors are collected into the `Aggregate` variant so
 callers can inspect each individual failure. Consumers should handle these
-errors appropriately, for example by printing them to stderr and exiting.
-Future releases may include improved missing‑value error messages, but
-currently the crate simply returns the underlying error information.
+errors appropriately, for example by printing them to stderr and exiting. If
+required fields are missing after merging, the crate returns
+`OrthoError::MissingRequiredValues` with a user‑friendly list of missing paths
+and hints on how to provide them. For example:
+
+```text
+Missing required values:
+  sample_value (use --sample-value, SAMPLE_VALUE, or file entry)
+```
 
 ## Additional notes
 
@@ -391,11 +427,23 @@ currently the crate simply returns the underlying error information.
   while still requiring the CLI to provide a value when defaults are absent;
   see the `vk` example above.
 
-- **Hidden** `--config-path` **argument** – The derive macro inserts a hidden
-  `--config-path` option into the CLI to override the configuration file path.
-  This option does not appear in help output unless explicitly defined in the
-  user struct. The environment variable `PREFIXCONFIG_PATH` provides the same
-  functionality[GitHub](https://github.com/leynos/ortho-config/blob/58c8e0bf82d5a69182824d32e9aff8944eb435c1/README.md#L148-L161).
+- **Config path flag** – The derive macro inserts a hidden `--config-path`
+  option into the CLI to override the configuration file path. To expose or
+  rename this flag, define your own `config_path` field with a `cli_long`
+  attribute:
+
+  ```rust
+  #[derive(ortho_config::OrthoConfig)]
+  struct AppConfig {
+      #[serde(skip)]
+      #[ortho_config(cli_long = "config")]
+      config_path: Option<std::path::PathBuf>,
+  }
+  ```
+
+  The example above enables `--config` and the `CONFIG_PATH` environment
+  variable. The option remains hidden from help output unless a `config_path`
+  field is declared.
 
 - **Changing naming conventions** – Currently, only the default
   snake/kebab/upper snake mappings are supported. Future versions may introduce
