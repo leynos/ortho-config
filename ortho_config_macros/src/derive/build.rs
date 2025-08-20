@@ -246,40 +246,20 @@ pub(crate) fn build_dotfile_name(struct_attrs: &StructAttrs) -> proc_macro2::Tok
     quote! { #base }
 }
 
-/// Builds discovery code for TOML configuration files.
+/// Builds discovery code for configuration files with the given extensions.
 ///
 /// # Examples
 ///
 /// ```ignore
-/// let tokens = build_toml_discovery();
+/// let tokens = build_discovery(&["toml"]);
 /// assert!(!tokens.is_empty());
 /// ```
-fn build_toml_discovery() -> proc_macro2::TokenStream {
-    quote! { try_load_config(&mut file_fig, &["toml"], &mut discovery_errors); }
-}
-
-/// Builds discovery code for JSON and JSON5 configuration files.
-///
-/// # Examples
-///
-/// ```ignore
-/// let tokens = build_json_discovery();
-/// assert!(!tokens.is_empty());
-/// ```
-fn build_json_discovery() -> proc_macro2::TokenStream {
-    quote! { try_load_config(&mut file_fig, &["json", "json5"], &mut discovery_errors); }
-}
-
-/// Builds discovery code for YAML configuration files.
-///
-/// # Examples
-///
-/// ```ignore
-/// let tokens = build_yaml_discovery();
-/// assert!(!tokens.is_empty());
-/// ```
-fn build_yaml_discovery() -> proc_macro2::TokenStream {
-    quote! { try_load_config(&mut file_fig, &["yaml", "yml"], &mut discovery_errors); }
+fn build_discovery(exts: &[&str]) -> proc_macro2::TokenStream {
+    let exts: Vec<_> = exts
+        .iter()
+        .map(|ext| syn::LitStr::new(ext, proc_macro2::Span::call_site()))
+        .collect();
+    quote! { try_load_config(&mut file_fig, &[#(#exts),*], &mut discovery_errors); }
 }
 
 /// Builds the XDG base directory configuration discovery snippet.
@@ -291,9 +271,9 @@ fn build_yaml_discovery() -> proc_macro2::TokenStream {
 /// assert!(!tokens.is_empty());
 /// ```
 fn build_xdg_config_discovery() -> proc_macro2::TokenStream {
-    let toml = build_toml_discovery();
-    let json = build_json_discovery();
-    let yaml = build_yaml_discovery();
+    let toml = build_discovery(&["toml"]);
+    let json = build_discovery(&["json", "json5"]);
+    let yaml = build_discovery(&["yaml", "yml"]);
     quote! {
         let try_load_config = |
             fig: &mut Option<figment::Figment>,
