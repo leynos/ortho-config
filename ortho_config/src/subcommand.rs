@@ -167,13 +167,13 @@ fn dotted(prefix: &Prefix) -> String {
 ///
 /// ```rust,no_run
 /// use std::path::{Path, PathBuf};
-/// use ortho_config::subcommand::push_stem_candidates;
+/// use crate::subcommand::push_stem_candidates;
 /// let mut candidates: Vec<PathBuf> = Vec::new();
 /// // Populate the vector with common configuration file names under `/tmp`.
 /// push_stem_candidates(Path::new("/tmp"), ".myapp", &mut candidates);
 /// assert!(candidates.iter().any(|p| p.ends_with(".myapp.toml")));
 /// ```
-pub fn push_stem_candidates(dir: &Path, base: &str, paths: &mut Vec<PathBuf>) {
+pub(crate) fn push_stem_candidates(dir: &Path, base: &str, paths: &mut Vec<PathBuf>) {
     push_candidates(paths, base, |f| dir.join(f));
 }
 
