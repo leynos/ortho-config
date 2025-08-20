@@ -294,6 +294,29 @@ fn load_from_files(paths: &[PathBuf], name: &CmdName) -> Result<Figment, OrthoEr
     Ok(fig)
 }
 
+/// Create an environment provider for a subcommand.
+///
+/// The provider reads variables following the pattern
+/// `<PREFIX>CMDS_<NAME>_` and normalises keys using `Uncased`.
+/// Double underscores are interpreted as key separators.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// use ortho_config::subcommand::{Prefix, CmdName, subcommand_env_provider};
+/// use figment::providers::Env;
+/// let prefix = Prefix::new("app");
+/// let name = CmdName::new("serve");
+/// let _env: Env = subcommand_env_provider(&prefix, &name);
+/// ```
+fn subcommand_env_provider(prefix: &Prefix, name: &CmdName) -> Env {
+    let env_name = name.env_key();
+    let env_prefix = format!("{}CMDS_{env_name}_", prefix.raw());
+    Env::prefixed(&env_prefix)
+        .map(|k| Uncased::from(k))
+        .split("__")
+}
+
 /// Load configuration for a specific subcommand.
 ///
 /// The configuration is sourced from:
@@ -344,11 +367,7 @@ where
     let paths = candidate_paths(prefix);
     let mut fig = load_from_files(&paths, name)?;
 
-    let env_name = name.env_key();
-    let env_prefix = format!("{}CMDS_{env_name}_", prefix.raw());
-    let env_provider = Env::prefixed(&env_prefix)
-        .map(|k| Uncased::from(k))
-        .split("__");
+    let env_provider = subcommand_env_provider(prefix, name);
     fig = fig.merge(env_provider);
 
     fig.extract().map_err(OrthoError::Gathering)
@@ -443,11 +462,7 @@ where
     let paths = candidate_paths(prefix);
     let mut fig = load_from_files(&paths, &name)?;
 
-    let env_name = name.env_key();
-    let env_prefix = format!("{}CMDS_{env_name}_", prefix.raw());
-    let env_provider = Env::prefixed(&env_prefix)
-        .map(|k| Uncased::from(k))
-        .split("__");
+    let env_provider = subcommand_env_provider(prefix, &name);
     fig = fig.merge(env_provider);
 
     fig.merge(sanitized_provider(cli)?)
