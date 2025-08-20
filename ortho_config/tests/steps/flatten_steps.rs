@@ -46,6 +46,11 @@ fn malformed_flat_file(world: &mut World) {
     world.flat_file = Some("nested = 5".into());
 }
 
+#[given("a flattened configuration file with invalid value")]
+fn invalid_flat_file(world: &mut World) {
+    world.flat_file = Some("nested = { value = 5 }".into());
+}
+
 #[when("the flattened config is loaded without CLI overrides")]
 fn load_without_cli(world: &mut World) {
     world.flat_result = Some(load_flat(world.flat_file.as_deref(), &["prog"]));

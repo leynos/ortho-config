@@ -15,8 +15,11 @@ use serde_json::Value;
 ///
 /// This is intended for CLI sanitisation so unset [`Option`] fields and
 /// untouched flattened structs do not override defaults from files or
-/// environment variables. Returns `true` when the provided `value` should be
-/// pruned from its parent after null-stripping.
+/// environment variables.
+///
+/// Returns `true` if `value` becomes empty after pruning (that is, it is
+/// `Null` or an object with no remaining fields). Arrays never return `true`,
+/// even when emptied, to preserve explicit clearing semantics.
 fn strip_nulls(value: &mut Value) -> bool {
     match value {
         Value::Object(map) => {
