@@ -183,6 +183,31 @@ fn push_local_candidates(prefix: &Prefix, paths: &mut Vec<PathBuf>) {
     push_stem_candidates(Path::new("."), &dotted(prefix), paths);
 }
 
+#[cfg(any(unix, target_os = "redox"))]
+/// Adds XDG configuration files for the provided extensions.
+///
+/// Iterates over `exts`, searching `xdg_dirs` for `config.<ext>` and pushes
+/// each discovered path onto `paths`.
+///
+/// # Examples
+///
+/// ```rust,no_run
+/// use std::path::PathBuf;
+/// use xdg::BaseDirectories;
+/// let dirs = BaseDirectories::new().expect("locate directories");
+/// if let Some(p) = dirs.find_config_file("config.toml") {
+///     let mut paths = Vec::<PathBuf>::new();
+///     paths.push(p);
+/// }
+/// ```
+fn push_xdg_candidates(xdg_dirs: &BaseDirectories, exts: &[&str], paths: &mut Vec<PathBuf>) {
+    for ext in exts {
+        if let Some(p) = xdg_dirs.find_config_file(format!("config.{ext}")) {
+            paths.push(p);
+        }
+    }
+}
+
 /// Returns a list of possible configuration file paths for a subcommand, based on the provided prefix.
 ///
 /// The search includes standard locations such as the user's home directory, platform-specific configuration directories, and the current working directory. The function considers multiple file formats and adapts its search strategy according to the operating system and enabled features.
@@ -215,23 +240,13 @@ fn collect_unix_paths(prefix: &Prefix, paths: &mut Vec<PathBuf>) {
         BaseDirectories::with_prefix(prefix.as_str())
     };
 
-    if let Some(p) = xdg_dirs.find_config_file("config.toml") {
-        paths.push(p);
-    }
+    push_xdg_candidates(&xdg_dirs, &["toml"], paths);
 
     #[cfg(feature = "json5")]
-    for ext in ["json", "json5"] {
-        if let Some(p) = xdg_dirs.find_config_file(format!("config.{ext}")) {
-            paths.push(p);
-        }
-    }
+    push_xdg_candidates(&xdg_dirs, &["json", "json5"], paths);
 
     #[cfg(feature = "yaml")]
-    for ext in ["yaml", "yml"] {
-        if let Some(p) = xdg_dirs.find_config_file(format!("config.{ext}")) {
-            paths.push(p);
-        }
-    }
+    push_xdg_candidates(&xdg_dirs, &["yaml", "yml"], paths);
 }
 
 #[cfg(not(any(unix, target_os = "redox")))]
