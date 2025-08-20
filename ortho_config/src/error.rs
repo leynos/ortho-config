@@ -28,6 +28,13 @@ pub enum OrthoError {
     #[error("Failed to gather configuration: {0}")]
     Gathering(#[from] figment::Error),
 
+    /// Failure merging CLI values over configuration sources.
+    #[error("Failed to merge CLI with configuration: {source}")]
+    Merge {
+        #[source]
+        source: figment::Error,
+    },
+
     /// Validation failures when building configuration.
     #[error("Validation failed for '{key}': {message}")]
     Validation { key: String, message: String },
@@ -103,15 +110,29 @@ impl OrthoError {
             OrthoError::Aggregate(AggregatedErrors::new(errors))
         }
     }
+
+    /// Construct a merge error from a [`figment::Error`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ortho_config::OrthoError;
+    /// let fe = figment::Error::from("boom");
+    /// let e = OrthoError::merge(fe);
+    /// assert!(matches!(e, OrthoError::Merge { .. }));
+    /// ```
+    #[must_use]
+    pub fn merge(source: figment::Error) -> Self {
+        OrthoError::Merge { source }
+    }
 }
 
 impl From<OrthoError> for FigmentError {
     /// Allow using `?` in tests and examples that return `figment::Error`.
     fn from(e: OrthoError) -> Self {
         match e {
-            // Preserve the original Figment error (keeps kind, metadata, and
-            // sources).
-            OrthoError::Gathering(fe) => fe,
+            // Preserve the original Figment error (keeps kind, metadata, and sources).
+            OrthoError::Gathering(fe) | OrthoError::Merge { source: fe } => fe,
             // Fall back to a message for other variants.
             other => FigmentError::from(other.to_string()),
         }

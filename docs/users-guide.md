@@ -236,6 +236,12 @@ names with double underscores. For example, if `AppConfig` has a nested
 `database.url` field. If a nested struct has its own prefix attribute, that
 prefix is used for its fields (e.g. `APP_DB_URL`).
 
+When `clap`'s `flatten` attribute is employed to compose argument groups, the
+flattened struct is initialised even if no CLI flags within the group are
+specified. During merging, `ortho_config` discards these empty groups so that
+values from configuration files or the environment remain in place unless a
+field is explicitly supplied on the command line.
+
 ### Using defaults and optional fields
 
 Fields of type `Option<T>` are treated as optional values. If no source
@@ -362,12 +368,14 @@ for a complete example.
 ## Error handling
 
 `load` and `load_and_merge_subcommand_for` return a `Result<T, OrthoError>`.
-`OrthoError` wraps errors from `clap`, file I/O and `figment`. When multiple
-sources fail, the errors are collected into the `Aggregate` variant, so callers
-can inspect each individual failure. Consumers should handle these errors
-appropriately, for example by printing them to stderr and exiting. Future
-releases may include improved missing‑value error messages, but currently the
-crate simply returns the underlying error information.
+`OrthoError` wraps errors from `clap`, file I/O and `figment`. Failures during
+the final merge of CLI values over configuration sources surface as the `Merge`
+variant, providing clearer diagnostics when the combined data is invalid. When
+multiple sources fail, the errors are collected into the `Aggregate` variant so
+callers can inspect each individual failure. Consumers should handle these
+errors appropriately, for example by printing them to stderr and exiting.
+Future releases may include improved missing‑value error messages, but
+currently the crate simply returns the underlying error information.
 
 ## Additional notes
 

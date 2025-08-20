@@ -48,7 +48,8 @@ fn cli_file_env_errors(world: &mut World) {
                 match e {
                     ortho_config::OrthoError::CliParsing(_) => saw_cli = true,
                     ortho_config::OrthoError::File { .. } => saw_file = true,
-                    ortho_config::OrthoError::Gathering(_) => saw_env = true,
+                    ortho_config::OrthoError::Merge { .. }
+                    | ortho_config::OrthoError::Gathering(_) => saw_env = true,
                     _ => {}
                 }
             }

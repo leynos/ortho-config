@@ -94,7 +94,7 @@ fn invalid_cli_wrong_type_maps_error() {
 fn invalid_cli_missing_required_maps_error() {
     figment::Jail::expect_with(|_| {
         let err = RequiredConfig::load_from_iter(["prog"]).unwrap_err();
-        assert!(matches!(err, OrthoError::Gathering(_)));
+        assert!(matches!(err, OrthoError::Merge { .. }));
         Ok(())
     });
 }

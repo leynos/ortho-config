@@ -76,18 +76,47 @@ The primary data flow for a user calling `AppConfig::load()` will be:
    - **Environment Provider:** An `Env` provider configured with the correct
      prefix and key-mapping rules.
    - **CLI Provider:** The `clap`-parsed arguments are serialized into a
-     `figment` provider and merged last. Fields left as `None` are removed
-     before merging so that environment or file defaults remain untouched. This
-     serialization step relies on `serde_json` and introduces a small overhead;
-     if configuration loading becomes a hotspot, benchmark to evaluate a more
-     direct approach. A helper, `sanitized_provider`, wraps sanitization and
-     provider construction to avoid repeating the pattern.
+   `figment` provider and merged last. Fields left as `None` are removed before
+   merging so that environment or file defaults remain untouched. This
+   serialization step relies on `serde_json` and introduces a small overhead;
+   if configuration loading becomes a hotspot, benchmark to evaluate a more
+   direct approach. A helper, `sanitized_provider`, wraps sanitization and
+   provider construction to avoid repeating the pattern. Empty objects are
+   pruned during sanitisation, ensuring that `#[clap(flatten)]` groups with no
+   CLI overrides do not wipe out defaults from files or environment variables.
 
 4. `figment`'s `extract()` method is called to deserialize the merged
    configuration into the user's `AppConfig` struct.
 5. Array merging logic is applied post-deserialization if the "append" strategy
    is used.
 6. The result, either `Ok(AppConfig)` or `Err(OrthoError)`, is returned.
+
+### CLI and Configuration Merge Flow
+
+```mermaid
+flowchart TD
+    CLI[CLI Arguments]
+    Flattened[Flattened Groups]
+    Prune[Prune Empty Objects]
+    Config[Config File/Env]
+    Merge[Merged Config]
+    Error[OrthoError::Merge on Failure]
+
+    CLI --> Flattened
+    Flattened --> Prune
+    Prune --> Merge
+    Config --> Merge
+    Merge -->|Success| Merged
+    Merge -->|Failure| Error
+```
+
+```mermaid
+erDiagram
+    CLI_ARGS ||--o{ FLATTENED_GROUPS : contains
+    FLATTENED_GROUPS ||--o| CONFIG : merged_into
+    CONFIG ||--o| MERGED_CONFIG : produces
+    MERGED_CONFIG ||--o| ORTHOERROR : error_on_failure
+```
 
 ## 4. Component Deep Dive
 
@@ -221,6 +250,9 @@ pub enum OrthoError {
 
     #[error("Failed to gather configuration: {0}")]
     Gathering(#[from] figment::Error),
+
+    #[error("Failed to merge CLI with configuration: {source}")]
+    Merge { #[source] source: figment::Error },
 
     #[error("multiple configuration errors:\n{0}")]
     Aggregate(AggregatedErrors),
