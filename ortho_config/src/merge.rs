@@ -64,6 +64,23 @@ pub fn value_without_nones<T: Serialize>(cli: &T) -> Result<Value, serde_json::E
     Ok(value)
 }
 
+/// Convert a [`serde_json::Error`] into [`OrthoError::Gathering`].
+///
+/// This helper is used by [`sanitize_value`] to map JSON serialisation
+/// failures into the library's error type.
+///
+/// # Examples
+///
+/// ```rust
+/// use ortho_config::sanitize_value;
+/// use serde::Serialize;
+///
+/// #[derive(Serialize)]
+/// struct Args { count: Option<u32> }
+///
+/// // Sanitise `Args` and map serialisation errors to `OrthoError::Gathering`.
+/// sanitize_value(&Args { count: None }).unwrap();
+/// ```
 fn convert_gathering_error(e: &serde_json::Error) -> OrthoError {
     OrthoError::Gathering(figment::Error::from(e.to_string()))
 }
