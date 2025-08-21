@@ -227,7 +227,6 @@ struct RenamedPathConfig {
     sample: Option<String>,
     #[serde(skip)]
     #[ortho_config(cli_long = "config")]
-    #[expect(dead_code, reason = "field is populated via CLI in tests")]
     config_path: Option<std::path::PathBuf>,
 }
 
@@ -238,6 +237,10 @@ fn config_path_custom_flag() {
         let cfg =
             RenamedPathConfig::load_from_iter(["prog", "--config", "alt.toml"]).expect("load");
         assert_eq!(cfg.sample.as_deref(), Some("file"));
+        assert!(
+            cfg.config_path.is_none(),
+            "config_path should not be retained post-merge"
+        );
         Ok(())
     });
 }
@@ -249,6 +252,10 @@ fn config_path_custom_env() {
         j.set_env("CONFIG_PATH", "alt.toml");
         let cfg = RenamedPathConfig::load_from_iter(["prog"]).expect("load");
         assert_eq!(cfg.sample.as_deref(), Some("env"));
+        assert!(
+            cfg.config_path.is_none(),
+            "config_path should not be retained post-merge"
+        );
         Ok(())
     });
 }

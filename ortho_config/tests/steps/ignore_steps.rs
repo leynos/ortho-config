@@ -36,6 +36,6 @@ fn load_ignore(world: &mut World, cli: String) {
 )]
 fn check_ignore(world: &mut World, expected: String) {
     let cfg = world.result.take().expect("result").expect("ok");
-    let want: Vec<String> = expected.split(',').map(str::to_string).collect();
+    let want: Vec<String> = expected.split(',').map(|s| s.trim().to_string()).collect();
     assert_eq!(cfg.ignore_patterns, want);
 }

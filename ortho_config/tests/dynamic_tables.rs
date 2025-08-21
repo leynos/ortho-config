@@ -1,4 +1,4 @@
-//! Tests for dynamic table deserialisation into maps.
+//! Tests for dynamic table deserialization into maps.
 
 use figment::{Figment, providers::Format, providers::Toml};
 use rstest::rstest;
