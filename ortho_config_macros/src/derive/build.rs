@@ -248,17 +248,23 @@ pub(crate) fn build_dotfile_name(struct_attrs: &StructAttrs) -> proc_macro2::Tok
 
 /// Builds discovery code for configuration files with the given extensions.
 ///
+/// The extensions are tried sequentially; earlier entries take precedence over
+/// later ones. Passing `["json", "json5", "yaml"]` will therefore try
+/// `config.json` before `config.json5` and `config.yaml`.
+///
 /// # Examples
 ///
 /// ```ignore
-/// let tokens = build_discovery(&["toml"]);
+/// let tokens = build_discovery(["json", "json5", "yaml"]);
 /// assert!(!tokens.is_empty());
 /// ```
-fn build_discovery(exts: &[&str]) -> proc_macro2::TokenStream {
-    let exts: Vec<_> = exts
-        .iter()
-        .map(|ext| syn::LitStr::new(ext, proc_macro2::Span::call_site()))
-        .collect();
+fn build_discovery<I, S>(exts: I) -> proc_macro2::TokenStream
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<str>,
+{
+    let exts_vec: Vec<S> = exts.into_iter().collect();
+    let exts = exts_vec.iter().map(AsRef::as_ref);
     quote! { try_load_config(&mut file_fig, &[#(#exts),*], &mut discovery_errors); }
 }
 
@@ -271,9 +277,9 @@ fn build_discovery(exts: &[&str]) -> proc_macro2::TokenStream {
 /// assert!(!tokens.is_empty());
 /// ```
 fn build_xdg_config_discovery() -> proc_macro2::TokenStream {
-    let toml = build_discovery(&["toml"]);
-    let json = build_discovery(&["json", "json5"]);
-    let yaml = build_discovery(&["yaml", "yml"]);
+    let toml = build_discovery(["toml"]);
+    let json = build_discovery(["json", "json5"]);
+    let yaml = build_discovery(["yaml", "yml"]);
     quote! {
         let try_load_config = |
             fig: &mut Option<figment::Figment>,
