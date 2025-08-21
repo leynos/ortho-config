@@ -1,4 +1,8 @@
 //! Helpers for reading configuration files into Figment.
+#![expect(
+    clippy::result_large_err,
+    reason = "OrthoError is intentionally large throughout this module"
+)]
 
 use crate::OrthoError;
 #[cfg(feature = "yaml")]
@@ -31,10 +35,6 @@ fn file_error(path: &Path, err: impl Into<Box<dyn Error + Send + Sync>>) -> Orth
 ///
 /// Returns an [`OrthoError`] if the file contents fail to parse or if the
 /// required feature is disabled.
-#[expect(
-    clippy::result_large_err,
-    reason = "Error type is library specific and intentionally large"
-)]
 fn parse_config_by_format(path: &Path, data: &str) -> Result<Figment, OrthoError> {
     let ext = path
         .extension()
@@ -88,17 +88,13 @@ fn parse_config_by_format(path: &Path, data: &str) -> Result<Figment, OrthoError
 ///
 /// ```rust,ignore
 /// # use figment::{Figment, providers::{Format, Toml}};
-/// # use std::path::Path;
+/// # use std::path::{Path, PathBuf};
 /// # use ortho_config::file::get_extends;
 /// let figment = Figment::from(Toml::string("extends = \"base.toml\""));
 /// let extends = get_extends(&figment, Path::new("cfg.toml")).unwrap();
-/// assert_eq!(extends, Some("base.toml".to_string()));
+/// assert_eq!(extends, Some(PathBuf::from("base.toml")));
 /// ```
-#[expect(
-    clippy::result_large_err,
-    reason = "Error type is library specific and intentionally large"
-)]
-fn get_extends(figment: &Figment, current_path: &Path) -> Result<Option<String>, OrthoError> {
+fn get_extends(figment: &Figment, current_path: &Path) -> Result<Option<PathBuf>, OrthoError> {
     match figment.find_value("extends") {
         Ok(val) => {
             let base = val.as_str().ok_or_else(|| {
@@ -119,77 +115,10 @@ fn get_extends(figment: &Figment, current_path: &Path) -> Result<Option<String>,
                     ),
                 )
             })?;
-            Ok(Some(base.to_owned()))
+            Ok(Some(PathBuf::from(base)))
         }
         Err(e) if e.missing() => Ok(None),
         Err(e) => Err(file_error(current_path, e)),
-    }
-}
-
-/// Resolve the base configuration file path relative to `current_path`.
-///
-/// The returned path is canonicalised.
-///
-/// # Examples
-///
-/// ```rust,ignore
-/// # use std::path::Path;
-/// # use ortho_config::file::resolve_base_path;
-/// let path = resolve_base_path("base.toml", Path::new("dir/config.toml"))?;
-/// ```
-#[expect(
-    clippy::result_large_err,
-    reason = "propagating path resolution errors"
-)]
-fn resolve_base_path(base: &str, current_path: &Path) -> Result<PathBuf, OrthoError> {
-    let parent = current_path.parent().ok_or_else(|| {
-        file_error(
-            current_path,
-            std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                "Cannot determine parent directory for config file when resolving 'extends'",
-            ),
-        )
-    })?;
-
-    let base_path = if Path::new(base).is_absolute() {
-        PathBuf::from(base)
-    } else {
-        parent.join(base)
-    };
-
-    std::fs::canonicalize(&base_path).map_err(|e| file_error(&base_path, e))
-}
-
-/// Load and merge the parent configuration specified by `canonical`.
-///
-/// The parent is loaded and then merged with `figment`, allowing the current
-/// configuration to override base settings.
-///
-/// # Examples
-///
-/// ```rust,ignore
-/// # use figment::{Figment, providers::{Format, Toml}};
-/// # use std::collections::HashSet;
-/// # use std::path::Path;
-/// # use ortho_config::file::merge_parent;
-/// # let figment = Figment::from(Toml::string("foo = \"bar\""));
-/// # let mut visited = HashSet::new();
-/// # let mut stack = Vec::new();
-/// # let base = Path::new("base.toml");
-/// let merged = merge_parent(figment, base, &mut visited, &mut stack)?;
-/// ```
-#[expect(clippy::result_large_err, reason = "propagating file loading errors")]
-fn merge_parent(
-    figment: Figment,
-    canonical: &Path,
-    visited: &mut HashSet<PathBuf>,
-    stack: &mut Vec<PathBuf>,
-) -> Result<Figment, OrthoError> {
-    if let Some(base_fig) = load_config_file_inner(canonical, visited, stack)? {
-        Ok(base_fig.merge(figment))
-    } else {
-        Ok(figment)
     }
 }
 
@@ -202,19 +131,31 @@ fn merge_parent(
 ///
 /// Returns an [`OrthoError`] if the extended file fails to load or the `extends`
 /// key is malformed.
-#[expect(clippy::result_large_err, reason = "propagating file loading errors")]
 fn process_extends(
-    figment: Figment,
+    mut figment: Figment,
     current_path: &Path,
     visited: &mut HashSet<PathBuf>,
     stack: &mut Vec<PathBuf>,
 ) -> Result<Figment, OrthoError> {
-    if let Some(base) = get_extends(&figment, current_path)? {
-        let canonical = resolve_base_path(&base, current_path)?;
-        merge_parent(figment, &canonical, visited, stack)
-    } else {
-        Ok(figment)
+    if let Some(mut base) = get_extends(&figment, current_path)? {
+        let parent = current_path.parent().ok_or_else(|| {
+            file_error(
+                current_path,
+                std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "Cannot determine parent directory for config file when resolving 'extends'",
+                ),
+            )
+        })?;
+        if !base.is_absolute() {
+            base = parent.join(base);
+        }
+        let canonical = std::fs::canonicalize(&base).map_err(|e| file_error(&base, e))?;
+        if let Some(parent_fig) = load_config_file_inner(&canonical, visited, stack)? {
+            figment = parent_fig.merge(figment);
+        }
     }
+    Ok(figment)
 }
 
 /// Load configuration from a file, selecting the parser based on extension.
@@ -247,17 +188,12 @@ fn process_extends(
 /// # Errors
 ///
 /// Returns an [`OrthoError`] if reading or parsing the file fails.
-#[expect(
-    clippy::result_large_err,
-    reason = "Error type is large but returned directly"
-)]
 pub fn load_config_file(path: &Path) -> Result<Option<Figment>, OrthoError> {
     let mut visited = HashSet::new();
     let mut stack = Vec::new();
     load_config_file_inner(path, &mut visited, &mut stack)
 }
 
-#[expect(clippy::result_large_err, reason = "propagating parsing and IO errors")]
 fn load_config_file_inner(
     path: &Path,
     visited: &mut HashSet<PathBuf>,
@@ -289,59 +225,72 @@ fn load_config_file_inner(
 mod tests {
     use super::*;
     use figment::{Figment, Jail, providers::Format, providers::Toml};
+    use rstest::rstest;
+    use std::path::{Path, PathBuf};
 
-    #[test]
-    fn get_extends_returns_string() {
-        let figment = Figment::from(Toml::string("extends = \"base.toml\""));
-        let extends = get_extends(&figment, Path::new("cfg.toml")).expect("extends");
-        assert_eq!(extends, Some("base.toml".to_string()));
+    enum ExtCase {
+        Ok(Option<PathBuf>),
+        Err(&'static str),
+    }
+
+    #[rstest]
+    #[case(
+        "extends = \"base.toml\"",
+        ExtCase::Ok(Some(PathBuf::from("base.toml")))
+    )]
+    #[case("foo = \"bar\"", ExtCase::Ok(None))]
+    #[case("extends = 1", ExtCase::Err("must be a string"))]
+    fn get_extends_cases(#[case] input: &str, #[case] expected: ExtCase) {
+        let figment = Figment::from(Toml::string(input));
+        match expected {
+            ExtCase::Ok(exp) => {
+                let ext = get_extends(&figment, Path::new("cfg.toml")).expect("extends");
+                assert_eq!(ext, exp);
+            }
+            ExtCase::Err(msg) => {
+                let err = get_extends(&figment, Path::new("cfg.toml")).unwrap_err();
+                assert!(err.to_string().contains(msg));
+            }
+        }
     }
 
     #[test]
-    fn get_extends_none_when_missing() {
-        let figment = Figment::from(Toml::string("foo = \"bar\""));
-        let extends = get_extends(&figment, Path::new("cfg.toml")).expect("extends");
-        assert!(extends.is_none());
-    }
-
-    #[test]
-    fn get_extends_errors_on_non_string() {
-        let figment = Figment::from(Toml::string("extends = 1"));
-        let err = get_extends(&figment, Path::new("cfg.toml")).unwrap_err();
-        let msg = format!("{err}");
-        assert!(msg.contains("must be a string"));
-    }
-
-    #[test]
-    fn resolve_base_path_handles_relative_and_absolute() {
-        Jail::expect_with(|j| {
-            j.create_file("base.toml", "")?;
-            let root = std::fs::canonicalize(".").expect("canonicalise root");
-            let current = root.join("config.toml");
-            let rel = resolve_base_path("base.toml", &current).expect("resolve relative");
-            assert_eq!(rel, root.join("base.toml"));
-
-            let abs_str = root.join("base.toml").to_str().expect("str").to_owned();
-            let abs = resolve_base_path(&abs_str, &current).expect("resolve absolute");
-            assert_eq!(abs, root.join("base.toml"));
-            Ok(())
-        });
-    }
-
-    #[test]
-    fn merge_parent_overrides_base() {
+    fn process_extends_handles_relative_and_absolute() {
         Jail::expect_with(|j| {
             j.create_file("base.toml", "foo = \"base\"")?;
-            let canonical = std::fs::canonicalize("base.toml").expect("canonicalise base");
-            let figment = Figment::from(Toml::string("foo = \"child\""));
+            let root = std::fs::canonicalize(".").expect("canonicalise root");
+            let current = root.join("config.toml");
+
+            let figment = Figment::from(Toml::string("extends = \"base.toml\""));
             let mut visited = HashSet::new();
             let mut stack = Vec::new();
-            let merged =
-                merge_parent(figment, &canonical, &mut visited, &mut stack).expect("merge");
+            let merged = process_extends(figment, &current, &mut visited, &mut stack)?;
             let value = merged.find_value("foo").expect("foo");
-            let foo = value.as_str().expect("string");
-            assert_eq!(foo, "child");
+            assert_eq!(value.as_str(), Some("base"));
+
+            let abs_path = root.join("base.toml");
+            let figment = Figment::from(Toml::string(&format!(
+                "extends = \"{}\"",
+                abs_path.display()
+            )));
+            let mut visited = HashSet::new();
+            let mut stack = Vec::new();
+            let merged = process_extends(figment, &current, &mut visited, &mut stack)?;
+            let value = merged.find_value("foo").expect("foo");
+            assert_eq!(value.as_str(), Some("base"));
             Ok(())
         });
+    }
+
+    #[test]
+    fn process_extends_errors_when_no_parent() {
+        let figment = Figment::from(Toml::string("extends = \"base.toml\""));
+        let mut visited = HashSet::new();
+        let mut stack = Vec::new();
+        let err = process_extends(figment, Path::new(""), &mut visited, &mut stack).unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("Cannot determine parent directory")
+        );
     }
 }
