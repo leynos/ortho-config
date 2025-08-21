@@ -219,3 +219,24 @@ fn env_value_used_when_cli_missing() {
     .expect("merge");
     assert_eq!(merged.ref_id.as_deref(), Some("from-env"));
 }
+#[derive(Debug, Deserialize, Default, PartialEq)]
+struct NestedCfg {
+    nested: Nested,
+}
+
+#[derive(Debug, Deserialize, Default, PartialEq)]
+struct Nested {
+    host: Option<String>,
+}
+
+/// Tests that environment variables with double underscores map to nested
+/// fields.
+#[test]
+fn env_values_support_nesting() {
+    let cfg: NestedCfg = with_subcommand_config(|j| {
+        j.set_env("APP_CMDS_TEST_NESTED__HOST", "env");
+        Ok(())
+    })
+    .expect("config");
+    assert_eq!(cfg.nested.host.as_deref(), Some("env"));
+}
