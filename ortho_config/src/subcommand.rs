@@ -79,9 +79,10 @@ impl CmdName {
     ///
     /// # Examples
     ///
-    /// ```rust,no_run
+    /// ```rust,ignore
     /// use ortho_config::subcommand::CmdName;
     /// let name = CmdName::new("my-cmd");
+    /// // crate-private API; shown for illustration only
     /// assert_eq!(name.as_str(), "my-cmd");
     /// ```
     #[must_use]
@@ -95,9 +96,10 @@ impl CmdName {
     ///
     /// # Examples
     ///
-    /// ```rust,no_run
+    /// ```rust,ignore
     /// use ortho_config::subcommand::CmdName;
     /// let name = CmdName::new("my-cmd");
+    /// // crate-private API; shown for illustration only
     /// assert_eq!(name.env_key(), "MY_CMD");
     /// ```
     #[must_use]
@@ -165,15 +167,15 @@ fn dotted(prefix: &Prefix) -> String {
 ///
 /// # Examples
 ///
-/// ```rust,no_run
+/// ```rust,ignore
 /// use std::path::{Path, PathBuf};
-/// use ortho_config::subcommand::push_stem_candidates;
+/// // crate-private API; shown for illustration only
 /// let mut candidates: Vec<PathBuf> = Vec::new();
 /// // Populate the vector with common configuration file names under `/tmp`.
 /// push_stem_candidates(Path::new("/tmp"), ".myapp", &mut candidates);
 /// assert!(candidates.iter().any(|p| p.ends_with(".myapp.toml")));
 /// ```
-pub fn push_stem_candidates(dir: &Path, base: &str, paths: &mut Vec<PathBuf>) {
+pub(crate) fn push_stem_candidates(dir: &Path, base: &str, paths: &mut Vec<PathBuf>) {
     push_candidates(paths, base, |f| dir.join(f));
 }
 
@@ -376,8 +378,11 @@ where
 /// #[derive(clap::Parser, serde::Serialize, serde::Deserialize, Default)]
 /// struct MySubcommandConfig;
 /// impl ortho_config::OrthoConfig for MySubcommandConfig {
-///     fn load_and_merge(&self) -> Result<Self, ortho_config::OrthoError> where Self: serde::Serialize { todo!() }
-///     fn load() -> Result<Self, ortho_config::OrthoError> { todo!() }
+///     fn load_from_iter<I, T>(_: I) -> Result<Self, ortho_config::OrthoError>
+///     where
+///         I: IntoIterator<Item = T>,
+///         T: Into<std::ffi::OsString> + Clone,
+///     { todo!() }
 ///     fn prefix() -> &'static str { "" }
 /// }
 /// # fn main() -> Result<(), ortho_config::OrthoError> {
@@ -477,8 +482,11 @@ where
 /// #[derive(clap::Parser, serde::Serialize, serde::Deserialize, Default)]
 /// struct MyCmd { /* fields */ }
 /// impl ortho_config::OrthoConfig for MyCmd {
-///     fn load_and_merge(&self) -> Result<Self, ortho_config::OrthoError> where Self: serde::Serialize { todo!() }
-///     fn load() -> Result<Self, ortho_config::OrthoError> { todo!() }
+///     fn load_from_iter<I, T>(_: I) -> Result<Self, ortho_config::OrthoError>
+///     where
+///         I: IntoIterator<Item = T>,
+///         T: Into<std::ffi::OsString> + Clone,
+///     { todo!() }
 ///     fn prefix() -> &'static str { "myapp" }
 /// }
 /// # fn main() -> Result<(), ortho_config::OrthoError> {

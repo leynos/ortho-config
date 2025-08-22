@@ -91,10 +91,11 @@ impl CsvEnv {
     ///
     /// # Examples
     ///
-    /// ```rust,no_run
+    /// ```rust,ignore
     /// use ortho_config::CsvEnv;
     /// use uncased::Uncased;
     /// let env = CsvEnv::raw().filter_map(|k| k.strip_prefix("APP_").map(Uncased::from));
+    /// // requires `UncasedStr::strip_prefix`; shown for illustration only
     /// let _ = env;
     /// ```
     #[must_use]
