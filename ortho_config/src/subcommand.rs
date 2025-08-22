@@ -297,8 +297,8 @@ fn load_from_files(paths: &[PathBuf], name: &CmdName) -> Result<Figment, OrthoEr
 /// Create an environment provider for a subcommand.
 ///
 /// The provider reads variables following the pattern
-/// `<PREFIX>CMDS_<NAME>_` and normalises keys using `Uncased`.
-/// Double underscores are interpreted as key separators.
+/// `<PREFIX>CMDS_<NAME>_` and performs case-insensitive key matching via
+/// `Uncased`. Double underscores are interpreted as key separators.
 ///
 /// # Examples
 ///
@@ -313,8 +313,8 @@ fn subcommand_env_provider(prefix: &Prefix, name: &CmdName) -> Env {
     let env_name = name.env_key();
     let env_prefix = format!("{}CMDS_{env_name}_", prefix.raw());
     Env::prefixed(&env_prefix)
-        .map(|k| Uncased::from(k))
         .split("__")
+        .map(|k| Uncased::from(k))
 }
 
 /// Load configuration for a specific subcommand.
@@ -367,8 +367,7 @@ where
     let paths = candidate_paths(prefix);
     let mut fig = load_from_files(&paths, name)?;
 
-    let env_provider = subcommand_env_provider(prefix, name);
-    fig = fig.merge(env_provider);
+    fig = fig.merge(subcommand_env_provider(prefix, name));
 
     fig.extract().map_err(OrthoError::Gathering)
 }
@@ -462,8 +461,7 @@ where
     let paths = candidate_paths(prefix);
     let mut fig = load_from_files(&paths, &name)?;
 
-    let env_provider = subcommand_env_provider(prefix, &name);
-    fig = fig.merge(env_provider);
+    fig = fig.merge(subcommand_env_provider(prefix, &name));
 
     fig.merge(sanitized_provider(cli)?)
         .extract()

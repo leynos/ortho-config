@@ -221,22 +221,40 @@ fn env_value_used_when_cli_missing() {
 }
 #[derive(Debug, Deserialize, Default, PartialEq)]
 struct NestedCfg {
+    #[serde(default)]
     nested: Nested,
 }
 
 #[derive(Debug, Deserialize, Default, PartialEq)]
 struct Nested {
     host: Option<String>,
+    port: Option<u16>,
 }
 
 /// Tests that environment variables with double underscores map to nested
 /// fields.
+///
+/// # Examples
+///
+/// ```
+/// env_values_support_nesting();
+/// ```
 #[test]
 fn env_values_support_nesting() {
     let cfg: NestedCfg = with_subcommand_config(|j| {
         j.set_env("APP_CMDS_TEST_NESTED__HOST", "env");
+        j.set_env("APP_CMDS_TEST_NESTED__PORT", "8080");
         Ok(())
     })
     .expect("config");
     assert_eq!(cfg.nested.host.as_deref(), Some("env"));
+    assert_eq!(cfg.nested.port, Some(8080));
+}
+
+/// Defaults are returned when nested variables are absent.
+#[test]
+fn env_values_support_nesting_defaults() {
+    let cfg: NestedCfg = with_subcommand_config(|_| Ok(())).expect("config");
+    assert_eq!(cfg.nested.host, None);
+    assert_eq!(cfg.nested.port, None);
 }
