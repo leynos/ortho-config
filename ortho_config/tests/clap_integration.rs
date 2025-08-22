@@ -259,3 +259,20 @@ fn config_path_custom_env() {
         Ok(())
     });
 }
+
+#[rstest]
+fn config_path_cli_overrides_env() {
+    figment::Jail::expect_with(|j| {
+        j.create_file("env.toml", "sample = \"env\"")?;
+        j.create_file("cli.toml", "sample = \"cli\"")?;
+        j.set_env("CONFIG_PATH", "env.toml");
+        let cfg =
+            RenamedPathConfig::load_from_iter(["prog", "--config", "cli.toml"]).expect("load");
+        assert_eq!(cfg.sample.as_deref(), Some("cli"));
+        assert!(
+            cfg.config_path.is_none(),
+            "config_path should not be retained post-merge",
+        );
+        Ok(())
+    });
+}

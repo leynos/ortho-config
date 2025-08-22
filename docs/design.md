@@ -325,16 +325,17 @@ fulfil missing defaults and eliminates workarounds like
 `load_with_reference_fallback`. The legacy `load_subcommand_config` helpers are
 retained but deprecated.
 
-### 4.10. Dynamic Rule Tables
+### 4.10. Dynamic rule tables
 
 Configuration structures may include map fields such as
 `BTreeMap<String, RuleCfg>` to support dynamic tables where the keys are not
-known at compile time. The loader deserialises any sub-table beneath the map
+known at compile time. The loader deserializes any sub-table beneath the map
 key and preserves unknown rule names. This allows applications to accept
 arbitrary rule configurations like `[rules.consistent-casing]` without
-additional code.
+additional code. Entries may originate from files, environment variables or CLI
+flags and follow the usual precedence rules.
 
-### 4.11. Ignore Pattern Lists
+### 4.11. Ignore pattern lists
 
 Vector fields such as `ignore_patterns` can be populated from comma-separated
 environment variables and CLI flags. Values are merged using the `append` merge

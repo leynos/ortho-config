@@ -103,13 +103,13 @@ references the relevant design guidance.
 
   - [ ] Update documentation and examples to illustrate this override.
 
-- **Enable dynamic tables for arbitrary keys**
+  - **Enable dynamic tables for arbitrary keys**
 
-  - [ ] Accept map types (e.g. `BTreeMap<String, RuleConfig>`) in configuration
+  - [x] Accept map types (e.g. `BTreeMap<String, RuleConfig>`) in configuration
     structs to support dynamic rule tables such as `[rules.consistent-casing]`.
     [[DDLint Gap Analysis](ddlint-gap-analysis.md)]
 
-  - [ ] Ensure these maps deserialize correctly from files, environment
+  - [x] Ensure these maps deserialize correctly from files, environment
     variables and CLI.
 
 - **Implement ignore‑pattern list handling**

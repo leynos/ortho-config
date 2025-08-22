@@ -280,7 +280,7 @@ inheritance is in use.
 
 Map fields such as `BTreeMap<String, RuleConfig>` allow configuration files to
 declare arbitrary rule keys. Any table nested under `rules.<name>` is
-deserialised into the map without prior knowledge of the key names. This
+deserialized into the map without prior knowledge of the key names. This
 enables use cases like:
 
 ```toml

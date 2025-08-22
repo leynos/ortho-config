@@ -2,7 +2,6 @@
 
 use crate::{RulesConfig, World};
 use cucumber::{given, then, when};
-use ortho_config::OrthoConfig;
 
 #[given(expr = "the environment variable DDLINT_IGNORE_PATTERNS is {string}")]
 fn set_ignore_env(world: &mut World, val: String) {
@@ -15,15 +14,16 @@ fn set_ignore_env(world: &mut World, val: String) {
     reason = "Cucumber step requires owned String"
 )]
 fn load_ignore(world: &mut World, cli: String) {
-    let env_val = world.env_value.clone().expect("env");
+    let env_val = world
+        .env_value
+        .as_deref()
+        .expect("DDLINT_IGNORE_PATTERNS not set");
     let mut result = None;
     figment::Jail::expect_with(|j| {
-        j.set_env("DDLINT_IGNORE_PATTERNS", &env_val);
-        result = Some(RulesConfig::load_from_iter([
-            "prog",
-            "--ignore-patterns",
-            &cli,
-        ]));
+        j.set_env("DDLINT_IGNORE_PATTERNS", env_val);
+        result = Some(<RulesConfig as ortho_config::OrthoConfig>::load_from_iter(
+            ["prog", "--ignore-patterns", cli.as_str()],
+        ));
         Ok(())
     });
     world.result = result;
