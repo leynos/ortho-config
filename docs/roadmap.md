@@ -121,6 +121,11 @@ references the relevant design guidance.
   - [x] Document the precedence rules and the relationship to defaults (e.g.
     `[".git/", "build/", "target/"]`).
 
+- **Reduce error payload size**
+
+  - [ ] Wrap expansive error variants in `Arc` to shrink `Result` sizes and
+    eliminate the need for `#[expect(clippy::result_large_err)]`.
+
 - **Address future enhancements**
 
   - [ ] Explore asynchronous loading of configuration files and environment

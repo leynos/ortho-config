@@ -29,7 +29,7 @@ pub use types::{CmdName, Prefix};
 /// or an error if loading fails.
 #[expect(
     clippy::result_large_err,
-    reason = "Result error type is intentionally large due to Figment merge errors; FIXME: track refactor to reduce size"
+    reason = "Figment merge errors inflate Result size; wrapping in `Arc` is tracked on the roadmap"
 )]
 fn load_from_files(paths: &[PathBuf], name: &CmdName) -> Result<Figment, OrthoError> {
     let mut fig = Figment::new();
@@ -59,7 +59,7 @@ fn load_from_files(paths: &[PathBuf], name: &CmdName) -> Result<Figment, OrthoEr
 /// to load defaults and apply CLI overrides in one step.
 #[expect(
     clippy::result_large_err,
-    reason = "Result error type is intentionally large due to Figment merge errors; FIXME: track refactor to reduce size"
+    reason = "Figment merge errors inflate Result size; wrapping in `Arc` is tracked on the roadmap"
 )]
 #[deprecated(note = "use `load_and_merge_subcommand` or `load_and_merge_subcommand_for` instead")]
 /// Loads configuration for a specific subcommand from files and environment variables.
@@ -71,7 +71,7 @@ fn load_from_files(paths: &[PathBuf], name: &CmdName) -> Result<Figment, OrthoEr
 ///
 /// # Deprecated
 ///
-/// This function is deprecated. Use the newer combined loading and merging functions instead.
+/// This function is deprecated. Use the newer combined loading and merging functions instead. Removal is tracked on the project roadmap.
 ///
 /// # Errors
 ///
@@ -105,7 +105,7 @@ where
 /// Returns an [`OrthoError`] if file loading or deserialization fails.
 #[expect(
     clippy::result_large_err,
-    reason = "Result error type is intentionally large due to Figment merge errors; FIXME: track refactor to reduce size"
+    reason = "Figment merge errors inflate Result size; wrapping in `Arc` is tracked on the roadmap"
 )]
 #[deprecated(note = "use `load_and_merge_subcommand_for` instead")]
 /// Loads configuration defaults for a subcommand using the prefix defined by the type.
@@ -131,13 +131,19 @@ where
 /// # Ok(())
 /// # }
 /// ```
+///
+/// # Deprecated
+///
+/// This function is deprecated. Use
+/// [`load_and_merge_subcommand_for`](crate::load_and_merge_subcommand_for)
+/// instead. Removal is tracked on the project roadmap.
 pub fn load_subcommand_config_for<T>(name: &CmdName) -> Result<T, OrthoError>
 where
     T: crate::OrthoConfig + Default,
 {
     #[expect(
         deprecated,
-        reason = "Call deprecated helper for backwards compatibility; FIXME: remove when deprecated API is dropped"
+        reason = "Call deprecated helper for backwards compatibility; removal tracked on the roadmap"
     )]
     {
         load_subcommand_config(&Prefix::new(T::prefix()), name)
@@ -155,7 +161,7 @@ where
 /// Returns an [`OrthoError`] if file loading or deserialization fails.
 #[expect(
     clippy::result_large_err,
-    reason = "Result error type is intentionally large due to Figment merge errors; FIXME: track refactor to reduce size"
+    reason = "Figment merge errors inflate Result size; wrapping in `Arc` is tracked on the roadmap"
 )]
 /// Loads configuration defaults for a subcommand and merges CLI-provided values over them.
 ///
@@ -214,7 +220,7 @@ where
 /// Returns an [`OrthoError`] if file loading or deserialization fails.
 #[expect(
     clippy::result_large_err,
-    reason = "Result error type is intentionally large due to Figment merge errors; FIXME: track refactor to reduce size"
+    reason = "Figment merge errors inflate Result size; wrapping in `Arc` is tracked on the roadmap"
 )]
 /// Loads and merges configuration for a subcommand using the prefix defined by its type.
 ///

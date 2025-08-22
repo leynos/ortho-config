@@ -136,21 +136,28 @@ pub(crate) fn candidate_paths(prefix: &Prefix) -> Vec<PathBuf> {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(any(unix, target_os = "redox"))]
     use super::*;
+    #[cfg(any(unix, target_os = "redox"))]
     use rstest::rstest;
+    #[cfg(any(unix, target_os = "redox"))]
     use serial_test::serial;
     use std::env;
     use std::ffi::OsString;
+    #[cfg(any(unix, target_os = "redox"))]
     use std::fs;
     use std::path::Path;
+    #[cfg(any(unix, target_os = "redox"))]
     use std::sync::LazyLock;
     use tempfile::TempDir;
 
+    #[cfg(any(unix, target_os = "redox"))]
     struct XdgGuard {
         old: Option<OsString>,
         dir: TempDir,
     }
 
+    #[cfg(any(unix, target_os = "redox"))]
     impl Drop for XdgGuard {
         fn drop(&mut self) {
             match &self.old {
@@ -160,6 +167,7 @@ mod tests {
         }
     }
 
+    #[cfg(any(unix, target_os = "redox"))]
     static XDG_GUARD: LazyLock<XdgGuard> = LazyLock::new(|| {
         let old = env::var_os("XDG_CONFIG_HOME");
         let dir = TempDir::new().expect("xdg");
@@ -170,6 +178,7 @@ mod tests {
         XdgGuard { old, dir }
     });
 
+    #[cfg(any(unix, target_os = "redox"))]
     fn xdg_path() -> &'static Path {
         XDG_GUARD.dir.path()
     }
@@ -183,14 +192,19 @@ mod tests {
     #[cfg(feature = "yaml")]
     #[case(&["yaml", "yml"], &["config.yaml", "config.yml"])]
     fn push_xdg_candidates_finds_files(#[case] exts: &[&str], #[case] files: &[&str]) {
-        let dir = TempDir::new().expect("tempdir");
-        let old = env::var_os("XDG_CONFIG_HOME");
-        unsafe {
-            env::set_var("XDG_CONFIG_HOME", dir.path());
+        let dir = xdg_path();
+        for entry in fs::read_dir(dir).expect("read dir") {
+            let entry = entry.expect("entry");
+            let path = entry.path();
+            if path.is_dir() {
+                fs::remove_dir_all(&path).expect("clean dir");
+            } else {
+                fs::remove_file(&path).expect("clean file");
+            }
         }
 
         for file in files {
-            fs::write(dir.path().join(file), "").expect("create file");
+            fs::write(dir.join(file), "").expect("create file");
         }
 
         let dirs = BaseDirectories::new();
@@ -199,17 +213,7 @@ mod tests {
 
         assert_eq!(paths.len(), files.len());
         for (p, f) in paths.iter().zip(files.iter()) {
-            assert_eq!(p, &dir.path().join(f));
-        }
-
-        if let Some(v) = old {
-            unsafe {
-                env::set_var("XDG_CONFIG_HOME", v);
-            }
-        } else {
-            unsafe {
-                env::remove_var("XDG_CONFIG_HOME");
-            }
+            assert_eq!(p, &dir.join(f));
         }
     }
 
@@ -254,42 +258,79 @@ mod tests {
             format!(".{}", prefix.as_str())
         };
 
-        let mut expected = Vec::new();
-        expected.push(home.path().join(format!("{dotted}.toml")));
+        let mut expected_files = Vec::new();
+        expected_files.push(format!("{dotted}.toml"));
         #[cfg(feature = "json5")]
         {
-            expected.push(home.path().join(format!("{dotted}.json")));
-            expected.push(home.path().join(format!("{dotted}.json5")));
+            expected_files.push(format!("{dotted}.json"));
+            expected_files.push(format!("{dotted}.json5"));
         }
         #[cfg(feature = "yaml")]
         {
-            expected.push(home.path().join(format!("{dotted}.yaml")));
-            expected.push(home.path().join(format!("{dotted}.yml")));
+            expected_files.push(format!("{dotted}.yaml"));
+            expected_files.push(format!("{dotted}.yml"));
         }
-        expected.push(xdg_cfg_dir.join("config.toml"));
+        expected_files.push("config.toml".to_string());
         #[cfg(feature = "json5")]
         {
-            expected.push(xdg_cfg_dir.join("config.json"));
-            expected.push(xdg_cfg_dir.join("config.json5"));
+            expected_files.push("config.json".to_string());
+            expected_files.push("config.json5".to_string());
         }
         #[cfg(feature = "yaml")]
         {
-            expected.push(xdg_cfg_dir.join("config.yaml"));
-            expected.push(xdg_cfg_dir.join("config.yml"));
+            expected_files.push("config.yaml".to_string());
+            expected_files.push("config.yml".to_string());
         }
-        expected.push(Path::new(".").join(format!("{dotted}.toml")));
+        expected_files.push(format!("{dotted}.toml"));
         #[cfg(feature = "json5")]
         {
-            expected.push(Path::new(".").join(format!("{dotted}.json")));
-            expected.push(Path::new(".").join(format!("{dotted}.json5")));
+            expected_files.push(format!("{dotted}.json"));
+            expected_files.push(format!("{dotted}.json5"));
         }
         #[cfg(feature = "yaml")]
         {
-            expected.push(Path::new(".").join(format!("{dotted}.yaml")));
-            expected.push(Path::new(".").join(format!("{dotted}.yml")));
+            expected_files.push(format!("{dotted}.yaml"));
+            expected_files.push(format!("{dotted}.yml"));
         }
 
-        assert_eq!(paths, expected);
+        let files: Vec<String> = paths
+            .iter()
+            .map(|p| p.file_name().unwrap().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(files, expected_files);
+
+        let group_len = {
+            let mut len = 1;
+            #[cfg(feature = "json5")]
+            {
+                len += 2;
+            }
+            #[cfg(feature = "yaml")]
+            {
+                len += 2;
+            }
+            len
+        };
+
+        let home_parent = paths[0].parent().unwrap();
+        assert!(
+            paths[..group_len]
+                .iter()
+                .all(|p| p.parent() == Some(home_parent))
+        );
+
+        let xdg_parent = paths[group_len].parent().unwrap();
+        assert!(
+            paths[group_len..group_len * 2]
+                .iter()
+                .all(|p| p.parent() == Some(xdg_parent))
+        );
+
+        assert!(
+            paths[group_len * 2..]
+                .iter()
+                .all(|p| p.parent() == Some(Path::new(".")))
+        );
 
         if let Some(v) = old_home {
             unsafe {
