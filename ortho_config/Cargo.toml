@@ -40,6 +40,8 @@ trybuild = "1"
 cucumber = "0.21.1"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 rstest = "0.26.1"
+serial_test = "2"
+tempfile = "3"
 
 [[test]]
 name = "cucumber"
