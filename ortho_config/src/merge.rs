@@ -1,4 +1,5 @@
-//! Utilities for merging command-line arguments with configuration defaults.
+//! Helpers for sanitizing and merging command-line arguments with
+//! configuration defaults.
 
 use crate::OrthoError;
 use figment::{Figment, providers::Serialized};
@@ -13,7 +14,7 @@ use serde_json::Value;
 /// - Array elements equal to null are removed, dropping `None` entries in
 ///   `Vec<_>` but retaining empty arrays to allow deliberate clearing.
 ///
-/// This is intended for CLI sanitisation so unset [`Option`] fields and
+/// This is intended for CLI sanitization so unset [`Option`] fields and
 /// untouched flattened structs do not override defaults from files or
 /// environment variables.
 ///
@@ -66,7 +67,7 @@ pub fn value_without_nones<T: Serialize>(cli: &T) -> Result<Value, serde_json::E
 
 /// Convert a [`serde_json::Error`] into [`OrthoError::Gathering`].
 ///
-/// This helper is used by [`sanitize_value`] to map JSON serialisation
+/// This helper is used by [`sanitize_value`] to map JSON serialization
 /// failures into the library's error type.
 ///
 /// # Examples
@@ -78,10 +79,16 @@ pub fn value_without_nones<T: Serialize>(cli: &T) -> Result<Value, serde_json::E
 /// #[derive(Serialize)]
 /// struct Args { count: Option<u32> }
 ///
-/// // Sanitise `Args` and map serialisation errors to `OrthoError::Gathering`.
-/// sanitize_value(&Args { count: None }).unwrap();
+/// // Sanitize `Args` and map serialization errors to
+/// // `OrthoError::Gathering`.
+/// sanitize_value(&Args { count: None })
+///     .expect("expected sanitization to succeed");
 /// ```
-fn convert_gathering_error(e: &serde_json::Error) -> OrthoError {
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Accept by value to enable map_err without a closure"
+)]
+fn convert_gathering_error(e: serde_json::Error) -> OrthoError {
     OrthoError::Gathering(figment::Error::from(e.to_string()))
 }
 
@@ -109,7 +116,7 @@ fn convert_gathering_error(e: &serde_json::Error) -> OrthoError {
     reason = "Return OrthoError to keep a single error type across the public API"
 )]
 pub fn sanitize_value<T: Serialize>(value: &T) -> Result<Value, OrthoError> {
-    value_without_nones(value).map_err(|e| convert_gathering_error(&e))
+    value_without_nones(value).map_err(convert_gathering_error)
 }
 
 /// Produce a Figment provider from `value` with `None` fields removed.
