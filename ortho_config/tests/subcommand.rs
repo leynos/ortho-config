@@ -231,6 +231,23 @@ struct Nested {
     port: Option<u16>,
 }
 
+#[derive(Debug, Deserialize, Default, PartialEq)]
+struct DeepNestedCfg {
+    #[serde(default)]
+    deep: DeepLevel,
+}
+
+#[derive(Debug, Deserialize, Default, PartialEq)]
+struct DeepLevel {
+    #[serde(default)]
+    nest: DeepNest,
+}
+
+#[derive(Debug, Deserialize, Default, PartialEq)]
+struct DeepNest {
+    host: Option<String>,
+}
+
 /// Tests that environment variables with double underscores map to nested
 /// fields.
 ///
@@ -257,4 +274,21 @@ fn env_values_support_nesting_defaults() {
     let cfg: NestedCfg = with_subcommand_config(|_| Ok(())).expect("config");
     assert_eq!(cfg.nested.host, None);
     assert_eq!(cfg.nested.port, None);
+}
+
+/// Tests multi-level splitting of environment variable keys.
+///
+/// # Examples
+///
+/// ```
+/// env_values_support_deeper_nesting();
+/// ```
+#[test]
+fn env_values_support_deeper_nesting() {
+    let cfg: DeepNestedCfg = with_subcommand_config(|j| {
+        j.set_env("APP_CMDS_TEST_DEEP__NEST__HOST", "deep");
+        Ok(())
+    })
+    .expect("config");
+    assert_eq!(cfg.deep.nest.host.as_deref(), Some("deep"));
 }

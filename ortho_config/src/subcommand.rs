@@ -302,7 +302,7 @@ fn load_from_files(paths: &[PathBuf], name: &CmdName) -> Result<Figment, OrthoEr
 ///
 /// # Examples
 ///
-/// ```rust,ignore
+/// ```rust,no_run
 /// use ortho_config::subcommand::{Prefix, CmdName, subcommand_env_provider};
 /// use figment::providers::Env;
 /// let prefix = Prefix::new("app");
