@@ -1,5 +1,4 @@
-//! Helpers for sanitizing and merging command-line arguments with
-//! configuration defaults.
+//! Helpers for sanitizing and merging command-line arguments with configuration defaults.
 
 use crate::OrthoError;
 use figment::{Figment, providers::Serialized};
@@ -52,7 +51,8 @@ fn strip_nulls(value: &mut Value) -> bool {
 /// #[derive(Serialize)]
 /// struct Args { count: Option<u32> }
 ///
-/// let v = value_without_nones(&Args { count: None }).unwrap();
+/// let v = value_without_nones(&Args { count: None })
+///     .expect("expected serialization to succeed");
 /// assert_eq!(v, serde_json::json!({}));
 /// ```
 ///
@@ -63,33 +63,6 @@ pub fn value_without_nones<T: Serialize>(cli: &T) -> Result<Value, serde_json::E
     let mut value = serde_json::to_value(cli)?;
     let _ = strip_nulls(&mut value);
     Ok(value)
-}
-
-/// Convert a [`serde_json::Error`] into [`OrthoError::Gathering`].
-///
-/// This helper is used by [`sanitize_value`] to map JSON serialization
-/// failures into the library's error type.
-///
-/// # Examples
-///
-/// ```rust
-/// use ortho_config::sanitize_value;
-/// use serde::Serialize;
-///
-/// #[derive(Serialize)]
-/// struct Args { count: Option<u32> }
-///
-/// // Sanitize `Args` and map serialization errors to
-/// // `OrthoError::Gathering`.
-/// sanitize_value(&Args { count: None })
-///     .expect("expected sanitization to succeed");
-/// ```
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "Accept by value to enable map_err without a closure"
-)]
-fn convert_gathering_error(e: serde_json::Error) -> OrthoError {
-    OrthoError::Gathering(figment::Error::from(e.to_string()))
 }
 
 /// Serialize `value` to JSON, pruning `None` fields and mapping errors to
@@ -103,8 +76,8 @@ fn convert_gathering_error(e: serde_json::Error) -> OrthoError {
 ///
 /// #[derive(Serialize)]
 /// struct Args { count: Option<u32> }
-///
-/// let v = sanitize_value(&Args { count: None }).unwrap();
+/// let v = sanitize_value(&Args { count: None })
+///     .expect("expected sanitization to succeed");
 /// assert_eq!(v, serde_json::json!({}));
 /// ```
 ///
@@ -116,7 +89,7 @@ fn convert_gathering_error(e: serde_json::Error) -> OrthoError {
     reason = "Return OrthoError to keep a single error type across the public API"
 )]
 pub fn sanitize_value<T: Serialize>(value: &T) -> Result<Value, OrthoError> {
-    value_without_nones(value).map_err(convert_gathering_error)
+    value_without_nones(value).map_err(Into::into)
 }
 
 /// Produce a Figment provider from `value` with `None` fields removed.
@@ -134,8 +107,11 @@ pub fn sanitize_value<T: Serialize>(value: &T) -> Result<Value, OrthoError> {
 /// #[derive(Serialize)]
 /// struct Args { count: Option<u32> }
 ///
-/// let provider = sanitized_provider(&Args { count: None }).unwrap();
-/// let value: serde_json::Value = Figment::from(provider).extract().unwrap();
+/// let provider = sanitized_provider(&Args { count: None })
+///     .expect("expected provider creation to succeed");
+/// let value: serde_json::Value = Figment::from(provider)
+///     .extract()
+///     .expect("expected extraction to succeed");
 /// assert_eq!(value, serde_json::json!({}));
 /// ```
 ///
