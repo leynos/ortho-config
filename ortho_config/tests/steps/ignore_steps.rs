@@ -14,15 +14,20 @@ fn set_ignore_env(world: &mut World, val: String) {
     reason = "Cucumber step requires owned String"
 )]
 fn load_ignore(world: &mut World, cli: String) {
-    let env_val = world
-        .env_value
-        .as_deref()
-        .expect("DDLINT_IGNORE_PATTERNS not set");
+    let env_val = world.env_value.take();
     let mut result = None;
     figment::Jail::expect_with(|j| {
-        j.set_env("DDLINT_IGNORE_PATTERNS", env_val);
+        if let Some(val) = env_val.as_deref() {
+            j.set_env("DDLINT_IGNORE_PATTERNS", val);
+        }
+        let mut args = vec!["prog".to_string()];
+        if !cli.is_empty() {
+            args.push("--ignore-patterns".into());
+            args.push(cli.trim().to_string());
+        }
+        let refs: Vec<&str> = args.iter().map(String::as_str).collect();
         result = Some(<RulesConfig as ortho_config::OrthoConfig>::load_from_iter(
-            ["prog", "--ignore-patterns", cli.as_str()],
+            refs,
         ));
         Ok(())
     });

@@ -1,7 +1,7 @@
 //! Steps demonstrating a renamed configuration path flag.
 
 use crate::{RulesConfig, World};
-use cucumber::{given, when};
+use cucumber::{given, then, when};
 use ortho_config::OrthoConfig;
 
 #[given(expr = "an alternate config file with rule {string}")]
@@ -24,4 +24,17 @@ fn load_with_custom_flag(world: &mut World, flag: String, path: String) {
         Ok(())
     });
     world.result = result;
+}
+
+#[then("config loading fails with a CLI parsing error")]
+fn cli_error(world: &mut World) {
+    let err = world
+        .result
+        .take()
+        .expect("missing result")
+        .expect_err("expected CLI parsing error");
+    match err {
+        ortho_config::OrthoError::CliParsing(_) => {}
+        other => panic!("unexpected error: {other:?}"),
+    }
 }

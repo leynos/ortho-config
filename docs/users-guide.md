@@ -237,7 +237,7 @@ names with double underscores. For example, if `AppConfig` has a nested
 prefix is used for its fields (e.g. `APP_DB_URL`).
 
 When `clap`'s `flatten` attribute is employed to compose argument groups, the
-flattened struct is initialised even if no CLI flags within the group are
+flattened struct is initialized even if no CLI flags within the group are
 specified. During merging, `ortho_config` discards these empty groups so that
 values from configuration files or the environment remain in place unless a
 field is explicitly supplied on the command line.
@@ -296,8 +296,9 @@ Each entry becomes a map key with its associated struct value.
 
 Lists of files or directories to exclude can be specified via comma-separated
 environment variables and CLI flags. Values are merged using the `append`
-strategy so configuration defaults are extended by environment variables and
-finally by the CLI. For example:
+strategy, so that configuration defaults are extended by environment variables
+and finally by the CLI. Whitespace around entries is trimmed and duplicates are
+preserved. For example:
 
 ```bash
 DDLINT_IGNORE_PATTERNS=".git/,build/"
@@ -447,7 +448,7 @@ Missing required values:
 
 - **Changing naming conventions** – Currently, only the default
   snake/kebab/upper snake mappings are supported. Future versions may introduce
-  attributes such as `file_key` or `env` to customise names further.
+  attributes such as `file_key` or `env` to customize names further.
 
 - **Testing** – Because the CLI and environment variables are merged at
   runtime, integration tests should set environment variables and construct CLI

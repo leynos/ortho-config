@@ -25,12 +25,17 @@ fn loads_map_from_file() {
     figment::Jail::expect_with(|j| {
         j.create_file(
             ".config.toml",
-            "[rules.a]\nenabled = true\n[rules.b]\nenabled = false",
+            r"[rules.a]
+enabled = true
+[rules.b]
+enabled = false
+",
         )?;
         let fig = Figment::from(Toml::file(".config.toml"));
         let cfg: TableConfig = fig.extract().expect("extract");
         assert!(cfg.rules.get("a").is_some_and(|r| r.enabled));
         assert!(cfg.rules.get("b").is_some_and(|r| !r.enabled));
+        assert_eq!(cfg.rules.len(), 2, "unexpected rule entries parsed");
         Ok(())
     });
 }
@@ -44,6 +49,7 @@ fn loads_map_from_env() {
         let cfg: TableConfig = fig.extract().expect("extract");
         assert!(cfg.rules.get("a").is_some_and(|r| r.enabled));
         assert!(cfg.rules.get("b").is_some_and(|r| !r.enabled));
+        assert_eq!(cfg.rules.len(), 2, "unexpected rule entries parsed");
         Ok(())
     });
 }
@@ -60,6 +66,31 @@ fn loads_map_from_cli() {
         let cfg: TableConfig = fig.extract().expect("extract");
         assert!(cfg.rules.get("a").is_some_and(|r| r.enabled));
         assert!(cfg.rules.get("b").is_some_and(|r| !r.enabled));
+        assert_eq!(cfg.rules.len(), 2, "unexpected rule entries parsed");
+        Ok(())
+    });
+}
+
+#[rstest]
+fn merges_map_from_sources() {
+    figment::Jail::expect_with(|j| {
+        j.create_file(
+            ".config.toml",
+            r"[rules.a]
+enabled = true
+",
+        )?;
+        j.set_env("RULES__B__ENABLED", "false");
+        let fig = Figment::from(Toml::file(".config.toml"))
+            .merge(Env::raw().split("__"))
+            .merge(Serialized::defaults(&json!({
+                "rules": { "c": { "enabled": true } }
+            })));
+        let cfg: TableConfig = fig.extract().expect("extract");
+        assert!(cfg.rules.get("a").is_some_and(|r| r.enabled));
+        assert!(cfg.rules.get("b").is_some_and(|r| !r.enabled));
+        assert!(cfg.rules.get("c").is_some_and(|r| r.enabled));
+        assert_eq!(cfg.rules.len(), 3, "unexpected rule entries parsed");
         Ok(())
     });
 }

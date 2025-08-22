@@ -340,9 +340,10 @@ flags and follow the usual precedence rules.
 Vector fields such as `ignore_patterns` can be populated from comma-separated
 environment variables and CLI flags. Values are merged using the `append` merge
 strategy so that patterns from configuration files are extended by environment
-variables and finally CLI arguments.
+variables and finally CLI arguments. Whitespace is trimmed and duplicates are
+preserved.
 
-### 4.12. Renaming the Configuration Path Flag
+### 4.12. Renaming the configuration path flag
 
 The derive macro exposes the generated `config_path` field, allowing projects
 to rename the hidden `--config-path` flag by defining their own field with a

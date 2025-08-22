@@ -97,11 +97,11 @@ references the relevant design guidance.
 
 - **Support custom option names for the configuration path**
 
-  - [ ] Allow renaming of the auto‑generated `--config-path` flag and its
+  - [x] Allow renaming of the auto‑generated `--config-path` flag and its
     environment variable (e.g. to `--config`) via an attribute on the
     configuration struct. [[DDLint Gap Analysis](ddlint-gap-analysis.md)]
 
-  - [ ] Update documentation and examples to illustrate this override.
+  - [x] Update documentation and examples to illustrate this override.
 
   - **Enable dynamic tables for arbitrary keys**
 
@@ -114,11 +114,11 @@ references the relevant design guidance.
 
 - **Implement ignore‑pattern list handling**
 
-  - [ ] Provide support for ignore pattern lists using comma‑separated
+  - [x] Provide support for ignore pattern lists using comma‑separated
     environment variables and CLI flags.
     [[DDLint Gap Analysis](ddlint-gap-analysis.md)]
 
-  - [ ] Document the precedence rules and the relationship to defaults (e.g.
+  - [x] Document the precedence rules and the relationship to defaults (e.g.
     `[".git/", "build/", "target/"]`).
 
 - **Address future enhancements**
