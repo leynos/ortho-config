@@ -54,9 +54,9 @@ without requiring all values to be defined in lower-precedence layers.
 
 The `load_subcommand_config` and `load_subcommand_config_for` functions, which
 only load defaults, become less useful with the improved `load_and_merge`. To
-simplify the API, these could be deprecated and eventually removed, guiding
-users towards the more comprehensive `load_and_merge` as the single,
-recommended way to handle subcommand configuration.
+simplify the API, these were deprecated in v0.3.0 and are scheduled for removal
+in v0.4.0. This guides users towards the more comprehensive `load_and_merge` as
+the single, recommended way to handle subcommand configuration.
 
 ## How this Simplifies `vk`
 

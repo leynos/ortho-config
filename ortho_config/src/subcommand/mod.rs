@@ -72,7 +72,8 @@ fn load_from_files(paths: &[PathBuf], name: &CmdName) -> Result<Figment, OrthoEr
 ///
 /// # Deprecated
 ///
-/// This function is deprecated. Use the newer combined loading and merging functions instead. Removal is tracked on the project roadmap.
+/// This function is deprecated. Use the newer combined loading and merging
+/// functions instead. Planned removal: v0.4.0 (see the project roadmap).
 ///
 /// # Errors
 ///
@@ -141,7 +142,7 @@ where
 ///
 /// This function is deprecated. Use
 /// [`load_and_merge_subcommand_for`](crate::load_and_merge_subcommand_for)
-/// instead. Removal is tracked on the project roadmap.
+/// instead. Planned removal: v0.4.0 (see the project roadmap).
 pub fn load_subcommand_config_for<T>(name: &CmdName) -> Result<T, OrthoError>
 where
     T: crate::OrthoConfig + Default,
