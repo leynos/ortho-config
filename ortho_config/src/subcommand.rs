@@ -7,7 +7,7 @@ use directories::BaseDirs;
 use figment::{Figment, providers::Env};
 use serde::de::DeserializeOwned;
 use std::path::{Path, PathBuf};
-use uncased::Uncased;
+use uncased::{Uncased, UncasedStr};
 #[cfg(any(unix, target_os = "redox"))]
 use xdg::BaseDirectories;
 
@@ -294,27 +294,33 @@ fn load_from_files(paths: &[PathBuf], name: &CmdName) -> Result<Figment, OrthoEr
     Ok(fig)
 }
 
+fn to_uncased(key: &UncasedStr) -> Uncased<'_> {
+    Uncased::from(key)
+}
+
 /// Create an environment provider for a subcommand.
 ///
 /// The provider reads variables following the pattern
 /// `<PREFIX>CMDS_<NAME>_` and performs case-insensitive key matching via
 /// `Uncased`. Double underscores are interpreted as key separators.
 ///
+/// The `prefix` is used verbatim in environment variable names. Pass your
+/// preferred case and delimiters (commonly upper-case with a trailing `_`)
+/// if you want a separator before `CMDS_`.
+///
 /// # Examples
 ///
 /// ```rust,no_run
 /// use ortho_config::subcommand::{Prefix, CmdName, subcommand_env_provider};
 /// use figment::providers::Env;
-/// let prefix = Prefix::new("app");
+/// let prefix = Prefix::new("APP_");
 /// let name = CmdName::new("serve");
 /// let _env: Env = subcommand_env_provider(&prefix, &name);
 /// ```
 fn subcommand_env_provider(prefix: &Prefix, name: &CmdName) -> Env {
     let env_name = name.env_key();
     let env_prefix = format!("{}CMDS_{env_name}_", prefix.raw());
-    Env::prefixed(&env_prefix)
-        .split("__")
-        .map(|k| Uncased::from(k))
+    Env::prefixed(&env_prefix).split("__").map(to_uncased)
 }
 
 /// Load configuration for a specific subcommand.

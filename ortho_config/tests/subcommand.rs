@@ -248,32 +248,34 @@ struct DeepNest {
     host: Option<String>,
 }
 
-/// Tests that environment variables with double underscores map to nested
-/// fields.
-///
-/// # Examples
-///
-/// ```
-/// env_values_support_nesting();
-/// ```
-#[test]
-fn env_values_support_nesting() {
+/// Environment variables with double underscores map to nested fields, and
+/// defaults apply when values are absent.
+#[rstest::rstest]
+#[case(
+    Some(("APP_CMDS_TEST_NESTED__HOST", "env")),
+    Some(("APP_CMDS_TEST_NESTED__PORT", "8080")),
+    Some("env"),
+    Some(8080u16)
+)]
+#[case(None, None, None, None)]
+fn env_values_support_nesting_cases(
+    #[case] host_kv: Option<(&str, &str)>,
+    #[case] port_kv: Option<(&str, &str)>,
+    #[case] expect_host: Option<&str>,
+    #[case] expect_port: Option<u16>,
+) {
     let cfg: NestedCfg = with_subcommand_config(|j| {
-        j.set_env("APP_CMDS_TEST_NESTED__HOST", "env");
-        j.set_env("APP_CMDS_TEST_NESTED__PORT", "8080");
+        if let Some((k, v)) = host_kv {
+            j.set_env(k, v);
+        }
+        if let Some((k, v)) = port_kv {
+            j.set_env(k, v);
+        }
         Ok(())
     })
     .expect("config");
-    assert_eq!(cfg.nested.host.as_deref(), Some("env"));
-    assert_eq!(cfg.nested.port, Some(8080));
-}
-
-/// Defaults are returned when nested variables are absent.
-#[test]
-fn env_values_support_nesting_defaults() {
-    let cfg: NestedCfg = with_subcommand_config(|_| Ok(())).expect("config");
-    assert_eq!(cfg.nested.host, None);
-    assert_eq!(cfg.nested.port, None);
+    assert_eq!(cfg.nested.host.as_deref(), expect_host);
+    assert_eq!(cfg.nested.port, expect_port);
 }
 
 /// Tests multi-level splitting of environment variable keys.
