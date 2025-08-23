@@ -246,40 +246,29 @@ pub(crate) fn build_dotfile_name(struct_attrs: &StructAttrs) -> proc_macro2::Tok
     quote! { #base }
 }
 
-/// Builds discovery code for TOML configuration files.
+/// Builds discovery code for configuration files with the given extensions.
+///
+/// The extensions are tried sequentially; earlier entries take precedence over
+/// later ones. Passing `["json", "json5", "yaml", "yml"]` will therefore
+/// try `config.json` before `config.json5` and either `config.yaml` or
+/// `config.yml`.
+///
+/// JSON and JSON5 support are only available when the `json5` feature is
+/// enabled, and YAML/YML support requires the `yaml` feature.
 ///
 /// # Examples
 ///
 /// ```ignore
-/// let tokens = build_toml_discovery();
+/// let tokens = build_discovery(["json", "json5", "yaml", "yml"]);
 /// assert!(!tokens.is_empty());
 /// ```
-fn build_toml_discovery() -> proc_macro2::TokenStream {
-    quote! { try_load_config(&mut file_fig, &["toml"], &mut discovery_errors); }
-}
-
-/// Builds discovery code for JSON and JSON5 configuration files.
-///
-/// # Examples
-///
-/// ```ignore
-/// let tokens = build_json_discovery();
-/// assert!(!tokens.is_empty());
-/// ```
-fn build_json_discovery() -> proc_macro2::TokenStream {
-    quote! { try_load_config(&mut file_fig, &["json", "json5"], &mut discovery_errors); }
-}
-
-/// Builds discovery code for YAML configuration files.
-///
-/// # Examples
-///
-/// ```ignore
-/// let tokens = build_yaml_discovery();
-/// assert!(!tokens.is_empty());
-/// ```
-fn build_yaml_discovery() -> proc_macro2::TokenStream {
-    quote! { try_load_config(&mut file_fig, &["yaml", "yml"], &mut discovery_errors); }
+fn build_discovery<I, S>(exts: I) -> proc_macro2::TokenStream
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<str>,
+{
+    let exts = exts.into_iter().map(|s| s.as_ref().to_owned());
+    quote! { try_load_config(&mut file_fig, &[#(#exts),*], &mut discovery_errors); }
 }
 
 /// Builds the XDG base directory configuration discovery snippet.
@@ -291,9 +280,9 @@ fn build_yaml_discovery() -> proc_macro2::TokenStream {
 /// assert!(!tokens.is_empty());
 /// ```
 fn build_xdg_config_discovery() -> proc_macro2::TokenStream {
-    let toml = build_toml_discovery();
-    let json = build_json_discovery();
-    let yaml = build_yaml_discovery();
+    let toml = build_discovery(["toml"]);
+    let json = build_discovery(["json", "json5"]);
+    let yaml = build_discovery(["yaml", "yml"]);
     quote! {
         let try_load_config = |
             fig: &mut Option<figment::Figment>,
