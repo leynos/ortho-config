@@ -127,7 +127,8 @@ impl OrthoError {
     }
 }
 
-/// Convert JSON serialization errors into [`OrthoError::Gathering`].
+/// Convert JSON serialization and deserialization errors into
+/// [`OrthoError::Gathering`].
 ///
 /// # Examples
 ///
@@ -141,7 +142,12 @@ impl OrthoError {
 /// ```
 impl From<serde_json::Error> for OrthoError {
     fn from(e: serde_json::Error) -> Self {
-        OrthoError::Gathering(figment::Error::from(e.to_string()))
+        OrthoError::Gathering(figment::Error::from(format!(
+            "{} at line {}, column {}",
+            e,
+            e.line(),
+            e.column()
+        )))
     }
 }
 

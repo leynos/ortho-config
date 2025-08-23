@@ -89,7 +89,8 @@ pub fn value_without_nones<T: Serialize>(cli: &T) -> Result<Value, serde_json::E
     reason = "Return OrthoError to keep a single error type across the public API"
 )]
 pub fn sanitize_value<T: Serialize>(value: &T) -> Result<Value, OrthoError> {
-    value_without_nones(value).map_err(Into::into)
+    let v = value_without_nones(value)?;
+    Ok(v)
 }
 
 /// Produce a Figment provider from `value` with `None` fields removed.
