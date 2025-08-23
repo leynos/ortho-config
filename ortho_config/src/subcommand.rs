@@ -275,7 +275,6 @@ fn candidate_paths(prefix: &Prefix) -> Vec<PathBuf> {
 }
 
 /// Load and merge `[cmds.<name>]` sections from the given paths.
-#[allow(clippy::result_large_err)]
 /// Loads and merges configuration for a subcommand from the specified files.
 ///
 /// For each provided path, loads the configuration file and merges the `[cmds.<name>]` section into a single `Figment` instance. Only the focused section for the given subcommand is merged from each file.
@@ -343,7 +342,6 @@ fn subcommand_env_provider(prefix: &Prefix, name: &CmdName) -> Env {
 ///
 /// Use [`load_and_merge_subcommand`] or [`load_and_merge_subcommand_for`] instead
 /// to load defaults and apply CLI overrides in one step.
-#[allow(clippy::result_large_err)]
 #[deprecated(note = "use `load_and_merge_subcommand` or `load_and_merge_subcommand_for` instead")]
 /// Loads configuration for a specific subcommand from files and environment variables.
 ///
@@ -383,7 +381,7 @@ where
 
     fig = fig.merge(subcommand_env_provider(prefix, name));
 
-    fig.extract().map_err(OrthoError::Gathering)
+    fig.extract().map_err(|e| OrthoError::Gathering(e.into()))
 }
 
 /// Load default values for a subcommand using `T`'s configured prefix.
@@ -396,7 +394,6 @@ where
 /// # Errors
 ///
 /// Returns an [`OrthoError`] if file loading or deserialization fails.
-#[allow(clippy::result_large_err)]
 /// Loads configuration defaults for a subcommand using the prefix defined by the type.
 ///
 /// This function retrieves the configuration for the specified subcommand, using the prefix provided by the `OrthoConfig` implementation of `T`. It loads and merges configuration from files and environment variables, returning the resulting configuration as type `T`.
@@ -441,7 +438,6 @@ where
 /// # Errors
 ///
 /// Returns an [`OrthoError`] if file loading or deserialization fails.
-#[allow(clippy::result_large_err)]
 /// Loads configuration defaults for a subcommand and merges CLI-provided values over them.
 ///
 /// This function determines the subcommand name from the type `T`, loads its default configuration from files and environment variables using the given prefix, and overlays values provided via the CLI. The resulting configuration is returned as type `T`.
@@ -490,7 +486,6 @@ where
 /// # Errors
 ///
 /// Returns an [`OrthoError`] if file loading or deserialization fails.
-#[allow(clippy::result_large_err)]
 /// Loads and merges configuration for a subcommand using the prefix defined by its type.
 ///
 /// Loads default configuration values for the subcommand from files and environment variables, then merges CLI-provided values over these defaults. The prefix is determined by the `OrthoConfig` implementation of the type.

@@ -65,7 +65,7 @@ pub fn value_without_nones<T: Serialize>(cli: &T) -> Result<Value, serde_json::E
 }
 
 fn convert_gathering_error(e: &serde_json::Error) -> OrthoError {
-    OrthoError::Gathering(figment::Error::from(e.to_string()))
+    OrthoError::Gathering(figment::Error::from(e.to_string()).into())
 }
 
 /// Serialize `value` to JSON, pruning `None` fields and mapping errors to
@@ -87,10 +87,6 @@ fn convert_gathering_error(e: &serde_json::Error) -> OrthoError {
 /// # Errors
 ///
 /// Returns an [`OrthoError`] if JSON serialization fails.
-#[expect(
-    clippy::result_large_err,
-    reason = "Return OrthoError to keep a single error type across the public API"
-)]
 pub fn sanitize_value<T: Serialize>(value: &T) -> Result<Value, OrthoError> {
     value_without_nones(value).map_err(|e| convert_gathering_error(&e))
 }
@@ -118,10 +114,6 @@ pub fn sanitize_value<T: Serialize>(value: &T) -> Result<Value, OrthoError> {
 /// # Errors
 ///
 /// Returns an [`OrthoError`] if JSON serialization fails.
-#[expect(
-    clippy::result_large_err,
-    reason = "Return OrthoError to keep a single error type across the public API"
-)]
 pub fn sanitized_provider<T: Serialize>(
     value: &T,
 ) -> Result<Serialized<serde_json::Value>, OrthoError> {

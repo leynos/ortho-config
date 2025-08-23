@@ -50,33 +50,23 @@ pub use file::load_config_file;
 pub trait OrthoConfig: Sized + serde::de::DeserializeOwned {
     /// Loads configuration from command-line arguments, environment variables
     /// and configuration files using the standard precedence rules.
-    ///
     /// Command-line arguments have the highest precedence, followed by
     /// environment variables and finally configuration files. Default values
     /// specified via `#[ortho_config(default = ...)]` sit at the lowest
     /// precedence level.
-    ///
     /// ```rust,no_run
     /// use ortho_config::{OrthoConfig, OrthoError};
     /// use serde::Deserialize;
-    ///
     /// #[derive(Deserialize, OrthoConfig)]
     /// struct AppConfig {
     ///     port: u16,
     /// }
-    ///
     /// # fn main() -> Result<(), OrthoError> {
     /// let _cfg = AppConfig::load()?;
     /// # Ok(())
     /// # }
     /// ```
-    #[expect(
-        clippy::result_large_err,
-        reason = "Return OrthoError to keep a single error type across the public API"
-    )]
-    ///
     /// # Errors
-    ///
     /// Returns an [`OrthoError`] if parsing command-line arguments, reading
     /// files or deserializing configuration fails.
     fn load() -> Result<Self, OrthoError> {
@@ -85,13 +75,7 @@ pub trait OrthoConfig: Sized + serde::de::DeserializeOwned {
 
     /// Loads configuration from the provided iterator of command-line
     /// arguments.
-    #[expect(
-        clippy::result_large_err,
-        reason = "Return OrthoError to keep a single error type across the public API"
-    )]
-    ///
     /// # Errors
-    ///
     /// Returns an [`OrthoError`] if parsing command-line arguments, reading
     /// files or deserializing configuration fails.
     fn load_from_iter<I, T>(iter: I) -> Result<Self, OrthoError>

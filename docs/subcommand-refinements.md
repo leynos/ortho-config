@@ -68,7 +68,6 @@ function would no longer be necessary. The `main` function would look like this:
 // Simplified vk/src/main.rs
 
 #[tokio::main]
-#[allow(clippy::result_large_err)]
 async fn main() -> Result<(), VkError> {
     let cli = Cli::parse();
     let mut global = GlobalArgs::load_from_iter(std::env::args_os().take(1))?;
