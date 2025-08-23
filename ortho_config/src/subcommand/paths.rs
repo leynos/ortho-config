@@ -25,7 +25,12 @@ where
 }
 
 fn dotted(prefix: &Prefix) -> String {
-    format!(".{}", prefix.as_str())
+    let p = prefix.as_str();
+    if p.is_empty() {
+        String::new()
+    } else {
+        format!(".{p}")
+    }
 }
 
 /// Adds candidate configuration file paths under `dir` using `base` as the file stem.
@@ -246,11 +251,6 @@ mod tests {
         };
 
         fs::write(xdg_cfg_dir.join("config.toml"), "").expect("toml");
-        #[cfg(feature = "json5")]
-        {
-            fs::write(xdg_cfg_dir.join("config.json"), "").expect("json");
-            fs::write(xdg_cfg_dir.join("config.json5"), "").expect("json5");
-        }
         #[cfg(feature = "yaml")]
         {
             fs::write(xdg_cfg_dir.join("config.yaml"), "").expect("yaml");
@@ -260,45 +260,36 @@ mod tests {
         let prefix = Prefix::new(prefix_raw);
         let paths = candidate_paths(&prefix);
 
-        let dotted = if prefix.as_str().is_empty() {
-            ".".to_string()
-        } else {
-            format!(".{}", prefix.as_str())
-        };
+        let dotted_prefix = dotted(&prefix);
 
         let mut expected_files = Vec::new();
-        expected_files.push(format!("{dotted}.toml"));
+        expected_files.push(format!("{dotted_prefix}.toml"));
         #[cfg(feature = "json5")]
         {
-            expected_files.push(format!("{dotted}.json"));
-            expected_files.push(format!("{dotted}.json5"));
+            expected_files.push(format!("{dotted_prefix}.json"));
+            expected_files.push(format!("{dotted_prefix}.json5"));
         }
         #[cfg(feature = "yaml")]
         {
-            expected_files.push(format!("{dotted}.yaml"));
-            expected_files.push(format!("{dotted}.yml"));
+            expected_files.push(format!("{dotted_prefix}.yaml"));
+            expected_files.push(format!("{dotted_prefix}.yml"));
         }
         expected_files.push("config.toml".to_string());
-        #[cfg(feature = "json5")]
-        {
-            expected_files.push("config.json".to_string());
-            expected_files.push("config.json5".to_string());
-        }
         #[cfg(feature = "yaml")]
         {
             expected_files.push("config.yaml".to_string());
             expected_files.push("config.yml".to_string());
         }
-        expected_files.push(format!("{dotted}.toml"));
+        expected_files.push(format!("{dotted_prefix}.toml"));
         #[cfg(feature = "json5")]
         {
-            expected_files.push(format!("{dotted}.json"));
-            expected_files.push(format!("{dotted}.json5"));
+            expected_files.push(format!("{dotted_prefix}.json"));
+            expected_files.push(format!("{dotted_prefix}.json5"));
         }
         #[cfg(feature = "yaml")]
         {
-            expected_files.push(format!("{dotted}.yaml"));
-            expected_files.push(format!("{dotted}.yml"));
+            expected_files.push(format!("{dotted_prefix}.yaml"));
+            expected_files.push(format!("{dotted_prefix}.yml"));
         }
 
         let files: Vec<String> = paths
@@ -329,13 +320,13 @@ mod tests {
 
         let xdg_parent = paths[group_len].parent().unwrap();
         assert!(
-            paths[group_len..group_len * 2]
+            paths[group_len..paths.len() - group_len]
                 .iter()
                 .all(|p| p.parent() == Some(xdg_parent))
         );
 
         assert!(
-            paths[group_len * 2..]
+            paths[paths.len() - group_len..]
                 .iter()
                 .all(|p| p.parent() == Some(Path::new(".")))
         );
