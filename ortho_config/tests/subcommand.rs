@@ -283,14 +283,25 @@ fn env_values_support_nesting_cases(
 /// # Examples
 ///
 /// ```
-/// env_values_support_deeper_nesting();
+/// env_values_support_deeper_nesting(
+///     Some(("APP_CMDS_TEST_DEEP__NEST__HOST", "deep")),
+///     Some("deep"),
+/// );
+/// env_values_support_deeper_nesting(None, None);
 /// ```
-#[test]
-fn env_values_support_deeper_nesting() {
+#[rstest::rstest]
+#[case(Some(("APP_CMDS_TEST_DEEP__NEST__HOST", "deep")), Some("deep"))]
+#[case(None, None)]
+fn env_values_support_deeper_nesting(
+    #[case] kv: Option<(&str, &str)>,
+    #[case] expect_host: Option<&str>,
+) {
     let cfg: DeepNestedCfg = with_subcommand_config(|j| {
-        j.set_env("APP_CMDS_TEST_DEEP__NEST__HOST", "deep");
+        if let Some((k, v)) = kv {
+            j.set_env(k, v);
+        }
         Ok(())
     })
     .expect("config");
-    assert_eq!(cfg.deep.nest.host.as_deref(), Some("deep"));
+    assert_eq!(cfg.deep.nest.host.as_deref(), expect_host);
 }
