@@ -51,8 +51,8 @@ fn load_from_files(paths: &[PathBuf], name: &CmdName) -> Result<Figment, OrthoEr
 ///
 /// # Errors
 ///
-/// Returns [`OrthoError::Merge`] if CLI values cannot be merged or if
-/// deserialisation fails.
+/// Returns [`OrthoError::Gathering`] if configuration files cannot be loaded or
+/// if deserialisation fails.
 ///
 /// # Deprecated
 ///
@@ -106,7 +106,8 @@ where
 /// # Errors
 ///
 /// Returns [`OrthoError::Merge`] if CLI values cannot be merged or if
-/// deserialisation fails.
+/// deserialisation fails. Because CLI merging occurs, this function does not
+/// return [`OrthoError::Gathering`].
 #[expect(
     clippy::result_large_err,
     reason = "Figment merge errors inflate Result size; wrapping in `Arc` is tracked on the roadmap for v0.4.0"
@@ -165,7 +166,8 @@ where
 /// # Errors
 ///
 /// Returns [`OrthoError::Merge`] if CLI values cannot be merged or if
-/// deserialisation fails.
+/// deserialisation fails. Because CLI merging occurs, this function does not
+/// return [`OrthoError::Gathering`].
 #[expect(
     clippy::result_large_err,
     reason = "Figment merge errors inflate Result size; wrapping in `Arc` is tracked on the roadmap for v0.4.0"
@@ -179,6 +181,9 @@ where
 /// # Returns
 ///
 /// The merged configuration for the subcommand, or an error if loading or merging fails.
+///
+/// CLI-provided values override defaults from configuration files or
+/// environment variables.
 ///
 /// # Examples
 ///
@@ -197,7 +202,7 @@ where
 /// let prefix = Prefix::new("MYAPP");
 /// let cli = MyCmd { value: Some("cli".to_string()) };
 /// let config = load_and_merge_subcommand(&prefix, &cli)?;
-/// // CLI-provided value overrides the file default.
+/// // Assert CLI overrides defaults (assuming a file/env default of "file").
 /// assert_eq!(config.value.as_deref(), Some("cli"));
 /// # Ok(())
 /// # }
