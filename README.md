@@ -64,22 +64,6 @@ struct DatabaseConfig {
     pool_size: Option<u32>, // Optional value, defaults to `Some(5)`
 }
 
-impl std::str::FromStr for DatabaseConfig {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut parts = s.splitn(2, ',');
-        let url = parts
-            .next()
-            .ok_or_else(|| "missing url".to_string())?
-            .to_string();
-        let pool_size = parts
-            .next()
-            .and_then(|p| p.parse::<u32>().ok());
-        Ok(DatabaseConfig { url, pool_size })
-    }
-}
-
 #[derive(Debug, Deserialize, Serialize, OrthoConfig)]
 #[ortho_config(prefix = "APP")] // Prefix for environment variables (e.g., APP_LOG_LEVEL)
 struct AppConfig {
