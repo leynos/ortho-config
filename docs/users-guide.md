@@ -107,8 +107,9 @@ A configuration is represented by a plain Rust struct. To take advantage of
   values and merging overrides.
 
 - The derive macro generates a hidden `clap::Parser` implementation, so
-  no manual `clap` annotations are needed. CLI customisation is performed using
-  `ortho_config` attributes such as `cli_short` or `cli_long`.
+  manual `clap` annotations are not required in typical use. CLI customization
+  is performed using `ortho_config` attributes such as `cli_short`, or
+  `cli_long`.
 
 - `OrthoConfig` – provided by the library. This derive macro generates the code
   to load and merge configuration from multiple sources.
@@ -191,12 +192,12 @@ fn main() -> Result<(), OrthoError> {
 }
 ```
 
-No `clap` attributes are required; flags are derived from field names and
-`ortho_config` attributes. In this example the `AppConfig` struct uses a prefix
-of `APP`. The `DatabaseConfig` struct has its own prefix `DB`, resulting in
-environment variables such as `APP_DB_URL`. The `features` field is a
-`Vec<String>` and will accumulate values from multiple sources rather than
-overwriting them.
+`clap` attributes are not required in general; flags are derived from field
+names and `ortho_config` attributes. In this example, the `AppConfig` struct
+uses a prefix of `APP`. The `DatabaseConfig` struct declares a prefix `DB`,
+resulting in environment variables such as `APP_DB_URL`. The `features` field
+is a `Vec` and accumulates values from multiple sources rather than overwriting
+them.
 
 ## Loading configuration and precedence rules
 
