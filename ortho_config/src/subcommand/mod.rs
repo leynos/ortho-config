@@ -29,7 +29,7 @@ pub use types::{CmdName, Prefix};
 /// or an error if loading fails.
 #[expect(
     clippy::result_large_err,
-    reason = "Figment merge errors inflate Result size; wrapping in `Arc` is tracked on the roadmap"
+    reason = "Figment merge errors inflate Result size; wrapping in `Arc` is tracked on the roadmap for v0.4.0"
 )]
 fn load_from_files(paths: &[PathBuf], name: &CmdName) -> Result<Figment, OrthoError> {
     let mut fig = Figment::new();
@@ -51,7 +51,7 @@ fn load_from_files(paths: &[PathBuf], name: &CmdName) -> Result<Figment, OrthoEr
 ///
 /// # Errors
 ///
-/// Returns an [`OrthoError`] if file loading or deserialization fails.
+/// Returns an [`OrthoError`] if file loading or deserialisation fails.
 ///
 /// # Deprecated
 ///
@@ -59,7 +59,7 @@ fn load_from_files(paths: &[PathBuf], name: &CmdName) -> Result<Figment, OrthoEr
 /// to load defaults and apply CLI overrides in one step.
 #[expect(
     clippy::result_large_err,
-    reason = "Figment merge errors inflate Result size; wrapping in `Arc` is tracked on the roadmap"
+    reason = "Figment merge errors inflate Result size; wrapping in `Arc` is tracked on the roadmap for v0.4.0"
 )]
 #[deprecated(note = "use `load_and_merge_subcommand` or `load_and_merge_subcommand_for` instead")]
 /// Loads configuration for a specific subcommand from files and environment variables.
@@ -75,7 +75,7 @@ fn load_from_files(paths: &[PathBuf], name: &CmdName) -> Result<Figment, OrthoEr
 ///
 /// # Errors
 ///
-/// Returns an error if configuration files cannot be loaded or if deserialization fails.
+/// Returns an error if configuration files cannot be loaded or if deserialisation fails.
 pub fn load_subcommand_config<T>(prefix: &Prefix, name: &CmdName) -> Result<T, OrthoError>
 where
     T: DeserializeOwned + Default,
@@ -102,10 +102,10 @@ where
 ///
 /// # Errors
 ///
-/// Returns an [`OrthoError`] if file loading or deserialization fails.
+/// Returns an [`OrthoError`] if file loading or deserialisation fails.
 #[expect(
     clippy::result_large_err,
-    reason = "Figment merge errors inflate Result size; wrapping in `Arc` is tracked on the roadmap"
+    reason = "Figment merge errors inflate Result size; wrapping in `Arc` is tracked on the roadmap for v0.4.0"
 )]
 #[deprecated(note = "use `load_and_merge_subcommand_for` instead")]
 /// Loads configuration defaults for a subcommand using the prefix defined by the type.
@@ -158,10 +158,10 @@ where
 ///
 /// # Errors
 ///
-/// Returns an [`OrthoError`] if file loading or deserialization fails.
+/// Returns an [`OrthoError`] if file loading or deserialisation fails.
 #[expect(
     clippy::result_large_err,
-    reason = "Figment merge errors inflate Result size; wrapping in `Arc` is tracked on the roadmap"
+    reason = "Figment merge errors inflate Result size; wrapping in `Arc` is tracked on the roadmap for v0.4.0"
 )]
 /// Loads configuration defaults for a subcommand and merges CLI-provided values over them.
 ///
@@ -217,10 +217,10 @@ where
 ///
 /// # Errors
 ///
-/// Returns an [`OrthoError`] if file loading or deserialization fails.
+/// Returns an [`OrthoError`] if file loading or deserialisation fails.
 #[expect(
     clippy::result_large_err,
-    reason = "Figment merge errors inflate Result size; wrapping in `Arc` is tracked on the roadmap"
+    reason = "Figment merge errors inflate Result size; wrapping in `Arc` is tracked on the roadmap for v0.4.0"
 )]
 /// Loads and merges configuration for a subcommand using the prefix defined by its type.
 ///

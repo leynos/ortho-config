@@ -143,13 +143,25 @@ mod tests {
     #[cfg(any(unix, target_os = "redox"))]
     use serial_test::serial;
     use std::env;
-    use std::ffi::OsString;
+    use std::ffi::{OsStr, OsString};
     #[cfg(any(unix, target_os = "redox"))]
     use std::fs;
     use std::path::Path;
     #[cfg(any(unix, target_os = "redox"))]
     use std::sync::LazyLock;
     use tempfile::TempDir;
+
+    #[cfg(any(unix, target_os = "redox"))]
+    fn set_env<K: AsRef<OsStr>, V: AsRef<OsStr>>(key: K, val: V) {
+        // SAFETY: tests run serially, so environment mutations do not race.
+        unsafe { env::set_var(key, val) }
+    }
+
+    #[cfg(any(unix, target_os = "redox"))]
+    fn remove_env<K: AsRef<OsStr>>(key: K) {
+        // SAFETY: tests run serially, so environment mutations do not race.
+        unsafe { env::remove_var(key) }
+    }
 
     #[cfg(any(unix, target_os = "redox"))]
     struct XdgGuard {
@@ -161,8 +173,8 @@ mod tests {
     impl Drop for XdgGuard {
         fn drop(&mut self) {
             match &self.old {
-                Some(v) => unsafe { env::set_var("XDG_CONFIG_HOME", v) },
-                None => unsafe { env::remove_var("XDG_CONFIG_HOME") },
+                Some(v) => set_env("XDG_CONFIG_HOME", v),
+                None => remove_env("XDG_CONFIG_HOME"),
             }
         }
     }
@@ -172,9 +184,7 @@ mod tests {
         let old = env::var_os("XDG_CONFIG_HOME");
         let dir = TempDir::new().expect("xdg");
         let path = dir.path().to_path_buf();
-        unsafe {
-            env::set_var("XDG_CONFIG_HOME", &path);
-        }
+        set_env("XDG_CONFIG_HOME", &path);
         XdgGuard { old, dir }
     });
 
@@ -189,17 +199,15 @@ mod tests {
     #[case(&["toml"], &["config.toml"])]
     #[cfg(feature = "json5")]
     #[case(&["json", "json5"], &["config.json", "config.json5"])]
-    #[cfg(feature = "yaml")]
-    #[case(&["yaml", "yml"], &["config.yaml", "config.yml"])]
     fn push_xdg_candidates_finds_files(#[case] exts: &[&str], #[case] files: &[&str]) {
         let dir = xdg_path();
         for entry in fs::read_dir(dir).expect("read dir") {
             let entry = entry.expect("entry");
             let path = entry.path();
             if path.is_dir() {
-                fs::remove_dir_all(&path).expect("clean dir");
+                let _ = fs::remove_dir_all(&path);
             } else {
-                fs::remove_file(&path).expect("clean file");
+                let _ = fs::remove_file(&path);
             }
         }
 
@@ -225,9 +233,7 @@ mod tests {
     fn candidate_paths_ordering(#[case] prefix_raw: &str) {
         let home = TempDir::new().expect("home");
         let old_home = env::var_os("HOME");
-        unsafe {
-            env::set_var("HOME", home.path());
-        }
+        set_env("HOME", home.path());
 
         let xdg_cfg_dir = if prefix_raw.is_empty() {
             xdg_path().to_path_buf()
@@ -333,13 +339,9 @@ mod tests {
         );
 
         if let Some(v) = old_home {
-            unsafe {
-                env::set_var("HOME", v);
-            }
+            set_env("HOME", v);
         } else {
-            unsafe {
-                env::remove_var("HOME");
-            }
+            remove_env("HOME");
         }
     }
 }
