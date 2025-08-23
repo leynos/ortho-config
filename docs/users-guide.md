@@ -317,6 +317,10 @@ struct is returned as a new instance; the original `cli` struct remains
 unchanged. CLI fields left unset (`None`) do not override environment or file
 defaults, avoiding accidental loss of configuration.
 
+For ergonomic use, a `SubcmdConfigMerge` trait is re‑exported. It provides a
+`load_and_merge` method that borrows `self` and returns a merged instance,
+removing the need for each subcommand struct to define its own helper method.
+
 ### How it works
 
 When a struct derives `OrthoConfig`, it also implements the associated

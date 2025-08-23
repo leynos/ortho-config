@@ -325,6 +325,11 @@ fulfil missing defaults and eliminates workarounds like
 `load_with_reference_fallback`. The legacy `load_subcommand_config` helpers are
 retained but deprecated.
 
+To remove repeated `load_and_merge` implementations on each subcommand struct,
+the crate now exposes a blanket `SubcmdConfigMerge` trait. The trait provides a
+`load_and_merge` method that borrows `self`, returning a merged instance while
+leaving the original values untouched.
+
 ### 4.10. Dynamic rule tables
 
 Configuration structures may include map fields such as

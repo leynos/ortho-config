@@ -47,6 +47,9 @@ fn merge_works_for_subcommand() {
         let Commands::Run(args) = cli.cmd;
         let cfg = args.load_and_merge()?;
         assert_eq!(cfg.option.as_deref(), Some("cli"));
+        // `load_and_merge` borrows `self`, so the original `args` remains
+        // accessible afterwards.
+        assert_eq!(args.option.as_deref(), Some("cli"));
         Ok(())
     });
 }
