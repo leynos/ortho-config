@@ -15,7 +15,8 @@ use serde_json::Value;
 ///
 /// This is intended for CLI sanitization so unset [`Option`] fields and
 /// untouched flattened structs do not override defaults from files or
-/// environment variables.
+/// environment variables. Note: this function does not remove empty arrays; it
+/// only clears [`Option::None`] fields.
 ///
 /// Returns `true` if `value` becomes empty after pruning (that is, it is
 /// `Null` or an object with no remaining fields). Arrays never return `true`,
