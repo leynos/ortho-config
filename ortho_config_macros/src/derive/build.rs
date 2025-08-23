@@ -249,13 +249,17 @@ pub(crate) fn build_dotfile_name(struct_attrs: &StructAttrs) -> proc_macro2::Tok
 /// Builds discovery code for configuration files with the given extensions.
 ///
 /// The extensions are tried sequentially; earlier entries take precedence over
-/// later ones. Passing `["json", "json5", "yaml"]` will therefore try
-/// `config.json` before `config.json5` and `config.yaml`.
+/// later ones. Passing `["json", "json5", "yaml", "yml"]` will therefore
+/// try `config.json` before `config.json5` and either `config.yaml` or
+/// `config.yml`.
+///
+/// JSON and JSON5 support are only available when the `json5` feature is
+/// enabled, and YAML/YML support requires the `yaml` feature.
 ///
 /// # Examples
 ///
 /// ```ignore
-/// let tokens = build_discovery(["json", "json5", "yaml"]);
+/// let tokens = build_discovery(["json", "json5", "yaml", "yml"]);
 /// assert!(!tokens.is_empty());
 /// ```
 fn build_discovery<I, S>(exts: I) -> proc_macro2::TokenStream
