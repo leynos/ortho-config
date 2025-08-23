@@ -527,3 +527,55 @@ where
 {
     load_and_merge_subcommand(&Prefix::new(T::prefix()), cli)
 }
+
+/// Helper trait providing a [`load_and_merge`](SubcmdConfigMerge::load_and_merge)
+/// method for subcommand argument structs.
+///
+/// The trait offers a blanket implementation, allowing any type that
+/// satisfies the required bounds to call `load_and_merge` directly. This
+/// avoids duplicating boilerplate `impl` blocks across multiple subcommand
+/// structures.
+///
+/// # Examples
+///
+/// ```rust,no_run
+/// use ortho_config::{OrthoConfig, SubcmdConfigMerge};
+/// use clap::Parser;
+/// use serde::{Deserialize, Serialize};
+///
+/// #[derive(Parser, Deserialize, Serialize, Default, Clone, OrthoConfig)]
+/// #[ortho_config(prefix = "APP_")]
+/// struct Cmd {
+///     #[arg(long)]
+///     value: Option<String>,
+/// }
+///
+/// # fn main() -> Result<(), ortho_config::OrthoError> {
+/// let cli = Cmd::parse_from(["cmd", "--value", "cli"]);
+/// let cfg = cli.load_and_merge()?;
+/// assert_eq!(cfg.value.as_deref(), Some("cli"));
+/// # Ok(())
+/// # }
+/// ```
+#[expect(
+    clippy::result_large_err,
+    reason = "OrthoError comes from external crate and matches API"
+)]
+pub trait SubcmdConfigMerge: Sized {
+    /// Merge defaults from files and environment variables with `self`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`OrthoError`] if loading or merging configuration fails.
+    fn load_and_merge(&self) -> Result<Self, OrthoError>
+    where
+        Self: crate::OrthoConfig + serde::Serialize + Default + CommandFactory,
+    {
+        load_and_merge_subcommand_for(self)
+    }
+}
+
+impl<T> SubcmdConfigMerge for T where
+    T: crate::OrthoConfig + serde::Serialize + Default + CommandFactory
+{
+}

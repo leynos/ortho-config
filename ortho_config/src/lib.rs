@@ -19,8 +19,8 @@ pub use merge::{sanitize_value, sanitized_provider, value_without_nones};
     reason = "Re-export deprecated subcommand helpers for back-compat. FIXME: remove in the next minor release"
 )]
 pub use subcommand::{
-    load_and_merge_subcommand, load_and_merge_subcommand_for, load_subcommand_config,
-    load_subcommand_config_for,
+    SubcmdConfigMerge, load_and_merge_subcommand, load_and_merge_subcommand_for,
+    load_subcommand_config, load_subcommand_config_for,
 };
 
 /// Normalize a prefix by trimming trailing underscores and converting

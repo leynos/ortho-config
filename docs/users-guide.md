@@ -336,7 +336,7 @@ might be defined as follows:
 
 ```rust
 use clap::Parser;
-use ortho_config::{OrthoConfig, load_and_merge_subcommand_for};
+use ortho_config::{OrthoConfig, SubcmdConfigMerge};
 use serde::{Deserialize, Serialize};
 
 #[derive(Parser, Deserialize, Serialize, Debug, OrthoConfig, Clone, Default)]
@@ -356,7 +356,7 @@ pub struct PrArgs {
 fn main() -> Result<(), ortho_config::OrthoError> {
     let cli_pr = PrArgs::parse();
     // Merge defaults from [cmds.pr] and VK_CMDS_PR_* over CLI
-    let merged_pr = load_and_merge_subcommand_for::<PrArgs>(&cli_pr)?;
+    let merged_pr = cli_pr.load_and_merge()?;
     println!("PrArgs after merging: {:#?}", merged_pr);
     Ok(())
 }
