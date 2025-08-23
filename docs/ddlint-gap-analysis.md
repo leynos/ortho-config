@@ -61,8 +61,10 @@ the relevant configuration file sections and environment variables before
 applying CLI arguments.
 
 ```rust
+use ortho_config::SubcmdConfigMerge;
+
 // Reads `[cmds.add-user]` sections and `APP_CMDS_ADD_USER_*` variables then merges with CLI
-let args = load_and_merge_subcommand_for::<AddUserArgs>(&cli)?;
+let args = cli.load_and_merge()?;
 ```
 
 Configuration file example:

@@ -141,7 +141,7 @@ fn merge_helper_combines_defaults_and_cli() {
     assert_eq!(merged.bar, None);
 }
 
-#[derive(Debug, Deserialize, serde::Serialize, OrthoConfig, Default, PartialEq, Parser)]
+#[derive(Debug, Deserialize, serde::Serialize, OrthoConfig, Default, PartialEq, Parser, Clone)]
 #[command(name = "test")]
 #[ortho_config(prefix = "APP_")]
 struct MergePrefixed {

@@ -2,10 +2,10 @@
 
 use clap::Parser;
 use clap_dispatch::clap_dispatch;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use ortho_config::{OrthoConfig, SubcmdConfigMerge};
 
-#[derive(Parser, Deserialize, Default, Debug, Clone, OrthoConfig)]
+#[derive(Parser, Deserialize, Serialize, Default, Debug, Clone, OrthoConfig)]
 #[ortho_config(prefix = "REGCTL_")]
 pub struct AddUserArgs {
     #[arg(long)]
@@ -14,7 +14,7 @@ pub struct AddUserArgs {
     admin: Option<bool>,
 }
 
-#[derive(Parser, Deserialize, Default, Debug, Clone, OrthoConfig)]
+#[derive(Parser, Deserialize, Serialize, Default, Debug, Clone, OrthoConfig)]
 #[ortho_config(prefix = "REGCTL_")]
 pub struct ListItemsArgs {
     #[arg(long)]

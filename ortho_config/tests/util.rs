@@ -11,8 +11,8 @@
 use clap::CommandFactory;
 use ortho_config::subcommand::{CmdName, Prefix};
 use ortho_config::{
-    OrthoConfig, OrthoError, load_and_merge_subcommand, load_and_merge_subcommand_for,
-    load_subcommand_config, load_subcommand_config_for,
+    OrthoConfig, OrthoError, SubcmdConfigMerge, load_and_merge_subcommand, load_subcommand_config,
+    load_subcommand_config_for,
 };
 use serde::de::DeserializeOwned;
 
@@ -110,7 +110,7 @@ where
 pub fn with_merged_subcommand_cli_for<F, T>(setup: F, cli: &T) -> Result<T, OrthoError>
 where
     F: FnOnce(&mut figment::Jail) -> figment::error::Result<()>,
-    T: OrthoConfig + serde::Serialize + Default + CommandFactory,
+    T: OrthoConfig + serde::Serialize + Clone + Default + CommandFactory,
 {
-    with_jail(setup, || load_and_merge_subcommand_for(cli))
+    with_jail(setup, || cli.load_and_merge())
 }

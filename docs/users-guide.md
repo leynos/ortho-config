@@ -311,26 +311,25 @@ results in `ignore_patterns = [".git/", "build/", "target/"]`.
 
 Many CLI applications use `clap` subcommands to perform different operations.
 `OrthoConfig` supports per‑subcommand defaults via a dedicated `cmds`
-namespace. The helper function `load_and_merge_subcommand_for` loads defaults
-for a specific subcommand and merges them beneath the CLI values. The merged
-struct is returned as a new instance; the original `cli` struct remains
-unchanged. CLI fields left unset (`None`) do not override environment or file
-defaults, avoiding accidental loss of configuration.
+namespace. The `SubcmdConfigMerge` trait offers a `load_and_merge` method that
+loads defaults for a specific subcommand and merges them beneath the CLI
+values. The merged struct is returned as a new instance; the original `cli`
+struct remains unchanged. CLI fields left unset (`None`) do not override
+environment or file defaults, avoiding accidental loss of configuration.
 
-For ergonomic use, a `SubcmdConfigMerge` trait is re‑exported. It provides a
-`load_and_merge` method that borrows `self` and returns a merged instance,
-removing the need for each subcommand struct to define its own helper method.
+The `SubcmdConfigMerge` trait is re‑exported to remove boilerplate. Its
+`load_and_merge` method borrows `self` and returns a merged instance.
 
 ### How it works
 
 When a struct derives `OrthoConfig`, it also implements the associated
 `prefix()` method. This method returns the configured prefix string.
-`load_and_merge_subcommand_for(prefix, cli_struct)` uses this prefix to build a
-`cmds.<subcommand>` section name for the configuration file and an
-`PREFIX_CMDS_SUBCOMMAND_` prefix for environment variables. Configuration is
-loaded in the same order as global configuration (defaults → file → environment
-→ CLI), but only values in the `[cmds.<subcommand>]` section or environment
-variables beginning with `PREFIX_CMDS_<SUBCOMMAND>_` are considered.
+`cli_struct.load_and_merge()` uses this prefix to build a `cmds.<subcommand>`
+section name for the configuration file and an `PREFIX_CMDS_SUBCOMMAND_` prefix
+for environment variables. Configuration is loaded in the same order as global
+configuration (defaults → file → environment → CLI), but only values in the
+`[cmds.<subcommand>]` section or environment variables beginning with
+`PREFIX_CMDS_<SUBCOMMAND>_` are considered.
 
 ### Example
 
@@ -395,21 +394,20 @@ tool continues using the CLI value instead of exiting with an error.
 The `clap‑dispatch` crate can be combined with `OrthoConfig` to simplify
 subcommand execution. Each subcommand struct implements a trait defining the
 action to perform. An enum of subcommands is annotated with
-`#[clap_dispatch(fn run(...))]`, and the `load_and_merge_subcommand_for`
-function can be called on each variant before dispatching. See the
-`Subcommand Configuration` section of the `OrthoConfig` [README](../README.md)
-for a complete example.
+`#[clap_dispatch(fn run(...))]`, and the `load_and_merge` method can be called
+on each variant before dispatching. See the `Subcommand Configuration` section
+of the `OrthoConfig` [README](../README.md) for a complete example.
 
 ## Error handling
 
-`load` and `load_and_merge_subcommand_for` return a `Result<T, OrthoError>`.
-`OrthoError` wraps errors from `clap`, file I/O and `figment`. Failures during
-the final merge of CLI values over configuration sources surface as the `Merge`
-variant, providing clearer diagnostics when the combined data is invalid. When
-multiple sources fail, the errors are collected into the `Aggregate` variant so
-callers can inspect each individual failure. Consumers should handle these
-errors appropriately, for example by printing them to stderr and exiting. If
-required fields are missing after merging, the crate returns
+`load` and `load_and_merge` return a `Result<T, OrthoError>`. `OrthoError`
+wraps errors from `clap`, file I/O and `figment`. Failures during the final
+merge of CLI values over configuration sources surface as the `Merge` variant,
+providing clearer diagnostics when the combined data is invalid. When multiple
+sources fail, the errors are collected into the `Aggregate` variant so callers
+can inspect each individual failure. Consumers should handle these errors
+appropriately, for example by printing them to stderr and exiting. If required
+fields are missing after merging, the crate returns
 `OrthoError::MissingRequiredValues` with a user‑friendly list of missing paths
 and hints on how to provide them. For example:
 

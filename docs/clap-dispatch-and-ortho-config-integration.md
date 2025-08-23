@@ -748,7 +748,7 @@ pub struct ListArgs {
    Example of final resolution println!("  Default Format: {:?}",
    self.default_format.as_deref().unwrap_or("text")); Ok(()) } }
 
-// --- Merging Logic --- use ortho_config::load_and_merge_subcommand_for;
+// --- Merging Logic --- use ortho_config::SubcmdConfigMerge;
 
 
 fn main() -> Result<(), String> { // 1. Initialize ortho-config (load files,
@@ -760,7 +760,7 @@ env vars) let ortho_config_store = OrthoConfigStore::load("mycli")?;
     match cli_args.command { Commands::List(clap_parsed_list_args) => { // 4.
     Merge CLI values over ortho-config defaults for the subcommand let
     final_list_args =
-    load_and_merge_subcommand_for::<ListArgs>(&clap_parsed_list_args)?;
+    clap_parsed_list_args.load_and_merge()?;
     Commands::List(final_list_args) } // Commands::Add(clap_parsed_add_args) =>
     { /* similar logic for Add command */ } };
 
@@ -775,10 +775,10 @@ env vars) let ortho_config_store = OrthoConfigStore::load("mycli")?;
 This conceptual code illustrates the key stages: loading `ortho-config`
 defaults, parsing CLI arguments with `clap`, merging these layers with defined
 precedence, and finally dispatching the command using the method provided by
-`clap-dispatch`. The critical merging step now uses
-`load_and_merge_subcommand_for`, which loads the subcommand defaults and
-applies any CLI overrides. A more generic merging strategy might involve
-reflection or a trait implemented by all argument structs.
+`clap-dispatch`. The critical merging step now uses `load_and_merge`, which
+loads the subcommand defaults and applies any CLI overrides. A more generic
+merging strategy might involve reflection or a trait implemented by all
+argument structs.
 
 ### E. Benefits and Rationale for the Proposed Design
 
