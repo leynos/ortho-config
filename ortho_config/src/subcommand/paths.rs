@@ -9,18 +9,22 @@ use directories::BaseDirs;
 #[cfg(any(unix, target_os = "redox"))]
 use xdg::BaseDirectories;
 
+const EXT_GROUPS: &[&[&str]] = &[
+    &["toml"],
+    #[cfg(feature = "json5")]
+    &["json", "json5"],
+    #[cfg(feature = "yaml")]
+    &["yaml", "yml"],
+];
+
 fn push_candidates<F>(paths: &mut Vec<PathBuf>, base: &str, mut to_path: F)
 where
     F: FnMut(String) -> PathBuf,
 {
-    paths.push(to_path(format!("{base}.toml")));
-    #[cfg(feature = "json5")]
-    for ext in ["json", "json5"] {
-        paths.push(to_path(format!("{base}.{ext}")));
-    }
-    #[cfg(feature = "yaml")]
-    for ext in ["yaml", "yml"] {
-        paths.push(to_path(format!("{base}.{ext}")));
+    for group in EXT_GROUPS {
+        for ext in *group {
+            paths.push(to_path(format!("{base}.{ext}")));
+        }
     }
 }
 
@@ -263,16 +267,8 @@ mod tests {
         let dotted_prefix = dotted(&prefix);
 
         let mut expected_files = Vec::new();
-        expected_files.push(format!("{dotted_prefix}.toml"));
-        #[cfg(feature = "json5")]
-        {
-            expected_files.push(format!("{dotted_prefix}.json"));
-            expected_files.push(format!("{dotted_prefix}.json5"));
-        }
-        #[cfg(feature = "yaml")]
-        {
-            expected_files.push(format!("{dotted_prefix}.yaml"));
-            expected_files.push(format!("{dotted_prefix}.yml"));
+        for ext in EXT_GROUPS.iter().flat_map(|g| *g) {
+            expected_files.push(format!("{dotted_prefix}.{ext}"));
         }
         expected_files.push("config.toml".to_string());
         #[cfg(feature = "yaml")]
@@ -280,16 +276,8 @@ mod tests {
             expected_files.push("config.yaml".to_string());
             expected_files.push("config.yml".to_string());
         }
-        expected_files.push(format!("{dotted_prefix}.toml"));
-        #[cfg(feature = "json5")]
-        {
-            expected_files.push(format!("{dotted_prefix}.json"));
-            expected_files.push(format!("{dotted_prefix}.json5"));
-        }
-        #[cfg(feature = "yaml")]
-        {
-            expected_files.push(format!("{dotted_prefix}.yaml"));
-            expected_files.push(format!("{dotted_prefix}.yml"));
+        for ext in EXT_GROUPS.iter().flat_map(|g| *g) {
+            expected_files.push(format!("{dotted_prefix}.{ext}"));
         }
 
         let files: Vec<String> = paths
@@ -298,18 +286,7 @@ mod tests {
             .collect();
         assert_eq!(files, expected_files);
 
-        let group_len = {
-            let mut len = 1;
-            #[cfg(feature = "json5")]
-            {
-                len += 2;
-            }
-            #[cfg(feature = "yaml")]
-            {
-                len += 2;
-            }
-            len
-        };
+        let group_len: usize = EXT_GROUPS.iter().map(|g| g.len()).sum();
 
         let home_parent = paths[0].parent().unwrap();
         assert!(
