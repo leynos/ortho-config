@@ -127,8 +127,8 @@ impl OrthoError {
     }
 }
 
-/// Convert JSON serialization and deserialization errors into
-/// [`OrthoError::Gathering`].
+/// Convert any [`serde_json::Error`], whether from serialization or
+/// deserialization, into [`OrthoError::Gathering`].
 ///
 /// # Examples
 ///
