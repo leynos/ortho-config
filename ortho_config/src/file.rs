@@ -128,6 +128,9 @@ fn get_extends(figment: &Figment, current_path: &Path) -> Result<Option<PathBuf>
 /// `current_path` and canonicalised. Absolute paths are canonicalised
 /// directly.
 ///
+/// Canonicalisation ensures consistent absolute paths for robust cycle
+/// detection and de-duplication across symlinks.
+///
 /// # Errors
 ///
 /// Returns an [`OrthoError`] if the parent directory cannot be determined
@@ -146,7 +149,7 @@ fn get_extends(figment: &Figment, current_path: &Path) -> Result<Option<PathBuf>
 /// # Ok(())
 /// # }
 /// ```
-fn resolve_base_path(current_path: &Path, mut base: PathBuf) -> Result<PathBuf, OrthoError> {
+fn resolve_base_path(current_path: &Path, base: PathBuf) -> Result<PathBuf, OrthoError> {
     let parent = current_path.parent().ok_or_else(|| {
         file_error(
             current_path,
@@ -156,9 +159,7 @@ fn resolve_base_path(current_path: &Path, mut base: PathBuf) -> Result<PathBuf, 
             ),
         )
     })?;
-    if !base.is_absolute() {
-        base = parent.join(base);
-    }
+    let base = if base.is_absolute() { base } else { parent.join(base) };
     std::fs::canonicalize(&base).map_err(|e| file_error(&base, e))
 }
 
@@ -332,7 +333,7 @@ mod tests {
     }
 
     #[test]
-    fn merge_parent_overrides_child_values() {
+    fn merge_parent_child_overrides_parent_on_conflicts() {
         let parent = Figment::from(Toml::string("foo = \"parent\"\nbar = \"parent\""));
         let child = Figment::from(Toml::string("foo = \"child\""));
         let merged = merge_parent(child, parent);
@@ -342,24 +343,20 @@ mod tests {
         assert_eq!(bar.as_str(), Some("parent"));
     }
 
-    #[test]
-    fn process_extends_handles_relative_and_absolute() {
+    #[rstest]
+    #[case::relative(false)]
+    #[case::absolute(true)]
+    fn process_extends_handles_relative_and_absolute(#[case] is_abs: bool) {
         Jail::expect_with(|j| {
             j.create_file("base.toml", "foo = \"base\"")?;
             let root = std::fs::canonicalize(".").expect("canonicalise root");
             let current = root.join("config.toml");
-
-            let figment = Figment::from(Toml::string("extends = \"base.toml\""));
-            let mut visited = HashSet::new();
-            let mut stack = Vec::new();
-            let merged = process_extends(figment, &current, &mut visited, &mut stack)?;
-            let value = merged.find_value("foo").expect("foo");
-            assert_eq!(value.as_str(), Some("base"));
-
-            let abs_path = root.join("base.toml");
-            // Use single quotes to avoid escaping backslashes in Windows paths.
-            let figment =
-                Figment::from(Toml::string(&format!("extends = '{}'", abs_path.display())));
+            let config = if is_abs {
+                format!("extends = '{}'", root.join("base.toml").display())
+            } else {
+                "extends = \"base.toml\"".to_string()
+            };
+            let figment = Figment::from(Toml::string(&config));
             let mut visited = HashSet::new();
             let mut stack = Vec::new();
             let merged = process_extends(figment, &current, &mut visited, &mut stack)?;
