@@ -357,10 +357,9 @@ mod tests {
             assert_eq!(value.as_str(), Some("base"));
 
             let abs_path = root.join("base.toml");
-            let figment = Figment::from(Toml::string(&format!(
-                "extends = \"{}\"",
-                abs_path.display()
-            )));
+            // Use single quotes to avoid escaping backslashes in Windows paths.
+            let figment =
+                Figment::from(Toml::string(&format!("extends = '{}'", abs_path.display())));
             let mut visited = HashSet::new();
             let mut stack = Vec::new();
             let merged = process_extends(figment, &current, &mut visited, &mut stack)?;
