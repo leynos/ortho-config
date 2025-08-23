@@ -263,8 +263,7 @@ where
     I: IntoIterator<Item = S>,
     S: AsRef<str>,
 {
-    let exts_vec: Vec<S> = exts.into_iter().collect();
-    let exts = exts_vec.iter().map(AsRef::as_ref);
+    let exts = exts.into_iter().map(|s| s.as_ref().to_owned());
     quote! { try_load_config(&mut file_fig, &[#(#exts),*], &mut discovery_errors); }
 }
 
