@@ -7,7 +7,7 @@ use directories::BaseDirs;
 use figment::{Figment, providers::Env};
 use serde::de::DeserializeOwned;
 use std::path::{Path, PathBuf};
-use uncased::Uncased;
+use uncased::{Uncased, UncasedStr};
 #[cfg(any(unix, target_os = "redox"))]
 use xdg::BaseDirectories;
 
@@ -296,11 +296,42 @@ fn load_from_files(paths: &[PathBuf], name: &CmdName) -> Result<Figment, OrthoEr
     Ok(fig)
 }
 
+/// Create an environment provider for a subcommand.
+///
+/// The provider reads variables following the pattern
+/// `<PREFIX>CMDS_<NAME>_` and performs case-insensitive key matching via
+/// `Uncased`. Double underscores are interpreted as key separators.
+///
+/// The value of [`Prefix::raw`] is used verbatim in environment variable
+/// names. Supply your preferred case and delimiters (commonly upper-case with
+/// a trailing `_`) if you want a separator before `CMDS_`.
+///
+/// # Examples
+///
+/// ```rust,no_run
+/// use ortho_config::subcommand::{Prefix, CmdName, subcommand_env_provider};
+/// use figment::providers::Env;
+/// let prefix = Prefix::new("APP_");
+/// let name = CmdName::new("serve");
+/// let _env: Env = subcommand_env_provider(&prefix, &name);
+/// ```
+fn to_uncased(k: &UncasedStr) -> Uncased<'_> {
+    Uncased::from(k)
+}
+
+fn subcommand_env_provider(prefix: &Prefix, name: &CmdName) -> Env {
+    let env_name = name.env_key();
+    let env_prefix = format!("{}CMDS_{env_name}_", prefix.raw());
+    Env::prefixed(&env_prefix).split("__").map(to_uncased)
+}
+
 /// Load configuration for a specific subcommand.
 ///
 /// The configuration is sourced from:
 ///   * `[cmds.<name>]` sections in configuration files
 ///   * environment variables following the pattern `<PREFIX>CMDS_<NAME>_`.
+///     Here `<PREFIX>` is [`Prefix::raw`], used verbatim; pass your preferred
+///     case and delimiters (commonly upper-case with a trailing `_`).
 ///
 /// Values from environment variables override those from files.
 ///
@@ -316,7 +347,11 @@ fn load_from_files(paths: &[PathBuf], name: &CmdName) -> Result<Figment, OrthoEr
 #[deprecated(note = "use `load_and_merge_subcommand` or `load_and_merge_subcommand_for` instead")]
 /// Loads configuration for a specific subcommand from files and environment variables.
 ///
-/// Searches for configuration files using the provided prefix, loads the `[cmds.<name>]` section from each file, and merges them. Then overlays environment variables prefixed with `<PREFIX>CMDS_<NAME>_` (case-insensitive, double underscore for nesting). Returns the merged configuration as type `T`.
+/// Searches for configuration files using the provided prefix, loads the
+/// `[cmds.<name>]` section from each file, and merges them. Then overlays
+/// environment variables prefixed with `<PREFIX>CMDS_<NAME>_`, where
+/// `<PREFIX>` is [`Prefix::raw`] verbatim (case-insensitive, double underscore
+/// for nesting). Returns the merged configuration as type `T`.
 ///
 /// # Deprecated
 ///
@@ -346,12 +381,7 @@ where
     let paths = candidate_paths(prefix);
     let mut fig = load_from_files(&paths, name)?;
 
-    let env_name = name.env_key();
-    let env_prefix = format!("{}CMDS_{env_name}_", prefix.raw());
-    let env_provider = Env::prefixed(&env_prefix)
-        .map(|k| Uncased::from(k))
-        .split("__");
-    fig = fig.merge(env_provider);
+    fig = fig.merge(subcommand_env_provider(prefix, name));
 
     fig.extract().map_err(OrthoError::Gathering)
 }
@@ -448,12 +478,7 @@ where
     let paths = candidate_paths(prefix);
     let mut fig = load_from_files(&paths, &name)?;
 
-    let env_name = name.env_key();
-    let env_prefix = format!("{}CMDS_{env_name}_", prefix.raw());
-    let env_provider = Env::prefixed(&env_prefix)
-        .map(|k| Uncased::from(k))
-        .split("__");
-    fig = fig.merge(env_provider);
+    fig = fig.merge(subcommand_env_provider(prefix, &name));
 
     fig.merge(sanitized_provider(cli)?)
         .extract()

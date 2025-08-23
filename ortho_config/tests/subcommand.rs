@@ -219,3 +219,89 @@ fn env_value_used_when_cli_missing() {
     .expect("merge");
     assert_eq!(merged.ref_id.as_deref(), Some("from-env"));
 }
+#[derive(Debug, Deserialize, Default, PartialEq)]
+struct NestedCfg {
+    #[serde(default)]
+    nested: Nested,
+}
+
+#[derive(Debug, Deserialize, Default, PartialEq)]
+struct Nested {
+    host: Option<String>,
+    port: Option<u16>,
+}
+
+#[derive(Debug, Deserialize, Default, PartialEq)]
+struct DeepNestedCfg {
+    #[serde(default)]
+    deep: DeepLevel,
+}
+
+#[derive(Debug, Deserialize, Default, PartialEq)]
+struct DeepLevel {
+    #[serde(default)]
+    nest: DeepNest,
+}
+
+#[derive(Debug, Deserialize, Default, PartialEq)]
+struct DeepNest {
+    host: Option<String>,
+}
+
+/// Environment variables with double underscores map to nested fields, and
+/// defaults apply when values are absent.
+#[rstest::rstest]
+#[case(
+    Some(("APP_CMDS_TEST_NESTED__HOST", "env")),
+    Some(("APP_CMDS_TEST_NESTED__PORT", "8080")),
+    Some("env"),
+    Some(8080u16)
+)]
+#[case(None, None, None, None)]
+fn env_values_support_nesting_cases(
+    #[case] host_kv: Option<(&str, &str)>,
+    #[case] port_kv: Option<(&str, &str)>,
+    #[case] expect_host: Option<&str>,
+    #[case] expect_port: Option<u16>,
+) {
+    let cfg: NestedCfg = with_subcommand_config(|j| {
+        if let Some((k, v)) = host_kv {
+            j.set_env(k, v);
+        }
+        if let Some((k, v)) = port_kv {
+            j.set_env(k, v);
+        }
+        Ok(())
+    })
+    .expect("config");
+    assert_eq!(cfg.nested.host.as_deref(), expect_host);
+    assert_eq!(cfg.nested.port, expect_port);
+}
+
+/// Tests multi-level splitting of environment variable keys.
+///
+/// # Examples
+///
+/// ```
+/// env_values_support_deeper_nesting(
+///     Some(("APP_CMDS_TEST_DEEP__NEST__HOST", "deep")),
+///     Some("deep"),
+/// );
+/// env_values_support_deeper_nesting(None, None);
+/// ```
+#[rstest::rstest]
+#[case(Some(("APP_CMDS_TEST_DEEP__NEST__HOST", "deep")), Some("deep"))]
+#[case(None, None)]
+fn env_values_support_deeper_nesting(
+    #[case] kv: Option<(&str, &str)>,
+    #[case] expect_host: Option<&str>,
+) {
+    let cfg: DeepNestedCfg = with_subcommand_config(|j| {
+        if let Some((k, v)) = kv {
+            j.set_env(k, v);
+        }
+        Ok(())
+    })
+    .expect("config");
+    assert_eq!(cfg.deep.nest.host.as_deref(), expect_host);
+}
