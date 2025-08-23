@@ -203,11 +203,11 @@ configurable via:
 - TOML file: `max_connections = <value>`
 - JSON5 file: `max_connections` or `maxConnections` (configurable)
 
-You can customise these mappings using `#[ortho_config(…)]` attributes.
+You can customize these mappings using `#[ortho_config(…)]` attributes.
 
 ## Field Attributes `#[ortho_config(…)]`
 
-Customise behaviour for each field:
+Customize behaviour for each field:
 
 - `#[ortho_config(default =…)]`: Sets a default value. Can be a literal (e.g.,
   `"debug"`, `123`, `true`) or a path to a function (e.g.,

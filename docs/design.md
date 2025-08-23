@@ -325,6 +325,30 @@ fulfil missing defaults and eliminates workarounds like
 `load_with_reference_fallback`. The legacy `load_subcommand_config` helpers are
 retained but deprecated.
 
+### 4.10. Dynamic rule tables
+
+Configuration structures may include map fields such as
+`BTreeMap<String, RuleCfg>` to support dynamic tables where the keys are not
+known at compile time. The loader deserializes any sub-table beneath the map
+key and preserves unknown rule names. This allows applications to accept
+arbitrary rule configurations like `[rules.consistent-casing]` without
+additional code. Entries may originate from files, environment variables or CLI
+flags and follow the usual precedence rules.
+
+### 4.11. Ignore pattern lists
+
+Vector fields such as `ignore_patterns` can be populated from comma-separated
+environment variables and CLI flags. Values are merged using the `append` merge
+strategy so that patterns from configuration files are extended by environment
+variables and finally CLI arguments. Whitespace is trimmed and duplicates are
+preserved.
+
+### 4.12. Renaming the configuration path flag
+
+The derive macro exposes the generated `config_path` field, allowing projects
+to rename the hidden `--config-path` flag by defining their own field with a
+`cli_long` attribute. The associated environment variable remains `CONFIG_PATH`.
+
 ## 5. Dependency Strategy
 
 - **`ortho_config_macros`:**

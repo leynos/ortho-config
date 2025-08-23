@@ -87,38 +87,38 @@ references the relevant design guidance.
 
 - **Enhance documentation and examples**
 
-  - [ ] Expand user and developer documentation to cover new features such as
+  - [x] Expand user and developer documentation to cover new features such as
     extends, comma‑separated lists, dynamic tables and ignore patterns.
     [[Design](design.md)]
 
-  - [ ] Provide worked examples demonstrating how to rename the config path
+  - [x] Provide worked examples demonstrating how to rename the config path
     flag, how to use subcommand defaults via the `cmds` namespace, and how to
     interpret improved error messages.
 
 - **Support custom option names for the configuration path**
 
-  - [ ] Allow renaming of the auto‑generated `--config-path` flag and its
+  - [x] Allow renaming of the auto‑generated `--config-path` flag and its
     environment variable (e.g. to `--config`) via an attribute on the
     configuration struct. [[DDLint Gap Analysis](ddlint-gap-analysis.md)]
 
-  - [ ] Update documentation and examples to illustrate this override.
+  - [x] Update documentation and examples to illustrate this override.
 
-- **Enable dynamic tables for arbitrary keys**
+  - **Enable dynamic tables for arbitrary keys**
 
-  - [ ] Accept map types (e.g. `BTreeMap<String, RuleConfig>`) in configuration
+  - [x] Accept map types (e.g. `BTreeMap<String, RuleConfig>`) in configuration
     structs to support dynamic rule tables such as `[rules.consistent-casing]`.
     [[DDLint Gap Analysis](ddlint-gap-analysis.md)]
 
-  - [ ] Ensure these maps deserialize correctly from files, environment
+  - [x] Ensure these maps deserialize correctly from files, environment
     variables and CLI.
 
 - **Implement ignore‑pattern list handling**
 
-  - [ ] Provide support for ignore pattern lists using comma‑separated
+  - [x] Provide support for ignore pattern lists using comma‑separated
     environment variables and CLI flags.
     [[DDLint Gap Analysis](ddlint-gap-analysis.md)]
 
-  - [ ] Document the precedence rules and the relationship to defaults (e.g.
+  - [x] Document the precedence rules and the relationship to defaults (e.g.
     `[".git/", "build/", "target/"]`).
 
 - **Address future enhancements**
