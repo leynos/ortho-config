@@ -32,10 +32,6 @@ fn to_uncased(key: &UncasedStr) -> Uncased<'_> {
 /// # Returns
 /// A `Figment` instance containing the merged configuration for the subcommand,
 /// or an error if loading fails.
-#[expect(
-    clippy::result_large_err,
-    reason = "Figment merge errors inflate Result size; wrapping in `Arc` is tracked on the roadmap for v0.4.0"
-)]
 fn load_from_files(paths: &[PathBuf], name: &CmdName) -> Result<Figment, OrthoError> {
     let mut fig = Figment::new();
     for p in paths {
@@ -65,10 +61,6 @@ fn load_from_files(paths: &[PathBuf], name: &CmdName) -> Result<Figment, OrthoEr
 /// Use [`load_and_merge_subcommand`] or
 /// [`load_and_merge_subcommand_for`] instead to load defaults and apply CLI
 /// overrides in one step. Planned removal: v0.4.0 (see the project roadmap).
-#[expect(
-    clippy::result_large_err,
-    reason = "Figment merge errors inflate Result size; wrapping in `Arc` is tracked on the roadmap for v0.4.0"
-)]
 #[deprecated(
     since = "0.3.0",
     note = "use `load_and_merge_subcommand` or `load_and_merge_subcommand_for` instead; removed in v0.4.0"
@@ -86,7 +78,7 @@ where
     fig = fig.merge(env_provider);
 
     // Extraction only gathers defaults, so map failures accordingly.
-    fig.extract().map_err(OrthoError::Gathering)
+    fig.extract().map_err(|e| OrthoError::Gathering(e.into()))
 }
 
 /// Loads configuration defaults for a subcommand using the prefix defined by the
@@ -126,10 +118,6 @@ where
 /// This function is deprecated. Use
 /// [`load_and_merge_subcommand_for`](crate::load_and_merge_subcommand_for)
 /// instead. Planned removal: v0.4.0 (see the project roadmap).
-#[expect(
-    clippy::result_large_err,
-    reason = "Figment merge errors inflate Result size; wrapping in `Arc` is tracked on the roadmap for v0.4.0"
-)]
 #[deprecated(
     since = "0.3.0",
     note = "use `load_and_merge_subcommand_for` instead; removed in v0.4.0"
@@ -140,18 +128,15 @@ where
 {
     #[expect(
         deprecated,
-        reason = "Call deprecated helper for backwards compatibility; removal tracked on the roadmap"
+        reason = "delegates to deprecated helper during transition"
     )]
-    {
-        load_subcommand_config(&Prefix::new(T::prefix()), name)
-    }
+    load_subcommand_config(&Prefix::new(T::prefix()), name)
 }
 
 /// Loads defaults for a subcommand and merges CLI-provided values over them.
 ///
-/// This convenience function combines [`load_subcommand_config`] and
-/// [`merge_cli_over_defaults`](crate::merge_cli_over_defaults) to reduce
-/// boilerplate when working with `clap` subcommands. It determines the
+/// This convenience function combines [`load_subcommand_config`] with CLI
+/// overrides to reduce boilerplate when working with `clap` subcommands. It determines the
 /// subcommand name from `T`, loads default configuration from files and
 /// environment variables using the given prefix, and overlays values provided
 /// via the CLI. CLI-provided values override file or environment defaults.
@@ -184,10 +169,6 @@ where
 /// # Ok(())
 /// # }
 /// ```
-#[expect(
-    clippy::result_large_err,
-    reason = "Figment merge errors inflate Result size; wrapping in `Arc` is tracked on the roadmap for v0.4.0"
-)]
 pub fn load_and_merge_subcommand<T>(prefix: &Prefix, cli: &T) -> Result<T, OrthoError>
 where
     T: serde::Serialize + DeserializeOwned + Default + CommandFactory,
@@ -240,10 +221,6 @@ where
 /// # Ok(())
 /// # }
 /// ```
-#[expect(
-    clippy::result_large_err,
-    reason = "Figment merge errors inflate Result size; wrapping in `Arc` is tracked on the roadmap for v0.4.0"
-)]
 pub fn load_and_merge_subcommand_for<T>(cli: &T) -> Result<T, OrthoError>
 where
     T: crate::OrthoConfig + serde::Serialize + Default + CommandFactory,

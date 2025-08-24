@@ -7,10 +7,6 @@ use figment::{Figment, providers::Serialized};
 use ortho_config::{OrthoError, load_config_file, sanitized_provider};
 use std::path::Path;
 
-#[expect(
-    clippy::result_large_err,
-    reason = "test helper returns library error type"
-)]
 fn load_flat(file: Option<&str>, args: &[&str]) -> Result<FlatArgs, OrthoError> {
     let mut res = None;
     figment::Jail::expect_with(|j| {

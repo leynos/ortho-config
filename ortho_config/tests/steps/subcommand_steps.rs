@@ -51,10 +51,6 @@ fn load_sub(world: &mut World) {
 }
 
 /// Set up test environment with configuration file and environment variables.
-#[expect(
-    clippy::result_large_err,
-    reason = "OrthoError size is acceptable in test helper"
-)]
 fn setup_test_environment(world: &World, cli: &PrArgs) -> Result<PrArgs, ortho_config::OrthoError> {
     let mut result = None;
     figment::Jail::expect_with(|j| {

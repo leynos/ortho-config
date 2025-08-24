@@ -99,9 +99,12 @@ pub(crate) fn collect_unix_paths(prefix: &Prefix, paths: &mut Vec<PathBuf>) {
         BaseDirectories::with_prefix(prefix.as_str())
     };
 
-    for group in EXT_GROUPS {
-        push_xdg_candidates(&xdg_dirs, group, paths);
-    }
+    // Only search for canonical XDG config filenames under the XDG dirs:
+    // - config.toml (always)
+    // - config.yaml and config.yml when the `yaml` feature is enabled
+    push_xdg_candidates(&xdg_dirs, &["toml"], paths);
+    #[cfg(feature = "yaml")]
+    push_xdg_candidates(&xdg_dirs, &["yaml", "yml"], paths);
 }
 
 #[cfg(not(any(unix, target_os = "redox")))]

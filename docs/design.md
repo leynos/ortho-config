@@ -239,7 +239,7 @@ impl std::fmt::Display for AggregatedErrors {
 #[derive(Debug, Error)]
 pub enum OrthoError {
     #[error("Failed to parse command-line arguments: {0}")]
-    CliParsing(#[from] clap::Error),
+    CliParsing(#[from] Box<clap::Error>),
 
     #[error("Configuration file error in '{path}': {source}")]
     File {
@@ -249,13 +249,13 @@ pub enum OrthoError {
     },
 
     #[error("Failed to gather configuration: {0}")]
-    Gathering(#[from] figment::Error),
+    Gathering(#[from] Box<figment::Error>),
 
     #[error("Failed to merge CLI with configuration: {source}")]
-    Merge { #[source] source: figment::Error },
+    Merge { #[source] source: Box<figment::Error> },
 
     #[error("multiple configuration errors:\n{0}")]
-    Aggregate(AggregatedErrors),
+    Aggregate(Box<AggregatedErrors>),
 
     // More specific errors as needed
     #[error("Validation failed for '{key}': {message}")]
