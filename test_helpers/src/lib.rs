@@ -27,6 +27,16 @@ pub mod env {
 
     static ENV_MUTEX: LazyLock<ReentrantMutex<()>> = LazyLock::new(ReentrantMutex::default);
 
+    fn set_var_inner(key: &str, value: &OsStr) {
+        // SAFETY: Mutations are serialised by `ENV_MUTEX`.
+        unsafe { env::set_var(key, value) };
+    }
+
+    fn remove_var_inner(key: &str) {
+        // SAFETY: Mutations are serialised by `ENV_MUTEX`.
+        unsafe { env::remove_var(key) };
+    }
+
     /// RAII guard restoring an environment variable to its prior value on drop.
     pub struct EnvVarGuard {
         key: String,
@@ -51,7 +61,7 @@ pub mod env {
         let key = key.into();
         let lock = ENV_MUTEX.lock();
         let original = env::var_os(&key);
-        unsafe { env::set_var(&key, value.as_ref()) };
+        set_var_inner(&key, value.as_ref());
         EnvVarGuard {
             key,
             original,
@@ -75,7 +85,7 @@ pub mod env {
         let key = key.into();
         let lock = ENV_MUTEX.lock();
         let original = env::var_os(&key);
-        unsafe { env::remove_var(&key) };
+        remove_var_inner(&key);
         EnvVarGuard {
             key,
             original,
@@ -87,9 +97,9 @@ pub mod env {
         fn drop(&mut self) {
             if let Some(val) = self.original.take() {
                 // guard still holds the lock
-                unsafe { env::set_var(&self.key, &val) };
+                set_var_inner(&self.key, &val);
             } else {
-                unsafe { env::remove_var(&self.key) };
+                remove_var_inner(&self.key);
             }
         }
     }
@@ -104,6 +114,7 @@ pub mod env {
     #[cfg(test)]
     mod tests {
         use super::*;
+        use std::ffi::OsStr;
         use std::sync::{Arc, Barrier};
         use std::thread;
 
@@ -111,32 +122,32 @@ pub mod env {
         fn set_var_restores_original() {
             let key = "TEST_HELPERS_SET_VAR";
             let original = "orig";
-            super::with_lock(|| unsafe { env::set_var(key, original) });
+            super::with_lock(|| super::set_var_inner(key, OsStr::new(original)));
             {
                 let _guard = set_var(key, "temp");
                 assert_eq!(std::env::var(key).expect("read env var"), "temp");
             }
             assert_eq!(std::env::var(key).expect("read env var"), original);
-            super::with_lock(|| unsafe { env::remove_var(key) });
+            super::with_lock(|| super::remove_var_inner(key));
         }
 
         #[test]
         fn remove_var_restores_value() {
             let key = "TEST_HELPERS_REMOVE_VAR";
             let original = "to-be-removed";
-            super::with_lock(|| unsafe { env::set_var(key, original) });
+            super::with_lock(|| super::set_var_inner(key, OsStr::new(original)));
             {
                 let _guard = remove_var(key);
                 assert!(std::env::var(key).is_err());
             }
             assert_eq!(std::env::var(key).expect("read env var"), original);
-            super::with_lock(|| unsafe { env::remove_var(key) });
+            super::with_lock(|| super::remove_var_inner(key));
         }
 
         #[test]
         fn set_var_unsets_when_absent() {
             let key = "TEST_HELPERS_UNSET";
-            super::with_lock(|| unsafe { env::remove_var(key) });
+            super::with_lock(|| super::remove_var_inner(key));
             {
                 let _guard = set_var(key, "tmp");
                 assert_eq!(std::env::var(key).expect("read env var"), "tmp");
@@ -179,7 +190,7 @@ pub mod env {
         fn stacking_restores_in_lifo() {
             let key = "TEST_HELPERS_STACKING";
             // Ensure clean slate
-            super::with_lock(|| unsafe { env::remove_var(key) });
+            super::with_lock(|| super::remove_var_inner(key));
             {
                 let _g1 = set_var(key, "v1");
                 assert_eq!(std::env::var(key).expect("read env var"), "v1");
