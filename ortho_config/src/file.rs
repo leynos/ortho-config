@@ -62,8 +62,7 @@ fn parse_config_by_format(path: &Path, data: &str) -> Result<Figment, OrthoError
                 ));
             }
         }
-        #[allow(clippy::unnested_or_patterns)]
-        Some("yaml") | Some("yml") => {
+        Some("yaml" | "yml") => {
             #[cfg(feature = "yaml")]
             {
                 serde_yaml::from_str::<serde_yaml::Value>(data).map_err(|e| file_error(path, e))?;
@@ -215,7 +214,8 @@ fn process_extends(
     stack: &mut Vec<PathBuf>,
 ) -> Result<Figment, OrthoError> {
     if let Some(base) = get_extends(&figment, current_path)? {
-        let canonical = resolve_base_path(current_path, base)?;
+        let canonical =
+            resolve_base_path(current_path, base).map_err(|e| file_error(current_path, e))?;
         if !canonical.is_file() {
             return Err(file_error(
                 &canonical,
@@ -283,6 +283,9 @@ fn load_config_file_inner(
     if !path.is_file() {
         return Ok(None);
     }
+    #[cfg(windows)]
+    let canonical = dunce::canonicalize(path).map_err(|e| file_error(path, e))?;
+    #[cfg(not(windows))]
     let canonical = std::fs::canonicalize(path).map_err(|e| file_error(path, e))?;
     if !visited.insert(canonical.clone()) {
         let mut cycle: Vec<String> = stack.iter().map(|p| p.display().to_string()).collect();

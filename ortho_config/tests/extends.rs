@@ -66,8 +66,9 @@ fn missing_base_file_errors() {
     figment::Jail::expect_with(|j| {
         j.create_file(".config.toml", "extends = \"missing.toml\"")?;
         let err = ExtendsCfg::load_from_iter(["prog"]).unwrap_err();
-        let msg = format!("{err}");
+        let msg = err.to_string();
         assert!(msg.contains("missing.toml"));
+        assert!(msg.contains(".config.toml"));
         Ok(())
     });
 }

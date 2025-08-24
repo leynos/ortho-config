@@ -25,7 +25,7 @@ where
     let result = RefCell::new(None);
     figment::Jail::try_with(|j| {
         setup(j)?;
-        let cfg = loader().map_err(|e| figment::error::Error::from(e.to_string()))?;
+        let cfg = loader().map_err(|e| -> figment::error::Error { e.into() })?;
         result.replace(Some(cfg));
         Ok(())
     })?;
