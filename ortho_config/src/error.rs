@@ -127,6 +127,30 @@ impl OrthoError {
     }
 }
 
+/// Convert any [`serde_json::Error`], whether from serialization or
+/// deserialization, into [`OrthoError::Gathering`].
+///
+/// # Examples
+///
+/// ```
+/// use ortho_config::OrthoError;
+///
+/// let json_err = serde_json::from_str::<u8>("not a number")
+///     .expect_err("invalid number");
+/// let err: OrthoError = json_err.into();
+/// assert!(matches!(err, OrthoError::Gathering(_)));
+/// ```
+impl From<serde_json::Error> for OrthoError {
+    fn from(e: serde_json::Error) -> Self {
+        OrthoError::Gathering(figment::Error::from(format!(
+            "{} at line {}, column {}",
+            e,
+            e.line(),
+            e.column()
+        )))
+    }
+}
+
 impl From<OrthoError> for FigmentError {
     /// Allow using `?` in tests and examples that return `figment::Error`.
     fn from(e: OrthoError) -> Self {
