@@ -14,6 +14,33 @@ where
     figment::Jail::expect_with(f);
 }
 
+fn canonical_root_and_current() -> (PathBuf, PathBuf) {
+    #[cfg(windows)]
+    let root = dunce::canonicalize(".").expect("canonicalise root");
+    #[cfg(not(windows))]
+    let root = std::fs::canonicalize(".").expect("canonicalise root");
+    let current = root.join("config.toml");
+    (root, current)
+}
+
+fn with_fresh_graph<F>(f: F)
+where
+    F: FnOnce(
+        &mut figment::Jail,
+        &Path,
+        &Path,
+        &mut HashSet<PathBuf>,
+        &mut Vec<PathBuf>,
+    ) -> figment::error::Result<()>,
+{
+    jail_expect_with(|j| {
+        let (root, current) = canonical_root_and_current();
+        let mut visited = HashSet::new();
+        let mut stack = Vec::new();
+        f(j, &root, &current, &mut visited, &mut stack)
+    });
+}
+
 enum ExtCase {
     Ok(Option<PathBuf>),
     Err(&'static str),
@@ -48,11 +75,7 @@ fn get_extends_cases(#[case] input: &str, #[case] expected: ExtCase) {
 fn resolve_base_path_resolves(#[case] is_abs: bool) {
     jail_expect_with(|j| {
         j.create_file("base.toml", "")?;
-        #[cfg(windows)]
-        let root = dunce::canonicalize(".").expect("canonicalise root");
-        #[cfg(not(windows))]
-        let root = std::fs::canonicalize(".").expect("canonicalise root");
-        let current = root.join("config.toml");
+        let (root, current) = canonical_root_and_current();
         let base_path = if is_abs {
             root.join("base.toml")
         } else {
@@ -88,22 +111,15 @@ fn merge_parent_child_overrides_parent_on_conflicts() {
 #[case::relative(false)]
 #[case::absolute(true)]
 fn process_extends_handles_relative_and_absolute(#[case] is_abs: bool) {
-    jail_expect_with(|j| {
+    with_fresh_graph(|j, root, current, visited, stack| {
         j.create_file("base.toml", "foo = \"base\"")?;
-        #[cfg(windows)]
-        let root = dunce::canonicalize(".").expect("canonicalise root");
-        #[cfg(not(windows))]
-        let root = std::fs::canonicalize(".").expect("canonicalise root");
-        let current = root.join("config.toml");
         let config = if is_abs {
             format!("extends = '{}'", root.join("base.toml").display())
         } else {
             "extends = \"base.toml\"".to_string()
         };
         let figment = Figment::from(Toml::string(&config));
-        let mut visited = HashSet::new();
-        let mut stack = Vec::new();
-        let merged = process_extends(figment, &current, &mut visited, &mut stack)?;
+        let merged = process_extends(figment, current, visited, stack)?;
         let value = merged.find_value("foo").expect("foo");
         assert_eq!(value.as_str(), Some("base"));
         Ok(())
@@ -124,17 +140,10 @@ fn process_extends_errors_when_no_parent() {
 
 #[test]
 fn process_extends_errors_when_base_is_not_file() {
-    jail_expect_with(|j| {
+    with_fresh_graph(|j, _root, current, visited, stack| {
         j.create_dir("dir")?;
-        #[cfg(windows)]
-        let root = dunce::canonicalize(".").expect("canonicalise root");
-        #[cfg(not(windows))]
-        let root = std::fs::canonicalize(".").expect("canonicalise root");
-        let current = root.join("config.toml");
         let figment = Figment::from(Toml::string("extends = 'dir'"));
-        let mut visited = HashSet::new();
-        let mut stack = Vec::new();
-        let err = process_extends(figment, &current, &mut visited, &mut stack).unwrap_err();
+        let err = process_extends(figment, current, visited, stack).unwrap_err();
         assert!(err.to_string().contains("not a regular file"));
         Ok(())
     });
@@ -142,17 +151,10 @@ fn process_extends_errors_when_base_is_not_file() {
 
 #[test]
 fn process_extends_errors_when_extends_empty() {
-    jail_expect_with(|j| {
+    with_fresh_graph(|j, _root, current, visited, stack| {
         j.create_file("base.toml", "")?; // placeholder to satisfy Jail
-        #[cfg(windows)]
-        let root = dunce::canonicalize(".").expect("canonicalise root");
-        #[cfg(not(windows))]
-        let root = std::fs::canonicalize(".").expect("canonicalise root");
-        let current = root.join("config.toml");
         let figment = Figment::from(Toml::string("extends = ''"));
-        let mut visited = HashSet::new();
-        let mut stack = Vec::new();
-        let err = process_extends(figment, &current, &mut visited, &mut stack).unwrap_err();
+        let err = process_extends(figment, current, visited, stack).unwrap_err();
         assert!(err.to_string().contains("non-empty"));
         Ok(())
     });

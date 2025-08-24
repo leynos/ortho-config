@@ -77,7 +77,6 @@ fn missing_base_file_errors() {
         let err = ExtendsCfg::load_from_iter(["prog"]).unwrap_err();
         let msg = err.to_string();
         assert!(msg.contains("missing.toml"));
-        assert!(msg.contains(".config.toml"));
         Ok(())
     });
 }

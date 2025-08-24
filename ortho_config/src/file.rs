@@ -4,12 +4,6 @@
     reason = "OrthoError is intentionally large throughout this module"
 )]
 
-// FIXME: Reduce OrthoError size (e.g., via Arc) to remove this expectation.
-#![expect(
-    clippy::result_large_err,
-    reason = "Surface detailed file errors to callers"
-)]
-
 use crate::OrthoError;
 #[cfg(feature = "yaml")]
 use figment::providers::Yaml;
@@ -41,6 +35,7 @@ fn file_error(path: &Path, err: impl Into<Box<dyn Error + Send + Sync>>) -> Orth
 ///
 /// Returns an [`OrthoError`] if the file contents fail to parse or if the
 /// required feature is disabled.
+#[expect(clippy::result_large_err, reason = "propagating file parsing errors")]
 fn parse_config_by_format(path: &Path, data: &str) -> Result<Figment, OrthoError> {
     let ext = path
         .extension()
@@ -100,6 +95,7 @@ fn parse_config_by_format(path: &Path, data: &str) -> Result<Figment, OrthoError
 /// let extends = get_extends(&figment, Path::new("cfg.toml")).unwrap();
 /// assert_eq!(extends, Some(PathBuf::from("base.toml")));
 /// ```
+#[expect(clippy::result_large_err, reason = "propagating key validation errors")]
 fn get_extends(figment: &Figment, current_path: &Path) -> Result<Option<PathBuf>, OrthoError> {
     match figment.find_value("extends") {
         Ok(val) => {
@@ -169,6 +165,10 @@ fn get_extends(figment: &Figment, current_path: &Path) -> Result<Option<PathBuf>
 /// # Ok(())
 /// # }
 /// ```
+#[expect(
+    clippy::result_large_err,
+    reason = "propagating path resolution errors"
+)]
 fn resolve_base_path(current_path: &Path, base: PathBuf) -> Result<PathBuf, OrthoError> {
     let parent = current_path.parent().ok_or_else(|| {
         file_error(
@@ -217,6 +217,7 @@ fn merge_parent(figment: Figment, parent_figment: Figment) -> Figment {
 ///
 /// Returns an [`OrthoError`] if the extended file fails to load or the `extends`
 /// key is malformed.
+#[expect(clippy::result_large_err, reason = "propagating file loading errors")]
 fn process_extends(
     mut figment: Figment,
     current_path: &Path,
@@ -224,8 +225,7 @@ fn process_extends(
     stack: &mut Vec<PathBuf>,
 ) -> Result<Figment, OrthoError> {
     if let Some(base) = get_extends(&figment, current_path)? {
-        let canonical =
-            resolve_base_path(current_path, base).map_err(|e| file_error(current_path, e))?;
+        let canonical = resolve_base_path(current_path, base)?;
         if !canonical.is_file() {
             return Err(file_error(
                 &canonical,
@@ -279,12 +279,14 @@ fn process_extends(
 /// # Errors
 ///
 /// Returns an [`OrthoError`] if reading or parsing the file fails.
+#[expect(clippy::result_large_err, reason = "propagating file loading errors")]
 pub fn load_config_file(path: &Path) -> Result<Option<Figment>, OrthoError> {
     let mut visited = HashSet::new();
     let mut stack = Vec::new();
     load_config_file_inner(path, &mut visited, &mut stack)
 }
 
+#[expect(clippy::result_large_err, reason = "propagating file loading errors")]
 fn load_config_file_inner(
     path: &Path,
     visited: &mut HashSet<PathBuf>,
