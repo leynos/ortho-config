@@ -147,13 +147,17 @@ mod tests {
     use rstest::rstest;
     #[cfg(any(unix, target_os = "redox"))]
     use serial_test::serial;
+    #[cfg(any(unix, target_os = "redox"))]
     use std::env;
+    #[cfg(any(unix, target_os = "redox"))]
     use std::ffi::{OsStr, OsString};
     #[cfg(any(unix, target_os = "redox"))]
     use std::fs;
+    #[cfg(any(unix, target_os = "redox"))]
     use std::path::Path;
     #[cfg(any(unix, target_os = "redox"))]
     use std::sync::LazyLock;
+    #[cfg(any(unix, target_os = "redox"))]
     use tempfile::TempDir;
 
     #[cfg(any(unix, target_os = "redox"))]
