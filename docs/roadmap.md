@@ -121,6 +121,16 @@ references the relevant design guidance.
   - [x] Document the precedence rules and the relationship to defaults (e.g.
     `[".git/", "build/", "target/"]`).
 
+- **Reduce error payload size** (target: v0.4.0)
+
+  - [ ] Wrap expansive error variants in `Arc` to shrink `Result` sizes and
+    eliminate the need for `#[expect(clippy::result_large_err)]`.
+    - Link: <https://github.com/leynos/ortho-config/issues/>
+    - Done when:
+      - Public `Result<_, OrthoError>` signatures use `Arc` (or an alias).
+      - All `#[expect(clippy::result_large_err)]` are removed or scoped to
+        private internals with a rationale.
+
 - **Address future enhancements**
 
   - [ ] Explore asynchronous loading of configuration files and environment
