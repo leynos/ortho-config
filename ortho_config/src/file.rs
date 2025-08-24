@@ -1,8 +1,4 @@
 //! Helpers for reading configuration files into Figment.
-#![expect(
-    clippy::result_large_err,
-    reason = "OrthoError is intentionally large throughout this module"
-)]
 
 use crate::OrthoError;
 #[cfg(feature = "yaml")]

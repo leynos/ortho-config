@@ -59,33 +59,6 @@ where
     })
 }
 
-/// Runs `setup` in a jailed environment and loads a subcommand
-/// configuration for the `test` command using `T`'s prefix.
-///
-/// # Errors
-///
-/// Returns an error if configuration loading fails.
-#[expect(
-    clippy::result_large_err,
-    reason = "tests need full error details for assertions"
-)]
-pub fn with_typed_subcommand_config<F, T>(setup: F) -> Result<T, OrthoError>
-where
-    F: FnOnce(&mut figment::Jail) -> figment::error::Result<()>,
-    T: OrthoConfig + Default,
-{
-    with_jail(setup, || {
-        #[expect(
-            deprecated,
-            reason = "figment's Jail uses deprecated APIs for test isolation"
-        )]
-        {
-            // FIXME: remove once figment::Jail replacement lands upstream (see https://github.com/SergioBenitez/Figment/issues/138)
-            ortho_config::load_subcommand_config_for::<T>(&CmdName::new("test"))
-        }
-    })
-}
-
 /// Runs `setup` in a jailed environment, then loads defaults for the `test`
 /// subcommand and merges them with `cli` using the `APP_` prefix.
 ///
