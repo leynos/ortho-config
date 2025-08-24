@@ -4,6 +4,15 @@ use ortho_config::{OrthoConfig, OrthoError};
 use rstest::rstest;
 use serde::{Deserialize, Serialize};
 
+#[inline]
+#[allow(deprecated, reason = "figment::Jail is used for test isolation only")]
+fn with_jail<F>(f: F)
+where
+    F: FnOnce(&mut figment::Jail) -> figment::error::Result<()>,
+{
+    figment::Jail::expect_with(f);
+}
+
 #[derive(Debug, Deserialize, Serialize, OrthoConfig)]
 struct ExtendsCfg {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -32,7 +41,7 @@ fn inheritance_precedence(
     #[case] env_value: Option<&str>,
     #[case] expected: &str,
 ) {
-    figment::Jail::expect_with(|j| {
+    with_jail(|j| {
         j.create_file("base.toml", &format!("foo = \"{base_value}\""))?;
         j.create_file(
             ".config.toml",
@@ -51,7 +60,7 @@ fn inheritance_precedence(
 
 #[rstest]
 fn cyclic_inheritance_is_detected() {
-    figment::Jail::expect_with(|j| {
+    with_jail(|j| {
         j.create_file("a.toml", "extends = \"b.toml\"\nfoo = \"a\"")?;
         j.create_file("b.toml", "extends = \"a.toml\"\nfoo = \"b\"")?;
         j.create_file(".config.toml", "extends = \"a.toml\"")?;
@@ -63,7 +72,7 @@ fn cyclic_inheritance_is_detected() {
 
 #[rstest]
 fn missing_base_file_errors() {
-    figment::Jail::expect_with(|j| {
+    with_jail(|j| {
         j.create_file(".config.toml", "extends = \"missing.toml\"")?;
         let err = ExtendsCfg::load_from_iter(["prog"]).unwrap_err();
         let msg = err.to_string();
@@ -75,7 +84,7 @@ fn missing_base_file_errors() {
 
 #[rstest]
 fn non_string_extends_errors() {
-    figment::Jail::expect_with(|j| {
+    with_jail(|j| {
         j.create_file(".config.toml", "extends = 1")?;
         let err = ExtendsCfg::load_from_iter(["prog"]).unwrap_err();
         let msg = err.to_string();
@@ -88,7 +97,7 @@ fn non_string_extends_errors() {
 
 #[rstest]
 fn empty_extends_errors() {
-    figment::Jail::expect_with(|j| {
+    with_jail(|j| {
         j.create_file("base.toml", "")?; // placeholder so Jail has root file
         j.create_file(".config.toml", "extends = ''")?;
         let err = ExtendsCfg::load_from_iter(["prog"]).unwrap_err();
@@ -99,7 +108,7 @@ fn empty_extends_errors() {
 
 #[rstest]
 fn directory_extends_errors() {
-    figment::Jail::expect_with(|j| {
+    with_jail(|j| {
         j.create_dir("dir")?;
         j.create_file(".config.toml", "extends = 'dir'")?;
         let err = ExtendsCfg::load_from_iter(["prog"]).unwrap_err();
