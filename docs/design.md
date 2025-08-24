@@ -254,6 +254,12 @@ pub enum OrthoError {
     #[error("Failed to merge CLI with configuration: {source}")]
     Merge { #[source] source: figment::Error },
 
+    #[error("invalid placeholder syntax in '{pattern}': {message}")]
+    PlaceholderSyntax { pattern: String, message: String },
+
+    #[error("failed to compile placeholder regex '{pattern}': {source}")]
+    PlaceholderRegex { pattern: String, #[source] source: regex::Error },
+
     #[error("multiple configuration errors:\n{0}")]
     Aggregate(AggregatedErrors),
 

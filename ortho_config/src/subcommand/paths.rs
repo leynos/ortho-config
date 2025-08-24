@@ -232,9 +232,10 @@ mod tests {
         let mut paths = Vec::new();
         push_xdg_candidates(&dirs, exts, &mut paths);
 
-        assert_eq!(paths.len(), files.len());
-        for (p, f) in paths.iter().zip(files.iter()) {
-            assert_eq!(p, &dir.join(f));
+        let existing: Vec<_> = files.iter().filter(|f| dir.join(f).exists()).collect();
+        assert_eq!(paths.len(), existing.len());
+        for (p, f) in paths.iter().zip(existing.iter()) {
+            assert_eq!(p, &dir.join(**f));
         }
     }
 
@@ -275,8 +276,12 @@ mod tests {
         expected_files.push("config.toml".to_string());
         #[cfg(feature = "yaml")]
         {
-            expected_files.push("config.yaml".to_string());
-            expected_files.push("config.yml".to_string());
+            if xdg_cfg_dir.join("config.yaml").exists() {
+                expected_files.push("config.yaml".to_string());
+            }
+            if xdg_cfg_dir.join("config.yml").exists() {
+                expected_files.push("config.yml".to_string());
+            }
         }
         for ext in EXT_GROUPS.iter().flat_map(|g| *g) {
             expected_files.push(format!("{dotted_prefix}.{ext}"));

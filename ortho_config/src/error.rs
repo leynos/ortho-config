@@ -1,6 +1,7 @@
 //! Error types produced by the configuration loader.
 
 use figment::error::Error as FigmentError;
+use regex::Error as RegexError;
 use std::{error::Error, fmt};
 use thiserror::Error;
 
@@ -33,6 +34,18 @@ pub enum OrthoError {
     Merge {
         #[source]
         source: figment::Error,
+    },
+
+    /// Placeholder expression contained invalid syntax.
+    #[error("invalid placeholder syntax in '{pattern}': {message}")]
+    PlaceholderSyntax { pattern: String, message: String },
+
+    /// Placeholder expression failed to compile as regex.
+    #[error("failed to compile placeholder regex '{pattern}': {source}")]
+    PlaceholderRegex {
+        pattern: String,
+        #[source]
+        source: RegexError,
     },
 
     /// Validation failures when building configuration.

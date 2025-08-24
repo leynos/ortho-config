@@ -919,6 +919,7 @@ dependencies = [
  "figment-json5",
  "json5",
  "ortho_config_macros",
+ "regex",
  "rstest 0.26.1",
  "serde",
  "serde_json",

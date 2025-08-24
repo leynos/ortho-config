@@ -10,6 +10,7 @@ mod csv_env;
 mod error;
 mod file;
 mod merge;
+mod placeholder;
 pub mod subcommand;
 #[expect(deprecated, reason = "Retain helper for backwards compatibility")]
 pub use merge::merge_cli_over_defaults;
@@ -45,6 +46,7 @@ pub fn normalize_prefix(prefix: &str) -> String {
 pub use csv_env::CsvEnv;
 pub use error::OrthoError;
 pub use file::load_config_file;
+pub use placeholder::compile_placeholder;
 
 /// Trait implemented for structs that represent application configuration.
 pub trait OrthoConfig: Sized + serde::de::DeserializeOwned {
