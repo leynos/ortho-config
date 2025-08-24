@@ -222,12 +222,10 @@ use clap::Parser;
 use serde::Deserialize;
 use ortho_config::{load_and_merge_subcommand_for, OrthoConfig};
 
-#[derive(Parser, Deserialize, Default, Debug, OrthoConfig)]
+#[derive(Debug, Deserialize, OrthoConfig)]
 #[ortho_config(prefix = "APP_")]
 pub struct AddUserArgs {
-    #[arg(long)]
     username: Option<String>,
-    #[arg(long)]
     admin: Option<bool>,
 }
 
@@ -267,13 +265,11 @@ Subcommands can be executed with defaults applied using
 use clap::Parser;
 use clap_dispatch::clap_dispatch;
 use serde::Deserialize;
-use ortho_config::load_and_merge_subcommand_for;
+use ortho_config::{load_and_merge_subcommand_for, OrthoConfig};
 
-#[derive(Parser, Deserialize, Default, Debug)]
+#[derive(Debug, Deserialize, OrthoConfig)]
 pub struct ListItemsArgs {
-    #[arg(long)]
     category: Option<String>,
-    #[arg(long)]
     all: Option<bool>,
 }
 
