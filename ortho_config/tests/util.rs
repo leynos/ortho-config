@@ -11,10 +11,6 @@ use ortho_config::{
 };
 use serde::de::DeserializeOwned;
 
-#[expect(
-    clippy::result_large_err,
-    reason = "tests need full error details for assertions"
-)]
 fn with_jail<F, L, T>(setup: F, loader: L) -> Result<T, OrthoError>
 where
     F: FnOnce(&mut figment::Jail) -> figment::error::Result<()>,
@@ -38,10 +34,6 @@ where
 /// # Errors
 ///
 /// Returns an error if configuration loading fails.
-#[expect(
-    clippy::result_large_err,
-    reason = "tests need full error details for assertions"
-)]
 pub fn with_subcommand_config<F, T>(setup: F) -> Result<T, OrthoError>
 where
     F: FnOnce(&mut figment::Jail) -> figment::error::Result<()>,
@@ -65,10 +57,6 @@ where
 /// # Errors
 ///
 /// Returns an error if configuration loading or merging fails.
-#[expect(
-    clippy::result_large_err,
-    reason = "tests need full error details for assertions"
-)]
 pub fn with_merged_subcommand_cli<F, T>(setup: F, cli: &T) -> Result<T, OrthoError>
 where
     F: FnOnce(&mut figment::Jail) -> figment::error::Result<()>,
@@ -85,10 +73,6 @@ where
 /// # Errors
 ///
 /// Returns an error if configuration loading or merging fails.
-#[expect(
-    clippy::result_large_err,
-    reason = "tests need full error details for assertions"
-)]
 pub fn with_merged_subcommand_cli_for<F, T>(setup: F, cli: &T) -> Result<T, OrthoError>
 where
     F: FnOnce(&mut figment::Jail) -> figment::error::Result<()>,
