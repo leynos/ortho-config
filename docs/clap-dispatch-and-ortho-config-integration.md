@@ -12,7 +12,7 @@ the dispatch logic can become cumbersome.
 
 The `clap-dispatch` crate aims to alleviate this by providing an ergonomic
 mechanism for dispatching CLI subcommands.3 It leverages Rust's trait system
-and procedural macros to reduce boilerplate and improve code organization when
+and procedural macros to reduce boilerplate and improve code organisation when
 subcommands represent different ways of performing a similar action.
 
 This report serves a dual purpose. Firstly, it provides comprehensive,
@@ -118,7 +118,7 @@ In CLIs with numerous subcommands or deeply nested subcommand trees,
   more easily. For example, the `sort` method of `QuickArgs` can be called
   directly with test data, isolating its logic from the CLI parsing and main
   dispatch mechanisms. This facilitates focused testing of each subcommand's
-  specific behavior.
+  specific behaviour.
 
 ## III. Practical Guide: Implementing Subcommands with `clap-dispatch`
 
@@ -786,7 +786,7 @@ This design offers several advantages:
 
 - **Consistency:** Extends `ortho-config`'s orthographic configuration principle
   to subcommands, providing a uniform user experience.
-- **Flexibility:** Users can configure subcommand behavior via their preferred
+- **Flexibility:** Users can configure subcommand behaviour via their preferred
   method: CLI flags for ad-hoc changes, environment variables for CI/CD or
   containerized environments, or configuration files for persistent settings.
 - **Reduced Boilerplate:** `clap-dispatch` handles the command dispatch logic,
@@ -841,7 +841,7 @@ and effectiveness in structuring subcommand logic.
 The proposed integration of `clap-dispatch` with `ortho-config` via a "cmds"
 namespace aims to extend `ortho-config`'s powerful orthographic configuration
 capabilities to subcommands. This design promises enhanced consistency,
-allowing users to configure subcommand behavior through CLI arguments,
+allowing users to configure subcommand behaviour through CLI arguments,
 environment variables, or configuration files in a predictable manner. The
 layering of these configuration sources, with clear precedence rules, ensures
 flexibility while maintaining control.

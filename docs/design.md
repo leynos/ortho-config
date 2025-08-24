@@ -326,9 +326,11 @@ fulfil missing defaults and eliminates workarounds like
 retained but deprecated.
 
 To remove repeated `load_and_merge` implementations on each subcommand struct,
-the crate now exposes a blanket `SubcmdConfigMerge` trait. The trait provides a
-`load_and_merge` method that borrows `self`, returning a merged instance while
-leaving the original values untouched.
+the crate now exposes a blanket `SubcmdConfigMerge` trait. The trait provides
+`load_and_merge(&self) -> Result<Self, OrthoError>`, borrowing `self` and
+returning a merged instance while leaving the original values untouched. The
+blanket implementation applies when the type implements:
+`OrthoConfig + serde::Serialize + Default + clap::builder::CommandFactory`.
 
 ### 4.10. Dynamic rule tables
 

@@ -56,9 +56,9 @@ earlier ones:
 4. **Command-Line Arguments:** Parsed using `clap` conventions. Long flags are
    derived from field names (e.g., `my_field` becomes `--my-field`).
 
-Subcommands can load defaults from a `cmds` namespace. The helper below merges
-the relevant configuration file sections and environment variables before
-applying CLI arguments.
+Subcommands can load defaults from a `cmds` namespace. The method below borrows
+`self` and merges the relevant configuration file sections and environment
+variables before applying CLI arguments.
 
 ```rust
 use ortho_config::SubcmdConfigMerge;

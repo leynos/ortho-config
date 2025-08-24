@@ -311,14 +311,16 @@ results in `ignore_patterns = [".git/", "build/", "target/"]`.
 
 Many CLI applications use `clap` subcommands to perform different operations.
 `OrthoConfig` supports per‑subcommand defaults via a dedicated `cmds`
-namespace. The `SubcmdConfigMerge` trait offers a `load_and_merge` method that
-loads defaults for a specific subcommand and merges them beneath the CLI
-values. The merged struct is returned as a new instance; the original `cli`
-struct remains unchanged. CLI fields left unset (`None`) do not override
-environment or file defaults, avoiding accidental loss of configuration.
+namespace. The `SubcmdConfigMerge` trait provides
+`load_and_merge(&self) -> Result<Self, ortho_config::OrthoError>`, which reads
+these values from configuration files and environment variables using the
+struct’s `prefix()` function (default: empty string) and merges them beneath
+the CLI arguments. The method borrows `self` and returns a new merged instance,
+so the original CLI value remains usable. CLI fields left unset (`None`) do not
+override environment or file defaults, avoiding accidental loss of
+configuration.
 
-The `SubcmdConfigMerge` trait is re‑exported to remove boilerplate. Its
-`load_and_merge` method borrows `self` and returns a merged instance.
+The `SubcmdConfigMerge` trait is re‑exported to remove boilerplate.
 
 ### How it works
 
@@ -450,7 +452,7 @@ Missing required values:
 
 - **Changing naming conventions** – Currently, only the default
   snake/kebab/upper snake mappings are supported. Future versions may introduce
-  attributes such as `file_key` or `env` to customize names further.
+  attributes such as `file_key` or `env` to customise names further.
 
 - **Testing** – Because the CLI and environment variables are merged at
   runtime, integration tests should set environment variables and construct CLI

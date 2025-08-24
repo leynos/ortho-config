@@ -14,7 +14,7 @@ pub mod subcommand;
 #[expect(deprecated, reason = "Retain helper for backwards compatibility")]
 pub use merge::merge_cli_over_defaults;
 pub use merge::{sanitize_value, sanitized_provider, value_without_nones};
-pub use subcommand::{SubcmdConfigMerge, load_and_merge_subcommand, load_and_merge_subcommand_for};
+pub use subcommand::{SubcmdConfigMerge, load_and_merge_subcommand};
 
 #[expect(
     deprecated,

@@ -28,11 +28,11 @@ manual aliasing.
   strongly typed Rust structs.
 - **Easy to Use:** A simple `#[derive(OrthoConfig)]` macro enables a quick
   start.
-- **Customizable:** Field-level attributes allow fine-grained control over
-  naming, defaults, and merging behavior.
+  - **Customisable:** Field-level attributes allow fine-grained control over
+    naming, defaults, and merging behaviour.
 - **Nested Configuration:** Naturally supports nested structs for organized
   configuration.
-- **Sensible Defaults:** Aims for intuitive behavior out-of-the-box.
+  - **Sensible Defaults:** Aims for intuitive behaviour out-of-the-box.
 
 ## Quick Start
 <!-- markdownlint-disable MD029 -->
@@ -203,7 +203,7 @@ configurable via:
 - TOML file: `max_connections = <value>`
 - JSON5 file: `max_connections` or `maxConnections` (configurable)
 
-You can customize these mappings using `#[ortho_config(…)]` attributes.
+You can customise these mappings using `#[ortho_config(…)]` attributes.
 
 ## Field Attributes `#[ortho_config(…)]`
 
@@ -228,10 +228,12 @@ Customize behaviour for each field:
 ## Subcommand Configuration
 
 Applications using `clap` subcommands can keep per-command defaults in a
-dedicated `cmds` namespace. The `SubcmdConfigMerge` trait provides a
-`load_and_merge` method that reads these values from configuration files and
-environment variables using the struct's `prefix()` function (which defaults to
-an empty string) and merges them underneath the CLI arguments.
+dedicated `cmds` namespace. The `SubcmdConfigMerge` trait exposes
+`load_and_merge(&self) -> Result<Self, ortho_config::OrthoError>`, which reads
+these values from configuration files and environment variables using the
+struct's `prefix()` function (default: empty string) and merges them beneath
+the CLI arguments. The method borrows `self` and returns a new merged instance,
+so the original values remain accessible.
 
 ```rust
 use clap::Parser;
@@ -337,18 +339,18 @@ fn main() -> Result<(), String> {
   files for persistent settings).
 - **Clear Precedence:** Predictable configuration resolution.
 
-## Migrating from 0.1 to 0.2
+## Migrating from 0.2 to 0.3
 
-Version 0.2 introduces a small API refinement:
+Version 0.3 introduces an API refinement:
 
 - `load_subcommand_config_for` now only loads default values from files and
   environment variables. Use [`load_and_merge`](#subcommand-configuration) to
-  merge these defaults with CLI arguments.
+  merge these defaults with CLI arguments via the `SubcmdConfigMerge` trait.
 - Types deriving `OrthoConfig` expose an associated `prefix()` function. Use
   this if you need the configured prefix directly.
 
-Update the `Cargo.toml` to depend on `ortho_config = "0.2"` and adjust code to
-call `load_and_merge` instead of manually merging defaults.
+Update the `Cargo.toml` to depend on `ortho_config = "0.3"` (or newer) and call
+`load_and_merge` instead of manually merging defaults.
 
 ## Contributing
 

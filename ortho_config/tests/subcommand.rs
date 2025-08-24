@@ -8,10 +8,7 @@ mod util;
 use clap::Parser;
 use ortho_config::OrthoConfig;
 use serde::{Deserialize, Serialize};
-use util::{
-    with_merged_subcommand_cli, with_merged_subcommand_cli_for, with_subcommand_config,
-    with_typed_subcommand_config,
-};
+use util::{with_merged_subcommand_cli, with_subcommand_config, with_typed_subcommand_config};
 
 #[derive(Debug, Deserialize, Default, PartialEq)]
 struct CmdCfg {
@@ -105,8 +102,9 @@ fn loads_yaml_file() {
     assert_eq!(cfg.foo.as_deref(), Some("yaml"));
 }
 
-#[derive(Debug, Deserialize, serde::Serialize, Default, PartialEq, Parser)]
+#[derive(Debug, Deserialize, serde::Serialize, Default, PartialEq, Parser, OrthoConfig, Clone)]
 #[command(name = "test")]
+#[ortho_config(prefix = "APP_")]
 struct MergeArgs {
     #[serde(skip_serializing_if = "Option::is_none")]
     foo: Option<String>,
@@ -141,18 +139,13 @@ fn merge_helper_combines_defaults_and_cli() {
     assert_eq!(merged.bar, None);
 }
 
-#[derive(Debug, Deserialize, serde::Serialize, OrthoConfig, Default, PartialEq, Parser, Clone)]
-#[command(name = "test")]
-#[ortho_config(prefix = "APP_")]
-struct MergePrefixed {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    foo: Option<String>,
-}
-
 #[test]
 fn merge_wrapper_respects_prefix() {
-    let cli = MergePrefixed { foo: None };
-    let merged = with_merged_subcommand_cli_for(
+    let cli = MergeArgs {
+        foo: None,
+        bar: None,
+    };
+    let merged = with_merged_subcommand_cli(
         |j| {
             j.create_file(".app.toml", "[cmds.test]\nfoo = \"file\"")?;
             Ok(())
@@ -163,8 +156,9 @@ fn merge_wrapper_respects_prefix() {
     assert_eq!(merged.foo.as_deref(), Some("file"));
 }
 
-#[derive(Debug, Deserialize, serde::Serialize, Parser, Default, PartialEq)]
+#[derive(Debug, Deserialize, serde::Serialize, Parser, Default, PartialEq, OrthoConfig, Clone)]
 #[command(name = "test")]
+#[ortho_config(prefix = "APP_")]
 struct RequiredCli {
     #[arg(long, required = true)]
     #[serde(skip_serializing_if = "Option::is_none")]
