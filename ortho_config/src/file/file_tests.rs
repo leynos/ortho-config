@@ -1,10 +1,18 @@
 //! Tests for configuration file helpers.
 
 use super::*;
-use figment::{Figment, Jail, providers::Format, providers::Toml};
+use figment::{Figment, providers::Format, providers::Toml};
 use rstest::rstest;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
+
+#[allow(deprecated, reason = "figment::Jail is used for test isolation only")]
+fn jail_expect_with<F>(f: F)
+where
+    F: FnOnce(&mut figment::Jail) -> figment::error::Result<()>,
+{
+    figment::Jail::expect_with(f);
+}
 
 enum ExtCase {
     Ok(Option<PathBuf>),
@@ -38,7 +46,7 @@ fn get_extends_cases(#[case] input: &str, #[case] expected: ExtCase) {
 #[case::relative(false)]
 #[case::absolute(true)]
 fn resolve_base_path_resolves(#[case] is_abs: bool) {
-    Jail::expect_with(|j| {
+    jail_expect_with(|j| {
         j.create_file("base.toml", "")?;
         #[cfg(windows)]
         let root = dunce::canonicalize(".").expect("canonicalise root");
@@ -80,7 +88,7 @@ fn merge_parent_child_overrides_parent_on_conflicts() {
 #[case::relative(false)]
 #[case::absolute(true)]
 fn process_extends_handles_relative_and_absolute(#[case] is_abs: bool) {
-    Jail::expect_with(|j| {
+    jail_expect_with(|j| {
         j.create_file("base.toml", "foo = \"base\"")?;
         #[cfg(windows)]
         let root = dunce::canonicalize(".").expect("canonicalise root");
@@ -116,7 +124,7 @@ fn process_extends_errors_when_no_parent() {
 
 #[test]
 fn process_extends_errors_when_base_is_not_file() {
-    Jail::expect_with(|j| {
+    jail_expect_with(|j| {
         j.create_dir("dir")?;
         #[cfg(windows)]
         let root = dunce::canonicalize(".").expect("canonicalise root");
@@ -134,7 +142,7 @@ fn process_extends_errors_when_base_is_not_file() {
 
 #[test]
 fn process_extends_errors_when_extends_empty() {
-    Jail::expect_with(|j| {
+    jail_expect_with(|j| {
         j.create_file("base.toml", "")?; // placeholder to satisfy Jail
         #[cfg(windows)]
         let root = dunce::canonicalize(".").expect("canonicalise root");
