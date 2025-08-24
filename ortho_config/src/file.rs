@@ -308,6 +308,8 @@ mod tests {
     )]
     #[case("foo = \"bar\"", ExtCase::Ok(None))]
     #[case("extends = 1", ExtCase::Err("must be a string"))]
+    #[case("extends = \"\"", ExtCase::Ok(Some(PathBuf::from(""))))]
+    #[case("extends = \"dir\"", ExtCase::Ok(Some(PathBuf::from("dir"))))]
     fn get_extends_cases(#[case] input: &str, #[case] expected: ExtCase) {
         let figment = Figment::from(Toml::string(input));
         match expected {

@@ -68,3 +68,25 @@ fn non_string_extends_errors() {
         Ok(())
     });
 }
+
+#[rstest]
+fn empty_extends_errors() {
+    figment::Jail::expect_with(|j| {
+        j.create_file("base.toml", "")?; // placeholder so Jail has root file
+        j.create_file(".config.toml", "extends = ''")?;
+        let err = ExtendsCfg::load_from_iter(["prog"]).unwrap_err();
+        assert!(err.to_string().contains("not a regular file"));
+        Ok(())
+    });
+}
+
+#[rstest]
+fn directory_extends_errors() {
+    figment::Jail::expect_with(|j| {
+        j.create_dir("dir")?;
+        j.create_file(".config.toml", "extends = 'dir'")?;
+        let err = ExtendsCfg::load_from_iter(["prog"]).unwrap_err();
+        assert!(err.to_string().contains("not a regular file"));
+        Ok(())
+    });
+}
