@@ -8,8 +8,17 @@
 pub mod env {
     //! Helpers for safely mutating environment variables in tests.
     //!
-    //! Each mutation acquires a global mutex and returns an RAII guard that
-    //! restores the previous state when dropped.
+    //! Each mutation acquires a global re-entrant mutex and returns an RAII guard that:
+    //! - Holds the mutex for the entire lifetime of the guard to serialise all
+    //!   environment mutations across threads.
+    //! - Restores the previous state when dropped (removing the variable if it
+    //!   was previously absent).
+    //!
+    //! Behaviour:
+    //! - Stacking multiple guards for the same key is supported and restores in
+    //!   LIFO order.
+    //! - The coarse-grained lock trades parallelism for safety; tests that mutate
+    //!   the environment will be serialised while a guard is in scope.
     //!
     //! # Examples
     //!
@@ -28,13 +37,21 @@ pub mod env {
 
     static ENV_MUTEX: LazyLock<ReentrantMutex<()>> = LazyLock::new(ReentrantMutex::default);
 
-    fn set_var_inner(key: &str, value: &OsStr) {
-        // SAFETY: Mutations are serialised by `ENV_MUTEX`.
+    /// Wrapper around `std::env::set_var`.
+    ///
+    /// # Safety
+    ///
+    /// Callers must ensure the global environment is synchronised.
+    unsafe fn env_set_var(key: &str, value: &OsStr) {
         unsafe { env::set_var(key, value) };
     }
 
-    fn remove_var_inner(key: &str) {
-        // SAFETY: Mutations are serialised by `ENV_MUTEX`.
+    /// Wrapper around `std::env::remove_var`.
+    ///
+    /// # Safety
+    ///
+    /// Callers must ensure the global environment is synchronised.
+    unsafe fn env_remove_var(key: &str) {
         unsafe { env::remove_var(key) };
     }
 
@@ -74,6 +91,11 @@ pub mod env {
 
     /// Sets an environment variable and returns a guard restoring its prior value.
     ///
+    /// # Safety
+    /// Although this function is safe to call, it mutates process-wide state.
+    /// Access is serialised by a global re-entrant mutex held by the returned
+    /// guard.
+    ///
     /// # Examples
     /// ```
     /// use test_helpers::env;
@@ -86,10 +108,15 @@ pub mod env {
         K: Into<String>,
         V: AsRef<OsStr>,
     {
-        mutate_env_var(key, |k| set_var_inner(k, value.as_ref()))
+        mutate_env_var(key, |k| unsafe { env_set_var(k, value.as_ref()) })
     }
 
     /// Removes an environment variable and returns a guard restoring its prior value.
+    ///
+    /// # Safety
+    /// Although this function is safe to call, it mutates process-wide state.
+    /// Access is serialised by a global re-entrant mutex held by the returned
+    /// guard.
     ///
     /// # Examples
     /// ```
@@ -102,16 +129,17 @@ pub mod env {
     where
         K: Into<String>,
     {
-        mutate_env_var(key, remove_var_inner)
+        mutate_env_var(key, |k| unsafe { env_remove_var(k) })
     }
 
     impl Drop for EnvVarGuard {
         fn drop(&mut self) {
             if let Some(val) = self.original.take() {
-                // guard still holds the lock
-                set_var_inner(&self.key, &val);
+                // SAFETY: Guard still holds `ENV_MUTEX`.
+                unsafe { env_set_var(&self.key, &val) };
             } else {
-                remove_var_inner(&self.key);
+                // SAFETY: Guard still holds `ENV_MUTEX`.
+                unsafe { env_remove_var(&self.key) };
             }
         }
     }
@@ -135,32 +163,32 @@ pub mod env {
         fn set_var_restores_original() {
             let key = "TEST_HELPERS_SET_VAR";
             let original = "orig";
-            super::with_lock(|| super::set_var_inner(key, OsStr::new(original)));
+            super::with_lock(|| unsafe { super::env_set_var(key, OsStr::new(original)) });
             {
                 let _guard = set_var(key, "temp");
                 assert_eq!(std::env::var(key).expect("read env var"), "temp");
             }
             assert_eq!(std::env::var(key).expect("read env var"), original);
-            super::with_lock(|| super::remove_var_inner(key));
+            super::with_lock(|| unsafe { super::env_remove_var(key) });
         }
 
         #[test]
         fn remove_var_restores_value() {
             let key = "TEST_HELPERS_REMOVE_VAR";
             let original = "to-be-removed";
-            super::with_lock(|| super::set_var_inner(key, OsStr::new(original)));
+            super::with_lock(|| unsafe { super::env_set_var(key, OsStr::new(original)) });
             {
                 let _guard = remove_var(key);
                 assert!(std::env::var(key).is_err());
             }
             assert_eq!(std::env::var(key).expect("read env var"), original);
-            super::with_lock(|| super::remove_var_inner(key));
+            super::with_lock(|| unsafe { super::env_remove_var(key) });
         }
 
         #[test]
         fn set_var_unsets_when_absent() {
             let key = "TEST_HELPERS_UNSET";
-            super::with_lock(|| super::remove_var_inner(key));
+            super::with_lock(|| unsafe { super::env_remove_var(key) });
             {
                 let _guard = set_var(key, "tmp");
                 assert_eq!(std::env::var(key).expect("read env var"), "tmp");
@@ -203,7 +231,7 @@ pub mod env {
         fn stacking_restores_in_lifo() {
             let key = "TEST_HELPERS_STACKING";
             // Ensure clean slate
-            super::with_lock(|| super::remove_var_inner(key));
+            super::with_lock(|| unsafe { super::env_remove_var(key) });
             {
                 let _g1 = set_var(key, "v1");
                 assert_eq!(std::env::var(key).expect("read env var"), "v1");
