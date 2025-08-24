@@ -144,7 +144,7 @@ project:
   ```
 
 - Environment access (env::set_var and env::remove_var) are always unsafe in
-  Rust 2024 editionand **must** be marked as such 
+  Rust 2024 editionand **must** be marked as such
 
 ### Testing
 
@@ -158,8 +158,8 @@ project:
   like `Env` and `Clock`) where appropriate. See
   `docs/reliable-testing-in-rust-via-dependency-injection.md` for guidance.
 - If DI + `mockable` cannot be used, env mutations in tests **must** be wrapped
-  in shared guards and mutexes placed in a shared `test_utils` or `test_helpers`
-  crate.  Direct environment mutation is **forbidden** in tests.
+  in shared guards and mutexes placed in a shared `test_utils` or
+  `test_helpers` crate.  Direct environment mutation is **forbidden** in tests.
 
 ### Dependency Management
 

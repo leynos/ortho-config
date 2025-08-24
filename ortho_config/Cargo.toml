@@ -27,6 +27,9 @@ directories = "6"
 [target.'cfg(any(unix, target_os = "redox"))'.dependencies]
 xdg = "3"
 
+[target.'cfg(windows)'.dependencies]
+dunce = "1.0.0"
+
 [features]
 default = ["toml"]
 toml = ["figment/toml", "dep:toml"]

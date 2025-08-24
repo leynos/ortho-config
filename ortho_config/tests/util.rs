@@ -25,11 +25,38 @@ where
     let result = RefCell::new(None);
     figment::Jail::try_with(|j| {
         setup(j)?;
-        let cfg = loader().map_err(|e| figment::error::Error::from(e.to_string()))?;
+        let cfg = loader().map_err(|e| -> figment::error::Error { e.into() })?;
         result.replace(Some(cfg));
         Ok(())
     })?;
     Ok(result.into_inner().expect("loader executed"))
+}
+
+/// Runs `setup` in a jailed environment then loads a subcommand
+/// configuration for the `test` command using the `APP_` prefix.
+///
+/// # Errors
+///
+/// Returns an error if configuration loading fails.
+#[expect(
+    clippy::result_large_err,
+    reason = "tests need full error details for assertions"
+)]
+pub fn with_subcommand_config<F, T>(setup: F) -> Result<T, OrthoError>
+where
+    F: FnOnce(&mut figment::Jail) -> figment::error::Result<()>,
+    T: DeserializeOwned + Default,
+{
+    with_jail(setup, || {
+        #[expect(
+            deprecated,
+            reason = "figment's Jail uses deprecated APIs for test isolation"
+        )]
+        {
+            // FIXME: remove once figment::Jail replacement lands upstream (see https://github.com/SergioBenitez/Figment/issues/138)
+            ortho_config::load_subcommand_config::<T>(&Prefix::new("APP_"), &CmdName::new("test"))
+        }
+    })
 }
 
 /// Runs `setup` in a jailed environment, then loads defaults for the `test`
@@ -70,32 +97,5 @@ where
     with_jail(setup, || load_and_merge_subcommand_for(cli))
 }
 
-/// Runs `setup` in a jailed environment, then loads configuration for the
-/// `test` subcommand using the fixed `APP_` prefix.
-///
-/// This helper is used in tests that validate environment variable handling
-/// and nesting semantics without involving CLI merging. It mirrors the legacy
-/// behaviour of the previous monolithic `subcommand.rs` helpers.
-///
-/// # Errors
-///
-/// Returns an [`OrthoError`] if configuration loading fails.
-#[expect(
-    clippy::result_large_err,
-    reason = "tests need full error details for assertions"
-)]
-pub fn with_subcommand_config<F, T>(setup: F) -> Result<T, OrthoError>
-where
-    F: FnOnce(&mut figment::Jail) -> figment::error::Result<()>,
-    T: serde::de::DeserializeOwned + Default,
-{
-    with_jail(setup, || {
-        // Use the deprecated helper intentionally to match legacy behaviour in
-        // these tests. Scope the allowance narrowly to keep other warnings
-        // denied.
-        #[allow(deprecated)]
-        {
-            ortho_config::load_subcommand_config::<T>(&Prefix::new("APP_"), &CmdName::new("test"))
-        }
-    })
-}
+// Intentionally no additional legacy-only helper; tests should use the
+// unified wrappers above to exercise both legacy and current behaviours.
