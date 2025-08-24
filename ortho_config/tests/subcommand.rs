@@ -7,7 +7,7 @@ mod util;
 use clap::Parser;
 use ortho_config::OrthoConfig;
 use serde::{Deserialize, Serialize};
-use util::{with_merged_subcommand_cli, with_merged_subcommand_cli_for};
+use util::{with_merged_subcommand_cli, with_merged_subcommand_cli_for, with_subcommand_config};
 
 #[derive(Debug, Serialize, Deserialize, Default, PartialEq, Parser)]
 #[command(name = "test")]

@@ -5,7 +5,7 @@
 //! tests by encapsulating the jail creation and configuration loading.
 
 use clap::CommandFactory;
-use ortho_config::subcommand::Prefix;
+use ortho_config::subcommand::{CmdName, Prefix};
 use ortho_config::{
     OrthoConfig, OrthoError, load_and_merge_subcommand, load_and_merge_subcommand_for,
 };
@@ -68,4 +68,34 @@ where
     T: OrthoConfig + serde::Serialize + Default + CommandFactory,
 {
     with_jail(setup, || load_and_merge_subcommand_for(cli))
+}
+
+/// Runs `setup` in a jailed environment, then loads configuration for the
+/// `test` subcommand using the fixed `APP_` prefix.
+///
+/// This helper is used in tests that validate environment variable handling
+/// and nesting semantics without involving CLI merging. It mirrors the legacy
+/// behaviour of the previous monolithic `subcommand.rs` helpers.
+///
+/// # Errors
+///
+/// Returns an [`OrthoError`] if configuration loading fails.
+#[expect(
+    clippy::result_large_err,
+    reason = "tests need full error details for assertions"
+)]
+pub fn with_subcommand_config<F, T>(setup: F) -> Result<T, OrthoError>
+where
+    F: FnOnce(&mut figment::Jail) -> figment::error::Result<()>,
+    T: serde::de::DeserializeOwned + Default,
+{
+    with_jail(setup, || {
+        // Use the deprecated helper intentionally to match legacy behaviour in
+        // these tests. Scope the allowance narrowly to keep other warnings
+        // denied.
+        #[allow(deprecated)]
+        {
+            ortho_config::load_subcommand_config::<T>(&Prefix::new("APP_"), &CmdName::new("test"))
+        }
+    })
 }
