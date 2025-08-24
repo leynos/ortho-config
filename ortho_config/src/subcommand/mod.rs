@@ -5,7 +5,7 @@ use clap::CommandFactory;
 use figment::{Figment, providers::Env};
 use serde::de::DeserializeOwned;
 use std::path::PathBuf;
-use uncased::Uncased;
+use uncased::{Uncased, UncasedStr};
 
 mod paths;
 mod types;
@@ -13,6 +13,11 @@ mod types;
 use paths::candidate_paths;
 pub use paths::push_stem_candidates;
 pub use types::{CmdName, Prefix};
+
+/// Maps an `UncasedStr` to an owned `Uncased` without using an inline closure.
+fn to_uncased(key: &UncasedStr) -> Uncased<'_> {
+    Uncased::from(key)
+}
 
 /// Load and merge `[cmds.<name>]` sections from the given paths.
 ///
@@ -77,9 +82,7 @@ where
 
     let env_name = name.env_key();
     let env_prefix = format!("{}CMDS_{env_name}_", prefix.raw());
-    let env_provider = Env::prefixed(&env_prefix)
-        .map(|k| Uncased::from(k))
-        .split("__");
+    let env_provider = Env::prefixed(&env_prefix).map(to_uncased).split("__");
     fig = fig.merge(env_provider);
 
     // Extraction only gathers defaults, so map failures accordingly.
