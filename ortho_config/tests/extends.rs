@@ -61,8 +61,10 @@ fn non_string_extends_errors() {
     figment::Jail::expect_with(|j| {
         j.create_file(".config.toml", "extends = 1")?;
         let err = ExtendsCfg::load_from_iter(["prog"]).unwrap_err();
-        let msg = format!("{err}");
+        let msg = err.to_string();
         assert!(msg.contains("must be a string"));
+        // Also assert the origin file is mentioned for better diagnostics.
+        assert!(msg.contains(".config.toml"));
         Ok(())
     });
 }

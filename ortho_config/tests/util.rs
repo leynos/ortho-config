@@ -39,10 +39,6 @@ where
 ///
 /// Returns an error if configuration loading fails.
 #[expect(
-    deprecated,
-    reason = "figment's Jail uses deprecated APIs for test isolation"
-)]
-#[expect(
     clippy::result_large_err,
     reason = "tests need full error details for assertions"
 )]
@@ -52,7 +48,14 @@ where
     T: DeserializeOwned + Default,
 {
     with_jail(setup, || {
-        ortho_config::load_subcommand_config::<T>(&Prefix::new("APP_"), &CmdName::new("test"))
+        #[expect(
+            deprecated,
+            reason = "figment's Jail uses deprecated APIs for test isolation"
+        )]
+        {
+            // FIXME: remove once figment::Jail replacement lands upstream (see https://github.com/SergioBenitez/Figment/issues/138)
+            ortho_config::load_subcommand_config::<T>(&Prefix::new("APP_"), &CmdName::new("test"))
+        }
     })
 }
 
@@ -63,10 +66,6 @@ where
 ///
 /// Returns an error if configuration loading fails.
 #[expect(
-    deprecated,
-    reason = "figment's Jail uses deprecated APIs for test isolation"
-)]
-#[expect(
     clippy::result_large_err,
     reason = "tests need full error details for assertions"
 )]
@@ -76,7 +75,14 @@ where
     T: OrthoConfig + Default,
 {
     with_jail(setup, || {
-        ortho_config::load_subcommand_config_for::<T>(&CmdName::new("test"))
+        #[expect(
+            deprecated,
+            reason = "figment's Jail uses deprecated APIs for test isolation"
+        )]
+        {
+            // FIXME: remove once figment::Jail replacement lands upstream (see https://github.com/SergioBenitez/Figment/issues/138)
+            ortho_config::load_subcommand_config_for::<T>(&CmdName::new("test"))
+        }
     })
 }
 

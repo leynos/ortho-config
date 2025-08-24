@@ -4,6 +4,12 @@
     reason = "OrthoError is intentionally large throughout this module"
 )]
 
+// FIXME: Reduce OrthoError size (e.g., via Arc) to remove this expectation.
+#![expect(
+    clippy::result_large_err,
+    reason = "Surface detailed file errors to callers"
+)]
+
 use crate::OrthoError;
 #[cfg(feature = "yaml")]
 use figment::providers::Yaml;
@@ -131,6 +137,9 @@ fn get_extends(figment: &Figment, current_path: &Path) -> Result<Option<PathBuf>
 /// Canonicalisation ensures consistent absolute paths for robust cycle
 /// detection and de-duplication across symlinks.
 ///
+/// The target must already exist as a regular file; non-existent paths
+/// cause canonicalisation to fail and an error to be returned.
+///
 /// # Errors
 ///
 /// Returns an [`OrthoError`] if the parent directory cannot be determined
@@ -201,9 +210,18 @@ fn process_extends(
 ) -> Result<Figment, OrthoError> {
     if let Some(base) = get_extends(&figment, current_path)? {
         let canonical = resolve_base_path(current_path, base)?;
-        if let Some(parent_fig) = load_config_file_inner(&canonical, visited, stack)? {
-            figment = merge_parent(figment, parent_fig);
+        if !canonical.is_file() {
+            return Err(file_error(
+                &canonical,
+                std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "extended path is not a regular file",
+                ),
+            ));
         }
+        let parent_fig = load_config_file_inner(&canonical, visited, stack)?
+            .expect("canonical path is a regular file");
+        figment = merge_parent(figment, parent_fig);
     }
     Ok(figment)
 }
@@ -376,5 +394,35 @@ mod tests {
             err.to_string()
                 .contains("Cannot determine parent directory")
         );
+    }
+
+    #[test]
+    fn process_extends_errors_when_base_is_not_file() {
+        Jail::expect_with(|j| {
+            j.create_dir("dir")?;
+            let root = std::fs::canonicalize(".").expect("canonicalise root");
+            let current = root.join("config.toml");
+            let figment = Figment::from(Toml::string("extends = 'dir'"));
+            let mut visited = HashSet::new();
+            let mut stack = Vec::new();
+            let err = process_extends(figment, &current, &mut visited, &mut stack).unwrap_err();
+            assert!(err.to_string().contains("not a regular file"));
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn process_extends_errors_when_extends_empty() {
+        Jail::expect_with(|j| {
+            j.create_file("base.toml", "")?; // placeholder to satisfy Jail
+            let root = std::fs::canonicalize(".").expect("canonicalise root");
+            let current = root.join("config.toml");
+            let figment = Figment::from(Toml::string("extends = ''"));
+            let mut visited = HashSet::new();
+            let mut stack = Vec::new();
+            let err = process_extends(figment, &current, &mut visited, &mut stack).unwrap_err();
+            assert!(err.to_string().contains("not a regular file"));
+            Ok(())
+        });
     }
 }
