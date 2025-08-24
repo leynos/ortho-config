@@ -153,7 +153,7 @@ In this example, `answer_to_life` is a public function marked with
 `#[fixture]`. It takes no arguments and returns a `u32` value of 42. The
 `#[fixture]` macro effectively registers this function with the `rstest`
 system, transforming it into a component that `rstest` can discover and
-utilise. The return type of the fixture function (here, `u32`) defines the type
+utilize. The return type of the fixture function (here, `u32`) defines the type
 of the data that will be injected into tests requesting this fixture. Fixtures
 can return any valid Rust type, from simple primitives to complex structs or
 trait objects. Fixtures can also depend on other fixtures, allowing for
@@ -162,7 +162,7 @@ compositional setup.
 ### C. Injecting Fixtures into Tests with `#[rstest]`
 
 Once a fixture is defined, it can be used in a test function. Test functions
-that utilise `rstest` features, including fixture injection, must be annotated
+that utilize `rstest` features, including fixture injection, must be annotated
 with the `#[rstest]` attribute. The fixture is then injected by simply
 declaring an argument in the test function with the same name as the fixture
 function.
@@ -1071,7 +1071,7 @@ significantly increase binary size if used with large data files.
 
 ## VIII. Reusability and Organization
 
-As test suites grow, maintaining reusability and clear organisation becomes
+As test suites grow, maintaining reusability and clear organization becomes
 paramount. `rstest` and its ecosystem provide tools and encourage practices
 that support these goals.
 
@@ -1132,7 +1132,7 @@ applying them.
 
 ### B. Best Practices for Organizing Fixtures and Tests
 
-Good fixture and test organisation mirrors good software design principles. As
+Good fixture and test organization mirrors good software design principles. As
 the number of tests and fixtures grows, a well-structured approach is critical
 for maintainability and scalability.
 
@@ -1169,7 +1169,7 @@ external dependencies, also applies and is well-supported by `rstest`'s design.
 ## IX. `rstest` in Context: Comparison and Considerations
 
 Understanding how `rstest` compares to standard Rust testing approaches and its
-potential trade-offs helps in deciding when and how to best utilise it.
+potential trade-offs helps in deciding when and how to best utilize it.
 
 ### A. `rstest` vs. Standard Rust `#[test]` and Manual Setup
 

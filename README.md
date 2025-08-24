@@ -28,7 +28,7 @@ manual aliasing.
   strongly typed Rust structs.
 - **Easy to Use:** A simple `#[derive(OrthoConfig)]` macro enables a quick
   start.
-  - **Customisable:** Field-level attributes allow fine-grained control over
+  - **Customizable:** Field-level attributes allow fine-grained control over
     naming, defaults, and merging behaviour.
 - **Nested Configuration:** Naturally supports nested structs for organized
   configuration.

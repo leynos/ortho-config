@@ -12,7 +12,7 @@ the dispatch logic can become cumbersome.
 
 The `clap-dispatch` crate aims to alleviate this by providing an ergonomic
 mechanism for dispatching CLI subcommands.3 It leverages Rust's trait system
-and procedural macros to reduce boilerplate and improve code organisation when
+and procedural macros to reduce boilerplate and improve code organization when
 subcommands represent different ways of performing a similar action.
 
 This report serves a dual purpose. Firstly, it provides comprehensive,
@@ -760,6 +760,7 @@ env vars) let ortho_config_store = OrthoConfigStore::load("mycli")?;
     match cli_args.command { Commands::List(clap_parsed_list_args) => { // 4.
     Merge CLI values over ortho-config defaults for the subcommand let
     final_list_args =
+    // `load_and_merge` borrows `self` and returns a merged instance.
     clap_parsed_list_args.load_and_merge()?;
     Commands::List(final_list_args) } // Commands::Add(clap_parsed_add_args) =>
     { /* similar logic for Add command */ } };

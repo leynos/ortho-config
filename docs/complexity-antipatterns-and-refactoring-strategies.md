@@ -737,7 +737,7 @@ without modifying existing dispatcher code (aligning with the Open/Closed
 Principle). However, it's important to ensure that the dispatch mechanism
 itself remains clear and that the proliferation of small classes doesn't lead
 to Ravioli Code, where the overall system flow becomes obscured. Clear naming
-conventions and logical organisation are vital.
+conventions and logical organization are vital.
 
 The **State pattern** is a related behavioural pattern useful when an object's
 behaviour changes depending on its internal state. Instead of using large
