@@ -144,9 +144,7 @@ mod tests {
     #[cfg(any(unix, target_os = "redox"))]
     use super::*;
     #[cfg(any(unix, target_os = "redox"))]
-    use rstest::{fixture, rstest};
-    #[cfg(any(unix, target_os = "redox"))]
-    use serial_test::serial;
+    use rstest::rstest;
     #[cfg(any(unix, target_os = "redox"))]
     use std::fs;
     #[cfg(any(unix, target_os = "redox"))]
@@ -158,36 +156,22 @@ mod tests {
     use test_helpers::env::{self as test_env, EnvVarGuard};
 
     #[cfg(any(unix, target_os = "redox"))]
-    struct XdgGuard {
-        dir: TempDir,
-        _var: EnvVarGuard,
-    }
-
-    #[cfg(any(unix, target_os = "redox"))]
-    #[fixture]
-    fn xdg_home() -> XdgGuard {
+    /// Creates a temporary XDG config directory and sets `XDG_CONFIG_HOME` for the test.
+    fn init_xdg_home() -> (TempDir, EnvVarGuard) {
         let dir = TempDir::new().expect("xdg");
-        let var = test_env::set_var("XDG_CONFIG_HOME", dir.path());
-        XdgGuard { dir, _var: var }
+        let guard = test_env::set_var("XDG_CONFIG_HOME", dir.path());
+        (dir, guard)
     }
 
     #[cfg(any(unix, target_os = "redox"))]
     #[rstest]
-    #[serial]
     #[case(&["toml"], &["config.toml"])]
     #[cfg(feature = "json5")]
     #[case(&["json", "json5"], &["config.json", "config.json5"])]
     #[cfg(feature = "yaml")]
     #[case(&["yaml", "yml"], &["config.yaml", "config.yml"])]
-    fn push_xdg_candidates_finds_files(
-        #[case] exts: &[&str],
-        #[case] files: &[&str],
-        xdg_home: XdgGuard,
-    ) {
-        let XdgGuard {
-            dir,
-            _var: _env_guard,
-        } = xdg_home;
+    fn push_xdg_candidates_finds_files(#[case] exts: &[&str], #[case] files: &[&str]) {
+        let (dir, _guard) = init_xdg_home();
         let dir = dir.path();
         for entry in fs::read_dir(dir).expect("read dir") {
             let entry = entry.expect("entry");
@@ -215,17 +199,13 @@ mod tests {
 
     #[cfg(any(unix, target_os = "redox"))]
     #[rstest]
-    #[serial]
     #[case("")]
     #[case("myapp")]
-    fn candidate_paths_ordering(#[case] prefix_raw: &str, xdg_home: XdgGuard) {
+    fn candidate_paths_ordering(#[case] prefix_raw: &str) {
         let home = TempDir::new().expect("home");
         let home_guard = test_env::set_var("HOME", home.path());
 
-        let XdgGuard {
-            dir: base_dir,
-            _var: _env_guard,
-        } = xdg_home;
+        let (base_dir, _guard) = init_xdg_home();
         let base = base_dir.path();
         let xdg_cfg_dir = if prefix_raw.is_empty() {
             base.to_path_buf()
