@@ -1,31 +1,35 @@
 //! Tests for subcommand configuration helpers.
 
 #![allow(non_snake_case)]
-#![allow(deprecated)]
 //! Utilities for subcommand test setup and loading.
 mod util;
 
 use clap::Parser;
 use ortho_config::OrthoConfig;
 use serde::{Deserialize, Serialize};
-use util::{
-    with_merged_subcommand_cli, with_merged_subcommand_cli_for, with_subcommand_config,
-    with_typed_subcommand_config,
-};
+use util::{with_merged_subcommand_cli, with_merged_subcommand_cli_for};
 
-#[derive(Debug, Deserialize, Default, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Default, PartialEq, Parser)]
+#[command(name = "test")]
 struct CmdCfg {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[arg(long)]
     foo: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[arg(long)]
     bar: Option<bool>,
 }
 
 #[test]
 fn file_and_env_loading() {
-    let cfg: CmdCfg = with_subcommand_config(|j| {
-        j.create_file(".app.toml", "[cmds.test]\nfoo = \"file\"\nbar = true")?;
-        j.set_env("APP_CMDS_TEST_FOO", "env");
-        Ok(())
-    })
+    let cfg: CmdCfg = with_merged_subcommand_cli(
+        |j| {
+            j.create_file(".app.toml", "[cmds.test]\nfoo = \"file\"\nbar = true")?;
+            j.set_env("APP_CMDS_TEST_FOO", "env");
+            Ok(())
+        },
+        &CmdCfg::default(),
+    )
     .expect("config");
     assert_eq!(cfg.foo.as_deref(), Some("env"));
     assert_eq!(cfg.bar, Some(true));
@@ -33,29 +37,35 @@ fn file_and_env_loading() {
 
 #[test]
 fn loads_from_home() {
-    let cfg: CmdCfg = with_subcommand_config(|j| {
-        let home = j.create_dir("home")?;
-        j.create_file(home.join(".app.toml"), "[cmds.test]\nfoo = \"home\"")?;
-        j.set_env("HOME", home.to_str().unwrap());
-        #[cfg(windows)]
-        j.set_env("USERPROFILE", home.to_str().unwrap());
-        Ok(())
-    })
+    let cfg: CmdCfg = with_merged_subcommand_cli(
+        |j| {
+            let home = j.create_dir("home")?;
+            j.create_file(home.join(".app.toml"), "[cmds.test]\nfoo = \"home\"")?;
+            j.set_env("HOME", home.to_str().unwrap());
+            #[cfg(windows)]
+            j.set_env("USERPROFILE", home.to_str().unwrap());
+            Ok(())
+        },
+        &CmdCfg::default(),
+    )
     .expect("config");
     assert_eq!(cfg.foo.as_deref(), Some("home"));
 }
 
 #[test]
 fn local_overrides_home() {
-    let cfg: CmdCfg = with_subcommand_config(|j| {
-        let home = j.create_dir("home")?;
-        j.create_file(home.join(".app.toml"), "[cmds.test]\nfoo = \"home\"")?;
-        j.set_env("HOME", home.to_str().unwrap());
-        #[cfg(windows)]
-        j.set_env("USERPROFILE", home.to_str().unwrap());
-        j.create_file(".app.toml", "[cmds.test]\nfoo = \"local\"")?;
-        Ok(())
-    })
+    let cfg: CmdCfg = with_merged_subcommand_cli(
+        |j| {
+            let home = j.create_dir("home")?;
+            j.create_file(home.join(".app.toml"), "[cmds.test]\nfoo = \"home\"")?;
+            j.set_env("HOME", home.to_str().unwrap());
+            #[cfg(windows)]
+            j.set_env("USERPROFILE", home.to_str().unwrap());
+            j.create_file(".app.toml", "[cmds.test]\nfoo = \"local\"")?;
+            Ok(())
+        },
+        &CmdCfg::default(),
+    )
     .expect("config");
     assert_eq!(cfg.foo.as_deref(), Some("local"));
 }
@@ -64,14 +74,17 @@ fn local_overrides_home() {
 #[cfg(any(unix, target_os = "redox"))]
 #[test]
 fn loads_from_xdg_config() {
-    let cfg: CmdCfg = with_subcommand_config(|j| {
-        let xdg = j.create_dir("xdg")?;
-        let abs = std::fs::canonicalize(&xdg).unwrap();
-        j.create_dir(abs.join("app"))?;
-        j.create_file(abs.join("app/config.toml"), "[cmds.test]\nfoo = \"xdg\"")?;
-        j.set_env("XDG_CONFIG_HOME", abs.to_str().unwrap());
-        Ok(())
-    })
+    let cfg: CmdCfg = with_merged_subcommand_cli(
+        |j| {
+            let xdg = j.create_dir("xdg")?;
+            let abs = std::fs::canonicalize(&xdg).unwrap();
+            j.create_dir(abs.join("app"))?;
+            j.create_file(abs.join("app/config.toml"), "[cmds.test]\nfoo = \"xdg\"")?;
+            j.set_env("XDG_CONFIG_HOME", abs.to_str().unwrap());
+            Ok(())
+        },
+        &CmdCfg::default(),
+    )
     .expect("config");
     assert_eq!(cfg.foo.as_deref(), Some("xdg"));
 }
@@ -79,17 +92,21 @@ fn loads_from_xdg_config() {
 #[derive(Debug, Deserialize, Serialize, Parser, OrthoConfig, Default, PartialEq)]
 #[allow(non_snake_case)]
 #[ortho_config(prefix = "APP_")]
+#[command(name = "test")]
 struct PrefixedCfg {
     foo: Option<String>,
 }
 
 #[test]
 fn wrapper_uses_struct_prefix() {
-    let cfg: PrefixedCfg = with_typed_subcommand_config(|j| {
-        j.create_file(".app.toml", "[cmds.test]\nfoo = \"val\"")?;
-        j.set_env("APP_CMDS_TEST_FOO", "env");
-        Ok(())
-    })
+    let cfg: PrefixedCfg = with_merged_subcommand_cli_for(
+        |j| {
+            j.create_file(".app.toml", "[cmds.test]\nfoo = \"val\"")?;
+            j.set_env("APP_CMDS_TEST_FOO", "env");
+            Ok(())
+        },
+        &PrefixedCfg::default(),
+    )
     .expect("config");
     assert_eq!(cfg.foo.as_deref(), Some("env"));
 }
@@ -97,10 +114,13 @@ fn wrapper_uses_struct_prefix() {
 #[cfg(feature = "yaml")]
 #[test]
 fn loads_yaml_file() {
-    let cfg: CmdCfg = with_subcommand_config(|j| {
-        j.create_file(".app.yml", "cmds:\n  test:\n    foo: yaml")?;
-        Ok(())
-    })
+    let cfg: CmdCfg = with_merged_subcommand_cli(
+        |j| {
+            j.create_file(".app.yml", "cmds:\n  test:\n    foo: yaml")?;
+            Ok(())
+        },
+        &CmdCfg::default(),
+    )
     .expect("config");
     assert_eq!(cfg.foo.as_deref(), Some("yaml"));
 }

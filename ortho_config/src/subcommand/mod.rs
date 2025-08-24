@@ -64,7 +64,10 @@ fn load_from_files(paths: &[PathBuf], name: &CmdName) -> Result<Figment, OrthoEr
     clippy::result_large_err,
     reason = "Figment merge errors inflate Result size; wrapping in `Arc` is tracked on the roadmap for v0.4.0"
 )]
-#[deprecated(note = "use `load_and_merge_subcommand` or `load_and_merge_subcommand_for` instead")]
+#[deprecated(
+    since = "0.3.0",
+    note = "use `load_and_merge_subcommand` or `load_and_merge_subcommand_for` instead; removed in v0.4.0"
+)]
 pub fn load_subcommand_config<T>(prefix: &Prefix, name: &CmdName) -> Result<T, OrthoError>
 where
     T: DeserializeOwned + Default,
@@ -79,6 +82,7 @@ where
         .split("__");
     fig = fig.merge(env_provider);
 
+    // Extraction only gathers defaults, so map failures accordingly.
     fig.extract().map_err(OrthoError::Gathering)
 }
 
@@ -123,7 +127,10 @@ where
     clippy::result_large_err,
     reason = "Figment merge errors inflate Result size; wrapping in `Arc` is tracked on the roadmap for v0.4.0"
 )]
-#[deprecated(note = "use `load_and_merge_subcommand_for` instead")]
+#[deprecated(
+    since = "0.3.0",
+    note = "use `load_and_merge_subcommand_for` instead; removed in v0.4.0"
+)]
 pub fn load_subcommand_config_for<T>(name: &CmdName) -> Result<T, OrthoError>
 where
     T: crate::OrthoConfig + Default,
@@ -193,6 +200,7 @@ where
         .split("__");
     fig = fig.merge(env_provider);
 
+    // CLI values are merged over defaults; map failures to `Merge`.
     fig.merge(sanitized_provider(cli)?)
         .extract()
         .map_err(OrthoError::merge)

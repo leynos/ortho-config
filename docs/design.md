@@ -268,7 +268,9 @@ pub enum OrthoError {
 
 The implementation must be careful to wrap errors from `clap`, `figment`, and
 file IO into this enum, adding contextual information (like file paths) where
-possible.
+possible. `Gathering` covers failures while sourcing defaults from files or the
+environment. When CLI values are overlaid onto those defaults, any merge or
+deserialisation failures map to `Merge`.
 
 ### 4.6. Configuration File Discovery
 

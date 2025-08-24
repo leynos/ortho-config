@@ -99,13 +99,9 @@ pub(crate) fn collect_unix_paths(prefix: &Prefix, paths: &mut Vec<PathBuf>) {
         BaseDirectories::with_prefix(prefix.as_str())
     };
 
-    push_xdg_candidates(&xdg_dirs, &["toml"], paths);
-
-    #[cfg(feature = "json5")]
-    push_xdg_candidates(&xdg_dirs, &["json", "json5"], paths);
-
-    #[cfg(feature = "yaml")]
-    push_xdg_candidates(&xdg_dirs, &["yaml", "yml"], paths);
+    for group in EXT_GROUPS {
+        push_xdg_candidates(&xdg_dirs, group, paths);
+    }
 }
 
 #[cfg(not(any(unix, target_os = "redox")))]
@@ -210,6 +206,8 @@ mod tests {
     #[case(&["toml"], &["config.toml"])]
     #[cfg(feature = "json5")]
     #[case(&["json", "json5"], &["config.json", "config.json5"])]
+    #[cfg(feature = "yaml")]
+    #[case(&["yaml", "yml"], &["config.yaml", "config.yml"])]
     fn push_xdg_candidates_finds_files(#[case] exts: &[&str], #[case] files: &[&str]) {
         let dir = xdg_path();
         for entry in fs::read_dir(dir).expect("read dir") {
