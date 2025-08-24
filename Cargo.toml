@@ -1,7 +1,8 @@
 [workspace]
 members = [
     "ortho_config",
-    "ortho_config_macros"
+    "ortho_config_macros",
+    "test_helpers"
 ]
 resolver = "2"
 

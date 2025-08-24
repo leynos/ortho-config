@@ -149,74 +149,33 @@ mod tests {
     #[cfg(any(unix, target_os = "redox"))]
     use rstest::rstest;
     #[cfg(any(unix, target_os = "redox"))]
-    use serial_test::serial;
-    #[cfg(any(unix, target_os = "redox"))]
-    use std::env;
-    #[cfg(any(unix, target_os = "redox"))]
-    use std::ffi::{OsStr, OsString};
-    #[cfg(any(unix, target_os = "redox"))]
     use std::fs;
     #[cfg(any(unix, target_os = "redox"))]
     use std::path::Path;
     #[cfg(any(unix, target_os = "redox"))]
-    use std::sync::LazyLock;
-    #[cfg(any(unix, target_os = "redox"))]
     use tempfile::TempDir;
 
     #[cfg(any(unix, target_os = "redox"))]
-    fn set_env<K: AsRef<OsStr>, V: AsRef<OsStr>>(key: K, val: V) {
-        // SAFETY: Rust 1.87 marks environment mutation functions as unsafe.
-        // Tests run serially, so mutations cannot race.
-        unsafe { env::set_var(key, val) }
-    }
+    use test_helpers::env::{self as test_env, EnvVarGuard};
 
     #[cfg(any(unix, target_os = "redox"))]
-    fn remove_env<K: AsRef<OsStr>>(key: K) {
-        // SAFETY: Rust 1.87 marks environment mutation functions as unsafe.
-        // Tests run serially, so mutations cannot race.
-        unsafe { env::remove_var(key) }
-    }
-
-    #[cfg(any(unix, target_os = "redox"))]
-    struct XdgGuard {
-        old: Option<OsString>,
-        dir: TempDir,
-    }
-
-    #[cfg(any(unix, target_os = "redox"))]
-    impl Drop for XdgGuard {
-        fn drop(&mut self) {
-            match &self.old {
-                Some(v) => set_env("XDG_CONFIG_HOME", v),
-                None => remove_env("XDG_CONFIG_HOME"),
-            }
-        }
-    }
-
-    #[cfg(any(unix, target_os = "redox"))]
-    static XDG_GUARD: LazyLock<XdgGuard> = LazyLock::new(|| {
-        let old = env::var_os("XDG_CONFIG_HOME");
+    /// Creates a temporary XDG config directory and sets `XDG_CONFIG_HOME` for the test.
+    fn init_xdg_home() -> (TempDir, EnvVarGuard) {
         let dir = TempDir::new().expect("xdg");
-        let path = dir.path().to_path_buf();
-        set_env("XDG_CONFIG_HOME", &path);
-        XdgGuard { old, dir }
-    });
-
-    #[cfg(any(unix, target_os = "redox"))]
-    fn xdg_path() -> &'static Path {
-        XDG_GUARD.dir.path()
+        let guard = test_env::set_var("XDG_CONFIG_HOME", dir.path());
+        (dir, guard)
     }
 
     #[cfg(any(unix, target_os = "redox"))]
     #[rstest]
-    #[serial]
     #[case(&["toml"], &["config.toml"])]
     #[cfg(feature = "json5")]
     #[case(&["json", "json5"], &["config.json", "config.json5"])]
     #[cfg(feature = "yaml")]
     #[case(&["yaml", "yml"], &["config.yaml", "config.yml"])]
     fn push_xdg_candidates_finds_files(#[case] exts: &[&str], #[case] files: &[&str]) {
-        let dir = xdg_path();
+        let (dir, _guard) = init_xdg_home();
+        let dir = dir.path();
         for entry in fs::read_dir(dir).expect("read dir") {
             let entry = entry.expect("entry");
             let path = entry.path();
@@ -243,18 +202,18 @@ mod tests {
 
     #[cfg(any(unix, target_os = "redox"))]
     #[rstest]
-    #[serial]
     #[case("")]
     #[case("myapp")]
     fn candidate_paths_ordering(#[case] prefix_raw: &str) {
         let home = TempDir::new().expect("home");
-        let old_home = env::var_os("HOME");
-        set_env("HOME", home.path());
+        let home_guard = test_env::set_var("HOME", home.path());
 
+        let (base_dir, _guard) = init_xdg_home();
+        let base = base_dir.path();
         let xdg_cfg_dir = if prefix_raw.is_empty() {
-            xdg_path().to_path_buf()
+            base.to_path_buf()
         } else {
-            let d = xdg_path().join(prefix_raw);
+            let d = base.join(prefix_raw);
             fs::create_dir_all(&d).expect("xdg pref dir");
             d
         };
@@ -313,10 +272,6 @@ mod tests {
                 .all(|p| p.parent() == Some(Path::new(".")))
         );
 
-        if let Some(v) = old_home {
-            set_env("HOME", v);
-        } else {
-            remove_env("HOME");
-        }
+        drop(home_guard);
     }
 }
