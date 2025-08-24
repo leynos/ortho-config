@@ -228,7 +228,7 @@ pub(crate) fn build_load_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStre
                 let cli = match Self::try_parse_from(iter) {
                     Ok(c) => Some(c),
                     Err(e) => {
-                        errors.push(ortho_config::OrthoError::CliParsing(e.into()));
+                        errors.push(e.into());
                         None
                     }
                 };

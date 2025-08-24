@@ -145,7 +145,7 @@ impl OrthoError {
 impl From<serde_json::Error> for OrthoError {
     fn from(e: serde_json::Error) -> Self {
         OrthoError::Gathering(Box::new(figment::Error::from(format!(
-            "{} at line {}, column {}",
+            "JSON error: {} at line {}, column {}",
             e,
             e.line(),
             e.column()
