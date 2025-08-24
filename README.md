@@ -218,22 +218,29 @@ struct's `prefix()` function (which defaults to an empty string) and merges
 them underneath the CLI arguments.
 
 ```rust
-use clap::Parser;
+use clap::{Args, Parser};
 use serde::Deserialize;
 use ortho_config::{load_and_merge_subcommand_for, OrthoConfig};
 
-#[derive(Debug, Deserialize, Parser, OrthoConfig)]
+#[derive(Debug, Deserialize, Args, OrthoConfig)]
 #[ortho_config(prefix = "APP_")]
 pub struct AddUserArgs {
     username: Option<String>,
     admin: Option<bool>,
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let cli = AddUserArgs::parse();
+#[derive(Parser)]
+struct Cli {
+    #[command(flatten)]
+    args: AddUserArgs,
+}
 
-    // Reads `[cmds.add-user]` sections and `APP_CMDS_ADD_USER_*` variables then merges with CLI
-    let args = load_and_merge_subcommand_for::<AddUserArgs>(&cli)?;
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let cli = Cli::parse();
+
+    // Reads `[cmds.add-user]` sections and `APP_CMDS_ADD_USER_*` variables
+    // then merges with CLI values
+    let args = load_and_merge_subcommand_for::<AddUserArgs>(&cli.args)?;
 
     println!("Final args: {args:?}");
     Ok(())
@@ -262,12 +269,19 @@ Subcommands can be executed with defaults applied using
 [`clap-dispatch`](https://docs.rs/clap-dispatch):
 
 ```rust
-use clap::Parser;
+use clap::{Args, Parser};
 use clap_dispatch::clap_dispatch;
 use serde::Deserialize;
 use ortho_config::{load_and_merge_subcommand_for, OrthoConfig};
 
-#[derive(Debug, Deserialize, OrthoConfig)]
+#[derive(Debug, Deserialize, Args, OrthoConfig)]
+#[ortho_config(prefix = "APP_")]
+pub struct AddUserArgs {
+    username: Option<String>,
+    admin: Option<bool>,
+}
+
+#[derive(Debug, Deserialize, Args, OrthoConfig)]
 pub struct ListItemsArgs {
     category: Option<String>,
     all: Option<bool>,
