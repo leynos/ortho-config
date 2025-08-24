@@ -60,9 +60,44 @@ ortho_config = { version = "0.3.0", features = ["json5", "yaml"] }
 ```
 
 Enabling the `json5` feature causes both `.json` and `.json5` files to be
-parsed using the JSON5 format. Without this feature, attempts to load JSON
-files will fail. The `yaml` feature similarly enables YAML file discovery and
-parsing.
+parsed using the JSON5 format. Without this feature, these files are ignored
+during discovery and do not cause errors if present. The `yaml` feature
+similarly enables `.yaml` and `.yml` files; without it, such files are skipped
+during discovery and do not cause errors if present.
+
+## Migrating from earlier versions
+
+Projects using a pre‑0.3 release can upgrade with the following steps:
+
+- `#[derive(OrthoConfig)]` remains the correct way to annotate configuration
+  structs. No additional derives are required.
+- Remove any `load_with_reference_fallback` helpers. The merge logic inside
+  `load_and_merge_subcommand_for` supersedes this workaround.
+- Replace calls to deprecated helpers such as `load_subcommand_config_for` with
+  `ortho_config::subcommand::load_and_merge_subcommand_for`.
+
+Each subcommand struct can expose a wrapper method that forwards to
+`load_and_merge_subcommand_for`:
+
+```rust
+use ortho_config::{subcommand::load_and_merge_subcommand_for, OrthoConfig,
+                   OrthoError};
+use serde::Deserialize;
+
+#[derive(Deserialize, OrthoConfig)]
+struct PrArgs {
+    reference: String,
+}
+
+impl PrArgs {
+    fn load_and_merge(cli: &Cli) -> Result<Self, OrthoError> {
+        load_and_merge_subcommand_for::<Self>(cli)
+    }
+}
+```
+
+After parsing the top‑level `Cli` struct, call `PrArgs::load_and_merge(&cli)`
+to obtain the merged configuration for that subcommand.
 
 ## Defining configuration structures
 
@@ -73,7 +108,9 @@ A configuration is represented by a plain Rust struct. To take advantage of
   values and merging overrides.
 
 - The derive macro generates a hidden `clap::Parser` implementation, so
-  no manual `clap` annotations are needed.
+  manual `clap` annotations are not required in typical use. CLI customization
+  is performed using `ortho_config` attributes such as `cli_short`, or
+  `cli_long`.
 
 - `OrthoConfig` – provided by the library. This derive macro generates the code
   to load and merge configuration from multiple sources.
@@ -123,32 +160,27 @@ The following example illustrates many of these features:
       log_level: String,
 
     /// Port to bind on – defaults to 8080 when unspecified
-    #[arg(long)]
     #[ortho_config(default = 8080)]
     port: u16,
 
-    /// Optional list of features.  Values from files, environment and CLI are appended.
-    #[arg(long)]
+    /// Optional list of features. Values from files, environment and CLI are appended.
     #[ortho_config(merge_strategy = "append")]
     features: Vec<String>,
 
-    /// Nested configuration for the database.  A separate prefix is used to avoid ambiguity.
+    /// Nested configuration for the database. A separate prefix is used to avoid ambiguity.
     #[serde(flatten)]
     database: DatabaseConfig,
 
     /// Enable verbose output; also available as -v via cli_short
-    #[arg(long)]
     #[ortho_config(cli_short = 'v')]
     verbose: bool,
-}
+  }
 
-#[derive(Debug, Clone, Deserialize, Serialize, OrthoConfig, Parser)]
+#[derive(Debug, Clone, Deserialize, Serialize, OrthoConfig)]
 #[ortho_config(prefix = "DB")]               // used in conjunction with APP_ prefix to form APP_DB_URL
 struct DatabaseConfig {
-    #[arg(long)]
     url: String,
 
-    #[arg(long)]
     #[ortho_config(default = 5)]
     pool_size: Option<u32>,
 }
@@ -161,10 +193,12 @@ fn main() -> Result<(), OrthoError> {
 }
 ```
 
-In this example the `AppConfig` struct uses a prefix of `APP`. The
-`DatabaseConfig` struct has its own prefix `DB`, resulting in environment
-variables such as `APP_DB_URL`. The `features` field is a `Vec<String>` and
-will accumulate values from multiple sources rather than overwriting them.
+`clap` attributes are not required in general; flags are derived from field
+names and `ortho_config` attributes. In this example, the `AppConfig` struct
+uses a prefix of `APP`. The `DatabaseConfig` struct declares a prefix `DB`,
+resulting in environment variables such as `APP_DB_URL`. The `features` field
+is a `Vec<String>` and accumulates values from multiple sources rather than
+overwriting them.
 
 ## Loading configuration and precedence rules
 
@@ -312,10 +346,12 @@ results in `ignore_patterns = [".git/", "build/", "target/"]`.
 Many CLI applications use `clap` subcommands to perform different operations.
 `OrthoConfig` supports per‑subcommand defaults via a dedicated `cmds`
 namespace. The helper function `load_and_merge_subcommand_for` loads defaults
-for a specific subcommand and merges them beneath the CLI values. The merged
-struct is returned as a new instance; the original `cli` struct remains
-unchanged. CLI fields left unset (`None`) do not override environment or file
-defaults, avoiding accidental loss of configuration.
+for a specific subcommand and merges them beneath the CLI values. The older
+`load_subcommand_config` and `load_subcommand_config_for` helpers are
+deprecated in favour of this function. The merged struct is returned as a new
+instance; the original `cli` struct remains unchanged. CLI fields left unset
+(`None`) do not override environment or file defaults, avoiding accidental loss
+of configuration.
 
 ### How it works
 
@@ -342,7 +378,6 @@ use serde::{Deserialize, Serialize};
 #[derive(Parser, Deserialize, Serialize, Debug, OrthoConfig, Clone, Default)]
 #[ortho_config(prefix = "VK")]               // all variables start with VK
 pub struct GlobalArgs {
-    #[arg(long)]
     pub repo: Option<String>,
 }
 

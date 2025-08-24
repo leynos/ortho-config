@@ -64,22 +64,6 @@ struct DatabaseConfig {
     pool_size: Option<u32>, // Optional value, defaults to `Some(5)`
 }
 
-impl std::str::FromStr for DatabaseConfig {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut parts = s.splitn(2, ',');
-        let url = parts
-            .next()
-            .ok_or_else(|| "missing url".to_string())?
-            .to_string();
-        let pool_size = parts
-            .next()
-            .and_then(|p| p.parse::<u32>().ok());
-        Ok(DatabaseConfig { url, pool_size })
-    }
-}
-
 #[derive(Debug, Deserialize, Serialize, OrthoConfig)]
 #[ortho_config(prefix = "APP")] // Prefix for environment variables (e.g., APP_LOG_LEVEL)
 struct AppConfig {
@@ -234,24 +218,29 @@ struct's `prefix()` function (which defaults to an empty string) and merges
 them underneath the CLI arguments.
 
 ```rust
-use clap::Parser;
+use clap::{Args, Parser};
 use serde::Deserialize;
 use ortho_config::{load_and_merge_subcommand_for, OrthoConfig};
 
-#[derive(Parser, Deserialize, Default, Debug, OrthoConfig)]
+#[derive(Debug, Deserialize, Args, OrthoConfig)]
 #[ortho_config(prefix = "APP_")]
 pub struct AddUserArgs {
-    #[arg(long)]
     username: Option<String>,
-    #[arg(long)]
     admin: Option<bool>,
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let cli = AddUserArgs::parse();
+#[derive(Parser)]
+struct Cli {
+    #[command(flatten)]
+    args: AddUserArgs,
+}
 
-    // Reads `[cmds.add-user]` sections and `APP_CMDS_ADD_USER_*` variables then merges with CLI
-    let args = load_and_merge_subcommand_for::<AddUserArgs>(&cli)?;
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let cli = Cli::parse();
+
+    // Reads `[cmds.add-user]` sections and `APP_CMDS_ADD_USER_*` variables
+    // then merges with CLI values
+    let args = load_and_merge_subcommand_for::<AddUserArgs>(&cli.args)?;
 
     println!("Final args: {args:?}");
     Ok(())
@@ -280,16 +269,21 @@ Subcommands can be executed with defaults applied using
 [`clap-dispatch`](https://docs.rs/clap-dispatch):
 
 ```rust
-use clap::Parser;
+use clap::{Args, Parser};
 use clap_dispatch::clap_dispatch;
 use serde::Deserialize;
-use ortho_config::load_and_merge_subcommand_for;
+use ortho_config::{load_and_merge_subcommand_for, OrthoConfig};
 
-#[derive(Parser, Deserialize, Default, Debug)]
+#[derive(Debug, Deserialize, Args, OrthoConfig)]
+#[ortho_config(prefix = "APP_")]
+pub struct AddUserArgs {
+    username: Option<String>,
+    admin: Option<bool>,
+}
+
+#[derive(Debug, Deserialize, Args, OrthoConfig)]
 pub struct ListItemsArgs {
-    #[arg(long)]
     category: Option<String>,
-    #[arg(long)]
     all: Option<bool>,
 }
 
