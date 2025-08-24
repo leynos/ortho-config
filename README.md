@@ -222,7 +222,7 @@ use clap::Parser;
 use serde::Deserialize;
 use ortho_config::{load_and_merge_subcommand_for, OrthoConfig};
 
-#[derive(Debug, Deserialize, OrthoConfig)]
+#[derive(Debug, Deserialize, Parser, OrthoConfig)]
 #[ortho_config(prefix = "APP_")]
 pub struct AddUserArgs {
     username: Option<String>,

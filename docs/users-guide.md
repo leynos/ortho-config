@@ -60,9 +60,10 @@ ortho_config = { version = "0.3.0", features = ["json5", "yaml"] }
 ```
 
 Enabling the `json5` feature causes both `.json` and `.json5` files to be
-parsed using the JSON5 format. Without this feature, these files are ignored.
-The `yaml` feature similarly enables `.yaml` and `.yml` files; without it, such
-files are skipped during discovery.
+parsed using the JSON5 format. Without this feature, these files are ignored
+during discovery and do not cause errors if present. The `yaml` feature
+similarly enables `.yaml` and `.yml` files; without it, such files are skipped
+during discovery and do not cause errors if present.
 
 ## Migrating from earlier versions
 
@@ -196,8 +197,8 @@ fn main() -> Result<(), OrthoError> {
 names and `ortho_config` attributes. In this example, the `AppConfig` struct
 uses a prefix of `APP`. The `DatabaseConfig` struct declares a prefix `DB`,
 resulting in environment variables such as `APP_DB_URL`. The `features` field
-is a `Vec` and accumulates values from multiple sources rather than overwriting
-them.
+is a `Vec<String>` and accumulates values from multiple sources rather than
+overwriting them.
 
 ## Loading configuration and precedence rules
 
