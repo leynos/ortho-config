@@ -65,7 +65,7 @@ pub fn value_without_nones<T: Serialize>(cli: &T) -> Result<Value, serde_json::E
 }
 
 fn convert_gathering_error(e: &serde_json::Error) -> OrthoError {
-    OrthoError::Gathering(figment::Error::from(e.to_string()).into())
+    figment::Error::from(e.to_string()).into()
 }
 
 /// Serialize `value` to JSON, pruning `None` fields and mapping errors to

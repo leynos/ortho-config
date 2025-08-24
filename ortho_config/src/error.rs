@@ -64,9 +64,7 @@ impl From<figment::Error> for OrthoError {
 /// use ortho_config::OrthoError;
 /// let e = OrthoError::aggregate(vec![
 ///     OrthoError::Validation { key: "port".into(), message: "must be positive".into() },
-///     OrthoError::CliParsing(
-///         clap::Error::raw(clap::error::ErrorKind::InvalidValue, "bad flag").into(),
-///     ),
+///     clap::Error::raw(clap::error::ErrorKind::InvalidValue, "bad flag").into(),
 /// ]);
 /// if let OrthoError::Aggregate(agg) = e {
 ///     assert_eq!(agg.len(), 2);

@@ -381,7 +381,7 @@ where
 
     fig = fig.merge(subcommand_env_provider(prefix, name));
 
-    fig.extract().map_err(|e| OrthoError::Gathering(e.into()))
+    fig.extract().map_err(Into::into)
 }
 
 /// Load default values for a subcommand using `T`'s configured prefix.
