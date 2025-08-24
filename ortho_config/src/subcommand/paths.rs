@@ -144,16 +144,13 @@ mod tests {
     #[cfg(any(unix, target_os = "redox"))]
     use super::*;
     #[cfg(any(unix, target_os = "redox"))]
-    use rstest::rstest;
+    use rstest::{fixture, rstest};
     #[cfg(any(unix, target_os = "redox"))]
     use serial_test::serial;
-    #[cfg(any(unix, target_os = "redox"))]
     #[cfg(any(unix, target_os = "redox"))]
     use std::fs;
     #[cfg(any(unix, target_os = "redox"))]
     use std::path::Path;
-    #[cfg(any(unix, target_os = "redox"))]
-    use std::sync::LazyLock;
     #[cfg(any(unix, target_os = "redox"))]
     use tempfile::TempDir;
 
@@ -167,16 +164,18 @@ mod tests {
     }
 
     #[cfg(any(unix, target_os = "redox"))]
-    static XDG_GUARD: LazyLock<XdgGuard> = LazyLock::new(|| {
-        let dir = TempDir::new().expect("xdg");
-        let path = dir.path().to_path_buf();
-        let var = test_env::set_var("XDG_CONFIG_HOME", &path);
-        XdgGuard { dir, _var: var }
-    });
+    impl XdgGuard {
+        fn path(&self) -> &Path {
+            self.dir.path()
+        }
+    }
 
     #[cfg(any(unix, target_os = "redox"))]
-    fn xdg_path() -> &'static Path {
-        XDG_GUARD.dir.path()
+    #[fixture]
+    fn xdg_home() -> XdgGuard {
+        let dir = TempDir::new().expect("xdg");
+        let var = test_env::set_var("XDG_CONFIG_HOME", dir.path());
+        XdgGuard { dir, _var: var }
     }
 
     #[cfg(any(unix, target_os = "redox"))]
@@ -187,8 +186,12 @@ mod tests {
     #[case(&["json", "json5"], &["config.json", "config.json5"])]
     #[cfg(feature = "yaml")]
     #[case(&["yaml", "yml"], &["config.yaml", "config.yml"])]
-    fn push_xdg_candidates_finds_files(#[case] exts: &[&str], #[case] files: &[&str]) {
-        let dir = xdg_path();
+    fn push_xdg_candidates_finds_files(
+        #[case] exts: &[&str],
+        #[case] files: &[&str],
+        xdg_home: XdgGuard,
+    ) {
+        let dir = xdg_home.path();
         for entry in fs::read_dir(dir).expect("read dir") {
             let entry = entry.expect("entry");
             let path = entry.path();
@@ -218,14 +221,15 @@ mod tests {
     #[serial]
     #[case("")]
     #[case("myapp")]
-    fn candidate_paths_ordering(#[case] prefix_raw: &str) {
+    fn candidate_paths_ordering(#[case] prefix_raw: &str, xdg_home: XdgGuard) {
         let home = TempDir::new().expect("home");
         let home_guard = test_env::set_var("HOME", home.path());
 
+        let base = xdg_home.path();
         let xdg_cfg_dir = if prefix_raw.is_empty() {
-            xdg_path().to_path_buf()
+            base.to_path_buf()
         } else {
-            let d = xdg_path().join(prefix_raw);
+            let d = base.join(prefix_raw);
             fs::create_dir_all(&d).expect("xdg pref dir");
             d
         };
