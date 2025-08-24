@@ -11,24 +11,40 @@ struct ExtendsCfg {
 }
 
 #[rstest]
-fn extended_file_overrides_base() {
+#[case(
+    "base",
+    "child",
+    &[] as &[&str],
+    None,
+    "child",
+)]
+#[case(
+    "base",
+    "file",
+    &["--foo", "cli"],
+    Some("env"),
+    "cli",
+)]
+fn inheritance_precedence(
+    #[case] base_value: &str,
+    #[case] config_value: &str,
+    #[case] cli_args: &[&str],
+    #[case] env_value: Option<&str>,
+    #[case] expected: &str,
+) {
     figment::Jail::expect_with(|j| {
-        j.create_file("base.toml", "foo = \"base\"")?;
-        j.create_file(".config.toml", "extends = \"base.toml\"\nfoo = \"child\"")?;
-        let cfg = ExtendsCfg::load_from_iter(["prog"]).expect("load");
-        assert_eq!(cfg.foo.as_deref(), Some("child"));
-        Ok(())
-    });
-}
-
-#[rstest]
-fn env_and_cli_override_extended_file() {
-    figment::Jail::expect_with(|j| {
-        j.create_file("base.toml", "foo = \"base\"")?;
-        j.create_file(".config.toml", "extends = \"base.toml\"\nfoo = \"file\"")?;
-        j.set_env("FOO", "env");
-        let cfg = ExtendsCfg::load_from_iter(["prog", "--foo", "cli"]).expect("load");
-        assert_eq!(cfg.foo.as_deref(), Some("cli"));
+        j.create_file("base.toml", &format!("foo = \"{base_value}\""))?;
+        j.create_file(
+            ".config.toml",
+            &format!("extends = \"base.toml\"\nfoo = \"{config_value}\""),
+        )?;
+        if let Some(val) = env_value {
+            j.set_env("FOO", val);
+        }
+        let mut args = vec!["prog"];
+        args.extend_from_slice(cli_args);
+        let cfg = ExtendsCfg::load_from_iter(args).expect("load");
+        assert_eq!(cfg.foo.as_deref(), Some(expected));
         Ok(())
     });
 }
