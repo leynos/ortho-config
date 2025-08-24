@@ -5,10 +5,8 @@
 //! tests by encapsulating the jail creation and configuration loading.
 
 use clap::CommandFactory;
-use ortho_config::subcommand::Prefix;
-use ortho_config::{
-    OrthoConfig, OrthoError, load_and_merge_subcommand, load_and_merge_subcommand_for,
-};
+use ortho_config::subcommand::{CmdName, Prefix, SubcmdConfigMerge};
+use ortho_config::{OrthoConfig, OrthoError, load_and_merge_subcommand};
 use serde::de::DeserializeOwned;
 
 fn with_jail<F, L, T>(setup: F, loader: L) -> Result<T, OrthoError>
@@ -55,7 +53,7 @@ where
     F: FnOnce(&mut figment::Jail) -> figment::error::Result<()>,
     T: OrthoConfig + serde::Serialize + Default + CommandFactory,
 {
-    with_jail(setup, || load_and_merge_subcommand_for(cli))
+    with_jail(setup, || cli.load_and_merge())
 }
 
 // These helpers keep tests focused on the unified subcommand loaders without
