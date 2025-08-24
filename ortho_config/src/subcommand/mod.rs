@@ -41,13 +41,14 @@ fn load_from_files(paths: &[PathBuf], name: &CmdName) -> Result<Figment, OrthoEr
     Ok(fig)
 }
 
-/// Load configuration for a specific subcommand.
+/// Loads configuration for a specific subcommand from files and environment
+/// variables.
 ///
-/// The configuration is sourced from:
-///   * `[cmds.<name>]` sections in configuration files
-///   * environment variables following the pattern `<PREFIX>CMDS_<NAME>_`.
-///
-/// Values from environment variables override those from files.
+/// Searches for configuration files using the provided prefix, loads the
+/// `[cmds.<name>]` section from each file, and merges them. Then overlays
+/// environment variables prefixed with `<PREFIX>CMDS_<NAME>_` (case-insensitive,
+/// double underscore for nesting). Values from environment variables override
+/// those from files.
 ///
 /// # Errors
 ///
@@ -56,29 +57,14 @@ fn load_from_files(paths: &[PathBuf], name: &CmdName) -> Result<Figment, OrthoEr
 ///
 /// # Deprecated
 ///
-/// Use [`load_and_merge_subcommand`] or [`load_and_merge_subcommand_for`] instead
-/// to load defaults and apply CLI overrides in one step.
+/// Use [`load_and_merge_subcommand`] or
+/// [`load_and_merge_subcommand_for`] instead to load defaults and apply CLI
+/// overrides in one step. Planned removal: v0.4.0 (see the project roadmap).
 #[expect(
     clippy::result_large_err,
     reason = "Figment merge errors inflate Result size; wrapping in `Arc` is tracked on the roadmap for v0.4.0"
 )]
 #[deprecated(note = "use `load_and_merge_subcommand` or `load_and_merge_subcommand_for` instead")]
-/// Loads configuration for a specific subcommand from files and environment variables.
-///
-/// Searches for configuration files using the provided prefix, loads the `[cmds.<name>]`
-/// section from each file, and merges them. Then overlays environment variables
-/// prefixed with `<PREFIX>CMDS_<NAME>_` (case-insensitive, double underscore for
-/// nesting). Returns the merged configuration as type `T`.
-///
-/// # Deprecated
-///
-/// This function is deprecated. Use the newer combined loading and merging
-/// functions instead. Planned removal: v0.4.0 (see the project roadmap).
-///
-/// # Errors
-///
-/// Returns [`OrthoError::Gathering`] if configuration files cannot be loaded or if
-/// deserialisation fails.
 pub fn load_subcommand_config<T>(prefix: &Prefix, name: &CmdName) -> Result<T, OrthoError>
 where
     T: DeserializeOwned + Default,
@@ -96,30 +82,19 @@ where
     fig.extract().map_err(OrthoError::Gathering)
 }
 
-/// Load default values for a subcommand using `T`'s configured prefix.
+/// Loads configuration defaults for a subcommand using the prefix defined by the
+/// type.
 ///
 /// The prefix is provided by [`OrthoConfig::prefix`]. If the struct does not
 /// specify `#[ortho_config(prefix = "...")]`, the default empty prefix is used.
-/// Combine the returned defaults with CLI arguments using
-/// [`merge_cli_over_defaults`](crate::merge_cli_over_defaults).
+/// This function loads `[cmds.<name>]` sections from configuration files and
+/// overlays environment variables prefixed with `<PREFIX>CMDS_<NAME>_`,
+/// returning the merged configuration as type `T`.
 ///
 /// # Errors
 ///
-/// Returns [`OrthoError::Merge`] if CLI values cannot be merged or if
-/// deserialisation fails. Because CLI merging occurs, this function does not
-/// return [`OrthoError::Gathering`].
-#[expect(
-    clippy::result_large_err,
-    reason = "Figment merge errors inflate Result size; wrapping in `Arc` is tracked on the roadmap for v0.4.0"
-)]
-#[deprecated(note = "use `load_and_merge_subcommand_for` instead")]
-/// Loads configuration defaults for a subcommand using the prefix defined by the type.
-///
-/// This function retrieves the configuration for the specified subcommand, using the prefix
-/// provided by the `OrthoConfig` implementation of `T`. It loads and merges configuration
-/// from files and environment variables, returning the resulting configuration as type `T`.
-///
-/// CLI-provided values override defaults from files and environment.
+/// Returns [`OrthoError::Gathering`] if configuration files cannot be loaded or
+/// if deserialisation fails.
 ///
 /// # Examples
 ///
@@ -144,6 +119,11 @@ where
 /// This function is deprecated. Use
 /// [`load_and_merge_subcommand_for`](crate::load_and_merge_subcommand_for)
 /// instead. Planned removal: v0.4.0 (see the project roadmap).
+#[expect(
+    clippy::result_large_err,
+    reason = "Figment merge errors inflate Result size; wrapping in `Arc` is tracked on the roadmap for v0.4.0"
+)]
+#[deprecated(note = "use `load_and_merge_subcommand_for` instead")]
 pub fn load_subcommand_config_for<T>(name: &CmdName) -> Result<T, OrthoError>
 where
     T: crate::OrthoConfig + Default,
@@ -157,33 +137,20 @@ where
     }
 }
 
-/// Load defaults for a subcommand and merge CLI-provided values over them.
+/// Loads defaults for a subcommand and merges CLI-provided values over them.
 ///
 /// This convenience function combines [`load_subcommand_config`] and
 /// [`merge_cli_over_defaults`](crate::merge_cli_over_defaults) to reduce
-/// boilerplate when working with `clap` subcommands.
+/// boilerplate when working with `clap` subcommands. It determines the
+/// subcommand name from `T`, loads default configuration from files and
+/// environment variables using the given prefix, and overlays values provided
+/// via the CLI. CLI-provided values override file or environment defaults.
 ///
 /// # Errors
 ///
 /// Returns [`OrthoError::Merge`] if CLI values cannot be merged or if
 /// deserialisation fails. Because CLI merging occurs, this function does not
 /// return [`OrthoError::Gathering`].
-#[expect(
-    clippy::result_large_err,
-    reason = "Figment merge errors inflate Result size; wrapping in `Arc` is tracked on the roadmap for v0.4.0"
-)]
-/// Loads configuration defaults for a subcommand and merges CLI-provided values over them.
-///
-/// This function determines the subcommand name from the type `T`, loads its default configuration from files and environment
-/// variables using the given prefix, and overlays values provided via the CLI. The resulting configuration is returned as type
-/// `T`.
-///
-/// # Returns
-///
-/// The merged configuration for the subcommand, or an error if loading or merging fails.
-///
-/// CLI-provided values override defaults from configuration files or
-/// environment variables.
 ///
 /// # Examples
 ///
@@ -207,6 +174,10 @@ where
 /// # Ok(())
 /// # }
 /// ```
+#[expect(
+    clippy::result_large_err,
+    reason = "Figment merge errors inflate Result size; wrapping in `Arc` is tracked on the roadmap for v0.4.0"
+)]
 pub fn load_and_merge_subcommand<T>(prefix: &Prefix, cli: &T) -> Result<T, OrthoError>
 where
     T: serde::Serialize + DeserializeOwned + Default + CommandFactory,
@@ -227,25 +198,17 @@ where
         .map_err(OrthoError::merge)
 }
 
-/// Wrapper around [`load_and_merge_subcommand`] using the struct's configured prefix.
+/// Wrapper around [`load_and_merge_subcommand`] using the struct's configured
+/// prefix.
+///
+/// Loads default configuration values for the subcommand from files and
+/// environment variables, then merges CLI-provided values over these defaults.
+/// The prefix is determined by the `OrthoConfig` implementation of the type.
 ///
 /// # Errors
 ///
 /// Returns [`OrthoError::Merge`] if CLI values cannot be merged or if
 /// deserialisation fails.
-#[expect(
-    clippy::result_large_err,
-    reason = "Figment merge errors inflate Result size; wrapping in `Arc` is tracked on the roadmap for v0.4.0"
-)]
-/// Loads and merges configuration for a subcommand using the prefix defined by its type.
-///
-/// Loads default configuration values for the subcommand from files and environment variables,
-/// then merges CLI-provided values over these defaults. The prefix is determined by the
-/// `OrthoConfig` implementation of the type.
-///
-/// # Returns
-///
-/// The merged configuration for the subcommand, or an error if loading or merging fails.
 ///
 /// # Examples
 ///
@@ -266,6 +229,10 @@ where
 /// # Ok(())
 /// # }
 /// ```
+#[expect(
+    clippy::result_large_err,
+    reason = "Figment merge errors inflate Result size; wrapping in `Arc` is tracked on the roadmap for v0.4.0"
+)]
 pub fn load_and_merge_subcommand_for<T>(cli: &T) -> Result<T, OrthoError>
 where
     T: crate::OrthoConfig + serde::Serialize + Default + CommandFactory,
