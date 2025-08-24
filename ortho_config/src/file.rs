@@ -87,7 +87,8 @@ fn parse_config_by_format(path: &Path, data: &str) -> Result<Figment, OrthoError
 
 /// Validate and extract the `extends` value from `figment`.
 ///
-/// Returns `Ok(None)` if the key is absent.
+/// Returns `Ok(None)` if the key is absent. Empty strings are rejected with an
+/// error.
 ///
 /// # Examples
 ///
@@ -120,6 +121,15 @@ fn get_extends(figment: &Figment, current_path: &Path) -> Result<Option<PathBuf>
                     ),
                 )
             })?;
+            if base.is_empty() {
+                return Err(file_error(
+                    current_path,
+                    std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        "'extends' key must be a non-empty string",
+                    ),
+                ));
+            }
             Ok(Some(PathBuf::from(base)))
         }
         Err(e) if e.missing() => Ok(None),

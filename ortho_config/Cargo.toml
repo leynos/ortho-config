@@ -20,13 +20,15 @@ figment-json5 = { version = "0.1", optional = true }
 serde_yaml = { version = "0.9", optional = true }
 json5 = { version = "0.4", optional = true }
 serde_json = { version = "1" }
-dunce = "1"
 
 [target.'cfg(not(any(unix, target_os = "redox")))'.dependencies]
 directories = "6"
 
 [target.'cfg(any(unix, target_os = "redox"))'.dependencies]
 xdg = "3"
+
+[target.'cfg(windows)'.dependencies]
+dunce = "1.0.0"
 
 [features]
 default = ["toml"]

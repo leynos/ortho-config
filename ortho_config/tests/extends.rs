@@ -92,7 +92,7 @@ fn empty_extends_errors() {
         j.create_file("base.toml", "")?; // placeholder so Jail has root file
         j.create_file(".config.toml", "extends = ''")?;
         let err = ExtendsCfg::load_from_iter(["prog"]).unwrap_err();
-        assert!(err.to_string().contains("not a regular file"));
+        assert!(err.to_string().contains("non-empty"));
         Ok(())
     });
 }

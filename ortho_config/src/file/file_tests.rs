@@ -18,7 +18,7 @@ enum ExtCase {
 )]
 #[case("foo = \"bar\"", ExtCase::Ok(None))]
 #[case("extends = 1", ExtCase::Err("must be a string"))]
-#[case("extends = \"\"", ExtCase::Ok(Some(PathBuf::from(""))))]
+#[case("extends = \"\"", ExtCase::Err("non-empty"))]
 #[case("extends = \"dir\"", ExtCase::Ok(Some(PathBuf::from("dir"))))]
 fn get_extends_cases(#[case] input: &str, #[case] expected: ExtCase) {
     let figment = Figment::from(Toml::string(input));
@@ -40,6 +40,9 @@ fn get_extends_cases(#[case] input: &str, #[case] expected: ExtCase) {
 fn resolve_base_path_resolves(#[case] is_abs: bool) {
     Jail::expect_with(|j| {
         j.create_file("base.toml", "")?;
+        #[cfg(windows)]
+        let root = dunce::canonicalize(".").expect("canonicalise root");
+        #[cfg(not(windows))]
         let root = std::fs::canonicalize(".").expect("canonicalise root");
         let current = root.join("config.toml");
         let base_path = if is_abs {
@@ -79,6 +82,9 @@ fn merge_parent_child_overrides_parent_on_conflicts() {
 fn process_extends_handles_relative_and_absolute(#[case] is_abs: bool) {
     Jail::expect_with(|j| {
         j.create_file("base.toml", "foo = \"base\"")?;
+        #[cfg(windows)]
+        let root = dunce::canonicalize(".").expect("canonicalise root");
+        #[cfg(not(windows))]
         let root = std::fs::canonicalize(".").expect("canonicalise root");
         let current = root.join("config.toml");
         let config = if is_abs {
@@ -112,6 +118,9 @@ fn process_extends_errors_when_no_parent() {
 fn process_extends_errors_when_base_is_not_file() {
     Jail::expect_with(|j| {
         j.create_dir("dir")?;
+        #[cfg(windows)]
+        let root = dunce::canonicalize(".").expect("canonicalise root");
+        #[cfg(not(windows))]
         let root = std::fs::canonicalize(".").expect("canonicalise root");
         let current = root.join("config.toml");
         let figment = Figment::from(Toml::string("extends = 'dir'"));
@@ -127,13 +136,16 @@ fn process_extends_errors_when_base_is_not_file() {
 fn process_extends_errors_when_extends_empty() {
     Jail::expect_with(|j| {
         j.create_file("base.toml", "")?; // placeholder to satisfy Jail
+        #[cfg(windows)]
+        let root = dunce::canonicalize(".").expect("canonicalise root");
+        #[cfg(not(windows))]
         let root = std::fs::canonicalize(".").expect("canonicalise root");
         let current = root.join("config.toml");
         let figment = Figment::from(Toml::string("extends = ''"));
         let mut visited = HashSet::new();
         let mut stack = Vec::new();
         let err = process_extends(figment, &current, &mut visited, &mut stack).unwrap_err();
-        assert!(err.to_string().contains("not a regular file"));
+        assert!(err.to_string().contains("non-empty"));
         Ok(())
     });
 }
