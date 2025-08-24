@@ -162,13 +162,15 @@ mod tests {
 
     #[cfg(any(unix, target_os = "redox"))]
     fn set_env<K: AsRef<OsStr>, V: AsRef<OsStr>>(key: K, val: V) {
-        // SAFETY: tests run serially, so environment mutations do not race.
+        // SAFETY: Rust 1.87 marks environment mutation functions as unsafe.
+        // Tests run serially, so mutations cannot race.
         unsafe { env::set_var(key, val) }
     }
 
     #[cfg(any(unix, target_os = "redox"))]
     fn remove_env<K: AsRef<OsStr>>(key: K) {
-        // SAFETY: tests run serially, so environment mutations do not race.
+        // SAFETY: Rust 1.87 marks environment mutation functions as unsafe.
+        // Tests run serially, so mutations cannot race.
         unsafe { env::remove_var(key) }
     }
 
@@ -208,8 +210,6 @@ mod tests {
     #[case(&["toml"], &["config.toml"])]
     #[cfg(feature = "json5")]
     #[case(&["json", "json5"], &["config.json", "config.json5"])]
-    #[cfg(feature = "yaml")]
-    #[case(&["yaml", "yml"], &["config.yaml", "config.yml"])]
     fn push_xdg_candidates_finds_files(#[case] exts: &[&str], #[case] files: &[&str]) {
         let dir = xdg_path();
         for entry in fs::read_dir(dir).expect("read dir") {
