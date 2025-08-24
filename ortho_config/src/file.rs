@@ -179,7 +179,11 @@ fn resolve_base_path(current_path: &Path, base: PathBuf) -> Result<PathBuf, Orth
             ),
         )
     })?;
-    let base = if base.is_absolute() { base } else { parent.join(base) };
+    let base = if base.is_absolute() {
+        base
+    } else {
+        parent.join(base)
+    };
     #[cfg(windows)]
     let canonical = dunce::canonicalize(&base).map_err(|e| file_error(&base, e))?;
     #[cfg(not(windows))]
