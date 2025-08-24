@@ -13,10 +13,10 @@ use serde_json::Value;
 /// - Array elements equal to null are removed, dropping `None` entries in
 ///   `Vec<_>` but retaining empty arrays to allow deliberate clearing.
 ///
-/// This is intended for CLI sanitization so unset [`Option`] fields and
-/// untouched flattened structs do not override defaults from files or
-/// environment variables. Note: this function does not remove empty arrays; it
-/// only clears [`Option::None`] fields.
+/// Intended for CLI sanitization so unset [`Option`] fields and untouched
+/// flattened structs do not override defaults from files or environment variables.
+/// Arrays are never removed, even when emptied; this function only removes
+/// [`Option::None`] fields.
 ///
 /// Returns `true` if `value` becomes empty after pruning (that is, it is
 /// `Null` or an object with no remaining fields). Arrays never return `true`,
@@ -66,6 +66,20 @@ pub fn value_without_nones<T: Serialize>(cli: &T) -> Result<Value, serde_json::E
     Ok(value)
 }
 
+/// Convert a [`serde_json::Error`] into [`OrthoError::Gathering`].
+///
+/// This helper is used by [`sanitize_value`] to map JSON serialization
+/// failures into the crate's error type.
+///
+/// ```ignore
+/// fn sanitize_value<T: Serialize>(value: &T) -> Result<Value, OrthoError> {
+///     value_without_nones(value).map_err(convert_gathering_error)
+/// }
+/// ```
+fn convert_gathering_error(e: serde_json::Error) -> OrthoError {
+    e.into()
+}
+
 /// Serialize `value` to JSON, pruning `None` fields and mapping errors to
 /// [`OrthoError`].
 ///
@@ -90,7 +104,7 @@ pub fn value_without_nones<T: Serialize>(cli: &T) -> Result<Value, serde_json::E
     reason = "Return OrthoError to keep a single error type across the public API"
 )]
 pub fn sanitize_value<T: Serialize>(value: &T) -> Result<Value, OrthoError> {
-    Ok(value_without_nones(value)?)
+    value_without_nones(value).map_err(convert_gathering_error)
 }
 
 /// Produce a Figment provider from `value` with `None` fields removed.
