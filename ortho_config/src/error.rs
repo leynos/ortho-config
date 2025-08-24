@@ -10,7 +10,7 @@ use thiserror::Error;
 pub enum OrthoError {
     /// Error parsing command-line arguments.
     #[error("Failed to parse command-line arguments: {0}")]
-    CliParsing(#[from] clap::Error),
+    CliParsing(#[from] Box<clap::Error>),
 
     /// Error originating from a configuration file.
     #[error("Configuration file error in '{path}': {source}")]
@@ -26,13 +26,13 @@ pub enum OrthoError {
 
     /// Error while gathering configuration from providers.
     #[error("Failed to gather configuration: {0}")]
-    Gathering(#[from] figment::Error),
+    Gathering(#[from] Box<figment::Error>),
 
     /// Failure merging CLI values over configuration sources.
     #[error("Failed to merge CLI with configuration: {source}")]
     Merge {
         #[source]
-        source: figment::Error,
+        source: Box<figment::Error>,
     },
 
     /// Validation failures when building configuration.
@@ -41,7 +41,7 @@ pub enum OrthoError {
 
     /// Multiple errors occurred while loading configuration.
     #[error("multiple configuration errors:\n{0}")]
-    Aggregate(AggregatedErrors),
+    Aggregate(Box<AggregatedErrors>),
 }
 
 /// Collection of [`OrthoError`]s produced during a single load attempt.
@@ -52,7 +52,7 @@ pub enum OrthoError {
 /// use ortho_config::OrthoError;
 /// let e = OrthoError::aggregate(vec![
 ///     OrthoError::Validation { key: "port".into(), message: "must be positive".into() },
-///     OrthoError::CliParsing(clap::Error::raw(clap::error::ErrorKind::InvalidValue, "bad flag")),
+///     OrthoError::CliParsing(clap::Error::raw(clap::error::ErrorKind::InvalidValue, "bad flag").into()),
 /// ]);
 /// if let OrthoError::Aggregate(agg) = e {
 ///     assert_eq!(agg.len(), 2);
@@ -107,7 +107,7 @@ impl OrthoError {
         if errors.len() == 1 {
             errors.into_iter().next().expect("one error")
         } else {
-            OrthoError::Aggregate(AggregatedErrors::new(errors))
+            OrthoError::Aggregate(Box::new(AggregatedErrors::new(errors)))
         }
     }
 
@@ -123,7 +123,9 @@ impl OrthoError {
     /// ```
     #[must_use]
     pub fn merge(source: figment::Error) -> Self {
-        OrthoError::Merge { source }
+        OrthoError::Merge {
+            source: Box::new(source),
+        }
     }
 }
 
@@ -142,12 +144,24 @@ impl OrthoError {
 /// ```
 impl From<serde_json::Error> for OrthoError {
     fn from(e: serde_json::Error) -> Self {
-        OrthoError::Gathering(figment::Error::from(format!(
+        OrthoError::Gathering(Box::new(figment::Error::from(format!(
             "{} at line {}, column {}",
             e,
             e.line(),
             e.column()
-        )))
+        ))))
+    }
+}
+
+impl From<clap::Error> for OrthoError {
+    fn from(e: clap::Error) -> Self {
+        OrthoError::CliParsing(e.into())
+    }
+}
+
+impl From<figment::Error> for OrthoError {
+    fn from(e: figment::Error) -> Self {
+        OrthoError::Gathering(e.into())
     }
 }
 
@@ -156,7 +170,7 @@ impl From<OrthoError> for FigmentError {
     fn from(e: OrthoError) -> Self {
         match e {
             // Preserve the original Figment error (keeps kind, metadata, and sources).
-            OrthoError::Gathering(fe) | OrthoError::Merge { source: fe } => fe,
+            OrthoError::Merge { source: fe } | OrthoError::Gathering(fe) => *fe,
             // Fall back to a message for other variants.
             other => FigmentError::from(other.to_string()),
         }

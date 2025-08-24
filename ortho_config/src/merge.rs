@@ -1,8 +1,8 @@
 //! Helpers for sanitizing and merging command-line arguments with configuration defaults.
 
 use crate::OrthoError;
-use figment::{Figment, providers::Serialized};
-use serde::{Serialize, de::DeserializeOwned};
+use figment::providers::Serialized;
+use serde::Serialize;
 use serde_json::Value;
 
 /// Recursively remove all [`Value::Null`] entries, pruning empty objects.
@@ -99,10 +99,6 @@ fn convert_gathering_error(e: serde_json::Error) -> OrthoError {
 /// # Errors
 ///
 /// Returns an [`OrthoError`] if JSON serialization fails.
-#[expect(
-    clippy::result_large_err,
-    reason = "Return OrthoError to keep a single error type across the public API"
-)]
 pub fn sanitize_value<T: Serialize>(value: &T) -> Result<Value, OrthoError> {
     value_without_nones(value).map_err(convert_gathering_error)
 }
@@ -133,55 +129,8 @@ pub fn sanitize_value<T: Serialize>(value: &T) -> Result<Value, OrthoError> {
 /// # Errors
 ///
 /// Returns an [`OrthoError`] if JSON serialization fails.
-#[expect(
-    clippy::result_large_err,
-    reason = "Return OrthoError to keep a single error type across the public API"
-)]
 pub fn sanitized_provider<T: Serialize>(
     value: &T,
 ) -> Result<Serialized<serde_json::Value>, OrthoError> {
     sanitize_value(value).map(Serialized::defaults)
-}
-
-/// Merge CLI-provided values over application defaults using Figment.
-///
-/// Any field set to `None` in the `cli` argument will leave the corresponding
-/// value from `defaults` intact. This function is intended for simple
-/// "CLI over defaults" merging in example code and small projects.
-///
-/// # Examples
-///
-/// ```rust,no_run
-/// use ortho_config::merge_cli_over_defaults;
-/// use serde::{Deserialize, Serialize};
-///
-/// #[derive(Default, Serialize, Deserialize)]
-/// struct Config {
-///     count: Option<u32>,
-/// }
-///
-/// let defaults = Config { count: Some(1) };
-/// let cli = Config { count: Some(2) };
-/// let merged = merge_cli_over_defaults(&defaults, &cli)
-///     .expect("failed to merge configuration");
-/// assert_eq!(merged.count, Some(2));
-/// ```
-///
-/// # Errors
-///
-/// Returns any [`figment::Error`] produced while extracting the merged
-/// configuration.
-#[deprecated(note = "use `load_and_merge_subcommand` instead", since = "0.4.0")]
-#[expect(
-    clippy::result_large_err,
-    reason = "Return figment::Error for backward compatibility"
-)]
-pub fn merge_cli_over_defaults<T>(defaults: &T, cli: &T) -> Result<T, figment::Error>
-where
-    T: Serialize + DeserializeOwned + Default,
-{
-    let cli_value = value_without_nones(cli).map_err(|e| figment::Error::from(e.to_string()))?;
-    Figment::from(Serialized::defaults(defaults))
-        .merge(Serialized::defaults(&cli_value))
-        .extract()
 }

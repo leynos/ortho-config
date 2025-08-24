@@ -11,12 +11,9 @@ mod error;
 mod file;
 mod merge;
 pub mod subcommand;
-#[expect(deprecated, reason = "Retain helper for backwards compatibility")]
-pub use merge::merge_cli_over_defaults;
-pub use merge::{sanitize_value, sanitized_provider, value_without_nones};
 #[expect(
     deprecated,
-    reason = "Re-export deprecated subcommand helpers for back-compat. FIXME: remove in the next minor release"
+    reason = "re-export legacy helpers pending removal in v0.4.0"
 )]
 pub use subcommand::{
     load_and_merge_subcommand, load_and_merge_subcommand_for, load_subcommand_config,
@@ -45,6 +42,7 @@ pub fn normalize_prefix(prefix: &str) -> String {
 pub use csv_env::CsvEnv;
 pub use error::OrthoError;
 pub use file::load_config_file;
+pub use merge::{sanitize_value, sanitized_provider};
 
 /// Trait implemented for structs that represent application configuration.
 pub trait OrthoConfig: Sized + serde::de::DeserializeOwned {
@@ -70,10 +68,6 @@ pub trait OrthoConfig: Sized + serde::de::DeserializeOwned {
     /// # Ok(())
     /// # }
     /// ```
-    #[expect(
-        clippy::result_large_err,
-        reason = "Return OrthoError to keep a single error type across the public API"
-    )]
     ///
     /// # Errors
     ///
@@ -85,10 +79,6 @@ pub trait OrthoConfig: Sized + serde::de::DeserializeOwned {
 
     /// Loads configuration from the provided iterator of command-line
     /// arguments.
-    #[expect(
-        clippy::result_large_err,
-        reason = "Return OrthoError to keep a single error type across the public API"
-    )]
     ///
     /// # Errors
     ///
