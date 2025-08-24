@@ -101,20 +101,18 @@ project:
 - Run `make fmt`, `make lint`, and `make test` before committing. These targets
   wrap `cargo fmt`, `cargo clippy`, and `cargo test` with the appropriate flags.
 - Clippy warnings MUST be disallowed.
-- Fix any warnings emitted during tests in the code itself rather than silencing
-  them.
+- Fix any warnings emitted during tests in the code itself rather than
+  silencing them.
 - Where a function is too long, extract meaningfully named helper functions
   adhering to separation of concerns and CQRS.
 - Where a function has too many parameters, group related parameters in
   meaningfully named structs.
 - Where a function is returning a large error consider using `Arc` to reduce the
   amount of data returned.
-- Write unit and behavioural tests for new functionality. Run both before and
-  after making any change.
-- Document public APIs using Rustdoc comments (`///`) so documentation can be
-  generated with cargo doc.
 - Every module **must** begin with a module level (`//!`) comment explaining the
   module's purpose and utility.
+- Document public APIs using Rustdoc comments (`///`) so documentation can be
+  generated with cargo doc.
 - Prefer immutable data and avoid unnecessary `mut` bindings.
 - Handle errors with the `Result` type instead of panicking where feasible.
 - Use explicit version ranges in `Cargo.toml` and keep dependencies up-to-date.
@@ -126,10 +124,80 @@ project:
 - Lints must not be silenced except as a **last resort**.
 - Lint rule suppressions must be tightly scoped and include a clear reason.
 - Prefer `expect` over `allow`.
+- Where a function is unused with specific features selected, use conditional
+  compilation with `#[cfg]` or `#[cfg_attr]`.
+- Prefer `.expect()` over `.unwrap()`.
+- Use `concat!()` to combine long string literals rather than escaping newlines
+  with a backslash.
+- Prefer single line versions of functions where appropriate. I.e.,
+
+  ```rust
+  pub fn new(id: u64) -> Self { Self(id) }
+  ```
+
+  Instead of:
+
+  ```rust
+  pub fn new(id: u64) -> Self {
+      Self(id)
+  }
+  ```
+
+- Environment access (env::set_var and env::remove_var) are always unsafe in
+  Rust 2024 editionand **must** be marked as such 
+
+### Testing
+
+- Write unit and behavioural tests for new functionality. Run both before and
+  after making any change.
 - Use `rstest` fixtures for shared setup.
 - Replace duplicated tests with `#[rstest(...)]` parameterised cases.
 - Prefer `mockall` for mocks/stubs.
-- Prefer `.expect()` over `.unwrap()`.
+- Mock non-deterministic dependencies (e.g., environment variables and the
+  system clock) using dependency injection with the `mockable` crate (traits
+  like `Env` and `Clock`) where appropriate. See
+  `docs/reliable-testing-in-rust-via-dependency-injection.md` for guidance.
+- If DI + `mockable` cannot be used, env mutations in tests **must** be wrapped
+  in shared guards and mutexes placed in a shared `test_utils` or `test_helpers`
+  crate.  Direct environment mutation is **forbidden** in tests.
+
+### Dependency Management
+
+- **Mandate caret requirements for all dependencies.** All crate versions
+  specified in `Cargo.toml` must use SemVer-compatible caret requirements
+  (e.g., `some-crate = "1.2.3"`). This is Cargo's default and allows for safe,
+  non-breaking updates to minor and patch versions while preventing breaking
+  changes from new major versions. This approach is critical for ensuring build
+  stability and reproducibility.
+- **Prohibit unstable version specifiers.** The use of wildcard (`*`) or
+  open-ended inequality (`>=`) version requirements is strictly forbidden, as
+  they introduce unacceptable risk and unpredictability. Tilde requirements
+  (`~`) should only be used where a dependency must be locked to patch-level
+  updates for a specific, documented reason.
+
+### Error Handling
+
+- **Prefer semantic error enums**. Derive `std::error::Error` (via the
+  `thiserror` crate) for any condition the caller might inspect, retry, or map
+  to an HTTP status.
+- **Use an *opaque* error only at the app boundary**. Use `eyre::Report` for
+  human-readable logs; these should not be exposed in public APIs.
+- **Never export the opaque type from a library**. Convert to domain enums at
+  API boundaries, and to `eyre` only in the main `main()` entrypoint or
+  top-level async task.
+
+## Markdown Guidance
+
+- Validate Markdown files using `make markdownlint`.
+- Run `make fmt` after any documentation changes to format all Markdown
+  files and fix table markup.
+- Validate Mermaid diagrams in Markdown files by running `make nixie`.
+- Markdown paragraphs and bullet points must be wrapped at 80 columns.
+- Code blocks must be wrapped at 120 columns.
+- Tables and headings must not be wrapped.
+- Use dashes (`-`) for list bullets.
+- Use GitHub-flavoured Markdown footnotes (`[^1]`) for references and
+  footnotes.
 
 ## Markdown Guidance
 
