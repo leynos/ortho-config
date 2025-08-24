@@ -42,6 +42,7 @@ tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 rstest = "0.26.1"
 serial_test = "2"
 tempfile = "3"
+test_helpers = { path = "../test_helpers" }
 
 [[test]]
 name = "cucumber"

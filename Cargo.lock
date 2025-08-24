@@ -925,6 +925,7 @@ dependencies = [
  "serde_yaml",
  "serial_test",
  "tempfile",
+ "test_helpers",
  "thiserror 1.0.69",
  "tokio",
  "toml",
@@ -1538,6 +1539,10 @@ dependencies = [
  "rustix",
  "windows-sys",
 ]
+
+[[package]]
+name = "test_helpers"
+version = "0.3.0"
 
 [[package]]
 name = "textwrap"

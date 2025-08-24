@@ -148,9 +148,6 @@ mod tests {
     #[cfg(any(unix, target_os = "redox"))]
     use serial_test::serial;
     #[cfg(any(unix, target_os = "redox"))]
-    use std::env;
-    #[cfg(any(unix, target_os = "redox"))]
-    use std::ffi::{OsStr, OsString};
     #[cfg(any(unix, target_os = "redox"))]
     use std::fs;
     #[cfg(any(unix, target_os = "redox"))]
@@ -161,42 +158,20 @@ mod tests {
     use tempfile::TempDir;
 
     #[cfg(any(unix, target_os = "redox"))]
-    fn set_env<K: AsRef<OsStr>, V: AsRef<OsStr>>(key: K, val: V) {
-        // SAFETY: Rust 1.87 marks environment mutation functions as unsafe.
-        // Tests run serially, so mutations cannot race.
-        unsafe { env::set_var(key, val) }
-    }
-
-    #[cfg(any(unix, target_os = "redox"))]
-    fn remove_env<K: AsRef<OsStr>>(key: K) {
-        // SAFETY: Rust 1.87 marks environment mutation functions as unsafe.
-        // Tests run serially, so mutations cannot race.
-        unsafe { env::remove_var(key) }
-    }
+    use test_helpers::env::{self as test_env, EnvVarGuard};
 
     #[cfg(any(unix, target_os = "redox"))]
     struct XdgGuard {
-        old: Option<OsString>,
         dir: TempDir,
-    }
-
-    #[cfg(any(unix, target_os = "redox"))]
-    impl Drop for XdgGuard {
-        fn drop(&mut self) {
-            match &self.old {
-                Some(v) => set_env("XDG_CONFIG_HOME", v),
-                None => remove_env("XDG_CONFIG_HOME"),
-            }
-        }
+        _var: EnvVarGuard,
     }
 
     #[cfg(any(unix, target_os = "redox"))]
     static XDG_GUARD: LazyLock<XdgGuard> = LazyLock::new(|| {
-        let old = env::var_os("XDG_CONFIG_HOME");
         let dir = TempDir::new().expect("xdg");
         let path = dir.path().to_path_buf();
-        set_env("XDG_CONFIG_HOME", &path);
-        XdgGuard { old, dir }
+        let var = test_env::set_var("XDG_CONFIG_HOME", &path);
+        XdgGuard { dir, _var: var }
     });
 
     #[cfg(any(unix, target_os = "redox"))]
@@ -245,8 +220,7 @@ mod tests {
     #[case("myapp")]
     fn candidate_paths_ordering(#[case] prefix_raw: &str) {
         let home = TempDir::new().expect("home");
-        let old_home = env::var_os("HOME");
-        set_env("HOME", home.path());
+        let home_guard = test_env::set_var("HOME", home.path());
 
         let xdg_cfg_dir = if prefix_raw.is_empty() {
             xdg_path().to_path_buf()
@@ -310,10 +284,6 @@ mod tests {
                 .all(|p| p.parent() == Some(Path::new(".")))
         );
 
-        if let Some(v) = old_home {
-            set_env("HOME", v);
-        } else {
-            remove_env("HOME");
-        }
+        drop(home_guard);
     }
 }
