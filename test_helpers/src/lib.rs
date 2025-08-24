@@ -23,6 +23,7 @@ pub mod env {
     use parking_lot::{ReentrantMutex, ReentrantMutexGuard};
     use std::env;
     use std::ffi::{OsStr, OsString};
+    use std::fmt;
     use std::sync::LazyLock;
 
     static ENV_MUTEX: LazyLock<ReentrantMutex<()>> = LazyLock::new(ReentrantMutex::default);
@@ -38,10 +39,20 @@ pub mod env {
     }
 
     /// RAII guard restoring an environment variable to its prior value on drop.
+    #[must_use = "dropping restores the prior value"]
     pub struct EnvVarGuard {
         key: String,
         original: Option<OsString>,
         _lock: ReentrantMutexGuard<'static, ()>,
+    }
+
+    impl fmt::Debug for EnvVarGuard {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            f.debug_struct("EnvVarGuard")
+                .field("key", &self.key)
+                .field("had_original", &self.original.is_some())
+                .finish_non_exhaustive()
+        }
     }
 
     /// Sets an environment variable and returns a guard restoring its prior value.
@@ -104,7 +115,8 @@ pub mod env {
         }
     }
 
-    pub fn with_lock<F, R>(f: F) -> R
+    #[cfg(test)]
+    pub(crate) fn with_lock<F, R>(f: F) -> R
     where
         F: FnOnce() -> R,
     {
