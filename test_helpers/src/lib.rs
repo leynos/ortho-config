@@ -38,6 +38,23 @@ pub mod env {
         unsafe { env::remove_var(key) };
     }
 
+    /// Helper function that handles the common pattern of environment variable mutation
+    fn mutate_env_var<K, F>(key: K, mutator: F) -> EnvVarGuard
+    where
+        K: Into<String>,
+        F: FnOnce(&str),
+    {
+        let key = key.into();
+        let lock = ENV_MUTEX.lock();
+        let original = env::var_os(&key);
+        mutator(&key);
+        EnvVarGuard {
+            key,
+            original,
+            _lock: lock,
+        }
+    }
+
     /// RAII guard restoring an environment variable to its prior value on drop.
     #[must_use = "dropping restores the prior value"]
     pub struct EnvVarGuard {
@@ -69,15 +86,7 @@ pub mod env {
         K: Into<String>,
         V: AsRef<OsStr>,
     {
-        let key = key.into();
-        let lock = ENV_MUTEX.lock();
-        let original = env::var_os(&key);
-        set_var_inner(&key, value.as_ref());
-        EnvVarGuard {
-            key,
-            original,
-            _lock: lock,
-        }
+        mutate_env_var(key, |k| set_var_inner(k, value.as_ref()))
     }
 
     /// Removes an environment variable and returns a guard restoring its prior value.
@@ -93,15 +102,7 @@ pub mod env {
     where
         K: Into<String>,
     {
-        let key = key.into();
-        let lock = ENV_MUTEX.lock();
-        let original = env::var_os(&key);
-        remove_var_inner(&key);
-        EnvVarGuard {
-            key,
-            original,
-            _lock: lock,
-        }
+        mutate_env_var(key, remove_var_inner)
     }
 
     impl Drop for EnvVarGuard {
