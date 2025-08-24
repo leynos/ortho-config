@@ -38,7 +38,10 @@ where
 /// # Errors
 ///
 /// Returns an error if configuration loading fails.
-#[expect(deprecated, reason = "Tests cover deprecated configuration loaders")]
+#[expect(
+    deprecated,
+    reason = "figment's Jail uses deprecated APIs for test isolation"
+)]
 #[expect(
     clippy::result_large_err,
     reason = "tests need full error details for assertions"
@@ -59,7 +62,10 @@ where
 /// # Errors
 ///
 /// Returns an error if configuration loading fails.
-#[expect(deprecated, reason = "Tests cover deprecated configuration loaders")]
+#[expect(
+    deprecated,
+    reason = "figment's Jail uses deprecated APIs for test isolation"
+)]
 #[expect(
     clippy::result_large_err,
     reason = "tests need full error details for assertions"
