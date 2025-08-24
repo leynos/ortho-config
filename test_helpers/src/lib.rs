@@ -1,6 +1,9 @@
 //! Test helpers shared across crates.
 //!
 //! This crate currently provides environment variable guards.
+//!
+//! Usage scope:
+//! - Intended for test code only; do not use in production binaries or libraries.
 
 pub mod env {
     //! Helpers for safely mutating environment variables in tests.
@@ -30,6 +33,14 @@ pub mod env {
     }
 
     /// Sets an environment variable and returns a guard restoring its prior value.
+    ///
+    /// # Examples
+    /// ```
+    /// use test_helpers::env;
+    /// let _g = env::set_var("FOO", "bar");
+    /// assert_eq!(std::env::var("FOO").expect("read env var"), "bar");
+    /// // Dropping `_g` restores the prior value (or unsets it if none existed).
+    /// ```
     pub fn set_var<K, V>(key: K, value: V) -> EnvVarGuard
     where
         K: Into<String>,
@@ -38,13 +49,21 @@ pub mod env {
         let key = key.into();
         let original = with_lock(|| {
             let original = env::var_os(&key);
-            unsafe { env::set_var(&key, value.as_ref()) };
+            unsafe { env_set_var(&key, value.as_ref()) };
             original
         });
         EnvVarGuard { key, original }
     }
 
     /// Removes an environment variable and returns a guard restoring its prior value.
+    ///
+    /// # Examples
+    /// ```
+    /// use test_helpers::env;
+    /// let _g = env::remove_var("FOO");
+    /// assert!(std::env::var("FOO").is_err());
+    /// // Dropping `_g` restores the prior value (if any).
+    /// ```
     pub fn remove_var<K>(key: K) -> EnvVarGuard
     where
         K: Into<String>,
@@ -52,7 +71,7 @@ pub mod env {
         let key = key.into();
         let original = with_lock(|| {
             let original = env::var_os(&key);
-            unsafe { env::remove_var(&key) };
+            unsafe { env_remove_var(&key) };
             original
         });
         EnvVarGuard { key, original }
@@ -61,9 +80,9 @@ pub mod env {
     impl Drop for EnvVarGuard {
         fn drop(&mut self) {
             if let Some(val) = self.original.take() {
-                with_lock(|| unsafe { env::set_var(&self.key, val) });
+                with_lock(|| unsafe { env_set_var(&self.key, &val) });
             } else {
-                with_lock(|| unsafe { env::remove_var(&self.key) });
+                with_lock(|| unsafe { env_remove_var(&self.key) });
             }
         }
     }
@@ -76,6 +95,18 @@ pub mod env {
         f()
     }
 
+    #[inline]
+    unsafe fn env_set_var(key: &str, value: &OsStr) {
+        // SAFETY: Callers serialise mutations via `ENV_MUTEX`; test-only usage.
+        unsafe { env::set_var(key, value) };
+    }
+
+    #[inline]
+    unsafe fn env_remove_var(key: &str) {
+        // SAFETY: Callers serialise mutations via `ENV_MUTEX`; test-only usage.
+        unsafe { env::remove_var(key) };
+    }
+
     #[cfg(test)]
     mod tests {
         use super::*;
@@ -86,35 +117,35 @@ pub mod env {
         fn set_var_restores_original() {
             let key = "TEST_HELPERS_SET_VAR";
             let original = "orig";
-            unsafe { std::env::set_var(key, original) };
+            unsafe { super::env_set_var(key, std::ffi::OsStr::new(original)) };
             {
                 let _guard = set_var(key, "temp");
-                assert_eq!(std::env::var(key).unwrap(), "temp");
+                assert_eq!(std::env::var(key).expect("read env var"), "temp");
             }
-            assert_eq!(std::env::var(key).unwrap(), original);
-            unsafe { std::env::remove_var(key) };
+            assert_eq!(std::env::var(key).expect("read env var"), original);
+            unsafe { super::env_remove_var(key) };
         }
 
         #[test]
         fn remove_var_restores_value() {
             let key = "TEST_HELPERS_REMOVE_VAR";
             let original = "to-be-removed";
-            unsafe { std::env::set_var(key, original) };
+            unsafe { super::env_set_var(key, std::ffi::OsStr::new(original)) };
             {
                 let _guard = remove_var(key);
                 assert!(std::env::var(key).is_err());
             }
-            assert_eq!(std::env::var(key).unwrap(), original);
-            unsafe { std::env::remove_var(key) };
+            assert_eq!(std::env::var(key).expect("read env var"), original);
+            unsafe { super::env_remove_var(key) };
         }
 
         #[test]
         fn set_var_unsets_when_absent() {
             let key = "TEST_HELPERS_UNSET";
-            unsafe { std::env::remove_var(key) };
+            unsafe { super::env_remove_var(key) };
             {
                 let _guard = set_var(key, "tmp");
-                assert_eq!(std::env::var(key).unwrap(), "tmp");
+                assert_eq!(std::env::var(key).expect("read env var"), "tmp");
             }
             assert!(std::env::var(key).is_err());
         }
@@ -136,7 +167,7 @@ pub mod env {
                         barrier.wait();
                         let value = format!("value-{key}");
                         let _g = set_var(&key, &value);
-                        assert_eq!(std::env::var(&key).unwrap(), value);
+                        assert_eq!(std::env::var(&key).expect("read env var"), value);
                     })
                 })
                 .collect();
@@ -148,6 +179,23 @@ pub mod env {
             for key in keys {
                 assert!(std::env::var(key).is_err());
             }
+        }
+
+        #[test]
+        fn stacking_restores_in_lifo() {
+            let key = "TEST_HELPERS_STACKING";
+            // Ensure clean slate
+            unsafe { super::env_remove_var(key) };
+            {
+                let _g1 = set_var(key, "v1");
+                assert_eq!(std::env::var(key).expect("read env var"), "v1");
+                {
+                    let _g2 = set_var(key, "v2");
+                    assert_eq!(std::env::var(key).expect("read env var"), "v2");
+                }
+                assert_eq!(std::env::var(key).expect("read env var"), "v1");
+            }
+            assert!(std::env::var(key).is_err());
         }
     }
 }

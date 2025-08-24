@@ -164,13 +164,6 @@ mod tests {
     }
 
     #[cfg(any(unix, target_os = "redox"))]
-    impl XdgGuard {
-        fn path(&self) -> &Path {
-            self.dir.path()
-        }
-    }
-
-    #[cfg(any(unix, target_os = "redox"))]
     #[fixture]
     fn xdg_home() -> XdgGuard {
         let dir = TempDir::new().expect("xdg");
@@ -191,7 +184,11 @@ mod tests {
         #[case] files: &[&str],
         xdg_home: XdgGuard,
     ) {
-        let dir = xdg_home.path();
+        let XdgGuard {
+            dir,
+            _var: _env_guard,
+        } = xdg_home;
+        let dir = dir.path();
         for entry in fs::read_dir(dir).expect("read dir") {
             let entry = entry.expect("entry");
             let path = entry.path();
@@ -225,7 +222,11 @@ mod tests {
         let home = TempDir::new().expect("home");
         let home_guard = test_env::set_var("HOME", home.path());
 
-        let base = xdg_home.path();
+        let XdgGuard {
+            dir: base_dir,
+            _var: _env_guard,
+        } = xdg_home;
+        let base = base_dir.path();
         let xdg_cfg_dir = if prefix_raw.is_empty() {
             base.to_path_buf()
         } else {
