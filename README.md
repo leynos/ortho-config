@@ -331,18 +331,17 @@ fn main() -> Result<(), String> {
   files for persistent settings).
 - **Clear Precedence:** Predictable configuration resolution.
 
-## Migrating from 0.1 to 0.2
+## Migrating from 0.4 to 0.5
 
-Version 0.2 introduces a small API refinement:
+Version 0.5 introduces a small API refinement:
 
-- `load_subcommand_config_for` now only loads default values from files and
-  environment variables. Use
-  [`load_and_merge_subcommand_for`](#subcommand-configuration) to merge these
-  defaults with CLI arguments.
+- `load_subcommand_config_for` has been removed. Use
+  [`load_and_merge_subcommand_for`](#subcommand-configuration) to load defaults
+  and merge them with CLI arguments.
 - Types deriving `OrthoConfig` expose an associated `prefix()` function. Use
   this if you need the configured prefix directly.
 
-Update the `Cargo.toml` to depend on `ortho_config = "0.2"` and adjust code to
+Update the `Cargo.toml` to depend on `ortho_config = "0.5"` and adjust code to
 call `load_and_merge_subcommand_for` instead of manually merging defaults.
 
 ## Contributing

@@ -5,7 +5,7 @@ use clap::CommandFactory;
 use figment::{Figment, providers::Env};
 use serde::de::DeserializeOwned;
 use std::path::PathBuf;
-use uncased::{Uncased, UncasedStr};
+use uncased::Uncased;
 
 mod paths;
 mod types;
@@ -14,10 +14,6 @@ use paths::candidate_paths;
 pub use paths::push_stem_candidates;
 pub use types::{CmdName, Prefix};
 
-/// Maps an `UncasedStr` to an owned `Uncased` without using an inline closure.
-fn to_uncased(key: &UncasedStr) -> Uncased<'_> {
-    Uncased::from(key)
-}
 
 /// Load and merge `[cmds.<name>]` sections from the given paths.
 ///
@@ -42,103 +38,10 @@ fn load_from_files(paths: &[PathBuf], name: &CmdName) -> Result<Figment, OrthoEr
     Ok(fig)
 }
 
-/// Loads configuration for a specific subcommand from files and environment
-/// variables.
-///
-/// Searches for configuration files using the provided prefix, loads the
-/// `[cmds.<name>]` section from each file, and merges them. Then overlays
-/// environment variables prefixed with `<PREFIX>CMDS_<NAME>_` (case-insensitive,
-/// double underscore for nesting). Values from environment variables override
-/// those from files.
-///
-/// # Errors
-///
-/// Returns [`OrthoError::Gathering`] if configuration files cannot be loaded or
-/// if deserialisation fails.
-///
-/// # Deprecated
-///
-/// Use [`load_and_merge_subcommand`] or
-/// [`load_and_merge_subcommand_for`] instead to load defaults and apply CLI
-/// overrides in one step. Planned removal: v0.4.0 (see the project roadmap).
-#[deprecated(
-    since = "0.3.0",
-    note = "use `load_and_merge_subcommand` or `load_and_merge_subcommand_for` instead; removed in v0.4.0"
-)]
-pub fn load_subcommand_config<T>(prefix: &Prefix, name: &CmdName) -> Result<T, OrthoError>
-where
-    T: DeserializeOwned + Default,
-{
-    let paths = candidate_paths(prefix);
-    let mut fig = load_from_files(&paths, name)?;
-
-    let env_name = name.env_key();
-    let env_prefix = format!("{}CMDS_{env_name}_", prefix.raw());
-    let env_provider = Env::prefixed(&env_prefix).map(to_uncased).split("__");
-    fig = fig.merge(env_provider);
-
-    // Extraction only gathers defaults, so map failures accordingly.
-    fig.extract().map_err(|e| OrthoError::Gathering(e.into()))
-}
-
-/// Loads configuration defaults for a subcommand using the prefix defined by the
-/// type.
-///
-/// The prefix is provided by [`OrthoConfig::prefix`]. If the struct does not
-/// specify `#[ortho_config(prefix = "...")]`, the default empty prefix is used.
-/// This function loads `[cmds.<name>]` sections from configuration files and
-/// overlays environment variables prefixed with `<PREFIX>CMDS_<NAME>_`,
-/// returning the merged configuration as type `T`.
-///
-/// # Errors
-///
-/// Returns [`OrthoError::Gathering`] if configuration files cannot be loaded or
-/// if deserialisation fails.
-///
-/// # Examples
-///
-/// ```rust,ignore
-/// use ortho_config::subcommand::{CmdName, load_subcommand_config_for};
-/// #[derive(clap::Parser, serde::Serialize, serde::Deserialize, Default)]
-/// struct MySubcommandConfig;
-/// impl ortho_config::OrthoConfig for MySubcommandConfig {
-///     fn load_and_merge(&self) -> Result<Self, ortho_config::OrthoError> where Self: serde::Serialize { todo!() }
-///     fn load() -> Result<Self, ortho_config::OrthoError> { todo!() }
-///     fn prefix() -> &'static str { "" }
-/// }
-/// # fn main() -> Result<(), ortho_config::OrthoError> {
-/// let config = load_subcommand_config_for::<MySubcommandConfig>(&CmdName::new("serve"))?;
-/// # let _ = config;
-/// # Ok(())
-/// # }
-/// ```
-///
-/// # Deprecated
-///
-/// This function is deprecated. Use
-/// [`load_and_merge_subcommand_for`](crate::load_and_merge_subcommand_for)
-/// instead. Planned removal: v0.4.0 (see the project roadmap).
-#[deprecated(
-    since = "0.3.0",
-    note = "use `load_and_merge_subcommand_for` instead; removed in v0.4.0"
-)]
-pub fn load_subcommand_config_for<T>(name: &CmdName) -> Result<T, OrthoError>
-where
-    T: crate::OrthoConfig + Default,
-{
-    #[expect(
-        deprecated,
-        reason = "delegates to deprecated helper during transition"
-    )]
-    load_subcommand_config(&Prefix::new(T::prefix()), name)
-}
-
 /// Loads defaults for a subcommand and merges CLI-provided values over them.
 ///
-/// This convenience function combines [`load_subcommand_config`] with CLI
-/// overrides to reduce boilerplate when working with `clap` subcommands. It determines the
-/// subcommand name from `T`, loads default configuration from files and
-/// environment variables using the given prefix, and overlays values provided
+/// This convenience function loads default configuration from files and
+/// environment variables using the given prefix, then overlays values provided
 /// via the CLI. CLI-provided values override file or environment defaults.
 ///
 /// # Errors

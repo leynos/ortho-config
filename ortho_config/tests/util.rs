@@ -5,7 +5,7 @@
 //! tests by encapsulating the jail creation and configuration loading.
 
 use clap::CommandFactory;
-use ortho_config::subcommand::{CmdName, Prefix};
+use ortho_config::subcommand::Prefix;
 use ortho_config::{
     OrthoConfig, OrthoError, load_and_merge_subcommand, load_and_merge_subcommand_for,
 };
@@ -26,29 +26,6 @@ where
         Ok(())
     })?;
     Ok(result.into_inner().expect("loader executed"))
-}
-
-/// Runs `setup` in a jailed environment then loads a subcommand
-/// configuration for the `test` command using the `APP_` prefix.
-///
-/// # Errors
-///
-/// Returns an error if configuration loading fails.
-pub fn with_subcommand_config<F, T>(setup: F) -> Result<T, OrthoError>
-where
-    F: FnOnce(&mut figment::Jail) -> figment::error::Result<()>,
-    T: DeserializeOwned + Default,
-{
-    with_jail(setup, || {
-        #[expect(
-            deprecated,
-            reason = "figment's Jail uses deprecated APIs for test isolation"
-        )]
-        {
-            // FIXME: remove once figment::Jail replacement lands upstream (see https://github.com/SergioBenitez/Figment/issues/138)
-            ortho_config::load_subcommand_config::<T>(&Prefix::new("APP_"), &CmdName::new("test"))
-        }
-    })
 }
 
 /// Runs `setup` in a jailed environment, then loads defaults for the `test`
