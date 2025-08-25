@@ -349,6 +349,8 @@ call `load_and_merge_subcommand_for` instead of manually merging defaults.
 
 - The `scripts/bump_version.py` helper keeps the workspace and member crates in
   version sync.
+- It requires [`uv`](https://docs.astral.sh/uv/) on the `PATH` as the shebang
+  uses `uv` for dependency resolution.
 - Run it with the desired semantic version:
 
 ```sh

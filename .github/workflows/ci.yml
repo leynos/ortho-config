@@ -28,6 +28,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Ensure bump_version script is executable
+        if: runner.os == 'Linux'
+        shell: bash
         run: test -x scripts/bump_version.py
       - name: Setup Rust
         uses: leynos/shared-actions/.github/actions/setup-rust@c6559452842af6a83b83429129dccaf910e34562

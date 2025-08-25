@@ -41,8 +41,28 @@ def _set_version(toml_path: Path, version: str) -> None:
         temp_name = tf.name
     os.replace(temp_name, toml_path)
 
+
 def main(argv: list[str]) -> int:
-    """Update the workspace and member crate versions to the supplied value."""
+    """
+    Update the workspace and member crate versions to the supplied value.
+
+    Parameters
+    ----------
+    argv
+        Command-line arguments where `argv[1]` is the target semantic version
+        (for example, "1.2.3").
+
+    Returns
+    -------
+    int
+        Zero on success; non-zero if any member update fails or arguments are
+        invalid.
+
+    Examples
+    --------
+    >>> import sys
+    >>> sys.exit(main(["bump_version.py", "1.2.3"]))
+    """
     if len(argv) != 2:
         prog = Path(argv[0]).name
         print(f"Usage: {prog} <version>", file=sys.stderr)
@@ -58,22 +78,43 @@ def main(argv: list[str]) -> int:
         return 1
     members = data.get("workspace", {}).get("members", [])
     _set_version(workspace, version)
-    for member in members:
-        member_path = root / member / "Cargo.toml"
-        if not member_path.exists():
+    had_error = False
+    for pattern in members:
+        matches = list(root.glob(pattern))
+        if not matches:
             print(
-                f"Warning: Skipping missing member Cargo.toml at {member_path}",
+                f"Warning: No members matched pattern '{pattern}'",
                 file=sys.stderr,
             )
             continue
-        try:
-            _set_version(member_path, version)
-        except Exception as exc:  # pragma: no cover - defensive
-            print(
-                f"Error: Failed to set version for {member_path}: {exc}",
-                file=sys.stderr,
+        for member_root in matches:
+            member_path = (
+                member_root / "Cargo.toml"
+                if member_root.is_dir()
+                else member_root
             )
-    return 0
+            if member_path.name != "Cargo.toml":
+                member_path = member_root / "Cargo.toml"
+            if not member_path.exists():
+                print(
+                    f"Warning: Skipping missing member Cargo.toml at {member_path}",
+                    file=sys.stderr,
+                )
+                continue
+            try:
+                _set_version(member_path, version)
+            except (
+                tomllib.TOMLDecodeError,
+                OSError,
+                TypeError,
+                ValueError,
+            ) as exc:  # pragma: no cover - defensive
+                had_error = True
+                print(
+                    f"Error: Failed to set version for {member_path}: {exc}",
+                    file=sys.stderr,
+                )
+    return 0 if not had_error else 1
 
 if __name__ == "__main__":  # pragma: no cover
     raise SystemExit(main(sys.argv))
