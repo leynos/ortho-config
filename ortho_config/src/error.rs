@@ -127,10 +127,25 @@ impl OrthoError {
             source: Box::new(source),
         }
     }
+
+    /// Construct a gathering error from a [`figment::Error`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ortho_config::OrthoError;
+    /// let fe = figment::Error::from("boom");
+    /// let e = OrthoError::gathering(fe);
+    /// assert!(matches!(e, OrthoError::Gathering(_)));
+    /// ```
+    #[must_use]
+    pub fn gathering(source: figment::Error) -> Self {
+        OrthoError::Gathering(Box::new(source))
+    }
 }
 
-/// Convert any [`serde_json::Error`], whether from serialization or
-/// deserialization, into [`OrthoError::Gathering`].
+/// Convert any [`serde_json::Error`], whether from serialisation or
+/// deserialisation, into [`OrthoError::Gathering`].
 ///
 /// # Examples
 ///

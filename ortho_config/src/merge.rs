@@ -1,4 +1,5 @@
-//! Helpers for sanitizing and merging command-line arguments with configuration defaults.
+//! Helpers for sanitising and merging command-line arguments with
+//! configuration defaults.
 
 use crate::OrthoError;
 use figment::providers::Serialized;
@@ -13,8 +14,9 @@ use serde_json::Value;
 /// - Array elements equal to null are removed, dropping `None` entries in
 ///   `Vec<_>` but retaining empty arrays to allow deliberate clearing.
 ///
-/// Intended for CLI sanitization so unset [`Option`] fields and untouched
-/// flattened structs do not override defaults from files or environment variables.
+/// Intended for CLI sanitisation so unset [`Option`] fields and untouched
+/// flattened structs do not override defaults from files or environment
+/// variables.
 /// Arrays are never removed, even when emptied; this function only removes
 /// [`Option::None`] fields.
 ///
@@ -41,7 +43,7 @@ fn strip_nulls(value: &mut Value) -> bool {
     }
 }
 
-/// Serialize a CLI struct to JSON, removing fields set to `None`.
+/// Serialise a CLI struct to JSON, removing fields set to `None`.
 ///
 /// # Examples
 ///
@@ -53,13 +55,13 @@ fn strip_nulls(value: &mut Value) -> bool {
 /// struct Args { count: Option<u32> }
 ///
 /// let v = value_without_nones(&Args { count: None })
-///     .expect("expected serialization to succeed");
+///     .expect("expected serialisation to succeed");
 /// assert_eq!(v, serde_json::json!({}));
 /// ```
 ///
 /// # Errors
 ///
-/// Returns any [`serde_json::Error`] encountered during serialization.
+/// Returns any [`serde_json::Error`] encountered during serialisation.
 pub fn value_without_nones<T: Serialize>(cli: &T) -> Result<Value, serde_json::Error> {
     let mut value = serde_json::to_value(cli)?;
     let _ = strip_nulls(&mut value);
@@ -68,7 +70,7 @@ pub fn value_without_nones<T: Serialize>(cli: &T) -> Result<Value, serde_json::E
 
 /// Convert a [`serde_json::Error`] into [`OrthoError::Gathering`].
 ///
-/// This helper is used by [`sanitize_value`] to map JSON serialization
+/// This helper is used by [`sanitize_value`] to map JSON serialisation
 /// failures into the crate's error type.
 ///
 /// ```ignore
@@ -80,7 +82,7 @@ fn convert_gathering_error(e: serde_json::Error) -> OrthoError {
     e.into()
 }
 
-/// Serialize `value` to JSON, pruning `None` fields and mapping errors to
+/// Serialise `value` to JSON, pruning `None` fields and mapping errors to
 /// [`OrthoError`].
 ///
 /// # Examples
@@ -92,13 +94,13 @@ fn convert_gathering_error(e: serde_json::Error) -> OrthoError {
 /// #[derive(Serialize)]
 /// struct Args { count: Option<u32> }
 /// let v = sanitize_value(&Args { count: None })
-///     .expect("expected sanitization to succeed");
+///     .expect("expected sanitisation to succeed");
 /// assert_eq!(v, serde_json::json!({}));
 /// ```
 ///
 /// # Errors
 ///
-/// Returns an [`OrthoError`] if JSON serialization fails.
+/// Returns an [`OrthoError`] if JSON serialisation fails.
 pub fn sanitize_value<T: Serialize>(value: &T) -> Result<Value, OrthoError> {
     value_without_nones(value).map_err(convert_gathering_error)
 }
@@ -128,7 +130,7 @@ pub fn sanitize_value<T: Serialize>(value: &T) -> Result<Value, OrthoError> {
 ///
 /// # Errors
 ///
-/// Returns an [`OrthoError`] if JSON serialization fails.
+/// Returns an [`OrthoError`] if JSON serialisation fails.
 pub fn sanitized_provider<T: Serialize>(
     value: &T,
 ) -> Result<Serialized<serde_json::Value>, OrthoError> {

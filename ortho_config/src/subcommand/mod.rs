@@ -78,7 +78,7 @@ where
     fig = fig.merge(env_provider);
 
     // Extraction only gathers defaults, so map failures accordingly.
-    fig.extract().map_err(|e| OrthoError::Gathering(e.into()))
+    fig.extract().map_err(OrthoError::gathering)
 }
 
 /// Loads configuration defaults for a subcommand using the prefix defined by the
@@ -126,6 +126,8 @@ pub fn load_subcommand_config_for<T>(name: &CmdName) -> Result<T, OrthoError>
 where
     T: crate::OrthoConfig + Default,
 {
+    // FIXME: Remove once `load_subcommand_config` is deleted in v0.4.0.
+    // See docs/roadmap.md.
     #[expect(
         deprecated,
         reason = "delegates to deprecated helper during transition"
