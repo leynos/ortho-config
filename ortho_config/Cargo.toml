@@ -12,7 +12,7 @@ repository.workspace = true
 workspace = true
 
 [dependencies]
-ortho_config_macros = { path = "../ortho_config_macros" }
+ortho_config_macros = { path = "../ortho_config_macros", version = "0.5.0-alpha2" }
 serde = { version = "1", features = ["derive"] }
 thiserror = "1"
 clap = { version = "4", features = ["derive"] }
