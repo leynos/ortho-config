@@ -2,6 +2,10 @@
 name = "ortho_config"
 version = "0.3.0"
 edition = "2024"
+description.workspace = true
+license.workspace = true
+repository.workspace = true
+
 
 
 [lints]
@@ -43,8 +47,8 @@ trybuild = "1"
 cucumber = "0.21.1"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 rstest = "0.26.1"
-serial_test = "2"
 tempfile = "3"
+test_helpers = { path = "../test_helpers" }
 
 [[test]]
 name = "cucumber"

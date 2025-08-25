@@ -11,14 +11,7 @@ mod error;
 mod file;
 mod merge;
 pub mod subcommand;
-#[expect(
-    deprecated,
-    reason = "re-export legacy helpers pending removal in v0.4.0"
-)]
-pub use subcommand::{
-    load_and_merge_subcommand, load_and_merge_subcommand_for, load_subcommand_config,
-    load_subcommand_config_for,
-};
+pub use subcommand::{load_and_merge_subcommand, load_and_merge_subcommand_for};
 
 /// Normalize a prefix by trimming trailing underscores and converting
 /// to lowercase ASCII.

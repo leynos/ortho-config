@@ -1,12 +1,13 @@
 [workspace]
 members = [
     "ortho_config",
-    "ortho_config_macros"
+    "ortho_config_macros",
+    "test_helpers"
 ]
 resolver = "2"
 
 [workspace.package]
-version = "0.3.0"
+version = "0.5.0-alpha2"
 authors = ["Payton McIntosh <pmcintosh@df12.net>"]
 edition = "2024"
 license = "ISC"

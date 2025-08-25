@@ -50,13 +50,13 @@ This change would make the `load_and_merge` method more intuitive, as it would
 correctly reflect the desired precedence (CLI &gt; Env &gt; File &gt; Defaults)
 without requiring all values to be defined in lower-precedence layers.
 
-### 2. Deprecating `load_subcommand_config`
+### 2. Removing `load_subcommand_config`
 
 The `load_subcommand_config` and `load_subcommand_config_for` functions, which
-only load defaults, become less useful with the improved `load_and_merge`. To
-simplify the API, these were deprecated in v0.3.0 and are scheduled for removal
-in v0.4.0. This guides users towards the more comprehensive `load_and_merge` as
-the single, recommended way to handle subcommand configuration.
+only load defaults, became less useful with the improved `load_and_merge` and
+were removed in v0.5.0. This guides users towards the more comprehensive
+`load_and_merge` as the single, recommended way to handle subcommand
+configuration.
 
 ## How this Simplifies `vk`
 
