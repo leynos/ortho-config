@@ -3,7 +3,8 @@
 use clap::Parser;
 use clap_dispatch::clap_dispatch;
 use serde::Deserialize;
-use ortho_config::{load_and_merge_subcommand_for, OrthoConfig};
+use ortho_config::OrthoConfig;
+use ortho_config::subcommand::SubcmdConfigMerge;
 
 #[derive(Parser, Deserialize, Default, Debug, Clone, OrthoConfig)]
 #[ortho_config(prefix = "REGCTL_")]
@@ -60,13 +61,11 @@ fn main() -> Result<(), String> {
     let db_url = "postgres://user:pass@localhost/registry";
     let final_cmd = match cli {
         Commands::AddUser(args) => {
-            let merged = load_and_merge_subcommand_for::<AddUserArgs>(&args)
-                .map_err(|e| e.to_string())?;
+            let merged = args.load_and_merge().map_err(|e| e.to_string())?;
             Commands::AddUser(merged)
         }
         Commands::ListItems(args) => {
-            let merged = load_and_merge_subcommand_for::<ListItemsArgs>(&args)
-                .map_err(|e| e.to_string())?;
+            let merged = args.load_and_merge().map_err(|e| e.to_string())?;
             Commands::ListItems(merged)
         }
     };

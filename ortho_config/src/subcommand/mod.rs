@@ -1,7 +1,7 @@
-//! Support for loading configuration for individual subcommands.
+//! Utilities for loading configuration for individual subcommands.
 //!
-//! Gathers defaults from files and environment variables before applying CLI
-//! overrides for a focused subcommand.
+//! Resolves defaults from files and the environment and exposes the
+//! [`SubcmdConfigMerge`] trait for merging them with CLI arguments.
 
 use crate::{OrthoError, load_config_file, sanitized_provider};
 use clap::CommandFactory;
@@ -131,4 +131,55 @@ where
     T: crate::OrthoConfig + serde::Serialize + Default + CommandFactory,
 {
     load_and_merge_subcommand(&Prefix::new(T::prefix()), cli)
+}
+
+/// Trait adding a convenience [`load_and_merge`] method to subcommand structs.
+///
+/// Implemented for any type that satisfies the bounds required by
+/// [`load_and_merge_subcommand_for`]. This avoids writing identical
+/// `load_and_merge` methods for each subcommand struct in an application.
+///
+/// # Examples
+///
+/// ```rust,no_run
+/// use clap::Parser;
+/// use ortho_config::OrthoConfig;
+/// use ortho_config::subcommand::SubcmdConfigMerge;
+/// use serde::{Deserialize, Serialize};
+///
+/// #[derive(Parser, Deserialize, Serialize, OrthoConfig, Default)]
+/// #[ortho_config(prefix = "APP_")]
+/// struct RunArgs {
+///     #[arg(long)]
+///     level: Option<u32>,
+/// }
+///
+/// # fn main() -> Result<(), ortho_config::OrthoError> {
+/// let cli = RunArgs::parse_from(["tool", "--level", "3"]);
+/// let cfg = cli.load_and_merge()?;
+/// # let _ = cfg;
+/// # Ok(())
+/// # }
+/// ```
+pub trait SubcmdConfigMerge: crate::OrthoConfig + CommandFactory + Sized {
+    /// Merge configuration defaults for this subcommand over CLI arguments.
+    ///
+    /// Loads defaults from configuration files and the environment, then
+    /// overlays the already parsed CLI values.
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`OrthoError::Merge`] if CLI values cannot be merged or if
+    /// deserialisation fails.
+    fn load_and_merge(&self) -> Result<Self, OrthoError>
+    where
+        Self: serde::Serialize + Default,
+    {
+        load_and_merge_subcommand_for(self)
+    }
+}
+
+impl<T> SubcmdConfigMerge for T where
+    T: crate::OrthoConfig + serde::Serialize + Default + CommandFactory
+{
 }
