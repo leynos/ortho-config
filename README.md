@@ -221,7 +221,8 @@ to `.config.toml`. These values are then merged beneath the CLI arguments.
 ```rust
 use clap::{Args, Parser};
 use serde::Deserialize;
-use ortho_config::{OrthoConfig, SubcmdConfigMerge};
+use ortho_config::OrthoConfig;
+use ortho_config::subcommand::SubcmdConfigMerge;
 
 #[derive(Debug, Deserialize, Args, OrthoConfig)]
 #[ortho_config(prefix = "APP_")]

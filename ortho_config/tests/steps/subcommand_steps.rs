@@ -8,7 +8,7 @@
 use crate::{PrArgs, World};
 use clap::Parser;
 use cucumber::{given, then, when};
-use ortho_config::SubcmdConfigMerge;
+use ortho_config::subcommand::SubcmdConfigMerge;
 
 /// Check if all configuration sources are absent.
 fn has_no_config_sources(world: &World) -> bool {

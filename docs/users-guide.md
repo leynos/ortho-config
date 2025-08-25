@@ -75,19 +75,21 @@ Projects using a pre‑0.5 release can upgrade with the following steps:
   `load_and_merge_subcommand_for` supersedes this workaround.
 - Replace calls to deprecated helpers such as `load_subcommand_config_for` with
   `ortho_config::subcommand::load_and_merge_subcommand_for` or import
-  SubcmdConfigMerge to call load_and_merge directly.
+  `ortho_config::subcommand::SubcmdConfigMerge` to call `load_and_merge`
+  directly.
 
 Import it with:
 
 ```rust
-use ortho_config::SubcmdConfigMerge;
+use ortho_config::subcommand::SubcmdConfigMerge;
 ```
 
 Subcommand structs can leverage the `SubcmdConfigMerge` trait to expose a
 `load_and_merge` method automatically:
 
 ```rust
-use ortho_config::{OrthoConfig, OrthoError, SubcmdConfigMerge};
+use ortho_config::{OrthoConfig, OrthoError};
+use ortho_config::subcommand::SubcmdConfigMerge;
 use serde::Deserialize;
 
 #[derive(Deserialize, OrthoConfig)]
@@ -378,7 +380,8 @@ might be defined as follows:
 
 ```rust
 use clap::Parser;
-use ortho_config::{OrthoConfig, SubcmdConfigMerge};
+use ortho_config::OrthoConfig;
+use ortho_config::subcommand::SubcmdConfigMerge;
 use serde::{Deserialize, Serialize};
 
 #[derive(Parser, Deserialize, Serialize, Debug, OrthoConfig, Clone, Default)]

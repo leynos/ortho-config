@@ -66,7 +66,7 @@ self, enabling each subcommand to invoke configuration merging without extra
 code. Import it with:
 
 ```rust
-use ortho_config::SubcmdConfigMerge;
+use ortho_config::subcommand::SubcmdConfigMerge;
 ```
 
 ## How this Simplifies `vk`
