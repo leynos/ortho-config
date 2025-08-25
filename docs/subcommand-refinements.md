@@ -61,8 +61,8 @@ configuration.
 ### 3. Eliminating boilerplate with SubcmdConfigMerge
 
 Repeated `impl` blocks for subcommand structs obscured intent. The
-`SubcmdConfigMerge` trait offers a default `load_and_merge` method that borrows
-`self`, enabling each subcommand to invoke configuration merging without extra
+SubcmdConfigMerge trait offers a default load_and_merge method that borrows
+self, enabling each subcommand to invoke configuration merging without extra
 code. Import it with:
 
 ```rust

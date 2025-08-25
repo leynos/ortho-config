@@ -75,7 +75,7 @@ Projects using a pre‑0.5 release can upgrade with the following steps:
   `load_and_merge_subcommand_for` supersedes this workaround.
 - Replace calls to deprecated helpers such as `load_subcommand_config_for` with
   `ortho_config::subcommand::load_and_merge_subcommand_for` or import
-  `SubcmdConfigMerge` to call `load_and_merge` directly.
+  SubcmdConfigMerge to call load_and_merge directly.
 
 Import it with:
 
