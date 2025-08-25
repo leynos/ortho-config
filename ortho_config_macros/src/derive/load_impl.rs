@@ -104,7 +104,7 @@ pub(crate) fn build_env_section(tokens: &LoadImplTokens<'_>) -> proc_macro2::Tok
     }
 }
 
-/// Build tokens that merge a sanitised CLI provider into a `Figment`.
+/// Build tokens that merge a sanitized CLI provider into a `Figment`.
 ///
 /// The generated code merges the provider when present and pushes any
 /// resulting errors onto the supplied collection.

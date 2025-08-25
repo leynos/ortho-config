@@ -75,15 +75,17 @@ The primary data flow for a user calling `AppConfig::load()` will be:
      loads the configuration file.
    - **Environment Provider:** An `Env` provider configured with the correct
      prefix and key-mapping rules.
+
    - **CLI Provider:** The `clap`-parsed arguments are serialized into a
-   `figment` provider and merged last. Fields left as `None` are removed before
-   merging so that environment or file defaults remain untouched. This
-   serialization step relies on `serde_json` and introduces a small overhead;
-   if configuration loading becomes a hotspot, benchmark to evaluate a more
-   direct approach. A helper, `sanitized_provider`, wraps sanitisation and
-   provider construction to avoid repeating the pattern. Empty objects are
-   pruned during sanitisation, ensuring that `#[clap(flatten)]` groups with no
-   CLI overrides do not wipe out defaults from files or environment variables.
+     `figment` provider and merged last. Fields left as `None` are removed
+     before merging so that environment or file defaults remain untouched. This
+     serialization step relies on `serde_json` and introduces a small overhead;
+     if configuration loading becomes a hotspot, benchmark to evaluate a more
+     direct approach. A helper, `sanitized_provider`, wraps sanitization and
+     provider construction to avoid repeating the pattern. Empty objects are
+     pruned during sanitization, ensuring that `#[clap(flatten)]` groups with
+     no CLI overrides do not wipe out defaults from files or environment
+     variables.
 
 4. `figment`'s `extract()` method is called to deserialize the merged
    configuration into the user's `AppConfig` struct.
@@ -270,7 +272,7 @@ The implementation must be careful to wrap errors from `clap`, `figment`, and
 file IO into this enum, adding contextual information (like file paths) where
 possible. `Gathering` covers failures while sourcing defaults from files or the
 environment. When CLI values are overlaid onto those defaults, any merge or
-deserialisation failures map to `Merge`.
+deserialization failures map to `Merge`.
 
 ### 4.6. Configuration File Discovery
 
