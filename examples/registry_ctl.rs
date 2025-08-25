@@ -3,7 +3,8 @@
 use clap::Parser;
 use clap_dispatch::clap_dispatch;
 use serde::Deserialize;
-use ortho_config::{OrthoConfig, SubcmdConfigMerge};
+use ortho_config::OrthoConfig;
+use ortho_config::subcommand::SubcmdConfigMerge;
 
 #[derive(Parser, Deserialize, Default, Debug, Clone, OrthoConfig)]
 #[ortho_config(prefix = "REGCTL_")]

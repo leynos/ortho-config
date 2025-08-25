@@ -336,7 +336,7 @@ the need for repetitive implementation blocks across subcommands.
 Import it with:
 
 ```rust
-use ortho_config::SubcmdConfigMerge;
+use ortho_config::subcommand::SubcmdConfigMerge;
 ```
 
 The sequence below shows how subcommand defaults are gathered and how gathering
