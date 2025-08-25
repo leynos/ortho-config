@@ -17,8 +17,7 @@
 //!   - no CLI, no environment  => `option = "file"` (file wins)
 
 use clap::{Parser, Subcommand};
-use ortho_config::OrthoConfig;
-use ortho_config::subcommand::SubcmdConfigMerge;
+use ortho_config::{OrthoConfig, SubcmdConfigMerge};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Parser)]
