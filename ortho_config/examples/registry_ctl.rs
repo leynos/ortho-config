@@ -3,7 +3,7 @@
 use clap::Parser;
 use clap_dispatch::clap_dispatch;
 use ortho_config::OrthoConfig;
-use ortho_config::subcommand::SubcmdConfigMerge;
+use ortho_config::SubcmdConfigMerge;
 use serde::{Deserialize, Serialize};
 
 #[derive(Parser, Deserialize, Serialize, Default, Debug, Clone, PartialEq, OrthoConfig)]

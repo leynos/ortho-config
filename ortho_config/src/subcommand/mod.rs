@@ -144,7 +144,7 @@ where
 /// ```rust,no_run
 /// use clap::Parser;
 /// use ortho_config::OrthoConfig;
-/// use ortho_config::subcommand::SubcmdConfigMerge;
+/// use ortho_config::SubcmdConfigMerge;
 /// use serde::{Deserialize, Serialize};
 ///
 /// #[derive(Parser, Deserialize, Serialize, OrthoConfig, Default)]

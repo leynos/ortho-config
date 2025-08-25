@@ -56,4 +56,5 @@ harness = false
 
 [[example]]
 name = "registry_ctl"
-path = "../examples/registry_ctl.rs"
+path = "examples/registry_ctl.rs"
+test = true
