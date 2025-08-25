@@ -5,8 +5,8 @@
 //! tests by encapsulating the jail creation and configuration loading.
 
 use clap::CommandFactory;
-use ortho_config::subcommand::{Prefix, SubcmdConfigMerge};
-use ortho_config::{OrthoConfig, OrthoError, load_and_merge_subcommand};
+use ortho_config::subcommand::Prefix;
+use ortho_config::{OrthoConfig, OrthoError, SubcmdConfigMerge, load_and_merge_subcommand};
 use serde::de::DeserializeOwned;
 
 fn with_jail<F, L, T>(setup: F, loader: L) -> Result<T, OrthoError>
