@@ -2,13 +2,17 @@
 name = "ortho_config"
 version = "0.3.0"
 edition = "2024"
+description.workspace = true
+license.workspace = true
+repository.workspace = true
+
 
 
 [lints]
 workspace = true
 
 [dependencies]
-ortho_config_macros = { path = "../ortho_config_macros" }
+ortho_config_macros = { path = "../ortho_config_macros", version = "0.3.0" }
 serde = { version = "1", features = ["derive"] }
 thiserror = "1"
 clap = { version = "4", features = ["derive"] }
