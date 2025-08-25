@@ -2,6 +2,9 @@
 name = "ortho_config_macros"
 version = "0.3.0"
 edition = "2024"
+description = "Procedural macros for ortho_config"
+license.workspace = true
+repository.workspace = true
 
 [lints]
 workspace = true
