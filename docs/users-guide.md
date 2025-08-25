@@ -75,9 +75,15 @@ Projects using a pre‑0.5 release can upgrade with the following steps:
   `load_and_merge_subcommand_for` supersedes this workaround.
 - Replace calls to deprecated helpers such as `load_subcommand_config_for` with
   `ortho_config::subcommand::load_and_merge_subcommand_for` or import
-  [`SubcmdConfigMerge`] to call `load_and_merge` directly.
+  `SubcmdConfigMerge` to call `load_and_merge` directly.
 
-Subcommand structs can leverage the [`SubcmdConfigMerge`] trait to expose a
+Import it with:
+
+```rust
+use ortho_config::SubcmdConfigMerge;
+```
+
+Subcommand structs can leverage the `SubcmdConfigMerge` trait to expose a
 `load_and_merge` method automatically:
 
 ```rust
@@ -89,15 +95,16 @@ struct PrArgs {
     reference: String,
 }
 
-# fn demo(cli: &PrArgs) -> Result<(), OrthoError> {
-let merged = cli.load_and_merge()?;
+# fn demo(pr_args: &PrArgs) -> Result<(), OrthoError> {
+let merged = pr_args.load_and_merge()?;
 # let _ = merged;
 # Ok(())
 # }
 ```
 
-After parsing the top‑level `Cli` struct, call `cli.load_and_merge()?` to
-obtain the merged configuration for that subcommand.
+After parsing the relevant subcommand struct, call `load_and_merge()?` on that
+value (for example, `pr_args.load_and_merge()?`) to obtain the merged
+configuration for that subcommand.
 
 ## Defining configuration structures
 

@@ -213,9 +213,10 @@ Customize behaviour for each field:
 
 Applications using `clap` subcommands can keep per-command defaults in a
 dedicated `cmds` namespace. The helper `load_and_merge_subcommand_for` or the
-[`SubcmdConfigMerge`] trait reads these values from configuration files and
-environment variables using the struct's `prefix()` function (which defaults to
-an empty string) and merges them underneath the CLI arguments.
+`SubcmdConfigMerge` trait reads these values from configuration files and
+environment variables using the struct’s `prefix()` value. When no prefix is
+set, environment variables use no prefix, whilst file discovery still defaults
+to `.config.toml`. These values are then merged beneath the CLI arguments.
 
 ```rust
 use clap::{Args, Parser};

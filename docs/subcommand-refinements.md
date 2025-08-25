@@ -58,12 +58,16 @@ were removed in v0.5.0. This guides users towards the more comprehensive
 `load_and_merge` as the single, recommended way to handle subcommand
 configuration.
 
-### 3. Eliminating boilerplate with `SubcmdConfigMerge`
+### 3. Eliminating boilerplate with SubcmdConfigMerge
 
 Repeated `impl` blocks for subcommand structs obscured intent. The
-[`SubcmdConfigMerge`] trait offers a default `load_and_merge` method that
-borrows `self`, letting each subcommand invoke configuration merging without
-extra code.
+`SubcmdConfigMerge` trait offers a default `load_and_merge` method that borrows
+`self`, enabling each subcommand to invoke configuration merging without extra
+code. Import it with:
+
+```rust
+use ortho_config::SubcmdConfigMerge;
+```
 
 ## How this Simplifies `vk`
 
