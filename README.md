@@ -212,15 +212,16 @@ Customize behaviour for each field:
 ## Subcommand Configuration
 
 Applications using `clap` subcommands can keep per-command defaults in a
-dedicated `cmds` namespace. The helper `load_and_merge_subcommand_for` reads
-these values from configuration files and environment variables using the
-struct's `prefix()` function (which defaults to an empty string) and merges
-them underneath the CLI arguments.
+dedicated `cmds` namespace. The helper `load_and_merge_subcommand_for` or the
+`SubcmdConfigMerge` trait reads these values from configuration files and
+environment variables using the struct’s `prefix()` value. When no prefix is
+set, environment variables use no prefix, whilst file discovery still defaults
+to `.config.toml`. These values are then merged beneath the CLI arguments.
 
 ```rust
 use clap::{Args, Parser};
 use serde::Deserialize;
-use ortho_config::{load_and_merge_subcommand_for, OrthoConfig};
+use ortho_config::{OrthoConfig, SubcmdConfigMerge};
 
 #[derive(Debug, Deserialize, Args, OrthoConfig)]
 #[ortho_config(prefix = "APP_")]
@@ -240,7 +241,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Reads `[cmds.add-user]` sections and `APP_CMDS_ADD_USER_*` variables
     // then merges with CLI values
-    let args = load_and_merge_subcommand_for::<AddUserArgs>(&cli.args)?;
+    let args = cli.args.load_and_merge()?;
 
     println!("Final args: {args:?}");
     Ok(())

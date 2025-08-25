@@ -74,14 +74,20 @@ Projects using a pre‑0.3 release can upgrade with the following steps:
 - Remove any `load_with_reference_fallback` helpers. The merge logic inside
   `load_and_merge_subcommand_for` supersedes this workaround.
 - Replace calls to deprecated helpers such as `load_subcommand_config_for` with
-  `ortho_config::subcommand::load_and_merge_subcommand_for`.
+  `ortho_config::subcommand::load_and_merge_subcommand_for` or import
+  SubcmdConfigMerge to call load_and_merge directly.
 
-Each subcommand struct can expose a wrapper method that forwards to
-`load_and_merge_subcommand_for`:
+Import it with:
 
 ```rust
-use ortho_config::{subcommand::load_and_merge_subcommand_for, OrthoConfig,
-                   OrthoError};
+use ortho_config::SubcmdConfigMerge;
+```
+
+Subcommand structs can leverage the `SubcmdConfigMerge` trait to expose a
+`load_and_merge` method automatically:
+
+```rust
+use ortho_config::{OrthoConfig, OrthoError, SubcmdConfigMerge};
 use serde::Deserialize;
 
 #[derive(Deserialize, OrthoConfig)]
@@ -89,15 +95,16 @@ struct PrArgs {
     reference: String,
 }
 
-impl PrArgs {
-    fn load_and_merge(cli: &Cli) -> Result<Self, OrthoError> {
-        load_and_merge_subcommand_for::<Self>(cli)
-    }
-}
+# fn demo(pr_args: &PrArgs) -> Result<(), OrthoError> {
+let merged = pr_args.load_and_merge()?;
+# let _ = merged;
+# Ok(())
+# }
 ```
 
-After parsing the top‑level `Cli` struct, call `PrArgs::load_and_merge(&cli)`
-to obtain the merged configuration for that subcommand.
+After parsing the relevant subcommand struct, call `load_and_merge()?` on that
+value (for example, `pr_args.load_and_merge()?`) to obtain the merged
+configuration for that subcommand.
 
 ## Defining configuration structures
 
@@ -372,7 +379,7 @@ might be defined as follows:
 
 ```rust
 use clap::Parser;
-use ortho_config::{OrthoConfig, load_and_merge_subcommand_for};
+use ortho_config::{OrthoConfig, SubcmdConfigMerge};
 use serde::{Deserialize, Serialize};
 
 #[derive(Parser, Deserialize, Serialize, Debug, OrthoConfig, Clone, Default)]
@@ -391,7 +398,7 @@ pub struct PrArgs {
 fn main() -> Result<(), ortho_config::OrthoError> {
     let cli_pr = PrArgs::parse();
     // Merge defaults from [cmds.pr] and VK_CMDS_PR_* over CLI
-    let merged_pr = load_and_merge_subcommand_for::<PrArgs>(&cli_pr)?;
+    let merged_pr = cli_pr.load_and_merge()?;
     println!("PrArgs after merging: {:#?}", merged_pr);
     Ok(())
 }

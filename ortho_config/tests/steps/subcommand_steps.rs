@@ -8,7 +8,7 @@
 use crate::{PrArgs, World};
 use clap::Parser;
 use cucumber::{given, then, when};
-use ortho_config::subcommand::load_and_merge_subcommand_for;
+use ortho_config::SubcmdConfigMerge;
 
 /// Check if all configuration sources are absent.
 fn has_no_config_sources(world: &World) -> bool {
@@ -60,7 +60,7 @@ fn setup_test_environment(world: &World, cli: &PrArgs) -> Result<PrArgs, ortho_c
         if let Some(ref val) = world.sub_env {
             j.set_env("APP_CMDS_TEST_REFERENCE", val);
         }
-        result = Some(load_and_merge_subcommand_for::<PrArgs>(cli));
+        result = Some(cli.load_and_merge());
         Ok(())
     });
     result.expect("jail setup should complete")

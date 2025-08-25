@@ -327,6 +327,16 @@ fulfil missing defaults and eliminates workarounds like
 `load_with_reference_fallback`. The legacy `load_subcommand_config` helpers are
 retained but deprecated.
 
+A helper trait, SubcmdConfigMerge, provides a default load_and_merge method for
+subcommand structs. It borrows self to avoid unnecessary cloning and removes
+the need for repetitive implementation blocks across subcommands.
+
+Import it with:
+
+```rust
+use ortho_config::SubcmdConfigMerge;
+```
+
 ### 4.10. Dynamic rule tables
 
 Configuration structures may include map fields such as

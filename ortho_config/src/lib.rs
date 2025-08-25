@@ -11,6 +11,8 @@ mod error;
 mod file;
 mod merge;
 pub mod subcommand;
+// Re-export for ergonomic trait imports.
+pub use subcommand::SubcmdConfigMerge;
 #[expect(
     deprecated,
     reason = "re-export legacy helpers pending removal in v0.4.0"
