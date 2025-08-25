@@ -325,7 +325,7 @@ when the CLI supplied those values. The revised implementation builds the
 parsed CLI struct before extraction. This ensures that required CLI arguments
 fulfil missing defaults and eliminates workarounds like
 `load_with_reference_fallback`. The legacy `load_subcommand_config` helpers
-have been removed.
+were removed in v0.5.0.
 
 ### 4.10. Dynamic rule tables
 
