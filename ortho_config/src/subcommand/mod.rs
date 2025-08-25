@@ -1,6 +1,6 @@
 //! Utilities for loading configuration for individual subcommands.
 //!
-//! Resolves defaults from files and the environment and exposes the
+//! Resolves defaults from files and the environment, then exposes the
 //! [`SubcmdConfigMerge`] trait for merging them with CLI arguments.
 
 use crate::{OrthoError, load_config_file, sanitized_provider};

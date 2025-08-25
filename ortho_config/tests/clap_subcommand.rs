@@ -85,7 +85,9 @@ fn merge_errors_on_invalid_file() {
         j.create_file(".app.toml", "[cmds.run]\noption = 5")?;
         let cli = Cli::parse_from(["prog", "run"]);
         let Commands::Run(args) = cli.cmd;
-        assert!(args.load_and_merge().is_err());
+        let err = args.load_and_merge().expect_err("invalid file should fail");
+        assert!(matches!(err, ortho_config::OrthoError::Merge { .. }));
+        assert!(err.to_string().contains("expected a string"));
         Ok(())
     });
 }
@@ -96,7 +98,9 @@ fn merge_errors_on_invalid_env() {
         j.set_env("APP_CMDS_RUN_COUNT", "not-a-number");
         let cli = Cli::parse_from(["prog", "run"]);
         let Commands::Run(args) = cli.cmd;
-        assert!(args.load_and_merge().is_err());
+        let err = args.load_and_merge().expect_err("invalid env should fail");
+        assert!(matches!(err, ortho_config::OrthoError::Merge { .. }));
+        assert!(err.to_string().contains("expected u32"));
         Ok(())
     });
 }
