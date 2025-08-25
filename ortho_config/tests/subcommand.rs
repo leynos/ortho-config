@@ -7,7 +7,7 @@ mod util;
 use clap::Parser;
 use ortho_config::OrthoConfig;
 use serde::{Deserialize, Serialize};
-use util::{with_merged_subcommand_cli, with_merged_subcommand_cli_for, with_subcommand_config};
+use util::{with_merged_subcommand_cli, with_merged_subcommand_cli_for};
 
 #[derive(Debug, Serialize, Deserialize, Default, PartialEq, Parser)]
 #[command(name = "test")]
@@ -239,31 +239,35 @@ fn env_value_used_when_cli_missing() {
     .expect("merge");
     assert_eq!(merged.ref_id.as_deref(), Some("from-env"));
 }
-#[derive(Debug, Deserialize, Default, PartialEq)]
+#[derive(Debug, Deserialize, Serialize, Default, PartialEq, Parser)]
+#[command(name = "test")]
 struct NestedCfg {
     #[serde(default)]
+    #[arg(skip)]
     nested: Nested,
 }
 
-#[derive(Debug, Deserialize, Default, PartialEq)]
+#[derive(Debug, Deserialize, Serialize, Default, PartialEq)]
 struct Nested {
     host: Option<String>,
     port: Option<u16>,
 }
 
-#[derive(Debug, Deserialize, Default, PartialEq)]
+#[derive(Debug, Deserialize, Serialize, Default, PartialEq, Parser)]
+#[command(name = "test")]
 struct DeepNestedCfg {
     #[serde(default)]
+    #[arg(skip)]
     deep: DeepLevel,
 }
 
-#[derive(Debug, Deserialize, Default, PartialEq)]
+#[derive(Debug, Deserialize, Serialize, Default, PartialEq)]
 struct DeepLevel {
     #[serde(default)]
     nest: DeepNest,
 }
 
-#[derive(Debug, Deserialize, Default, PartialEq)]
+#[derive(Debug, Deserialize, Serialize, Default, PartialEq)]
 struct DeepNest {
     host: Option<String>,
 }
@@ -284,15 +288,18 @@ fn env_values_support_nesting_cases(
     #[case] expect_host: Option<&str>,
     #[case] expect_port: Option<u16>,
 ) {
-    let cfg: NestedCfg = with_subcommand_config(|j| {
-        if let Some((k, v)) = host_kv {
-            j.set_env(k, v);
-        }
-        if let Some((k, v)) = port_kv {
-            j.set_env(k, v);
-        }
-        Ok(())
-    })
+    let cfg: NestedCfg = with_merged_subcommand_cli(
+        |j| {
+            if let Some((k, v)) = host_kv {
+                j.set_env(k, v);
+            }
+            if let Some((k, v)) = port_kv {
+                j.set_env(k, v);
+            }
+            Ok(())
+        },
+        &NestedCfg::default(),
+    )
     .expect("config");
     assert_eq!(cfg.nested.host.as_deref(), expect_host);
     assert_eq!(cfg.nested.port, expect_port);
@@ -316,12 +323,15 @@ fn env_values_support_deeper_nesting(
     #[case] kv: Option<(&str, &str)>,
     #[case] expect_host: Option<&str>,
 ) {
-    let cfg: DeepNestedCfg = with_subcommand_config(|j| {
-        if let Some((k, v)) = kv {
-            j.set_env(k, v);
-        }
-        Ok(())
-    })
+    let cfg: DeepNestedCfg = with_merged_subcommand_cli(
+        |j| {
+            if let Some((k, v)) = kv {
+                j.set_env(k, v);
+            }
+            Ok(())
+        },
+        &DeepNestedCfg::default(),
+    )
     .expect("config");
     assert_eq!(cfg.deep.nest.host.as_deref(), expect_host);
 }

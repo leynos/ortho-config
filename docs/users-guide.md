@@ -67,13 +67,13 @@ during discovery and do not cause errors if present.
 
 ## Migrating from earlier versions
 
-Projects using a pre‑0.3 release can upgrade with the following steps:
+Projects using a pre‑0.5 release can upgrade with the following steps:
 
 - `#[derive(OrthoConfig)]` remains the correct way to annotate configuration
   structs. No additional derives are required.
 - Remove any `load_with_reference_fallback` helpers. The merge logic inside
   `load_and_merge_subcommand_for` supersedes this workaround.
-- Replace calls to deprecated helpers such as `load_subcommand_config_for` with
+- Replace calls to removed helpers such as `load_subcommand_config_for` with
   `ortho_config::subcommand::load_and_merge_subcommand_for`.
 
 Each subcommand struct can expose a wrapper method that forwards to
@@ -346,12 +346,11 @@ results in `ignore_patterns = [".git/", "build/", "target/"]`.
 Many CLI applications use `clap` subcommands to perform different operations.
 `OrthoConfig` supports per‑subcommand defaults via a dedicated `cmds`
 namespace. The helper function `load_and_merge_subcommand_for` loads defaults
-for a specific subcommand and merges them beneath the CLI values. The older
-`load_subcommand_config` and `load_subcommand_config_for` helpers are
-deprecated in favour of this function. The merged struct is returned as a new
-instance; the original `cli` struct remains unchanged. CLI fields left unset
-(`None`) do not override environment or file defaults, avoiding accidental loss
-of configuration.
+for a specific subcommand and merges them beneath the CLI values. The legacy
+`load_subcommand_config` and `load_subcommand_config_for` helpers were removed
+in v0.5.0. The merged struct is returned as a new instance; the original `cli`
+struct remains unchanged. CLI fields left unset (`None`) do not override
+environment or file defaults, avoiding accidental loss of configuration.
 
 ### How it works
 
