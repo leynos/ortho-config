@@ -6,7 +6,7 @@ use ortho_config::OrthoConfig;
 use ortho_config::subcommand::SubcmdConfigMerge;
 use serde::{Deserialize, Serialize};
 
-#[derive(Parser, Deserialize, Serialize, Default, Debug, Clone, OrthoConfig)]
+#[derive(Parser, Deserialize, Serialize, Default, Debug, Clone, PartialEq, OrthoConfig)]
 #[ortho_config(prefix = "REGCTL_")]
 pub struct AddUserArgs {
     #[arg(long)]
@@ -15,7 +15,7 @@ pub struct AddUserArgs {
     admin: Option<bool>,
 }
 
-#[derive(Parser, Deserialize, Serialize, Default, Debug, Clone, OrthoConfig)]
+#[derive(Parser, Deserialize, Serialize, Default, Debug, Clone, PartialEq, OrthoConfig)]
 #[ortho_config(prefix = "REGCTL_")]
 pub struct ListItemsArgs {
     #[arg(long)]
@@ -70,6 +70,18 @@ fn main() -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde::de::DeserializeOwned;
+
+    // Serialisation enables persisting configuration. This helper ensures
+    // roundtrips do not drop data.
+    fn assert_roundtrip<T>(value: &T)
+    where
+        T: Serialize + DeserializeOwned + PartialEq + std::fmt::Debug,
+    {
+        let json = serde_json::to_string(value).expect("serialise");
+        let de: T = serde_json::from_str(&json).expect("deserialise");
+        assert_eq!(de, *value);
+    }
 
     #[test]
     fn add_user_args_roundtrip() {
@@ -77,10 +89,7 @@ mod tests {
             username: Some(String::from("alice")),
             admin: Some(true),
         };
-        let json = serde_json::to_string(&args).expect("serialise");
-        let de: AddUserArgs = serde_json::from_str(&json).expect("deserialise");
-        assert_eq!(de.username, args.username);
-        assert_eq!(de.admin, args.admin);
+        assert_roundtrip(&args);
     }
 
     #[test]
@@ -89,9 +98,6 @@ mod tests {
             category: Some(String::from("tools")),
             all: Some(false),
         };
-        let json = serde_json::to_string(&args).expect("serialise");
-        let de: ListItemsArgs = serde_json::from_str(&json).expect("deserialise");
-        assert_eq!(de.category, args.category);
-        assert_eq!(de.all, args.all);
+        assert_roundtrip(&args);
     }
 }
