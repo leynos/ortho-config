@@ -11,6 +11,7 @@ mod error;
 mod file;
 mod merge;
 pub mod subcommand;
+pub use crate::subcommand::SubcmdConfigMerge;
 pub use subcommand::{load_and_merge_subcommand, load_and_merge_subcommand_for};
 
 /// Normalize a prefix by trimming trailing underscores and converting

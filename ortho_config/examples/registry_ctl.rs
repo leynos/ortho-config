@@ -2,11 +2,11 @@
 
 use clap::Parser;
 use clap_dispatch::clap_dispatch;
-use serde::Deserialize;
 use ortho_config::OrthoConfig;
-use ortho_config::subcommand::SubcmdConfigMerge;
+use ortho_config::SubcmdConfigMerge;
+use serde::{Deserialize, Serialize};
 
-#[derive(Parser, Deserialize, Default, Debug, Clone, OrthoConfig)]
+#[derive(Parser, Deserialize, Serialize, Default, Debug, Clone, PartialEq, OrthoConfig)]
 #[ortho_config(prefix = "REGCTL_")]
 pub struct AddUserArgs {
     #[arg(long)]
@@ -15,7 +15,7 @@ pub struct AddUserArgs {
     admin: Option<bool>,
 }
 
-#[derive(Parser, Deserialize, Default, Debug, Clone, OrthoConfig)]
+#[derive(Parser, Deserialize, Serialize, Default, Debug, Clone, PartialEq, OrthoConfig)]
 #[ortho_config(prefix = "REGCTL_")]
 pub struct ListItemsArgs {
     #[arg(long)]
@@ -24,12 +24,8 @@ pub struct ListItemsArgs {
     all: Option<bool>,
 }
 
-trait Run {
-    fn run(&self, db_url: &str) -> Result<(), String>;
-}
-
 impl Run for AddUserArgs {
-    fn run(&self, db_url: &str) -> Result<(), String> {
+    fn run(self, db_url: &str) -> Result<(), String> {
         println!("Connecting to database at: {db_url}");
         println!("Adding user: {:?}, Admin: {:?}", self.username, self.admin);
         Ok(())
@@ -37,12 +33,11 @@ impl Run for AddUserArgs {
 }
 
 impl Run for ListItemsArgs {
-    fn run(&self, db_url: &str) -> Result<(), String> {
+    fn run(self, db_url: &str) -> Result<(), String> {
         println!("Connecting to database at: {db_url}");
         println!(
             "Listing items in category {:?}, All: {:?}",
-            self.category,
-            self.all
+            self.category, self.all
         );
         Ok(())
     }
@@ -70,4 +65,39 @@ fn main() -> Result<(), String> {
         }
     };
     final_cmd.run(db_url)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde::de::DeserializeOwned;
+
+    // Serialisation enables persisting configuration. This helper ensures
+    // roundtrips do not drop data.
+    fn assert_roundtrip<T>(value: &T)
+    where
+        T: Serialize + DeserializeOwned + PartialEq + std::fmt::Debug,
+    {
+        let json = serde_json::to_string(value).expect("serialise");
+        let de: T = serde_json::from_str(&json).expect("deserialise");
+        assert_eq!(de, *value);
+    }
+
+    #[test]
+    fn add_user_args_roundtrip() {
+        let args = AddUserArgs {
+            username: Some(String::from("alice")),
+            admin: Some(true),
+        };
+        assert_roundtrip(&args);
+    }
+
+    #[test]
+    fn list_items_args_roundtrip() {
+        let args = ListItemsArgs {
+            category: Some(String::from("tools")),
+            all: Some(false),
+        };
+        assert_roundtrip(&args);
+    }
 }
