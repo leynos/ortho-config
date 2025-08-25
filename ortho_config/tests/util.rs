@@ -58,5 +58,5 @@ where
     with_jail(setup, || load_and_merge_subcommand_for(cli))
 }
 
-// Intentionally no additional legacy-only helper; tests should use the
-// unified wrappers above to exercise both legacy and current behaviours.
+// These helpers keep tests focused on the unified subcommand loaders without
+// legacy-specific branches.

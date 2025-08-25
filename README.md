@@ -333,9 +333,9 @@ fn main() -> Result<(), String> {
 
 ## Migrating from 0.4 to 0.5
 
-Version 0.5 introduces a small API refinement:
+Version v0.5.0 introduces a small API refinement:
 
-- `load_subcommand_config_for` has been removed. Use
+- In v0.5.0 the helper `load_subcommand_config_for` was removed. Use
   [`load_and_merge_subcommand_for`](#subcommand-configuration) to load defaults
   and merge them with CLI arguments.
 - Types deriving `OrthoConfig` expose an associated `prefix()` function. Use

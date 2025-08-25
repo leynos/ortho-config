@@ -55,7 +55,7 @@ references the relevant design guidance.
     [[Subcommand Refinements](subcommand-refinements.md)]
 
   - [x] Remove `load_subcommand_config` and its `_for` variant in favour of a
-    unified `load_and_merge` API.
+    unified `load_and_merge` API (completed in v0.5.0).
 
 - [x] **Finish `clap` integration in the derive macro**
 

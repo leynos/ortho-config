@@ -14,7 +14,6 @@ use paths::candidate_paths;
 pub use paths::push_stem_candidates;
 pub use types::{CmdName, Prefix};
 
-
 /// Load and merge `[cmds.<name>]` sections from the given paths.
 ///
 /// For each provided path, loads the configuration file and merges the
