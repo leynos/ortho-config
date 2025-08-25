@@ -220,7 +220,7 @@ an empty string) and merges them underneath the CLI arguments.
 ```rust
 use clap::{Args, Parser};
 use serde::Deserialize;
-use ortho_config::{OrthoConfig, subcommand::SubcmdConfigMerge};
+use ortho_config::{OrthoConfig, SubcmdConfigMerge};
 
 #[derive(Debug, Deserialize, Args, OrthoConfig)]
 #[ortho_config(prefix = "APP_")]

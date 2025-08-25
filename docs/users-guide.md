@@ -81,7 +81,7 @@ Subcommand structs can leverage the [`SubcmdConfigMerge`] trait to expose a
 `load_and_merge` method automatically:
 
 ```rust
-use ortho_config::{subcommand::SubcmdConfigMerge, OrthoConfig, OrthoError};
+use ortho_config::{OrthoConfig, OrthoError, SubcmdConfigMerge};
 use serde::Deserialize;
 
 #[derive(Deserialize, OrthoConfig)]
@@ -371,7 +371,7 @@ might be defined as follows:
 
 ```rust
 use clap::Parser;
-use ortho_config::{OrthoConfig, subcommand::SubcmdConfigMerge};
+use ortho_config::{OrthoConfig, SubcmdConfigMerge};
 use serde::{Deserialize, Serialize};
 
 #[derive(Parser, Deserialize, Serialize, Debug, OrthoConfig, Clone, Default)]

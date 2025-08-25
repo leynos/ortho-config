@@ -1,4 +1,7 @@
-//! Support for loading configuration for individual subcommands.
+//! Utilities for loading configuration for individual subcommands.
+//!
+//! Resolves defaults from files and the environment and exposes the
+//! [`SubcmdConfigMerge`] trait for merging them with CLI arguments.
 
 use crate::{OrthoError, load_config_file, sanitized_provider};
 use clap::CommandFactory;
@@ -140,7 +143,7 @@ where
 ///
 /// ```rust,no_run
 /// use clap::Parser;
-/// use ortho_config::{OrthoConfig, subcommand::SubcmdConfigMerge};
+/// use ortho_config::{OrthoConfig, SubcmdConfigMerge};
 /// use serde::{Deserialize, Serialize};
 ///
 /// #[derive(Parser, Deserialize, Serialize, OrthoConfig, Default)]
@@ -157,9 +160,7 @@ where
 /// # Ok(())
 /// # }
 /// ```
-pub trait SubcmdConfigMerge:
-    crate::OrthoConfig + serde::Serialize + Default + CommandFactory + Sized
-{
+pub trait SubcmdConfigMerge: crate::OrthoConfig + CommandFactory + Sized {
     /// Merge configuration defaults for this subcommand over CLI arguments.
     ///
     /// Loads defaults from configuration files and the environment, then
@@ -169,7 +170,10 @@ pub trait SubcmdConfigMerge:
     ///
     /// Returns an [`OrthoError::Merge`] if CLI values cannot be merged or if
     /// deserialisation fails.
-    fn load_and_merge(&self) -> Result<Self, OrthoError> {
+    fn load_and_merge(&self) -> Result<Self, OrthoError>
+    where
+        Self: serde::Serialize + Default,
+    {
         load_and_merge_subcommand_for(self)
     }
 }
