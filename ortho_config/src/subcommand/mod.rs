@@ -1,4 +1,7 @@
 //! Support for loading configuration for individual subcommands.
+//!
+//! Gathers defaults from files and environment variables before applying CLI
+//! overrides for a focused subcommand.
 
 use crate::{OrthoError, load_config_file, sanitized_provider};
 use clap::CommandFactory;
@@ -46,7 +49,7 @@ fn load_from_files(paths: &[PathBuf], name: &CmdName) -> Result<Figment, OrthoEr
 /// # Errors
 ///
 /// Returns [`OrthoError::Merge`] if CLI values cannot be merged or if
-/// deserialisation fails. Because CLI merging occurs, this function does not
+/// deserialization fails. Because CLI merging occurs, this function does not
 /// return [`OrthoError::Gathering`].
 ///
 /// # Examples
@@ -102,7 +105,7 @@ where
 /// # Errors
 ///
 /// Returns [`OrthoError::Merge`] if CLI values cannot be merged or if
-/// deserialisation fails.
+/// deserialization fails.
 ///
 /// # Examples
 ///

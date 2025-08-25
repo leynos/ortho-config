@@ -1,4 +1,5 @@
-//! Helpers for sanitizing and merging command-line arguments with configuration defaults.
+//! Helpers for sanitizing and merging command-line arguments with
+//! configuration defaults.
 
 use crate::OrthoError;
 use figment::providers::Serialized;
@@ -14,7 +15,8 @@ use serde_json::Value;
 ///   `Vec<_>` but retaining empty arrays to allow deliberate clearing.
 ///
 /// Intended for CLI sanitization so unset [`Option`] fields and untouched
-/// flattened structs do not override defaults from files or environment variables.
+/// flattened structs do not override defaults from files or environment
+/// variables.
 /// Arrays are never removed, even when emptied; this function only removes
 /// [`Option::None`] fields.
 ///
@@ -66,20 +68,6 @@ pub fn value_without_nones<T: Serialize>(cli: &T) -> Result<Value, serde_json::E
     Ok(value)
 }
 
-/// Convert a [`serde_json::Error`] into [`OrthoError::Gathering`].
-///
-/// This helper is used by [`sanitize_value`] to map JSON serialization
-/// failures into the crate's error type.
-///
-/// ```ignore
-/// fn sanitize_value<T: Serialize>(value: &T) -> Result<Value, OrthoError> {
-///     value_without_nones(value).map_err(convert_gathering_error)
-/// }
-/// ```
-fn convert_gathering_error(e: serde_json::Error) -> OrthoError {
-    e.into()
-}
-
 /// Serialize `value` to JSON, pruning `None` fields and mapping errors to
 /// [`OrthoError`].
 ///
@@ -100,7 +88,7 @@ fn convert_gathering_error(e: serde_json::Error) -> OrthoError {
 ///
 /// Returns an [`OrthoError`] if JSON serialization fails.
 pub fn sanitize_value<T: Serialize>(value: &T) -> Result<Value, OrthoError> {
-    value_without_nones(value).map_err(convert_gathering_error)
+    value_without_nones(value).map_err(Into::into)
 }
 
 /// Produce a Figment provider from `value` with `None` fields removed.

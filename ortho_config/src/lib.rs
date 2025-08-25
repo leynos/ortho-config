@@ -1,8 +1,8 @@
 //! Core crate for the `OrthoConfig` configuration framework.
 //!
-//! This crate defines the [`OrthoConfig`] trait and supporting error types. The
-//! actual implementation of the derive macro lives in the companion
-//! `ortho_config_macros` crate.
+//! Defines the [`OrthoConfig`] trait, error types and sanitization helpers used
+//! to layer configuration from the CLI, files and environment. The derive macro
+//! lives in the companion `ortho_config_macros` crate.
 
 pub use ortho_config_macros::OrthoConfig;
 
@@ -35,6 +35,24 @@ pub fn normalize_prefix(prefix: &str) -> String {
 pub use csv_env::CsvEnv;
 pub use error::OrthoError;
 pub use file::load_config_file;
+/// Re-export sanitization helpers used to strip `None` fields and produce a
+/// Figment provider.
+///
+/// # Examples
+///
+/// ```rust,no_run
+/// use ortho_config::{sanitize_value, sanitized_provider, OrthoError};
+/// #[derive(serde::Serialize)]
+/// struct CLI { flag: Option<()> }
+///
+/// # fn main() -> Result<(), OrthoError> {
+/// let cli = CLI { flag: None };
+/// let provider = sanitized_provider(&cli)?; // ready to merge over defaults
+/// let _json = sanitize_value(&cli)?;        // raw serialized value with `None`s removed
+/// # let _ = provider;
+/// # Ok(())
+/// # }
+/// ```
 pub use merge::{sanitize_value, sanitized_provider};
 
 /// Trait implemented for structs that represent application configuration.

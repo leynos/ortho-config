@@ -8,7 +8,7 @@ use serde::Deserialize;
 struct AggConfig {
     #[expect(
         dead_code,
-        reason = "Field is read via deserialisation only in this test"
+        reason = "Field is read via deserialization only in this test"
     )]
     port: u32,
 }
