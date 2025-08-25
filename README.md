@@ -345,6 +345,16 @@ Version 0.2 introduces a small API refinement:
 Update the `Cargo.toml` to depend on `ortho_config = "0.2"` and adjust code to
 call `load_and_merge_subcommand_for` instead of manually merging defaults.
 
+## Version management
+
+- The `scripts/bump_version.py` helper keeps the workspace and member crates in
+  version sync.
+- Run it with the desired semantic version:
+
+```sh
+./scripts/bump_version.py 1.2.3
+```
+
 ## Contributing
 
 Contributions are welcome! Please feel free to submit issues, fork the
