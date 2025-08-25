@@ -53,3 +53,7 @@ test_helpers = { path = "../test_helpers" }
 [[test]]
 name = "cucumber"
 harness = false
+
+[[example]]
+name = "registry_ctl"
+path = "../examples/registry_ctl.rs"
