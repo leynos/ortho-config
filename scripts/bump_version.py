@@ -1,6 +1,6 @@
 #!/usr/bin/env uv
 # /// script
-# dependencies = ["toml-w"]
+# dependencies = ["tomli-w"]
 # ///
 """Synchronise workspace and crate versions.
 
@@ -18,7 +18,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 import tomllib
-import toml_w
+import tomli_w
 
 def _set_version(toml_path: Path, version: str) -> None:
     """Set the package or workspace version in a Cargo.toml file."""
@@ -28,7 +28,7 @@ def _set_version(toml_path: Path, version: str) -> None:
         data["workspace"]["package"]["version"] = version
     elif "package" in data:
         data["package"]["version"] = version
-    toml_path.write_text(toml_w.dumps(data))
+    toml_path.write_text(tomli_w.dumps(data))
 
 def main(argv: list[str]) -> int:
     if len(argv) != 2:
