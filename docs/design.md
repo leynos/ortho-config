@@ -80,7 +80,7 @@ The primary data flow for a user calling `AppConfig::load()` will be:
    merging so that environment or file defaults remain untouched. This
    serialization step relies on `serde_json` and introduces a small overhead;
    if configuration loading becomes a hotspot, benchmark to evaluate a more
-   direct approach. A helper, `sanitized_provider`, wraps sanitization and
+   direct approach. A helper, `sanitized_provider`, wraps sanitisation and
    provider construction to avoid repeating the pattern. Empty objects are
    pruned during sanitisation, ensuring that `#[clap(flatten)]` groups with no
    CLI overrides do not wipe out defaults from files or environment variables.
@@ -326,6 +326,30 @@ parsed CLI struct before extraction. This ensures that required CLI arguments
 fulfil missing defaults and eliminates workarounds like
 `load_with_reference_fallback`. The legacy `load_subcommand_config` helpers are
 retained but deprecated.
+
+The sequence below shows how subcommand defaults are gathered and how gathering
+errors propagate to the caller.
+
+```mermaid
+sequenceDiagram
+  autonumber
+  actor CLI as CLI
+  participant SC as Subcommand Loader
+  participant Fig as figment::Figment
+  participant Err as OrthoError
+
+  CLI->>SC: load_subcommand_config<T>()
+  SC->>Fig: extract::<T>()
+  alt Success
+    Fig-->>SC: T
+    SC-->>CLI: T
+  else Gathering error
+    Fig-->>SC: figment::Error
+    SC->>Err: OrthoError::gathering(figment::Error)
+    Err-->>SC: OrthoError::Gathering
+    SC-->>CLI: Err(OrthoError::Gathering)
+  end
+```
 
 ### 4.10. Dynamic rule tables
 

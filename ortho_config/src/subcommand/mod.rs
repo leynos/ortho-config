@@ -129,8 +129,8 @@ pub fn load_subcommand_config_for<T>(name: &CmdName) -> Result<T, OrthoError>
 where
     T: crate::OrthoConfig + Default,
 {
-    // FIXME: Remove once `load_subcommand_config` is deleted in v0.4.0.
-    // See docs/roadmap.md.
+    // FIXME: Remove once `load_subcommand_config` is deleted in v0.4.0 (see
+    // docs/roadmap.md).
     #[expect(
         deprecated,
         reason = "delegates to deprecated helper during transition"
