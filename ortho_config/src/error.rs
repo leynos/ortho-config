@@ -144,8 +144,8 @@ impl OrthoError {
     }
 }
 
-/// Convert any [`serde_json::Error`], whether from serialisation or
-/// deserialisation, into [`OrthoError::Gathering`].
+/// Convert any [`serde_json::Error`], whether from serialization or
+/// deserialization, into [`OrthoError::Gathering`].
 ///
 /// # Examples
 ///
