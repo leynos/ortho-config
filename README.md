@@ -46,8 +46,8 @@ serde = { version = "1.0", features = ["derive"] }
 ```
 
 `ortho_config` re-exports its parsing dependencies, so applications can import
-`figment`, `uncased`, `xdg`, and the optional format parsers without declaring
-them directly.
+`figment`, `uncased`, `xdg`, and the optional format parsers (`figment_json5`,
+`json5`, `serde_yaml`, `toml`) without declaring them directly.
 
 2. **Define the configuration struct:**
 
