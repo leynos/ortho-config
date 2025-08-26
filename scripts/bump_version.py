@@ -1,6 +1,6 @@
 #!/usr/bin/env -S uv run
 # /// script
-# dependencies = ["tomlkit==0.13.*", "markdown-it-py"]
+# dependencies = ["tomlkit==0.13.*", "markdown-it-py>=3,<4"]
 # ///
 """Synchronise workspace and crate versions.
 
