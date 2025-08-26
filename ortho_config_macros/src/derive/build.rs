@@ -197,6 +197,7 @@ pub(crate) fn build_cli_struct_fields(
     field_attrs: &[FieldAttrs],
 ) -> syn::Result<Vec<proc_macro2::TokenStream>> {
     let mut used_shorts = HashSet::new();
+    let mut used_longs: HashSet<String> = HashSet::new();
     let mut result = Vec::with_capacity(fields.len());
 
     for (f, attrs) in fields.iter().zip(field_attrs) {
@@ -207,6 +208,9 @@ pub(crate) fn build_cli_struct_fields(
             .clone()
             .unwrap_or_else(|| name.to_string().replace('_', "-"));
         validate_cli_long(name, &long)?;
+        if !used_longs.insert(long.clone()) {
+            return Err(syn::Error::new_spanned(name, "duplicate `cli_long` value"));
+        }
         let short_ch = resolve_short_flag(name, attrs, &mut used_shorts)?;
         let long_lit = syn::LitStr::new(&long, proc_macro2::Span::call_site());
         let short_lit = syn::LitChar::new(short_ch, proc_macro2::Span::call_site());
@@ -503,6 +507,22 @@ mod tests {
         };
         let err = resolve_short_flag(&name, &attrs, &mut used).expect_err("should fail");
         assert!(err.to_string().contains(expected_error));
+    }
+
+    #[test]
+    fn rejects_duplicate_long_flags() {
+        let input: syn::DeriveInput = parse_quote! {
+            struct Demo {
+                #[ortho_config(cli_long = "alpha")]
+                field1: u32,
+                #[ortho_config(cli_long = "alpha")]
+                field2: u32,
+            }
+        };
+        let (_, fields, _, field_attrs) =
+            crate::derive::parse::parse_input(&input).expect("parse_input");
+        let err = build_cli_struct_fields(&fields, &field_attrs).expect_err("should fail");
+        assert!(err.to_string().contains("duplicate `cli_long` value"));
     }
 
     fn demo_input() -> (Vec<syn::Field>, Vec<FieldAttrs>, StructAttrs) {
