@@ -221,11 +221,12 @@ following steps:
 2. Attempts to load a configuration file. Candidate file paths are searched in
    the following order:
 
-   1. A `--config-path` CLI argument. A hidden option is generated
-      automatically by the derive macro; if the user defines a `config_path`
-      field in their struct then that will override the hidden option.
-      Alternatively the environment variable `PREFIXCONFIG_PATH` (or
-      `CONFIG_PATH` if no prefix is set) can specify an explicit file.
+   1. A `--config-path` CLI argument. The derive recognises a field named
+      `config_path` as the hook for this option. Add the field with
+      `#[serde(skip)]` and, if desired, `#[ortho_config(cli_long = "config")]`
+      to expose or rename the flag. The environment variable
+      `PREFIXCONFIG_PATH` (or `CONFIG_PATH` with no prefix) provides the same
+      override.
 
    1. A dotfile named `.config.toml` or `.<prefix>.toml` in the current working
       directory.
@@ -471,23 +472,28 @@ Missing required values:
   while still requiring the CLI to provide a value when defaults are absent;
   see the `vk` example above.
 
-- **Config path flag** – The derive macro inserts a hidden `--config-path`
-  option into the CLI to override the configuration file path. To expose or
-  rename this flag, define your own `config_path` field with a `cli_long`
-  attribute:
+- **Config path flag** – The derive treats a field literally named
+  `config_path` as the hook for selecting a configuration file. Expose or
+  rename the CLI flag by adding the field with `#[serde(skip)]` and an optional
+  `cli_long` attribute:
 
   ```rust
-  #[derive(ortho_config::OrthoConfig)]
-  struct AppConfig {
+  #[derive(Debug, Deserialize, ortho_config::OrthoConfig)]
+  struct LagcArgs {
       #[serde(skip)]
-      #[ortho_config(cli_long = "config")]
-      config_path: Option<std::path::PathBuf>,
+      #[ortho_config(cli_long = "config-path")] // or "config" to rename
+      pub config_path: Option<std::path::PathBuf>,
   }
   ```
 
-  The example above enables `--config` and the `CONFIG_PATH` environment
-  variable. The option remains hidden from help output unless a `config_path`
-  field is declared.
+  - `#[serde(skip)]` keeps the path out of the deserialised config while still
+    allowing the CLI or environment to supply it.
+  - `#[ortho_config(cli_long = "...")]` exposes or renames the `--config-path`
+    flag; omit it to keep the default name.
+
+  During loading, any path from this flag or the `CONFIG_PATH` environment
+  variable is passed to `load_config_file`, which selects a parser based on the
+  extension and uses `Toml::string` for `.toml` files.
 
 - **Changing naming conventions** – Currently, only the default
   snake/kebab/upper snake mappings are supported. Future versions may introduce
