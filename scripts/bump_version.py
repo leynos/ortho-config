@@ -1,6 +1,6 @@
 #!/usr/bin/env -S uv run
 # /// script
-# dependencies = ["tomli-w"]
+# dependencies = ["tomlkit"]
 # ///
 """Synchronise workspace and crate versions.
 
@@ -20,19 +20,48 @@ import sys
 import tempfile
 from pathlib import Path
 
-import tomllib
-import tomli_w
+import tomlkit
+from tomlkit.exceptions import TOMLKitError
 
-def _set_version(toml_path: Path, version: str) -> None:
-    """Set the package or workspace version in a Cargo.toml file."""
-    with toml_path.open("rb") as fh:
-        data = tomllib.load(fh)
-    if "workspace" in data and "package" in data["workspace"]:
-        data["workspace"]["package"]["version"] = version
-    elif "package" in data:
-        data["package"]["version"] = version
+def _set_version(
+    toml_path: Path, version: str, dependency: str | None = None
+) -> None:
+    """Set version fields in a ``Cargo.toml`` file.
 
-    text = tomli_w.dumps(data)
+    The update respects existing formatting and comments by using ``tomlkit``.
+    The optional ``dependency`` parameter allows synchronising an internal
+    dependency's version alongside the package version.
+
+    Examples
+    --------
+    >>> import tempfile
+    >>> from pathlib import Path
+    >>> with tempfile.NamedTemporaryFile('w+', suffix='.toml') as fh:
+    ...     _ = fh.write('[package]\nname = "demo"\nversion = "0.1.0"')
+    ...     fh.flush()
+    ...     _set_version(Path(fh.name), '1.2.3')
+    ...     fh.seek(0)
+    ...     'version = "1.2.3"' in fh.read()
+    True
+    """
+    with toml_path.open("r", encoding="utf-8") as fh:
+        doc = tomlkit.parse(fh.read())
+
+    if "workspace" in doc and "package" in doc["workspace"]:
+        doc["workspace"]["package"]["version"] = version
+    elif "package" in doc:
+        doc["package"]["version"] = version
+
+    if dependency:
+        deps = doc.get("dependencies")
+        if deps and dependency in deps:
+            entry = deps[dependency]
+            if isinstance(entry, dict):
+                entry["version"] = version
+            else:
+                deps[dependency] = version
+
+    text = tomlkit.dumps(doc)
     temp_dir = toml_path.parent
     with tempfile.NamedTemporaryFile(
         "w", encoding="utf-8", dir=temp_dir, delete=False
@@ -125,9 +154,12 @@ def _update_member_version(member_path: Path, version: str) -> bool:
     False
     """
     try:
-        _set_version(member_path, version)
+        dependency = (
+            "ortho_config_macros" if member_path.parent.name == "ortho_config" else None
+        )
+        _set_version(member_path, version, dependency)
     except (
-        tomllib.TOMLDecodeError,
+        TOMLKitError,
         OSError,
         TypeError,
         ValueError,
@@ -230,9 +262,9 @@ def main(argv: list[str]) -> int:
     version, root = result
     workspace = root / "Cargo.toml"
     try:
-        with workspace.open("rb") as fh:
-            data = tomllib.load(fh)
-    except tomllib.TOMLDecodeError as exc:  # pragma: no cover - defensive
+        with workspace.open("r", encoding="utf-8") as fh:
+            data = tomlkit.parse(fh.read())
+    except TOMLKitError as exc:  # pragma: no cover - defensive
         print(f"Error: Failed to parse {workspace}: {exc}", file=sys.stderr)
         return 1
     members = data.get("workspace", {}).get("members", [])
