@@ -129,6 +129,30 @@ pub(crate) fn collect_non_unix_paths(prefix: &Prefix, paths: &mut Vec<PathBuf>) 
     }
 }
 
+/// Returns candidate configuration file paths for `prefix`.
+///
+/// Paths are yielded in the following order:
+/// 1. The user's home directory, e.g. `~/.app.toml`.
+/// 2. Platform configuration directories such as
+///    `$XDG_CONFIG_HOME/app/config.toml`.
+/// 3. The current working directory, e.g. `./.app.toml`.
+///
+/// The [`Prefix`] normalises user input and is incorporated into file stems and
+/// directory names. An empty prefix limits the search to canonical
+/// `config.*` files.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// use ortho_config::subcommand::{paths::candidate_paths, Prefix};
+///
+/// let paths = candidate_paths(&Prefix::new("app"));
+/// // prints something like:
+/// // ["/home/alice/.app.toml",
+/// //  "/home/alice/.config/app/config.toml",
+/// //  "./.app.toml"]
+/// println!("{paths:?}");
+/// ```
 pub(crate) fn candidate_paths(prefix: &Prefix) -> Vec<PathBuf> {
     let mut paths = Vec::new();
 
