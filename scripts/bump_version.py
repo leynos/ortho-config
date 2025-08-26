@@ -1,12 +1,13 @@
 #!/usr/bin/env -S uv run
 # /// script
-# dependencies = ["tomlkit"]
+# dependencies = ["tomlkit", "markdown-it-py"]
 # ///
 """Synchronise workspace and crate versions.
 
 This tool updates the top-level workspace version and each member crate's
-version to the supplied value. It exists to reduce the risk of publishing
-mismatched versions across the workspace.
+version to the supplied value, keeping documentation snippets in sync. It
+exists to reduce the risk of publishing mismatched versions across the
+workspace.
 
 Examples
 --------
@@ -19,9 +20,49 @@ import os
 import sys
 import tempfile
 from pathlib import Path
+from typing import Callable
 
 import tomlkit
+from markdown_it import MarkdownIt
 from tomlkit.exceptions import TOMLKitError
+
+
+def replace_fences(md_text: str, lang: str, replace_fn: Callable[[str], str]) -> str:
+    """Apply ``replace_fn`` to fenced code blocks of ``lang`` in Markdown text.
+
+    Parameters
+    ----------
+    md_text
+        Markdown content to process.
+    lang
+        Fence language (for example ``"toml"``).
+    replace_fn
+        Callback invoked with the fence body; its return value replaces the
+        original body.
+
+    Examples
+    --------
+    >>> md = '```toml\n[dependencies]\nfoo = "1"\n```'
+    >>> replace_fences(md, 'toml', lambda body: body.replace('1', '2'))
+    '```toml\n[dependencies]\nfoo = "2"\n```\n'
+    """
+    md = MarkdownIt("commonmark")
+    tokens = md.parse(md_text)
+    lines = md_text.splitlines(keepends=True)
+    out: list[str] = []
+    last = 0
+    for tok in tokens:
+        if tok.type == "fence" and (tok.info or "").split()[0] == lang:
+            start, end = tok.map
+            out.append("".join(lines[last:start]))
+            fence_marker = tok.markup or "```"
+            info = tok.info or lang
+            new_body = replace_fn(tok.content)
+            out.append(f"{fence_marker}{info}\n{new_body}\n{fence_marker}\n")
+            last = end
+    out.append("".join(lines[last:]))
+    return "".join(out)
+
 
 def _set_version(
     toml_path: Path, version: str, dependency: str | None = None
@@ -235,6 +276,57 @@ def _process_members(root: Path, members: list[str], version: str) -> bool:
     return had_error
 
 
+def _replace_version_in_toml(snippet: str, version: str) -> str:
+    """Return snippet with the ``ortho_config`` version updated.
+
+    Parameters
+    ----------
+    snippet
+        TOML text containing a ``[dependencies]`` table.
+    version
+        Version string to apply.
+
+    Examples
+    --------
+    >>> _replace_version_in_toml('[dependencies]\northo_config = "0"', '1')
+    '[dependencies]\northo_config = "1"\n'
+    """
+    try:
+        doc = tomlkit.parse(snippet)
+    except TOMLKitError:
+        return snippet
+    deps = doc.get("dependencies")
+    if isinstance(deps, dict) and "ortho_config" in deps:
+        entry = deps["ortho_config"]
+        if isinstance(entry, dict):
+            entry["version"] = version
+        else:
+            deps["ortho_config"] = version
+    return tomlkit.dumps(doc).rstrip()
+
+
+def _update_markdown_versions(md_path: Path, version: str) -> None:
+    """Update ``ortho_config`` versions in TOML fences within ``md_path``.
+
+    Examples
+    --------
+    >>> import tempfile
+    >>> sample = '```toml\n[dependencies]\northo_config = "0"\n```\n'
+    >>> with tempfile.NamedTemporaryFile('w+', suffix='.md') as fh:
+    ...     _ = fh.write(sample)
+    ...     fh.flush()
+    ...     _update_markdown_versions(Path(fh.name), '1')
+    ...     fh.seek(0)
+    ...     'ortho_config = "1"' in fh.read()
+    True
+    """
+    if not md_path.exists():
+        return
+    text = md_path.read_text(encoding="utf-8")
+    updated = replace_fences(text, "toml", lambda body: _replace_version_in_toml(body, version))
+    md_path.write_text(updated, encoding="utf-8")
+
+
 def main(argv: list[str]) -> int:
     """
     Update the workspace and member crate versions to the supplied value.
@@ -270,6 +362,8 @@ def main(argv: list[str]) -> int:
     members = data.get("workspace", {}).get("members", [])
     _set_version(workspace, version)
     had_error = _process_members(root, members, version)
+    _update_markdown_versions(root / "README.md", version)
+    _update_markdown_versions(root / "docs" / "users-guide.md", version)
     return 0 if not had_error else 1
 
 if __name__ == "__main__":  # pragma: no cover
