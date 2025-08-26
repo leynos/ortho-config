@@ -443,10 +443,14 @@ mod tests {
         assert!(validate_cli_long(&name, long).is_ok());
     }
 
-    #[test]
-    fn rejects_empty_long_flag() {
+    #[rstest]
+    #[case("")]
+    #[case("bad/flag")]
+    #[case("has space")]
+    #[case("*")]
+    fn rejects_invalid_long_flags(#[case] bad: &str) {
         let name: Ident = parse_quote!(field);
-        let err = validate_cli_long(&name, "").expect_err("should fail");
+        let err = validate_cli_long(&name, bad).expect_err("should fail");
         assert!(err.to_string().contains("invalid `cli_long`"));
     }
 
