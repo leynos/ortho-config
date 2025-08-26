@@ -154,6 +154,38 @@ fn is_valid_cli_long(long: &str) -> bool {
             .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
 }
 
+/// Validates a long CLI flag against syntax and reserved names.
+///
+/// Ensures the provided flag is non-empty, uses only allowed characters and
+/// does not collide with globally reserved clap flags.
+///
+/// # Examples
+///
+/// ```ignore
+/// use ortho_config_macros::derive::build::validate_cli_long;
+/// use syn::parse_quote;
+///
+/// let name: syn::Ident = parse_quote!(field);
+/// validate_cli_long(&name, "alpha").expect("flag");
+/// ```
+fn validate_cli_long(name: &Ident, long: &str) -> syn::Result<()> {
+    if !is_valid_cli_long(long) {
+        return Err(syn::Error::new_spanned(
+            name,
+            format!(
+                "invalid `cli_long` value '{long}': must be non-empty and contain only ASCII alphanumeric, '-' or '_'",
+            ),
+        ));
+    }
+    if RESERVED_LONGS.contains(&long) {
+        return Err(syn::Error::new_spanned(
+            name,
+            format!("reserved `cli_long` value '{long}': conflicts with global clap flags"),
+        ));
+    }
+    Ok(())
+}
+
 /// Generates the fields for the hidden `clap::Parser` struct.
 ///
 /// Each user field becomes `Option<T>` to record whether the CLI provided a
@@ -174,20 +206,7 @@ pub(crate) fn build_cli_struct_fields(
             .cli_long
             .clone()
             .unwrap_or_else(|| name.to_string().replace('_', "-"));
-        if !is_valid_cli_long(&long) {
-            return Err(syn::Error::new_spanned(
-                name,
-                format!(
-                    "invalid `cli_long` value '{long}': must be non-empty and contain only ASCII alphanumeric, '-' or '_'",
-                ),
-            ));
-        }
-        if RESERVED_LONGS.contains(&long.as_str()) {
-            return Err(syn::Error::new_spanned(
-                name,
-                format!("reserved `cli_long` value '{long}': conflicts with global clap flags"),
-            ));
-        }
+        validate_cli_long(name, &long)?;
         let short_ch = resolve_short_flag(name, attrs, &mut used_shorts)?;
         let long_lit = syn::LitStr::new(&long, proc_macro2::Span::call_site());
         let short_lit = syn::LitChar::new(short_ch, proc_macro2::Span::call_site());
@@ -414,6 +433,31 @@ mod tests {
     use rstest::rstest;
     use std::collections::HashSet;
     use syn::{Ident, parse_quote};
+
+    #[rstest]
+    #[case("alpha")]
+    #[case("alpha-1")]
+    #[case("alpha_beta")]
+    fn accepts_valid_long_flags(#[case] long: &str) {
+        let name: Ident = parse_quote!(field);
+        assert!(validate_cli_long(&name, long).is_ok());
+    }
+
+    #[test]
+    fn rejects_empty_long_flag() {
+        let name: Ident = parse_quote!(field);
+        let err = validate_cli_long(&name, "").expect_err("should fail");
+        assert!(err.to_string().contains("invalid `cli_long`"));
+    }
+
+    #[rstest]
+    #[case("help")]
+    #[case("version")]
+    fn rejects_reserved_long_flags(#[case] long: &str) {
+        let name: Ident = parse_quote!(field);
+        let err = validate_cli_long(&name, long).expect_err("should fail");
+        assert!(err.to_string().contains("reserved `cli_long` value"));
+    }
 
     #[rstest]
     fn selects_default_lowercase() {
