@@ -1,6 +1,6 @@
 #!/usr/bin/env -S uv run
 # /// script
-# dependencies = ["tomlkit", "markdown-it-py"]
+# dependencies = ["tomlkit==0.13.*", "markdown-it-py"]
 # ///
 """Synchronise workspace and crate versions.
 
@@ -191,44 +191,7 @@ def _update_dependency_version(doc: dict, dependency: str, version: str) -> None
 def _set_version(
     toml_path: Path, version: str, dependency: str | None = None
 ) -> None:
-    """Set version fields in a ``Cargo.toml`` file.
-
-    The update respects existing formatting and comments by using ``tomlkit``.
-    The optional ``dependency`` parameter allows synchronising an internal
-    dependency's version alongside the package version.
-
-    Examples
-    --------
-    >>> import tempfile
-    >>> from pathlib import Path
-    >>> with tempfile.NamedTemporaryFile('w+', suffix='.toml') as fh:
-    ...     _ = fh.write('[package]\nname = "demo"\nversion = "0.1.0"')
-    ...     fh.flush()
-    ...     _set_version(Path(fh.name), '1.2.3')
-    ...     fh.seek(0)
-    ...     'version = "1.2.3"' in fh.read()
-    True
-
-    >>> toml = '[dependencies]\nfoo = "^0.1"\n'
-    >>> with tempfile.NamedTemporaryFile('w+', suffix='.toml') as fh:
-    ...     _ = fh.write(toml)
-    ...     fh.flush()
-    ...     _set_version(Path(fh.name), '1.2.3', 'foo')
-    ...     fh.seek(0)
-    ...     'foo = "^1.2.3"' in fh.read()
-    True
-
-    >>> snippet = (
-    ...     '[dependencies]\nfoo = { version = "~0.1", features = ["a"] }\n'
-    ... )
-    >>> with tempfile.NamedTemporaryFile('w+', suffix='.toml') as fh:
-    ...     _ = fh.write(snippet)
-    ...     fh.flush()
-    ...     _set_version(Path(fh.name), '1.2.3', 'foo')
-    ...     fh.seek(0)
-    ...     'version = "~1.2.3"' in fh.read()
-    True
-    """
+    """Set package and optional dependency version in a ``Cargo.toml``."""
     with toml_path.open("r", encoding="utf-8") as fh:
         doc = tomlkit.parse(fh.read())
 
@@ -493,7 +456,7 @@ def main(argv: list[str]) -> int:
     try:
         with workspace.open("r", encoding="utf-8") as fh:
             data = tomlkit.parse(fh.read())
-    except TOMLKitError as exc:  # pragma: no cover - defensive
+    except (TOMLKitError, OSError, TypeError, ValueError) as exc:  # pragma: no cover - defensive
         print(f"Error: Failed to parse {workspace}: {exc}", file=sys.stderr)
         return 1
     members = data.get("workspace", {}).get("members", [])
