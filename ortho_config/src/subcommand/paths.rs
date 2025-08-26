@@ -1,7 +1,7 @@
-//! Discover configuration file paths for subcommands.
+//! Utilities for discovering configuration file paths for subcommands.
 //!
-//! Provides utilities to enumerate candidate configuration files in the
-//! user's home directory, platform-specific configuration directories, and the
+//! Enumerates candidate configuration files under the user's home directory,
+//! platform-specific configuration directories (e.g. XDG locations), and the
 //! current working directory.
 
 use std::path::{Path, PathBuf};
@@ -142,11 +142,12 @@ pub(crate) fn collect_non_unix_paths(prefix: &Prefix, paths: &mut Vec<PathBuf>) 
 /// 3. The current working directory, e.g. `./.app.toml`.
 ///
 /// The [`Prefix`] normalises user input and is incorporated into file stems and
-/// directory names. When `prefix` is empty:
-/// - home and local candidates are dotfiles with no stem (e.g. `~/.toml`,
-///   `./.toml`);
-/// - platform configuration directories are searched for canonical `config.*`
-///   names (e.g. `config.toml`) only.
+/// directory names. When `prefix` is empty, home and working directories yield
+/// dotfiles with only an extension (e.g. `~/.toml`, `./.toml`). Platform
+/// configuration directories are searched solely for their canonical
+/// `config.<ext>` names as defined by the platform (e.g. `config.toml` under
+/// `$XDG_CONFIG_HOME`). This restriction applies only to platform directories;
+/// home and working directories still emit extension-only dotfiles.
 ///
 /// # Examples
 ///
