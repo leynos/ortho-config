@@ -18,6 +18,8 @@ quote = "1"
 proc-macro2 = "1"
 
 [features]
+# Mirrors optional format parsers in `ortho_config` so
+# macro output enables them when selected.
 default = []
 json5 = []
 yaml = []
