@@ -1,4 +1,8 @@
-//! Path discovery helpers for subcommand configuration.
+//! Discover configuration file paths for subcommands.
+//!
+//! Provides utilities to enumerate candidate configuration files in the
+//! user's home directory, platform-specific configuration directories, and the
+//! current working directory.
 
 use std::path::{Path, PathBuf};
 
@@ -138,8 +142,11 @@ pub(crate) fn collect_non_unix_paths(prefix: &Prefix, paths: &mut Vec<PathBuf>) 
 /// 3. The current working directory, e.g. `./.app.toml`.
 ///
 /// The [`Prefix`] normalises user input and is incorporated into file stems and
-/// directory names. An empty prefix limits the search to canonical
-/// `config.*` files.
+/// directory names. When `prefix` is empty:
+/// - home and local candidates are dotfiles with no stem (e.g. `~/.toml`,
+///   `./.toml`);
+/// - platform configuration directories are searched for canonical `config.*`
+///   names (e.g. `config.toml`) only.
 ///
 /// # Examples
 ///
@@ -151,6 +158,13 @@ pub(crate) fn collect_non_unix_paths(prefix: &Prefix, paths: &mut Vec<PathBuf>) 
 /// // ["/home/alice/.app.toml",
 /// //  "/home/alice/.config/app/config.toml",
 /// //  "./.app.toml"]
+/// println!("{paths:?}");
+/// ```
+///
+/// ```rust,ignore
+/// // Empty prefix: home/local dotfiles with no stem plus platform config.* files
+/// let paths = candidate_paths(&Prefix::new(""));
+/// // e.g. ["/home/alice/.toml", "/home/alice/.config/config.toml", "./.toml"]
 /// println!("{paths:?}");
 /// ```
 pub(crate) fn candidate_paths(prefix: &Prefix) -> Vec<PathBuf> {
