@@ -6,6 +6,17 @@
 
 pub use ortho_config_macros::OrthoConfig;
 
+pub use figment;
+#[cfg(feature = "json5")]
+pub use figment_json5;
+#[cfg(feature = "yaml")]
+pub use serde_yaml;
+#[cfg(feature = "toml")]
+pub use toml;
+pub use uncased;
+#[cfg(any(unix, target_os = "redox"))]
+pub use xdg;
+
 mod csv_env;
 mod error;
 mod file;

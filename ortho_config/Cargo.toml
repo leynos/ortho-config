@@ -36,9 +36,9 @@ dunce = "1.0.0"
 
 [features]
 default = ["toml"]
-toml = ["figment/toml", "dep:toml"]
-json5 = ["dep:figment-json5", "dep:json5"]
-yaml = ["figment/yaml", "dep:serde_yaml"]
+toml = ["figment/toml", "dep:toml", "ortho_config_macros/toml"]
+json5 = ["dep:figment-json5", "dep:json5", "ortho_config_macros/json5"]
+yaml = ["figment/yaml", "dep:serde_yaml", "ortho_config_macros/yaml"]
 
 [dev-dependencies]
 figment = { version = "0.10", features = ["toml", "env"] }

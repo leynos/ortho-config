@@ -406,6 +406,10 @@ to rename the hidden `--config-path` flag by defining their own field with a
     users aren't surprised by silent TOML parsing.
   - `thiserror`: For ergonomic error type definitions.
 
+  The core crate re-exports `figment`, `uncased`, `xdg` and the optional
+  format parsers so downstream libraries can import them via `ortho_config::`
+  without declaring separate dependencies.
+
 ## 6. Implementation Roadmap
 
 1. **V0.1 (Scaffolding):**

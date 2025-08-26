@@ -285,7 +285,7 @@ fn build_xdg_config_discovery() -> proc_macro2::TokenStream {
     let yaml = build_discovery(["yaml", "yml"]);
     quote! {
         let try_load_config = |
-            fig: &mut Option<figment::Figment>,
+            fig: &mut Option<ortho_config::figment::Figment>,
             exts: &[&str],
             errors: &mut Vec<ortho_config::OrthoError>,
         | {
@@ -327,9 +327,9 @@ pub(crate) fn build_xdg_snippet(struct_attrs: &StructAttrs) -> proc_macro2::Toke
         if file_fig.is_none() {
             let xdg_base = ortho_config::normalize_prefix(#prefix_lit);
             let xdg_dirs = if xdg_base.is_empty() {
-                xdg::BaseDirectories::new()
+                ortho_config::xdg::BaseDirectories::new()
             } else {
-                xdg::BaseDirectories::with_prefix(&xdg_base)
+                ortho_config::xdg::BaseDirectories::with_prefix(&xdg_base)
             };
             #config_discovery
         }

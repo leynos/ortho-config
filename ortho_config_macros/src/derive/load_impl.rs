@@ -98,7 +98,9 @@ pub(crate) fn build_env_section(tokens: &LoadImplTokens<'_>) -> proc_macro2::Tok
     quote! {
         let env_provider = {
             #env_provider
-                .map(|k| uncased::Uncased::new(k.as_str().to_ascii_uppercase()))
+                .map(|k| ortho_config::uncased::Uncased::new(
+                    k.as_str().to_ascii_uppercase(),
+                ))
                 .split("__")
         };
     }
@@ -216,13 +218,17 @@ pub(crate) fn build_load_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStre
                 T: Into<std::ffi::OsString> + Clone,
             {
                 use clap::Parser as _;
-                use figment::{Figment, providers::{Toml, Serialized}, Profile};
+                use ortho_config::figment::{
+                    providers::{Serialized, Toml},
+                    Figment,
+                    Profile,
+                };
                 use ortho_config::CsvEnv;
-                #[cfg(feature = "json5")] use figment_json5::Json5;
-                #[cfg(feature = "yaml")] use figment::providers::Yaml;
-                use uncased::Uncased;
-                #[cfg(feature = "yaml")] use serde_yaml;
-                #[cfg(feature = "toml")] use toml;
+                #[cfg(feature = "json5")] use ortho_config::figment_json5::Json5;
+                #[cfg(feature = "yaml")] use ortho_config::figment::providers::Yaml;
+                use ortho_config::uncased::Uncased;
+                #[cfg(feature = "yaml")] use ortho_config::serde_yaml;
+                #[cfg(feature = "toml")] use ortho_config::toml;
 
                 let mut errors: Vec<ortho_config::OrthoError> = Vec::new();
                 let cli = match Self::try_parse_from(iter) {
