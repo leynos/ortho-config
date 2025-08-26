@@ -51,7 +51,7 @@ fn dotted(prefix: &Prefix) -> String {
 ///
 /// ```rust,ignore
 /// use std::path::{Path, PathBuf};
-/// use ortho_config::subcommand::push_stem_candidates;
+/// use ortho_config::subcommand::paths::push_stem_candidates;
 /// let mut candidates: Vec<PathBuf> = Vec::new();
 /// // Populate the vector with common configuration file names under `/tmp`.
 /// push_stem_candidates(Path::new("/tmp"), ".myapp", &mut candidates);
@@ -285,20 +285,29 @@ mod tests {
 
         let files: Vec<String> = paths
             .iter()
-            .map(|p| p.file_name().unwrap().to_string_lossy().into_owned())
+            .map(|p| {
+                p.file_name()
+                    .expect("candidate path has a file name")
+                    .to_string_lossy()
+                    .into_owned()
+            })
             .collect();
         assert_eq!(files, expected_files);
 
         let group_len: usize = EXT_GROUPS.iter().map(|g| g.len()).sum();
 
-        let home_parent = paths[0].parent().unwrap();
+        let home_parent = paths[0]
+            .parent()
+            .expect("HOME candidate must have a parent directory");
         assert!(
             paths[..group_len]
                 .iter()
                 .all(|p| p.parent() == Some(home_parent))
         );
 
-        let xdg_parent = paths[group_len].parent().unwrap();
+        let xdg_parent = paths[group_len]
+            .parent()
+            .expect("platform candidate must have a parent directory");
         assert!(
             paths[group_len..paths.len() - group_len]
                 .iter()
