@@ -19,9 +19,9 @@ from __future__ import annotations
 import os
 import sys
 import tempfile
-from collections.abc import Mapping
+from collections.abc import Mapping, MutableMapping
 from pathlib import Path
-from typing import Any, Callable
+from typing import Callable
 
 import tomlkit
 from markdown_it import MarkdownIt
@@ -55,8 +55,8 @@ def replace_fences(md_text: str, lang: str, replace_fn: Callable[[str], str]) ->
     for tok in tokens:
         if tok.type != "fence":
             continue
-        info_lang = (tok.info or "").split()[0]
-        if info_lang != lang:
+        info_lang = ((tok.info or "").split()[0] or "").lower()
+        if info_lang != lang.lower():
             continue
         start, end = tok.map
         out.append("".join(lines[last:start]))
@@ -69,7 +69,10 @@ def replace_fences(md_text: str, lang: str, replace_fn: Callable[[str], str]) ->
     return "".join(out)
 
 
-def _update_package_version(doc: dict, version: str) -> None:
+def _update_package_version(
+    doc: MutableMapping[str, object],
+    version: str,
+) -> None:
     """Update package version in ``doc`` if present.
 
     Examples
@@ -85,7 +88,9 @@ def _update_package_version(doc: dict, version: str) -> None:
         doc["package"]["version"] = version
 
 
-def _extract_version_prefix(entry: Any) -> str:
+def _extract_version_prefix(
+    entry: tomlkit.items.String | Mapping[str, object] | str | None,
+) -> str:
     """Return version prefix (``^`` or ``~``) if present.
 
     Examples
@@ -97,13 +102,16 @@ def _extract_version_prefix(entry: Any) -> str:
     >>> _extract_version_prefix("1")
     ''
     """
-    if isinstance(entry, dict):
+    if isinstance(entry, Mapping):
         entry = entry.get("version")
-    text = entry.value if isinstance(entry, tomlkit.items.String) else str(entry)
+    text = entry.value if isinstance(entry, tomlkit.items.String) else str(entry or "")
     return text[0] if text and text[0] in "^~" else ""
 
 
-def _update_dict_dependency(entry: dict, version: str) -> None:
+def _update_dict_dependency(
+    entry: MutableMapping[str, object],
+    version: str,
+) -> None:
     """Update dict-style dependency ``entry`` with ``version``.
 
     Examples
@@ -116,11 +124,23 @@ def _update_dict_dependency(entry: dict, version: str) -> None:
     '^1.2.3'
     """
     prefix = _extract_version_prefix(entry)
-    entry["version"] = prefix + version
+    existing = entry.get("version")
+    if isinstance(existing, tomlkit.items.String):
+        new = tomlkit.string(prefix + version)
+        new.trivia.indent = existing.trivia.indent
+        new.trivia.comment_ws = existing.trivia.comment_ws
+        new.trivia.comment = existing.trivia.comment
+        new.trivia.trail = existing.trivia.trail
+        entry["version"] = new
+    else:
+        entry["version"] = prefix + version
 
 
 def _update_string_dependency(
-    deps: dict, dependency: str, entry: Any, version: str
+    deps: MutableMapping[str, object],
+    dependency: str,
+    entry: tomlkit.items.String | str,
+    version: str,
 ) -> None:
     """Update string-style dependency ``dependency`` in ``deps``.
 
@@ -134,13 +154,20 @@ def _update_string_dependency(
     """
     prefix = _extract_version_prefix(entry)
     if isinstance(entry, tomlkit.items.String):
-        entry.value = prefix + version  # preserve comments/formatting
+        new = tomlkit.string(prefix + version)
+        new.trivia.indent = entry.trivia.indent
+        new.trivia.comment_ws = entry.trivia.comment_ws
+        new.trivia.comment = entry.trivia.comment
+        new.trivia.trail = entry.trivia.trail
+        deps[dependency] = new
     else:
         deps[dependency] = prefix + version
 
 
 def _update_dependency_in_table(
-    deps: dict, dependency: str, version: str
+    deps: MutableMapping[str, object],
+    dependency: str,
+    version: str,
 ) -> None:
     """Update ``dependency`` inside dependency table ``deps``.
 
@@ -159,7 +186,11 @@ def _update_dependency_in_table(
         _update_string_dependency(deps, dependency, entry, version)
 
 
-def _update_dependency_version(doc: dict, dependency: str, version: str) -> None:
+def _update_dependency_version(
+    doc: MutableMapping[str, object],
+    dependency: str,
+    version: str,
+) -> None:
     """Update ``dependency`` across dependency tables in ``doc``.
 
     Maintains caret or tilde prefixes and preserves formatting.
@@ -193,7 +224,7 @@ def _set_version(
     toml_path: Path,
     version: str,
     dependency: str | None = None,
-    doc: dict | None = None,
+    doc: MutableMapping[str, object] | None = None,
 ) -> None:
     """Set package and optional dependency version in a ``Cargo.toml``.
 
@@ -351,9 +382,7 @@ def _process_single_member(member_root: Path, version: str) -> bool:
     False
     """
     member_path = (
-        member_root / "Cargo.toml"
-        if member_root.is_dir() or member_root.name != "Cargo.toml"
-        else member_root
+        member_root / "Cargo.toml" if member_root.is_dir() else member_root
     )
     if not member_path.exists():
         print(
@@ -394,31 +423,15 @@ def _process_members(root: Path, members: list[str], version: str) -> bool:
 
 
 def _replace_version_in_toml(snippet: str, version: str) -> str:
-    """Return snippet with the ``ortho_config`` version updated.
-
-    Parameters
-    ----------
-    snippet
-        TOML text containing a ``[dependencies]`` table.
-    version
-        Version string to apply.
-
-    Examples
-    --------
-    >>> _replace_version_in_toml('[dependencies]\northo_config = "0"', '1')
-    '[dependencies]\northo_config = "1"\n'
-    """
+    """Update ``ortho_config`` version in TOML snippet, preserving formatting."""
     try:
         doc = tomlkit.parse(snippet)
     except TOMLKitError:
         return snippet
-    deps = doc.get("dependencies")
-    if isinstance(deps, dict) and "ortho_config" in deps:
-        entry = deps["ortho_config"]
-        if isinstance(entry, dict):
-            entry["version"] = version
-        else:
-            deps["ortho_config"] = version
+    for table in ("dependencies", "dev-dependencies", "build-dependencies"):
+        deps = doc.get(table)
+        if deps and "ortho_config" in deps:
+            _update_dependency_in_table(deps, "ortho_config", version)
     return tomlkit.dumps(doc).rstrip()
 
 
@@ -477,7 +490,7 @@ def main(argv: list[str]) -> int:
         print(f"Error: Failed to parse {workspace}: {exc}", file=sys.stderr)
         return 1
     members = data.get("workspace", {}).get("members", [])
-    _set_version(workspace, version)
+    _set_version(workspace, version, doc=data)
     had_error = _process_members(root, members, version)
     _update_markdown_versions(root / "README.md", version)
     _update_markdown_versions(root / "docs" / "users-guide.md", version)

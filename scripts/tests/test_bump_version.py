@@ -1,5 +1,8 @@
 import tomlkit
-from scripts.bump_version import _update_dependency_version
+from scripts.bump_version import (
+    _update_dependency_version,
+    _update_markdown_versions,
+)
 
 
 def test_updates_string_dependency_preserving_prefix() -> None:
@@ -41,3 +44,26 @@ def test_missing_dependency_no_change() -> None:
     doc = tomlkit.parse(snippet)
     _update_dependency_version(doc, 'foo', '1.2.3')
     assert tomlkit.dumps(doc).strip() == snippet, "should be a no-op when dependency is absent"
+
+
+def test_update_markdown_versions_updates_toml_fences(tmp_path) -> None:
+    md_text = (
+        "pre\n" "```toml\n" "[dependencies]\n" 'ortho_config = "0"\n' "```\n" "post\n"
+    )
+    for rel in ("README.md", "docs/users-guide.md"):
+        md_path = tmp_path / rel
+        md_path.parent.mkdir(parents=True, exist_ok=True)
+        md_path.write_text(md_text)
+        _update_markdown_versions(md_path, "1")
+        updated = md_path.read_text()
+        assert 'ortho_config = "1"' in updated, "must update TOML fences"
+
+
+def test_update_markdown_versions_ignores_non_toml_fences(tmp_path) -> None:
+    md_text = "pre\n```bash\necho hi\n```\npost\n"
+    for rel in ("README.md", "docs/users-guide.md"):
+        md_path = tmp_path / rel
+        md_path.parent.mkdir(parents=True, exist_ok=True)
+        md_path.write_text(md_text)
+        _update_markdown_versions(md_path, "1")
+        assert md_path.read_text() == md_text, "must leave non-TOML fences unchanged"
