@@ -52,16 +52,87 @@ def replace_fences(md_text: str, lang: str, replace_fn: Callable[[str], str]) ->
     out: list[str] = []
     last = 0
     for tok in tokens:
-        if tok.type == "fence" and (tok.info or "").split()[0] == lang:
-            start, end = tok.map
-            out.append("".join(lines[last:start]))
-            fence_marker = tok.markup or "```"
-            info = tok.info or lang
-            new_body = replace_fn(tok.content)
-            out.append(f"{fence_marker}{info}\n{new_body}\n{fence_marker}\n")
-            last = end
+        if tok.type != "fence":
+            continue
+        info_lang = (tok.info or "").split()[0]
+        if info_lang != lang:
+            continue
+        start, end = tok.map
+        out.append("".join(lines[last:start]))
+        fence_marker = tok.markup or "```"
+        info = tok.info or lang
+        new_body = replace_fn(tok.content)
+        out.append(f"{fence_marker}{info}\n{new_body}\n{fence_marker}\n")
+        last = end
     out.append("".join(lines[last:]))
     return "".join(out)
+
+
+def _update_package_version(doc: dict, version: str) -> None:
+    """Update package version in ``doc`` if present.
+
+    Examples
+    --------
+    >>> data = {"package": {"version": "0"}}
+    >>> _update_package_version(data, "1")
+    >>> data["package"]["version"]
+    '1'
+    """
+    if "workspace" in doc and "package" in doc["workspace"]:
+        doc["workspace"]["package"]["version"] = version
+    elif "package" in doc:
+        doc["package"]["version"] = version
+
+
+def _update_dependency_version(doc: dict, dependency: str, version: str) -> None:
+    """Update ``dependency`` across dependency tables in ``doc``.
+
+    Maintains caret or tilde prefixes and preserves formatting.
+
+    Examples
+    --------
+    >>> doc = tomlkit.parse('[dependencies]\nfoo = "^0.1"')
+    >>> _update_dependency_version(doc, 'foo', '1.2.3')
+    >>> tomlkit.dumps(doc).strip()
+    '[dependencies]\nfoo = "^1.2.3"'
+
+    >>> snippet = '[dependencies]\nfoo = { version = "~0.1", features = ["a"] }'
+    >>> doc = tomlkit.parse(snippet)
+    >>> _update_dependency_version(doc, 'foo', '1.2.3')
+    >>> 'version = "~1.2.3"' in tomlkit.dumps(doc)
+    True
+
+    >>> doc = tomlkit.parse('[dev-dependencies]\nfoo = "^0.1"')
+    >>> _update_dependency_version(doc, 'foo', '1.2.3')
+    >>> 'foo = "^1.2.3"' in tomlkit.dumps(doc)
+    True
+    """
+    for table in ("dependencies", "dev-dependencies", "build-dependencies"):
+        deps = doc.get(table)
+        if not deps or dependency not in deps:
+            continue
+        entry = deps[dependency]
+        if isinstance(entry, dict):
+            existing = entry.get("version")
+            prefix = (
+                existing.value[0]
+                if isinstance(existing, tomlkit.items.String)
+                and existing.value
+                and existing.value[0] in "^~"
+                else ""
+            )
+            entry["version"] = prefix + version
+        elif isinstance(entry, tomlkit.items.String):
+            prefix = (
+                entry.value[0]
+                if entry.value and entry.value[0] in "^~"
+                else ""
+            )
+            entry.value = prefix + version
+        else:
+            text = str(entry)
+            prefix = text[0] if text and text[0] in "^~" else ""
+            deps[dependency] = prefix + version
 
 
 def _set_version(
@@ -84,23 +155,34 @@ def _set_version(
     ...     fh.seek(0)
     ...     'version = "1.2.3"' in fh.read()
     True
+
+    >>> toml = '[dependencies]\nfoo = "^0.1"\n'
+    >>> with tempfile.NamedTemporaryFile('w+', suffix='.toml') as fh:
+    ...     _ = fh.write(toml)
+    ...     fh.flush()
+    ...     _set_version(Path(fh.name), '1.2.3', 'foo')
+    ...     fh.seek(0)
+    ...     'foo = "^1.2.3"' in fh.read()
+    True
+
+    >>> snippet = (
+    ...     '[dependencies]\nfoo = { version = "~0.1", features = ["a"] }\n'
+    ... )
+    >>> with tempfile.NamedTemporaryFile('w+', suffix='.toml') as fh:
+    ...     _ = fh.write(snippet)
+    ...     fh.flush()
+    ...     _set_version(Path(fh.name), '1.2.3', 'foo')
+    ...     fh.seek(0)
+    ...     'version = "~1.2.3"' in fh.read()
+    True
     """
     with toml_path.open("r", encoding="utf-8") as fh:
         doc = tomlkit.parse(fh.read())
 
-    if "workspace" in doc and "package" in doc["workspace"]:
-        doc["workspace"]["package"]["version"] = version
-    elif "package" in doc:
-        doc["package"]["version"] = version
+    _update_package_version(doc, version)
 
     if dependency:
-        deps = doc.get("dependencies")
-        if deps and dependency in deps:
-            entry = deps[dependency]
-            if isinstance(entry, dict):
-                entry["version"] = version
-            else:
-                deps[dependency] = version
+        _update_dependency_version(doc, dependency, version)
 
     text = tomlkit.dumps(doc)
     temp_dir = toml_path.parent
@@ -195,10 +277,12 @@ def _update_member_version(member_path: Path, version: str) -> bool:
     False
     """
     try:
-        dependency = (
-            "ortho_config_macros" if member_path.parent.name == "ortho_config" else None
-        )
-        _set_version(member_path, version, dependency)
+        # Derive from the actual package name to avoid coupling to directory names
+        with member_path.open("r", encoding="utf-8") as fh:
+            doc = tomlkit.parse(fh.read())
+        package_name = doc.get("package", {}).get("name")
+        dep = "ortho_config_macros" if package_name == "ortho_config" else None
+        _set_version(member_path, version, dep)
     except (
         TOMLKitError,
         OSError,
