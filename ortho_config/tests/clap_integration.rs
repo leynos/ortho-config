@@ -189,7 +189,7 @@ fn missing_config_file_is_ignored() {
 fn loads_from_xdg_config() {
     figment::Jail::expect_with(|j| {
         let dir = j.create_dir("xdg")?;
-        let abs = std::fs::canonicalize(&dir).unwrap();
+        let abs = ortho_config::file::canonicalise(&dir).unwrap();
         j.create_file(
             dir.join("config.toml"),
             "sample_value = \"xdg\"\nother = \"val\"",
@@ -210,7 +210,7 @@ fn loads_from_xdg_config() {
 fn loads_from_xdg_yaml_config() {
     figment::Jail::expect_with(|j| {
         let dir = j.create_dir("xdg_yaml")?;
-        let abs = std::fs::canonicalize(&dir).unwrap();
+        let abs = ortho_config::file::canonicalise(&dir).unwrap();
         j.create_file(dir.join("config.yaml"), "sample_value: xdg\nother: val")?;
         j.set_env("XDG_CONFIG_HOME", abs.to_str().unwrap());
 

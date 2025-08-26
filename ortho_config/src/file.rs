@@ -24,6 +24,8 @@ fn file_error(path: &Path, err: impl Into<Box<dyn Error + Send + Sync>>) -> Orth
 
 /// Canonicalise `p` using platform-specific rules.
 ///
+/// Returns an absolute, normalised path with symlinks resolved.
+///
 /// On Windows the [`dunce`] crate is used to avoid introducing UNC prefixes
 /// in diagnostic messages.
 ///
@@ -33,7 +35,7 @@ fn file_error(path: &Path, err: impl Into<Box<dyn Error + Send + Sync>>) -> Orth
 ///
 /// # Examples
 ///
-/// ```rust,ignore
+/// ```rust,no_run
 /// use std::path::Path;
 ///
 /// # fn run() -> Result<(), ortho_config::OrthoError> {
@@ -43,7 +45,7 @@ fn file_error(path: &Path, err: impl Into<Box<dyn Error + Send + Sync>>) -> Orth
 /// # Ok(())
 /// # }
 /// ```
-fn canonicalise(p: &Path) -> Result<PathBuf, OrthoError> {
+pub fn canonicalise(p: &Path) -> Result<PathBuf, OrthoError> {
     #[cfg(windows)]
     {
         dunce::canonicalize(p).map_err(|e| file_error(p, e))
@@ -206,8 +208,7 @@ fn resolve_base_path(current_path: &Path, base: PathBuf) -> Result<PathBuf, Orth
     } else {
         parent.join(base)
     };
-    let canonical = canonicalise(&base)?;
-    Ok(canonical)
+    canonicalise(&base)
 }
 
 /// Merge `figment` over its parent configuration.
