@@ -407,8 +407,9 @@ to rename the hidden `--config-path` flag by defining their own field with a
   - `thiserror`: For ergonomic error type definitions.
 
   The core crate re-exports `figment`, `uncased`, `xdg` (on Unix-like and
-  Redox targets), and the optional format parsers, so downstream libraries can
-  import them via `ortho_config::` without declaring separate dependencies.
+  Redox targets), and the optional format parsers (`figment_json5`, `json5`,
+  `serde_yaml`, `toml`), so downstream libraries can import them via
+  `ortho_config::` without declaring separate dependencies.
 
 ## 6. Implementation Roadmap
 

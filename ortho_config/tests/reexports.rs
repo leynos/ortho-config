@@ -18,8 +18,9 @@ fn reexports_are_public() {
     }
     #[cfg(feature = "json5")]
     {
+        use ortho_config::figment::providers::Format as _;
         use ortho_config::{figment_json5::Json5, json5};
-        let _ = <Json5 as ortho_config::figment::providers::Format>::file("dummy.json5");
+        let _ = Json5::file("dummy.json5");
         let _: Result<serde_json::Value, _> = json5::from_str("{}");
     }
     #[cfg(any(unix, target_os = "redox"))]
