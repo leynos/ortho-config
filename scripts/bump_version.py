@@ -19,8 +19,9 @@ from __future__ import annotations
 import os
 import sys
 import tempfile
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Callable
+from typing import Any, Callable
 
 import tomlkit
 from markdown_it import MarkdownIt
@@ -84,7 +85,7 @@ def _update_package_version(doc: dict, version: str) -> None:
         doc["package"]["version"] = version
 
 
-def _extract_version_prefix(entry) -> str:
+def _extract_version_prefix(entry: Any) -> str:
     """Return version prefix (``^`` or ``~``) if present.
 
     Examples
@@ -98,10 +99,7 @@ def _extract_version_prefix(entry) -> str:
     """
     if isinstance(entry, dict):
         entry = entry.get("version")
-    if isinstance(entry, tomlkit.items.String):
-        text = entry.value
-    else:
-        text = str(entry)
+    text = entry.value if isinstance(entry, tomlkit.items.String) else str(entry)
     return text[0] if text and text[0] in "^~" else ""
 
 
@@ -122,7 +120,7 @@ def _update_dict_dependency(entry: dict, version: str) -> None:
 
 
 def _update_string_dependency(
-    deps: dict, dependency: str, entry, version: str
+    deps: dict, dependency: str, entry: Any, version: str
 ) -> None:
     """Update string-style dependency ``dependency`` in ``deps``.
 
@@ -135,7 +133,10 @@ def _update_string_dependency(
     'foo = "^1.2.3"'
     """
     prefix = _extract_version_prefix(entry)
-    deps[dependency] = prefix + version
+    if isinstance(entry, tomlkit.items.String):
+        entry.value = prefix + version  # preserve comments/formatting
+    else:
+        deps[dependency] = prefix + version
 
 
 def _update_dependency_in_table(
@@ -152,7 +153,7 @@ def _update_dependency_in_table(
     True
     """
     entry = deps[dependency]
-    if isinstance(entry, dict):
+    if isinstance(entry, Mapping):
         _update_dict_dependency(entry, version)
     else:
         _update_string_dependency(deps, dependency, entry, version)
@@ -189,11 +190,27 @@ def _update_dependency_version(doc: dict, dependency: str, version: str) -> None
 
 
 def _set_version(
-    toml_path: Path, version: str, dependency: str | None = None
+    toml_path: Path,
+    version: str,
+    dependency: str | None = None,
+    doc: dict | None = None,
 ) -> None:
-    """Set package and optional dependency version in a ``Cargo.toml``."""
-    with toml_path.open("r", encoding="utf-8") as fh:
-        doc = tomlkit.parse(fh.read())
+    """Set package and optional dependency version in a ``Cargo.toml``.
+
+    Parameters
+    ----------
+    toml_path
+        Path to the ``Cargo.toml`` file.
+    version
+        Version string to apply.
+    dependency
+        Optional dependency to update alongside the package version.
+    doc
+        Pre-parsed document to update. If provided, the file is not re-read.
+    """
+    if doc is None:
+        with toml_path.open("r", encoding="utf-8") as fh:
+            doc = tomlkit.parse(fh.read())
 
     _update_package_version(doc, version)
 
@@ -298,7 +315,7 @@ def _update_member_version(member_path: Path, version: str) -> bool:
             doc = tomlkit.parse(fh.read())
         package_name = doc.get("package", {}).get("name")
         dep = "ortho_config_macros" if package_name == "ortho_config" else None
-        _set_version(member_path, version, dep)
+        _set_version(member_path, version, dep, doc)
     except (
         TOMLKitError,
         OSError,
