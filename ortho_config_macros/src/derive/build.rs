@@ -137,7 +137,7 @@ pub(crate) fn build_default_struct_fields(fields: &[syn::Field]) -> Vec<proc_mac
 /// Returns whether a long CLI flag is valid.
 ///
 /// A valid flag is non-empty and contains only ASCII alphanumeric, hyphen or
-/// underscore characters.
+/// underscore characters and does not begin with a hyphen.
 ///
 /// # Examples
 ///
@@ -145,10 +145,12 @@ pub(crate) fn build_default_struct_fields(fields: &[syn::Field]) -> Vec<proc_mac
 /// use ortho_config_macros::derive::build::is_valid_cli_long;
 /// assert!(is_valid_cli_long("alpha-1"));
 /// assert!(!is_valid_cli_long(""));
+/// assert!(!is_valid_cli_long("-alpha"));
 /// assert!(!is_valid_cli_long("bad/flag"));
 /// ```
 fn is_valid_cli_long(long: &str) -> bool {
     !long.is_empty()
+        && !long.starts_with('-')
         && long
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
@@ -175,6 +177,13 @@ fn validate_cli_long(name: &Ident, long: &str) -> syn::Result<()> {
             format!(
                 "invalid `cli_long` value '{long}': must be non-empty and contain only ASCII alphanumeric, '-' or '_'",
             ),
+        ));
+    }
+    // Disallow leading '_' to avoid invalid defaults from underscored fields.
+    if matches!(long.as_bytes().first(), Some(b'_')) {
+        return Err(syn::Error::new_spanned(
+            name,
+            format!("invalid `cli_long` value '{long}': must not start with '_'"),
         ));
     }
     if RESERVED_LONGS.contains(&long) {
@@ -452,6 +461,8 @@ mod tests {
     #[case("bad/flag")]
     #[case("has space")]
     #[case("*")]
+    #[case("-alpha")]
+    #[case("_alpha")]
     fn rejects_invalid_long_flags(#[case] bad: &str) {
         let name: Ident = parse_quote!(field);
         let err = validate_cli_long(&name, bad).expect_err("should fail");
@@ -517,6 +528,22 @@ mod tests {
                 field1: u32,
                 #[ortho_config(cli_long = "alpha")]
                 field2: u32,
+            }
+        };
+        let (_, fields, _, field_attrs) =
+            crate::derive::parse::parse_input(&input).expect("parse_input");
+        let err = build_cli_struct_fields(&fields, &field_attrs).expect_err("should fail");
+        assert!(err.to_string().contains("duplicate `cli_long` value"));
+    }
+
+    #[test]
+    fn rejects_duplicate_between_default_and_override() {
+        // `field_one` defaults to "field-one"; explicit override matches it.
+        let input: syn::DeriveInput = parse_quote! {
+            struct Demo {
+                field_one: u32,
+                #[ortho_config(cli_long = "field-one")]
+                field_two: u32,
             }
         };
         let (_, fields, _, field_attrs) =
