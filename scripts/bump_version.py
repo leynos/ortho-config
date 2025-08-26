@@ -84,6 +84,80 @@ def _update_package_version(doc: dict, version: str) -> None:
         doc["package"]["version"] = version
 
 
+def _extract_version_prefix(entry) -> str:
+    """Return version prefix (``^`` or ``~``) if present.
+
+    Examples
+    --------
+    >>> import tomlkit
+    >>> doc = tomlkit.parse('foo = "^1"')
+    >>> _extract_version_prefix(doc["foo"])
+    '^'
+    >>> _extract_version_prefix("1")
+    ''
+    """
+    if isinstance(entry, dict):
+        entry = entry.get("version")
+    if isinstance(entry, tomlkit.items.String):
+        text = entry.value
+    else:
+        text = str(entry)
+    return text[0] if text and text[0] in "^~" else ""
+
+
+def _update_dict_dependency(entry: dict, version: str) -> None:
+    """Update dict-style dependency ``entry`` with ``version``.
+
+    Examples
+    --------
+    >>> import tomlkit
+    >>> entry = tomlkit.table()
+    >>> entry["version"] = tomlkit.string("^0.1")
+    >>> _update_dict_dependency(entry, "1.2.3")
+    >>> entry["version"].value
+    '^1.2.3'
+    """
+    prefix = _extract_version_prefix(entry)
+    entry["version"] = prefix + version
+
+
+def _update_string_dependency(
+    deps: dict, dependency: str, entry, version: str
+) -> None:
+    """Update string-style dependency ``dependency`` in ``deps``.
+
+    Examples
+    --------
+    >>> import tomlkit
+    >>> doc = tomlkit.parse('foo = "^0.1"')
+    >>> _update_string_dependency(doc, 'foo', doc['foo'], '1.2.3')
+    >>> tomlkit.dumps(doc).strip()
+    'foo = "^1.2.3"'
+    """
+    prefix = _extract_version_prefix(entry)
+    deps[dependency] = prefix + version
+
+
+def _update_dependency_in_table(
+    deps: dict, dependency: str, version: str
+) -> None:
+    """Update ``dependency`` inside dependency table ``deps``.
+
+    Examples
+    --------
+    >>> import tomlkit
+    >>> doc = tomlkit.parse('[dependencies]\nfoo = "^0.1"')
+    >>> _update_dependency_in_table(doc['dependencies'], 'foo', '1.2.3')
+    >>> 'foo = "^1.2.3"' in tomlkit.dumps(doc)
+    True
+    """
+    entry = deps[dependency]
+    if isinstance(entry, dict):
+        _update_dict_dependency(entry, version)
+    else:
+        _update_string_dependency(deps, dependency, entry, version)
+
+
 def _update_dependency_version(doc: dict, dependency: str, version: str) -> None:
     """Update ``dependency`` across dependency tables in ``doc``.
 
@@ -111,28 +185,7 @@ def _update_dependency_version(doc: dict, dependency: str, version: str) -> None
         deps = doc.get(table)
         if not deps or dependency not in deps:
             continue
-        entry = deps[dependency]
-        if isinstance(entry, dict):
-            existing = entry.get("version")
-            prefix = (
-                existing.value[0]
-                if isinstance(existing, tomlkit.items.String)
-                and existing.value
-                and existing.value[0] in "^~"
-                else ""
-            )
-            entry["version"] = prefix + version
-        elif isinstance(entry, tomlkit.items.String):
-            prefix = (
-                entry.value[0]
-                if entry.value and entry.value[0] in "^~"
-                else ""
-            )
-            entry.value = prefix + version
-        else:
-            text = str(entry)
-            prefix = text[0] if text and text[0] in "^~" else ""
-            deps[dependency] = prefix + version
+        _update_dependency_in_table(deps, dependency, version)
 
 
 def _set_version(
