@@ -21,7 +21,7 @@ import sys
 import tempfile
 from collections.abc import Mapping, MutableMapping
 from pathlib import Path
-from typing import Callable
+from typing import Any, Callable
 
 import tomlkit
 from markdown_it import MarkdownIt
@@ -139,7 +139,7 @@ def _update_dict_dependency(
 def _update_string_dependency(
     deps: MutableMapping[str, object],
     dependency: str,
-    entry: tomlkit.items.String | str,
+    entry: Any,
     version: str,
 ) -> None:
     """Update string-style dependency ``dependency`` in ``deps``.
