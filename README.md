@@ -45,9 +45,9 @@ ortho_config = "0.3.0" # Replace with the latest version
 serde = { version = "1.0", features = ["derive"] }
 ```
 
-`ortho_config` exposes its internal dependencies, letting applications import
-`figment`, `uncased`, `xdg` and the optional format parsers without declaring
-them separately.
+`ortho_config` re-exports its parsing dependencies, so applications can import
+`figment`, `uncased`, `xdg`, and the optional format parsers without declaring
+them directly.
 
 2. **Define the configuration struct:**
 

@@ -65,9 +65,10 @@ during discovery and do not cause errors if present. The `yaml` feature
 similarly enables `.yaml` and `.yml` files; without it, such files are skipped
 during discovery and do not cause errors if present.
 
-`ortho_config` re-exports its parsing dependencies so consumers do not need to
-declare them directly. Access `figment`, `uncased`, `xdg` and the optional
-parsers (`figment_json5`, `serde_yaml`, `toml`) via `ortho_config::` paths.
+`ortho_config` re-exports its parsing dependencies, so consumers do not need to
+declare them directly. Access `figment`, `uncased`, `xdg`, and the optional
+parsers (`figment_json5`, `json5`, `serde_yaml`, `toml`) via `ortho_config::`
+paths.
 
 ## Migrating from earlier versions
 
