@@ -77,10 +77,10 @@ fn loads_from_xdg_config() {
     let cfg: CmdCfg = with_merged_subcommand_cli(
         |j| {
             let xdg = j.create_dir("xdg")?;
-            let abs = ortho_config::file::canonicalise(&xdg).unwrap();
+            let abs = ortho_config::file::canonicalise(&xdg).expect("canonicalise xdg dir");
             j.create_dir(abs.join("app"))?;
             j.create_file(abs.join("app/config.toml"), "[cmds.test]\nfoo = \"xdg\"")?;
-            j.set_env("XDG_CONFIG_HOME", abs.to_str().unwrap());
+            j.set_env("XDG_CONFIG_HOME", abs.to_str().expect("xdg dir to string"));
             Ok(())
         },
         &CmdCfg::default(),
