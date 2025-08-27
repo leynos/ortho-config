@@ -520,32 +520,24 @@ mod tests {
         assert!(err.to_string().contains(expected_error));
     }
 
-    #[test]
-    fn rejects_duplicate_long_flags() {
-        let input: syn::DeriveInput = parse_quote! {
-            struct Demo {
-                #[ortho_config(cli_long = "alpha")]
-                field1: u32,
-                #[ortho_config(cli_long = "alpha")]
-                field2: u32,
-            }
-        };
-        let (_, fields, _, field_attrs) =
-            crate::derive::parse::parse_input(&input).expect("parse_input");
-        let err = build_cli_struct_fields(&fields, &field_attrs).expect_err("should fail");
-        assert!(err.to_string().contains("duplicate `cli_long` value"));
-    }
-
-    #[test]
-    fn rejects_duplicate_between_default_and_override() {
-        // `field_one` defaults to "field-one"; explicit override matches it.
-        let input: syn::DeriveInput = parse_quote! {
-            struct Demo {
-                field_one: u32,
-                #[ortho_config(cli_long = "field-one")]
-                field_two: u32,
-            }
-        };
+    #[rstest]
+    #[case(parse_quote! {
+        struct Demo {
+            #[ortho_config(cli_long = "alpha")]
+            field1: u32,
+            #[ortho_config(cli_long = "alpha")]
+            field2: u32,
+        }
+    })]
+    #[case(parse_quote! {
+        struct Demo {
+            field_one: u32,
+            #[ortho_config(cli_long = "field-one")]
+            field_two: u32,
+        }
+    })]
+    // Ensure duplicates trigger a diagnostic for explicit and default-derived clashes.
+    fn rejects_duplicate_long_flags_scenarios(#[case] input: syn::DeriveInput) {
         let (_, fields, _, field_attrs) =
             crate::derive::parse::parse_input(&input).expect("parse_input");
         let err = build_cli_struct_fields(&fields, &field_attrs).expect_err("should fail");
