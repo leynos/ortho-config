@@ -76,7 +76,7 @@ fn push_local_candidates(prefix: &Prefix, paths: &mut Vec<PathBuf>) {
 /// use std::path::PathBuf;
 /// use xdg::BaseDirectories;
 /// use ortho_config::subcommand::paths::push_xdg_candidates;
-/// let dirs = BaseDirectories::new().expect("locate directories");
+/// let dirs = BaseDirectories::new();
 /// let mut paths: Vec<PathBuf> = Vec::new();
 /// push_xdg_candidates(&dirs, &["toml"], &mut paths);
 /// assert!(paths.iter().all(|p| p.ends_with("config.toml")));
@@ -106,7 +106,10 @@ pub(crate) fn collect_unix_paths(prefix: &Prefix, paths: &mut Vec<PathBuf>) {
     // Only search for canonical XDG config filenames under the XDG dirs:
     // - config.toml (always)
     // - config.yaml and config.yml when the `yaml` feature is enabled
+    // - config.json and config.json5 when the `json5` feature is enabled
     push_xdg_candidates(&xdg_dirs, &["toml"], paths);
+    #[cfg(feature = "json5")]
+    push_xdg_candidates(&xdg_dirs, &["json", "json5"], paths);
     #[cfg(feature = "yaml")]
     push_xdg_candidates(&xdg_dirs, &["yaml", "yml"], paths);
 }
@@ -146,8 +149,13 @@ pub(crate) fn collect_non_unix_paths(prefix: &Prefix, paths: &mut Vec<PathBuf>) 
 /// dotfiles with only an extension (e.g. `~/.toml`, `./.toml`). Platform
 /// configuration directories are searched solely for their canonical
 /// `config.<ext>` names as defined by the platform (e.g. `config.toml` under
-/// `$XDG_CONFIG_HOME`). This restriction applies only to platform directories;
-/// home and working directories still emit extension-only dotfiles.
+/// `$XDG_CONFIG_HOME`).
+#[cfg_attr(
+    feature = "json5",
+    doc = "On Unix-like platforms these may also be `config.json` and `config.json5`."
+)]
+/// This restriction applies only to platform directories; home and working
+/// directories still emit extension-only dotfiles.
 ///
 /// # Examples
 ///
