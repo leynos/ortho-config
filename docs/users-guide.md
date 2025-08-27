@@ -221,11 +221,11 @@ following steps:
 2. Attempts to load a configuration file. Candidate file paths are searched in
    the following order:
 
-   1. A `--config-path` CLI argument. The derive recognises a field named
-      `config_path` as the hook for this option. Add the field with
+   1. A `--config-path` CLI argument. The derive macro recognizes a field
+      named `config_path` as the hook for this option. Add the field with
       `#[serde(skip)]` and, if desired, `#[ortho_config(cli_long = "config")]`
       to expose or rename the flag. The environment variable
-      `PREFIXCONFIG_PATH` (or `CONFIG_PATH` with no prefix) provides the same
+      `PREFIX_CONFIG_PATH` (or `CONFIG_PATH` with no prefix) provides the same
       override.
 
    1. A dotfile named `.config.toml` or `.<prefix>.toml` in the current working
@@ -486,14 +486,15 @@ Missing required values:
   }
   ```
 
-  - `#[serde(skip)]` keeps the path out of the deserialised config while still
+  - `#[serde(skip)]` keeps the path out of the deserialized config while still
     allowing the CLI or environment to supply it.
   - `#[ortho_config(cli_long = "...")]` exposes or renames the `--config-path`
     flag; omit it to keep the default name.
 
-  During loading, any path from this flag or the `CONFIG_PATH` environment
-  variable is passed to `load_config_file`, which selects a parser based on the
-  extension and uses `Toml::string` for `.toml` files.
+  During loading, any path from this flag or the `PREFIX_CONFIG_PATH` (or
+  `CONFIG_PATH` with no prefix) environment variable is passed to
+  `load_config_file`, which selects a parser based on the extension and uses
+  `Toml::string` for `.toml` files.
 
 - **Changing naming conventions** – Currently, only the default
   snake/kebab/upper snake mappings are supported. Future versions may introduce
