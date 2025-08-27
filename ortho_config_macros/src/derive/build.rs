@@ -144,6 +144,7 @@ pub(crate) fn build_default_struct_fields(fields: &[syn::Field]) -> Vec<proc_mac
 /// ```ignore
 /// use ortho_config_macros::derive::build::is_valid_cli_long;
 /// assert!(is_valid_cli_long("alpha-1"));
+/// assert!(is_valid_cli_long("-alpha"));
 /// assert!(!is_valid_cli_long(""));
 /// assert!(!is_valid_cli_long("bad/flag"));
 /// ```
@@ -152,6 +153,45 @@ fn is_valid_cli_long(long: &str) -> bool {
         && long
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+}
+
+/// Validates a long CLI flag against syntax and reserved names.
+///
+/// Ensures the provided flag is non-empty, uses only allowed characters and
+/// does not collide with globally reserved clap flags.
+///
+/// # Examples
+///
+/// ```ignore
+/// use ortho_config_macros::derive::build::validate_cli_long;
+/// use syn::parse_quote;
+///
+/// let name: syn::Ident = parse_quote!(field);
+/// validate_cli_long(&name, "alpha").expect("flag");
+/// ```
+fn validate_cli_long(name: &Ident, long: &str) -> syn::Result<()> {
+    if !is_valid_cli_long(long) {
+        return Err(syn::Error::new_spanned(
+            name,
+            format!(
+                "invalid `cli_long` value '{long}': must be non-empty and contain only ASCII alphanumeric, '-' or '_'",
+            ),
+        ));
+    }
+    // Disallow leading '_' to avoid invalid defaults from underscored fields.
+    if long.starts_with('_') {
+        return Err(syn::Error::new_spanned(
+            name,
+            format!("invalid `cli_long` value '{long}': must not start with '_'"),
+        ));
+    }
+    if RESERVED_LONGS.contains(&long) {
+        return Err(syn::Error::new_spanned(
+            name,
+            format!("reserved `cli_long` value '{long}': conflicts with global clap flags"),
+        ));
+    }
+    Ok(())
 }
 
 /// Generates the fields for the hidden `clap::Parser` struct.
@@ -165,6 +205,7 @@ pub(crate) fn build_cli_struct_fields(
     field_attrs: &[FieldAttrs],
 ) -> syn::Result<Vec<proc_macro2::TokenStream>> {
     let mut used_shorts = HashSet::new();
+    let mut used_longs: HashSet<String> = HashSet::new();
     let mut result = Vec::with_capacity(fields.len());
 
     for (f, attrs) in fields.iter().zip(field_attrs) {
@@ -174,18 +215,11 @@ pub(crate) fn build_cli_struct_fields(
             .cli_long
             .clone()
             .unwrap_or_else(|| name.to_string().replace('_', "-"));
-        if !is_valid_cli_long(&long) {
+        validate_cli_long(name, &long)?;
+        if !used_longs.insert(long.clone()) {
             return Err(syn::Error::new_spanned(
                 name,
-                format!(
-                    "invalid `cli_long` value '{long}': must be non-empty and contain only ASCII alphanumeric, '-' or '_'",
-                ),
-            ));
-        }
-        if RESERVED_LONGS.contains(&long.as_str()) {
-            return Err(syn::Error::new_spanned(
-                name,
-                format!("reserved `cli_long` value '{long}': conflicts with global clap flags"),
+                format!("duplicate `cli_long` value '{long}'"),
             ));
         }
         let short_ch = resolve_short_flag(name, attrs, &mut used_shorts)?;
@@ -416,6 +450,37 @@ mod tests {
     use syn::{Ident, parse_quote};
 
     #[rstest]
+    #[case("alpha")]
+    #[case("alpha-1")]
+    #[case("alpha_beta")]
+    #[case("-alpha")]
+    fn accepts_valid_long_flags(#[case] long: &str) {
+        let name: Ident = parse_quote!(field);
+        assert!(validate_cli_long(&name, long).is_ok());
+    }
+
+    #[rstest]
+    #[case("")]
+    #[case("bad/flag")]
+    #[case("has space")]
+    #[case("*")]
+    #[case("_alpha")]
+    fn rejects_invalid_long_flags(#[case] bad: &str) {
+        let name: Ident = parse_quote!(field);
+        let err = validate_cli_long(&name, bad).expect_err("should fail");
+        assert!(err.to_string().contains("invalid `cli_long`"));
+    }
+
+    #[rstest]
+    #[case("help")]
+    #[case("version")]
+    fn rejects_reserved_long_flags(#[case] long: &str) {
+        let name: Ident = parse_quote!(field);
+        let err = validate_cli_long(&name, long).expect_err("should fail");
+        assert!(err.to_string().contains("reserved `cli_long` value"));
+    }
+
+    #[rstest]
     fn selects_default_lowercase() {
         let name: Ident = parse_quote!(field);
         let attrs = FieldAttrs::default();
@@ -455,6 +520,30 @@ mod tests {
         };
         let err = resolve_short_flag(&name, &attrs, &mut used).expect_err("should fail");
         assert!(err.to_string().contains(expected_error));
+    }
+
+    #[rstest]
+    #[case(parse_quote! {
+        struct Demo {
+            #[ortho_config(cli_long = "alpha")]
+            field1: u32,
+            #[ortho_config(cli_long = "alpha")]
+            field2: u32,
+        }
+    })]
+    #[case(parse_quote! {
+        struct Demo {
+            field_one: u32,
+            #[ortho_config(cli_long = "field-one")]
+            field_two: u32,
+        }
+    })]
+    // Ensure duplicates trigger a diagnostic for explicit and default-derived clashes.
+    fn rejects_duplicate_long_flags_scenarios(#[case] input: syn::DeriveInput) {
+        let (_, fields, _, field_attrs) =
+            crate::derive::parse::parse_input(&input).expect("parse_input");
+        let err = build_cli_struct_fields(&fields, &field_attrs).expect_err("should fail");
+        assert!(err.to_string().contains("duplicate `cli_long` value"));
     }
 
     fn demo_input() -> (Vec<syn::Field>, Vec<FieldAttrs>, StructAttrs) {
