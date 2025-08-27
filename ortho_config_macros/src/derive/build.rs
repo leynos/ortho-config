@@ -137,20 +137,19 @@ pub(crate) fn build_default_struct_fields(fields: &[syn::Field]) -> Vec<proc_mac
 /// Returns whether a long CLI flag is valid.
 ///
 /// A valid flag is non-empty and contains only ASCII alphanumeric, hyphen or
-/// underscore characters and does not begin with a hyphen.
+/// underscore characters.
 ///
 /// # Examples
 ///
 /// ```ignore
 /// use ortho_config_macros::derive::build::is_valid_cli_long;
 /// assert!(is_valid_cli_long("alpha-1"));
+/// assert!(is_valid_cli_long("-alpha"));
 /// assert!(!is_valid_cli_long(""));
-/// assert!(!is_valid_cli_long("-alpha"));
 /// assert!(!is_valid_cli_long("bad/flag"));
 /// ```
 fn is_valid_cli_long(long: &str) -> bool {
     !long.is_empty()
-        && !long.starts_with('-')
         && long
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
@@ -180,7 +179,7 @@ fn validate_cli_long(name: &Ident, long: &str) -> syn::Result<()> {
         ));
     }
     // Disallow leading '_' to avoid invalid defaults from underscored fields.
-    if matches!(long.as_bytes().first(), Some(b'_')) {
+    if long.starts_with('_') {
         return Err(syn::Error::new_spanned(
             name,
             format!("invalid `cli_long` value '{long}': must not start with '_'"),
@@ -218,7 +217,10 @@ pub(crate) fn build_cli_struct_fields(
             .unwrap_or_else(|| name.to_string().replace('_', "-"));
         validate_cli_long(name, &long)?;
         if !used_longs.insert(long.clone()) {
-            return Err(syn::Error::new_spanned(name, "duplicate `cli_long` value"));
+            return Err(syn::Error::new_spanned(
+                name,
+                format!("duplicate `cli_long` value '{long}'"),
+            ));
         }
         let short_ch = resolve_short_flag(name, attrs, &mut used_shorts)?;
         let long_lit = syn::LitStr::new(&long, proc_macro2::Span::call_site());
@@ -451,6 +453,7 @@ mod tests {
     #[case("alpha")]
     #[case("alpha-1")]
     #[case("alpha_beta")]
+    #[case("-alpha")]
     fn accepts_valid_long_flags(#[case] long: &str) {
         let name: Ident = parse_quote!(field);
         assert!(validate_cli_long(&name, long).is_ok());
@@ -461,7 +464,6 @@ mod tests {
     #[case("bad/flag")]
     #[case("has space")]
     #[case("*")]
-    #[case("-alpha")]
     #[case("_alpha")]
     fn rejects_invalid_long_flags(#[case] bad: &str) {
         let name: Ident = parse_quote!(field);
