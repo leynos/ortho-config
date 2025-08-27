@@ -22,6 +22,40 @@ fn file_error(path: &Path, err: impl Into<Box<dyn Error + Send + Sync>>) -> Orth
     }
 }
 
+/// Canonicalise `p` using platform-specific rules.
+///
+/// Returns an absolute, normalised path with symlinks resolved.
+///
+/// On Windows the [`dunce`] crate is used to avoid introducing UNC prefixes
+/// in diagnostic messages.
+///
+/// # Errors
+///
+/// Returns an [`OrthoError`] if canonicalisation fails.
+///
+/// # Examples
+///
+/// ```rust,no_run
+/// use std::path::Path;
+///
+/// # fn run() -> Result<(), ortho_config::OrthoError> {
+/// let p = Path::new("config.toml");
+/// let c = ortho_config::file::canonicalise(p)?;
+/// assert!(c.is_absolute());
+/// # Ok(())
+/// # }
+/// ```
+pub fn canonicalise(p: &Path) -> Result<PathBuf, OrthoError> {
+    #[cfg(windows)]
+    {
+        dunce::canonicalize(p).map_err(|e| file_error(p, e))
+    }
+    #[cfg(not(windows))]
+    {
+        std::fs::canonicalize(p).map_err(|e| file_error(p, e))
+    }
+}
+
 /// Parse configuration data according to the file extension.
 ///
 /// Supported formats are JSON5, YAML and TOML. The `json5` and `yaml`
@@ -174,11 +208,7 @@ fn resolve_base_path(current_path: &Path, base: PathBuf) -> Result<PathBuf, Orth
     } else {
         parent.join(base)
     };
-    #[cfg(windows)]
-    let canonical = dunce::canonicalize(&base).map_err(|e| file_error(&base, e))?;
-    #[cfg(not(windows))]
-    let canonical = std::fs::canonicalize(&base).map_err(|e| file_error(&base, e))?;
-    Ok(canonical)
+    canonicalise(&base)
 }
 
 /// Merge `figment` over its parent configuration.
@@ -286,10 +316,7 @@ fn load_config_file_inner(
     if !path.is_file() {
         return Ok(None);
     }
-    #[cfg(windows)]
-    let canonical = dunce::canonicalize(path).map_err(|e| file_error(path, e))?;
-    #[cfg(not(windows))]
-    let canonical = std::fs::canonicalize(path).map_err(|e| file_error(path, e))?;
+    let canonical = canonicalise(path)?;
     if !visited.insert(canonical.clone()) {
         let mut cycle: Vec<String> = stack.iter().map(|p| p.display().to_string()).collect();
         cycle.push(canonical.display().to_string());

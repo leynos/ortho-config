@@ -26,7 +26,7 @@ pub use xdg;
 
 mod csv_env;
 mod error;
-mod file;
+pub mod file;
 mod merge;
 pub mod subcommand;
 pub use crate::subcommand::SubcmdConfigMerge;

@@ -15,10 +15,7 @@ where
 }
 
 fn canonical_root_and_current() -> (PathBuf, PathBuf) {
-    #[cfg(windows)]
-    let root = dunce::canonicalize(".").expect("canonicalise root");
-    #[cfg(not(windows))]
-    let root = std::fs::canonicalize(".").expect("canonicalise root");
+    let root = canonicalise(Path::new(".")).expect("canonicalise root");
     let current = root.join("config.toml");
     (root, current)
 }
