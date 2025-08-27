@@ -1,4 +1,4 @@
-# OrthoConfig User's Guide
+# OrthoConfig user's guide
 
 `OrthoConfig` is a Rust library that unifies command‑line arguments,
 environment variables and configuration files into a single, strongly typed
@@ -36,8 +36,8 @@ values from multiple sources. The core features are:
   configuration struct and call a generated method to load the configuration.
 
 - **Customizable behaviour** – Attributes such as `default`, `cli_long`,
-  `cli_short` and `merge_strategy` provide fine‑grained control over naming and
-  merging behaviour.
+  `cli_short`, and `merge_strategy` provide fine‑grained control over naming
+  and merging behaviour.
 
 ## Installation and dependencies
 
@@ -479,7 +479,7 @@ Missing required values:
 
   ```rust
   #[derive(Debug, Deserialize, ortho_config::OrthoConfig)]
-  struct LagcArgs {
+  struct CliArgs {
       #[serde(skip)]
       #[ortho_config(cli_long = "config-path")] // or "config" to rename
       pub config_path: Option<std::path::PathBuf>,
