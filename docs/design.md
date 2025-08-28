@@ -162,13 +162,15 @@ This is the most complex component. It needs to perform the following using
    values. The macro translates `#[ortho_config(cli_long="…")]` and
    `#[ortho_config(cli_short='x')]` attributes into `#[arg(long=…, short=…)]`
    on this struct. When these attributes are absent, long names are derived
-   automatically from the field name using `kebab-case` and short names default
-   to the field's first character. If the short letter is already used, the
-   macro tries the upper-case variant. A further collision triggers a compile
-   error and requires the user to supply `cli_short`. Short flags must be ASCII
-   alphanumeric and cannot reuse clap's `-h` or `-V`. Long flags must contain
-   only ASCII alphanumeric characters plus `-` or `_` and may not be `help` or
-   `version`.
+   automatically from the field name with underscores replaced by hyphens (not
+   fully kebab-case), so the generator never emits underscores. Short names
+   default to the field's first character. If the short letter is already used,
+   the macro tries the upper-case variant. A further collision triggers a
+   compile error and requires the user to supply `cli_short`. Short flags must
+   be ASCII alphanumeric and cannot reuse clap's `-h` or `-V`. Generated long
+   flags use only ASCII alphanumeric plus `-`. When overriding with `cli_long`,
+   ASCII alphanumeric plus `-` and `_` are accepted. Long names may not be
+   `help` or `version`.
 3. **Generate `impl OrthoConfig for UserStruct`:**
    - This block contains the `load_from_iter` method used by the `load`
      convenience function.
@@ -185,8 +187,8 @@ The macro must enforce naming conventions automatically.
 
 - **Struct Field to CLI Flag:** A field `listen_port` should automatically
   become `--listen-port` unless overridden by
-  `#[ortho_config(cli_long = "…")]`. This involves converting `snake_case` to
-  `kebab-case`.
+  `#[ortho_config(cli_long = "…")]`. This involves replacing underscores with
+  hyphens (i.e., not fully kebab-case).
 - **Struct Field to Env Var:** A field `listen_port` within a struct with
   `#[ortho_config(prefix = "MY_APP")]` should become `MY_APP_LISTEN_PORT`.
   Nested structs (e.g., `database.url`) should become `MY_APP_DATABASE__URL`
@@ -434,7 +436,7 @@ to rename the hidden `--config-path` flag by defining their own field with a
    - Update the derive macro to generate the hidden `clap`-aware struct.
    - Integrate the parsed CLI arguments as the highest-precedence `figment`
      layer.
-   - Implement `snake_case` to `kebab-case` mapping for CLI flag generation.
+    - Replace underscores with hyphens for CLI flag generation.
 
 4. **V0.4 (Attribute Handling):**
 

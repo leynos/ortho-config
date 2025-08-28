@@ -103,9 +103,9 @@ final `extract()` call. Instead, it will:
    `#[ortho_config(prefix = "…")]` attribute.
 
 4. **Format the error message**: Using the template from section 1, it will
-   dynamically generate the CLI flags (by converting `snake_case` to
-   `kebab-case`), environment variables (using the prefix and converting to
-   `UPPER_SNAKE_CASE`), and TOML keys.
+   dynamically generate the CLI flags (by replacing underscores with hyphens,
+   i.e., not fully kebab-case), environment variables (using the prefix and
+   converting to `UPPER_SNAKE_CASE`), and TOML keys.
 
 5. **Return the new error**: The formatted string will be wrapped in the
    `OrthoError::MissingRequiredValues` variant and returned.

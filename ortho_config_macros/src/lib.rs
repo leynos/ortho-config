@@ -3,8 +3,9 @@
 //! The current implementation of the [`OrthoConfig`] derive provides a basic
 //! `load` method that layers configuration from a `config.toml` file,
 //! environment variables, and now command-line arguments via `clap`. CLI flag
-//! names are automatically generated from `snake_case` field names using the
-//! `kebab-case` convention.
+//! names are automatically generated from `snake_case` field names by replacing
+//! underscores with hyphens. Generated long flags therefore never include
+//! underscores; supply `cli_long` to specify them.
 
 use proc_macro::TokenStream;
 use quote::{format_ident, quote};
@@ -19,7 +20,7 @@ mod derive {
 use derive::build::{
     build_append_logic, build_cli_struct_fields, build_config_env_var, build_default_struct_fields,
     build_default_struct_init, build_dotfile_name, build_env_provider, build_override_struct,
-    build_xdg_snippet, collect_append_fields,
+    build_xdg_snippet, collect_append_fields, ensure_no_config_path_collision,
 };
 use derive::load_impl::{LoadImplArgs, LoadImplIdents, LoadImplTokens, build_load_impl};
 use derive::parse::parse_input;
@@ -73,6 +74,8 @@ fn build_macro_components(
         .any(|f| f.ident.as_ref().is_some_and(|id| id == "config_path"));
     let mut cli_struct_fields = build_cli_struct_fields(fields, field_attrs)?;
     if !has_user_config_path {
+        // Ensure no other field already uses "config-path"
+        ensure_no_config_path_collision(fields, field_attrs)?;
         cli_struct_fields.push(quote! {
             #[arg(long = "config-path", hide = true)]
             #[serde(skip_serializing_if = "Option::is_none")]

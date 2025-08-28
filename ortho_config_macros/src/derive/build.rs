@@ -25,8 +25,6 @@ fn option_type_tokens(ty: &Type) -> proc_macro2::TokenStream {
 ///
 /// # Examples
 ///
-/// ```ignore
-/// use std::collections::HashSet;
 /// Validates a user-supplied short flag and records it if free.
 ///
 /// ```ignore
@@ -62,6 +60,52 @@ fn validate_user_cli_short(
     Ok(user)
 }
 
+/// Returns `true` if the candidate short flag is free for use.
+///
+/// ```ignore
+/// use std::collections::HashSet;
+/// use ortho_config_macros::derive::build::is_short_flag_available;
+///
+/// let used: HashSet<char> = ['a'].into_iter().collect();
+/// assert!(!is_short_flag_available('a', &used));
+/// assert!(is_short_flag_available('b', &used));
+/// ```
+fn is_short_flag_available(candidate: char, used_shorts: &HashSet<char>) -> bool {
+    !RESERVED_SHORTS.contains(&candidate) && !used_shorts.contains(&candidate)
+}
+
+/// Generates lowercase and uppercase variants of the provided character.
+///
+/// ```ignore
+/// use ortho_config_macros::derive::build::generate_short_flag_candidates;
+///
+/// assert_eq!(generate_short_flag_candidates('a'), ['a', 'A']);
+/// assert_eq!(generate_short_flag_candidates('7'), ['7', '7']);
+/// ```
+fn generate_short_flag_candidates(ch: char) -> [char; 2] {
+    [ch.to_ascii_lowercase(), ch.to_ascii_uppercase()]
+}
+
+/// Attempts to claim the first available short flag from the candidates.
+///
+/// ```ignore
+/// use std::collections::HashSet;
+/// use ortho_config_macros::derive::build::try_claim_short_flag;
+///
+/// let mut used = HashSet::new();
+/// let claimed = try_claim_short_flag(['a', 'A'], &mut used);
+/// assert_eq!(claimed, Some('a'));
+/// ```
+fn try_claim_short_flag(candidates: [char; 2], used_shorts: &mut HashSet<char>) -> Option<char> {
+    for candidate in candidates {
+        if is_short_flag_available(candidate, used_shorts) {
+            used_shorts.insert(candidate);
+            return Some(candidate);
+        }
+    }
+    None
+}
+
 /// Derives a default short flag from the field name.
 ///
 /// ```ignore
@@ -75,19 +119,18 @@ fn validate_user_cli_short(
 /// assert_eq!(ch, 'f');
 /// ```
 fn find_default_short_flag(name: &Ident, used_shorts: &mut HashSet<char>) -> syn::Result<char> {
-    let default = name
-        .to_string()
-        .chars()
-        .next()
-        .expect("field has at least one char");
-    for &candidate in &[default, default.to_ascii_uppercase()] {
-        if !RESERVED_SHORTS.contains(&candidate) && used_shorts.insert(candidate) {
-            return Ok(candidate);
+    for ch in name.to_string().chars() {
+        if !ch.is_ascii_alphanumeric() {
+            continue;
+        }
+        let candidates = generate_short_flag_candidates(ch);
+        if let Some(c) = try_claim_short_flag(candidates, used_shorts) {
+            return Ok(c);
         }
     }
     Err(syn::Error::new_spanned(
         name,
-        "short flag collision; supply `cli_short` to disambiguate",
+        "unable to derive a short flag; supply `cli_short` to disambiguate",
     ))
 }
 
@@ -136,20 +179,21 @@ pub(crate) fn build_default_struct_fields(fields: &[syn::Field]) -> Vec<proc_mac
 
 /// Returns whether a long CLI flag is valid.
 ///
-/// A valid flag is non-empty and contains only ASCII alphanumeric, hyphen or
-/// underscore characters.
+/// A valid flag is non-empty, does not start with `-`, and contains only ASCII
+/// alphanumeric, hyphen or underscore characters.
 ///
 /// # Examples
 ///
 /// ```ignore
 /// use ortho_config_macros::derive::build::is_valid_cli_long;
 /// assert!(is_valid_cli_long("alpha-1"));
-/// assert!(is_valid_cli_long("-alpha"));
+/// assert!(!is_valid_cli_long("-alpha"));
 /// assert!(!is_valid_cli_long(""));
 /// assert!(!is_valid_cli_long("bad/flag"));
 /// ```
 fn is_valid_cli_long(long: &str) -> bool {
     !long.is_empty()
+        && !long.starts_with('-')
         && long
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
@@ -185,6 +229,12 @@ fn validate_cli_long(name: &Ident, long: &str) -> syn::Result<()> {
             format!("invalid `cli_long` value '{long}': must not start with '_'"),
         ));
     }
+    if long.starts_with('-') {
+        return Err(syn::Error::new_spanned(
+            name,
+            format!("invalid `cli_long` value '{long}': must not start with '-'"),
+        ));
+    }
     if RESERVED_LONGS.contains(&long) {
         return Err(syn::Error::new_spanned(
             name,
@@ -194,18 +244,48 @@ fn validate_cli_long(name: &Ident, long: &str) -> syn::Result<()> {
     Ok(())
 }
 
+/// Ensures no field's `cli_long` collides with the hidden `config-path` flag.
+pub(crate) fn ensure_no_config_path_collision(
+    fields: &[syn::Field],
+    field_attrs: &[FieldAttrs],
+) -> syn::Result<()> {
+    let mut used: HashSet<String> = HashSet::with_capacity(fields.len());
+    for (f, attrs) in fields.iter().zip(field_attrs) {
+        let name = f.ident.as_ref().expect("named field");
+        let long = attrs
+            .cli_long
+            .clone()
+            .unwrap_or_else(|| name.to_string().replace('_', "-"));
+        if long == "config-path" {
+            return Err(syn::Error::new_spanned(
+                name,
+                "duplicate `cli_long` value 'config-path' clashes with the hidden config flag; rename the field or specify a different `cli_long`",
+            ));
+        }
+        if !used.insert(long.clone()) {
+            return Err(syn::Error::new_spanned(
+                name,
+                format!("duplicate `cli_long` value '{long}'"),
+            ));
+        }
+    }
+    Ok(())
+}
+
 /// Generates the fields for the hidden `clap::Parser` struct.
 ///
 /// Each user field becomes `Option<T>` to record whether the CLI provided a
-/// value. Long names default to the field name converted to kebab-case and
-/// short names default to the first character of the field. These may be
-/// overridden via `cli_long` and `cli_short` attributes.
+/// value. Long names default to the field name with underscores replaced by
+/// hyphens, so generated long flags never include
+/// underscores. Short names default to the first ASCII alphanumeric character
+/// of the field. These may be overridden via `cli_long` and `cli_short`
+/// attributes.
 pub(crate) fn build_cli_struct_fields(
     fields: &[syn::Field],
     field_attrs: &[FieldAttrs],
 ) -> syn::Result<Vec<proc_macro2::TokenStream>> {
     let mut used_shorts = HashSet::new();
-    let mut used_longs: HashSet<String> = HashSet::new();
+    let mut used_longs: HashSet<String> = HashSet::with_capacity(fields.len());
     let mut result = Vec::with_capacity(fields.len());
 
     for (f, attrs) in fields.iter().zip(field_attrs) {
@@ -453,7 +533,7 @@ mod tests {
     #[case("alpha")]
     #[case("alpha-1")]
     #[case("alpha_beta")]
-    #[case("-alpha")]
+    // Leading '-' must be rejected; clap adds them
     fn accepts_valid_long_flags(#[case] long: &str) {
         let name: Ident = parse_quote!(field);
         assert!(validate_cli_long(&name, long).is_ok());
@@ -465,6 +545,7 @@ mod tests {
     #[case("has space")]
     #[case("*")]
     #[case("_alpha")]
+    #[case("-alpha")]
     fn rejects_invalid_long_flags(#[case] bad: &str) {
         let name: Ident = parse_quote!(field);
         let err = validate_cli_long(&name, bad).expect_err("should fail");
@@ -498,6 +579,25 @@ mod tests {
         let ch = resolve_short_flag(&name, &attrs, &mut used).expect("short flag");
         assert_eq!(ch, 'F');
         assert!(used.contains(&'F'));
+    }
+
+    #[rstest]
+    fn skips_leading_underscore_for_default_short() {
+        let name: Ident = parse_quote!(_alpha);
+        let attrs = FieldAttrs::default();
+        let mut used = HashSet::new();
+        let ch = resolve_short_flag(&name, &attrs, &mut used).expect("short flag");
+        assert_eq!(ch, 'a');
+        assert!(used.contains(&'a'));
+    }
+
+    #[rstest]
+    fn errors_when_no_alphanumeric_found() {
+        let name: Ident = parse_quote!(__);
+        let attrs = FieldAttrs::default();
+        let mut used = HashSet::new();
+        let err = resolve_short_flag(&name, &attrs, &mut used).expect_err("should fail");
+        assert!(err.to_string().contains("unable to derive a short flag"));
     }
 
     #[rstest]

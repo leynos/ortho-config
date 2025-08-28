@@ -3,7 +3,6 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize, Serialize, OrthoConfig)]
 struct Collide {
-    second: Option<String>,
-    sample: Option<String>,
-    spare: Option<String>,
+    vfield: Option<String>,
+    V: Option<String>,
 }
