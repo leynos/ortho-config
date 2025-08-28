@@ -508,8 +508,9 @@ Missing required values:
   `Toml::string` for `.toml` files.
 
 - **Changing naming conventions** – Currently, only the default
-  snake/kebab/upper snake mappings are supported. Future versions may introduce
-  attributes such as `file_key` or `env` to customize names further.
+  snake/hyphenated (underscores → hyphens)/upper snake mappings are supported.
+  Future versions may introduce attributes such as `file_key` or `env` to
+  customize names further.
 
 - **Testing** – Because the CLI and environment variables are merged at
   runtime, integration tests should set environment variables and construct CLI

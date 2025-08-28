@@ -25,8 +25,6 @@ fn option_type_tokens(ty: &Type) -> proc_macro2::TokenStream {
 ///
 /// # Examples
 ///
-/// ```ignore
-/// use std::collections::HashSet;
 /// Validates a user-supplied short flag and records it if free.
 ///
 /// ```ignore
@@ -241,7 +239,7 @@ pub(crate) fn ensure_no_config_path_collision(
 ///
 /// Each user field becomes `Option<T>` to record whether the CLI provided a
 /// value. Long names default to the field name with underscores replaced by
-/// hyphens (i.e., not fully kebab-case), so generated long flags never include
+/// hyphens, so generated long flags never include
 /// underscores. Short names default to the first ASCII alphanumeric character
 /// of the field. These may be overridden via `cli_long` and `cli_short`
 /// attributes.
