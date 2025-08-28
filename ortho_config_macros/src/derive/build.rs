@@ -60,6 +60,52 @@ fn validate_user_cli_short(
     Ok(user)
 }
 
+/// Returns `true` if the candidate short flag is free for use.
+///
+/// ```ignore
+/// use std::collections::HashSet;
+/// use ortho_config_macros::derive::build::is_short_flag_available;
+///
+/// let used: HashSet<char> = ['a'].into_iter().collect();
+/// assert!(!is_short_flag_available('a', &used));
+/// assert!(is_short_flag_available('b', &used));
+/// ```
+fn is_short_flag_available(candidate: char, used_shorts: &HashSet<char>) -> bool {
+    !RESERVED_SHORTS.contains(&candidate) && !used_shorts.contains(&candidate)
+}
+
+/// Generates lowercase and uppercase variants of the provided character.
+///
+/// ```ignore
+/// use ortho_config_macros::derive::build::generate_short_flag_candidates;
+///
+/// assert_eq!(generate_short_flag_candidates('a'), ['a', 'A']);
+/// assert_eq!(generate_short_flag_candidates('7'), ['7', '7']);
+/// ```
+fn generate_short_flag_candidates(ch: char) -> [char; 2] {
+    [ch.to_ascii_lowercase(), ch.to_ascii_uppercase()]
+}
+
+/// Attempts to claim the first available short flag from the candidates.
+///
+/// ```ignore
+/// use std::collections::HashSet;
+/// use ortho_config_macros::derive::build::try_claim_short_flag;
+///
+/// let mut used = HashSet::new();
+/// let claimed = try_claim_short_flag(['a', 'A'], &mut used);
+/// assert_eq!(claimed, Some('a'));
+/// ```
+fn try_claim_short_flag(candidates: [char; 2], used_shorts: &mut HashSet<char>) -> Option<char> {
+    for candidate in candidates {
+        if is_short_flag_available(candidate, used_shorts) {
+            used_shorts.insert(candidate);
+            return Some(candidate);
+        }
+    }
+    None
+}
+
 /// Derives a default short flag from the field name.
 ///
 /// ```ignore
@@ -73,23 +119,14 @@ fn validate_user_cli_short(
 /// assert_eq!(ch, 'f');
 /// ```
 fn find_default_short_flag(name: &Ident, used_shorts: &mut HashSet<char>) -> syn::Result<char> {
-    let mut chosen: Option<char> = None;
     for ch in name.to_string().chars() {
         if !ch.is_ascii_alphanumeric() {
             continue;
         }
-        for candidate in [ch.to_ascii_lowercase(), ch.to_ascii_uppercase()] {
-            if !RESERVED_SHORTS.contains(&candidate) && used_shorts.insert(candidate) {
-                chosen = Some(candidate);
-                break;
-            }
+        let candidates = generate_short_flag_candidates(ch);
+        if let Some(c) = try_claim_short_flag(candidates, used_shorts) {
+            return Ok(c);
         }
-        if chosen.is_some() {
-            break;
-        }
-    }
-    if let Some(c) = chosen {
-        return Ok(c);
     }
     Err(syn::Error::new_spanned(
         name,
