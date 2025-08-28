@@ -75,19 +75,27 @@ fn validate_user_cli_short(
 /// assert_eq!(ch, 'f');
 /// ```
 fn find_default_short_flag(name: &Ident, used_shorts: &mut HashSet<char>) -> syn::Result<char> {
-    let default = name
-        .to_string()
-        .chars()
-        .next()
-        .expect("field has at least one char");
-    for &candidate in &[default, default.to_ascii_uppercase()] {
-        if !RESERVED_SHORTS.contains(&candidate) && used_shorts.insert(candidate) {
-            return Ok(candidate);
+    let mut chosen: Option<char> = None;
+    for ch in name.to_string().chars() {
+        if !ch.is_ascii_alphanumeric() {
+            continue;
         }
+        for candidate in [ch.to_ascii_lowercase(), ch.to_ascii_uppercase()] {
+            if !RESERVED_SHORTS.contains(&candidate) && used_shorts.insert(candidate) {
+                chosen = Some(candidate);
+                break;
+            }
+        }
+        if chosen.is_some() {
+            break;
+        }
+    }
+    if let Some(c) = chosen {
+        return Ok(c);
     }
     Err(syn::Error::new_spanned(
         name,
-        "short flag collision; supply `cli_short` to disambiguate",
+        "unable to derive a short flag; supply `cli_short` to disambiguate",
     ))
 }
 
@@ -136,20 +144,21 @@ pub(crate) fn build_default_struct_fields(fields: &[syn::Field]) -> Vec<proc_mac
 
 /// Returns whether a long CLI flag is valid.
 ///
-/// A valid flag is non-empty and contains only ASCII alphanumeric, hyphen or
-/// underscore characters.
+/// A valid flag is non-empty, does not start with `-`, and contains only ASCII
+/// alphanumeric, hyphen or underscore characters.
 ///
 /// # Examples
 ///
 /// ```ignore
 /// use ortho_config_macros::derive::build::is_valid_cli_long;
 /// assert!(is_valid_cli_long("alpha-1"));
-/// assert!(is_valid_cli_long("-alpha"));
+/// assert!(!is_valid_cli_long("-alpha"));
 /// assert!(!is_valid_cli_long(""));
 /// assert!(!is_valid_cli_long("bad/flag"));
 /// ```
 fn is_valid_cli_long(long: &str) -> bool {
     !long.is_empty()
+        && !long.starts_with('-')
         && long
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
@@ -185,10 +194,44 @@ fn validate_cli_long(name: &Ident, long: &str) -> syn::Result<()> {
             format!("invalid `cli_long` value '{long}': must not start with '_'"),
         ));
     }
+    if long.starts_with('-') {
+        return Err(syn::Error::new_spanned(
+            name,
+            format!("invalid `cli_long` value '{long}': must not start with '-'"),
+        ));
+    }
     if RESERVED_LONGS.contains(&long) {
         return Err(syn::Error::new_spanned(
             name,
             format!("reserved `cli_long` value '{long}': conflicts with global clap flags"),
+        ));
+    }
+    Ok(())
+}
+
+/// Ensures no field's `cli_long` collides with the hidden `config-path` flag.
+pub(crate) fn ensure_no_config_path_collision(
+    fields: &[syn::Field],
+    field_attrs: &[FieldAttrs],
+) -> syn::Result<()> {
+    let mut used: HashSet<String> = HashSet::with_capacity(fields.len());
+    for (f, attrs) in fields.iter().zip(field_attrs) {
+        let name = f.ident.as_ref().expect("named field");
+        let long = attrs
+            .cli_long
+            .clone()
+            .unwrap_or_else(|| name.to_string().replace('_', "-"));
+        if !used.insert(long.clone()) {
+            return Err(syn::Error::new_spanned(
+                name,
+                format!("duplicate `cli_long` value '{long}'"),
+            ));
+        }
+    }
+    if used.contains("config-path") {
+        return Err(syn::Error::new(
+            proc_macro2::Span::call_site(),
+            "duplicate `cli_long` value 'config-path' clashes with the hidden config flag; rename the field or specify a different `cli_long`",
         ));
     }
     Ok(())
@@ -199,8 +242,9 @@ fn validate_cli_long(name: &Ident, long: &str) -> syn::Result<()> {
 /// Each user field becomes `Option<T>` to record whether the CLI provided a
 /// value. Long names default to the field name with underscores replaced by
 /// hyphens (i.e., not fully kebab-case), so generated long flags never include
-/// underscores. Short names default to the first character of the field. These
-/// may be overridden via `cli_long` and `cli_short` attributes.
+/// underscores. Short names default to the first ASCII alphanumeric character
+/// of the field. These may be overridden via `cli_long` and `cli_short`
+/// attributes.
 pub(crate) fn build_cli_struct_fields(
     fields: &[syn::Field],
     field_attrs: &[FieldAttrs],
@@ -454,7 +498,7 @@ mod tests {
     #[case("alpha")]
     #[case("alpha-1")]
     #[case("alpha_beta")]
-    #[case("-alpha")]
+    // Leading '-' must be rejected; clap adds them
     fn accepts_valid_long_flags(#[case] long: &str) {
         let name: Ident = parse_quote!(field);
         assert!(validate_cli_long(&name, long).is_ok());
@@ -466,6 +510,7 @@ mod tests {
     #[case("has space")]
     #[case("*")]
     #[case("_alpha")]
+    #[case("-alpha")]
     fn rejects_invalid_long_flags(#[case] bad: &str) {
         let name: Ident = parse_quote!(field);
         let err = validate_cli_long(&name, bad).expect_err("should fail");
@@ -499,6 +544,25 @@ mod tests {
         let ch = resolve_short_flag(&name, &attrs, &mut used).expect("short flag");
         assert_eq!(ch, 'F');
         assert!(used.contains(&'F'));
+    }
+
+    #[rstest]
+    fn skips_leading_underscore_for_default_short() {
+        let name: Ident = parse_quote!(_alpha);
+        let attrs = FieldAttrs::default();
+        let mut used = HashSet::new();
+        let ch = resolve_short_flag(&name, &attrs, &mut used).expect("short flag");
+        assert_eq!(ch, 'a');
+        assert!(used.contains(&'a'));
+    }
+
+    #[rstest]
+    fn errors_when_no_alphanumeric_found() {
+        let name: Ident = parse_quote!(__);
+        let attrs = FieldAttrs::default();
+        let mut used = HashSet::new();
+        let err = resolve_short_flag(&name, &attrs, &mut used).expect_err("should fail");
+        assert!(err.to_string().contains("unable to derive a short flag"));
     }
 
     #[rstest]

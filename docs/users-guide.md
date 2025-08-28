@@ -154,13 +154,13 @@ stricter validation may add manual `compile_error!` guards.
 
 By default, each field receives a long flag derived from its name with
 underscores replaced by hyphens (not fully kebab-case) and a short flag from
-its first letter. If that letter is already used, the macro assigns the
-upper-case variant to the next field. Further collisions require specifying
-`cli_short` explicitly. Short flags must be ASCII alphanumeric and may not use
-clap's global `-h` or `-V` options. Generated long flags use only ASCII
-alphanumeric plus `-` and must not start with `-` or `_`. When overriding with
-`cli_long`, ASCII alphanumeric plus `-` and `_` are accepted, but the name must
-not start with `-` or `_`. Long names may not be `help` or `version`.
+its first ASCII alphanumeric character. If that character is already used, the
+macro assigns the opposite case variant for letters. Further collisions require
+specifying `cli_short` explicitly. Short flags must be ASCII alphanumeric and
+may not use clap's global `-h` or `-V` options. Generated long flags use only
+ASCII alphanumeric plus `-` and must not start with `-` or `_`. When overriding
+with `cli_long`, ASCII alphanumeric plus `-` and `_` are accepted, but the name
+must not start with `-` or `_`. Long names may not be `help` or `version`.
 
 ### Example configuration struct
 
