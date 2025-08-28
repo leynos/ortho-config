@@ -25,8 +25,10 @@ automatically loading values from multiple sources. The core features are:
 
 - **Orthographic naming** – A single field in a Rust struct is automatically
   mapped to a CLI flag with underscores replaced by hyphens (not fully
-  kebab‑case), an environment variable (upper snake case with a prefix), and a
-  file key (snake case). This removes the need for manual aliasing.
+  kebab‑case). Generated long flags never include underscores; when required,
+  `cli_long` may specify them. Each field also maps to an environment variable
+  (upper snake case with a prefix) and a file key (snake case). This removes
+  the need for manual aliasing.
 
 - **Type‑safe deserialization** – Values are deserialized into strongly typed
   Rust structs using `serde`.
@@ -155,9 +157,9 @@ underscores replaced by hyphens (not fully kebab-case) and a short flag from
 its first letter. If that letter is already used, the macro assigns the
 upper-case variant to the next field. Further collisions require specifying
 `cli_short` explicitly. Short flags must be ASCII alphanumeric and may not use
-clap's global `-h` or `-V` options. Long flags must contain only ASCII
-alphanumeric characters, hyphens or underscores and cannot be named `help` or
-`version`.
+clap's global `-h` or `-V` options. Generated long flags use only ASCII
+alphanumeric plus `-`. When overriding with `cli_long`, ASCII alphanumeric plus
+`-` and `_` are accepted. Long names cannot be named `help` or `version`.
 
 ### Example configuration struct
 

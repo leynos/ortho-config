@@ -163,12 +163,14 @@ This is the most complex component. It needs to perform the following using
    `#[ortho_config(cli_short='x')]` attributes into `#[arg(long=…, short=…)]`
    on this struct. When these attributes are absent, long names are derived
    automatically from the field name with underscores replaced by hyphens (not
-   fully kebab-case), and short names default to the field's first character.
-   If the short letter is already used, the macro tries the upper-case variant.
-   A further collision triggers a compile error and requires the user to supply
-   `cli_short`. Short flags must be ASCII alphanumeric and cannot reuse clap's
-   `-h` or `-V`. Long flags must contain only ASCII alphanumeric characters
-   plus `-` or `_` and may not be `help` or `version`.
+   fully kebab-case), so the generator never emits underscores. Short names
+   default to the field's first character. If the short letter is already used,
+   the macro tries the upper-case variant. A further collision triggers a
+   compile error and requires the user to supply `cli_short`. Short flags must
+   be ASCII alphanumeric and cannot reuse clap's `-h` or `-V`. Generated long
+   flags use only ASCII alphanumeric plus `-`. When overriding with `cli_long`,
+   ASCII alphanumeric plus `-` and `_` are accepted. Long names may not be
+   `help` or `version`.
 3. **Generate `impl OrthoConfig for UserStruct`:**
    - This block contains the `load_from_iter` method used by the `load`
      convenience function.

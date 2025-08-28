@@ -198,9 +198,9 @@ fn validate_cli_long(name: &Ident, long: &str) -> syn::Result<()> {
 ///
 /// Each user field becomes `Option<T>` to record whether the CLI provided a
 /// value. Long names default to the field name with underscores replaced by
-/// hyphens (i.e., not fully kebab-case), and short names default to the first
-/// character of the field. These may be overridden via `cli_long` and
-/// `cli_short` attributes.
+/// hyphens (i.e., not fully kebab-case), so generated long flags never include
+/// underscores. Short names default to the first character of the field. These
+/// may be overridden via `cli_long` and `cli_short` attributes.
 pub(crate) fn build_cli_struct_fields(
     fields: &[syn::Field],
     field_attrs: &[FieldAttrs],

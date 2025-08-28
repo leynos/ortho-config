@@ -4,7 +4,8 @@
 //! `load` method that layers configuration from a `config.toml` file,
 //! environment variables, and now command-line arguments via `clap`. CLI flag
 //! names are automatically generated from `snake_case` field names by replacing
-//! underscores with hyphens (i.e., not fully kebab-case).
+//! underscores with hyphens (i.e., not fully kebab-case). Generated long flags
+//! therefore never include underscores; supply `cli_long` to specify them.
 
 use proc_macro::TokenStream;
 use quote::{format_ident, quote};
