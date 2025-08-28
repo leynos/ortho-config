@@ -103,19 +103,19 @@ def test_update_markdown_versions_behavior(
 
 
 def test_replace_fences_preserves_indentation() -> None:
-    md_text = (
-        "1. item\n\n"
-        "    ```toml\n"
-        "    [dependencies]\n"
-        '    foo = "0"\n'
-        "    ```\n"
-    )
+    md_text = """1. item
+
+    ```toml
+    [dependencies]
+    foo = "0"
+    ```
+"""
     replaced = replace_fences(md_text, "toml", lambda body: body.replace("0", "1"))
-    expected = (
-        "1. item\n\n"
-        "    ```toml\n"
-        "    [dependencies]\n"
-        '    foo = "1"\n'
-        "    ```\n"
-    )
+    expected = """1. item
+
+    ```toml
+    [dependencies]
+    foo = "1"
+    ```
+"""
     assert replaced == expected

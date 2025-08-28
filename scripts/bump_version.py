@@ -171,12 +171,12 @@ def _update_dict_dependency(
     >>> entry["version"].value
     '^1.2.3'
     """
-    if entry.get("workspace") is True:
+    if bool(entry.get("workspace")) is True:
         return
     prefix = _extract_version_prefix(entry)
     existing = entry.get("version")
     if isinstance(existing, tomlkit.items.String):
-        existing._original = prefix + version
+        existing._original = prefix + version  # value is read-only in tomlkit 0.13
     else:
         entry["version"] = prefix + version
 
