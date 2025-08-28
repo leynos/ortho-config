@@ -3,8 +3,8 @@
 //! The current implementation of the [`OrthoConfig`] derive provides a basic
 //! `load` method that layers configuration from a `config.toml` file,
 //! environment variables, and now command-line arguments via `clap`. CLI flag
-//! names are automatically generated from `snake_case` field names using the
-//! `kebab-case` convention.
+//! names are automatically generated from `snake_case` field names by replacing
+//! underscores with hyphens (i.e., not fully kebab-case).
 
 use proc_macro::TokenStream;
 use quote::{format_ident, quote};

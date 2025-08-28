@@ -197,15 +197,16 @@ fn validate_cli_long(name: &Ident, long: &str) -> syn::Result<()> {
 /// Generates the fields for the hidden `clap::Parser` struct.
 ///
 /// Each user field becomes `Option<T>` to record whether the CLI provided a
-/// value. Long names default to the field name converted to kebab-case and
-/// short names default to the first character of the field. These may be
-/// overridden via `cli_long` and `cli_short` attributes.
+/// value. Long names default to the field name with underscores replaced by
+/// hyphens (i.e., not fully kebab-case), and short names default to the first
+/// character of the field. These may be overridden via `cli_long` and
+/// `cli_short` attributes.
 pub(crate) fn build_cli_struct_fields(
     fields: &[syn::Field],
     field_attrs: &[FieldAttrs],
 ) -> syn::Result<Vec<proc_macro2::TokenStream>> {
     let mut used_shorts = HashSet::new();
-    let mut used_longs: HashSet<String> = HashSet::new();
+    let mut used_longs: HashSet<String> = HashSet::with_capacity(fields.len());
     let mut result = Vec::with_capacity(fields.len());
 
     for (f, attrs) in fields.iter().zip(field_attrs) {

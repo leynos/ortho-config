@@ -59,9 +59,10 @@ references the relevant design guidance.
 
 - [x] **Finish `clap` integration in the derive macro**
 
-  - [x] Generate a hidden `clap::Parser` struct that automatically derives long
-    and short option names from field names (snake_case → kebab‑case) unless
-    overridden via `#[ortho_config(cli_long = "…")]`. [[Design](design.md)]
+  - [x] Generate a hidden `clap::Parser` struct that automatically derives
+      long
+      and short option names from field names (underscores → hyphens) unless
+      overridden via `#[ortho_config(cli_long = "…")]`. [[Design](design.md)]
 
   - [x] Ensure the macro sets appropriate `#[clap(long, short)]` attributes and
     respects default values specified in struct attributes.

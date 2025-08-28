@@ -12,11 +12,11 @@ repository.
 
 Rust projects often wire together `clap` for CLI parsing, `serde` for
 de/serialization, and ad‑hoc code for loading `*.toml` files or reading
-environment variables. Mapping between different naming conventions (kebab‑case
-flags, `UPPER_SNAKE_CASE` environment variables, and `snake_case` struct
-fields) can be tedious. `OrthoConfig` addresses these problems by letting
-developers describe their configuration once and then automatically loading
-values from multiple sources. The core features are:
+environment variables. Mapping between different naming conventions
+(hyphen‑separated flags, `UPPER_SNAKE_CASE` environment variables, and
+`snake_case` struct fields) can be tedious. `OrthoConfig` addresses these
+problems by letting developers describe their configuration once and then
+automatically loading values from multiple sources. The core features are:
 
 - **Layered configuration** – Configuration values can come from application
   defaults, configuration files, environment variables and command‑line
@@ -24,9 +24,9 @@ values from multiple sources. The core features are:
   the highest precedence and defaults the lowest.
 
 - **Orthographic naming** – A single field in a Rust struct is automatically
-  mapped to a CLI flag (kebab‑case), an environment variable (upper snake case
-  with a prefix), and a file key (snake case). This removes the need for manual
-  aliasing.
+  mapped to a CLI flag with underscores replaced by hyphens (not fully
+  kebab‑case), an environment variable (upper snake case with a prefix), and a
+  file key (snake case). This removes the need for manual aliasing.
 
 - **Type‑safe deserialization** – Values are deserialized into strongly typed
   Rust structs using `serde`.
@@ -142,7 +142,7 @@ Field attributes modify how a field is sourced or merged:
 | Attribute                   | Behaviour                                                                                                                                                                     |
 | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `default = expr`            | Supplies a default value when no source provides one. The expression can be a literal or a function path.                                                                     |
-| `cli_long = "name"`         | Overrides the automatically generated long CLI flag (kebab‑case).                                                                                                             |
+| `cli_long = "name"`         | Overrides the generated long CLI flag (underscores → hyphens).                                                                                                                |
 | `cli_short = 'c'`           | Adds a single‑letter short flag for the field.                                                                                                                                |
 | `merge_strategy = "append"` | For `Vec<T>` fields, specifies that values from different sources should be concatenated. This is currently the only supported strategy and is the default for vector fields. |
 
@@ -150,13 +150,14 @@ Unrecognized keys are ignored by the derive macro for forwards compatibility.
 Unknown keys will therefore silently do nothing. Developers who require
 stricter validation may add manual `compile_error!` guards.
 
-By default, each field receives a long flag derived from its name in kebab-case
-and a short flag from its first letter. If that letter is already used, the
-macro assigns the upper-case variant to the next field. Further collisions
-require specifying `cli_short` explicitly. Short flags must be ASCII
-alphanumeric and may not use clap's global `-h` or `-V` options. Long flags
-must contain only ASCII alphanumeric characters, hyphens or underscores and
-cannot be named `help` or `version`.
+By default, each field receives a long flag derived from its name with
+underscores replaced by hyphens (not fully kebab-case) and a short flag from
+its first letter. If that letter is already used, the macro assigns the
+upper-case variant to the next field. Further collisions require specifying
+`cli_short` explicitly. Short flags must be ASCII alphanumeric and may not use
+clap's global `-h` or `-V` options. Long flags must contain only ASCII
+alphanumeric characters, hyphens or underscores and cannot be named `help` or
+`version`.
 
 ### Example configuration struct
 
