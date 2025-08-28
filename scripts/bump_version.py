@@ -21,7 +21,7 @@ import sys
 import tempfile
 from collections.abc import Mapping, MutableMapping
 from pathlib import Path
-from typing import Any, Callable
+from typing import Callable
 
 import tomlkit
 from markdown_it import MarkdownIt
@@ -61,9 +61,18 @@ def replace_fences(md_text: str, lang: str, replace_fn: Callable[[str], str]) ->
         start, end = tok.map
         out.append("".join(lines[last:start]))
         fence_marker = tok.markup or "```"
+        # Preserve original indentation from the opening fence line
+        opening_line = lines[start]
+        indent_len = opening_line.find(fence_marker)
+        indent = "" if indent_len < 0 else opening_line[:indent_len]
         info = tok.info or lang
         new_body = replace_fn(tok.content)
-        out.append(f"{fence_marker}{info}\n{new_body}\n{fence_marker}\n")
+        indented_body = "".join(
+            f"{indent}{line}" for line in new_body.splitlines(keepends=True)
+        )
+        out.append(
+            f"{indent}{fence_marker}{info}\n{indented_body}{indent}{fence_marker}\n"
+        )
         last = end
     out.append("".join(lines[last:]))
     return "".join(out)
@@ -123,15 +132,12 @@ def _update_dict_dependency(
     >>> entry["version"].value
     '^1.2.3'
     """
+    if entry.get("workspace") is True:
+        return
     prefix = _extract_version_prefix(entry)
     existing = entry.get("version")
     if isinstance(existing, tomlkit.items.String):
-        new = tomlkit.string(prefix + version)
-        new.trivia.indent = existing.trivia.indent
-        new.trivia.comment_ws = existing.trivia.comment_ws
-        new.trivia.comment = existing.trivia.comment
-        new.trivia.trail = existing.trivia.trail
-        entry["version"] = new
+        existing._original = prefix + version
     else:
         entry["version"] = prefix + version
 
@@ -139,7 +145,7 @@ def _update_dict_dependency(
 def _update_string_dependency(
     deps: MutableMapping[str, object],
     dependency: str,
-    entry: Any,
+    entry: tomlkit.items.String | str,
     version: str,
 ) -> None:
     """Update string-style dependency ``dependency`` in ``deps``.
@@ -154,12 +160,7 @@ def _update_string_dependency(
     """
     prefix = _extract_version_prefix(entry)
     if isinstance(entry, tomlkit.items.String):
-        new = tomlkit.string(prefix + version)
-        new.trivia.indent = entry.trivia.indent
-        new.trivia.comment_ws = entry.trivia.comment_ws
-        new.trivia.comment = entry.trivia.comment
-        new.trivia.trail = entry.trivia.trail
-        deps[dependency] = new
+        entry._original = prefix + version  # preserve comments/formatting
     else:
         deps[dependency] = prefix + version
 
