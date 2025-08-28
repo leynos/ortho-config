@@ -59,31 +59,40 @@ def test_missing_dependency_no_change() -> None:
     assert tomlkit.dumps(doc).strip() == snippet, "should be a no-op when dependency is absent"
 
 
-def test_update_markdown_versions_updates_toml_fences(tmp_path: Path) -> None:
-    md_text = """pre
+@pytest.mark.parametrize(
+    "md_text, should_change, description",
+    [
+        (
+            """pre
 ```toml
 [dependencies]
-ortho_config = "0"
+ortho_config = \"0\"
 ```
 post
-"""
+""",
+            True,
+            "must update TOML fences",
+        ),
+        (
+            "pre\n```bash\necho hi\n```\npost\n",
+            False,
+            "must leave non-TOML fences unchanged",
+        ),
+    ],
+)
+def test_update_markdown_versions_behavior(
+    tmp_path: Path, md_text: str, should_change: bool, description: str
+) -> None:
     for rel in ("README.md", "docs/users-guide.md"):
         md_path = tmp_path / rel
         md_path.parent.mkdir(parents=True, exist_ok=True)
         md_path.write_text(md_text)
         _update_markdown_versions(md_path, "1")
         updated = md_path.read_text()
-        assert 'ortho_config = "1"' in updated, "must update TOML fences"
-
-
-def test_update_markdown_versions_ignores_non_toml_fences(tmp_path: Path) -> None:
-    md_text = "pre\n```bash\necho hi\n```\npost\n"
-    for rel in ("README.md", "docs/users-guide.md"):
-        md_path = tmp_path / rel
-        md_path.parent.mkdir(parents=True, exist_ok=True)
-        md_path.write_text(md_text)
-        _update_markdown_versions(md_path, "1")
-        assert md_path.read_text() == md_text, "must leave non-TOML fences unchanged"
+        if should_change:
+            assert 'ortho_config = "1"' in updated, description
+        else:
+            assert updated == md_text, description
 
 
 def test_replace_fences_preserves_indentation() -> None:

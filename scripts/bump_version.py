@@ -28,6 +28,60 @@ from markdown_it import MarkdownIt
 from tomlkit.exceptions import TOMLKitError
 
 
+def _is_matching_fence_token(tok, lang: str) -> bool:
+    """Return ``True`` if ``tok`` is a fence of ``lang``.
+
+    Examples
+    --------
+    >>> from markdown_it import MarkdownIt
+    >>> tok = MarkdownIt("commonmark").parse('```toml\n```')[0]
+    >>> _is_matching_fence_token(tok, 'toml')
+    True
+    """
+    if tok.type != "fence":
+        return False
+    info_lang = ((tok.info or "").split()[0] or "").lower()
+    return info_lang == lang.lower()
+
+
+def _extract_fence_indent(opening_line: str, fence_marker: str) -> str:
+    """Return indentation preceding ``fence_marker`` in ``opening_line``.
+
+    Examples
+    --------
+    >>> _extract_fence_indent('  ```toml', '```')
+    '  '
+    """
+    pos = opening_line.find(fence_marker)
+    return "" if pos < 0 else opening_line[:pos]
+
+
+def _process_fence_token(
+    tok,
+    lines: list[str],
+    lang: str,
+    replace_fn: Callable[[str], str],
+) -> str:
+    """Return rewritten fence text for ``tok``.
+
+    Examples
+    --------
+    >>> md = '```toml\nfoo\n```\n'
+    >>> tokens = MarkdownIt('commonmark').parse(md)
+    >>> _process_fence_token(tokens[0], md.splitlines(keepends=True), 'toml', str.upper)
+    '```toml\nFOO\n```\n'
+    """
+    start, _ = tok.map
+    fence_marker = tok.markup or "```"
+    indent = _extract_fence_indent(lines[start], fence_marker)
+    info = tok.info or lang
+    new_body = replace_fn(tok.content)
+    indented = "".join(
+        f"{indent}{line}" for line in new_body.splitlines(keepends=True)
+    )
+    return f"{indent}{fence_marker}{info}\n{indented}{indent}{fence_marker}\n"
+
+
 def replace_fences(md_text: str, lang: str, replace_fn: Callable[[str], str]) -> str:
     """Apply ``replace_fn`` to fenced code blocks of ``lang`` in Markdown text.
 
@@ -53,26 +107,11 @@ def replace_fences(md_text: str, lang: str, replace_fn: Callable[[str], str]) ->
     out: list[str] = []
     last = 0
     for tok in tokens:
-        if tok.type != "fence":
-            continue
-        info_lang = ((tok.info or "").split()[0] or "").lower()
-        if info_lang != lang.lower():
+        if not _is_matching_fence_token(tok, lang):
             continue
         start, end = tok.map
         out.append("".join(lines[last:start]))
-        fence_marker = tok.markup or "```"
-        # Preserve original indentation from the opening fence line
-        opening_line = lines[start]
-        indent_len = opening_line.find(fence_marker)
-        indent = "" if indent_len < 0 else opening_line[:indent_len]
-        info = tok.info or lang
-        new_body = replace_fn(tok.content)
-        indented_body = "".join(
-            f"{indent}{line}" for line in new_body.splitlines(keepends=True)
-        )
-        out.append(
-            f"{indent}{fence_marker}{info}\n{indented_body}{indent}{fence_marker}\n"
-        )
+        out.append(_process_fence_token(tok, lines, lang, replace_fn))
         last = end
     out.append("".join(lines[last:]))
     return "".join(out)
