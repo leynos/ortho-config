@@ -59,6 +59,13 @@ def test_missing_dependency_no_change() -> None:
     assert tomlkit.dumps(doc).strip() == snippet, "should be a no-op when dependency is absent"
 
 
+def test_workspace_dependency_no_version_written() -> None:
+    doc = tomlkit.parse('[dependencies]\nfoo = { workspace = true }\n')
+    _update_dependency_version(doc, 'foo', '1.2.3')
+    deps = doc['dependencies']['foo']
+    assert 'version' not in deps, 'must not add version when workspace is true'
+
+
 @pytest.mark.parametrize(
     "md_text, should_change, description",
     [
