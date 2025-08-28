@@ -81,7 +81,12 @@ post
             "must update TOML fences",
         ),
         (
-            "pre\n```bash\necho hi\n```\npost\n",
+            """pre
+```bash
+echo hi
+```
+post
+""",
             False,
             "must leave non-TOML fences unchanged",
         ),
