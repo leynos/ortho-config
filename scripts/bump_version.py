@@ -176,7 +176,10 @@ def _update_dict_dependency(
     prefix = _extract_version_prefix(entry)
     existing = entry.get("version")
     if isinstance(existing, tomlkit.items.String):
-        existing._original = prefix + version  # value is read-only in tomlkit 0.13
+        try:
+            setattr(existing, "value", prefix + version)
+        except AttributeError:  # tomlkit <0.14 lacks a value setter
+            existing._original = prefix + version
     else:
         entry["version"] = prefix + version
 
@@ -199,7 +202,10 @@ def _update_string_dependency(
     """
     prefix = _extract_version_prefix(entry)
     if isinstance(entry, tomlkit.items.String):
-        entry._original = prefix + version  # preserve comments/formatting
+        try:
+            setattr(entry, "value", prefix + version)
+        except AttributeError:  # tomlkit <0.14 lacks a value setter
+            entry._original = prefix + version
     else:
         deps[dependency] = prefix + version
 
