@@ -12,11 +12,12 @@ repository.
 
 Rust projects often wire together `clap` for CLI parsing, `serde` for
 de/serialization, and ad‑hoc code for loading `*.toml` files or reading
-environment variables. Mapping between different naming conventions
-(hyphen‑separated flags, `UPPER_SNAKE_CASE` environment variables, and
-`snake_case` struct fields) can be tedious. `OrthoConfig` addresses these
-problems by letting developers describe their configuration once and then
-automatically loading values from multiple sources. The core features are:
+environment variables. Mapping between different naming conventions (long flags
+where underscores are converted to hyphens, `UPPER_SNAKE_CASE` environment
+variables, and `snake_case` struct fields) can be tedious. `OrthoConfig`
+addresses these problems by letting developers describe their configuration
+once and then automatically loading values from multiple sources. The core
+features are:
 
 - **Layered configuration** – Configuration values can come from application
   defaults, configuration files, environment variables and command‑line
@@ -25,10 +26,11 @@ automatically loading values from multiple sources. The core features are:
 
 - **Orthographic naming** – A single field in a Rust struct is automatically
   mapped to a CLI flag with underscores replaced by hyphens (not fully
-  kebab‑case). Generated long flags never include underscores; when required,
-  `cli_long` may specify them. Each field also maps to an environment variable
-  (upper snake case with a prefix) and a file key (snake case). This removes
-  the need for manual aliasing.
+  kebab‑case). Generated long flags never include underscores and must not
+  begin with `-` or `_`; when required, `cli_long` may specify underscores.
+  Each field also maps to an environment variable (upper snake case with a
+  prefix) and a file key (snake case). This removes the need for manual
+  aliasing.
 
 - **Type‑safe deserialization** – Values are deserialized into strongly typed
   Rust structs using `serde`.
