@@ -219,18 +219,18 @@ pub(crate) fn ensure_no_config_path_collision(
             .cli_long
             .clone()
             .unwrap_or_else(|| name.to_string().replace('_', "-"));
+        if long == "config-path" {
+            return Err(syn::Error::new_spanned(
+                name,
+                "duplicate `cli_long` value 'config-path' clashes with the hidden config flag; rename the field or specify a different `cli_long`",
+            ));
+        }
         if !used.insert(long.clone()) {
             return Err(syn::Error::new_spanned(
                 name,
                 format!("duplicate `cli_long` value '{long}'"),
             ));
         }
-    }
-    if used.contains("config-path") {
-        return Err(syn::Error::new(
-            proc_macro2::Span::call_site(),
-            "duplicate `cli_long` value 'config-path' clashes with the hidden config flag; rename the field or specify a different `cli_long`",
-        ));
     }
     Ok(())
 }

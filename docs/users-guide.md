@@ -146,7 +146,7 @@ Field attributes modify how a field is sourced or merged:
 | Attribute                   | Behaviour                                                                                                                                                                     |
 | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `default = expr`            | Supplies a default value when no source provides one. The expression can be a literal or a function path.                                                                     |
-| `cli_long = "name"`         | Overrides the generated long CLI flag (underscores → hyphens).                                                                                                                |
+| `cli_long = "name"`         | Overrides the generated long CLI flag. By default, underscores become hyphens; custom values are used verbatim.                                                               |
 | `cli_short = 'c'`           | Adds a single‑letter short flag for the field.                                                                                                                                |
 | `merge_strategy = "append"` | For `Vec<T>` fields, specifies that values from different sources should be concatenated. This is currently the only supported strategy and is the default for vector fields. |
 
@@ -156,13 +156,14 @@ stricter validation may add manual `compile_error!` guards.
 
 By default, each field receives a long flag derived from its name with
 underscores replaced by hyphens (not fully kebab-case) and a short flag from
-its first ASCII alphanumeric character. If that character is already used, the
-macro assigns the opposite case variant for letters. Further collisions require
-specifying `cli_short` explicitly. Short flags must be ASCII alphanumeric and
-may not use clap's global `-h` or `-V` options. Generated long flags use only
-ASCII alphanumeric plus `-` and must not start with `-` or `_`. When overriding
-with `cli_long`, ASCII alphanumeric plus `-` and `_` are accepted, but the name
-must not start with `-` or `_`. Long names may not be `help` or `version`.
+the first ASCII alphanumeric character of the name. If that character is
+already used, the macro assigns the opposite case variant for letters. Further
+collisions require specifying `cli_short` explicitly. Short flags must be a
+single ASCII alphanumeric character and may not use clap's global `-h` or `-V`
+options. Generated long flags use only ASCII alphanumeric plus `-` and must not
+start with `-` or `_`. When overriding with `cli_long`, ASCII alphanumeric plus
+`-` and `_` are accepted, but the name must not start with `-` or `_`. Long
+names may not be `help` or `version`.
 
 ### Example configuration struct
 
