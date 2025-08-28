@@ -158,8 +158,9 @@ its first letter. If that letter is already used, the macro assigns the
 upper-case variant to the next field. Further collisions require specifying
 `cli_short` explicitly. Short flags must be ASCII alphanumeric and may not use
 clap's global `-h` or `-V` options. Generated long flags use only ASCII
-alphanumeric plus `-`. When overriding with `cli_long`, ASCII alphanumeric plus
-`-` and `_` are accepted. Long names cannot be named `help` or `version`.
+alphanumeric plus `-` and must not start with `-` or `_`. When overriding with
+`cli_long`, ASCII alphanumeric plus `-` and `_` are accepted, but the name must
+not start with `-` or `_`. Long names may not be `help` or `version`.
 
 ### Example configuration struct
 
