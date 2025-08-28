@@ -1,4 +1,8 @@
-//! Path discovery helpers for subcommand configuration.
+//! Utilities for discovering configuration file paths for subcommands.
+//!
+//! Enumerates candidate configuration files under the user's home directory,
+//! platform-specific configuration directories (e.g. XDG locations), and the
+//! current working directory.
 
 use std::path::{Path, PathBuf};
 
@@ -47,7 +51,7 @@ fn dotted(prefix: &Prefix) -> String {
 ///
 /// ```rust,ignore
 /// use std::path::{Path, PathBuf};
-/// use ortho_config::subcommand::push_stem_candidates;
+/// use ortho_config::subcommand::paths::push_stem_candidates;
 /// let mut candidates: Vec<PathBuf> = Vec::new();
 /// // Populate the vector with common configuration file names under `/tmp`.
 /// push_stem_candidates(Path::new("/tmp"), ".myapp", &mut candidates);
@@ -72,7 +76,7 @@ fn push_local_candidates(prefix: &Prefix, paths: &mut Vec<PathBuf>) {
 /// use std::path::PathBuf;
 /// use xdg::BaseDirectories;
 /// use ortho_config::subcommand::paths::push_xdg_candidates;
-/// let dirs = BaseDirectories::new().expect("locate directories");
+/// let dirs = BaseDirectories::new();
 /// let mut paths: Vec<PathBuf> = Vec::new();
 /// push_xdg_candidates(&dirs, &["toml"], &mut paths);
 /// assert!(paths.iter().all(|p| p.ends_with("config.toml")));
@@ -102,7 +106,10 @@ pub(crate) fn collect_unix_paths(prefix: &Prefix, paths: &mut Vec<PathBuf>) {
     // Only search for canonical XDG config filenames under the XDG dirs:
     // - config.toml (always)
     // - config.yaml and config.yml when the `yaml` feature is enabled
+    // - config.json and config.json5 when the `json5` feature is enabled
     push_xdg_candidates(&xdg_dirs, &["toml"], paths);
+    #[cfg(feature = "json5")]
+    push_xdg_candidates(&xdg_dirs, &["json", "json5"], paths);
     #[cfg(feature = "yaml")]
     push_xdg_candidates(&xdg_dirs, &["yaml", "yml"], paths);
 }
@@ -129,6 +136,46 @@ pub(crate) fn collect_non_unix_paths(prefix: &Prefix, paths: &mut Vec<PathBuf>) 
     }
 }
 
+/// Returns candidate configuration file paths for `prefix`.
+///
+/// Paths are yielded in the following order:
+/// 1. The user's home directory, e.g. `~/.app.toml`.
+/// 2. Platform configuration directories such as
+///    `$XDG_CONFIG_HOME/app/config.toml`.
+/// 3. The current working directory, e.g. `./.app.toml`.
+///
+/// The [`Prefix`] normalises user input and is incorporated into file stems and
+/// directory names. When `prefix` is empty, home and working directories yield
+/// dotfiles with only an extension (e.g. `~/.toml`, `./.toml`). Platform
+/// configuration directories are searched solely for their canonical
+/// `config.<ext>` names as defined by the platform (e.g. `config.toml` under
+/// `$XDG_CONFIG_HOME`).
+#[cfg_attr(
+    feature = "json5",
+    doc = "On Unix-like platforms these may also be `config.json` and `config.json5`."
+)]
+/// This restriction applies only to platform directories; home and working
+/// directories still emit extension-only dotfiles.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// use ortho_config::subcommand::{paths::candidate_paths, Prefix};
+///
+/// let paths = candidate_paths(&Prefix::new("app"));
+/// // prints something like:
+/// // ["/home/alice/.app.toml",
+/// //  "/home/alice/.config/app/config.toml",
+/// //  "./.app.toml"]
+/// println!("{paths:?}");
+/// ```
+///
+/// ```rust,ignore
+/// // Empty prefix: home/local dotfiles with no stem plus platform config.* files
+/// let paths = candidate_paths(&Prefix::new(""));
+/// // e.g. ["/home/alice/.toml", "/home/alice/.config/config.toml", "./.toml"]
+/// println!("{paths:?}");
+/// ```
 pub(crate) fn candidate_paths(prefix: &Prefix) -> Vec<PathBuf> {
     let mut paths = Vec::new();
 
@@ -246,20 +293,29 @@ mod tests {
 
         let files: Vec<String> = paths
             .iter()
-            .map(|p| p.file_name().unwrap().to_string_lossy().into_owned())
+            .map(|p| {
+                p.file_name()
+                    .expect("candidate path has a file name")
+                    .to_string_lossy()
+                    .into_owned()
+            })
             .collect();
         assert_eq!(files, expected_files);
 
         let group_len: usize = EXT_GROUPS.iter().map(|g| g.len()).sum();
 
-        let home_parent = paths[0].parent().unwrap();
+        let home_parent = paths[0]
+            .parent()
+            .expect("HOME candidate must have a parent directory");
         assert!(
             paths[..group_len]
                 .iter()
                 .all(|p| p.parent() == Some(home_parent))
         );
 
-        let xdg_parent = paths[group_len].parent().unwrap();
+        let xdg_parent = paths[group_len]
+            .parent()
+            .expect("platform candidate must have a parent directory");
         assert!(
             paths[group_len..paths.len() - group_len]
                 .iter()
