@@ -2,7 +2,7 @@
 # /// script
 # dependencies = ["tomlkit==0.13.*", "markdown-it-py>=3,<4"]
 # ///
-"""Synchronise workspace and crate versions.
+"""Synchronize workspace and crate versions.
 
 This tool updates the top-level workspace version and each member crate's
 version to the supplied value, keeping documentation snippets in sync. It
