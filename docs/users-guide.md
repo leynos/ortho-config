@@ -1,4 +1,4 @@
-# OrthoConfig user's guide
+# OrthoConfig User's Guide
 
 `OrthoConfig` is a Rust library that unifies command‑line arguments,
 environment variables and configuration files into a single, strongly typed
@@ -12,12 +12,11 @@ repository.
 
 Rust projects often wire together `clap` for CLI parsing, `serde` for
 de/serialization, and ad‑hoc code for loading `*.toml` files or reading
-environment variables. Mapping between different naming conventions (long flags
-where underscores are converted to hyphens, `UPPER_SNAKE_CASE` environment
-variables, and `snake_case` struct fields) can be tedious. `OrthoConfig`
-addresses these problems by letting developers describe their configuration
-once and then automatically loading values from multiple sources. The core
-features are:
+environment variables. Mapping between different naming conventions (kebab‑case
+flags, `UPPER_SNAKE_CASE` environment variables, and `snake_case` struct
+fields) can be tedious. `OrthoConfig` addresses these problems by letting
+developers describe their configuration once and then automatically loading
+values from multiple sources. The core features are:
 
 - **Layered configuration** – Configuration values can come from application
   defaults, configuration files, environment variables and command‑line
@@ -25,11 +24,8 @@ features are:
   the highest precedence and defaults the lowest.
 
 - **Orthographic naming** – A single field in a Rust struct is automatically
-  mapped to a CLI flag with underscores replaced by hyphens (not fully
-  kebab‑case). Generated long flags never include underscores and must not
-  begin with `-` or `_`; when required, `cli_long` may specify underscores.
-  Each field also maps to an environment variable (upper snake case with a
-  prefix) and a file key (snake case). This removes the need for manual
+  mapped to a CLI flag (kebab‑case), an environment variable (upper snake case
+  with a prefix), and a file key (snake case). This removes the need for manual
   aliasing.
 
 - **Type‑safe deserialization** – Values are deserialized into strongly typed
@@ -39,7 +35,7 @@ features are:
   necessary code. Developers only need to derive `serde` traits on their
   configuration struct and call a generated method to load the configuration.
 
-- **Customizable behaviour** – Attributes such as `default`, `cli_long`,
+- **Customisable behaviour** – Attributes such as `default`, `cli_long`,
   `cli_short`, and `merge_strategy` provide fine‑grained control over naming
   and merging behaviour.
 
@@ -61,6 +57,7 @@ corresponding cargo features:
 ```toml
 [dependencies]
 ortho_config = { version = "0.5.0-beta1", features = ["json5", "yaml"] }
+# Enabling these features expands file formats; precedence stays: defaults < file < env < CLI.
 ```
 
 Enabling the `json5` feature causes both `.json` and `.json5` files to be
@@ -139,31 +136,51 @@ lower‑cased when used to form file names. For example, a prefix of `APP_`
 results in environment variables like `APP_PORT` and file names such as
 `.app.toml`.
 
-### Field‑level attributes
+### Field-level attributes
 
 Field attributes modify how a field is sourced or merged:
 
 | Attribute                   | Behaviour                                                                                                                                                                     |
 | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `default = expr`            | Supplies a default value when no source provides one. The expression can be a literal or a function path.                                                                     |
-| `cli_long = "name"`         | Overrides the generated long CLI flag. By default, underscores become hyphens; custom values are used verbatim.                                                               |
-| `cli_short = 'c'`           | Adds a single‑letter short flag for the field.                                                                                                                                |
+| `cli_long = "name"`         | Overrides the automatically generated long CLI flag (kebab-case).                                                                                                             |
+| `cli_short = 'c'`           | Adds a single-letter short flag for the field.                                                                                                                                |
 | `merge_strategy = "append"` | For `Vec<T>` fields, specifies that values from different sources should be concatenated. This is currently the only supported strategy and is the default for vector fields. |
 
 Unrecognized keys are ignored by the derive macro for forwards compatibility.
 Unknown keys will therefore silently do nothing. Developers who require
 stricter validation may add manual `compile_error!` guards.
 
-By default, each field receives a long flag derived from its name with
-underscores replaced by hyphens (not fully kebab-case) and a short flag from
-the first ASCII alphanumeric character of the name. If that character is
-already used, the macro assigns the opposite case variant for letters. Further
-collisions require specifying `cli_short` explicitly. Short flags must be a
-single ASCII alphanumeric character and may not use clap's global `-h` or `-V`
-options. Generated long flags use only ASCII alphanumeric plus `-` and must not
-start with `-` or `_`. When overriding with `cli_long`, ASCII alphanumeric plus
-`-` and `_` are accepted, but the name must not start with `-` or `_`. Long
-names may not be `help` or `version`.
+By default, each field receives a long-flag derived from its name in kebab-case
+and a short-flag. The macro chooses the short-flag using these rules:
+
+- Use the field's first ASCII alphanumeric character.
+- If that character is already taken or reserved, try its upper-case form.
+- If both are unavailable, no short-flag is assigned; specify `cli_short` to
+  resolve the collision.
+
+Collisions are evaluated against short-flags already assigned within the same
+parser and reserved characters such as clap's `-h` and `-V`. A character is
+considered taken if it matches either set.
+
+The macro does not scan other characters in the field name when deriving the
+short-flag. Short-flags must be single ASCII alphanumeric characters and may
+not use clap's global `-h` or `-V` options. Long-flags must contain only ASCII
+alphanumeric characters, hyphens or underscores and cannot be named `help` or
+`version`.
+
+For example, when multiple fields begin with the same character, `cli_short`
+can disambiguate the final field:
+
+```rust
+#[derive(OrthoConfig)]
+struct Options {
+    port: u16,                         // -p
+    path: String,                      // -P
+    #[ortho_config(cli_short = 'r')]
+    peer: String,                      // -r via override
+}
+```
 
 ### Example configuration struct
 
@@ -233,12 +250,12 @@ following steps:
 2. Attempts to load a configuration file. Candidate file paths are searched in
    the following order:
 
-   1. A `--config-path` CLI argument. The derive macro recognizes a field
-      named `config_path` as the hook for this option. Add the field with
-      `#[serde(skip)]` and, if desired, `#[ortho_config(cli_long = "config")]`
-      to expose or rename the flag. The environment variable
-      `PREFIX_CONFIG_PATH` (or `CONFIG_PATH` with no prefix) provides the same
-      override.
+   1. A `--config-path` CLI argument. A hidden option is generated
+      automatically by the derive macro; if the user defines a `config_path`
+      field then that will override the hidden option. Alternatively, the
+      environment variable `<PREFIX>CONFIG_PATH` (for example,
+      `APP_CONFIG_PATH`, or `CONFIG_PATH` if no prefix is set) can specify an
+      explicit file.
 
    1. A dotfile named `.config.toml` or `.<prefix>.toml` in the current working
       directory.
@@ -484,29 +501,23 @@ Missing required values:
   while still requiring the CLI to provide a value when defaults are absent;
   see the `vk` example above.
 
-- **Config path flag** – The derive treats a field literally named
-  `config_path` as the hook for selecting a configuration file. Expose or
-  rename the CLI flag by adding the field with `#[serde(skip)]` and an optional
-  `cli_long` attribute:
+- **Config path flag** – The derive macro inserts a hidden `--config-path`
+  option into the CLI to override the configuration file path. To expose or
+  rename this flag, define your own `config_path` field with a `cli_long`
+  attribute:
 
   ```rust
   #[derive(Debug, Deserialize, ortho_config::OrthoConfig)]
   struct CliArgs {
       #[serde(skip)]
-      #[ortho_config(cli_long = "config-path")] // or "config" to rename
+      #[ortho_config(cli_long = "config")]
       pub config_path: Option<std::path::PathBuf>,
   }
   ```
 
-  - `#[serde(skip)]` keeps the path out of the deserialized config while still
-    allowing the CLI or environment to supply it.
-  - `#[ortho_config(cli_long = "...")]` exposes or renames the `--config-path`
-    flag; omit it to keep the default name.
-
-  During loading, any path from this flag or the `PREFIX_CONFIG_PATH` (or
-  `CONFIG_PATH` with no prefix) environment variable is passed to
-  `load_config_file`, which selects a parser based on the extension and uses
-  `Toml::string` for `.toml` files.
+  The example above enables `--config` and the `CONFIG_PATH` environment
+  variable. The option remains hidden from help output unless a `config_path`
+  field is declared.
 
 - **Changing naming conventions** – Currently, only the default
   snake/hyphenated (underscores → hyphens)/upper snake mappings are supported.
