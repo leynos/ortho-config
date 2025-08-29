@@ -907,7 +907,7 @@ dependencies = [
  "serde_yaml",
  "tempfile",
  "test_helpers",
- "thiserror 1.0.69",
+ "thiserror 2.0.12",
  "tokio",
  "toml",
  "trybuild",
