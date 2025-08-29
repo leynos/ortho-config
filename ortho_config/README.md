@@ -45,11 +45,6 @@ ortho_config = "0.5.0-beta1" # Replace with the latest version
 serde = { version = "1.0", features = ["derive"] }
 ```
 
-`ortho_config` re-exports its parsing dependencies, so applications can import
-`figment`, `uncased`, `xdg` (on Unix-like and Redox targets), and the optional
-format parsers (`figment_json5`, `json5`, `serde_yaml`, `toml`) without
-declaring them directly.
-
 2. **Define the configuration struct:**
 
 ```rust
