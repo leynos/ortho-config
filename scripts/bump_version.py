@@ -536,10 +536,23 @@ def main(argv: list[str]) -> int:
         print(f"Error: Failed to parse {workspace}: {exc}", file=sys.stderr)
         return 1
     members = data.get("workspace", {}).get("members", [])
-    _set_version(workspace, version, doc=data)
+    try:
+        _set_version(workspace, version, doc=data)
+    except (TOMLKitError, OSError, TypeError, ValueError) as exc:
+        print(
+            f"Error: Failed to set version for {workspace}: {exc}",
+            file=sys.stderr,
+        )
+        return 1
     had_error = _process_members(root, members, version)
-    _update_markdown_versions(root / "README.md", version)
-    _update_markdown_versions(root / "docs" / "users-guide.md", version)
+    for md_path in (root / "README.md", root / "docs" / "users-guide.md"):
+        try:
+            _update_markdown_versions(md_path, version)
+        except (TOMLKitError, OSError, TypeError, ValueError) as exc:
+            print(
+                f"Warning: Failed to update {md_path}: {exc}",
+                file=sys.stderr,
+            )
     return 0 if not had_error else 1
 
 if __name__ == "__main__":  # pragma: no cover
