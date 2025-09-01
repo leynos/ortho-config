@@ -295,7 +295,7 @@ following steps:
 The derive macro always inserts a hidden `--config-path` option and two
 environment variables: `<PREFIX>CONFIG_PATH` and the unprefixed `CONFIG_PATH`.
 For example, with the prefix `APP`, both `APP_CONFIG_PATH` and `CONFIG_PATH`
-are recognised. `ortho_config` accepts `--config-path` even when no
+are recognized. `ortho_config` accepts `--config-path` even when no
 `config_path` field exists. Declaring a `config_path` field with a `cli_long`
 attribute merely exposes or renames the same flag and both environment
 variables:
