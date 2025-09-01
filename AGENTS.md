@@ -21,8 +21,17 @@
   related code (e.g., models + utilities + fixtures) close together.
 - **Group by feature, not layer.** Colocate views, logic, fixtures, and helpers
   related to a domain concept rather than splitting by type.
-- Comments must use en-GB-oxendict spelling and grammar.
-- Function documentation must include clear examples.
+- **Use consistent spelling and grammar.** Comments must use en-GB-oxendict
+  ("-ize" / "-yse" / "-our") spelling and grammar, with the exception of
+  references to external APIs.
+- **Illustrate with clear examples.** Function documentation must include clear
+  examples demonstrating the usage and outcome of the function. Test
+  documentation should omit examples where the example serves only to reiterate
+  the test logic.
+- **Keep file size managable.** No single code file may be longer than 400
+  lines. Long switch statements or dispatch tables should be broken up by
+  feature and constituents colocated with targets. Large blocks of test data
+  should be moved to external data files.
 
 ## Documentation Maintenance
 
@@ -31,10 +40,11 @@
   choices, and architectural decisions.
 - **Update:** When new decisions are made, requirements change, libraries are
   added/removed, or architectural patterns evolve, **proactively update** the
-  relevant file(s) in the `docs/` directory to reflect the latest state. Ensure
-  the documentation remains accurate and current.
-- Documentation must use en-GB-oxendict spelling and grammar (with the exception
-  of "license" which is to be left unchanged for community consistency.
+  relevant file(s) in the `docs/` directory to reflect the latest state.
+  **Ensure the documentation remains accurate and current.**
+- Documentation must use en-GB-oxendict ("-ize" / "-yse" / "-our") spelling
+  and grammar. (EXCEPTION: the naming of the "LICENSE" file, which is to be
+  left unchanged for community consistency.)
 
 ## Change Quality & Committing
 
@@ -42,10 +52,16 @@
   subsequent commit) should represent a single logical unit of work.
 - **Quality Gates:** Before considering a change complete or proposing a commit,
   ensure it meets the following criteria:
+  - New functionality or changes in behaviour are fully validated by relevant
+    unittests and behavioural tests.
+  - Where a bug is being fixed, a unittest has been provided demonstrating the
+    behaviour being corrected both to validate the fix and to guard against
+    regression.
   - Passes all relevant unit and behavioral tests according to the guidelines
-    above.
-  - Passes lint checks
-  - Adheres to formatting standards tested using a formatting validator.
+    above. (Use `make test` to verify).
+  - Passes lint checks. (Use `make lint` to verify).
+  - Adheres to formatting standards tested using a formatting validator. (Use
+    `make check-fmt` to verify).
 - **Committing:**
   - Only changes that meet all the quality gates above should be committed.
   - Write clear, descriptive commit messages summarizing the change, following
@@ -143,9 +159,6 @@ project:
   }
   ```
 
-- Environment access (env::set_var and env::remove_var) are always unsafe in
-  Rust 2024 editionand **must** be marked as such
-
 ### Testing
 
 - Write unit and behavioural tests for new functionality. Run both before and
@@ -157,9 +170,6 @@ project:
   system clock) using dependency injection with the `mockable` crate (traits
   like `Env` and `Clock`) where appropriate. See
   `docs/reliable-testing-in-rust-via-dependency-injection.md` for guidance.
-- If DI + `mockable` cannot be used, env mutations in tests **must** be wrapped
-  in shared guards and mutexes placed in a shared `test_utils` or
-  `test_helpers` crate.  Direct environment mutation is **forbidden** in tests.
 
 ### Dependency Management
 
@@ -189,16 +199,57 @@ project:
 ## Markdown Guidance
 
 - Validate Markdown files using `make markdownlint`.
-- Run `make fmt` after any documentation changes to format all Markdown files
-  and fix table markup.
+- Run `make fmt` after any documentation changes to format all Markdown
+  files and fix table markup.
 - Validate Mermaid diagrams in Markdown files by running `make nixie`.
 - Markdown paragraphs and bullet points must be wrapped at 80 columns.
 - Code blocks must be wrapped at 120 columns.
 - Tables and headings must not be wrapped.
 - Use dashes (`-`) for list bullets.
-- Use GitHub-flavoured Markdown footnotes (`[^1]`) for references.
+- Use GitHub-flavoured Markdown footnotes (`[^1]`) for references and
+  footnotes.
 
-### Key Takeaway
+## Additional tooling
+
+The following tooling is available in this environment:
+
+- `mbake` – A Makefile validator. Run using `mbake validate Makefile`.
+- `strace` – Traces system calls and signals made by a process; useful for
+  debugging runtime behaviour and syscalls.
+- `gdb` – The GNU Debugger, for inspecting and controlling programs as they
+  execute (or post-mortem via core dumps).
+- `ripgrep` – Fast, recursive text search tool (`grep` alternative) that
+  respects `.gitignore` files.
+- `ltrace` – Traces calls to dynamic library functions made by a process.
+- `valgrind` – Suite for detecting memory leaks, profiling, and debugging
+  low-level memory errors.
+- `bpftrace` – High-level tracing tool for eBPF, using a custom scripting
+  language for kernel and application tracing.
+- `lsof` – Lists open files and the processes using them.
+- `htop` – Interactive process viewer (visual upgrade to `top`).
+- `iotop` – Displays and monitors I/O usage by processes.
+- `ncdu` – NCurses-based disk usage viewer for finding large files/folders.
+- `tree` – Displays directory structure as a tree.
+- `bat` – `cat` clone with syntax highlighting, Git integration, and paging.
+- `delta` – Syntax-highlighted pager for Git and diff output.
+- `tcpdump` – Captures and analyses network traffic at the packet level.
+- `nmap` – Network scanner for host discovery, port scanning, and service
+  identification.
+- `lldb` – LLVM debugger, alternative to `gdb`.
+- `eza` – Modern `ls` replacement with more features and better defaults.
+- `fzf` – Interactive fuzzy finder for selecting files, commands, etc.
+- `hyperfine` – Command-line benchmarking tool with statistical output.
+- `shellcheck` – Linter for shell scripts, identifying errors and bad practices.
+- `fd` – Fast, user-friendly `find` alternative with sensible defaults.
+- `checkmake` – Linter for `Makefile`s, ensuring they follow best practices and
+  conventions.
+- `srgn` – [Structural grep](https://github.com/alexpovel/srgn), searches code
+  and enables editing by syntax tree patterns (see `docs/srgn.md` for a
+  complete guide).
+- `difft` **(Difftastic)** – Semantic diff tool that compares code structure
+  rather than just text differences.
+
+## Key Takeaway
 
 These practices help maintain a high-quality codebase and facilitate
 collaboration.
