@@ -3,7 +3,7 @@
 `OrthoConfig` is a Rust library that unifies command‑line arguments,
 environment variables and configuration files into a single, strongly typed
 configuration struct. It is inspired by tools such as `esbuild` and is designed
-to minimise boiler‑plate. The library uses `serde` for deserialisation and
+to minimize boiler‑plate. The library uses `serde` for deserialization and
 `clap` for argument parsing, while `figment` provides layered configuration
 management. This guide covers the functionality currently implemented in the
 repository.
@@ -11,7 +11,7 @@ repository.
 ## Core concepts and motivation
 
 Rust projects often wire together `clap` for CLI parsing, `serde` for
-de/serialisation, and ad‑hoc code for loading `*.toml` files or reading
+de/serialization, and ad‑hoc code for loading `*.toml` files or reading
 environment variables. Mapping between different naming conventions (kebab‑case
 flags, `UPPER_SNAKE_CASE` environment variables, and `snake_case` struct
 fields) can be tedious. `OrthoConfig` addresses these problems by letting
@@ -28,7 +28,7 @@ values from multiple sources. The core features are:
   with a prefix), and a file key (snake case). This removes the need for manual
   aliasing.
 
-- **Type‑safe deserialisation** – Values are deserialised into strongly typed
+- **Type‑safe deserialization** – Values are deserialized into strongly typed
   Rust structs using `serde`.
 
 - **Easy adoption** – A procedural macro `#[derive(OrthoConfig)]` adds the
@@ -118,7 +118,7 @@ configuration for that subcommand.
 A configuration is represented by a plain Rust struct. To take advantage of
 `OrthoConfig`, derive the following traits:
 
-- `serde::Deserialize` and `serde::Serialize` – required for deserialising
+- `serde::Deserialize` and `serde::Serialize` – required for deserializing
   values and merging overrides.
 
 - The derive macro generates a hidden `clap::Parser` implementation, so
@@ -147,7 +147,7 @@ Field attributes modify how a field is sourced or merged:
 | `cli_short = 'c'`           | Adds a single-letter short flag for the field.                                                                                                                                |
 | `merge_strategy = "append"` | For `Vec<T>` fields, specifies that values from different sources should be concatenated. This is currently the only supported strategy and is the default for vector fields. |
 
-Unrecognised keys are ignored by the derive macro for forwards compatibility.
+Unrecognized keys are ignored by the derive macro for forwards compatibility.
 Unknown keys will therefore silently do nothing. Developers who require
 stricter validation may add manual `compile_error!` guards.
 
@@ -155,19 +155,19 @@ By default, each field receives a long flag derived from its name in kebab‑cas
 and a short flag. The macro chooses the short flag using these rules:
 
 - Use the field's first ASCII alphanumeric character.
-- If that character is already taken or reserved, try its upper-case form.
+- If that character is already taken or reserved, try its uppercase form.
 - If both are unavailable, no short flag is assigned; specify `cli_short` to
   resolve the collision.
 
 | Scenario                          | Result                 |
 | --------------------------------- | ---------------------- |
 | First letter free                 | `-p`                   |
-| Lower case taken; upper free      | `-P`                   |
+| Lowercase taken; uppercase free   | `-P`                   |
 | Both cases taken                  | none (set `cli_short`) |
 | Explicit override via `cli_short` | `-r`                   |
 
 Collisions are evaluated against short flags already assigned within the same
-parser and reserved characters such as clap's `-h` and `-V`. A character is
+parser, and reserved characters such as clap's `-h` and `-V`. A character is
 considered taken if it matches either set.
 
 The macro does not scan other characters in the field name when deriving the
@@ -263,8 +263,7 @@ following steps:
        even when no `config_path` field exists—takes precedence; see
        [Config path override](#config-path-override).
 
-    2. A dotfile named `.config.toml` or `.<prefix>.toml` in the current working
-       directory.
+    2. A dotfile named `.<prefix>.toml` in the current working directory.
 
     3. A dotfile of the same name in the user's home directory.
 
@@ -273,7 +272,7 @@ following steps:
        Windows, the `%APPDATA%` and `%LOCALAPPDATA%` directories are checked.
 
     5. If the `json5` or `yaml` features are enabled, files with `.json`,
-       `.json5`, `.yaml` or `.yml` extensions are also considered in these
+       `.json5`, `.yaml`, or `.yml` extensions are also considered in these
        locations.
 
 3. Adds an environment provider using the prefix specified on the struct. Keys
@@ -336,7 +335,7 @@ names with double underscores. For example, if `AppConfig` has a nested
 prefix is used for its fields (e.g. `APP_DB_URL`).
 
 When `clap`'s `flatten` attribute is employed to compose argument groups, the
-flattened struct is initialised even if no CLI flags within the group are
+flattened struct is initialized even if no CLI flags within the group are
 specified. During merging, `ortho_config` discards these empty groups so that
 values from configuration files or the environment remain in place unless a
 field is explicitly supplied on the command line.
@@ -379,7 +378,7 @@ inheritance is in use.
 
 Map fields such as `BTreeMap<String, RuleConfig>` allow configuration files to
 declare arbitrary rule keys. Any table nested under `rules.<name>` is
-deserialised into the map without prior knowledge of the key names. This
+deserialized into the map without prior knowledge of the key names. This
 enables use cases like:
 
 ```toml
@@ -542,7 +541,7 @@ Missing required values:
   argument vectors to exercise the merge logic. The `figment` crate makes it
   easy to inject additional providers when writing unit tests.
 
-- **Sanitised providers** – The `sanitized_provider` helper returns a `Figment`
+- **Sanitized providers** – The `sanitized_provider` helper returns a `Figment`
   provider with `None` fields removed. It aids manual layering when bypassing
   the derive macro. For example:
 
