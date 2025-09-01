@@ -294,9 +294,10 @@ following steps:
 
 The derive macro always inserts a hidden `--config-path` option and matching
 `<PREFIX>CONFIG_PATH` environment variable (for example, `APP_CONFIG_PATH` when
-the prefix is `APP`), so `ortho_config` accepts `--config-path` even when no
-`config_path` field exists. Defining a `config_path` field with a `cli_long`
-attribute merely exposes or renames the same underlying flag:
+the prefix is `APP`, or `CONFIG_PATH` when no prefix is set), so `ortho_config`
+accepts `--config-path` even when no `config_path` field exists. Defining a
+`config_path` field with a `cli_long` attribute merely exposes or renames the
+same underlying flag:
 
 ```rust
 #[derive(Debug, Deserialize, ortho_config::OrthoConfig)]
@@ -309,7 +310,8 @@ struct CliArgs {
 
 The example above exposes the flag as `--config` and the environment variable
 as `CONFIG_PATH`. Without this field, `--config-path` and `<PREFIX>CONFIG_PATH`
-remain available but hidden from help output.
+(or `CONFIG_PATH` without a prefix) remain available but hidden from help
+output.
 
 ### Source precedence
 
