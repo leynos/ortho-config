@@ -180,6 +180,20 @@ ortho_config = { version = "0.3.0", features = ["json5", "yaml"] }
 
 These keep examples and adapters concise while maintaining explicit semantics.
 
+If you need to return multiple failures at once, use the generic
+`OrthoError::aggregate` to build an aggregate error from either owned or
+shared errors:
+
+```rust
+use std::sync::Arc;
+use ortho_config::OrthoError;
+
+let agg = OrthoError::aggregate(vec![
+    OrthoError::validation("port", "must be positive"), // or explicit variant
+    Arc::new(OrthoError::gathering(figment::Error::from("boom"))),
+]);
+```
+
 The file loader selects the parser based on the extension (`.toml`, `.json`,
 `.json5`, `.yaml`, `.yml`). When the `json5` feature is active, both `.json`
 and `.json5` files are parsed using the JSON5 format. Standard JSON is valid

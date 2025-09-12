@@ -113,6 +113,15 @@ and explicit:
 These helpers are intentionally small and composable so call‑sites remain easy
 to read without hiding the semantics of error mapping.
 
+### Aggregated errors
+
+To surface multiple failures at once, `OrthoError::aggregate<I, E>(errors)`
+accepts any iterator of items that implement `Into<Arc<OrthoError>>`. This
+allows callers to provide either owned `OrthoError` values or shared
+`Arc<OrthoError>` values without additional boiler‑plate. For a single error,
+the helper unwraps it and returns the underlying `OrthoError`; for two or more
+errors it returns `OrthoError::Aggregate` containing a shared collection.
+
 ### CLI and Configuration Merge Flow
 
 ```mermaid

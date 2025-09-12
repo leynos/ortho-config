@@ -521,6 +521,30 @@ Missing required values:
   sample_value (use --sample-value, SAMPLE_VALUE, or file entry)
 ```
 
+### Aggregating multiple errors
+
+When you need to return multiple errors in one go, use the generic
+`OrthoError::aggregate` helper. It accepts any iterator of items that can be
+converted into `Arc<OrthoError>` so you can pass either owned errors or shared
+ones:
+
+```rust
+use std::sync::Arc;
+use ortho_config::OrthoError;
+
+// From bare errors
+let err = OrthoError::aggregate(vec![
+    OrthoError::Validation { key: "port".into(), message: "must be positive".into() },
+    OrthoError::gathering(figment::Error::from("invalid")),
+]);
+
+// From shared errors
+let err = OrthoError::aggregate(vec![
+    Arc::new(OrthoError::Validation { key: "x".into(), message: "bad".into() }),
+    Arc::new(OrthoError::gathering(figment::Error::from("boom"))),
+]);
+```
+
 ### Mapping errors ergonomically
 
 To reduce boiler‑plate when converting between error types, the crate exposes
