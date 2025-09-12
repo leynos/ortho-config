@@ -5,7 +5,7 @@ distilled from the design documents and a comparison with the current
 repository implementation. Each item summarises an outstanding task and
 references the relevant design guidance.
 
-- **Add a dedicated error for missing required values**
+- [x] **Add a dedicated error for missing required values**
 
   - [x] Introduce a `MissingRequiredValues` variant to `OrthoError` and update
     the derive macro to check for missing required fields before
@@ -21,7 +21,7 @@ references the relevant design guidance.
     correctly.
     [[Improved Error Message Design](improved-error-message-design.md)]
 
-- **Implement comma‑separated list parsing for environment variables**
+- [x] **Implement comma‑separated list parsing for environment variables**
 
   - [x] Update the env provider or derive macro to accept comma‑separated values
     for array fields, allowing syntax such as `DDLINT_RULES=A,B,C`.
@@ -30,7 +30,7 @@ references the relevant design guidance.
   - [x] Ensure consistent handling of list values across environment variables,
     CLI arguments and configuration files.
 
-- **Add configuration inheritance (extends)**
+- [x] **Add configuration inheritance (extends)**
 
   - [x] Design and implement an `extends` key for configuration files, so a
     config can inherit from a base file, with current settings overriding those
@@ -42,7 +42,7 @@ references the relevant design guidance.
   - [x] Document how inheritance interacts with prefixes and subcommand
     namespaces.
 
-- **Refine subcommand merging behaviour**
+- [x] **Refine subcommand merging behaviour**
 
   - [x] Simplify `load_and_merge` for subcommands to merge CLI‑provided values
     over file/env defaults without requiring all fields to exist in the
@@ -59,10 +59,9 @@ references the relevant design guidance.
 
 - [x] **Finish `clap` integration in the derive macro**
 
-  - [x] Generate a hidden `clap::Parser` struct that automatically derives
-      long
-      and short option names from field names (underscores → hyphens) unless
-      overridden via `#[ortho_config(cli_long = "…")]`. [[Design](design.md)]
+  - [x] Generate a hidden `clap::Parser` struct that automatically derives long
+    and short option names from field names (underscores → hyphens) unless
+    overridden via `#[ortho_config(cli_long = "…")]`. [[Design](design.md)]
 
   - [x] Ensure the macro sets appropriate `#[clap(long, short)]` attributes and
     respects default values specified in struct attributes.
@@ -70,8 +69,8 @@ references the relevant design guidance.
   - [x] Confirm that CLI arguments override environment variables and file
     values in the correct order. [[Design](design.md)]
 
-- **Improve merging and error reporting when combining CLI and configuration
-  sources**
+- [x] **Improve merging and error reporting when combining CLI and
+  configuration sources**
 
   - [x] Distinguish between values explicitly provided on the command line and
     those left as `None` so that default values from env/file are not
@@ -86,7 +85,7 @@ references the relevant design guidance.
     structs to ensure predictable behaviour.
     [[Clap Dispatch](clap-dispatch-and-ortho-config-integration.md)]
 
-- **Enhance documentation and examples**
+- [x] **Enhance documentation and examples**
 
   - [x] Expand user and developer documentation to cover new features such as
     extends, comma‑separated lists, dynamic tables and ignore patterns.
@@ -96,7 +95,7 @@ references the relevant design guidance.
     flag, how to use subcommand defaults via the `cmds` namespace, and how to
     interpret improved error messages.
 
-- **Support custom option names for the configuration path**
+- [x] **Support custom option names for the configuration path**
 
   - [x] Allow renaming of the auto‑generated `--config-path` flag and its
     environment variable (e.g. to `--config`) via an attribute on the
@@ -104,7 +103,7 @@ references the relevant design guidance.
 
   - [x] Update documentation and examples to illustrate this override.
 
-  - **Enable dynamic tables for arbitrary keys**
+- [x] **Enable dynamic tables for arbitrary keys**
 
   - [x] Accept map types (e.g. `BTreeMap<String, RuleConfig>`) in configuration
     structs to support dynamic rule tables such as `[rules.consistent-casing]`.
@@ -113,7 +112,7 @@ references the relevant design guidance.
   - [x] Ensure these maps deserialize correctly from files, environment
     variables and CLI.
 
-- **Implement ignore‑pattern list handling**
+- [x] **Implement ignore‑pattern list handling**
 
   - [x] Provide support for ignore pattern lists using comma‑separated
     environment variables and CLI flags.
@@ -122,7 +121,7 @@ references the relevant design guidance.
   - [x] Document the precedence rules and the relationship to defaults (e.g.
     `[".git/", "build/", "target/"]`).
 
-- **Reduce error payload size** (target: v0.4.0)
+- [ ] **Reduce error payload size** (target: v0.4.0)
 
   - [ ] Wrap expansive error variants in `Arc` to shrink `Result` sizes and
     eliminate the need for `#[expect(clippy::result_large_err)]`.
@@ -132,7 +131,7 @@ references the relevant design guidance.
       - All `#[expect(clippy::result_large_err)]` are removed or scoped to
         private internals with a rationale.
 
-- **Address future enhancements**
+- [ ] **Address future enhancements**
 
   - [ ] Explore asynchronous loading of configuration files and environment
     variables for applications that need non‑blocking startup.
