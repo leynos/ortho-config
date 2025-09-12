@@ -7,7 +7,7 @@
 use clap::CommandFactory;
 use ortho_config::subcommand::Prefix;
 use ortho_config::{
-    IntoFigmentError, OrthoConfig, OrthoResult, SubcmdConfigMerge, load_and_merge_subcommand,
+    OrthoConfig, OrthoResult, ResultIntoFigment, SubcmdConfigMerge, load_and_merge_subcommand,
 };
 use serde::de::DeserializeOwned;
 
@@ -21,7 +21,7 @@ where
     let result = RefCell::new(None);
     figment::Jail::try_with(|j| {
         setup(j)?;
-        let cfg = loader().map_err(IntoFigmentError::into_figment)?;
+        let cfg = loader().to_figment()?;
         result.replace(Some(cfg));
         Ok(())
     })

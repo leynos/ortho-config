@@ -1,7 +1,7 @@
 //! Tests for configuration file helpers.
 
 use super::*;
-use crate::IntoFigmentError;
+use crate::result_ext::ResultIntoFigment;
 use figment::{Figment, providers::Format, providers::Toml};
 use rstest::rstest;
 use std::collections::HashSet;
@@ -79,8 +79,7 @@ fn resolve_base_path_resolves(#[case] is_abs: bool) {
         } else {
             PathBuf::from("base.toml")
         };
-        let resolved =
-            resolve_base_path(&current, base_path).map_err(IntoFigmentError::into_figment)?;
+        let resolved = resolve_base_path(&current, base_path).to_figment()?;
         assert_eq!(resolved, root.join("base.toml"));
         Ok(())
     });
@@ -118,8 +117,7 @@ fn process_extends_handles_relative_and_absolute(#[case] is_abs: bool) {
             "extends = \"base.toml\"".to_string()
         };
         let figment = Figment::from(Toml::string(&config));
-        let merged = process_extends(figment, current, visited, stack)
-            .map_err(IntoFigmentError::into_figment)?;
+        let merged = process_extends(figment, current, visited, stack).to_figment()?;
         let value = merged.find_value("foo").expect("foo");
         assert_eq!(value.as_str(), Some("base"));
         Ok(())

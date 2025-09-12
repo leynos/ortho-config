@@ -5,7 +5,7 @@ use clap::Parser;
 use cucumber::{given, then, when};
 use figment::{Figment, providers::Serialized};
 use ortho_config::{
-    IntoFigmentError, OrthoError, OrthoResult, load_config_file, sanitized_provider,
+    OrthoError, OrthoResult, ResultIntoFigment, load_config_file, sanitized_provider,
 };
 use std::path::Path;
 
@@ -17,13 +17,11 @@ fn load_flat(file: Option<&str>, args: &[&str]) -> OrthoResult<FlatArgs> {
         }
         let cli = FlatArgs::parse_from(args);
         let mut fig = Figment::from(Serialized::defaults(&FlatArgs::default()));
-        if let Some(f) =
-            load_config_file(Path::new(".flat.toml")).map_err(IntoFigmentError::into_figment)?
-        {
+        if let Some(f) = load_config_file(Path::new(".flat.toml")).to_figment()? {
             fig = fig.merge(f);
         }
         res = Some(
-            fig.merge(sanitized_provider(&cli).map_err(IntoFigmentError::into_figment)?)
+            fig.merge(sanitized_provider(&cli).to_figment()?)
                 .extract()
                 .map_err(|e| OrthoError::merge(e).into()),
         );

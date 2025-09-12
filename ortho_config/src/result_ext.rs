@@ -82,3 +82,27 @@ impl IntoFigmentError for Arc<OrthoError> {
         figment::Error::from(self.to_string())
     }
 }
+
+impl IntoFigmentError for &Arc<OrthoError> {
+    fn into_figment(self) -> figment::Error {
+        figment::Error::from(self.to_string())
+    }
+}
+
+/// Extension to convert `Result<T, Arc<OrthoError>>` into `Result<T, figment::Error>`.
+#[allow(clippy::result_large_err)] // figment::Error is large; this helper is test-facing only.
+pub trait ResultIntoFigment<T> {
+    /// Map the `Arc<OrthoError>` error into a `figment::Error` using
+    /// [`IntoFigmentError`].
+    ///
+    /// # Errors
+    ///
+    /// Returns a `figment::Error` containing the original message.
+    fn to_figment(self) -> Result<T, figment::Error>;
+}
+
+impl<T> ResultIntoFigment<T> for Result<T, Arc<OrthoError>> {
+    fn to_figment(self) -> Result<T, figment::Error> {
+        self.map_err(IntoFigmentError::into_figment)
+    }
+}
