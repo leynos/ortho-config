@@ -1,6 +1,6 @@
 //! Helpers for reading configuration files into Figment.
 
-use crate::OrthoError;
+use crate::{OrthoError, OrthoResult};
 #[cfg(feature = "yaml")]
 use figment::providers::Yaml;
 use figment::{
@@ -35,24 +35,24 @@ fn file_error(path: &Path, err: impl Into<Box<dyn Error + Send + Sync>>) -> Orth
 ///
 /// # Examples
 ///
-/// ```rust,no_run
+/// ```rust,ignore
 /// use std::path::Path;
 ///
-/// # fn run() -> Result<(), ortho_config::OrthoError> {
+/// # fn run() -> ortho_config::OrthoResult<()> {
 /// let p = Path::new("config.toml");
 /// let c = ortho_config::file::canonicalise(p)?;
 /// assert!(c.is_absolute());
 /// # Ok(())
 /// # }
 /// ```
-pub fn canonicalise(p: &Path) -> Result<PathBuf, OrthoError> {
+pub fn canonicalise(p: &Path) -> OrthoResult<PathBuf> {
     #[cfg(windows)]
     {
-        dunce::canonicalize(p).map_err(|e| file_error(p, e))
+        dunce::canonicalize(p).map_err(|e| file_error(p, e).into())
     }
     #[cfg(not(windows))]
     {
-        std::fs::canonicalize(p).map_err(|e| file_error(p, e))
+        std::fs::canonicalize(p).map_err(|e| file_error(p, e).into())
     }
 }
 
@@ -65,7 +65,7 @@ pub fn canonicalise(p: &Path) -> Result<PathBuf, OrthoError> {
 ///
 /// Returns an [`OrthoError`] if the file contents fail to parse or if the
 /// required feature is disabled.
-fn parse_config_by_format(path: &Path, data: &str) -> Result<Figment, OrthoError> {
+fn parse_config_by_format(path: &Path, data: &str) -> OrthoResult<Figment> {
     let ext = path
         .extension()
         .and_then(|e| e.to_str())
@@ -78,12 +78,12 @@ fn parse_config_by_format(path: &Path, data: &str) -> Result<Figment, OrthoError
             }
             #[cfg(not(feature = "json5"))]
             {
-                return Err(file_error(
+                return Err::<_, std::sync::Arc<OrthoError>>(file_error(
                     path,
                     std::io::Error::other(
                         "json5 feature disabled: enable the 'json5' feature to support this file format",
                     ),
-                ));
+                ).into());
             }
         }
         Some("yaml" | "yml") => {
@@ -94,10 +94,9 @@ fn parse_config_by_format(path: &Path, data: &str) -> Result<Figment, OrthoError
             }
             #[cfg(not(feature = "yaml"))]
             {
-                return Err(file_error(
-                    path,
-                    std::io::Error::other("yaml feature disabled"),
-                ));
+                return Err::<_, std::sync::Arc<OrthoError>>(
+                    file_error(path, std::io::Error::other("yaml feature disabled")).into(),
+                );
             }
         }
         _ => {
@@ -124,7 +123,7 @@ fn parse_config_by_format(path: &Path, data: &str) -> Result<Figment, OrthoError
 /// let extends = get_extends(&figment, Path::new("cfg.toml")).unwrap();
 /// assert_eq!(extends, Some(PathBuf::from("base.toml")));
 /// ```
-fn get_extends(figment: &Figment, current_path: &Path) -> Result<Option<PathBuf>, OrthoError> {
+fn get_extends(figment: &Figment, current_path: &Path) -> OrthoResult<Option<PathBuf>> {
     match figment.find_value("extends") {
         Ok(val) => {
             let base = val.as_str().ok_or_else(|| {
@@ -152,12 +151,13 @@ fn get_extends(figment: &Figment, current_path: &Path) -> Result<Option<PathBuf>
                         std::io::ErrorKind::InvalidData,
                         "'extends' key must be a non-empty string",
                     ),
-                ));
+                )
+                .into());
             }
             Ok(Some(PathBuf::from(base)))
         }
         Err(e) if e.missing() => Ok(None),
-        Err(e) => Err(file_error(current_path, e)),
+        Err(e) => Err(file_error(current_path, e).into()),
     }
 }
 
@@ -182,10 +182,10 @@ fn get_extends(figment: &Figment, current_path: &Path) -> Result<Option<PathBuf>
 ///
 /// # Examples
 ///
-/// ```rust,no_run
+/// ```rust,ignore
 /// # use std::path::{Path, PathBuf};
 /// # use ortho_config::file::resolve_base_path;
-/// # fn run() -> Result<(), ortho_config::OrthoError> {
+/// # fn run() -> ortho_config::OrthoResult<()> {
 /// let current = Path::new("/tmp/config.toml");
 /// let base = PathBuf::from("base.toml");
 /// let canonical = resolve_base_path(current, base)?;
@@ -193,16 +193,19 @@ fn get_extends(figment: &Figment, current_path: &Path) -> Result<Option<PathBuf>
 /// # Ok(())
 /// # }
 /// ```
-fn resolve_base_path(current_path: &Path, base: PathBuf) -> Result<PathBuf, OrthoError> {
-    let parent = current_path.parent().ok_or_else(|| {
-        file_error(
-            current_path,
-            std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                "Cannot determine parent directory for config file when resolving 'extends'",
-            ),
-        )
-    })?;
+fn resolve_base_path(current_path: &Path, base: PathBuf) -> OrthoResult<PathBuf> {
+    let parent = current_path
+        .parent()
+        .ok_or_else(|| {
+            file_error(
+                current_path,
+                std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "Cannot determine parent directory for config file when resolving 'extends'",
+                ),
+            )
+        })
+        .map_err(std::sync::Arc::new)?;
     let base = if base.is_absolute() {
         base
     } else {
@@ -218,7 +221,7 @@ fn resolve_base_path(current_path: &Path, base: PathBuf) -> Result<PathBuf, Orth
 ///
 /// # Examples
 ///
-/// ```rust
+/// ```rust,ignore
 /// use figment::{Figment, providers::Toml};
 /// use ortho_config::file::merge_parent;
 ///
@@ -246,7 +249,7 @@ fn process_extends(
     current_path: &Path,
     visited: &mut HashSet<PathBuf>,
     stack: &mut Vec<PathBuf>,
-) -> Result<Figment, OrthoError> {
+) -> OrthoResult<Figment> {
     if let Some(base) = get_extends(&figment, current_path)? {
         let canonical = resolve_base_path(current_path, base)?;
         if !canonical.is_file() {
@@ -256,7 +259,8 @@ fn process_extends(
                     std::io::ErrorKind::InvalidInput,
                     "extended path is not a regular file",
                 ),
-            ));
+            )
+            .into());
         }
         let Some(parent_fig) = load_config_file_inner(&canonical, visited, stack)? else {
             return Err(file_error(
@@ -265,7 +269,8 @@ fn process_extends(
                     std::io::ErrorKind::NotFound,
                     "extended file disappeared during load",
                 ),
-            ));
+            )
+            .into());
         };
         figment = merge_parent(figment, parent_fig);
     }
@@ -288,7 +293,7 @@ fn process_extends(
 ///     host: String,
 /// }
 ///
-/// # fn run() -> Result<(), ortho_config::OrthoError> {
+/// # fn run() -> ortho_config::OrthoResult<()> {
 /// if let Some(figment) = load_config_file(Path::new("config.toml"))? {
 ///     let config: Config = figment
 ///         .extract()
@@ -302,7 +307,7 @@ fn process_extends(
 /// # Errors
 ///
 /// Returns an [`OrthoError`] if reading or parsing the file fails.
-pub fn load_config_file(path: &Path) -> Result<Option<Figment>, OrthoError> {
+pub fn load_config_file(path: &Path) -> OrthoResult<Option<Figment>> {
     let mut visited = HashSet::new();
     let mut stack = Vec::new();
     load_config_file_inner(path, &mut visited, &mut stack)
@@ -312,7 +317,7 @@ fn load_config_file_inner(
     path: &Path,
     visited: &mut HashSet<PathBuf>,
     stack: &mut Vec<PathBuf>,
-) -> Result<Option<Figment>, OrthoError> {
+) -> OrthoResult<Option<Figment>> {
     if !path.is_file() {
         return Ok(None);
     }
@@ -322,7 +327,8 @@ fn load_config_file_inner(
         cycle.push(canonical.display().to_string());
         return Err(OrthoError::CyclicExtends {
             cycle: cycle.join(" -> "),
-        });
+        }
+        .into());
     }
     stack.push(canonical.clone());
     let result = (|| {

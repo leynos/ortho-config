@@ -22,7 +22,7 @@ pub struct World {
     /// Whether the base file is missing.
     missing_base: bool,
     /// Result of attempting to load configuration.
-    pub result: Option<Result<RulesConfig, ortho_config::OrthoError>>,
+    pub result: Option<ortho_config::OrthoResult<RulesConfig>>,
     /// CLI reference value for subcommand scenarios.
     sub_ref: Option<String>,
     /// Configuration file reference for subcommand scenarios.
@@ -30,13 +30,13 @@ pub struct World {
     /// Environment variable reference for subcommand scenarios.
     sub_env: Option<String>,
     /// Result of subcommand configuration loading.
-    pub sub_result: Option<Result<PrArgs, ortho_config::OrthoError>>,
+    pub sub_result: Option<ortho_config::OrthoResult<PrArgs>>,
     /// Result of aggregated error scenario.
-    pub agg_result: Option<Result<ErrorConfig, ortho_config::OrthoError>>,
+    pub agg_result: Option<ortho_config::OrthoResult<ErrorConfig>>,
     /// File contents for flattened merging scenarios.
     flat_file: Option<String>,
     /// Result of flattened configuration loading.
-    pub(crate) flat_result: Option<Result<FlatArgs, ortho_config::OrthoError>>,
+    pub(crate) flat_result: Option<ortho_config::OrthoResult<FlatArgs>>,
 }
 
 /// CLI struct used for subcommand behavioural tests.

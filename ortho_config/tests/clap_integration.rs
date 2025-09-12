@@ -81,20 +81,20 @@ fn cli_combines_with_file() {
 #[rstest]
 fn invalid_cli_input_maps_error() {
     let err = TestConfig::load_from_iter(["prog", "--bogus"]).unwrap_err();
-    assert!(matches!(err, OrthoError::CliParsing(_)));
+    assert!(matches!(&*err, OrthoError::CliParsing(_)));
 }
 
 #[rstest]
 fn invalid_cli_wrong_type_maps_error() {
     let err = OptionConfig::load_from_iter(["prog", "--maybe", "notanumber"]).unwrap_err();
-    assert!(matches!(err, OrthoError::CliParsing(_)));
+    assert!(matches!(&*err, OrthoError::CliParsing(_)));
 }
 
 #[rstest]
 fn invalid_cli_missing_required_maps_error() {
     figment::Jail::expect_with(|_| {
         let err = RequiredConfig::load_from_iter(["prog"]).unwrap_err();
-        assert!(matches!(err, OrthoError::Merge { .. }));
+        assert!(matches!(&*err, OrthoError::Merge { .. }));
         Ok(())
     });
 }
@@ -104,7 +104,7 @@ fn invalid_cli_duplicate_flag_maps_error() {
     let err =
         TestConfig::load_from_iter(["prog", "--sample-value", "foo", "--sample-value", "bar"])
             .unwrap_err();
-    assert!(matches!(err, OrthoError::CliParsing(_)));
+    assert!(matches!(&*err, OrthoError::CliParsing(_)));
 }
 
 #[rstest]

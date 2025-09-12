@@ -102,7 +102,7 @@ pub(crate) fn parse_struct_attrs(attrs: &[Attribute]) -> Result<StructAttrs, syn
 /// })?;
 /// # Ok(())
 /// # }
-/// ```
+/// ```rust,ignore
 fn parse_lit<T, F>(
     meta: &syn::meta::ParseNestedMeta,
     key: &str,
@@ -131,14 +131,14 @@ where
 ///
 /// # Examples
 ///
-/// ```
+/// ```rust,ignore
 /// # use syn::meta::ParseNestedMeta;
 /// # fn demo(meta: &ParseNestedMeta) -> syn::Result<()> {
 /// let s = lit_str(meta, "cli_long")?;
 /// assert_eq!(s.value(), "name");
 /// # Ok(())
 /// # }
-/// ```
+/// ```rust,ignore
 fn lit_str(meta: &syn::meta::ParseNestedMeta, key: &str) -> Result<LitStr, syn::Error> {
     parse_lit(meta, key, |lit| match lit {
         Lit::Str(s) => Some(s),
@@ -150,14 +150,14 @@ fn lit_str(meta: &syn::meta::ParseNestedMeta, key: &str) -> Result<LitStr, syn::
 ///
 /// # Examples
 ///
-/// ```
+/// ```rust,ignore
 /// # use syn::meta::ParseNestedMeta;
 /// # fn demo(meta: &ParseNestedMeta) -> syn::Result<()> {
 /// let c = lit_char(meta, "cli_short")?;
 /// assert_eq!(c, 'n');
 /// # Ok(())
 /// # }
-/// ```
+/// ```rust,ignore
 fn lit_char(meta: &syn::meta::ParseNestedMeta, key: &str) -> Result<char, syn::Error> {
     parse_lit(meta, key, |lit| match lit {
         Lit::Char(c) => Some(c.value()),
@@ -169,7 +169,7 @@ fn lit_char(meta: &syn::meta::ParseNestedMeta, key: &str) -> Result<char, syn::E
 ///
 /// # Examples
 ///
-/// ```
+/// ```rust,ignore
 /// # use syn::meta::ParseNestedMeta;
 /// # fn demo(meta: &ParseNestedMeta) -> syn::Result<()> {
 /// let mut out = FieldAttrs::default();

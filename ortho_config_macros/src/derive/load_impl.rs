@@ -82,7 +82,7 @@ pub(crate) fn build_file_discovery(
                 Err(e) => errors.push(e),
             }
         }
-        let mut discovery_errors: Vec<ortho_config::OrthoError> = Vec::new();
+        let mut discovery_errors: Vec<std::sync::Arc<ortho_config::OrthoError>> = Vec::new();
         #xdg_snippet
         errors.extend(discovery_errors);
     }
@@ -182,12 +182,12 @@ pub(crate) fn build_merge_section(
                 if errors.is_empty() {
                     Ok(cfg)
                 } else {
-                    Err(ortho_config::OrthoError::aggregate(errors))
+                    Err(ortho_config::OrthoError::aggregate_arcs(errors).into())
                 }
             }
             Err(e) => {
-                errors.push(ortho_config::OrthoError::merge(e));
-                Err(ortho_config::OrthoError::aggregate(errors))
+                errors.push(std::sync::Arc::new(ortho_config::OrthoError::merge(e)));
+                Err(ortho_config::OrthoError::aggregate_arcs(errors).into())
             }
         }
     }
@@ -212,7 +212,7 @@ pub(crate) fn build_load_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStre
     quote! {
         impl #cli_ident {
             #[expect(dead_code, reason = "Generated method may not be used in all builds")]
-            pub fn load_from_iter<I, T>(iter: I) -> Result<#config_ident, ortho_config::OrthoError>
+            pub fn load_from_iter<I, T>(iter: I) -> ortho_config::OrthoResult<#config_ident>
             where
                 I: IntoIterator<Item = T>,
                 T: Into<std::ffi::OsString> + Clone,
@@ -220,11 +220,11 @@ pub(crate) fn build_load_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStre
                 use clap::Parser as _;
                 use ortho_config::figment::{providers::Serialized, Figment};
 
-                let mut errors: Vec<ortho_config::OrthoError> = Vec::new();
+                let mut errors: Vec<std::sync::Arc<ortho_config::OrthoError>> = Vec::new();
                 let cli = match Self::try_parse_from(iter) {
                     Ok(c) => Some(c),
                     Err(e) => {
-                        errors.push(e.into());
+                        errors.push(std::sync::Arc::new(e.into()));
                         None
                     }
                 };

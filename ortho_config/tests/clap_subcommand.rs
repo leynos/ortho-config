@@ -47,7 +47,9 @@ fn merge_works_for_subcommand() {
         j.create_file(".app.toml", "[cmds.run]\noption = \"file\"")?;
         let cli = Cli::parse_from(["prog", "run", "--option", "cli"]);
         let Commands::Run(args) = cli.cmd;
-        let cfg = args.load_and_merge()?;
+        let cfg = args
+            .load_and_merge()
+            .map_err(|e| figment::Error::from(e.to_string()))?;
         assert_eq!(cfg.option.as_deref(), Some("cli"));
         Ok(())
     });
@@ -59,7 +61,9 @@ fn merge_falls_back_to_env_when_cli_none() {
         j.set_env("APP_CMDS_RUN_OPTION", "env");
         let cli = Cli::parse_from(["prog", "run"]);
         let Commands::Run(args) = cli.cmd;
-        let cfg = args.load_and_merge()?;
+        let cfg = args
+            .load_and_merge()
+            .map_err(|e| figment::Error::from(e.to_string()))?;
         assert_eq!(cfg.option.as_deref(), Some("env"));
         Ok(())
     });
@@ -73,7 +77,9 @@ fn merge_falls_back_to_file_when_cli_none() {
         j.create_file(".app.toml", "[cmds.run]\noption = \"file\"")?;
         let cli = Cli::parse_from(["prog", "run"]);
         let Commands::Run(args) = cli.cmd;
-        let cfg = args.load_and_merge()?;
+        let cfg = args
+            .load_and_merge()
+            .map_err(|e| figment::Error::from(e.to_string()))?;
         assert_eq!(cfg.option.as_deref(), Some("file"));
         Ok(())
     });

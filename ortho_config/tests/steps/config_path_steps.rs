@@ -33,7 +33,7 @@ fn cli_error(world: &mut World) {
         .take()
         .expect("missing result")
         .expect_err("expected CLI parsing error");
-    match err {
+    match &*err {
         ortho_config::OrthoError::CliParsing(_) => {}
         other => panic!("unexpected error: {other:?}"),
     }

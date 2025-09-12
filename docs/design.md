@@ -91,7 +91,9 @@ The primary data flow for a user calling `AppConfig::load()` will be:
    configuration into the user's `AppConfig` struct.
 5. Array merging logic is applied post-deserialization if the "append" strategy
    is used.
-6. The result, either `Ok(AppConfig)` or `Err(OrthoError)`, is returned.
+6. The result, either `Ok(AppConfig)` or `Err(Arc<OrthoError>)`, is returned
+   via the alias `OrthoResult<T>`. This keeps public `Result` types small while
+   preserving rich error variants.
 
 ### CLI and Configuration Merge Flow
 
@@ -134,10 +136,10 @@ pub use ortho_config_macros::OrthoConfig;
 pub trait OrthoConfig: Sized + serde::de::DeserializeOwned {
     /// Loads, merges, and deserializes configuration from all available
     /// sources according to predefined precedence rules.
-    fn load() -> Result<Self, OrthoError>;
+    fn load() -> OrthoResult<Self>;
     
     // Potentially add other methods in the future, e.g.,
-    // fn load_from(path: &Path) -> Result<Self, OrthoError>;
+    // fn load_from(path: &Path) -> OrthoResult<Self>;
 }
 ```
 
@@ -226,7 +228,7 @@ A custom, comprehensive error enum is non-negotiable for a good user experience.
 use thiserror::Error;
 
 /// Wraps multiple configuration errors and implements [`Display`].
-pub struct AggregatedErrors(pub Vec<OrthoError>);
+pub struct AggregatedErrors(pub Vec<Arc<OrthoError>>);
 
 impl std::fmt::Display for AggregatedErrors {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

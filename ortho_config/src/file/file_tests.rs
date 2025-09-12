@@ -78,7 +78,8 @@ fn resolve_base_path_resolves(#[case] is_abs: bool) {
         } else {
             PathBuf::from("base.toml")
         };
-        let resolved = resolve_base_path(&current, base_path)?;
+        let resolved = resolve_base_path(&current, base_path)
+            .map_err(|e| figment::Error::from(e.to_string()))?;
         assert_eq!(resolved, root.join("base.toml"));
         Ok(())
     });
@@ -116,7 +117,8 @@ fn process_extends_handles_relative_and_absolute(#[case] is_abs: bool) {
             "extends = \"base.toml\"".to_string()
         };
         let figment = Figment::from(Toml::string(&config));
-        let merged = process_extends(figment, current, visited, stack)?;
+        let merged = process_extends(figment, current, visited, stack)
+            .map_err(|e| figment::Error::from(e.to_string()))?;
         let value = merged.find_value("foo").expect("foo");
         assert_eq!(value.as_str(), Some("base"));
         Ok(())

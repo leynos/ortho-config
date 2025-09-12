@@ -50,7 +50,7 @@ serde = { version = "1.0", features = ["derive"] }
 format parsers (`figment_json5`, `json5`, `serde_yaml`, `toml`) without
 declaring them directly.
 
-2. **Define the configuration struct:**
+1. **Define the configuration struct:**
 
 ```rust
 use ortho_config::{OrthoConfig, OrthoError};
@@ -109,7 +109,7 @@ fn main() -> Result<(), OrthoError> {
 }
 ```
 
-3. **Running the application**:
+2. **Running the application**:
 
 - With CLI arguments:
     `cargo run -- --log-level debug --port 3000 -v --features extra_cli_feature`

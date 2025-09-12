@@ -23,7 +23,7 @@ dependencies are provided as arguments. The
 set of traits (`Env`, `Clock`, etc.) to implement this pattern for common
 system interactions in Rust.
 
----
+______________________________________________________________________
 
 ## ✨ Mocking Environment Variables
 
@@ -122,7 +122,7 @@ fn main() {
 }
 ```
 
----
+______________________________________________________________________
 
 ## 🔩 Handling Other Non-Deterministic Dependencies
 
@@ -188,7 +188,7 @@ mod tests {
 
 In production, an instance of `RealClock::new()` would be used.
 
----
+______________________________________________________________________
 
 ## 📌 Key Takeaways
 

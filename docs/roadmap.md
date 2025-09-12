@@ -60,9 +60,9 @@ references the relevant design guidance.
 - [x] **Finish `clap` integration in the derive macro**
 
   - [x] Generate a hidden `clap::Parser` struct that automatically derives
-      long
-      and short option names from field names (underscores → hyphens) unless
-      overridden via `#[ortho_config(cli_long = "…")]`. [[Design](design.md)]
+      long and short option names from field names (underscores → hyphens)
+      unless overridden via `#[ortho_config(cli_long = "…")]`.
+      [[Design](design.md)]
 
   - [x] Ensure the macro sets appropriate `#[clap(long, short)]` attributes and
     respects default values specified in struct attributes.
@@ -124,11 +124,12 @@ references the relevant design guidance.
 
 - **Reduce error payload size** (target: v0.4.0)
 
-  - [ ] Wrap expansive error variants in `Arc` to shrink `Result` sizes and
+  - [x] Wrap expansive error variants in `Arc` to shrink `Result` sizes and
     eliminate the need for `#[expect(clippy::result_large_err)]`.
     - Link: <https://github.com/leynos/ortho-config/issues/>
     - Done when:
-      - Public `Result<_, OrthoError>` signatures use `Arc` (or an alias).
+      - Public `Result<_, OrthoError>` signatures use `Arc` (via the
+        alias `OrthoResult<T>`).
       - All `#[expect(clippy::result_large_err)]` are removed or scoped to
         private internals with a rationale.
 

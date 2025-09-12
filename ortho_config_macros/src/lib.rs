@@ -176,7 +176,7 @@ fn generate_ortho_impl(
         #load_impl
 
         impl ortho_config::OrthoConfig for #config_ident {
-            fn load_from_iter<I, T>(iter: I) -> Result<Self, ortho_config::OrthoError>
+            fn load_from_iter<I, T>(iter: I) -> ortho_config::OrthoResult<Self>
             where
                 I: IntoIterator<Item = T>,
                 T: Into<std::ffi::OsString> + Clone,

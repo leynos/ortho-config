@@ -1,7 +1,7 @@
 //! Error types produced by the configuration loader.
 
 use figment::error::Error as FigmentError;
-use std::{error::Error, fmt};
+use std::{error::Error, fmt, sync::Arc};
 use thiserror::Error;
 
 /// Errors that can occur while loading configuration.
@@ -59,19 +59,19 @@ pub enum OrthoError {
 /// }
 /// ```
 #[derive(Debug, Default)]
-pub struct AggregatedErrors(Vec<OrthoError>);
+pub struct AggregatedErrors(Vec<Arc<OrthoError>>);
 
 impl AggregatedErrors {
     /// Create a new aggregation from a vector of errors.
     #[must_use]
-    pub fn new(errors: Vec<OrthoError>) -> Self {
+    pub fn new(errors: Vec<Arc<OrthoError>>) -> Self {
         Self(errors)
     }
 
     /// Iterate over the contained errors.
     #[must_use = "iterators should be consumed to inspect errors"]
     pub fn iter(&self) -> impl Iterator<Item = &OrthoError> {
-        self.0.iter()
+        self.0.iter().map(AsRef::as_ref)
     }
 
     /// Number of errors in the aggregation.
@@ -106,6 +106,28 @@ impl OrthoError {
         assert!(!errors.is_empty(), "aggregate requires at least one error");
         if errors.len() == 1 {
             errors.into_iter().next().expect("one error")
+        } else {
+            let arcs = errors.into_iter().map(Arc::new).collect();
+            OrthoError::Aggregate(Box::new(AggregatedErrors::new(arcs)))
+        }
+    }
+
+    /// Build an [`OrthoError`] from a list of already shared errors.
+    ///
+    /// Use when upstream code has already materialised `Arc<OrthoError>`
+    /// instances.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `errors` is empty. Callers must provide at least one error.
+    #[must_use]
+    pub fn aggregate_arcs(errors: Vec<Arc<OrthoError>>) -> Self {
+        assert!(!errors.is_empty(), "aggregate requires at least one error");
+        if errors.len() == 1 {
+            match Arc::try_unwrap(errors.into_iter().next().expect("one error")) {
+                Ok(e) => e,
+                Err(shared) => OrthoError::Aggregate(Box::new(AggregatedErrors::new(vec![shared]))),
+            }
         } else {
             OrthoError::Aggregate(Box::new(AggregatedErrors::new(errors)))
         }

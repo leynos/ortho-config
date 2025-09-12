@@ -3,7 +3,7 @@
 //! Resolves defaults from files and the environment and exposes the
 //! [`SubcmdConfigMerge`] trait for merging them with CLI arguments.
 
-use crate::{OrthoError, load_config_file, sanitized_provider};
+use crate::{OrthoError, OrthoResult, load_config_file, sanitized_provider};
 use clap::CommandFactory;
 use figment::{Figment, providers::Env};
 use serde::de::DeserializeOwned;
@@ -30,7 +30,7 @@ pub use types::{CmdName, Prefix};
 /// # Returns
 /// A `Figment` instance containing the merged configuration for the subcommand,
 /// or an error if loading fails.
-fn load_from_files(paths: &[PathBuf], name: &CmdName) -> Result<Figment, OrthoError> {
+fn load_from_files(paths: &[PathBuf], name: &CmdName) -> OrthoResult<Figment> {
     let mut fig = Figment::new();
     for p in paths {
         if let Some(file_fig) = load_config_file(p)? {
@@ -64,7 +64,7 @@ fn load_from_files(paths: &[PathBuf], name: &CmdName) -> Result<Figment, OrthoEr
 ///     value: Option<String>,
 /// }
 ///
-/// # fn main() -> Result<(), ortho_config::OrthoError> {
+/// # fn main() -> ortho_config::OrthoResult<()> {
 /// // Assume configuration files default `value` to "file".
 /// let prefix = Prefix::new("MYAPP");
 /// let cli = MyCmd { value: Some("cli".to_string()) };
@@ -74,7 +74,7 @@ fn load_from_files(paths: &[PathBuf], name: &CmdName) -> Result<Figment, OrthoEr
 /// # Ok(())
 /// # }
 /// ```
-pub fn load_and_merge_subcommand<T>(prefix: &Prefix, cli: &T) -> Result<T, OrthoError>
+pub fn load_and_merge_subcommand<T>(prefix: &Prefix, cli: &T) -> OrthoResult<T>
 where
     T: serde::Serialize + DeserializeOwned + Default + CommandFactory,
 {
@@ -92,7 +92,7 @@ where
     // CLI values are merged over defaults; map failures to `Merge`.
     fig.merge(sanitized_provider(cli)?)
         .extract()
-        .map_err(OrthoError::merge)
+        .map_err(|e| OrthoError::merge(e).into())
 }
 
 /// Wrapper around [`load_and_merge_subcommand`] using the struct's configured
@@ -119,14 +119,14 @@ where
 ///     fn load() -> Result<Self, ortho_config::OrthoError> { todo!() }
 ///     fn prefix() -> &'static str { "myapp" }
 /// }
-/// # fn main() -> Result<(), ortho_config::OrthoError> {
+/// # fn main() -> ortho_config::OrthoResult<()> {
 /// let cli = MyCmd::parse_from(&["mycmd"]);
 /// let config = load_and_merge_subcommand_for(&cli)?;
 /// # let _ = config;
 /// # Ok(())
 /// # }
 /// ```
-pub fn load_and_merge_subcommand_for<T>(cli: &T) -> Result<T, OrthoError>
+pub fn load_and_merge_subcommand_for<T>(cli: &T) -> OrthoResult<T>
 where
     T: crate::OrthoConfig + serde::Serialize + Default + CommandFactory,
 {
@@ -154,7 +154,7 @@ where
 ///     level: Option<u32>,
 /// }
 ///
-/// # fn main() -> Result<(), ortho_config::OrthoError> {
+/// # fn main() -> ortho_config::OrthoResult<()> {
 /// let cli = RunArgs::parse_from(["tool", "--level", "3"]);
 /// let cfg = cli.load_and_merge()?;
 /// # let _ = cfg;
@@ -171,7 +171,7 @@ pub trait SubcmdConfigMerge: crate::OrthoConfig + CommandFactory + Sized {
     ///
     /// Returns an [`OrthoError::Merge`] if CLI values cannot be merged or if
     /// deserialisation fails.
-    fn load_and_merge(&self) -> Result<Self, OrthoError>
+    fn load_and_merge(&self) -> OrthoResult<Self>
     where
         Self: serde::Serialize + Default,
     {

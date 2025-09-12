@@ -65,7 +65,7 @@ fn cyclic_inheritance_is_detected() {
         j.create_file("b.toml", "extends = \"a.toml\"\nfoo = \"b\"")?;
         j.create_file(".config.toml", "extends = \"a.toml\"")?;
         let err = ExtendsCfg::load_from_iter(["prog"]).unwrap_err();
-        assert!(matches!(err, OrthoError::CyclicExtends { .. }));
+        assert!(matches!(&*err, OrthoError::CyclicExtends { .. }));
         Ok(())
     });
 }

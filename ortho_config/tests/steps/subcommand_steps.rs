@@ -38,7 +38,7 @@ fn env_ref(world: &mut World, val: String) {
 #[when("the subcommand configuration is loaded without defaults")]
 fn load_sub(world: &mut World) {
     let result = if has_no_config_sources(world) {
-        PrArgs::try_parse_from(["test"]).map_err(Into::into)
+        PrArgs::try_parse_from(["test"]).map_err(|e| ortho_config::OrthoError::from(e).into())
     } else {
         let cli = PrArgs {
             reference: world.sub_ref.clone(),
@@ -51,7 +51,7 @@ fn load_sub(world: &mut World) {
 }
 
 /// Set up test environment with configuration file and environment variables.
-fn setup_test_environment(world: &World, cli: &PrArgs) -> Result<PrArgs, ortho_config::OrthoError> {
+fn setup_test_environment(world: &World, cli: &PrArgs) -> ortho_config::OrthoResult<PrArgs> {
     let mut result = None;
     figment::Jail::expect_with(|j| {
         if let Some(ref val) = world.sub_file {
