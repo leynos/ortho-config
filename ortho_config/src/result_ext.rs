@@ -79,11 +79,20 @@ pub trait IntoFigmentError {
 
 impl IntoFigmentError for Arc<OrthoError> {
     fn into_figment(self) -> figment::Error {
-        match &*self {
-            OrthoError::Merge { source } | OrthoError::Gathering(source) => {
-                figment::Error::from(source.to_string())
-            }
-            other => figment::Error::from(other.to_string()),
+        // Prefer preserving structured Figment details when we can take
+        // ownership of the error. This retains kind, metadata and sources for
+        // Merge/Gathering variants via `From<OrthoError> for figment::Error`.
+        match Arc::try_unwrap(self) {
+            Ok(err) => err.into(),
+            Err(shared) => match &*shared {
+                // Fallback: we only have a shared reference; reconstruct from
+                // message text to avoid cloning large errors. This loses
+                // structure, but keeps a helpful message.
+                OrthoError::Merge { source } | OrthoError::Gathering(source) => {
+                    figment::Error::from(source.to_string())
+                }
+                other => figment::Error::from(other.to_string()),
+            },
         }
     }
 }
