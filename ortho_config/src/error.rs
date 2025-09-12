@@ -1,6 +1,6 @@
 //! Error types produced by the configuration loader.
 
-use figment::error::Error as FigmentError;
+use figment::Error as FigmentError;
 use std::{error::Error, fmt, sync::Arc};
 use thiserror::Error;
 
@@ -26,13 +26,13 @@ pub enum OrthoError {
 
     /// Error while gathering configuration from providers.
     #[error("Failed to gather configuration: {0}")]
-    Gathering(#[from] Box<figment::Error>),
+    Gathering(#[from] Box<FigmentError>),
 
     /// Failure merging CLI values over configuration sources.
     #[error("Failed to merge CLI with configuration: {source}")]
     Merge {
         #[source]
-        source: Box<figment::Error>,
+        source: Box<FigmentError>,
     },
 
     /// Validation failures when building configuration.
@@ -132,7 +132,7 @@ impl OrthoError {
     /// assert!(matches!(e, OrthoError::Merge { .. }));
     /// ```
     #[must_use]
-    pub fn merge(source: figment::Error) -> Self {
+    pub fn merge(source: FigmentError) -> Self {
         OrthoError::Merge {
             source: Box::new(source),
         }
@@ -149,7 +149,7 @@ impl OrthoError {
     /// assert!(matches!(e, OrthoError::Gathering(_)));
     /// ```
     #[must_use]
-    pub fn gathering(source: figment::Error) -> Self {
+    pub fn gathering(source: FigmentError) -> Self {
         OrthoError::Gathering(Box::new(source))
     }
 }
@@ -173,8 +173,8 @@ impl From<clap::Error> for OrthoError {
     }
 }
 
-impl From<figment::Error> for OrthoError {
-    fn from(e: figment::Error) -> Self {
+impl From<FigmentError> for OrthoError {
+    fn from(e: FigmentError) -> Self {
         OrthoError::Gathering(e.into())
     }
 }
