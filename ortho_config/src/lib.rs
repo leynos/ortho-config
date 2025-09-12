@@ -31,8 +31,8 @@ mod merge;
 mod result_ext;
 pub mod subcommand;
 pub use crate::subcommand::SubcmdConfigMerge;
-pub use subcommand::{load_and_merge_subcommand, load_and_merge_subcommand_for};
 pub use result_ext::{OrthoMergeExt, OrthoResultExt};
+pub use subcommand::{load_and_merge_subcommand, load_and_merge_subcommand_for};
 
 /// Normalize a prefix by trimming trailing underscores and converting
 /// to lowercase ASCII.

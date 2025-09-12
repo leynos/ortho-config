@@ -87,7 +87,9 @@ pub fn value_without_nones<T: Serialize>(cli: &T) -> Result<Value, serde_json::E
 /// # Errors
 ///
 /// Returns an [`OrthoError`] if JSON serialization fails.
-pub fn sanitize_value<T: Serialize>(value: &T) -> OrthoResult<Value> { value_without_nones(value).into_ortho() }
+pub fn sanitize_value<T: Serialize>(value: &T) -> OrthoResult<Value> {
+    value_without_nones(value).into_ortho()
+}
 
 /// Produce a Figment provider from `value` with `None` fields removed.
 ///

@@ -25,6 +25,27 @@ fn file_error(
     })
 }
 
+fn invalid_input(path: &Path, msg: impl Into<String>) -> std::sync::Arc<OrthoError> {
+    file_error(
+        path,
+        std::io::Error::new(std::io::ErrorKind::InvalidInput, msg.into()),
+    )
+}
+
+fn invalid_data(path: &Path, msg: impl Into<String>) -> std::sync::Arc<OrthoError> {
+    file_error(
+        path,
+        std::io::Error::new(std::io::ErrorKind::InvalidData, msg.into()),
+    )
+}
+
+fn not_found(path: &Path, msg: impl Into<String>) -> std::sync::Arc<OrthoError> {
+    file_error(
+        path,
+        std::io::Error::new(std::io::ErrorKind::NotFound, msg.into()),
+    )
+}
+
 /// Canonicalise `p` using platform-specific rules.
 ///
 /// Returns an absolute, normalised path with symlinks resolved.
@@ -50,9 +71,13 @@ fn file_error(
 /// ```
 pub fn canonicalise(p: &Path) -> OrthoResult<PathBuf> {
     #[cfg(windows)]
-    { dunce::canonicalize(p).map_err(|e| file_error(p, e)) }
+    {
+        dunce::canonicalize(p).map_err(|e| file_error(p, e))
+    }
     #[cfg(not(windows))]
-    { std::fs::canonicalize(p).map_err(|e| file_error(p, e)) }
+    {
+        std::fs::canonicalize(p).map_err(|e| file_error(p, e))
+    }
 }
 
 /// Parse configuration data according to the file extension.
@@ -136,21 +161,15 @@ fn get_extends(figment: &Figment, current_path: &Path) -> OrthoResult<Option<Pat
                     figment::value::Value::Dict(..) => "object",
                     figment::value::Value::Array(..) => "array",
                 };
-                file_error(
+                invalid_data(
                     current_path,
-                    std::io::Error::new(
-                        std::io::ErrorKind::InvalidData,
-                        format!("'extends' key must be a string, but found type: {actual_type}"),
-                    ),
+                    format!("'extends' key must be a string, but found type: {actual_type}"),
                 )
             })?;
             if base.is_empty() {
-                return Err(file_error(
+                return Err(invalid_data(
                     current_path,
-                    std::io::Error::new(
-                        std::io::ErrorKind::InvalidData,
-                        "'extends' key must be a non-empty string",
-                    ),
+                    "'extends' key must be a non-empty string",
                 ));
             }
             Ok(Some(PathBuf::from(base)))
@@ -194,12 +213,9 @@ fn get_extends(figment: &Figment, current_path: &Path) -> OrthoResult<Option<Pat
 /// ```
 fn resolve_base_path(current_path: &Path, base: PathBuf) -> OrthoResult<PathBuf> {
     let parent = current_path.parent().ok_or_else(|| {
-        file_error(
+        invalid_input(
             current_path,
-            std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                "Cannot determine parent directory for config file when resolving 'extends'",
-            ),
+            "Cannot determine parent directory for config file when resolving 'extends'",
         )
     })?;
     let base = if base.is_absolute() {
@@ -249,21 +265,15 @@ fn process_extends(
     if let Some(base) = get_extends(&figment, current_path)? {
         let canonical = resolve_base_path(current_path, base)?;
         if !canonical.is_file() {
-            return Err(file_error(
+            return Err(invalid_input(
                 &canonical,
-                std::io::Error::new(
-                    std::io::ErrorKind::InvalidInput,
-                    "extended path is not a regular file",
-                ),
+                "extended path is not a regular file",
             ));
         }
         let Some(parent_fig) = load_config_file_inner(&canonical, visited, stack)? else {
-            return Err(file_error(
+            return Err(not_found(
                 &canonical,
-                std::io::Error::new(
-                    std::io::ErrorKind::NotFound,
-                    "extended file disappeared during load",
-                ),
+                "extended file disappeared during load",
             ));
         };
         figment = merge_parent(figment, parent_fig);

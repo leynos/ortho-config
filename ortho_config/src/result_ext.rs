@@ -35,6 +35,10 @@ use std::sync::Arc;
 /// into an `OrthoResult<T>`.
 pub trait OrthoResultExt<T, E> {
     /// Convert `Result<T, E>` into `OrthoResult<T>` using `Into<OrthoError>`.
+    ///
+    /// # Errors
+    ///
+    /// Propagates the original error after conversion into `Arc<OrthoError>`.
     fn into_ortho(self) -> OrthoResult<T>;
 }
 
@@ -51,6 +55,10 @@ where
 pub trait OrthoMergeExt<T> {
     /// Convert `Result<T, figment::Error>` into `OrthoResult<T>` as a
     /// [`OrthoError::Merge`].
+    ///
+    /// # Errors
+    ///
+    /// Returns an `OrthoError::Merge` wrapped in `Arc` when the input is `Err`.
     fn into_ortho_merge(self) -> OrthoResult<T>;
 }
 
@@ -59,4 +67,3 @@ impl<T> OrthoMergeExt<T> for Result<T, figment::Error> {
         self.map_err(|e| Arc::new(OrthoError::merge(e)))
     }
 }
-
