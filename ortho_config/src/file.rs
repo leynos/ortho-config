@@ -15,11 +15,14 @@ use std::error::Error;
 use std::path::{Path, PathBuf};
 
 /// Construct an [`OrthoError::File`] for a configuration path.
-fn file_error(path: &Path, err: impl Into<Box<dyn Error + Send + Sync>>) -> OrthoError {
-    OrthoError::File {
+fn file_error(
+    path: &Path,
+    err: impl Into<Box<dyn Error + Send + Sync>>,
+) -> std::sync::Arc<OrthoError> {
+    std::sync::Arc::new(OrthoError::File {
         path: path.to_path_buf(),
         source: err.into(),
-    }
+    })
 }
 
 /// Canonicalise `p` using platform-specific rules.
@@ -47,13 +50,9 @@ fn file_error(path: &Path, err: impl Into<Box<dyn Error + Send + Sync>>) -> Orth
 /// ```
 pub fn canonicalise(p: &Path) -> OrthoResult<PathBuf> {
     #[cfg(windows)]
-    {
-        dunce::canonicalize(p).map_err(|e| file_error(p, e).into())
-    }
+    { dunce::canonicalize(p).map_err(|e| file_error(p, e)) }
     #[cfg(not(windows))]
-    {
-        std::fs::canonicalize(p).map_err(|e| file_error(p, e).into())
-    }
+    { std::fs::canonicalize(p).map_err(|e| file_error(p, e)) }
 }
 
 /// Parse configuration data according to the file extension.
@@ -83,7 +82,7 @@ fn parse_config_by_format(path: &Path, data: &str) -> OrthoResult<Figment> {
                     std::io::Error::other(
                         "json5 feature disabled: enable the 'json5' feature to support this file format",
                     ),
-                ).into());
+                ));
             }
         }
         Some("yaml" | "yml") => {
@@ -94,9 +93,10 @@ fn parse_config_by_format(path: &Path, data: &str) -> OrthoResult<Figment> {
             }
             #[cfg(not(feature = "yaml"))]
             {
-                return Err::<_, std::sync::Arc<OrthoError>>(
-                    file_error(path, std::io::Error::other("yaml feature disabled")).into(),
-                );
+                return Err::<_, std::sync::Arc<OrthoError>>(file_error(
+                    path,
+                    std::io::Error::other("yaml feature disabled"),
+                ));
             }
         }
         _ => {
@@ -151,13 +151,12 @@ fn get_extends(figment: &Figment, current_path: &Path) -> OrthoResult<Option<Pat
                         std::io::ErrorKind::InvalidData,
                         "'extends' key must be a non-empty string",
                     ),
-                )
-                .into());
+                ));
             }
             Ok(Some(PathBuf::from(base)))
         }
         Err(e) if e.missing() => Ok(None),
-        Err(e) => Err(file_error(current_path, e).into()),
+        Err(e) => Err(file_error(current_path, e)),
     }
 }
 
@@ -194,18 +193,15 @@ fn get_extends(figment: &Figment, current_path: &Path) -> OrthoResult<Option<Pat
 /// # }
 /// ```
 fn resolve_base_path(current_path: &Path, base: PathBuf) -> OrthoResult<PathBuf> {
-    let parent = current_path
-        .parent()
-        .ok_or_else(|| {
-            file_error(
-                current_path,
-                std::io::Error::new(
-                    std::io::ErrorKind::InvalidInput,
-                    "Cannot determine parent directory for config file when resolving 'extends'",
-                ),
-            )
-        })
-        .map_err(std::sync::Arc::new)?;
+    let parent = current_path.parent().ok_or_else(|| {
+        file_error(
+            current_path,
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "Cannot determine parent directory for config file when resolving 'extends'",
+            ),
+        )
+    })?;
     let base = if base.is_absolute() {
         base
     } else {
@@ -259,8 +255,7 @@ fn process_extends(
                     std::io::ErrorKind::InvalidInput,
                     "extended path is not a regular file",
                 ),
-            )
-            .into());
+            ));
         }
         let Some(parent_fig) = load_config_file_inner(&canonical, visited, stack)? else {
             return Err(file_error(
@@ -269,8 +264,7 @@ fn process_extends(
                     std::io::ErrorKind::NotFound,
                     "extended file disappeared during load",
                 ),
-            )
-            .into());
+            ));
         };
         figment = merge_parent(figment, parent_fig);
     }
@@ -325,10 +319,9 @@ fn load_config_file_inner(
     if !visited.insert(canonical.clone()) {
         let mut cycle: Vec<String> = stack.iter().map(|p| p.display().to_string()).collect();
         cycle.push(canonical.display().to_string());
-        return Err(OrthoError::CyclicExtends {
+        return Err(std::sync::Arc::new(OrthoError::CyclicExtends {
             cycle: cycle.join(" -> "),
-        }
-        .into());
+        }));
     }
     stack.push(canonical.clone());
     let result = (|| {

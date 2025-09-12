@@ -1,7 +1,7 @@
 //! Helpers for sanitizing and merging command-line arguments with
 //! configuration defaults.
 
-use crate::{OrthoError, OrthoResult};
+use crate::{OrthoResult, OrthoResultExt};
 use figment::providers::Serialized;
 use serde::Serialize;
 use serde_json::Value;
@@ -87,9 +87,7 @@ pub fn value_without_nones<T: Serialize>(cli: &T) -> Result<Value, serde_json::E
 /// # Errors
 ///
 /// Returns an [`OrthoError`] if JSON serialization fails.
-pub fn sanitize_value<T: Serialize>(value: &T) -> OrthoResult<Value> {
-    value_without_nones(value).map_err(|e| OrthoError::from(e).into())
-}
+pub fn sanitize_value<T: Serialize>(value: &T) -> OrthoResult<Value> { value_without_nones(value).into_ortho() }
 
 /// Produce a Figment provider from `value` with `None` fields removed.
 ///

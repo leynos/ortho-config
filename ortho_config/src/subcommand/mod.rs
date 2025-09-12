@@ -3,7 +3,7 @@
 //! Resolves defaults from files and the environment and exposes the
 //! [`SubcmdConfigMerge`] trait for merging them with CLI arguments.
 
-use crate::{OrthoError, OrthoResult, load_config_file, sanitized_provider};
+use crate::{OrthoMergeExt, OrthoResult, load_config_file, sanitized_provider};
 use clap::CommandFactory;
 use figment::{Figment, providers::Env};
 use serde::de::DeserializeOwned;
@@ -92,7 +92,7 @@ where
     // CLI values are merged over defaults; map failures to `Merge`.
     fig.merge(sanitized_provider(cli)?)
         .extract()
-        .map_err(|e| OrthoError::merge(e).into())
+        .into_ortho_merge()
 }
 
 /// Wrapper around [`load_and_merge_subcommand`] using the struct's configured
