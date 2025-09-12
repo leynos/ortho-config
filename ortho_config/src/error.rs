@@ -152,6 +152,25 @@ impl OrthoError {
     pub fn gathering(source: FigmentError) -> Self {
         OrthoError::Gathering(Box::new(source))
     }
+
+    /// Construct a gathering error from a [`figment::Error`] wrapped in an
+    /// [`Arc`].
+    ///
+    /// This helper reduces repetition in call sites that need an
+    /// `Arc<OrthoError>` (for example, when aggregating multiple errors).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ortho_config::OrthoError;
+    /// let fe = figment::Error::from("boom");
+    /// let e = OrthoError::gathering_arc(fe);
+    /// assert!(matches!(&*e, OrthoError::Gathering(_)));
+    /// ```
+    #[must_use]
+    pub fn gathering_arc(source: FigmentError) -> Arc<Self> {
+        Arc::new(Self::gathering(source))
+    }
 }
 
 /// Convert JSON encoding or decoding failures into

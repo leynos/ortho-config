@@ -25,7 +25,7 @@ where
         result.replace(Some(cfg));
         Ok(())
     })
-    .map_err(|e| std::sync::Arc::new(ortho_config::OrthoError::gathering(e)))?;
+    .map_err(ortho_config::OrthoError::gathering_arc)?;
     Ok(result.into_inner().expect("loader executed"))
 }
 
