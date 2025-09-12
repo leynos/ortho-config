@@ -17,7 +17,7 @@
 //!   - no CLI, no environment  => `option = "file"` (file wins)
 
 use clap::{Parser, Subcommand};
-use ortho_config::{OrthoConfig, SubcmdConfigMerge};
+use ortho_config::{IntoFigmentError, OrthoConfig, SubcmdConfigMerge};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Parser)]
@@ -49,7 +49,7 @@ fn merge_works_for_subcommand() {
         let Commands::Run(args) = cli.cmd;
         let cfg = args
             .load_and_merge()
-            .map_err(|e| figment::Error::from(e.to_string()))?;
+            .map_err(IntoFigmentError::into_figment)?;
         assert_eq!(cfg.option.as_deref(), Some("cli"));
         Ok(())
     });
@@ -63,7 +63,7 @@ fn merge_falls_back_to_env_when_cli_none() {
         let Commands::Run(args) = cli.cmd;
         let cfg = args
             .load_and_merge()
-            .map_err(|e| figment::Error::from(e.to_string()))?;
+            .map_err(IntoFigmentError::into_figment)?;
         assert_eq!(cfg.option.as_deref(), Some("env"));
         Ok(())
     });
@@ -79,7 +79,7 @@ fn merge_falls_back_to_file_when_cli_none() {
         let Commands::Run(args) = cli.cmd;
         let cfg = args
             .load_and_merge()
-            .map_err(|e| figment::Error::from(e.to_string()))?;
+            .map_err(IntoFigmentError::into_figment)?;
         assert_eq!(cfg.option.as_deref(), Some("file"));
         Ok(())
     });

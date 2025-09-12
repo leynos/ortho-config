@@ -6,7 +6,9 @@
 
 use clap::CommandFactory;
 use ortho_config::subcommand::Prefix;
-use ortho_config::{OrthoConfig, OrthoResult, SubcmdConfigMerge, load_and_merge_subcommand};
+use ortho_config::{
+    IntoFigmentError, OrthoConfig, OrthoResult, SubcmdConfigMerge, load_and_merge_subcommand,
+};
 use serde::de::DeserializeOwned;
 
 fn with_jail<F, L, T>(setup: F, loader: L) -> OrthoResult<T>
@@ -19,7 +21,7 @@ where
     let result = RefCell::new(None);
     figment::Jail::try_with(|j| {
         setup(j)?;
-        let cfg = loader().map_err(|e| figment::error::Error::from(e.to_string()))?;
+        let cfg = loader().map_err(IntoFigmentError::into_figment)?;
         result.replace(Some(cfg));
         Ok(())
     })

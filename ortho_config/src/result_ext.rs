@@ -67,3 +67,18 @@ impl<T> OrthoMergeExt<T> for Result<T, figment::Error> {
         self.map_err(|e| Arc::new(OrthoError::merge(e)))
     }
 }
+
+/// Convert shared Ortho errors into `figment::Error` for interop in tests and
+/// integrations that expect Figment's error type.
+pub trait IntoFigmentError {
+    /// Convert into a `figment::Error`, preserving message text. For
+    /// `Merge/Gathering` variants, structured details may be lost due to shared
+    /// ownership; consumers should prefer `OrthoError` where possible.
+    fn into_figment(self) -> figment::Error;
+}
+
+impl IntoFigmentError for Arc<OrthoError> {
+    fn into_figment(self) -> figment::Error {
+        figment::Error::from(self.to_string())
+    }
+}
