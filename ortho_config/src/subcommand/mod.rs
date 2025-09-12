@@ -54,7 +54,7 @@ fn load_from_files(paths: &[PathBuf], name: &CmdName) -> OrthoResult<Figment> {
 ///
 /// # Examples
 ///
-/// ```rust,ignore
+/// ```rust,no_run
 /// use ortho_config::subcommand::load_and_merge_subcommand;
 /// use ortho_config::subcommand::Prefix;
 /// # use clap::Parser;
