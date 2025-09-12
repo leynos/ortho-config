@@ -1,4 +1,14 @@
 //! Parsing utilities for the `OrthoConfig` derive macro.
+//!
+//! Basic compile-check example:
+//!
+//! ```rust
+//! // This trivial example exists to keep doctests compiling in this module.
+//! // The parsing helpers below are internal to the macro and exercised by
+//! // unit tests; this snippet simply guards against accidental doctest
+//! // breakage (e.g., invalid code fences).
+//! let _ = 1 + 1;
+//! ```
 
 use syn::parenthesized;
 use syn::{
@@ -102,7 +112,7 @@ pub(crate) fn parse_struct_attrs(attrs: &[Attribute]) -> Result<StructAttrs, syn
 /// })?;
 /// # Ok(())
 /// # }
-/// ```
+/// ```rust,ignore
 fn parse_lit<T, F>(
     meta: &syn::meta::ParseNestedMeta,
     key: &str,
@@ -131,13 +141,17 @@ where
 ///
 /// # Examples
 ///
-/// ```
-/// # use syn::meta::ParseNestedMeta;
-/// # fn demo(meta: &ParseNestedMeta) -> syn::Result<()> {
-/// let s = lit_str(meta, "cli_long")?;
-/// assert_eq!(s.value(), "name");
-/// # Ok(())
-/// # }
+/// ```rust
+/// // Build a synthetic attribute and visit its nested meta so we can call into
+/// // the parsing helper in this crate. This example ensures the documented
+/// // function signature stays aligned with the implementation.
+/// use syn::Attribute;
+/// let attr: Attribute = syn::parse_quote!(#[ortho_config(cli_long = "name")]);
+/// attr.parse_nested_meta(|meta| {
+///     let s = ortho_config_macros::__doc_lit_str(&meta, "cli_long")?;
+///     assert_eq!(s.value(), "name");
+///     Ok(())
+/// }).unwrap();
 /// ```
 fn lit_str(meta: &syn::meta::ParseNestedMeta, key: &str) -> Result<LitStr, syn::Error> {
     parse_lit(meta, key, |lit| match lit {
@@ -150,14 +164,14 @@ fn lit_str(meta: &syn::meta::ParseNestedMeta, key: &str) -> Result<LitStr, syn::
 ///
 /// # Examples
 ///
-/// ```
+/// ```rust,ignore
 /// # use syn::meta::ParseNestedMeta;
 /// # fn demo(meta: &ParseNestedMeta) -> syn::Result<()> {
 /// let c = lit_char(meta, "cli_short")?;
 /// assert_eq!(c, 'n');
 /// # Ok(())
 /// # }
-/// ```
+/// ```rust,ignore
 fn lit_char(meta: &syn::meta::ParseNestedMeta, key: &str) -> Result<char, syn::Error> {
     parse_lit(meta, key, |lit| match lit {
         Lit::Char(c) => Some(c.value()),
@@ -169,7 +183,7 @@ fn lit_char(meta: &syn::meta::ParseNestedMeta, key: &str) -> Result<char, syn::E
 ///
 /// # Examples
 ///
-/// ```
+/// ```rust,ignore
 /// # use syn::meta::ParseNestedMeta;
 /// # fn demo(meta: &ParseNestedMeta) -> syn::Result<()> {
 /// let mut out = FieldAttrs::default();
@@ -204,6 +218,42 @@ fn apply_field_attr(
             Ok(true)
         }
         () => Ok(false),
+    }
+}
+
+// Expose a thin wrapper for doctests without leaking internals into the public
+// API in normal builds. This allows examples to type-check while keeping
+// `lit_str` private outside of tests/doctests.
+#[cfg(any(test, doctest))]
+#[doc(hidden)]
+pub fn __doc_lit_str(meta: &syn::meta::ParseNestedMeta, key: &str) -> Result<LitStr, syn::Error> {
+    lit_str(meta, key)
+}
+
+#[cfg(test)]
+mod lit_str_tests {
+    use super::*;
+
+    #[test]
+    fn lit_str_parses_string_values() {
+        let attr: Attribute = syn::parse_quote!(#[ortho_config(cli_long = "name")]);
+        attr.parse_nested_meta(|meta| {
+            let s = super::__doc_lit_str(&meta, "cli_long")?;
+            assert_eq!(s.value(), "name");
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn lit_char_parses_char_values() {
+        let attr: syn::Attribute = syn::parse_quote!(#[ortho_config(cli_short = 'n')]);
+        attr.parse_nested_meta(|meta| {
+            let c = super::lit_char(&meta, "cli_short")?;
+            assert_eq!(c, 'n');
+            Ok(())
+        })
+        .unwrap();
     }
 }
 

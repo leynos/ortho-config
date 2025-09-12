@@ -28,8 +28,10 @@ mod csv_env;
 mod error;
 pub mod file;
 mod merge;
+mod result_ext;
 pub mod subcommand;
 pub use crate::subcommand::SubcmdConfigMerge;
+pub use result_ext::{IntoFigmentError, OrthoMergeExt, OrthoResultExt, ResultIntoFigment};
 pub use subcommand::{load_and_merge_subcommand, load_and_merge_subcommand_for};
 
 /// Normalize a prefix by trimming trailing underscores and converting
@@ -60,11 +62,11 @@ pub use file::load_config_file;
 /// # Examples
 ///
 /// ```rust,no_run
-/// use ortho_config::{sanitize_value, sanitized_provider, OrthoError};
+/// use ortho_config::{sanitize_value, sanitized_provider, OrthoResult};
 /// #[derive(serde::Serialize)]
 /// struct CLI { flag: Option<()> }
 ///
-/// # fn main() -> Result<(), OrthoError> {
+/// # fn main() -> OrthoResult<()> {
 /// let cli = CLI { flag: None };
 /// let provider = sanitized_provider(&cli)?; // ready to merge over defaults
 /// let _json = sanitize_value(&cli)?;        // raw serialized value with `None`s removed
@@ -72,7 +74,8 @@ pub use file::load_config_file;
 /// # Ok(())
 /// # }
 /// ```
-pub use merge::{sanitize_value, sanitized_provider};
+pub use merge::{sanitize_value, sanitized_provider, value_without_nones};
+use std::sync::Arc;
 
 /// Trait implemented for structs that represent application configuration.
 pub trait OrthoConfig: Sized + serde::de::DeserializeOwned {
@@ -85,7 +88,7 @@ pub trait OrthoConfig: Sized + serde::de::DeserializeOwned {
     /// precedence level.
     ///
     /// ```rust,no_run
-    /// use ortho_config::{OrthoConfig, OrthoError};
+    /// use ortho_config::{OrthoConfig, OrthoResult};
     /// use serde::Deserialize;
     ///
     /// #[derive(Deserialize, OrthoConfig)]
@@ -93,7 +96,7 @@ pub trait OrthoConfig: Sized + serde::de::DeserializeOwned {
     ///     port: u16,
     /// }
     ///
-    /// # fn main() -> Result<(), OrthoError> {
+    /// # fn main() -> OrthoResult<()> {
     /// let _cfg = AppConfig::load()?;
     /// # Ok(())
     /// # }
@@ -103,7 +106,7 @@ pub trait OrthoConfig: Sized + serde::de::DeserializeOwned {
     ///
     /// Returns an [`OrthoError`] if parsing command-line arguments, reading
     /// files or deserializing configuration fails.
-    fn load() -> Result<Self, OrthoError> {
+    fn load() -> OrthoResult<Self> {
         Self::load_from_iter(std::env::args_os())
     }
 
@@ -114,7 +117,7 @@ pub trait OrthoConfig: Sized + serde::de::DeserializeOwned {
     ///
     /// Returns an [`OrthoError`] if parsing command-line arguments, reading
     /// files or deserializing configuration fails.
-    fn load_from_iter<I, T>(iter: I) -> Result<Self, OrthoError>
+    fn load_from_iter<I, T>(iter: I) -> OrthoResult<Self>
     where
         I: IntoIterator<Item = T>,
         T: Into<std::ffi::OsString> + Clone;
@@ -126,3 +129,11 @@ pub trait OrthoConfig: Sized + serde::de::DeserializeOwned {
         ""
     }
 }
+
+/// Canonical result type for public APIs in this crate.
+///
+/// Errors are wrapped in an `Arc` to reduce the size of `Result` and avoid
+/// `clippy::result_large_err` on public signatures while keeping rich error
+/// variants internally. This keeps call-sites lightweight and encourages cheap
+/// cloning while propagating errors.
+pub type OrthoResult<T> = std::result::Result<T, Arc<OrthoError>>;

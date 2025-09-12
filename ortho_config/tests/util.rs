@@ -6,23 +6,26 @@
 
 use clap::CommandFactory;
 use ortho_config::subcommand::Prefix;
-use ortho_config::{OrthoConfig, OrthoError, SubcmdConfigMerge, load_and_merge_subcommand};
+use ortho_config::{
+    OrthoConfig, OrthoResult, ResultIntoFigment, SubcmdConfigMerge, load_and_merge_subcommand,
+};
 use serde::de::DeserializeOwned;
 
-fn with_jail<F, L, T>(setup: F, loader: L) -> Result<T, OrthoError>
+fn with_jail<F, L, T>(setup: F, loader: L) -> OrthoResult<T>
 where
     F: FnOnce(&mut figment::Jail) -> figment::error::Result<()>,
-    L: FnOnce() -> Result<T, OrthoError>,
+    L: FnOnce() -> OrthoResult<T>,
 {
     use std::cell::RefCell;
 
     let result = RefCell::new(None);
     figment::Jail::try_with(|j| {
         setup(j)?;
-        let cfg = loader().map_err(|e| -> figment::error::Error { e.into() })?;
+        let cfg = loader().to_figment()?;
         result.replace(Some(cfg));
         Ok(())
-    })?;
+    })
+    .map_err(ortho_config::OrthoError::gathering_arc)?;
     Ok(result.into_inner().expect("loader executed"))
 }
 
@@ -32,7 +35,7 @@ where
 /// # Errors
 ///
 /// Returns an error if configuration loading or merging fails.
-pub fn with_merged_subcommand_cli<F, T>(setup: F, cli: &T) -> Result<T, OrthoError>
+pub fn with_merged_subcommand_cli<F, T>(setup: F, cli: &T) -> OrthoResult<T>
 where
     F: FnOnce(&mut figment::Jail) -> figment::error::Result<()>,
     T: serde::Serialize + DeserializeOwned + Default + CommandFactory,
@@ -48,7 +51,7 @@ where
 /// # Errors
 ///
 /// Returns an error if configuration loading or merging fails.
-pub fn with_merged_subcommand_cli_for<F, T>(setup: F, cli: &T) -> Result<T, OrthoError>
+pub fn with_merged_subcommand_cli_for<F, T>(setup: F, cli: &T) -> OrthoResult<T>
 where
     F: FnOnce(&mut figment::Jail) -> figment::error::Result<()>,
     T: OrthoConfig + serde::Serialize + Default + CommandFactory,

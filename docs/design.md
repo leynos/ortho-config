@@ -91,7 +91,36 @@ The primary data flow for a user calling `AppConfig::load()` will be:
    configuration into the user's `AppConfig` struct.
 5. Array merging logic is applied post-deserialization if the "append" strategy
    is used.
-6. The result, either `Ok(AppConfig)` or `Err(OrthoError)`, is returned.
+6. The result, either `Ok(AppConfig)` or `Err(Arc<OrthoError>)`, is returned
+   via the alias `OrthoResult<T>`. This keeps public `Result` types small while
+   preserving rich error variants.
+
+### Error ergonomics and interop
+
+The crate provides focused extension traits to keep error conversions concise
+and explicit:
+
+- `OrthoResultExt::into_ortho()` maps external error types implementing
+  `Into<OrthoError>` into `Arc<OrthoError>` within `OrthoResult<T>`.
+- `OrthoMergeExt::into_ortho_merge()` maps `figment::Error` into
+  `OrthoError::Merge` (wrapped in `Arc`) when extracting configurations.
+- `IntoFigmentError::into_figment()` converts shared `OrthoError`s into
+  `figment::Error` for test adapters or integration code that expects Figment’s
+  error type.
+- `ResultIntoFigment::to_figment()` converts `OrthoResult<T>` back into
+  `Result<T, figment::Error>` where this is more ergonomic.
+
+These helpers are intentionally small and composable so call‑sites remain easy
+to read without hiding the semantics of error mapping.
+
+### Aggregated errors
+
+To surface multiple failures at once, `OrthoError::aggregate<I, E>(errors)`
+accepts any iterator of items that implement `Into<Arc<OrthoError>>`. This
+allows callers to provide either owned `OrthoError` values or shared
+`Arc<OrthoError>` values without additional boiler‑plate. For a single error,
+the helper unwraps it and returns the underlying `OrthoError`; for two or more
+errors it returns `OrthoError::Aggregate` containing a shared collection.
 
 ### CLI and Configuration Merge Flow
 
@@ -134,10 +163,10 @@ pub use ortho_config_macros::OrthoConfig;
 pub trait OrthoConfig: Sized + serde::de::DeserializeOwned {
     /// Loads, merges, and deserializes configuration from all available
     /// sources according to predefined precedence rules.
-    fn load() -> Result<Self, OrthoError>;
+    fn load() -> OrthoResult<Self>;
     
     // Potentially add other methods in the future, e.g.,
-    // fn load_from(path: &Path) -> Result<Self, OrthoError>;
+    // fn load_from(path: &Path) -> OrthoResult<Self>;
 }
 ```
 
@@ -226,7 +255,7 @@ A custom, comprehensive error enum is non-negotiable for a good user experience.
 use thiserror::Error;
 
 /// Wraps multiple configuration errors and implements [`Display`].
-pub struct AggregatedErrors(pub Vec<OrthoError>);
+pub struct AggregatedErrors(pub Vec<Arc<OrthoError>>);
 
 impl std::fmt::Display for AggregatedErrors {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

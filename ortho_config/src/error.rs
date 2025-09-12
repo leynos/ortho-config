@@ -1,7 +1,7 @@
 //! Error types produced by the configuration loader.
 
-use figment::error::Error as FigmentError;
-use std::{error::Error, fmt};
+use figment::Error as FigmentError;
+use std::{error::Error, fmt, sync::Arc};
 use thiserror::Error;
 
 /// Errors that can occur while loading configuration.
@@ -26,13 +26,13 @@ pub enum OrthoError {
 
     /// Error while gathering configuration from providers.
     #[error("Failed to gather configuration: {0}")]
-    Gathering(#[from] Box<figment::Error>),
+    Gathering(#[from] Box<FigmentError>),
 
     /// Failure merging CLI values over configuration sources.
     #[error("Failed to merge CLI with configuration: {source}")]
     Merge {
         #[source]
-        source: Box<figment::Error>,
+        source: Box<FigmentError>,
     },
 
     /// Validation failures when building configuration.
@@ -59,19 +59,19 @@ pub enum OrthoError {
 /// }
 /// ```
 #[derive(Debug, Default)]
-pub struct AggregatedErrors(Vec<OrthoError>);
+pub struct AggregatedErrors(Vec<Arc<OrthoError>>);
 
 impl AggregatedErrors {
     /// Create a new aggregation from a vector of errors.
     #[must_use]
-    pub fn new(errors: Vec<OrthoError>) -> Self {
+    pub fn new(errors: Vec<Arc<OrthoError>>) -> Self {
         Self(errors)
     }
 
     /// Iterate over the contained errors.
     #[must_use = "iterators should be consumed to inspect errors"]
     pub fn iter(&self) -> impl Iterator<Item = &OrthoError> {
-        self.0.iter()
+        self.0.iter().map(AsRef::as_ref)
     }
 
     /// Number of errors in the aggregation.
@@ -96,18 +96,28 @@ impl fmt::Display for AggregatedErrors {
 impl Error for AggregatedErrors {}
 
 impl OrthoError {
-    /// Build an [`OrthoError`] from a list of errors.
+    /// Build an [`OrthoError`] from at least one error, each of which can be
+    /// an `OrthoError` or an `Arc<OrthoError>`.
     ///
     /// # Panics
     ///
     /// Panics if `errors` is empty.
     #[must_use]
-    pub fn aggregate(errors: Vec<OrthoError>) -> Self {
-        assert!(!errors.is_empty(), "aggregate requires at least one error");
-        if errors.len() == 1 {
-            errors.into_iter().next().expect("one error")
+    pub fn aggregate<I, E>(errors: I) -> Self
+    where
+        I: IntoIterator<Item = E>,
+        E: Into<Arc<OrthoError>>,
+    {
+        let mut arcs: Vec<Arc<OrthoError>> = errors.into_iter().map(Into::into).collect();
+        assert!(!arcs.is_empty(), "aggregate requires at least one error");
+
+        if arcs.len() == 1 {
+            match Arc::try_unwrap(arcs.pop().expect("one error")) {
+                Ok(err) => err,
+                Err(shared) => OrthoError::Aggregate(Box::new(AggregatedErrors::new(vec![shared]))),
+            }
         } else {
-            OrthoError::Aggregate(Box::new(AggregatedErrors::new(errors)))
+            OrthoError::Aggregate(Box::new(AggregatedErrors::new(arcs)))
         }
     }
 
@@ -122,7 +132,7 @@ impl OrthoError {
     /// assert!(matches!(e, OrthoError::Merge { .. }));
     /// ```
     #[must_use]
-    pub fn merge(source: figment::Error) -> Self {
+    pub fn merge(source: FigmentError) -> Self {
         OrthoError::Merge {
             source: Box::new(source),
         }
@@ -139,8 +149,27 @@ impl OrthoError {
     /// assert!(matches!(e, OrthoError::Gathering(_)));
     /// ```
     #[must_use]
-    pub fn gathering(source: figment::Error) -> Self {
+    pub fn gathering(source: FigmentError) -> Self {
         OrthoError::Gathering(Box::new(source))
+    }
+
+    /// Construct a gathering error from a [`figment::Error`] wrapped in an
+    /// [`Arc`].
+    ///
+    /// This helper reduces repetition in call sites that need an
+    /// `Arc<OrthoError>` (for example, when aggregating multiple errors).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ortho_config::OrthoError;
+    /// let fe = figment::Error::from("boom");
+    /// let e = OrthoError::gathering_arc(fe);
+    /// assert!(matches!(&*e, OrthoError::Gathering(_)));
+    /// ```
+    #[must_use]
+    pub fn gathering_arc(source: FigmentError) -> Arc<Self> {
+        Arc::new(Self::gathering(source))
     }
 }
 
@@ -163,8 +192,8 @@ impl From<clap::Error> for OrthoError {
     }
 }
 
-impl From<figment::Error> for OrthoError {
-    fn from(e: figment::Error) -> Self {
+impl From<FigmentError> for OrthoError {
+    fn from(e: FigmentError) -> Self {
         OrthoError::Gathering(e.into())
     }
 }
@@ -188,6 +217,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "aggregate requires at least one error")]
     fn aggregate_panics_on_empty() {
-        let _ = OrthoError::aggregate(vec![]);
+        let empty: Vec<OrthoError> = vec![];
+        let _ = OrthoError::aggregate(empty);
     }
 }

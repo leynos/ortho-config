@@ -39,8 +39,8 @@ fn cli_file_env_errors(world: &mut World) {
         .take()
         .expect("missing test result")
         .expect_err("expected aggregated error");
-    match err {
-        ortho_config::OrthoError::Aggregate(ref agg) => {
+    match &*err {
+        ortho_config::OrthoError::Aggregate(agg) => {
             let mut saw_cli = false;
             let mut saw_file = false;
             let mut saw_env = false;
@@ -68,7 +68,7 @@ fn cli_error_only(world: &mut World) {
         .take()
         .expect("missing test result")
         .expect_err("expected CLI parsing error");
-    match err {
+    match &*err {
         ortho_config::OrthoError::CliParsing(_) => {}
         other => panic!("unexpected error: {other:?}"),
     }

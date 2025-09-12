@@ -1,6 +1,7 @@
 //! Tests for configuration file helpers.
 
 use super::*;
+use crate::result_ext::ResultIntoFigment;
 use figment::{Figment, providers::Format, providers::Toml};
 use rstest::rstest;
 use std::collections::HashSet;
@@ -66,6 +67,43 @@ fn get_extends_cases(#[case] input: &str, #[case] expected: ExtCase) {
     }
 }
 
+#[test]
+fn get_extends_reports_type_error_with_file_variant() {
+    use figment::providers::{Format, Toml};
+
+    let figment = Figment::from(Toml::string("extends = 1"));
+    let err = get_extends(&figment, Path::new("cfg.toml")).unwrap_err();
+    // OrthoResult wraps errors in Arc; match on the inner value
+    match &*err {
+        crate::OrthoError::File { path, source } => {
+            assert!(path.ends_with("cfg.toml"), "path: {path:?}");
+            assert!(
+                source.to_string().contains("must be a string"),
+                "source: {source}"
+            );
+        }
+        other => panic!("expected File error, got: {other:?}"),
+    }
+}
+
+#[test]
+fn get_extends_reports_empty_string_with_file_variant() {
+    use figment::providers::{Format, Toml};
+
+    let figment = Figment::from(Toml::string("extends = ''"));
+    let err = get_extends(&figment, Path::new("cfg.toml")).unwrap_err();
+    match &*err {
+        crate::OrthoError::File { path, source } => {
+            assert!(path.ends_with("cfg.toml"), "path: {path:?}");
+            assert!(
+                source.to_string().contains("must be a non-empty string"),
+                "source: {source}"
+            );
+        }
+        other => panic!("expected File error, got: {other:?}"),
+    }
+}
+
 #[rstest]
 #[case::relative(false)]
 #[case::absolute(true)]
@@ -78,7 +116,7 @@ fn resolve_base_path_resolves(#[case] is_abs: bool) {
         } else {
             PathBuf::from("base.toml")
         };
-        let resolved = resolve_base_path(&current, base_path)?;
+        let resolved = resolve_base_path(&current, base_path).to_figment()?;
         assert_eq!(resolved, root.join("base.toml"));
         Ok(())
     });
@@ -116,7 +154,7 @@ fn process_extends_handles_relative_and_absolute(#[case] is_abs: bool) {
             "extends = \"base.toml\"".to_string()
         };
         let figment = Figment::from(Toml::string(&config));
-        let merged = process_extends(figment, current, visited, stack)?;
+        let merged = process_extends(figment, current, visited, stack).to_figment()?;
         let value = merged.find_value("foo").expect("foo");
         assert_eq!(value.as_str(), Some("base"));
         Ok(())

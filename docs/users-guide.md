@@ -93,7 +93,7 @@ Subcommand structs can leverage the `SubcmdConfigMerge` trait to expose a
 `load_and_merge` method automatically:
 
 ```rust
-use ortho_config::{OrthoConfig, OrthoError};
+use ortho_config::{OrthoConfig, OrthoResult};
 use ortho_config::SubcmdConfigMerge;
 use serde::Deserialize;
 
@@ -102,7 +102,7 @@ struct PrArgs {
     reference: String,
 }
 
-# fn demo(pr_args: &PrArgs) -> Result<(), OrthoError> {
+# fn demo(pr_args: &PrArgs) -> OrthoResult<()> {
 let merged = pr_args.load_and_merge()?;
 # let _ = merged;
 # Ok(())
@@ -504,20 +504,77 @@ for a complete example.
 
 ## Error handling
 
-`load` and `load_and_merge_subcommand_for` return a `Result<T, OrthoError>`.
-`OrthoError` wraps errors from `clap`, file I/O and `figment`. Failures during
-the final merge of CLI values over configuration sources surface as the `Merge`
-variant, providing clearer diagnostics when the combined data is invalid. When
-multiple sources fail, the errors are collected into the `Aggregate` variant so
-callers can inspect each individual failure. Consumers should handle these
-errors appropriately, for example by printing them to stderr and exiting. If
-required fields are missing after merging, the crate returns
-`OrthoError::MissingRequiredValues` with a user‑friendly list of missing paths
-and hints on how to provide them. For example:
+`load` and `load_and_merge_subcommand_for` return `OrthoResult<T>`, an alias
+for `Result<T, Arc<OrthoError>>`. `OrthoError` wraps errors from `clap`, file
+I/O and `figment`. Failures during the final merge of CLI values over
+configuration sources surface as the `Merge` variant, providing clearer
+diagnostics when the combined data is invalid. When multiple sources fail, the
+errors are collected into the `Aggregate` variant so callers can inspect each
+individual failure. Consumers should handle these errors appropriately, for
+example by printing them to stderr and exiting. If required fields are missing
+after merging, the crate returns `OrthoError::MissingRequiredValues` with a
+user‑friendly list of missing paths and hints on how to provide them. For
+example:
 
 ```plaintext
 Missing required values:
   sample_value (use --sample-value, SAMPLE_VALUE, or file entry)
+```
+
+### Aggregating multiple errors
+
+When you need to return multiple errors in one go, use the generic
+`OrthoError::aggregate` helper. It accepts any iterator of items that can be
+converted into `Arc<OrthoError>` so you can pass either owned errors or shared
+ones:
+
+```rust
+use std::sync::Arc;
+use ortho_config::OrthoError;
+
+// From bare errors
+let err = OrthoError::aggregate(vec![
+    OrthoError::Validation { key: "port".into(), message: "must be positive".into() },
+    OrthoError::gathering(figment::Error::from("invalid")),
+]);
+
+// From shared errors
+let err = OrthoError::aggregate(vec![
+    Arc::new(OrthoError::Validation { key: "x".into(), message: "bad".into() }),
+    Arc::new(OrthoError::gathering(figment::Error::from("boom"))),
+]);
+```
+
+### Mapping errors ergonomically
+
+To reduce boiler‑plate when converting between error types, the crate exposes
+small extension traits:
+
+- `OrthoResultExt::into_ortho()` converts `Result<T, E>` into
+  `OrthoResult<T>` when `E: Into<OrthoError>` (e.g., `serde_json::Error`).
+- `OrthoMergeExt::into_ortho_merge()` converts `Result<T, figment::Error>`
+  into `OrthoResult<T>` as `OrthoError::Merge`.
+- `IntoFigmentError::into_figment()` converts `Arc<OrthoError>` (or
+  `&Arc<OrthoError>`) into `figment::Error` for interop in tests or adapters.
+- `ResultIntoFigment::to_figment()` converts `OrthoResult<T>` into
+  `Result<T, figment::Error>`.
+
+Examples:
+
+```rust
+use ortho_config::{OrthoMergeExt, OrthoResultExt, ResultIntoFigment};
+
+fn sanitize<T: serde::Serialize>(v: &T) -> ortho_config::OrthoResult<serde_json::Value> {
+    serde_json::to_value(v).into_ortho()
+}
+
+fn extract(fig: figment::Figment) -> ortho_config::OrthoResult<MyCfg> {
+    fig.extract::<MyCfg>().into_ortho_merge()
+}
+
+fn interop(r: ortho_config::OrthoResult<MyCfg>) -> Result<MyCfg, figment::Error> {
+    r.to_figment()
+}
 ```
 
 ## Additional notes

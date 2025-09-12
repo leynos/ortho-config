@@ -401,7 +401,7 @@ fn build_xdg_config_discovery() -> proc_macro2::TokenStream {
         let try_load_config = |
             fig: &mut Option<ortho_config::figment::Figment>,
             exts: &[&str],
-            errors: &mut Vec<ortho_config::OrthoError>,
+            errors: &mut Vec<std::sync::Arc<ortho_config::OrthoError>>,
         | {
             for ext in exts {
                 let filename = format!("config.{}", ext);

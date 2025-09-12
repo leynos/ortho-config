@@ -4,10 +4,12 @@ use crate::{FlatArgs, World};
 use clap::Parser;
 use cucumber::{given, then, when};
 use figment::{Figment, providers::Serialized};
-use ortho_config::{OrthoError, load_config_file, sanitized_provider};
+use ortho_config::{
+    OrthoError, OrthoMergeExt, OrthoResult, ResultIntoFigment, load_config_file, sanitized_provider,
+};
 use std::path::Path;
 
-fn load_flat(file: Option<&str>, args: &[&str]) -> Result<FlatArgs, OrthoError> {
+fn load_flat(file: Option<&str>, args: &[&str]) -> OrthoResult<FlatArgs> {
     let mut res = None;
     figment::Jail::expect_with(|j| {
         if let Some(contents) = file {
@@ -15,13 +17,13 @@ fn load_flat(file: Option<&str>, args: &[&str]) -> Result<FlatArgs, OrthoError> 
         }
         let cli = FlatArgs::parse_from(args);
         let mut fig = Figment::from(Serialized::defaults(&FlatArgs::default()));
-        if let Some(f) = load_config_file(Path::new(".flat.toml"))? {
+        if let Some(f) = load_config_file(Path::new(".flat.toml")).to_figment()? {
             fig = fig.merge(f);
         }
         res = Some(
-            fig.merge(sanitized_provider(&cli)?)
+            fig.merge(sanitized_provider(&cli).to_figment()?)
                 .extract()
-                .map_err(OrthoError::merge),
+                .into_ortho_merge(),
         );
         Ok(())
     });
@@ -81,5 +83,5 @@ fn flattening_fails(world: &mut World) {
         .take()
         .expect("result")
         .expect_err("expected merge error");
-    assert!(matches!(err, OrthoError::Merge { .. }));
+    assert!(matches!(&*err, OrthoError::Merge { .. }));
 }

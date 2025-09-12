@@ -50,10 +50,10 @@ serde = { version = "1.0", features = ["derive"] }
 format parsers (`figment_json5`, `json5`, `serde_yaml`, `toml`) without
 declaring them directly.
 
-2. **Define the configuration struct:**
+1. **Define the configuration struct:**
 
 ```rust
-use ortho_config::{OrthoConfig, OrthoError};
+use ortho_config::{OrthoConfig, OrthoResult};
 use serde::{Deserialize, Serialize}; // Required for OrthoConfig derive
 
 #[derive(Debug, Clone, Deserialize, Serialize, OrthoConfig)]
@@ -91,7 +91,7 @@ struct AppConfig {
     verbose: bool, // Defaults to false if not specified
 }
 
-fn main() -> Result<(), OrthoError> {
+fn main() -> OrthoResult<()> {
     let config = AppConfig::load()?; // Load configuration
 
     println!("Loaded configuration: {:#?}", config);
@@ -109,7 +109,7 @@ fn main() -> Result<(), OrthoError> {
 }
 ```
 
-3. **Running the application**:
+2. **Running the application**:
 
 - With CLI arguments:
     `cargo run -- --log-level debug --port 3000 -v --features extra_cli_feature`
@@ -166,6 +166,32 @@ support additional formats:
 ```toml
 [dependencies]
 ortho_config = { version = "0.3.0", features = ["json5", "yaml"] }
+```
+
+### Error interop helpers
+
+`OrthoConfig` includes small extensions to simplify error conversions:
+
+- `OrthoResultExt::into_ortho()` maps external errors into `OrthoResult<T>`.
+- `OrthoMergeExt::into_ortho_merge()` maps `figment::Error` into
+  `OrthoError::Merge` within `OrthoResult<T>`.
+- `ResultIntoFigment::to_figment()` converts `OrthoResult<T>` into
+  `Result<T, figment::Error>` for integrations that prefer Figment’s type.
+
+These keep examples and adapters concise while maintaining explicit semantics.
+
+If you need to return multiple failures at once, use the generic
+`OrthoError::aggregate` to build an aggregate error from either owned or shared
+errors:
+
+```rust
+use std::sync::Arc;
+use ortho_config::OrthoError;
+
+let agg = OrthoError::aggregate(vec![
+    OrthoError::validation("port", "must be positive"), // or explicit variant
+    Arc::new(OrthoError::gathering(figment::Error::from("boom"))),
+]);
 ```
 
 The file loader selects the parser based on the extension (`.toml`, `.json`,

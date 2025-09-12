@@ -20,7 +20,7 @@ fn aggregates_cli_file_env_errors() {
         j.set_env("PORT", "notanumber");
         let err = AggConfig::load_from_iter(["prog", "--bogus"])
             .expect_err("expected aggregated error from CLI/file/env sources");
-        match err {
+        match &*err {
             OrthoError::Aggregate(agg) => {
                 assert_eq!(agg.len(), 3);
                 let mut kinds = agg
