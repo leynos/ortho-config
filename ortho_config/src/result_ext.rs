@@ -79,13 +79,23 @@ pub trait IntoFigmentError {
 
 impl IntoFigmentError for Arc<OrthoError> {
     fn into_figment(self) -> figment::Error {
-        figment::Error::from(self.to_string())
+        match &*self {
+            OrthoError::Merge { source } | OrthoError::Gathering(source) => {
+                figment::Error::from(source.to_string())
+            }
+            other => figment::Error::from(other.to_string()),
+        }
     }
 }
 
 impl IntoFigmentError for &Arc<OrthoError> {
     fn into_figment(self) -> figment::Error {
-        figment::Error::from(self.to_string())
+        match &**self {
+            OrthoError::Merge { source } | OrthoError::Gathering(source) => {
+                figment::Error::from(source.to_string())
+            }
+            other => figment::Error::from(other.to_string()),
+        }
     }
 }
 
