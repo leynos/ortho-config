@@ -1,4 +1,14 @@
 //! Parsing utilities for the `OrthoConfig` derive macro.
+//!
+//! Basic compile-check example:
+//!
+//! ```rust
+//! // This trivial example exists to keep doctests compiling in this module.
+//! // The parsing helpers below are internal to the macro and exercised by
+//! // unit tests; this snippet simply guards against accidental doctest
+//! // breakage (e.g., invalid code fences).
+//! let _ = 1 + 1;
+//! ```
 
 use syn::parenthesized;
 use syn::{
