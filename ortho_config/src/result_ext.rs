@@ -85,11 +85,10 @@ impl IntoFigmentError for Arc<OrthoError> {
         match Arc::try_unwrap(self) {
             Ok(err) => err.into(),
             Err(shared) => match &*shared {
-                // Fallback: we only have a shared reference; reconstruct from
-                // message text to avoid cloning large errors. This loses
-                // structure, but keeps a helpful message.
+                // Fallback: we only have a shared reference; clone the original
+                // Figment error to retain structured details.
                 OrthoError::Merge { source } | OrthoError::Gathering(source) => {
-                    figment::Error::from(source.to_string())
+                    source.as_ref().clone()
                 }
                 other => figment::Error::from(other.to_string()),
             },
@@ -100,9 +99,7 @@ impl IntoFigmentError for Arc<OrthoError> {
 impl IntoFigmentError for &Arc<OrthoError> {
     fn into_figment(self) -> figment::Error {
         match &**self {
-            OrthoError::Merge { source } | OrthoError::Gathering(source) => {
-                figment::Error::from(source.to_string())
-            }
+            OrthoError::Merge { source } | OrthoError::Gathering(source) => source.as_ref().clone(),
             other => figment::Error::from(other.to_string()),
         }
     }

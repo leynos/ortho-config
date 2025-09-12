@@ -106,7 +106,8 @@ and explicit:
   `OrthoError::Merge` (wrapped in `Arc`) when extracting configurations.
 - `IntoFigmentError::into_figment()` converts shared `OrthoError`s into
   `figment::Error` for test adapters or integration code that expects Figment’s
-  error type.
+  error type, cloning the inner Figment error to retain structured details
+  where available.
 - `ResultIntoFigment::to_figment()` converts `OrthoResult<T>` back into
   `Result<T, figment::Error>` where this is more ergonomic.
 
@@ -116,9 +117,9 @@ to read without hiding the semantics of error mapping.
 ### Aggregated errors
 
 To surface multiple failures at once, `OrthoError::aggregate<I, E>(errors)`
-accepts any iterator of items that implement `Into<Arc<OrthoError>>`. This
-allows callers to provide either owned `OrthoError` values or shared
-`Arc<OrthoError>` values without additional boiler‑plate. For a single error,
+accepts any iterator of items that implement `Into<Arc<OrthoError>>`. When the
+caller cannot guarantee errors are present, the fallible
+`OrthoError::try_aggregate` returns `Option<OrthoError>`. For a single error,
 the helper unwraps it and returns the underlying `OrthoError`; for two or more
 errors it returns `OrthoError::Aggregate` containing a shared collection.
 
