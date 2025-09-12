@@ -5,7 +5,7 @@ use clap::Parser;
 use cucumber::{given, then, when};
 use figment::{Figment, providers::Serialized};
 use ortho_config::{
-    OrthoError, OrthoResult, ResultIntoFigment, load_config_file, sanitized_provider,
+    OrthoError, OrthoMergeExt, OrthoResult, ResultIntoFigment, load_config_file, sanitized_provider,
 };
 use std::path::Path;
 
@@ -23,7 +23,7 @@ fn load_flat(file: Option<&str>, args: &[&str]) -> OrthoResult<FlatArgs> {
         res = Some(
             fig.merge(sanitized_provider(&cli).to_figment()?)
                 .extract()
-                .map_err(|e| OrthoError::merge(e).into()),
+                .into_ortho_merge(),
         );
         Ok(())
     });
