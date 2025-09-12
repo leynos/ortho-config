@@ -7,7 +7,8 @@
 use clap::CommandFactory;
 use ortho_config::subcommand::Prefix;
 use ortho_config::{
-    OrthoConfig, OrthoResult, ResultIntoFigment, SubcmdConfigMerge, load_and_merge_subcommand,
+    OrthoConfig, OrthoResult, OrthoResultExt, ResultIntoFigment, SubcmdConfigMerge,
+    load_and_merge_subcommand,
 };
 use serde::de::DeserializeOwned;
 
@@ -25,7 +26,7 @@ where
         result.replace(Some(cfg));
         Ok(())
     })
-    .map_err(ortho_config::OrthoError::gathering_arc)?;
+    .into_ortho()?;
     Ok(result.into_inner().expect("loader executed"))
 }
 

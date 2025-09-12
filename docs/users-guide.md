@@ -523,10 +523,10 @@ Missing required values:
 
 ### Aggregating multiple errors
 
-When you need to return multiple errors in one go, use the generic
-`OrthoError::aggregate` helper. It accepts any iterator of items that can be
-converted into `Arc<OrthoError>` so you can pass either owned errors or shared
-ones:
+When you need to return multiple errors in one go, use `OrthoError::aggregate`.
+It accepts any iterator of items that can be converted into `Arc<OrthoError>`
+so you can pass either owned errors or shared ones. If the list might be empty,
+`OrthoError::try_aggregate` returns `Option<OrthoError>` instead of panicking:
 
 ```rust
 use std::sync::Arc;
@@ -541,7 +541,7 @@ let err = OrthoError::aggregate(vec![
 // From shared errors
 let err = OrthoError::aggregate(vec![
     Arc::new(OrthoError::Validation { key: "x".into(), message: "bad".into() }),
-    Arc::new(OrthoError::gathering(figment::Error::from("boom"))),
+    OrthoError::gathering_arc(figment::Error::from("boom")),
 ]);
 ```
 
@@ -555,7 +555,8 @@ small extension traits:
 - `OrthoMergeExt::into_ortho_merge()` converts `Result<T, figment::Error>`
   into `OrthoResult<T>` as `OrthoError::Merge`.
 - `IntoFigmentError::into_figment()` converts `Arc<OrthoError>` (or
-  `&Arc<OrthoError>`) into `figment::Error` for interop in tests or adapters.
+  `&Arc<OrthoError>`) into `figment::Error` for interop in tests or adapters,
+  cloning the inner error to preserve structured details where possible.
 - `ResultIntoFigment::to_figment()` converts `OrthoResult<T>` into
   `Result<T, figment::Error>`.
 

@@ -67,36 +67,19 @@ fn get_extends_cases(#[case] input: &str, #[case] expected: ExtCase) {
     }
 }
 
-#[test]
-fn get_extends_reports_type_error_with_file_variant() {
+#[rstest]
+#[case("extends = 1", "must be a string")]
+#[case("extends = ''", "must be a non-empty string")]
+fn get_extends_reports_error_with_file_variant(#[case] input: &str, #[case] expected_msg: &str) {
     use figment::providers::{Format, Toml};
 
-    let figment = Figment::from(Toml::string("extends = 1"));
-    let err = get_extends(&figment, Path::new("cfg.toml")).unwrap_err();
-    // OrthoResult wraps errors in Arc; match on the inner value
-    match &*err {
-        crate::OrthoError::File { path, source } => {
-            assert!(path.ends_with("cfg.toml"), "path: {path:?}");
-            assert!(
-                source.to_string().contains("must be a string"),
-                "source: {source}"
-            );
-        }
-        other => panic!("expected File error, got: {other:?}"),
-    }
-}
-
-#[test]
-fn get_extends_reports_empty_string_with_file_variant() {
-    use figment::providers::{Format, Toml};
-
-    let figment = Figment::from(Toml::string("extends = ''"));
+    let figment = Figment::from(Toml::string(input));
     let err = get_extends(&figment, Path::new("cfg.toml")).unwrap_err();
     match &*err {
         crate::OrthoError::File { path, source } => {
             assert!(path.ends_with("cfg.toml"), "path: {path:?}");
             assert!(
-                source.to_string().contains("must be a non-empty string"),
+                source.to_string().contains(expected_msg),
                 "source: {source}"
             );
         }
