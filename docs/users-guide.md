@@ -521,6 +521,38 @@ Missing required values:
   sample_value (use --sample-value, SAMPLE_VALUE, or file entry)
 ```
 
+### Mapping errors ergonomically
+
+To reduce boiler‑plate when converting between error types, the crate exposes
+small extension traits:
+
+- `OrthoResultExt::into_ortho()` converts `Result<T, E>` into
+  `OrthoResult<T>` when `E: Into<OrthoError>` (e.g., `serde_json::Error`).
+- `OrthoMergeExt::into_ortho_merge()` converts `Result<T, figment::Error>`
+  into `OrthoResult<T>` as `OrthoError::Merge`.
+- `IntoFigmentError::into_figment()` converts `Arc<OrthoError>` (or
+  `&Arc<OrthoError>`) into `figment::Error` for interop in tests or adapters.
+- `ResultIntoFigment::to_figment()` converts `OrthoResult<T>` into
+  `Result<T, figment::Error>`.
+
+Examples:
+
+```rust
+use ortho_config::{OrthoMergeExt, OrthoResultExt, ResultIntoFigment};
+
+fn sanitize<T: serde::Serialize>(v: &T) -> ortho_config::OrthoResult<serde_json::Value> {
+    serde_json::to_value(v).into_ortho()
+}
+
+fn extract(fig: figment::Figment) -> ortho_config::OrthoResult<MyCfg> {
+    fig.extract::<MyCfg>().into_ortho_merge()
+}
+
+fn interop(r: ortho_config::OrthoResult<MyCfg>) -> Result<MyCfg, figment::Error> {
+    r.to_figment()
+}
+```
+
 ## Additional notes
 
 - **Vector merging** – For `Vec<T>` fields the default merge strategy is

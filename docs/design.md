@@ -95,6 +95,24 @@ The primary data flow for a user calling `AppConfig::load()` will be:
    via the alias `OrthoResult<T>`. This keeps public `Result` types small while
    preserving rich error variants.
 
+### Error ergonomics and interop
+
+The crate provides focused extension traits to keep error conversions concise
+and explicit:
+
+- `OrthoResultExt::into_ortho()` maps external error types implementing
+  `Into<OrthoError>` into `Arc<OrthoError>` within `OrthoResult<T>`.
+- `OrthoMergeExt::into_ortho_merge()` maps `figment::Error` into
+  `OrthoError::Merge` (wrapped in `Arc`) when extracting configurations.
+- `IntoFigmentError::into_figment()` converts shared `OrthoError`s into
+  `figment::Error` for test adapters or integration code that expects Figment’s
+  error type.
+- `ResultIntoFigment::to_figment()` converts `OrthoResult<T>` back into
+  `Result<T, figment::Error>` where this is more ergonomic.
+
+These helpers are intentionally small and composable so call‑sites remain easy
+to read without hiding the semantics of error mapping.
+
 ### CLI and Configuration Merge Flow
 
 ```mermaid
