@@ -181,11 +181,11 @@ pub(crate) fn build_merge_section(
             Ok(cfg) => {
                 if errors.is_empty() { Ok(cfg) }
                 else if errors.len() == 1 { Err(errors.pop().expect("one error")) }
-                else { Err(ortho_config::OrthoError::aggregate_arcs(errors).into()) }
+                else { Err(ortho_config::OrthoError::aggregate(errors).into()) }
             }
             Err(e) => {
                 errors.push(std::sync::Arc::new(ortho_config::OrthoError::merge(e)));
-                Err(ortho_config::OrthoError::aggregate_arcs(errors).into())
+                Err(ortho_config::OrthoError::aggregate(errors).into())
             }
         }
     }

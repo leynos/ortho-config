@@ -96,40 +96,28 @@ impl fmt::Display for AggregatedErrors {
 impl Error for AggregatedErrors {}
 
 impl OrthoError {
-    /// Build an [`OrthoError`] from a list of errors.
+    /// Build an [`OrthoError`] from at least one error, each of which can be
+    /// an `OrthoError` or an `Arc<OrthoError>`.
     ///
     /// # Panics
     ///
     /// Panics if `errors` is empty.
     #[must_use]
-    pub fn aggregate(errors: Vec<OrthoError>) -> Self {
-        assert!(!errors.is_empty(), "aggregate requires at least one error");
-        if errors.len() == 1 {
-            errors.into_iter().next().expect("one error")
-        } else {
-            let arcs = errors.into_iter().map(Arc::new).collect();
-            OrthoError::Aggregate(Box::new(AggregatedErrors::new(arcs)))
-        }
-    }
+    pub fn aggregate<I, E>(errors: I) -> Self
+    where
+        I: IntoIterator<Item = E>,
+        E: Into<Arc<OrthoError>>,
+    {
+        let mut arcs: Vec<Arc<OrthoError>> = errors.into_iter().map(Into::into).collect();
+        assert!(!arcs.is_empty(), "aggregate requires at least one error");
 
-    /// Build an [`OrthoError`] from a list of already shared errors.
-    ///
-    /// Use when upstream code has already materialised `Arc<OrthoError>`
-    /// instances.
-    ///
-    /// # Panics
-    ///
-    /// Panics if `errors` is empty. Callers must provide at least one error.
-    #[must_use]
-    pub fn aggregate_arcs(errors: Vec<Arc<OrthoError>>) -> Self {
-        assert!(!errors.is_empty(), "aggregate requires at least one error");
-        if errors.len() == 1 {
-            match Arc::try_unwrap(errors.into_iter().next().expect("one error")) {
-                Ok(e) => e,
+        if arcs.len() == 1 {
+            match Arc::try_unwrap(arcs.pop().expect("one error")) {
+                Ok(err) => err,
                 Err(shared) => OrthoError::Aggregate(Box::new(AggregatedErrors::new(vec![shared]))),
             }
         } else {
-            OrthoError::Aggregate(Box::new(AggregatedErrors::new(errors)))
+            OrthoError::Aggregate(Box::new(AggregatedErrors::new(arcs)))
         }
     }
 
@@ -210,6 +198,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "aggregate requires at least one error")]
     fn aggregate_panics_on_empty() {
-        let _ = OrthoError::aggregate(vec![]);
+        let empty: Vec<OrthoError> = vec![];
+        let _ = OrthoError::aggregate(empty);
     }
 }
