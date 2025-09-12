@@ -181,8 +181,8 @@ ortho_config = { version = "0.3.0", features = ["json5", "yaml"] }
 These keep examples and adapters concise while maintaining explicit semantics.
 
 If you need to return multiple failures at once, use the generic
-`OrthoError::aggregate` to build an aggregate error from either owned or
-shared errors:
+`OrthoError::aggregate` to build an aggregate error from either owned or shared
+errors:
 
 ```rust
 use std::sync::Arc;
