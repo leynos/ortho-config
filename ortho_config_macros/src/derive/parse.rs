@@ -244,6 +244,17 @@ mod lit_str_tests {
         })
         .unwrap();
     }
+
+    #[test]
+    fn lit_char_parses_char_values() {
+        let attr: syn::Attribute = syn::parse_quote!(#[ortho_config(cli_short = 'n')]);
+        attr.parse_nested_meta(|meta| {
+            let c = super::lit_char(&meta, "cli_short")?;
+            assert_eq!(c, 'n');
+            Ok(())
+        })
+        .unwrap();
+    }
 }
 
 /// Parses field-level `#[ortho_config(...)]` attributes.
