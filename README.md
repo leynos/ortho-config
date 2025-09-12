@@ -53,7 +53,7 @@ declaring them directly.
 1. **Define the configuration struct:**
 
 ```rust
-use ortho_config::{OrthoConfig, OrthoError};
+use ortho_config::{OrthoConfig, OrthoResult};
 use serde::{Deserialize, Serialize}; // Required for OrthoConfig derive
 
 #[derive(Debug, Clone, Deserialize, Serialize, OrthoConfig)]
@@ -91,7 +91,7 @@ struct AppConfig {
     verbose: bool, // Defaults to false if not specified
 }
 
-fn main() -> Result<(), OrthoError> {
+fn main() -> OrthoResult<()> {
     let config = AppConfig::load()?; // Load configuration
 
     println!("Loaded configuration: {:#?}", config);
@@ -167,6 +167,18 @@ support additional formats:
 [dependencies]
 ortho_config = { version = "0.3.0", features = ["json5", "yaml"] }
 ```
+
+### Error interop helpers
+
+`OrthoConfig` includes small extensions to simplify error conversions:
+
+- `OrthoResultExt::into_ortho()` maps external errors into `OrthoResult<T>`.
+- `OrthoMergeExt::into_ortho_merge()` maps `figment::Error` into
+  `OrthoError::Merge` within `OrthoResult<T>`.
+- `ResultIntoFigment::to_figment()` converts `OrthoResult<T>` into
+  `Result<T, figment::Error>` for integrations that prefer Figment’s type.
+
+These keep examples and adapters concise while maintaining explicit semantics.
 
 The file loader selects the parser based on the extension (`.toml`, `.json`,
 `.json5`, `.yaml`, `.yml`). When the `json5` feature is active, both `.json`

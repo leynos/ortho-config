@@ -48,7 +48,7 @@ serde = { version = "1.0", features = ["derive"] }
 2. **Define the configuration struct:**
 
 ```rust
-use ortho_config::{OrthoConfig, OrthoError};
+use ortho_config::{OrthoConfig, OrthoResult};
 use serde::{Deserialize, Serialize}; // Required for OrthoConfig derive
 
 #[derive(Debug, Clone, Deserialize, Serialize, OrthoConfig)]
@@ -86,7 +86,7 @@ struct AppConfig {
     verbose: bool, // Defaults to false if not specified
 }
 
-fn main() -> Result<(), OrthoError> {
+fn main() -> OrthoResult<()> {
     let config = AppConfig::load()?; // Load configuration
 
     println!("Loaded configuration: {:#?}", config);
