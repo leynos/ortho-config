@@ -523,9 +523,9 @@ Missing required values:
 
 ### Aggregating multiple errors
 
-When you need to return multiple errors in one go, use `OrthoError::aggregate`.
-It accepts any iterator of items that can be converted into `Arc<OrthoError>`
-so you can pass either owned errors or shared ones. If the list might be empty,
+To return multiple errors in one go, use `OrthoError::aggregate`. It accepts
+any iterator of items that can be converted into `Arc<OrthoError>` so both
+owned and shared errors are supported. If the list might be empty,
 `OrthoError::try_aggregate` returns `Option<OrthoError>` instead of panicking:
 
 ```rust
