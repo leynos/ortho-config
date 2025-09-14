@@ -287,7 +287,10 @@ mod tests {
             let agg = *agg;
             let iter_items: Vec<_> = agg.iter().collect();
             assert_eq!(iter_items.len(), 2);
-            let borrowed_items: Vec<_> = (&agg).into_iter().collect();
+            let mut borrowed_items = Vec::new();
+            for e in &agg {
+                borrowed_items.push(e);
+            }
             assert_eq!(borrowed_items.len(), 2);
             let display = agg.to_string();
             let owned_items: Vec<_> = agg.into_iter().collect();
