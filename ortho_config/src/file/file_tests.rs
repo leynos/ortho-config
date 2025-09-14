@@ -71,8 +71,6 @@ fn get_extends_cases(#[case] input: &str, #[case] expected: ExtCase) {
 #[case("extends = 1", "must be a string")]
 #[case("extends = ''", "must be a non-empty string")]
 fn get_extends_reports_error_with_file_variant(#[case] input: &str, #[case] expected_msg: &str) {
-    use figment::providers::{Format, Toml};
-
     let figment = Figment::from(Toml::string(input));
     let err = get_extends(&figment, Path::new("cfg.toml")).unwrap_err();
     match &*err {
