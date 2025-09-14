@@ -95,6 +95,18 @@ impl fmt::Display for AggregatedErrors {
 
 impl Error for AggregatedErrors {}
 
+impl<'a> IntoIterator for &'a AggregatedErrors {
+    type Item = &'a OrthoError;
+    type IntoIter = std::iter::Map<
+        std::slice::Iter<'a, Arc<OrthoError>>,
+        fn(&'a Arc<OrthoError>) -> &'a OrthoError,
+    >;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.iter().map(Arc::as_ref)
+    }
+}
+
 impl IntoIterator for AggregatedErrors {
     type Item = Arc<OrthoError>;
     type IntoIter = std::vec::IntoIter<Arc<OrthoError>>;
@@ -275,6 +287,8 @@ mod tests {
             let agg = *agg;
             let iter_items: Vec<_> = agg.iter().collect();
             assert_eq!(iter_items.len(), 2);
+            let borrowed_items: Vec<_> = (&agg).into_iter().collect();
+            assert_eq!(borrowed_items.len(), 2);
             let display = agg.to_string();
             let owned_items: Vec<_> = agg.into_iter().collect();
             assert_eq!(owned_items.len(), 2);
