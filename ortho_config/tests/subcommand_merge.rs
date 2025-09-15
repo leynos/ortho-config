@@ -52,9 +52,7 @@ impl Drop for DirGuard {
 }
 
 #[fixture]
-fn config_dir(
-    #[default("")] cfg: &str,
-) -> (TempDir, DirGuard) {
+fn config_dir(#[default("")] cfg: &str) -> (TempDir, DirGuard) {
     let dir = tempfile::tempdir().expect("create temp dir");
     let cap = Dir::open_ambient_dir(dir.path(), ambient_authority()).expect("open temp dir");
     cap.write(".vk.toml", cfg).expect("write config");
@@ -77,22 +75,29 @@ fn config_dir(
     Some("file_ref"),
     vec!["file.txt".into()],
 )]
+#[case::cli_over_env_and_file(
+    "[cmds.pr]\nreference = \"file_ref\"\nfiles = [\"file.txt\"]\n",
+    Some("env_ref"),
+    PrArgs { reference: Some("cli_ref".into()), files: vec!["cli.txt".into()] },
+    Some("cli_ref"),
+    vec!["cli.txt".into()],
+)]
+#[allow(clippy::used_underscore_binding)]
 #[serial]
 fn test_pr_precedence(
-    #[case] config_content: &str,
+    #[case] _config_content: &str,
     #[case] env_val: Option<&str>,
     #[case] cli: PrArgs,
     #[case] expected_reference: Option<&str>,
     #[case] expected_files: Vec<String>,
     #[from(config_dir)]
-    #[with(config_content)] workspace: (TempDir, DirGuard),
+    #[with(_config_content)]
+    _workspace: (TempDir, DirGuard),
 ) {
     let _env = match env_val {
         Some(val) => env::set_var("VK_CMDS_PR_REFERENCE", val),
         None => env::remove_var("VK_CMDS_PR_REFERENCE"),
     };
-    let _ = config_content;
-    let _ = workspace;
     let merged = load_and_merge_subcommand_for(&cli).expect("merge pr args");
     assert_eq!(merged.reference.as_deref(), expected_reference);
     assert_eq!(merged.files, expected_files);
@@ -111,21 +116,27 @@ fn test_pr_precedence(
     IssueArgs { reference: None },
     Some("file_ref"),
 )]
+#[case::cli_over_env_and_file(
+    "[cmds.issue]\nreference = \"file_ref\"\n",
+    Some("env_ref"),
+    IssueArgs { reference: Some("cli_ref".into()) },
+    Some("cli_ref"),
+)]
+#[allow(clippy::used_underscore_binding)]
 #[serial]
 fn test_issue_precedence(
-    #[case] config_content: &str,
+    #[case] _config_content: &str,
     #[case] env_val: Option<&str>,
     #[case] cli: IssueArgs,
     #[case] expected_reference: Option<&str>,
     #[from(config_dir)]
-    #[with(config_content)] workspace: (TempDir, DirGuard),
+    #[with(_config_content)]
+    _workspace: (TempDir, DirGuard),
 ) {
     let _env = match env_val {
         Some(val) => env::set_var("VK_CMDS_ISSUE_REFERENCE", val),
         None => env::remove_var("VK_CMDS_ISSUE_REFERENCE"),
     };
-    let _ = config_content;
-    let _ = workspace;
     let merged = load_and_merge_subcommand_for(&cli).expect("merge issue args");
     assert_eq!(merged.reference.as_deref(), expected_reference);
 }
