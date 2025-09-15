@@ -61,57 +61,69 @@ fn set_env(key: &str, val: Option<&str>) {
 }
 
 #[rstest]
+#[case::env_over_file(
+    "[cmds.pr]\nreference = \"file_ref\"\nfiles = [\"file.txt\"]\n",
+    Some("env_ref"),
+    PrArgs { reference: None, files: vec![] },
+    Some("env_ref"),
+    vec!["file.txt".into()],
+)]
+#[case::file_over_defaults(
+    "[cmds.pr]\nreference = \"file_ref\"\nfiles = [\"file.txt\"]\n",
+    None,
+    PrArgs { reference: None, files: vec![] },
+    Some("file_ref"),
+    vec!["file.txt".into()],
+)]
 #[serial]
-fn pr_env_over_file_when_cli_absent() {
-    let cfg = "[cmds.pr]\nreference = \"file_ref\"\nfiles = [\"file.txt\"]\n";
-    let dir = write_config(cfg);
+fn test_pr_precedence(
+    #[case] config_content: &str,
+    #[case] env_val: Option<&str>,
+    #[case] cli: PrArgs,
+    #[case] expected_reference: Option<&str>,
+    #[case] expected_files: Vec<String>,
+) {
+    let dir = write_config(config_content);
     let _guard = set_dir(&dir);
-    set_env("VK_CMDS_PR_REFERENCE", Some("env_ref"));
-    let cli = PrArgs {
-        reference: None,
-        files: vec![],
-    };
+    if let Some(val) = env_val {
+        set_env("VK_CMDS_PR_REFERENCE", Some(val));
+    }
     let merged = load_and_merge_subcommand_for(&cli).expect("merge pr args");
-    assert_eq!(merged.reference.as_deref(), Some("env_ref"));
-    assert_eq!(merged.files, ["file.txt"]);
-    set_env("VK_CMDS_PR_REFERENCE", None);
+    assert_eq!(merged.reference.as_deref(), expected_reference);
+    assert_eq!(merged.files, expected_files);
+    if env_val.is_some() {
+        set_env("VK_CMDS_PR_REFERENCE", None);
+    }
 }
 
 #[rstest]
+#[case::env_over_file(
+    "[cmds.issue]\nreference = \"file_ref\"\n",
+    Some("env_ref"),
+    IssueArgs { reference: None },
+    Some("env_ref"),
+)]
+#[case::file_over_defaults(
+    "[cmds.issue]\nreference = \"file_ref\"\n",
+    None,
+    IssueArgs { reference: None },
+    Some("file_ref"),
+)]
 #[serial]
-fn pr_file_over_defaults_when_env_and_cli_absent() {
-    let cfg = "[cmds.pr]\nreference = \"file_ref\"\nfiles = [\"file.txt\"]\n";
-    let dir = write_config(cfg);
+fn test_issue_precedence(
+    #[case] config_content: &str,
+    #[case] env_val: Option<&str>,
+    #[case] cli: IssueArgs,
+    #[case] expected_reference: Option<&str>,
+) {
+    let dir = write_config(config_content);
     let _guard = set_dir(&dir);
-    let cli = PrArgs {
-        reference: None,
-        files: vec![],
-    };
-    let merged = load_and_merge_subcommand_for(&cli).expect("merge pr args");
-    assert_eq!(merged.reference.as_deref(), Some("file_ref"));
-    assert_eq!(merged.files, ["file.txt"]);
-}
-
-#[rstest]
-#[serial]
-fn issue_env_over_file_when_cli_absent() {
-    let cfg = "[cmds.issue]\nreference = \"file_ref\"\n";
-    let dir = write_config(cfg);
-    let _guard = set_dir(&dir);
-    set_env("VK_CMDS_ISSUE_REFERENCE", Some("env_ref"));
-    let cli = IssueArgs { reference: None };
+    if let Some(val) = env_val {
+        set_env("VK_CMDS_ISSUE_REFERENCE", Some(val));
+    }
     let merged = load_and_merge_subcommand_for(&cli).expect("merge issue args");
-    assert_eq!(merged.reference.as_deref(), Some("env_ref"));
-    set_env("VK_CMDS_ISSUE_REFERENCE", None);
-}
-
-#[rstest]
-#[serial]
-fn issue_file_over_defaults_when_env_and_cli_absent() {
-    let cfg = "[cmds.issue]\nreference = \"file_ref\"\n";
-    let dir = write_config(cfg);
-    let _guard = set_dir(&dir);
-    let cli = IssueArgs { reference: None };
-    let merged = load_and_merge_subcommand_for(&cli).expect("merge issue args");
-    assert_eq!(merged.reference.as_deref(), Some("file_ref"));
+    assert_eq!(merged.reference.as_deref(), expected_reference);
+    if env_val.is_some() {
+        set_env("VK_CMDS_ISSUE_REFERENCE", None);
+    }
 }
