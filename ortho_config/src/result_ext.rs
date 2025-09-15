@@ -77,6 +77,13 @@ pub trait IntoFigmentError {
     fn into_figment(self) -> figment::Error;
 }
 
+fn clone_figment(shared: &Arc<OrthoError>) -> figment::Error {
+    match shared.as_ref() {
+        OrthoError::Merge { source } | OrthoError::Gathering(source) => source.as_ref().clone(),
+        other => figment::Error::from(other.to_string()),
+    }
+}
+
 impl IntoFigmentError for Arc<OrthoError> {
     fn into_figment(self) -> figment::Error {
         // Prefer preserving structured Figment details when we can take
@@ -84,27 +91,14 @@ impl IntoFigmentError for Arc<OrthoError> {
         // Merge/Gathering variants via `From<OrthoError> for figment::Error`.
         match Arc::try_unwrap(self) {
             Ok(err) => err.into(),
-            Err(shared) => match &*shared {
-                // Fallback: we only have a shared reference; reconstruct from
-                // message text to avoid cloning large errors. This loses
-                // structure, but keeps a helpful message.
-                OrthoError::Merge { source } | OrthoError::Gathering(source) => {
-                    figment::Error::from(source.to_string())
-                }
-                other => figment::Error::from(other.to_string()),
-            },
+            Err(shared) => clone_figment(&shared),
         }
     }
 }
 
 impl IntoFigmentError for &Arc<OrthoError> {
     fn into_figment(self) -> figment::Error {
-        match &**self {
-            OrthoError::Merge { source } | OrthoError::Gathering(source) => {
-                figment::Error::from(source.to_string())
-            }
-            other => figment::Error::from(other.to_string()),
-        }
+        clone_figment(self)
     }
 }
 

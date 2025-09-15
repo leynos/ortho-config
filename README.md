@@ -180,18 +180,21 @@ ortho_config = { version = "0.3.0", features = ["json5", "yaml"] }
 
 These keep examples and adapters concise while maintaining explicit semantics.
 
-If you need to return multiple failures at once, use the generic
-`OrthoError::aggregate` to build an aggregate error from either owned or shared
-errors:
+To return multiple failures at once, `OrthoError::aggregate` builds an
+aggregate error from either owned or shared errors. When the collection might
+be empty, `OrthoError::try_aggregate` returns `Option<OrthoError>`:
 
 ```rust
-use std::sync::Arc;
 use ortho_config::OrthoError;
 
 let agg = OrthoError::aggregate(vec![
     OrthoError::validation("port", "must be positive"), // or explicit variant
-    Arc::new(OrthoError::gathering(figment::Error::from("boom"))),
+    OrthoError::gathering_arc(figment::Error::from("boom")),
 ]);
+
+assert!(
+    OrthoError::try_aggregate(std::iter::empty::<OrthoError>()).is_none()
+);
 ```
 
 The file loader selects the parser based on the extension (`.toml`, `.json`,
