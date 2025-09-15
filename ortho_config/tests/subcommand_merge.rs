@@ -2,10 +2,12 @@ use camino::Utf8PathBuf;
 use cap_std::{ambient_authority, fs::Dir};
 use clap::Parser;
 use ortho_config::{OrthoConfig, load_and_merge_subcommand_for};
-use rstest::rstest;
+use rstest::{fixture, rstest};
 use serde::{Deserialize, Serialize};
 use serial_test::serial;
+use std::sync::{LazyLock, Mutex, MutexGuard};
 use tempfile::TempDir;
+use test_helpers::env;
 
 #[derive(Debug, Parser, Serialize, Deserialize, OrthoConfig, Default, PartialEq)]
 #[command(name = "pr")]
@@ -26,22 +28,20 @@ struct IssueArgs {
     reference: Option<String>,
 }
 
-fn write_config(cfg: &str) -> TempDir {
-    let dir = tempfile::tempdir().expect("create temp dir");
-    let cap = Dir::open_ambient_dir(dir.path(), ambient_authority()).expect("open temp dir");
-    cap.write(".vk.toml", cfg).expect("write config");
-    dir
-}
+static CWD_MUTEX: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
 
 struct DirGuard {
     old: Utf8PathBuf,
+    _lock: MutexGuard<'static, ()>,
 }
 
 fn set_dir(dir: &TempDir) -> DirGuard {
+    let lock = CWD_MUTEX.lock().expect("lock current dir");
     let old = std::env::current_dir().expect("read current dir");
     std::env::set_current_dir(dir.path()).expect("set current dir");
     DirGuard {
         old: Utf8PathBuf::from_path_buf(old).expect("utf8"),
+        _lock: lock,
     }
 }
 
@@ -51,13 +51,15 @@ impl Drop for DirGuard {
     }
 }
 
-fn set_env(key: &str, val: Option<&str>) {
-    unsafe {
-        match val {
-            Some(v) => std::env::set_var(key, v),
-            None => std::env::remove_var(key),
-        }
-    }
+#[fixture]
+fn config_dir(
+    #[default("")] cfg: &str,
+) -> (TempDir, DirGuard) {
+    let dir = tempfile::tempdir().expect("create temp dir");
+    let cap = Dir::open_ambient_dir(dir.path(), ambient_authority()).expect("open temp dir");
+    cap.write(".vk.toml", cfg).expect("write config");
+    let guard = set_dir(&dir);
+    (dir, guard)
 }
 
 #[rstest]
@@ -82,18 +84,18 @@ fn test_pr_precedence(
     #[case] cli: PrArgs,
     #[case] expected_reference: Option<&str>,
     #[case] expected_files: Vec<String>,
+    #[from(config_dir)]
+    #[with(config_content)] workspace: (TempDir, DirGuard),
 ) {
-    let dir = write_config(config_content);
-    let _guard = set_dir(&dir);
-    if let Some(val) = env_val {
-        set_env("VK_CMDS_PR_REFERENCE", Some(val));
-    }
+    let _env = match env_val {
+        Some(val) => env::set_var("VK_CMDS_PR_REFERENCE", val),
+        None => env::remove_var("VK_CMDS_PR_REFERENCE"),
+    };
+    let _ = config_content;
+    let _ = workspace;
     let merged = load_and_merge_subcommand_for(&cli).expect("merge pr args");
     assert_eq!(merged.reference.as_deref(), expected_reference);
     assert_eq!(merged.files, expected_files);
-    if env_val.is_some() {
-        set_env("VK_CMDS_PR_REFERENCE", None);
-    }
 }
 
 #[rstest]
@@ -115,15 +117,15 @@ fn test_issue_precedence(
     #[case] env_val: Option<&str>,
     #[case] cli: IssueArgs,
     #[case] expected_reference: Option<&str>,
+    #[from(config_dir)]
+    #[with(config_content)] workspace: (TempDir, DirGuard),
 ) {
-    let dir = write_config(config_content);
-    let _guard = set_dir(&dir);
-    if let Some(val) = env_val {
-        set_env("VK_CMDS_ISSUE_REFERENCE", Some(val));
-    }
+    let _env = match env_val {
+        Some(val) => env::set_var("VK_CMDS_ISSUE_REFERENCE", val),
+        None => env::remove_var("VK_CMDS_ISSUE_REFERENCE"),
+    };
+    let _ = config_content;
+    let _ = workspace;
     let merged = load_and_merge_subcommand_for(&cli).expect("merge issue args");
     assert_eq!(merged.reference.as_deref(), expected_reference);
-    if env_val.is_some() {
-        set_env("VK_CMDS_ISSUE_REFERENCE", None);
-    }
 }
