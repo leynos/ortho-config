@@ -153,6 +153,7 @@ impl OrthoError {
     ///
     /// Panics if `errors` is empty. Use [`OrthoError::try_aggregate`] to avoid panicking when the error list may be empty.
     #[must_use]
+    #[track_caller]
     pub fn aggregate<I, E>(errors: I) -> Self
     where
         I: IntoIterator<Item = E>,

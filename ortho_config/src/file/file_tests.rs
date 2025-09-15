@@ -61,7 +61,8 @@ fn get_extends_cases(#[case] input: &str, #[case] expected: ExtCase) {
             assert_eq!(ext, exp);
         }
         ExtCase::Err(msg) => {
-            let err = get_extends(&figment, Path::new("cfg.toml")).unwrap_err();
+            let err = get_extends(&figment, Path::new("cfg.toml"))
+                .expect_err("expected OrthoError::File for invalid 'extends'");
             assert!(err.to_string().contains(msg));
         }
     }
@@ -69,10 +70,11 @@ fn get_extends_cases(#[case] input: &str, #[case] expected: ExtCase) {
 
 #[rstest]
 #[case("extends = 1", "must be a string")]
-#[case("extends = ''", "must be a non-empty string")]
+#[case("extends = \"\"", "must be a non-empty string")]
 fn get_extends_reports_error_with_file_variant(#[case] input: &str, #[case] expected_msg: &str) {
     let figment = Figment::from(Toml::string(input));
-    let err = get_extends(&figment, Path::new("cfg.toml")).unwrap_err();
+    let err = get_extends(&figment, Path::new("cfg.toml"))
+        .expect_err("expected OrthoError::File for invalid 'extends'");
     match &*err {
         crate::OrthoError::File { path, source } => {
             assert!(path.ends_with("cfg.toml"), "path: {path:?}");
@@ -169,7 +171,7 @@ fn process_extends_errors_when_base_is_not_file() {
 fn process_extends_errors_when_extends_empty() {
     with_fresh_graph(|j, _root, current, visited, stack| {
         j.create_file("base.toml", "")?; // placeholder to satisfy Jail
-        let figment = Figment::from(Toml::string("extends = ''"));
+        let figment = Figment::from(Toml::string("extends = \"\""));
         let err = process_extends(figment, current, visited, stack).unwrap_err();
         assert!(err.to_string().contains("non-empty"));
         Ok(())

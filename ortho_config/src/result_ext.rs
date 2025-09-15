@@ -78,7 +78,7 @@ pub trait IntoFigmentError {
 }
 
 fn clone_figment(shared: &Arc<OrthoError>) -> figment::Error {
-    match &**shared {
+    match shared.as_ref() {
         OrthoError::Merge { source } | OrthoError::Gathering(source) => source.as_ref().clone(),
         other => figment::Error::from(other.to_string()),
     }
