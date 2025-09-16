@@ -1,4 +1,4 @@
-//! Tests subcommand configuration precedence (env > file > CLI defaults) for pr and issue.
+//! Tests subcommand configuration precedence (defaults < file < env < CLI) for pr and issue.
 use camino::Utf8PathBuf;
 use cap_std::{ambient_authority, fs::Dir};
 use clap::Parser;
@@ -78,12 +78,12 @@ fn config_dir(#[default("")] cfg: &str) -> (TempDir, DirGuard) {
     Some("file_ref"),
     vec!["file.txt".into()],
 )]
-#[case::cli_over_env_and_file(
+#[case::cli_over_env_with_file_fallback(
     "[cmds.pr]\nreference = \"file_ref\"\nfiles = [\"file.txt\"]\n",
     Some("env_ref"),
-    PrArgs { reference: Some("cli_ref".into()), files: vec!["cli.txt".into()] },
+    PrArgs { reference: Some("cli_ref".into()), files: vec![] },
     Some("cli_ref"),
-    vec!["cli.txt".into()],
+    vec!["file.txt".into()],
 )]
 #[allow(clippy::used_underscore_binding)]
 #[serial]
@@ -119,7 +119,7 @@ fn test_pr_precedence(
     IssueArgs { reference: None },
     Some("file_ref"),
 )]
-#[case::cli_over_env_and_file(
+#[case::cli_over_env(
     "[cmds.issue]\nreference = \"file_ref\"\n",
     Some("env_ref"),
     IssueArgs { reference: Some("cli_ref".into()) },
