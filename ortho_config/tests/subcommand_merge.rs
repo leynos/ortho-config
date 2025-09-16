@@ -1,3 +1,4 @@
+//! Tests subcommand configuration precedence (env > file > CLI defaults) for pr and issue.
 use camino::Utf8PathBuf;
 use cap_std::{ambient_authority, fs::Dir};
 use clap::Parser;
@@ -38,6 +39,7 @@ struct DirGuard {
 fn set_dir(dir: &TempDir) -> DirGuard {
     let lock = CWD_MUTEX.lock().expect("lock current dir");
     let old = std::env::current_dir().expect("read current dir");
+    // SAFETY: Process CWD is mutated while holding CWD_MUTEX to prevent races with other tests.
     std::env::set_current_dir(dir.path()).expect("set current dir");
     DirGuard {
         old: Utf8PathBuf::from_path_buf(old).expect("utf8"),
@@ -47,6 +49,7 @@ fn set_dir(dir: &TempDir) -> DirGuard {
 
 impl Drop for DirGuard {
     fn drop(&mut self) {
+        // SAFETY: Lock is still held via `_lock`, so restoration is atomic w.r.t. other tests.
         std::env::set_current_dir(&self.old).expect("restore current dir");
     }
 }
