@@ -547,12 +547,11 @@ def _update_markdown_versions(md_path: Path, version: str) -> None:
     ... ortho_config = "0"
     ... ```
     ... '''
-    >>> with tempfile.NamedTemporaryFile('w+', suffix='.md') as fh:
-    ...     _ = fh.write(sample)
-    ...     fh.flush()
-    ...     _update_markdown_versions(Path(fh.name), '1')
-    ...     _ = fh.seek(0)
-    ...     'ortho_config = "1"' in fh.read()
+    >>> with tempfile.TemporaryDirectory() as tmpdir:
+    ...     md_path = Path(tmpdir) / 'sample.md'
+    ...     _ = md_path.write_text(sample, encoding='utf-8')
+    ...     _update_markdown_versions(md_path, '1')
+    ...     'ortho_config = "1"' in md_path.read_text(encoding='utf-8')
     True
     """
     if not md_path.exists():
