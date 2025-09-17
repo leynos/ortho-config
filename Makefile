@@ -60,8 +60,10 @@ check: check-fmt lint test markdownlint nixie
 markdownlint: ## Lint Markdown files
 	find . -type f -name '*.md' -not -path './target/*' -print0 | xargs -0 -- $(MDLINT)
 
-nixie: ## Validate Mermaid diagrams
-	find . -type f -name '*.md' -not -path './target/*' -print0 | xargs -0 -n1 $(NIXIE)
+nixie:
+	# CI currently requires --no-sandbox; remove once nixie supports
+	# environment variable control for this option
+	nixie --no-sandbox
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?##' $(MAKEFILE_LIST) | \
