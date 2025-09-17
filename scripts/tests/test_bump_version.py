@@ -121,9 +121,8 @@ ortho_config = { version = \"0.5.0-beta1\", features = [\"json5\", \"yaml\"] }
 
     _update_markdown_versions(md_path, "0.5.0")
 
-    updated_content = md_path.read_text()
-    assert 'version = "0.5.0"' in updated_content, "must bump version inside TOML fence"
-    updated_lines = updated_content.splitlines()
+    updated_lines = md_path.read_text().splitlines()
+    assert 'version = "0.5.0"' in "\n".join(updated_lines), "must bump version inside TOML fence"
     assert updated_lines[-2] == (
         "# Enabling these features expands file formats; precedence stays: "
         "defaults < file < env < CLI."
