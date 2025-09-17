@@ -75,7 +75,10 @@ def _process_fence_token(
     fence_marker = tok.markup or "```"
     indent = _extract_fence_indent(lines[start], fence_marker)
     info = tok.info or lang
-    new_body = replace_fn(tok.content)
+    original_body = tok.content
+    new_body = replace_fn(original_body)
+    if original_body.endswith("\n") and not new_body.endswith("\n"):
+        new_body = f"{new_body}\n"
     indented = "".join(
         f"{indent}{line}" for line in new_body.splitlines(keepends=True)
     )

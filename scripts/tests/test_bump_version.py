@@ -107,6 +107,27 @@ def test_update_markdown_versions_behavior(
             assert updated == md_text, description
 
 
+def test_update_markdown_preserves_trailing_newline(tmp_path: Path) -> None:
+    md_text = """```toml
+[dependencies]
+ortho_config = { version = \"0.5.0-beta1\", features = [\"json5\", \"yaml\"] }
+# Enabling these features expands file formats; precedence stays: defaults < file < env < CLI.
+```
+"""
+    md_path = tmp_path / "README.md"
+    md_path.parent.mkdir(parents=True, exist_ok=True)
+    md_path.write_text(md_text)
+
+    _update_markdown_versions(md_path, "0.5.0")
+
+    updated_lines = md_path.read_text().splitlines()
+    assert updated_lines[-2] == (
+        "# Enabling these features expands file formats; precedence stays: "
+        "defaults < file < env < CLI."
+    )
+    assert updated_lines[-1] == "```"
+
+
 def test_replace_fences_preserves_indentation() -> None:
     md_text = """1. item
 
