@@ -1,32 +1,32 @@
 # Hello World example
 
-This crate will showcase a minimal, end-to-end configuration driven command
-line application. It focuses on demonstrating the orthogonal configuration
-concepts that power the wider project without adding production ready
-complexity.
+This crate will showcase a minimal, end-to-end, configuration-driven
+command-line application. It focuses on demonstrating the orthogonal
+configuration concepts that power the wider project without adding
+production-ready complexity.
 
 ## Demonstrated capabilities
 
 - **Global parameters, switches, and array parameters**: illustrate how the
-  command line parser exposes top level configuration that applies to every
+  command-line parser exposes top-level configuration that applies to every
   command, covering boolean feature switches, repeated values, and precedence
-  between defaults and caller supplied input.
+  between defaults and caller-supplied input.
 - **Subcommands**: implement a friendly `greet` command that accepts a name and
   configurable greeting, alongside a `take-leave` workflow that combines
   switches and optional arguments to decide how a farewell is delivered.
-- **Testing disciplines**: add `rstest` powered unit tests for deterministic
+- **Testing disciplines**: add `rstest`-powered unit tests for deterministic
   components and `cucumber-rs` behavioural specifications that exercise the
-  binary as a user would, capturing configuration precedence and cross platform
+  binary as a user would, capturing configuration precedence and cross-platform
   quirks.
 - **Shell and Windows automation**: provide paired `.sh` and `.cmd` scripts
-  highlighting how environment variables, configuration files, and command line
-  overrides interact. Include examples covering default configuration, per
-  subcommand overrides, and the escalation order between the sources.
+  highlighting how environment variables, configuration files, and command-line
+  overrides interact. Include examples covering default configuration,
+  per-subcommand overrides, and the escalation order between the sources.
 
 ## Planned project layout
 
-- `src/` will contain a small `main.rs` and supporting modules for option
-  parsing, command dispatch, and domain logic.
+- `src/` will contain a small `main.rs` and supporting modules for
+  option-parsing, command dispatch, and domain logic.
 - `tests/` will host cucumber steps and supporting fixtures for behavioural
   coverage.
 - `scripts/` will offer automation snippets, with mirrored POSIX shell and
@@ -40,15 +40,15 @@ complexity.
   remains on configuration handling rather than application behaviour.
 - Ensure every configuration source is represented in both documentation and
   automated coverage to demonstrate reproducibility.
-- Document how to run the example from fresh checkout through the scripts and
+- Document how to run the example from a fresh checkout through the scripts and
   behavioural tests.
 
 ## Implementation checklist
 
 - [ ] Scaffold the crate with `Cargo.toml`, `src/main.rs`, and supporting
       modules.
-- [ ] Define global command line parameters, switches, and array parameters with
-      defaults and validation.
+- [ ] Define global command-line parameters, switches, and array parameters
+      with defaults and validation.
 - [ ] Implement the `greet` subcommand with its arguments and options.
 - [ ] Implement the `take-leave` subcommand with its arguments and options.
 - [ ] Add `rstest` unit tests covering parsing, validation, and command logic.
