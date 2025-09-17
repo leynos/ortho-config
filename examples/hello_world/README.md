@@ -21,7 +21,7 @@ production-ready complexity.
 - **Shell and Windows automation**: provide paired `.sh` and `.cmd` scripts
   highlighting how environment variables, configuration files, and command-line
   overrides interact. Include examples covering default configuration,
-  per-subcommand overrides, and the escalation order between the sources.
+  per-subcommand overrides, and the precedence order across the sources.
 
 ## Planned project layout
 
@@ -45,10 +45,12 @@ production-ready complexity.
 
 ## Getting started
 
-- Prerequisites: Rust toolchain (via rustup), Cargo, Make, and
+- Prerequisites: Rust toolchain (via rustup), Cargo, make, and
   markdownlint-cli2.
 - Build: `cargo build`.
 - Run formatting and lint checks: `make fmt && make markdownlint`.
+- Run static analysis: `make lint` (wraps `cargo clippy -D warnings`).
+- Validate Mermaid diagrams (if present): `make nixie`.
 - Execute tests (unit and behavioural): `cargo test`.
 
 ## Implementation checklist
