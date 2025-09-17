@@ -7,21 +7,17 @@ CLIPPY_FLAGS ?= --all-targets --all-features -- -D warnings
 MDLINT ?= markdownlint
 NIXIE ?= nixie
 PYTHON_VENV ?= scripts/.venv
-
-ifeq ($(OS),Windows_NT)
-PYTHON ?= python
-VENV_BIN_DIR ?= $(PYTHON_VENV)/Scripts
-PYTHON_BIN ?= $(VENV_BIN_DIR)/python.exe
-else
-PYTHON ?= python3
-VENV_BIN_DIR ?= $(PYTHON_VENV)/bin
-PYTHON_BIN ?= $(VENV_BIN_DIR)/python
-endif
-
-PIP ?= $(PYTHON_BIN) -m pip
-PYTEST ?= $(PYTHON_BIN) -m pytest
-PYTEST_FLAGS ?= --doctest-modules scripts/bump_version.py scripts/tests -q
+UV ?= uv
+PYTHON_VERSION ?= 3.13
 PYTHON_DEPS_FILE ?= scripts/requirements-test.txt
+PYTEST_FLAGS ?= --doctest-modules scripts/bump_version.py scripts/tests -q
+ifeq ($(OS),Windows_NT)
+NULL_DEVICE ?= NUL
+else
+NULL_DEVICE ?= /dev/null
+endif
+UV_RUN := $(UV) run --python $(PYTHON_VERSION) --with-requirements $(PYTHON_DEPS_FILE)
+PYTEST ?= $(UV_RUN) --module pytest
 
 build: target/debug/lib$(CRATE) ## Build debug binary
 release: target/release/lib$(CRATE) ## Build release binary
@@ -36,13 +32,8 @@ test: python-test-deps ## Run tests with warnings treated as errors
 	RUSTFLAGS="-D warnings" $(CARGO) test --all-targets --all-features $(BUILD_JOBS)
 	$(PYTEST) $(PYTEST_FLAGS)
 
-python-test-deps: $(PYTHON_VENV)/.deps-installed ## Ensure the Python virtualenv has required test dependencies
-
-$(PYTHON_VENV)/.deps-installed: $(PYTHON_DEPS_FILE)
-	$(PYTHON) -m venv $(PYTHON_VENV)
-	$(PIP) install --quiet --upgrade pip
-	$(PIP) install --quiet --requirement $(PYTHON_DEPS_FILE)
-	touch $@
+python-test-deps: ## Ensure Python test dependencies are provisioned
+	$(PYTEST) --version > $(NULL_DEVICE)
 
 # will match target/debug/libmy_library.rlib and target/release/libmy_library.rlib
 target/%/lib$(CRATE).rlib: ## Build library in debug or release
