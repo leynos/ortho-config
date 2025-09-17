@@ -6,8 +6,8 @@ import tomlkit
 from scripts.bump_version import (
     _update_dependency_version,
     _update_markdown_versions,
-    _replace_version_in_toml,
     replace_fences,
+    replace_version_in_toml,
 )
 
 
@@ -121,7 +121,9 @@ ortho_config = { version = \"0.5.0-beta1\", features = [\"json5\", \"yaml\"] }
 
     _update_markdown_versions(md_path, "0.5.0")
 
-    updated_lines = md_path.read_text().splitlines()
+    updated_content = md_path.read_text()
+    assert 'version = "0.5.0"' in updated_content, "must bump version inside TOML fence"
+    updated_lines = updated_content.splitlines()
     assert updated_lines[-2] == (
         "# Enabling these features expands file formats; precedence stays: "
         "defaults < file < env < CLI."
@@ -142,7 +144,7 @@ ortho_config = { version = \"0.5.0-beta1\", features = [\"json5\", \"yaml\"] }
 def test_replace_version_in_toml_preserves_suffix(
     snippet: str, expected_suffix: str
 ) -> None:
-    updated = _replace_version_in_toml(snippet, "1")
+    updated = replace_version_in_toml(snippet, "1")
     base = updated.rstrip("\r\n")
     actual_suffix = updated[len(base) :]
     assert actual_suffix == expected_suffix
@@ -160,7 +162,7 @@ def test_replace_version_in_toml_preserves_suffix(
     ],
 )
 def test_replace_version_in_toml_no_dependency_returns_input(snippet: str) -> None:
-    assert _replace_version_in_toml(snippet, "1") == snippet
+    assert replace_version_in_toml(snippet, "1") == snippet
 
 
 def test_replace_fences_preserves_indentation() -> None:

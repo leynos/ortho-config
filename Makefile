@@ -7,7 +7,7 @@ CLIPPY_FLAGS ?= --all-targets --all-features -- -D warnings
 MDLINT ?= markdownlint
 NIXIE ?= nixie
 PYTEST ?= python -m pytest
-PYTEST_FLAGS ?=
+PYTEST_FLAGS ?= --doctest-modules scripts/bump_version.py scripts/tests -q
 PYTHON ?= python
 PYTHON_DEPS_FILE ?= scripts/requirements-test.txt
 
