@@ -406,8 +406,18 @@ def _update_member_version(member_path: Path, version: str) -> bool:
 
     Examples
     --------
-    >>> _update_member_version(Path('Cargo.toml'), '1.2.3')
-    False
+    >>> import tempfile
+    >>> from pathlib import Path
+    >>> with tempfile.TemporaryDirectory() as tmp:
+    ...     cargo_toml = Path(tmp) / "Cargo.toml"
+    ...     _ = cargo_toml.write_text(
+    ...         "[package]\\n"
+    ...         'name = "demo"\\n'
+    ...         'version = "0.1.0"\\n'
+    ...     )
+    ...     result = _update_member_version(cargo_toml, "1.2.3")
+    ...     cargo_toml.read_text(), result
+    ('[package]\\nname = "demo"\\nversion = "1.2.3"\\n', False)
     """
     try:
         # Derive from the actual package name to avoid coupling to directory names

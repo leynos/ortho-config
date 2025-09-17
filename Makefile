@@ -6,9 +6,18 @@ BUILD_JOBS ?=
 CLIPPY_FLAGS ?= --all-targets --all-features -- -D warnings
 MDLINT ?= markdownlint
 NIXIE ?= nixie
-PYTHON ?= python3
 PYTHON_VENV ?= scripts/.venv
-PYTHON_BIN ?= $(PYTHON_VENV)/bin/python
+
+ifeq ($(OS),Windows_NT)
+PYTHON ?= python
+VENV_BIN_DIR ?= $(PYTHON_VENV)/Scripts
+PYTHON_BIN ?= $(VENV_BIN_DIR)/python.exe
+else
+PYTHON ?= python3
+VENV_BIN_DIR ?= $(PYTHON_VENV)/bin
+PYTHON_BIN ?= $(VENV_BIN_DIR)/python
+endif
+
 PIP ?= $(PYTHON_BIN) -m pip
 PYTEST ?= $(PYTHON_BIN) -m pytest
 PYTEST_FLAGS ?= --doctest-modules scripts/bump_version.py scripts/tests -q
