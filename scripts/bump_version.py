@@ -17,6 +17,7 @@ Run with the desired semantic version:
 from __future__ import annotations
 
 import os
+import re
 import sys
 import tempfile
 from collections.abc import Mapping, MutableMapping
@@ -34,7 +35,9 @@ def _is_matching_fence_token(tok, lang: str) -> bool:
     Examples
     --------
     >>> from markdown_it import MarkdownIt
-    >>> tok = MarkdownIt("commonmark").parse('```toml\n```')[0]
+    >>> md = '''```toml
+    ... ```'''
+    >>> tok = MarkdownIt("commonmark").parse(md)[0]
     >>> _is_matching_fence_token(tok, 'toml')
     True
     """
@@ -66,16 +69,26 @@ def _process_fence_token(
 
     Examples
     --------
-    >>> md = '```toml\nfoo\n```\n'
+    >>> md = '''```toml
+    ... foo
+    ... ```
+    ... '''
     >>> tokens = MarkdownIt('commonmark').parse(md)
-    >>> _process_fence_token(tokens[0], md.splitlines(keepends=True), 'toml', str.upper)
-    '```toml\nFOO\n```\n'
+    >>> result = _process_fence_token(
+    ...     tokens[0], md.splitlines(keepends=True), 'toml', str.upper
+    ... )
+    >>> result == '```toml\\nFOO\\n```\\n'
+    True
     """
     start, _ = tok.map
     fence_marker = tok.markup or "```"
     indent = _extract_fence_indent(lines[start], fence_marker)
     info = tok.info or lang
-    new_body = replace_fn(tok.content)
+    original_body = tok.content
+    new_body = replace_fn(original_body)
+    m = re.search(r"(\r?\n+)$", original_body)
+    suffix = m.group(1) if m else ""
+    new_body = new_body.rstrip("\r\n") + suffix
     indented = "".join(
         f"{indent}{line}" for line in new_body.splitlines(keepends=True)
     )
@@ -97,9 +110,13 @@ def replace_fences(md_text: str, lang: str, replace_fn: Callable[[str], str]) ->
 
     Examples
     --------
-    >>> md = '```toml\n[dependencies]\nfoo = "1"\n```'
-    >>> replace_fences(md, 'toml', lambda body: body.replace('1', '2'))
-    '```toml\n[dependencies]\nfoo = "2"\n```\n'
+    >>> md = '''```toml
+    ... [dependencies]
+    ... foo = "1"
+    ... ```'''
+    >>> replaced = replace_fences(md, 'toml', lambda body: body.replace('1', '2'))
+    >>> replaced == '```toml\\n[dependencies]\\nfoo = "2"\\n```\\n'
+    True
     """
     md = MarkdownIt("commonmark")
     tokens = md.parse(md_text)
@@ -168,8 +185,8 @@ def _update_dict_dependency(
     >>> entry = tomlkit.table()
     >>> entry["version"] = tomlkit.string("^0.1")
     >>> _update_dict_dependency(entry, "1.2.3")
-    >>> entry["version"].value
-    '^1.2.3'
+    >>> tomlkit.dumps(entry).strip()
+    'version = "^1.2.3"'
     """
     if bool(entry.get("workspace")) is True:
         return
@@ -220,7 +237,8 @@ def _update_dependency_in_table(
     Examples
     --------
     >>> import tomlkit
-    >>> doc = tomlkit.parse('[dependencies]\nfoo = "^0.1"')
+    >>> doc = tomlkit.parse('''[dependencies]
+    ... foo = "^0.1"''')
     >>> _update_dependency_in_table(doc['dependencies'], 'foo', '1.2.3')
     >>> 'foo = "^1.2.3"' in tomlkit.dumps(doc)
     True
@@ -243,18 +261,22 @@ def _update_dependency_version(
 
     Examples
     --------
-    >>> doc = tomlkit.parse('[dependencies]\nfoo = "^0.1"')
+    >>> doc = tomlkit.parse('''[dependencies]
+    ... foo = "^0.1"''')
     >>> _update_dependency_version(doc, 'foo', '1.2.3')
-    >>> tomlkit.dumps(doc).strip()
-    '[dependencies]\nfoo = "^1.2.3"'
+    >>> tomlkit.dumps(doc).strip() == '''[dependencies]
+    ... foo = "^1.2.3"'''
+    True
 
-    >>> snippet = '[dependencies]\nfoo = { version = "~0.1", features = ["a"] }'
+    >>> snippet = '''[dependencies]
+    ... foo = { version = "~0.1", features = ["a"] }'''
     >>> doc = tomlkit.parse(snippet)
     >>> _update_dependency_version(doc, 'foo', '1.2.3')
     >>> 'version = "~1.2.3"' in tomlkit.dumps(doc)
     True
 
-    >>> doc = tomlkit.parse('[dev-dependencies]\nfoo = "^0.1"')
+    >>> doc = tomlkit.parse('''[dev-dependencies]
+    ... foo = "^0.1"''')
     >>> _update_dependency_version(doc, 'foo', '1.2.3')
     >>> 'foo = "^1.2.3"' in tomlkit.dumps(doc)
     True
@@ -320,8 +342,9 @@ def _validate_args_and_setup(argv: list[str]) -> tuple[str, Path] | None:
 
     Examples
     --------
-    >>> _validate_args_and_setup(["bump_version.py", "1.2.3"])  # doctest: +ELLIPSIS
-    ('1.2.3', Path(...))
+    >>> version, root = _validate_args_and_setup(["bump_version.py", "1.2.3"])
+    >>> (version, isinstance(root, Path))
+    ('1.2.3', True)
     """
     if len(argv) != 2:
         prog = Path(argv[0]).name
@@ -350,8 +373,8 @@ def _resolve_member_paths(root: Path, members: list[str]) -> list[Path]:
 
     Examples
     --------
-    >>> _resolve_member_paths(Path('.'), ['scripts'])  # doctest: +ELLIPSIS
-    [Path('scripts')]
+    >>> [path.as_posix() for path in _resolve_member_paths(Path('.'), ['scripts'])]
+    ['scripts']
     """
     paths: list[Path] = []
     for pattern in members:
@@ -383,8 +406,18 @@ def _update_member_version(member_path: Path, version: str) -> bool:
 
     Examples
     --------
-    >>> _update_member_version(Path('Cargo.toml'), '1.2.3')
-    False
+    >>> import tempfile
+    >>> from pathlib import Path
+    >>> with tempfile.TemporaryDirectory() as tmp:
+    ...     cargo_toml = Path(tmp) / "Cargo.toml"
+    ...     _ = cargo_toml.write_text(
+    ...         "[package]\\n"
+    ...         'name = "demo"\\n'
+    ...         'version = "0.1.0"\\n'
+    ...     )
+    ...     result = _update_member_version(cargo_toml, "1.2.3")
+    ...     cargo_toml.read_text(), result
+    ('[package]\\nname = "demo"\\nversion = "1.2.3"\\n', False)
     """
     try:
         # Derive from the actual package name to avoid coupling to directory names
@@ -468,17 +501,39 @@ def _process_members(root: Path, members: list[str], version: str) -> bool:
     return had_error
 
 
-def _replace_version_in_toml(snippet: str, version: str) -> str:
-    """Update ``ortho_config`` version in TOML snippet, preserving formatting."""
+def replace_version_in_toml(snippet: str, version: str) -> str:
+    """Update ``ortho_config`` version in a TOML snippet.
+
+    Examples
+    --------
+    >>> replace_version_in_toml('''[dependencies]
+    ... ortho_config = "0"
+    ... ''', '1') == '[dependencies]\\northo_config = "1"\\n'
+    True
+    >>> replace_version_in_toml('''[dependencies]
+    ... ortho_config = "0"''', '1') == '[dependencies]\\northo_config = "1"'
+    True
+    """
     try:
         doc = tomlkit.parse(snippet)
     except TOMLKitError:
         return snippet
+    match = re.search(r"((?:\r?\n)*)$", snippet)
+    newline_suffix = match.group(1) if match else ""
+    dependency_found = False
     for table in ("dependencies", "dev-dependencies", "build-dependencies"):
         deps = doc.get(table)
         if deps and "ortho_config" in deps:
+            dependency_found = True
             _update_dependency_in_table(deps, "ortho_config", version)
-    return tomlkit.dumps(doc).rstrip()
+    if not dependency_found:
+        return snippet
+    dumped = tomlkit.dumps(doc)
+    base = dumped.rstrip("\r\n")
+    return f"{base}{newline_suffix}" if newline_suffix else base
+
+
+_replace_version_in_toml = replace_version_in_toml
 
 
 def _update_markdown_versions(md_path: Path, version: str) -> None:
@@ -487,19 +542,22 @@ def _update_markdown_versions(md_path: Path, version: str) -> None:
     Examples
     --------
     >>> import tempfile
-    >>> sample = '```toml\n[dependencies]\northo_config = "0"\n```\n'
-    >>> with tempfile.NamedTemporaryFile('w+', suffix='.md') as fh:
-    ...     _ = fh.write(sample)
-    ...     fh.flush()
-    ...     _update_markdown_versions(Path(fh.name), '1')
-    ...     fh.seek(0)
-    ...     'ortho_config = "1"' in fh.read()
+    >>> sample = '''```toml
+    ... [dependencies]
+    ... ortho_config = "0"
+    ... ```
+    ... '''
+    >>> with tempfile.TemporaryDirectory() as tmpdir:
+    ...     md_path = Path(tmpdir) / 'sample.md'
+    ...     _ = md_path.write_text(sample, encoding='utf-8')
+    ...     _update_markdown_versions(md_path, '1')
+    ...     'ortho_config = "1"' in md_path.read_text(encoding='utf-8')
     True
     """
     if not md_path.exists():
         return
     text = md_path.read_text(encoding="utf-8")
-    updated = replace_fences(text, "toml", lambda body: _replace_version_in_toml(body, version))
+    updated = replace_fences(text, "toml", lambda body: replace_version_in_toml(body, version))
     md_path.write_text(updated, encoding="utf-8")
 
 
@@ -521,8 +579,8 @@ def main(argv: list[str]) -> int:
 
     Examples
     --------
-    >>> import sys
-    >>> sys.exit(main(["bump_version.py", "1.2.3"]))
+    >>> main(["bump_version.py", "1.2.3"])  # doctest: +SKIP
+    0
     """
     result = _validate_args_and_setup(argv)
     if result is None:

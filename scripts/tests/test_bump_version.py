@@ -7,6 +7,7 @@ from scripts.bump_version import (
     _update_dependency_version,
     _update_markdown_versions,
     replace_fences,
+    replace_version_in_toml,
 )
 
 
@@ -105,6 +106,62 @@ def test_update_markdown_versions_behavior(
             assert 'ortho_config = "1"' in updated, description
         else:
             assert updated == md_text, description
+
+
+def test_update_markdown_preserves_trailing_newline(tmp_path: Path) -> None:
+    md_text = """```toml
+[dependencies]
+ortho_config = { version = \"0.5.0-beta1\", features = [\"json5\", \"yaml\"] }
+# Enabling these features expands file formats; precedence stays: defaults < file < env < CLI.
+```
+"""
+    md_path = tmp_path / "README.md"
+    md_path.parent.mkdir(parents=True, exist_ok=True)
+    md_path.write_text(md_text)
+
+    _update_markdown_versions(md_path, "0.5.0")
+
+    updated_lines = md_path.read_text().splitlines()
+    assert 'version = "0.5.0"' in "\n".join(updated_lines), "must bump version inside TOML fence"
+    assert updated_lines[-2] == (
+        "# Enabling these features expands file formats; precedence stays: "
+        "defaults < file < env < CLI."
+    )
+    assert updated_lines[-1] == "```"
+
+
+@pytest.mark.parametrize(
+    "snippet, expected_suffix",
+    [
+        ("[dependencies]\northo_config = \"0\"\n", "\n"),
+        ("[dependencies]\northo_config = \"0\"\r\n", "\r\n"),
+        ("[dependencies]\northo_config = \"0\"\n\n", "\n\n"),
+        ("[dependencies]\northo_config = \"0\"\r\n\r\n", "\r\n\r\n"),
+        ("[dependencies]\northo_config = \"0\"", ""),
+    ],
+)
+def test_replace_version_in_toml_preserves_suffix(
+    snippet: str, expected_suffix: str
+) -> None:
+    updated = replace_version_in_toml(snippet, "1")
+    base = updated.rstrip("\r\n")
+    actual_suffix = updated[len(base) :]
+    assert actual_suffix == expected_suffix
+    assert 'ortho_config = "1"' in updated
+
+
+@pytest.mark.parametrize(
+    "snippet",
+    [
+        "[dependencies]\nfoo = \"0\"\n",
+        "[dependencies]\nfoo = \"0\"\r\n",
+        "[dependencies]\nfoo = \"0\"\n\n",
+        "[dev-dependencies]\nfoo = \"0\"",
+        "[build-dependencies]\nfoo = \"0\"\r\n",
+    ],
+)
+def test_replace_version_in_toml_no_dependency_returns_input(snippet: str) -> None:
+    assert replace_version_in_toml(snippet, "1") == snippet
 
 
 def test_replace_fences_preserves_indentation() -> None:
