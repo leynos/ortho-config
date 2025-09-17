@@ -22,3 +22,7 @@ target/
 #.idea/
 
 .crush/
+
+# Python tooling
+scripts/.venv/
+**/__pycache__/
