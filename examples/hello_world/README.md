@@ -48,10 +48,10 @@ production-ready complexity.
 - Prerequisites: Rust toolchain (via rustup), Cargo, make, and
   markdownlint-cli2.
 - Build: `cargo build`.
-- Run formatting and lint checks: `make fmt && make markdownlint`.
-- Run static analysis: `make lint` (wraps `cargo clippy -D warnings`).
+- Run formatting and Markdown lint checks: `make fmt && make markdownlint`.
 - Validate Mermaid diagrams (if present): `make nixie`.
-- Execute tests (unit and behavioural): `cargo test`.
+- Run static analysis: `cargo clippy -D warnings` (or `make lint`).
+- Execute tests (unit and behavioural): `make test`.
 
 ## Implementation checklist
 
