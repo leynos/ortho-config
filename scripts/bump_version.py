@@ -17,6 +17,7 @@ Run with the desired semantic version:
 from __future__ import annotations
 
 import os
+import re
 import sys
 import tempfile
 from collections.abc import Mapping, MutableMapping
@@ -472,22 +473,13 @@ def _process_members(root: Path, members: list[str], version: str) -> bool:
 
 
 def _replace_version_in_toml(snippet: str, version: str) -> str:
-    """Update ``ortho_config`` version in TOML snippet, preserving formatting.
-
-    Examples
-    --------
-    >>> snippet = '[dependencies]\northo_config = "0"\n'
-    >>> updated = _replace_version_in_toml(snippet, "1")
-    >>> updated.endswith('\n'), 'ortho_config = "1"' in updated
-    (True, True)
-    >>> _replace_version_in_toml('[dependencies]\northo_config = "0"', "1").endswith('\n')
-    False
-    """
+    """Update ``ortho_config`` version in a TOML snippet."""
     try:
         doc = tomlkit.parse(snippet)
     except TOMLKitError:
         return snippet
-    had_trailing_newline = snippet.endswith("\n")
+    match = re.search(r"((?:\r?\n)*)$", snippet)
+    newline_suffix = match.group(1) if match else ""
     dependency_found = False
     for table in ("dependencies", "dev-dependencies", "build-dependencies"):
         deps = doc.get(table)
@@ -497,9 +489,8 @@ def _replace_version_in_toml(snippet: str, version: str) -> str:
     if not dependency_found:
         return snippet
     dumped = tomlkit.dumps(doc)
-    if not had_trailing_newline and dumped.endswith("\n"):
-        return dumped[:-1]
-    return dumped
+    base = dumped.rstrip("\r\n")
+    return f"{base}{newline_suffix}" if newline_suffix else base
 
 
 def _update_markdown_versions(md_path: Path, version: str) -> None:

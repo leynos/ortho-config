@@ -6,6 +6,7 @@ import tomlkit
 from scripts.bump_version import (
     _update_dependency_version,
     _update_markdown_versions,
+    _replace_version_in_toml,
     replace_fences,
 )
 
@@ -126,6 +127,40 @@ ortho_config = { version = \"0.5.0-beta1\", features = [\"json5\", \"yaml\"] }
         "defaults < file < env < CLI."
     )
     assert updated_lines[-1] == "```"
+
+
+@pytest.mark.parametrize(
+    "snippet, expected_suffix",
+    [
+        ("[dependencies]\northo_config = \"0\"\n", "\n"),
+        ("[dependencies]\northo_config = \"0\"\r\n", "\r\n"),
+        ("[dependencies]\northo_config = \"0\"\n\n", "\n\n"),
+        ("[dependencies]\northo_config = \"0\"\r\n\r\n", "\r\n\r\n"),
+        ("[dependencies]\northo_config = \"0\"", ""),
+    ],
+)
+def test_replace_version_in_toml_preserves_suffix(
+    snippet: str, expected_suffix: str
+) -> None:
+    updated = _replace_version_in_toml(snippet, "1")
+    base = updated.rstrip("\r\n")
+    actual_suffix = updated[len(base) :]
+    assert actual_suffix == expected_suffix
+    assert 'ortho_config = "1"' in updated
+
+
+@pytest.mark.parametrize(
+    "snippet",
+    [
+        "[dependencies]\nfoo = \"0\"\n",
+        "[dependencies]\nfoo = \"0\"\r\n",
+        "[dependencies]\nfoo = \"0\"\n\n",
+        "[dev-dependencies]\nfoo = \"0\"",
+        "[build-dependencies]\nfoo = \"0\"\r\n",
+    ],
+)
+def test_replace_version_in_toml_no_dependency_returns_input(snippet: str) -> None:
+    assert _replace_version_in_toml(snippet, "1") == snippet
 
 
 def test_replace_fences_preserves_indentation() -> None:
