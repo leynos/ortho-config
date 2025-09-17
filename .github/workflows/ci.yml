@@ -1,10 +1,8 @@
 name: CI
 
 on:
-  push:
-    branches: [main]
   pull_request:
-    branches: [main]
+    types: [opened, synchronize, reopened]
   workflow_dispatch:
 
 jobs:
@@ -16,52 +14,80 @@ jobs:
       CARGO_TERM_COLOR: always
       CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}
       CODESCENE_CLI_SHA256: ${{ vars.CODESCENE_CLI_SHA256 }}
-      BUILD_PROFILE: debug
+      RUSTFLAGS: -D warnings
+      RUSTDOCFLAGS: -D warnings
     strategy:
       fail-fast: false
       matrix:
         include:
           - os: ubuntu-latest
-            coverage: true
           - os: windows-latest
-            coverage: false
     steps:
-      - uses: actions/checkout@v5
-      - name: Setup uv
-        # v6.4.3
-        uses: astral-sh/setup-uv@e92bafb6253dcd438e0484186d7669ea7a8ca1cc
-        with:
-          python-version: '3.13'
-          cache-dependency-glob: |
-            **/pyproject.toml
-            **/uv.lock
-            **/scripts/*.py
-      - name: Ensure bump_version script is executable
-        if: runner.os == 'Linux'
-        shell: bash
-        run: test -x scripts/bump_version.py
+      - name: Checkout
+        uses: actions/checkout@v5
+
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@988ff278fcab48e8a932e2af88ce1aaaa78386a0
-      - name: Show Ninja version
-        run: ninja --version
-      - name: Format
+        uses: leynos/shared-actions/.github/actions/setup-rust@ebbaaa0d7a776ec3187f3940667e5c7c9379cdf5
+
+      - name: Install bun
+        uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76 # v2
+        with:
+          bun-version: '1.2.21'
+
+      - name: Check formatting
         run: make check-fmt
+
+      - name: Install Mermaid CLI
+        run: |
+          set -euxo pipefail
+          bun install --no-progress --global @mermaid-js/mermaid-cli@11.9.0
+          bun x @puppeteer/browsers browsers install chrome-headless-shell
+          mmdc --version
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@9e3559f5c6d1922b77a10af6d8a1a88e5c8ea1a4 # v6
+        with:
+          version: 'latest'
+
+      - name: Install Nixie
+        run: uv tool install --from git+https://github.com/leynos/nixie nixie
+
+      - name: Nixie
+        run: make nixie
+
+      - name: Markdown lint
+        uses: DavidAnson/markdownlint-cli2-action@992badcdf24e3b8eb7e87ff9287fe931bcb00c6e # v20
+        with:
+          globs: '**/*.md'
+
       - name: Lint
         run: make lint
-      - name: Test
-        run: make test
-      - name: Test and Measure Coverage
-        uses: leynos/shared-actions/.github/actions/generate-coverage@988ff278fcab48e8a932e2af88ce1aaaa78386a0
+
+      - name: Test and Measure Coverage (with features)
+        if: ${{ matrix.coverage && matrix.features != '' }}
+        uses: leynos/shared-actions/.github/actions/generate-coverage@ebbaaa0d7a776ec3187f3940667e5c7c9379cdf5
         with:
           output-path: lcov.info
           format: lcov
+          features: rstest-bdd/diagnostics ${{ matrix.features }}
+          with-default-features: ${{ matrix.with-default-features }}
+
+      - name: Test and Measure Coverage (no features)
+        if: ${{ matrix.coverage && matrix.features == '' }}
+        uses: leynos/shared-actions/.github/actions/generate-coverage@ebbaaa0d7a776ec3187f3940667e5c7c9379cdf5
+        with:
+          output-path: lcov.info
+          format: lcov
+          features: rstest-bdd/diagnostics
+          with-default-features: ${{ matrix.with-default-features }}
+
+      - name: Publish dry run
+        run: make publish-check
+
       - name: Upload coverage data to CodeScene
-        env:
-          CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}
-        if: ${{ env.CS_ACCESS_TOKEN }}
-        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@988ff278fcab48e8a932e2af88ce1aaaa78386a0
+        if: ${{ matrix.coverage && env.CS_ACCESS_TOKEN && vars.CODESCENE_CLI_SHA256 }}
+        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@ebbaaa0d7a776ec3187f3940667e5c7c9379cdf5
         with:
           format: lcov
           access-token: ${{ env.CS_ACCESS_TOKEN }}
           installer-checksum: ${{ vars.CODESCENE_CLI_SHA256 }}
-
