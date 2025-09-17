@@ -469,16 +469,30 @@ def _process_members(root: Path, members: list[str], version: str) -> bool:
 
 
 def _replace_version_in_toml(snippet: str, version: str) -> str:
-    """Update ``ortho_config`` version in TOML snippet, preserving formatting."""
+    """Update ``ortho_config`` version in TOML snippet, preserving formatting.
+
+    Examples
+    --------
+    >>> snippet = 'ortho_config = "0"\n'
+    >>> updated = _replace_version_in_toml(snippet, "1")
+    >>> updated.endswith('\n'), 'ortho_config = "1"' in updated
+    (True, True)
+    >>> _replace_version_in_toml('ortho_config = "0"', "1").endswith('\n')
+    False
+    """
     try:
         doc = tomlkit.parse(snippet)
     except TOMLKitError:
         return snippet
+    had_trailing_newline = snippet.endswith("\n")
     for table in ("dependencies", "dev-dependencies", "build-dependencies"):
         deps = doc.get(table)
         if deps and "ortho_config" in deps:
             _update_dependency_in_table(deps, "ortho_config", version)
-    return tomlkit.dumps(doc).rstrip()
+    dumped = tomlkit.dumps(doc)
+    if not had_trailing_newline and dumped.endswith("\n"):
+        return dumped[:-1]
+    return dumped
 
 
 def _update_markdown_versions(md_path: Path, version: str) -> None:
