@@ -473,11 +473,11 @@ def _replace_version_in_toml(snippet: str, version: str) -> str:
 
     Examples
     --------
-    >>> snippet = 'ortho_config = "0"\n'
+    >>> snippet = '[dependencies]\northo_config = "0"\n'
     >>> updated = _replace_version_in_toml(snippet, "1")
     >>> updated.endswith('\n'), 'ortho_config = "1"' in updated
     (True, True)
-    >>> _replace_version_in_toml('ortho_config = "0"', "1").endswith('\n')
+    >>> _replace_version_in_toml('[dependencies]\northo_config = "0"', "1").endswith('\n')
     False
     """
     try:
@@ -485,10 +485,14 @@ def _replace_version_in_toml(snippet: str, version: str) -> str:
     except TOMLKitError:
         return snippet
     had_trailing_newline = snippet.endswith("\n")
+    dependency_found = False
     for table in ("dependencies", "dev-dependencies", "build-dependencies"):
         deps = doc.get(table)
         if deps and "ortho_config" in deps:
+            dependency_found = True
             _update_dependency_in_table(deps, "ortho_config", version)
+    if not dependency_found:
+        return snippet
     dumped = tomlkit.dumps(doc)
     if not had_trailing_newline and dumped.endswith("\n"):
         return dumped[:-1]
