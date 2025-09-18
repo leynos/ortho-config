@@ -45,10 +45,15 @@ ortho_config = "0.5.0-beta1" # Replace with the latest version
 serde = { version = "1.0", features = ["derive"] }
 ```
 
-2. **Define the configuration struct:**
+`ortho_config` re-exports its parsing dependencies, so applications can import
+`figment`, `uncased`, `xdg` (on Unix-like and Redox targets), and the optional
+format parsers (`figment_json5`, `json5`, `serde_yaml`, `toml`) without
+declaring them directly.
+
+1. **Define the configuration struct:**
 
 ```rust
-use ortho_config::{OrthoConfig, OrthoError};
+use ortho_config::{OrthoConfig, OrthoResult};
 use serde::{Deserialize, Serialize}; // Required for OrthoConfig derive
 
 #[derive(Debug, Clone, Deserialize, Serialize, OrthoConfig)]
@@ -86,7 +91,7 @@ struct AppConfig {
     verbose: bool, // Defaults to false if not specified
 }
 
-fn main() -> Result<(), OrthoError> {
+fn main() -> OrthoResult<()> {
     let config = AppConfig::load()?; // Load configuration
 
     println!("Loaded configuration: {:#?}", config);
@@ -104,7 +109,7 @@ fn main() -> Result<(), OrthoError> {
 }
 ```
 
-3. **Running the application**:
+2. **Running the application**:
 
 - With CLI arguments:
     `cargo run -- --log-level debug --port 3000 -v --features extra_cli_feature`
@@ -160,7 +165,36 @@ support additional formats:
 
 ```toml
 [dependencies]
-ortho_config = { version = "0.3.0", features = ["json5", "yaml"] }
+ortho_config = { version = "0.5.0-beta1", features = ["json5", "yaml"] }
+```
+
+### Error interop helpers
+
+`OrthoConfig` includes small extensions to simplify error conversions:
+
+- `OrthoResultExt::into_ortho()` maps external errors into `OrthoResult<T>`.
+- `OrthoMergeExt::into_ortho_merge()` maps `figment::Error` into
+  `OrthoError::Merge` within `OrthoResult<T>`.
+- `ResultIntoFigment::to_figment()` converts `OrthoResult<T>` into
+  `Result<T, figment::Error>` for integrations that prefer Figment’s type.
+
+These keep examples and adapters concise while maintaining explicit semantics.
+
+To return multiple failures at once, `OrthoError::aggregate` builds an
+aggregate error from either owned or shared errors. When the collection might
+be empty, `OrthoError::try_aggregate` returns `Option<OrthoError>`:
+
+```rust
+use ortho_config::OrthoError;
+
+let agg = OrthoError::aggregate(vec![
+    OrthoError::validation("port", "must be positive"), // or explicit variant
+    OrthoError::gathering_arc(figment::Error::from("boom")),
+]);
+
+assert!(
+    OrthoError::try_aggregate(std::iter::empty::<OrthoError>()).is_none()
+);
 ```
 
 The file loader selects the parser based on the extension (`.toml`, `.json`,
