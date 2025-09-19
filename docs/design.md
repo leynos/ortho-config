@@ -481,7 +481,7 @@ to rename the hidden `--config-path` flag by defining their own field with a
    - Add extensive documentation and examples.
    - Feature-gate the file format support (`json5`, `yaml`).
 
-## 7. Hello World Example
+## 7. Hello world example
 
 The example crate under `examples/hello_world` demonstrates how to layer
 global flags on top of the derive macro while keeping the application logic

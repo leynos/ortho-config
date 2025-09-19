@@ -426,8 +426,9 @@ demonstrate how global options, switches and arrays behave with `OrthoConfig`.
   applies the punctuation and delivery mode before printing the greeting.
 - Run the example with `cargo run -p hello_world --` followed by flags. For
   example, `cargo run -p hello_world -- -s Hi -s there -r team` prints
-  `Hi there, team!`. Passing `--excited` or `--quiet` toggles shouty or
-  whispered output, and combining both switches exits with a validation error.
+  `Hi there, team!`. Passing `--is-excited true` or `--is-quiet true` toggles
+  shouty or whispered output, and combining both switches exits with a
+  validation error.
 - The crate includes `rstest` unit tests and a `cucumber` suite that exercises
   the compiled binary (`cargo test -p hello_world --test cucumber`) to verify
   that the CLI behaves as documented.

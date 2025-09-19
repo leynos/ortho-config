@@ -1,3 +1,7 @@
+//! CLI configuration for the `hello_world` example.
+//!
+//! Binds CLI, environment, and default layers via `OrthoConfig` so tests can
+//! drive the binary with predictable inputs.
 use crate::error::ValidationError;
 use ortho_config::OrthoConfig;
 use serde::Deserialize;
@@ -21,11 +25,11 @@ pub struct HelloWorldCli {
     /// Enables an enthusiastic delivery mode.
     #[serde(default)]
     #[ortho_config(default = false)]
-    pub excited: bool,
+    pub is_excited: bool,
     /// Selects a quiet delivery mode.
     #[serde(default)]
     #[ortho_config(default = false)]
-    pub quiet: bool,
+    pub is_quiet: bool,
 }
 
 impl Default for HelloWorldCli {
@@ -33,8 +37,8 @@ impl Default for HelloWorldCli {
         Self {
             recipient: default_recipient(),
             salutations: default_salutations(),
-            excited: false,
-            quiet: false,
+            is_excited: false,
+            is_quiet: false,
         }
     }
 }
@@ -52,8 +56,17 @@ pub enum DeliveryMode {
 
 impl HelloWorldCli {
     /// Validates the resolved configuration before execution.
+    ///
+    /// # Examples
+    /// ```rust
+    /// # use crate::cli::{DeliveryMode, HelloWorldCli};
+    /// let mut cli = HelloWorldCli::default();
+    /// cli.is_excited = true;
+    /// cli.validate().unwrap();
+    /// assert_eq!(cli.delivery_mode(), DeliveryMode::Enthusiastic);
+    /// ```
     pub fn validate(&self) -> Result<(), ValidationError> {
-        if self.excited && self.quiet {
+        if self.is_excited && self.is_quiet {
             return Err(ValidationError::ConflictingDeliveryModes);
         }
         if self.salutations.is_empty() {
@@ -70,9 +83,13 @@ impl HelloWorldCli {
     /// Calculates the delivery mode once the configuration is valid.
     #[must_use]
     pub fn delivery_mode(&self) -> DeliveryMode {
-        if self.excited {
+        debug_assert!(
+            !(self.is_excited && self.is_quiet),
+            "Call validate() before delivery_mode(); conflicting flags set",
+        );
+        if self.is_excited {
             DeliveryMode::Enthusiastic
-        } else if self.quiet {
+        } else if self.is_quiet {
             DeliveryMode::Quiet
         } else {
             DeliveryMode::Standard
@@ -80,6 +97,14 @@ impl HelloWorldCli {
     }
 
     /// Strips incidental whitespace from salutations for consistent output.
+    ///
+    /// # Examples
+    /// ```rust
+    /// # use crate::cli::HelloWorldCli;
+    /// let mut cli = HelloWorldCli::default();
+    /// cli.salutations = vec!["  Hello".into(), "world  ".into()];
+    /// assert_eq!(cli.trimmed_salutations(), vec!["Hello", "world"]);
+    /// ```
     #[must_use]
     pub fn trimmed_salutations(&self) -> Vec<String> {
         self.salutations
@@ -114,8 +139,8 @@ mod tests {
 
     #[rstest]
     fn conflicting_delivery_modes_are_rejected(mut base_cli: HelloWorldCli) {
-        base_cli.excited = true;
-        base_cli.quiet = true;
+        base_cli.is_excited = true;
+        base_cli.is_quiet = true;
         let err = base_cli
             .validate()
             .expect_err("conflicting modes should fail");
@@ -150,8 +175,8 @@ mod tests {
         #[case] quiet: bool,
         #[case] expected: DeliveryMode,
     ) {
-        base_cli.excited = excited;
-        base_cli.quiet = quiet;
+        base_cli.is_excited = excited;
+        base_cli.is_quiet = quiet;
         assert_eq!(base_cli.delivery_mode(), expected);
     }
 

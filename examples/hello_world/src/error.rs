@@ -1,3 +1,7 @@
+//! Error types for the `hello_world` example.
+//!
+//! This module centralises configuration and validation failures so `main`
+//! can report user-friendly errors without exposing internal details.
 use std::sync::Arc;
 use thiserror::Error;
 
@@ -22,6 +26,6 @@ pub enum ValidationError {
     #[error("salutations must contain visible characters (index {0})")]
     BlankSalutation(usize),
     /// Mutually exclusive delivery modes were enabled simultaneously.
-    #[error("cannot combine --excited with --quiet")]
+    #[error("cannot combine --is-excited with --is-quiet")]
     ConflictingDeliveryModes,
 }

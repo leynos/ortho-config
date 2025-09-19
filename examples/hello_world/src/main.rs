@@ -1,3 +1,4 @@
+//! Hello World example entry-point: load config, build greeting plan, print message.
 mod cli;
 mod error;
 mod message;

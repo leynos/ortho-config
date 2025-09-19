@@ -1,3 +1,4 @@
+//! Greeting planning and rendering for the `hello_world` example.
 use crate::cli::{DeliveryMode, HelloWorldCli};
 use crate::error::HelloWorldError;
 
@@ -28,7 +29,7 @@ pub fn build_plan(config: &HelloWorldCli) -> Result<GreetingPlan, HelloWorldErro
     config.validate()?;
     let mode = config.delivery_mode();
     let salutation = config.trimmed_salutations().join(" ");
-    let recipient = config.recipient.trim();
+    let recipient = &config.recipient;
     let base = format!("{salutation}, {recipient}");
     let message = match mode {
         DeliveryMode::Standard => format!("{base}!"),
@@ -63,7 +64,7 @@ mod tests {
 
     #[rstest]
     fn build_plan_shouts_for_excited(mut base_config: HelloWorldCli) {
-        base_config.excited = true;
+        base_config.is_excited = true;
         let plan = build_plan(&base_config).expect("plan");
         assert_eq!(plan.mode(), DeliveryMode::Enthusiastic);
         assert_eq!(plan.message(), "HELLO, WORLD!");
@@ -71,7 +72,7 @@ mod tests {
 
     #[rstest]
     fn build_plan_whispers_for_quiet(mut base_config: HelloWorldCli) {
-        base_config.quiet = true;
+        base_config.is_quiet = true;
         let plan = build_plan(&base_config).expect("plan");
         assert_eq!(plan.mode(), DeliveryMode::Quiet);
         assert_eq!(plan.message(), "Hello, World...");
