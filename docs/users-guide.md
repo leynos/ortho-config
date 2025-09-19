@@ -414,24 +414,21 @@ flags via the `append` merge strategy.
 
 ## Hello world example
 
-The workspace ships with an executable example under `examples/hello_world` to
-demonstrate how global options, switches and arrays behave with `OrthoConfig`.
+The workspace ships with an executable example under `examples/hello_world`
+that demonstrates how global options, switches, and arrays behave when the
+derive macro wires CLI, environment, and default layers together. The
+`HelloWorldCli` struct exposes public fields with short flags for the repeated
+salutation array (`-s`) and recipient (`-r`), and validation rejects empty
+inputs or conflicting delivery switches before constructing a `GreetingPlan`
+for `main`.
 
-- `HelloWorldCli` derives `OrthoConfig` and keeps its fields public so the
-  binary can inspect them directly. The struct defines `cli_short` attributes
-  for the repeated salutation array (`-s`) and recipient (`-r`) to keep the
-  command line terse.
-- Validation rejects empty salutations and conflicting delivery modes. After
-  loading configuration, the values are converted into a `GreetingPlan` which
-  applies the punctuation and delivery mode before printing the greeting.
-- Run the example with `cargo run -p hello_world --` followed by flags. For
-  example, `cargo run -p hello_world -- -s Hi -s there -r team` prints
-  `Hi there, team!`. Passing `--is-excited true` or `--is-quiet true` toggles
-  shouty or whispered output, and combining both switches exits with a
-  validation error.
-- The crate includes `rstest` unit tests and a `cucumber` suite that exercises
-  the compiled binary (`cargo test -p hello_world --test cucumber`) to verify
-  that the CLI behaves as documented.
+Run the example with `cargo run -p hello_world --` followed by flags such as
+`-s Hi -s there -r team`. The binary prints `Hi there, team!`, and the
+`--is-excited true` or `--is-quiet true` switches toggle enthusiastic or quiet
+delivery. Supplying both switches exits with a validation error. Behaviour is
+backed by `rstest` unit tests and a `cucumber` suite
+(`cargo test -p hello_world --test cucumber`) so the guide and README stay in
+sync without duplicating every scenario here.
 
 ## Subcommand configuration
 
