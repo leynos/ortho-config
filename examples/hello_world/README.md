@@ -55,9 +55,9 @@ production-ready complexity.
 
 ## Implementation checklist
 
-- [ ] Scaffold the crate with `Cargo.toml`, `src/main.rs`, and supporting
+- [x] Scaffold the crate with `Cargo.toml`, `src/main.rs`, and supporting
       modules.
-- [ ] Define global command-line parameters, switches, and array parameters
+- [x] Define global command-line parameters, switches, and array parameters
       with defaults and validation.
 - [ ] Implement the `greet` subcommand with its arguments and options.
 - [ ] Implement the `take-leave` subcommand with its arguments and options.

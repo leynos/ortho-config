@@ -412,6 +412,26 @@ By default, the ignore-pattern list includes `[".git/", "build/", "target/"]`.
 These defaults are extended (not replaced) by environment variables and CLI
 flags via the `append` merge strategy.
 
+## Hello world example
+
+The workspace ships with an executable example under `examples/hello_world` to
+demonstrate how global options, switches and arrays behave with `OrthoConfig`.
+
+- `HelloWorldCli` derives `OrthoConfig` and keeps its fields public so the
+  binary can inspect them directly. The struct defines `cli_short` attributes
+  for the repeated salutation array (`-s`) and recipient (`-r`) to keep the
+  command line terse.
+- Validation rejects empty salutations and conflicting delivery modes. After
+  loading configuration, the values are converted into a `GreetingPlan` which
+  applies the punctuation and delivery mode before printing the greeting.
+- Run the example with `cargo run -p hello_world --` followed by flags. For
+  example, `cargo run -p hello_world -- -s Hi -s there -r team` prints
+  `Hi there, team!`. Passing `--excited` or `--quiet` toggles shouty or
+  whispered output, and combining both switches exits with a validation error.
+- The crate includes `rstest` unit tests and a `cucumber` suite that exercises
+  the compiled binary (`cargo test -p hello_world --test cucumber`) to verify
+  that the CLI behaves as documented.
+
 ## Subcommand configuration
 
 Many CLI applications use `clap` subcommands to perform different operations.

@@ -481,7 +481,28 @@ to rename the hidden `--config-path` flag by defining their own field with a
    - Add extensive documentation and examples.
    - Feature-gate the file format support (`json5`, `yaml`).
 
-## 7. Future Work
+## 7. Hello World Example
+
+The example crate under `examples/hello_world` demonstrates how to layer
+global flags on top of the derive macro while keeping the application logic
+explicit.
+
+- `HelloWorldCli` derives `OrthoConfig` and exposes the public fields used by
+  the binary. The struct defines short flags for the repeated salutation array
+  and the recipient switch so the CLI remains terse when composed in scenarios.
+- Validation lives alongside the struct. The `DeliveryMode` enumeration
+  captures mutually exclusive switches and the helper trims salutation input so
+  command execution never needs to re-implement parsing safeguards.
+- `GreetingPlan` encapsulates the formatted message. The builder enforces the
+  validation contract, canonicalises punctuation, and records the delivery mode
+  for downstream rendering. This keeps the `main` function focused on
+  orchestration.
+- Unit tests rely on `rstest` fixtures to exercise validation and message
+  rendering. Behavioural coverage uses `cucumber-rs` to execute the compiled
+  binary with different flag combinations, verifying exit codes and emitted
+  text.
+
+## 8. Future Work
 
 - **Async Support:** A version of `load` that uses non-blocking IO.
 - **Custom Sources:** An API for users to add their own `figment` providers
