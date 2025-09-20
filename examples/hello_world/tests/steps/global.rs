@@ -10,15 +10,8 @@ pub async fn run_without_args(world: &mut World) {
 }
 
 #[when(expr = "I run the hello world example with arguments {string}")]
-// Clippy 1.81 does not emit `needless_pass_by_value`; keep the expectation
-// for documentation consistency.
-#[allow(unfulfilled_lint_expectations)]
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "Cucumber step signature requires owned String"
-)]
 pub async fn run_with_args(world: &mut World, args: String) {
-    world.run_hello(Some(args.as_str())).await;
+    world.run_hello(Some(args)).await;
 }
 
 #[then("the command succeeds")]
@@ -32,25 +25,11 @@ pub fn command_fails(world: &mut World) {
 }
 
 #[then(expr = "stdout contains {string}")]
-// Clippy 1.81 does not emit `needless_pass_by_value`; keep the expectation
-// for documentation consistency.
-#[allow(unfulfilled_lint_expectations)]
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "Cucumber step signature requires owned String"
-)]
 pub fn stdout_contains(world: &mut World, expected: String) {
-    world.assert_stdout_contains(&expected);
+    world.assert_stdout_contains(expected);
 }
 
 #[then(expr = "stderr contains {string}")]
-// Clippy 1.81 does not emit `needless_pass_by_value`; keep the expectation
-// for documentation consistency.
-#[allow(unfulfilled_lint_expectations)]
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "Cucumber step signature requires owned String"
-)]
 pub fn stderr_contains(world: &mut World, expected: String) {
-    world.assert_stderr_contains(&expected);
+    world.assert_stderr_contains(expected);
 }

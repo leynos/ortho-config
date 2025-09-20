@@ -39,6 +39,11 @@ values from multiple sources. The core features are:
   `cli_short`, and `merge_strategy` provide fine‑grained control over naming
   and merging behaviour.
 
+The workspace bundles an executable hello world example under
+`examples/hello_world`. It layers defaults, environment variables, and CLI
+flags via the derive macro; consult its README for a step-by-step walkthrough
+and the cucumber scenarios that validate behaviour end to end.
+
 ## Installation and dependencies
 
 Add `ortho_config` as a dependency in `Cargo.toml` along with `serde`:
@@ -411,24 +416,6 @@ results in `ignore_patterns = [".git/", "build/", "target/"]`.
 By default, the ignore-pattern list includes `[".git/", "build/", "target/"]`.
 These defaults are extended (not replaced) by environment variables and CLI
 flags via the `append` merge strategy.
-
-## Hello world example
-
-The workspace ships with an executable example under `examples/hello_world`
-that demonstrates how global options, switches, and arrays behave when the
-derive macro wires CLI, environment, and default layers together. The
-`HelloWorldCli` struct exposes public fields with short flags for the repeated
-salutation array (`-s`) and recipient (`-r`), and validation rejects empty
-inputs or conflicting delivery switches before constructing a `GreetingPlan`
-for `main`.
-
-Run the example with `cargo run -p hello_world --` followed by flags such as
-`-s Hi -s there -r team`. The binary prints `Hi there, team!`, and the
-`--is-excited true` or `--is-quiet true` switches toggle enthusiastic or quiet
-delivery. Supplying both switches exits with a validation error. Behaviour is
-backed by `rstest` unit tests and a `cucumber` suite
-(`cargo test -p hello_world --test cucumber`) so the guide and README stay in
-sync without duplicating every scenario here.
 
 ## Subcommand configuration
 

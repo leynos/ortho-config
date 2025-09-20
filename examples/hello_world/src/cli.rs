@@ -58,8 +58,8 @@ impl HelloWorldCli {
     /// Validates the resolved configuration before execution.
     ///
     /// # Examples
-    /// ```ignore
-    /// # use hello_world::cli::{DeliveryMode, HelloWorldCli};
+    /// ```no_run
+    /// # use crate::cli::{DeliveryMode, HelloWorldCli};
     /// let mut cli = HelloWorldCli::default();
     /// cli.is_excited = true;
     /// cli.validate().unwrap();
@@ -99,8 +99,8 @@ impl HelloWorldCli {
     /// Strips incidental whitespace from salutations for consistent output.
     ///
     /// # Examples
-    /// ```ignore
-    /// # use hello_world::cli::HelloWorldCli;
+    /// ```no_run
+    /// # use crate::cli::HelloWorldCli;
     /// let mut cli = HelloWorldCli::default();
     /// cli.salutations = vec!["  Hello".into(), "world  ".into()];
     /// assert_eq!(cli.trimmed_salutations(), vec!["Hello", "world"]);

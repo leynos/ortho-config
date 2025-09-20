@@ -45,7 +45,7 @@ impl World {
     ///
     /// Panics if argument tokenisation fails or if the underlying command
     /// fails to execute successfully.
-    pub async fn run_hello(&mut self, args: Option<&str>) {
+    pub async fn run_hello(&mut self, args: Option<String>) {
         let parsed = match args {
             Some(raw) => {
                 let trimmed = raw.trim();
@@ -122,7 +122,11 @@ impl World {
     /// # Panics
     ///
     /// Panics if stdout does not include the provided fragment.
-    pub fn assert_stdout_contains(&self, expected: &str) {
+    pub fn assert_stdout_contains<S>(&self, expected: S)
+    where
+        S: AsRef<str>,
+    {
+        let expected = expected.as_ref();
         let result = self.result();
         assert!(
             result.stdout.contains(expected),
@@ -136,7 +140,11 @@ impl World {
     /// # Panics
     ///
     /// Panics if stderr does not include the provided fragment.
-    pub fn assert_stderr_contains(&self, expected: &str) {
+    pub fn assert_stderr_contains<S>(&self, expected: S)
+    where
+        S: AsRef<str>,
+    {
+        let expected = expected.as_ref();
         let result = self.result();
         assert!(
             result.stderr.contains(expected),
