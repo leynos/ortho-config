@@ -95,6 +95,15 @@ references the relevant design guidance.
     flag, how to use subcommand defaults via the `cmds` namespace, and how to
     interpret improved error messages.
 
+- [x] **Ship the `hello_world` example crate**
+
+  - [x] Scaffold the binary crate with `Cargo.toml`, a `main.rs`, and supporting
+    modules for configuration and message rendering.
+  - [x] Demonstrate global switches and repeated parameters with defaults and
+    validation enforced in code rather than at call sites.
+  - [x] Cover the example with `rstest` unit tests and a `cucumber` suite that
+    exercises the compiled binary end-to-end.
+
 - [x] **Support custom option names for the configuration path**
 
   - [x] Allow renaming of the auto‑generated `--config-path` flag and its

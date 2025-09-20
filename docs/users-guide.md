@@ -39,6 +39,11 @@ values from multiple sources. The core features are:
   `cli_short`, and `merge_strategy` provide fine‑grained control over naming
   and merging behaviour.
 
+The workspace bundles an executable hello world example under
+`examples/hello_world`. It layers defaults, environment variables, and CLI
+flags via the derive macro; consult its README for a step-by-step walkthrough
+and the cucumber scenarios that validate behaviour end to end.
+
 ## Installation and dependencies
 
 Add `ortho_config` as a dependency in `Cargo.toml` along with `serde`:

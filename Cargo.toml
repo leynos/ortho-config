@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "examples/hello_world",
     "ortho_config",
     "ortho_config_macros",
     "test_helpers"
