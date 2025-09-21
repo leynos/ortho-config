@@ -1,9 +1,11 @@
 //! Cucumber test harness for the `hello_world` example.
+use std::process::Stdio;
 use std::time::Duration;
 
 use camino::Utf8PathBuf;
 use cucumber::World as _;
 use shlex::split;
+use tokio::io::AsyncReadExt;
 use tokio::process::Command;
 use tokio::time::timeout;
 
@@ -74,6 +76,8 @@ impl World {
         let binary = binary_path();
         let mut command = Command::new(binary.as_std_path());
         command.args(&args);
+        command.stdout(Stdio::piped());
+        command.stderr(Stdio::piped());
         // Remove configuration-related env to keep tests deterministic.
         for (key, _) in std::env::vars_os() {
             if let Some(k) = key.to_str() {
@@ -82,13 +86,55 @@ impl World {
                 }
             }
         }
-        let output = timeout(COMMAND_TIMEOUT, command.output())
-            .await
-            .expect("hello_world binary timed out")
-            .expect("execute hello_world binary");
+        let mut child = command.spawn().expect("spawn hello_world binary");
+        let stdout_pipe = child
+            .stdout
+            .take()
+            .expect("capture hello_world stdout pipe");
+        let stderr_pipe = child
+            .stderr
+            .take()
+            .expect("capture hello_world stderr pipe");
+
+        let wait_future = async move {
+            match timeout(COMMAND_TIMEOUT, child.wait()).await {
+                Ok(Ok(status)) => status,
+                Ok(Err(err)) => panic!("wait for hello_world binary: {err}"),
+                Err(_) => {
+                    let _ = child.kill().await;
+                    let _ = child.wait().await;
+                    panic!("hello_world binary timed out");
+                }
+            }
+        };
+
+        let stdout_future = async move {
+            let mut buffer = Vec::new();
+            let mut pipe = stdout_pipe;
+            pipe.read_to_end(&mut buffer)
+                .await
+                .expect("read hello_world stdout");
+            buffer
+        };
+
+        let stderr_future = async move {
+            let mut buffer = Vec::new();
+            let mut pipe = stderr_pipe;
+            pipe.read_to_end(&mut buffer)
+                .await
+                .expect("read hello_world stderr");
+            buffer
+        };
+
+        let (status, stdout, stderr) = tokio::join!(wait_future, stdout_future, stderr_future);
+        let output = std::process::Output {
+            status,
+            stdout,
+            stderr,
+        };
         let mut result = CommandResult::from(output);
         result.binary = binary.to_string();
-        result.args.clone_from(&args);
+        result.args = args;
         self.result = Some(result);
     }
 
@@ -113,8 +159,8 @@ impl World {
         let result = self.result();
         assert!(
             result.success,
-            "expected success; cmd: {} {:?}; stderr: {}",
-            result.binary, result.args, result.stderr
+            "expected success; status: {:?}; cmd: {} {:?}; stderr: {}",
+            result.status, result.binary, result.args, result.stderr
         );
     }
 
@@ -127,8 +173,8 @@ impl World {
         let result = self.result();
         assert!(
             !result.success,
-            "expected failure; cmd: {} {:?}; stdout: {}",
-            result.binary, result.args, result.stdout
+            "expected failure; status: {:?}; cmd: {} {:?}; stdout: {}",
+            result.status, result.binary, result.args, result.stdout
         );
     }
 
