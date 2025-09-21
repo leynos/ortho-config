@@ -22,7 +22,7 @@ pub async fn run_without_args(world: &mut World) {
 )]
 // Clippy 1.81 does not emit needless_pass_by_value; expectation retained for documentation consistency.
 pub async fn run_with_args(world: &mut World, args: String) {
-    world.run_hello(Some(args.as_str())).await;
+    world.run_hello(Some(args)).await;
 }
 
 #[then("the command succeeds")]
@@ -46,7 +46,7 @@ pub fn command_fails(world: &mut World) {
 )]
 // Clippy 1.81 does not emit needless_pass_by_value; expectation retained for documentation consistency.
 pub fn stdout_contains(world: &mut World, expected: String) {
-    world.assert_stdout_contains(expected.as_str());
+    world.assert_stdout_contains(expected);
 }
 
 #[then(expr = "stderr contains {string}")]
@@ -60,5 +60,5 @@ pub fn stdout_contains(world: &mut World, expected: String) {
 )]
 // Clippy 1.81 does not emit needless_pass_by_value; expectation retained for documentation consistency.
 pub fn stderr_contains(world: &mut World, expected: String) {
-    world.assert_stderr_contains(expected.as_str());
+    world.assert_stderr_contains(expected);
 }
