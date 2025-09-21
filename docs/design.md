@@ -501,6 +501,8 @@ explicit.
   rendering. Behavioural coverage uses `cucumber-rs` to execute the compiled
   binary with different flag combinations, verifying exit codes and emitted
   text.
+- Behavioural tests delegate CLI parsing and output assertions to the world
+  helpers so each cucumber step stays as a single, intention-revealing line.
 
 ## 8. Future Work
 

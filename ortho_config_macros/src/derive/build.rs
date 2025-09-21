@@ -681,10 +681,7 @@ mod tests {
         let (_, fields, _, field_attrs) =
             crate::derive::parse::parse_input(&input).expect("parse_input");
         let tokens = build_cli_struct_fields(&fields, &field_attrs).expect("build cli fields");
-        let field_ts = tokens
-            .first()
-            .expect("generated field tokens")
-            .to_string();
+        let field_ts = tokens.first().expect("generated field tokens").to_string();
         assert!(
             field_ts.contains("ArgAction :: SetTrue"),
             "boolean CLI fields should use ArgAction::SetTrue"

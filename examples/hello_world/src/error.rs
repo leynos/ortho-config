@@ -2,6 +2,9 @@
 //!
 //! This module centralises configuration and validation failures so `main`
 //! can report user-friendly errors without exposing internal details.
+//!
+//! `HelloWorldError` wraps the derive layer errors alongside local validation
+//! issues so the binary renders concise, actionable diagnostics.
 use std::sync::Arc;
 use thiserror::Error;
 
