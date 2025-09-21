@@ -46,7 +46,7 @@ pub fn command_fails(world: &mut World) {
 )]
 // Clippy 1.81 does not emit needless_pass_by_value; expectation retained for documentation consistency.
 pub fn stdout_contains(world: &mut World, expected: String) {
-    world.assert_stdout_contains(expected);
+    world.assert_stdout_contains(&expected);
 }
 
 #[then(expr = "stderr contains {string}")]
@@ -60,5 +60,5 @@ pub fn stdout_contains(world: &mut World, expected: String) {
 )]
 // Clippy 1.81 does not emit needless_pass_by_value; expectation retained for documentation consistency.
 pub fn stderr_contains(world: &mut World, expected: String) {
-    world.assert_stderr_contains(expected);
+    world.assert_stderr_contains(&expected);
 }
