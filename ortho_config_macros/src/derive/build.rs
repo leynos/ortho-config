@@ -4,6 +4,9 @@
 //! routines. The `load_impl` submodule houses the helpers that build the
 //! `load_from_iter` implementation used by the derive macro. Boolean fields are
 //! handled specially with `ArgAction::SetTrue` for proper CLI flag behaviour.
+//! Fields that are originally declared as `Option` emit
+//! `#[serde(skip_serializing_if = "Option::is_none")]` in the generated CLI
+//! struct to avoid serialising absent values.
 
 use quote::{format_ident, quote};
 use syn::{Ident, Type};
@@ -550,6 +553,7 @@ pub(crate) fn build_append_logic(fields: &[(Ident, &Type)]) -> proc_macro2::Toke
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ortho_config::figment::{Figment, providers::Serialized};
     use rstest::rstest;
     use std::collections::HashSet;
     use syn::{Ident, parse_quote};
@@ -673,6 +677,12 @@ mod tests {
 
     #[test]
     fn bool_fields_do_not_emit_skip_serializing_if() {
+        // Mirror the generated CLI field to confirm Figment receives no value when the flag is absent.
+        #[derive(serde::Serialize)]
+        struct __Cli {
+            excited: Option<bool>,
+        }
+
         let input: syn::DeriveInput = parse_quote! {
             struct Demo {
                 excited: bool,
@@ -689,6 +699,13 @@ mod tests {
         assert!(
             !field_ts.contains("skip_serializing_if"),
             "boolean CLI fields should not emit skip_serializing_if"
+        );
+
+        let cli = __Cli { excited: None };
+        let figment = Figment::from(Serialized::defaults(&cli));
+        assert!(
+            figment.extract_inner::<bool>("excited").is_err(),
+            "Absent boolean flags should not appear in Figment"
         );
     }
 

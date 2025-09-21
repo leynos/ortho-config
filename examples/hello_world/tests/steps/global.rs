@@ -1,7 +1,7 @@
 //! Step definitions for the `hello_world` example.
 //! Drive the binary and assert its outputs.
 #![allow(unfulfilled_lint_expectations)]
-// NOTE: Allow the meta-lint so Clippy expectations documenting future coverage do not fail on stable compilers.
+// Allow the meta-lint so documenting expectations stays noise-free on stable compilers.
 use crate::World;
 use cucumber::{then, when};
 

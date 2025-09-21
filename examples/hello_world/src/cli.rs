@@ -15,19 +15,15 @@ use serde::Deserialize;
 #[ortho_config(prefix = "HELLO_WORLD")]
 pub struct HelloWorldCli {
     /// Recipient of the greeting. Defaults to a friendly placeholder.
-    #[serde(default = "default_recipient")]
     #[ortho_config(default = default_recipient(), cli_short = 'r')]
     pub recipient: String,
     /// Words used to open the greeting. Demonstrates repeated parameters.
-    #[serde(default = "default_salutations")]
     #[ortho_config(default = default_salutations(), cli_short = 's')]
     pub salutations: Vec<String>,
     /// Enables an enthusiastic delivery mode.
-    #[serde(default)]
     #[ortho_config(default = false)]
     pub is_excited: bool,
     /// Selects a quiet delivery mode.
-    #[serde(default)]
     #[ortho_config(default = false)]
     pub is_quiet: bool,
 }

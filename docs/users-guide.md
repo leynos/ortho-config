@@ -43,7 +43,7 @@ The workspace bundles an executable Hello World example under
 `examples/hello_world`. It layers defaults, environment variables, and CLI
 flags via the derive macro; see its [README](../examples/hello_world/README.md)
 for a step-by-step walkthrough and the Cucumber scenarios that validate
-behaviour end to end.
+behaviour end-to-end.
 
 ## Installation and dependencies
 
