@@ -2,7 +2,8 @@
 //!
 //! This module contains utilities shared across the code generation
 //! routines. The `load_impl` submodule houses the helpers that build the
-//! `load_from_iter` implementation used by the derive macro.
+//! `load_from_iter` implementation used by the derive macro. Boolean fields are
+//! handled specially with `ArgAction::SetTrue` for proper CLI flag behaviour.
 
 use quote::{format_ident, quote};
 use syn::{Ident, Type};
@@ -30,15 +31,8 @@ fn is_bool_type(ty: &Type) -> bool {
         )
     }
 
-    if matches_bool(ty) {
-        true
-    } else if let Some(inner) = option_inner(ty) {
-        matches_bool(inner)
-    } else {
-        false
-    }
+    matches_bool(ty) || option_inner(ty).is_some_and(matches_bool)
 }
-
 
 /// Resolves a short CLI flag ensuring uniqueness and validity.
 ///
@@ -324,19 +318,23 @@ pub(crate) fn build_cli_struct_fields(
         let short_ch = resolve_short_flag(name, attrs, &mut used_shorts)?;
         let long_lit = syn::LitStr::new(&long, proc_macro2::Span::call_site());
         let short_lit = syn::LitChar::new(short_ch, proc_macro2::Span::call_site());
-        if is_bool_type(&f.ty) {
-            result.push(quote! {
+        let is_bool = is_bool_type(&f.ty);
+        let serde_attr = option_inner(&f.ty)
+            .map(|_| quote! { #[serde(skip_serializing_if = "Option::is_none")] });
+        let arg_attr = if is_bool {
+            quote! {
                 #[arg(long = #long_lit, short = #short_lit, action = clap::ArgAction::SetTrue)]
-                #[serde(skip_serializing_if = "Option::is_none")]
-                pub #name: #ty
-            });
+            }
         } else {
-            result.push(quote! {
+            quote! {
                 #[arg(long = #long_lit, short = #short_lit)]
-                #[serde(skip_serializing_if = "Option::is_none")]
-                pub #name: #ty
-            });
-        }
+            }
+        };
+        result.push(quote! {
+            #arg_attr
+            #serde_attr
+            pub #name: #ty
+        });
     }
 
     Ok(result)
@@ -671,6 +669,30 @@ mod tests {
             crate::derive::parse::parse_input(&input).expect("parse_input");
         let err = build_cli_struct_fields(&fields, &field_attrs).expect_err("should fail");
         assert!(err.to_string().contains("duplicate `cli_long` value"));
+    }
+
+    #[test]
+    fn bool_fields_do_not_emit_skip_serializing_if() {
+        let input: syn::DeriveInput = parse_quote! {
+            struct Demo {
+                excited: bool,
+            }
+        };
+        let (_, fields, _, field_attrs) =
+            crate::derive::parse::parse_input(&input).expect("parse_input");
+        let tokens = build_cli_struct_fields(&fields, &field_attrs).expect("build cli fields");
+        let field_ts = tokens
+            .first()
+            .expect("generated field tokens")
+            .to_string();
+        assert!(
+            field_ts.contains("ArgAction :: SetTrue"),
+            "boolean CLI fields should use ArgAction::SetTrue"
+        );
+        assert!(
+            !field_ts.contains("skip_serializing_if"),
+            "boolean CLI fields should not emit skip_serializing_if"
+        );
     }
 
     fn demo_input() -> (Vec<syn::Field>, Vec<FieldAttrs>, StructAttrs) {
