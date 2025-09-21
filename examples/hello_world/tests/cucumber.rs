@@ -45,7 +45,7 @@ impl World {
     ///
     /// Panics if argument tokenisation fails or if the underlying command
     /// fails to execute successfully.
-    pub async fn run_hello(&mut self, args: Option<String>) {
+    pub async fn run_hello(&mut self, args: Option<&str>) {
         let parsed = match args {
             Some(raw) => {
                 let trimmed = raw.trim();

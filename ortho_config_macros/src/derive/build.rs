@@ -21,6 +21,25 @@ fn option_type_tokens(ty: &Type) -> proc_macro2::TokenStream {
     }
 }
 
+fn is_bool_type(ty: &Type) -> bool {
+    fn matches_bool(ty: &Type) -> bool {
+        matches!(
+            ty,
+            Type::Path(type_path)
+                if type_path.qself.is_none() && type_path.path.is_ident("bool")
+        )
+    }
+
+    if matches_bool(ty) {
+        true
+    } else if let Some(inner) = option_inner(ty) {
+        matches_bool(inner)
+    } else {
+        false
+    }
+}
+
+
 /// Resolves a short CLI flag ensuring uniqueness and validity.
 ///
 /// # Examples
@@ -305,11 +324,19 @@ pub(crate) fn build_cli_struct_fields(
         let short_ch = resolve_short_flag(name, attrs, &mut used_shorts)?;
         let long_lit = syn::LitStr::new(&long, proc_macro2::Span::call_site());
         let short_lit = syn::LitChar::new(short_ch, proc_macro2::Span::call_site());
-        result.push(quote! {
-            #[arg(long = #long_lit, short = #short_lit)]
-            #[serde(skip_serializing_if = "Option::is_none")]
-            pub #name: #ty
-        });
+        if is_bool_type(&f.ty) {
+            result.push(quote! {
+                #[arg(long = #long_lit, short = #short_lit, action = clap::ArgAction::SetTrue)]
+                #[serde(skip_serializing_if = "Option::is_none")]
+                pub #name: #ty
+            });
+        } else {
+            result.push(quote! {
+                #[arg(long = #long_lit, short = #short_lit)]
+                #[serde(skip_serializing_if = "Option::is_none")]
+                pub #name: #ty
+            });
+        }
     }
 
     Ok(result)
