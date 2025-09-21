@@ -25,6 +25,8 @@ pub struct CommandResult {
     pub success: bool,
     pub stdout: String,
     pub stderr: String,
+    pub binary: String,
+    pub args: Vec<String>,
 }
 
 impl From<std::process::Output> for CommandResult {
@@ -34,6 +36,8 @@ impl From<std::process::Output> for CommandResult {
             success: output.status.success(),
             stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
             stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+            binary: String::new(),
+            args: Vec::new(),
         }
     }
 }
@@ -70,11 +74,22 @@ impl World {
         let binary = binary_path();
         let mut command = Command::new(binary.as_std_path());
         command.args(&args);
+        // Remove configuration-related env to keep tests deterministic.
+        for (key, _) in std::env::vars_os() {
+            if let Some(k) = key.to_str() {
+                if k.starts_with("HELLO_WORLD_") {
+                    command.env_remove(&key);
+                }
+            }
+        }
         let output = timeout(COMMAND_TIMEOUT, command.output())
             .await
             .expect("hello_world binary timed out")
             .expect("execute hello_world binary");
-        self.result = Some(CommandResult::from(output));
+        let mut result = CommandResult::from(output);
+        result.binary = binary.to_string();
+        result.args.clone_from(&args);
+        self.result = Some(result);
     }
 
     /// Returns the captured command output from the most recent run.
@@ -98,8 +113,8 @@ impl World {
         let result = self.result();
         assert!(
             result.success,
-            "expected success, stderr was: {}",
-            result.stderr
+            "expected success; cmd: {} {:?}; stderr: {}",
+            result.binary, result.args, result.stderr
         );
     }
 
@@ -112,8 +127,8 @@ impl World {
         let result = self.result();
         assert!(
             !result.success,
-            "expected failure, stdout was: {}",
-            result.stdout
+            "expected failure; cmd: {} {:?}; stdout: {}",
+            result.binary, result.args, result.stdout
         );
     }
 
@@ -130,7 +145,9 @@ impl World {
         let result = self.result();
         assert!(
             result.stdout.contains(expected),
-            "stdout did not contain {expected:?}. stdout was: {:?}",
+            "stdout did not contain {expected:?}; cmd: {} {:?}; stdout was: {:?}",
+            result.binary,
+            result.args,
             result.stdout
         );
     }
@@ -148,7 +165,9 @@ impl World {
         let result = self.result();
         assert!(
             result.stderr.contains(expected),
-            "stderr did not contain {expected:?}. stderr was: {:?}",
+            "stderr did not contain {expected:?}; cmd: {} {:?}; stderr was: {:?}",
+            result.binary,
+            result.args,
             result.stderr
         );
     }

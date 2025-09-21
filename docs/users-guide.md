@@ -39,10 +39,11 @@ values from multiple sources. The core features are:
   `cli_short`, and `merge_strategy` provide fine‑grained control over naming
   and merging behaviour.
 
-The workspace bundles an executable hello world example under
+The workspace bundles an executable Hello World example under
 `examples/hello_world`. It layers defaults, environment variables, and CLI
-flags via the derive macro; consult its README for a step-by-step walkthrough
-and the cucumber scenarios that validate behaviour end to end.
+flags via the derive macro; see its [README](../examples/hello_world/README.md)
+for a step-by-step walkthrough and the Cucumber scenarios that validate
+behaviour end to end.
 
 ## Installation and dependencies
 
