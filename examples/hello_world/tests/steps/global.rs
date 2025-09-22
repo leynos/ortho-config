@@ -12,7 +12,7 @@ pub async fn run_without_args(world: &mut World) {
 #[when(expr = "I run the hello world example with arguments {string}")]
 // Cucumber supplies owned `String` captures for step arguments.
 pub async fn run_with_args(world: &mut World, args: String) {
-    world.run_hello(Some(args.as_str())).await;
+    world.run_hello(Some(args)).await;
 }
 
 #[then("the command succeeds")]
