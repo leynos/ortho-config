@@ -199,6 +199,9 @@ pub(crate) fn build_default_struct_fields(fields: &[syn::Field]) -> Vec<proc_mac
 /// alphanumeric characters or hyphens. Underscores are rejected to keep the CLI
 /// syntax aligned with the documentation.
 ///
+/// Allows only ASCII alphanumeric characters or hyphens and rejects
+/// underscores to keep long flags consistent with the user guide.
+///
 /// # Examples
 ///
 /// ```ignore

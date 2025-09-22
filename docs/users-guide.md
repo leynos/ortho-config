@@ -179,8 +179,8 @@ considered taken if it matches either set.
 The macro does not scan other characters in the field name when deriving the
 short flag. Short flags must be single ASCII alphanumeric characters and may
 not use clap's global `-h` or `-V` options. Long flags must contain only ASCII
-alphanumerics and hyphens, must not start with `-`, cannot be named `help` or
-`version`, and underscores are rejected.
+alphanumeric characters or hyphens, must not start with `-`, cannot be named
+`help` or `version`, and the macro rejects underscores.
 
 For example, when multiple fields begin with the same character, `cli_short`
 can disambiguate the final field:

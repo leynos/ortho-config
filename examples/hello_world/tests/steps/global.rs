@@ -1,3 +1,7 @@
+#![allow(
+    unfulfilled_lint_expectations,
+    reason = "Clippy 1.81 does not emit needless_pass_by_value for cucumber steps yet; expectations document the signature requirements."
+)]
 //! Step definitions for the `hello_world` example.
 //! Drive the binary and assert its outputs.
 use crate::World;
@@ -10,10 +14,14 @@ pub async fn run_without_args(world: &mut World) {
 }
 
 #[when(expr = "I run the hello world example with arguments {string}")]
-// Step captures arrive as owned `String` values from cucumber; move them
-// into the world helper for tokenisation.
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Cucumber step signature requires owned String"
+)]
+// Step captures arrive as owned `String` values from cucumber; lend them
+// to the world helper for tokenisation.
 pub async fn run_with_args(world: &mut World, args: String) {
-    world.run_hello(Some(args)).await;
+    world.run_hello(Some(args.as_str())).await;
 }
 
 #[then("the command succeeds")]
