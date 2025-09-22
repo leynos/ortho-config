@@ -13,7 +13,7 @@ pub async fn run_without_args(world: &mut World) {
 // Step captures arrive as owned `String` values from cucumber; move them
 // into the world helper to avoid cloning.
 pub async fn run_with_args(world: &mut World, args: String) {
-    world.run_hello(Some(args)).await;
+    world.run_hello(Some(args.as_str())).await;
 }
 
 #[then("the command succeeds")]
