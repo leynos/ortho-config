@@ -191,7 +191,8 @@ impl World {
         let result = self.result();
         assert!(
             result.stdout.contains(expected),
-            "stdout did not contain {expected:?}; cmd: {} {:?}; stdout was: {:?}",
+            "stdout did not contain {expected:?}; status: {:?}; cmd: {} {:?}; stdout was: {:?}",
+            result.status,
             result.binary,
             result.args,
             result.stdout
@@ -211,7 +212,8 @@ impl World {
         let result = self.result();
         assert!(
             result.stderr.contains(expected),
-            "stderr did not contain {expected:?}; cmd: {} {:?}; stderr was: {:?}",
+            "stderr did not contain {expected:?}; status: {:?}; cmd: {} {:?}; stderr was: {:?}",
+            result.status,
             result.binary,
             result.args,
             result.stderr

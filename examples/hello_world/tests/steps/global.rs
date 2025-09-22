@@ -27,13 +27,23 @@ pub fn command_fails(world: &mut World) {
 }
 
 #[then(expr = "stdout contains {string}")]
-// Step captures arrive as owned `String` values from cucumber.
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Cucumber step signature requires owned String"
+)]
+// Step captures arrive as owned `String` values from cucumber; borrow them
+// for assertions so the captured text remains available.
 pub fn stdout_contains(world: &mut World, expected: String) {
-    world.assert_stdout_contains(expected);
+    world.assert_stdout_contains(&expected);
 }
 
 #[then(expr = "stderr contains {string}")]
-// Step captures arrive as owned `String` values from cucumber.
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Cucumber step signature requires owned String"
+)]
+// Step captures arrive as owned `String` values from cucumber; borrow them
+// for assertions so the captured text remains available.
 pub fn stderr_contains(world: &mut World, expected: String) {
-    world.assert_stderr_contains(expected);
+    world.assert_stderr_contains(&expected);
 }
