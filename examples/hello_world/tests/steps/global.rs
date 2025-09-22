@@ -11,9 +11,9 @@ pub async fn run_without_args(world: &mut World) {
 
 #[when(expr = "I run the hello world example with arguments {string}")]
 // Step captures arrive as owned `String` values from cucumber; move them
-// into the world helper to avoid cloning.
+// into the world helper for tokenisation.
 pub async fn run_with_args(world: &mut World, args: String) {
-    world.run_hello(Some(args.as_str())).await;
+    world.run_hello(Some(args)).await;
 }
 
 #[then("the command succeeds")]
@@ -27,21 +27,13 @@ pub fn command_fails(world: &mut World) {
 }
 
 #[then(expr = "stdout contains {string}")]
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "Cucumber step signature requires owned String"
-)]
 // Step captures arrive as owned `String` values from cucumber.
 pub fn stdout_contains(world: &mut World, expected: String) {
-    world.assert_stdout_contains(&expected);
+    world.assert_stdout_contains(expected);
 }
 
 #[then(expr = "stderr contains {string}")]
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "Cucumber step signature requires owned String"
-)]
 // Step captures arrive as owned `String` values from cucumber.
 pub fn stderr_contains(world: &mut World, expected: String) {
-    world.assert_stderr_contains(&expected);
+    world.assert_stderr_contains(expected);
 }
