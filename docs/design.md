@@ -198,9 +198,9 @@ This is the most complex component. It needs to perform the following using
    the macro tries the upper-case variant. A further collision triggers a
    compile error and requires the user to supply `cli_short`. Short flags must
    be ASCII alphanumeric and cannot reuse clap's `-h` or `-V`. Generated long
-   flags use only ASCII alphanumeric characters plus `-`, and overrides provided
-   via `cli_long` must obey the same constraint. Long names may not be `help` or
-   `version`.
+   flags use only ASCII alphanumeric characters plus `-`, and overrides
+   provided via `cli_long` must obey the same constraint. Long names may not be
+   `help` or `version`.
 3. **Generate `impl OrthoConfig for UserStruct`:**
    - This block contains the `load_from_iter` method used by the `load`
      convenience function.

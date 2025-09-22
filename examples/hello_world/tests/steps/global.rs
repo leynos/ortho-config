@@ -10,7 +10,7 @@ pub async fn run_without_args(world: &mut World) {
 }
 
 #[when(expr = "I run the hello world example with arguments {string}")]
-// Cucumber supplies owned `String` captures for step arguments.
+// Cucumber supplies owned `String` captures and the helper consumes them, so no lint expectation is required.
 pub async fn run_with_args(world: &mut World, args: String) {
     world.run_hello(Some(args)).await;
 }
