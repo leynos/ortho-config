@@ -10,9 +10,10 @@ pub async fn run_without_args(world: &mut World) {
 }
 
 #[when(expr = "I run the hello world example with arguments {string}")]
-// Cucumber supplies owned `String` captures and the helper consumes them, so no lint expectation is required.
+// Step captures arrive as owned `String` values from cucumber; borrow the
+// contents to avoid cloning.
 pub async fn run_with_args(world: &mut World, args: String) {
-    world.run_hello(Some(args)).await;
+    world.run_hello(Some(args.as_str())).await;
 }
 
 #[then("the command succeeds")]
