@@ -10,10 +10,10 @@ pub async fn run_without_args(world: &mut World) {
 }
 
 #[when(expr = "I run the hello world example with arguments {string}")]
-// Step captures arrive as owned `String` values from cucumber; borrow the
-// contents to avoid cloning.
+// Step captures arrive as owned `String` values from cucumber; move them
+// into the world helper to avoid cloning.
 pub async fn run_with_args(world: &mut World, args: String) {
-    world.run_hello(Some(args.as_str())).await;
+    world.run_hello(Some(args)).await;
 }
 
 #[then("the command succeeds")]

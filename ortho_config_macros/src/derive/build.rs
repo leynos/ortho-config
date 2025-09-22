@@ -196,7 +196,8 @@ pub(crate) fn build_default_struct_fields(fields: &[syn::Field]) -> Vec<proc_mac
 /// Returns whether a long CLI flag is valid.
 ///
 /// A valid flag is non-empty, does not start with `-`, and contains only ASCII
-/// alphanumeric characters or hyphens.
+/// alphanumeric characters or hyphens. Underscores are rejected to keep the CLI
+/// syntax aligned with the documentation.
 ///
 /// # Examples
 ///
@@ -206,6 +207,7 @@ pub(crate) fn build_default_struct_fields(fields: &[syn::Field]) -> Vec<proc_mac
 /// assert!(!is_valid_cli_long("-alpha"));
 /// assert!(!is_valid_cli_long(""));
 /// assert!(!is_valid_cli_long("bad/flag"));
+/// assert!(!is_valid_cli_long("with_underscore"));
 /// ```
 fn is_valid_cli_long(long: &str) -> bool {
     !long.is_empty()
