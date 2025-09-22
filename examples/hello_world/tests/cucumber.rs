@@ -80,10 +80,11 @@ impl World {
         command.stderr(Stdio::piped());
         // Remove configuration-related env to keep tests deterministic.
         for (key, _) in std::env::vars_os() {
-            if let Some(k) = key.to_str() {
-                if k.starts_with("HELLO_WORLD_") {
-                    command.env_remove(&key);
-                }
+            if key
+                .to_str()
+                .is_some_and(|name| name.starts_with("HELLO_WORLD_"))
+            {
+                command.env_remove(&key);
             }
         }
         let mut child = command.spawn().expect("spawn hello_world binary");
