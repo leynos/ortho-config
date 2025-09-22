@@ -196,7 +196,7 @@ pub(crate) fn build_default_struct_fields(fields: &[syn::Field]) -> Vec<proc_mac
 /// Returns whether a long CLI flag is valid.
 ///
 /// A valid flag is non-empty, does not start with `-`, and contains only ASCII
-/// alphanumeric, hyphen or underscore characters.
+/// alphanumeric characters or hyphens.
 ///
 /// # Examples
 ///
@@ -210,9 +210,7 @@ pub(crate) fn build_default_struct_fields(fields: &[syn::Field]) -> Vec<proc_mac
 fn is_valid_cli_long(long: &str) -> bool {
     !long.is_empty()
         && !long.starts_with('-')
-        && long
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+        && long.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
 }
 
 /// Validates a long CLI flag against syntax and reserved names.
@@ -234,7 +232,7 @@ fn validate_cli_long(name: &Ident, long: &str) -> syn::Result<()> {
         return Err(syn::Error::new_spanned(
             name,
             format!(
-                "invalid `cli_long` value '{long}': must be non-empty and contain only ASCII alphanumeric, '-' or '_'",
+                "invalid `cli_long` value '{long}': must be non-empty and contain only ASCII alphanumeric or '-'",
             ),
         ));
     }
@@ -561,7 +559,6 @@ mod tests {
     #[rstest]
     #[case("alpha")]
     #[case("alpha-1")]
-    #[case("alpha_beta")]
     // Leading '-' must be rejected; clap adds them
     fn accepts_valid_long_flags(#[case] long: &str) {
         let name: Ident = parse_quote!(field);
@@ -571,6 +568,7 @@ mod tests {
     #[rstest]
     #[case("")]
     #[case("bad/flag")]
+    #[case("alpha_beta")]
     #[case("has space")]
     #[case("*")]
     #[case("_alpha")]
