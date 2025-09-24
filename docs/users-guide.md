@@ -39,6 +39,12 @@ values from multiple sources. The core features are:
   `cli_short`, and `merge_strategy` provide fine‑grained control over naming
   and merging behaviour.
 
+The workspace bundles an executable Hello World example under
+`examples/hello_world`. It layers defaults, environment variables, and CLI
+flags via the derive macro; see its [README](../examples/hello_world/README.md)
+for a step-by-step walkthrough and the Cucumber scenarios that validate
+behaviour end-to-end.
+
 ## Installation and dependencies
 
 Add `ortho_config` as a dependency in `Cargo.toml` along with `serde`:
@@ -173,8 +179,8 @@ considered taken if it matches either set.
 The macro does not scan other characters in the field name when deriving the
 short flag. Short flags must be single ASCII alphanumeric characters and may
 not use clap's global `-h` or `-V` options. Long flags must contain only ASCII
-alphanumerics and hyphens, must not start with `-` or `_`, and cannot be named
-`help` or `version`.
+alphanumeric characters or hyphens, must not start with `-`, cannot be named
+`help` or `version`, and the macro rejects underscores.
 
 For example, when multiple fields begin with the same character, `cli_short`
 can disambiguate the final field:

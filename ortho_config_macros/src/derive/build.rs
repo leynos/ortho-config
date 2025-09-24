@@ -2,7 +2,11 @@
 //!
 //! This module contains utilities shared across the code generation
 //! routines. The `load_impl` submodule houses the helpers that build the
-//! `load_from_iter` implementation used by the derive macro.
+//! `load_from_iter` implementation used by the derive macro. Boolean fields are
+//! handled specially with `ArgAction::SetTrue` for proper CLI flag behaviour.
+//! Fields that are originally declared as `Option` emit
+//! `#[serde(skip_serializing_if = "Option::is_none")]` in the generated CLI
+//! struct to avoid serialising absent values.
 
 use quote::{format_ident, quote};
 use syn::{Ident, Type};
@@ -19,6 +23,18 @@ fn option_type_tokens(ty: &Type) -> proc_macro2::TokenStream {
     } else {
         quote! { Option<#ty> }
     }
+}
+
+fn is_bool_type(ty: &Type) -> bool {
+    fn matches_bool(ty: &Type) -> bool {
+        matches!(
+            ty,
+            Type::Path(type_path)
+                if type_path.qself.is_none() && type_path.path.is_ident("bool")
+        )
+    }
+
+    matches_bool(ty) || option_inner(ty).is_some_and(matches_bool)
 }
 
 /// Resolves a short CLI flag ensuring uniqueness and validity.
@@ -180,7 +196,11 @@ pub(crate) fn build_default_struct_fields(fields: &[syn::Field]) -> Vec<proc_mac
 /// Returns whether a long CLI flag is valid.
 ///
 /// A valid flag is non-empty, does not start with `-`, and contains only ASCII
-/// alphanumeric, hyphen or underscore characters.
+/// alphanumeric characters or hyphens. Underscores are rejected to keep the CLI
+/// syntax aligned with the documentation.
+///
+/// Allows only ASCII alphanumeric characters or hyphens and rejects
+/// underscores to keep long flags consistent with the user guide.
 ///
 /// # Examples
 ///
@@ -190,13 +210,12 @@ pub(crate) fn build_default_struct_fields(fields: &[syn::Field]) -> Vec<proc_mac
 /// assert!(!is_valid_cli_long("-alpha"));
 /// assert!(!is_valid_cli_long(""));
 /// assert!(!is_valid_cli_long("bad/flag"));
+/// assert!(!is_valid_cli_long("with_underscore"));
 /// ```
 fn is_valid_cli_long(long: &str) -> bool {
     !long.is_empty()
         && !long.starts_with('-')
-        && long
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+        && long.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
 }
 
 /// Validates a long CLI flag against syntax and reserved names.
@@ -218,7 +237,7 @@ fn validate_cli_long(name: &Ident, long: &str) -> syn::Result<()> {
         return Err(syn::Error::new_spanned(
             name,
             format!(
-                "invalid `cli_long` value '{long}': must be non-empty and contain only ASCII alphanumeric, '-' or '_'",
+                "invalid `cli_long` value '{long}': must be non-empty and contain only ASCII alphanumeric or '-'",
             ),
         ));
     }
@@ -305,9 +324,21 @@ pub(crate) fn build_cli_struct_fields(
         let short_ch = resolve_short_flag(name, attrs, &mut used_shorts)?;
         let long_lit = syn::LitStr::new(&long, proc_macro2::Span::call_site());
         let short_lit = syn::LitChar::new(short_ch, proc_macro2::Span::call_site());
+        let is_bool = is_bool_type(&f.ty);
+        let serde_attr = option_inner(&f.ty)
+            .map(|_| quote! { #[serde(skip_serializing_if = "Option::is_none")] });
+        let arg_attr = if is_bool {
+            quote! {
+                #[arg(long = #long_lit, short = #short_lit, action = clap::ArgAction::SetTrue)]
+            }
+        } else {
+            quote! {
+                #[arg(long = #long_lit, short = #short_lit)]
+            }
+        };
         result.push(quote! {
-            #[arg(long = #long_lit, short = #short_lit)]
-            #[serde(skip_serializing_if = "Option::is_none")]
+            #arg_attr
+            #serde_attr
             pub #name: #ty
         });
     }
@@ -525,6 +556,7 @@ pub(crate) fn build_append_logic(fields: &[(Ident, &Type)]) -> proc_macro2::Toke
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ortho_config::figment::{Figment, providers::Serialized};
     use rstest::rstest;
     use std::collections::HashSet;
     use syn::{Ident, parse_quote};
@@ -532,7 +564,6 @@ mod tests {
     #[rstest]
     #[case("alpha")]
     #[case("alpha-1")]
-    #[case("alpha_beta")]
     // Leading '-' must be rejected; clap adds them
     fn accepts_valid_long_flags(#[case] long: &str) {
         let name: Ident = parse_quote!(field);
@@ -542,6 +573,7 @@ mod tests {
     #[rstest]
     #[case("")]
     #[case("bad/flag")]
+    #[case("alpha_beta")]
     #[case("has space")]
     #[case("*")]
     #[case("_alpha")]
@@ -644,6 +676,40 @@ mod tests {
             crate::derive::parse::parse_input(&input).expect("parse_input");
         let err = build_cli_struct_fields(&fields, &field_attrs).expect_err("should fail");
         assert!(err.to_string().contains("duplicate `cli_long` value"));
+    }
+
+    #[test]
+    fn bool_fields_do_not_emit_skip_serializing_if() {
+        // Mirror the generated CLI field to confirm Figment receives no value when the flag is absent.
+        #[derive(serde::Serialize)]
+        struct __Cli {
+            excited: Option<bool>,
+        }
+
+        let input: syn::DeriveInput = parse_quote! {
+            struct Demo {
+                excited: bool,
+            }
+        };
+        let (_, fields, _, field_attrs) =
+            crate::derive::parse::parse_input(&input).expect("parse_input");
+        let tokens = build_cli_struct_fields(&fields, &field_attrs).expect("build cli fields");
+        let field_ts = tokens.first().expect("generated field tokens").to_string();
+        assert!(
+            field_ts.contains("ArgAction :: SetTrue"),
+            "boolean CLI fields should use ArgAction::SetTrue"
+        );
+        assert!(
+            !field_ts.contains("skip_serializing_if"),
+            "boolean CLI fields should not emit skip_serializing_if"
+        );
+
+        let cli = __Cli { excited: None };
+        let figment = Figment::from(Serialized::defaults(&cli));
+        assert!(
+            figment.extract_inner::<bool>("excited").is_err(),
+            "Absent boolean flags should not appear in Figment"
+        );
     }
 
     fn demo_input() -> (Vec<syn::Field>, Vec<FieldAttrs>, StructAttrs) {

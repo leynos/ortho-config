@@ -198,8 +198,8 @@ This is the most complex component. It needs to perform the following using
    the macro tries the upper-case variant. A further collision triggers a
    compile error and requires the user to supply `cli_short`. Short flags must
    be ASCII alphanumeric and cannot reuse clap's `-h` or `-V`. Generated long
-   flags use only ASCII alphanumeric plus `-`. When overriding with `cli_long`,
-   ASCII alphanumeric plus `-` and `_` are accepted. Long names may not be
+   flags use only ASCII alphanumeric characters plus `-`, and overrides
+   provided via `cli_long` must obey the same constraint. Long names may not be
    `help` or `version`.
 3. **Generate `impl OrthoConfig for UserStruct`:**
    - This block contains the `load_from_iter` method used by the `load`
@@ -481,7 +481,30 @@ to rename the hidden `--config-path` flag by defining their own field with a
    - Add extensive documentation and examples.
    - Feature-gate the file format support (`json5`, `yaml`).
 
-## 7. Future Work
+## 7. Hello world example
+
+The example crate under `examples/hello_world` demonstrates how to layer
+global flags on top of the derive macro while keeping the application logic
+explicit.
+
+- `HelloWorldCli` derives `OrthoConfig` and exposes the public fields used by
+  the binary. The struct defines short flags for the repeated salutation array
+  and the recipient switch so the CLI remains terse when composed in scenarios.
+- Validation lives alongside the struct. The `DeliveryMode` enumeration
+  captures mutually exclusive switches and the helper trims salutation input so
+  command execution never needs to re-implement parsing safeguards.
+- `GreetingPlan` encapsulates the formatted message. The builder enforces the
+  validation contract, canonicalises punctuation, and records the delivery mode
+  for downstream rendering. This keeps the `main` function focused on
+  orchestration.
+- Unit tests rely on `rstest` fixtures to exercise validation and message
+  rendering. Behavioural coverage uses `cucumber-rs` to execute the compiled
+  binary with different flag combinations, verifying exit codes and emitted
+  text.
+- Behavioural tests delegate CLI parsing and output assertions to the world
+  helpers so each cucumber step stays as a single, intention-revealing line.
+
+## 8. Future Work
 
 - **Async Support:** A version of `load` that uses non-blocking IO.
 - **Custom Sources:** An API for users to add their own `figment` providers
