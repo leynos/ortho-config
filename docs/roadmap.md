@@ -98,11 +98,13 @@ references the relevant design guidance.
 - [x] **Ship the `hello_world` example crate**
 
   - [x] Scaffold the binary crate with `Cargo.toml`, a `main.rs`, and supporting
-    modules for configuration and message rendering.
+        modules for configuration and message rendering.
   - [x] Demonstrate global switches and repeated parameters with defaults and
-    validation enforced in code rather than at call sites.
+        validation enforced in code rather than at call sites.
+  - [x] Implement `greet` and `take-leave` subcommands with layered
+        configuration, unit tests, and behavioural coverage.
   - [x] Cover the example with `rstest` unit tests and a `cucumber` suite that
-    exercises the compiled binary end-to-end.
+        exercises the compiled binary end-to-end.
 
 - [x] **Support custom option names for the configuration path**
 

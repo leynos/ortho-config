@@ -498,6 +498,27 @@ Subcommands `pr` and `issue` load their defaults from the `cmds` namespace and
 environment variables. If the `reference` field is missing in the defaults, the
 tool continues using the CLI value instead of exiting with an error.
 
+### Hello world walkthrough
+
+The `hello_world` example crate demonstrates these patterns in a compact
+setting. Global options such as `--recipient` or `--salutation` are parsed via
+`load_global_config`, which layers configuration files and environment
+variables beneath any CLI overrides. The `greet` subcommand adds optional
+behaviour like a preamble (`--preamble "Good morning"`) or custom punctuation
+whilst reusing the merged global configuration. The `take-leave` subcommand
+combines switches and optional arguments (`--wave`, `--gift`,
+`--channel email`, `--remind-in 15`) to describe how the farewell should
+unfold. Each subcommand struct derives `OrthoConfig` so defaults from
+`[cmds.greet]` or `[cmds.take-leave]` merge automatically when
+`load_and_merge()` is called.
+
+Behavioural tests in `examples/hello_world/tests` exercise scenarios such as
+`hello_world greet --preamble "Good morning"` and
+`hello_world --is-excited take-leave --gift biscuits --remind-in 15 --channel`
+`email --wave`. These end-to-end checks verify that CLI arguments override
+configuration files and that validation errors surface cleanly when callers
+provide blank strings or conflicting switches.
+
 ### Dispatching with `clap‑dispatch`
 
 The `clap‑dispatch` crate can be combined with `OrthoConfig` to simplify
