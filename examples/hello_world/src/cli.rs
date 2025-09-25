@@ -148,14 +148,29 @@ impl Default for TakeLeaveCommand {
 impl TakeLeaveCommand {
     /// Validates caller-provided farewell customisation.
     pub fn validate(&self) -> Result<(), ValidationError> {
+        self.validate_parting()?;
+        self.validate_reminder()?;
+        self.validate_gift()?;
+        Ok(())
+    }
+
+    fn validate_parting(&self) -> Result<(), ValidationError> {
         if self.parting.trim().is_empty() {
             return Err(ValidationError::BlankFarewell);
         }
+        Ok(())
+    }
+
+    fn validate_reminder(&self) -> Result<(), ValidationError> {
         if let Some(minutes) = self.remind_in {
             if minutes == 0 {
                 return Err(ValidationError::ReminderOutOfRange);
             }
         }
+        Ok(())
+    }
+
+    fn validate_gift(&self) -> Result<(), ValidationError> {
         if let Some(gift) = &self.gift {
             if gift.trim().is_empty() {
                 return Err(ValidationError::BlankGift);
