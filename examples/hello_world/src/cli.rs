@@ -5,7 +5,7 @@
 use std::ffi::OsString;
 
 use clap::{ArgAction, Args, Parser, Subcommand, ValueEnum};
-use ortho_config::{OrthoConfig, OrthoMergeExt};
+use ortho_config::OrthoConfig;
 use serde::{Deserialize, Serialize};
 
 use crate::error::{HelloWorldError, ValidationError};
@@ -217,30 +217,22 @@ pub fn load_global_config(globals: &GlobalArgs) -> Result<HelloWorldCli, HelloWo
     let binary = std::env::args_os()
         .next()
         .unwrap_or_else(|| OsString::from("hello-world"));
-    let config = HelloWorldCli::load_from_iter(std::iter::once(binary))?;
-    let mut fig = ortho_config::figment::Figment::from(
-        ortho_config::figment::providers::Serialized::defaults(&config),
-    );
-    let mut sanitized = ortho_config::sanitize_value(globals)?;
-    if let Some(map) = sanitized.as_object_mut() {
-        if map
-            .get("salutations")
-            .and_then(|value| value.as_array())
-            .is_some_and(Vec::is_empty)
-        {
-            map.remove("salutations");
-        }
+    let mut merged = HelloWorldCli::load_from_iter(std::iter::once(binary))?;
+    if let Some(recipient) = &globals.recipient {
+        merged.recipient.clone_from(recipient);
     }
-    fig = fig.merge(ortho_config::figment::providers::Serialized::defaults(
-        sanitized,
-    ));
-    let mut merged = fig.extract::<HelloWorldCli>().into_ortho_merge()?;
     if !globals.salutations.is_empty() {
         merged.salutations = globals
             .salutations
             .iter()
             .map(|value| value.trim().to_string())
             .collect();
+    }
+    if globals.is_excited {
+        merged.is_excited = true;
+    }
+    if globals.is_quiet {
+        merged.is_quiet = true;
     }
     merged.validate()?;
     Ok(merged)
