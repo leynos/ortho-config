@@ -1,6 +1,7 @@
 //! Greeting planning and rendering for the `hello_world` example.
 use crate::cli::{DeliveryMode, GreetCommand, HelloWorldCli, TakeLeaveCommand};
 use crate::error::HelloWorldError;
+use ortho_config::SubcmdConfigMerge;
 
 /// Computed greeting ready for display.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -92,7 +93,8 @@ pub fn build_take_leave_plan(
 ) -> Result<TakeLeavePlan, HelloWorldError> {
     config.validate()?;
     command.validate()?;
-    let greeting = build_plan(config, &GreetCommand::default())?;
+    let greeting_defaults = GreetCommand::default().load_and_merge()?;
+    let greeting = build_plan(config, &greeting_defaults)?;
     let mut farewell = format!("{}, {}", command.parting.trim(), config.recipient);
     let mut fragments = Vec::new();
     if command.wave {
@@ -149,7 +151,9 @@ fn join_fragments(parts: &[String]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::cli::FarewellChannel;
     use crate::error::ValidationError;
+    use ortho_config::SubcmdConfigMerge;
     use rstest::{fixture, rstest};
 
     #[fixture]
@@ -213,12 +217,36 @@ mod tests {
     ) {
         take_leave_command.wave = true;
         take_leave_command.gift = Some(String::from("biscuits"));
+        take_leave_command.channel = Some(FarewellChannel::Email);
         take_leave_command.remind_in = Some(10);
         let plan = build_take_leave_plan(&base_config, &take_leave_command).expect("plan");
         assert_eq!(plan.greeting().message(), "Hello, World!");
         assert!(plan.farewell().contains("waves enthusiastically"));
         assert!(plan.farewell().contains("leaves biscuits"));
+        assert!(plan.farewell().contains("follows up with an email"));
         assert!(plan.farewell().contains("10 minutes"));
+    }
+
+    #[rstest]
+    fn build_take_leave_plan_uses_greet_defaults(
+        base_config: HelloWorldCli,
+        take_leave_command: TakeLeaveCommand,
+    ) {
+        ortho_config::figment::Jail::expect_with(|jail| {
+            jail.clear_env();
+            jail.set_env("HELLO_WORLD_CMDS_GREET_PUNCTUATION", "?");
+            jail.create_file(
+                ".hello-world.toml",
+                r#"[cmds.greet]
+punctuation = "?"
+"#,
+            )?;
+            let defaults = GreetCommand::default().load_and_merge().expect("defaults");
+            let expected = build_plan(&base_config, &defaults).expect("expected greeting");
+            let plan = build_take_leave_plan(&base_config, &take_leave_command).expect("plan");
+            assert_eq!(plan.greeting(), &expected);
+            Ok(())
+        });
     }
 
     #[rstest]
@@ -232,5 +260,8 @@ mod tests {
             join_fragments(&parts),
             "waves, leaves biscuits, and follows up with an email"
         );
+
+        let pair = vec![String::from("waves"), String::from("leaves biscuits")];
+        assert_eq!(join_fragments(&pair), "waves and leaves biscuits");
     }
 }

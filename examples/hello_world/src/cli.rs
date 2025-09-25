@@ -4,8 +4,8 @@
 //! drive the binary with predictable inputs.
 use std::ffi::OsString;
 
-use clap::{ArgAction, ArgMatches, Args, Parser, Subcommand, ValueEnum};
-use ortho_config::OrthoConfig;
+use clap::{ArgAction, Args, Parser, Subcommand, ValueEnum};
+use ortho_config::{OrthoConfig, OrthoMergeExt};
 use serde::{Deserialize, Serialize};
 
 use crate::error::{HelloWorldError, ValidationError};
@@ -27,10 +27,12 @@ pub struct CommandLine {
 }
 
 /// CLI overrides for the global greeting options.
-#[derive(Debug, Default, Clone, PartialEq, Eq, Args)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, Args, Deserialize, Serialize, OrthoConfig)]
+#[ortho_config(prefix = "HELLO_WORLD_")]
 pub struct GlobalArgs {
     /// Recipient of the greeting when supplied on the CLI.
     #[arg(short = 'r', long = "recipient", value_name = "NAME", id = "recipient")]
+    #[ortho_config(cli_short = 'r')]
     pub recipient: Option<String>,
     /// Replacement salutations supplied on the CLI.
     #[arg(
@@ -39,12 +41,15 @@ pub struct GlobalArgs {
         value_name = "WORD",
         id = "salutations"
     )]
+    #[ortho_config(cli_short = 's')]
     pub salutations: Vec<String>,
     /// Enables an enthusiastic delivery mode from the CLI.
     #[arg(long = "is-excited", action = ArgAction::SetTrue, id = "is_excited")]
+    #[ortho_config(default = false)]
     pub is_excited: bool,
     /// Enables a quiet delivery mode from the CLI.
     #[arg(long = "is-quiet", action = ArgAction::SetTrue, id = "is_quiet")]
+    #[ortho_config(default = false)]
     pub is_quiet: bool,
 }
 
@@ -54,7 +59,7 @@ pub enum Commands {
     /// Prints a greeting using the configured style.
     #[command(name = "greet")]
     Greet(GreetCommand),
-    /// Says goodbye whilst describing how the farewell will be delivered.
+    /// Says goodbye while describing how the farewell will be delivered.
     #[command(name = "take-leave")]
     TakeLeave(TakeLeaveCommand),
 }
@@ -127,7 +132,7 @@ pub struct TakeLeaveCommand {
     /// Optional gift noted in the farewell.
     #[arg(long, value_name = "ITEM", id = "gift")]
     pub gift: Option<String>,
-    /// Records whether the caller waves whilst leaving.
+    /// Records whether the caller waves while leaving.
     #[arg(long, action = ArgAction::SetTrue, id = "wave")]
     #[ortho_config(default = false)]
     pub wave: bool,
@@ -208,42 +213,37 @@ impl FarewellChannel {
 }
 
 /// Resolves the global configuration by layering defaults with CLI overrides.
-pub fn load_global_config(matches: &ArgMatches) -> Result<HelloWorldCli, HelloWorldError> {
-    let mut args = vec![OsString::from("hello-world")];
-
-    if let Some(recipient) = matches.get_one::<String>("recipient") {
-        args.push(OsString::from("-r"));
-        args.push(OsString::from(recipient));
+pub fn load_global_config(globals: &GlobalArgs) -> Result<HelloWorldCli, HelloWorldError> {
+    let binary = std::env::args_os()
+        .next()
+        .unwrap_or_else(|| OsString::from("hello-world"));
+    let config = HelloWorldCli::load_from_iter(std::iter::once(binary))?;
+    let mut fig = ortho_config::figment::Figment::from(
+        ortho_config::figment::providers::Serialized::defaults(&config),
+    );
+    let mut sanitized = ortho_config::sanitize_value(globals)?;
+    if let Some(map) = sanitized.as_object_mut() {
+        if map
+            .get("salutations")
+            .and_then(|value| value.as_array())
+            .is_some_and(Vec::is_empty)
+        {
+            map.remove("salutations");
+        }
     }
-
-    let salutation_overrides: Vec<String> = matches
-        .get_many::<String>("salutations")
-        .map(|values| values.cloned().collect::<Vec<_>>())
-        .unwrap_or_default();
-
-    for value in &salutation_overrides {
-        args.push(OsString::from("-s"));
-        args.push(OsString::from(value));
-    }
-
-    if matches.get_flag("is_excited") {
-        args.push(OsString::from("--is-excited"));
-    }
-    if matches.get_flag("is_quiet") {
-        args.push(OsString::from("--is-quiet"));
-    }
-
-    let mut config = HelloWorldCli::load_from_iter(args)?;
-
-    if !salutation_overrides.is_empty() {
-        config.salutations = salutation_overrides
-            .into_iter()
+    fig = fig.merge(ortho_config::figment::providers::Serialized::defaults(
+        sanitized,
+    ));
+    let mut merged = fig.extract::<HelloWorldCli>().into_ortho_merge()?;
+    if !globals.salutations.is_empty() {
+        merged.salutations = globals
+            .salutations
+            .iter()
             .map(|value| value.trim().to_string())
             .collect();
     }
-
-    config.validate()?;
-    Ok(config)
+    merged.validate()?;
+    Ok(merged)
 }
 
 /// Top-level configuration for the hello world demo.
@@ -251,7 +251,7 @@ pub fn load_global_config(matches: &ArgMatches) -> Result<HelloWorldCli, HelloWo
 /// The struct collects the global options exposed by the example, keeping
 /// fields public so the command dispatcher can inspect the resolved values
 /// without extra accessor boilerplate.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, OrthoConfig)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, OrthoConfig)]
 #[ortho_config(prefix = "HELLO_WORLD_")]
 pub struct HelloWorldCli {
     /// Recipient of the greeting. Defaults to a friendly placeholder.
@@ -364,7 +364,6 @@ fn default_salutations() -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use clap::CommandFactory;
     use rstest::{fixture, rstest};
 
     #[fixture]
@@ -486,10 +485,10 @@ mod tests {
     fn load_global_config_applies_overrides() {
         ortho_config::figment::Jail::expect_with(|jail| {
             jail.clear_env();
-            let matches = CommandLine::command()
-                .try_get_matches_from(["hello-world", "-r", "Team", "-s", "Hi", "greet"])
-                .expect("parse CLI");
-            let config = load_global_config(&matches).expect("load config");
+            let cli =
+                CommandLine::try_parse_from(["hello-world", "-r", "Team", "-s", "Hi", "greet"])
+                    .expect("parse CLI");
+            let config = load_global_config(&cli.globals).expect("load config");
             assert_eq!(config.recipient, "Team");
             assert_eq!(config.trimmed_salutations(), vec![String::from("Hi")]);
             Ok(())
@@ -501,10 +500,8 @@ mod tests {
         ortho_config::figment::Jail::expect_with(|jail| {
             jail.clear_env();
             jail.set_env("HELLO_WORLD_RECIPIENT", "Library");
-            let matches = CommandLine::command()
-                .try_get_matches_from(["hello-world", "greet"])
-                .expect("parse CLI");
-            let config = load_global_config(&matches).expect("load config");
+            let cli = CommandLine::try_parse_from(["hello-world", "greet"]).expect("parse CLI");
+            let config = load_global_config(&cli.globals).expect("load config");
             assert_eq!(config.recipient, "Library");
             Ok(())
         });

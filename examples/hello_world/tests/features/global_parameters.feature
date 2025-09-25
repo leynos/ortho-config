@@ -36,3 +36,4 @@ Feature: Global parameters govern greetings
     Then the command succeeds
     And stdout contains "HELLO, WORLD!"
     And stdout contains "leaves biscuits"
+    And stdout contains "follows up with an email"

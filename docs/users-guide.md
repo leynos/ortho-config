@@ -505,7 +505,7 @@ setting. Global options such as `--recipient` or `--salutation` are parsed via
 `load_global_config`, which layers configuration files and environment
 variables beneath any CLI overrides. The `greet` subcommand adds optional
 behaviour like a preamble (`--preamble "Good morning"`) or custom punctuation
-whilst reusing the merged global configuration. The `take-leave` subcommand
+while reusing the merged global configuration. The `take-leave` subcommand
 combines switches and optional arguments (`--wave`, `--gift`,
 `--channel email`, `--remind-in 15`) to describe how the farewell should
 unfold. Each subcommand struct derives `OrthoConfig` so defaults from
