@@ -93,7 +93,13 @@ pub fn build_take_leave_plan(
 ) -> Result<TakeLeavePlan, HelloWorldError> {
     config.validate()?;
     command.validate()?;
-    let greeting_defaults = GreetCommand::default().load_and_merge()?;
+    let mut greeting_defaults = GreetCommand::default().load_and_merge()?;
+    if let Some(preamble) = &command.greeting_preamble {
+        greeting_defaults.preamble = Some(preamble.clone());
+    }
+    if let Some(punctuation) = &command.greeting_punctuation {
+        greeting_defaults.punctuation.clone_from(punctuation);
+    }
     let greeting = build_plan(config, &greeting_defaults)?;
     let mut farewell = format!("{}, {}", command.parting.trim(), config.recipient);
     let mut fragments = Vec::new();
@@ -225,6 +231,18 @@ mod tests {
         assert!(plan.farewell().contains("leaves biscuits"));
         assert!(plan.farewell().contains("follows up with an email"));
         assert!(plan.farewell().contains("10 minutes"));
+    }
+
+    #[rstest]
+    fn build_take_leave_plan_applies_greeting_overrides(
+        base_config: HelloWorldCli,
+        mut take_leave_command: TakeLeaveCommand,
+    ) {
+        take_leave_command.greeting_preamble = Some(String::from("Until next time"));
+        take_leave_command.greeting_punctuation = Some(String::from("?"));
+        let plan = build_take_leave_plan(&base_config, &take_leave_command).expect("plan");
+        assert_eq!(plan.greeting().preamble(), Some("Until next time"));
+        assert!(plan.greeting().message().ends_with('?'));
     }
 
     #[rstest]

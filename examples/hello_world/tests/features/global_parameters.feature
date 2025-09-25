@@ -37,3 +37,9 @@ Feature: Global parameters govern greetings
     And stdout contains "HELLO, WORLD!"
     And stdout contains "leaves biscuits"
     And stdout contains "follows up with an email"
+
+  Scenario: Taking leave customises the greeting
+    When I run the hello world example with arguments "take-leave --preamble 'Until next time' --punctuation ?"
+    Then the command succeeds
+    And stdout contains "Until next time"
+    And stdout contains "Hello, World?"
