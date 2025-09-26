@@ -521,6 +521,10 @@ punctuation = "?"
             .validate()
             .expect_err("blank parting should fail");
         assert_eq!(err, ValidationError::BlankFarewell);
+        assert_eq!(
+            err.to_string(),
+            "farewell messages must contain visible characters"
+        );
     }
 
     #[rstest]
@@ -530,6 +534,10 @@ punctuation = "?"
             .validate()
             .expect_err("zero reminder should fail");
         assert_eq!(err, ValidationError::ReminderOutOfRange);
+        assert_eq!(
+            err.to_string(),
+            "reminder minutes must be greater than zero"
+        );
     }
 
     #[rstest]
@@ -539,6 +547,10 @@ punctuation = "?"
             .validate()
             .expect_err("blank gift should fail");
         assert_eq!(err, ValidationError::BlankGift);
+        assert_eq!(
+            err.to_string(),
+            "gift descriptions must contain visible characters"
+        );
     }
 
     #[rstest]
@@ -550,6 +562,10 @@ punctuation = "?"
             .validate()
             .expect_err("blank greeting preamble should fail");
         assert_eq!(err, ValidationError::BlankPreamble);
+        assert_eq!(
+            err.to_string(),
+            "preambles must contain visible characters when supplied"
+        );
     }
 
     #[rstest]
@@ -561,6 +577,10 @@ punctuation = "?"
             .validate()
             .expect_err("blank greeting punctuation should fail");
         assert_eq!(err, ValidationError::BlankPunctuation);
+        assert_eq!(
+            err.to_string(),
+            "greeting punctuation must contain visible characters"
+        );
     }
 
     #[rstest]
