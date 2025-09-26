@@ -232,7 +232,11 @@ pub enum FarewellChannel {
 
 impl FarewellChannel {
     #[must_use]
-    pub fn describe(self) -> &'static str {
+    #[expect(
+        clippy::trivially_copy_pass_by_ref,
+        reason = "Borrowed API avoids consuming FarewellChannel values when describing them."
+    )]
+    pub fn describe(&self) -> &'static str {
         match self {
             FarewellChannel::Message => "a message",
             FarewellChannel::Call => "a call",
