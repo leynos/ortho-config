@@ -97,10 +97,12 @@ impl GreetCommand {
         if self.punctuation.trim().is_empty() {
             return Err(ValidationError::BlankPunctuation);
         }
-        if let Some(text) = &self.preamble {
-            if text.trim().is_empty() {
-                return Err(ValidationError::BlankPreamble);
-            }
+        if self
+            .preamble
+            .as_deref()
+            .is_some_and(|text| text.trim().is_empty())
+        {
+            return Err(ValidationError::BlankPreamble);
         }
         Ok(())
     }
@@ -176,33 +178,37 @@ impl TakeLeaveCommand {
     }
 
     fn validate_reminder(&self) -> Result<(), ValidationError> {
-        if let Some(minutes) = self.remind_in {
-            if minutes == 0 {
-                return Err(ValidationError::ReminderOutOfRange);
-            }
+        if self.remind_in.is_some_and(|minutes| minutes == 0) {
+            return Err(ValidationError::ReminderOutOfRange);
         }
         Ok(())
     }
 
     fn validate_gift(&self) -> Result<(), ValidationError> {
-        if let Some(gift) = &self.gift {
-            if gift.trim().is_empty() {
-                return Err(ValidationError::BlankGift);
-            }
+        if self
+            .gift
+            .as_deref()
+            .is_some_and(|gift| gift.trim().is_empty())
+        {
+            return Err(ValidationError::BlankGift);
         }
         Ok(())
     }
 
     fn validate_greeting_overrides(&self) -> Result<(), ValidationError> {
-        if let Some(text) = &self.greeting_preamble {
-            if text.trim().is_empty() {
-                return Err(ValidationError::BlankPreamble);
-            }
+        if self
+            .greeting_preamble
+            .as_deref()
+            .is_some_and(|text| text.trim().is_empty())
+        {
+            return Err(ValidationError::BlankPreamble);
         }
-        if let Some(text) = &self.greeting_punctuation {
-            if text.trim().is_empty() {
-                return Err(ValidationError::BlankPunctuation);
-            }
+        if self
+            .greeting_punctuation
+            .as_deref()
+            .is_some_and(|text| text.trim().is_empty())
+        {
+            return Err(ValidationError::BlankPunctuation);
         }
         Ok(())
     }
