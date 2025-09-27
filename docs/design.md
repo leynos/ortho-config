@@ -114,6 +114,20 @@ and explicit:
 These helpers are intentionally small and composable so call‑sites remain easy
 to read without hiding the semantics of error mapping.
 
+### 4.3. Hello world example testing strategy
+
+The `examples/hello_world` crate now anchors both unit and behavioural testing
+for the workspace. Deterministic components such as CLI parsing, validation,
+and plan construction are covered with `rstest` parameterisations; fixtures
+expose pre-populated `HelloWorldCli`, `GreetCommand`, and `TakeLeaveCommand`
+values to exercise edge-cases like conflicting modes, blank input, and
+punctuation overrides. End-to-end workflows are expressed with `cucumber-rs`
+scenarios that invoke the compiled binary. The Cucumber world initialises a
+temporary working directory (`tempfile::TempDir`) per scenario, writes
+`.hello-world.toml` snapshots via `cap_std::fs_utf8`, and layers environment
+overrides before spawning the command. This isolates precedence checks (file →
+environment → CLI) while keeping the operating system environment pristine.
+
 ### Aggregated errors
 
 To surface multiple failures at once, `OrthoError::aggregate<I, E>(errors)`

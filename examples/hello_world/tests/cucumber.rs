@@ -14,10 +14,25 @@ mod steps;
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Shared state threaded through Cucumber steps.
-#[derive(Debug, Default, cucumber::World)]
+#[derive(Debug, cucumber::World)]
 pub struct World {
     /// Result captured after invoking the binary.
     pub result: Option<CommandResult>,
+    /// Temporary working directory isolated per scenario.
+    workdir: tempfile::TempDir,
+    /// Environment variables to inject when running the binary.
+    env: std::collections::BTreeMap<String, String>,
+}
+
+impl Default for World {
+    fn default() -> Self {
+        let workdir = tempfile::tempdir().expect("create hello_world workdir");
+        Self {
+            result: None,
+            workdir,
+            env: std::collections::BTreeMap::new(),
+        }
+    }
 }
 
 /// Output captured from executing the CLI.
@@ -45,6 +60,25 @@ impl From<std::process::Output> for CommandResult {
 }
 
 impl World {
+    /// Records an environment variable to be injected for the next command.
+    pub fn set_env(&mut self, key: String, value: String) {
+        self.env.insert(key, value);
+    }
+
+    /// Writes a configuration file into the scenario work directory.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the temporary working directory cannot be opened or the
+    /// config file cannot be written.
+    pub fn write_config(&self, contents: &str) {
+        let dir =
+            cap_std::fs::Dir::open_ambient_dir(self.workdir.path(), cap_std::ambient_authority())
+                .expect("open hello_world workdir");
+        dir.write(".hello-world.toml", contents)
+            .expect("write hello_world config");
+    }
+
     /// Runs the `hello_world` binary with optional CLI arguments.
     ///
     /// # Panics
@@ -75,6 +109,7 @@ impl World {
     pub async fn run_example(&mut self, args: Vec<String>) {
         let binary = binary_path();
         let mut command = Command::new(binary.as_std_path());
+        command.current_dir(self.workdir.path());
         command.args(&args);
         command.stdout(Stdio::piped());
         command.stderr(Stdio::piped());
@@ -86,6 +121,9 @@ impl World {
             {
                 command.env_remove(&key);
             }
+        }
+        for (key, value) in &self.env {
+            command.env(key, value);
         }
         let mut child = command.spawn().expect("spawn hello_world binary");
         let stdout_pipe = child

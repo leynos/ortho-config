@@ -43,3 +43,11 @@ Feature: Global parameters govern greetings
     Then the command succeeds
     And stdout contains "Until next time"
     And stdout contains "Hello, World?"
+
+  Scenario: CLI overrides environment overrides configuration files
+    Given the hello world config file sets file defaults
+    And the environment contains "HELLO_WORLD_RECIPIENT" = "Env"
+    And the environment contains "HELLO_WORLD_SALUTATIONS" = "EnvOne,EnvTwo"
+    When I run the hello world example with arguments "-r Cli greet"
+    Then the command succeeds
+    And stdout contains "EnvOne EnvTwo, Cli!"
