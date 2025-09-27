@@ -65,6 +65,14 @@ impl World {
         self.env.insert(key, value);
     }
 
+    /// Removes an environment variable override for the next command.
+    pub fn remove_env(&mut self, key: &str) {
+        self.env.remove(key);
+        // Removing environment variables mutates global process state.
+        // Limit scope to keys managed by the world to avoid surprises.
+        unsafe { std::env::remove_var(key) };
+    }
+
     /// Writes a configuration file into the scenario work directory.
     ///
     /// # Panics
@@ -72,11 +80,32 @@ impl World {
     /// Panics if the temporary working directory cannot be opened or the
     /// config file cannot be written.
     pub fn write_config(&self, contents: &str) {
-        let dir =
-            cap_std::fs::Dir::open_ambient_dir(self.workdir.path(), cap_std::ambient_authority())
-                .expect("open hello_world workdir");
+        let dir = self.scenario_dir();
         dir.write(".hello-world.toml", contents)
             .expect("write hello_world config");
+    }
+
+    fn scenario_dir(&self) -> cap_std::fs::Dir {
+        cap_std::fs::Dir::open_ambient_dir(self.workdir.path(), cap_std::ambient_authority())
+            .expect("open hello_world workdir")
+    }
+
+    fn configure_environment(&self, command: &mut Command) {
+        Self::scrub_command_environment(command);
+        for (key, value) in &self.env {
+            command.env(key, value);
+        }
+    }
+
+    fn scrub_command_environment(command: &mut Command) {
+        for (key, _) in std::env::vars_os() {
+            if key
+                .to_str()
+                .is_some_and(|name| name.starts_with("HELLO_WORLD_"))
+            {
+                command.env_remove(&key);
+            }
+        }
     }
 
     /// Runs the `hello_world` binary with optional CLI arguments.
@@ -113,18 +142,7 @@ impl World {
         command.args(&args);
         command.stdout(Stdio::piped());
         command.stderr(Stdio::piped());
-        // Remove configuration-related env to keep tests deterministic.
-        for (key, _) in std::env::vars_os() {
-            if key
-                .to_str()
-                .is_some_and(|name| name.starts_with("HELLO_WORLD_"))
-            {
-                command.env_remove(&key);
-            }
-        }
-        for (key, value) in &self.env {
-            command.env(key, value);
-        }
+        self.configure_environment(&mut command);
         let mut child = command.spawn().expect("spawn hello_world binary");
         let stdout_pipe = child
             .stdout

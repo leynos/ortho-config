@@ -122,7 +122,7 @@ and plan construction are covered with `rstest` parameterisations; fixtures
 expose pre-populated `HelloWorldCli`, `GreetCommand`, and `TakeLeaveCommand`
 values to exercise edge-cases like conflicting modes, blank input, and
 punctuation overrides. End-to-end workflows are expressed with `cucumber-rs`
-scenarios that invoke the compiled binary. The Cucumber world initialises a
+scenarios that invoke the compiled binary. The Cucumber world initializes a
 temporary working directory (`tempfile::TempDir`) per scenario, writes
 `.hello-world.toml` snapshots via `cap_std::fs_utf8`, and layers environment
 overrides before spawning the command. This isolates precedence checks (file →

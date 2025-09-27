@@ -410,25 +410,30 @@ mod tests {
     use crate::error::ValidationError;
     use rstest::{fixture, rstest};
 
+    /// Provides a default CLI configuration for tests.
     #[fixture]
     fn base_cli() -> HelloWorldCli {
         HelloWorldCli::default()
     }
 
+    /// Provides a default greet command for tests.
     #[fixture]
     fn greet_command() -> GreetCommand {
         GreetCommand::default()
     }
 
+    /// Provides a default take-leave command for tests.
     #[fixture]
     fn take_leave_command() -> TakeLeaveCommand {
         TakeLeaveCommand::default()
     }
 
+    type CommandAssertion = fn(CommandLine);
+
+    /// Parses command-line invocations and asserts the resulting command variant.
     #[rstest]
-    fn command_line_parses_greet_command() {
-        let cli = CommandLine::try_parse_from([
-            "hello-world",
+    #[case::greet(
+        &[
             "--recipient",
             "Crew",
             "-s",
@@ -438,23 +443,11 @@ mod tests {
             "Good morning",
             "--punctuation",
             "?!",
-        ])
-        .expect("parse greet CLI");
-        assert_eq!(cli.globals.recipient.as_deref(), Some("Crew"));
-        assert_eq!(cli.globals.salutations, vec![String::from("Hi")]);
-        match cli.command {
-            Commands::Greet(greet) => {
-                assert_eq!(greet.preamble.as_deref(), Some("Good morning"));
-                assert_eq!(greet.punctuation, "?!");
-            }
-            Commands::TakeLeave(_) => panic!("expected greet command, found take-leave"),
-        }
-    }
-
-    #[rstest]
-    fn command_line_parses_take_leave_command() {
-        let cli = CommandLine::try_parse_from([
-            "hello-world",
+        ],
+        assert_greet_command as CommandAssertion
+    )]
+    #[case::take_leave(
+        &[
             "--is-excited",
             "take-leave",
             "--parting",
@@ -466,21 +459,18 @@ mod tests {
             "--channel",
             "message",
             "--wave",
-        ])
-        .expect("parse take-leave CLI");
-        assert!(cli.globals.is_excited);
-        match cli.command {
-            Commands::TakeLeave(command) => {
-                assert_eq!(command.parting, "Cheerio");
-                assert_eq!(command.gift.as_deref(), Some("flowers"));
-                assert_eq!(command.remind_in, Some(20));
-                assert_eq!(command.channel, Some(FarewellChannel::Message));
-                assert!(command.wave);
-            }
-            Commands::Greet(_) => panic!("expected take-leave command, found greet"),
-        }
+        ],
+        assert_take_leave_command as CommandAssertion
+    )]
+    fn command_line_parses_expected_variants(
+        #[case] args: &[&str],
+        #[case] assert_cli: CommandAssertion,
+    ) {
+        let cli = parse_command_line(args);
+        assert_cli(cli);
     }
 
+    /// Ensures the hello world CLI rejects conflicting delivery modes.
     #[rstest]
     fn hello_world_cli_detects_conflicting_modes(mut base_cli: HelloWorldCli) {
         base_cli.is_excited = true;
@@ -489,6 +479,7 @@ mod tests {
         assert_eq!(err, ValidationError::ConflictingDeliveryModes);
     }
 
+    /// Enumerates validation errors for the global CLI options.
     #[rstest]
     #[case::missing_salutations(
         |cli: &mut HelloWorldCli| cli.salutations.clear(),
@@ -510,6 +501,7 @@ mod tests {
         assert_eq!(err, expected);
     }
 
+    /// Derives the delivery mode based on global CLI flags.
     #[rstest]
     #[case::excited(true, false, DeliveryMode::Enthusiastic)]
     #[case::quiet(false, true, DeliveryMode::Quiet)]
@@ -525,6 +517,7 @@ mod tests {
         assert_eq!(base_cli.delivery_mode(), expected);
     }
 
+    /// Trims incidental whitespace from salutation overrides.
     #[rstest]
     fn trimmed_salutations_remove_whitespace(mut base_cli: HelloWorldCli) {
         base_cli.salutations = vec![String::from("  Hi"), String::from("Team  ")];
@@ -534,24 +527,35 @@ mod tests {
         );
     }
 
+    /// Rejects blank inputs supplied to the greet command.
     #[rstest]
-    fn greet_command_rejects_blank_punctuation(mut greet_command: GreetCommand) {
-        greet_command.punctuation = String::from("   ");
+    #[case::punctuation(
+        |command: &mut GreetCommand| command.punctuation = String::from("   "),
+        ValidationError::BlankPunctuation,
+        "greeting punctuation must contain visible characters",
+    )]
+    #[case::preamble(
+        |command: &mut GreetCommand| command.preamble = Some(String::from("   ")),
+        ValidationError::BlankPreamble,
+        "preambles must contain visible characters when supplied",
+    )]
+    fn greet_command_rejects_blank_inputs<F>(
+        mut greet_command: GreetCommand,
+        #[case] mutate: F,
+        #[case] expected_error: ValidationError,
+        #[case] expected_message: &str,
+    ) where
+        F: Fn(&mut GreetCommand),
+    {
+        mutate(&mut greet_command);
         let err = greet_command
             .validate()
             .expect_err("validation should fail");
-        assert_eq!(err, ValidationError::BlankPunctuation);
+        assert_eq!(err, expected_error);
+        assert_eq!(err.to_string(), expected_message);
     }
 
-    #[rstest]
-    fn greet_command_rejects_blank_preamble(mut greet_command: GreetCommand) {
-        greet_command.preamble = Some(String::from("   "));
-        let err = greet_command
-            .validate()
-            .expect_err("validation should fail");
-        assert_eq!(err, ValidationError::BlankPreamble);
-    }
-
+    /// Enumerates validation errors raised by the take-leave command.
     #[rstest]
     #[case::blank_parting(|cmd: &mut TakeLeaveCommand| cmd.parting = String::from(" "), ValidationError::BlankFarewell, "farewell messages must contain visible characters")]
     #[case::zero_reminder(|cmd: &mut TakeLeaveCommand| cmd.remind_in = Some(0), ValidationError::ReminderOutOfRange, "reminder minutes must be greater than zero")]
@@ -574,6 +578,7 @@ mod tests {
         assert_eq!(err.to_string(), expected_message);
     }
 
+    /// Loads configuration by merging CLI and environment sources.
     #[rstest]
     fn load_global_config_applies_overrides() {
         ortho_config::figment::Jail::expect_with(|jail| {
@@ -588,6 +593,7 @@ mod tests {
         });
     }
 
+    /// Preserves environment-derived configuration when the CLI omits overrides.
     #[rstest]
     fn load_global_config_preserves_env_when_not_overridden() {
         ortho_config::figment::Jail::expect_with(|jail| {
@@ -598,5 +604,44 @@ mod tests {
             assert_eq!(config.recipient, "Library");
             Ok(())
         });
+    }
+
+    fn parse_command_line(args: &[&str]) -> CommandLine {
+        let mut full_args = Vec::with_capacity(args.len() + 1);
+        full_args.push("hello-world");
+        full_args.extend_from_slice(args);
+        CommandLine::try_parse_from(full_args).expect("parse command line")
+    }
+
+    fn assert_greet_command(cli: CommandLine) {
+        assert_eq!(cli.globals.recipient.as_deref(), Some("Crew"));
+        assert_eq!(cli.globals.salutations, vec![String::from("Hi")]);
+        let greet = expect_greet(cli.command);
+        assert_eq!(greet.preamble.as_deref(), Some("Good morning"));
+        assert_eq!(greet.punctuation, "?!");
+    }
+
+    fn assert_take_leave_command(cli: CommandLine) {
+        assert!(cli.globals.is_excited);
+        let command = expect_take_leave(cli.command);
+        assert_eq!(command.parting, "Cheerio");
+        assert_eq!(command.gift.as_deref(), Some("flowers"));
+        assert_eq!(command.remind_in, Some(20));
+        assert_eq!(command.channel, Some(FarewellChannel::Message));
+        assert!(command.wave);
+    }
+
+    fn expect_greet(command: Commands) -> GreetCommand {
+        match command {
+            Commands::Greet(greet) => greet,
+            Commands::TakeLeave(_) => panic!("expected greet command, found take-leave"),
+        }
+    }
+
+    fn expect_take_leave(command: Commands) -> TakeLeaveCommand {
+        match command {
+            Commands::TakeLeave(command) => command,
+            Commands::Greet(_) => panic!("expected take-leave command, found greet"),
+        }
     }
 }

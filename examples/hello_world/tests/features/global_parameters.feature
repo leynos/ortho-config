@@ -45,7 +45,11 @@ Feature: Global parameters govern greetings
     And stdout contains "Hello, World?"
 
   Scenario: CLI overrides environment overrides configuration files
-    Given the hello world config file sets file defaults
+    Given the hello world config file contains:
+      """
+      recipient = "File"
+      salutations = ["File hello"]
+      """
     And the environment contains "HELLO_WORLD_RECIPIENT" = "Env"
     And the environment contains "HELLO_WORLD_SALUTATIONS" = "EnvOne,EnvTwo"
     When I run the hello world example with arguments "-r Cli greet"
