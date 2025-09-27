@@ -31,4 +31,19 @@ pub enum ValidationError {
     /// Mutually exclusive delivery modes were enabled simultaneously.
     #[error("cannot combine --is-excited with --is-quiet")]
     ConflictingDeliveryModes,
+    /// Greeting punctuation collapsed to nothing after trimming.
+    #[error("greeting punctuation must contain visible characters")]
+    BlankPunctuation,
+    /// Greeting preamble collapsed to nothing after trimming.
+    #[error("preambles must contain visible characters when supplied")]
+    BlankPreamble,
+    /// Farewell phrase collapsed to nothing after trimming.
+    #[error("farewell messages must contain visible characters")]
+    BlankFarewell,
+    /// Reminder durations must be positive.
+    #[error("reminder minutes must be greater than zero")]
+    ReminderOutOfRange,
+    /// Gift descriptions collapsed to nothing after trimming.
+    #[error("gift descriptions must contain visible characters")]
+    BlankGift,
 }

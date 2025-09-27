@@ -503,6 +503,12 @@ explicit.
   text.
 - Behavioural tests delegate CLI parsing and output assertions to the world
   helpers so each cucumber step stays as a single, intention-revealing line.
+- Subcommands showcase layering strategies: the `greet` command customises
+  punctuation and optional preambles, while `take-leave` composes switches,
+  optional arguments, and shared greeting overrides to describe a farewell
+  workflow. Global flags are merged via `load_global_config`, and per-command
+  defaults are applied with `SubcmdConfigMerge::load_and_merge` so configuration
+  files can pre-populate command arguments.
 
 ## 8. Future Work
 

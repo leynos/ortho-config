@@ -2,17 +2,300 @@
 //!
 //! Binds CLI, environment, and default layers via `OrthoConfig` so tests can
 //! drive the binary with predictable inputs.
-use crate::error::ValidationError;
-use ortho_config::OrthoConfig;
-use serde::Deserialize;
+use std::ffi::OsString;
+
+use clap::{ArgAction, Args, Parser, Subcommand, ValueEnum};
+use ortho_config::{OrthoConfig, OrthoMergeExt};
+use serde::{Deserialize, Serialize};
+
+use crate::error::{HelloWorldError, ValidationError};
+
+/// Command-line surface exposed by the example.
+#[derive(Debug, Parser)]
+#[command(
+    name = "hello-world",
+    about = "Friendly greeting demo showcasing OrthoConfig layering",
+    version
+)]
+pub struct CommandLine {
+    /// Global switches shared by every subcommand.
+    #[command(flatten)]
+    pub globals: GlobalArgs,
+    /// Selected workflow to execute.
+    #[command(subcommand)]
+    pub command: Commands,
+}
+
+/// CLI overrides for the global greeting options.
+#[derive(Debug, Default, Clone, PartialEq, Eq, Args, Deserialize, Serialize, OrthoConfig)]
+#[ortho_config(prefix = "HELLO_WORLD_")]
+pub struct GlobalArgs {
+    /// Recipient of the greeting when supplied on the CLI.
+    #[arg(short = 'r', long = "recipient", value_name = "NAME", id = "recipient")]
+    #[ortho_config(cli_short = 'r')]
+    pub recipient: Option<String>,
+    /// Replacement salutations supplied on the CLI.
+    #[arg(
+        short = 's',
+        long = "salutation",
+        value_name = "WORD",
+        id = "salutations"
+    )]
+    #[ortho_config(cli_short = 's')]
+    pub salutations: Vec<String>,
+    /// Enables an enthusiastic delivery mode from the CLI.
+    #[arg(long = "is-excited", action = ArgAction::SetTrue, id = "is_excited")]
+    #[ortho_config(default = false)]
+    pub is_excited: bool,
+    /// Enables a quiet delivery mode from the CLI.
+    #[arg(long = "is-quiet", action = ArgAction::SetTrue, id = "is_quiet")]
+    #[ortho_config(default = false)]
+    pub is_quiet: bool,
+}
+
+/// Subcommands implemented by the example.
+#[derive(Debug, Clone, PartialEq, Eq, Subcommand)]
+pub enum Commands {
+    /// Prints a greeting using the configured style.
+    #[command(name = "greet")]
+    Greet(GreetCommand),
+    /// Says goodbye while describing how the farewell will be delivered.
+    #[command(name = "take-leave")]
+    TakeLeave(TakeLeaveCommand),
+}
+
+/// Customisation options for the `greet` command.
+#[derive(Debug, Clone, PartialEq, Eq, Parser, Deserialize, Serialize, OrthoConfig)]
+#[ortho_config(prefix = "HELLO_WORLD_")]
+pub struct GreetCommand {
+    /// Optional preamble printed before the greeting.
+    #[arg(long, value_name = "PHRASE", id = "preamble")]
+    pub preamble: Option<String>,
+    /// Punctuation appended to the greeting when not whispered.
+    #[arg(
+        long,
+        value_name = "TEXT",
+        id = "punctuation",
+        default_value_t = default_punctuation()
+    )]
+    #[ortho_config(default = default_punctuation())]
+    pub punctuation: String,
+}
+
+impl Default for GreetCommand {
+    fn default() -> Self {
+        Self {
+            preamble: None,
+            punctuation: default_punctuation(),
+        }
+    }
+}
+
+impl GreetCommand {
+    /// Ensures user-provided options are well formed.
+    pub fn validate(&self) -> Result<(), ValidationError> {
+        if self.punctuation.trim().is_empty() {
+            return Err(ValidationError::BlankPunctuation);
+        }
+        if self
+            .preamble
+            .as_deref()
+            .is_some_and(|text| text.trim().is_empty())
+        {
+            return Err(ValidationError::BlankPreamble);
+        }
+        Ok(())
+    }
+}
+
+fn default_punctuation() -> String {
+    String::from("!")
+}
+
+/// Options controlling the `take-leave` workflow.
+#[derive(Debug, Clone, PartialEq, Eq, Parser, Deserialize, Serialize, OrthoConfig)]
+#[ortho_config(prefix = "HELLO_WORLD_")]
+pub struct TakeLeaveCommand {
+    /// Parting phrase to use when saying goodbye.
+    #[arg(
+        long,
+        value_name = "PHRASE",
+        id = "parting",
+        default_value_t = default_parting()
+    )]
+    #[ortho_config(default = default_parting())]
+    pub parting: String,
+    /// Optional preamble printed before the farewell greeting.
+    #[arg(long = "preamble", value_name = "PHRASE", id = "farewell_preamble")]
+    pub greeting_preamble: Option<String>,
+    /// Optional punctuation override appended to the farewell greeting.
+    #[arg(long = "punctuation", value_name = "TEXT", id = "farewell_punctuation")]
+    pub greeting_punctuation: Option<String>,
+    /// Describes how the farewell follow-up will be delivered.
+    #[arg(long = "channel", value_enum, id = "channel")]
+    pub channel: Option<FarewellChannel>,
+    /// Optional reminder delay in minutes.
+    #[arg(long = "remind-in", value_name = "MINUTES", id = "remind_in")]
+    pub remind_in: Option<u16>,
+    /// Optional gift noted in the farewell.
+    #[arg(long, value_name = "ITEM", id = "gift")]
+    pub gift: Option<String>,
+    /// Records whether the caller waves while leaving.
+    #[arg(long, action = ArgAction::SetTrue, id = "wave")]
+    #[ortho_config(default = false)]
+    pub wave: bool,
+}
+
+impl Default for TakeLeaveCommand {
+    fn default() -> Self {
+        Self {
+            parting: default_parting(),
+            greeting_preamble: None,
+            greeting_punctuation: None,
+            channel: None,
+            remind_in: None,
+            gift: None,
+            wave: false,
+        }
+    }
+}
+
+impl TakeLeaveCommand {
+    /// Validates caller-provided farewell customisation.
+    pub fn validate(&self) -> Result<(), ValidationError> {
+        self.validate_greeting_overrides()?;
+        self.validate_parting()?;
+        self.validate_reminder()?;
+        self.validate_gift()?;
+        Ok(())
+    }
+
+    fn validate_parting(&self) -> Result<(), ValidationError> {
+        if self.parting.trim().is_empty() {
+            return Err(ValidationError::BlankFarewell);
+        }
+        Ok(())
+    }
+
+    fn validate_reminder(&self) -> Result<(), ValidationError> {
+        if self.remind_in.is_some_and(|minutes| minutes == 0) {
+            return Err(ValidationError::ReminderOutOfRange);
+        }
+        Ok(())
+    }
+
+    fn validate_gift(&self) -> Result<(), ValidationError> {
+        if self
+            .gift
+            .as_deref()
+            .is_some_and(|gift| gift.trim().is_empty())
+        {
+            return Err(ValidationError::BlankGift);
+        }
+        Ok(())
+    }
+
+    fn validate_greeting_overrides(&self) -> Result<(), ValidationError> {
+        if self
+            .greeting_preamble
+            .as_deref()
+            .is_some_and(|text| text.trim().is_empty())
+        {
+            return Err(ValidationError::BlankPreamble);
+        }
+        if self
+            .greeting_punctuation
+            .as_deref()
+            .is_some_and(|text| text.trim().is_empty())
+        {
+            return Err(ValidationError::BlankPunctuation);
+        }
+        Ok(())
+    }
+}
+
+fn default_parting() -> String {
+    String::from("Take care")
+}
+
+/// Delivery channels supported by the `take-leave` command.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, ValueEnum)]
+#[serde(rename_all = "kebab-case")]
+pub enum FarewellChannel {
+    /// Sends a follow-up via instant message.
+    Message,
+    /// Schedules a quick voice call.
+    Call,
+    /// Dispatches a friendly email.
+    Email,
+}
+
+impl FarewellChannel {
+    #[must_use]
+    #[expect(
+        clippy::trivially_copy_pass_by_ref,
+        reason = "Borrowed API avoids consuming FarewellChannel values when describing them."
+    )]
+    pub fn describe(&self) -> &'static str {
+        match self {
+            FarewellChannel::Message => "a message",
+            FarewellChannel::Call => "a call",
+            FarewellChannel::Email => "an email",
+        }
+    }
+}
+
+/// Resolves the global configuration by layering defaults with CLI overrides.
+pub fn load_global_config(globals: &GlobalArgs) -> Result<HelloWorldCli, HelloWorldError> {
+    #[derive(Serialize)]
+    struct Overrides<'a> {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        recipient: Option<&'a String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        salutations: Option<Vec<String>>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        is_excited: Option<bool>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        is_quiet: Option<bool>,
+    }
+
+    let binary = std::env::args_os()
+        .next()
+        .unwrap_or_else(|| OsString::from("hello-world"));
+    let base = HelloWorldCli::load_from_iter(std::iter::once(binary))?;
+    let salutations = if globals.salutations.is_empty() {
+        None
+    } else {
+        Some(
+            globals
+                .salutations
+                .iter()
+                .map(|value| value.trim().to_string())
+                .collect(),
+        )
+    };
+    let overrides = Overrides {
+        recipient: globals.recipient.as_ref(),
+        salutations,
+        is_excited: globals.is_excited.then_some(true),
+        is_quiet: globals.is_quiet.then_some(true),
+    };
+    let figment = ortho_config::figment::Figment::from(
+        ortho_config::figment::providers::Serialized::defaults(&base),
+    )
+    .merge(ortho_config::sanitized_provider(&overrides)?);
+    let merged = figment.extract::<HelloWorldCli>().into_ortho_merge()?;
+    merged.validate()?;
+    Ok(merged)
+}
 
 /// Top-level configuration for the hello world demo.
 ///
 /// The struct collects the global options exposed by the example, keeping
 /// fields public so the command dispatcher can inspect the resolved values
 /// without extra accessor boilerplate.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, OrthoConfig)]
-#[ortho_config(prefix = "HELLO_WORLD")]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, OrthoConfig)]
+#[ortho_config(prefix = "HELLO_WORLD_")]
 pub struct HelloWorldCli {
     /// Recipient of the greeting. Defaults to a friendly placeholder.
     #[ortho_config(default = default_recipient(), cli_short = 'r')]
@@ -124,65 +407,161 @@ fn default_salutations() -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::cli::FarewellChannel;
+    use crate::error::ValidationError;
+    use crate::message::{build_plan, build_take_leave_plan};
+    use ortho_config::SubcmdConfigMerge;
     use rstest::{fixture, rstest};
 
     #[fixture]
-    fn base_cli() -> HelloWorldCli {
+    fn base_config() -> HelloWorldCli {
         HelloWorldCli::default()
     }
 
-    #[rstest]
-    fn default_configuration_is_valid(base_cli: HelloWorldCli) {
-        base_cli.validate().expect("default config is valid");
+    #[fixture]
+    fn greet_command() -> GreetCommand {
+        GreetCommand::default()
+    }
+
+    #[fixture]
+    fn take_leave_command() -> TakeLeaveCommand {
+        TakeLeaveCommand::default()
     }
 
     #[rstest]
-    fn conflicting_delivery_modes_are_rejected(mut base_cli: HelloWorldCli) {
-        base_cli.is_excited = true;
-        base_cli.is_quiet = true;
-        let err = base_cli
-            .validate()
-            .expect_err("conflicting modes should fail");
-        assert_eq!(err, ValidationError::ConflictingDeliveryModes);
-    }
-
-    #[rstest]
-    fn missing_salutation_is_rejected(mut base_cli: HelloWorldCli) {
-        base_cli.salutations.clear();
-        let err = base_cli
-            .validate()
-            .expect_err("missing salutation should fail");
-        assert_eq!(err, ValidationError::MissingSalutation);
-    }
-
-    #[rstest]
-    fn blank_salutation_is_rejected(mut base_cli: HelloWorldCli) {
-        base_cli.salutations[0] = String::from("   ");
-        let err = base_cli
-            .validate()
-            .expect_err("blank salutation should fail");
-        assert_eq!(err, ValidationError::BlankSalutation(0));
-    }
-
-    #[rstest]
-    #[case(false, false, DeliveryMode::Standard)]
-    #[case(true, false, DeliveryMode::Enthusiastic)]
-    #[case(false, true, DeliveryMode::Quiet)]
-    fn delivery_mode_resolves_preference(
-        mut base_cli: HelloWorldCli,
-        #[case] is_excited: bool,
-        #[case] is_quiet: bool,
-        #[case] expected: DeliveryMode,
+    fn build_plan_produces_default_message(
+        base_config: HelloWorldCli,
+        greet_command: GreetCommand,
     ) {
-        base_cli.is_excited = is_excited;
-        base_cli.is_quiet = is_quiet;
-        assert_eq!(base_cli.delivery_mode(), expected);
+        let plan = build_plan(&base_config, &greet_command).expect("plan");
+        assert_eq!(plan.mode(), DeliveryMode::Standard);
+        assert_eq!(plan.message(), "Hello, World!");
+        assert_eq!(plan.preamble(), None);
     }
 
     #[rstest]
-    fn trimmed_salutations_strip_whitespace(mut base_cli: HelloWorldCli) {
-        base_cli.salutations = vec![String::from("  Hello"), String::from("world  ")];
-        let trimmed = base_cli.trimmed_salutations();
-        assert_eq!(trimmed, vec![String::from("Hello"), String::from("world")],);
+    fn build_plan_shouts_for_excited(mut base_config: HelloWorldCli, greet_command: GreetCommand) {
+        base_config.is_excited = true;
+        let plan = build_plan(&base_config, &greet_command).expect("plan");
+        assert_eq!(plan.mode(), DeliveryMode::Enthusiastic);
+        assert_eq!(plan.message(), "HELLO, WORLD!");
+    }
+
+    #[rstest]
+    fn build_plan_applies_preamble(mut greet_command: GreetCommand, base_config: HelloWorldCli) {
+        greet_command.preamble = Some(String::from("Good morning"));
+        let plan = build_plan(&base_config, &greet_command).expect("plan");
+        assert_eq!(plan.preamble(), Some("Good morning"));
+    }
+
+    #[rstest]
+    fn build_plan_propagates_validation_errors(mut base_config: HelloWorldCli) {
+        base_config.salutations.clear();
+        let err = build_plan(&base_config, &GreetCommand::default()).expect_err("invalid plan");
+        assert!(
+            matches!(
+                err,
+                HelloWorldError::Validation(ValidationError::MissingSalutation)
+            ),
+            "expected missing salutation error",
+        );
+    }
+
+    #[rstest]
+    fn build_take_leave_plan_produces_steps(
+        base_config: HelloWorldCli,
+        mut take_leave_command: TakeLeaveCommand,
+    ) {
+        take_leave_command.wave = true;
+        take_leave_command.gift = Some(String::from("biscuits"));
+        take_leave_command.channel = Some(FarewellChannel::Email);
+        take_leave_command.remind_in = Some(10);
+        let plan = build_take_leave_plan(&base_config, &take_leave_command).expect("plan");
+        assert_eq!(plan.greeting().message(), "Hello, World!");
+        assert!(plan.farewell().contains("waves enthusiastically"));
+        assert!(plan.farewell().contains("leaves biscuits"));
+        assert!(plan.farewell().contains("follows up with an email"));
+        assert!(plan.farewell().contains("10 minutes"));
+    }
+
+    #[rstest]
+    fn build_take_leave_plan_applies_greeting_overrides(
+        base_config: HelloWorldCli,
+        mut take_leave_command: TakeLeaveCommand,
+    ) {
+        take_leave_command.greeting_preamble = Some(String::from("Until next time"));
+        take_leave_command.greeting_punctuation = Some(String::from("?"));
+        let plan = build_take_leave_plan(&base_config, &take_leave_command).expect("plan");
+        assert_eq!(plan.greeting().preamble(), Some("Until next time"));
+        assert!(plan.greeting().message().ends_with('?'));
+    }
+
+    #[rstest]
+    fn build_take_leave_plan_uses_greet_defaults(
+        base_config: HelloWorldCli,
+        take_leave_command: TakeLeaveCommand,
+    ) {
+        ortho_config::figment::Jail::expect_with(|jail| {
+            jail.clear_env();
+            jail.set_env("HELLO_WORLD_CMDS_GREET_PUNCTUATION", "?");
+            jail.create_file(
+                ".hello-world.toml",
+                r#"[cmds.greet]
+punctuation = "?"
+"#,
+            )?;
+            let defaults = GreetCommand::default().load_and_merge().expect("defaults");
+            let expected = build_plan(&base_config, &defaults).expect("expected greeting");
+            let plan = build_take_leave_plan(&base_config, &take_leave_command).expect("plan");
+            assert_eq!(plan.greeting(), &expected);
+            Ok(())
+        });
+    }
+    #[rstest]
+    #[case::blank_parting(|cmd: &mut TakeLeaveCommand| cmd.parting = String::from(" "), ValidationError::BlankFarewell, "farewell messages must contain visible characters")]
+    #[case::zero_reminder(|cmd: &mut TakeLeaveCommand| cmd.remind_in = Some(0), ValidationError::ReminderOutOfRange, "reminder minutes must be greater than zero")]
+    #[case::blank_gift(|cmd: &mut TakeLeaveCommand| cmd.gift = Some(String::from("   ")), ValidationError::BlankGift, "gift descriptions must contain visible characters")]
+    #[case::blank_greeting_preamble(|cmd: &mut TakeLeaveCommand| cmd.greeting_preamble = Some(String::from("   ")), ValidationError::BlankPreamble, "preambles must contain visible characters when supplied")]
+    #[case::blank_greeting_punctuation(|cmd: &mut TakeLeaveCommand| cmd.greeting_punctuation = Some(String::from("   ")), ValidationError::BlankPunctuation, "greeting punctuation must contain visible characters")]
+    fn take_leave_command_validation_errors<F>(
+        mut take_leave_command: TakeLeaveCommand,
+        #[case] setup: F,
+        #[case] expected_error: ValidationError,
+        #[case] expected_message: &str,
+    ) where
+        F: Fn(&mut TakeLeaveCommand),
+    {
+        setup(&mut take_leave_command);
+        let err = take_leave_command
+            .validate()
+            .expect_err("validation should fail");
+        assert_eq!(err, expected_error);
+        assert_eq!(err.to_string(), expected_message);
+    }
+
+    #[rstest]
+    fn load_global_config_applies_overrides() {
+        ortho_config::figment::Jail::expect_with(|jail| {
+            jail.clear_env();
+            let cli =
+                CommandLine::try_parse_from(["hello-world", "-r", "Team", "-s", "Hi", "greet"])
+                    .expect("parse CLI");
+            let config = load_global_config(&cli.globals).expect("load config");
+            assert_eq!(config.recipient, "Team");
+            assert_eq!(config.trimmed_salutations(), vec![String::from("Hi")]);
+            Ok(())
+        });
+    }
+
+    #[rstest]
+    fn load_global_config_preserves_env_when_not_overridden() {
+        ortho_config::figment::Jail::expect_with(|jail| {
+            jail.clear_env();
+            jail.set_env("HELLO_WORLD_RECIPIENT", "Library");
+            let cli = CommandLine::try_parse_from(["hello-world", "greet"]).expect("parse CLI");
+            let config = load_global_config(&cli.globals).expect("load config");
+            assert_eq!(config.recipient, "Library");
+            Ok(())
+        });
     }
 }

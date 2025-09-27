@@ -13,7 +13,8 @@ production-ready complexity.
   defaults and caller-supplied input.
 - **Subcommands**: implement a friendly `greet` command that accepts a name and
   configurable greeting, alongside a `take-leave` workflow that combines
-  switches and optional arguments to decide how a farewell is delivered.
+  switches, optional arguments, and shared greeting customizations to decide
+  how a farewell is delivered.
 - **Testing disciplines**: add `rstest`-powered unit tests for deterministic
   components and `cucumber-rs` behavioural specifications that exercise the
   binary as a user would, capturing configuration precedence and cross-platform
@@ -59,8 +60,8 @@ production-ready complexity.
       modules.
 - [x] Define global command-line parameters, switches, and array parameters
       with defaults and validation.
-- [ ] Implement the `greet` subcommand with its arguments and options.
-- [ ] Implement the `take-leave` subcommand with its arguments and options.
+- [x] Implement the `greet` subcommand with its arguments and options.
+- [x] Implement the `take-leave` subcommand with its arguments and options.
 - [ ] Add `rstest` unit tests covering parsing, validation, and command logic.
 - [ ] Add `cucumber-rs` behavioural tests covering end-to-end workflows and
       configuration precedence.
