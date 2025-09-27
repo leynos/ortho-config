@@ -62,8 +62,8 @@ production-ready complexity.
       with defaults and validation.
 - [x] Implement the `greet` subcommand with its arguments and options.
 - [x] Implement the `take-leave` subcommand with its arguments and options.
-- [x] Add `rstest` unit tests covering parsing, validation, and command logic.
-- [x] Add `cucumber-rs` behavioural tests covering end-to-end workflows and
+- [ ] Add `rstest` unit tests covering parsing, validation, and command logic.
+- [ ] Add `cucumber-rs` behavioural tests covering end-to-end workflows and
       configuration precedence.
 - [ ] Create shell and Windows `.cmd` scripts showcasing configuration file
       usage and overrides.
