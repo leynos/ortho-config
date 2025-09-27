@@ -517,74 +517,26 @@ punctuation = "?"
             Ok(())
         });
     }
-
     #[rstest]
-    fn take_leave_command_rejects_blank_parting(mut take_leave_command: TakeLeaveCommand) {
-        take_leave_command.parting = String::from(" ");
-        let err = take_leave_command
-            .validate()
-            .expect_err("blank parting should fail");
-        assert_eq!(err, ValidationError::BlankFarewell);
-        assert_eq!(
-            err.to_string(),
-            "farewell messages must contain visible characters"
-        );
-    }
-
-    #[rstest]
-    fn take_leave_command_rejects_zero_reminder(mut take_leave_command: TakeLeaveCommand) {
-        take_leave_command.remind_in = Some(0);
-        let err = take_leave_command
-            .validate()
-            .expect_err("zero reminder should fail");
-        assert_eq!(err, ValidationError::ReminderOutOfRange);
-        assert_eq!(
-            err.to_string(),
-            "reminder minutes must be greater than zero"
-        );
-    }
-
-    #[rstest]
-    fn take_leave_command_rejects_blank_gift(mut take_leave_command: TakeLeaveCommand) {
-        take_leave_command.gift = Some(String::from("   "));
-        let err = take_leave_command
-            .validate()
-            .expect_err("blank gift should fail");
-        assert_eq!(err, ValidationError::BlankGift);
-        assert_eq!(
-            err.to_string(),
-            "gift descriptions must contain visible characters"
-        );
-    }
-
-    #[rstest]
-    fn take_leave_command_rejects_blank_greeting_preamble(
+    #[case::blank_parting(|cmd: &mut TakeLeaveCommand| cmd.parting = String::from(" "), ValidationError::BlankFarewell, "farewell messages must contain visible characters")]
+    #[case::zero_reminder(|cmd: &mut TakeLeaveCommand| cmd.remind_in = Some(0), ValidationError::ReminderOutOfRange, "reminder minutes must be greater than zero")]
+    #[case::blank_gift(|cmd: &mut TakeLeaveCommand| cmd.gift = Some(String::from("   ")), ValidationError::BlankGift, "gift descriptions must contain visible characters")]
+    #[case::blank_greeting_preamble(|cmd: &mut TakeLeaveCommand| cmd.greeting_preamble = Some(String::from("   ")), ValidationError::BlankPreamble, "preambles must contain visible characters when supplied")]
+    #[case::blank_greeting_punctuation(|cmd: &mut TakeLeaveCommand| cmd.greeting_punctuation = Some(String::from("   ")), ValidationError::BlankPunctuation, "greeting punctuation must contain visible characters")]
+    fn take_leave_command_validation_errors<F>(
         mut take_leave_command: TakeLeaveCommand,
-    ) {
-        take_leave_command.greeting_preamble = Some(String::from("   "));
+        #[case] setup: F,
+        #[case] expected_error: ValidationError,
+        #[case] expected_message: &str,
+    ) where
+        F: Fn(&mut TakeLeaveCommand),
+    {
+        setup(&mut take_leave_command);
         let err = take_leave_command
             .validate()
-            .expect_err("blank greeting preamble should fail");
-        assert_eq!(err, ValidationError::BlankPreamble);
-        assert_eq!(
-            err.to_string(),
-            "preambles must contain visible characters when supplied"
-        );
-    }
-
-    #[rstest]
-    fn take_leave_command_rejects_blank_greeting_punctuation(
-        mut take_leave_command: TakeLeaveCommand,
-    ) {
-        take_leave_command.greeting_punctuation = Some(String::from("   "));
-        let err = take_leave_command
-            .validate()
-            .expect_err("blank greeting punctuation should fail");
-        assert_eq!(err, ValidationError::BlankPunctuation);
-        assert_eq!(
-            err.to_string(),
-            "greeting punctuation must contain visible characters"
-        );
+            .expect_err("validation should fail");
+        assert_eq!(err, expected_error);
+        assert_eq!(err.to_string(), expected_message);
     }
 
     #[rstest]
