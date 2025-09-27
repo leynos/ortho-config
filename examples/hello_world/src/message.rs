@@ -93,6 +93,15 @@ pub fn build_take_leave_plan(
 ) -> Result<TakeLeavePlan, HelloWorldError> {
     config.validate()?;
     command.validate()?;
+
+    let greeting_defaults = build_greeting_defaults(command)?;
+    let greeting = build_plan(config, &greeting_defaults)?;
+    let farewell = format_farewell_message(config, command);
+
+    Ok(TakeLeavePlan { greeting, farewell })
+}
+
+fn build_greeting_defaults(command: &TakeLeaveCommand) -> Result<GreetCommand, HelloWorldError> {
     let mut greeting_defaults = GreetCommand::default().load_and_merge()?;
     if let Some(preamble) = &command.greeting_preamble {
         greeting_defaults.preamble = Some(preamble.clone());
@@ -100,8 +109,10 @@ pub fn build_take_leave_plan(
     if let Some(punctuation) = &command.greeting_punctuation {
         greeting_defaults.punctuation.clone_from(punctuation);
     }
-    let greeting = build_plan(config, &greeting_defaults)?;
-    let mut farewell = format!("{}, {}", command.parting.trim(), config.recipient);
+    Ok(greeting_defaults)
+}
+
+fn build_farewell_fragments(command: &TakeLeaveCommand) -> Vec<String> {
     let mut fragments = Vec::new();
     if command.wave {
         fragments.push(String::from("waves enthusiastically"));
@@ -116,6 +127,12 @@ pub fn build_take_leave_plan(
         let suffix = if minutes == 1 { "" } else { "s" };
         fragments.push(format!("schedules a reminder in {minutes} minute{suffix}"));
     }
+    fragments
+}
+
+fn format_farewell_message(config: &HelloWorldCli, command: &TakeLeaveCommand) -> String {
+    let mut farewell = format!("{}, {}", command.parting.trim(), config.recipient);
+    let fragments = build_farewell_fragments(command);
     if fragments.is_empty() {
         farewell.push('.');
     } else {
@@ -123,7 +140,7 @@ pub fn build_take_leave_plan(
         farewell.push_str(&join_fragments(&fragments));
         farewell.push('.');
     }
-    Ok(TakeLeavePlan { greeting, farewell })
+    farewell
 }
 
 /// Prints the greeting to standard output.
