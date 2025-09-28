@@ -136,6 +136,18 @@ shell and Windows scripts copy these files into a temporary working directory
 before invoking `cargo run` so that configuration layering can be demonstrated
 without mutating the caller's checkout.
 
+`load_global_config` and the new `load_greet_defaults` helper both consult
+`.hello_world.toml` overrides. Discovery honours `HELLO_WORLD_CONFIG_PATH`
+first, then standard user configuration directories (`$XDG_CONFIG_HOME`, each
+entry in `$XDG_CONFIG_DIRS`, and `%APPDATA%` on Windows), the user's home
+directory (`$HOME/.config/hello_world/config.toml` and
+`$HOME/.hello_world.toml`), and finally the working directory. Tests cover the
+absence path, explicit environment overrides, and the precedence of XDG
+directories over local files. Additional unit tests ensure
+`apply_greet_overrides` updates subcommand defaults and that greeting plans
+produced from the sample configuration shout with the layered punctuation and
+preamble documented in the behavioural scenarios.
+
 ### Aggregated errors
 
 To surface multiple failures at once, `OrthoError::aggregate<I, E>(errors)`

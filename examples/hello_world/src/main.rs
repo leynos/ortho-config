@@ -21,7 +21,8 @@ fn run() -> Result<(), HelloWorldError> {
     let globals = load_global_config(&cli.globals)?;
     match cli.command {
         Commands::Greet(args) => {
-            let merged = args.load_and_merge()?;
+            let mut merged = args.load_and_merge()?;
+            crate::cli::apply_greet_overrides(&mut merged)?;
             let plan = build_plan(&globals, &merged)?;
             print_plan(&plan);
         }

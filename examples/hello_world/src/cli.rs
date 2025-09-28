@@ -3,9 +3,11 @@
 //! Binds CLI, environment, and default layers via `OrthoConfig` so tests can
 //! drive the binary with predictable inputs.
 use std::ffi::OsString;
+use std::path::PathBuf;
+use std::sync::Arc;
 
 use clap::{ArgAction, Args, Parser, Subcommand, ValueEnum};
-use ortho_config::{OrthoConfig, OrthoMergeExt};
+use ortho_config::{OrthoConfig, OrthoMergeExt, SubcmdConfigMerge};
 use serde::{Deserialize, Serialize};
 
 use crate::error::{HelloWorldError, ValidationError};
@@ -284,9 +286,127 @@ pub fn load_global_config(globals: &GlobalArgs) -> Result<HelloWorldCli, HelloWo
         ortho_config::figment::providers::Serialized::defaults(&base),
     )
     .merge(ortho_config::sanitized_provider(&overrides)?);
-    let merged = figment.extract::<HelloWorldCli>().into_ortho_merge()?;
+    let mut merged = figment.extract::<HelloWorldCli>().into_ortho_merge()?;
     merged.validate()?;
+    if let Some(overrides) = load_config_overrides()? {
+        if let Some(flag) = overrides.is_excited {
+            merged.is_excited = flag;
+        }
+    }
     Ok(merged)
+}
+
+fn load_config_overrides() -> Result<Option<FileOverrides>, HelloWorldError> {
+    if let Some(figment) = discover_config_figment()? {
+        let overrides: FileOverrides = figment.extract().map_err(|err| {
+            HelloWorldError::Configuration(Arc::new(ortho_config::OrthoError::merge(err)))
+        })?;
+        Ok(Some(overrides))
+    } else {
+        Ok(None)
+    }
+}
+
+fn discover_config_figment() -> Result<Option<ortho_config::figment::Figment>, HelloWorldError> {
+    let mut candidates = Vec::new();
+    let mut push_candidate = |path: PathBuf| {
+        if path.as_os_str().is_empty() {
+            return;
+        }
+        if !candidates.iter().any(|candidate| candidate == &path) {
+            candidates.push(path);
+        }
+    };
+
+    if let Some(path) = std::env::var_os("HELLO_WORLD_CONFIG_PATH") {
+        push_candidate(PathBuf::from(path));
+    }
+
+    let config_basename = ".hello_world.toml";
+
+    if let Some(dir) = std::env::var_os("XDG_CONFIG_HOME") {
+        let dir = PathBuf::from(dir);
+        push_candidate(dir.join("hello_world").join("config.toml"));
+        push_candidate(dir.join(config_basename));
+    }
+
+    if let Some(dirs) = std::env::var_os("XDG_CONFIG_DIRS") {
+        for dir in std::env::split_paths(&dirs) {
+            push_candidate(dir.join("hello_world").join("config.toml"));
+            push_candidate(dir.join(config_basename));
+        }
+    }
+
+    if let Some(appdata) = std::env::var_os("APPDATA") {
+        let dir = PathBuf::from(appdata);
+        push_candidate(dir.join("hello_world").join("config.toml"));
+        push_candidate(dir.join(config_basename));
+    }
+
+    if let Some(home) = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")) {
+        let home_path = PathBuf::from(home);
+        push_candidate(
+            home_path
+                .join(".config")
+                .join("hello_world")
+                .join("config.toml"),
+        );
+        push_candidate(home_path.join(config_basename));
+    }
+
+    push_candidate(PathBuf::from(config_basename));
+
+    for path in candidates {
+        match ortho_config::load_config_file(&path) {
+            Ok(Some(figment)) => return Ok(Some(figment)),
+            Ok(None) => {}
+            Err(err) => return Err(HelloWorldError::Configuration(err)),
+        }
+    }
+
+    Ok(None)
+}
+
+#[derive(Debug, Default, Deserialize, PartialEq, Eq)]
+struct FileOverrides {
+    #[serde(default)]
+    is_excited: Option<bool>,
+    #[serde(default)]
+    cmds: CommandOverrides,
+}
+
+#[derive(Debug, Default, Deserialize, PartialEq, Eq)]
+struct CommandOverrides {
+    #[serde(default)]
+    greet: Option<GreetOverrides>,
+}
+
+#[derive(Debug, Default, Deserialize, PartialEq, Eq)]
+struct GreetOverrides {
+    #[serde(default)]
+    preamble: Option<String>,
+    #[serde(default)]
+    punctuation: Option<String>,
+}
+
+pub(crate) fn apply_greet_overrides(command: &mut GreetCommand) -> Result<(), HelloWorldError> {
+    if let Some(overrides) = load_config_overrides()? {
+        if let Some(greet) = overrides.cmds.greet {
+            if let Some(preamble) = greet.preamble {
+                command.preamble = Some(preamble);
+            }
+            if let Some(punctuation) = greet.punctuation {
+                command.punctuation = punctuation;
+            }
+        }
+    }
+    Ok(())
+}
+
+pub(crate) fn load_greet_defaults() -> Result<GreetCommand, HelloWorldError> {
+    let mut command = GreetCommand::default().load_and_merge()?;
+    apply_greet_overrides(&mut command)?;
+    Ok(command)
 }
 
 /// Top-level configuration for the hello world demo.
@@ -408,7 +528,6 @@ fn default_salutations() -> Vec<String> {
 mod tests {
     use super::*;
     use crate::error::ValidationError;
-    use ortho_config::SubcmdConfigMerge;
     use rstest::{fixture, rstest};
 
     /// Provides a default CLI configuration for tests.
@@ -621,12 +740,104 @@ mod tests {
                 config.trimmed_salutations(),
                 vec![String::from("Hello"), String::from("Hey config friends")]
             );
-            assert!(!config.is_excited);
-            let greet_defaults = GreetCommand::default()
-                .load_and_merge()
-                .expect("merge greet defaults");
-            assert!(greet_defaults.preamble.is_none());
-            assert_eq!(greet_defaults.punctuation, "!");
+            assert!(config.is_excited);
+            let greet_defaults = load_greet_defaults().expect("merge greet defaults");
+            assert_eq!(greet_defaults.preamble.as_deref(), Some("Layered hello"));
+            assert_eq!(greet_defaults.punctuation, "!!!");
+            Ok(())
+        });
+    }
+
+    /// Returns `None` when no configuration file is present.
+    #[rstest]
+    fn load_config_overrides_returns_none_without_files() {
+        ortho_config::figment::Jail::expect_with(|jail| {
+            jail.clear_env();
+            assert!(load_config_overrides().expect("load overrides").is_none());
+            Ok(())
+        });
+    }
+
+    /// Reads overrides from an explicit configuration path when provided.
+    #[rstest]
+    fn load_config_overrides_uses_explicit_path() {
+        ortho_config::figment::Jail::expect_with(|jail| {
+            jail.clear_env();
+            jail.create_file(
+                "custom.toml",
+                r#"is_excited = true
+
+[cmds.greet]
+preamble = "From explicit path"
+punctuation = "?"
+"#,
+            )?;
+            jail.set_env("HELLO_WORLD_CONFIG_PATH", "custom.toml");
+            let overrides = load_config_overrides()
+                .expect("load overrides")
+                .expect("overrides not found");
+            assert_eq!(overrides.is_excited, Some(true));
+            assert_eq!(
+                overrides.cmds.greet,
+                Some(GreetOverrides {
+                    preamble: Some(String::from("From explicit path")),
+                    punctuation: Some(String::from("?")),
+                })
+            );
+            Ok(())
+        });
+    }
+
+    /// Prefers XDG configuration directories before local files.
+    #[rstest]
+    fn load_config_overrides_prefers_xdg_directories() {
+        ortho_config::figment::Jail::expect_with(|jail| {
+            jail.clear_env();
+            jail.create_dir("xdg")?;
+            jail.create_dir("xdg/hello_world")?;
+            jail.create_file(
+                "xdg/hello_world/config.toml",
+                r#"[cmds.greet]
+punctuation = "???"
+"#,
+            )?;
+            jail.create_file(
+                ".hello_world.toml",
+                r#"[cmds.greet]
+punctuation = "!!!"
+"#,
+            )?;
+            jail.set_env("XDG_CONFIG_HOME", "xdg");
+            let overrides = load_config_overrides()
+                .expect("load overrides")
+                .expect("expected overrides");
+            assert_eq!(overrides.is_excited, None);
+            assert_eq!(
+                overrides.cmds.greet,
+                Some(GreetOverrides {
+                    preamble: None,
+                    punctuation: Some(String::from("???")),
+                })
+            );
+            Ok(())
+        });
+    }
+
+    /// Applies file overrides to the greet command defaults.
+    #[rstest]
+    fn apply_greet_overrides_updates_command(mut greet_command: GreetCommand) {
+        ortho_config::figment::Jail::expect_with(|jail| {
+            jail.clear_env();
+            jail.create_file(
+                ".hello_world.toml",
+                r#"[cmds.greet]
+preamble = "From file"
+punctuation = "?!"
+"#,
+            )?;
+            apply_greet_overrides(&mut greet_command).expect("apply overrides");
+            assert_eq!(greet_command.preamble.as_deref(), Some("From file"));
+            assert_eq!(greet_command.punctuation, String::from("?!"));
             Ok(())
         });
     }

@@ -54,6 +54,16 @@ working directory, layers `.hello_world.toml` defaults via `cap-std`, and sets
 `HELLO_WORLD_*` environment variables per scenario to demonstrate precedence:
 configuration files < environment variables < CLI arguments.
 
+The runtime discovers `.hello_world.toml` in several locations so local
+overrides apply without additional flags. `HELLO_WORLD_CONFIG_PATH` wins when
+set; otherwise the loader searches `$XDG_CONFIG_HOME/hello_world/config.toml`,
+every directory listed in `$XDG_CONFIG_DIRS`, `%APPDATA%` on Windows,
+`$HOME/.config/hello_world/config.toml`, `$HOME/.hello_world.toml`, and finally
+the working directory. The repository ships `config/overrides.toml`, which
+extends `config/baseline.toml` to set `is_excited = true`, provide a
+`Layered hello` preamble, and swap the greet punctuation for `!!!`. Behavioural
+tests and demo scripts assert the uppercase output to guard this layering.
+
 ## Installation and dependencies
 
 Add `ortho_config` as a dependency in `Cargo.toml` along with `serde`:

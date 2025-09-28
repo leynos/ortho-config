@@ -13,9 +13,12 @@ trap cleanup EXIT
 prepare_config() {
   local sample="$1"
   rm -f "${WORKDIR}/.hello_world.toml"
+
+  local file
   for file in "${EXAMPLE_ROOT}/config/"*.toml; do
-    cp "${file}" "${WORKDIR}/$(basename "${file}")"
+    cp "${file}" "${WORKDIR}/$(basename "${file}")" || return 1
   done
+
   cp "${WORKDIR}/${sample}" "${WORKDIR}/.hello_world.toml"
 }
 
@@ -24,11 +27,13 @@ run_hello() {
   shift
   printf '==> %s\n' "${description}"
   printf '    $ %s\n' "$*"
-  (
-    cd "${WORKDIR}"
-    "$@"
-  )
-  printf '\n'
+  if (cd "${WORKDIR}" && "$@" ); then
+    printf '\n'
+  else
+    local status=$?
+    printf 'Command failed with status %d\n' "${status}" >&2
+    exit "${status}"
+  fi
 }
 
 prepare_config baseline.toml

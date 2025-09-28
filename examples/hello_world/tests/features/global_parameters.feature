@@ -60,4 +60,5 @@ Feature: Global parameters govern greetings
     Given I start from the sample hello world config "overrides.toml"
     When I run the hello world example with arguments "greet"
     Then the command succeeds
-    And stdout contains "Hello Hey config friends, Excited crew!"
+    And stdout contains "Layered hello"
+    And stdout contains "HEY CONFIG FRIENDS, EXCITED CREW!!!"

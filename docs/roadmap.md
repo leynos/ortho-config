@@ -108,6 +108,9 @@ references the relevant design guidance.
 
   - [x] Provide demo scripts and sample configuration files that demonstrate
         configuration precedence on POSIX and Windows.
+  - [x] Layer `.hello_world.toml` discovery across XDG, platform-specific, and
+        working-directory locations so the sample overrides excite the greeting
+        and update `cmds.greet` defaults used by both subcommands.
 
 - [x] **Support custom option names for the configuration path**
 
