@@ -583,9 +583,7 @@ mod tests {
     fn load_global_config_applies_overrides() {
         ortho_config::figment::Jail::expect_with(|jail| {
             jail.clear_env();
-            let cli =
-                CommandLine::try_parse_from(["hello-world", "-r", "Team", "-s", "Hi", "greet"])
-                    .expect("parse CLI");
+            let cli = parse_command_line(&["-r", "Team", "-s", "Hi", "greet"]);
             let config = load_global_config(&cli.globals).expect("load config");
             assert_eq!(config.recipient, "Team");
             assert_eq!(config.trimmed_salutations(), vec![String::from("Hi")]);
@@ -599,7 +597,7 @@ mod tests {
         ortho_config::figment::Jail::expect_with(|jail| {
             jail.clear_env();
             jail.set_env("HELLO_WORLD_RECIPIENT", "Library");
-            let cli = CommandLine::try_parse_from(["hello-world", "greet"]).expect("parse CLI");
+            let cli = parse_command_line(&["greet"]);
             let config = load_global_config(&cli.globals).expect("load config");
             assert_eq!(config.recipient, "Library");
             Ok(())
