@@ -307,55 +307,81 @@ fn load_config_overrides() -> Result<Option<FileOverrides>, HelloWorldError> {
     }
 }
 
-fn discover_config_figment() -> Result<Option<ortho_config::figment::Figment>, HelloWorldError> {
+fn collect_config_candidates() -> Vec<PathBuf> {
     let mut candidates = Vec::new();
-    let mut push_candidate = |path: PathBuf| {
-        if path.as_os_str().is_empty() {
-            return;
-        }
-        if !candidates.iter().any(|candidate| candidate == &path) {
-            candidates.push(path);
-        }
-    };
 
+    add_explicit_path_candidate(&mut candidates);
+    add_xdg_candidates(&mut candidates);
+    add_windows_candidates(&mut candidates);
+    add_home_candidates(&mut candidates);
+    add_working_directory_candidate(&mut candidates);
+
+    candidates
+}
+
+fn add_explicit_path_candidate(candidates: &mut Vec<PathBuf>) {
     if let Some(path) = std::env::var_os("HELLO_WORLD_CONFIG_PATH") {
-        push_candidate(PathBuf::from(path));
+        push_unique_candidate(candidates, PathBuf::from(path));
     }
+}
 
+fn add_xdg_candidates(candidates: &mut Vec<PathBuf>) {
     let config_basename = ".hello_world.toml";
 
     if let Some(dir) = std::env::var_os("XDG_CONFIG_HOME") {
         let dir = PathBuf::from(dir);
-        push_candidate(dir.join("hello_world").join("config.toml"));
-        push_candidate(dir.join(config_basename));
+        push_unique_candidate(candidates, dir.join("hello_world").join("config.toml"));
+        push_unique_candidate(candidates, dir.join(config_basename));
     }
 
     if let Some(dirs) = std::env::var_os("XDG_CONFIG_DIRS") {
         for dir in std::env::split_paths(&dirs) {
-            push_candidate(dir.join("hello_world").join("config.toml"));
-            push_candidate(dir.join(config_basename));
+            push_unique_candidate(candidates, dir.join("hello_world").join("config.toml"));
+            push_unique_candidate(candidates, dir.join(config_basename));
         }
     }
+}
+
+fn add_windows_candidates(candidates: &mut Vec<PathBuf>) {
+    let config_basename = ".hello_world.toml";
 
     if let Some(appdata) = std::env::var_os("APPDATA") {
         let dir = PathBuf::from(appdata);
-        push_candidate(dir.join("hello_world").join("config.toml"));
-        push_candidate(dir.join(config_basename));
+        push_unique_candidate(candidates, dir.join("hello_world").join("config.toml"));
+        push_unique_candidate(candidates, dir.join(config_basename));
     }
+}
+
+fn add_home_candidates(candidates: &mut Vec<PathBuf>) {
+    let config_basename = ".hello_world.toml";
 
     if let Some(home) = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")) {
         let home_path = PathBuf::from(home);
-        push_candidate(
+        push_unique_candidate(
+            candidates,
             home_path
                 .join(".config")
                 .join("hello_world")
                 .join("config.toml"),
         );
-        push_candidate(home_path.join(config_basename));
+        push_unique_candidate(candidates, home_path.join(config_basename));
     }
+}
 
-    push_candidate(PathBuf::from(config_basename));
+fn add_working_directory_candidate(candidates: &mut Vec<PathBuf>) {
+    push_unique_candidate(candidates, PathBuf::from(".hello_world.toml"));
+}
 
+fn push_unique_candidate(candidates: &mut Vec<PathBuf>, path: PathBuf) {
+    if path.as_os_str().is_empty() || candidates.contains(&path) {
+        return;
+    }
+    candidates.push(path);
+}
+
+fn load_first_available_config(
+    candidates: Vec<PathBuf>,
+) -> Result<Option<ortho_config::figment::Figment>, HelloWorldError> {
     for path in candidates {
         match ortho_config::load_config_file(&path) {
             Ok(Some(figment)) => return Ok(Some(figment)),
@@ -363,8 +389,12 @@ fn discover_config_figment() -> Result<Option<ortho_config::figment::Figment>, H
             Err(err) => return Err(HelloWorldError::Configuration(err)),
         }
     }
-
     Ok(None)
+}
+
+fn discover_config_figment() -> Result<Option<ortho_config::figment::Figment>, HelloWorldError> {
+    let candidates = collect_config_candidates();
+    load_first_available_config(candidates)
 }
 
 #[derive(Debug, Default, Deserialize, PartialEq, Eq)]
