@@ -271,7 +271,7 @@ mod tests {
             jail.clear_env();
             jail.set_env("HELLO_WORLD_CMDS_GREET_PUNCTUATION", "?");
             jail.create_file(
-                ".hello-world.toml",
+                ".hello_world.toml",
                 r#"[cmds.greet]
 punctuation = "?"
 "#,

@@ -106,6 +106,9 @@ references the relevant design guidance.
   - [x] Cover the example with `rstest` unit tests and a `cucumber` suite that
         exercises the compiled binary end-to-end.
 
+  - [x] Provide demo scripts and sample configuration files that demonstrate
+        configuration precedence on POSIX and Windows.
+
 - [x] **Support custom option names for the configuration path**
 
   - [x] Allow renaming of the auto‑generated `--config-path` flag and its

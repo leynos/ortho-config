@@ -408,6 +408,7 @@ fn default_salutations() -> Vec<String> {
 mod tests {
     use super::*;
     use crate::error::ValidationError;
+    use ortho_config::SubcmdConfigMerge;
     use rstest::{fixture, rstest};
 
     /// Provides a default CLI configuration for tests.
@@ -600,6 +601,32 @@ mod tests {
             let cli = parse_command_line(&["greet"]);
             let config = load_global_config(&cli.globals).expect("load config");
             assert_eq!(config.recipient, "Library");
+            Ok(())
+        });
+    }
+
+    /// Loads the sample configuration shipped with the demo scripts.
+    #[rstest]
+    fn load_sample_configuration() {
+        ortho_config::figment::Jail::expect_with(|jail| {
+            jail.clear_env();
+            jail.create_file("baseline.toml", include_str!("../config/baseline.toml"))?;
+            jail.create_file(
+                ".hello_world.toml",
+                include_str!("../config/overrides.toml"),
+            )?;
+            let config = load_global_config(&GlobalArgs::default()).expect("load config");
+            assert_eq!(config.recipient, "Excited crew");
+            assert_eq!(
+                config.trimmed_salutations(),
+                vec![String::from("Hello"), String::from("Hey config friends")]
+            );
+            assert!(!config.is_excited);
+            let greet_defaults = GreetCommand::default()
+                .load_and_merge()
+                .expect("merge greet defaults");
+            assert!(greet_defaults.preamble.is_none());
+            assert_eq!(greet_defaults.punctuation, "!");
             Ok(())
         });
     }

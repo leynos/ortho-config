@@ -124,9 +124,17 @@ values to exercise edge-cases like conflicting modes, blank input, and
 punctuation overrides. End-to-end workflows are expressed with `cucumber-rs`
 scenarios that invoke the compiled binary. The Cucumber world initializes a
 temporary working directory (`tempfile::TempDir`) per scenario, writes
-`.hello-world.toml` snapshots via `cap_std::fs_utf8`, and layers environment
+`.hello_world.toml` snapshots via `cap_std::fs_utf8`, and layers environment
 overrides before spawning the command. This isolates precedence checks (file →
 environment → CLI) while keeping the operating system environment pristine.
+
+The example now ships repository-managed samples in `config/baseline.toml` and
+`config/overrides.toml`. The baseline file captures the values exercised by the
+demo scripts and behavioural scenarios, while `overrides.toml` extends it to
+highlight inheritance by tweaking the recipient and salutation. Both the POSIX
+shell and Windows scripts copy these files into a temporary working directory
+before invoking `cargo run` so that configuration layering can be demonstrated
+without mutating the caller's checkout.
 
 ### Aggregated errors
 

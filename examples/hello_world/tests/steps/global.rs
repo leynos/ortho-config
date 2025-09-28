@@ -82,3 +82,13 @@ pub fn config_file(world: &mut World, step: &GherkinStep) {
         .expect("config docstring provided for hello world example");
     world.write_config(contents);
 }
+
+/// Initialises the scenario using a repository sample configuration.
+#[given(expr = "I start from the sample hello world config {string}")]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Cucumber step signature requires owned String"
+)]
+pub fn start_from_sample_config(world: &mut World, sample: String) {
+    world.write_sample_config(&sample);
+}

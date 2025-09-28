@@ -5,6 +5,7 @@ use std::time::Duration;
 use camino::Utf8PathBuf;
 use cucumber::World as _;
 use shlex::split;
+use std::collections::{BTreeMap, BTreeSet};
 use tokio::io::AsyncReadExt;
 use tokio::process::Command;
 use tokio::time::timeout;
@@ -13,7 +14,7 @@ mod steps;
 
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(10);
 
-const CONFIG_FILE: &str = ".hello-world.toml";
+const CONFIG_FILE: &str = ".hello_world.toml";
 const ENV_PREFIX: &str = "HELLO_WORLD_";
 
 /// Shared state threaded through Cucumber steps.
@@ -24,7 +25,7 @@ pub struct World {
     /// Temporary working directory isolated per scenario.
     workdir: tempfile::TempDir,
     /// Environment variables to inject when running the binary.
-    env: std::collections::BTreeMap<String, String>,
+    env: BTreeMap<String, String>,
 }
 
 impl Default for World {
@@ -33,7 +34,7 @@ impl Default for World {
         Self {
             result: None,
             workdir,
-            env: std::collections::BTreeMap::new(),
+            env: BTreeMap::new(),
         }
     }
 }
@@ -90,6 +91,46 @@ impl World {
         let dir = self.scenario_dir();
         dir.write(CONFIG_FILE, contents)
             .expect("write hello_world config");
+    }
+
+    /// Copies a repository sample configuration into the scenario directory.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the sample configuration or any referenced base file cannot be
+    /// read or written.
+    pub fn write_sample_config(&self, sample: &str) {
+        let manifest_dir = Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let config_dir = manifest_dir.join("config");
+        let source = cap_std::fs::Dir::open_ambient_dir(
+            config_dir.as_std_path(),
+            cap_std::ambient_authority(),
+        )
+        .expect("open hello_world sample config directory");
+        let mut visited = BTreeSet::new();
+        self.copy_sample_config(&source, sample, CONFIG_FILE, &mut visited);
+    }
+
+    fn copy_sample_config(
+        &self,
+        source: &cap_std::fs::Dir,
+        source_name: &str,
+        target_name: &str,
+        visited: &mut BTreeSet<String>,
+    ) {
+        if !visited.insert(source_name.to_string()) {
+            return;
+        }
+        let contents = source
+            .read_to_string(source_name)
+            .expect("read hello_world sample config");
+        let scenario = self.scenario_dir();
+        scenario
+            .write(target_name, &contents)
+            .expect("write hello_world sample config");
+        if let Some(base) = parse_extends(&contents) {
+            self.copy_sample_config(source, &base, &base, visited);
+        }
     }
 
     fn scenario_dir(&self) -> cap_std::fs::Dir {
@@ -284,6 +325,23 @@ impl World {
             result.stderr
         );
     }
+}
+
+fn parse_extends(contents: &str) -> Option<String> {
+    contents.lines().find_map(|line| {
+        let trimmed = line.trim();
+        if !trimmed.starts_with("extends") {
+            return None;
+        }
+        let (_, raw) = trimmed.split_once('=')?;
+        let value = raw.split('#').next().unwrap_or("").trim();
+        let value = value.trim_matches(|ch| ch == '"' || ch == '\'');
+        if value.is_empty() {
+            None
+        } else {
+            Some(value.to_string())
+        }
+    })
 }
 
 fn binary_path() -> Utf8PathBuf {

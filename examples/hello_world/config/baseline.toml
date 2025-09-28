@@ -1,0 +1,15 @@
+recipient = "Config crew"
+salutations = ["Hello from config"]
+
+[cmds.greet]
+preamble = "Configured greeting"
+punctuation = "."
+
+[cmds.take-leave]
+parting = "Travel safely"
+gift = "biscuits"
+remind_in = 30
+channel = "email"
+wave = true
+greeting_preamble = "Before we part"
+greeting_punctuation = "!"
