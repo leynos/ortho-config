@@ -177,6 +177,38 @@ mod tests {
     use crate::error::ValidationError;
     use rstest::{fixture, rstest};
 
+    // Helper function for setting up test environment with sample configs
+    fn setup_sample_config_environment() -> HelloWorldCli {
+        with_sample_config_environment(HelloWorldCli::clone)
+    }
+
+    fn with_sample_config_environment<R>(action: impl FnOnce(&HelloWorldCli) -> R) -> R {
+        let mut result = None;
+        ortho_config::figment::Jail::expect_with(|jail| {
+            jail.clear_env();
+            jail.create_file("baseline.toml", include_str!("../config/baseline.toml"))?;
+            jail.create_file(
+                ".hello_world.toml",
+                include_str!("../config/overrides.toml"),
+            )?;
+            let config =
+                crate::cli::load_global_config(&GlobalArgs::default()).expect("load global config");
+            result = Some(action(&config));
+            Ok(())
+        });
+        result.expect("sample config action")
+    }
+
+    // Generic helper for testing plan building with sample configs
+    fn test_sample_config_plan<P, F>(plan_builder: F, plan_validator: impl FnOnce(&P))
+    where
+        F: FnOnce(&HelloWorldCli) -> Result<P, HelloWorldError>,
+    {
+        setup_sample_config_environment();
+        let plan = with_sample_config_environment(|config| plan_builder(config).expect("plan"));
+        plan_validator(&plan);
+    }
+
     #[fixture]
     fn base_config() -> HelloWorldCli {
         HelloWorldCli::default()
@@ -267,44 +299,32 @@ mod tests {
 
     #[rstest]
     fn build_take_leave_plan_uses_greet_defaults() {
-        ortho_config::figment::Jail::expect_with(|jail| {
-            jail.clear_env();
-            jail.create_file("baseline.toml", include_str!("../config/baseline.toml"))?;
-            jail.create_file(
-                ".hello_world.toml",
-                include_str!("../config/overrides.toml"),
-            )?;
-            let config =
-                crate::cli::load_global_config(&GlobalArgs::default()).expect("load global config");
-            let plan = build_take_leave_plan(&config, &TakeLeaveCommand::default()).expect("plan");
-            assert_eq!(plan.greeting().preamble(), Some("Layered hello"));
-            assert_eq!(
-                plan.greeting().message(),
-                "HELLO HEY CONFIG FRIENDS, EXCITED CREW!!!"
-            );
-            assert_eq!(plan.greeting().mode(), DeliveryMode::Enthusiastic);
-            Ok(())
-        });
+        test_sample_config_plan(
+            |config| build_take_leave_plan(config, &TakeLeaveCommand::default()),
+            |plan| {
+                assert_eq!(plan.greeting().preamble(), Some("Layered hello"));
+                assert_eq!(
+                    plan.greeting().message(),
+                    "HELLO HEY CONFIG FRIENDS, EXCITED CREW!!!"
+                );
+                assert_eq!(plan.greeting().mode(), DeliveryMode::Enthusiastic);
+            },
+        );
     }
 
     #[rstest]
     fn build_plan_uses_sample_overrides() {
-        ortho_config::figment::Jail::expect_with(|jail| {
-            jail.clear_env();
-            jail.create_file("baseline.toml", include_str!("../config/baseline.toml"))?;
-            jail.create_file(
-                ".hello_world.toml",
-                include_str!("../config/overrides.toml"),
-            )?;
-            let config =
-                crate::cli::load_global_config(&GlobalArgs::default()).expect("load global config");
-            let greet = crate::cli::load_greet_defaults().expect("load greet defaults");
-            let plan = build_plan(&config, &greet).expect("plan");
-            assert_eq!(plan.preamble(), Some("Layered hello"));
-            assert_eq!(plan.message(), "HELLO HEY CONFIG FRIENDS, EXCITED CREW!!!");
-            assert_eq!(plan.mode(), DeliveryMode::Enthusiastic);
-            Ok(())
-        });
+        test_sample_config_plan(
+            |config| {
+                let greet = crate::cli::load_greet_defaults().expect("load greet defaults");
+                build_plan(config, &greet)
+            },
+            |plan| {
+                assert_eq!(plan.preamble(), Some("Layered hello"));
+                assert_eq!(plan.message(), "HELLO HEY CONFIG FRIENDS, EXCITED CREW!!!");
+                assert_eq!(plan.mode(), DeliveryMode::Enthusiastic);
+            },
+        );
     }
 
     #[rstest]
