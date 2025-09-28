@@ -407,116 +407,155 @@ fn default_salutations() -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::cli::FarewellChannel;
     use crate::error::ValidationError;
-    use crate::message::{build_plan, build_take_leave_plan};
-    use ortho_config::SubcmdConfigMerge;
     use rstest::{fixture, rstest};
 
+    /// Provides a default CLI configuration for tests.
     #[fixture]
-    fn base_config() -> HelloWorldCli {
+    fn base_cli() -> HelloWorldCli {
         HelloWorldCli::default()
     }
 
+    /// Provides a default greet command for tests.
     #[fixture]
     fn greet_command() -> GreetCommand {
         GreetCommand::default()
     }
 
+    /// Provides a default take-leave command for tests.
     #[fixture]
     fn take_leave_command() -> TakeLeaveCommand {
         TakeLeaveCommand::default()
     }
 
+    type CommandAssertion = fn(CommandLine);
+
+    /// Parses command-line invocations and asserts the resulting command variant.
     #[rstest]
-    fn build_plan_produces_default_message(
-        base_config: HelloWorldCli,
-        greet_command: GreetCommand,
+    #[case::greet(
+        &[
+            "--recipient",
+            "Crew",
+            "-s",
+            "Hi",
+            "greet",
+            "--preamble",
+            "Good morning",
+            "--punctuation",
+            "?!",
+        ],
+        assert_greet_command as CommandAssertion
+    )]
+    #[case::take_leave(
+        &[
+            "--is-excited",
+            "take-leave",
+            "--parting",
+            "Cheerio",
+            "--gift",
+            "flowers",
+            "--remind-in",
+            "20",
+            "--channel",
+            "message",
+            "--wave",
+        ],
+        assert_take_leave_command as CommandAssertion
+    )]
+    fn command_line_parses_expected_variants(
+        #[case] args: &[&str],
+        #[case] assert_cli: CommandAssertion,
     ) {
-        let plan = build_plan(&base_config, &greet_command).expect("plan");
-        assert_eq!(plan.mode(), DeliveryMode::Standard);
-        assert_eq!(plan.message(), "Hello, World!");
-        assert_eq!(plan.preamble(), None);
+        let cli = parse_command_line(args);
+        assert_cli(cli);
     }
 
+    /// Ensures the hello world CLI rejects conflicting delivery modes.
     #[rstest]
-    fn build_plan_shouts_for_excited(mut base_config: HelloWorldCli, greet_command: GreetCommand) {
-        base_config.is_excited = true;
-        let plan = build_plan(&base_config, &greet_command).expect("plan");
-        assert_eq!(plan.mode(), DeliveryMode::Enthusiastic);
-        assert_eq!(plan.message(), "HELLO, WORLD!");
+    fn hello_world_cli_detects_conflicting_modes(mut base_cli: HelloWorldCli) {
+        base_cli.is_excited = true;
+        base_cli.is_quiet = true;
+        let err = base_cli.validate().expect_err("validation should fail");
+        assert_eq!(err, ValidationError::ConflictingDeliveryModes);
     }
 
+    /// Enumerates validation errors for the global CLI options.
     #[rstest]
-    fn build_plan_applies_preamble(mut greet_command: GreetCommand, base_config: HelloWorldCli) {
-        greet_command.preamble = Some(String::from("Good morning"));
-        let plan = build_plan(&base_config, &greet_command).expect("plan");
-        assert_eq!(plan.preamble(), Some("Good morning"));
+    #[case::missing_salutations(
+        |cli: &mut HelloWorldCli| cli.salutations.clear(),
+        ValidationError::MissingSalutation
+    )]
+    #[case::blank_salutation(
+        |cli: &mut HelloWorldCli| cli.salutations[0] = String::from("   "),
+        ValidationError::BlankSalutation(0)
+    )]
+    fn hello_world_cli_validation_errors<F>(
+        mut base_cli: HelloWorldCli,
+        #[case] mutate: F,
+        #[case] expected: ValidationError,
+    ) where
+        F: Fn(&mut HelloWorldCli),
+    {
+        mutate(&mut base_cli);
+        let err = base_cli.validate().expect_err("validation should fail");
+        assert_eq!(err, expected);
     }
 
+    /// Derives the delivery mode based on global CLI flags.
     #[rstest]
-    fn build_plan_propagates_validation_errors(mut base_config: HelloWorldCli) {
-        base_config.salutations.clear();
-        let err = build_plan(&base_config, &GreetCommand::default()).expect_err("invalid plan");
-        assert!(
-            matches!(
-                err,
-                HelloWorldError::Validation(ValidationError::MissingSalutation)
-            ),
-            "expected missing salutation error",
+    #[case::excited(true, false, DeliveryMode::Enthusiastic)]
+    #[case::quiet(false, true, DeliveryMode::Quiet)]
+    #[case::standard(false, false, DeliveryMode::Standard)]
+    fn delivery_mode_from_flags(
+        mut base_cli: HelloWorldCli,
+        #[case] excited: bool,
+        #[case] quiet: bool,
+        #[case] expected: DeliveryMode,
+    ) {
+        base_cli.is_excited = excited;
+        base_cli.is_quiet = quiet;
+        assert_eq!(base_cli.delivery_mode(), expected);
+    }
+
+    /// Trims incidental whitespace from salutation overrides.
+    #[rstest]
+    fn trimmed_salutations_remove_whitespace(mut base_cli: HelloWorldCli) {
+        base_cli.salutations = vec![String::from("  Hi"), String::from("Team  ")];
+        assert_eq!(
+            base_cli.trimmed_salutations(),
+            vec![String::from("Hi"), String::from("Team")]
         );
     }
 
+    /// Rejects blank inputs supplied to the greet command.
     #[rstest]
-    fn build_take_leave_plan_produces_steps(
-        base_config: HelloWorldCli,
-        mut take_leave_command: TakeLeaveCommand,
-    ) {
-        take_leave_command.wave = true;
-        take_leave_command.gift = Some(String::from("biscuits"));
-        take_leave_command.channel = Some(FarewellChannel::Email);
-        take_leave_command.remind_in = Some(10);
-        let plan = build_take_leave_plan(&base_config, &take_leave_command).expect("plan");
-        assert_eq!(plan.greeting().message(), "Hello, World!");
-        assert!(plan.farewell().contains("waves enthusiastically"));
-        assert!(plan.farewell().contains("leaves biscuits"));
-        assert!(plan.farewell().contains("follows up with an email"));
-        assert!(plan.farewell().contains("10 minutes"));
+    #[case::punctuation(
+        |command: &mut GreetCommand| command.punctuation = String::from("   "),
+        ValidationError::BlankPunctuation,
+        "greeting punctuation must contain visible characters",
+    )]
+    #[case::preamble(
+        |command: &mut GreetCommand| command.preamble = Some(String::from("   ")),
+        ValidationError::BlankPreamble,
+        "preambles must contain visible characters when supplied",
+    )]
+    fn greet_command_rejects_blank_inputs<F>(
+        mut greet_command: GreetCommand,
+        #[case] mutate: F,
+        #[case] expected_error: ValidationError,
+        #[case] expected_message: &str,
+    ) where
+        F: Fn(&mut GreetCommand),
+    {
+        mutate(&mut greet_command);
+        let err = greet_command
+            .validate()
+            .expect_err("validation should fail");
+        assert_eq!(err, expected_error);
+        assert_eq!(err.to_string(), expected_message);
     }
 
-    #[rstest]
-    fn build_take_leave_plan_applies_greeting_overrides(
-        base_config: HelloWorldCli,
-        mut take_leave_command: TakeLeaveCommand,
-    ) {
-        take_leave_command.greeting_preamble = Some(String::from("Until next time"));
-        take_leave_command.greeting_punctuation = Some(String::from("?"));
-        let plan = build_take_leave_plan(&base_config, &take_leave_command).expect("plan");
-        assert_eq!(plan.greeting().preamble(), Some("Until next time"));
-        assert!(plan.greeting().message().ends_with('?'));
-    }
-
-    #[rstest]
-    fn build_take_leave_plan_uses_greet_defaults(
-        base_config: HelloWorldCli,
-        take_leave_command: TakeLeaveCommand,
-    ) {
-        ortho_config::figment::Jail::expect_with(|jail| {
-            jail.clear_env();
-            jail.set_env("HELLO_WORLD_CMDS_GREET_PUNCTUATION", "?");
-            jail.create_file(
-                ".hello-world.toml",
-                r#"[cmds.greet]
-punctuation = "?"
-"#,
-            )?;
-            let defaults = GreetCommand::default().load_and_merge().expect("defaults");
-            let expected = build_plan(&base_config, &defaults).expect("expected greeting");
-            let plan = build_take_leave_plan(&base_config, &take_leave_command).expect("plan");
-            assert_eq!(plan.greeting(), &expected);
-            Ok(())
-        });
-    }
+    /// Enumerates validation errors raised by the take-leave command.
     #[rstest]
     #[case::blank_parting(|cmd: &mut TakeLeaveCommand| cmd.parting = String::from(" "), ValidationError::BlankFarewell, "farewell messages must contain visible characters")]
     #[case::zero_reminder(|cmd: &mut TakeLeaveCommand| cmd.remind_in = Some(0), ValidationError::ReminderOutOfRange, "reminder minutes must be greater than zero")]
@@ -539,13 +578,12 @@ punctuation = "?"
         assert_eq!(err.to_string(), expected_message);
     }
 
+    /// Loads configuration by merging CLI and environment sources.
     #[rstest]
     fn load_global_config_applies_overrides() {
         ortho_config::figment::Jail::expect_with(|jail| {
             jail.clear_env();
-            let cli =
-                CommandLine::try_parse_from(["hello-world", "-r", "Team", "-s", "Hi", "greet"])
-                    .expect("parse CLI");
+            let cli = parse_command_line(&["-r", "Team", "-s", "Hi", "greet"]);
             let config = load_global_config(&cli.globals).expect("load config");
             assert_eq!(config.recipient, "Team");
             assert_eq!(config.trimmed_salutations(), vec![String::from("Hi")]);
@@ -553,15 +591,55 @@ punctuation = "?"
         });
     }
 
+    /// Preserves environment-derived configuration when the CLI omits overrides.
     #[rstest]
     fn load_global_config_preserves_env_when_not_overridden() {
         ortho_config::figment::Jail::expect_with(|jail| {
             jail.clear_env();
             jail.set_env("HELLO_WORLD_RECIPIENT", "Library");
-            let cli = CommandLine::try_parse_from(["hello-world", "greet"]).expect("parse CLI");
+            let cli = parse_command_line(&["greet"]);
             let config = load_global_config(&cli.globals).expect("load config");
             assert_eq!(config.recipient, "Library");
             Ok(())
         });
+    }
+
+    fn parse_command_line(args: &[&str]) -> CommandLine {
+        let mut full_args = Vec::with_capacity(args.len() + 1);
+        full_args.push("hello-world");
+        full_args.extend_from_slice(args);
+        CommandLine::try_parse_from(full_args).expect("parse command line")
+    }
+
+    fn assert_greet_command(cli: CommandLine) {
+        assert_eq!(cli.globals.recipient.as_deref(), Some("Crew"));
+        assert_eq!(cli.globals.salutations, vec![String::from("Hi")]);
+        let greet = expect_greet(cli.command);
+        assert_eq!(greet.preamble.as_deref(), Some("Good morning"));
+        assert_eq!(greet.punctuation, "?!");
+    }
+
+    fn assert_take_leave_command(cli: CommandLine) {
+        assert!(cli.globals.is_excited);
+        let command = expect_take_leave(cli.command);
+        assert_eq!(command.parting, "Cheerio");
+        assert_eq!(command.gift.as_deref(), Some("flowers"));
+        assert_eq!(command.remind_in, Some(20));
+        assert_eq!(command.channel, Some(FarewellChannel::Message));
+        assert!(command.wave);
+    }
+
+    fn expect_greet(command: Commands) -> GreetCommand {
+        match command {
+            Commands::Greet(greet) => greet,
+            Commands::TakeLeave(_) => panic!("expected greet command, found take-leave"),
+        }
+    }
+
+    fn expect_take_leave(command: Commands) -> TakeLeaveCommand {
+        match command {
+            Commands::TakeLeave(command) => command,
+            Commands::Greet(_) => panic!("expected take-leave command, found greet"),
+        }
     }
 }

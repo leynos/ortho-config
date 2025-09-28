@@ -5,7 +5,8 @@
 //! Step definitions for the `hello_world` example.
 //! Drive the binary and assert its outputs.
 use crate::World;
-use cucumber::{then, when};
+use cucumber::gherkin::Step as GherkinStep;
+use cucumber::{given, then, when};
 
 /// Runs the binary without additional arguments.
 #[when("I run the hello world example")]
@@ -54,4 +55,30 @@ pub fn stdout_contains(world: &mut World, expected: String) {
 // for assertions so the captured text remains available.
 pub fn stderr_contains(world: &mut World, expected: String) {
     world.assert_stderr_contains(&expected);
+}
+
+#[given(expr = "the environment contains {string} = {string}")]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Cucumber step signature requires owned String"
+)]
+pub fn environment_contains(world: &mut World, key: String, value: String) {
+    world.set_env(key, value);
+}
+
+#[given(expr = "the environment does not contain {string}")]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Cucumber step signature requires owned String"
+)]
+pub fn environment_does_not_contain(world: &mut World, key: String) {
+    world.remove_env(&key);
+}
+
+#[given("the hello world config file contains:")]
+pub fn config_file(world: &mut World, step: &GherkinStep) {
+    let contents = step
+        .docstring()
+        .expect("config docstring provided for hello world example");
+    world.write_config(contents);
 }

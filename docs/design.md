@@ -114,6 +114,20 @@ and explicit:
 These helpers are intentionally small and composable so call‑sites remain easy
 to read without hiding the semantics of error mapping.
 
+### 4.4. Hello world example testing strategy
+
+The `examples/hello_world` crate now anchors both unit and behavioural testing
+for the workspace. Deterministic components such as CLI parsing, validation,
+and plan construction are covered with `rstest` parameterisations; fixtures
+expose pre-populated `HelloWorldCli`, `GreetCommand`, and `TakeLeaveCommand`
+values to exercise edge-cases like conflicting modes, blank input, and
+punctuation overrides. End-to-end workflows are expressed with `cucumber-rs`
+scenarios that invoke the compiled binary. The Cucumber world initializes a
+temporary working directory (`tempfile::TempDir`) per scenario, writes
+`.hello-world.toml` snapshots via `cap_std::fs_utf8`, and layers environment
+overrides before spawning the command. This isolates precedence checks (file →
+environment → CLI) while keeping the operating system environment pristine.
+
 ### Aggregated errors
 
 To surface multiple failures at once, `OrthoError::aggregate<I, E>(errors)`
@@ -211,7 +225,7 @@ This is the most complex component. It needs to perform the following using
      For example, it uses the `prefix` attribute for
      `figment::providers::Env::prefixed(…)`.
 
-### 4.3. Orthographic Name Mapping
+### 4.5. Orthographic Name Mapping
 
 The macro must enforce naming conventions automatically.
 
@@ -230,7 +244,7 @@ The macro must enforce naming conventions automatically.
   `#[ortho_config(rename_all = "kebab-case")]` which would pass the
   corresponding `#[serde(rename_all = "…")]` attribute to the user's struct.
 
-### 4.4. Array (`Vec<T>`) Merging
+### 4.6. Array (`Vec<T>`) Merging
 
 This is a key user-experience feature.
 
@@ -246,7 +260,7 @@ This is a key user-experience feature.
      calling `extract()` on the final result. This ensures the combined `Vec`
      is present for deserialization.
 
-### 4.5. Error Handling
+### 4.7. Error Handling
 
 A custom, comprehensive error enum is non-negotiable for a good user experience.
 
@@ -306,7 +320,7 @@ possible. `Gathering` covers failures while sourcing defaults from files or the
 environment. When CLI values are overlaid onto those defaults, any merge or
 deserialization failures map to `Merge`.
 
-### 4.6. Configuration File Discovery
+### 4.8. Configuration File Discovery
 
 On Unix-like systems and Redox, the crate uses the `xdg` crate to locate
 configuration directories. It respects `XDG_CONFIG_HOME` and falls back to
@@ -320,7 +334,7 @@ resolves to `%APPDATA%` (a.k.a. `FOLDERID_RoamingAppData`) and `%LOCALAPPDATA%`
 Support for `XDG_CONFIG_HOME` on Windows could be added later using
 `directories` to mimic the XDG specification.
 
-### 4.7. Comma-Separated Environment Lists
+### 4.9. Comma-Separated Environment Lists
 
 Environment variables often provide simple comma-separated strings for lists.
 The crate introduces a `CsvEnv` provider that wraps `figment::providers::Env`
@@ -331,7 +345,7 @@ containing literal commas must be wrapped in quotes or brackets to avoid being
 split. The derive macro now uses `CsvEnv` instead of `Env` so list handling is
 consistent across files, environment, and CLI inputs.
 
-### 4.8. Configuration Inheritance
+### 4.10. Configuration Inheritance
 
 Some projects require a base configuration that can be extended by other files.
 A configuration file may specify an `extends` key whose value is a relative or
@@ -350,7 +364,7 @@ Precedence across all sources becomes:
 Prefixes and subcommand namespaces are applied at each layer just as they would
 be without inheritance.
 
-### 4.9. Improved Subcommand Merging
+### 4.11. Improved Subcommand Merging
 
 Earlier versions extracted subcommand defaults before applying CLI overrides.
 Missing required fields in `[cmds.<name>]` caused deserialization failures even
@@ -394,7 +408,7 @@ sequenceDiagram
     SC-->>CLI: Err(OrthoError::Gathering)
   end
 
-### 4.10. Dynamic rule tables
+### 4.12. Dynamic rule tables
 
 Configuration structures may include map fields such as
 `BTreeMap<String, RuleCfg>` to support dynamic tables where the keys are not
@@ -404,7 +418,7 @@ arbitrary rule configurations like `[rules.consistent-casing]` without
 additional code. Entries may originate from files, environment variables or CLI
 flags and follow the usual precedence rules.
 
-### 4.11. Ignore pattern lists
+### 4.13. Ignore pattern lists
 
 Vector fields such as `ignore_patterns` can be populated from comma-separated
 environment variables and CLI flags. Values are merged using the `append` merge
@@ -412,7 +426,7 @@ strategy so that patterns from configuration files are extended by environment
 variables and finally CLI arguments. Whitespace is trimmed and duplicates are
 preserved.
 
-### 4.12. Renaming the configuration path flag
+### 4.14. Renaming the configuration path flag
 
 The derive macro exposes the generated `config_path` field, allowing projects
 to rename the hidden `--config-path` flag by defining their own field with a
