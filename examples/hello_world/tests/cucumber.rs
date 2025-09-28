@@ -63,7 +63,7 @@ impl From<std::process::Output> for CommandResult {
 }
 
 impl World {
-    /// Records an environment variable to be injected for the next command.
+    /// Records an environment variable override scoped to the scenario.
     pub fn set_env<K, V>(&mut self, key: K, value: V)
     where
         K: Into<String>,
@@ -72,7 +72,7 @@ impl World {
         self.env.insert(key.into(), value.into());
     }
 
-    /// Removes an environment variable override for the next command.
+    /// Removes a scenario-scoped environment variable override.
     ///
     /// This only updates the world-scoped overrides map so the process
     /// environment remains untouched during the scenario.
