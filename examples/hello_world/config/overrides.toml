@@ -1,8 +1,6 @@
 extends = "baseline.toml"
-is_excited = true
 recipient = "Excited crew"
 salutations = ["Hey config friends"]
 
 [cmds.greet]
 preamble = "Layered hello"
-punctuation = "!!!"
