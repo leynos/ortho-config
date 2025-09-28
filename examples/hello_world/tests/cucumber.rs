@@ -63,6 +63,13 @@ impl From<std::process::Output> for CommandResult {
     }
 }
 
+#[derive(Debug, Copy, Clone)]
+struct ConfigCopyParams<'a> {
+    source: &'a cap_std::fs::Dir,
+    source_name: &'a str,
+    target_name: &'a str,
+}
+
 impl World {
     /// Records an environment variable override scoped to the scenario.
     pub fn set_env<K, V>(&mut self, key: K, value: V)
@@ -108,28 +115,33 @@ impl World {
         )
         .expect("open hello_world sample config directory");
         let mut visited = BTreeSet::new();
-        self.copy_sample_config(&source, sample, CONFIG_FILE, &mut visited);
+        let params = ConfigCopyParams {
+            source: &source,
+            source_name: sample,
+            target_name: CONFIG_FILE,
+        };
+        self.copy_sample_config(params, &mut visited);
     }
 
-    fn copy_sample_config(
-        &self,
-        source: &cap_std::fs::Dir,
-        source_name: &str,
-        target_name: &str,
-        visited: &mut BTreeSet<String>,
-    ) {
-        if !visited.insert(source_name.to_string()) {
+    fn copy_sample_config(&self, params: ConfigCopyParams<'_>, visited: &mut BTreeSet<String>) {
+        if !visited.insert(params.source_name.to_string()) {
             return;
         }
-        let contents = source
-            .read_to_string(source_name)
+        let contents = params
+            .source
+            .read_to_string(params.source_name)
             .expect("read hello_world sample config");
         let scenario = self.scenario_dir();
         scenario
-            .write(target_name, &contents)
+            .write(params.target_name, &contents)
             .expect("write hello_world sample config");
         if let Some(base) = parse_extends(&contents) {
-            self.copy_sample_config(source, &base, &base, visited);
+            let base_params = ConfigCopyParams {
+                source: params.source,
+                source_name: &base,
+                target_name: &base,
+            };
+            self.copy_sample_config(base_params, visited);
         }
     }
 
