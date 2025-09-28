@@ -13,11 +13,14 @@ mod steps;
 
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(10);
 
+const CONFIG_FILE: &str = ".hello-world.toml";
+const ENV_PREFIX: &str = "HELLO_WORLD_";
+
 /// Shared state threaded through Cucumber steps.
 #[derive(Debug, cucumber::World)]
 pub struct World {
     /// Result captured after invoking the binary.
-    pub result: Option<CommandResult>,
+    result: Option<CommandResult>,
     /// Temporary working directory isolated per scenario.
     workdir: tempfile::TempDir,
     /// Environment variables to inject when running the binary.
@@ -61,8 +64,12 @@ impl From<std::process::Output> for CommandResult {
 
 impl World {
     /// Records an environment variable to be injected for the next command.
-    pub fn set_env(&mut self, key: String, value: String) {
-        self.env.insert(key, value);
+    pub fn set_env<K, V>(&mut self, key: K, value: V)
+    where
+        K: Into<String>,
+        V: Into<String>,
+    {
+        self.env.insert(key.into(), value.into());
     }
 
     /// Removes an environment variable override for the next command.
@@ -81,7 +88,7 @@ impl World {
     /// config file cannot be written.
     pub fn write_config(&self, contents: &str) {
         let dir = self.scenario_dir();
-        dir.write(".hello-world.toml", contents)
+        dir.write(CONFIG_FILE, contents)
             .expect("write hello_world config");
     }
 
@@ -101,7 +108,7 @@ impl World {
         for (key, _) in std::env::vars_os() {
             if key
                 .to_str()
-                .is_some_and(|name| name.starts_with("HELLO_WORLD_"))
+                .is_some_and(|name| name.starts_with(ENV_PREFIX))
             {
                 command.env_remove(&key);
             }
@@ -142,6 +149,7 @@ impl World {
         command.args(&args);
         command.stdout(Stdio::piped());
         command.stderr(Stdio::piped());
+        command.stdin(Stdio::null());
         self.configure_environment(&mut command);
         let mut child = command.spawn().expect("spawn hello_world binary");
         let stdout_pipe = child
