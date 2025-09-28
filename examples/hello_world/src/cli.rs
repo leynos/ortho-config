@@ -310,73 +310,80 @@ fn load_config_overrides() -> Result<Option<FileOverrides>, HelloWorldError> {
 fn collect_config_candidates() -> Vec<PathBuf> {
     let mut candidates = Vec::new();
 
-    add_explicit_path_candidate(&mut candidates);
-    add_xdg_candidates(&mut candidates);
-    add_windows_candidates(&mut candidates);
-    add_home_candidates(&mut candidates);
-    add_working_directory_candidate(&mut candidates);
+    let mut push_candidate = |path: PathBuf| {
+        if path.as_os_str().is_empty() || candidates.contains(&path) {
+            return;
+        }
+        candidates.push(path);
+    };
+
+    add_explicit_config_path(&mut push_candidate);
+    add_xdg_config_paths(&mut push_candidate);
+    add_windows_config_paths(&mut push_candidate);
+    add_home_config_paths(&mut push_candidate);
+    push_candidate(PathBuf::from(".hello_world.toml"));
 
     candidates
 }
 
-fn add_explicit_path_candidate(candidates: &mut Vec<PathBuf>) {
+fn add_explicit_config_path<F>(push_candidate: &mut F)
+where
+    F: FnMut(PathBuf),
+{
     if let Some(path) = std::env::var_os("HELLO_WORLD_CONFIG_PATH") {
-        push_unique_candidate(candidates, PathBuf::from(path));
+        push_candidate(PathBuf::from(path));
     }
 }
 
-fn add_xdg_candidates(candidates: &mut Vec<PathBuf>) {
+fn add_xdg_config_paths<F>(push_candidate: &mut F)
+where
+    F: FnMut(PathBuf),
+{
     let config_basename = ".hello_world.toml";
 
     if let Some(dir) = std::env::var_os("XDG_CONFIG_HOME") {
         let dir = PathBuf::from(dir);
-        push_unique_candidate(candidates, dir.join("hello_world").join("config.toml"));
-        push_unique_candidate(candidates, dir.join(config_basename));
+        push_candidate(dir.join("hello_world").join("config.toml"));
+        push_candidate(dir.join(config_basename));
     }
 
     if let Some(dirs) = std::env::var_os("XDG_CONFIG_DIRS") {
         for dir in std::env::split_paths(&dirs) {
-            push_unique_candidate(candidates, dir.join("hello_world").join("config.toml"));
-            push_unique_candidate(candidates, dir.join(config_basename));
+            push_candidate(dir.join("hello_world").join("config.toml"));
+            push_candidate(dir.join(config_basename));
         }
     }
 }
 
-fn add_windows_candidates(candidates: &mut Vec<PathBuf>) {
+fn add_windows_config_paths<F>(push_candidate: &mut F)
+where
+    F: FnMut(PathBuf),
+{
     let config_basename = ".hello_world.toml";
 
     if let Some(appdata) = std::env::var_os("APPDATA") {
         let dir = PathBuf::from(appdata);
-        push_unique_candidate(candidates, dir.join("hello_world").join("config.toml"));
-        push_unique_candidate(candidates, dir.join(config_basename));
+        push_candidate(dir.join("hello_world").join("config.toml"));
+        push_candidate(dir.join(config_basename));
     }
 }
 
-fn add_home_candidates(candidates: &mut Vec<PathBuf>) {
+fn add_home_config_paths<F>(push_candidate: &mut F)
+where
+    F: FnMut(PathBuf),
+{
     let config_basename = ".hello_world.toml";
 
     if let Some(home) = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")) {
         let home_path = PathBuf::from(home);
-        push_unique_candidate(
-            candidates,
+        push_candidate(
             home_path
                 .join(".config")
                 .join("hello_world")
                 .join("config.toml"),
         );
-        push_unique_candidate(candidates, home_path.join(config_basename));
+        push_candidate(home_path.join(config_basename));
     }
-}
-
-fn add_working_directory_candidate(candidates: &mut Vec<PathBuf>) {
-    push_unique_candidate(candidates, PathBuf::from(".hello_world.toml"));
-}
-
-fn push_unique_candidate(candidates: &mut Vec<PathBuf>, path: PathBuf) {
-    if path.as_os_str().is_empty() || candidates.contains(&path) {
-        return;
-    }
-    candidates.push(path);
 }
 
 fn load_first_available_config(
