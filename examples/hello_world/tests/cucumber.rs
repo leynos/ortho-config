@@ -66,11 +66,11 @@ impl World {
     }
 
     /// Removes an environment variable override for the next command.
+    ///
+    /// This only updates the world-scoped overrides map so the process
+    /// environment remains untouched during the scenario.
     pub fn remove_env(&mut self, key: &str) {
         self.env.remove(key);
-        // Removing environment variables mutates global process state.
-        // Limit scope to keys managed by the world to avoid surprises.
-        unsafe { std::env::remove_var(key) };
     }
 
     /// Writes a configuration file into the scenario work directory.
