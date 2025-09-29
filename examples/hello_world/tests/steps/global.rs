@@ -4,7 +4,7 @@
 )]
 //! Step definitions for the `hello_world` example.
 //! Drive the binary and assert its outputs.
-use crate::World;
+use crate::{SampleConfigError, World};
 use cucumber::gherkin::Step as GherkinStep;
 use cucumber::{given, then, when};
 
@@ -91,4 +91,17 @@ pub fn config_file(world: &mut World, step: &GherkinStep) {
 )]
 pub fn start_from_sample_config(world: &mut World, sample: String) {
     world.write_sample_config(&sample);
+}
+
+#[given(expr = "I start from a missing or invalid sample config {string}")]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Cucumber step signature requires owned String"
+)]
+pub fn start_from_invalid_sample_config(world: &mut World, sample: String) {
+    match world.try_write_sample_config(&sample) {
+        Ok(()) => panic!("expected sample config {sample:?} to be missing or invalid"),
+        Err(SampleConfigError::ReadSample { .. } | SampleConfigError::WriteSample { .. }) => {}
+        Err(err) => panic!("unexpected sample config error: {err}"),
+    }
 }

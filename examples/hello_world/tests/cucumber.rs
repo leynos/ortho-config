@@ -6,6 +6,7 @@ use camino::Utf8PathBuf;
 use cucumber::World as _;
 use shlex::split;
 use std::collections::{BTreeMap, BTreeSet};
+use thiserror::Error;
 use tokio::io::AsyncReadExt;
 use tokio::process::Command;
 use tokio::time::timeout;
@@ -70,6 +71,27 @@ struct ConfigCopyParams<'a> {
     target_name: &'a str,
 }
 
+#[derive(Debug, Error)]
+pub enum SampleConfigError {
+    #[error("failed to open hello world sample config directory")]
+    OpenConfigDir {
+        #[source]
+        source: std::io::Error,
+    },
+    #[error("failed to read hello world sample config {name}")]
+    ReadSample {
+        name: String,
+        #[source]
+        source: std::io::Error,
+    },
+    #[error("failed to write hello world sample config {name}")]
+    WriteSample {
+        name: String,
+        #[source]
+        source: std::io::Error,
+    },
+}
+
 impl World {
     /// Records an environment variable override scoped to the scenario.
     pub fn set_env<K, V>(&mut self, key: K, value: V)
@@ -104,45 +126,67 @@ impl World {
     ///
     /// # Panics
     ///
-    /// Panics if the sample configuration or any referenced base file cannot be
-    /// read or written.
+    /// Panics if writing the sample configuration fails.
     pub fn write_sample_config(&self, sample: &str) {
+        self.try_write_sample_config(sample)
+            .expect("write hello_world sample config");
+    }
+
+    /// Attempts to copy a repository sample configuration into the scenario directory.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the sample or any extended configuration cannot be read
+    /// or when writing into the scenario directory fails.
+    pub fn try_write_sample_config(&self, sample: &str) -> Result<(), SampleConfigError> {
         let manifest_dir = Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         let config_dir = manifest_dir.join("config");
         let source = cap_std::fs::Dir::open_ambient_dir(
             config_dir.as_std_path(),
             cap_std::ambient_authority(),
         )
-        .expect("open hello_world sample config directory");
+        .map_err(|source| SampleConfigError::OpenConfigDir { source })?;
         let mut visited = BTreeSet::new();
         let params = ConfigCopyParams {
             source: &source,
             source_name: sample,
             target_name: CONFIG_FILE,
         };
-        self.copy_sample_config(params, &mut visited);
+        self.copy_sample_config(params, &mut visited)?;
+        Ok(())
     }
 
-    fn copy_sample_config(&self, params: ConfigCopyParams<'_>, visited: &mut BTreeSet<String>) {
+    fn copy_sample_config(
+        &self,
+        params: ConfigCopyParams<'_>,
+        visited: &mut BTreeSet<String>,
+    ) -> Result<(), SampleConfigError> {
         if !visited.insert(params.source_name.to_string()) {
-            return;
+            return Ok(());
         }
         let contents = params
             .source
             .read_to_string(params.source_name)
-            .expect("read hello_world sample config");
+            .map_err(|source| SampleConfigError::ReadSample {
+                name: params.source_name.to_string(),
+                source,
+            })?;
         let scenario = self.scenario_dir();
         scenario
             .write(params.target_name, &contents)
-            .expect("write hello_world sample config");
+            .map_err(|source| SampleConfigError::WriteSample {
+                name: params.target_name.to_string(),
+                source,
+            })?;
         if let Some(base) = parse_extends(&contents) {
             let base_params = ConfigCopyParams {
                 source: params.source,
-                source_name: &base,
-                target_name: &base,
+                source_name: base.as_str(),
+                target_name: base.as_str(),
             };
-            self.copy_sample_config(base_params, visited);
+            self.copy_sample_config(base_params, visited)?;
         }
+        Ok(())
     }
 
     fn scenario_dir(&self) -> cap_std::fs::Dir {
@@ -366,4 +410,23 @@ fn binary_path() -> Utf8PathBuf {
 #[tokio::main]
 async fn main() {
     World::run("tests/features").await;
+}
+
+#[cfg(test)]
+mod tests {
+    use rstest::rstest;
+
+    #[rstest]
+    fn try_write_sample_config_reports_missing_sample() {
+        let world = super::World::default();
+        let error = world
+            .try_write_sample_config("nonexistent.toml")
+            .expect_err("missing sample config should error");
+        match error {
+            super::SampleConfigError::ReadSample { name, .. } => {
+                assert_eq!(name, "nonexistent.toml");
+            }
+            other => panic!("expected read sample error, got {other:?}"),
+        }
+    }
 }
