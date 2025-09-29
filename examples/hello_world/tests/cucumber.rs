@@ -73,11 +73,14 @@ struct ConfigCopyParams<'a> {
 
 #[derive(Debug, Error)]
 pub enum SampleConfigError {
-    #[error("failed to open hello world sample config directory")]
+    #[error("failed to open hello world sample config directory: {path}")]
     OpenConfigDir {
+        path: String,
         #[source]
         source: std::io::Error,
     },
+    #[error("invalid hello world sample config name {name}")]
+    InvalidName { name: String },
     #[error("failed to open hello world sample config {name}")]
     OpenSample {
         name: String,
@@ -96,6 +99,20 @@ pub enum SampleConfigError {
         #[source]
         source: std::io::Error,
     },
+}
+
+fn is_simple_filename(name: &str) -> bool {
+    !name.is_empty() && !name.chars().any(std::path::is_separator)
+}
+
+fn ensure_simple_filename(name: &str) -> Result<(), SampleConfigError> {
+    if is_simple_filename(name) {
+        Ok(())
+    } else {
+        Err(SampleConfigError::InvalidName {
+            name: name.to_string(),
+        })
+    }
 }
 
 impl World {
@@ -145,13 +162,17 @@ impl World {
     /// Returns an error when the sample or any extended configuration cannot be read
     /// or when writing into the scenario directory fails.
     pub fn try_write_sample_config(&self, sample: &str) -> Result<(), SampleConfigError> {
+        ensure_simple_filename(sample)?;
         let manifest_dir = Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         let config_dir = manifest_dir.join("config");
         let source = cap_std::fs::Dir::open_ambient_dir(
             config_dir.as_std_path(),
             cap_std::ambient_authority(),
         )
-        .map_err(|source| SampleConfigError::OpenConfigDir { source })?;
+        .map_err(|source| SampleConfigError::OpenConfigDir {
+            path: config_dir.to_string(),
+            source,
+        })?;
         let mut visited = BTreeSet::new();
         let params = ConfigCopyParams {
             source: &source,
@@ -167,6 +188,8 @@ impl World {
         params: ConfigCopyParams<'_>,
         visited: &mut BTreeSet<String>,
     ) -> Result<(), SampleConfigError> {
+        ensure_simple_filename(params.source_name)?;
+        ensure_simple_filename(params.target_name)?;
         if !visited.insert(params.source_name.to_string()) {
             return Ok(());
         }
@@ -195,6 +218,7 @@ impl World {
             })?;
         for base in parse_extends(&contents) {
             let base_name = base.as_str();
+            ensure_simple_filename(base_name)?;
             let base_params = ConfigCopyParams {
                 source: params.source,
                 source_name: base_name,
@@ -474,6 +498,12 @@ mod tests {
         assert!(out.is_empty());
     }
 
+    #[test]
+    fn parse_extends_nested_array_filters_deeper_levels() {
+        let out = super::parse_extends(r#"extends = [["base.toml"], " extra.toml ", ""]"#);
+        assert_eq!(out, vec!["extra.toml"]);
+    }
+
     #[rstest]
     fn try_write_sample_config_reports_missing_sample() {
         let world = super::World::default();
@@ -485,6 +515,20 @@ mod tests {
                 assert_eq!(name, "nonexistent.toml");
             }
             other => panic!("expected open sample error, got {other:?}"),
+        }
+    }
+
+    #[rstest]
+    fn try_write_sample_config_rejects_invalid_name() {
+        let world = super::World::default();
+        let error = world
+            .try_write_sample_config("../invalid.toml")
+            .expect_err("invalid sample name should error");
+        match error {
+            super::SampleConfigError::InvalidName { name } => {
+                assert_eq!(name, "../invalid.toml");
+            }
+            other => panic!("expected invalid name error, got {other:?}"),
         }
     }
 
