@@ -288,10 +288,8 @@ pub fn load_global_config(globals: &GlobalArgs) -> Result<HelloWorldCli, HelloWo
     .merge(ortho_config::sanitized_provider(&overrides)?);
     let mut merged = figment.extract::<HelloWorldCli>().into_ortho_merge()?;
     merged.validate()?;
-    if let Some(overrides) = load_config_overrides()? {
-        if let Some(flag) = overrides.is_excited {
-            merged.is_excited = flag;
-        }
+    if let Some(flag) = load_config_overrides()?.and_then(|overrides| overrides.is_excited) {
+        merged.is_excited = flag;
     }
     Ok(merged)
 }
@@ -427,14 +425,12 @@ struct GreetOverrides {
 }
 
 pub(crate) fn apply_greet_overrides(command: &mut GreetCommand) -> Result<(), HelloWorldError> {
-    if let Some(overrides) = load_config_overrides()? {
-        if let Some(greet) = overrides.cmds.greet {
-            if let Some(preamble) = greet.preamble {
-                command.preamble = Some(preamble);
-            }
-            if let Some(punctuation) = greet.punctuation {
-                command.punctuation = punctuation;
-            }
+    if let Some(greet) = load_config_overrides()?.and_then(|overrides| overrides.cmds.greet) {
+        if let Some(preamble) = greet.preamble {
+            command.preamble = Some(preamble);
+        }
+        if let Some(punctuation) = greet.punctuation {
+            command.punctuation = punctuation;
         }
     }
     Ok(())
