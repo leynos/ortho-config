@@ -384,20 +384,21 @@ impl World {
 }
 
 fn parse_extends(contents: &str) -> Option<String> {
-    contents.lines().find_map(|line| {
-        let trimmed = line.trim();
-        if !trimmed.starts_with("extends") {
-            return None;
+    let document: toml::Value = toml::from_str(contents).ok()?;
+    match document.get("extends") {
+        Some(toml::Value::String(path)) => {
+            let trimmed = path.trim();
+            (!trimmed.is_empty()).then(|| trimmed.to_string())
         }
-        let (_, raw) = trimmed.split_once('=')?;
-        let value = raw.split('#').next().unwrap_or("").trim();
-        let value = value.trim_matches(|ch| ch == '"' || ch == '\'');
-        if value.is_empty() {
-            None
-        } else {
-            Some(value.to_string())
-        }
-    })
+        Some(toml::Value::Array(values)) => values.iter().find_map(|value| match value {
+            toml::Value::String(path) => {
+                let trimmed = path.trim();
+                (!trimmed.is_empty()).then(|| trimmed.to_string())
+            }
+            _ => None,
+        }),
+        _ => None,
+    }
 }
 
 fn binary_path() -> Utf8PathBuf {

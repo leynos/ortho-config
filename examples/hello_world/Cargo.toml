@@ -23,6 +23,7 @@ camino = "1"
 tempfile = "3"
 cap-std = "3"
 gherkin = "0.14"
+toml = "0.8"
 
 [features]
 default = []
