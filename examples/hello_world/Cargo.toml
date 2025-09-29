@@ -28,7 +28,7 @@ toml = "0.8"
 default = []
 json5 = ["ortho_config/json5"]
 yaml = ["ortho_config/yaml"]
-toml = ["ortho_config/toml"]
+cfg-toml = ["ortho_config/toml"]
 
 [[test]]
 name = "cucumber"
