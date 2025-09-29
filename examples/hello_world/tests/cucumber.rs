@@ -455,6 +455,25 @@ async fn main() {
 mod tests {
     use rstest::rstest;
 
+    #[test]
+    fn parse_extends_single_string() {
+        let out = super::parse_extends(r#"extends = "base.toml""#);
+        assert_eq!(out, vec!["base.toml"]);
+    }
+
+    #[test]
+    fn parse_extends_array_mixed_types_filters_non_strings() {
+        let out =
+            super::parse_extends(r#"extends = ["a.toml", 42, " b . toml ", "", { k = "v" }]"#);
+        assert_eq!(out, vec!["a.toml", "b . toml"]);
+    }
+
+    #[test]
+    fn parse_extends_ignores_malformed_toml() {
+        let out = super::parse_extends(r#"extends = [ "a.toml", ""#);
+        assert!(out.is_empty());
+    }
+
     #[rstest]
     fn try_write_sample_config_reports_missing_sample() {
         let world = super::World::default();
@@ -467,5 +486,74 @@ mod tests {
             }
             other => panic!("expected open sample error, got {other:?}"),
         }
+    }
+
+    #[rstest]
+    fn copy_sample_config_writes_all_files() {
+        let world = super::World::default();
+        let tempdir = tempfile::tempdir().expect("create sample source");
+        let source =
+            cap_std::fs::Dir::open_ambient_dir(tempdir.path(), cap_std::ambient_authority())
+                .expect("open sample source dir");
+        source
+            .write("overrides.toml", r#"extends = ["baseline.toml"]"#)
+            .expect("write overrides sample");
+        source
+            .write("baseline.toml", "")
+            .expect("write baseline sample");
+
+        let mut visited = std::collections::BTreeSet::new();
+        let params = super::ConfigCopyParams {
+            source: &source,
+            source_name: "overrides.toml",
+            target_name: ".hello_world.toml",
+        };
+        world
+            .copy_sample_config(params, &mut visited)
+            .expect("copy sample config");
+
+        let scenario = world.scenario_dir();
+        let overrides = scenario
+            .read_to_string(".hello_world.toml")
+            .expect("read copied overrides");
+        assert!(overrides.contains("baseline.toml"));
+        let baseline = scenario
+            .read_to_string("baseline.toml")
+            .expect("read copied baseline");
+        assert!(baseline.is_empty());
+    }
+
+    #[rstest]
+    fn copy_sample_config_deduplicates_repeated_extends() {
+        let world = super::World::default();
+        let tempdir = tempfile::tempdir().expect("create sample source");
+        let source =
+            cap_std::fs::Dir::open_ambient_dir(tempdir.path(), cap_std::ambient_authority())
+                .expect("open sample source dir");
+        source
+            .write(
+                "overrides.toml",
+                r#"extends = ["baseline.toml", "baseline.toml"]"#,
+            )
+            .expect("write overrides sample");
+        source
+            .write("baseline.toml", "")
+            .expect("write baseline sample");
+
+        let mut visited = std::collections::BTreeSet::new();
+        let params = super::ConfigCopyParams {
+            source: &source,
+            source_name: "overrides.toml",
+            target_name: ".hello_world.toml",
+        };
+        world
+            .copy_sample_config(params, &mut visited)
+            .expect("copy sample config");
+
+        let visited: Vec<_> = visited.into_iter().collect();
+        assert_eq!(
+            visited,
+            vec!["baseline.toml".to_string(), "overrides.toml".to_string()]
+        );
     }
 }

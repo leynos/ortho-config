@@ -2,8 +2,8 @@
 //!
 //! Binds CLI, environment, and default layers via `OrthoConfig` so tests can
 //! drive the binary with predictable inputs.
+use camino::Utf8PathBuf;
 use std::ffi::OsString;
-use std::path::PathBuf;
 use std::sync::Arc;
 
 use clap::{ArgAction, Args, Parser, Subcommand, ValueEnum};
@@ -316,65 +316,68 @@ fn load_config_overrides() -> Result<Option<FileOverrides>, HelloWorldError> {
     }
 }
 
-fn push_unique_candidate(candidates: &mut Vec<PathBuf>, path: PathBuf) {
-    if path.as_os_str().is_empty() || candidates.contains(&path) {
+fn push_unique_candidate(candidates: &mut Vec<Utf8PathBuf>, path: Utf8PathBuf) {
+    if path.as_str().is_empty() || candidates.contains(&path) {
         return;
     }
     candidates.push(path);
 }
 
-fn collect_config_candidates() -> Vec<PathBuf> {
+fn collect_config_candidates() -> Vec<Utf8PathBuf> {
     let mut candidates = Vec::new();
 
     {
-        let mut push = |path: PathBuf| push_unique_candidate(&mut candidates, path);
+        let mut push = |path: Utf8PathBuf| push_unique_candidate(&mut candidates, path);
         add_explicit_config_path(&mut push);
         add_xdg_config_paths(&mut push);
         add_windows_config_paths(&mut push);
         add_home_config_paths(&mut push);
     }
-    push_unique_candidate(&mut candidates, PathBuf::from(".hello_world.toml"));
+    push_unique_candidate(&mut candidates, Utf8PathBuf::from(".hello_world.toml"));
 
     candidates
 }
 
 fn add_explicit_config_path<F>(push_candidate: &mut F)
 where
-    F: FnMut(PathBuf),
+    F: FnMut(Utf8PathBuf),
 {
-    if let Some(path) = std::env::var_os("HELLO_WORLD_CONFIG_PATH") {
-        push_candidate(PathBuf::from(path));
+    if let Ok(path) = std::env::var("HELLO_WORLD_CONFIG_PATH") {
+        push_candidate(Utf8PathBuf::from(path));
     }
 }
 
 fn add_xdg_config_paths<F>(push_candidate: &mut F)
 where
-    F: FnMut(PathBuf),
+    F: FnMut(Utf8PathBuf),
 {
     let config_basename = ".hello_world.toml";
 
-    if let Some(dir) = std::env::var_os("XDG_CONFIG_HOME") {
-        let dir = PathBuf::from(dir);
+    if let Ok(dir) = std::env::var("XDG_CONFIG_HOME") {
+        let dir = Utf8PathBuf::from(dir);
         push_candidate(dir.join("hello_world").join("config.toml"));
         push_candidate(dir.join(config_basename));
     }
 
-    if let Some(dirs) = std::env::var_os("XDG_CONFIG_DIRS") {
-        for dir in std::env::split_paths(&dirs) {
-            push_candidate(dir.join("hello_world").join("config.toml"));
-            push_candidate(dir.join(config_basename));
+    if let Ok(dirs) = std::env::var("XDG_CONFIG_DIRS") {
+        let os_dirs = OsString::from(&dirs);
+        for dir in std::env::split_paths(&os_dirs) {
+            if let Ok(dir) = Utf8PathBuf::from_path_buf(dir) {
+                push_candidate(dir.join("hello_world").join("config.toml"));
+                push_candidate(dir.join(config_basename));
+            }
         }
     }
 }
 
 fn add_windows_config_paths<F>(push_candidate: &mut F)
 where
-    F: FnMut(PathBuf),
+    F: FnMut(Utf8PathBuf),
 {
     let config_basename = ".hello_world.toml";
 
-    if let Some(appdata) = std::env::var_os("APPDATA") {
-        let dir = PathBuf::from(appdata);
+    if let Ok(appdata) = std::env::var("APPDATA") {
+        let dir = Utf8PathBuf::from(appdata);
         push_candidate(dir.join("hello_world").join("config.toml"));
         push_candidate(dir.join(config_basename));
     }
@@ -382,12 +385,13 @@ where
 
 fn add_home_config_paths<F>(push_candidate: &mut F)
 where
-    F: FnMut(PathBuf),
+    F: FnMut(Utf8PathBuf),
 {
     let config_basename = ".hello_world.toml";
 
-    if let Some(home) = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")) {
-        let home_path = PathBuf::from(home);
+    let home = std::env::var("HOME").or_else(|_| std::env::var("USERPROFILE"));
+    if let Ok(home) = home {
+        let home_path = Utf8PathBuf::from(home);
         push_candidate(
             home_path
                 .join(".config")
@@ -399,10 +403,10 @@ where
 }
 
 fn load_first_available_config(
-    candidates: Vec<PathBuf>,
+    candidates: Vec<Utf8PathBuf>,
 ) -> Result<Option<ortho_config::figment::Figment>, HelloWorldError> {
     for path in candidates {
-        match ortho_config::load_config_file(&path) {
+        match ortho_config::load_config_file(path.as_std_path()) {
             Ok(Some(figment)) => return Ok(Some(figment)),
             Ok(None) => {}
             Err(err) => return Err(HelloWorldError::Configuration(err)),
