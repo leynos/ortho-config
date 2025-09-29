@@ -761,16 +761,30 @@ mod tests {
         });
     }
 
+    // Propagate figment errors without erasing diagnostics.
+    #[allow(clippy::result_large_err)]
+    fn setup_sample_jail(
+        jail: &mut ortho_config::figment::Jail,
+    ) -> Result<(), ortho_config::figment::Error> {
+        jail.clear_env();
+        jail.create_file("baseline.toml", include_str!("../config/baseline.toml"))?;
+        jail.create_file(
+            ".hello_world.toml",
+            include_str!("../config/overrides.toml"),
+        )?;
+        Ok(())
+    }
+
+    fn assert_sample_greet_defaults(greet: &GreetCommand) {
+        assert_eq!(greet.preamble.as_deref(), Some("Layered hello"));
+        assert_eq!(greet.punctuation, "!!!");
+    }
+
     /// Loads the sample configuration shipped with the demo scripts.
     #[rstest]
     fn load_sample_configuration() {
         ortho_config::figment::Jail::expect_with(|jail| {
-            jail.clear_env();
-            jail.create_file("baseline.toml", include_str!("../config/baseline.toml"))?;
-            jail.create_file(
-                ".hello_world.toml",
-                include_str!("../config/overrides.toml"),
-            )?;
+            setup_sample_jail(jail)?;
             let config = load_global_config(&GlobalArgs::default()).expect("load config");
             assert_eq!(config.recipient, "Excited crew");
             assert_eq!(
@@ -779,8 +793,7 @@ mod tests {
             );
             assert!(config.is_excited);
             let greet_defaults = load_greet_defaults().expect("merge greet defaults");
-            assert_eq!(greet_defaults.preamble.as_deref(), Some("Layered hello"));
-            assert_eq!(greet_defaults.punctuation, "!!!");
+            assert_sample_greet_defaults(&greet_defaults);
             Ok(())
         });
     }
