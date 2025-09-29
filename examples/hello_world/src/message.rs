@@ -175,6 +175,7 @@ mod tests {
     use super::*;
     use crate::cli::{FarewellChannel, GlobalArgs};
     use crate::error::ValidationError;
+    use camino::Utf8PathBuf;
     use rstest::{fixture, rstest};
 
     // Helper function for setting up test environment with sample configs
@@ -186,11 +187,20 @@ mod tests {
         let mut result = None;
         ortho_config::figment::Jail::expect_with(|jail| {
             jail.clear_env();
-            jail.create_file("baseline.toml", include_str!("../config/baseline.toml"))?;
-            jail.create_file(
-                ".hello_world.toml",
-                include_str!("../config/overrides.toml"),
-            )?;
+            let manifest_dir = Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+            let config_dir = cap_std::fs::Dir::open_ambient_dir(
+                manifest_dir.join("config").as_std_path(),
+                cap_std::ambient_authority(),
+            )
+            .expect("open hello_world sample config directory");
+            let baseline = config_dir
+                .read_to_string("baseline.toml")
+                .expect("read baseline sample configuration");
+            let overrides = config_dir
+                .read_to_string("overrides.toml")
+                .expect("read overrides sample configuration");
+            jail.create_file("baseline.toml", &baseline)?;
+            jail.create_file(".hello_world.toml", &overrides)?;
             let config =
                 crate::cli::load_global_config(&GlobalArgs::default()).expect("load global config");
             result = Some(action(&config));

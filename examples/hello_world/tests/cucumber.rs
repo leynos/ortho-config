@@ -78,6 +78,12 @@ pub enum SampleConfigError {
         #[source]
         source: std::io::Error,
     },
+    #[error("failed to open hello world sample config {name}")]
+    OpenSample {
+        name: String,
+        #[source]
+        source: std::io::Error,
+    },
     #[error("failed to read hello world sample config {name}")]
     ReadSample {
         name: String,
@@ -167,9 +173,18 @@ impl World {
         let contents = params
             .source
             .read_to_string(params.source_name)
-            .map_err(|source| SampleConfigError::ReadSample {
-                name: params.source_name.to_string(),
-                source,
+            .map_err(|source| {
+                if source.kind() == std::io::ErrorKind::NotFound {
+                    SampleConfigError::OpenSample {
+                        name: params.source_name.to_string(),
+                        source,
+                    }
+                } else {
+                    SampleConfigError::ReadSample {
+                        name: params.source_name.to_string(),
+                        source,
+                    }
+                }
             })?;
         let scenario = self.scenario_dir();
         scenario
@@ -178,11 +193,12 @@ impl World {
                 name: params.target_name.to_string(),
                 source,
             })?;
-        if let Some(base) = parse_extends(&contents) {
+        for base in parse_extends(&contents) {
+            let base_name = base.as_str();
             let base_params = ConfigCopyParams {
                 source: params.source,
-                source_name: base.as_str(),
-                target_name: base.as_str(),
+                source_name: base_name,
+                target_name: base_name,
             };
             self.copy_sample_config(base_params, visited)?;
         }
@@ -383,22 +399,32 @@ impl World {
     }
 }
 
-fn parse_extends(contents: &str) -> Option<String> {
-    let document: toml::Value = toml::from_str(contents).ok()?;
+fn parse_extends(contents: &str) -> Vec<String> {
+    let document: toml::Value = match toml::from_str(contents) {
+        Ok(value) => value,
+        Err(_) => return Vec::new(),
+    };
+    let mut bases = Vec::new();
     match document.get("extends") {
         Some(toml::Value::String(path)) => {
             let trimmed = path.trim();
-            (!trimmed.is_empty()).then(|| trimmed.to_string())
-        }
-        Some(toml::Value::Array(values)) => values.iter().find_map(|value| match value {
-            toml::Value::String(path) => {
-                let trimmed = path.trim();
-                (!trimmed.is_empty()).then(|| trimmed.to_string())
+            if !trimmed.is_empty() {
+                bases.push(trimmed.to_string());
             }
-            _ => None,
-        }),
-        _ => None,
+        }
+        Some(toml::Value::Array(values)) => {
+            for value in values {
+                if let toml::Value::String(path) = value {
+                    let trimmed = path.trim();
+                    if !trimmed.is_empty() {
+                        bases.push(trimmed.to_string());
+                    }
+                }
+            }
+        }
+        _ => {}
     }
+    bases
 }
 
 fn binary_path() -> Utf8PathBuf {
@@ -424,10 +450,10 @@ mod tests {
             .try_write_sample_config("nonexistent.toml")
             .expect_err("missing sample config should error");
         match error {
-            super::SampleConfigError::ReadSample { name, .. } => {
+            super::SampleConfigError::OpenSample { name, .. } => {
                 assert_eq!(name, "nonexistent.toml");
             }
-            other => panic!("expected read sample error, got {other:?}"),
+            other => panic!("expected open sample error, got {other:?}"),
         }
     }
 }

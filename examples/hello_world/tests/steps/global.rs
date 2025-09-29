@@ -101,7 +101,11 @@ pub fn start_from_sample_config(world: &mut World, sample: String) {
 pub fn start_from_invalid_sample_config(world: &mut World, sample: String) {
     match world.try_write_sample_config(&sample) {
         Ok(()) => panic!("expected sample config {sample:?} to be missing or invalid"),
-        Err(SampleConfigError::ReadSample { .. } | SampleConfigError::WriteSample { .. }) => {}
+        Err(
+            SampleConfigError::OpenSample { .. }
+            | SampleConfigError::ReadSample { .. }
+            | SampleConfigError::WriteSample { .. },
+        ) => {}
         Err(err) => panic!("unexpected sample config error: {err}"),
     }
 }

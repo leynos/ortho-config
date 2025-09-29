@@ -261,6 +261,12 @@ pub fn load_global_config(globals: &GlobalArgs) -> Result<HelloWorldCli, HelloWo
         is_quiet: Option<bool>,
     }
 
+    #[derive(Serialize)]
+    struct FileLayer {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        is_excited: Option<bool>,
+    }
+
     let binary = std::env::args_os()
         .next()
         .unwrap_or_else(|| OsString::from("hello-world"));
@@ -282,15 +288,20 @@ pub fn load_global_config(globals: &GlobalArgs) -> Result<HelloWorldCli, HelloWo
         is_excited: globals.is_excited.then_some(true),
         is_quiet: globals.is_quiet.then_some(true),
     };
-    let figment = ortho_config::figment::Figment::from(
+    let file_overrides = load_config_overrides()?;
+    let mut figment = ortho_config::figment::Figment::from(
         ortho_config::figment::providers::Serialized::defaults(&base),
-    )
-    .merge(ortho_config::sanitized_provider(&overrides)?);
-    let mut merged = figment.extract::<HelloWorldCli>().into_ortho_merge()?;
-    merged.validate()?;
-    if let Some(flag) = load_config_overrides()?.and_then(|overrides| overrides.is_excited) {
-        merged.is_excited = flag;
+    );
+    if let Some(ref file) = file_overrides {
+        figment = figment.merge(ortho_config::figment::providers::Serialized::defaults(
+            &FileLayer {
+                is_excited: file.is_excited,
+            },
+        ));
     }
+    figment = figment.merge(ortho_config::sanitized_provider(&overrides)?);
+    let merged = figment.extract::<HelloWorldCli>().into_ortho_merge()?;
+    merged.validate()?;
     Ok(merged)
 }
 
@@ -305,21 +316,24 @@ fn load_config_overrides() -> Result<Option<FileOverrides>, HelloWorldError> {
     }
 }
 
+fn push_unique_candidate(candidates: &mut Vec<PathBuf>, path: PathBuf) {
+    if path.as_os_str().is_empty() || candidates.contains(&path) {
+        return;
+    }
+    candidates.push(path);
+}
+
 fn collect_config_candidates() -> Vec<PathBuf> {
     let mut candidates = Vec::new();
 
-    let mut push_candidate = |path: PathBuf| {
-        if path.as_os_str().is_empty() || candidates.contains(&path) {
-            return;
-        }
-        candidates.push(path);
-    };
-
-    add_explicit_config_path(&mut push_candidate);
-    add_xdg_config_paths(&mut push_candidate);
-    add_windows_config_paths(&mut push_candidate);
-    add_home_config_paths(&mut push_candidate);
-    push_candidate(PathBuf::from(".hello_world.toml"));
+    {
+        let mut push = |path: PathBuf| push_unique_candidate(&mut candidates, path);
+        add_explicit_config_path(&mut push);
+        add_xdg_config_paths(&mut push);
+        add_windows_config_paths(&mut push);
+        add_home_config_paths(&mut push);
+    }
+    push_unique_candidate(&mut candidates, PathBuf::from(".hello_world.toml"));
 
     candidates
 }
@@ -561,6 +575,7 @@ fn default_salutations() -> Vec<String> {
 mod tests {
     use super::*;
     use crate::error::ValidationError;
+    use camino::Utf8PathBuf;
     use rstest::{fixture, rstest};
 
     /// Provides a default CLI configuration for tests.
@@ -758,16 +773,28 @@ mod tests {
     }
 
     // Propagate figment errors without erasing diagnostics.
-    #[allow(clippy::result_large_err)]
+    #[expect(
+        clippy::result_large_err,
+        reason = "figment::Error originates in an external crate"
+    )]
     fn setup_sample_jail(
         jail: &mut ortho_config::figment::Jail,
     ) -> Result<(), ortho_config::figment::Error> {
         jail.clear_env();
-        jail.create_file("baseline.toml", include_str!("../config/baseline.toml"))?;
-        jail.create_file(
-            ".hello_world.toml",
-            include_str!("../config/overrides.toml"),
-        )?;
+        let manifest_dir = Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let config_dir = cap_std::fs::Dir::open_ambient_dir(
+            manifest_dir.join("config").as_std_path(),
+            cap_std::ambient_authority(),
+        )
+        .expect("open hello_world sample config directory");
+        let baseline = config_dir
+            .read_to_string("baseline.toml")
+            .expect("read baseline sample configuration");
+        let overrides = config_dir
+            .read_to_string("overrides.toml")
+            .expect("read overrides sample configuration");
+        jail.create_file("baseline.toml", &baseline)?;
+        jail.create_file(".hello_world.toml", &overrides)?;
         Ok(())
     }
 
