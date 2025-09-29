@@ -404,27 +404,39 @@ fn parse_extends(contents: &str) -> Vec<String> {
         Ok(value) => value,
         Err(_) => return Vec::new(),
     };
-    let mut bases = Vec::new();
+
     match document.get("extends") {
-        Some(toml::Value::String(path)) => {
-            let trimmed = path.trim();
-            if !trimmed.is_empty() {
-                bases.push(trimmed.to_string());
-            }
-        }
-        Some(toml::Value::Array(values)) => {
-            for value in values {
-                if let toml::Value::String(path) = value {
-                    let trimmed = path.trim();
-                    if !trimmed.is_empty() {
-                        bases.push(trimmed.to_string());
-                    }
-                }
-            }
-        }
-        _ => {}
+        Some(toml::Value::String(path)) => extract_single_path(path),
+        Some(toml::Value::Array(values)) => extract_multiple_paths(values),
+        _ => Vec::new(),
     }
-    bases
+}
+
+fn extract_single_path(path: &str) -> Vec<String> {
+    let trimmed = path.trim();
+    if trimmed.is_empty() {
+        Vec::new()
+    } else {
+        vec![trimmed.to_string()]
+    }
+}
+
+fn extract_multiple_paths(values: &[toml::Value]) -> Vec<String> {
+    values.iter().filter_map(extract_string_value).collect()
+}
+
+fn extract_string_value(value: &toml::Value) -> Option<String> {
+    match value {
+        toml::Value::String(path) => {
+            let trimmed = path.trim();
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed.to_string())
+            }
+        }
+        _ => None,
+    }
 }
 
 fn binary_path() -> Utf8PathBuf {
