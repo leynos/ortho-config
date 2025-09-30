@@ -106,6 +106,12 @@ references the relevant design guidance.
   - [x] Cover the example with `rstest` unit tests and a `cucumber` suite that
         exercises the compiled binary end-to-end.
 
+  - [x] Provide demo scripts and sample configuration files that demonstrate
+        configuration precedence on POSIX and Windows.
+  - [x] Layer `.hello_world.toml` discovery across XDG, platform-specific, and
+        working-directory locations so the sample overrides excite the greeting
+        and update `cmds.greet` defaults used by both subcommands.
+
 - [x] **Support custom option names for the configuration path**
 
   - [x] Allow renaming of the auto‑generated `--config-path` flag and its

@@ -124,9 +124,29 @@ values to exercise edge-cases like conflicting modes, blank input, and
 punctuation overrides. End-to-end workflows are expressed with `cucumber-rs`
 scenarios that invoke the compiled binary. The Cucumber world initializes a
 temporary working directory (`tempfile::TempDir`) per scenario, writes
-`.hello-world.toml` snapshots via `cap_std::fs_utf8`, and layers environment
+`.hello_world.toml` snapshots via `cap_std::fs_utf8`, and layers environment
 overrides before spawning the command. This isolates precedence checks (file →
 environment → CLI) while keeping the operating system environment pristine.
+
+The example now ships repository-managed samples in `config/baseline.toml` and
+`config/overrides.toml`. The baseline file captures the values exercised by the
+demo scripts and behavioural scenarios, while `overrides.toml` extends it to
+highlight inheritance by tweaking the recipient and salutation. Both the POSIX
+shell and Windows scripts copy these files into a temporary working directory
+before invoking `cargo run` so that configuration layering can be demonstrated
+without mutating the caller's checkout.
+
+`load_global_config` and the new `load_greet_defaults` helper both consult
+`.hello_world.toml` overrides. Discovery honours `HELLO_WORLD_CONFIG_PATH`
+first, then standard user configuration directories (`$XDG_CONFIG_HOME`, each
+entry in `$XDG_CONFIG_DIRS`, and `%APPDATA%` on Windows), the user's home
+directory (`$HOME/.config/hello_world/config.toml` and
+`$HOME/.hello_world.toml`), and finally the working directory. Tests cover the
+absence path, explicit environment overrides, and the precedence of XDG
+directories over local files. Additional unit tests ensure
+`apply_greet_overrides` updates subcommand defaults and that greeting plans
+produced from the sample configuration shout with the layered punctuation and
+preamble documented in the behavioural scenarios.
 
 ### Aggregated errors
 

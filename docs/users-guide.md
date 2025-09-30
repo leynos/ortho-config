@@ -50,9 +50,19 @@ fixtures to exercise parsing, validation, and command planning across
 parameterised edge-cases (conflicting delivery modes, blank salutations, and
 custom punctuation). Behavioural coverage comes from the `cucumber-rs` runner
 in `tests/cucumber.rs`, which spawns the compiled binary inside a temporary
-working directory, layers `.hello-world.toml` defaults via `cap-std`, and sets
+working directory, layers `.hello_world.toml` defaults via `cap-std`, and sets
 `HELLO_WORLD_*` environment variables per scenario to demonstrate precedence:
 configuration files < environment variables < CLI arguments.
+
+The runtime discovers `.hello_world.toml` in several locations so local
+overrides apply without additional flags. `HELLO_WORLD_CONFIG_PATH` wins when
+set; otherwise the loader searches `$XDG_CONFIG_HOME/hello_world/config.toml`,
+every directory listed in `$XDG_CONFIG_DIRS`, `%APPDATA%` on Windows,
+`$HOME/.config/hello_world/config.toml`, `$HOME/.hello_world.toml`, and finally
+the working directory. The repository ships `config/overrides.toml`, which
+extends `config/baseline.toml` to set `is_excited = true`, provide a
+`Layered hello` preamble, and swap the greet punctuation for `!!!`. Behavioural
+tests and demo scripts assert the uppercase output to guard this layering.
 
 ## Installation and dependencies
 
@@ -528,6 +538,15 @@ Behavioural tests in `examples/hello_world/tests` exercise scenarios such as
 `--channel email`, and `--wave`. These end-to-end checks verify that CLI
 arguments override configuration files and that validation errors surface
 cleanly when callers provide blank strings or conflicting switches.
+
+Sample configuration files live in `examples/hello_world/config`. The
+`baseline.toml` defaults underpin both the automated tests and the demo
+scripts, while `overrides.toml` extends the baseline to demonstrate inheritance
+by adjusting the recipient and salutation. The paired `scripts/demo.sh` and
+`scripts/demo.cmd` helpers copy these files into a temporary directory before
+running `cargo run -p hello_world`, illustrating how file defaults, environment
+variables, and CLI arguments override one another without mutating the working
+tree.
 
 ### Dispatching with `clap‑dispatch`
 

@@ -55,3 +55,16 @@ Feature: Global parameters govern greetings
     When I run the hello world example with arguments "-r Cli greet"
     Then the command succeeds
     And stdout contains "EnvOne EnvTwo, Cli!"
+
+  Scenario: Sample configuration files drive the demo scripts
+    Given I start from the sample hello world config "overrides.toml"
+    When I run the hello world example with arguments "greet"
+    Then the command succeeds
+    And stdout contains "Layered hello"
+    And stdout contains "HEY CONFIG FRIENDS, EXCITED CREW!!!"
+
+  Scenario: Missing sample configuration falls back to defaults
+    Given I start from a missing or invalid sample config "nonexistent.toml"
+    When I run the hello world example with arguments "greet"
+    Then the command succeeds
+    And stdout contains "Hello, World!"

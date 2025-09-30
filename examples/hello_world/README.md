@@ -44,6 +44,29 @@ production-ready complexity.
 - Document how to run the example from a fresh checkout through the scripts and
   behavioural tests.
 
+## Configuration samples and scripts
+
+The `config/` directory contains `baseline.toml` and `overrides.toml`. The
+baseline file defines the defaults exercised by the behavioural tests and the
+demo scripts. `overrides.toml` extends the baseline to demonstrate
+configuration inheritance by changing the recipient and salutation while
+preserving the original repository state.
+
+When present, `.hello_world.toml` overrides both global excitement and nested
+`cmds.greet` fields. Discovery prefers `HELLO_WORLD_CONFIG_PATH`, then standard
+user configuration folders (`$XDG_CONFIG_HOME`, entries in `$XDG_CONFIG_DIRS`,
+and `%APPDATA%`), and finally falls back to `$HOME/.hello_world.toml` and the
+working directory. The shipped overrides enable a `Layered hello` preamble and
+triple exclamation marks, so the behavioural suite and demo scripts assert the
+shouted output (`HEY CONFIG FRIENDS, EXCITED CREW!!!`) to guard the layering.
+
+Once the workspace is built, `scripts/demo.sh` (or `scripts/demo.cmd` on
+Windows) can be executed. Each script creates an isolated temporary directory,
+copies the sample configuration files, and then invokes
+`cargo run -p hello_world` multiple times to show the precedence order: file
+defaults, environment overrides, and CLI flags. The scripts leave the
+repository tree untouched so they are safe to rerun.
+
 ## Getting started
 
 - Prerequisites: Rust toolchain (via rustup), Cargo, make, and
@@ -65,7 +88,7 @@ production-ready complexity.
 - [x] Add `rstest` unit tests covering parsing, validation, and command logic.
 - [x] Add `cucumber-rs` behavioural tests covering end-to-end workflows and
       configuration precedence.
-- [ ] Create shell and Windows `.cmd` scripts showcasing configuration file
+- [x] Create shell and Windows `.cmd` scripts showcasing configuration file
       usage and overrides.
-- [ ] Provide sample configuration files aligned with the scripts and tests.
-- [ ] Update documentation to reference the example and describe how to run it.
+- [x] Provide sample configuration files aligned with the scripts and tests.
+- [x] Update documentation to reference the example and describe how to run it.

@@ -1,7 +1,6 @@
 //! Greeting planning and rendering for the `hello_world` example.
 use crate::cli::{DeliveryMode, GreetCommand, HelloWorldCli, TakeLeaveCommand};
 use crate::error::HelloWorldError;
-use ortho_config::SubcmdConfigMerge;
 
 /// Computed greeting ready for display.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -102,7 +101,7 @@ pub fn build_take_leave_plan(
 }
 
 fn build_greeting_defaults(command: &TakeLeaveCommand) -> Result<GreetCommand, HelloWorldError> {
-    let mut greeting_defaults = GreetCommand::default().load_and_merge()?;
+    let mut greeting_defaults = crate::cli::load_greet_defaults()?;
     if let Some(preamble) = &command.greeting_preamble {
         greeting_defaults.preamble = Some(preamble.clone());
     }
@@ -174,10 +173,51 @@ fn join_fragments(parts: &[String]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::cli::FarewellChannel;
+    use crate::cli::{FarewellChannel, GlobalArgs};
     use crate::error::ValidationError;
-    use ortho_config::SubcmdConfigMerge;
+    use camino::Utf8PathBuf;
     use rstest::{fixture, rstest};
+
+    // Helper function for setting up test environment with sample configs
+    fn setup_sample_config_environment() -> HelloWorldCli {
+        with_sample_config_environment(HelloWorldCli::clone)
+    }
+
+    fn with_sample_config_environment<R>(action: impl FnOnce(&HelloWorldCli) -> R) -> R {
+        let mut result = None;
+        ortho_config::figment::Jail::expect_with(|jail| {
+            jail.clear_env();
+            let manifest_dir = Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+            let config_dir = cap_std::fs::Dir::open_ambient_dir(
+                manifest_dir.join("config").as_std_path(),
+                cap_std::ambient_authority(),
+            )
+            .expect("open hello_world sample config directory");
+            let baseline = config_dir
+                .read_to_string("baseline.toml")
+                .expect("read baseline sample configuration");
+            let overrides = config_dir
+                .read_to_string("overrides.toml")
+                .expect("read overrides sample configuration");
+            jail.create_file("baseline.toml", &baseline)?;
+            jail.create_file(".hello_world.toml", &overrides)?;
+            let config =
+                crate::cli::load_global_config(&GlobalArgs::default()).expect("load global config");
+            result = Some(action(&config));
+            Ok(())
+        });
+        result.expect("sample config action")
+    }
+
+    // Generic helper for testing plan building with sample configs
+    fn test_sample_config_plan<P, F>(plan_builder: F, plan_validator: impl FnOnce(&P))
+    where
+        F: FnOnce(&HelloWorldCli) -> Result<P, HelloWorldError>,
+    {
+        setup_sample_config_environment();
+        let plan = with_sample_config_environment(|config| plan_builder(config).expect("plan"));
+        plan_validator(&plan);
+    }
 
     #[fixture]
     fn base_config() -> HelloWorldCli {
@@ -234,20 +274,25 @@ mod tests {
     }
 
     #[rstest]
-    fn build_take_leave_plan_produces_steps(
-        base_config: HelloWorldCli,
-        mut take_leave_command: TakeLeaveCommand,
-    ) {
-        take_leave_command.wave = true;
-        take_leave_command.gift = Some(String::from("biscuits"));
-        take_leave_command.channel = Some(FarewellChannel::Email);
-        take_leave_command.remind_in = Some(10);
-        let plan = build_take_leave_plan(&base_config, &take_leave_command).expect("plan");
-        assert_eq!(plan.greeting().message(), "Hello, World!");
-        assert!(plan.farewell().contains("waves enthusiastically"));
-        assert!(plan.farewell().contains("leaves biscuits"));
-        assert!(plan.farewell().contains("follows up with an email"));
-        assert!(plan.farewell().contains("10 minutes"));
+    fn build_take_leave_plan_produces_steps() {
+        ortho_config::figment::Jail::expect_with(|jail| {
+            jail.clear_env();
+            let take_leave_command = TakeLeaveCommand {
+                wave: true,
+                gift: Some(String::from("biscuits")),
+                channel: Some(FarewellChannel::Email),
+                remind_in: Some(10),
+                ..TakeLeaveCommand::default()
+            };
+            let plan = build_take_leave_plan(&HelloWorldCli::default(), &take_leave_command)
+                .expect("plan");
+            assert_eq!(plan.greeting().message(), "Hello, World!");
+            assert!(plan.farewell().contains("waves enthusiastically"));
+            assert!(plan.farewell().contains("leaves biscuits"));
+            assert!(plan.farewell().contains("follows up with an email"));
+            assert!(plan.farewell().contains("10 minutes"));
+            Ok(())
+        });
     }
 
     #[rstest]
@@ -263,25 +308,33 @@ mod tests {
     }
 
     #[rstest]
-    fn build_take_leave_plan_uses_greet_defaults(
-        base_config: HelloWorldCli,
-        take_leave_command: TakeLeaveCommand,
-    ) {
-        ortho_config::figment::Jail::expect_with(|jail| {
-            jail.clear_env();
-            jail.set_env("HELLO_WORLD_CMDS_GREET_PUNCTUATION", "?");
-            jail.create_file(
-                ".hello-world.toml",
-                r#"[cmds.greet]
-punctuation = "?"
-"#,
-            )?;
-            let defaults = GreetCommand::default().load_and_merge().expect("defaults");
-            let expected = build_plan(&base_config, &defaults).expect("expected greeting");
-            let plan = build_take_leave_plan(&base_config, &take_leave_command).expect("plan");
-            assert_eq!(plan.greeting(), &expected);
-            Ok(())
-        });
+    fn build_take_leave_plan_uses_greet_defaults() {
+        test_sample_config_plan(
+            |config| build_take_leave_plan(config, &TakeLeaveCommand::default()),
+            |plan| {
+                assert_eq!(plan.greeting().preamble(), Some("Layered hello"));
+                assert_eq!(
+                    plan.greeting().message(),
+                    "HELLO HEY CONFIG FRIENDS, EXCITED CREW!!!"
+                );
+                assert_eq!(plan.greeting().mode(), DeliveryMode::Enthusiastic);
+            },
+        );
+    }
+
+    #[rstest]
+    fn build_plan_uses_sample_overrides() {
+        test_sample_config_plan(
+            |config| {
+                let greet = crate::cli::load_greet_defaults().expect("load greet defaults");
+                build_plan(config, &greet)
+            },
+            |plan| {
+                assert_eq!(plan.preamble(), Some("Layered hello"));
+                assert_eq!(plan.message(), "HELLO HEY CONFIG FRIENDS, EXCITED CREW!!!");
+                assert_eq!(plan.mode(), DeliveryMode::Enthusiastic);
+            },
+        );
     }
 
     #[rstest]
