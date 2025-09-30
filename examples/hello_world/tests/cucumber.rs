@@ -505,30 +505,23 @@ mod tests {
     }
 
     #[rstest]
-    fn try_write_sample_config_reports_missing_sample() {
+    #[case("nonexistent.toml", "missing")]
+    #[case("../invalid.toml", "invalid")]
+    fn try_write_sample_config_reports_expected_errors(
+        #[case] sample: &str,
+        #[case] expected: &str,
+    ) {
         let world = super::World::default();
         let error = world
-            .try_write_sample_config("nonexistent.toml")
-            .expect_err("missing sample config should error");
-        match error {
-            super::SampleConfigError::OpenSample { name, .. } => {
-                assert_eq!(name, "nonexistent.toml");
-            }
-            other => panic!("expected open sample error, got {other:?}"),
-        }
-    }
+            .try_write_sample_config(sample)
+            .expect_err("sample config copy should fail");
 
-    #[rstest]
-    fn try_write_sample_config_rejects_invalid_name() {
-        let world = super::World::default();
-        let error = world
-            .try_write_sample_config("../invalid.toml")
-            .expect_err("invalid sample name should error");
-        match error {
-            super::SampleConfigError::InvalidName { name } => {
-                assert_eq!(name, "../invalid.toml");
+        match (expected, error) {
+            ("missing", super::SampleConfigError::OpenSample { name, .. })
+            | ("invalid", super::SampleConfigError::InvalidName { name }) => {
+                assert_eq!(name, sample);
             }
-            other => panic!("expected invalid name error, got {other:?}"),
+            (_, other) => panic!("unexpected sample config error: {other:?}"),
         }
     }
 
