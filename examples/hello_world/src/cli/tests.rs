@@ -345,7 +345,7 @@ punctuation = "!!!"
 }
 
 #[cfg(unix)]
-/// Falls back to system XDG directories when XDG_CONFIG_DIRS is unset.
+/// Falls back to system XDG directories when `XDG_CONFIG_DIRS` is unset.
 #[rstest]
 fn load_config_overrides_uses_xdg_fallback() {
     ortho_config::figment::Jail::expect_with(|jail| {
