@@ -1,4 +1,5 @@
 use super::*;
+use crate::cli::discovery::collect_config_candidates;
 use crate::error::ValidationError;
 use camino::Utf8PathBuf;
 use rstest::{fixture, rstest};
@@ -308,7 +309,6 @@ punctuation = "?"
         Ok(())
     });
 }
-
 /// Prefers XDG configuration directories before local files.
 #[rstest]
 fn load_config_overrides_prefers_xdg_directories() {
@@ -340,6 +340,43 @@ punctuation = "!!!"
                 punctuation: Some(String::from("???")),
             })
         );
+        Ok(())
+    });
+}
+
+#[cfg(unix)]
+/// Falls back to system XDG directories when XDG_CONFIG_DIRS is unset.
+#[rstest]
+fn load_config_overrides_uses_xdg_fallback() {
+    ortho_config::figment::Jail::expect_with(|jail| {
+        jail.clear_env();
+        let candidates = collect_config_candidates();
+        assert!(
+            candidates.contains(&Utf8PathBuf::from("/etc/xdg/hello_world/config.toml")),
+            "expected fallback hello world config in candidate list",
+        );
+        assert!(
+            candidates.contains(&Utf8PathBuf::from("/etc/xdg/.hello_world.toml")),
+            "expected fallback dotfile config in candidate list",
+        );
+        Ok(())
+    });
+}
+
+/// Reads overrides from LOCALAPPDATA when APPDATA is unavailable.
+#[rstest]
+fn load_config_overrides_reads_localappdata() {
+    ortho_config::figment::Jail::expect_with(|jail| {
+        jail.clear_env();
+        jail.create_dir("localdata")?;
+        jail.create_dir("localdata/hello_world")?;
+        jail.create_file("localdata/hello_world/config.toml", "is_excited = true")?;
+        jail.create_file(".hello_world.toml", "is_excited = false")?;
+        jail.set_env("LOCALAPPDATA", "localdata");
+        let overrides = load_config_overrides()
+            .expect("load overrides")
+            .expect("expected overrides");
+        assert_eq!(overrides.is_excited, Some(true));
         Ok(())
     });
 }
