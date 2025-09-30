@@ -47,23 +47,20 @@ where
         push_candidate(dir.join(config_basename));
     }
 
-    match std::env::var("XDG_CONFIG_DIRS") {
-        Ok(dirs) => {
-            let os_dirs = OsString::from(&dirs);
-            for dir in std::env::split_paths(&os_dirs) {
-                if let Ok(dir) = Utf8PathBuf::from_path_buf(dir) {
-                    push_candidate(dir.join("hello_world").join("config.toml"));
-                    push_candidate(dir.join(config_basename));
-                }
-            }
-        }
-        Err(_) => {
-            #[cfg(unix)]
-            {
-                let dir = Utf8PathBuf::from("/etc/xdg");
+    if let Ok(dirs) = std::env::var("XDG_CONFIG_DIRS") {
+        let os_dirs = OsString::from(&dirs);
+        for dir in std::env::split_paths(&os_dirs) {
+            if let Ok(dir) = Utf8PathBuf::from_path_buf(dir) {
                 push_candidate(dir.join("hello_world").join("config.toml"));
                 push_candidate(dir.join(config_basename));
             }
+        }
+    } else {
+        #[cfg(unix)]
+        {
+            let dir = Utf8PathBuf::from("/etc/xdg");
+            push_candidate(dir.join("hello_world").join("config.toml"));
+            push_candidate(dir.join(config_basename));
         }
     }
 }

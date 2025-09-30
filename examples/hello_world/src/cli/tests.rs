@@ -1,4 +1,5 @@
 use super::*;
+#[cfg(unix)]
 use crate::cli::discovery::collect_config_candidates;
 use crate::error::ValidationError;
 use camino::Utf8PathBuf;
