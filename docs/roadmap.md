@@ -138,7 +138,7 @@ references the relevant design guidance.
   - [x] Document the precedence rules and the relationship to defaults (e.g.
     `[".git/", "build/", "target/"]`).
 
-- [ ] **Reduce error payload size** (target: v0.4.0)
+- [x] **Reduce error payload size** (target: v0.4.0)
 
   - [x] Wrap expansive error variants in `Arc` to shrink `Result` sizes and
     eliminate the need for `#[expect(clippy::result_large_err)]`.
@@ -148,6 +148,51 @@ references the relevant design guidance.
         alias `OrthoResult<T>`).
       - All `#[expect(clippy::result_large_err)]` are removed or scoped to
         private internals with a rationale.
+
+- [ ] **Abstract configuration discovery**
+
+  - [ ] Provide a cross-platform discovery helper that surfaces the same
+    search order currently hand-coded in `hello_world`, consolidating explicit
+    paths, XDG directories, Windows locations and project roots into a single
+    call.
+    [[Feedback](feedback-from-hello-world-example.md)]
+
+  - [ ] Integrate the helper with the derive macro so applications can opt in
+    via attributes to customise config file names and generated CLI flags
+    without duplicating boilerplate.
+    [[Feedback](feedback-from-hello-world-example.md)]
+
+- [ ] **Introduce declarative configuration merging**
+
+  - [ ] Design a library-level merging trait or API that composes layered
+    configuration structs without the ad hoc Figment plumbing required in the
+    example crate.
+    [[Feedback](feedback-from-hello-world-example.md)]
+
+  - [ ] Ensure merge failures map to `OrthoError` consistently so downstream
+    binaries no longer need bespoke error conversion when combining loaders.
+    [[Feedback](feedback-from-hello-world-example.md)]
+
+  - [ ] Document the declarative merge flow with examples that cover global
+    defaults, file overrides and CLI adjustments to codify expected behaviour.
+    [[Feedback](feedback-from-hello-world-example.md)]
+
+- [ ] **Streamline subcommand configuration overrides**
+
+  - [ ] Make `load_and_merge` treat CLI defaults as absent when the user did
+    not override them, allowing subcommand sections such as `[cmds.greet]` to
+    flow through automatically.
+    [[Feedback](feedback-from-hello-world-example.md)]
+
+  - [ ] Provide an attribute- or trait-based hook for bespoke subcommand merge
+    logic so advanced cases can adjust the merged struct without manual glue
+    code.
+    [[Feedback](feedback-from-hello-world-example.md)]
+
+  - [ ] Offer a unified API that returns merged global and selected subcommand
+    configuration in one call, eliminating the repetitive `match` scaffolding
+    in `hello_world`.
+    [[Feedback](feedback-from-hello-world-example.md)]
 
 - [ ] **Address future enhancements**
 
