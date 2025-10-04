@@ -151,11 +151,10 @@ references the relevant design guidance.
 
 - [ ] **Abstract configuration discovery**
 
-  - [ ] Provide a cross-platform discovery helper that surfaces the same
+  - [x] Provide a cross-platform discovery helper that surfaces the same
     search order currently hand-coded in `hello_world`, consolidating explicit
     paths, XDG directories, Windows locations and project roots into a single
-    call.
-    [[Feedback](feedback-from-hello-world-example.md)]
+    call. [[Feedback](feedback-from-hello-world-example.md)]
 
   - [ ] Integrate the helper with the derive macro so applications can opt in
     via attributes to customise config file names and generated CLI flags
@@ -166,8 +165,7 @@ references the relevant design guidance.
 
   - [ ] Design a library-level merging trait or API that composes layered
     configuration structs without the ad hoc Figment plumbing required in the
-    example crate.
-    [[Feedback](feedback-from-hello-world-example.md)]
+    example crate. [[Feedback](feedback-from-hello-world-example.md)]
 
   - [ ] Ensure merge failures map to `OrthoError` consistently so downstream
     binaries no longer need bespoke error conversion when combining loaders.
@@ -186,13 +184,11 @@ references the relevant design guidance.
 
   - [ ] Provide an attribute- or trait-based hook for bespoke subcommand merge
     logic so advanced cases can adjust the merged struct without manual glue
-    code.
-    [[Feedback](feedback-from-hello-world-example.md)]
+    code. [[Feedback](feedback-from-hello-world-example.md)]
 
   - [ ] Offer a unified API that returns merged global and selected subcommand
     configuration in one call, eliminating the repetitive `match` scaffolding
-    in `hello_world`.
-    [[Feedback](feedback-from-hello-world-example.md)]
+    in `hello_world`. [[Feedback](feedback-from-hello-world-example.md)]
 
 - [ ] **Address future enhancements**
 

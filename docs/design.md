@@ -148,6 +148,22 @@ directories over local files. Additional unit tests ensure
 produced from the sample configuration shout with the layered punctuation and
 preamble documented in the behavioural scenarios.
 
+### 4.5. Configuration discovery helper
+
+`ConfigDiscovery` now wraps the path search order previously hand-written in
+the example. A builder customises the environment variable, dotfile name and
+project roots without duplicating the discovery routine. The helper maintains
+the precedence from the example: explicit overrides via `<PREFIX>_CONFIG_PATH`,
+then XDG locations (including `/etc/xdg` when `XDG_CONFIG_DIRS` is unset),
+Windows application data directories, the user's home directory, and finally
+project roots. Candidates are deduplicated as they are gathered so different
+sources referencing the same file do not perform duplicate I/O.
+
+`ConfigDiscovery::load_first` delegates to `load_config_file`, short-circuiting
+once a readable file is found. Returning `OrthoResult` keeps the API aligned
+with the rest of the crate and allows downstream binaries to continue using
+their existing `From<Arc<OrthoError>>` implementations.
+
 ### Aggregated errors
 
 To surface multiple failures at once, `OrthoError::aggregate<I, E>(errors)`

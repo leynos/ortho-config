@@ -145,6 +145,21 @@ impl World {
             .expect("write hello_world config");
     }
 
+    /// Writes an arbitrary configuration file into the scenario directory.
+    ///
+    /// # Panics
+    ///
+    /// Panics when `name` is not a simple filename or when writing fails.
+    pub fn write_named_file(&self, name: &str, contents: &str) {
+        assert!(
+            is_simple_filename(name),
+            "custom config filename must not contain path separators: {name}"
+        );
+        let dir = self.scenario_dir();
+        dir.write(name, contents)
+            .expect("write hello_world named config");
+    }
+
     /// Copies a repository sample configuration into the scenario directory.
     ///
     /// # Panics
