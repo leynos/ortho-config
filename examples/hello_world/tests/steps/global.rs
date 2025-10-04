@@ -116,6 +116,18 @@ pub fn config_file(world: &mut World, step: &GherkinStep) {
     world.write_config(contents);
 }
 
+#[given(expr = "the file {string} contains:")]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Cucumber step signature requires owned capture values"
+)]
+pub fn named_file_contains(world: &mut World, name: CapturedString, step: &GherkinStep) {
+    let contents = step
+        .docstring()
+        .expect("config docstring provided for hello world example");
+    world.write_named_file(name.as_str(), contents);
+}
+
 /// Initialises the scenario using a repository sample configuration.
 #[given(expr = "I start from the sample hello world config {string}")]
 #[expect(

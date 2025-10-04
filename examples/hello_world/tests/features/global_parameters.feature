@@ -56,6 +56,16 @@ Feature: Global parameters govern greetings
     Then the command succeeds
     And stdout contains "EnvOne EnvTwo, Cli!"
 
+  Scenario: Explicit config path overrides discovery order
+    Given the file "custom.toml" contains:
+      """
+      recipient = "Explicit path"
+      """
+    And the environment contains "HELLO_WORLD_CONFIG_PATH" = "custom.toml"
+    When I run the hello world example with arguments "greet"
+    Then the command succeeds
+    And stdout contains "Explicit path"
+
   Scenario: Sample configuration files drive the demo scripts
     Given I start from the sample hello world config "overrides.toml"
     When I run the hello world example with arguments "greet"
