@@ -66,6 +66,15 @@ Feature: Global parameters govern greetings
     Then the command succeeds
     And stdout contains "Explicit path"
 
+  Scenario: XDG config home provides configuration
+    Given the XDG config home contains:
+      """
+      recipient = "XDG home"
+      """
+    When I run the hello world example with arguments "greet"
+    Then the command succeeds
+    And stdout contains "XDG home"
+
   Scenario: Sample configuration files drive the demo scripts
     Given I start from the sample hello world config "overrides.toml"
     When I run the hello world example with arguments "greet"

@@ -60,7 +60,9 @@ the helper honours `HELLO_WORLD_CONFIG_PATH`, then searches
 `$XDG_CONFIG_HOME/hello_world`, each entry in `$XDG_CONFIG_DIRS` (falling back
 to `/etc/xdg` on Unix-like targets), Windows application data directories,
 `$HOME/.config/hello_world`, `$HOME/.hello_world.toml`, and finally the project
-root. Candidates are deduplicated and returned in precedence order:
+root. Candidates are deduplicated in precedence order (case-insensitively on
+Windows). Call `utf8_candidates()` to receive a `Vec<camino::Utf8PathBuf>`
+without manual conversions:
 
 ```rust,no_run
 use ortho_config::ConfigDiscovery;

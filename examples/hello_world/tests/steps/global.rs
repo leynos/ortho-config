@@ -128,6 +128,14 @@ pub fn named_file_contains(world: &mut World, name: CapturedString, step: &Gherk
     world.write_named_file(name.as_str(), contents);
 }
 
+#[given("the XDG config home contains:")]
+pub fn xdg_config_home_contains(world: &mut World, step: &GherkinStep) {
+    let contents = step
+        .docstring()
+        .expect("config docstring provided for hello world example");
+    world.write_xdg_config_home(contents);
+}
+
 /// Initialises the scenario using a repository sample configuration.
 #[given(expr = "I start from the sample hello world config {string}")]
 #[expect(

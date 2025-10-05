@@ -7,6 +7,9 @@
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
+use camino::Utf8PathBuf;
+use dirs::home_dir;
+
 use crate::{OrthoResult, load_config_file};
 
 /// Builder for [`ConfigDiscovery`].
@@ -168,16 +171,29 @@ impl ConfigDiscovery {
         ConfigDiscoveryBuilder::new(app_name)
     }
 
-    fn push_unique(paths: &mut Vec<PathBuf>, seen: &mut HashSet<PathBuf>, candidate: PathBuf) {
+    fn push_unique(paths: &mut Vec<PathBuf>, seen: &mut HashSet<String>, candidate: PathBuf) {
         if candidate.as_os_str().is_empty() {
             return;
         }
-        if seen.insert(candidate.clone()) {
+        let key = Self::normalised_key(&candidate);
+        if seen.insert(key) {
             paths.push(candidate);
         }
     }
 
-    fn push_explicit(&self, paths: &mut Vec<PathBuf>, seen: &mut HashSet<PathBuf>) {
+    fn normalised_key(path: &Path) -> String {
+        #[cfg(windows)]
+        {
+            path.to_string_lossy().to_lowercase()
+        }
+
+        #[cfg(not(windows))]
+        {
+            path.to_string_lossy().into_owned()
+        }
+    }
+
+    fn push_explicit(&self, paths: &mut Vec<PathBuf>, seen: &mut HashSet<String>) {
         if let Some(env_var) = &self.env_var {
             if let Some(value) = std::env::var_os(env_var) {
                 if !value.is_empty() {
@@ -191,59 +207,55 @@ impl ConfigDiscovery {
         }
     }
 
-    fn push_nested(&self, base: &Path, paths: &mut Vec<PathBuf>, seen: &mut HashSet<PathBuf>) {
-        let dir = if self.app_name.is_empty() {
-            base.to_path_buf()
-        } else {
-            base.join(&self.app_name)
-        };
-        Self::push_unique(paths, seen, dir.join(&self.config_file_name));
+    fn push_for_bases<I>(&self, bases: I, paths: &mut Vec<PathBuf>, seen: &mut HashSet<String>)
+    where
+        I: IntoIterator,
+        I::Item: Into<PathBuf>,
+    {
+        for base in bases {
+            let base = base.into();
+            let nested = if self.app_name.is_empty() {
+                base.clone()
+            } else {
+                base.join(&self.app_name)
+            };
+            Self::push_unique(paths, seen, nested.join(&self.config_file_name));
+            Self::push_unique(paths, seen, base.join(&self.dotfile_name));
+        }
     }
 
-    fn push_dotfile(&self, base: &Path, paths: &mut Vec<PathBuf>, seen: &mut HashSet<PathBuf>) {
-        Self::push_unique(paths, seen, base.join(&self.dotfile_name));
-    }
-
-    fn push_xdg(&self, paths: &mut Vec<PathBuf>, seen: &mut HashSet<PathBuf>) {
+    fn push_xdg(&self, paths: &mut Vec<PathBuf>, seen: &mut HashSet<String>) {
         if let Some(dir) = std::env::var_os("XDG_CONFIG_HOME") {
-            let dir = PathBuf::from(dir);
-            self.push_nested(&dir, paths, seen);
-            self.push_dotfile(&dir, paths, seen);
+            self.push_for_bases(std::iter::once(PathBuf::from(dir)), paths, seen);
         }
 
         if let Some(dirs) = std::env::var_os("XDG_CONFIG_DIRS") {
-            for dir in std::env::split_paths(&dirs) {
-                self.push_nested(&dir, paths, seen);
-                self.push_dotfile(&dir, paths, seen);
-            }
+            self.push_for_bases(std::env::split_paths(&dirs), paths, seen);
         } else if cfg!(any(unix, target_os = "redox")) {
-            let dir = Path::new("/etc/xdg");
-            self.push_nested(dir, paths, seen);
-            self.push_dotfile(dir, paths, seen);
+            self.push_for_bases(std::iter::once(PathBuf::from("/etc/xdg")), paths, seen);
         }
     }
 
-    fn push_windows(&self, paths: &mut Vec<PathBuf>, seen: &mut HashSet<PathBuf>) {
-        for key in ["APPDATA", "LOCALAPPDATA"] {
-            if let Some(dir) = std::env::var_os(key) {
-                let dir = PathBuf::from(dir);
-                self.push_nested(&dir, paths, seen);
-                self.push_dotfile(&dir, paths, seen);
-            }
-        }
+    fn push_windows(&self, paths: &mut Vec<PathBuf>, seen: &mut HashSet<String>) {
+        let dirs = ["APPDATA", "LOCALAPPDATA"]
+            .into_iter()
+            .filter_map(|key| std::env::var_os(key).map(PathBuf::from));
+        self.push_for_bases(dirs, paths, seen);
     }
 
-    fn push_home(&self, paths: &mut Vec<PathBuf>, seen: &mut HashSet<PathBuf>) {
-        let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"));
-        if let Some(home) = home {
-            let home_path = PathBuf::from(&home);
+    fn push_home(&self, paths: &mut Vec<PathBuf>, seen: &mut HashSet<String>) {
+        let home = std::env::var_os("HOME")
+            .or_else(|| std::env::var_os("USERPROFILE"))
+            .map(PathBuf::from)
+            .or_else(home_dir);
+        if let Some(home_path) = home {
             let config_dir = home_path.join(".config");
-            self.push_nested(&config_dir, paths, seen);
+            self.push_for_bases(std::iter::once(config_dir), paths, seen);
             Self::push_unique(paths, seen, home_path.join(&self.dotfile_name));
         }
     }
 
-    fn push_projects(&self, paths: &mut Vec<PathBuf>, seen: &mut HashSet<PathBuf>) {
+    fn push_projects(&self, paths: &mut Vec<PathBuf>, seen: &mut HashSet<String>) {
         for root in &self.project_roots {
             Self::push_unique(paths, seen, root.join(&self.project_file_name));
         }
@@ -252,7 +264,7 @@ impl ConfigDiscovery {
     /// Returns the ordered configuration candidates.
     #[must_use]
     pub fn candidates(&self) -> Vec<PathBuf> {
-        let mut seen = HashSet::new();
+        let mut seen: HashSet<String> = HashSet::new();
         let mut paths = Vec::new();
 
         self.push_explicit(&mut paths, &mut seen);
@@ -264,17 +276,51 @@ impl ConfigDiscovery {
         paths
     }
 
+    /// Returns the ordered configuration candidates as [`Utf8PathBuf`] values.
+    ///
+    /// Paths that cannot be represented as UTF-8 are omitted.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use ortho_config::ConfigDiscovery;
+    ///
+    /// std::env::set_var("HELLO_WORLD_CONFIG_PATH", "./hello_world.toml");
+    /// let discovery = ConfigDiscovery::builder("hello_world")
+    ///     .env_var("HELLO_WORLD_CONFIG_PATH")
+    ///     .build();
+    /// let mut utf8_candidates = discovery.utf8_candidates();
+    /// assert_eq!(
+    ///     utf8_candidates.remove(0),
+    ///     camino::Utf8PathBuf::from("./hello_world.toml")
+    /// );
+    /// std::env::remove_var("HELLO_WORLD_CONFIG_PATH");
+    /// ```
+    #[must_use]
+    pub fn utf8_candidates(&self) -> Vec<Utf8PathBuf> {
+        self.candidates()
+            .into_iter()
+            .filter_map(|path| Utf8PathBuf::from_path_buf(path).ok())
+            .collect()
+    }
+
     /// Loads the first available configuration file using [`load_config_file`].
+    ///
+    /// # Behaviour
+    ///
+    /// Skips candidates that fail to load and continues scanning until an
+    /// existing configuration file is parsed successfully.
     ///
     /// # Errors
     ///
-    /// Returns an [`OrthoError`](crate::OrthoError) if reading a candidate fails.
+    /// Currently always returns `Ok`; the [`OrthoResult`] return type keeps the
+    /// API aligned with other loaders and reserves space for future failures.
     pub fn load_first(&self) -> OrthoResult<Option<figment::Figment>> {
         for path in self.candidates() {
             match load_config_file(&path) {
                 Ok(Some(figment)) => return Ok(Some(figment)),
                 Ok(None) => {}
-                Err(err) => return Err(err),
+                Err(_err) => {}
             }
         }
         Ok(None)
@@ -335,6 +381,22 @@ mod tests {
     }
 
     #[rstest]
+    fn utf8_candidates_prioritise_env_paths() {
+        let _guards = clear_common_env();
+        let path = std::env::temp_dir().join("explicit.toml");
+        let _env = test_env::set_var("HELLO_WORLD_CONFIG_PATH", &path);
+
+        let discovery = ConfigDiscovery::builder("hello_world")
+            .env_var("HELLO_WORLD_CONFIG_PATH")
+            .build();
+        let mut candidates = discovery.utf8_candidates();
+        assert_eq!(
+            candidates.remove(0),
+            Utf8PathBuf::from_path_buf(path).expect("utf8 explicit path")
+        );
+    }
+
+    #[rstest]
     fn project_roots_append_last() {
         let _guards = clear_common_env();
         let discovery = ConfigDiscovery::builder("hello_world")
@@ -370,5 +432,50 @@ mod tests {
             .expect("figment present");
         let config: SampleConfig = figment.extract().expect("extract sample config");
         assert!(config.value);
+    }
+
+    #[rstest]
+    fn load_first_skips_invalid_candidates() {
+        let _guards = clear_common_env();
+        let dir = TempDir::new().expect("config dir");
+        let invalid = dir.path().join("broken.toml");
+        let valid = dir.path().join("valid.toml");
+        std::fs::write(&invalid, "value = ???").expect("write invalid config");
+        std::fs::write(&valid, "value = false").expect("write valid config");
+        let _env = test_env::set_var("HELLO_WORLD_CONFIG_PATH", &invalid);
+
+        let discovery = ConfigDiscovery::builder("hello_world")
+            .env_var("HELLO_WORLD_CONFIG_PATH")
+            .add_explicit_path(valid.clone())
+            .build();
+
+        let figment = discovery
+            .load_first()
+            .expect("load figment")
+            .expect("figment present");
+        let config: SampleConfig = figment.extract().expect("extract sample config");
+        assert!(!config.value);
+        assert!(
+            std::fs::metadata(&invalid).is_ok(),
+            "expected invalid file retained"
+        );
+    }
+
+    #[cfg(windows)]
+    #[rstest]
+    fn windows_candidates_are_case_insensitive() {
+        use std::ffi::OsString;
+
+        let _guards = clear_common_env();
+        let mut builder = ConfigDiscovery::builder("hello_world");
+        builder = builder.add_explicit_path(PathBuf::from("C:/Config/FILE.TOML"));
+        builder = builder.add_explicit_path(PathBuf::from("c:/config/file.toml"));
+        let discovery = builder.build();
+        let candidates = discovery.candidates();
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(
+            candidates[0].as_os_str(),
+            OsString::from("C:/Config/FILE.TOML")
+        );
     }
 }

@@ -10,16 +10,8 @@ fn discovery() -> ortho_config::ConfigDiscovery {
 }
 
 #[cfg(test)]
-fn convert_candidates(paths: Vec<std::path::PathBuf>) -> Vec<Utf8PathBuf> {
-    paths
-        .into_iter()
-        .filter_map(|path| Utf8PathBuf::from_path_buf(path).ok())
-        .collect()
-}
-
-#[cfg(test)]
 pub(super) fn collect_config_candidates() -> Vec<Utf8PathBuf> {
-    convert_candidates(discovery().candidates())
+    discovery().utf8_candidates()
 }
 
 pub(super) fn discover_config_figment()

@@ -153,7 +153,7 @@ references the relevant design guidance.
 
   - [x] Provide a cross-platform discovery helper that surfaces the same
     search order currently hand-coded in `hello_world`, consolidating explicit
-    paths, XDG directories, Windows locations and project roots into a single
+    paths, XDG directories, Windows locations, and project roots into a single
     call. [[Feedback](feedback-from-hello-world-example.md)]
 
   - [ ] Integrate the helper with the derive macro so applications can opt in
