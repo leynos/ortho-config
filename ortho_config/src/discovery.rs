@@ -142,9 +142,7 @@ impl ConfigDiscoveryBuilder {
 
         let mut project_roots = self.project_roots;
         if project_roots.is_empty() {
-            if let Ok(current_dir) = std::env::current_dir() {
-                project_roots.push(current_dir);
-            }
+            project_roots.extend(std::env::current_dir());
         }
 
         ConfigDiscovery {
@@ -290,16 +288,14 @@ impl ConfigDiscovery {
     /// ```rust
     /// use ortho_config::ConfigDiscovery;
     ///
-    /// std::env::set_var("HELLO_WORLD_CONFIG_PATH", "./hello_world.toml");
     /// let discovery = ConfigDiscovery::builder("hello_world")
-    ///     .env_var("HELLO_WORLD_CONFIG_PATH")
+    ///     .add_explicit_path("./hello_world.toml")
     ///     .build();
     /// let mut utf8_candidates = discovery.utf8_candidates();
     /// assert_eq!(
     ///     utf8_candidates.remove(0),
     ///     camino::Utf8PathBuf::from("./hello_world.toml")
     /// );
-    /// std::env::remove_var("HELLO_WORLD_CONFIG_PATH");
     /// ```
     #[must_use]
     pub fn utf8_candidates(&self) -> Vec<Utf8PathBuf> {
