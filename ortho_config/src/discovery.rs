@@ -21,7 +21,7 @@ use crate::{OrthoResult, load_config_file};
 ///
 /// # fn run() -> ortho_config::OrthoResult<()> {
 /// let discovery = ConfigDiscovery::builder("hello_world")
-///     .env_var("HELLO_WORLD_CONFIG_PATH")
+///     .add_explicit_path("./hello_world.toml")
 ///     .build();
 ///
 /// if let Some(figment) = discovery.load_first()? {
