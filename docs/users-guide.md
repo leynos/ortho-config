@@ -55,24 +55,32 @@ working directory, layers `.hello_world.toml` defaults via `cap-std`, and sets
 configuration files < environment variables < CLI arguments.
 
 `ConfigDiscovery` exposes the same search order used by the example so
-applications can replace bespoke path juggling with a single call. By default
-the helper honours `HELLO_WORLD_CONFIG_PATH`, then searches
-`$XDG_CONFIG_HOME/hello_world`, each entry in `$XDG_CONFIG_DIRS` (falling back
-to `/etc/xdg` on Unix-like targets), Windows application data directories,
-`$HOME/.config/hello_world`, `$HOME/.hello_world.toml`, and finally the project
-root. Candidates are deduplicated in precedence order (case-insensitively on
-Windows). Call `utf8_candidates()` to receive a `Vec<camino::Utf8PathBuf>`
-without manual conversions:
+applications can replace bespoke path juggling with a single call. By
+default the helper honours `HELLO_WORLD_CONFIG_PATH`, then searches
+`$XDG_CONFIG_HOME/hello_world`, each entry in `$XDG_CONFIG_DIRS` (falling
+back to `/etc/xdg` on Unix-like targets), Windows application data
+directories, `$HOME/.config/hello_world`, `$HOME/.hello_world.toml`, and
+finally the project root. Candidates are deduplicated in precedence order
+(case-insensitively on Windows). Call `utf8_candidates()` to receive a
+`Vec<camino::Utf8PathBuf>` without manual conversions:
 
 ```rust,no_run
 use ortho_config::ConfigDiscovery;
 
 # fn load() -> ortho_config::OrthoResult<()> {
-let figment = ConfigDiscovery::builder("hello_world")
+let discovery = ConfigDiscovery::builder("hello_world")
     .env_var("HELLO_WORLD_CONFIG_PATH")
-    .build()
-    .load_first()?;
-# let _ = figment;
+    .build();
+
+if let Some(figment) = discovery.load_first()? {
+    // Extract your configuration struct from the figment here.
+    println!(
+        "Loaded configuration from {:?}",
+        discovery.candidates().first()
+    );
+} else {
+    // Fall back to defaults when no configuration files exist.
+}
 # Ok(())
 # }
 ```

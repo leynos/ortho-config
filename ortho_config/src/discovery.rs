@@ -58,7 +58,7 @@ impl ConfigDiscoveryBuilder {
             config_file_name: String::from("config.toml"),
             custom_dotfile_name: None,
             custom_project_file_name: None,
-            project_roots: vec![PathBuf::new()],
+            project_roots: Vec::new(),
             explicit_paths: Vec::new(),
         }
     }
@@ -140,6 +140,13 @@ impl ConfigDiscoveryBuilder {
             .custom_project_file_name
             .unwrap_or_else(|| dotfile_name.clone());
 
+        let mut project_roots = self.project_roots;
+        if project_roots.is_empty() {
+            if let Ok(current_dir) = std::env::current_dir() {
+                project_roots.push(current_dir);
+            }
+        }
+
         ConfigDiscovery {
             env_var: self.env_var,
             explicit_paths: self.explicit_paths,
@@ -147,7 +154,7 @@ impl ConfigDiscoveryBuilder {
             config_file_name: self.config_file_name,
             dotfile_name,
             project_file_name,
-            project_roots: self.project_roots,
+            project_roots,
         }
     }
 }
@@ -195,10 +202,8 @@ impl ConfigDiscovery {
 
     fn push_explicit(&self, paths: &mut Vec<PathBuf>, seen: &mut HashSet<String>) {
         if let Some(env_var) = &self.env_var {
-            if let Some(value) = std::env::var_os(env_var) {
-                if !value.is_empty() {
-                    Self::push_unique(paths, seen, PathBuf::from(value));
-                }
+            if let Some(value) = std::env::var_os(env_var).filter(|v| !v.is_empty()) {
+                Self::push_unique(paths, seen, PathBuf::from(value));
             }
         }
 
@@ -351,8 +356,7 @@ mod tests {
         guards
     }
 
-    fn setup_env_override_discovery(
-    ) -> (
+    fn setup_env_override_discovery() -> (
         ConfigDiscovery,
         PathBuf,
         Vec<test_env::EnvVarGuard>,
