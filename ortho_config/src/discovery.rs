@@ -351,15 +351,26 @@ mod tests {
         guards
     }
 
-    #[rstest]
-    fn env_override_precedes_other_candidates() {
-        let _guards = clear_common_env();
+    fn setup_env_override_discovery(
+    ) -> (
+        ConfigDiscovery,
+        PathBuf,
+        Vec<test_env::EnvVarGuard>,
+        test_env::EnvVarGuard,
+    ) {
+        let guards = clear_common_env();
         let path = std::env::temp_dir().join("explicit.toml");
-        let _env = test_env::set_var("HELLO_WORLD_CONFIG_PATH", &path);
-
+        let env_guard = test_env::set_var("HELLO_WORLD_CONFIG_PATH", &path);
         let discovery = ConfigDiscovery::builder("hello_world")
             .env_var("HELLO_WORLD_CONFIG_PATH")
             .build();
+
+        (discovery, path, guards, env_guard)
+    }
+
+    #[rstest]
+    fn env_override_precedes_other_candidates() {
+        let (discovery, path, _guards, _env) = setup_env_override_discovery();
         let candidates = discovery.candidates();
         assert_eq!(candidates.first(), Some(&path));
     }
@@ -382,13 +393,7 @@ mod tests {
 
     #[rstest]
     fn utf8_candidates_prioritise_env_paths() {
-        let _guards = clear_common_env();
-        let path = std::env::temp_dir().join("explicit.toml");
-        let _env = test_env::set_var("HELLO_WORLD_CONFIG_PATH", &path);
-
-        let discovery = ConfigDiscovery::builder("hello_world")
-            .env_var("HELLO_WORLD_CONFIG_PATH")
-            .build();
+        let (discovery, path, _guards, _env) = setup_env_override_discovery();
         let mut candidates = discovery.utf8_candidates();
         assert_eq!(
             candidates.remove(0),
