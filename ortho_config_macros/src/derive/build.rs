@@ -12,10 +12,18 @@ use quote::{format_ident, quote};
 use syn::{Ident, Type};
 
 use super::parse::{FieldAttrs, StructAttrs, option_inner, vec_inner};
+use heck::ToSnakeCase;
 use std::collections::HashSet;
 
 const RESERVED_SHORTS: &[char] = &['h', 'V'];
 const RESERVED_LONGS: &[&str] = &["help", "version"];
+
+#[derive(Debug)]
+pub(crate) struct CliStructTokens {
+    pub fields: Vec<proc_macro2::TokenStream>,
+    pub used_shorts: HashSet<char>,
+    pub used_longs: HashSet<String>,
+}
 
 fn option_type_tokens(ty: &Type) -> proc_macro2::TokenStream {
     if let Some(inner) = option_inner(ty) {
@@ -263,34 +271,6 @@ fn validate_cli_long(name: &Ident, long: &str) -> syn::Result<()> {
     Ok(())
 }
 
-/// Ensures no field's `cli_long` collides with the hidden `config-path` flag.
-pub(crate) fn ensure_no_config_path_collision(
-    fields: &[syn::Field],
-    field_attrs: &[FieldAttrs],
-) -> syn::Result<()> {
-    let mut used: HashSet<String> = HashSet::with_capacity(fields.len());
-    for (f, attrs) in fields.iter().zip(field_attrs) {
-        let name = f.ident.as_ref().expect("named field");
-        let long = attrs
-            .cli_long
-            .clone()
-            .unwrap_or_else(|| name.to_string().replace('_', "-"));
-        if long == "config-path" {
-            return Err(syn::Error::new_spanned(
-                name,
-                "duplicate `cli_long` value 'config-path' clashes with the hidden config flag; rename the field or specify a different `cli_long`",
-            ));
-        }
-        if !used.insert(long.clone()) {
-            return Err(syn::Error::new_spanned(
-                name,
-                format!("duplicate `cli_long` value '{long}'"),
-            ));
-        }
-    }
-    Ok(())
-}
-
 /// Generates the fields for the hidden `clap::Parser` struct.
 ///
 /// Each user field becomes `Option<T>` to record whether the CLI provided a
@@ -302,7 +282,7 @@ pub(crate) fn ensure_no_config_path_collision(
 pub(crate) fn build_cli_struct_fields(
     fields: &[syn::Field],
     field_attrs: &[FieldAttrs],
-) -> syn::Result<Vec<proc_macro2::TokenStream>> {
+) -> syn::Result<CliStructTokens> {
     let mut used_shorts = HashSet::new();
     let mut used_longs: HashSet<String> = HashSet::with_capacity(fields.len());
     let mut result = Vec::with_capacity(fields.len());
@@ -343,7 +323,54 @@ pub(crate) fn build_cli_struct_fields(
         });
     }
 
-    Ok(result)
+    Ok(CliStructTokens {
+        fields: result,
+        used_shorts,
+        used_longs,
+    })
+}
+
+pub(crate) fn build_config_flag_field(
+    struct_attrs: &StructAttrs,
+    used_shorts: &HashSet<char>,
+    used_longs: &HashSet<String>,
+) -> syn::Result<proc_macro2::TokenStream> {
+    let name = Ident::new("config_path", proc_macro2::Span::call_site());
+    let discovery = struct_attrs.discovery.as_ref();
+    let long = discovery
+        .and_then(|attrs| attrs.config_cli_long.clone())
+        .unwrap_or_else(|| String::from("config-path"));
+    validate_cli_long(&name, &long)?;
+    if used_longs.contains(&long) {
+        return Err(syn::Error::new_spanned(
+            &name,
+            format!("duplicate `cli_long` value '{long}' conflicts with the generated config flag"),
+        ));
+    }
+    let long_lit = syn::LitStr::new(&long, proc_macro2::Span::call_site());
+    let mut arg_meta: Vec<proc_macro2::TokenStream> = vec![quote! { long = #long_lit }];
+    if let Some(short) = discovery.and_then(|attrs| attrs.config_cli_short) {
+        let mut used = used_shorts.clone();
+        let claimed = validate_user_cli_short(&name, short, &mut used)?;
+        let short_lit = syn::LitChar::new(claimed, proc_macro2::Span::call_site());
+        arg_meta.push(quote! { short = #short_lit });
+    }
+    let visible = discovery
+        .and_then(|attrs| attrs.config_cli_visible)
+        .unwrap_or(false);
+    if !visible {
+        arg_meta.push(quote! { hide = true });
+    }
+    arg_meta.push(quote! { value_name = "PATH" });
+    if visible {
+        arg_meta.push(quote! { help = "Path to the configuration file" });
+    }
+    let serde_attr = quote! { #[serde(skip_serializing_if = "Option::is_none")] };
+    Ok(quote! {
+        #[arg( #( #arg_meta ),* )]
+        #serde_attr
+        pub config_path: Option<std::path::PathBuf>
+    })
 }
 
 pub(crate) fn build_default_struct_init(
@@ -372,23 +399,40 @@ pub(crate) fn build_env_provider(struct_attrs: &StructAttrs) -> proc_macro2::Tok
     }
 }
 
+pub(crate) fn compute_config_env_var(struct_attrs: &StructAttrs) -> String {
+    struct_attrs.prefix.as_deref().map_or_else(
+        || String::from("CONFIG_PATH"),
+        |prefix| format!("{prefix}CONFIG_PATH"),
+    )
+}
+
 pub(crate) fn build_config_env_var(struct_attrs: &StructAttrs) -> proc_macro2::TokenStream {
-    if let Some(prefix) = &struct_attrs.prefix {
-        let var = format!("{prefix}CONFIG_PATH");
-        quote! { #var }
-    } else {
-        quote! { "CONFIG_PATH" }
-    }
+    let var = compute_config_env_var(struct_attrs);
+    quote! { #var }
 }
 
 pub(crate) fn build_dotfile_name(struct_attrs: &StructAttrs) -> proc_macro2::TokenStream {
-    let base = if let Some(prefix) = &struct_attrs.prefix {
+    let base = compute_dotfile_name(struct_attrs);
+    quote! { #base }
+}
+
+pub(crate) fn compute_dotfile_name(struct_attrs: &StructAttrs) -> String {
+    if let Some(prefix) = &struct_attrs.prefix {
         let base = prefix.trim_end_matches('_').to_ascii_lowercase();
         format!(".{base}.toml")
     } else {
-        ".config.toml".to_string()
-    };
-    quote! { #base }
+        String::from(".config.toml")
+    }
+}
+
+pub(crate) fn default_app_name(struct_attrs: &StructAttrs, ident: &Ident) -> String {
+    if let Some(prefix) = &struct_attrs.prefix {
+        let normalised = prefix.trim_end_matches('_').to_ascii_lowercase();
+        if !normalised.is_empty() {
+            return normalised;
+        }
+    }
+    ident.to_string().to_snake_case()
 }
 
 /// Builds discovery code for configuration files with the given extensions.
@@ -556,6 +600,7 @@ pub(crate) fn build_append_logic(fields: &[(Ident, &Type)]) -> proc_macro2::Toke
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::derive::parse::DiscoveryAttrs;
     use ortho_config::figment::{Figment, providers::Serialized};
     use rstest::rstest;
     use std::collections::HashSet;
@@ -654,6 +699,45 @@ mod tests {
         assert!(err.to_string().contains(expected_error));
     }
 
+    #[test]
+    fn config_flag_rejects_duplicate_long_from_fields() {
+        let input: syn::DeriveInput = parse_quote! {
+            struct Demo {
+                #[ortho_config(cli_long = "config")]
+                value: u32,
+            }
+        };
+        let (_, fields, mut struct_attrs, field_attrs) =
+            crate::derive::parse::parse_input(&input).expect("parse_input");
+        let cli = build_cli_struct_fields(&fields, &field_attrs).expect("build cli fields");
+        struct_attrs.discovery = Some(DiscoveryAttrs {
+            config_cli_long: Some(String::from("config")),
+            ..DiscoveryAttrs::default()
+        });
+        let err = build_config_flag_field(&struct_attrs, &cli.used_shorts, &cli.used_longs)
+            .expect_err("should fail");
+        assert!(err.to_string().contains("duplicate `cli_long` value"));
+    }
+
+    #[test]
+    fn config_flag_rejects_duplicate_short_from_fields() {
+        let input: syn::DeriveInput = parse_quote! {
+            struct Demo {
+                value: u32,
+            }
+        };
+        let (_, fields, mut struct_attrs, field_attrs) =
+            crate::derive::parse::parse_input(&input).expect("parse_input");
+        let cli = build_cli_struct_fields(&fields, &field_attrs).expect("build cli fields");
+        struct_attrs.discovery = Some(DiscoveryAttrs {
+            config_cli_short: Some('v'),
+            ..DiscoveryAttrs::default()
+        });
+        let err = build_config_flag_field(&struct_attrs, &cli.used_shorts, &cli.used_longs)
+            .expect_err("should fail");
+        assert!(err.to_string().contains("duplicate `cli_short` value"));
+    }
+
     #[rstest]
     #[case(parse_quote! {
         struct Demo {
@@ -694,7 +778,11 @@ mod tests {
         let (_, fields, _, field_attrs) =
             crate::derive::parse::parse_input(&input).expect("parse_input");
         let tokens = build_cli_struct_fields(&fields, &field_attrs).expect("build cli fields");
-        let field_ts = tokens.first().expect("generated field tokens").to_string();
+        let field_ts = tokens
+            .fields
+            .first()
+            .expect("generated field tokens")
+            .to_string();
         assert!(
             field_ts.contains("ArgAction :: SetTrue"),
             "boolean CLI fields should use ArgAction::SetTrue"

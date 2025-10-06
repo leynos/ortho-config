@@ -18,11 +18,14 @@ mod derive {
 }
 
 use derive::build::{
-    build_append_logic, build_cli_struct_fields, build_config_env_var, build_default_struct_fields,
-    build_default_struct_init, build_dotfile_name, build_env_provider, build_override_struct,
-    build_xdg_snippet, collect_append_fields, ensure_no_config_path_collision,
+    build_append_logic, build_cli_struct_fields, build_config_env_var, build_config_flag_field,
+    build_default_struct_fields, build_default_struct_init, build_dotfile_name, build_env_provider,
+    build_override_struct, build_xdg_snippet, collect_append_fields, compute_config_env_var,
+    default_app_name,
 };
-use derive::load_impl::{LoadImplArgs, LoadImplIdents, LoadImplTokens, build_load_impl};
+use derive::load_impl::{
+    DiscoveryTokens, LoadImplArgs, LoadImplIdents, LoadImplTokens, build_load_impl,
+};
 use derive::parse::parse_input;
 
 /// Derive macro for [`ortho_config::OrthoConfig`].
@@ -72,16 +75,16 @@ fn build_macro_components(
     let has_user_config_path = fields
         .iter()
         .any(|f| f.ident.as_ref().is_some_and(|id| id == "config_path"));
-    let mut cli_struct_fields = build_cli_struct_fields(fields, field_attrs)?;
+    let mut cli_struct = build_cli_struct_fields(fields, field_attrs)?;
     if !has_user_config_path {
-        // Ensure no other field already uses "config-path"
-        ensure_no_config_path_collision(fields, field_attrs)?;
-        cli_struct_fields.push(quote! {
-            #[arg(long = "config-path", hide = true)]
-            #[serde(skip_serializing_if = "Option::is_none")]
-            pub config_path: Option<std::path::PathBuf>
-        });
+        let config_field = build_config_flag_field(
+            struct_attrs,
+            &cli_struct.used_shorts,
+            &cli_struct.used_longs,
+        )?;
+        cli_struct.fields.push(config_field);
     }
+    let cli_struct_fields = cli_struct.fields;
     let default_struct_init = build_default_struct_init(fields, field_attrs);
     let env_provider = build_env_provider(struct_attrs);
     let config_env_var = build_config_env_var(struct_attrs);
@@ -91,6 +94,22 @@ fn build_macro_components(
     let (override_struct_ts, override_init_ts) = build_override_struct(ident, &append_fields);
     let append_logic = build_append_logic(&append_fields);
     let has_config_path = true;
+    let discovery_tokens = struct_attrs
+        .discovery
+        .as_ref()
+        .map(|attrs| DiscoveryTokens {
+            app_name: attrs
+                .app_name
+                .clone()
+                .unwrap_or_else(|| default_app_name(struct_attrs, ident)),
+            env_var: attrs
+                .env_var
+                .clone()
+                .unwrap_or_else(|| compute_config_env_var(struct_attrs)),
+            config_file_name: attrs.config_file_name.clone(),
+            dotfile_name: attrs.dotfile_name.clone(),
+            project_file_name: attrs.project_file_name.clone(),
+        });
     let load_impl = build_load_impl(&LoadImplArgs {
         idents: LoadImplIdents {
             cli_ident: &cli_ident,
@@ -105,6 +124,7 @@ fn build_macro_components(
             config_env_var: &config_env_var,
             dotfile_name: &dotfile_name,
             xdg_snippet: &xdg_snippet,
+            discovery: discovery_tokens.as_ref(),
         },
         has_config_path,
     });

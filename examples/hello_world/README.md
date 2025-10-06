@@ -65,7 +65,9 @@ Windows) can be executed. Each script creates an isolated temporary directory,
 copies the sample configuration files, and then invokes
 `cargo run -p hello_world` multiple times to show the precedence order: file
 defaults, environment overrides, and CLI flags. The scripts leave the
-repository tree untouched so they are safe to rerun.
+repository tree untouched so they are safe to rerun. The derived CLI also
+exposes a `--config` / `-c` flag so ad hoc configuration files can be layered
+without mutating the working directory.
 
 ## Getting started
 
