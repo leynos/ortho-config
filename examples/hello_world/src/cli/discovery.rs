@@ -1,4 +1,4 @@
-#[cfg(test)]
+#[cfg(all(test, unix))]
 use camino::Utf8PathBuf;
 
 use crate::error::HelloWorldError;
@@ -9,7 +9,7 @@ fn discovery() -> ortho_config::ConfigDiscovery {
         .build()
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 pub(super) fn collect_config_candidates() -> Vec<Utf8PathBuf> {
     discovery().utf8_candidates()
 }
