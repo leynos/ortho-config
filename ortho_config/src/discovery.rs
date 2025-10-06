@@ -199,10 +199,12 @@ impl ConfigDiscovery {
     }
 
     fn push_explicit(&self, paths: &mut Vec<PathBuf>, seen: &mut HashSet<String>) {
-        if let Some(env_var) = &self.env_var {
-            if let Some(value) = std::env::var_os(env_var).filter(|v| !v.is_empty()) {
-                Self::push_unique(paths, seen, PathBuf::from(value));
-            }
+        if let Some(value) = self
+            .env_var
+            .as_ref()
+            .and_then(|env_var| std::env::var_os(env_var).filter(|v| !v.is_empty()))
+        {
+            Self::push_unique(paths, seen, PathBuf::from(value));
         }
 
         for path in &self.explicit_paths {
@@ -233,7 +235,16 @@ impl ConfigDiscovery {
         }
 
         if let Some(dirs) = std::env::var_os("XDG_CONFIG_DIRS") {
-            self.push_for_bases(std::env::split_paths(&dirs), paths, seen);
+            let xdg_dirs: Vec<PathBuf> = std::env::split_paths(&dirs)
+                .filter(|path| !path.as_os_str().is_empty())
+                .collect();
+            if xdg_dirs.is_empty() {
+                if cfg!(any(unix, target_os = "redox")) {
+                    self.push_for_bases(std::iter::once(PathBuf::from("/etc/xdg")), paths, seen);
+                }
+            } else {
+                self.push_for_bases(xdg_dirs, paths, seen);
+            }
         } else if cfg!(any(unix, target_os = "redox")) {
             self.push_for_bases(std::iter::once(PathBuf::from("/etc/xdg")), paths, seen);
         }
@@ -389,6 +400,59 @@ mod tests {
         let expected_second = dir.path().join(".hello_world.toml");
         assert_eq!(candidates.first(), Some(&expected_first));
         assert_eq!(candidates.get(1), Some(&expected_second));
+    }
+
+    #[cfg(any(unix, target_os = "redox"))]
+    #[rstest]
+    fn xdg_dirs_empty_falls_back_to_default() {
+        let _guards = clear_common_env();
+        let _dirs = test_env::set_var("XDG_CONFIG_DIRS", "");
+
+        let discovery = ConfigDiscovery::builder("hello_world").build();
+        let candidates = discovery.candidates();
+
+        let default_base = PathBuf::from("/etc/xdg");
+        let nested = default_base.join("hello_world").join("config.toml");
+        let dotfile = default_base.join(".hello_world.toml");
+
+        assert!(
+            candidates.contains(&nested),
+            "expected fallback nested candidate present"
+        );
+        assert!(
+            candidates.contains(&dotfile),
+            "expected fallback dotfile candidate present"
+        );
+    }
+
+    #[cfg(any(unix, target_os = "redox"))]
+    #[rstest]
+    fn xdg_dirs_with_values_excludes_default() {
+        let _guards = clear_common_env();
+        let _dirs = test_env::set_var("XDG_CONFIG_DIRS", "/opt/example:/etc/custom");
+
+        let discovery = ConfigDiscovery::builder("hello_world").build();
+        let candidates = discovery.candidates();
+
+        let default_base = PathBuf::from("/etc/xdg");
+        let default_nested = default_base.join("hello_world").join("config.toml");
+        let default_dotfile = default_base.join(".hello_world.toml");
+        let provided_nested = PathBuf::from("/opt/example")
+            .join("hello_world")
+            .join("config.toml");
+
+        assert!(
+            candidates.contains(&provided_nested),
+            "expected provided directory candidate present"
+        );
+        assert!(
+            !candidates.contains(&default_nested),
+            "unexpected fallback nested candidate present"
+        );
+        assert!(
+            !candidates.contains(&default_dotfile),
+            "unexpected fallback dotfile candidate present"
+        );
     }
 
     #[rstest]
