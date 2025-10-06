@@ -53,6 +53,61 @@ pub(crate) struct LoadImplArgs<'a> {
 /// Configuration files are searched in multiple locations as described in the
 /// "Configuration File Discovery" section of the design document. This mirrors
 /// standard XDG behaviour on Unix-like systems and uses `directories` on Windows.
+fn opt_to_litstr(value: Option<&String>) -> Option<syn::LitStr> {
+    value.map(|value| syn::LitStr::new(value, proc_macro2::Span::call_site()))
+}
+
+fn builder_stmt(lit: Option<syn::LitStr>, method: &str) -> Option<proc_macro2::TokenStream> {
+    lit.map(|lit| {
+        let method_ident = syn::Ident::new(method, proc_macro2::Span::call_site());
+        quote! { builder = builder.#method_ident(#lit); }
+    })
+}
+
+fn build_legacy_file_discovery(
+    tokens: &LoadImplTokens<'_>,
+    has_config_path: bool,
+) -> proc_macro2::TokenStream {
+    let LoadImplTokens {
+        config_env_var,
+        dotfile_name,
+        xdg_snippet,
+        ..
+    } = tokens;
+    let config_path_chain = if has_config_path {
+        quote! { .chain(cli.as_ref().and_then(|c| c.config_path.clone())) }
+    } else {
+        quote! {}
+    };
+    quote! {
+        let mut file_fig = None;
+        let candidates = std::iter::empty()
+            #config_path_chain
+            .chain(
+                std::env::var_os(#config_env_var)
+                    .map(std::path::PathBuf::from),
+            )
+            .chain(Some(std::path::PathBuf::from(#dotfile_name)))
+            .chain(
+                std::env::var_os("HOME")
+                    .map(|h| std::path::PathBuf::from(h).join(#dotfile_name)),
+            );
+        for path in candidates {
+            match ortho_config::load_config_file(&path) {
+                Ok(Some(fig)) => {
+                    file_fig = Some(fig);
+                    break;
+                }
+                Ok(None) => {}
+                Err(e) => errors.push(e),
+            }
+        }
+        let mut discovery_errors: Vec<std::sync::Arc<ortho_config::OrthoError>> = Vec::new();
+        #xdg_snippet
+        errors.extend(discovery_errors);
+    }
+}
+
 pub(crate) fn build_file_discovery(
     tokens: &LoadImplTokens<'_>,
     has_config_path: bool,
@@ -60,23 +115,12 @@ pub(crate) fn build_file_discovery(
     if let Some(discovery) = tokens.discovery {
         let app_name = syn::LitStr::new(&discovery.app_name, proc_macro2::Span::call_site());
         let env_var = syn::LitStr::new(&discovery.env_var, proc_macro2::Span::call_site());
-        let config_file = discovery
-            .config_file_name
-            .as_ref()
-            .map(|value| syn::LitStr::new(value, proc_macro2::Span::call_site()));
-        let dotfile = discovery
-            .dotfile_name
-            .as_ref()
-            .map(|value| syn::LitStr::new(value, proc_macro2::Span::call_site()));
-        let project_file = discovery
-            .project_file_name
-            .as_ref()
-            .map(|value| syn::LitStr::new(value, proc_macro2::Span::call_site()));
-        let config_file_stmt =
-            config_file.map(|lit| quote! { builder = builder.config_file_name(#lit); });
-        let dotfile_stmt = dotfile.map(|lit| quote! { builder = builder.dotfile_name(#lit); });
-        let project_stmt =
-            project_file.map(|lit| quote! { builder = builder.project_file_name(#lit); });
+        let config_file = opt_to_litstr(discovery.config_file_name.as_ref());
+        let dotfile = opt_to_litstr(discovery.dotfile_name.as_ref());
+        let project_file = opt_to_litstr(discovery.project_file_name.as_ref());
+        let config_file_stmt = builder_stmt(config_file, "config_file_name");
+        let dotfile_stmt = builder_stmt(dotfile, "dotfile_name");
+        let project_stmt = builder_stmt(project_file, "project_file_name");
         let cli_chain = if has_config_path {
             quote! {
                 if let Some(ref cli) = cli {
@@ -104,44 +148,7 @@ pub(crate) fn build_file_discovery(
             }
         }
     } else {
-        let LoadImplTokens {
-            config_env_var,
-            dotfile_name,
-            xdg_snippet,
-            ..
-        } = tokens;
-        let config_path_chain = if has_config_path {
-            quote! { .chain(cli.as_ref().and_then(|c| c.config_path.clone())) }
-        } else {
-            quote! {}
-        };
-        quote! {
-            let mut file_fig = None;
-            let candidates = std::iter::empty()
-                #config_path_chain
-                .chain(
-                    std::env::var_os(#config_env_var)
-                        .map(std::path::PathBuf::from),
-                )
-                .chain(Some(std::path::PathBuf::from(#dotfile_name)))
-                .chain(
-                    std::env::var_os("HOME")
-                        .map(|h| std::path::PathBuf::from(h).join(#dotfile_name)),
-                );
-            for path in candidates {
-                match ortho_config::load_config_file(&path) {
-                    Ok(Some(fig)) => {
-                        file_fig = Some(fig);
-                        break;
-                    }
-                    Ok(None) => {}
-                    Err(e) => errors.push(e),
-                }
-            }
-            let mut discovery_errors: Vec<std::sync::Arc<ortho_config::OrthoError>> = Vec::new();
-            #xdg_snippet
-            errors.extend(discovery_errors);
-        }
+        build_legacy_file_discovery(tokens, has_config_path)
     }
 }
 
