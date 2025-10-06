@@ -41,6 +41,11 @@ impl AsRef<str> for CapturedString {
     }
 }
 
+fn extract_docstring(step: &GherkinStep) -> &str {
+    step.docstring()
+        .expect("config docstring provided for hello world example")
+}
+
 /// Runs the binary without additional arguments.
 #[when("I run the hello world example")]
 pub async fn run_without_args(world: &mut World) {
@@ -108,12 +113,29 @@ pub fn environment_does_not_contain(world: &mut World, key: CapturedString) {
     world.remove_env(key.as_str());
 }
 
+/// Writes docstring contents to the default configuration file.
 #[given("the hello world config file contains:")]
 pub fn config_file(world: &mut World, step: &GherkinStep) {
-    let contents = step
-        .docstring()
-        .expect("config docstring provided for hello world example");
+    let contents = extract_docstring(step);
     world.write_config(contents);
+}
+
+/// Writes docstring contents to a named file.
+#[given(expr = "the file {string} contains:")]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Cucumber step signature requires owned capture values"
+)]
+pub fn named_file_contains(world: &mut World, name: CapturedString, step: &GherkinStep) {
+    let contents = extract_docstring(step);
+    world.write_named_file(name.as_str(), contents);
+}
+
+/// Writes docstring contents to the XDG config home directory.
+#[given("the XDG config home contains:")]
+pub fn xdg_config_home_contains(world: &mut World, step: &GherkinStep) {
+    let contents = extract_docstring(step);
+    world.write_xdg_config_home(contents);
 }
 
 /// Initialises the scenario using a repository sample configuration.

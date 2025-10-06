@@ -25,6 +25,7 @@ pub use uncased;
 pub use xdg;
 
 mod csv_env;
+pub mod discovery;
 mod error;
 pub mod file;
 mod merge;
@@ -54,6 +55,7 @@ pub fn normalize_prefix(prefix: &str) -> String {
 }
 
 pub use csv_env::CsvEnv;
+pub use discovery::{ConfigDiscovery, ConfigDiscoveryBuilder};
 pub use error::OrthoError;
 pub use file::load_config_file;
 /// Re-export sanitization helpers used to strip `None` fields and produce a

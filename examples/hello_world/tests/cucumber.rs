@@ -1,4 +1,5 @@
 //! Cucumber test harness for the `hello_world` example.
+use std::fs;
 use std::process::Stdio;
 use std::time::Duration;
 
@@ -143,6 +144,35 @@ impl World {
         let dir = self.scenario_dir();
         dir.write(CONFIG_FILE, contents)
             .expect("write hello_world config");
+    }
+
+    /// Writes an arbitrary configuration file into the scenario directory.
+    ///
+    /// # Panics
+    ///
+    /// Panics when `name` is not a simple filename or when writing fails.
+    pub fn write_named_file(&self, name: &str, contents: &str) {
+        assert!(
+            is_simple_filename(name),
+            "custom config filename must not contain path separators: {name}"
+        );
+        let dir = self.scenario_dir();
+        dir.write(name, contents)
+            .expect("write hello_world named config");
+    }
+
+    /// Writes the provided contents to `config.toml` under an XDG config home.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the XDG directory cannot be prepared or the file write fails.
+    pub fn write_xdg_config_home(&mut self, contents: &str) {
+        let base = self.workdir.path().join("xdg-config");
+        let config_dir = base.join("hello_world");
+        fs::create_dir_all(&config_dir).expect("create XDG hello_world directory");
+        fs::write(config_dir.join("config.toml"), contents).expect("write XDG hello_world config");
+        let value = base.to_string_lossy().into_owned();
+        self.set_env("XDG_CONFIG_HOME", value);
     }
 
     /// Copies a repository sample configuration into the scenario directory.

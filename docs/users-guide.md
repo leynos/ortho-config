@@ -54,15 +54,41 @@ working directory, layers `.hello_world.toml` defaults via `cap-std`, and sets
 `HELLO_WORLD_*` environment variables per scenario to demonstrate precedence:
 configuration files < environment variables < CLI arguments.
 
-The runtime discovers `.hello_world.toml` in several locations so local
-overrides apply without additional flags. `HELLO_WORLD_CONFIG_PATH` wins when
-set; otherwise the loader searches `$XDG_CONFIG_HOME/hello_world/config.toml`,
-every directory listed in `$XDG_CONFIG_DIRS`, `%APPDATA%` on Windows,
-`$HOME/.config/hello_world/config.toml`, `$HOME/.hello_world.toml`, and finally
-the working directory. The repository ships `config/overrides.toml`, which
-extends `config/baseline.toml` to set `is_excited = true`, provide a
-`Layered hello` preamble, and swap the greet punctuation for `!!!`. Behavioural
-tests and demo scripts assert the uppercase output to guard this layering.
+`ConfigDiscovery` exposes the same search order used by the example so
+applications can replace bespoke path juggling with a single call. By
+default the helper honours `HELLO_WORLD_CONFIG_PATH`, then searches
+`$XDG_CONFIG_HOME/hello_world`, each entry in `$XDG_CONFIG_DIRS` (falling
+back to `/etc/xdg` on Unix-like targets), Windows application data
+directories, `$HOME/.config/hello_world`, `$HOME/.hello_world.toml`, and
+finally the project root. Candidates are deduplicated in precedence order
+(case-insensitively on Windows). Call `utf8_candidates()` to receive a
+`Vec<camino::Utf8PathBuf>` without manual conversions:
+
+```rust,no_run
+use ortho_config::ConfigDiscovery;
+
+# fn load() -> ortho_config::OrthoResult<()> {
+let discovery = ConfigDiscovery::builder("hello_world")
+    .env_var("HELLO_WORLD_CONFIG_PATH")
+    .build();
+
+if let Some(figment) = discovery.load_first()? {
+    // Extract your configuration struct from the figment here.
+    println!(
+        "Loaded configuration from {:?}",
+        discovery.candidates().first()
+    );
+} else {
+    // Fall back to defaults when no configuration files exist.
+}
+# Ok(())
+# }
+```
+
+The repository ships `config/overrides.toml`, which extends
+`config/baseline.toml` to set `is_excited = true`, provide a `Layered hello`
+preamble, and swap the greet punctuation for `!!!`. Behavioural tests and demo
+scripts assert the uppercase output to guard this layering.
 
 ## Installation and dependencies
 
