@@ -1,6 +1,6 @@
 //! Tests for struct-level discovery attributes.
 
-use ortho_config::OrthoConfig;
+use ortho_config::{OrthoConfig, OrthoError};
 use rstest::rstest;
 use serde::{Deserialize, Serialize};
 use std::env;
@@ -57,6 +57,23 @@ fn cli_long_flag_loads_config() {
 }
 
 #[rstest]
+fn cli_long_flag_invalid_config_path() {
+    let _env = clear_support_env();
+    let _config = test_env::remove_var("APP_CONFIG_PATH");
+    let dir = TempDir::new().expect("temp dir");
+    let config_path = dir.path().join("missing.toml");
+
+    let err = DiscoveryConfig::load_from_iter([
+        "prog",
+        "--config",
+        config_path.to_str().expect("utf8 path"),
+    ])
+    .expect_err("error when CLI path missing");
+
+    assert!(matches!(&*err, OrthoError::File { .. }));
+}
+
+#[rstest]
 fn cli_short_flag_loads_config() {
     let _env = clear_support_env();
     let _config = test_env::remove_var("APP_CONFIG_PATH");
@@ -102,6 +119,21 @@ fn xdg_config_home_respects_custom_file_name() {
 }
 
 #[rstest]
+fn xdg_config_home_missing_file_returns_default() {
+    let _env = clear_support_env();
+    let _config = test_env::remove_var("APP_CONFIG_PATH");
+    let dir = TempDir::new().expect("temp dir");
+    let xdg_home = dir.path().join("xdg_missing");
+    fs::create_dir_all(&xdg_home).expect("create xdg home");
+
+    let guard = test_env::set_var("XDG_CONFIG_HOME", &xdg_home);
+    let cfg = DiscoveryConfig::load_from_iter(["prog"]).expect("load default when xdg missing");
+    drop(guard);
+
+    assert_eq!(cfg.value, 1);
+}
+
+#[rstest]
 fn dotfile_fallback_uses_custom_name() {
     let _env = clear_support_env();
     let _config = test_env::remove_var("APP_CONFIG_PATH");
@@ -123,4 +155,18 @@ fn defaults_apply_when_no_config_found() {
     let _config = test_env::remove_var("APP_CONFIG_PATH");
     let cfg = DiscoveryConfig::load_from_iter(["prog"]).expect("load default config");
     assert_eq!(cfg.value, 1);
+}
+
+#[rstest]
+fn error_on_malformed_config() {
+    let _env = clear_support_env();
+    let dir = TempDir::new().expect("temp dir");
+    let config_path = dir.path().join("broken.toml");
+    write_file(&config_path, "value = ???");
+
+    let guard = test_env::set_var("APP_CONFIG_PATH", &config_path);
+    let err = DiscoveryConfig::load_from_iter(["prog"]).expect_err("malformed config should fail");
+    drop(guard);
+
+    assert!(matches!(&*err, OrthoError::File { .. }));
 }

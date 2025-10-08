@@ -103,7 +103,7 @@ pub(crate) fn build_file_discovery(
         quote! {
             if let Some(ref cli) = cli {
                 if let Some(ref path) = cli.config_path {
-                    builder = builder.add_explicit_path(path.clone());
+                    builder = builder.add_required_path(path.clone());
                 }
             }
         }

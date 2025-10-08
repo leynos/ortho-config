@@ -5,6 +5,7 @@
 //! helper inspects explicit paths, XDG directories, Windows application data
 //! folders, the user's home directory and project roots.
 use std::collections::HashSet;
+use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -43,6 +44,7 @@ pub struct ConfigDiscoveryBuilder {
     custom_project_file_name: Option<String>,
     project_roots: Vec<PathBuf>,
     explicit_paths: Vec<PathBuf>,
+    required_explicit_paths: Vec<PathBuf>,
 }
 
 impl ConfigDiscoveryBuilder {
@@ -61,6 +63,7 @@ impl ConfigDiscoveryBuilder {
             custom_project_file_name: None,
             project_roots: Vec::new(),
             explicit_paths: Vec::new(),
+            required_explicit_paths: Vec::new(),
         }
     }
 
@@ -113,6 +116,16 @@ impl ConfigDiscoveryBuilder {
         self
     }
 
+    /// Adds an explicit candidate path that must exist.
+    ///
+    /// This is primarily used for CLI-specified paths where falling back to
+    /// other discovery locations would be surprising.
+    #[must_use]
+    pub fn add_required_path(mut self, path: impl Into<PathBuf>) -> Self {
+        self.required_explicit_paths.push(path.into());
+        self
+    }
+
     fn default_dotfile(&self) -> String {
         let stem = self.app_name.trim();
         let extension = Path::new(&self.config_file_name)
@@ -149,6 +162,7 @@ impl ConfigDiscoveryBuilder {
         ConfigDiscovery {
             env_var: self.env_var,
             explicit_paths: self.explicit_paths,
+            required_explicit_paths: self.required_explicit_paths,
             app_name: self.app_name,
             config_file_name: self.config_file_name,
             dotfile_name,
@@ -163,6 +177,7 @@ impl ConfigDiscoveryBuilder {
 pub struct ConfigDiscovery {
     env_var: Option<String>,
     explicit_paths: Vec<PathBuf>,
+    required_explicit_paths: Vec<PathBuf>,
     app_name: String,
     config_file_name: String,
     dotfile_name: String,
@@ -200,6 +215,10 @@ impl ConfigDiscovery {
     }
 
     fn push_explicit(&self, paths: &mut Vec<PathBuf>, seen: &mut HashSet<String>) {
+        for path in &self.required_explicit_paths {
+            Self::push_unique(paths, seen, path.clone());
+        }
+
         for path in &self.explicit_paths {
             Self::push_unique(paths, seen, path.clone());
         }
@@ -363,10 +382,23 @@ impl ConfigDiscovery {
     #[must_use]
     pub fn load_first_with_errors(&self) -> (Option<figment::Figment>, Vec<Arc<OrthoError>>) {
         let mut errors = Vec::new();
-        for path in self.candidates() {
+        let candidates = self.candidates();
+        let required = self.required_explicit_paths.len();
+        for (idx, path) in candidates.into_iter().enumerate() {
             match load_config_file(&path) {
                 Ok(Some(figment)) => return (Some(figment), errors),
-                Ok(None) => {}
+                Ok(None) => {
+                    if idx < required {
+                        let missing = Arc::new(OrthoError::File {
+                            path: path.clone(),
+                            source: Box::new(io::Error::new(
+                                io::ErrorKind::NotFound,
+                                "required configuration file not found",
+                            )),
+                        });
+                        errors.push(missing);
+                    }
+                }
                 Err(err) => errors.push(err),
             }
         }
@@ -562,6 +594,26 @@ mod tests {
         assert!(
             std::fs::metadata(&invalid).is_ok(),
             "expected invalid file retained"
+        );
+    }
+
+    #[rstest]
+    fn required_paths_emit_missing_errors() {
+        let _guards = clear_common_env();
+        let dir = TempDir::new().expect("config dir");
+        let missing = dir.path().join("absent.toml");
+
+        let discovery = ConfigDiscovery::builder("hello_world")
+            .add_required_path(&missing)
+            .build();
+        let (_, errors) = discovery.load_first_with_errors();
+
+        assert!(
+            errors.iter().any(|err| match err.as_ref() {
+                OrthoError::File { path, .. } => path == &missing,
+                _ => false,
+            }),
+            "expected missing required path error"
         );
     }
 

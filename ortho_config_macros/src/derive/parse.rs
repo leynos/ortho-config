@@ -103,41 +103,45 @@ pub(crate) fn parse_struct_attrs(attrs: &[Attribute]) -> Result<StructAttrs, syn
         } else if meta.path.is_ident("discovery") {
             let mut discovery = out.discovery.take().unwrap_or_default();
             meta.parse_nested_meta(|nested| {
-                if nested.path.is_ident("app_name") {
-                    let s = lit_str(&nested, "app_name")?;
-                    discovery.app_name = Some(s.value());
-                    Ok(())
-                } else if nested.path.is_ident("env_var") {
-                    let s = lit_str(&nested, "env_var")?;
-                    discovery.env_var = Some(s.value());
-                    Ok(())
-                } else if nested.path.is_ident("config_file_name") {
-                    let s = lit_str(&nested, "config_file_name")?;
-                    discovery.config_file_name = Some(s.value());
-                    Ok(())
-                } else if nested.path.is_ident("dotfile_name") {
-                    let s = lit_str(&nested, "dotfile_name")?;
-                    discovery.dotfile_name = Some(s.value());
-                    Ok(())
-                } else if nested.path.is_ident("project_file_name") {
-                    let s = lit_str(&nested, "project_file_name")?;
-                    discovery.project_file_name = Some(s.value());
-                    Ok(())
-                } else if nested.path.is_ident("config_cli_long") {
-                    let s = lit_str(&nested, "config_cli_long")?;
-                    discovery.config_cli_long = Some(s.value());
-                    Ok(())
-                } else if nested.path.is_ident("config_cli_short") {
-                    let c = lit_char(&nested, "config_cli_short")?;
-                    discovery.config_cli_short = Some(c);
-                    Ok(())
-                } else if nested.path.is_ident("config_cli_visible") {
-                    let b = lit_bool(&nested, "config_cli_visible")?;
-                    discovery.config_cli_visible = Some(b);
-                    Ok(())
-                } else {
-                    discard_unknown(&nested)
+                let Some(ident) = nested.path.get_ident().map(ToString::to_string) else {
+                    return discard_unknown(&nested);
+                };
+                match ident.as_str() {
+                    "app_name" => {
+                        let s = lit_str(&nested, "app_name")?;
+                        discovery.app_name = Some(s.value());
+                    }
+                    "env_var" => {
+                        let s = lit_str(&nested, "env_var")?;
+                        discovery.env_var = Some(s.value());
+                    }
+                    "config_file_name" => {
+                        let s = lit_str(&nested, "config_file_name")?;
+                        discovery.config_file_name = Some(s.value());
+                    }
+                    "dotfile_name" => {
+                        let s = lit_str(&nested, "dotfile_name")?;
+                        discovery.dotfile_name = Some(s.value());
+                    }
+                    "project_file_name" => {
+                        let s = lit_str(&nested, "project_file_name")?;
+                        discovery.project_file_name = Some(s.value());
+                    }
+                    "config_cli_long" => {
+                        let s = lit_str(&nested, "config_cli_long")?;
+                        discovery.config_cli_long = Some(s.value());
+                    }
+                    "config_cli_short" => {
+                        let c = lit_char(&nested, "config_cli_short")?;
+                        discovery.config_cli_short = Some(c);
+                    }
+                    "config_cli_visible" => {
+                        let b = lit_bool(&nested, "config_cli_visible")?;
+                        discovery.config_cli_visible = Some(b);
+                    }
+                    _ => discard_unknown(&nested)?,
                 }
+                Ok(())
             })?;
             out.discovery = Some(discovery);
             Ok(())
