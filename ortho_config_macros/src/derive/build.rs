@@ -411,11 +411,6 @@ pub(crate) fn build_config_env_var(struct_attrs: &StructAttrs) -> proc_macro2::T
     quote! { #var }
 }
 
-pub(crate) fn build_dotfile_name(struct_attrs: &StructAttrs) -> proc_macro2::TokenStream {
-    let base = compute_dotfile_name(struct_attrs);
-    quote! { #base }
-}
-
 pub(crate) fn compute_dotfile_name(struct_attrs: &StructAttrs) -> String {
     if let Some(prefix) = &struct_attrs.prefix {
         let base = prefix.trim_end_matches('_').to_ascii_lowercase();
@@ -433,96 +428,6 @@ pub(crate) fn default_app_name(struct_attrs: &StructAttrs, ident: &Ident) -> Str
         }
     }
     ident.to_string().to_snake_case()
-}
-
-/// Builds discovery code for configuration files with the given extensions.
-///
-/// The extensions are tried sequentially; earlier entries take precedence over
-/// later ones. Passing `["json", "json5", "yaml", "yml"]` will therefore
-/// try `config.json` before `config.json5` and either `config.yaml` or
-/// `config.yml`.
-///
-/// JSON and JSON5 support are only available when the `json5` feature is
-/// enabled, and YAML/YML support requires the `yaml` feature.
-///
-/// # Examples
-///
-/// ```ignore
-/// let tokens = build_discovery(["json", "json5", "yaml", "yml"]);
-/// assert!(!tokens.is_empty());
-/// ```
-fn build_discovery<I, S>(exts: I) -> proc_macro2::TokenStream
-where
-    I: IntoIterator<Item = S>,
-    S: AsRef<str>,
-{
-    let exts = exts.into_iter().map(|s| s.as_ref().to_owned());
-    quote! { try_load_config(&mut file_fig, &[#(#exts),*], &mut discovery_errors); }
-}
-
-/// Builds the XDG base directory configuration discovery snippet.
-///
-/// # Examples
-///
-/// ```ignore
-/// let tokens = build_xdg_config_discovery();
-/// assert!(!tokens.is_empty());
-/// ```
-fn build_xdg_config_discovery() -> proc_macro2::TokenStream {
-    let toml = build_discovery(["toml"]);
-    let json = build_discovery(["json", "json5"]);
-    let yaml = build_discovery(["yaml", "yml"]);
-    quote! {
-        let try_load_config = |
-            fig: &mut Option<ortho_config::figment::Figment>,
-            exts: &[&str],
-            errors: &mut Vec<std::sync::Arc<ortho_config::OrthoError>>,
-        | {
-            for ext in exts {
-                let filename = format!("config.{}", ext);
-                let path = match xdg_dirs.find_config_file(&filename) {
-                    Some(p) => p,
-                    None => continue,
-                };
-                match ortho_config::load_config_file(&path) {
-                    Ok(new_fig) => {
-                        *fig = new_fig;
-                        break;
-                    }
-                    Err(e) => errors.push(e),
-                }
-            }
-        };
-
-        if file_fig.is_none() {
-            #toml
-        }
-        #[cfg(feature = "json5")]
-        if file_fig.is_none() {
-            #json
-        }
-        #[cfg(feature = "yaml")]
-        if file_fig.is_none() {
-            #yaml
-        }
-    }
-}
-
-pub(crate) fn build_xdg_snippet(struct_attrs: &StructAttrs) -> proc_macro2::TokenStream {
-    let prefix_lit = struct_attrs.prefix.as_deref().unwrap_or("");
-    let config_discovery = build_xdg_config_discovery();
-    quote! {
-        #[cfg(any(unix, target_os = "redox"))]
-        if file_fig.is_none() {
-            let xdg_base = ortho_config::normalize_prefix(#prefix_lit);
-            let xdg_dirs = if xdg_base.is_empty() {
-                ortho_config::xdg::BaseDirectories::new()
-            } else {
-                ortho_config::xdg::BaseDirectories::with_prefix(&xdg_base)
-            };
-            #config_discovery
-        }
-    }
 }
 
 pub(crate) fn collect_append_fields<'a>(

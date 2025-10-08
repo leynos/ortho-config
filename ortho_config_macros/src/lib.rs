@@ -19,8 +19,8 @@ mod derive {
 
 use derive::build::{
     build_append_logic, build_cli_struct_fields, build_config_env_var, build_config_flag_field,
-    build_default_struct_fields, build_default_struct_init, build_dotfile_name, build_env_provider,
-    build_override_struct, build_xdg_snippet, collect_append_fields, compute_config_env_var,
+    build_default_struct_fields, build_default_struct_init, build_env_provider,
+    build_override_struct, collect_append_fields, compute_config_env_var, compute_dotfile_name,
     default_app_name,
 };
 use derive::load_impl::{
@@ -88,12 +88,18 @@ fn build_macro_components(
     let default_struct_init = build_default_struct_init(fields, field_attrs);
     let env_provider = build_env_provider(struct_attrs);
     let config_env_var = build_config_env_var(struct_attrs);
-    let dotfile_name = build_dotfile_name(struct_attrs);
-    let xdg_snippet = build_xdg_snippet(struct_attrs);
+    let dotfile_name_string = compute_dotfile_name(struct_attrs);
+    let dotfile_name = syn::LitStr::new(&dotfile_name_string, proc_macro2::Span::call_site());
     let append_fields = collect_append_fields(fields, field_attrs);
     let (override_struct_ts, override_init_ts) = build_override_struct(ident, &append_fields);
     let append_logic = build_append_logic(&append_fields);
     let has_config_path = true;
+    let default_app_name_value = default_app_name(struct_attrs, ident);
+    let legacy_app_name_value = struct_attrs
+        .prefix
+        .as_ref()
+        .map(|prefix| prefix.trim_end_matches('_').to_ascii_lowercase())
+        .unwrap_or_default();
     let discovery_tokens = struct_attrs
         .discovery
         .as_ref()
@@ -101,7 +107,7 @@ fn build_macro_components(
             app_name: attrs
                 .app_name
                 .clone()
-                .unwrap_or_else(|| default_app_name(struct_attrs, ident)),
+                .unwrap_or_else(|| default_app_name_value.clone()),
             env_var: attrs
                 .env_var
                 .clone()
@@ -123,7 +129,7 @@ fn build_macro_components(
             append_logic: &append_logic,
             config_env_var: &config_env_var,
             dotfile_name: &dotfile_name,
-            xdg_snippet: &xdg_snippet,
+            legacy_app_name: &legacy_app_name_value,
             discovery: discovery_tokens.as_ref(),
         },
         has_config_path,

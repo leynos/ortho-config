@@ -6,11 +6,12 @@
 //! folders, the user's home directory and project roots.
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use camino::Utf8PathBuf;
 use dirs::home_dir;
 
-use crate::{OrthoResult, load_config_file};
+use crate::{OrthoError, OrthoResult, load_config_file};
 
 /// Builder for [`ConfigDiscovery`].
 ///
@@ -199,16 +200,16 @@ impl ConfigDiscovery {
     }
 
     fn push_explicit(&self, paths: &mut Vec<PathBuf>, seen: &mut HashSet<String>) {
+        for path in &self.explicit_paths {
+            Self::push_unique(paths, seen, path.clone());
+        }
+
         if let Some(value) = self
             .env_var
             .as_ref()
             .and_then(|env_var| std::env::var_os(env_var).filter(|v| !v.is_empty()))
         {
             Self::push_unique(paths, seen, PathBuf::from(value));
-        }
-
-        for path in &self.explicit_paths {
-            Self::push_unique(paths, seen, path.clone());
         }
     }
 
@@ -226,6 +227,26 @@ impl ConfigDiscovery {
             };
             Self::push_unique(paths, seen, nested.join(&self.config_file_name));
             Self::push_unique(paths, seen, base.join(&self.dotfile_name));
+            #[cfg(any(feature = "json5", feature = "yaml"))]
+            if let Some(stem) = Path::new(&self.config_file_name)
+                .file_stem()
+                .and_then(|stem| stem.to_str())
+            {
+                #[cfg(feature = "json5")]
+                {
+                    for ext in ["json", "json5"] {
+                        let filename = format!("{stem}.{ext}");
+                        Self::push_unique(paths, seen, nested.join(&filename));
+                    }
+                }
+                #[cfg(feature = "yaml")]
+                {
+                    for ext in ["yaml", "yml"] {
+                        let filename = format!("{stem}.{ext}");
+                        Self::push_unique(paths, seen, nested.join(&filename));
+                    }
+                }
+            }
         }
     }
 
@@ -328,14 +349,28 @@ impl ConfigDiscovery {
     /// Currently always returns `Ok`; the [`OrthoResult`] return type keeps the
     /// API aligned with other loaders and reserves space for future failures.
     pub fn load_first(&self) -> OrthoResult<Option<figment::Figment>> {
-        for path in self.candidates() {
-            match load_config_file(&path) {
-                Ok(Some(figment)) => return Ok(Some(figment)),
-                Ok(None) => {}
-                Err(_err) => {}
-            }
+        let (figment, errors) = self.load_first_with_errors();
+        if let Some(figment) = figment {
+            return Ok(Some(figment));
+        }
+        if let Some(err) = errors.into_iter().next() {
+            return Err(err);
         }
         Ok(None)
+    }
+
+    /// Attempts to load the first available configuration file while collecting errors.
+    #[must_use]
+    pub fn load_first_with_errors(&self) -> (Option<figment::Figment>, Vec<Arc<OrthoError>>) {
+        let mut errors = Vec::new();
+        for path in self.candidates() {
+            match load_config_file(&path) {
+                Ok(Some(figment)) => return (Some(figment), errors),
+                Ok(None) => {}
+                Err(err) => errors.push(err),
+            }
+        }
+        (None, errors)
     }
 }
 
