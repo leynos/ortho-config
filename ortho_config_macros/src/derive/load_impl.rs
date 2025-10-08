@@ -53,53 +53,22 @@ pub(crate) struct LoadImplArgs<'a> {
 /// Configuration files are searched in multiple locations as described in the
 /// "Configuration File Discovery" section of the design document. This mirrors
 /// standard XDG behaviour on Unix-like systems and uses `directories` on Windows.
-fn opt_to_litstr(value: Option<&String>) -> Option<syn::LitStr> {
+fn to_lit_str(value: Option<&String>) -> Option<syn::LitStr> {
     value.map(|value| syn::LitStr::new(value, proc_macro2::Span::call_site()))
 }
 
-fn builder_stmt(lit: Option<syn::LitStr>, method: &str) -> Option<proc_macro2::TokenStream> {
+fn build_optional_stmt(
+    lit: Option<syn::LitStr>,
+    method_name: &str,
+) -> Option<proc_macro2::TokenStream> {
     lit.map(|lit| {
-        let method_ident = syn::Ident::new(method, proc_macro2::Span::call_site());
+        let method_ident = syn::Ident::new(method_name, proc_macro2::Span::call_site());
         quote! { builder = builder.#method_ident(#lit); }
     })
 }
 
-pub(crate) fn build_file_discovery(
-    tokens: &LoadImplTokens<'_>,
-    has_config_path: bool,
-) -> proc_macro2::TokenStream {
-    let app_name_str = tokens
-        .discovery
-        .map_or(tokens.legacy_app_name, |discovery| {
-            discovery.app_name.as_str()
-        });
-    let app_name = syn::LitStr::new(app_name_str, proc_macro2::Span::call_site());
-    let env_stmt = if let Some(discovery) = tokens.discovery {
-        let env_var = syn::LitStr::new(&discovery.env_var, proc_macro2::Span::call_site());
-        quote! { builder = builder.env_var(#env_var); }
-    } else {
-        let config_env_var = tokens.config_env_var;
-        quote! { builder = builder.env_var(#config_env_var); }
-    };
-    let config_file_stmt = tokens.discovery.and_then(|discovery| {
-        builder_stmt(
-            opt_to_litstr(discovery.config_file_name.as_ref()),
-            "config_file_name",
-        )
-    });
-    let dotfile_lit = if let Some(discovery) = tokens.discovery {
-        opt_to_litstr(discovery.dotfile_name.as_ref())
-    } else {
-        Some(tokens.dotfile_name.clone())
-    };
-    let dotfile_stmt = builder_stmt(dotfile_lit, "dotfile_name");
-    let project_stmt = tokens.discovery.and_then(|discovery| {
-        builder_stmt(
-            opt_to_litstr(discovery.project_file_name.as_ref()),
-            "project_file_name",
-        )
-    });
-    let cli_chain = if has_config_path {
+fn build_cli_chain_tokens(has_config_path: bool) -> proc_macro2::TokenStream {
+    if has_config_path {
         quote! {
             if let Some(ref cli) = cli {
                 if let Some(ref path) = cli.config_path {
@@ -109,11 +78,30 @@ pub(crate) fn build_file_discovery(
         }
     } else {
         quote! {}
-    };
+    }
+}
+
+fn build_discovery_based_loading(
+    discovery: &DiscoveryTokens,
+    has_config_path: bool,
+) -> proc_macro2::TokenStream {
+    let app_name = syn::LitStr::new(&discovery.app_name, proc_macro2::Span::call_site());
+    let env_var = syn::LitStr::new(&discovery.env_var, proc_macro2::Span::call_site());
+    let config_file_stmt = build_optional_stmt(
+        to_lit_str(discovery.config_file_name.as_ref()),
+        "config_file_name",
+    );
+    let dotfile_stmt =
+        build_optional_stmt(to_lit_str(discovery.dotfile_name.as_ref()), "dotfile_name");
+    let project_stmt = build_optional_stmt(
+        to_lit_str(discovery.project_file_name.as_ref()),
+        "project_file_name",
+    );
+    let cli_chain = build_cli_chain_tokens(has_config_path);
     quote! {
         let mut file_fig = None;
         let mut builder = ortho_config::ConfigDiscovery::builder(#app_name);
-        #env_stmt
+        builder = builder.env_var(#env_var);
         #config_file_stmt
         #dotfile_stmt
         #project_stmt
@@ -124,6 +112,33 @@ pub(crate) fn build_file_discovery(
             file_fig = Some(fig);
         }
         errors.append(&mut discovery_errors);
+    }
+}
+
+pub(crate) fn build_file_discovery(
+    tokens: &LoadImplTokens<'_>,
+    has_config_path: bool,
+) -> proc_macro2::TokenStream {
+    if let Some(discovery) = tokens.discovery {
+        build_discovery_based_loading(discovery, has_config_path)
+    } else {
+        let app_name = syn::LitStr::new(tokens.legacy_app_name, proc_macro2::Span::call_site());
+        let config_env_var = tokens.config_env_var;
+        let dotfile_name = tokens.dotfile_name.clone();
+        let cli_chain = build_cli_chain_tokens(has_config_path);
+        quote! {
+            let mut file_fig = None;
+            let mut builder = ortho_config::ConfigDiscovery::builder(#app_name);
+            builder = builder.env_var(#config_env_var);
+            builder = builder.dotfile_name(#dotfile_name);
+            #cli_chain
+            let discovery = builder.build();
+            let (loaded_fig, mut discovery_errors) = discovery.load_first_with_errors();
+            if let Some(fig) = loaded_fig {
+                file_fig = Some(fig);
+            }
+            errors.append(&mut discovery_errors);
+        }
     }
 }
 
