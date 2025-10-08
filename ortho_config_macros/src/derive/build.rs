@@ -604,43 +604,44 @@ mod tests {
         assert!(err.to_string().contains(expected_error));
     }
 
-    #[test]
-    fn config_flag_rejects_duplicate_long_from_fields() {
-        let input: syn::DeriveInput = parse_quote! {
+    #[rstest]
+    #[case::long(
+        parse_quote! {
             struct Demo {
                 #[ortho_config(cli_long = "config")]
                 value: u32,
             }
-        };
-        let (_, fields, mut struct_attrs, field_attrs) =
-            crate::derive::parse::parse_input(&input).expect("parse_input");
-        let cli = build_cli_struct_fields(&fields, &field_attrs).expect("build cli fields");
-        struct_attrs.discovery = Some(DiscoveryAttrs {
+        },
+        DiscoveryAttrs {
             config_cli_long: Some(String::from("config")),
             ..DiscoveryAttrs::default()
-        });
-        let err = build_config_flag_field(&struct_attrs, &cli.used_shorts, &cli.used_longs)
-            .expect_err("should fail");
-        assert!(err.to_string().contains("duplicate `cli_long` value"));
-    }
-
-    #[test]
-    fn config_flag_rejects_duplicate_short_from_fields() {
-        let input: syn::DeriveInput = parse_quote! {
+        },
+        "duplicate `cli_long` value",
+    )]
+    #[case::short(
+        parse_quote! {
             struct Demo {
                 value: u32,
             }
-        };
+        },
+        DiscoveryAttrs {
+            config_cli_short: Some('v'),
+            ..DiscoveryAttrs::default()
+        },
+        "duplicate `cli_short` value",
+    )]
+    fn config_flag_rejects_duplicate_from_fields(
+        #[case] input: syn::DeriveInput,
+        #[case] discovery: DiscoveryAttrs,
+        #[case] expected: &str,
+    ) {
         let (_, fields, mut struct_attrs, field_attrs) =
             crate::derive::parse::parse_input(&input).expect("parse_input");
         let cli = build_cli_struct_fields(&fields, &field_attrs).expect("build cli fields");
-        struct_attrs.discovery = Some(DiscoveryAttrs {
-            config_cli_short: Some('v'),
-            ..DiscoveryAttrs::default()
-        });
+        struct_attrs.discovery = Some(discovery);
         let err = build_config_flag_field(&struct_attrs, &cli.used_shorts, &cli.used_longs)
             .expect_err("should fail");
-        assert!(err.to_string().contains("duplicate `cli_short` value"));
+        assert!(err.to_string().contains(expected));
     }
 
     #[rstest]
