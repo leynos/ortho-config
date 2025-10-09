@@ -58,13 +58,14 @@ fn is_bool_type(ty: &Type) -> bool {
 ///
 /// let name: syn::Ident = parse_quote!(field);
 /// let mut used = HashSet::new();
-/// let ch = validate_user_cli_short(&name, 'f', &mut used).expect("short flag");
+/// let ch = validate_user_cli_short(&name, 'f', &used).expect("short flag");
+/// used.insert(ch);
 /// assert_eq!(ch, 'f');
 /// ```
 fn validate_user_cli_short(
     name: &Ident,
     user: char,
-    used_shorts: &mut HashSet<char>,
+    used_shorts: &HashSet<char>,
 ) -> syn::Result<char> {
     if !user.is_ascii_alphanumeric() {
         return Err(syn::Error::new_spanned(
@@ -78,7 +79,7 @@ fn validate_user_cli_short(
             format!("reserved `cli_short` '{user}' conflicts with global flags"),
         ));
     }
-    if !used_shorts.insert(user) {
+    if used_shorts.contains(&user) {
         return Err(syn::Error::new_spanned(name, "duplicate `cli_short` value"));
     }
     Ok(user)
@@ -180,7 +181,9 @@ fn resolve_short_flag(
     used_shorts: &mut HashSet<char>,
 ) -> syn::Result<char> {
     if let Some(user) = attrs.cli_short {
-        return validate_user_cli_short(name, user, used_shorts);
+        let claimed = validate_user_cli_short(name, user, used_shorts)?;
+        used_shorts.insert(claimed);
+        return Ok(claimed);
     }
     find_default_short_flag(name, used_shorts)
 }
@@ -350,8 +353,7 @@ pub(crate) fn build_config_flag_field(
     let long_lit = syn::LitStr::new(&long, proc_macro2::Span::call_site());
     let mut arg_meta: Vec<proc_macro2::TokenStream> = vec![quote! { long = #long_lit }];
     if let Some(short) = discovery.and_then(|attrs| attrs.config_cli_short) {
-        let mut used = used_shorts.clone();
-        let claimed = validate_user_cli_short(&name, short, &mut used)?;
+        let claimed = validate_user_cli_short(&name, short, used_shorts)?;
         let short_lit = syn::LitChar::new(claimed, proc_macro2::Span::call_site());
         arg_meta.push(quote! { short = #short_lit });
     }

@@ -1,4 +1,10 @@
 //! Tests for struct-level discovery attributes.
+//!
+//! Validates that the `#[ortho_config(discovery(...))]` attribute correctly
+//! customises configuration discovery, including CLI flag names, environment
+//! variable names, and file paths. Tests cover loading via CLI flags,
+//! environment variables, `XDG_CONFIG_HOME`, dotfile fallback, defaults, and
+//! error handling for missing or malformed configurations.
 
 use ortho_config::{OrthoConfig, OrthoError};
 use rstest::rstest;
