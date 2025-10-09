@@ -174,7 +174,7 @@ references the relevant design guidance.
   - [ ] Derive `DeclarativeMerge` alongside `OrthoConfig`, generating
     field-level merge arms and attribute-driven strategies for collections.
 
-  - [ ] Emit a `MergeComposer` builder that discovers file layers and serialises
+  - [ ] Emit a `MergeComposer` builder that discovers file layers and serializes
     CLI and environment input into `MergeLayer` instances without exposing
     Figment publicly.
 

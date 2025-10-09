@@ -127,7 +127,7 @@ responsibility via a trait-driven merge pipeline:
     an individual layer into the accumulated configuration. Layers describe
     their provenance (`Defaults`, `File`, `Environment`, or `Cli`) so telemetry
     and tracing remain meaningful.
-  - `fn finish(self) -> OrthoResult<Self::Output>` finalises post-processing
+  - `fn finish(self) -> OrthoResult<Self::Output>` finalizes post-processing
     such as vector append strategies. For plain structs `Output = Self`.
 - `MergeLayer<'a>` wraps borrowed data produced by the derive macro. CLI
   arguments and environment captures stay in `Cow<'a, serde_json::Value>` so
