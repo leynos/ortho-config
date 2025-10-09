@@ -59,6 +59,9 @@ and `%APPDATA%`), and finally falls back to `$HOME/.hello_world.toml` and the
 working directory. The shipped overrides enable a `Layered hello` preamble and
 triple exclamation marks, so the behavioural suite and demo scripts assert the
 shouted output (`HEY CONFIG FRIENDS, EXCITED CREW!!!`) to guard the layering.
+The derive uses `#[ortho_config(prefix = "HELLO_WORLD")]`; the macro appends
+the trailing underscore automatically so environment variables continue to use
+the `HELLO_WORLD_` prefix.
 
 Once the workspace is built, `scripts/demo.sh` (or `scripts/demo.cmd` on
 Windows) can be executed. Each script creates an isolated temporary directory,

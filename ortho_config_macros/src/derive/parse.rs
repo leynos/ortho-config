@@ -95,7 +95,14 @@ pub(crate) fn parse_struct_attrs(attrs: &[Attribute]) -> Result<StructAttrs, syn
         if meta.path.is_ident("prefix") {
             let val = meta.value()?.parse::<Lit>()?;
             if let Lit::Str(s) = val {
-                out.prefix = Some(s.value());
+                let mut value = s.value();
+                if !value.is_empty() && !value.ends_with('_') {
+                    // Permit callers to omit the trailing underscore commonly used
+                    // for environment variable prefixes. Normalise the stored value
+                    // so downstream code can assume the delimiter is present.
+                    value.push('_');
+                }
+                out.prefix = Some(value);
             } else {
                 return Err(syn::Error::new(val.span(), "prefix must be a string"));
             }
@@ -438,7 +445,7 @@ pub(crate) fn parse_input(
 mod tests {
     use super::*;
     use rstest::rstest;
-    use syn::parse_quote;
+    use syn::{Attribute, parse_quote};
 
     #[test]
     fn parses_struct_and_field_attributes() {
@@ -546,6 +553,18 @@ mod tests {
         assert_eq!(fields.len(), 1);
         assert_eq!(struct_attrs.prefix.as_deref(), Some("CFG_"));
         assert_eq!(field_attrs[0].cli_long.as_deref(), cli_long);
+    }
+
+    #[rstest]
+    #[case::missing_suffix("APP", "APP_")]
+    #[case::with_suffix("APP_", "APP_")]
+    #[case::empty("", "")]
+    fn struct_prefix_normalises_trailing_underscore(#[case] raw: &str, #[case] expected: &str) {
+        let lit = syn::LitStr::new(raw, proc_macro2::Span::call_site());
+        let attr: Attribute = syn::parse_quote!(#[ortho_config(prefix = #lit)]);
+        let attrs = parse_struct_attrs(&[attr]).expect("struct attrs should parse");
+
+        assert_eq!(attrs.prefix.as_deref(), Some(expected));
     }
 
     #[rstest]
