@@ -62,6 +62,98 @@ struct MacroComponents {
     prefix_fn: Option<proc_macro2::TokenStream>,
 }
 
+#[derive(Clone, Copy)]
+struct LoadTokenRefs<'a> {
+    env_provider: &'a proc_macro2::TokenStream,
+    default_struct_init: &'a [proc_macro2::TokenStream],
+    override_init_ts: &'a proc_macro2::TokenStream,
+    append_logic: &'a proc_macro2::TokenStream,
+    config_env_var: &'a proc_macro2::TokenStream,
+    dotfile_name: &'a syn::LitStr,
+}
+
+fn build_cli_struct_tokens(
+    fields: &[syn::Field],
+    field_attrs: &[derive::parse::FieldAttrs],
+    struct_attrs: &derive::parse::StructAttrs,
+) -> syn::Result<Vec<proc_macro2::TokenStream>> {
+    let has_user_config_path = fields.iter().any(|field| {
+        field
+            .ident
+            .as_ref()
+            .is_some_and(|ident| ident == "config_path")
+    });
+    let mut cli_struct = build_cli_struct_fields(fields, field_attrs)?;
+    if !has_user_config_path {
+        let config_field = build_config_flag_field(
+            struct_attrs,
+            &cli_struct.used_shorts,
+            &cli_struct.used_longs,
+        )?;
+        cli_struct.fields.push(config_field);
+    }
+    Ok(cli_struct.fields)
+}
+
+fn build_discovery_tokens(
+    struct_attrs: &derive::parse::StructAttrs,
+    ident: &syn::Ident,
+) -> Option<DiscoveryTokens> {
+    let default_app_name_value = default_app_name(struct_attrs, ident);
+    struct_attrs
+        .discovery
+        .as_ref()
+        .map(|attrs| DiscoveryTokens {
+            app_name: attrs.app_name.clone().unwrap_or(default_app_name_value),
+            env_var: attrs
+                .env_var
+                .clone()
+                .unwrap_or_else(|| compute_config_env_var(struct_attrs)),
+            config_file_name: attrs.config_file_name.clone(),
+            dotfile_name: attrs.dotfile_name.clone(),
+            project_file_name: attrs.project_file_name.clone(),
+        })
+}
+
+fn build_load_impl_args<'a>(
+    idents: LoadImplIdents<'a>,
+    token_refs: LoadTokenRefs<'a>,
+    struct_attrs: &'a derive::parse::StructAttrs,
+    discovery_tokens: Option<&'a DiscoveryTokens>,
+    legacy_app_name_value: &'a mut String,
+    has_config_path: bool,
+) -> LoadImplArgs<'a> {
+    *legacy_app_name_value = struct_attrs
+        .prefix
+        .as_ref()
+        .map(|prefix| prefix.trim_end_matches('_').to_ascii_lowercase())
+        .unwrap_or_default();
+    let legacy_app_name: &'a str = legacy_app_name_value.as_str();
+    let LoadTokenRefs {
+        env_provider,
+        default_struct_init,
+        override_init_ts,
+        append_logic,
+        config_env_var,
+        dotfile_name,
+    } = token_refs;
+
+    LoadImplArgs {
+        idents,
+        tokens: LoadImplTokens {
+            env_provider,
+            default_struct_init,
+            override_init_ts,
+            append_logic,
+            config_env_var,
+            dotfile_name,
+            legacy_app_name,
+            discovery: discovery_tokens,
+        },
+        has_config_path,
+    }
+}
+
 /// Build all components required for macro output.
 fn build_macro_components(
     ident: &syn::Ident,
@@ -72,19 +164,7 @@ fn build_macro_components(
     let defaults_ident = format_ident!("__{}Defaults", ident);
     let default_struct_fields = build_default_struct_fields(fields);
     let cli_ident = format_ident!("__{}Cli", ident);
-    let has_user_config_path = fields
-        .iter()
-        .any(|f| f.ident.as_ref().is_some_and(|id| id == "config_path"));
-    let mut cli_struct = build_cli_struct_fields(fields, field_attrs)?;
-    if !has_user_config_path {
-        let config_field = build_config_flag_field(
-            struct_attrs,
-            &cli_struct.used_shorts,
-            &cli_struct.used_longs,
-        )?;
-        cli_struct.fields.push(config_field);
-    }
-    let cli_struct_fields = cli_struct.fields;
+    let cli_struct_fields = build_cli_struct_tokens(fields, field_attrs, struct_attrs)?;
     let default_struct_init = build_default_struct_init(fields, field_attrs);
     let env_provider = build_env_provider(struct_attrs);
     let config_env_var = build_config_env_var(struct_attrs);
@@ -94,46 +174,30 @@ fn build_macro_components(
     let (override_struct_ts, override_init_ts) = build_override_struct(ident, &append_fields);
     let append_logic = build_append_logic(&append_fields);
     let has_config_path = true;
-    let default_app_name_value = default_app_name(struct_attrs, ident);
-    let legacy_app_name_value = struct_attrs
-        .prefix
-        .as_ref()
-        .map(|prefix| prefix.trim_end_matches('_').to_ascii_lowercase())
-        .unwrap_or_default();
-    let discovery_tokens = struct_attrs
-        .discovery
-        .as_ref()
-        .map(|attrs| DiscoveryTokens {
-            app_name: attrs
-                .app_name
-                .clone()
-                .unwrap_or_else(|| default_app_name_value.clone()),
-            env_var: attrs
-                .env_var
-                .clone()
-                .unwrap_or_else(|| compute_config_env_var(struct_attrs)),
-            config_file_name: attrs.config_file_name.clone(),
-            dotfile_name: attrs.dotfile_name.clone(),
-            project_file_name: attrs.project_file_name.clone(),
-        });
-    let load_impl = build_load_impl(&LoadImplArgs {
-        idents: LoadImplIdents {
-            cli_ident: &cli_ident,
-            config_ident: ident,
-            defaults_ident: &defaults_ident,
-        },
-        tokens: LoadImplTokens {
-            env_provider: &env_provider,
-            default_struct_init: &default_struct_init,
-            override_init_ts: &override_init_ts,
-            append_logic: &append_logic,
-            config_env_var: &config_env_var,
-            dotfile_name: &dotfile_name,
-            legacy_app_name: &legacy_app_name_value,
-            discovery: discovery_tokens.as_ref(),
-        },
+    let discovery_tokens = build_discovery_tokens(struct_attrs, ident);
+    let mut legacy_app_name_value = String::new();
+    let load_impl_idents = LoadImplIdents {
+        cli_ident: &cli_ident,
+        config_ident: ident,
+        defaults_ident: &defaults_ident,
+    };
+    let load_token_refs = LoadTokenRefs {
+        env_provider: &env_provider,
+        default_struct_init: &default_struct_init,
+        override_init_ts: &override_init_ts,
+        append_logic: &append_logic,
+        config_env_var: &config_env_var,
+        dotfile_name: &dotfile_name,
+    };
+    let load_impl_args = build_load_impl_args(
+        load_impl_idents,
+        load_token_refs,
+        struct_attrs,
+        discovery_tokens.as_ref(),
+        &mut legacy_app_name_value,
         has_config_path,
-    });
+    );
+    let load_impl = build_load_impl(&load_impl_args);
     let prefix_fn = struct_attrs.prefix.as_ref().map(|prefix| {
         quote! {
             fn prefix() -> &'static str {
