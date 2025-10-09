@@ -161,18 +161,30 @@ references the relevant design guidance.
     without duplicating boilerplate.
     [[Feedback](feedback-from-hello-world-example.md)]
 
-- [ ] **Introduce declarative configuration merging**
+- [x] **Introduce declarative configuration merging**
 
-  - [ ] Design a library-level merging trait or API that composes layered
-    configuration structs without the ad hoc Figment plumbing required in the
-    example crate. [[Feedback](feedback-from-hello-world-example.md)]
+  - [x] Define the `DeclarativeMerge`, `MergeLayer`, and `MergeComposer` design
+    that replaces hand-written Figment wiring in the hello_world example and
+    future clients. [[Feedback](feedback-from-hello-world-example.md)]
 
-  - [ ] Ensure merge failures map to `OrthoError` consistently so downstream
-    binaries no longer need bespoke error conversion when combining loaders.
-    [[Feedback](feedback-from-hello-world-example.md)]
+  - [ ] Document declarative merging with examples covering defaults, file
+    overrides, environment variables, and CLI adjustments to codify expected
+    behaviour. [[Feedback](feedback-from-hello-world-example.md)]
 
-  - [ ] Document the declarative merge flow with examples that cover global
-    defaults, file overrides and CLI adjustments to codify expected behaviour.
+  - [ ] Derive `DeclarativeMerge` alongside `OrthoConfig`, generating
+    field-level merge arms and attribute-driven strategies for collections.
+
+  - [ ] Emit a `MergeComposer` builder that discovers file layers and serializes
+    CLI and environment input into `MergeLayer` instances without exposing
+    Figment publicly.
+
+  - [ ] Replace `load_global_config` and related helpers in examples with the
+    new API. Add regression coverage using the behavioural testing
+    fixtures.[^roadmap-behavioural] Reuse the parameterised setups from the
+    rstest fixture guide.[^roadmap-rstest]
+
+  - [ ] Route merge failures through `OrthoError::Merge` so binaries rely on a
+    single shared error surface when combining loaders.
     [[Feedback](feedback-from-hello-world-example.md)]
 
 - [ ] **Streamline subcommand configuration overrides**
@@ -203,6 +215,9 @@ references the relevant design guidance.
     acknowledging that this lies outside the initial scope but is part of the
     long‑term vision. [[Design](design.md#7-future-work)]
 
-These items collectively define a coherent roadmap for advancing OrthoConfig
-toward the capabilities described in the design documents and bridging the gaps
-observed in the current implementation.
+  These items collectively define a coherent roadmap for advancing OrthoConfig
+  toward the capabilities described in the design documents and bridging
+  the gaps observed in the current implementation.
+
+[^roadmap-behavioural]: `docs/behavioural-testing-in-rust-with-cucumber.md`.
+[^roadmap-rstest]: `docs/rust-testing-with-rstest-fixtures.md`.
