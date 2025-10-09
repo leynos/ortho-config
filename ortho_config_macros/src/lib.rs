@@ -72,6 +72,21 @@ struct LoadTokenRefs<'a> {
     dotfile_name: &'a syn::LitStr,
 }
 
+/// Build CLI struct field tokens, conditionally adding a generated
+/// `config_path` field.
+///
+/// If no user-defined `config_path` field exists, generates a config flag field
+/// based on discovery attributes from `struct_attrs`.
+///
+/// # Arguments
+///
+/// - `fields`: Struct fields used to generate CLI tokens.
+/// - `field_attrs`: Per-field attributes controlling CLI generation.
+/// - `struct_attrs`: Struct-level attributes including discovery settings.
+///
+/// # Errors
+///
+/// Returns an error if CLI flag collisions are detected.
 fn build_cli_struct_tokens(
     fields: &[syn::Field],
     field_attrs: &[derive::parse::FieldAttrs],
@@ -95,6 +110,17 @@ fn build_cli_struct_tokens(
     Ok(cli_struct.fields)
 }
 
+/// Build discovery tokens from struct-level `discovery(...)` attributes.
+///
+/// Populates discovery settings with defaults derived from
+/// `struct_attrs.prefix` and `ident` when explicit values are not provided.
+/// Returns `None` if no discovery attribute is present.
+///
+/// # Arguments
+///
+/// - `struct_attrs`: Struct-level attributes that may include discovery
+///   configuration.
+/// - `ident`: The struct identifier used to derive default app names.
 fn build_discovery_tokens(
     struct_attrs: &derive::parse::StructAttrs,
     ident: &syn::Ident,
@@ -122,19 +148,30 @@ struct LoadImplConfig<'a> {
     has_config_path: bool,
 }
 
+/// Construct `LoadImplArgs` by combining identifiers, token references, and
+/// configuration.
+///
+/// Computes the legacy app name from the optional prefix so the legacy
+/// discovery flow can reuse the builder without mutating state in the caller.
+///
+/// # Arguments
+///
+/// - `idents`: CLI, config, and defaults struct identifiers.
+/// - `token_refs`: References to token streams used in the load
+///   implementation.
+/// - `config`: Configuration grouping discovery tokens and config-path
+///   presence.
 fn build_load_impl_args<'a>(
     idents: LoadImplIdents<'a>,
     token_refs: LoadTokenRefs<'a>,
     config: LoadImplConfig<'a>,
-    legacy_app_name_value: &'a mut String,
 ) -> LoadImplArgs<'a> {
-    *legacy_app_name_value = config
+    let legacy_app_name = config
         .struct_attrs
         .prefix
         .as_ref()
         .map(|prefix| prefix.trim_end_matches('_').to_ascii_lowercase())
         .unwrap_or_default();
-    let legacy_app_name: &'a str = legacy_app_name_value.as_str();
     let LoadTokenRefs {
         env_provider,
         default_struct_init,
@@ -181,7 +218,6 @@ fn build_macro_components(
     let append_logic = build_append_logic(&append_fields);
     let has_config_path = true;
     let discovery_tokens = build_discovery_tokens(struct_attrs, ident);
-    let mut legacy_app_name_value = String::new();
     let load_impl_idents = LoadImplIdents {
         cli_ident: &cli_ident,
         config_ident: ident,
@@ -200,12 +236,7 @@ fn build_macro_components(
         discovery_tokens: discovery_tokens.as_ref(),
         has_config_path,
     };
-    let load_impl_args = build_load_impl_args(
-        load_impl_idents,
-        load_token_refs,
-        load_impl_config,
-        &mut legacy_app_name_value,
-    );
+    let load_impl_args = build_load_impl_args(load_impl_idents, load_token_refs, load_impl_config);
     let load_impl = build_load_impl(&load_impl_args);
     let prefix_fn = struct_attrs.prefix.as_ref().map(|prefix| {
         quote! {

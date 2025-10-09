@@ -60,6 +60,14 @@ struct CwdGuard {
     original: std::path::PathBuf,
 }
 
+impl CwdGuard {
+    fn new() -> Self {
+        Self {
+            original: env::current_dir().expect("capture current directory"),
+        }
+    }
+}
+
 impl Drop for CwdGuard {
     fn drop(&mut self) {
         env::set_current_dir(&self.original).expect("restore current dir");
@@ -171,10 +179,7 @@ fn dotfile_fallback_uses_custom_name() {
     let dir = TempDir::new().expect("temp dir");
     let _ = create_test_config(dir.path(), ".demo.toml", 23);
 
-    let original_dir = env::current_dir().expect("current dir");
-    let _cwd_guard = CwdGuard {
-        original: original_dir,
-    };
+    let _cwd_guard = CwdGuard::new();
     env::set_current_dir(dir.path()).expect("set current dir");
     let cfg = DiscoveryConfig::load_from_iter(["prog"]).expect("load config from dotfile");
 

@@ -27,7 +27,7 @@ pub(crate) struct LoadImplTokens<'a> {
     pub append_logic: &'a proc_macro2::TokenStream,
     pub config_env_var: &'a proc_macro2::TokenStream,
     pub dotfile_name: &'a syn::LitStr,
-    pub legacy_app_name: &'a str,
+    pub legacy_app_name: String,
     pub discovery: Option<&'a DiscoveryTokens>,
 }
 
@@ -122,7 +122,7 @@ pub(crate) fn build_file_discovery(
     if let Some(discovery) = tokens.discovery {
         build_discovery_based_loading(discovery, has_config_path)
     } else {
-        let app_name = syn::LitStr::new(tokens.legacy_app_name, proc_macro2::Span::call_site());
+        let app_name = syn::LitStr::new(&tokens.legacy_app_name, proc_macro2::Span::call_site());
         let config_env_var = tokens.config_env_var;
         let dotfile_name = tokens.dotfile_name.clone();
         let cli_chain = build_cli_chain_tokens(has_config_path);
