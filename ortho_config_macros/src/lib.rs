@@ -115,6 +115,7 @@ fn build_discovery_tokens(
         })
 }
 
+#[derive(Clone, Copy)]
 struct LoadImplConfig<'a> {
     struct_attrs: &'a derive::parse::StructAttrs,
     discovery_tokens: Option<&'a DiscoveryTokens>,
@@ -124,7 +125,7 @@ struct LoadImplConfig<'a> {
 fn build_load_impl_args<'a>(
     idents: LoadImplIdents<'a>,
     token_refs: LoadTokenRefs<'a>,
-    config: &LoadImplConfig<'a>,
+    config: LoadImplConfig<'a>,
     legacy_app_name_value: &'a mut String,
 ) -> LoadImplArgs<'a> {
     *legacy_app_name_value = config
@@ -202,7 +203,7 @@ fn build_macro_components(
     let load_impl_args = build_load_impl_args(
         load_impl_idents,
         load_token_refs,
-        &load_impl_config,
+        load_impl_config,
         &mut legacy_app_name_value,
     );
     let load_impl = build_load_impl(&load_impl_args);
