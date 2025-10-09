@@ -13,10 +13,10 @@ current behavior and guide the proposed enhancements.
 find configuration files. In `examples/hello_world/src/cli/discovery.rs`,
 functions like `add_xdg_config_paths`, `add_windows_config_paths`, and others
 are manually invoked to build a list of candidate
-paths([1](examples/hello_world/src/cli/discovery.rs#L14-L23)).
- This includes checking an explicit environment variable
-(`HELLO_WORLD_CONFIG_PATH`) for a config file and searching standard locations
-(XDG directories, `%APPDATA%`, home directory, working
+paths([1](examples/hello_world/src/cli/discovery.rs#L14-L23)). This includes
+checking an explicit environment variable (`HELLO_WORLD_CONFIG_PATH`) for a
+config file and searching standard locations (XDG directories, `%APPDATA%`,
+home directory, working
 directory)([1](examples/hello_world/src/cli/discovery.rs#L29-L37))([1](examples/hello_world/src/cli/discovery.rs#L68-L76)).
  Writing and maintaining this logic is tedious and error-prone.
 
@@ -33,12 +33,11 @@ call. Specifically:
   fall back to standard directories (XDG on Unix, `AppData` on Windows, etc.),
   and finally the current directory. This leverages existing internal utilities
   – for instance, the library already has a `candidate_paths` helper for
-  subcommands that enumerates
-  `~/.<app>.toml`, `$XDG_CONFIG_HOME/<app>/config.toml`, `./.<app>.toml`,
-  etc.([2](ortho_config/src/subcommand/paths.rs#L180-L188)).
-   By extending this to also handle a user-provided path or environment
-  override, the library can return a merged Figment (or config struct) in one
-  step.
+  subcommands that enumerates `~/.<app>.toml`,
+  `$XDG_CONFIG_HOME/<app>/config.toml`, `./.<app>.toml`,
+  etc.([2](ortho_config/src/subcommand/paths.rs#L180-L188)). By extending this
+  to also handle a user-provided path or environment override, the library can
+  return a merged Figment (or config struct) in one step.
 
 - **Reduce boilerplate for developers:** With this in place, the example’s
   discovery module could be replaced by a single call, e.g.
@@ -56,9 +55,9 @@ call. Specifically:
   `#[ortho_config(config = "hello_world", config_flag = "config")]` might
   generate a `--config` CLI flag and use `HELLO_WORLD_CONFIG_PATH` internally
   (the roadmap indicates support for renaming the config path flag is already
-  planned([3](docs/roadmap.md#L114-L122))).
-   This way, developers can opt-in to a custom file name or flag, but the
-  underlying discovery logic remains in the library.
+  planned([3](docs/roadmap.md#L114-L122))). This way, developers can opt-in to
+  a custom file name or flag, but the underlying discovery logic remains in the
+  library.
 
 **Outcome:** By abstracting file discovery, an application like `hello_world`
 can load configuration with one line, instead of maintaining dozens of lines of
@@ -107,30 +106,28 @@ append or replace based on policy).
   at least providing a higher-level method to merge an *overrides struct* into
   a base config would help. This is hinted in the design: the crate intended a
   single derive to “handle the entire lifecycle of parsing, layering,
-  merging”([5](docs/design.md#L14-L22)).
-   Realizing that vision fully means fewer ad-hoc merges in user code.
+  merging”([5](docs/design.md#L14-L22)). Realizing that vision fully means
+  fewer ad-hoc merges in user code.
 
 - **Array and List Merging Strategies:** As part of a more expressive merge
   mechanism, support configurable strategies for merging arrays/vectors. The
   design documents mention an `"append"` strategy for lists (where values from
-  files, env, and CLI
-  accumulate)([5](docs/design.md#L8-L16)).
-   Implementing this would remove the need for the example’s manual logic to
-  decide if CLI salutations should override or extend defaults. For instance, a
-  field attribute `#[ortho_config(strategy = "append")]` could instruct the
-  derive to merge vector values by concatenation instead of replacement.
-  Internally, the library could extract lists from each source and combine them
-  post-deserialization([5](docs/design.md#L2-L10)).
-   This would greatly simplify handling of repeated parameters like the
-  `salutations` vector.
+  files, env, and CLI accumulate)([5](docs/design.md#L8-L16)). Implementing
+  this would remove the need for the example’s manual logic to decide if CLI
+  salutations should override or extend defaults. For instance, a field
+  attribute `#[ortho_config(strategy = "append")]` could instruct the derive to
+  merge vector values by concatenation instead of replacement. Internally, the
+  library could extract lists from each source and combine them
+  post-deserialization([5](docs/design.md#L2-L10)). This would greatly simplify
+  handling of repeated parameters like the `salutations` vector.
 
 - **Error Handling Improvements:** A generic merge system can also uniformly
   handle errors. In the current example, errors from merging are wrapped into a
   custom `HelloWorldError` enum. A library-provided merge would return a
   standard `OrthoError::Merge` on failure (already supported via
   `into_ortho_merge()` when using
-  Figment([4](examples/hello_world/src/cli/mod.rs#L2-L5))),
-   reducing the need for custom error conversion code.
+  Figment([4](examples/hello_world/src/cli/mod.rs#L2-L5))), reducing the need
+  for custom error conversion code.
 
 **Outcome:** Developers would no longer need to write functions like
 `load_global_config` to manually orchestrate merging. They could rely on either
@@ -140,9 +137,8 @@ configuration composition more *composable* – different config pieces could be
 merged with each other in a clean, trait-driven manner – and less brittle,
 since the logic lives in the library. The explicit merging code in the example
 (creating `Overrides`, calling `figment.merge(...)` for each
-layer([4](examples/hello_world/src/cli/mod.rs#L293-L301)))
- would be replaced by library calls, making the application code cleaner and
-easier to follow.
+layer([4](examples/hello_world/src/cli/mod.rs#L293-L301))) would be replaced by
+library calls, making the application code cleaner and easier to follow.
 
 ## 3. Streamlined Subcommand Configuration and Overrides
 
@@ -152,13 +148,12 @@ apply file-based overrides on top of CLI inputs. After calling
 `args.load_and_merge()` for the `GreetCommand`, the code calls
 `apply_greet_overrides(&mut merged)` to inject any `[cmds.greet]` values from
 the config file into the final
-struct([4](examples/hello_world/src/cli/mod.rs#L343-L351)).
- This was necessary because the library did not automatically apply those
-overrides in the merged result – likely due to how default CLI values (like the
-default `"!"` punctuation) were treated as overriding file values. In contrast,
-the `take-leave` subcommand did not have special overrides in the example, but
-it highlights an inconsistency in how different subcommands might need extra
-code.
+struct([4](examples/hello_world/src/cli/mod.rs#L343-L351)). This was necessary
+because the library did not automatically apply those overrides in the merged
+result – likely due to how default CLI values (like the default `"!"`
+punctuation) were treated as overriding file values. In contrast, the
+`take-leave` subcommand did not have special overrides in the example, but it
+highlights an inconsistency in how different subcommands might need extra code.
 
 **Proposal:** Enhance `ortho-config` to natively support subcommand-specific
 config layering and custom merge logic, so that such overrides happen
@@ -179,10 +174,9 @@ transparently:
   optional internally, `args.load_and_merge()` would leave it unset and thus
   the file’s `cmds.greet.punctuation` would merge in. The roadmap explicitly
   mentions distinguishing values explicitly provided on CLI vs defaults to
-  avoid incorrect
-  overrides([3](docs/roadmap.md#L72-L80));
-   implementing that for subcommands would eliminate the need for manual
-  fix-ups like `apply_greet_overrides`.
+  avoid incorrect overrides([3](docs/roadmap.md#L72-L80)); implementing that
+  for subcommands would eliminate the need for manual fix-ups like
+  `apply_greet_overrides`.
 
 - **Custom Merge Hooks for Subcommands:** For advanced cases, allow developers
   to inject custom merging logic per subcommand. This could be done via a trait
@@ -221,7 +215,7 @@ system, with the library doing the heavy lifting of merging default values,
 config file sections, environment variables, and CLI inputs for each command.
 The explicit override application seen in
 `apply_greet_overrides`([4](examples/hello_world/src/cli/mod.rs#L343-L351))
- could be dropped entirely – the `GreetCommand::load_and_merge()` would yield a
+could be dropped entirely – the `GreetCommand::load_and_merge()` would yield a
 fully merged struct. This makes the code for running subcommands cleaner and
 less error-prone (developers won’t forget to apply overrides for a new
 subcommand, for example). It also aligns with the library’s goal of *reducing
@@ -243,5 +237,5 @@ focused on preserving the library’s flexibility (through traits or optional
 overrides) while adopting sensible defaults that cover the majority of
 use-cases without extra code. This aligns with the project’s vision of
 **“dramatic reduction in boilerplate and cognitive load”** for configuration
-management([5](docs/design.md#L24-L31)),
- moving closer to a truly *batteries-included* experience.
+management([5](docs/design.md#L24-L31)), moving closer to a truly
+*batteries-included* experience.

@@ -201,15 +201,26 @@ append deterministically and that subcommand defaults flow straight from
 ### 4.5. Configuration discovery helper
 
 `ConfigDiscovery` now wraps the path search order previously hand-written in
-the example. A builder customises the environment variable, dotfile name, and
-project roots without duplicating the discovery routine. The helper maintains
-the precedence from the example: explicit overrides via `<PREFIX>_CONFIG_PATH`,
-then XDG locations (including `/etc/xdg` when `XDG_CONFIG_DIRS` is unset),
-Windows application data directories, the user's home directory, and finally
-project roots. Candidates are gathered without duplication, using
-case-insensitive comparison on Windows to avoid repeated I/O. Consumers can
-call `utf8_candidates()` to receive `camino::Utf8PathBuf` values when they
-prefer strong UTF-8 typing.
+the example. A builder customises the environment variable, dotfile name,
+project roots, and the canonical config filename without duplicating the
+discovery routine. The helper maintains the precedence from the example:
+explicit overrides via `<PREFIX>_CONFIG_PATH`, then XDG locations (including
+`/etc/xdg` when `XDG_CONFIG_DIRS` is unset), Windows application data
+directories, the user's home directory, and finally project roots. Candidates
+are gathered without duplication, using case-insensitive comparison on Windows
+to avoid repeated I/O. Consumers can call `utf8_candidates()` to receive
+`camino::Utf8PathBuf` values when they prefer strong UTF-8 typing.
+
+When a struct applies the new `#[ortho_config(discovery(...))]` attribute the
+derive macro feeds the builder and adopts its output. Callers can therefore
+rename the generated CLI flag, expose a short alias, or change the default
+filenames used during discovery without introducing custom glue code. The
+attribute mirrors the builder surface (`app_name`, `env_var`,
+`config_file_name`, `dotfile_name`, `project_file_name`, `config_cli_long`,
+`config_cli_short`, and `config_cli_visible`) while retaining the previous
+defaults when omitted. Behavioural tests in the `hello_world` example exercise
+the new `--config`/`-c` flags alongside the environment overrides to confirm
+the precedence order is preserved.
 
 `ConfigDiscovery::load_first` delegates to `load_config_file`, short-circuiting
 once a readable file is found. Failed reads are skipped so later candidates can
@@ -626,7 +637,7 @@ This design provides a clear path forward for implementing `OrthoConfig`. By
 building on a solid foundation of existing crates and focusing on the developer
 experience, we can create a highly valuable addition to the Rust ecosystem.
 
-## 9. Decision record
+## 9. Decision log
 
 - **Adopt a trait-based declarative merge pipeline (2024-05-27):** The derive
   macro will generate `DeclarativeMerge`, `MergeLayer`, and `MergeComposer`
@@ -634,6 +645,12 @@ experience, we can create a highly valuable addition to the Rust ecosystem.
   providers.[^hello-world-feedback] The approach keeps layering predictable,
   allows behavioural tests to inject bespoke layers, and ensures merge failures
   consistently surface as `OrthoError::Merge`.
+
+- **Prefix normalisation:** The `prefix` struct attribute now appends a trailing
+  underscore when callers omit it (unless the string is empty). This keeps
+  attribute usage ergonomic for API consumers—`#[ortho_config(prefix = "APP")]`
+  produces environment variables such as `APP_PORT`—whilst preserving existing
+  behaviour for code that already includes the delimiter.
 
 [^hello-world-feedback]: `docs/feedback-from-hello-world-example.md`.
 [^behavioural-testing]: `docs/behavioural-testing-in-rust-with-cucumber.md`.

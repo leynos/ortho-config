@@ -201,8 +201,8 @@ mod tests {
                 .expect("read overrides sample configuration");
             jail.create_file("baseline.toml", &baseline)?;
             jail.create_file(".hello_world.toml", &overrides)?;
-            let config =
-                crate::cli::load_global_config(&GlobalArgs::default()).expect("load global config");
+            let config = crate::cli::load_global_config(&GlobalArgs::default(), None)
+                .expect("load global config");
             result = Some(action(&config));
             Ok(())
         });
