@@ -50,6 +50,16 @@ fn create_test_config(dir: &std::path::Path, filename: &str, value: u32) -> std:
     path
 }
 
+struct CwdGuard {
+    original: std::path::PathBuf,
+}
+
+impl Drop for CwdGuard {
+    fn drop(&mut self) {
+        env::set_current_dir(&self.original).expect("restore current dir");
+    }
+}
+
 #[rstest]
 #[case(
     "--config",
@@ -156,9 +166,11 @@ fn dotfile_fallback_uses_custom_name() {
     let _ = create_test_config(dir.path(), ".demo.toml", 23);
 
     let original_dir = env::current_dir().expect("current dir");
+    let _cwd_guard = CwdGuard {
+        original: original_dir,
+    };
     env::set_current_dir(dir.path()).expect("set current dir");
     let cfg = DiscoveryConfig::load_from_iter(["prog"]).expect("load config from dotfile");
-    env::set_current_dir(original_dir).expect("restore current dir");
 
     assert_eq!(cfg.value, 23);
 }
