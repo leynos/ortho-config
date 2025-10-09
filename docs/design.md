@@ -585,3 +585,11 @@ explicit.
 This design provides a clear path forward for implementing `OrthoConfig`. By
 building on a solid foundation of existing crates and focusing on the developer
 experience, we can create a highly valuable addition to the Rust ecosystem.
+
+## 9. Decision Log
+
+- **Prefix normalisation:** The `prefix` struct attribute now appends a trailing
+  underscore when callers omit it (unless the string is empty). This keeps
+  attribute usage ergonomic for API consumers—`#[ortho_config(prefix = "APP")]`
+  produces environment variables such as `APP_PORT`—whilst preserving existing
+  behaviour for code that already includes the delimiter.

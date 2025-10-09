@@ -44,7 +44,7 @@ pub struct CommandLine {
 
 /// CLI overrides for the global greeting options.
 #[derive(Debug, Default, Clone, PartialEq, Eq, Args, Deserialize, Serialize, OrthoConfig)]
-#[ortho_config(prefix = "HELLO_WORLD_")]
+#[ortho_config(prefix = "HELLO_WORLD")]
 pub struct GlobalArgs {
     /// Recipient of the greeting when supplied on the CLI.
     #[arg(short = 'r', long = "recipient", value_name = "NAME", id = "recipient")]
@@ -82,7 +82,7 @@ pub enum Commands {
 
 /// Customisation options for the `greet` command.
 #[derive(Debug, Clone, PartialEq, Eq, Parser, Deserialize, Serialize, OrthoConfig)]
-#[ortho_config(prefix = "HELLO_WORLD_")]
+#[ortho_config(prefix = "HELLO_WORLD")]
 pub struct GreetCommand {
     /// Optional preamble printed before the greeting.
     #[arg(long, value_name = "PHRASE", id = "preamble")]
@@ -130,7 +130,7 @@ fn default_punctuation() -> String {
 
 /// Options controlling the `take-leave` workflow.
 #[derive(Debug, Clone, PartialEq, Eq, Parser, Deserialize, Serialize, OrthoConfig)]
-#[ortho_config(prefix = "HELLO_WORLD_")]
+#[ortho_config(prefix = "HELLO_WORLD")]
 pub struct TakeLeaveCommand {
     /// Parting phrase to use when saying goodbye.
     #[arg(
@@ -385,7 +385,7 @@ pub(crate) fn load_greet_defaults() -> Result<GreetCommand, HelloWorldError> {
 /// without extra accessor boilerplate.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, OrthoConfig)]
 #[ortho_config(
-    prefix = "HELLO_WORLD_",
+    prefix = "HELLO_WORLD",
     discovery(
         app_name = "hello_world",
         config_file_name = "hello_world.toml",

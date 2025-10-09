@@ -182,10 +182,11 @@ A configuration is represented by a plain Rust struct. To take advantage of
 
 Optionally, the struct can include a `#[ortho_config(prefix = "PREFIX")]`
 attribute. The prefix sets a common string for environment variables and
-configuration file names. Trailing underscores are trimmed and the prefix is
-lower‑cased when used to form file names. For example, a prefix of `APP_`
-results in environment variables like `APP_PORT` and file names such as
-`.app.toml`.
+configuration file names. When the attribute omits a trailing underscore,
+`ortho_config` appends one automatically so environment variables consistently
+use `<PREFIX>_`. Trailing underscores are trimmed and the prefix is lower‑cased
+when used to form file names. For example, a prefix of `APP` results in
+environment variables like `APP_PORT` and file names such as `.app.toml`.
 
 ### Field-level attributes
 
@@ -249,7 +250,8 @@ The following example illustrates many of these features:
   use serde::{Deserialize, Serialize};
 
   #[derive(Debug, Clone, Deserialize, Serialize, OrthoConfig)]
-  #[ortho_config(prefix = "APP")]                // environment variables start with APP_
+  // env vars use APP_ (the macro adds the underscore automatically)
+  #[ortho_config(prefix = "APP")]
   struct AppConfig {
       /// Logging verbosity
       log_level: String,
