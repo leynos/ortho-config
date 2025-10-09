@@ -632,16 +632,16 @@ mod tests {
     )]
     fn config_flag_rejects_duplicate_from_fields(
         #[case] input: syn::DeriveInput,
-        #[case] discovery: DiscoveryAttrs,
-        #[case] expected: &str,
+        #[case] discovery_attrs: DiscoveryAttrs,
+        #[case] expected_error: &str,
     ) {
         let (_, fields, mut struct_attrs, field_attrs) =
             crate::derive::parse::parse_input(&input).expect("parse_input");
         let cli = build_cli_struct_fields(&fields, &field_attrs).expect("build cli fields");
-        struct_attrs.discovery = Some(discovery);
+        struct_attrs.discovery = Some(discovery_attrs);
         let err = build_config_flag_field(&struct_attrs, &cli.used_shorts, &cli.used_longs)
             .expect_err("should fail");
-        assert!(err.to_string().contains(expected));
+        assert!(err.to_string().contains(expected_error));
     }
 
     #[rstest]
