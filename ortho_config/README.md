@@ -30,6 +30,10 @@ manual aliasing.
   start.
 - **Customizable:** Field-level attributes allow fine-grained control over
   naming, defaults, and merging behavior.
+- **Config discovery attributes:** Use `#[ortho_config(discovery(...))]` to
+  rename the generated config override flag, adjust environment variables, and
+  customise the filenames searched for configuration files without bespoke glue
+  code.
 - **Nested Configuration:** Naturally supports nested structs for organized
   configuration.
 - **Sensible Defaults:** Aims for intuitive behavior out-of-the-box.
@@ -144,7 +148,8 @@ overriding earlier ones:
    `#[ortho_config(default =…)]` or `Option<T>` fields (which default to
    `None`).
 2. **Configuration File:** Resolved in this order:
-   1. `--config-path` CLI option
+   1. `--config-path` CLI option (renameable through the
+      `discovery(...)` attribute)
    2. `[PREFIX]CONFIG_PATH` environment variable
    3. `.<prefix>.toml` in the current directory
    4. `.<prefix>.toml` in the user's home directory

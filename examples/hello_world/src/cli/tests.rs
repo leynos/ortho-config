@@ -202,7 +202,7 @@ fn load_global_config_applies_overrides() {
         jail.create_file(".hello_world.toml", "")?;
         jail.set_env("HELLO_WORLD_SALUTATIONS", "Hi");
         let cli = parse_command_line(&["-r", "Team", "-s", "Hi", "greet"]);
-        let config = load_global_config(&cli.globals).expect("load config");
+        let config = load_global_config(&cli.globals, None).expect("load config");
         assert_eq!(config.recipient, "Team");
         assert_eq!(config.trimmed_salutations(), vec![String::from("Hi")]);
         Ok(())
@@ -216,7 +216,7 @@ fn load_global_config_preserves_env_when_not_overridden() {
         jail.clear_env();
         jail.set_env("HELLO_WORLD_RECIPIENT", "Library");
         let cli = parse_command_line(&["greet"]);
-        let config = load_global_config(&cli.globals).expect("load config");
+        let config = load_global_config(&cli.globals, None).expect("load config");
         assert_eq!(config.recipient, "Library");
         Ok(())
     });
@@ -258,7 +258,7 @@ fn assert_sample_greet_defaults(greet: &GreetCommand) {
 fn load_sample_configuration() {
     ortho_config::figment::Jail::expect_with(|jail| {
         setup_sample_jail(jail)?;
-        let config = load_global_config(&GlobalArgs::default()).expect("load config");
+        let config = load_global_config(&GlobalArgs::default(), None).expect("load config");
         assert_eq!(config.recipient, "Excited crew");
         assert_eq!(
             config.trimmed_salutations(),
@@ -318,7 +318,7 @@ fn load_config_overrides_prefers_xdg_directories() {
         jail.create_dir("xdg")?;
         jail.create_dir("xdg/hello_world")?;
         jail.create_file(
-            "xdg/hello_world/config.toml",
+            "xdg/hello_world/hello_world.toml",
             r#"[cmds.greet]
 punctuation = "???"
 "#,
@@ -353,7 +353,7 @@ fn load_config_overrides_uses_xdg_fallback() {
         jail.clear_env();
         let candidates = collect_config_candidates();
         assert!(
-            candidates.contains(&Utf8PathBuf::from("/etc/xdg/hello_world/config.toml")),
+            candidates.contains(&Utf8PathBuf::from("/etc/xdg/hello_world/hello_world.toml")),
             "expected fallback hello world config in candidate list",
         );
         assert!(
@@ -371,7 +371,10 @@ fn load_config_overrides_reads_localappdata() {
         jail.clear_env();
         jail.create_dir("localdata")?;
         jail.create_dir("localdata/hello_world")?;
-        jail.create_file("localdata/hello_world/config.toml", "is_excited = true")?;
+        jail.create_file(
+            "localdata/hello_world/hello_world.toml",
+            "is_excited = true",
+        )?;
         jail.create_file(".hello_world.toml", "is_excited = false")?;
         jail.set_env("LOCALAPPDATA", "localdata");
         let overrides = load_config_overrides()
@@ -409,6 +412,7 @@ fn parse_command_line(args: &[&str]) -> CommandLine {
 }
 
 fn assert_greet_command(cli: CommandLine) {
+    assert!(cli.config_path.is_none());
     assert_eq!(cli.globals.recipient.as_deref(), Some("Crew"));
     assert_eq!(cli.globals.salutations, vec![String::from("Hi")]);
     let greet = expect_greet(cli.command);
@@ -417,6 +421,7 @@ fn assert_greet_command(cli: CommandLine) {
 }
 
 fn assert_take_leave_command(cli: CommandLine) {
+    assert!(cli.config_path.is_none());
     assert!(cli.globals.is_excited);
     let command = expect_take_leave(cli.command);
     assert_eq!(command.parting, "Cheerio");

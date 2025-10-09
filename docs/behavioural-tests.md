@@ -43,8 +43,8 @@ environment, or a file **Then** the CLI flag is `--listen-port`, the env var is
 
 ### 3.3 File Discovery
 
-**Given** config files in the current directory and user home **When** no
-`--config-path` or env override is provided **Then** the loader prefers the
+**Given** config files in the current directory and user home **When** no CLI
+override or environment variable is provided **Then** the loader prefers the
 local file and falls back to the home file
 
 ### 3.4 XDG Support
@@ -74,10 +74,13 @@ field **Then** it is parsed as `["A", "B", "C"]`
 **Given** a file with `extends = "base.toml"` **When** `MyConfig::load()` is
 called **Then** `base.toml` is loaded first and overridden by the current file
 
-### 3.9 Custom Option Names (Gap)
+### 3.9 Config discovery attribute
 
-**Given** a field `config_path` with `cli_long = "config"` **When** the user
-specifies `--config` **Then** the file is loaded from the provided path
+**Given** a struct decorated with `#[ortho_config(discovery(...))]` where
+`config_cli_long = "config"`, `config_cli_short = 'c'`, and
+`config_cli_visible = true` **When** the user specifies `--config` or `-c`
+**Then** the file is loaded from the provided path and the flag appears in help
+output
 
 ### 3.10 Dynamic Rule Tables (Gap)
 

@@ -16,17 +16,30 @@ use syn::{
     Type,
 };
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub(crate) struct StructAttrs {
     pub prefix: Option<String>,
+    pub discovery: Option<DiscoveryAttrs>,
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub(crate) struct FieldAttrs {
     pub cli_long: Option<String>,
     pub cli_short: Option<char>,
     pub default: Option<Expr>,
     pub merge_strategy: Option<MergeStrategy>,
+}
+
+#[derive(Default, Clone)]
+pub(crate) struct DiscoveryAttrs {
+    pub app_name: Option<String>,
+    pub env_var: Option<String>,
+    pub config_file_name: Option<String>,
+    pub dotfile_name: Option<String>,
+    pub project_file_name: Option<String>,
+    pub config_cli_long: Option<String>,
+    pub config_cli_short: Option<char>,
+    pub config_cli_visible: Option<bool>,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -86,6 +99,51 @@ pub(crate) fn parse_struct_attrs(attrs: &[Attribute]) -> Result<StructAttrs, syn
             } else {
                 return Err(syn::Error::new(val.span(), "prefix must be a string"));
             }
+            Ok(())
+        } else if meta.path.is_ident("discovery") {
+            let mut discovery = out.discovery.take().unwrap_or_default();
+            meta.parse_nested_meta(|nested| {
+                let Some(ident) = nested.path.get_ident().map(ToString::to_string) else {
+                    return discard_unknown(&nested);
+                };
+                match ident.as_str() {
+                    "app_name" => {
+                        let s = lit_str(&nested, "app_name")?;
+                        discovery.app_name = Some(s.value());
+                    }
+                    "env_var" => {
+                        let s = lit_str(&nested, "env_var")?;
+                        discovery.env_var = Some(s.value());
+                    }
+                    "config_file_name" => {
+                        let s = lit_str(&nested, "config_file_name")?;
+                        discovery.config_file_name = Some(s.value());
+                    }
+                    "dotfile_name" => {
+                        let s = lit_str(&nested, "dotfile_name")?;
+                        discovery.dotfile_name = Some(s.value());
+                    }
+                    "project_file_name" => {
+                        let s = lit_str(&nested, "project_file_name")?;
+                        discovery.project_file_name = Some(s.value());
+                    }
+                    "config_cli_long" => {
+                        let s = lit_str(&nested, "config_cli_long")?;
+                        discovery.config_cli_long = Some(s.value());
+                    }
+                    "config_cli_short" => {
+                        let c = lit_char(&nested, "config_cli_short")?;
+                        discovery.config_cli_short = Some(c);
+                    }
+                    "config_cli_visible" => {
+                        let b = lit_bool(&nested, "config_cli_visible")?;
+                        discovery.config_cli_visible = Some(b);
+                    }
+                    _ => discard_unknown(&nested)?,
+                }
+                Ok(())
+            })?;
+            out.discovery = Some(discovery);
             Ok(())
         } else {
             // Unknown attributes are intentionally discarded to preserve
@@ -175,6 +233,13 @@ fn lit_str(meta: &syn::meta::ParseNestedMeta, key: &str) -> Result<LitStr, syn::
 fn lit_char(meta: &syn::meta::ParseNestedMeta, key: &str) -> Result<char, syn::Error> {
     parse_lit(meta, key, |lit| match lit {
         Lit::Char(c) => Some(c.value()),
+        _ => None,
+    })
+}
+
+fn lit_bool(meta: &syn::meta::ParseNestedMeta, key: &str) -> Result<bool, syn::Error> {
+    parse_lit(meta, key, |lit| match lit {
+        Lit::Bool(b) => Some(b.value),
         _ => None,
     })
 }
@@ -399,6 +464,39 @@ mod tests {
             field_attrs[1].merge_strategy,
             Some(MergeStrategy::Append)
         ));
+    }
+
+    #[test]
+    fn parses_discovery_attributes() {
+        let input: DeriveInput = parse_quote! {
+            #[ortho_config(prefix = "CFG_", discovery(
+                app_name = "demo",
+                env_var = "DEMO_CONFIG",
+                config_file_name = "demo.toml",
+                dotfile_name = ".demo.toml",
+                project_file_name = "demo-config.toml",
+                config_cli_long = "config",
+                config_cli_short = 'c',
+                config_cli_visible = true,
+            ))]
+            struct Demo {
+                value: u32,
+            }
+        };
+
+        let (_, _, struct_attrs, _) = parse_input(&input).expect("parse_input");
+        let discovery = struct_attrs.discovery.expect("discovery attrs");
+        assert_eq!(discovery.app_name.as_deref(), Some("demo"));
+        assert_eq!(discovery.env_var.as_deref(), Some("DEMO_CONFIG"));
+        assert_eq!(discovery.config_file_name.as_deref(), Some("demo.toml"));
+        assert_eq!(discovery.dotfile_name.as_deref(), Some(".demo.toml"));
+        assert_eq!(
+            discovery.project_file_name.as_deref(),
+            Some("demo-config.toml"),
+        );
+        assert_eq!(discovery.config_cli_long.as_deref(), Some("config"));
+        assert_eq!(discovery.config_cli_short, Some('c'));
+        assert_eq!(discovery.config_cli_visible, Some(true));
     }
 
     #[rstest]

@@ -2,8 +2,11 @@
 //!
 //! Binds CLI, environment, and default layers via `OrthoConfig` so tests can
 //! drive the binary with predictable inputs.
-use std::ffi::OsString;
-use std::sync::Arc;
+use std::{
+    ffi::OsString,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use clap::{ArgAction, Args, Parser, Subcommand, ValueEnum};
 use ortho_config::{OrthoConfig, OrthoMergeExt, SubcmdConfigMerge};
@@ -22,6 +25,15 @@ use self::discovery::discover_config_figment;
     version
 )]
 pub struct CommandLine {
+    /// Overrides configuration discovery with an explicit file path.
+    #[arg(
+        long = "config",
+        short = 'c',
+        value_name = "PATH",
+        global = true,
+        help = "Path to the configuration file"
+    )]
+    pub config_path: Option<PathBuf>,
     /// Global switches shared by every subcommand.
     #[command(flatten)]
     pub globals: GlobalArgs,
@@ -250,7 +262,10 @@ impl FarewellChannel {
 }
 
 /// Resolves the global configuration by layering defaults with CLI overrides.
-pub fn load_global_config(globals: &GlobalArgs) -> Result<HelloWorldCli, HelloWorldError> {
+pub fn load_global_config(
+    globals: &GlobalArgs,
+    config_override: Option<&Path>,
+) -> Result<HelloWorldCli, HelloWorldError> {
     #[derive(Serialize)]
     struct Overrides<'a> {
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -272,7 +287,12 @@ pub fn load_global_config(globals: &GlobalArgs) -> Result<HelloWorldCli, HelloWo
     let binary = std::env::args_os()
         .next()
         .unwrap_or_else(|| OsString::from("hello-world"));
-    let base = HelloWorldCli::load_from_iter(std::iter::once(binary))?;
+    let mut args = vec![binary];
+    if let Some(path) = config_override {
+        args.push(OsString::from("--config"));
+        args.push(path.as_os_str().to_os_string());
+    }
+    let base = HelloWorldCli::load_from_iter(args.into_iter())?;
     let salutations = if globals.salutations.is_empty() {
         None
     } else {
@@ -364,7 +384,18 @@ pub(crate) fn load_greet_defaults() -> Result<GreetCommand, HelloWorldError> {
 /// fields public so the command dispatcher can inspect the resolved values
 /// without extra accessor boilerplate.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, OrthoConfig)]
-#[ortho_config(prefix = "HELLO_WORLD_")]
+#[ortho_config(
+    prefix = "HELLO_WORLD_",
+    discovery(
+        app_name = "hello_world",
+        config_file_name = "hello_world.toml",
+        dotfile_name = ".hello_world.toml",
+        project_file_name = ".hello_world.toml",
+        config_cli_long = "config",
+        config_cli_short = 'c',
+        config_cli_visible = true,
+    )
+)]
 pub struct HelloWorldCli {
     /// Recipient of the greeting. Defaults to a friendly placeholder.
     #[ortho_config(default = default_recipient(), cli_short = 'r')]

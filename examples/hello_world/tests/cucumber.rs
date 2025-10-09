@@ -161,7 +161,7 @@ impl World {
             .expect("write hello_world named config");
     }
 
-    /// Writes the provided contents to `config.toml` under an XDG config home.
+    /// Writes the provided contents to `hello_world.toml` under an XDG config home.
     ///
     /// # Panics
     ///
@@ -170,7 +170,8 @@ impl World {
         let base = self.workdir.path().join("xdg-config");
         let config_dir = base.join("hello_world");
         fs::create_dir_all(&config_dir).expect("create XDG hello_world directory");
-        fs::write(config_dir.join("config.toml"), contents).expect("write XDG hello_world config");
+        fs::write(config_dir.join("hello_world.toml"), contents)
+            .expect("write XDG hello_world config");
         let value = base.to_string_lossy().into_owned();
         self.set_env("XDG_CONFIG_HOME", value);
     }

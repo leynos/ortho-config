@@ -26,8 +26,17 @@ pub(crate) struct LoadImplTokens<'a> {
     pub override_init_ts: &'a proc_macro2::TokenStream,
     pub append_logic: &'a proc_macro2::TokenStream,
     pub config_env_var: &'a proc_macro2::TokenStream,
-    pub dotfile_name: &'a proc_macro2::TokenStream,
-    pub xdg_snippet: &'a proc_macro2::TokenStream,
+    pub dotfile_name: &'a syn::LitStr,
+    pub legacy_app_name: String,
+    pub discovery: Option<&'a DiscoveryTokens>,
+}
+
+pub(crate) struct DiscoveryTokens {
+    pub app_name: String,
+    pub env_var: String,
+    pub config_file_name: Option<String>,
+    pub dotfile_name: Option<String>,
+    pub project_file_name: Option<String>,
 }
 
 /// Convenience wrapper for passing identifiers and tokens together.
@@ -44,47 +53,92 @@ pub(crate) struct LoadImplArgs<'a> {
 /// Configuration files are searched in multiple locations as described in the
 /// "Configuration File Discovery" section of the design document. This mirrors
 /// standard XDG behaviour on Unix-like systems and uses `directories` on Windows.
+fn to_lit_str(value: Option<&String>) -> Option<syn::LitStr> {
+    value.map(|value| syn::LitStr::new(value, proc_macro2::Span::call_site()))
+}
+
+fn build_optional_stmt(
+    lit: Option<syn::LitStr>,
+    method_name: &str,
+) -> Option<proc_macro2::TokenStream> {
+    lit.map(|lit| {
+        let method_ident = syn::Ident::new(method_name, proc_macro2::Span::call_site());
+        quote! { builder = builder.#method_ident(#lit); }
+    })
+}
+
+fn build_cli_chain_tokens(has_config_path: bool) -> proc_macro2::TokenStream {
+    if has_config_path {
+        quote! {
+            if let Some(ref cli) = cli {
+                if let Some(ref path) = cli.config_path {
+                    builder = builder.add_required_path(path.clone());
+                }
+            }
+        }
+    } else {
+        quote! {}
+    }
+}
+
+fn build_discovery_based_loading(
+    discovery: &DiscoveryTokens,
+    has_config_path: bool,
+) -> proc_macro2::TokenStream {
+    let app_name = syn::LitStr::new(&discovery.app_name, proc_macro2::Span::call_site());
+    let env_var = syn::LitStr::new(&discovery.env_var, proc_macro2::Span::call_site());
+    let config_file_stmt = build_optional_stmt(
+        to_lit_str(discovery.config_file_name.as_ref()),
+        "config_file_name",
+    );
+    let dotfile_stmt =
+        build_optional_stmt(to_lit_str(discovery.dotfile_name.as_ref()), "dotfile_name");
+    let project_stmt = build_optional_stmt(
+        to_lit_str(discovery.project_file_name.as_ref()),
+        "project_file_name",
+    );
+    let cli_chain = build_cli_chain_tokens(has_config_path);
+    quote! {
+        let mut file_fig = None;
+        let mut builder = ortho_config::ConfigDiscovery::builder(#app_name);
+        builder = builder.env_var(#env_var);
+        #config_file_stmt
+        #dotfile_stmt
+        #project_stmt
+        #cli_chain
+        let discovery = builder.build();
+        let (loaded_fig, mut discovery_errors) = discovery.load_first_with_errors();
+        if let Some(fig) = loaded_fig {
+            file_fig = Some(fig);
+        }
+        errors.append(&mut discovery_errors);
+    }
+}
+
 pub(crate) fn build_file_discovery(
     tokens: &LoadImplTokens<'_>,
     has_config_path: bool,
 ) -> proc_macro2::TokenStream {
-    let LoadImplTokens {
-        config_env_var,
-        dotfile_name,
-        xdg_snippet,
-        ..
-    } = tokens;
-    let config_path_chain = if has_config_path {
-        quote! { .chain(cli.as_ref().and_then(|c| c.config_path.clone())) }
+    if let Some(discovery) = tokens.discovery {
+        build_discovery_based_loading(discovery, has_config_path)
     } else {
-        quote! {}
-    };
-    quote! {
-        let mut file_fig = None;
-        let candidates = std::iter::empty()
-            #config_path_chain
-            .chain(
-                std::env::var_os(#config_env_var)
-                    .map(std::path::PathBuf::from),
-            )
-            .chain(Some(std::path::PathBuf::from(#dotfile_name)))
-            .chain(
-                std::env::var_os("HOME")
-                    .map(|h| std::path::PathBuf::from(h).join(#dotfile_name)),
-            );
-        for path in candidates {
-            match ortho_config::load_config_file(&path) {
-                Ok(Some(fig)) => {
-                    file_fig = Some(fig);
-                    break;
-                }
-                Ok(None) => {}
-                Err(e) => errors.push(e),
+        let app_name = syn::LitStr::new(&tokens.legacy_app_name, proc_macro2::Span::call_site());
+        let config_env_var = tokens.config_env_var;
+        let dotfile_name = tokens.dotfile_name.clone();
+        let cli_chain = build_cli_chain_tokens(has_config_path);
+        quote! {
+            let mut file_fig = None;
+            let mut builder = ortho_config::ConfigDiscovery::builder(#app_name);
+            builder = builder.env_var(#config_env_var);
+            builder = builder.dotfile_name(#dotfile_name);
+            #cli_chain
+            let discovery = builder.build();
+            let (loaded_fig, mut discovery_errors) = discovery.load_first_with_errors();
+            if let Some(fig) = loaded_fig {
+                file_fig = Some(fig);
             }
+            errors.append(&mut discovery_errors);
         }
-        let mut discovery_errors: Vec<std::sync::Arc<ortho_config::OrthoError>> = Vec::new();
-        #xdg_snippet
-        errors.extend(discovery_errors);
     }
 }
 

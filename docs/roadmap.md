@@ -149,14 +149,14 @@ references the relevant design guidance.
       - All `#[expect(clippy::result_large_err)]` are removed or scoped to
         private internals with a rationale.
 
-- [ ] **Abstract configuration discovery**
+- [x] **Abstract configuration discovery**
 
   - [x] Provide a cross-platform discovery helper that surfaces the same
     search order currently hand-coded in `hello_world`, consolidating explicit
     paths, XDG directories, Windows locations, and project roots into a single
     call. [[Feedback](feedback-from-hello-world-example.md)]
 
-  - [ ] Integrate the helper with the derive macro so applications can opt in
+  - [x] Integrate the helper with the derive macro so applications can opt in
     via attributes to customise config file names and generated CLI flags
     without duplicating boilerplate.
     [[Feedback](feedback-from-hello-world-example.md)]

@@ -17,6 +17,9 @@ use crate::error::HelloWorldError;
 fn discovery() -> ortho_config::ConfigDiscovery {
     ortho_config::ConfigDiscovery::builder("hello_world")
         .env_var("HELLO_WORLD_CONFIG_PATH")
+        .config_file_name("hello_world.toml")
+        .dotfile_name(".hello_world.toml")
+        .project_file_name(".hello_world.toml")
         .build()
 }
 

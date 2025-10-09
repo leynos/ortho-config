@@ -66,6 +66,15 @@ Feature: Global parameters govern greetings
     Then the command succeeds
     And stdout contains "Explicit path"
 
+  Scenario: CLI config flag selects a custom file
+    Given the file "cli.toml" contains:
+      """
+      recipient = "CLI config"
+      """
+    When I run the hello world example with arguments "--config cli.toml greet"
+    Then the command succeeds
+    And stdout contains "CLI config"
+
   Scenario: XDG config home provides configuration
     Given the XDG config home contains:
       """
