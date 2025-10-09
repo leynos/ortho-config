@@ -115,15 +115,20 @@ fn build_discovery_tokens(
         })
 }
 
+struct LoadImplConfig<'a> {
+    struct_attrs: &'a derive::parse::StructAttrs,
+    discovery_tokens: Option<&'a DiscoveryTokens>,
+    has_config_path: bool,
+}
+
 fn build_load_impl_args<'a>(
     idents: LoadImplIdents<'a>,
     token_refs: LoadTokenRefs<'a>,
-    struct_attrs: &'a derive::parse::StructAttrs,
-    discovery_tokens: Option<&'a DiscoveryTokens>,
+    config: &LoadImplConfig<'a>,
     legacy_app_name_value: &'a mut String,
-    has_config_path: bool,
 ) -> LoadImplArgs<'a> {
-    *legacy_app_name_value = struct_attrs
+    *legacy_app_name_value = config
+        .struct_attrs
         .prefix
         .as_ref()
         .map(|prefix| prefix.trim_end_matches('_').to_ascii_lowercase())
@@ -148,9 +153,9 @@ fn build_load_impl_args<'a>(
             config_env_var,
             dotfile_name,
             legacy_app_name,
-            discovery: discovery_tokens,
+            discovery: config.discovery_tokens,
         },
-        has_config_path,
+        has_config_path: config.has_config_path,
     }
 }
 
@@ -189,13 +194,16 @@ fn build_macro_components(
         config_env_var: &config_env_var,
         dotfile_name: &dotfile_name,
     };
+    let load_impl_config = LoadImplConfig {
+        struct_attrs,
+        discovery_tokens: discovery_tokens.as_ref(),
+        has_config_path,
+    };
     let load_impl_args = build_load_impl_args(
         load_impl_idents,
         load_token_refs,
-        struct_attrs,
-        discovery_tokens.as_ref(),
+        &load_impl_config,
         &mut legacy_app_name_value,
-        has_config_path,
     );
     let load_impl = build_load_impl(&load_impl_args);
     let prefix_fn = struct_attrs.prefix.as_ref().map(|prefix| {
