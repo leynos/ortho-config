@@ -141,6 +141,11 @@ fn build_discovery_tokens(
         })
 }
 
+/// Aggregated configuration for constructing load-implementation tokens.
+///
+/// Bundles the struct-level attributes, optional discovery settings, and
+/// whether a `config_path` field was supplied so helper functions can reason
+/// about discovery without a long parameter list.
 #[derive(Clone, Copy)]
 struct LoadImplConfig<'a> {
     struct_attrs: &'a derive::parse::StructAttrs,
@@ -148,19 +153,21 @@ struct LoadImplConfig<'a> {
     has_config_path: bool,
 }
 
-/// Construct `LoadImplArgs` by combining identifiers, token references, and
+/// Construct `LoadImplArgs` from identifiers, token references, and discovery
 /// configuration.
 ///
-/// Computes the legacy app name from the optional prefix so the legacy
-/// discovery flow can reuse the builder without mutating state in the caller.
+/// Computes the legacy app name from the optional prefix and stores it inside
+/// the returned [`LoadImplTokens`], allowing the legacy discovery path to reuse
+/// the shared builder flow. Aggregates the provided [`LoadImplConfig`] so
+/// callers do not have to pass multiple loosely related arguments.
 ///
 /// # Arguments
 ///
 /// - `idents`: CLI, config, and defaults struct identifiers.
 /// - `token_refs`: References to token streams used in the load
 ///   implementation.
-/// - `config`: Configuration grouping discovery tokens and config-path
-///   presence.
+/// - `config`: Configuration grouping struct attributes, discovery tokens, and
+///   config-path presence.
 fn build_load_impl_args<'a>(
     idents: LoadImplIdents<'a>,
     token_refs: LoadTokenRefs<'a>,
