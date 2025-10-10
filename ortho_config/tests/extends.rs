@@ -71,6 +71,24 @@ fn cyclic_inheritance_is_detected() {
 }
 
 #[rstest]
+#[cfg_attr(
+    not(any(windows, target_os = "macos")),
+    ignore = "case-insensitive cycle detection requires Windows or macOS"
+)]
+fn cyclic_inheritance_detects_case_variants() {
+    with_jail(|j| {
+        j.create_file("Base.toml", "extends = \".CONFIG.toml\"\nfoo = \"base\"")?;
+        j.create_file(".config.toml", "extends = \"base.toml\"\nfoo = \"config\"")?;
+        let err = ExtendsCfg::load_from_iter(["prog"]).unwrap_err();
+        assert!(matches!(&*err, OrthoError::CyclicExtends { .. }));
+        let msg = err.to_string();
+        assert!(msg.to_ascii_lowercase().contains("base.toml"));
+        assert!(msg.to_ascii_lowercase().contains(".config.toml"));
+        Ok(())
+    });
+}
+
+#[rstest]
 fn missing_base_file_errors() {
     with_jail(|j| {
         j.create_file(".config.toml", "extends = \"missing.toml\"")?;

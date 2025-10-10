@@ -98,15 +98,34 @@ pub fn canonicalise(p: &Path) -> OrthoResult<PathBuf> {
 /// // "/configs/config.toml" do not bypass cycle detection.
 /// ```
 fn normalise_cycle_key(path: &Path) -> PathBuf {
-    #[cfg(any(windows, target_os = "macos"))]
+    #[cfg(windows)]
     {
-        let lossy = path.to_string_lossy();
-        PathBuf::from(lossy.to_lowercase())
+        use std::ffi::OsString;
+        use std::os::windows::ffi::{OsStrExt, OsStringExt};
+
+        // Windows treats ASCII letters case-insensitively, but leaves other
+        // code points unchanged. Fold only the ASCII range so we mirror the
+        // filesystem's comparison rules without mangling non-ASCII names.
+        let mut lowered = Vec::with_capacity(path.as_os_str().len());
+        for unit in path.as_os_str().encode_wide() {
+            if (u16::from(b'A')..=u16::from(b'Z')).contains(&unit) {
+                lowered.push(unit + 32);
+            } else {
+                lowered.push(unit);
+            }
+        }
+        return PathBuf::from(OsString::from_wide(&lowered));
     }
-    #[cfg(not(any(windows, target_os = "macos")))]
+
+    #[cfg(target_os = "macos")]
     {
-        path.to_path_buf()
+        use std::ffi::OsString;
+
+        let lowered = path.as_os_str().to_string_lossy().to_lowercase();
+        return PathBuf::from(OsString::from(lowered));
     }
+
+    path.to_path_buf()
 }
 
 /// Parse configuration data according to the file extension.

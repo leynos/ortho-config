@@ -395,9 +395,10 @@ and reports a `CyclicExtends` error listing the chain of files.
 
 To avoid missing loops on case-insensitive filesystems, such as Windows and the
 default macOS configuration, the loader stores case-folded canonical paths
-while tracking visited files. Referencing the same file with different casing
-now triggers the usual `CyclicExtends` diagnostic rather than re-entering the
-cycle.
+while tracking visited files. On Windows only ASCII characters are folded to
+reflect the platform's case-insensitive comparison rules, whereas macOS uses a
+Unicode-aware fold. Referencing the same file with different casing now
+triggers the usual `CyclicExtends` diagnostic rather than re-entering the cycle.
 
 Precedence across all sources becomes:
 

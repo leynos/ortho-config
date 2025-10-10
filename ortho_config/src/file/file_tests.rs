@@ -184,12 +184,106 @@ fn normalise_cycle_key_is_noop_on_case_sensitive_platforms() {
     let path = PathBuf::from("/tmp/Config.toml");
     let normalised = normalise_cycle_key(&path);
     assert_eq!(normalised, path);
+
+    let unicode_mixed_case = PathBuf::from("/tmp/Café.toml");
+    let unicode_upper_case = PathBuf::from("/tmp/CAFÉ.toml");
+    assert_eq!(normalise_cycle_key(&unicode_mixed_case), unicode_mixed_case);
+    assert_eq!(normalise_cycle_key(&unicode_upper_case), unicode_upper_case);
+
+    let special_chars = PathBuf::from("/tmp/config-!@#.toml");
+    assert_eq!(normalise_cycle_key(&special_chars), special_chars);
+
+    let non_ascii = PathBuf::from("/tmp/конфиг.toml");
+    assert_eq!(normalise_cycle_key(&non_ascii), non_ascii);
 }
 
-#[cfg(any(windows, target_os = "macos"))]
 #[test]
+#[cfg_attr(
+    not(any(windows, target_os = "macos")),
+    ignore = "case-insensitive normalisation applies only on Windows and macOS"
+)]
 fn normalise_cycle_key_lowercases_on_case_insensitive_platforms() {
-    let path = PathBuf::from("C:/Temp/Config.toml");
-    let normalised = normalise_cycle_key(&path);
-    assert_eq!(normalised, PathBuf::from("c:/temp/config.toml"));
+    let (path, expected) = if cfg!(windows) {
+        (
+            PathBuf::from(r"C:\Temp\Config.toml"),
+            PathBuf::from(r"c:\temp\config.toml"),
+        )
+    } else {
+        (
+            PathBuf::from("/tmp/Config.toml"),
+            PathBuf::from("/tmp/config.toml"),
+        )
+    };
+    assert_eq!(normalise_cycle_key(&path), expected);
+}
+
+#[test]
+#[cfg_attr(
+    not(any(windows, target_os = "macos")),
+    ignore = "case-insensitive normalisation applies only on Windows and macOS"
+)]
+fn normalise_cycle_key_handles_relative_paths() {
+    let (path, expected) = if cfg!(windows) {
+        (
+            PathBuf::from(r".\Temp\Config.toml"),
+            PathBuf::from(r".\temp\config.toml"),
+        )
+    } else {
+        (
+            PathBuf::from("./Temp/Config.toml"),
+            PathBuf::from("./temp/config.toml"),
+        )
+    };
+    assert_eq!(normalise_cycle_key(&path), expected);
+}
+
+#[test]
+#[cfg_attr(
+    not(any(windows, target_os = "macos")),
+    ignore = "case-insensitive normalisation applies only on Windows and macOS"
+)]
+fn normalise_cycle_key_handles_redundant_separators() {
+    let (path, expected) = if cfg!(windows) {
+        (
+            PathBuf::from(r"C://Temp//Config.toml"),
+            PathBuf::from(r"c:\temp\config.toml"),
+        )
+    } else {
+        (
+            PathBuf::from("/tmp//Nested//Config.toml"),
+            PathBuf::from("/tmp/nested/config.toml"),
+        )
+    };
+    assert_eq!(normalise_cycle_key(&path), expected);
+}
+
+#[test]
+#[cfg_attr(
+    not(any(windows, target_os = "macos")),
+    ignore = "case-insensitive normalisation applies only on Windows and macOS"
+)]
+fn normalise_cycle_key_handles_unicode_and_special_characters() {
+    if cfg!(windows) {
+        let unicode = PathBuf::from(r"C:\Temp\CAFÉ.toml");
+        let special = PathBuf::from(r"C:\Temp\Config-!@#.toml");
+        assert_eq!(
+            normalise_cycle_key(&unicode),
+            PathBuf::from(r"c:\temp\CAFÉ.toml"),
+        );
+        assert_eq!(
+            normalise_cycle_key(&special),
+            PathBuf::from(r"c:\temp\config-!@#.toml"),
+        );
+    } else {
+        let unicode = PathBuf::from("/tmp/CAFÉ.toml");
+        let special = PathBuf::from("/tmp/Config-!@#.toml");
+        assert_eq!(
+            normalise_cycle_key(&unicode),
+            PathBuf::from("/tmp/café.toml")
+        );
+        assert_eq!(
+            normalise_cycle_key(&special),
+            PathBuf::from("/tmp/config-!@#.toml"),
+        );
+    }
 }
