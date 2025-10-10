@@ -13,6 +13,7 @@ pub use figment_json5;
 #[cfg(feature = "json5")]
 #[cfg_attr(docsrs, doc(cfg(feature = "json5")))]
 pub use json5;
+pub use serde_json;
 #[cfg(feature = "yaml")]
 #[cfg_attr(docsrs, doc(cfg(feature = "yaml")))]
 pub use serde_yaml;
@@ -25,6 +26,7 @@ pub use uncased;
 pub use xdg;
 
 mod csv_env;
+mod declarative;
 pub mod discovery;
 mod error;
 pub mod file;
@@ -32,6 +34,9 @@ mod merge;
 mod result_ext;
 pub mod subcommand;
 pub use crate::subcommand::SubcmdConfigMerge;
+pub use declarative::{
+    DeclarativeMerge, MergeLayer, MergeSource, merge_layer_into_map, merged_map_into,
+};
 pub use result_ext::{IntoFigmentError, OrthoMergeExt, OrthoResultExt, ResultIntoFigment};
 pub use subcommand::{load_and_merge_subcommand, load_and_merge_subcommand_for};
 

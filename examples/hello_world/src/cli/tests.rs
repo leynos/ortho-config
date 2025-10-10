@@ -3,6 +3,7 @@ use super::*;
 use crate::cli::discovery::collect_config_candidates;
 use crate::error::ValidationError;
 use camino::Utf8PathBuf;
+use ortho_config::serde_json::json;
 use rstest::{fixture, rstest};
 
 /// Provides a default CLI configuration for tests.
@@ -120,6 +121,35 @@ fn trimmed_salutations_remove_whitespace(mut base_cli: HelloWorldCli) {
         base_cli.trimmed_salutations(),
         vec![String::from("Hi"), String::from("Team")]
     );
+}
+
+/// Demonstrates declarative merging using `MergeLayer` fixtures.
+#[rstest]
+fn declarative_merge_layers_respect_precedence() {
+    use ortho_config::MergeLayer;
+
+    let merged = GlobalArgs::merge_from_layers([
+        MergeLayer::defaults(json!({
+            "recipient": "World",
+            "salutations": ["Hello"],
+            "is_excited": false,
+            "is_quiet": false,
+        })),
+        MergeLayer::environment(json!({
+            "recipient": "Env",
+            "is_quiet": true,
+        })),
+        MergeLayer::cli(json!({
+            "recipient": "Cli",
+            "is_excited": true,
+        })),
+    ])
+    .expect("layers should merge successfully");
+
+    assert_eq!(merged.recipient.as_deref(), Some("Cli"));
+    assert_eq!(merged.salutations, vec![String::from("Hello")]);
+    assert!(merged.is_excited);
+    assert!(merged.is_quiet);
 }
 
 /// Rejects blank inputs supplied to the greet command.

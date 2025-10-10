@@ -60,6 +60,8 @@ struct MacroComponents {
     override_struct_ts: proc_macro2::TokenStream,
     load_impl: proc_macro2::TokenStream,
     prefix_fn: Option<proc_macro2::TokenStream>,
+    merge_state_struct: proc_macro2::TokenStream,
+    merge_impl: proc_macro2::TokenStream,
 }
 
 #[derive(Clone, Copy)]
@@ -108,6 +110,55 @@ fn build_cli_struct_tokens(
         cli_struct.fields.push(config_field);
     }
     Ok(cli_struct.fields)
+}
+
+fn build_declarative_tokens(
+    ident: &syn::Ident,
+) -> (proc_macro2::TokenStream, proc_macro2::TokenStream) {
+    let merge_state_ident = format_ident!("__{}DeclarativeMergeState", ident);
+    let merge_state_struct = quote! {
+        struct #merge_state_ident {
+            data: ortho_config::serde_json::Map<String, ortho_config::serde_json::Value>,
+        }
+
+        impl Default for #merge_state_ident {
+            fn default() -> Self {
+                Self { data: ortho_config::serde_json::Map::new() }
+            }
+        }
+    };
+    let merge_impl = quote! {
+        impl ortho_config::DeclarativeMerge for #merge_state_ident {
+            type Output = #ident;
+
+            fn merge_layer(
+                &mut self,
+                layer: ortho_config::MergeLayer<'_>,
+            ) -> ortho_config::OrthoResult<()> {
+                ortho_config::merge_layer_into_map(&mut self.data, &layer)
+            }
+
+            fn finish(self) -> ortho_config::OrthoResult<Self::Output> {
+                ortho_config::merged_map_into::<#ident>(self.data)
+            }
+        }
+
+        impl #ident {
+            pub fn merge_from_layers<'a, I>(
+                layers: I,
+            ) -> ortho_config::OrthoResult<Self>
+            where
+                I: IntoIterator<Item = ortho_config::MergeLayer<'a>>,
+            {
+                let mut state = #merge_state_ident::default();
+                for layer in layers {
+                    ortho_config::DeclarativeMerge::merge_layer(&mut state, layer)?;
+                }
+                ortho_config::DeclarativeMerge::finish(state)
+            }
+        }
+    };
+    (merge_state_struct, merge_impl)
 }
 
 /// Build discovery tokens from struct-level `discovery(...)` attributes.
@@ -260,6 +311,7 @@ fn build_macro_components(
         legacy_app_name_storage: _legacy_app_name_storage,
     } = build_load_impl_args(load_impl_idents, load_token_refs, load_impl_config);
     let load_impl = build_load_impl(&load_impl_args);
+    let (merge_state_struct, merge_impl) = build_declarative_tokens(ident);
     let prefix_fn = struct_attrs.prefix.as_ref().map(|prefix| {
         quote! {
             fn prefix() -> &'static str {
@@ -276,6 +328,8 @@ fn build_macro_components(
         override_struct_ts,
         load_impl,
         prefix_fn,
+        merge_state_struct,
+        merge_impl,
     })
 }
 
@@ -292,6 +346,13 @@ fn generate_cli_struct(components: &MacroComponents) -> proc_macro2::TokenStream
             #( #cli_struct_fields, )*
         }
     }
+}
+
+fn generate_declarative_struct(components: &MacroComponents) -> proc_macro2::TokenStream {
+    let MacroComponents {
+        merge_state_struct, ..
+    } = components;
+    merge_state_struct.clone()
 }
 
 /// Generate the struct used to store default values.
@@ -319,6 +380,7 @@ fn generate_ortho_impl(
         override_struct_ts,
         load_impl,
         prefix_fn,
+        merge_impl,
         ..
     } = components;
     let prefix_fn = prefix_fn.clone().unwrap_or_else(|| quote! {});
@@ -343,6 +405,8 @@ fn generate_ortho_impl(
             fn _assert_deser<T: serde::de::DeserializeOwned>() {}
             let _ = _assert_deser::<#config_ident>;
         };
+
+        #merge_impl
     }
 }
 
@@ -352,10 +416,12 @@ fn generate_trait_implementation(
 ) -> proc_macro2::TokenStream {
     let cli_struct = generate_cli_struct(components);
     let defaults_struct = generate_defaults_struct(components);
+    let declarative_struct = generate_declarative_struct(components);
     let ortho_impl = generate_ortho_impl(config_ident, components);
     quote! {
         #cli_struct
         #defaults_struct
+        #declarative_struct
         #ortho_impl
     }
 }
