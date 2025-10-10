@@ -1,3 +1,9 @@
+//! Builder for configuration discovery helpers.
+//!
+//! The builder lets applications customise environment variables, filenames,
+//! and project roots before producing a [`ConfigDiscovery`] instance that
+//! drives the search order.
+
 use std::path::{Path, PathBuf};
 
 use super::ConfigDiscovery;
@@ -118,19 +124,19 @@ impl ConfigDiscoveryBuilder {
         let stem = self.app_name.trim();
         let extension = Path::new(&self.config_file_name)
             .extension()
-            .and_then(|e| e.to_str())
-            .unwrap_or("");
+            .and_then(|ext| ext.to_str())
+            .filter(|ext| !ext.is_empty());
 
         if stem.is_empty() {
-            match extension {
-                "" => String::from(".config"),
-                ext => format!(".{ext}"),
-            }
-        } else if extension.is_empty() {
-            format!(".{stem}")
-        } else {
-            format!(".{stem}.{extension}")
+            let name = extension.unwrap_or("config");
+            return format!(".{name}");
         }
+
+        let parts = std::iter::once(stem)
+            .chain(extension)
+            .collect::<Vec<_>>()
+            .join(".");
+        format!(".{parts}")
     }
 
     /// Finalises the builder and returns a [`ConfigDiscovery`].
@@ -144,7 +150,9 @@ impl ConfigDiscoveryBuilder {
 
         let mut project_roots = self.project_roots;
         if project_roots.is_empty() {
-            project_roots.extend(std::env::current_dir());
+            if let Ok(dir) = std::env::current_dir() {
+                project_roots.push(dir);
+            }
         }
 
         ConfigDiscovery {
