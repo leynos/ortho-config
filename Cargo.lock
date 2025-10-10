@@ -779,7 +779,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.16",
  "tokio",
- "toml 0.8.23",
+ "toml 0.9.6",
 ]
 
 [[package]]
