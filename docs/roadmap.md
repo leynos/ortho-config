@@ -174,6 +174,30 @@ references the relevant design guidance.
   - [ ] Derive `DeclarativeMerge` alongside `OrthoConfig`, generating
     field-level merge arms and attribute-driven strategies for collections.
 
+    - [ ] Sketch the derive macro surfaces, ensuring every struct that
+      already implements `OrthoConfig` can auto-derive `DeclarativeMerge`
+      without additional boilerplate. Mirror the trait signatures from the
+      declarative design doc before implementing. [[Design](design.md)]
+
+    - [ ] Generate merge arms for each field, respecting existing
+      `#[ortho_config(...)]` metadata so nested structures, optional values,
+      and enums flow through consistently. Use the dependency injection
+      patterns documented for testing to keep fixtures focused on precedence
+      rules.
+      [[Reliable Testing](reliable-testing-in-rust-via-dependency-injection.md)]
+
+    - [ ] Provide attribute-driven strategies for collections (e.g.
+      `Vec`, `BTreeMap`) so authors can pick append, replace, or keyed merges.
+      Document the expected strategies with doctests that reuse the dry-guide
+      patterns and behavioural cucumber coverage.
+      [[Rust Doctest Dry Guide](rust-doctest-dry-guide.md)]
+      [[Behavioural Testing](behavioural-testing-in-rust-with-cucumber.md)]
+
+    - [ ] Cover the derive macro with `rstest`-powered fixture suites
+      that enumerate precedence permutations and validate generated code via
+      `trybuild` where necessary.
+      [[Rust Testing with rstest Fixtures](rust-testing-with-rstest-fixtures.md)]
+
   - [ ] Emit a `MergeComposer` builder that discovers file layers and serializes
     CLI and environment input into `MergeLayer` instances without exposing
     Figment publicly.
@@ -216,8 +240,8 @@ references the relevant design guidance.
     long‑term vision. [[Design](design.md#7-future-work)]
 
   These items collectively define a coherent roadmap for advancing OrthoConfig
-  toward the capabilities described in the design documents and bridging
-  the gaps observed in the current implementation.
+  toward the capabilities described in the design documents and bridging the
+  gaps observed in the current implementation.
 
 [^roadmap-behavioural]: `docs/behavioural-testing-in-rust-with-cucumber.md`.
 [^roadmap-rstest]: `docs/rust-testing-with-rstest-fixtures.md`.
