@@ -72,20 +72,32 @@ pub(crate) fn build_file_discovery(
                 std::env::var_os("HOME")
                     .map(|h| std::path::PathBuf::from(h).join(#dotfile_name)),
             );
-        let mut discovery_errors: Vec<std::sync::Arc<ortho_config::OrthoError>> = Vec::new();
+        // Buffer discovery failures so that we only report them when every
+        // candidate fails to load. This keeps noise from unreadable overrides
+        // out of successful load attempts.
+        let mut buffered_errors: Vec<std::sync::Arc<ortho_config::OrthoError>> = Vec::new();
+        let mut load_candidate = |
+            target: &mut Option<ortho_config::figment::Figment>,
+            path: &std::path::Path,
+        | match ortho_config::load_config_file(path) {
+            Ok(Some(fig)) => {
+                *target = Some(fig);
+                true
+            }
+            Ok(None) => false,
+            Err(e) => {
+                buffered_errors.push(e);
+                false
+            }
+        };
         for path in candidates {
-            match ortho_config::load_config_file(&path) {
-                Ok(Some(fig)) => {
-                    file_fig = Some(fig);
-                    break;
-                }
-                Ok(None) => {}
-                Err(e) => discovery_errors.push(e),
+            if load_candidate(&mut file_fig, &path) {
+                break;
             }
         }
         #xdg_snippet
         if file_fig.is_none() {
-            errors.extend(discovery_errors);
+            errors.extend(buffered_errors);
         }
     }
 }
@@ -234,5 +246,46 @@ pub(crate) fn build_load_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStre
                 #merge_section
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use quote::quote;
+
+    #[test]
+    fn file_discovery_buffers_and_defers_errors() {
+        let env_provider = quote! {};
+        let default_struct_init: [proc_macro2::TokenStream; 0] = [];
+        let override_init_ts = quote! {};
+        let append_logic = quote! {};
+        let config_env_var = quote! { "CONFIG_PATH" };
+        let dotfile_name = quote! { ".config.toml" };
+        let xdg_snippet = quote! {};
+        let tokens = LoadImplTokens {
+            env_provider: &env_provider,
+            default_struct_init: &default_struct_init,
+            override_init_ts: &override_init_ts,
+            append_logic: &append_logic,
+            config_env_var: &config_env_var,
+            dotfile_name: &dotfile_name,
+            xdg_snippet: &xdg_snippet,
+        };
+        let stream = build_file_discovery(&tokens, false);
+        let code = stream.to_string();
+        assert!(code.contains("buffered_errors"));
+        assert!(code.contains("load_candidate"));
+        assert!(code.contains("errors . extend"));
+    }
+
+    #[test]
+    fn xdg_discovery_uses_shared_candidate_loader() {
+        let struct_attrs = crate::derive::parse::StructAttrs::default();
+        let snippet = crate::derive::build::build_xdg_snippet(&struct_attrs);
+        let code = snippet.to_string();
+        assert!(code.contains("let mut try_load_config"));
+        assert!(code.contains("load_candidate"));
+        assert!(!code.contains("discovery_errors"));
     }
 }

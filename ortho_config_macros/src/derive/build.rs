@@ -439,12 +439,8 @@ fn build_xdg_config_discovery() -> proc_macro2::TokenStream {
                     Some(p) => p,
                     None => continue,
                 };
-                match ortho_config::load_config_file(&path) {
-                    Ok(new_fig) => {
-                        *fig = new_fig;
-                        break;
-                    }
-                    Err(e) => discovery_errors.push(e),
+                if load_candidate(fig, &path) {
+                    break;
                 }
             }
         };
