@@ -72,6 +72,7 @@ pub(crate) fn build_file_discovery(
                 std::env::var_os("HOME")
                     .map(|h| std::path::PathBuf::from(h).join(#dotfile_name)),
             );
+        let mut discovery_errors: Vec<std::sync::Arc<ortho_config::OrthoError>> = Vec::new();
         for path in candidates {
             match ortho_config::load_config_file(&path) {
                 Ok(Some(fig)) => {
@@ -79,12 +80,13 @@ pub(crate) fn build_file_discovery(
                     break;
                 }
                 Ok(None) => {}
-                Err(e) => errors.push(e),
+                Err(e) => discovery_errors.push(e),
             }
         }
-        let mut discovery_errors: Vec<std::sync::Arc<ortho_config::OrthoError>> = Vec::new();
         #xdg_snippet
-        errors.extend(discovery_errors);
+        if file_fig.is_none() {
+            errors.extend(discovery_errors);
+        }
     }
 }
 

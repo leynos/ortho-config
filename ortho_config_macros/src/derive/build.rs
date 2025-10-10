@@ -413,7 +413,7 @@ where
     S: AsRef<str>,
 {
     let exts = exts.into_iter().map(|s| s.as_ref().to_owned());
-    quote! { try_load_config(&mut file_fig, &[#(#exts),*], &mut discovery_errors); }
+    quote! { try_load_config(&mut file_fig, &[#(#exts),*]); }
 }
 
 /// Builds the XDG base directory configuration discovery snippet.
@@ -429,10 +429,9 @@ fn build_xdg_config_discovery() -> proc_macro2::TokenStream {
     let json = build_discovery(["json", "json5"]);
     let yaml = build_discovery(["yaml", "yml"]);
     quote! {
-        let try_load_config = |
+        let mut try_load_config = |
             fig: &mut Option<ortho_config::figment::Figment>,
             exts: &[&str],
-            errors: &mut Vec<std::sync::Arc<ortho_config::OrthoError>>,
         | {
             for ext in exts {
                 let filename = format!("config.{}", ext);
@@ -445,7 +444,7 @@ fn build_xdg_config_discovery() -> proc_macro2::TokenStream {
                         *fig = new_fig;
                         break;
                     }
-                    Err(e) => errors.push(e),
+                    Err(e) => discovery_errors.push(e),
                 }
             }
         };
