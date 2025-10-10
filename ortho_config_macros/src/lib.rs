@@ -279,6 +279,19 @@ fn build_macro_components(
     })
 }
 
+fn generate_struct(
+    ident: &syn::Ident,
+    fields: &[proc_macro2::TokenStream],
+    derives: proc_macro2::TokenStream,
+) -> proc_macro2::TokenStream {
+    quote! {
+        #derives
+        struct #ident {
+            #( #fields, )*
+        }
+    }
+}
+
 /// Generate the hidden `clap::Parser` struct.
 fn generate_cli_struct(components: &MacroComponents) -> proc_macro2::TokenStream {
     let MacroComponents {
@@ -286,12 +299,11 @@ fn generate_cli_struct(components: &MacroComponents) -> proc_macro2::TokenStream
         cli_struct_fields,
         ..
     } = components;
-    quote! {
-        #[derive(clap::Parser, serde::Serialize, Default)]
-        struct #cli_ident {
-            #( #cli_struct_fields, )*
-        }
-    }
+    generate_struct(
+        cli_ident,
+        cli_struct_fields,
+        quote! { #[derive(clap::Parser, serde::Serialize, Default)] },
+    )
 }
 
 /// Generate the struct used to store default values.
@@ -301,12 +313,11 @@ fn generate_defaults_struct(components: &MacroComponents) -> proc_macro2::TokenS
         default_struct_fields,
         ..
     } = components;
-    quote! {
-        #[derive(serde::Serialize)]
-        struct #defaults_ident {
-            #( #default_struct_fields, )*
-        }
-    }
+    generate_struct(
+        defaults_ident,
+        default_struct_fields,
+        quote! { #[derive(serde::Serialize)] },
+    )
 }
 
 /// Generate the `OrthoConfig` trait implementation.
