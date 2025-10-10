@@ -413,7 +413,14 @@ where
     S: AsRef<str>,
 {
     let exts = exts.into_iter().map(|s| s.as_ref().to_owned());
-    quote! { try_load_config(&mut file_fig, &[#(#exts),*]); }
+    quote! {
+        try_load_config(
+            &xdg_dirs,
+            &mut load_candidate,
+            &mut file_fig,
+            &[#(#exts),*],
+        );
+    }
 }
 
 /// Builds the XDG base directory configuration discovery snippet.
@@ -429,10 +436,15 @@ fn build_xdg_config_discovery() -> proc_macro2::TokenStream {
     let json = build_discovery(["json", "json5"]);
     let yaml = build_discovery(["yaml", "yml"]);
     quote! {
-        let mut try_load_config = |
+        fn try_load_config(
+            xdg_dirs: &ortho_config::xdg::BaseDirectories,
+            load_candidate: &mut impl FnMut(
+                &mut Option<ortho_config::figment::Figment>,
+                &std::path::Path,
+            ) -> bool,
             fig: &mut Option<ortho_config::figment::Figment>,
             exts: &[&str],
-        | {
+        ) {
             for ext in exts {
                 let filename = format!("config.{}", ext);
                 let path = match xdg_dirs.find_config_file(&filename) {
@@ -443,7 +455,7 @@ fn build_xdg_config_discovery() -> proc_macro2::TokenStream {
                     break;
                 }
             }
-        };
+        }
 
         if file_fig.is_none() {
             #toml

@@ -284,7 +284,9 @@ mod tests {
         let struct_attrs = crate::derive::parse::StructAttrs::default();
         let snippet = crate::derive::build::build_xdg_snippet(&struct_attrs);
         let code = snippet.to_string();
-        assert!(code.contains("let mut try_load_config"));
+        assert!(code.contains("fn try_load_config"));
+        assert!(code.contains("& xdg_dirs"));
+        assert!(code.contains("& mut load_candidate"));
         assert!(code.contains("load_candidate"));
         assert!(!code.contains("discovery_errors"));
     }
