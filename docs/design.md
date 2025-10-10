@@ -390,8 +390,10 @@ Some projects require a base configuration that can be extended by other files.
 A configuration file may specify an `extends` key whose value is a relative or
 absolute path to another file. When present, the loader first loads the
 referenced file and then merges the current file over it. The path is resolved
-relative to the file containing the `extends` key. The loader detects cycles
-and reports a `CyclicExtends` error listing the chain of files.
+relative to the file containing the `extends` key. Missing files are reported
+with a not-found error that names both the resolved absolute path and the
+extending file. The loader detects cycles and reports a `CyclicExtends` error
+listing the chain of files.
 
 Precedence across all sources becomes:
 

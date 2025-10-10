@@ -55,14 +55,14 @@ working directory, layers `.hello_world.toml` defaults via `cap-std`, and sets
 configuration files < environment variables < CLI arguments.
 
 `ConfigDiscovery` exposes the same search order used by the example so
-applications can replace bespoke path juggling with a single call. By
-default the helper honours `HELLO_WORLD_CONFIG_PATH`, then searches
-`$XDG_CONFIG_HOME/hello_world`, each entry in `$XDG_CONFIG_DIRS` (falling
-back to `/etc/xdg` on Unix-like targets), Windows application data
-directories, `$HOME/.config/hello_world`, `$HOME/.hello_world.toml`, and
-finally the project root. Candidates are deduplicated in precedence order
-(case-insensitively on Windows). Call `utf8_candidates()` to receive a
-`Vec<camino::Utf8PathBuf>` without manual conversions:
+applications can replace bespoke path juggling with a single call. By default
+the helper honours `HELLO_WORLD_CONFIG_PATH`, then searches
+`$XDG_CONFIG_HOME/hello_world`, each entry in `$XDG_CONFIG_DIRS` (falling back
+to `/etc/xdg` on Unix-like targets), Windows application data directories,
+`$HOME/.config/hello_world`, `$HOME/.hello_world.toml`, and finally the project
+root. Candidates are deduplicated in precedence order (case-insensitively on
+Windows). Call `utf8_candidates()` to receive a `Vec<camino::Utf8PathBuf>`
+without manual conversions:
 
 ```rust,no_run
 use ortho_config::ConfigDiscovery;
@@ -423,10 +423,12 @@ to disable list parsing.
 A configuration file may specify an `extends` key pointing to another file. The
 referenced file is loaded first and the current file's values override it. The
 path is resolved relative to the file containing the `extends` directive.
-Precedence across all sources becomes base file → extending file → environment
-variables → CLI flags. Cycles are detected and reported via a `CyclicExtends`
-error. Prefix handling and subcommand namespaces work as normal when
-inheritance is in use.
+Missing files raise a not-found error that includes both the resolved absolute
+path and the file that declared `extends`, making it clear what needs to be
+created. Precedence across all sources becomes base file → extending file →
+environment variables → CLI flags. Cycles are detected and reported via a
+`CyclicExtends` error. Prefix handling and subcommand namespaces work as normal
+when inheritance is in use.
 
 ## Dynamic rule tables
 

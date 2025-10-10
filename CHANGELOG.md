@@ -10,3 +10,8 @@ All notable changes to this project will be documented in this file.
   simplify dependency graphs for consumers.
 - Forward `json5`, `yaml`, and `toml` feature flags to
   `ortho_config_macros`, so macros compile with matching support.
+
+### Changed
+
+- Report missing `extends` targets with a clear not-found error that names the
+  resolved absolute path and the referencing file (closes #110).
