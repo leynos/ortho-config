@@ -80,6 +80,35 @@ pub fn canonicalise(p: &Path) -> OrthoResult<PathBuf> {
     }
 }
 
+/// Normalise a canonical path for case-insensitive cycle detection.
+///
+/// The loader stores normalised keys in its visited set to ensure that files
+/// referenced with different casing are treated as the same node when the
+/// filesystem ignores case differences. On strictly case-sensitive platforms
+/// the path is returned unchanged.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// use std::path::Path;
+///
+/// let canonical = Path::new("/configs/Config.toml");
+/// let key = ortho_config::file::normalise_cycle_key(canonical);
+/// // On Windows and macOS the key is lower-cased so variants like
+/// // "/configs/config.toml" do not bypass cycle detection.
+/// ```
+fn normalise_cycle_key(path: &Path) -> PathBuf {
+    #[cfg(any(windows, target_os = "macos"))]
+    {
+        let lossy = path.to_string_lossy();
+        PathBuf::from(lossy.to_lowercase())
+    }
+    #[cfg(not(any(windows, target_os = "macos")))]
+    {
+        path.to_path_buf()
+    }
+}
+
 /// Parse configuration data according to the file extension.
 ///
 /// Supported formats are JSON5, YAML and TOML. The `json5` and `yaml`
@@ -326,7 +355,8 @@ fn load_config_file_inner(
         return Ok(None);
     }
     let canonical = canonicalise(path)?;
-    if !visited.insert(canonical.clone()) {
+    let normalised = normalise_cycle_key(&canonical);
+    if !visited.insert(normalised.clone()) {
         let mut cycle: Vec<String> = stack.iter().map(|p| p.display().to_string()).collect();
         cycle.push(canonical.display().to_string());
         return Err(std::sync::Arc::new(OrthoError::CyclicExtends {
@@ -339,7 +369,7 @@ fn load_config_file_inner(
         let figment = parse_config_by_format(&canonical, &data)?;
         process_extends(figment, &canonical, visited, stack)
     })();
-    visited.remove(&canonical);
+    visited.remove(&normalised);
     stack.pop();
     result.map(Some)
 }

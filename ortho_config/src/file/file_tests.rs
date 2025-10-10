@@ -177,3 +177,19 @@ fn process_extends_errors_when_extends_empty() {
         Ok(())
     });
 }
+
+#[cfg(not(any(windows, target_os = "macos")))]
+#[test]
+fn normalise_cycle_key_is_noop_on_case_sensitive_platforms() {
+    let path = PathBuf::from("/tmp/Config.toml");
+    let normalised = normalise_cycle_key(&path);
+    assert_eq!(normalised, path);
+}
+
+#[cfg(any(windows, target_os = "macos"))]
+#[test]
+fn normalise_cycle_key_lowercases_on_case_insensitive_platforms() {
+    let path = PathBuf::from("C:/Temp/Config.toml");
+    let normalised = normalise_cycle_key(&path);
+    assert_eq!(normalised, PathBuf::from("c:/temp/config.toml"));
+}

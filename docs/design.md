@@ -393,6 +393,12 @@ referenced file and then merges the current file over it. The path is resolved
 relative to the file containing the `extends` key. The loader detects cycles
 and reports a `CyclicExtends` error listing the chain of files.
 
+To avoid missing loops on case-insensitive filesystems, such as Windows and the
+default macOS configuration, the loader stores case-folded canonical paths
+while tracking visited files. Referencing the same file with different casing
+now triggers the usual `CyclicExtends` diagnostic rather than re-entering the
+cycle.
+
 Precedence across all sources becomes:
 
 1. Base file specified via `extends`
