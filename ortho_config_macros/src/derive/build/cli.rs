@@ -6,6 +6,7 @@
 
 use std::collections::HashSet;
 
+use heck::ToKebabCase;
 use quote::quote;
 use syn::{Ident, Type};
 
@@ -106,14 +107,29 @@ pub(super) fn resolve_short_flag(
 }
 
 pub(super) fn validate_cli_long(name: &Ident, long: &str) -> syn::Result<()> {
-    if long.is_empty()
-        || long.starts_with(['-', '_'])
-        || !long.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
-    {
+    if long.is_empty() {
+        return Err(syn::Error::new_spanned(
+            name,
+            format!("invalid `cli_long` '{long}': must be non-empty"),
+        ));
+    }
+    if long.starts_with('-') {
+        return Err(syn::Error::new_spanned(
+            name,
+            format!("invalid `cli_long` '{long}': must not start with '-'"),
+        ));
+    }
+    if long.starts_with('_') {
+        return Err(syn::Error::new_spanned(
+            name,
+            format!("invalid `cli_long` '{long}': must not start with '_'"),
+        ));
+    }
+    if !long.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
         return Err(syn::Error::new_spanned(
             name,
             format!(
-                "invalid `cli_long` '{long}': must be non-empty, avoid leading '-'/'_', and contain only ASCII alphanumeric or '-'",
+                "invalid `cli_long` '{long}': must contain only ASCII alphanumeric characters or '-'",
             ),
         ));
     }
@@ -136,13 +152,19 @@ pub(crate) fn build_cli_struct_fields(
     let mut result = Vec::with_capacity(fields.len());
 
     for (f, attrs) in fields.iter().zip(field_attrs) {
-        let name = f.ident.as_ref().expect("named field");
+        let Some(name) = f.ident.as_ref() else {
+            return Err(syn::Error::new_spanned(
+                f,
+                "unnamed (tuple) fields are not supported for CLI derive",
+            ));
+        };
         let ty = option_type_tokens(&f.ty);
-        field_names.insert(name.to_string());
+        let field_name = name.to_string();
+        field_names.insert(field_name.clone());
         let long = attrs
             .cli_long
             .clone()
-            .unwrap_or_else(|| name.to_string().replace('_', "-"));
+            .unwrap_or_else(|| field_name.to_kebab_case());
         validate_cli_long(name, &long)?;
         if !used_longs.insert(long.clone()) {
             return Err(syn::Error::new_spanned(
@@ -154,8 +176,11 @@ pub(crate) fn build_cli_struct_fields(
         let long_lit = syn::LitStr::new(&long, proc_macro2::Span::call_site());
         let short_lit = syn::LitChar::new(short_ch, proc_macro2::Span::call_site());
         let is_bool = is_bool_type(&f.ty);
-        let serde_attr = option_inner(&f.ty)
-            .map(|_| quote! { #[serde(skip_serializing_if = "Option::is_none")] });
+        let serde_attr = if is_bool {
+            proc_macro2::TokenStream::new()
+        } else {
+            quote! { #[serde(skip_serializing_if = "Option::is_none")] }
+        };
         let arg_attr = if is_bool {
             quote! {
                 #[arg(long = #long_lit, short = #short_lit, action = clap::ArgAction::SetTrue)]

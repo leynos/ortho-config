@@ -11,22 +11,24 @@ use crate::derive::parse::{FieldAttrs, MergeStrategy, vec_inner};
 pub(crate) fn collect_append_fields<'a>(
     fields: &'a [syn::Field],
     field_attrs: &'a [FieldAttrs],
-) -> Vec<(Ident, &'a Type)> {
-    fields
-        .iter()
-        .zip(field_attrs.iter())
-        .filter_map(|(f, attr)| {
-            let ty = &f.ty;
-            let name = f.ident.as_ref().unwrap();
-            let vec_ty = vec_inner(ty)?;
-            let strategy = attr.merge_strategy.unwrap_or(MergeStrategy::Append);
-            if strategy == MergeStrategy::Append {
-                Some((name.clone(), vec_ty))
-            } else {
-                None
-            }
-        })
-        .collect()
+) -> syn::Result<Vec<(Ident, &'a Type)>> {
+    let mut append_fields = Vec::new();
+    for (field, attrs) in fields.iter().zip(field_attrs) {
+        let Some(name) = field.ident.clone() else {
+            return Err(syn::Error::new_spanned(
+                field,
+                "unnamed (tuple) fields are not supported for append merge strategy",
+            ));
+        };
+        let Some(vec_ty) = vec_inner(&field.ty) else {
+            continue;
+        };
+        let strategy = attrs.merge_strategy.unwrap_or(MergeStrategy::Append);
+        if strategy == MergeStrategy::Append {
+            append_fields.push((name, vec_ty));
+        }
+    }
+    Ok(append_fields)
 }
 
 pub(crate) fn build_override_struct(
@@ -73,7 +75,9 @@ pub(crate) fn build_append_logic(fields: &[(Ident, &Type)]) -> proc_macro2::Toke
         }
     });
     quote! {
-        let cli_figment = Figment::from(Serialized::defaults(&cli));
+        let cli_figment = ortho_config::figment::Figment::from(
+            ortho_config::figment::providers::Serialized::defaults(&cli),
+        );
         #( #logic )*
     }
 }
@@ -101,7 +105,7 @@ mod tests {
     #[test]
     fn collect_append_fields_selects_vec_fields() {
         let (fields, field_attrs, _) = demo_input();
-        let out = collect_append_fields(&fields, &field_attrs);
+        let out = collect_append_fields(&fields, &field_attrs).expect("collect_append_fields");
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].0.to_string(), "field2");
     }
@@ -109,7 +113,7 @@ mod tests {
     #[test]
     fn build_override_struct_creates_struct() {
         let (fields, field_attrs, _) = demo_input();
-        let append = collect_append_fields(&fields, &field_attrs);
+        let append = collect_append_fields(&fields, &field_attrs).expect("collect_append_fields");
         let (ts, init_ts) = build_override_struct(&syn::parse_quote!(Demo), &append);
         assert!(ts.to_string().contains("struct __DemoVecOverride"));
         assert!(init_ts.to_string().contains("__DemoVecOverride"));
