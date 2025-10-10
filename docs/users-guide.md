@@ -714,6 +714,41 @@ fn interop(r: ortho_config::OrthoResult<MyCfg>) -> Result<MyCfg, figment::Error>
   while still requiring the CLI to provide a value when defaults are absent;
   see the `vk` example above.
 
+### Declarative merging helpers
+
+`#[derive(OrthoConfig)]` emits a merge state machine implementing
+`DeclarativeMerge`. The generated `merge_from_layers` helper accepts any
+iterator of `MergeLayer` values so tests can compose defaults, file fixtures,
+environment maps, and CLI snapshots without invoking discovery.
+
+```rust
+use ortho_config::{MergeLayer, OrthoConfig};
+use serde::Deserialize;
+use serde_json::json;
+
+#[derive(Deserialize, OrthoConfig)]
+struct DemoConfig {
+    recipient: String,
+    salutations: Vec<String>,
+}
+
+let merged = DemoConfig::merge_from_layers([
+    MergeLayer::defaults(json!({
+        "recipient": "World",
+        "salutations": ["Hello"],
+    })),
+    MergeLayer::environment(json!({ "recipient": "Env" })),
+    MergeLayer::cli(json!({ "recipient": "CLI" })),
+])?;
+
+assert_eq!(merged.recipient, "CLI");
+assert_eq!(merged.salutations, vec![String::from("Hello")]);
+```
+
+Layers must carry JSON objects; non-object values trigger `OrthoError::Merge`.
+Later layers win for scalar and array fields, while nested objects merge
+recursively.
+
 - **Changing naming conventions** – Currently, only the default
   snake/hyphenated (underscores → hyphens)/upper snake mappings are supported.
   Future versions may introduce attributes such as `file_key` or `env` to

@@ -158,6 +158,17 @@ their own `DeclarativeMerge` implementation, ensuring subcommand namespaces are
 merged consistently without the manual `apply_greet_overrides` helper
 highlighted in the example feedback.
 
+The initial implementation materialises merge state as a JSON object using
+`serde_json::Map<String, Value>`. Each layer is validated to ensure it contains
+an object payload; the helper maps violations to `OrthoError::Merge` using a
+`figment::Error` wrapper so downstream callers observe a consistent error
+surface. Overlays perform a simple "last write wins" merge for scalars and
+arrays while recursing into nested objects. This keeps precedence semantics
+predictable whilst allowing follow-on work to introduce richer strategies for
+collections without changing the surrounding API. `merge_from_layers` exposes
+the state machine so unit tests and doctests can compose deterministic layers
+without invoking CLI parsing or file discovery.
+
 The derive macro also emits a helper named `merge_from_layers` that accepts any
 iterator of `MergeLayer<'static>` and returns `OrthoResult<Self>` for tests.
 Developers can construct deterministic `MergeLayer` fixtures (for example,

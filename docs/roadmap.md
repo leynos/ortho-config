@@ -167,14 +167,14 @@ references the relevant design guidance.
     that replaces hand-written Figment wiring in the hello_world example and
     future clients. [[Feedback](feedback-from-hello-world-example.md)]
 
-  - [ ] Document declarative merging with examples covering defaults, file
+  - [x] Document declarative merging with examples covering defaults, file
     overrides, environment variables, and CLI adjustments to codify expected
     behaviour. [[Feedback](feedback-from-hello-world-example.md)]
 
   - [ ] Derive `DeclarativeMerge` alongside `OrthoConfig`, generating
     field-level merge arms and attribute-driven strategies for collections.
 
-    - [ ] Sketch the derive macro surfaces, ensuring every struct that
+    - [x] Sketch the derive macro surfaces, ensuring every struct that
       already implements `OrthoConfig` can auto-derive `DeclarativeMerge`
       without additional boilerplate. Mirror the trait signatures from the
       declarative design doc before implementing. [[Design](design.md)]
