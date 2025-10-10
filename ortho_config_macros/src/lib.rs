@@ -279,15 +279,61 @@ fn build_macro_components(
     })
 }
 
+/// Generate a struct declaration annotated with custom attributes.
+///
+/// Accepts the struct identifier, any pre-rendered field tokens, and
+/// caller-supplied attributes (for example, derives). This helper keeps struct
+/// generation consistent between the CLI and defaults builders while omitting
+/// trailing commas when no fields are present.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// use quote::quote;
+/// use syn::parse_str;
+///
+/// let ident = parse_str::<syn::Ident>("Example").expect("ident");
+/// let fields = vec![quote! { pub value: u32 }];
+/// let attrs = quote! { #[derive(Default)] };
+/// let tokens = super::generate_struct(&ident, &fields, &attrs);
+/// assert_eq!(
+///     tokens.to_string(),
+///     quote! {
+///         #[derive(Default)]
+///         struct Example {
+///             pub value: u32,
+///         }
+///     }
+///     .to_string(),
+/// );
+///
+/// let empty = parse_str::<syn::Ident>("Empty").expect("ident");
+/// let empty_attrs = quote! {};
+/// let empty_tokens = super::generate_struct(&empty, &[], &empty_attrs);
+/// assert_eq!(
+///     empty_tokens.to_string(),
+///     quote! {
+///         struct Empty {}
+///     }
+///     .to_string(),
+/// );
+/// ```
 fn generate_struct(
     ident: &syn::Ident,
     fields: &[proc_macro2::TokenStream],
-    derives: proc_macro2::TokenStream,
+    attributes: &proc_macro2::TokenStream,
 ) -> proc_macro2::TokenStream {
-    quote! {
-        #derives
-        struct #ident {
-            #( #fields, )*
+    if fields.is_empty() {
+        quote! {
+            #attributes
+            struct #ident {}
+        }
+    } else {
+        quote! {
+            #attributes
+            struct #ident {
+                #( #fields, )*
+            }
         }
     }
 }
@@ -302,7 +348,7 @@ fn generate_cli_struct(components: &MacroComponents) -> proc_macro2::TokenStream
     generate_struct(
         cli_ident,
         cli_struct_fields,
-        quote! { #[derive(clap::Parser, serde::Serialize, Default)] },
+        &quote! { #[derive(clap::Parser, serde::Serialize, Default)] },
     )
 }
 
@@ -316,7 +362,7 @@ fn generate_defaults_struct(components: &MacroComponents) -> proc_macro2::TokenS
     generate_struct(
         defaults_ident,
         default_struct_fields,
-        quote! { #[derive(serde::Serialize)] },
+        &quote! { #[derive(serde::Serialize)] },
     )
 }
 
@@ -368,5 +414,88 @@ fn generate_trait_implementation(
         #cli_struct
         #defaults_struct
         #ortho_impl
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{MacroComponents, generate_cli_struct, generate_defaults_struct, generate_struct};
+    use proc_macro2::TokenStream as TokenStream2;
+    use quote::quote;
+    use rstest::rstest;
+    use syn::parse_str;
+
+    fn build_components(
+        default_struct_fields: Vec<TokenStream2>,
+        cli_struct_fields: Vec<TokenStream2>,
+    ) -> MacroComponents {
+        MacroComponents {
+            defaults_ident: parse_str("DefaultsStruct").expect("defaults ident"),
+            default_struct_fields,
+            cli_ident: parse_str("CliStruct").expect("cli ident"),
+            cli_struct_fields,
+            override_struct_ts: quote! {},
+            load_impl: quote! {},
+            prefix_fn: None,
+        }
+    }
+
+    #[rstest]
+    fn generate_struct_handles_empty_fields() {
+        let ident = parse_str("Empty").expect("ident");
+        let attrs = quote! { #[derive(Default)] };
+        let tokens = generate_struct(&ident, &[], &attrs);
+        let expected = quote! {
+            #[derive(Default)]
+            struct Empty {}
+        };
+        assert_eq!(tokens.to_string(), expected.to_string());
+    }
+
+    #[rstest]
+    fn generate_struct_renders_fields_with_commas() {
+        let ident = parse_str("WithFields").expect("ident");
+        let fields = vec![quote! { pub value: u32 }, quote! { pub other: String }];
+        let attrs = quote! { #[derive(Default)] };
+        let tokens = generate_struct(&ident, &fields, &attrs);
+        let expected = quote! {
+            #[derive(Default)]
+            struct WithFields {
+                pub value: u32,
+                pub other: String,
+            }
+        };
+        assert_eq!(tokens.to_string(), expected.to_string());
+    }
+
+    #[rstest]
+    fn generate_cli_struct_emits_expected_tokens() {
+        let components = build_components(
+            vec![quote! { pub value: u32 }],
+            vec![quote! { #[clap(long)] pub value: Option<u32> }],
+        );
+        let tokens = generate_cli_struct(&components);
+        let expected = quote! {
+            #[derive(clap::Parser, serde::Serialize, Default)]
+            struct CliStruct {
+                #[clap(long)]
+                pub value: Option<u32>,
+            }
+        };
+        assert_eq!(tokens.to_string(), expected.to_string());
+    }
+
+    #[rstest]
+    fn generate_defaults_struct_supports_empty_fields() {
+        let components = build_components(
+            Vec::new(),
+            vec![quote! { #[clap(long)] pub value: Option<u32> }],
+        );
+        let tokens = generate_defaults_struct(&components);
+        let expected = quote! {
+            #[derive(serde::Serialize)]
+            struct DefaultsStruct {}
+        };
+        assert_eq!(tokens.to_string(), expected.to_string());
     }
 }
