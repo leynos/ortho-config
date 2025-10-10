@@ -1,3 +1,8 @@
+//! Environment discovery helpers for the derive macro.
+//!
+//! The functions here compute environment variable names, dotfile defaults, and
+//! providers that back the generated `load` implementation.
+
 use heck::ToSnakeCase;
 use quote::quote;
 use syn::Ident;

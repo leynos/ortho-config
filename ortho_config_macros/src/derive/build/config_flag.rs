@@ -1,3 +1,8 @@
+//! Config flag helpers used by the derive macro.
+//!
+//! These helpers construct the optional `--config-path` CLI argument and ensure
+//! that it does not collide with user-defined fields or custom flag metadata.
+
 use std::collections::HashSet;
 
 use quote::quote;
@@ -11,8 +16,15 @@ pub(crate) fn build_config_flag_field(
     struct_attrs: &StructAttrs,
     used_shorts: &HashSet<char>,
     used_longs: &HashSet<String>,
+    existing_fields: &HashSet<String>,
 ) -> syn::Result<proc_macro2::TokenStream> {
     let name = Ident::new("config_path", proc_macro2::Span::call_site());
+    if existing_fields.contains("config_path") {
+        return Err(syn::Error::new_spanned(
+            &name,
+            "generated config flag field conflicts with user-defined field 'config_path'",
+        ));
+    }
     let discovery = struct_attrs.discovery.as_ref();
     let long = discovery
         .and_then(|attrs| attrs.config_cli_long.clone())
@@ -53,7 +65,7 @@ pub(crate) fn build_config_flag_field(
 mod tests {
     use super::*;
     use crate::derive::build::build_cli_struct_fields;
-    use crate::derive::parse::DiscoveryAttrs;
+    use crate::derive::parse::{DiscoveryAttrs, StructAttrs};
     use rstest::rstest;
 
     #[rstest]
@@ -91,8 +103,13 @@ mod tests {
             crate::derive::parse::parse_input(&input).expect("parse_input");
         let cli = build_cli_struct_fields(&fields, &field_attrs).expect("build cli fields");
         struct_attrs.discovery = Some(discovery_attrs);
-        let err = build_config_flag_field(&struct_attrs, &cli.used_shorts, &cli.used_longs)
-            .expect_err("should fail");
+        let err = build_config_flag_field(
+            &struct_attrs,
+            &cli.used_shorts,
+            &cli.used_longs,
+            &cli.field_names,
+        )
+        .expect_err("should fail");
         assert!(err.to_string().contains(expected_error));
     }
 
@@ -155,6 +172,25 @@ mod tests {
         assert!(
             figment.extract_inner::<bool>("excited").is_err(),
             "Absent boolean flags should not appear in Figment",
+        );
+    }
+
+    #[test]
+    fn config_flag_field_name_conflict_errors() {
+        let used_shorts = HashSet::new();
+        let used_longs = HashSet::new();
+        let mut existing = HashSet::new();
+        existing.insert(String::from("config_path"));
+        let err = build_config_flag_field(
+            &StructAttrs::default(),
+            &used_shorts,
+            &used_longs,
+            &existing,
+        )
+        .expect_err("should fail on name conflict");
+        assert!(
+            err.to_string()
+                .contains("generated config flag field conflicts with user-defined field")
         );
     }
 }

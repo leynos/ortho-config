@@ -1,3 +1,8 @@
+//! Default struct helpers for the derive macro.
+//!
+//! These functions materialise the intermediate defaults struct that collects
+//! per-field values before layered configuration is merged.
+
 use quote::quote;
 
 use crate::derive::parse::FieldAttrs;

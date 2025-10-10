@@ -1,3 +1,8 @@
+//! Override helpers that build append structures for derived configuration.
+//!
+//! These utilities gather `Vec<_>` fields using append merge strategies and
+//! generate the supporting override struct plus load-time aggregation logic.
+
 use quote::{format_ident, quote};
 use syn::{Ident, Type};
 

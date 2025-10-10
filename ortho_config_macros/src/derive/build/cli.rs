@@ -1,3 +1,9 @@
+//! CLI helper builders used by the `OrthoConfig` derive macro.
+//!
+//! This module encapsulates generation and validation of CLI flag metadata.
+//! It keeps track of claimed short and long flags to avoid collisions and
+//! surfaces ergonomic diagnostics when callers need to supply overrides.
+
 use std::collections::HashSet;
 
 use quote::quote;
@@ -13,6 +19,7 @@ pub(crate) struct CliStructTokens {
     pub fields: Vec<proc_macro2::TokenStream>,
     pub used_shorts: HashSet<char>,
     pub used_longs: HashSet<String>,
+    pub field_names: HashSet<String>,
 }
 
 pub(super) fn option_type_tokens(ty: &Type) -> proc_macro2::TokenStream {
@@ -24,15 +31,11 @@ pub(super) fn option_type_tokens(ty: &Type) -> proc_macro2::TokenStream {
 }
 
 fn is_bool_type(ty: &Type) -> bool {
-    fn matches_bool(ty: &Type) -> bool {
-        matches!(
-            ty,
-            Type::Path(type_path)
-                if type_path.qself.is_none() && type_path.path.is_ident("bool")
-        )
-    }
-
-    matches_bool(ty) || option_inner(ty).is_some_and(matches_bool)
+    let inner = option_inner(ty).unwrap_or(ty);
+    matches!(
+        inner,
+        Type::Path(type_path) if type_path.qself.is_none() && type_path.path.is_ident("bool")
+    )
 }
 
 /// Resolves a short CLI flag ensuring uniqueness and validity.
@@ -75,84 +78,49 @@ pub(super) fn validate_user_cli_short(
     Ok(user)
 }
 
-fn is_short_flag_available(candidate: char, used_shorts: &HashSet<char>) -> bool {
-    !RESERVED_SHORTS.contains(&candidate) && !used_shorts.contains(&candidate)
-}
-
-fn generate_short_flag_candidates(ch: char) -> [char; 2] {
-    [ch.to_ascii_lowercase(), ch.to_ascii_uppercase()]
-}
-
-fn try_claim_short_flag(candidates: [char; 2], used_shorts: &mut HashSet<char>) -> Option<char> {
-    for candidate in candidates {
-        if is_short_flag_available(candidate, used_shorts) {
-            used_shorts.insert(candidate);
-            return Some(candidate);
-        }
-    }
-    None
-}
-
-fn find_default_short_flag(name: &Ident, used_shorts: &mut HashSet<char>) -> syn::Result<char> {
-    for ch in name.to_string().chars() {
-        if !ch.is_ascii_alphanumeric() {
-            continue;
-        }
-        let candidates = generate_short_flag_candidates(ch);
-        if let Some(c) = try_claim_short_flag(candidates, used_shorts) {
-            return Ok(c);
-        }
-    }
-    Err(syn::Error::new_spanned(
-        name,
-        "unable to derive a short flag; supply `cli_short` to disambiguate",
-    ))
-}
-
 pub(super) fn resolve_short_flag(
     name: &Ident,
     attrs: &FieldAttrs,
     used_shorts: &mut HashSet<char>,
 ) -> syn::Result<char> {
     if let Some(user) = attrs.cli_short {
-        let claimed = validate_user_cli_short(name, user, used_shorts)?;
-        used_shorts.insert(claimed);
-        return Ok(claimed);
+        let ch = validate_user_cli_short(name, user, used_shorts)?;
+        used_shorts.insert(ch);
+        return Ok(ch);
     }
-    find_default_short_flag(name, used_shorts)
-}
 
-fn is_valid_cli_long(long: &str) -> bool {
-    !long.is_empty()
-        && !long.starts_with('-')
-        && long.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
+    let derived = name
+        .to_string()
+        .chars()
+        .filter(char::is_ascii_alphanumeric)
+        .flat_map(|c| [c.to_ascii_lowercase(), c.to_ascii_uppercase()])
+        .find(|candidate| !RESERVED_SHORTS.contains(candidate) && !used_shorts.contains(candidate))
+        .ok_or_else(|| {
+            syn::Error::new_spanned(
+                name,
+                "unable to derive a short flag; supply `cli_short` to disambiguate",
+            )
+        })?;
+    used_shorts.insert(derived);
+    Ok(derived)
 }
 
 pub(super) fn validate_cli_long(name: &Ident, long: &str) -> syn::Result<()> {
-    if !is_valid_cli_long(long) {
+    if long.is_empty()
+        || long.starts_with(['-', '_'])
+        || !long.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
+    {
         return Err(syn::Error::new_spanned(
             name,
             format!(
-                "invalid `cli_long` value '{long}': must be non-empty and contain only ASCII alphanumeric or '-'",
+                "invalid `cli_long` '{long}': must be non-empty, avoid leading '-'/'_', and contain only ASCII alphanumeric or '-'",
             ),
-        ));
-    }
-    if long.starts_with('_') {
-        return Err(syn::Error::new_spanned(
-            name,
-            format!("invalid `cli_long` value '{long}': must not start with '_'"),
-        ));
-    }
-    if long.starts_with('-') {
-        return Err(syn::Error::new_spanned(
-            name,
-            format!("invalid `cli_long` value '{long}': must not start with '-'"),
         ));
     }
     if RESERVED_LONGS.contains(&long) {
         return Err(syn::Error::new_spanned(
             name,
-            format!("reserved `cli_long` value '{long}': conflicts with global clap flags"),
+            format!("reserved `cli_long` '{long}' conflicts with global clap flags"),
         ));
     }
     Ok(())
@@ -164,11 +132,13 @@ pub(crate) fn build_cli_struct_fields(
 ) -> syn::Result<CliStructTokens> {
     let mut used_shorts = HashSet::new();
     let mut used_longs: HashSet<String> = HashSet::with_capacity(fields.len());
+    let mut field_names: HashSet<String> = HashSet::with_capacity(fields.len());
     let mut result = Vec::with_capacity(fields.len());
 
     for (f, attrs) in fields.iter().zip(field_attrs) {
         let name = f.ident.as_ref().expect("named field");
         let ty = option_type_tokens(&f.ty);
+        field_names.insert(name.to_string());
         let long = attrs
             .cli_long
             .clone()
@@ -206,6 +176,7 @@ pub(crate) fn build_cli_struct_fields(
         fields: result,
         used_shorts,
         used_longs,
+        field_names,
     })
 }
 
@@ -243,7 +214,7 @@ mod tests {
     fn rejects_reserved_long_flags(#[case] long: &str) {
         let name: Ident = syn::parse_quote!(field);
         let err = validate_cli_long(&name, long).expect_err("should fail");
-        assert!(err.to_string().contains("reserved `cli_long` value"));
+        assert!(err.to_string().contains("reserved `cli_long`"));
     }
 
     #[rstest]

@@ -92,18 +92,13 @@ fn build_cli_struct_tokens(
     field_attrs: &[derive::parse::FieldAttrs],
     struct_attrs: &derive::parse::StructAttrs,
 ) -> syn::Result<Vec<proc_macro2::TokenStream>> {
-    let has_user_config_path = fields.iter().any(|field| {
-        field
-            .ident
-            .as_ref()
-            .is_some_and(|ident| ident == "config_path")
-    });
     let mut cli_struct = build_cli_struct_fields(fields, field_attrs)?;
-    if !has_user_config_path {
+    if !cli_struct.field_names.contains("config_path") {
         let config_field = build_config_flag_field(
             struct_attrs,
             &cli_struct.used_shorts,
             &cli_struct.used_longs,
+            &cli_struct.field_names,
         )?;
         cli_struct.fields.push(config_field);
     }
