@@ -463,10 +463,12 @@ to disable list parsing.
 A configuration file may specify an `extends` key pointing to another file. The
 referenced file is loaded first and the current file's values override it. The
 path is resolved relative to the file containing the `extends` directive.
-Precedence across all sources becomes base file → extending file → environment
-variables → CLI flags. Cycles are detected and reported via a `CyclicExtends`
-error. Prefix handling and subcommand namespaces work as normal when
-inheritance is in use.
+Missing files raise a not-found error that includes both the resolved absolute
+path and the file that declared `extends`, making it clear what needs to be
+created. Precedence across all sources becomes base file → extending file →
+environment variables → CLI flags. Cycles are detected and reported via a
+`CyclicExtends` error. Prefix handling and subcommand namespaces work as normal
+when inheritance is in use.
 
 ## Dynamic rule tables
 

@@ -248,8 +248,9 @@ fn get_extends(figment: &Figment, current_path: &Path) -> OrthoResult<Option<Pat
 /// [`dunce::canonicalize`] to avoid introducing UNC prefixes in diagnostic
 /// messages.
 ///
-/// The target must already exist as a regular file; non-existent paths
-/// cause canonicalisation to fail and an error to be returned.
+/// The target must already exist as a regular file. If the file is missing, a
+/// not-found error is returned describing the absolute path derived from
+/// `current_path`.
 ///
 /// # Errors
 ///
@@ -279,9 +280,28 @@ fn resolve_base_path(current_path: &Path, base: PathBuf) -> OrthoResult<PathBuf>
     let base = if base.is_absolute() {
         base
     } else {
-        parent.join(base)
+        canonicalise(parent)?.join(base)
     };
-    canonicalise(&base)
+    match canonicalise(&base) {
+        Ok(path) => Ok(path),
+        Err(err) => {
+            if let OrthoError::File { source, .. } = err.as_ref() {
+                if let Some(io_err) = source.downcast_ref::<std::io::Error>() {
+                    if io_err.kind() == std::io::ErrorKind::NotFound {
+                        return Err(not_found(
+                            &base,
+                            format!(
+                                "extended configuration file '{}' does not exist (referenced from '{}')",
+                                base.display(),
+                                current_path.display()
+                            ),
+                        ));
+                    }
+                }
+            }
+            Err(err)
+        }
+    }
 }
 
 /// Merge `figment` over its parent configuration.

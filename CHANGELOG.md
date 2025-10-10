@@ -13,3 +13,8 @@ All notable changes to this project will be documented in this file.
 - Introduce the `#[ortho_config(discovery(...))]` attribute to customise config
   discovery (filenames, environment overrides, and the generated CLI flag) and
   expose the new flag in the `hello_world` example.
+
+### Changed
+
+- Report missing `extends` targets with a clear not-found error that names the
+  resolved absolute path and the referencing file (closes #110).

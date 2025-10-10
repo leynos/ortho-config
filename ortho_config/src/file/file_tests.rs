@@ -127,6 +127,25 @@ fn resolve_base_path_errors_when_no_parent() {
 }
 
 #[test]
+fn resolve_base_path_reports_missing_file() {
+    jail_expect_with(|_| {
+        let (_root, current) = canonical_root_and_current();
+        let err = resolve_base_path(&current, PathBuf::from("missing.toml")).unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("missing.toml"), "message: {msg}");
+        assert!(msg.contains("does not exist"), "message: {msg}");
+        match &*err {
+            crate::OrthoError::File { source, .. } => {
+                let io_err = source.downcast_ref::<std::io::Error>().expect("io error");
+                assert_eq!(io_err.kind(), std::io::ErrorKind::NotFound);
+            }
+            other => panic!("expected File error, got: {other:?}"),
+        }
+        Ok(())
+    });
+}
+
+#[test]
 fn merge_parent_child_overrides_parent_on_conflicts() {
     let parent = Figment::from(Toml::string("foo = \"parent\"\nbar = \"parent\""));
     let child = Figment::from(Toml::string("foo = \"child\""));
