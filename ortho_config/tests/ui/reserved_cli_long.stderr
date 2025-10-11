@@ -1,4 +1,4 @@
-error: reserved `cli_long` value 'help': conflicts with global clap flags
+error: reserved `cli_long` 'help' conflicts with global clap flags
  --> tests/ui/reserved_cli_long.rs:6:5
   |
 6 |     field: String,
