@@ -51,6 +51,30 @@ fn has_invalid_chars(long: &str) -> bool {
     !long.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
 }
 
+fn invalid_prefix_message(long: &str) -> Option<String> {
+    if !has_invalid_prefix(long) {
+        return None;
+    }
+    let prefix = if long.starts_with('-') { '-' } else { '_' };
+    Some(format!(
+        "invalid `cli_long` '{long}': must not start with '{prefix}'"
+    ))
+}
+
+fn long_validation_error(long: &str) -> Option<String> {
+    if is_empty_long(long) {
+        Some(format!("invalid `cli_long` '{long}': must be non-empty"))
+    } else if let Some(message) = invalid_prefix_message(long) {
+        Some(message)
+    } else if has_invalid_chars(long) {
+        Some(format!(
+            "invalid `cli_long` '{long}': must contain only ASCII alphanumeric characters or '-'"
+        ))
+    } else {
+        None
+    }
+}
+
 /// Resolves a short CLI flag ensuring uniqueness and validity.
 ///
 /// # Examples
@@ -119,18 +143,7 @@ pub(super) fn resolve_short_flag(
 }
 
 pub(super) fn validate_cli_long(name: &Ident, long: &str) -> syn::Result<()> {
-    if is_empty_long(long) || has_invalid_prefix(long) || has_invalid_chars(long) {
-        let message = if is_empty_long(long) {
-            format!("invalid `cli_long` '{long}': must be non-empty")
-        } else if long.starts_with('-') {
-            format!("invalid `cli_long` '{long}': must not start with '-'")
-        } else if long.starts_with('_') {
-            format!("invalid `cli_long` '{long}': must not start with '_'")
-        } else {
-            format!(
-                "invalid `cli_long` '{long}': must contain only ASCII alphanumeric characters or '-'",
-            )
-        };
+    if let Some(message) = long_validation_error(long) {
         return Err(syn::Error::new_spanned(name, message));
     }
     if RESERVED_LONGS.contains(&long) {
