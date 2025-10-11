@@ -39,6 +39,18 @@ fn is_bool_type(ty: &Type) -> bool {
     )
 }
 
+fn is_empty_long(long: &str) -> bool {
+    long.is_empty()
+}
+
+fn has_invalid_prefix(long: &str) -> bool {
+    long.starts_with(['-', '_'])
+}
+
+fn has_invalid_chars(long: &str) -> bool {
+    !long.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
+}
+
 /// Resolves a short CLI flag ensuring uniqueness and validity.
 ///
 /// # Examples
@@ -107,31 +119,19 @@ pub(super) fn resolve_short_flag(
 }
 
 pub(super) fn validate_cli_long(name: &Ident, long: &str) -> syn::Result<()> {
-    if long.is_empty() {
-        return Err(syn::Error::new_spanned(
-            name,
-            format!("invalid `cli_long` '{long}': must be non-empty"),
-        ));
-    }
-    if long.starts_with('-') {
-        return Err(syn::Error::new_spanned(
-            name,
-            format!("invalid `cli_long` '{long}': must not start with '-'"),
-        ));
-    }
-    if long.starts_with('_') {
-        return Err(syn::Error::new_spanned(
-            name,
-            format!("invalid `cli_long` '{long}': must not start with '_'"),
-        ));
-    }
-    if !long.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
-        return Err(syn::Error::new_spanned(
-            name,
+    if is_empty_long(long) || has_invalid_prefix(long) || has_invalid_chars(long) {
+        let message = if is_empty_long(long) {
+            format!("invalid `cli_long` '{long}': must be non-empty")
+        } else if long.starts_with('-') {
+            format!("invalid `cli_long` '{long}': must not start with '-'")
+        } else if long.starts_with('_') {
+            format!("invalid `cli_long` '{long}': must not start with '_'")
+        } else {
             format!(
                 "invalid `cli_long` '{long}': must contain only ASCII alphanumeric characters or '-'",
-            ),
-        ));
+            )
+        };
+        return Err(syn::Error::new_spanned(name, message));
     }
     if RESERVED_LONGS.contains(&long) {
         return Err(syn::Error::new_spanned(
