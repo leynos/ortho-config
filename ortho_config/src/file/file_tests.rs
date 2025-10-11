@@ -197,7 +197,6 @@ fn normalise_cycle_key_is_noop_on_case_sensitive_platforms() {
     assert_eq!(normalise_cycle_key(&non_ascii), non_ascii);
 }
 
-#[cfg(any(windows, target_os = "macos"))]
 fn assert_normalise_cycle_key(
     windows_input: &str,
     windows_expected: &str,
@@ -221,7 +220,6 @@ fn assert_normalise_cycle_key(
     ignore = "case-insensitive normalisation applies only on Windows and macOS"
 )]
 fn normalise_cycle_key_lowercases_on_case_insensitive_platforms() {
-    #[cfg(any(windows, target_os = "macos"))]
     assert_normalise_cycle_key(
         r"C:\Temp\Config.toml",
         r"c:\temp\config.toml",
@@ -236,7 +234,6 @@ fn normalise_cycle_key_lowercases_on_case_insensitive_platforms() {
     ignore = "case-insensitive normalisation applies only on Windows and macOS"
 )]
 fn normalise_cycle_key_handles_relative_paths() {
-    #[cfg(any(windows, target_os = "macos"))]
     assert_normalise_cycle_key(
         r".\Temp\Config.toml",
         r".\temp\config.toml",
@@ -251,7 +248,6 @@ fn normalise_cycle_key_handles_relative_paths() {
     ignore = "case-insensitive normalisation applies only on Windows and macOS"
 )]
 fn normalise_cycle_key_handles_redundant_separators() {
-    #[cfg(any(windows, target_os = "macos"))]
     assert_normalise_cycle_key(
         r"C://Temp//Config.toml",
         r"c:\temp\config.toml",
