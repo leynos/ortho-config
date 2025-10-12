@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 struct EmptyConfig {}
 
 #[rstest]
-fn derives_for_struct_without_fields() {
+fn loads_empty_struct_successfully() {
     let cfg = EmptyConfig::load_from_iter(["bin"]).expect("load");
     assert_eq!(cfg, EmptyConfig {});
 }
