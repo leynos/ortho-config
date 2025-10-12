@@ -126,13 +126,28 @@ fn resolve_base_path_errors_when_no_parent() {
     );
 }
 
-#[test]
-fn resolve_base_path_reports_missing_file() {
+#[rstest]
+#[case::relative(false)]
+#[case::absolute(true)]
+fn resolve_base_path_reports_missing_file(#[case] is_abs: bool) {
     jail_expect_with(|_| {
-        let (_root, current) = canonical_root_and_current();
-        let err = resolve_base_path(&current, PathBuf::from("missing.toml")).unwrap_err();
+        let (root, current) = canonical_root_and_current();
+        let expected_base = root.join("missing.toml");
+        let base = if is_abs {
+            expected_base.clone()
+        } else {
+            PathBuf::from("missing.toml")
+        };
+        let err = resolve_base_path(&current, base).unwrap_err();
         let msg = err.to_string();
-        assert!(msg.contains("missing.toml"), "message: {msg}");
+        assert!(
+            msg.contains(expected_base.to_string_lossy().as_ref()),
+            "message: {msg}"
+        );
+        assert!(
+            msg.contains(current.to_string_lossy().as_ref()),
+            "message: {msg}"
+        );
         assert!(msg.contains("does not exist"), "message: {msg}");
         match &*err {
             crate::OrthoError::File { source, .. } => {
