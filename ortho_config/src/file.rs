@@ -285,21 +285,23 @@ fn resolve_base_path(current_path: &Path, base: PathBuf) -> OrthoResult<PathBuf>
     match canonicalise(&base) {
         Ok(path) => Ok(path),
         Err(err) => {
-            if let OrthoError::File { source, .. } = err.as_ref() {
-                if let Some(io_err) = source.downcast_ref::<std::io::Error>() {
-                    if io_err.kind() == std::io::ErrorKind::NotFound {
-                        return Err(not_found(
-                            &base,
-                            format!(
-                                "extended configuration file '{}' does not exist (referenced from '{}')",
-                                base.display(),
-                                current_path.display()
-                            ),
-                        ));
-                    }
-                }
+            let OrthoError::File { source, .. } = err.as_ref() else {
+                return Err(err);
+            };
+            let Some(io_err) = source.downcast_ref::<std::io::Error>() else {
+                return Err(err);
+            };
+            if io_err.kind() != std::io::ErrorKind::NotFound {
+                return Err(err);
             }
-            Err(err)
+            Err(not_found(
+                &base,
+                format!(
+                    "extended configuration file '{}' does not exist (referenced from '{}')",
+                    base.display(),
+                    current_path.display()
+                ),
+            ))
         }
     }
 }
