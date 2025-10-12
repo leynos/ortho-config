@@ -1,4 +1,5 @@
-//! Behavioural tests ensuring empty configuration structs derive correctly.
+//! Behavioural tests ensuring empty configuration structs generate valid code
+//! and load successfully.
 
 use ortho_config::OrthoConfig;
 use rstest::rstest;
