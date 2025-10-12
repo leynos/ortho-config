@@ -7,12 +7,24 @@ use rstest::rstest;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
-#[allow(deprecated, reason = "figment::Jail is used for test isolation only")]
-fn jail_expect_with<F>(f: F)
+#[deprecated(
+    note = "figment::Jail::expect_with was previously deprecated; keep a wrapper so lint expectations remain stable"
+)]
+fn deprecated_jail_expect_with<F>(f: F)
 where
     F: FnOnce(&mut figment::Jail) -> figment::error::Result<()>,
 {
     figment::Jail::expect_with(f);
+}
+
+fn jail_expect_with<F>(f: F)
+where
+    F: FnOnce(&mut figment::Jail) -> figment::error::Result<()>,
+{
+    #[expect(deprecated, reason = "figment::Jail is used for test isolation only")]
+    {
+        deprecated_jail_expect_with(f);
+    }
 }
 
 fn canonical_root_and_current() -> (PathBuf, PathBuf) {
@@ -214,46 +226,36 @@ fn assert_normalise_cycle_key(
     assert_eq!(normalise_cycle_key(&input), expected);
 }
 
-#[test]
+#[rstest]
+#[case::absolute_paths(
+    r"C:\Temp\Config.toml",
+    r"c:\temp\config.toml",
+    "/tmp/Config.toml",
+    "/tmp/config.toml"
+)]
+#[case::relative_paths(
+    r".\Temp\Config.toml",
+    r".\temp\config.toml",
+    "./Temp/Config.toml",
+    "./temp/config.toml"
+)]
+#[case::redundant_separators(
+    r"C://Temp//Config.toml",
+    r"c:\temp\config.toml",
+    "/tmp//Nested//Config.toml",
+    "/tmp/nested/config.toml"
+)]
 #[cfg_attr(
     not(any(windows, target_os = "macos")),
     ignore = "case-insensitive normalisation applies only on Windows and macOS"
 )]
-fn normalise_cycle_key_lowercases_on_case_insensitive_platforms() {
-    assert_normalise_cycle_key(
-        r"C:\Temp\Config.toml",
-        r"c:\temp\config.toml",
-        "/tmp/Config.toml",
-        "/tmp/config.toml",
-    );
-}
-
-#[test]
-#[cfg_attr(
-    not(any(windows, target_os = "macos")),
-    ignore = "case-insensitive normalisation applies only on Windows and macOS"
-)]
-fn normalise_cycle_key_handles_relative_paths() {
-    assert_normalise_cycle_key(
-        r".\Temp\Config.toml",
-        r".\temp\config.toml",
-        "./Temp/Config.toml",
-        "./temp/config.toml",
-    );
-}
-
-#[test]
-#[cfg_attr(
-    not(any(windows, target_os = "macos")),
-    ignore = "case-insensitive normalisation applies only on Windows and macOS"
-)]
-fn normalise_cycle_key_handles_redundant_separators() {
-    assert_normalise_cycle_key(
-        r"C://Temp//Config.toml",
-        r"c:\temp\config.toml",
-        "/tmp//Nested//Config.toml",
-        "/tmp/nested/config.toml",
-    );
+fn normalise_cycle_key_case_insensitive_scenarios(
+    #[case] windows_input: &str,
+    #[case] windows_expected: &str,
+    #[case] unix_input: &str,
+    #[case] unix_expected: &str,
+) {
+    assert_normalise_cycle_key(windows_input, windows_expected, unix_input, unix_expected);
 }
 
 #[test]
