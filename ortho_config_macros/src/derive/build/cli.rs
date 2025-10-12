@@ -7,7 +7,7 @@
 use std::collections::HashSet;
 
 use heck::ToKebabCase;
-use quote::quote;
+use quote::{quote, quote_spanned};
 use syn::{Ident, Type};
 
 use crate::derive::parse::{FieldAttrs, option_inner};
@@ -189,21 +189,24 @@ pub(crate) fn build_cli_struct_fields(
         let long_lit = syn::LitStr::new(&long, proc_macro2::Span::call_site());
         let short_lit = syn::LitChar::new(short_ch, proc_macro2::Span::call_site());
         let is_bool = is_bool_type(&f.ty);
-        let serde_attr = if is_bool {
-            proc_macro2::TokenStream::new()
-        } else {
-            quote! { #[serde(skip_serializing_if = "Option::is_none")] }
-        };
+        let span = name.span();
         let arg_attr = if is_bool {
-            quote! {
+            quote_spanned! { span =>
                 #[arg(long = #long_lit, short = #short_lit, action = clap::ArgAction::SetTrue)]
             }
         } else {
-            quote! {
+            quote_spanned! { span =>
                 #[arg(long = #long_lit, short = #short_lit)]
             }
         };
-        result.push(quote! {
+        let serde_attr = if is_bool {
+            proc_macro2::TokenStream::new()
+        } else {
+            quote_spanned! { span =>
+                #[serde(skip_serializing_if = "Option::is_none")]
+            }
+        };
+        result.push(quote_spanned! { span =>
             #arg_attr
             #serde_attr
             pub #name: #ty
