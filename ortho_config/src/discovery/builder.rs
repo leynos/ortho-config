@@ -149,10 +149,8 @@ impl ConfigDiscoveryBuilder {
             .unwrap_or_else(|| dotfile_name.clone());
 
         let mut project_roots = self.project_roots;
-        if project_roots.is_empty() {
-            if let Ok(dir) = std::env::current_dir() {
-                project_roots.push(dir);
-            }
+        if let (true, Ok(dir)) = (project_roots.is_empty(), std::env::current_dir()) {
+            project_roots.push(dir);
         }
 
         ConfigDiscovery {
