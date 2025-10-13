@@ -5,7 +5,7 @@
 
 use std::collections::HashSet;
 
-use quote::quote;
+use quote::{quote, quote_spanned};
 use syn::Ident;
 
 use crate::derive::parse::StructAttrs;
@@ -53,8 +53,9 @@ pub(crate) fn build_config_flag_field(
     if visible {
         arg_meta.push(quote! { help = "Path to the configuration file" });
     }
-    let serde_attr = quote! { #[serde(skip_serializing_if = "Option::is_none")] };
-    Ok(quote! {
+    let span = name.span();
+    let serde_attr = quote_spanned! { span => #[serde(skip_serializing_if = "Option::is_none")] };
+    Ok(quote_spanned! { span =>
         #[arg( #( #arg_meta ),* )]
         #serde_attr
         pub config_path: Option<std::path::PathBuf>
