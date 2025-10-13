@@ -89,12 +89,23 @@ fn cyclic_inheritance_detects_case_variants() {
 }
 
 #[rstest]
-fn missing_base_file_errors() {
+#[case::relative(false)]
+#[case::absolute(true)]
+fn missing_base_file_errors(#[case] is_abs: bool) {
     with_jail(|j| {
-        j.create_file(".config.toml", "extends = \"missing.toml\"")?;
+        let root = std::env::current_dir().expect("cwd");
+        let expected_base = root.join("missing.toml");
+        let extends_value = if is_abs {
+            expected_base.display().to_string()
+        } else {
+            "missing.toml".to_string()
+        };
+        j.create_file(".config.toml", &format!("extends = {extends_value:?}"))?;
         let err = ExtendsCfg::load_from_iter(["prog"]).unwrap_err();
         let msg = err.to_string();
-        assert!(msg.contains("missing.toml"));
+        assert!(msg.contains(expected_base.to_string_lossy().as_ref()));
+        assert!(msg.contains(".config.toml"));
+        assert!(msg.contains("does not exist"));
         Ok(())
     });
 }
