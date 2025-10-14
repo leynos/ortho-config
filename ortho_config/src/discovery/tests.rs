@@ -136,6 +136,33 @@ fn project_roots_append_last() {
     );
 }
 
+#[rstest]
+fn project_roots_replaces_existing_entries() {
+    let _guards = clear_common_env();
+    let discovery = ConfigDiscovery::builder("hello_world")
+        .add_project_root("legacy")
+        .project_roots([PathBuf::from("alpha"), PathBuf::from("beta")])
+        .build();
+
+    let candidates = discovery.candidates();
+    let expected = vec![
+        PathBuf::from("alpha/.hello_world.toml"),
+        PathBuf::from("beta/.hello_world.toml"),
+    ];
+    assert!(
+        candidates.len() >= expected.len(),
+        "expected at least {} candidates, found {}",
+        expected.len(),
+        candidates.len()
+    );
+    let tail = &candidates[candidates.len() - expected.len()..];
+    assert_eq!(tail, expected.as_slice());
+    assert!(
+        !candidates.contains(&PathBuf::from("legacy/.hello_world.toml")),
+        "expected legacy project root to be cleared"
+    );
+}
+
 #[derive(Debug, Deserialize)]
 struct SampleConfig {
     value: bool,

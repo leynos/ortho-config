@@ -96,6 +96,32 @@ impl ConfigDiscoveryBuilder {
         self
     }
 
+    /// Replaces the project roots searched for configuration files.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use ortho_config::discovery::ConfigDiscovery;
+    ///
+    /// let discovery = ConfigDiscovery::builder("hello_world")
+    ///     .project_roots(["./workspace", "./fallback"])
+    ///     .build();
+    /// let candidates = discovery.candidates();
+    /// assert!(candidates.ends_with(&[
+    ///     std::path::PathBuf::from("./workspace/.hello_world.toml"),
+    ///     std::path::PathBuf::from("./fallback/.hello_world.toml"),
+    /// ]));
+    /// ```
+    #[must_use]
+    pub fn project_roots<I, P>(mut self, roots: I) -> Self
+    where
+        I: IntoIterator<Item = P>,
+        P: Into<PathBuf>,
+    {
+        self.project_roots = roots.into_iter().map(Into::into).collect();
+        self
+    }
+
     /// Adds an additional project root searched for configuration files.
     #[must_use]
     pub fn add_project_root(mut self, root: impl Into<PathBuf>) -> Self {
