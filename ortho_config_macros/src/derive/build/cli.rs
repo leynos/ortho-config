@@ -155,6 +155,68 @@ pub(super) fn validate_cli_long(name: &Ident, long: &str) -> syn::Result<()> {
     Ok(())
 }
 
+fn process_cli_field(
+    field: &syn::Field,
+    attrs: &FieldAttrs,
+    used_shorts: &mut HashSet<char>,
+    used_longs: &mut HashSet<String>,
+    field_names: &mut HashSet<String>,
+) -> syn::Result<proc_macro2::TokenStream> {
+    let Some(name) = field.ident.as_ref() else {
+        return Err(syn::Error::new_spanned(
+            field,
+            "unnamed (tuple) fields are not supported for CLI derive",
+        ));
+    };
+
+    let ty = option_type_tokens(&field.ty);
+    let field_name = name.to_string();
+    field_names.insert(field_name.clone());
+
+    let long = attrs
+        .cli_long
+        .clone()
+        .unwrap_or_else(|| field_name.to_kebab_case());
+    validate_cli_long(name, &long)?;
+
+    if !used_longs.insert(long.clone()) {
+        return Err(syn::Error::new_spanned(
+            name,
+            format!("duplicate `cli_long` value '{long}'"),
+        ));
+    }
+
+    let short_ch = resolve_short_flag(name, attrs, used_shorts)?;
+    let long_lit = syn::LitStr::new(&long, proc_macro2::Span::call_site());
+    let short_lit = syn::LitChar::new(short_ch, proc_macro2::Span::call_site());
+    let is_bool = is_bool_type(&field.ty);
+    let span = name.span();
+
+    let arg_attr = if is_bool {
+        quote_spanned! { span =>
+            #[arg(long = #long_lit, short = #short_lit, action = clap::ArgAction::SetTrue)]
+        }
+    } else {
+        quote_spanned! { span =>
+            #[arg(long = #long_lit, short = #short_lit)]
+        }
+    };
+
+    let serde_attr = if is_bool {
+        proc_macro2::TokenStream::new()
+    } else {
+        quote_spanned! { span =>
+            #[serde(skip_serializing_if = "Option::is_none")]
+        }
+    };
+
+    Ok(quote_spanned! { span =>
+        #arg_attr
+        #serde_attr
+        pub #name: #ty
+    })
+}
+
 pub(crate) fn build_cli_struct_fields(
     fields: &[syn::Field],
     field_attrs: &[FieldAttrs],
@@ -175,53 +237,15 @@ pub(crate) fn build_cli_struct_fields(
     let mut field_names: HashSet<String> = HashSet::with_capacity(fields.len());
     let mut result = Vec::with_capacity(fields.len());
 
-    for (f, attrs) in fields.iter().zip(field_attrs) {
-        let Some(name) = f.ident.as_ref() else {
-            return Err(syn::Error::new_spanned(
-                f,
-                "unnamed (tuple) fields are not supported for CLI derive",
-            ));
-        };
-        let ty = option_type_tokens(&f.ty);
-        let field_name = name.to_string();
-        field_names.insert(field_name.clone());
-        let long = attrs
-            .cli_long
-            .clone()
-            .unwrap_or_else(|| field_name.to_kebab_case());
-        validate_cli_long(name, &long)?;
-        if !used_longs.insert(long.clone()) {
-            return Err(syn::Error::new_spanned(
-                name,
-                format!("duplicate `cli_long` value '{long}'"),
-            ));
-        }
-        let short_ch = resolve_short_flag(name, attrs, &mut used_shorts)?;
-        let long_lit = syn::LitStr::new(&long, proc_macro2::Span::call_site());
-        let short_lit = syn::LitChar::new(short_ch, proc_macro2::Span::call_site());
-        let is_bool = is_bool_type(&f.ty);
-        let span = name.span();
-        let arg_attr = if is_bool {
-            quote_spanned! { span =>
-                #[arg(long = #long_lit, short = #short_lit, action = clap::ArgAction::SetTrue)]
-            }
-        } else {
-            quote_spanned! { span =>
-                #[arg(long = #long_lit, short = #short_lit)]
-            }
-        };
-        let serde_attr = if is_bool {
-            proc_macro2::TokenStream::new()
-        } else {
-            quote_spanned! { span =>
-                #[serde(skip_serializing_if = "Option::is_none")]
-            }
-        };
-        result.push(quote_spanned! { span =>
-            #arg_attr
-            #serde_attr
-            pub #name: #ty
-        });
+    for (field, attrs) in fields.iter().zip(field_attrs) {
+        let field_tokens = process_cli_field(
+            field,
+            attrs,
+            &mut used_shorts,
+            &mut used_longs,
+            &mut field_names,
+        )?;
+        result.push(field_tokens);
     }
 
     Ok(CliStructTokens {
