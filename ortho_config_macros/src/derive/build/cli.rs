@@ -159,6 +159,17 @@ pub(crate) fn build_cli_struct_fields(
     fields: &[syn::Field],
     field_attrs: &[FieldAttrs],
 ) -> syn::Result<CliStructTokens> {
+    if fields.len() != field_attrs.len() {
+        return Err(syn::Error::new(
+            proc_macro2::Span::call_site(),
+            format!(
+                "CLI field metadata mismatch: expected {} `FieldAttrs` entries but found {}; lengths must match to avoid silently dropping metadata",
+                fields.len(),
+                field_attrs.len()
+            ),
+        ));
+    }
+
     let mut used_shorts = HashSet::new();
     let mut used_longs: HashSet<String> = HashSet::with_capacity(fields.len());
     let mut field_names: HashSet<String> = HashSet::with_capacity(fields.len());
@@ -317,5 +328,14 @@ mod tests {
         };
         let err = resolve_short_flag(&name, &attrs, &mut used).expect_err("should fail");
         assert!(err.to_string().contains(expected_error));
+    }
+
+    #[test]
+    fn rejects_mismatched_field_metadata_lengths() {
+        let fields: Vec<syn::Field> = vec![syn::parse_quote!(pub alpha: bool)];
+        let mut attrs = vec![FieldAttrs::default(); 2];
+        attrs[0].cli_long = Some("alpha".into());
+        let err = build_cli_struct_fields(&fields, &attrs).expect_err("should fail");
+        assert!(err.to_string().contains("CLI field metadata mismatch"));
     }
 }
