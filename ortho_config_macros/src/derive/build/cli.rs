@@ -155,12 +155,27 @@ pub(super) fn validate_cli_long(name: &Ident, long: &str) -> syn::Result<()> {
     Ok(())
 }
 
+/// Context for tracking used CLI flags and field names during field processing.
+struct CliFieldContext {
+    used_shorts: HashSet<char>,
+    used_longs: HashSet<String>,
+    field_names: HashSet<String>,
+}
+
+impl CliFieldContext {
+    fn with_capacity(capacity: usize) -> Self {
+        Self {
+            used_shorts: HashSet::new(),
+            used_longs: HashSet::with_capacity(capacity),
+            field_names: HashSet::with_capacity(capacity),
+        }
+    }
+}
+
 fn process_cli_field(
     field: &syn::Field,
     attrs: &FieldAttrs,
-    used_shorts: &mut HashSet<char>,
-    used_longs: &mut HashSet<String>,
-    field_names: &mut HashSet<String>,
+    context: &mut CliFieldContext,
 ) -> syn::Result<proc_macro2::TokenStream> {
     let Some(name) = field.ident.as_ref() else {
         return Err(syn::Error::new_spanned(
@@ -171,7 +186,7 @@ fn process_cli_field(
 
     let ty = option_type_tokens(&field.ty);
     let field_name = name.to_string();
-    field_names.insert(field_name.clone());
+    context.field_names.insert(field_name.clone());
 
     let long = attrs
         .cli_long
@@ -179,14 +194,14 @@ fn process_cli_field(
         .unwrap_or_else(|| field_name.to_kebab_case());
     validate_cli_long(name, &long)?;
 
-    if !used_longs.insert(long.clone()) {
+    if !context.used_longs.insert(long.clone()) {
         return Err(syn::Error::new_spanned(
             name,
             format!("duplicate `cli_long` value '{long}'"),
         ));
     }
 
-    let short_ch = resolve_short_flag(name, attrs, used_shorts)?;
+    let short_ch = resolve_short_flag(name, attrs, &mut context.used_shorts)?;
     let long_lit = syn::LitStr::new(&long, proc_macro2::Span::call_site());
     let short_lit = syn::LitChar::new(short_ch, proc_macro2::Span::call_site());
     let is_bool = is_bool_type(&field.ty);
@@ -232,21 +247,19 @@ pub(crate) fn build_cli_struct_fields(
         ));
     }
 
-    let mut used_shorts = HashSet::new();
-    let mut used_longs: HashSet<String> = HashSet::with_capacity(fields.len());
-    let mut field_names: HashSet<String> = HashSet::with_capacity(fields.len());
+    let mut context = CliFieldContext::with_capacity(fields.len());
     let mut result = Vec::with_capacity(fields.len());
 
     for (field, attrs) in fields.iter().zip(field_attrs) {
-        let field_tokens = process_cli_field(
-            field,
-            attrs,
-            &mut used_shorts,
-            &mut used_longs,
-            &mut field_names,
-        )?;
+        let field_tokens = process_cli_field(field, attrs, &mut context)?;
         result.push(field_tokens);
     }
+
+    let CliFieldContext {
+        used_shorts,
+        used_longs,
+        field_names,
+    } = context;
 
     Ok(CliStructTokens {
         fields: result,
