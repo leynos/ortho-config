@@ -154,15 +154,18 @@ impl ConfigDiscoveryBuilder {
             .filter(|ext| !ext.is_empty());
 
         if stem.is_empty() {
-            let name = extension.unwrap_or("config");
-            return format!(".{name}");
+            let mut name = String::from('.');
+            name.push_str(extension.unwrap_or("config"));
+            return name;
         }
 
-        let parts = std::iter::once(stem)
-            .chain(extension)
-            .collect::<Vec<_>>()
-            .join(".");
-        format!(".{parts}")
+        let mut name = String::from('.');
+        name.push_str(stem);
+        if let Some(ext) = extension {
+            name.push('.');
+            name.push_str(ext);
+        }
+        name
     }
 
     /// Finalises the builder and returns a [`ConfigDiscovery`].
