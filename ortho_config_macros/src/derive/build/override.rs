@@ -20,10 +20,16 @@ pub(crate) fn collect_append_fields<'a>(
                 "unnamed (tuple) fields are not supported for append merge strategy",
             ));
         };
+        let strategy = attrs.merge_strategy.unwrap_or(MergeStrategy::Append);
         let Some(vec_ty) = vec_inner(&field.ty) else {
+            if matches!(attrs.merge_strategy, Some(MergeStrategy::Append)) {
+                return Err(syn::Error::new_spanned(
+                    field,
+                    "append merge strategy requires a Vec<_> field",
+                ));
+            }
             continue;
         };
-        let strategy = attrs.merge_strategy.unwrap_or(MergeStrategy::Append);
         if strategy == MergeStrategy::Append {
             append_fields.push((name, vec_ty));
         }
@@ -117,5 +123,22 @@ mod tests {
         let (ts, init_ts) = build_override_struct(&syn::parse_quote!(Demo), &append);
         assert!(ts.to_string().contains("struct __DemoVecOverride"));
         assert!(init_ts.to_string().contains("__DemoVecOverride"));
+    }
+
+    #[test]
+    fn collect_append_fields_errors_on_non_vec_append() {
+        let input: syn::DeriveInput = syn::parse_quote! {
+            struct DemoAppendError {
+                #[ortho_config(merge_strategy = "append")]
+                field1: u32,
+            }
+        };
+        let (_, fields, _, field_attrs) =
+            crate::derive::parse::parse_input(&input).expect("parse_input");
+        let err = collect_append_fields(&fields, &field_attrs).expect_err("expected append error");
+        assert!(
+            err.to_string()
+                .contains("append merge strategy requires a Vec<_> field")
+        );
     }
 }
