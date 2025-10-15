@@ -158,6 +158,18 @@ their own `DeclarativeMerge` implementation, ensuring subcommand namespaces are
 merged consistently without the manual `apply_greet_overrides` helper
 highlighted in the example feedback.
 
+The initial implementation represents each layer as a `serde_json::Value`
+captured inside the generated merge state. `MergeLayer` wraps the JSON blob
+alongside its provenance and an optional source path so diagnostics retain
+context. `merge_layer` overlays objects recursively by key and replaces scalars
+and arrays wholesale; this mirrors Figment’s behaviour and keeps attribute-free
+collections predictable while a richer strategy surface is designed. The macro
+also emits a `merge_from_layers` helper on every configuration struct so tests
+and behavioural fixtures can compose layers with `MergeComposer` without
+instantiating the CLI parser. This zero-allocates when callers pass borrowed
+values (for example, from `rstest` fixtures) and keeps merging deterministic in
+unit tests.
+
 The derive macro also emits a helper named `merge_from_layers` that accepts any
 iterator of `MergeLayer<'static>` and returns `OrthoResult<Self>` for tests.
 Developers can construct deterministic `MergeLayer` fixtures (for example,

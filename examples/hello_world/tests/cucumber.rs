@@ -5,6 +5,7 @@ use std::time::Duration;
 
 use camino::Utf8PathBuf;
 use cucumber::World as _;
+use hello_world::cli::GlobalArgs;
 use shlex::split;
 use std::collections::{BTreeMap, BTreeSet};
 use thiserror::Error;
@@ -28,6 +29,8 @@ pub struct World {
     workdir: tempfile::TempDir,
     /// Environment variables to inject when running the binary.
     env: BTreeMap<String, String>,
+    /// Declaratively composed globals used by behavioural tests.
+    declarative_globals: Option<GlobalArgs>,
 }
 
 impl Default for World {
@@ -37,6 +40,7 @@ impl Default for World {
             result: None,
             workdir,
             env: BTreeMap::new(),
+            declarative_globals: None,
         }
     }
 }
@@ -132,6 +136,38 @@ impl World {
     /// environment remains untouched during the scenario.
     pub fn remove_env(&mut self, key: &str) {
         self.env.remove(key);
+    }
+
+    /// Stores declaratively merged globals for later assertions.
+    pub fn set_declarative_globals(&mut self, globals: GlobalArgs) {
+        self.declarative_globals = Some(globals);
+    }
+
+    fn declarative_globals(&self) -> &GlobalArgs {
+        self.declarative_globals
+            .as_ref()
+            .expect("declarative globals composed before assertion")
+    }
+
+    /// Asserts that the composed globals expose the expected recipient.
+    ///
+    /// # Panics
+    ///
+    /// Panics when the stored recipient does not match `expected`.
+    pub fn assert_declarative_recipient(&self, expected: &str) {
+        let globals = self.declarative_globals();
+        let recipient = globals.recipient.clone().unwrap_or_default();
+        assert_eq!(recipient, expected);
+    }
+
+    /// Asserts that the composed globals expose the expected salutations.
+    ///
+    /// # Panics
+    ///
+    /// Panics when the stored salutations differ from `expected`.
+    pub fn assert_declarative_salutations(&self, expected: &[String]) {
+        let globals = self.declarative_globals();
+        assert_eq!(globals.salutations, expected);
     }
 
     /// Writes a configuration file into the scenario work directory.

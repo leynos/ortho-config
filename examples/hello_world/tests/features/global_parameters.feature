@@ -96,3 +96,18 @@ Feature: Global parameters govern greetings
     When I run the hello world example with arguments "greet"
     Then the command succeeds
     And stdout contains "Hello, World!"
+
+  Scenario: Declarative merging composes layered overrides
+      Given I compose hello world globals from declarative layers:
+        """
+        [
+          {"provenance": "defaults", "value": {"recipient": "Defaults", "salutations": ["Hi"], "is_excited": false, "is_quiet": false}},
+          {"provenance": "environment", "value": {"salutations": ["Env"]}},
+          {"provenance": "cli", "value": {"recipient": "Cli"}}
+        ]
+        """
+    Then the declarative globals recipient is "Cli"
+    And the declarative globals salutations are:
+      """
+      Env
+      """

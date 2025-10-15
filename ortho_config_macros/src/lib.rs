@@ -398,6 +398,43 @@ fn generate_ortho_impl(
     }
 }
 
+fn generate_declarative_impl(config_ident: &syn::Ident) -> proc_macro2::TokenStream {
+    let state_ident = format_ident!("__{}DeclarativeMergeState", config_ident);
+    quote! {
+        #[derive(Default)]
+        struct #state_ident {
+            value: ortho_config::serde_json::Value,
+        }
+
+        impl ortho_config::DeclarativeMerge for #state_ident {
+            type Output = #config_ident;
+
+            fn merge_layer(&mut self, layer: ortho_config::MergeLayer<'_>) -> ortho_config::OrthoResult<()> {
+                ortho_config::declarative::merge_value(&mut self.value, layer.into_value());
+                Ok(())
+            }
+
+            fn finish(self) -> ortho_config::OrthoResult<Self::Output> {
+                ortho_config::declarative::from_value(self.value)
+            }
+        }
+
+        impl #config_ident {
+            /// Merge the configuration struct from declarative layers.
+            pub fn merge_from_layers<I>(layers: I) -> ortho_config::OrthoResult<Self>
+            where
+                I: IntoIterator<Item = ortho_config::MergeLayer<'static>>,
+            {
+                let mut state = #state_ident::default();
+                for layer in layers {
+                    ortho_config::DeclarativeMerge::merge_layer(&mut state, layer)?;
+                }
+                ortho_config::DeclarativeMerge::finish(state)
+            }
+        }
+    }
+}
+
 fn generate_trait_implementation(
     config_ident: &syn::Ident,
     components: &MacroComponents,
@@ -405,10 +442,12 @@ fn generate_trait_implementation(
     let cli_struct = generate_cli_struct(components);
     let defaults_struct = generate_defaults_struct(components);
     let ortho_impl = generate_ortho_impl(config_ident, components);
+    let declarative_impl = generate_declarative_impl(config_ident);
     quote! {
         #cli_struct
         #defaults_struct
         #ortho_impl
+        #declarative_impl
     }
 }
 

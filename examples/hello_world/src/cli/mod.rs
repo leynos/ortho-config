@@ -109,6 +109,11 @@ impl Default for GreetCommand {
 
 impl GreetCommand {
     /// Ensures user-provided options are well formed.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`ValidationError`] when punctuation or preamble values are
+    /// blank after trimming.
     pub fn validate(&self) -> Result<(), ValidationError> {
         if self.punctuation.trim().is_empty() {
             return Err(ValidationError::BlankPunctuation);
@@ -178,6 +183,10 @@ impl Default for TakeLeaveCommand {
 
 impl TakeLeaveCommand {
     /// Validates caller-provided farewell customisation.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`ValidationError`] when any validation check fails.
     pub fn validate(&self) -> Result<(), ValidationError> {
         self.validate_greeting_overrides()?;
         self.validate_parting()?;
@@ -186,6 +195,12 @@ impl TakeLeaveCommand {
         Ok(())
     }
 
+    /// Ensures the farewell parting phrase is not blank.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ValidationError::BlankFarewell`] when the parting phrase
+    /// contains only whitespace.
     fn validate_parting(&self) -> Result<(), ValidationError> {
         if self.parting.trim().is_empty() {
             return Err(ValidationError::BlankFarewell);
@@ -193,6 +208,12 @@ impl TakeLeaveCommand {
         Ok(())
     }
 
+    /// Ensures reminder durations fall within the supported range.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ValidationError::ReminderOutOfRange`] when the reminder is
+    /// present but zero minutes.
     fn validate_reminder(&self) -> Result<(), ValidationError> {
         if self.remind_in.is_some_and(|minutes| minutes == 0) {
             return Err(ValidationError::ReminderOutOfRange);
@@ -200,6 +221,12 @@ impl TakeLeaveCommand {
         Ok(())
     }
 
+    /// Ensures gifts, when provided, are not blank strings.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ValidationError::BlankGift`] when the caller supplies an
+    /// empty gift description.
     fn validate_gift(&self) -> Result<(), ValidationError> {
         if self
             .gift
@@ -248,10 +275,6 @@ pub enum FarewellChannel {
 
 impl FarewellChannel {
     #[must_use]
-    #[expect(
-        clippy::trivially_copy_pass_by_ref,
-        reason = "Borrowed API avoids consuming FarewellChannel values when describing them."
-    )]
     pub fn describe(&self) -> &'static str {
         match self {
             FarewellChannel::Message => "a message",
@@ -262,6 +285,11 @@ impl FarewellChannel {
 }
 
 /// Resolves the global configuration by layering defaults with CLI overrides.
+///
+/// # Errors
+///
+/// Returns a [`HelloWorldError`] when discovery fails or configuration cannot
+/// be deserialised.
 pub fn load_global_config(
     globals: &GlobalArgs,
     config_override: Option<&Path>,
@@ -360,7 +388,12 @@ struct GreetOverrides {
     punctuation: Option<String>,
 }
 
-pub(crate) fn apply_greet_overrides(command: &mut GreetCommand) -> Result<(), HelloWorldError> {
+/// Applies greeting-specific overrides derived from configuration defaults.
+///
+/// # Errors
+///
+/// Returns a [`HelloWorldError`] when greeting defaults cannot be loaded.
+pub fn apply_greet_overrides(command: &mut GreetCommand) -> Result<(), HelloWorldError> {
     if let Some(greet) = load_config_overrides()?.and_then(|overrides| overrides.cmds.greet) {
         if let Some(preamble) = greet.preamble {
             command.preamble = Some(preamble);
@@ -440,6 +473,11 @@ impl HelloWorldCli {
     }
 
     /// Validates the resolved configuration before execution.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ValidationError::ConflictingDeliveryModes`] when mutually
+    /// exclusive delivery options are enabled.
     ///
     /// # Examples
     /// ```ignore

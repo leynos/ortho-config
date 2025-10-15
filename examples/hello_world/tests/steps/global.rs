@@ -5,8 +5,13 @@
 //! Step definitions for the `hello_world` example.
 //! Drive the binary and assert its outputs.
 use crate::{SampleConfigError, World};
+use camino::Utf8PathBuf;
 use cucumber::gherkin::Step as GherkinStep;
 use cucumber::{given, then, when};
+use hello_world::cli::GlobalArgs;
+use ortho_config::MergeComposer;
+use ortho_config::serde_json::{self, Value};
+use serde::Deserialize;
 
 #[derive(Debug, Clone)]
 pub(crate) struct CapturedString(String);
@@ -44,6 +49,13 @@ impl AsRef<str> for CapturedString {
 fn extract_docstring(step: &GherkinStep) -> &str {
     step.docstring()
         .expect("config docstring provided for hello world example")
+}
+
+#[derive(Debug, Deserialize)]
+struct LayerInput {
+    provenance: String,
+    value: Value,
+    path: Option<String>,
 }
 
 /// Runs the binary without additional arguments.
@@ -164,4 +176,48 @@ pub fn start_from_invalid_sample_config(world: &mut World, sample: CapturedStrin
         ) => {}
         Err(err) => panic!("unexpected sample config error: {err}"),
     }
+}
+
+#[given("I compose hello world globals from declarative layers:")]
+pub fn compose_declarative_globals(world: &mut World, step: &GherkinStep) {
+    let contents = extract_docstring(step);
+    let inputs: Vec<LayerInput> =
+        serde_json::from_str(contents).expect("valid JSON describing declarative layers");
+    let mut composer = MergeComposer::new();
+    for input in inputs {
+        match input.provenance.as_str() {
+            "defaults" => composer.push_defaults(input.value),
+            "environment" => composer.push_environment(input.value),
+            "cli" => composer.push_cli(input.value),
+            "file" => {
+                let path = input.path.map(Utf8PathBuf::from);
+                composer.push_file(input.value, path);
+            }
+            other => panic!("unknown provenance {other}"),
+        }
+    }
+    let globals = GlobalArgs::merge_from_layers(composer.layers())
+        .expect("declarative merge should succeed for globals");
+    world.set_declarative_globals(globals);
+}
+
+#[then(expr = "the declarative globals recipient is {string}")]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Cucumber step signature requires owned capture values"
+)]
+pub fn assert_declarative_recipient(world: &mut World, expected: CapturedString) {
+    world.assert_declarative_recipient(expected.as_str());
+}
+
+#[then("the declarative globals salutations are:")]
+pub fn assert_declarative_salutations(world: &mut World, step: &GherkinStep) {
+    let contents = extract_docstring(step);
+    let expected: Vec<String> = contents
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .map(str::to_owned)
+        .collect();
+    world.assert_declarative_salutations(&expected);
 }

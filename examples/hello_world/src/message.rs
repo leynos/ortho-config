@@ -53,6 +53,11 @@ impl TakeLeavePlan {
 }
 
 /// Builds a [`GreetingPlan`] from the resolved configuration and command options.
+///
+/// # Errors
+///
+/// Returns a [`HelloWorldError`] when validation fails or greeting defaults
+/// cannot be loaded.
 pub fn build_plan(
     config: &HelloWorldCli,
     command: &GreetCommand,
@@ -86,6 +91,11 @@ pub fn build_plan(
 }
 
 /// Builds a [`TakeLeavePlan`] describing the farewell workflow.
+///
+/// # Errors
+///
+/// Returns a [`HelloWorldError`] when building the greeting plan fails or the
+/// farewell configuration is invalid.
 pub fn build_take_leave_plan(
     config: &HelloWorldCli,
     command: &TakeLeaveCommand,
@@ -100,6 +110,11 @@ pub fn build_take_leave_plan(
     Ok(TakeLeavePlan { greeting, farewell })
 }
 
+/// Builds a `GreetCommand` pre-populated from a farewell command.
+///
+/// # Errors
+///
+/// Returns a [`HelloWorldError`] when greeting defaults cannot be loaded.
 fn build_greeting_defaults(command: &TakeLeaveCommand) -> Result<GreetCommand, HelloWorldError> {
     let mut greeting_defaults = crate::cli::load_greet_defaults()?;
     if let Some(preamble) = &command.greeting_preamble {
