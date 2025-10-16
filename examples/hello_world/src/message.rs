@@ -96,6 +96,32 @@ pub fn build_plan(
 ///
 /// Returns a [`HelloWorldError`] when building the greeting plan fails or the
 /// farewell configuration is invalid.
+///
+/// # Examples
+///
+/// ```
+/// use hello_world::cli::{HelloWorldCli, TakeLeaveCommand};
+/// use hello_world::message::build_take_leave_plan;
+///
+/// let mut config = HelloWorldCli::default();
+/// config.recipient = String::from("Ada Lovelace");
+/// config.salutations = vec![String::from("Hello there")];
+///
+/// let mut command = TakeLeaveCommand::default();
+/// command.parting = String::from("Cheerio");
+/// command.greeting_preamble = Some(String::from("Before we go"));
+/// command.greeting_punctuation = Some(String::from("?"));
+///
+/// let plan =
+///     build_take_leave_plan(&config, &command).expect("valid farewell inputs");
+///
+/// assert_eq!(plan.greeting().preamble(), Some("Before we go"));
+/// assert_eq!(
+///     plan.greeting().message(),
+///     "Hello there, Ada Lovelace?"
+/// );
+/// assert_eq!(plan.farewell(), "Cheerio, Ada Lovelace.");
+/// ```
 pub fn build_take_leave_plan(
     config: &HelloWorldCli,
     command: &TakeLeaveCommand,
@@ -115,6 +141,26 @@ pub fn build_take_leave_plan(
 /// # Errors
 ///
 /// Returns a [`HelloWorldError`] when greeting defaults cannot be loaded.
+///
+/// # Examples
+///
+/// ```
+/// use hello_world::cli::{GreetCommand, TakeLeaveCommand};
+/// use hello_world::message::build_greeting_defaults;
+///
+/// let mut farewell = TakeLeaveCommand::default();
+/// farewell.greeting_preamble = Some(String::from("Mind the gap"));
+/// farewell.greeting_punctuation = Some(String::from("?"));
+///
+/// let defaults =
+///     build_greeting_defaults(&farewell).expect("defaults load successfully");
+///
+/// assert_eq!(
+///     defaults.preamble,
+///     Some(String::from("Mind the gap"))
+/// );
+/// assert_eq!(defaults.punctuation, String::from("?"));
+/// ```
 fn build_greeting_defaults(command: &TakeLeaveCommand) -> Result<GreetCommand, HelloWorldError> {
     let mut greeting_defaults = crate::cli::load_greet_defaults()?;
     if let Some(preamble) = &command.greeting_preamble {

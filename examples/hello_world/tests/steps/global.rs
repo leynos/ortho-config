@@ -1,7 +1,3 @@
-#![allow(
-    unfulfilled_lint_expectations,
-    reason = "Clippy 1.81 does not emit needless_pass_by_value for cucumber steps yet; expectations document the signature requirements."
-)]
 //! Step definitions for the `hello_world` example.
 //! Drive the binary and assert its outputs.
 use crate::{SampleConfigError, World};
@@ -65,7 +61,7 @@ pub async fn run_without_args(world: &mut World) {
 }
 
 #[when(expr = "I run the hello world example with arguments {string}")]
-#[expect(
+#[allow(
     clippy::needless_pass_by_value,
     reason = "Cucumber step signature requires owned capture values"
 )]
@@ -86,7 +82,7 @@ pub fn command_fails(world: &mut World) {
 }
 
 #[then(expr = "stdout contains {string}")]
-#[expect(
+#[allow(
     clippy::needless_pass_by_value,
     reason = "Cucumber step signature requires owned capture values"
 )]
@@ -97,7 +93,7 @@ pub fn stdout_contains(world: &mut World, expected: CapturedString) {
 }
 
 #[then(expr = "stderr contains {string}")]
-#[expect(
+#[allow(
     clippy::needless_pass_by_value,
     reason = "Cucumber step signature requires owned capture values"
 )]
@@ -108,7 +104,7 @@ pub fn stderr_contains(world: &mut World, expected: CapturedString) {
 }
 
 #[given(expr = "the environment contains {string} = {string}")]
-#[expect(
+#[allow(
     clippy::needless_pass_by_value,
     reason = "Cucumber step signature requires owned capture values"
 )]
@@ -117,7 +113,7 @@ pub fn environment_contains(world: &mut World, key: CapturedString, value: Captu
 }
 
 #[given(expr = "the environment does not contain {string}")]
-#[expect(
+#[allow(
     clippy::needless_pass_by_value,
     reason = "Cucumber step signature requires owned capture values"
 )]
@@ -134,7 +130,7 @@ pub fn config_file(world: &mut World, step: &GherkinStep) {
 
 /// Writes docstring contents to a named file.
 #[given(expr = "the file {string} contains:")]
-#[expect(
+#[allow(
     clippy::needless_pass_by_value,
     reason = "Cucumber step signature requires owned capture values"
 )]
@@ -152,7 +148,7 @@ pub fn xdg_config_home_contains(world: &mut World, step: &GherkinStep) {
 
 /// Initialises the scenario using a repository sample configuration.
 #[given(expr = "I start from the sample hello world config {string}")]
-#[expect(
+#[allow(
     clippy::needless_pass_by_value,
     reason = "Cucumber step signature requires owned capture values"
 )]
@@ -161,7 +157,7 @@ pub fn start_from_sample_config(world: &mut World, sample: CapturedString) {
 }
 
 #[given(expr = "I start from a missing or invalid sample config {string}")]
-#[expect(
+#[allow(
     clippy::needless_pass_by_value,
     reason = "Cucumber step signature requires owned capture values"
 )]
@@ -202,7 +198,7 @@ pub fn compose_declarative_globals(world: &mut World, step: &GherkinStep) {
 }
 
 #[then(expr = "the declarative globals recipient is {string}")]
-#[expect(
+#[allow(
     clippy::needless_pass_by_value,
     reason = "Cucumber step signature requires owned capture values"
 )]
