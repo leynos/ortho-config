@@ -272,12 +272,6 @@ pub trait DeclarativeMerge: Sized {
 ///   objects are overlaid).
 /// - Arrays and scalars replace `target` wholesale (no deep merge for arrays).
 ///
-/// # Panics
-///
-/// Panics when `target` contains a non-object value while merging an object
-/// layer. This happens only when the caller tries to merge an object into a
-/// scalar, which violates JSON object semantics.
-///
 /// # Examples
 ///
 /// ```rust
@@ -295,7 +289,7 @@ pub trait DeclarativeMerge: Sized {
 pub fn merge_value(target: &mut Value, layer: Value) {
     match layer {
         Value::Object(map) => merge_object(target, map),
-        Value::Array(_) | Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) => {
+        _ => {
             *target = layer;
         }
     }
@@ -305,21 +299,21 @@ pub fn merge_value(target: &mut Value, layer: Value) {
 ///
 /// Behaviour mirrors [`merge_value`]: non-object targets are converted to empty
 /// objects, nested objects merge recursively, and other types replace existing
-/// entries.
+/// entries. Library users normally experience these semantics via
+/// [`merge_value`]; the example below demonstrates the helper's behaviour using
+/// that public entrypoint so the doctest compiles against the crate surface.
 ///
 /// # Examples
 ///
 /// ```rust
-/// use ortho_config::declarative::{merge_object, merge_value};
-/// use serde_json::{json, Map};
+/// use ortho_config::declarative::merge_value;
+/// use serde_json::json;
 ///
 /// let mut target = json!({"greeting": "hi"});
-/// let mut incoming = Map::new();
-/// incoming.insert("audience".into(), json!("world"));
-/// merge_object(&mut target, incoming);
+/// merge_value(&mut target, json!({"audience": "world"}));
 /// assert_eq!(target, json!({"greeting": "hi", "audience": "world"}));
 ///
-/// // Delegating to `merge_value` matches the helper semantics for nested merges.
+/// // Nested objects merge recursively.
 /// merge_value(
 ///     &mut target,
 ///     json!({"nested": {"emphasis": "wave"}}),
