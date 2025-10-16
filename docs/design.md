@@ -160,7 +160,7 @@ highlighted in the example feedback.
 
 The initial implementation represents each layer as a `serde_json::Value`
 captured inside the generated merge state. `MergeLayer` wraps the JSON blob
-alongside its provenance and an optional source path so diagnostics retain
+alongside its provenance and an optional source path, so diagnostics retain
 context. `merge_layer` overlays objects recursively by key and replaces scalars
 and arrays wholesale; this mirrors Figment’s behaviour and keeps attribute-free
 collections predictable while a richer strategy surface is designed. The macro
@@ -169,6 +169,26 @@ and behavioural fixtures can compose layers with `MergeComposer` without
 instantiating the CLI parser. This zero-allocates when callers pass borrowed
 values (for example, from `rstest` fixtures) and keeps merging deterministic in
 unit tests.
+
+```rust
+use hello_world::cli::GlobalArgs;
+use ortho_config::MergeComposer;
+use serde_json::json;
+
+let mut composer = MergeComposer::new();
+composer.push_defaults(json!({
+    "salutations": ["Hello"],
+    "recipient": "Ada"
+}));
+composer.push_environment(json!({
+    "salutations": ["Greetings"],
+}));
+
+let globals = GlobalArgs::merge_from_layers(composer.layers())
+    .expect("layers merge successfully");
+assert_eq!(globals.recipient.as_deref(), Some("Ada"));
+assert_eq!(globals.salutations, vec![String::from("Greetings")]);
+```
 
 The derive macro also emits a helper named `merge_from_layers` that accepts any
 iterator of `MergeLayer<'static>` and returns `OrthoResult<Self>` for tests.

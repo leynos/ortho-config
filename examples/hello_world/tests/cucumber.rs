@@ -156,7 +156,7 @@ impl World {
     /// Panics when the stored recipient does not match `expected`.
     pub fn assert_declarative_recipient(&self, expected: &str) {
         let globals = self.declarative_globals();
-        let recipient = globals.recipient.clone().unwrap_or_default();
+        let recipient = globals.recipient.as_deref().unwrap_or("");
         assert_eq!(recipient, expected);
     }
 

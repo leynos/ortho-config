@@ -421,6 +421,33 @@ fn generate_declarative_impl(config_ident: &syn::Ident) -> proc_macro2::TokenStr
 
         impl #config_ident {
             /// Merge the configuration struct from declarative layers.
+            ///
+            /// See the
+            /// [declarative merging design](https://github.com/leynos/ortho-config/blob/main/docs/design.md#introduce-declarative-configuration-merging)
+            /// for background and trade-offs.
+            ///
+            /// # Examples
+            ///
+            /// ```rust
+            /// use ortho_config::{MergeComposer, OrthoConfig};
+            /// use serde::{Deserialize, Serialize};
+            /// use serde_json::json;
+            ///
+            /// #[derive(Debug, Deserialize, Serialize, OrthoConfig)]
+            /// #[ortho_config(prefix = "APP")]
+            /// struct AppConfig {
+            ///     #[ortho_config(default = 8080)]
+            ///     port: u16,
+            /// }
+            ///
+            /// let mut composer = MergeComposer::new();
+            /// composer.push_defaults(json!({"port": 8080}));
+            /// composer.push_environment(json!({"port": 9090}));
+            ///
+            /// let config = AppConfig::merge_from_layers(composer.layers())
+            ///     .expect("layers merge successfully");
+            /// assert_eq!(config.port, 9090);
+            /// ```
             pub fn merge_from_layers<I>(layers: I) -> ortho_config::OrthoResult<Self>
             where
                 I: IntoIterator<Item = ortho_config::MergeLayer<'static>>,

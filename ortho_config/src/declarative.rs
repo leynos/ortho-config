@@ -4,7 +4,37 @@
 //! sequence of declarative layers without exposing Figment in the public API.
 //! Layers are represented as serialised [`serde_json::Value`] blobs so tests
 //! and behavioural fixtures can compose deterministic inputs without touching
-//! the filesystem.
+//! the filesystem. See the
+//! [declarative merging design](https://github.com/leynos/ortho-config/blob/main/docs/design.md#introduce-declarative-configuration-merging)
+//! for the architectural context and trade-offs.
+//!
+//! # Example
+//!
+//! ```rust
+//! use ortho_config::declarative::{MergeComposer, MergeLayer};
+//! use ortho_config::{DeclarativeMerge, OrthoConfig};
+//! use serde::{Deserialize, Serialize};
+//! use serde_json::json;
+//!
+//! #[derive(Debug, Deserialize, Serialize, OrthoConfig)]
+//! #[ortho_config(prefix = "APP")]
+//! struct AppConfig {
+//!     #[ortho_config(default = 3000)]
+//!     port: u16,
+//! }
+//!
+//! let mut composer = MergeComposer::new();
+//! composer.push_layer(MergeLayer::defaults(json!({"port": 3000}).into()));
+//! composer.push_layer(MergeLayer::cli(json!({"port": 4000}).into()));
+//!
+//! let config = AppConfig::merge_from_layers(composer.layers())
+//!     .expect("layers merge successfully");
+//! assert_eq!(config.port, 4000);
+//! ```
+//!
+//! The derive generates an internal state machine that implements
+//! [`DeclarativeMerge`], so `merge_from_layers` can iterate through
+//! [`MergeLayer`] values deterministically.
 
 use std::borrow::Cow;
 
@@ -173,11 +203,33 @@ pub trait DeclarativeMerge: Sized {
 
 /// Overlay `layer` onto `target`, updating `target` in place.
 ///
+/// Behaviour:
+/// - When merging an object into a non-object target, target is initialised to
+///   `{}` first.
+/// - Objects are merged recursively (keys are added or overwritten, and nested
+///   objects are overlaid).
+/// - Arrays and scalars replace `target` wholesale (no deep merge for arrays).
+///
 /// # Panics
 ///
 /// Panics when `target` contains a non-object value while merging an object
 /// layer. This happens only when the caller tries to merge an object into a
 /// scalar, which violates JSON object semantics.
+///
+/// # Examples
+///
+/// ```rust
+/// use ortho_config::declarative::merge_value;
+/// use serde_json::json;
+///
+/// let mut acc = json!({"a": 1, "b": {"x": 1}});
+/// merge_value(&mut acc, json!({"b": {"y": 2}, "c": 3}));
+/// assert_eq!(acc, json!({"a": 1, "b": {"x": 1, "y": 2}, "c": 3}));
+///
+/// // Arrays replace existing values.
+/// merge_value(&mut acc, json!({"b": [1, 2, 3]}));
+/// assert_eq!(acc["b"], json!([1, 2, 3]));
+/// ```
 pub fn merge_value(target: &mut Value, layer: Value) {
     match layer {
         Value::Object(map) => merge_object(target, map),
@@ -189,21 +241,28 @@ pub fn merge_value(target: &mut Value, layer: Value) {
 
 /// Merge the provided JSON object `map` into `target`.
 ///
-/// This helper guarantees that `target` is an object before merging so the
-/// recursive calls in [`merge_value`] do not need to repeat the initialisation
-/// guard. It preserves the documented panic semantics by initialising
-/// non-object targets to an empty map before reborrowing them mutably.
+/// Behaviour mirrors [`merge_value`]: non-object targets are converted to empty
+/// objects, nested objects merge recursively, and other types replace existing
+/// entries.
 ///
 /// # Examples
 ///
-/// ```ignore
-/// use serde_json::{json, Map, Value};
+/// ```rust
+/// use ortho_config::declarative::{merge_object, merge_value};
+/// use serde_json::{json, Map};
 ///
 /// let mut target = json!({"greeting": "hi"});
 /// let mut incoming = Map::new();
 /// incoming.insert("audience".into(), json!("world"));
 /// merge_object(&mut target, incoming);
 /// assert_eq!(target, json!({"greeting": "hi", "audience": "world"}));
+///
+/// // Delegating to `merge_value` matches the helper semantics for nested merges.
+/// merge_value(
+///     &mut target,
+///     json!({"nested": {"emphasis": "wave"}}),
+/// );
+/// assert_eq!(target["nested"], json!({"emphasis": "wave"}));
 /// ```
 fn merge_object(target: &mut Value, map: Map<String, Value>) {
     if !target.is_object() {
@@ -225,6 +284,21 @@ fn merge_object(target: &mut Value, map: Map<String, Value>) {
 /// # Errors
 ///
 /// Returns an [`crate::OrthoError`] when deserialisation fails.
+///
+/// # Examples
+///
+/// ```rust
+/// use ortho_config::declarative::from_value;
+/// use serde::Deserialize;
+/// use serde_json::json;
+///
+/// #[derive(Debug, Deserialize, PartialEq)]
+/// struct App { port: u16 }
+///
+/// let v = json!({"port": 8080});
+/// let app: App = from_value(v).expect("value deserialises");
+/// assert_eq!(app.port, 8080);
+/// ```
 pub fn from_value<T: serde::de::DeserializeOwned>(value: Value) -> OrthoResult<T> {
     serde_json::from_value(value).into_ortho()
 }

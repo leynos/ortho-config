@@ -58,6 +58,23 @@ impl TakeLeavePlan {
 ///
 /// Returns a [`HelloWorldError`] when validation fails or greeting defaults
 /// cannot be loaded.
+///
+/// # Examples
+///
+/// ```rust
+/// use hello_world::cli::{GreetCommand, HelloWorldCli};
+/// use hello_world::message::build_plan;
+///
+/// let mut config = HelloWorldCli::default();
+/// config.recipient = String::from("Ada Lovelace");
+/// config.salutations = vec![String::from("Hello")];
+///
+/// let command = GreetCommand::default();
+/// let plan = build_plan(&config, &command).expect("plan builds");
+///
+/// assert_eq!(plan.message(), "Hello, Ada Lovelace!");
+/// assert_eq!(plan.preamble(), None);
+/// ```
 pub fn build_plan(
     config: &HelloWorldCli,
     command: &GreetCommand,
