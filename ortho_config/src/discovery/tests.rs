@@ -215,6 +215,34 @@ fn load_first_skips_invalid_candidates() {
 }
 
 #[rstest]
+fn load_first_with_errors_reports_preceding_failures() {
+    let _guards = clear_common_env();
+    let dir = TempDir::new().expect("config dir");
+    let missing = dir.path().join("absent.toml");
+    let valid = dir.path().join("valid.toml");
+    std::fs::write(&valid, "value = true").expect("write valid config");
+
+    let discovery = ConfigDiscovery::builder("hello_world")
+        .add_required_path(&missing)
+        .add_explicit_path(valid.clone())
+        .build();
+
+    let (loaded_fig, errors) = discovery.load_first_with_errors();
+
+    assert!(
+        loaded_fig.is_some(),
+        "expected successful load from valid fallback"
+    );
+    assert!(
+        errors.iter().any(|err| match err.as_ref() {
+            OrthoError::File { path, .. } => path == &missing,
+            _ => false,
+        }),
+        "expected discovery error collection to capture missing required candidate",
+    );
+}
+
+#[rstest]
 fn required_paths_emit_missing_errors() {
     let _guards = clear_common_env();
     let dir = TempDir::new().expect("config dir");

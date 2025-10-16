@@ -81,6 +81,29 @@ fn build_cli_chain_tokens(has_config_path: bool) -> proc_macro2::TokenStream {
     }
 }
 
+fn build_discovery_loading_block(
+    builder_init: &proc_macro2::TokenStream,
+    builder_steps: &[proc_macro2::TokenStream],
+    cli_chain: &proc_macro2::TokenStream,
+) -> proc_macro2::TokenStream {
+    quote! {
+        let mut file_fig = None;
+        let mut discovery_errors = Vec::new();
+        let mut builder = #builder_init;
+        #(#builder_steps)*
+        #cli_chain
+        let discovery = builder.build();
+        let (loaded_fig, mut load_errors) = discovery.load_first_with_errors();
+        if let Some(fig) = loaded_fig {
+            file_fig = Some(fig);
+        }
+        discovery_errors.append(&mut load_errors);
+        if file_fig.is_none() {
+            errors.append(&mut discovery_errors);
+        }
+    }
+}
+
 fn build_discovery_based_loading(
     discovery: &DiscoveryTokens,
     has_config_path: bool,
@@ -98,25 +121,18 @@ fn build_discovery_based_loading(
         "project_file_name",
     );
     let cli_chain = build_cli_chain_tokens(has_config_path);
-    quote! {
-        let mut file_fig = None;
-        let mut discovery_errors = Vec::new();
-        let mut builder = ortho_config::ConfigDiscovery::builder(#app_name);
-        builder = builder.env_var(#env_var);
-        #config_file_stmt
-        #dotfile_stmt
-        #project_stmt
-        #cli_chain
-        let discovery = builder.build();
-        let (loaded_fig, mut load_errors) = discovery.load_first_with_errors();
-        if let Some(fig) = loaded_fig {
-            file_fig = Some(fig);
-        }
-        discovery_errors.append(&mut load_errors);
-        if file_fig.is_none() {
-            errors.append(&mut discovery_errors);
-        }
+    let builder_init = quote! { ortho_config::ConfigDiscovery::builder(#app_name) };
+    let mut builder_steps = vec![quote! { builder = builder.env_var(#env_var); }];
+    if let Some(stmt) = config_file_stmt {
+        builder_steps.push(stmt);
     }
+    if let Some(stmt) = dotfile_stmt {
+        builder_steps.push(stmt);
+    }
+    if let Some(stmt) = project_stmt {
+        builder_steps.push(stmt);
+    }
+    build_discovery_loading_block(&builder_init, &builder_steps, &cli_chain)
 }
 
 pub(crate) fn build_file_discovery(
@@ -130,23 +146,12 @@ pub(crate) fn build_file_discovery(
         let config_env_var = tokens.config_env_var;
         let dotfile_name = tokens.dotfile_name.clone();
         let cli_chain = build_cli_chain_tokens(has_config_path);
-        quote! {
-            let mut file_fig = None;
-            let mut discovery_errors = Vec::new();
-            let mut builder = ortho_config::ConfigDiscovery::builder(#app_name);
-            builder = builder.env_var(#config_env_var);
-            builder = builder.dotfile_name(#dotfile_name);
-            #cli_chain
-            let discovery = builder.build();
-            let (loaded_fig, mut load_errors) = discovery.load_first_with_errors();
-            if let Some(fig) = loaded_fig {
-                file_fig = Some(fig);
-            }
-            discovery_errors.append(&mut load_errors);
-            if file_fig.is_none() {
-                errors.append(&mut discovery_errors);
-            }
-        }
+        let builder_init = quote! { ortho_config::ConfigDiscovery::builder(#app_name) };
+        let builder_steps = vec![
+            quote! { builder = builder.env_var(#config_env_var); },
+            quote! { builder = builder.dotfile_name(#dotfile_name); },
+        ];
+        build_discovery_loading_block(&builder_init, &builder_steps, &cli_chain)
     }
 }
 

@@ -13,6 +13,20 @@ struct AggConfig {
     port: u32,
 }
 
+#[derive(Debug, Deserialize, OrthoConfig)]
+#[ortho_config(
+    prefix = "AGG_",
+    discovery(
+        app_name = "agg_config",
+        env_var = "AGG_CONFIG_PATH",
+        dotfile_name = ".agg.toml"
+    )
+)]
+struct DiscoveryErrorConfig {
+    #[ortho_config(default = 0)]
+    port: u32,
+}
+
 #[rstest]
 fn aggregates_cli_file_env_errors() {
     figment::Jail::expect_with(|j| {
@@ -37,6 +51,33 @@ fn aggregates_cli_file_env_errors() {
             }
             other => panic!("unexpected error: {other:?}"),
         }
+        Ok(())
+    });
+}
+
+#[rstest]
+fn discovery_errors_hidden_when_fallback_succeeds() {
+    figment::Jail::expect_with(|j| {
+        j.create_file("invalid.toml", "port = ???")?;
+        j.create_file(".agg.toml", "port = 7000")?;
+        j.set_env("AGG_CONFIG_PATH", "invalid.toml");
+
+        let cfg = DiscoveryErrorConfig::load_from_iter(["prog"])
+            .expect("expected fallback discovery to succeed");
+        assert_eq!(cfg.port, 7000);
+        Ok(())
+    });
+}
+
+#[rstest]
+fn discovery_errors_surface_when_all_candidates_fail() {
+    figment::Jail::expect_with(|j| {
+        j.create_file("invalid.toml", "port = ???")?;
+        j.set_env("AGG_CONFIG_PATH", "invalid.toml");
+
+        let err = DiscoveryErrorConfig::load_from_iter(["prog"]) // no fallback file
+            .expect_err("expected discovery error when no file loads");
+        assert!(matches!(&*err, OrthoError::File { .. }));
         Ok(())
     });
 }
