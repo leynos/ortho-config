@@ -100,6 +100,7 @@ fn build_discovery_based_loading(
     let cli_chain = build_cli_chain_tokens(has_config_path);
     quote! {
         let mut file_fig = None;
+        let mut discovery_errors = Vec::new();
         let mut builder = ortho_config::ConfigDiscovery::builder(#app_name);
         builder = builder.env_var(#env_var);
         #config_file_stmt
@@ -107,11 +108,14 @@ fn build_discovery_based_loading(
         #project_stmt
         #cli_chain
         let discovery = builder.build();
-        let (loaded_fig, mut discovery_errors) = discovery.load_first_with_errors();
+        let (loaded_fig, mut load_errors) = discovery.load_first_with_errors();
         if let Some(fig) = loaded_fig {
             file_fig = Some(fig);
         }
-        errors.append(&mut discovery_errors);
+        discovery_errors.append(&mut load_errors);
+        if file_fig.is_none() {
+            errors.append(&mut discovery_errors);
+        }
     }
 }
 
@@ -128,16 +132,20 @@ pub(crate) fn build_file_discovery(
         let cli_chain = build_cli_chain_tokens(has_config_path);
         quote! {
             let mut file_fig = None;
+            let mut discovery_errors = Vec::new();
             let mut builder = ortho_config::ConfigDiscovery::builder(#app_name);
             builder = builder.env_var(#config_env_var);
             builder = builder.dotfile_name(#dotfile_name);
             #cli_chain
             let discovery = builder.build();
-            let (loaded_fig, mut discovery_errors) = discovery.load_first_with_errors();
+            let (loaded_fig, mut load_errors) = discovery.load_first_with_errors();
             if let Some(fig) = loaded_fig {
                 file_fig = Some(fig);
             }
-            errors.append(&mut discovery_errors);
+            discovery_errors.append(&mut load_errors);
+            if file_fig.is_none() {
+                errors.append(&mut discovery_errors);
+            }
         }
     }
 }
