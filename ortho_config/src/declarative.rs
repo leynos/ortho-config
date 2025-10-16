@@ -180,22 +180,42 @@ pub trait DeclarativeMerge: Sized {
 /// scalar, which violates JSON object semantics.
 pub fn merge_value(target: &mut Value, layer: Value) {
     match layer {
-        Value::Object(map) => {
-            if !target.is_object() {
-                *target = Value::Object(Map::new());
-            }
-            let target_map = target.as_object_mut().expect("object after initialisation");
-            for (key, value) in map {
-                match target_map.get_mut(&key) {
-                    Some(existing) => merge_value(existing, value),
-                    None => {
-                        target_map.insert(key, value);
-                    }
-                }
-            }
-        }
+        Value::Object(map) => merge_object(target, map),
         Value::Array(_) | Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) => {
             *target = layer;
+        }
+    }
+}
+
+/// Merge the provided JSON object `map` into `target`.
+///
+/// This helper guarantees that `target` is an object before merging so the
+/// recursive calls in [`merge_value`] do not need to repeat the initialisation
+/// guard. It preserves the documented panic semantics by initialising
+/// non-object targets to an empty map before reborrowing them mutably.
+///
+/// # Examples
+///
+/// ```ignore
+/// use serde_json::{json, Map, Value};
+///
+/// let mut target = json!({"greeting": "hi"});
+/// let mut incoming = Map::new();
+/// incoming.insert("audience".into(), json!("world"));
+/// merge_object(&mut target, incoming);
+/// assert_eq!(target, json!({"greeting": "hi", "audience": "world"}));
+/// ```
+fn merge_object(target: &mut Value, map: Map<String, Value>) {
+    if !target.is_object() {
+        *target = Value::Object(Map::new());
+    }
+    let target_map = target.as_object_mut().expect("object after initialisation");
+    for (key, value) in map {
+        match target_map.get_mut(&key) {
+            Some(existing) => merge_value(existing, value),
+            None => {
+                target_map.insert(key, value);
+            }
         }
     }
 }
