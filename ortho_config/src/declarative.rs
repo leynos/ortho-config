@@ -38,13 +38,14 @@
 
 use std::borrow::Cow;
 
-use camino::Utf8PathBuf;
+use camino::{Utf8Path, Utf8PathBuf};
 use serde_json::{Map, Value};
 
 use crate::{OrthoResult, OrthoResultExt};
 
 /// Provenance of a merge layer.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[non_exhaustive]
 pub enum MergeProvenance {
     /// Default values baked into the configuration struct.
     Defaults,
@@ -113,8 +114,8 @@ impl<'a> MergeLayer<'a> {
 
     /// Returns the associated path if this layer was sourced from a file.
     #[must_use]
-    pub fn path(&self) -> Option<&Utf8PathBuf> {
-        self.path.as_ref()
+    pub fn path(&self) -> Option<&Utf8Path> {
+        self.path.as_deref()
     }
 
     /// Returns an owned JSON value representing the layer.
@@ -145,6 +146,14 @@ impl MergeComposer {
     #[must_use]
     pub fn new() -> Self {
         Self { layers: Vec::new() }
+    }
+
+    /// Create a composer with preallocated capacity.
+    #[must_use]
+    pub fn with_capacity(capacity: usize) -> Self {
+        Self {
+            layers: Vec::with_capacity(capacity),
+        }
     }
 
     /// Push a defaults layer.
@@ -179,7 +188,60 @@ impl MergeComposer {
     }
 }
 
+impl IntoIterator for MergeComposer {
+    type Item = MergeLayer<'static>;
+    type IntoIter = std::vec::IntoIter<MergeLayer<'static>>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.layers.into_iter()
+    }
+}
+
 /// Trait implemented by derive-generated merge state machines.
+///
+/// # Example
+///
+/// ```rust
+/// use ortho_config::declarative::{from_value, merge_value, MergeComposer, MergeLayer};
+/// use ortho_config::DeclarativeMerge;
+/// use serde::Deserialize;
+/// use serde_json::json;
+///
+/// #[derive(Debug, Deserialize, PartialEq)]
+/// struct AppSettings {
+///     port: u16,
+/// }
+///
+/// #[derive(Default)]
+/// struct AppSettingsMerge {
+///     buffer: serde_json::Value,
+/// }
+///
+/// impl DeclarativeMerge for AppSettingsMerge {
+///     type Output = AppSettings;
+///
+///     fn merge_layer(&mut self, layer: MergeLayer<'_>) -> ortho_config::OrthoResult<()> {
+///         merge_value(&mut self.buffer, layer.into_value());
+///         Ok(())
+///     }
+///
+///     fn finish(self) -> ortho_config::OrthoResult<Self::Output> {
+///         from_value(self.buffer)
+///     }
+/// }
+///
+/// let mut composer = MergeComposer::new();
+/// composer.push_defaults(json!({"port": 3000}));
+/// composer.push_cli(json!({"port": 4000}));
+///
+/// let mut merge = AppSettingsMerge::default();
+/// for layer in composer.layers() {
+///     merge.merge_layer(layer)?;
+/// }
+/// let settings = merge.finish()?;
+/// assert_eq!(settings.port, 4000);
+/// # Ok::<_, ortho_config::OrthoError>(())
+/// ```
 pub trait DeclarativeMerge: Sized {
     /// Output type returned after applying all layers.
     type Output;
