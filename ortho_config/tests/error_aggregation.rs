@@ -70,6 +70,18 @@ fn discovery_errors_hidden_when_fallback_succeeds() {
 }
 
 #[rstest]
+fn required_path_errors_surface_even_with_fallback() {
+    figment::Jail::expect_with(|j| {
+        j.create_file(".agg.toml", "port = 7000")?;
+
+        let err = DiscoveryErrorConfig::load_from_iter(["prog", "--config-path", "missing.toml"])
+            .expect_err("expected missing required CLI path to error");
+        assert!(matches!(&*err, OrthoError::File { .. }));
+        Ok(())
+    });
+}
+
+#[rstest]
 fn discovery_errors_surface_when_all_candidates_fail() {
     figment::Jail::expect_with(|j| {
         j.create_file("invalid.toml", "port = ???")?;

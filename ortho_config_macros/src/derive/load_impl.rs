@@ -93,11 +93,16 @@ fn build_discovery_loading_block(
         #(#builder_steps)*
         #cli_chain
         let discovery = builder.build();
-        let (loaded_fig, mut load_errors) = discovery.load_first_with_errors();
+        let ortho_config::DiscoveryLoadOutcome {
+            figment: loaded_fig,
+            mut required_errors,
+            mut optional_errors,
+        } = discovery.load_first_partitioned();
         if let Some(fig) = loaded_fig {
             file_fig = Some(fig);
         }
-        discovery_errors.append(&mut load_errors);
+        errors.append(&mut required_errors);
+        discovery_errors.append(&mut optional_errors);
         if file_fig.is_none() {
             errors.append(&mut discovery_errors);
         }
