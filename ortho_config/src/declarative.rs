@@ -24,8 +24,8 @@
 //! }
 //!
 //! let mut composer = MergeComposer::new();
-//! composer.push_layer(MergeLayer::defaults(json!({"port": 3000}).into()));
-//! composer.push_layer(MergeLayer::cli(json!({"port": 4000}).into()));
+//! composer.push_defaults(json!({"port": 3000}));
+//! composer.push_cli(json!({"port": 4000}));
 //!
 //! let config = AppConfig::merge_from_layers(composer.layers())
 //!     .expect("layers merge successfully");
