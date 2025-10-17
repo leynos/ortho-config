@@ -81,6 +81,32 @@ fn build_cli_chain_tokens(has_config_path: bool) -> proc_macro2::TokenStream {
     }
 }
 
+/// Generate discovery loading tokens with partitioned error handling.
+///
+/// Creates a code block that builds a `ConfigDiscovery`, loads the first
+/// available configuration file using partitioned error reporting, and
+/// conditionally appends optional discovery errors only when no file loads.
+/// Required-path errors are always appended to the main error collection to
+/// preserve the builder API's guarantees.
+///
+/// # Parameters
+/// - `builder_init`: Tokens initialising the `ConfigDiscovery::builder`.
+/// - `builder_steps`: Sequence of builder method calls (for example
+///   `env_var`, `dotfile_name`).
+/// - `cli_chain`: Tokens adding CLI-provided required paths to the builder.
+///
+/// # Examples
+/// ```ignore
+/// use proc_macro2::TokenStream;
+/// use quote::quote;
+///
+/// let block = build_discovery_loading_block(
+///     &quote! { ortho_config::ConfigDiscovery::builder("app") },
+///     &[quote! { builder = builder.env_var("APP_CONFIG"); }],
+///     &TokenStream::new(),
+/// );
+/// assert!(block.to_string().contains("required_errors"));
+/// ```
 fn build_discovery_loading_block(
     builder_init: &proc_macro2::TokenStream,
     builder_steps: &[proc_macro2::TokenStream],
