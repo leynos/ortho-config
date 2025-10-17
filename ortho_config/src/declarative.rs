@@ -289,9 +289,7 @@ pub trait DeclarativeMerge: Sized {
 pub fn merge_value(target: &mut Value, layer: Value) {
     match layer {
         Value::Object(map) => merge_object(target, map),
-        _ => {
-            *target = layer;
-        }
+        _ => *target = layer,
     }
 }
 
