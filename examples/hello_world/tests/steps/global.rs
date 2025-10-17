@@ -149,9 +149,7 @@ pub fn start_from_invalid_sample_config(world: &mut World, sample_name: String) 
     }
 }
 
-#[given("I compose hello world globals from declarative layers:")]
-pub fn compose_declarative_globals(world: &mut World, step: &GherkinStep) {
-    let contents = extract_docstring(step);
+fn compose_declarative_globals_from_contents(world: &mut World, contents: &str) {
     let inputs: Vec<LayerInput> =
         serde_json::from_str(contents).expect("valid JSON describing declarative layers");
     let mut composer = MergeComposer::new();
@@ -170,6 +168,12 @@ pub fn compose_declarative_globals(world: &mut World, step: &GherkinStep) {
     let globals = GlobalArgs::merge_from_layers(composer.layers())
         .expect("declarative merge should succeed for globals");
     world.set_declarative_globals(globals);
+}
+
+#[given("I compose hello world globals from declarative layers:")]
+pub fn compose_declarative_globals(world: &mut World, step: &GherkinStep) {
+    let contents = extract_docstring(step);
+    compose_declarative_globals_from_contents(world, contents);
 }
 
 #[then(expr = "the declarative globals recipient is {string}")]
@@ -192,3 +196,6 @@ pub fn assert_declarative_salutations(world: &mut World, step: &GherkinStep) {
         .collect();
     world.assert_declarative_salutations(&expected);
 }
+
+#[cfg(test)]
+mod tests;
