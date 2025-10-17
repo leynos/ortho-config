@@ -382,9 +382,8 @@ Version v0.5.0 introduces a small API refinement:
 - Types deriving `OrthoConfig` expose an associated `prefix()` function. Use
   this if you need the configured prefix directly.
 
-Update the `Cargo.toml` to depend on `ortho_config = "0.5.0"` and adjust
-code to call `load_and_merge_subcommand_for` instead of manually merging
-defaults.
+Update the `Cargo.toml` to depend on `ortho_config = "0.5.0"` and adjust code
+to call `load_and_merge_subcommand_for` instead of manually merging defaults.
 
 ## Version management
 
