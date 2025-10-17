@@ -38,6 +38,10 @@ values from multiple sources. The core features are:
 - **Customizable behaviour** – Attributes such as `default`, `cli_long`,
   `cli_short`, and `merge_strategy` provide fine‑grained control over naming
   and merging behaviour.
+- **Declarative merge tooling** – Every configuration struct exposes a
+  `merge_from_layers` helper along with `MergeComposer`, making it simple to
+  compose defaults, files, environment captures, and CLI values in unit tests
+  or bespoke loaders without instantiating the CLI parser.
 
 The workspace bundles an executable Hello World example under
 `examples/hello_world`. It layers defaults, environment variables, and CLI
@@ -89,6 +93,40 @@ The repository ships `config/overrides.toml`, which extends
 `config/baseline.toml` to set `is_excited = true`, provide a `Layered hello`
 preamble, and swap the greet punctuation for `!!!`. Behavioural tests and demo
 scripts assert the uppercase output to guard this layering.
+
+### Declarative merging
+
+The derive macro now emits helpers for composing configuration layers without
+going through Figment directly. `MergeComposer` collects `MergeLayer` instances
+for defaults, files, environment, and CLI input; once constructed, pass the
+layers to `YourConfig::merge_from_layers` to build the final struct:
+
+```rust
+use ortho_config::{MergeComposer, OrthoConfig};
+use serde::Deserialize;
+use serde_json::json;
+
+#[derive(Debug, Deserialize, OrthoConfig)]
+struct AppConfig {
+    recipient: String,
+    salutations: Vec<String>,
+}
+
+let mut composer = MergeComposer::new();
+composer.push_defaults(json!({"recipient": "Defaults", "salutations": ["Hi"] }));
+composer.push_environment(json!({"salutations": ["Env"] }));
+composer.push_cli(json!({"recipient": "Cli" }));
+
+let merged = AppConfig::merge_from_layers(composer.layers())?;
+assert_eq!(merged.recipient, "Cli");
+assert_eq!(merged.salutations, vec![String::from("Env")]);
+```
+
+This API surfaces the same precedence as the generated `load()` method while
+making it trivial to drive unit and behavioural tests with hand-crafted layers.
+The Hello World example’s behavioural suite includes a dedicated scenario that
+parses JSON descriptors into `MergeLayer` values and asserts the merged
+configuration via these helpers.
 
 ## Installation and dependencies
 

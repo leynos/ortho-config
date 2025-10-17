@@ -13,6 +13,7 @@ pub use figment_json5;
 #[cfg(feature = "json5")]
 #[cfg_attr(docsrs, doc(cfg(feature = "json5")))]
 pub use json5;
+pub use serde_json;
 #[cfg(feature = "yaml")]
 #[cfg_attr(docsrs, doc(cfg(feature = "yaml")))]
 pub use serde_yaml;
@@ -25,6 +26,7 @@ pub use uncased;
 pub use xdg;
 
 mod csv_env;
+pub mod declarative;
 pub mod discovery;
 mod error;
 pub mod file;
@@ -55,6 +57,7 @@ pub fn normalize_prefix(prefix: &str) -> String {
 }
 
 pub use csv_env::CsvEnv;
+pub use declarative::{DeclarativeMerge, MergeComposer, MergeLayer, MergeProvenance};
 pub use discovery::{ConfigDiscovery, ConfigDiscoveryBuilder};
 pub use error::OrthoError;
 pub use file::load_config_file;

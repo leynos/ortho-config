@@ -1,14 +1,11 @@
 //! Hello World example entry-point: load config, build greeting plan, print message.
-mod cli;
-mod error;
-mod message;
 
 use clap::{CommandFactory, FromArgMatches};
 use ortho_config::SubcmdConfigMerge;
 
-use crate::cli::{CommandLine, Commands, load_global_config};
-use crate::error::HelloWorldError;
-use crate::message::{build_plan, build_take_leave_plan, print_plan, print_take_leave};
+use hello_world::cli::{CommandLine, Commands, apply_greet_overrides, load_global_config};
+use hello_world::error::HelloWorldError;
+use hello_world::message::{build_plan, build_take_leave_plan, print_plan, print_take_leave};
 
 fn main() -> color_eyre::Result<()> {
     color_eyre::install()?;
@@ -22,7 +19,7 @@ fn run() -> Result<(), HelloWorldError> {
     match cli.command {
         Commands::Greet(args) => {
             let mut merged = args.load_and_merge()?;
-            crate::cli::apply_greet_overrides(&mut merged)?;
+            apply_greet_overrides(&mut merged)?;
             let plan = build_plan(&globals, &merged)?;
             print_plan(&plan);
         }

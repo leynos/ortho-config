@@ -19,6 +19,10 @@ production-ready complexity.
   components and `cucumber-rs` behavioural specifications that exercise the
   binary as a user would, capturing configuration precedence and cross-platform
   quirks.
+- **Declarative merging**: demonstrate how `MergeComposer` and
+  `merge_from_layers` build layered configuration without invoking the CLI by
+  driving a behavioural scenario that composes JSON-described layers into
+  `GlobalArgs`.
 - **Shell and Windows automation**: provide paired `.sh` and `.cmd` scripts
   highlighting how environment variables, configuration files, and command-line
   overrides interact. Include examples covering default configuration,

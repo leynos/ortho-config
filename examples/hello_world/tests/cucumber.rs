@@ -5,6 +5,7 @@ use std::time::Duration;
 
 use camino::Utf8PathBuf;
 use cucumber::World as _;
+use hello_world::cli::GlobalArgs;
 use shlex::split;
 use std::collections::{BTreeMap, BTreeSet};
 use thiserror::Error;
@@ -28,6 +29,8 @@ pub struct World {
     workdir: tempfile::TempDir,
     /// Environment variables to inject when running the binary.
     env: BTreeMap<String, String>,
+    /// Declaratively composed globals used by behavioural tests.
+    declarative_globals: Option<GlobalArgs>,
 }
 
 impl Default for World {
@@ -37,6 +40,7 @@ impl Default for World {
             result: None,
             workdir,
             env: BTreeMap::new(),
+            declarative_globals: None,
         }
     }
 }
@@ -130,8 +134,46 @@ impl World {
     ///
     /// This only updates the world-scoped overrides map so the process
     /// environment remains untouched during the scenario.
-    pub fn remove_env(&mut self, key: &str) {
-        self.env.remove(key);
+    pub fn remove_env<S>(&mut self, key: S)
+    where
+        S: AsRef<str>,
+    {
+        self.env.remove(key.as_ref());
+    }
+
+    /// Stores declaratively merged globals for later assertions.
+    pub fn set_declarative_globals(&mut self, globals: GlobalArgs) {
+        self.declarative_globals = Some(globals);
+    }
+
+    fn declarative_globals(&self) -> &GlobalArgs {
+        self.declarative_globals
+            .as_ref()
+            .expect("declarative globals composed before assertion")
+    }
+
+    /// Asserts that the composed globals expose the expected recipient.
+    ///
+    /// # Panics
+    ///
+    /// Panics when the stored recipient does not match `expected`.
+    pub fn assert_declarative_recipient<S>(&self, expected: S)
+    where
+        S: AsRef<str>,
+    {
+        let globals = self.declarative_globals();
+        let recipient = globals.recipient.as_deref().unwrap_or("");
+        assert_eq!(recipient, expected.as_ref());
+    }
+
+    /// Asserts that the composed globals expose the expected salutations.
+    ///
+    /// # Panics
+    ///
+    /// Panics when the stored salutations differ from `expected`.
+    pub fn assert_declarative_salutations(&self, expected: &[String]) {
+        let globals = self.declarative_globals();
+        assert_eq!(globals.salutations, expected);
     }
 
     /// Writes a configuration file into the scenario work directory.
@@ -151,7 +193,11 @@ impl World {
     /// # Panics
     ///
     /// Panics when `name` is not a simple filename or when writing fails.
-    pub fn write_named_file(&self, name: &str, contents: &str) {
+    pub fn write_named_file<S>(&self, name: S, contents: &str)
+    where
+        S: AsRef<str>,
+    {
+        let name = name.as_ref();
         assert!(
             is_simple_filename(name),
             "custom config filename must not contain path separators: {name}"
@@ -181,7 +227,10 @@ impl World {
     /// # Panics
     ///
     /// Panics if writing the sample configuration fails.
-    pub fn write_sample_config(&self, sample: &str) {
+    pub fn write_sample_config<S>(&self, sample: S)
+    where
+        S: AsRef<str>,
+    {
         self.try_write_sample_config(sample)
             .expect("write hello_world sample config");
     }
@@ -192,7 +241,11 @@ impl World {
     ///
     /// Returns an error when the sample or any extended configuration cannot be read
     /// or when writing into the scenario directory fails.
-    pub fn try_write_sample_config(&self, sample: &str) -> Result<(), SampleConfigError> {
+    pub fn try_write_sample_config<S>(&self, sample: S) -> Result<(), SampleConfigError>
+    where
+        S: AsRef<str>,
+    {
+        let sample = sample.as_ref();
         ensure_simple_filename(sample)?;
         let manifest_dir = Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         let config_dir = manifest_dir.join("config");
@@ -289,7 +342,7 @@ impl World {
     ///
     /// Panics if argument tokenisation fails or if the underlying command
     /// fails to execute successfully.
-    pub async fn run_hello(&mut self, args: Option<&str>) {
+    pub async fn run_hello(&mut self, args: Option<String>) {
         let parsed = match args {
             Some(raw) => {
                 let trimmed = raw.trim();
