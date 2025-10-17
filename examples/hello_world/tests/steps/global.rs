@@ -14,6 +14,12 @@ fn extract_docstring(step: &GherkinStep) -> &str {
         .expect("config docstring provided for hello world example")
 }
 
+async fn run_with_args_inner(world: &mut World, args: &str) {
+    // Clone the capture into an owned `String` so the world helper receives
+    // the same owned data the step signature promises.
+    world.run_hello(Some(args.to_owned())).await;
+}
+
 #[derive(Debug, Deserialize)]
 struct LayerInput {
     provenance: String,
@@ -28,10 +34,17 @@ pub async fn run_without_args(world: &mut World) {
 }
 
 #[when(expr = "I run the hello world example with arguments {string}")]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Cucumber step signature requires owned capture values"
+)]
+// Clippy cannot emit `needless_pass_by_value` for async functions because the
+// state machine must own each capture, so allow the resulting expectation lint.
+#[allow(unfulfilled_lint_expectations)]
 // Step captures arrive as owned `String` values from cucumber; forward them
 // to the world helper for tokenisation.
 pub async fn run_with_args(world: &mut World, args: String) {
-    world.run_hello(Some(args)).await;
+    run_with_args_inner(world, args.as_str()).await;
 }
 
 #[then("the command succeeds")]
@@ -45,27 +58,43 @@ pub fn command_fails(world: &mut World) {
 }
 
 #[then(expr = "stdout contains {string}")]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Cucumber step signature requires owned capture values"
+)]
 // Step captures arrive as owned `String` values from cucumber; forward them
 // to the world helper so assertions can consume the owned capture directly.
 pub fn stdout_contains(world: &mut World, expected: String) {
-    world.assert_stdout_contains(expected);
+    world.assert_stdout_contains(&expected);
 }
 
 #[then(expr = "stderr contains {string}")]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Cucumber step signature requires owned capture values"
+)]
 // Step captures arrive as owned `String` values from cucumber; forward them
 // to the world helper so assertions can consume the owned capture directly.
 pub fn stderr_contains(world: &mut World, expected: String) {
-    world.assert_stderr_contains(expected);
+    world.assert_stderr_contains(&expected);
 }
 
 #[given(expr = "the environment contains {string} = {string}")]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Cucumber step signature requires owned capture values"
+)]
 pub fn environment_contains(world: &mut World, key: String, value: String) {
-    world.set_env(key, value);
+    world.set_env(&key, &value);
 }
 
 #[given(expr = "the environment does not contain {string}")]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Cucumber step signature requires owned capture values"
+)]
 pub fn environment_does_not_contain(world: &mut World, key: String) {
-    world.remove_env(key);
+    world.remove_env(&key);
 }
 
 /// Writes docstring contents to the default configuration file.
@@ -77,9 +106,13 @@ pub fn config_file(world: &mut World, step: &GherkinStep) {
 
 /// Writes docstring contents to a named file.
 #[given(expr = "the file {string} contains:")]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Cucumber step signature requires owned capture values"
+)]
 pub fn named_file_contains(world: &mut World, name: String, step: &GherkinStep) {
     let contents = extract_docstring(step);
-    world.write_named_file(name, contents);
+    world.write_named_file(&name, contents);
 }
 
 /// Writes docstring contents to the XDG config home directory.
@@ -91,17 +124,21 @@ pub fn xdg_config_home_contains(world: &mut World, step: &GherkinStep) {
 
 /// Initialises the scenario using a repository sample configuration.
 #[given(expr = "I start from the sample hello world config {string}")]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Cucumber step signature requires owned capture values"
+)]
 pub fn start_from_sample_config(world: &mut World, sample: String) {
-    world.write_sample_config(sample);
+    world.write_sample_config(&sample);
 }
 
 #[given(expr = "I start from a missing or invalid sample config {string}")]
 #[expect(
     clippy::needless_pass_by_value,
-    reason = "Step captures arrive owned from cucumber; cloning is required for diagnostic panics"
+    reason = "Cucumber step signature requires owned capture values"
 )]
 pub fn start_from_invalid_sample_config(world: &mut World, sample_name: String) {
-    match world.try_write_sample_config(sample_name.clone()) {
+    match world.try_write_sample_config(&sample_name) {
         Ok(()) => panic!("expected sample config {sample_name:?} to be missing or invalid"),
         Err(
             SampleConfigError::OpenSample { .. }
@@ -136,8 +173,12 @@ pub fn compose_declarative_globals(world: &mut World, step: &GherkinStep) {
 }
 
 #[then(expr = "the declarative globals recipient is {string}")]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Cucumber step signature requires owned capture values"
+)]
 pub fn assert_declarative_recipient(world: &mut World, expected: String) {
-    world.assert_declarative_recipient(expected);
+    world.assert_declarative_recipient(&expected);
 }
 
 #[then("the declarative globals salutations are:")]
