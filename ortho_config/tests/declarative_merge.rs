@@ -1,3 +1,4 @@
+use camino::Utf8PathBuf;
 use ortho_config::{
     MergeComposer, MergeLayer, MergeProvenance, OrthoConfig, declarative::merge_value,
 };
@@ -69,4 +70,39 @@ fn merge_value_merges_scalars() {
     let layer = json!({ "num": 42, "str": "bar", "bool": true });
     merge_value(&mut target, layer);
     assert_eq!(target, json!({ "num": 42, "str": "bar", "bool": true }));
+}
+
+#[rstest]
+fn merge_value_merges_null_values() {
+    let mut target = json!({ "num": 1, "str": "foo", "bool": true });
+    let layer = json!({ "num": null, "str": null, "bool": null });
+    merge_value(&mut target, layer);
+    assert_eq!(target, json!({ "num": null, "str": null, "bool": null }));
+
+    let mut target = json!({ "num": null, "str": null, "bool": null });
+    let layer = json!({ "num": 99, "str": "baz", "bool": false });
+    merge_value(&mut target, layer);
+    assert_eq!(target, json!({ "num": 99, "str": "baz", "bool": false }));
+}
+
+#[rstest]
+fn merge_value_merges_absent_target_key() {
+    let mut target = json!({});
+    let layer = json!({ "new_key": "new_value", "another": 123 });
+    merge_value(&mut target, layer);
+    assert_eq!(target, json!({ "new_key": "new_value", "another": 123 }));
+}
+
+#[rstest]
+fn merge_from_layers_accepts_file_layers() {
+    let mut composer = MergeComposer::new();
+    composer.push_defaults(json!({ "name": "default", "count": 1, "flag": false }));
+    composer.push_file(
+        json!({ "name": "from_file", "count": 7, "flag": true }),
+        Some(Utf8PathBuf::from("config.json")),
+    );
+    let config = DeclarativeSample::merge_from_layers(composer.layers()).expect("merge succeeds");
+    assert_eq!(config.name, "from_file");
+    assert_eq!(config.count, 7);
+    assert!(config.flag);
 }
