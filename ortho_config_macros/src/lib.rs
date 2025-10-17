@@ -398,14 +398,19 @@ fn generate_ortho_impl(
     }
 }
 
-fn generate_declarative_impl(config_ident: &syn::Ident) -> proc_macro2::TokenStream {
+fn generate_declarative_state_struct(config_ident: &syn::Ident) -> proc_macro2::TokenStream {
     let state_ident = format_ident!("__{}DeclarativeMergeState", config_ident);
     quote! {
         #[derive(Default)]
         struct #state_ident {
             value: ortho_config::serde_json::Value,
         }
+    }
+}
 
+fn generate_declarative_merge_impl(config_ident: &syn::Ident) -> proc_macro2::TokenStream {
+    let state_ident = format_ident!("__{}DeclarativeMergeState", config_ident);
+    quote! {
         impl ortho_config::DeclarativeMerge for #state_ident {
             type Output = #config_ident;
 
@@ -418,7 +423,12 @@ fn generate_declarative_impl(config_ident: &syn::Ident) -> proc_macro2::TokenStr
                 ortho_config::declarative::from_value(self.value)
             }
         }
+    }
+}
 
+fn generate_merge_from_layers_fn(config_ident: &syn::Ident) -> proc_macro2::TokenStream {
+    let state_ident = format_ident!("__{}DeclarativeMergeState", config_ident);
+    quote! {
         impl #config_ident {
             /// Merge the configuration struct from declarative layers.
             ///
@@ -459,6 +469,18 @@ fn generate_declarative_impl(config_ident: &syn::Ident) -> proc_macro2::TokenStr
                 ortho_config::DeclarativeMerge::finish(state)
             }
         }
+    }
+}
+
+fn generate_declarative_impl(config_ident: &syn::Ident) -> proc_macro2::TokenStream {
+    let state = generate_declarative_state_struct(config_ident);
+    let merge_impl = generate_declarative_merge_impl(config_ident);
+    let merge_fn = generate_merge_from_layers_fn(config_ident);
+
+    quote! {
+        #state
+        #merge_impl
+        #merge_fn
     }
 }
 

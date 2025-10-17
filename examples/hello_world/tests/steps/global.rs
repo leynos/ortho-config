@@ -149,9 +149,7 @@ pub fn start_from_invalid_sample_config(world: &mut World, sample_name: String) 
     }
 }
 
-#[given("I compose hello world globals from declarative layers:")]
-pub fn compose_declarative_globals(world: &mut World, step: &GherkinStep) {
-    let contents = extract_docstring(step);
+fn compose_declarative_globals_from_contents(world: &mut World, contents: &str) {
     let inputs: Vec<LayerInput> =
         serde_json::from_str(contents).expect("valid JSON describing declarative layers");
     let mut composer = MergeComposer::new();
@@ -170,6 +168,12 @@ pub fn compose_declarative_globals(world: &mut World, step: &GherkinStep) {
     let globals = GlobalArgs::merge_from_layers(composer.layers())
         .expect("declarative merge should succeed for globals");
     world.set_declarative_globals(globals);
+}
+
+#[given("I compose hello world globals from declarative layers:")]
+pub fn compose_declarative_globals(world: &mut World, step: &GherkinStep) {
+    let contents = extract_docstring(step);
+    compose_declarative_globals_from_contents(world, contents);
 }
 
 #[then(expr = "the declarative globals recipient is {string}")]
@@ -191,4 +195,30 @@ pub fn assert_declarative_salutations(world: &mut World, step: &GherkinStep) {
         .map(str::to_owned)
         .collect();
     world.assert_declarative_salutations(&expected);
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn compose_declarative_globals_panics_on_invalid_provenance() {
+        let mut world = crate::World::default();
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            super::compose_declarative_globals_from_contents(
+                &mut world,
+                r#"[
+                    {"provenance": "unknown", "value": {"foo": "bar"}}
+                ]"#,
+            );
+        }));
+        assert!(result.is_err(), "expected panic for invalid provenance");
+    }
+
+    #[test]
+    fn compose_declarative_globals_panics_on_malformed_json() {
+        let mut world = crate::World::default();
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            super::compose_declarative_globals_from_contents(&mut world, "not valid json");
+        }));
+        assert!(result.is_err(), "expected panic for malformed JSON");
+    }
 }

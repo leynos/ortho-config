@@ -54,3 +54,19 @@ fn merge_value_merges_nested_objects() {
     merge_value(&mut target, layer);
     assert_eq!(target, json!({ "outer": { "inner": true } }));
 }
+
+#[rstest]
+fn merge_value_merges_arrays() {
+    let mut target = json!({ "arr": [1, 2, 3] });
+    let layer = json!({ "arr": [4, 5] });
+    merge_value(&mut target, layer);
+    assert_eq!(target, json!({ "arr": [4, 5] }));
+}
+
+#[rstest]
+fn merge_value_merges_scalars() {
+    let mut target = json!({ "num": 1, "str": "foo", "bool": false });
+    let layer = json!({ "num": 42, "str": "bar", "bool": true });
+    merge_value(&mut target, layer);
+    assert_eq!(target, json!({ "num": 42, "str": "bar", "bool": true }));
+}
