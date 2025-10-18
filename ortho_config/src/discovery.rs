@@ -240,8 +240,8 @@ impl ConfigDiscovery {
     ///
     /// # Errors
     ///
-    /// Currently always returns `Ok`; the [`OrthoResult`] return type keeps the
-    /// API aligned with other loaders and reserves space for future failures.
+    /// Returns an error when every candidate fails and at least one error was
+    /// recorded during discovery; returns `Ok(None)` when no candidates exist.
     pub fn load_first(&self) -> OrthoResult<Option<figment::Figment>> {
         let (figment, errors) = self.load_first_with_errors();
         if let Some(figment) = figment {
