@@ -118,7 +118,7 @@ fn build_discovery_loading_block(
         #(#builder_steps)*
         #cli_chain
         let discovery = builder.build();
-        let ortho_config::DiscoveryLoadOutcome {
+        let ortho_config::discovery::DiscoveryLoadOutcome {
             figment: loaded_fig,
             mut required_errors,
             mut optional_errors,
