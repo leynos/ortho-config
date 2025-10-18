@@ -398,14 +398,20 @@ fn generate_ortho_impl(
     }
 }
 
-fn generate_declarative_impl(config_ident: &syn::Ident) -> proc_macro2::TokenStream {
-    let state_ident = format_ident!("__{}DeclarativeMergeState", config_ident);
+fn generate_declarative_state_struct(state_ident: &syn::Ident) -> proc_macro2::TokenStream {
     quote! {
         #[derive(Default)]
         struct #state_ident {
             value: ortho_config::serde_json::Value,
         }
+    }
+}
 
+fn generate_declarative_merge_impl(
+    state_ident: &syn::Ident,
+    config_ident: &syn::Ident,
+) -> proc_macro2::TokenStream {
+    quote! {
         impl ortho_config::DeclarativeMerge for #state_ident {
             type Output = #config_ident;
 
@@ -418,7 +424,14 @@ fn generate_declarative_impl(config_ident: &syn::Ident) -> proc_macro2::TokenStr
                 ortho_config::declarative::from_value(self.value)
             }
         }
+    }
+}
 
+fn generate_declarative_merge_from_layers_fn(
+    state_ident: &syn::Ident,
+    config_ident: &syn::Ident,
+) -> proc_macro2::TokenStream {
+    quote! {
         impl #config_ident {
             /// Merge the configuration struct from declarative layers.
             ///
@@ -448,9 +461,9 @@ fn generate_declarative_impl(config_ident: &syn::Ident) -> proc_macro2::TokenStr
             ///     .expect("layers merge successfully");
             /// assert_eq!(config.port, 9090);
             /// ```
-            pub fn merge_from_layers<I>(layers: I) -> ortho_config::OrthoResult<Self>
+            pub fn merge_from_layers<'a, I>(layers: I) -> ortho_config::OrthoResult<Self>
             where
-                I: IntoIterator<Item = ortho_config::MergeLayer<'static>>,
+                I: IntoIterator<Item = ortho_config::MergeLayer<'a>>,
             {
                 let mut state = #state_ident::default();
                 for layer in layers {
@@ -459,6 +472,19 @@ fn generate_declarative_impl(config_ident: &syn::Ident) -> proc_macro2::TokenStr
                 ortho_config::DeclarativeMerge::finish(state)
             }
         }
+    }
+}
+
+fn generate_declarative_impl(config_ident: &syn::Ident) -> proc_macro2::TokenStream {
+    let state_ident = format_ident!("__{}DeclarativeMergeState", config_ident);
+    let state_struct = generate_declarative_state_struct(&state_ident);
+    let merge_impl = generate_declarative_merge_impl(&state_ident, config_ident);
+    let merge_fn = generate_declarative_merge_from_layers_fn(&state_ident, config_ident);
+
+    quote! {
+        #state_struct
+        #merge_impl
+        #merge_fn
     }
 }
 
@@ -480,7 +506,13 @@ fn generate_trait_implementation(
 
 #[cfg(test)]
 mod tests {
-    use super::{MacroComponents, generate_cli_struct, generate_defaults_struct, generate_struct};
+    //! Unit tests for the procedural macro token generators.
+
+    use super::{
+        MacroComponents, generate_cli_struct, generate_declarative_impl,
+        generate_declarative_merge_from_layers_fn, generate_declarative_merge_impl,
+        generate_declarative_state_struct, generate_defaults_struct, generate_struct,
+    };
     use proc_macro2::TokenStream as TokenStream2;
     use quote::quote;
     use rstest::rstest;
@@ -556,6 +588,168 @@ mod tests {
         let expected = quote! {
             #[derive(serde::Serialize)]
             struct DefaultsStruct {}
+        };
+        assert_eq!(tokens.to_string(), expected.to_string());
+    }
+
+    #[rstest]
+    fn generate_declarative_state_struct_emits_storage() {
+        let state_ident = parse_str("__SampleDeclarativeMergeState").expect("state ident");
+        let tokens = generate_declarative_state_struct(&state_ident);
+        let expected = quote! {
+            #[derive(Default)]
+            struct __SampleDeclarativeMergeState {
+                value: ortho_config::serde_json::Value,
+            }
+        };
+        assert_eq!(tokens.to_string(), expected.to_string());
+    }
+
+    #[rstest]
+    fn generate_declarative_merge_impl_emits_trait_impl() {
+        let state_ident = parse_str("__SampleDeclarativeMergeState").expect("state ident");
+        let config_ident = parse_str("Sample").expect("config ident");
+        let tokens = generate_declarative_merge_impl(&state_ident, &config_ident);
+        let expected = quote! {
+            impl ortho_config::DeclarativeMerge for __SampleDeclarativeMergeState {
+                type Output = Sample;
+
+                fn merge_layer(
+                    &mut self,
+                    layer: ortho_config::MergeLayer<'_>
+                ) -> ortho_config::OrthoResult<()> {
+                    ortho_config::declarative::merge_value(&mut self.value, layer.into_value());
+                    Ok(())
+                }
+
+                fn finish(self) -> ortho_config::OrthoResult<Self::Output> {
+                    ortho_config::declarative::from_value(self.value)
+                }
+            }
+        };
+        assert_eq!(tokens.to_string(), expected.to_string());
+    }
+
+    #[rstest]
+    fn generate_declarative_merge_from_layers_fn_emits_constructor() {
+        let state_ident = parse_str("__SampleDeclarativeMergeState").expect("state ident");
+        let config_ident = parse_str("Sample").expect("config ident");
+        let tokens = generate_declarative_merge_from_layers_fn(&state_ident, &config_ident);
+        let expected = quote! {
+            impl Sample {
+                /// Merge the configuration struct from declarative layers.
+                ///
+                /// See the
+                /// [declarative merging design](https://github.com/leynos/ortho-config/blob/main/docs/design.md#introduce-declarative-configuration-merging)
+                /// for background and trade-offs.
+                ///
+                /// # Examples
+                ///
+                /// ```rust
+                /// use ortho_config::{MergeComposer, OrthoConfig};
+                /// use serde::{Deserialize, Serialize};
+                /// use serde_json::json;
+                ///
+                /// #[derive(Debug, Deserialize, Serialize, OrthoConfig)]
+                /// #[ortho_config(prefix = "APP")]
+                /// struct AppConfig {
+                ///     #[ortho_config(default = 8080)]
+                ///     port: u16,
+                /// }
+                ///
+                /// let mut composer = MergeComposer::new();
+                /// composer.push_defaults(json!({"port": 8080}));
+                /// composer.push_environment(json!({"port": 9090}));
+                ///
+                /// let config = AppConfig::merge_from_layers(composer.layers())
+                ///     .expect("layers merge successfully");
+                /// assert_eq!(config.port, 9090);
+                /// ```
+                pub fn merge_from_layers<'a, I>(
+                    layers: I
+                ) -> ortho_config::OrthoResult<Self>
+                where
+                    I: IntoIterator<Item = ortho_config::MergeLayer<'a>>,
+                {
+                    let mut state = __SampleDeclarativeMergeState::default();
+                    for layer in layers {
+                        ortho_config::DeclarativeMerge::merge_layer(&mut state, layer)?;
+                    }
+                    ortho_config::DeclarativeMerge::finish(state)
+                }
+            }
+        };
+        assert_eq!(tokens.to_string(), expected.to_string());
+    }
+
+    #[rstest]
+    fn generate_declarative_impl_composes_helpers() {
+        let config_ident = parse_str("Sample").expect("config ident");
+        let tokens = generate_declarative_impl(&config_ident);
+        let expected = quote! {
+            #[derive(Default)]
+            struct __SampleDeclarativeMergeState {
+                value: ortho_config::serde_json::Value,
+            }
+
+            impl ortho_config::DeclarativeMerge for __SampleDeclarativeMergeState {
+                type Output = Sample;
+
+                fn merge_layer(
+                    &mut self,
+                    layer: ortho_config::MergeLayer<'_>
+                ) -> ortho_config::OrthoResult<()> {
+                    ortho_config::declarative::merge_value(&mut self.value, layer.into_value());
+                    Ok(())
+                }
+
+                fn finish(self) -> ortho_config::OrthoResult<Self::Output> {
+                    ortho_config::declarative::from_value(self.value)
+                }
+            }
+
+            impl Sample {
+                /// Merge the configuration struct from declarative layers.
+                ///
+                /// See the
+                /// [declarative merging design](https://github.com/leynos/ortho-config/blob/main/docs/design.md#introduce-declarative-configuration-merging)
+                /// for background and trade-offs.
+                ///
+                /// # Examples
+                ///
+                /// ```rust
+                /// use ortho_config::{MergeComposer, OrthoConfig};
+                /// use serde::{Deserialize, Serialize};
+                /// use serde_json::json;
+                ///
+                /// #[derive(Debug, Deserialize, Serialize, OrthoConfig)]
+                /// #[ortho_config(prefix = "APP")]
+                /// struct AppConfig {
+                ///     #[ortho_config(default = 8080)]
+                ///     port: u16,
+                /// }
+                ///
+                /// let mut composer = MergeComposer::new();
+                /// composer.push_defaults(json!({"port": 8080}));
+                /// composer.push_environment(json!({"port": 9090}));
+                ///
+                /// let config = AppConfig::merge_from_layers(composer.layers())
+                ///     .expect("layers merge successfully");
+                /// assert_eq!(config.port, 9090);
+                /// ```
+                pub fn merge_from_layers<'a, I>(
+                    layers: I
+                ) -> ortho_config::OrthoResult<Self>
+                where
+                    I: IntoIterator<Item = ortho_config::MergeLayer<'a>>,
+                {
+                    let mut state = __SampleDeclarativeMergeState::default();
+                    for layer in layers {
+                        ortho_config::DeclarativeMerge::merge_layer(&mut state, layer)?;
+                    }
+                    ortho_config::DeclarativeMerge::finish(state)
+                }
+            }
         };
         assert_eq!(tokens.to_string(), expected.to_string());
     }
