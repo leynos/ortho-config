@@ -50,6 +50,7 @@ pub struct ConfigDiscovery {
 /// assert!(outcome.figment.is_none());
 /// assert_eq!(outcome.required_errors.len(), 1);
 /// ```
+#[derive(Debug, Default)]
 #[must_use]
 pub struct DiscoveryLoadOutcome {
     /// Successfully loaded configuration file, if any.
