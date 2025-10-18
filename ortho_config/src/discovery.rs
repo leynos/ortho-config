@@ -240,15 +240,15 @@ impl ConfigDiscovery {
     ///
     /// # Errors
     ///
-    /// Returns an error when every candidate fails and at least one error was
-    /// recorded during discovery; returns `Ok(None)` when no candidates exist.
+    /// When every candidate fails, returns an error containing all recorded
+    /// discovery diagnostics; if no candidates exist, returns `Ok(None)`.
     pub fn load_first(&self) -> OrthoResult<Option<figment::Figment>> {
         let (figment, errors) = self.load_first_with_errors();
         if let Some(figment) = figment {
             return Ok(Some(figment));
         }
-        if let Some(err) = errors.into_iter().next() {
-            return Err(err);
+        if let Some(err) = OrthoError::try_aggregate(errors) {
+            return Err(Arc::new(err));
         }
         Ok(None)
     }

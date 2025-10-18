@@ -256,12 +256,12 @@ the precedence order is preserved.
 
 `ConfigDiscovery::load_first` delegates to `load_config_file`, short-circuiting
 once a readable file is found. Failed reads are skipped so later candidates can
-load successfully. When every candidate fails and at least one error is
-recorded the helper now returns `Err`, bubbling the aggregated diagnostics to
-the caller. If no candidates exist the function returns `Ok(None)`. Returning
-`OrthoResult` keeps the API aligned with the rest of the crate and allows
-downstream binaries to continue using their existing `From<Arc<OrthoError>>`
-implementations.
+load successfully. When every candidate fails, the helper now returns `Err`
+containing the aggregated diagnostics (all recorded discovery errors) so
+callers can surface them together. If no candidates exist, the function returns
+`Ok(None)`. Returning `OrthoResult` keeps the API aligned with the rest of the
+crate and allows downstream binaries to continue using their existing
+`From<Arc<OrthoError>>` implementations.
 
 ### Aggregated errors
 
