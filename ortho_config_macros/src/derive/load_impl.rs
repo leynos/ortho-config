@@ -114,7 +114,6 @@ fn build_discovery_loading_block(
 ) -> proc_macro2::TokenStream {
     quote! {
         let mut file_fig = None;
-        let mut optional_discovery_errors = Vec::new();
         let mut builder = #builder_init;
         #(#builder_steps)*
         #cli_chain
@@ -128,9 +127,8 @@ fn build_discovery_loading_block(
             file_fig = Some(fig);
         }
         errors.append(&mut required_errors);
-        optional_discovery_errors.append(&mut optional_errors);
         if file_fig.is_none() {
-            errors.append(&mut optional_discovery_errors);
+            errors.append(&mut optional_errors);
         }
     }
 }
