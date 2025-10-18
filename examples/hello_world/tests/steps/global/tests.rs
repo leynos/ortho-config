@@ -1,9 +1,15 @@
 //! Tests for composing declarative globals in the hello world example.
 
-#[test]
+use rstest::{fixture, rstest};
+
+#[fixture]
+fn world() -> crate::World {
+    crate::World::default()
+}
+
+#[rstest]
 #[should_panic(expected = "unknown provenance unknown")]
-fn compose_declarative_globals_panics_on_invalid_provenance() {
-    let mut world = crate::World::default();
+fn compose_declarative_globals_panics_on_invalid_provenance(mut world: crate::World) {
     super::compose_declarative_globals_from_contents(
         &mut world,
         r#"[
@@ -12,9 +18,8 @@ fn compose_declarative_globals_panics_on_invalid_provenance() {
     );
 }
 
-#[test]
+#[rstest]
 #[should_panic(expected = "valid JSON describing declarative layers")]
-fn compose_declarative_globals_panics_on_malformed_json() {
-    let mut world = crate::World::default();
+fn compose_declarative_globals_panics_on_malformed_json(mut world: crate::World) {
     super::compose_declarative_globals_from_contents(&mut world, "not valid json");
 }
