@@ -461,9 +461,9 @@ fn generate_declarative_merge_from_layers_fn(
             ///     .expect("layers merge successfully");
             /// assert_eq!(config.port, 9090);
             /// ```
-            pub fn merge_from_layers<I>(layers: I) -> ortho_config::OrthoResult<Self>
+            pub fn merge_from_layers<'a, I>(layers: I) -> ortho_config::OrthoResult<Self>
             where
-                I: IntoIterator<Item = ortho_config::MergeLayer<'static>>,
+                I: IntoIterator<Item = ortho_config::MergeLayer<'a>>,
             {
                 let mut state = #state_ident::default();
                 for layer in layers {
@@ -665,11 +665,11 @@ mod tests {
                 ///     .expect("layers merge successfully");
                 /// assert_eq!(config.port, 9090);
                 /// ```
-                pub fn merge_from_layers<I>(
+                pub fn merge_from_layers<'a, I>(
                     layers: I
                 ) -> ortho_config::OrthoResult<Self>
                 where
-                    I: IntoIterator<Item = ortho_config::MergeLayer<'static>>,
+                    I: IntoIterator<Item = ortho_config::MergeLayer<'a>>,
                 {
                     let mut state = __SampleDeclarativeMergeState::default();
                     for layer in layers {
@@ -737,11 +737,11 @@ mod tests {
                 ///     .expect("layers merge successfully");
                 /// assert_eq!(config.port, 9090);
                 /// ```
-                pub fn merge_from_layers<I>(
+                pub fn merge_from_layers<'a, I>(
                     layers: I
                 ) -> ortho_config::OrthoResult<Self>
                 where
-                    I: IntoIterator<Item = ortho_config::MergeLayer<'static>>,
+                    I: IntoIterator<Item = ortho_config::MergeLayer<'a>>,
                 {
                     let mut state = __SampleDeclarativeMergeState::default();
                     for layer in layers {
