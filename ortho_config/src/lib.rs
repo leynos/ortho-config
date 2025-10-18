@@ -58,7 +58,7 @@ pub fn normalize_prefix(prefix: &str) -> String {
 
 pub use csv_env::CsvEnv;
 pub use declarative::{DeclarativeMerge, MergeComposer, MergeLayer, MergeProvenance};
-pub use discovery::{ConfigDiscovery, ConfigDiscoveryBuilder};
+pub use discovery::{ConfigDiscovery, ConfigDiscoveryBuilder, DiscoveryLoadOutcome};
 pub use error::OrthoError;
 pub use file::load_config_file;
 /// Re-export sanitization helpers used to strip `None` fields and produce a

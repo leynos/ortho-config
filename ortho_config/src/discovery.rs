@@ -31,6 +31,36 @@ pub struct ConfigDiscovery {
     project_roots: Vec<PathBuf>,
 }
 
+/// Result of a discovery attempt that keeps required and optional errors separate.
+///
+/// Callers can surface [`required_errors`] regardless of whether a configuration
+/// file eventually loads, while deferring [`optional_errors`] until fallbacks are
+/// exhausted. This mirrors the builder contract where required explicit paths
+/// must exist.
+///
+/// # Examples
+///
+/// ```rust
+/// use ortho_config::discovery::ConfigDiscovery;
+///
+/// let discovery = ConfigDiscovery::builder("demo")
+///     .add_required_path("missing.toml")
+///     .build();
+/// let outcome = discovery.load_first_partitioned();
+/// assert!(outcome.figment.is_none());
+/// assert_eq!(outcome.required_errors.len(), 1);
+/// ```
+#[derive(Debug, Default)]
+#[must_use]
+pub struct DiscoveryLoadOutcome {
+    /// Successfully loaded configuration file, if any.
+    pub figment: Option<figment::Figment>,
+    /// Errors originating from required explicit candidates.
+    pub required_errors: Vec<Arc<OrthoError>>,
+    /// Errors produced by optional discovery candidates.
+    pub optional_errors: Vec<Arc<OrthoError>>,
+}
+
 impl ConfigDiscovery {
     /// Creates a new builder initialised for `app_name`.
     #[must_use]
@@ -211,28 +241,52 @@ impl ConfigDiscovery {
     ///
     /// # Errors
     ///
-    /// Currently always returns `Ok`; the [`OrthoResult`] return type keeps the
-    /// API aligned with other loaders and reserves space for future failures.
+    /// When every candidate fails, returns an error containing all recorded
+    /// discovery diagnostics; if no candidates exist, returns `Ok(None)`.
     pub fn load_first(&self) -> OrthoResult<Option<figment::Figment>> {
         let (figment, errors) = self.load_first_with_errors();
         if let Some(figment) = figment {
             return Ok(Some(figment));
         }
-        if let Some(err) = errors.into_iter().next() {
-            return Err(err);
+        if let Some(err) = OrthoError::try_aggregate(errors) {
+            return Err(Arc::new(err));
         }
         Ok(None)
     }
 
-    /// Attempts to load the first available configuration file while collecting errors.
-    #[must_use]
-    pub fn load_first_with_errors(&self) -> (Option<figment::Figment>, Vec<Arc<OrthoError>>) {
-        let mut errors = Vec::new();
+    /// Attempts to load the first available configuration file while partitioning errors.
+    ///
+    /// Required explicit candidates populate [`DiscoveryLoadOutcome::required_errors`]
+    /// even when a later fallback succeeds, enabling callers to surface them eagerly.
+    /// Optional candidates populate [`DiscoveryLoadOutcome::optional_errors`] so they
+    /// can be reported once discovery exhausts every location.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use ortho_config::discovery::ConfigDiscovery;
+    ///
+    /// let discovery = ConfigDiscovery::builder("demo")
+    ///     .add_required_path("missing.toml")
+    ///     .build();
+    /// let outcome = discovery.load_first_partitioned();
+    /// assert!(outcome.figment.is_none());
+    /// assert_eq!(outcome.required_errors.len(), 1);
+    /// ```
+    pub fn load_first_partitioned(&self) -> DiscoveryLoadOutcome {
+        let mut required_errors = Vec::new();
+        let mut optional_errors = Vec::new();
         let candidates = self.candidates();
         let required = self.required_explicit_paths.len();
         for (idx, path) in candidates.into_iter().enumerate() {
             match load_config_file(&path) {
-                Ok(Some(figment)) => return (Some(figment), errors),
+                Ok(Some(figment)) => {
+                    return DiscoveryLoadOutcome {
+                        figment: Some(figment),
+                        required_errors,
+                        optional_errors,
+                    };
+                }
                 Ok(None) => {
                     if idx < required {
                         let missing = Arc::new(OrthoError::File {
@@ -242,13 +296,35 @@ impl ConfigDiscovery {
                                 "required configuration file not found",
                             )),
                         });
-                        errors.push(missing);
+                        required_errors.push(missing);
                     }
                 }
-                Err(err) => errors.push(err),
+                Err(err) => {
+                    if idx < required {
+                        required_errors.push(err);
+                    } else {
+                        optional_errors.push(err);
+                    }
+                }
             }
         }
-        (None, errors)
+        DiscoveryLoadOutcome {
+            figment: None,
+            required_errors,
+            optional_errors,
+        }
+    }
+
+    /// Attempts to load the first available configuration file while collecting errors.
+    #[must_use]
+    pub fn load_first_with_errors(&self) -> (Option<figment::Figment>, Vec<Arc<OrthoError>>) {
+        let DiscoveryLoadOutcome {
+            figment,
+            mut required_errors,
+            mut optional_errors,
+        } = self.load_first_partitioned();
+        required_errors.append(&mut optional_errors);
+        (figment, required_errors)
     }
 }
 

@@ -18,3 +18,7 @@ All notable changes to this project will be documented in this file.
 
 - Report missing `extends` targets with a clear not-found error that names the
   resolved absolute path and the referencing file (closes #110).
+- Clarify `ConfigDiscovery::load_first` semantics: the helper now returns
+  `Err` when every candidate fails and any discovery errors were recorded, and
+  `Ok(None)` only when no candidates exist without errors. Update error
+  handling in consumers accordingly.
