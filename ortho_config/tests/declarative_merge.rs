@@ -13,6 +13,16 @@ struct DeclarativeSample {
     flag: bool,
 }
 
+#[derive(Debug, Deserialize, OrthoConfig)]
+struct AppendSample {
+    values: Vec<String>,
+}
+
+#[derive(Debug, Deserialize, OrthoConfig)]
+struct OptionalSample {
+    flag: Option<String>,
+}
+
 fn compose_layers(
     defaults: serde_json::Value,
     environment: serde_json::Value,
@@ -91,6 +101,34 @@ fn merge_value_merges_absent_target_key() {
     let layer = json!({ "new_key": "new_value", "another": 123 });
     merge_value(&mut target, layer);
     assert_eq!(target, json!({ "new_key": "new_value", "another": 123 }));
+}
+
+#[rstest]
+fn merge_layers_append_vectors() {
+    let mut composer = MergeComposer::new();
+    composer.push_defaults(json!({ "values": ["default"] }));
+    composer.push_environment(json!({ "values": ["env"] }));
+    composer.push_cli(json!({ "values": ["cli"] }));
+
+    let config = AppendSample::merge_from_layers(composer.layers()).expect("merge succeeds");
+    assert_eq!(
+        config.values,
+        vec![
+            String::from("default"),
+            String::from("env"),
+            String::from("cli"),
+        ]
+    ); // order reflects precedence layering
+}
+
+#[rstest]
+fn merge_layers_respect_option_nulls() {
+    let mut composer = MergeComposer::new();
+    composer.push_defaults(json!({ "flag": "present" }));
+    composer.push_environment(json!({ "flag": null }));
+
+    let config = OptionalSample::merge_from_layers(composer.layers()).expect("merge succeeds");
+    assert!(config.flag.is_none());
 }
 
 #[rstest]

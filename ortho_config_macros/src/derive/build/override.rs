@@ -8,10 +8,10 @@ use syn::{Ident, Type};
 
 use crate::derive::parse::{FieldAttrs, MergeStrategy, vec_inner};
 
-pub(crate) fn collect_append_fields<'a>(
-    fields: &'a [syn::Field],
-    field_attrs: &'a [FieldAttrs],
-) -> syn::Result<Vec<(Ident, &'a Type)>> {
+pub(crate) fn collect_append_fields(
+    fields: &[syn::Field],
+    field_attrs: &[FieldAttrs],
+) -> syn::Result<Vec<(Ident, Type)>> {
     let mut append_fields = Vec::new();
     for (field, attrs) in fields.iter().zip(field_attrs) {
         let Some(name) = field.ident.clone() else {
@@ -31,7 +31,7 @@ pub(crate) fn collect_append_fields<'a>(
             continue;
         };
         if strategy == MergeStrategy::Append {
-            append_fields.push((name, vec_ty));
+            append_fields.push((name, (*vec_ty).clone()));
         }
     }
     Ok(append_fields)
@@ -39,7 +39,7 @@ pub(crate) fn collect_append_fields<'a>(
 
 pub(crate) fn build_override_struct(
     base: &Ident,
-    fields: &[(Ident, &Type)],
+    fields: &[(Ident, Type)],
 ) -> (proc_macro2::TokenStream, proc_macro2::TokenStream) {
     let ident = format_ident!("__{}VecOverride", base);
     let struct_fields = fields.iter().map(|(name, ty)| {
@@ -59,7 +59,7 @@ pub(crate) fn build_override_struct(
     (ts, init_ts)
 }
 
-pub(crate) fn build_append_logic(fields: &[(Ident, &Type)]) -> proc_macro2::TokenStream {
+pub(crate) fn build_append_logic(fields: &[(Ident, Type)]) -> proc_macro2::TokenStream {
     if fields.is_empty() {
         return quote! {};
     }

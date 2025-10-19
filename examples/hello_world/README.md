@@ -22,7 +22,8 @@ production-ready complexity.
 - **Declarative merging**: demonstrate how `MergeComposer` and
   `merge_from_layers` build layered configuration without invoking the CLI by
   driving a behavioural scenario that composes JSON-described layers into
-  `GlobalArgs`.
+  `GlobalArgs`, asserting that default salutations are preserved when
+  environment layers append new values.
 - **Shell and Windows automation**: provide paired `.sh` and `.cmd` scripts
   highlighting how environment variables, configuration files, and command-line
   overrides interact. Include examples covering default configuration,

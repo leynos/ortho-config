@@ -109,5 +109,6 @@ Feature: Global parameters govern greetings
     Then the declarative globals recipient is "Cli"
     And the declarative globals salutations are:
       """
+      Hi
       Env
       """

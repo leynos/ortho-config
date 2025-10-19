@@ -41,7 +41,9 @@ values from multiple sources. The core features are:
 - **Declarative merge tooling** – Every configuration struct exposes a
   `merge_from_layers` helper along with `MergeComposer`, making it simple to
   compose defaults, files, environment captures, and CLI values in unit tests
-  or bespoke loaders without instantiating the CLI parser.
+  or bespoke loaders without instantiating the CLI parser. Vector fields honour
+  the append strategy by default so defaults flow through alongside environment
+  and CLI additions.
 
 The workspace bundles an executable Hello World example under
 `examples/hello_world`. It layers defaults, environment variables, and CLI
@@ -119,14 +121,18 @@ composer.push_cli(json!({"recipient": "Cli" }));
 
 let merged = AppConfig::merge_from_layers(composer.layers())?;
 assert_eq!(merged.recipient, "Cli");
-assert_eq!(merged.salutations, vec![String::from("Env")]);
+assert_eq!(
+    merged.salutations,
+    vec![String::from("Hi"), String::from("Env")]
+);
 ```
 
 This API surfaces the same precedence as the generated `load()` method while
 making it trivial to drive unit and behavioural tests with hand-crafted layers.
-The Hello World example’s behavioural suite includes a dedicated scenario that
-parses JSON descriptors into `MergeLayer` values and asserts the merged
-configuration via these helpers.
+`Vec<_>` fields accumulate values from each layer in order so defaults can
+coexist with environment or CLI extensions. The Hello World example’s
+behavioural suite includes a dedicated scenario that parses JSON descriptors
+into `MergeLayer` values and asserts the merged configuration via these helpers.
 
 ## Installation and dependencies
 

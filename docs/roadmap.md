@@ -179,7 +179,7 @@ references the relevant design guidance.
       without additional boilerplate. Mirror the trait signatures from the
       declarative design doc before implementing. [[Design](design.md)]
 
-    - [ ] Generate merge arms for each field, respecting existing
+    - [x] Generate merge arms for each field, respecting existing
       `#[ortho_config(...)]` metadata so nested structures, optional values,
       and enums flow through consistently. Use the dependency injection
       patterns documented for testing to keep fixtures focused on precedence

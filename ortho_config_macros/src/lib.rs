@@ -60,6 +60,7 @@ struct MacroComponents {
     override_struct_ts: proc_macro2::TokenStream,
     load_impl: proc_macro2::TokenStream,
     prefix_fn: Option<proc_macro2::TokenStream>,
+    append_fields: Vec<(syn::Ident, syn::Type)>,
 }
 
 #[derive(Clone, Copy)]
@@ -271,6 +272,7 @@ fn build_macro_components(
         override_struct_ts,
         load_impl,
         prefix_fn,
+        append_fields,
     })
 }
 
@@ -398,11 +400,22 @@ fn generate_ortho_impl(
     }
 }
 
-fn generate_declarative_state_struct(state_ident: &syn::Ident) -> proc_macro2::TokenStream {
+fn generate_declarative_state_struct(
+    state_ident: &syn::Ident,
+    append_fields: &[(syn::Ident, syn::Type)],
+) -> proc_macro2::TokenStream {
+    let append_state_fields = append_fields.iter().map(|(name, ty)| {
+        let state_field_ident = format_ident!("append_{}", name);
+        quote! {
+            #state_field_ident: Option<Vec<#ty>>
+        }
+    });
+
     quote! {
         #[derive(Default)]
         struct #state_ident {
             value: ortho_config::serde_json::Value,
+            #( #append_state_fields, )*
         }
     }
 }
@@ -410,13 +423,55 @@ fn generate_declarative_state_struct(state_ident: &syn::Ident) -> proc_macro2::T
 fn generate_declarative_merge_impl(
     state_ident: &syn::Ident,
     config_ident: &syn::Ident,
+    append_fields: &[(syn::Ident, syn::Type)],
 ) -> proc_macro2::TokenStream {
+    let append_logic = append_fields.iter().map(|(field_ident, ty)| {
+        let state_field_ident = format_ident!("append_{}", field_ident);
+        let field_name = field_ident.to_string();
+        quote! {
+            if let Some(value) = map.remove(#field_name) {
+                let mut incoming: Vec<#ty> =
+                    ortho_config::serde_json::from_value(value).into_ortho()?;
+                let acc = self.#state_field_ident.get_or_insert_with(Vec::new);
+                acc.append(&mut incoming);
+                let aggregated = ortho_config::serde_json::to_value(&*acc).into_ortho()?;
+                let mut object = ortho_config::serde_json::Map::new();
+                object.insert(String::from(#field_name), aggregated);
+                ortho_config::declarative::merge_value(
+                    &mut self.value,
+                    ortho_config::serde_json::Value::Object(object),
+                );
+            }
+        }
+    });
+
+    let append_logic_tokens: Vec<_> = append_logic.collect();
+    let use_result_ext = if append_fields.is_empty() {
+        quote! {}
+    } else {
+        quote! { use ortho_config::OrthoResultExt as _; }
+    };
+
     quote! {
         impl ortho_config::DeclarativeMerge for #state_ident {
             type Output = #config_ident;
 
             fn merge_layer(&mut self, layer: ortho_config::MergeLayer<'_>) -> ortho_config::OrthoResult<()> {
-                ortho_config::declarative::merge_value(&mut self.value, layer.into_value());
+                #use_result_ext
+                match layer.into_value() {
+                    ortho_config::serde_json::Value::Object(mut map) => {
+                        #( #append_logic_tokens )*
+                        if !map.is_empty() {
+                            ortho_config::declarative::merge_value(
+                                &mut self.value,
+                                ortho_config::serde_json::Value::Object(map),
+                            );
+                        }
+                    }
+                    other => {
+                        ortho_config::declarative::merge_value(&mut self.value, other);
+                    }
+                }
                 Ok(())
             }
 
@@ -475,10 +530,13 @@ fn generate_declarative_merge_from_layers_fn(
     }
 }
 
-fn generate_declarative_impl(config_ident: &syn::Ident) -> proc_macro2::TokenStream {
+fn generate_declarative_impl(
+    config_ident: &syn::Ident,
+    append_fields: &[(syn::Ident, syn::Type)],
+) -> proc_macro2::TokenStream {
     let state_ident = format_ident!("__{}DeclarativeMergeState", config_ident);
-    let state_struct = generate_declarative_state_struct(&state_ident);
-    let merge_impl = generate_declarative_merge_impl(&state_ident, config_ident);
+    let state_struct = generate_declarative_state_struct(&state_ident, append_fields);
+    let merge_impl = generate_declarative_merge_impl(&state_ident, config_ident, append_fields);
     let merge_fn = generate_declarative_merge_from_layers_fn(&state_ident, config_ident);
 
     quote! {
@@ -495,7 +553,7 @@ fn generate_trait_implementation(
     let cli_struct = generate_cli_struct(components);
     let defaults_struct = generate_defaults_struct(components);
     let ortho_impl = generate_ortho_impl(config_ident, components);
-    let declarative_impl = generate_declarative_impl(config_ident);
+    let declarative_impl = generate_declarative_impl(config_ident, &components.append_fields);
     quote! {
         #cli_struct
         #defaults_struct
@@ -530,6 +588,7 @@ mod tests {
             override_struct_ts: quote! {},
             load_impl: quote! {},
             prefix_fn: None,
+            append_fields: Vec::new(),
         }
     }
 
@@ -595,7 +654,7 @@ mod tests {
     #[rstest]
     fn generate_declarative_state_struct_emits_storage() {
         let state_ident = parse_str("__SampleDeclarativeMergeState").expect("state ident");
-        let tokens = generate_declarative_state_struct(&state_ident);
+        let tokens = generate_declarative_state_struct(&state_ident, &[]);
         let expected = quote! {
             #[derive(Default)]
             struct __SampleDeclarativeMergeState {
@@ -606,10 +665,28 @@ mod tests {
     }
 
     #[rstest]
+    fn generate_declarative_state_struct_includes_append_fields() {
+        let state_ident = parse_str("__SampleDeclarativeMergeState").expect("state ident");
+        let append_fields = vec![(
+            parse_str("items").expect("field ident"),
+            parse_str("String").expect("field type"),
+        )];
+        let tokens = generate_declarative_state_struct(&state_ident, &append_fields);
+        let expected = quote! {
+            #[derive(Default)]
+            struct __SampleDeclarativeMergeState {
+                value: ortho_config::serde_json::Value,
+                append_items: Option<Vec<String>>,
+            }
+        };
+        assert_eq!(tokens.to_string(), expected.to_string());
+    }
+
+    #[rstest]
     fn generate_declarative_merge_impl_emits_trait_impl() {
         let state_ident = parse_str("__SampleDeclarativeMergeState").expect("state ident");
         let config_ident = parse_str("Sample").expect("config ident");
-        let tokens = generate_declarative_merge_impl(&state_ident, &config_ident);
+        let tokens = generate_declarative_merge_impl(&state_ident, &config_ident, &[]);
         let expected = quote! {
             impl ortho_config::DeclarativeMerge for __SampleDeclarativeMergeState {
                 type Output = Sample;
@@ -618,7 +695,19 @@ mod tests {
                     &mut self,
                     layer: ortho_config::MergeLayer<'_>
                 ) -> ortho_config::OrthoResult<()> {
-                    ortho_config::declarative::merge_value(&mut self.value, layer.into_value());
+                    match layer.into_value() {
+                        ortho_config::serde_json::Value::Object(mut map) => {
+                            if !map.is_empty() {
+                                ortho_config::declarative::merge_value(
+                                    &mut self.value,
+                                    ortho_config::serde_json::Value::Object(map),
+                                );
+                            }
+                        }
+                        other => {
+                            ortho_config::declarative::merge_value(&mut self.value, other);
+                        }
+                    }
                     Ok(())
                 }
 
@@ -628,6 +717,21 @@ mod tests {
             }
         };
         assert_eq!(tokens.to_string(), expected.to_string());
+    }
+
+    #[rstest]
+    fn generate_declarative_merge_impl_handles_append_fields() {
+        let state_ident = parse_str("__SampleDeclarativeMergeState").expect("state ident");
+        let config_ident = parse_str("Sample").expect("config ident");
+        let append_fields = vec![(
+            parse_str("items").expect("field ident"),
+            parse_str("String").expect("field type"),
+        )];
+        let tokens = generate_declarative_merge_impl(&state_ident, &config_ident, &append_fields);
+        let rendered = tokens.to_string();
+        assert!(rendered.contains("append_items"));
+        assert!(rendered.contains("OrthoResultExt"));
+        assert!(rendered.contains("serde_json :: Map"));
     }
 
     #[rstest]
@@ -685,7 +789,7 @@ mod tests {
     #[rstest]
     fn generate_declarative_impl_composes_helpers() {
         let config_ident = parse_str("Sample").expect("config ident");
-        let tokens = generate_declarative_impl(&config_ident);
+        let tokens = generate_declarative_impl(&config_ident, &[]);
         let expected = quote! {
             #[derive(Default)]
             struct __SampleDeclarativeMergeState {
@@ -699,7 +803,19 @@ mod tests {
                     &mut self,
                     layer: ortho_config::MergeLayer<'_>
                 ) -> ortho_config::OrthoResult<()> {
-                    ortho_config::declarative::merge_value(&mut self.value, layer.into_value());
+                    match layer.into_value() {
+                        ortho_config::serde_json::Value::Object(mut map) => {
+                            if !map.is_empty() {
+                                ortho_config::declarative::merge_value(
+                                    &mut self.value,
+                                    ortho_config::serde_json::Value::Object(map),
+                                );
+                            }
+                        }
+                        other => {
+                            ortho_config::declarative::merge_value(&mut self.value, other);
+                        }
+                    }
                     Ok(())
                 }
 
