@@ -117,8 +117,9 @@ fn merge_layers_append_vectors() {
             String::from("default"),
             String::from("env"),
             String::from("cli"),
-        ]
-    ); // order reflects precedence layering
+        ],
+        "vectors accumulate in layer composition order"
+    );
 }
 
 #[rstest]

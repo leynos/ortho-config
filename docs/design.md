@@ -160,7 +160,7 @@ highlighted in the example feedback.
 
 The merge state stores a `serde_json::Value` alongside append buffers for
 vector fields, so attribute-driven strategies can extend collections without
-dropping defaults. The buffers retain raw JSON arrays instead of re-serialising
+dropping defaults. The buffers retain raw JSON arrays instead of re-serializing
 typed vectors. That avoids an accidental `Serialize` bound on element types
 while still rejecting non-array payloads during layer ingestion. `MergeLayer`
 wraps the JSON blob alongside its provenance and an optional source path, so
