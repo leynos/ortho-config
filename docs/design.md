@@ -160,16 +160,18 @@ highlighted in the example feedback.
 
 The merge state stores a `serde_json::Value` alongside append buffers for
 vector fields so attribute-driven strategies can extend collections without
-dropping defaults. `MergeLayer` wraps the JSON blob alongside its provenance
-and an optional source path, so diagnostics retain context. `merge_layer`
-overlays objects recursively by key, replaces scalars wholesale, and defers to
-the append buffers when a field uses the vector strategy; other arrays continue
-to mirror Figment’s replace semantics. The macro also emits a
-`merge_from_layers` helper on every configuration struct, so tests and
-behavioural fixtures can compose layers with `MergeComposer` without
-instantiating the CLI parser. This zero-allocates when callers pass borrowed
-values (for example, from `rstest` fixtures) and keeps merging deterministic in
-unit tests.
+dropping defaults. These buffers retain raw JSON arrays instead of
+re-serialising typed vectors, avoiding an accidental `Serialize` bound on
+element types while still rejecting non-array payloads during layer ingestion.
+`MergeLayer` wraps the JSON blob alongside its provenance and an optional
+source path, so diagnostics retain context. `merge_layer` overlays objects
+recursively by key, replaces scalars wholesale, and defers to the append
+buffers when a field uses the vector strategy; other arrays continue to mirror
+Figment’s replace semantics. The macro also emits a `merge_from_layers` helper
+on every configuration struct, so tests and behavioural fixtures can compose
+layers with `MergeComposer` without instantiating the CLI parser. This
+zero-allocates when callers pass borrowed values (for example, from `rstest`
+fixtures) and keeps merging deterministic in unit tests.
 
 ```rust
 use hello_world::cli::GlobalArgs;

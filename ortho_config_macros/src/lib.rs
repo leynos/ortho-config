@@ -404,10 +404,10 @@ fn generate_declarative_state_struct(
     state_ident: &syn::Ident,
     append_fields: &[(syn::Ident, syn::Type)],
 ) -> proc_macro2::TokenStream {
-    let append_state_fields = append_fields.iter().map(|(name, ty)| {
+    let append_state_fields = append_fields.iter().map(|(name, _ty)| {
         let state_field_ident = format_ident!("append_{}", name);
         quote! {
-            #state_field_ident: Option<Vec<#ty>>
+            #state_field_ident: Option<Vec<ortho_config::serde_json::Value>>
         }
     });
 
@@ -425,16 +425,16 @@ fn generate_declarative_merge_impl(
     config_ident: &syn::Ident,
     append_fields: &[(syn::Ident, syn::Type)],
 ) -> proc_macro2::TokenStream {
-    let append_logic = append_fields.iter().map(|(field_ident, ty)| {
+    let append_logic = append_fields.iter().map(|(field_ident, _ty)| {
         let state_field_ident = format_ident!("append_{}", field_ident);
         let field_name = field_ident.to_string();
         quote! {
             if let Some(value) = map.remove(#field_name) {
-                let mut incoming: Vec<#ty> =
+                let mut incoming: Vec<ortho_config::serde_json::Value> =
                     ortho_config::serde_json::from_value(value).into_ortho()?;
                 let acc = self.#state_field_ident.get_or_insert_with(Vec::new);
                 acc.append(&mut incoming);
-                let aggregated = ortho_config::serde_json::to_value(&*acc).into_ortho()?;
+                let aggregated = ortho_config::serde_json::Value::Array(acc.clone());
                 let mut object = ortho_config::serde_json::Map::new();
                 object.insert(String::from(#field_name), aggregated);
                 ortho_config::declarative::merge_value(
@@ -676,7 +676,7 @@ mod tests {
             #[derive(Default)]
             struct __SampleDeclarativeMergeState {
                 value: ortho_config::serde_json::Value,
-                append_items: Option<Vec<String>>,
+                append_items: Option<Vec<ortho_config::serde_json::Value>>,
             }
         };
         assert_eq!(tokens.to_string(), expected.to_string());
@@ -732,6 +732,7 @@ mod tests {
         assert!(rendered.contains("append_items"));
         assert!(rendered.contains("OrthoResultExt"));
         assert!(rendered.contains("serde_json :: Map"));
+        assert!(rendered.contains("Value :: Array"));
     }
 
     #[rstest]
