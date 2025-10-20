@@ -131,7 +131,6 @@ fn merge_layers_respect_option_nulls() {
     assert!(config.flag.is_none());
 }
 
-
 #[rstest]
 fn merge_from_layers_accepts_file_layers() {
     let mut composer = MergeComposer::new();
