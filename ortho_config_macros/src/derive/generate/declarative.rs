@@ -166,6 +166,7 @@ mod tests {
         generate_declarative_impl, generate_declarative_merge_from_layers_fn,
         generate_declarative_merge_impl, generate_declarative_state_struct, unique_append_fields,
     };
+    use proc_macro2::TokenStream as TokenStream2;
     use quote::quote;
     use rstest::rstest;
     use syn::parse_str;
@@ -218,26 +219,40 @@ mod tests {
         assert!(rendered.contains("append_items"));
     }
 
+    fn assert_deduplicates_append_fields<F>(generator: F)
+    where
+        F: Fn(&[(syn::Ident, syn::Type)]) -> TokenStream2,
+    {
+        let duplicate_fields = vec![
+            (
+                parse_str("items").expect("first duplicate field ident"),
+                parse_str("String").expect("first duplicate field type"),
+            ),
+            (
+                parse_str("items").expect("second duplicate field ident"),
+                parse_str("String").expect("second duplicate field type"),
+            ),
+        ];
+        let duplicate_tokens = generator(&duplicate_fields);
+
+        let deduplicated_fields = vec![(
+            parse_str("items").expect("deduplicated field ident"),
+            parse_str("String").expect("deduplicated field type"),
+        )];
+        let deduplicated_tokens = generator(&deduplicated_fields);
+
+        assert_eq!(
+            duplicate_tokens.to_string(),
+            deduplicated_tokens.to_string()
+        );
+    }
+
     #[rstest]
     fn generate_declarative_state_struct_deduplicates_append_fields() {
         let state_ident = parse_str("__SampleDeclarativeMergeState").expect("state ident");
-        let append_fields = vec![
-            (
-                parse_str("items").expect("first field ident"),
-                parse_str("String").expect("first field type"),
-            ),
-            (
-                parse_str("items").expect("second field ident"),
-                parse_str("String").expect("second field type"),
-            ),
-        ];
-        let tokens = generate_declarative_state_struct(&state_ident, &append_fields);
-        let deduped = vec![(
-            parse_str("items").expect("deduped field ident"),
-            parse_str("String").expect("deduped field type"),
-        )];
-        let expected = generate_declarative_state_struct(&state_ident, &deduped);
-        assert_eq!(tokens.to_string(), expected.to_string());
+        assert_deduplicates_append_fields(|fields| {
+            generate_declarative_state_struct(&state_ident, fields)
+        });
     }
 
     #[rstest]
@@ -299,23 +314,9 @@ mod tests {
     fn generate_declarative_merge_impl_deduplicates_append_fields() {
         let state_ident = parse_str("__SampleDeclarativeMergeState").expect("state ident");
         let config_ident = parse_str("Sample").expect("config ident");
-        let append_fields = vec![
-            (
-                parse_str("items").expect("first field ident"),
-                parse_str("String").expect("first field type"),
-            ),
-            (
-                parse_str("items").expect("second field ident"),
-                parse_str("String").expect("second field type"),
-            ),
-        ];
-        let tokens = generate_declarative_merge_impl(&state_ident, &config_ident, &append_fields);
-        let deduped = vec![(
-            parse_str("items").expect("deduped field ident"),
-            parse_str("String").expect("deduped field type"),
-        )];
-        let expected = generate_declarative_merge_impl(&state_ident, &config_ident, &deduped);
-        assert_eq!(tokens.to_string(), expected.to_string());
+        assert_deduplicates_append_fields(|fields| {
+            generate_declarative_merge_impl(&state_ident, &config_ident, fields)
+        });
     }
 
     #[rstest]
