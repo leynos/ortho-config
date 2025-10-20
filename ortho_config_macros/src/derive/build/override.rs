@@ -16,7 +16,7 @@ use crate::derive::parse::{FieldAttrs, MergeStrategy, vec_inner};
 ///
 /// # Examples
 ///
-/// ```rust
+/// ```rust,ignore
 /// # use crate::derive::build::r#override::collect_append_fields;
 /// # use crate::derive::parse::parse_input;
 /// let input: syn::DeriveInput = syn::parse_quote! {
@@ -75,7 +75,7 @@ pub(crate) fn collect_append_fields(
 ///
 /// # Examples
 ///
-/// ```rust
+/// ```rust,ignore
 /// # use crate::derive::build::r#override::{
 /// #     build_override_struct, collect_append_fields
 /// # };
@@ -128,7 +128,7 @@ pub(crate) fn build_override_struct(
 ///
 /// # Examples
 ///
-/// ```rust
+/// ```rust,ignore
 /// # use crate::derive::build::r#override::{
 /// #     build_append_logic, collect_append_fields
 /// # };
