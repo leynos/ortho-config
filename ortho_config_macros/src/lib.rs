@@ -430,7 +430,7 @@ fn generate_declarative_state_struct(
         #[derive(Default)]
         struct #state_ident {
             value: ortho_config::serde_json::Value,
-            #( #append_state_fields, )*
+            #( #append_state_fields ),*
         }
     }
 }
@@ -446,13 +446,13 @@ fn generate_declarative_merge_impl(
         let field_name = field_ident.to_string();
         quote! {
             if let Some(value) = map.remove(#field_name) {
-                let mut incoming: Vec<ortho_config::serde_json::Value> =
+                let mut incoming: Vec<_> =
                     ortho_config::serde_json::from_value(value).into_ortho()?;
-                let acc = self.#state_field_ident.get_or_insert_with(Vec::new);
-                acc.append(&mut incoming);
-                let aggregated = ortho_config::serde_json::Value::Array(acc.clone());
+                let acc = self.#state_field_ident.get_or_insert_default();
+                acc.extend(incoming);
+                let arr = ortho_config::serde_json::Value::Array(acc.clone());
                 let mut object = ortho_config::serde_json::Map::new();
-                object.insert(String::from(#field_name), aggregated);
+                object.insert(String::from(#field_name), arr);
                 ortho_config::declarative::merge_value(
                     &mut self.value,
                     ortho_config::serde_json::Value::Object(object),
@@ -461,22 +461,16 @@ fn generate_declarative_merge_impl(
         }
     });
 
-    let append_logic_tokens: Vec<_> = append_logic.collect();
-    let use_result_ext = if append_fields.is_empty() {
-        quote! {}
-    } else {
-        quote! { use ortho_config::OrthoResultExt as _; }
-    };
-
     quote! {
         impl ortho_config::DeclarativeMerge for #state_ident {
             type Output = #config_ident;
 
             fn merge_layer(&mut self, layer: ortho_config::MergeLayer<'_>) -> ortho_config::OrthoResult<()> {
-                #use_result_ext
+                use ortho_config::OrthoResultExt as _;
+
                 match layer.into_value() {
                     ortho_config::serde_json::Value::Object(mut map) => {
-                        #( #append_logic_tokens )*
+                        #( #append_logic )*
                         if !map.is_empty() {
                             ortho_config::declarative::merge_value(
                                 &mut self.value,
@@ -488,6 +482,7 @@ fn generate_declarative_merge_impl(
                         ortho_config::declarative::merge_value(&mut self.value, other);
                     }
                 }
+
                 Ok(())
             }
 
@@ -692,7 +687,7 @@ mod tests {
             #[derive(Default)]
             struct __SampleDeclarativeMergeState {
                 value: ortho_config::serde_json::Value,
-                append_items: Option<Vec<ortho_config::serde_json::Value>>,
+                append_items: Option<Vec<ortho_config::serde_json::Value>>
             }
         };
         assert_eq!(tokens.to_string(), expected.to_string());
@@ -733,6 +728,8 @@ mod tests {
                     &mut self,
                     layer: ortho_config::MergeLayer<'_>
                 ) -> ortho_config::OrthoResult<()> {
+                    use ortho_config::OrthoResultExt as _;
+
                     match layer.into_value() {
                         ortho_config::serde_json::Value::Object(mut map) => {
                             if !map.is_empty() {
@@ -865,6 +862,8 @@ mod tests {
                     &mut self,
                     layer: ortho_config::MergeLayer<'_>
                 ) -> ortho_config::OrthoResult<()> {
+                    use ortho_config::OrthoResultExt as _;
+
                     match layer.into_value() {
                         ortho_config::serde_json::Value::Object(mut map) => {
                             if !map.is_empty() {
