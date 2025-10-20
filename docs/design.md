@@ -158,17 +158,20 @@ their own `DeclarativeMerge` implementation, ensuring subcommand namespaces are
 merged consistently without the manual `apply_greet_overrides` helper
 highlighted in the example feedback.
 
-The initial implementation represents each layer as a `serde_json::Value`
-captured inside the generated merge state. `MergeLayer` wraps the JSON blob
-alongside its provenance and an optional source path, so diagnostics retain
-context. `merge_layer` overlays objects recursively by key and replaces scalars
-and arrays wholesale; this mirrors Figment’s behaviour and keeps attribute-free
-collections predictable while a richer strategy surface is designed. The macro
-also emits a `merge_from_layers` helper on every configuration struct, so tests
-and behavioural fixtures can compose layers with `MergeComposer` without
-instantiating the CLI parser. This zero-allocates when callers pass borrowed
-values (for example, from `rstest` fixtures) and keeps merging deterministic in
-unit tests.
+The merge state stores a `serde_json::Value` alongside append buffers for
+vector fields, so attribute-driven strategies can extend collections without
+dropping defaults. The buffers retain raw JSON arrays instead of re-serialising
+typed vectors. That avoids an accidental `Serialize` bound on element types
+while still rejecting non-array payloads during layer ingestion. `MergeLayer`
+wraps the JSON blob alongside its provenance and an optional source path, so
+diagnostics retain context. `merge_layer` overlays objects recursively by key,
+replaces scalars wholesale, and defers to the append buffers when a field uses
+the vector strategy. Other arrays continue to mirror Figment’s replace
+semantics. The macro also emits a `merge_from_layers` helper on every
+configuration struct, so tests and behavioural fixtures can compose layers with
+`MergeComposer` without instantiating the CLI parser. This zero-allocates when
+callers pass borrowed values (for example, from `rstest` fixtures) and keeps
+merging deterministic in unit tests.
 
 ```rust
 use hello_world::cli::GlobalArgs;
@@ -187,7 +190,10 @@ composer.push_environment(json!({
 let globals = GlobalArgs::merge_from_layers(composer.layers())
     .expect("layers merge successfully");
 assert_eq!(globals.recipient.as_deref(), Some("Ada"));
-assert_eq!(globals.salutations, vec![String::from("Greetings")]);
+assert_eq!(
+    globals.salutations,
+    vec![String::from("Hello"), String::from("Greetings")]
+);
 ```
 
 The derive macro also emits a helper named `merge_from_layers` that accepts any
@@ -689,6 +695,10 @@ experience, we can create a highly valuable addition to the Rust ecosystem.
   providers.[^hello-world-feedback] The approach keeps layering predictable,
   allows behavioural tests to inject bespoke layers, and ensures merge failures
   consistently surface as `OrthoError::Merge`.
+- **Generate field-specific declarative merge arms (2024-06-07):** The derive
+  now accumulates vector fields in typed append buffers and emits per-field
+  merge logic so defaults, nested structures, and enumerations survive layered
+  declarative inputs without auxiliary helper structs.
 
 - **Prefix normalisation:** The `prefix` struct attribute now appends a trailing
   underscore when callers omit it (unless the string is empty). This keeps
