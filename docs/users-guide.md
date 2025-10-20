@@ -249,7 +249,7 @@ stricter validation may add manual `compile_error!` guards.
 
 Vector append buffers operate on raw JSON values, so element types only need to
 implement `serde::Deserialize`. Deriving `serde::Serialize` remains useful when
-applications serialise configuration back out (for example, to emit defaults),
+applications serialize configuration back out (for example, to emit defaults),
 but it is no longer required merely to opt into the append strategy.
 
 By default, each field receives a long flag derived from its name in kebab‑case

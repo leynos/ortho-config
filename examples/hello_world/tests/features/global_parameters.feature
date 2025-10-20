@@ -112,3 +112,22 @@ Feature: Global parameters govern greetings
       Hi
       Env
       """
+
+  Scenario: Declarative merging accumulates repeated append contributions
+      Given I compose hello world globals from declarative layers:
+        """
+        [
+          {"provenance": "defaults", "value": {"recipient": "Defaults", "salutations": ["Defaults"], "is_excited": false, "is_quiet": false}},
+          {"provenance": "environment", "value": {"salutations": ["EnvOne"]}},
+          {"provenance": "environment", "value": {"salutations": ["EnvTwo"]}},
+          {"provenance": "cli", "value": {"salutations": ["CliOne", "CliTwo"]}}
+        ]
+        """
+      Then the declarative globals salutations are:
+        """
+        Defaults
+        EnvOne
+        EnvTwo
+        CliOne
+        CliTwo
+        """

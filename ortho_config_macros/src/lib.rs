@@ -9,6 +9,7 @@
 
 use proc_macro::TokenStream;
 use quote::{format_ident, quote};
+use std::collections::HashSet;
 use syn::{DeriveInput, parse_macro_input};
 
 mod derive {
@@ -400,11 +401,25 @@ fn generate_ortho_impl(
     }
 }
 
+fn unique_append_fields(
+    append_fields: &[(syn::Ident, syn::Type)],
+) -> Vec<(&syn::Ident, &syn::Type)> {
+    let mut seen = HashSet::new();
+    append_fields
+        .iter()
+        .filter_map(|(ident, ty)| {
+            let key = ident.to_string();
+            seen.insert(key).then_some((ident, ty))
+        })
+        .collect()
+}
+
 fn generate_declarative_state_struct(
     state_ident: &syn::Ident,
     append_fields: &[(syn::Ident, syn::Type)],
 ) -> proc_macro2::TokenStream {
-    let append_state_fields = append_fields.iter().map(|(name, _ty)| {
+    let unique_fields = unique_append_fields(append_fields);
+    let append_state_fields = unique_fields.iter().map(|(name, _ty)| {
         let state_field_ident = format_ident!("append_{}", name);
         quote! {
             #state_field_ident: Option<Vec<ortho_config::serde_json::Value>>
@@ -425,7 +440,8 @@ fn generate_declarative_merge_impl(
     config_ident: &syn::Ident,
     append_fields: &[(syn::Ident, syn::Type)],
 ) -> proc_macro2::TokenStream {
-    let append_logic = append_fields.iter().map(|(field_ident, _ty)| {
+    let unique_fields = unique_append_fields(append_fields);
+    let append_logic = unique_fields.iter().map(|(field_ident, _ty)| {
         let state_field_ident = format_ident!("append_{}", field_ident);
         let field_name = field_ident.to_string();
         quote! {
@@ -683,6 +699,28 @@ mod tests {
     }
 
     #[rstest]
+    fn generate_declarative_state_struct_deduplicates_append_fields() {
+        let state_ident = parse_str("__SampleDeclarativeMergeState").expect("state ident");
+        let append_fields = vec![
+            (
+                parse_str("items").expect("first field ident"),
+                parse_str("String").expect("first field type"),
+            ),
+            (
+                parse_str("items").expect("second field ident"),
+                parse_str("String").expect("second field type"),
+            ),
+        ];
+        let tokens = generate_declarative_state_struct(&state_ident, &append_fields);
+        let deduped = vec![(
+            parse_str("items").expect("deduped field ident"),
+            parse_str("String").expect("deduped field type"),
+        )];
+        let expected = generate_declarative_state_struct(&state_ident, &deduped);
+        assert_eq!(tokens.to_string(), expected.to_string());
+    }
+
+    #[rstest]
     fn generate_declarative_merge_impl_emits_trait_impl() {
         let state_ident = parse_str("__SampleDeclarativeMergeState").expect("state ident");
         let config_ident = parse_str("Sample").expect("config ident");
@@ -733,6 +771,29 @@ mod tests {
         assert!(rendered.contains("OrthoResultExt"));
         assert!(rendered.contains("serde_json :: Map"));
         assert!(rendered.contains("Value :: Array"));
+    }
+
+    #[rstest]
+    fn generate_declarative_merge_impl_deduplicates_append_fields() {
+        let state_ident = parse_str("__SampleDeclarativeMergeState").expect("state ident");
+        let config_ident = parse_str("Sample").expect("config ident");
+        let append_fields = vec![
+            (
+                parse_str("items").expect("first field ident"),
+                parse_str("String").expect("first field type"),
+            ),
+            (
+                parse_str("items").expect("second field ident"),
+                parse_str("String").expect("second field type"),
+            ),
+        ];
+        let tokens = generate_declarative_merge_impl(&state_ident, &config_ident, &append_fields);
+        let deduped = vec![(
+            parse_str("items").expect("deduped field ident"),
+            parse_str("String").expect("deduped field type"),
+        )];
+        let expected = generate_declarative_merge_impl(&state_ident, &config_ident, &deduped);
+        assert_eq!(tokens.to_string(), expected.to_string());
     }
 
     #[rstest]
