@@ -18,14 +18,11 @@ use crate::MacroComponents;
 /// use quote::quote;
 /// use syn::parse_str;
 ///
-/// let ident = parse_str("Example").expect("ident");
+/// // Internal usage within the macro:
+/// let ident = parse_str("Example")?;
 /// let fields = vec![quote! { pub value: u32 }];
 /// let attrs = quote! { #[derive(Default)] };
-/// let tokens = ortho_config_macros::derive::generate::structs::generate_struct(
-///     &ident,
-///     &fields,
-///     &attrs,
-/// );
+/// let tokens = generate_struct(&ident, &fields, &attrs);
 /// assert!(tokens.to_string().contains("struct Example"));
 /// ```
 pub(crate) fn generate_struct(

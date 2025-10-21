@@ -49,6 +49,10 @@ pub(crate) fn generate_ortho_impl(
     }
 }
 
+/// Compose the complete trait implementation output.
+///
+/// Combines the CLI parser struct, defaults struct, and `OrthoConfig` impl into
+/// a single token stream ready for procedural macro expansion.
 pub(crate) fn generate_trait_implementation(
     config_ident: &Ident,
     components: &MacroComponents,

@@ -1,3 +1,9 @@
+//! Declarative merge code generation for `#[derive(OrthoConfig)]`.
+//!
+//! Emits merge-state structs, trait implementations, and helper constructors
+//! that layer declarative configuration values while honouring append
+//! semantics for vector fields.
+
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 use std::collections::HashSet;
@@ -49,7 +55,9 @@ pub(crate) fn generate_declarative_merge_impl(
             if let Some(value) = map.remove(#field_name) {
                 let mut incoming: Vec<_> =
                     ortho_config::serde_json::from_value(value).into_ortho()?;
-                let acc = self.#state_field_ident.get_or_insert_default();
+                let acc = self
+                    .#state_field_ident
+                    .get_or_insert_with(Default::default);
                 acc.extend(incoming);
                 let arr = ortho_config::serde_json::Value::Array(acc.clone());
                 let mut object = ortho_config::serde_json::Map::new();
@@ -103,7 +111,7 @@ pub(crate) fn generate_declarative_merge_from_layers_fn(
             /// Merge the configuration struct from declarative layers.
             ///
             /// See the
-            /// [declarative merging design](https://github.com/leynos/ortho-config/blob/main/docs/design.md#introduce-declarative-configuration-merging)
+            /// [declarative merging design](https://github.com/leynos/ortho-config/blob/main/docs/design.md#43-declarative-configuration-merging)
             /// for background and trade-offs.
             ///
             /// # Examples
@@ -329,7 +337,7 @@ mod tests {
                 /// Merge the configuration struct from declarative layers.
                 ///
                 /// See the
-                /// [declarative merging design](https://github.com/leynos/ortho-config/blob/main/docs/design.md#introduce-declarative-configuration-merging)
+                /// [declarative merging design](https://github.com/leynos/ortho-config/blob/main/docs/design.md#43-declarative-configuration-merging)
                 /// for background and trade-offs.
                 ///
                 /// # Examples

@@ -110,12 +110,12 @@ fn merge_value_merges_absent_target_key() {
 
 #[rstest]
 fn merge_layers_append_vectors() {
-    let mut composer = MergeComposer::new();
-    composer.push_defaults(json!({ "values": ["default"] }));
-    composer.push_environment(json!({ "values": ["env"] }));
-    composer.push_cli(json!({ "values": ["cli"] }));
-
-    let config = AppendSample::merge_from_layers(composer.layers()).expect("merge succeeds");
+    let layers = compose_layers(
+        json!({ "values": ["default"] }),
+        json!({ "values": ["env"] }),
+        json!({ "values": ["cli"] }),
+    );
+    let config = AppendSample::merge_from_layers(layers).expect("merge succeeds");
     assert_eq!(
         config.values,
         vec![
