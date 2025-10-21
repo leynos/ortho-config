@@ -86,6 +86,47 @@ pub(crate) fn generate_declarative_state_struct(
     }
 }
 
+fn generate_non_object_guard(config_ident: &syn::Ident) -> TokenStream {
+    quote! {
+        let provenance_label = match provenance {
+            ortho_config::MergeProvenance::Defaults => "defaults",
+            ortho_config::MergeProvenance::File => "file",
+            ortho_config::MergeProvenance::Environment => "environment",
+            ortho_config::MergeProvenance::Cli => "CLI",
+            _ => "unknown",
+        };
+        let value_kind = match other {
+            ortho_config::serde_json::Value::Null => "null",
+            ortho_config::serde_json::Value::Bool(_) => "a boolean",
+            ortho_config::serde_json::Value::Number(_) => "a number",
+            ortho_config::serde_json::Value::String(_) => "a string",
+            ortho_config::serde_json::Value::Array(_) => "an array",
+            ortho_config::serde_json::Value::Object(_) => unreachable!(
+                "objects handled by earlier match arm"
+            ),
+        };
+        let mut message = format!(
+            concat!(
+                "Declarative merge for ",
+                stringify!(#config_ident),
+                " expects JSON objects but the ",
+                "{provenance_label} layer supplied {value_kind}. "
+            ),
+            provenance_label = provenance_label,
+            value_kind = value_kind,
+        );
+        if let Some(path) = path {
+            message.push_str("Source: ");
+            message.push_str(path.as_str());
+            message.push_str(". ");
+        }
+        message.push_str("Non-object layers would overwrite accumulated state.");
+        return Err(std::sync::Arc::new(ortho_config::OrthoError::merge(
+            ortho_config::figment::Error::from(message),
+        )));
+    }
+}
+
 /// Generate the `DeclarativeMerge` trait implementation.
 ///
 /// Produces merge logic that accumulates append field contributions into
@@ -120,16 +161,31 @@ pub(crate) fn generate_declarative_merge_impl(
                     .#state_field_ident
                     .get_or_insert_with(Default::default);
                 acc.extend(incoming);
-                let arr = ortho_config::serde_json::Value::Array(acc.clone());
+            }
+        }
+    });
+    let destructured_fields = unique_fields.iter().map(|(field_ident, _ty)| {
+        let state_field_ident = format_ident!("append_{}", field_ident);
+        quote! { #state_field_ident }
+    });
+    let append_overlays = unique_fields.iter().map(|(field_ident, _ty)| {
+        let state_field_ident = format_ident!("append_{}", field_ident);
+        let field_name = field_ident.to_string();
+        quote! {
+            if let Some(values) = #state_field_ident {
                 let mut object = ortho_config::serde_json::Map::new();
-                object.insert(String::from(#field_name), arr);
+                object.insert(
+                    #field_name.to_owned(),
+                    ortho_config::serde_json::Value::Array(values),
+                );
                 ortho_config::declarative::merge_value(
-                    &mut self.value,
+                    &mut value,
                     ortho_config::serde_json::Value::Object(object),
                 );
             }
         }
     });
+    let non_object_guard = generate_non_object_guard(config_ident);
 
     quote! {
         impl ortho_config::DeclarativeMerge for #state_ident {
@@ -138,26 +194,31 @@ pub(crate) fn generate_declarative_merge_impl(
             fn merge_layer(&mut self, layer: ortho_config::MergeLayer<'_>) -> ortho_config::OrthoResult<()> {
                 use ortho_config::OrthoResultExt as _;
 
-                match layer.into_value() {
-                    ortho_config::serde_json::Value::Object(mut map) => {
-                        #( #append_logic )*
-                        if !map.is_empty() {
-                            ortho_config::declarative::merge_value(
-                                &mut self.value,
-                                ortho_config::serde_json::Value::Object(map),
-                            );
-                        }
-                    }
-                    other => {
-                        ortho_config::declarative::merge_value(&mut self.value, other);
-                    }
+                let provenance = layer.provenance();
+                let path = layer.path().map(|p| p.to_owned());
+                let value = layer.into_value();
+                let mut map = match value {
+                    ortho_config::serde_json::Value::Object(map) => map,
+                    other => { #non_object_guard }
+                };
+                #( #append_logic )*
+                if !map.is_empty() {
+                    ortho_config::declarative::merge_value(
+                        &mut self.value,
+                        ortho_config::serde_json::Value::Object(map),
+                    );
                 }
 
                 Ok(())
             }
 
             fn finish(self) -> ortho_config::OrthoResult<Self::Output> {
-                ortho_config::declarative::from_value(self.value)
+                let #state_ident {
+                    mut value,
+                    #( #destructured_fields, )*
+                } = self;
+                #( #append_overlays )*
+                ortho_config::declarative::from_value(value)
             }
         }
     }
@@ -193,7 +254,7 @@ pub(crate) fn generate_declarative_merge_from_layers_fn(
             ///
             /// # Examples
             ///
-            /// ```rust
+            /// ```rust,ignore
             /// use ortho_config::{MergeComposer, OrthoConfig};
             /// use serde::{Deserialize, Serialize};
             /// use serde_json::json;

@@ -149,3 +149,22 @@ fn merge_from_layers_accepts_file_layers() {
     assert_eq!(config.count, 7);
     assert!(config.flag);
 }
+
+#[rstest]
+fn merge_layers_reject_non_object_values() {
+    let mut composer = MergeComposer::new();
+    composer.push_defaults(json!({ "name": "default", "count": 1, "flag": false }));
+    composer.push_environment(json!(true));
+
+    let error = DeclarativeSample::merge_from_layers(composer.layers())
+        .expect_err("non-object layer is rejected");
+    let message = error.to_string();
+    assert!(
+        message.contains("expects JSON objects"),
+        "unexpected error message: {message}"
+    );
+    assert!(
+        message.contains("environment layer supplied a boolean"),
+        "missing provenance context: {message}"
+    );
+}
