@@ -8,6 +8,27 @@ use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 use std::collections::HashSet;
 
+/// Deduplicate append fields by identifier.
+///
+/// Returns a vector of unique `(ident, type)` pairs, preserving the first
+/// occurrence for each identifier in the input slice.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// use syn::parse_str;
+///
+/// let fields = vec![
+///     (parse_str("items").unwrap(), parse_str("String").unwrap()),
+///     (parse_str("items").unwrap(), parse_str("String").unwrap()),
+///     (parse_str("tags").unwrap(), parse_str("String").unwrap()),
+/// ];
+///
+/// let unique = unique_append_fields(&fields);
+/// assert_eq!(unique.len(), 2);
+/// assert_eq!(unique[0].0.to_string(), "items");
+/// assert_eq!(unique[1].0.to_string(), "tags");
+/// ```
 pub(crate) fn unique_append_fields(
     append_fields: &[(syn::Ident, syn::Type)],
 ) -> Vec<(&syn::Ident, &syn::Type)> {
@@ -21,6 +42,29 @@ pub(crate) fn unique_append_fields(
         .collect()
 }
 
+/// Generate the declarative merge state struct.
+///
+/// Emits a `#[derive(Default)]` struct containing a backing `value` field and
+/// optional append buffers for each unique vector field configured with the
+/// append strategy.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// use proc_macro2::TokenStream;
+/// use quote::quote;
+/// use syn::parse_str;
+///
+/// let state_ident = parse_str("__SampleDeclarativeMergeState").unwrap();
+/// let tokens = generate_declarative_state_struct(&state_ident, &[]);
+/// let expected: TokenStream = quote! {
+///     #[derive(Default)]
+///     struct __SampleDeclarativeMergeState {
+///         value: ortho_config::serde_json::Value,
+///     }
+/// };
+/// assert_eq!(tokens.to_string(), expected.to_string());
+/// ```
 pub(crate) fn generate_declarative_state_struct(
     state_ident: &syn::Ident,
     append_fields: &[(syn::Ident, syn::Type)],
@@ -42,6 +86,23 @@ pub(crate) fn generate_declarative_state_struct(
     }
 }
 
+/// Generate the `DeclarativeMerge` trait implementation.
+///
+/// Produces merge logic that accumulates append field contributions into
+/// per-field JSON buffers and finalises the state into the concrete
+/// configuration type.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// use proc_macro2::TokenStream;
+/// use syn::parse_str;
+///
+/// let state_ident = parse_str("__SampleDeclarativeMergeState").unwrap();
+/// let config_ident = parse_str("SampleConfig").unwrap();
+/// let tokens = generate_declarative_merge_impl(&state_ident, &config_ident, &[]);
+/// assert!(tokens.to_string().contains("impl ortho_config::DeclarativeMerge"));
+/// ```
 pub(crate) fn generate_declarative_merge_impl(
     state_ident: &syn::Ident,
     config_ident: &syn::Ident,
@@ -53,7 +114,7 @@ pub(crate) fn generate_declarative_merge_impl(
         let field_name = field_ident.to_string();
         quote! {
             if let Some(value) = map.remove(#field_name) {
-                let mut incoming: Vec<_> =
+                let incoming: Vec<_> =
                     ortho_config::serde_json::from_value(value).into_ortho()?;
                 let acc = self
                     .#state_field_ident
@@ -102,6 +163,22 @@ pub(crate) fn generate_declarative_merge_impl(
     }
 }
 
+/// Generate the public `merge_from_layers` constructor.
+///
+/// Emits an inherent implementation that constructs the declarative state,
+/// folds each layer into it, and calls `finish` to produce the configuration
+/// value.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// use syn::parse_str;
+///
+/// let state_ident = parse_str("__SampleDeclarativeMergeState").unwrap();
+/// let config_ident = parse_str("SampleConfig").unwrap();
+/// let tokens = generate_declarative_merge_from_layers_fn(&state_ident, &config_ident);
+/// assert!(tokens.to_string().contains("merge_from_layers"));
+/// ```
 pub(crate) fn generate_declarative_merge_from_layers_fn(
     state_ident: &syn::Ident,
     config_ident: &syn::Ident,
@@ -150,6 +227,20 @@ pub(crate) fn generate_declarative_merge_from_layers_fn(
     }
 }
 
+/// Compose the complete declarative merge implementation.
+///
+/// Combines the state struct, `DeclarativeMerge` trait implementation, and
+/// inherent constructor into a single token stream.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// use syn::parse_str;
+///
+/// let config_ident = parse_str("SampleConfig").unwrap();
+/// let tokens = generate_declarative_impl(&config_ident, &[]);
+/// assert!(tokens.to_string().contains("DeclarativeMerge"));
+/// ```
 pub(crate) fn generate_declarative_impl(
     config_ident: &syn::Ident,
     append_fields: &[(syn::Ident, syn::Type)],
