@@ -1,3 +1,8 @@
+//! Integration tests for declarative configuration merging.
+//!
+//! Validates layer composition, precedence, append strategies for Vec fields,
+//! and Option null handling in the declarative merge system.
+
 use camino::Utf8PathBuf;
 use ortho_config::{
     MergeComposer, MergeLayer, MergeProvenance, OrthoConfig, declarative::merge_value,
