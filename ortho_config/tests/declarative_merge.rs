@@ -118,7 +118,7 @@ fn merge_layers_append_vectors() {
             String::from("env"),
             String::from("cli"),
         ],
-        "vectors accumulate in layer composition order"
+        "vectors accumulate in defaults, environment, CLI order"
     );
 }
 
