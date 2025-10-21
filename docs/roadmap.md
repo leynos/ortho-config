@@ -212,7 +212,7 @@ references the relevant design guidance.
     identifier. Success is measured by loading at least the bundled English
     resources without runtime allocation failures. [[Design](design.md)]
 
-  - [ ] Extend the derive macro builder so applications can pass a
+  - [ ] Extend the derive macro builder, so applications can pass a
     `&dyn Localizer`, override help message identifiers, and surface localised
     copy in generated `clap::Command` structures. Behavioural coverage should
     confirm defaults remain functional when localisation is disabled.
