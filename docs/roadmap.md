@@ -196,7 +196,32 @@ references the relevant design guidance.
     - [ ] Cover the derive macro with `rstest`-powered fixture suites
       that enumerate precedence permutations and validate generated code via
       `trybuild` where necessary.
-      [[Rust Testing with rstest Fixtures](rust-testing-with-rstest-fixtures.md)]
+      [[rstest fixtures guide](rust-testing-with-rstest-fixtures.md)]
+
+- [ ] **Introduce Fluent localisation for `clap` integration**
+
+  - [ ] Define a `Localizer` trait and `NoOpLocalizer` implementation that wrap
+    message lookup and expose argument-aware helpers. [[Design](design.md)]
+
+  - [ ] Ship a `FluentLocalizer` that layers consumer bundles over embedded
+    defaults, logging formatting errors and falling back cleanly when lookups
+    fail. [[Design](design.md)]
+
+  - [ ] Embed default `.ftl` catalogues for supported locales and provide a
+    loader that constructs the baseline `FluentBundle` for a requested language
+    identifier. Success is measured by loading at least the bundled English
+    resources without runtime allocation failures. [[Design](design.md)]
+
+  - [ ] Extend the derive macro builder so applications can pass a
+    `&dyn Localizer`, override help message identifiers, and surface localised
+    copy in generated `clap::Command` structures. Behavioural coverage should
+    confirm defaults remain functional when localisation is disabled.
+    [[Design](design.md)]
+
+  - [ ] Provide a custom `clap` error formatter that maps `ErrorKind` variants
+    onto Fluent identifiers and forwards argument context, with unit tests that
+    verify fallback to the stock `clap` message when no translation exists.
+    [[Design](design.md)]
 
   - [ ] Emit a `MergeComposer` builder that discovers file layers and serializes
     CLI and environment input into `MergeLayer` instances without exposing

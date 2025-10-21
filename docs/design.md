@@ -553,7 +553,60 @@ sequenceDiagram
     SC-->>CLI: Err(OrthoError::Gathering)
   end
 
-### 4.12. Dynamic rule tables
+### 4.12. Localisation architecture
+
+`clap` surfaces every string presented to end users, so localisation must be
+first-class. `ortho-config` introduces a `Localizer` trait that abstracts string
+lookup and delegates to a Fluent-powered implementation layered over built-in
+defaults. Consumers can therefore opt into internationalisation without giving
+up a working baseline.
+
+- **Trait surface:** The trait exposes helpers for plain messages via
+  `fn get_message(&self, id: &str) -> Option<String>` and accepts arguments via
+  `fn get_message_with_args(&self, id: &str, args: Option<&HashMap<&str,
+  FluentValue<'_>>>) -> Option<String>`. A `NoOpLocalizer` implements the trait
+  for applications that decline to ship translations.
+
+- **Fluent-backed implementation:** `FluentLocalizer` wraps a default bundle of
+  library strings and an optional consumer bundle. Lookups favour the consumer
+  bundle, falling back to the defaults when a message or attribute is missing.
+  Formatting errors are logged and result in `None` so the caller can fall back
+  to `clap`'s native message.
+
+- **Bundling defaults:** Default message catalogues live under
+  `locales/<lang>/ortho_config.ftl` and are embedded with `include_str!`. A
+  helper constructs the default `FluentBundle` for the selected locale, parsing
+  the static resources once at start-up. Additional locales reuse the same
+  helper by passing a different language identifier.
+
+- **Consumer integration:** Callers either pass a fully built
+  `FluentBundle<&FluentResource>` or supply paths that are loaded into a bundle
+  before building `FluentLocalizer`. The derive macro's builder gains optional
+  setters for locale selection and for registering consumer bundles so
+  applications can perform all localisation wiring alongside existing
+  configuration discovery.
+
+- **Macro participation:** Generated code accepts a `&dyn Localizer` and emits
+  identifiers for every user-facing string. Developers can override the
+  defaults with `#[ortho_config(help_id = "…")]` metadata; otherwise IDs are
+  derived from the struct and field names. The generated `load_from_iter`
+  bootstrapper instantiates the localiser before building the `clap::Command`
+  tree and routes all `about`, `help`, and `long_help` strings through the
+  abstraction.
+
+- **Error formatting:** A dedicated helper maps `clap::ErrorKind` variants to
+  Fluent identifiers, injects any available context as Fluent arguments, and
+  produces a final string through the shared `Localizer`. Applications install
+  this formatter via `Command::error_handler` so validation failures are also
+  localised. When no translation exists the formatter delegates to the standard
+  `clap` display implementation.
+
+This architecture keeps localisation opt-in yet comprehensive. Default
+catalogues guarantee that every message has a fallback, while consumer bundles
+unlock per-application phrasing and additional languages without forking the
+library.
+
+### 4.13. Dynamic rule tables
 
 Configuration structures may include map fields such as
 `BTreeMap<String, RuleCfg>` to support dynamic tables where the keys are not
@@ -563,7 +616,7 @@ arbitrary rule configurations like `[rules.consistent-casing]` without
 additional code. Entries may originate from files, environment variables or CLI
 flags and follow the usual precedence rules.
 
-### 4.13. Ignore pattern lists
+### 4.14. Ignore pattern lists
 
 Vector fields such as `ignore_patterns` can be populated from comma-separated
 environment variables and CLI flags. Values are merged using the `append` merge
@@ -571,7 +624,7 @@ strategy so that patterns from configuration files are extended by environment
 variables and finally CLI arguments. Whitespace is trimmed and duplicates are
 preserved.
 
-### 4.14. Renaming the configuration path flag
+### 4.15. Renaming the configuration path flag
 
 The derive macro exposes the generated `config_path` field, allowing projects
 to rename the hidden `--config-path` flag by defining their own field with a
@@ -625,7 +678,7 @@ to rename the hidden `--config-path` flag by defining their own field with a
    - Update the derive macro to generate the hidden `clap`-aware struct.
    - Integrate the parsed CLI arguments as the highest-precedence `figment`
      layer.
-    - Replace underscores with hyphens for CLI flag generation.
+   - Replace underscores with hyphens for CLI flag generation.
 
 4. **V0.4 (Attribute Handling):**
 
