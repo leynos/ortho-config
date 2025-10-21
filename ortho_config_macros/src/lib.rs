@@ -25,6 +25,7 @@ use derive::build::{
     default_app_name,
 };
 use derive::generate::declarative::generate_declarative_impl;
+use derive::generate::ortho_impl::generate_trait_implementation;
 use derive::load_impl::{
     DiscoveryTokens, LoadImplArgs, LoadImplIdents, LoadImplTokens, build_load_impl,
 };
@@ -48,7 +49,12 @@ pub fn derive_ortho_config(input: TokenStream) -> TokenStream {
         Err(e) => return e.to_compile_error().into(),
     };
 
-    let expanded = generate_trait_implementation(&ident, &components);
+    let core_tokens = generate_trait_implementation(&ident, &components);
+    let declarative_impl = generate_declarative_impl(&ident, &components.append_fields);
+    let expanded = quote! {
+        #core_tokens
+        #declarative_impl
+    };
 
     TokenStream::from(expanded)
 }
@@ -278,151 +284,14 @@ fn build_macro_components(
     })
 }
 
-/// Generate a struct declaration annotated with custom attributes.
-///
-/// Accepts the struct identifier, any pre-rendered field tokens, and
-/// caller-supplied attributes (for example, derives). This helper keeps struct
-/// generation consistent between the CLI and defaults builders while omitting
-/// trailing commas when no fields are present.
-///
-/// # Examples
-///
-/// ```rust,ignore
-/// use quote::quote;
-/// use syn::parse_str;
-///
-/// let ident = parse_str::<syn::Ident>("Example").expect("ident");
-/// let fields = vec![quote! { pub value: u32 }];
-/// let attrs = quote! { #[derive(Default)] };
-/// let tokens = super::generate_struct(&ident, &fields, &attrs);
-/// assert_eq!(
-///     tokens.to_string(),
-///     quote! {
-///         #[derive(Default)]
-///         struct Example {
-///             pub value: u32,
-///         }
-///     }
-///     .to_string(),
-/// );
-///
-/// let empty = parse_str::<syn::Ident>("Empty").expect("ident");
-/// let empty_attrs = quote! {};
-/// let empty_tokens = super::generate_struct(&empty, &[], &empty_attrs);
-/// assert_eq!(
-///     empty_tokens.to_string(),
-///     quote! {
-///         struct Empty {}
-///     }
-///     .to_string(),
-/// );
-/// ```
-fn generate_struct(
-    ident: &syn::Ident,
-    fields: &[proc_macro2::TokenStream],
-    attributes: &proc_macro2::TokenStream,
-) -> proc_macro2::TokenStream {
-    if fields.is_empty() {
-        quote! {
-            #attributes
-            struct #ident {}
-        }
-    } else {
-        quote! {
-            #attributes
-            struct #ident {
-                #( #fields, )*
-            }
-        }
-    }
-}
-
-/// Generate the hidden `clap::Parser` struct.
-fn generate_cli_struct(components: &MacroComponents) -> proc_macro2::TokenStream {
-    let MacroComponents {
-        cli_ident,
-        cli_struct_fields,
-        ..
-    } = components;
-    generate_struct(
-        cli_ident,
-        cli_struct_fields,
-        &quote! { #[derive(clap::Parser, serde::Serialize, Default)] },
-    )
-}
-
-/// Generate the struct used to store default values.
-fn generate_defaults_struct(components: &MacroComponents) -> proc_macro2::TokenStream {
-    let MacroComponents {
-        defaults_ident,
-        default_struct_fields,
-        ..
-    } = components;
-    generate_struct(
-        defaults_ident,
-        default_struct_fields,
-        &quote! { #[derive(serde::Serialize)] },
-    )
-}
-
-/// Generate the `OrthoConfig` trait implementation.
-fn generate_ortho_impl(
-    config_ident: &syn::Ident,
-    components: &MacroComponents,
-) -> proc_macro2::TokenStream {
-    let MacroComponents {
-        cli_ident,
-        override_struct_ts,
-        load_impl,
-        prefix_fn,
-        ..
-    } = components;
-    let prefix_fn = prefix_fn.clone().unwrap_or_else(|| quote! {});
-    quote! {
-        #override_struct_ts
-
-        #load_impl
-
-        impl ortho_config::OrthoConfig for #config_ident {
-            fn load_from_iter<I, T>(iter: I) -> ortho_config::OrthoResult<Self>
-            where
-                I: IntoIterator<Item = T>,
-                T: Into<std::ffi::OsString> + Clone,
-            {
-                #cli_ident::load_from_iter(iter)
-            }
-
-            #prefix_fn
-        }
-
-        const _: () = {
-            fn _assert_deser<T: serde::de::DeserializeOwned>() {}
-            let _ = _assert_deser::<#config_ident>;
-        };
-    }
-}
-
-fn generate_trait_implementation(
-    config_ident: &syn::Ident,
-    components: &MacroComponents,
-) -> proc_macro2::TokenStream {
-    let cli_struct = generate_cli_struct(components);
-    let defaults_struct = generate_defaults_struct(components);
-    let ortho_impl = generate_ortho_impl(config_ident, components);
-    let declarative_impl = generate_declarative_impl(config_ident, &components.append_fields);
-    quote! {
-        #cli_struct
-        #defaults_struct
-        #ortho_impl
-        #declarative_impl
-    }
-}
-
 #[cfg(test)]
 mod tests {
     //! Unit tests for the procedural macro token generators.
 
-    use super::{MacroComponents, generate_cli_struct, generate_defaults_struct, generate_struct};
+    use super::MacroComponents;
+    use crate::derive::generate::structs::{
+        generate_cli_struct, generate_defaults_struct, generate_struct,
+    };
     use proc_macro2::TokenStream as TokenStream2;
     use quote::quote;
     use rstest::rstest;
