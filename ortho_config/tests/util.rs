@@ -3,19 +3,13 @@
 //! These helpers run setup code inside a jailed environment before
 //! loading a subcommand configuration. They reduce boilerplate in
 //! tests by encapsulating the jail creation and configuration loading.
-#![allow(
-    unfulfilled_lint_expectations,
-    reason = "clippy::expect_used is denied globally; tests may not hit those branches"
-)]
-#![expect(
-    clippy::expect_used,
-    reason = "tests panic to surface configuration mistakes"
-)]
+
+use std::sync::Arc;
 
 use clap::CommandFactory;
 use ortho_config::subcommand::Prefix;
 use ortho_config::{
-    OrthoConfig, OrthoResult, OrthoResultExt, ResultIntoFigment, SubcmdConfigMerge,
+    OrthoConfig, OrthoError, OrthoResult, OrthoResultExt, ResultIntoFigment, SubcmdConfigMerge,
     load_and_merge_subcommand,
 };
 use serde::de::DeserializeOwned;
@@ -35,7 +29,12 @@ where
         Ok(())
     })
     .into_ortho()?;
-    Ok(result.into_inner().expect("loader executed"))
+    result.into_inner().ok_or_else(|| {
+        Arc::new(OrthoError::Validation {
+            key: "subcommand_loader".into(),
+            message: "loader did not run".into(),
+        })
+    })
 }
 
 /// Runs `setup` in a jailed environment, then loads defaults for the `test`

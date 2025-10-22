@@ -1,13 +1,5 @@
 //! Tests for the append merge strategy on vectors.
-#![allow(
-    unfulfilled_lint_expectations,
-    reason = "clippy::expect_used is denied globally; tests may not hit those branches"
-)]
-#![expect(
-    clippy::expect_used,
-    reason = "tests panic to surface configuration mistakes"
-)]
-
+use anyhow::{Result, anyhow, ensure};
 use ortho_config::OrthoConfig;
 use rstest::rstest;
 use serde::{Deserialize, Serialize};
@@ -30,34 +22,68 @@ struct EmptyVec {
     values: Vec<String>,
 }
 
+fn with_jail<F>(f: F) -> Result<()>
+where
+    F: FnOnce(&mut figment::Jail) -> Result<()>,
+{
+    figment::Jail::try_with(|j| f(j).map_err(|err| figment::Error::from(err.to_string())))
+        .map_err(|err| anyhow!(err))
+}
+
 #[rstest]
-fn append_merges_all_sources() {
-    figment::Jail::expect_with(|j| {
+fn append_merges_all_sources() -> Result<()> {
+    with_jail(|j| {
         j.create_file(".config.toml", "values = [\"file\"]")?;
         j.set_env("VALUES", "[\"env\"]");
         let cfg = VecConfig::load_from_iter(["prog", "--values", "cli1", "--values", "cli2"])
-            .expect("load");
-        assert_eq!(cfg.values, vec!["file", "env", "cli1", "cli2"]);
+            .map_err(|err| anyhow!(err))?;
+        let expected = vec!["file", "env", "cli1", "cli2"]
+            .into_iter()
+            .map(String::from)
+            .collect::<Vec<_>>();
+        ensure!(
+            cfg.values == expected,
+            "expected {:?}, got {:?}",
+            expected,
+            cfg.values
+        );
         Ok(())
-    });
+    })?;
+    Ok(())
 }
 
 #[rstest]
-fn append_empty_sources_yields_empty() {
-    figment::Jail::expect_with(|_| {
-        let cfg = EmptyVec::load_from_iter(["prog"]).expect("load");
-        assert!(cfg.values.is_empty());
+fn append_empty_sources_yields_empty() -> Result<()> {
+    with_jail(|_| {
+        let cfg = EmptyVec::load_from_iter(["prog"]).map_err(|err| anyhow!(err))?;
+        ensure!(
+            cfg.values.is_empty(),
+            "expected empty values, got {:?}",
+            cfg.values
+        );
         Ok(())
-    });
+    })?;
+    Ok(())
 }
 
 #[rstest]
-fn append_includes_defaults() {
-    figment::Jail::expect_with(|j| {
+fn append_includes_defaults() -> Result<()> {
+    with_jail(|j| {
         j.create_file(".config.toml", "values = [\"file\"]")?;
         j.set_env("VALUES", "[\"env\"]");
-        let cfg = DefaultVec::load_from_iter(["prog", "--values", "cli"]).expect("load");
-        assert_eq!(cfg.values, vec!["def", "file", "env", "cli"]);
+        let cfg =
+            DefaultVec::load_from_iter(["prog", "--values", "cli"]).map_err(|err| anyhow!(err))?;
+        let expected = vec!["def", "file", "env", "cli"]
+            .into_iter()
+            .map(String::from)
+            .collect::<Vec<_>>();
+        ensure!(
+            cfg.values == expected,
+            "expected {:?}, got {:?}",
+            expected,
+            cfg.values
+        );
         Ok(())
-    });
+    })?;
+    Ok(())
 }
