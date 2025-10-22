@@ -3,6 +3,10 @@
 //! These helpers run setup code inside a jailed environment before
 //! loading a subcommand configuration. They reduce boilerplate in
 //! tests by encapsulating the jail creation and configuration loading.
+#![allow(
+    unfulfilled_lint_expectations,
+    reason = "clippy::expect_used is denied globally; tests may not hit those branches"
+)]
 #![expect(
     clippy::expect_used,
     reason = "tests panic to surface configuration mistakes"

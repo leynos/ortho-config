@@ -5,6 +5,10 @@
 //! variable names, and file paths. Tests cover loading via CLI flags,
 //! environment variables, `XDG_CONFIG_HOME`, dotfile fallback, defaults, and
 //! error handling for missing or malformed configurations.
+#![allow(
+    unfulfilled_lint_expectations,
+    reason = "clippy::expect_used is denied globally; tests may not hit those branches"
+)]
 #![expect(
     clippy::expect_used,
     reason = "tests panic to surface configuration mistakes"

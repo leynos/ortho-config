@@ -2,6 +2,10 @@
 //!
 //! Validates layer composition, precedence, append strategies for Vec fields,
 //! and Option null handling in the declarative merge system.
+#![allow(
+    unfulfilled_lint_expectations,
+    reason = "clippy::expect_used is denied globally; tests may not hit those branches"
+)]
 #![expect(
     clippy::expect_used,
     reason = "tests panic to surface configuration mistakes"

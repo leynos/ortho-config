@@ -3,6 +3,10 @@
 //! Verifies that declarative merge helpers emit deduplicated state storage,
 //! trait implementations, and constructors that honour append semantics.
 
+#![allow(
+    unfulfilled_lint_expectations,
+    reason = "clippy::expect_used is denied globally; tests may not hit those branches"
+)]
 #![expect(
     clippy::expect_used,
     reason = "tests panic when parsing fixture identifiers fails"

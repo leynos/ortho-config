@@ -271,50 +271,67 @@ mod tests {
     use super::OrthoError;
     use std::sync::Arc;
 
-    fn run_aggregate_tests<F>(name: &str, f: F)
+    fn run_aggregate_tests<F>(name: &str, runner: F)
     where
         F: Fn(Vec<Arc<OrthoError>>) -> OrthoError,
     {
-        // single-owned
+        assert_single_owned(name, &runner);
+        assert_single_shared(name, &runner);
+        assert_multi_entry(name, &runner);
+    }
+
+    fn assert_single_owned<F>(name: &str, runner: &F)
+    where
+        F: Fn(Vec<Arc<OrthoError>>) -> OrthoError,
+    {
         let err = Arc::new(OrthoError::Validation {
             key: "k".into(),
             message: "m".into(),
         });
-        let single_owned = f(vec![err]);
-        match single_owned {
-            OrthoError::Validation { .. } => {}
-            other => panic!("{name}: expected Validation, got {other:?}"),
-        }
+        let outcome = runner(vec![err]);
+        assert!(
+            matches!(outcome, OrthoError::Validation { .. }),
+            "{name}: expected Validation, got {outcome:?}"
+        );
+    }
 
-        // single-shared
+    fn assert_single_shared<F>(name: &str, runner: &F)
+    where
+        F: Fn(Vec<Arc<OrthoError>>) -> OrthoError,
+    {
         let shared = OrthoError::gathering_arc(figment::Error::from("boom"));
-        let shared_result = f(vec![Arc::clone(&shared)]);
-        if let OrthoError::Aggregate(aggregate) = shared_result {
-            assert_eq!(aggregate.len(), 1);
-        } else {
-            panic!("{name}: expected Aggregate");
-        }
-
-        // multi
-        let e1 = OrthoError::gathering_arc(figment::Error::from("one"));
-        let e2 = OrthoError::gathering_arc(figment::Error::from("two"));
-        let merged_result = f(vec![e1, e2]);
-        if let OrthoError::Aggregate(aggregate) = merged_result {
-            let aggregate_ref = aggregate.as_ref();
-            let iter_items: Vec<_> = aggregate_ref.iter().collect();
-            assert_eq!(iter_items.len(), 2);
-            let mut borrowed_items = Vec::new();
-            for e in aggregate_ref {
-                borrowed_items.push(e);
+        let outcome = runner(vec![Arc::clone(&shared)]);
+        match outcome {
+            OrthoError::Aggregate(aggregate) => {
+                assert_eq!(
+                    aggregate.len(),
+                    1,
+                    "{name}: expected single aggregate entry"
+                );
             }
-            assert_eq!(borrowed_items.len(), 2);
-            let display = aggregate_ref.to_string();
-            let owned_items: Vec<_> = aggregate.into_iter().collect();
-            assert_eq!(owned_items.len(), 2);
-            assert!(display.starts_with("1:"));
-            assert!(display.contains("\n2:"));
-        } else {
-            panic!("{name}: expected Aggregate");
+            other => panic!("{name}: expected Aggregate, got {other:?}"),
+        }
+    }
+
+    fn assert_multi_entry<F>(name: &str, runner: &F)
+    where
+        F: Fn(Vec<Arc<OrthoError>>) -> OrthoError,
+    {
+        let first = OrthoError::gathering_arc(figment::Error::from("one"));
+        let second = OrthoError::gathering_arc(figment::Error::from("two"));
+        match runner(vec![first, second]) {
+            OrthoError::Aggregate(aggregate) => {
+                let errors = aggregate.as_ref();
+                assert_eq!(errors.len(), 2, "{name}: expected two aggregate entries");
+                let borrowed: Vec<_> = errors.iter().collect();
+                assert_eq!(borrowed.len(), 2, "{name}: borrowed iteration failed");
+                let display = errors.to_string();
+                let owned: Vec<_> = aggregate.into_iter().collect();
+                assert_eq!(owned.len(), 2, "{name}: owned iteration failed");
+                assert!(display.starts_with("1:"), "{name}: first entry missing");
+                assert!(display.contains("\n2:"), "{name}: second entry missing");
+            }
+            other => panic!("{name}: expected Aggregate, got {other:?}"),
         }
     }
 
