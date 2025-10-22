@@ -4,6 +4,10 @@
     clippy::expect_used,
     reason = "tests panic to surface configuration mistakes"
 )]
+#![expect(
+    clippy::shadow_reuse,
+    reason = "Cucumber step macros rebind step arguments during code generation"
+)]
 
 use crate::{SampleConfigError, World};
 use camino::Utf8PathBuf;
@@ -42,8 +46,8 @@ pub async fn run_without_args(world: &mut World) {
 // Step captures arrive as owned `String` values from cucumber; forward them to
 // the world helper for tokenisation while retaining ownership requirements of
 // the async state machine.
-pub async fn run_with_args(world: &mut World, args: String) {
-    run_with_args_inner(world, args.as_str()).await;
+pub async fn run_with_args(world: &mut World, arguments: String) {
+    run_with_args_inner(world, arguments.as_str()).await;
 }
 
 #[then("the command succeeds")]
@@ -63,8 +67,8 @@ pub fn command_fails(world: &mut World) {
 )]
 // Step captures arrive as owned `String` values from cucumber; forward them
 // to the world helper so assertions can consume the owned capture directly.
-pub fn stdout_contains(world: &mut World, expected: String) {
-    world.assert_stdout_contains(&expected);
+pub fn stdout_contains(world: &mut World, expected_stdout: String) {
+    world.assert_stdout_contains(&expected_stdout);
 }
 
 #[then(expr = "stderr contains {string}")]
@@ -74,8 +78,8 @@ pub fn stdout_contains(world: &mut World, expected: String) {
 )]
 // Step captures arrive as owned `String` values from cucumber; forward them
 // to the world helper so assertions can consume the owned capture directly.
-pub fn stderr_contains(world: &mut World, expected: String) {
-    world.assert_stderr_contains(&expected);
+pub fn stderr_contains(world: &mut World, expected_stderr: String) {
+    world.assert_stderr_contains(&expected_stderr);
 }
 
 #[given(expr = "the environment contains {string} = {string}")]
@@ -83,8 +87,8 @@ pub fn stderr_contains(world: &mut World, expected: String) {
     clippy::needless_pass_by_value,
     reason = "Cucumber step signature requires owned capture values"
 )]
-pub fn environment_contains(world: &mut World, key: String, value: String) {
-    world.set_env(&key, &value);
+pub fn environment_contains(world: &mut World, env_key: String, env_value: String) {
+    world.set_env(&env_key, &env_value);
 }
 
 #[given(expr = "the environment does not contain {string}")]
@@ -92,8 +96,8 @@ pub fn environment_contains(world: &mut World, key: String, value: String) {
     clippy::needless_pass_by_value,
     reason = "Cucumber step signature requires owned capture values"
 )]
-pub fn environment_does_not_contain(world: &mut World, key: String) {
-    world.remove_env(&key);
+pub fn environment_does_not_contain(world: &mut World, env_key: String) {
+    world.remove_env(&env_key);
 }
 
 /// Writes docstring contents to the default configuration file.

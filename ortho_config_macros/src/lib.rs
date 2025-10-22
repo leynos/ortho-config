@@ -37,9 +37,9 @@ use derive::parse::parse_input;
 ///
 /// Returns a compile-time error if invoked on a struct that contains unnamed fields.
 #[proc_macro_derive(OrthoConfig, attributes(ortho_config))]
-pub fn derive_ortho_config(input: TokenStream) -> TokenStream {
-    let input = parse_macro_input!(input as DeriveInput);
-    let (ident, fields, struct_attrs, field_attrs) = match parse_input(&input) {
+pub fn derive_ortho_config(input_tokens: TokenStream) -> TokenStream {
+    let derive_input = parse_macro_input!(input_tokens as DeriveInput);
+    let (ident, fields, struct_attrs, field_attrs) = match parse_input(&derive_input) {
         Ok(v) => v,
         Err(e) => return e.to_compile_error().into(),
     };

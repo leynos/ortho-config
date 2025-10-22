@@ -3,7 +3,6 @@
     clippy::expect_used,
     reason = "tests panic to surface configuration mistakes"
 )]
-
 use ortho_config::{OrthoConfig, OrthoError};
 use rstest::rstest;
 use serde::{Deserialize, Serialize};
@@ -102,7 +101,7 @@ fn missing_base_file_errors(#[case] is_abs: bool) {
         let extends_value = if is_abs {
             expected_base.display().to_string()
         } else {
-            "missing.toml".to_string()
+            String::from("missing.toml")
         };
         j.create_file(".config.toml", &format!("extends = {extends_value:?}"))?;
         let err = ExtendsCfg::load_from_iter(["prog"]).expect_err("missing base file must error");

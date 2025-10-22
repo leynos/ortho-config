@@ -24,7 +24,7 @@ pub(crate) fn generate_ortho_impl(
         prefix_fn,
         ..
     } = components;
-    let prefix_fn = prefix_fn.clone().unwrap_or_else(|| quote! {});
+    let prefix_tokens = prefix_fn.clone().unwrap_or_else(|| quote! {});
     quote! {
         #override_struct_ts
 
@@ -39,7 +39,7 @@ pub(crate) fn generate_ortho_impl(
                 #cli_ident::load_from_iter(iter)
             }
 
-            #prefix_fn
+            #prefix_tokens
         }
 
         const _: () = {

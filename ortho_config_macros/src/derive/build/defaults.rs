@@ -44,11 +44,10 @@ pub(crate) fn build_default_struct_init(
                 )
                 .to_compile_error();
             };
-            if let Some(expr) = &attr.default {
-                quote! { #name: Some(#expr) }
-            } else {
-                quote! { #name: None }
-            }
+            attr.default.as_ref().map_or_else(
+                || quote! { #name: None },
+                |expr| quote! { #name: Some(#expr) },
+            )
         })
         .collect()
 }

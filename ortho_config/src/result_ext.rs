@@ -89,7 +89,7 @@ impl IntoFigmentError for Arc<OrthoError> {
         // Prefer preserving structured Figment details when we can take
         // ownership of the error. This retains kind, metadata and sources for
         // Merge/Gathering variants via `From<OrthoError> for figment::Error`.
-        match Arc::try_unwrap(self) {
+        match Self::try_unwrap(self) {
             Ok(err) => err.into(),
             Err(shared) => clone_figment(&shared),
         }

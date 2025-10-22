@@ -114,14 +114,14 @@ impl ConfigDiscovery {
         I::Item: Into<PathBuf>,
     {
         for base in bases {
-            let base = base.into();
+            let base_path: PathBuf = base.into();
             let nested = if self.app_name.is_empty() {
-                base.clone()
+                base_path.clone()
             } else {
-                base.join(&self.app_name)
+                base_path.join(&self.app_name)
             };
             Self::push_unique(paths, seen, nested.join(&self.config_file_name));
-            Self::push_unique(paths, seen, base.join(&self.dotfile_name));
+            Self::push_unique(paths, seen, base_path.join(&self.dotfile_name));
             #[cfg(any(feature = "json5", feature = "yaml"))]
             if let Some(stem) = Path::new(&self.config_file_name)
                 .file_stem()
@@ -245,8 +245,8 @@ impl ConfigDiscovery {
     /// discovery diagnostics; if no candidates exist, returns `Ok(None)`.
     pub fn load_first(&self) -> OrthoResult<Option<figment::Figment>> {
         let (figment, errors) = self.load_first_with_errors();
-        if let Some(figment) = figment {
-            return Ok(Some(figment));
+        if let Some(found_figment) = figment {
+            return Ok(Some(found_figment));
         }
         if let Some(err) = OrthoError::try_aggregate(errors) {
             return Err(Arc::new(err));

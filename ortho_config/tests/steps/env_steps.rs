@@ -6,6 +6,10 @@
     clippy::expect_used,
     reason = "tests panic to surface configuration mistakes"
 )]
+#![expect(
+    clippy::shadow_reuse,
+    reason = "Cucumber step macros rebind step arguments during code generation"
+)]
 
 use crate::{RulesConfig, World};
 use cucumber::{given, then, when};
@@ -37,6 +41,6 @@ fn load_config(world: &mut World) {
 /// Verifies that the parsed rule list matches the expected string.
 fn check_rules(world: &mut World, expected: String) {
     let cfg = world.result.take().expect("result").expect("ok");
-    let want: Vec<String> = expected.split(',').map(str::to_string).collect();
+    let want: Vec<String> = expected.split(',').map(str::to_owned).collect();
     assert_eq!(cfg.rules, want);
 }

@@ -35,13 +35,13 @@ struct OptionalSample {
 fn compose_layers(
     defaults: serde_json::Value,
     environment: serde_json::Value,
-    cli: Option<serde_json::Value>,
+    cli_layer: Option<serde_json::Value>,
 ) -> Vec<MergeLayer<'static>> {
     let mut composer = MergeComposer::new();
     composer.push_defaults(defaults);
     composer.push_environment(environment);
-    if let Some(cli) = cli {
-        composer.push_cli(cli);
+    if let Some(layer) = cli_layer {
+        composer.push_cli(layer);
     }
     composer.layers()
 }
@@ -94,12 +94,15 @@ fn merge_value_merges_scalars() {
 }
 
 #[rstest]
-fn merge_value_merges_null_values() {
+fn merge_value_nullifies_fields() {
     let mut target = json!({ "num": 1, "str": "foo", "bool": true });
     let layer = json!({ "num": null, "str": null, "bool": null });
     merge_value(&mut target, layer);
     assert_eq!(target, json!({ "num": null, "str": null, "bool": null }));
+}
 
+#[rstest]
+fn merge_value_overwrites_null_fields() {
     let mut target = json!({ "num": null, "str": null, "bool": null });
     let layer = json!({ "num": 99, "str": "baz", "bool": false });
     merge_value(&mut target, layer);

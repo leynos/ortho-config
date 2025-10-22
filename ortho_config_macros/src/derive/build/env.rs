@@ -10,11 +10,10 @@ use syn::Ident;
 use crate::derive::parse::StructAttrs;
 
 pub(crate) fn build_env_provider(struct_attrs: &StructAttrs) -> proc_macro2::TokenStream {
-    if let Some(prefix) = &struct_attrs.prefix {
-        quote! { ortho_config::CsvEnv::prefixed(#prefix) }
-    } else {
-        quote! { ortho_config::CsvEnv::raw() }
-    }
+    struct_attrs.prefix.as_ref().map_or_else(
+        || quote! { ortho_config::CsvEnv::raw() },
+        |prefix| quote! { ortho_config::CsvEnv::prefixed(#prefix) },
+    )
 }
 
 pub(crate) fn compute_config_env_var(struct_attrs: &StructAttrs) -> String {
@@ -30,12 +29,13 @@ pub(crate) fn build_config_env_var(struct_attrs: &StructAttrs) -> proc_macro2::T
 }
 
 pub(crate) fn compute_dotfile_name(struct_attrs: &StructAttrs) -> String {
-    if let Some(prefix) = &struct_attrs.prefix {
-        let base = prefix.trim_end_matches('_').to_ascii_lowercase();
-        format!(".{base}.toml")
-    } else {
-        String::from(".config.toml")
-    }
+    struct_attrs.prefix.as_ref().map_or_else(
+        || String::from(".config.toml"),
+        |prefix| {
+            let base = prefix.trim_end_matches('_').to_ascii_lowercase();
+            format!(".{base}.toml")
+        },
+    )
 }
 
 pub(crate) fn default_app_name(struct_attrs: &StructAttrs, ident: &Ident) -> String {

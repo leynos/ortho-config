@@ -24,11 +24,7 @@ pub(crate) struct CliStructTokens {
 }
 
 pub(super) fn option_type_tokens(ty: &Type) -> proc_macro2::TokenStream {
-    if let Some(inner) = option_inner(ty) {
-        quote! { Option<#inner> }
-    } else {
-        quote! { Option<#ty> }
-    }
+    option_inner(ty).map_or_else(|| quote! { Option<#ty> }, |inner| quote! { Option<#inner> })
 }
 
 fn is_bool_type(ty: &Type) -> bool {

@@ -3,6 +3,10 @@
     clippy::expect_used,
     reason = "tests panic to surface configuration mistakes"
 )]
+#![expect(
+    clippy::shadow_reuse,
+    reason = "Cucumber step macros rebind step arguments during code generation"
+)]
 
 use crate::{FlatArgs, World};
 use clap::Parser;
@@ -75,9 +79,9 @@ fn load_with_cli(world: &mut World, cli: String) {
     clippy::needless_pass_by_value,
     reason = "Cucumber step signature requires owned String"
 )]
-fn check_flattened(world: &mut World, expected: String) {
+fn check_flattened(world: &mut World, expected_value: String) {
     let cfg = world.flat_result.take().expect("result").expect("ok");
-    assert_eq!(cfg.nested.value.as_deref(), Some(expected.as_str()));
+    assert_eq!(cfg.nested.value.as_deref(), Some(expected_value.as_str()));
 }
 
 #[then("flattening fails with a merge error")]

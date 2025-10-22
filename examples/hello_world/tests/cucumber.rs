@@ -143,7 +143,7 @@ fn ensure_simple_filename(name: &str) -> Result<(), SampleConfigError> {
         Ok(())
     } else {
         Err(SampleConfigError::InvalidName {
-            name: name.to_string(),
+            name: name.to_owned(),
         })
     }
 }
@@ -225,13 +225,13 @@ impl World {
     where
         S: AsRef<str>,
     {
-        let name = name.as_ref();
+        let name_ref = name.as_ref();
         assert!(
-            is_simple_filename(name),
-            "custom config filename must not contain path separators: {name}"
+            is_simple_filename(name_ref),
+            "custom config filename must not contain path separators: {name_ref}"
         );
         let dir = self.scenario_dir();
-        dir.write(name, contents)
+        dir.write(name_ref, contents)
             .expect("write hello_world named config");
     }
 
@@ -273,8 +273,8 @@ impl World {
     where
         S: AsRef<str>,
     {
-        let sample = sample.as_ref();
-        ensure_simple_filename(sample)?;
+        let sample_name = sample.as_ref();
+        ensure_simple_filename(sample_name)?;
         let manifest_dir = Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         let config_dir = manifest_dir.join("config");
         let source = cap_std::fs::Dir::open_ambient_dir(
@@ -282,13 +282,13 @@ impl World {
             cap_std::ambient_authority(),
         )
         .map_err(|source| SampleConfigError::OpenConfigDir {
-            path: config_dir.to_string(),
+            path: config_dir.as_str().to_owned(),
             source,
         })?;
         let mut visited = BTreeSet::new();
         let params = ConfigCopyParams {
             source: &source,
-            source_name: sample,
+            source_name: sample_name,
             target_name: CONFIG_FILE,
         };
         self.copy_sample_config(params, &mut visited)?;
@@ -302,7 +302,7 @@ impl World {
     ) -> Result<(), SampleConfigError> {
         ensure_simple_filename(params.source_name)?;
         ensure_simple_filename(params.target_name)?;
-        if !visited.insert(params.source_name.to_string()) {
+        if !visited.insert(params.source_name.to_owned()) {
             return Ok(());
         }
         let contents = params
@@ -311,12 +311,12 @@ impl World {
             .map_err(|source| {
                 if source.kind() == std::io::ErrorKind::NotFound {
                     SampleConfigError::OpenSample {
-                        name: params.source_name.to_string(),
+                        name: params.source_name.to_owned(),
                         source,
                     }
                 } else {
                     SampleConfigError::ReadSample {
-                        name: params.source_name.to_string(),
+                        name: params.source_name.to_owned(),
                         source,
                     }
                 }
@@ -325,7 +325,7 @@ impl World {
         scenario
             .write(params.target_name, &contents)
             .map_err(|source| SampleConfigError::WriteSample {
-                name: params.target_name.to_string(),
+                name: params.target_name.to_owned(),
                 source,
             })?;
         for base in parse_extends(&contents) {
@@ -371,17 +371,14 @@ impl World {
     /// Panics if argument tokenisation fails or if the underlying command
     /// fails to execute successfully.
     pub async fn run_hello(&mut self, args: Option<String>) {
-        let parsed = match args {
-            Some(raw) => {
-                let trimmed = raw.trim();
-                if trimmed.is_empty() {
-                    Vec::new()
-                } else {
-                    split(trimmed).expect("parse CLI arguments")
-                }
+        let parsed = args.map_or_else(Vec::new, |raw| {
+            let trimmed = raw.trim();
+            if trimmed.is_empty() {
+                Vec::new()
+            } else {
+                split(trimmed).expect("parse CLI arguments")
             }
-            None => Vec::new(),
-        };
+        });
         self.run_example(parsed).await;
     }
 
@@ -415,8 +412,11 @@ impl World {
                 Ok(Ok(status)) => status,
                 Ok(Err(err)) => panic!("wait for hello_world binary: {err}"),
                 Err(_) => {
-                    let _ = child.kill().await;
-                    let _ = child.wait().await;
+                    child.kill().await.expect("kill stalled hello_world binary");
+                    child
+                        .wait()
+                        .await
+                        .expect("wait for killed hello_world binary");
                     panic!("hello_world binary timed out");
                 }
             }
@@ -447,7 +447,7 @@ impl World {
             stderr,
         };
         let mut result = CommandResult::from(output);
-        result.binary = binary.to_string();
+        binary.as_str().clone_into(&mut result.binary);
         result.args = args;
         self.result = Some(result);
     }
@@ -501,11 +501,11 @@ impl World {
     where
         S: AsRef<str>,
     {
-        let expected = expected.as_ref();
+        let expected_text = expected.as_ref();
         let result = self.result();
         assert!(
-            result.stdout.contains(expected),
-            "stdout did not contain {expected:?}; status: {:?}; cmd: {} {:?}; stdout was: {:?}",
+            result.stdout.contains(expected_text),
+            "stdout did not contain {expected_text:?}; status: {:?}; cmd: {} {:?}; stdout was: {:?}",
             result.status,
             result.binary,
             result.args,
@@ -522,11 +522,11 @@ impl World {
     where
         S: AsRef<str>,
     {
-        let expected = expected.as_ref();
+        let expected_text = expected.as_ref();
         let result = self.result();
         assert!(
-            result.stderr.contains(expected),
-            "stderr did not contain {expected:?}; status: {:?}; cmd: {} {:?}; stderr was: {:?}",
+            result.stderr.contains(expected_text),
+            "stderr did not contain {expected_text:?}; status: {:?}; cmd: {} {:?}; stderr was: {:?}",
             result.status,
             result.binary,
             result.args,
@@ -553,7 +553,7 @@ fn extract_single_path(path: &str) -> Vec<String> {
     if trimmed.is_empty() {
         Vec::new()
     } else {
-        vec![trimmed.to_string()]
+        vec![trimmed.to_owned()]
     }
 }
 
@@ -568,7 +568,7 @@ fn extract_string_value(value: &toml::Value) -> Option<String> {
             if trimmed.is_empty() {
                 None
             } else {
-                Some(trimmed.to_string())
+                Some(trimmed.to_owned())
             }
         }
         _ => None,
@@ -702,7 +702,7 @@ mod tests {
         let visited: Vec<_> = visited.into_iter().collect();
         assert_eq!(
             visited,
-            vec!["baseline.toml".to_string(), "overrides.toml".to_string()]
+            vec!["baseline.toml".to_owned(), "overrides.toml".to_owned()]
         );
     }
 }

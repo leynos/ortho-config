@@ -225,20 +225,19 @@ mod tests {
     #[cfg(feature = "yaml")]
     #[case(&["yaml", "yml"], &["config.yaml", "config.yml"])]
     fn push_xdg_candidates_finds_files(#[case] exts: &[&str], #[case] files: &[&str]) {
-        let (dir, _guard) = init_xdg_home();
-        let dir = dir.path();
-        for entry in fs::read_dir(dir).expect("read dir") {
-            let entry = entry.expect("entry");
-            let path = entry.path();
+        let (xdg_tempdir, _guard) = init_xdg_home();
+        let dir_path = xdg_tempdir.path();
+        for dir_entry in fs::read_dir(dir_path).expect("read dir") {
+            let path = dir_entry.expect("entry").path();
             if path.is_dir() {
-                let _ = fs::remove_dir_all(&path);
+                fs::remove_dir_all(&path).expect("remove directory");
             } else {
-                let _ = fs::remove_file(&path);
+                fs::remove_file(&path).expect("remove file");
             }
         }
 
         for file in files {
-            fs::write(dir.join(file), "").expect("create file");
+            fs::write(dir_path.join(file), "").expect("create file");
         }
 
         let dirs = BaseDirectories::new();
@@ -247,7 +246,7 @@ mod tests {
 
         assert_eq!(paths.len(), files.len());
         for (p, f) in paths.iter().zip(files.iter()) {
-            assert_eq!(p, &dir.join(f));
+            assert_eq!(p, &dir_path.join(f));
         }
     }
 
@@ -285,11 +284,11 @@ mod tests {
         for ext in EXT_GROUPS.iter().flat_map(|g| *g) {
             expected_files.push(format!("{dotted_prefix}.{ext}"));
         }
-        expected_files.push("config.toml".to_string());
+        expected_files.push("config.toml".to_owned());
         #[cfg(feature = "yaml")]
         {
-            expected_files.push("config.yaml".to_string());
-            expected_files.push("config.yml".to_string());
+            expected_files.push("config.yaml".to_owned());
+            expected_files.push("config.yml".to_owned());
         }
         for ext in EXT_GROUPS.iter().flat_map(|g| *g) {
             expected_files.push(format!("{dotted_prefix}.{ext}"));

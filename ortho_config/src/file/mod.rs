@@ -276,12 +276,12 @@ fn resolve_base_path(current_path: &Path, base: PathBuf) -> OrthoResult<PathBuf>
             "Cannot determine parent directory for config file when resolving 'extends'",
         )
     })?;
-    let base = if base.is_absolute() {
+    let resolved_base = if base.is_absolute() {
         base
     } else {
         canonicalise(parent)?.join(base)
     };
-    match canonicalise(&base) {
+    match canonicalise(&resolved_base) {
         Ok(path) => Ok(path),
         Err(err) => {
             let OrthoError::File { source, .. } = err.as_ref() else {
@@ -294,10 +294,10 @@ fn resolve_base_path(current_path: &Path, base: PathBuf) -> OrthoResult<PathBuf>
                 return Err(err);
             }
             Err(not_found(
-                &base,
+                &resolved_base,
                 format!(
                     "extended configuration file '{}' does not exist (referenced from '{}')",
-                    base.display(),
+                    resolved_base.display(),
                     current_path.display()
                 ),
             ))

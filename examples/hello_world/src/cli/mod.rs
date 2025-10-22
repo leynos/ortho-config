@@ -285,9 +285,9 @@ impl FarewellChannel {
     #[must_use]
     pub fn describe(&self) -> &'static str {
         match self {
-            FarewellChannel::Message => "a message",
-            FarewellChannel::Call => "a call",
-            FarewellChannel::Email => "an email",
+            Self::Message => "a message",
+            Self::Call => "a call",
+            Self::Email => "an email",
         }
     }
 }
@@ -336,7 +336,7 @@ pub fn load_global_config(
             globals
                 .salutations
                 .iter()
-                .map(|value| value.trim().to_string())
+                .map(|value| value.trim().to_owned())
                 .collect(),
         )
     };

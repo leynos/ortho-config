@@ -140,13 +140,13 @@ impl CsvEnv {
         if Self::should_parse_as_csv(trimmed) {
             trimmed
                 .split(',')
-                .map(|s| Value::from(s.trim().to_string()))
+                .map(|s| Value::from(s.trim().to_owned()))
                 .collect::<Vec<_>>()
                 .into()
         } else {
             trimmed
                 .parse()
-                .unwrap_or_else(|_| Value::from(trimmed.to_string()))
+                .unwrap_or_else(|_| Value::from(trimmed.to_owned()))
         }
     }
 }

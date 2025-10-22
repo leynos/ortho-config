@@ -3,7 +3,6 @@
     clippy::expect_used,
     reason = "tests panic to surface configuration mistakes"
 )]
-
 use ortho_config::{OrthoConfig, OrthoError};
 use rstest::rstest;
 use serde::{Deserialize, Serialize};

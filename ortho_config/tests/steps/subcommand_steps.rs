@@ -8,6 +8,10 @@
     clippy::expect_used,
     reason = "tests panic to surface configuration mistakes"
 )]
+#![expect(
+    clippy::shadow_reuse,
+    reason = "Cucumber step macros rebind step arguments during code generation"
+)]
 
 use crate::{PrArgs, World};
 use clap::Parser;
@@ -20,8 +24,8 @@ fn has_no_config_sources(world: &World) -> bool {
 }
 
 #[given(expr = "a CLI reference {string}")]
-fn set_cli_ref(world: &mut World, val: String) {
-    world.sub_ref = Some(val);
+fn set_cli_ref(world: &mut World, reference: String) {
+    world.sub_ref = Some(reference);
 }
 
 #[given("no CLI reference")]
@@ -30,13 +34,13 @@ fn no_cli_ref(world: &mut World) {
 }
 
 #[given(expr = "a configuration reference {string}")]
-fn file_ref(world: &mut World, val: String) {
-    world.sub_file = Some(val);
+fn file_ref(world: &mut World, reference: String) {
+    world.sub_file = Some(reference);
 }
 
 #[given(expr = "an environment reference {string}")]
-fn env_ref(world: &mut World, val: String) {
-    world.sub_env = Some(val);
+fn env_ref(world: &mut World, reference: String) {
+    world.sub_env = Some(reference);
 }
 
 #[when("the subcommand configuration is loaded without defaults")]
@@ -58,11 +62,14 @@ fn load_sub(world: &mut World) {
 fn setup_test_environment(world: &World, cli: &PrArgs) -> ortho_config::OrthoResult<PrArgs> {
     let mut result = None;
     figment::Jail::expect_with(|j| {
-        if let Some(ref val) = world.sub_file {
-            j.create_file(".app.toml", &format!("[cmds.test]\nreference = \"{val}\""))?;
+        if let Some(ref file_reference) = world.sub_file {
+            j.create_file(
+                ".app.toml",
+                &format!("[cmds.test]\nreference = \"{file_reference}\""),
+            )?;
         }
-        if let Some(ref val) = world.sub_env {
-            j.set_env("APP_CMDS_TEST_REFERENCE", val);
+        if let Some(ref env_reference) = world.sub_env {
+            j.set_env("APP_CMDS_TEST_REFERENCE", env_reference);
         }
         result = Some(cli.load_and_merge());
         Ok(())
@@ -75,9 +82,9 @@ fn setup_test_environment(world: &World, cli: &PrArgs) -> ortho_config::OrthoRes
     clippy::needless_pass_by_value,
     reason = "Cucumber step requires owned String"
 )]
-fn check_ref(world: &mut World, expected: String) {
+fn check_ref(world: &mut World, expected_reference: String) {
     let cfg = world.sub_result.take().expect("result").expect("ok");
-    assert_eq!(cfg.reference.as_deref(), Some(expected.as_str()));
+    assert_eq!(cfg.reference.as_deref(), Some(expected_reference.as_str()));
 }
 
 #[then("the subcommand load fails")]

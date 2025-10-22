@@ -451,7 +451,7 @@ fn expect_greet(command: Commands) -> GreetCommand {
 
 fn expect_take_leave(command: Commands) -> TakeLeaveCommand {
     match command {
-        Commands::TakeLeave(command) => command,
+        Commands::TakeLeave(take_leave) => take_leave,
         Commands::Greet(_) => panic!("expected take-leave command, found greet"),
     }
 }

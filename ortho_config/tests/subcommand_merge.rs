@@ -103,10 +103,10 @@ fn test_pr_precedence(
 ) {
     let (_temp_dir, _cwd_guard) = &workspace;
     let _ = config_content;
-    let _env = match env_val {
-        Some(val) => env::set_var("VK_CMDS_PR_REFERENCE", val),
-        None => env::remove_var("VK_CMDS_PR_REFERENCE"),
-    };
+    let _env = env_val.map_or_else(
+        || env::remove_var("VK_CMDS_PR_REFERENCE"),
+        |val| env::set_var("VK_CMDS_PR_REFERENCE", val),
+    );
     let merged = load_and_merge_subcommand_for(&cli).expect("merge pr args");
     assert_eq!(merged.reference.as_deref(), expected_reference);
     assert_eq!(merged.files, expected_files);
@@ -143,10 +143,10 @@ fn test_issue_precedence(
 ) {
     let (_temp_dir, _cwd_guard) = &workspace;
     let _ = config_content;
-    let _env = match env_val {
-        Some(val) => env::set_var("VK_CMDS_ISSUE_REFERENCE", val),
-        None => env::remove_var("VK_CMDS_ISSUE_REFERENCE"),
-    };
+    let _env = env_val.map_or_else(
+        || env::remove_var("VK_CMDS_ISSUE_REFERENCE"),
+        |val| env::set_var("VK_CMDS_ISSUE_REFERENCE", val),
+    );
     let merged = load_and_merge_subcommand_for(&cli).expect("merge issue args");
     assert_eq!(merged.reference.as_deref(), expected_reference);
 }

@@ -187,7 +187,7 @@ fn process_extends_handles_relative_and_absolute(#[case] is_abs: bool) {
         let config = if is_abs {
             format!("extends = '{}'", root.join("base.toml").display())
         } else {
-            "extends = \"base.toml\"".to_string()
+            String::from("extends = \"base.toml\"")
         };
         let figment = Figment::from(Toml::string(&config));
         let merged = process_extends(figment, current, visited, stack).to_figment()?;

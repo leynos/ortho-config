@@ -61,12 +61,12 @@ pub mod env {
         K: Into<String>,
         F: FnOnce(&str),
     {
-        let key = key.into();
+        let key_string = key.into();
         let lock = ENV_MUTEX.lock();
-        let original = env::var_os(&key);
-        mutator(&key);
+        let original = env::var_os(&key_string);
+        mutator(&key_string);
         EnvVarGuard {
-            key,
+            key: key_string,
             original,
             _lock: lock,
         }
@@ -215,9 +215,9 @@ pub mod env {
                 .iter()
                 .cloned()
                 .map(|key| {
-                    let barrier = Arc::clone(&barrier);
+                    let barrier_wait = Arc::clone(&barrier);
                     thread::spawn(move || {
-                        barrier.wait();
+                        barrier_wait.wait();
                         let value = format!("value-{key}");
                         let _g = set_var(&key, &value);
                         assert_eq!(env_value(&key), value);

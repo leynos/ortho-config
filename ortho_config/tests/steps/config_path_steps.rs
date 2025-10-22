@@ -3,6 +3,10 @@
     clippy::expect_used,
     reason = "tests panic to surface configuration mistakes"
 )]
+#![expect(
+    clippy::shadow_reuse,
+    reason = "Cucumber step macros rebind step arguments during code generation"
+)]
 
 use crate::{RulesConfig, World};
 use cucumber::{given, then, when};

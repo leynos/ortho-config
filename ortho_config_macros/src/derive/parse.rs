@@ -50,7 +50,7 @@ pub(crate) enum MergeStrategy {
 impl MergeStrategy {
     pub(crate) fn parse(s: &str, span: proc_macro2::Span) -> Result<Self, syn::Error> {
         match s {
-            "append" => Ok(MergeStrategy::Append),
+            "append" => Ok(Self::Append),
             _ => Err(syn::Error::new(span, "unknown merge_strategy")),
         }
     }
@@ -186,19 +186,19 @@ fn parse_lit<T, F>(
 where
     F: FnOnce(Lit) -> Option<T>,
 {
-    let lit = meta.value()?.parse::<Lit>()?;
-    let span = lit.span();
-    extractor(lit).ok_or_else(|| {
-        let ty = std::any::type_name::<T>()
+    let literal = meta.value()?.parse::<Lit>()?;
+    let span = literal.span();
+    extractor(literal).ok_or_else(|| {
+        let type_name = std::any::type_name::<T>()
             .rsplit("::")
             .next()
             .unwrap_or("literal")
             .to_lowercase();
-        let ty = match ty.as_str() {
+        let display_type = match type_name.as_str() {
             "litstr" => "string",
             other => other,
         };
-        syn::Error::new(span, format!("{key} must be a {ty}"))
+        syn::Error::new(span, format!("{key} must be a {display_type}"))
     })
 }
 
