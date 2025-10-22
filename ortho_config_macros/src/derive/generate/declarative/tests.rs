@@ -12,7 +12,16 @@ use quote::quote;
 use rstest::rstest;
 use syn::parse_str;
 
-fn expected_merge_impl_without_appends() -> TokenStream2 {
+/// Returns the expected `DeclarativeMerge` impl for an empty `append_fields`
+/// case.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// let tokens = expected_declarative_merge_impl_empty();
+/// assert!(tokens.to_string().contains("DeclarativeMerge"));
+/// ```
+fn expected_declarative_merge_impl_empty() -> TokenStream2 {
     quote! {
         impl ortho_config::DeclarativeMerge for __SampleDeclarativeMergeState {
             type Output = Sample;
@@ -180,7 +189,7 @@ fn generate_declarative_merge_impl_emits_trait_impl() {
     let state_ident = parse_str("__SampleDeclarativeMergeState").expect("state ident");
     let config_ident = parse_str("Sample").expect("config ident");
     let tokens = generate_declarative_merge_impl(&state_ident, &config_ident, &[]);
-    let expected = expected_merge_impl_without_appends();
+    let expected = expected_declarative_merge_impl_empty();
     assert_eq!(tokens.to_string(), expected.to_string());
 }
 
