@@ -274,6 +274,14 @@ pub enum FarewellChannel {
 }
 
 impl FarewellChannel {
+    /// Describes how the farewell will be delivered for user messaging.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use hello_world::cli::FarewellChannel;
+    /// assert_eq!(FarewellChannel::Email.describe(), "an email");
+    /// ```
     #[must_use]
     pub fn describe(&self) -> &'static str {
         match self {
