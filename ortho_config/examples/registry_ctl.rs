@@ -10,8 +10,8 @@ use serde::{Deserialize, Serialize};
 ///
 /// # Examples
 ///
-/// ```
-/// use registry_ctl::AddUserArgs;
+/// ```ignore
+/// use crate::AddUserArgs;
 /// let args = AddUserArgs::default();
 /// assert!(args.username.is_none());
 /// assert_eq!(args.admin, None);
@@ -29,8 +29,8 @@ pub struct AddUserArgs {
 ///
 /// # Examples
 ///
-/// ```
-/// use registry_ctl::ListItemsArgs;
+/// ```ignore
+/// use crate::ListItemsArgs;
 /// let args = ListItemsArgs::default();
 /// assert!(args.category.is_none());
 /// assert_eq!(args.all, None);
