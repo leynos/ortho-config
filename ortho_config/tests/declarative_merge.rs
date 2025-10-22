@@ -2,15 +2,7 @@
 //!
 //! Validates layer composition, precedence, append strategies for Vec fields,
 //! and Option null handling in the declarative merge system.
-#![allow(
-    unfulfilled_lint_expectations,
-    reason = "clippy::expect_used is denied globally; tests may not hit those branches"
-)]
-#![expect(
-    clippy::expect_used,
-    reason = "tests panic to surface configuration mistakes"
-)]
-
+use anyhow::{Result, anyhow, ensure};
 use camino::Utf8PathBuf;
 use ortho_config::{
     MergeComposer, MergeLayer, MergeProvenance, OrthoConfig, declarative::merge_value,
@@ -58,12 +50,21 @@ fn merge_layers_respect_precedence(
     #[case] environment: serde_json::Value,
     #[case] cli: serde_json::Value,
     #[case] expected_count: u32,
-) {
+) -> Result<()> {
     let layers = compose_layers(defaults, environment, Some(cli));
-    let config = DeclarativeSample::merge_from_layers(layers).expect("merge succeeds");
-    assert_eq!(config.count, expected_count);
-    assert_eq!(config.name, "default");
-    assert!(!config.flag);
+    let config = DeclarativeSample::merge_from_layers(layers).map_err(|err| anyhow!(err))?;
+    ensure!(
+        config.count == expected_count,
+        "expected {expected_count}, got {}",
+        config.count
+    );
+    ensure!(
+        config.name == "default",
+        "expected name default, got {}",
+        config.name
+    );
+    ensure!(!config.flag, "expected flag false, got true");
+    Ok(())
 }
 
 #[rstest]
@@ -122,61 +123,78 @@ fn merge_value_merges_absent_target_key() {
 }
 
 #[rstest]
-fn merge_layers_append_vectors() {
+fn merge_layers_append_vectors() -> Result<()> {
     let layers = compose_layers(
         json!({ "values": ["default"] }),
         json!({ "values": ["env"] }),
         Some(json!({ "values": ["cli"] })),
     );
-    let config = AppendSample::merge_from_layers(layers).expect("merge succeeds");
-    assert_eq!(
-        config.values,
-        vec![
-            String::from("default"),
-            String::from("env"),
-            String::from("cli"),
-        ],
-        "vectors accumulate in defaults, environment, CLI order"
+    let config = AppendSample::merge_from_layers(layers).map_err(|err| anyhow!(err))?;
+    let expected = vec![
+        String::from("default"),
+        String::from("env"),
+        String::from("cli"),
+    ];
+    ensure!(
+        config.values == expected,
+        "vectors accumulate incorrectly: expected {:?}, got {:?}",
+        expected,
+        config.values
     );
+    Ok(())
 }
 
 #[rstest]
-fn merge_layers_respect_option_nulls() {
+fn merge_layers_respect_option_nulls() -> Result<()> {
     let layers = compose_layers(json!({ "flag": "present" }), json!({ "flag": null }), None);
-    let config = OptionalSample::merge_from_layers(layers).expect("merge succeeds");
-    assert!(config.flag.is_none());
+    let config = OptionalSample::merge_from_layers(layers).map_err(|err| anyhow!(err))?;
+    ensure!(
+        config.flag.is_none(),
+        "expected flag to be None, got {:?}",
+        config.flag
+    );
+    Ok(())
 }
 #[rstest]
-fn merge_from_layers_accepts_file_layers() {
+fn merge_from_layers_accepts_file_layers() -> Result<()> {
     let mut composer = MergeComposer::new();
     composer.push_defaults(json!({ "name": "default", "count": 1, "flag": false }));
     composer.push_file(
         json!({ "name": "from_file", "count": 7, "flag": true }),
         Some(Utf8PathBuf::from("config.json")),
     );
-    let config = DeclarativeSample::merge_from_layers(composer.layers()).expect("merge succeeds");
-    assert_eq!(config.name, "from_file");
-    assert_eq!(config.count, 7);
-    assert!(config.flag);
+    let config =
+        DeclarativeSample::merge_from_layers(composer.layers()).map_err(|err| anyhow!(err))?;
+    ensure!(
+        config.name == "from_file",
+        "expected name from_file, got {}",
+        config.name
+    );
+    ensure!(config.count == 7, "expected count 7, got {}", config.count);
+    ensure!(config.flag, "expected flag true");
+    Ok(())
 }
 
 #[rstest]
-fn merge_layers_reject_non_object_values() {
+fn merge_layers_reject_non_object_values() -> Result<()> {
     let layers = compose_layers(
         json!({ "name": "default", "count": 1, "flag": false }),
         json!(true),
         None,
     );
 
-    let error =
-        DeclarativeSample::merge_from_layers(layers).expect_err("non-object layer is rejected");
+    let error = match DeclarativeSample::merge_from_layers(layers) {
+        Ok(config) => return Err(anyhow!("expected merge failure, got config {:?}", config)),
+        Err(err) => err,
+    };
     let message = error.to_string();
-    assert!(
+    ensure!(
         message.contains("expects JSON objects"),
         "unexpected error message: {message}"
     );
-    assert!(
+    ensure!(
         message.contains("environment layer supplied a boolean"),
         "missing provenance context: {message}"
     );
+    Ok(())
 }

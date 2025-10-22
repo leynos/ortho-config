@@ -1,13 +1,5 @@
 //! Tests for aggregated error reporting across configuration sources.
-#![allow(
-    unfulfilled_lint_expectations,
-    reason = "clippy::expect_used is denied globally; tests may not hit those branches"
-)]
-#![expect(
-    clippy::expect_used,
-    reason = "tests panic to surface configuration mistakes"
-)]
-
+use anyhow::{Result, anyhow, ensure};
 use ortho_config::{OrthoConfig, OrthoError};
 use rstest::rstest;
 use serde::Deserialize;
@@ -35,69 +27,104 @@ struct DiscoveryErrorConfig {
     port: u32,
 }
 
+fn with_jail<F>(f: F) -> Result<()>
+where
+    F: FnOnce(&mut figment::Jail) -> Result<()>,
+{
+    figment::Jail::try_with(|j| f(j).map_err(|err| figment::Error::from(err.to_string())))
+        .map_err(|err| anyhow!(err))
+}
+
 #[rstest]
-fn aggregates_cli_file_env_errors() {
-    figment::Jail::expect_with(|j| {
+fn aggregates_cli_file_env_errors() -> Result<()> {
+    with_jail(|j| {
         j.create_file(".config.toml", "port = ")?; // invalid TOML
         j.set_env("PORT", "notanumber");
-        let err = AggConfig::load_from_iter(["prog", "--bogus"])
-            .expect_err("expected aggregated error from CLI/file/env sources");
-        match &*err {
-            OrthoError::Aggregate(agg) => {
-                assert_eq!(agg.len(), 3);
-                let mut kinds = agg
-                    .iter()
-                    .map(|e| match e {
-                        OrthoError::CliParsing(_) => 1,
-                        OrthoError::File { .. } => 2,
-                        OrthoError::Merge { .. } | OrthoError::Gathering(_) => 3,
-                        _ => 0,
-                    })
-                    .collect::<Vec<_>>();
-                kinds.sort_unstable();
-                assert_eq!(kinds, vec![1, 2, 3]);
-            }
-            other => panic!("unexpected error: {other:?}"),
-        }
+        let err = match AggConfig::load_from_iter(["prog", "--bogus"]) {
+            Ok(cfg) => return Err(anyhow!("expected aggregated error, got config {:?}", cfg)),
+            Err(err) => err,
+        };
+        let agg = match &*err {
+            OrthoError::Aggregate(agg) => agg,
+            other => return Err(anyhow!("unexpected error variant: {other:?}")),
+        };
+        ensure!(
+            agg.len() == 3,
+            "expected three aggregated errors, got {}",
+            agg.len()
+        );
+        let mut kinds = agg
+            .iter()
+            .map(|e| match e {
+                OrthoError::CliParsing(_) => Ok(1),
+                OrthoError::File { .. } => Ok(2),
+                OrthoError::Merge { .. } | OrthoError::Gathering(_) => Ok(3),
+                other => Err(anyhow!("unexpected aggregated error variant: {other:?}")),
+            })
+            .collect::<Result<Vec<_>>>()?;
+        kinds.sort_unstable();
+        ensure!(
+            kinds == vec![1, 2, 3],
+            "unexpected error kinds: {:?}",
+            kinds
+        );
         Ok(())
-    });
+    })?;
+    Ok(())
 }
 
 #[rstest]
-fn discovery_errors_hidden_when_fallback_succeeds() {
-    figment::Jail::expect_with(|j| {
+fn discovery_errors_hidden_when_fallback_succeeds() -> Result<()> {
+    with_jail(|j| {
         j.create_file("invalid.toml", "port = ???")?;
         j.create_file(".agg.toml", "port = 7000")?;
         j.set_env("AGG_CONFIG_PATH", "invalid.toml");
 
-        let cfg = DiscoveryErrorConfig::load_from_iter(["prog"])
-            .expect("expected fallback discovery to succeed");
-        assert_eq!(cfg.port, 7000);
+        let cfg = DiscoveryErrorConfig::load_from_iter(["prog"]).map_err(|err| anyhow!(err))?;
+        ensure!(cfg.port == 7000, "expected port 7000, got {}", cfg.port);
         Ok(())
-    });
+    })?;
+    Ok(())
 }
 
 #[rstest]
-fn required_path_errors_surface_even_with_fallback() {
-    figment::Jail::expect_with(|j| {
+fn required_path_errors_surface_even_with_fallback() -> Result<()> {
+    with_jail(|j| {
         j.create_file(".agg.toml", "port = 7000")?;
 
-        let err = DiscoveryErrorConfig::load_from_iter(["prog", "--config-path", "missing.toml"])
-            .expect_err("expected missing required CLI path to error");
-        assert!(matches!(&*err, OrthoError::File { .. }));
+        let err =
+            match DiscoveryErrorConfig::load_from_iter(["prog", "--config-path", "missing.toml"]) {
+                Ok(cfg) => {
+                    return Err(anyhow!("expected missing config path error, got {:?}", cfg));
+                }
+                Err(err) => err,
+            };
+        ensure!(
+            matches!(&*err, OrthoError::File { .. }),
+            "expected file error, got {:?}",
+            err
+        );
         Ok(())
-    });
+    })?;
+    Ok(())
 }
 
 #[rstest]
-fn discovery_errors_surface_when_all_candidates_fail() {
-    figment::Jail::expect_with(|j| {
+fn discovery_errors_surface_when_all_candidates_fail() -> Result<()> {
+    with_jail(|j| {
         j.create_file("invalid.toml", "port = ???")?;
         j.set_env("AGG_CONFIG_PATH", "invalid.toml");
 
-        let err = DiscoveryErrorConfig::load_from_iter(["prog"]) // no fallback file
-            .expect_err("expected discovery error when no file loads");
-        assert!(matches!(&*err, OrthoError::File { .. }));
+        let err = match DiscoveryErrorConfig::load_from_iter(["prog"]) {
+            Ok(cfg) => return Err(anyhow!("expected discovery error, got {:?}", cfg)),
+            Err(err) => err,
+        };
+        ensure!(
+            matches!(&*err, OrthoError::File { .. }),
+            "expected file error, got {:?}",
+            err
+        );
         Ok(())
-    });
+    })?;
+    Ok(())
 }
