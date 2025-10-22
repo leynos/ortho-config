@@ -1,13 +1,5 @@
 //! Tests subcommand configuration precedence (defaults < file < env < CLI) for pr and issue.
-#![allow(
-    unfulfilled_lint_expectations,
-    reason = "clippy::expect_used is denied globally; tests may not hit those branches"
-)]
-#![expect(
-    clippy::expect_used,
-    reason = "tests panic to surface configuration mistakes"
-)]
-
+use anyhow::{Context, Result, anyhow, ensure};
 use camino::Utf8PathBuf;
 use cap_std::{ambient_authority, fs::Dir};
 use clap::Parser;
@@ -45,32 +37,41 @@ struct DirGuard {
     _lock: MutexGuard<'static, ()>,
 }
 
-fn set_dir(dir: &TempDir) -> DirGuard {
-    let lock = CWD_MUTEX.lock().expect("lock current dir");
-    let old = std::env::current_dir().expect("read current dir");
+fn set_dir(dir: &TempDir) -> Result<DirGuard> {
+    let lock = CWD_MUTEX
+        .lock()
+        .map_err(|err| anyhow!("lock current dir mutex: {err}"))?;
+    let old = std::env::current_dir().context("read current dir")?;
     // SAFETY: Process CWD is mutated while holding CWD_MUTEX to prevent races with other tests.
-    std::env::set_current_dir(dir.path()).expect("set current dir");
-    DirGuard {
-        old: Utf8PathBuf::from_path_buf(old).expect("utf8"),
+    std::env::set_current_dir(dir.path()).context("set current dir")?;
+    let old_utf8 = Utf8PathBuf::from_path_buf(old)
+        .map_err(|path| anyhow!("cwd is not valid UTF-8: {path:?}"))?;
+    Ok(DirGuard {
+        old: old_utf8,
         _lock: lock,
-    }
+    })
 }
 
 impl Drop for DirGuard {
     fn drop(&mut self) {
         // SAFETY: Lock is still held via `_lock`, so restoration is atomic w.r.t. other tests.
-        std::env::set_current_dir(&self.old).expect("restore current dir");
+        if let Err(err) = std::env::set_current_dir(&self.old) {
+            panic!("restore current dir: {err}");
+        }
     }
 }
 
 #[fixture]
-fn config_dir(#[default("")] cfg: &str) -> (TempDir, DirGuard) {
-    let dir = tempfile::tempdir().expect("create temp dir");
-    let cap = Dir::open_ambient_dir(dir.path(), ambient_authority()).expect("open temp dir");
-    cap.write(".vk.toml", cfg).expect("write config");
-    let guard = set_dir(&dir);
-    (dir, guard)
+fn config_dir(#[default("")] cfg: &str) -> Result<(TempDir, DirGuard)> {
+    let dir = tempfile::tempdir().context("create temp dir")?;
+    let cap = Dir::open_ambient_dir(dir.path(), ambient_authority()).context("open temp dir")?;
+    cap.write(".vk.toml", cfg.as_bytes())
+        .context("write config")?;
+    let guard = set_dir(&dir)?;
+    Ok((dir, guard))
 }
+
+type WorkspaceResult = Result<(TempDir, DirGuard)>;
 
 #[rstest]
 #[case::env_over_file(
@@ -103,17 +104,28 @@ fn test_pr_precedence(
     #[case] expected_files: Vec<String>,
     #[from(config_dir)]
     #[with(config_content)]
-    workspace: (TempDir, DirGuard),
-) {
-    let (_temp_dir, _cwd_guard) = &workspace;
+    workspace: WorkspaceResult,
+) -> Result<()> {
+    let (_temp_dir, _cwd_guard) = workspace?;
     let _ = config_content;
     let _env = env_val.map_or_else(
         || env::remove_var("VK_CMDS_PR_REFERENCE"),
         |val| env::set_var("VK_CMDS_PR_REFERENCE", val),
     );
-    let merged = load_and_merge_subcommand_for(&cli).expect("merge pr args");
-    assert_eq!(merged.reference.as_deref(), expected_reference);
-    assert_eq!(merged.files, expected_files);
+    let merged = load_and_merge_subcommand_for(&cli).context("merge pr args")?;
+    ensure!(
+        merged.reference.as_deref() == expected_reference,
+        "expected reference {:?}, got {:?}",
+        expected_reference,
+        merged.reference
+    );
+    ensure!(
+        merged.files == expected_files,
+        "expected files {:?}, got {:?}",
+        expected_files,
+        merged.files
+    );
+    Ok(())
 }
 
 #[rstest]
@@ -143,14 +155,20 @@ fn test_issue_precedence(
     #[case] expected_reference: Option<&str>,
     #[from(config_dir)]
     #[with(config_content)]
-    workspace: (TempDir, DirGuard),
-) {
-    let (_temp_dir, _cwd_guard) = &workspace;
+    workspace: WorkspaceResult,
+) -> Result<()> {
+    let (_temp_dir, _cwd_guard) = workspace?;
     let _ = config_content;
     let _env = env_val.map_or_else(
         || env::remove_var("VK_CMDS_ISSUE_REFERENCE"),
         |val| env::set_var("VK_CMDS_ISSUE_REFERENCE", val),
     );
-    let merged = load_and_merge_subcommand_for(&cli).expect("merge issue args");
-    assert_eq!(merged.reference.as_deref(), expected_reference);
+    let merged = load_and_merge_subcommand_for(&cli).context("merge issue args")?;
+    ensure!(
+        merged.reference.as_deref() == expected_reference,
+        "expected reference {:?}, got {:?}",
+        expected_reference,
+        merged.reference
+    );
+    Ok(())
 }
