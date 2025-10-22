@@ -168,19 +168,14 @@ pub(crate) fn generate_declarative_merge_impl(
         let state_field_ident = format_ident!("append_{}", field_ident);
         quote! { #state_field_ident }
     });
-    let append_overlays = unique_fields.iter().map(|(field_ident, _ty)| {
+    let append_inserts = unique_fields.iter().map(|(field_ident, _ty)| {
         let state_field_ident = format_ident!("append_{}", field_ident);
         let field_name = field_ident.to_string();
         quote! {
             if let Some(values) = #state_field_ident {
-                let mut object = ortho_config::serde_json::Map::new();
-                object.insert(
+                appended.insert(
                     #field_name.to_owned(),
                     ortho_config::serde_json::Value::Array(values),
-                );
-                ortho_config::declarative::merge_value(
-                    &mut value,
-                    ortho_config::serde_json::Value::Object(object),
                 );
             }
         }
@@ -217,7 +212,14 @@ pub(crate) fn generate_declarative_merge_impl(
                     mut value,
                     #( #destructured_fields, )*
                 } = self;
-                #( #append_overlays )*
+                let mut appended = ortho_config::serde_json::Map::new();
+                #( #append_inserts )*
+                if !appended.is_empty() {
+                    ortho_config::declarative::merge_value(
+                        &mut value,
+                        ortho_config::serde_json::Value::Object(appended),
+                    );
+                }
                 ortho_config::declarative::from_value(value)
             }
         }

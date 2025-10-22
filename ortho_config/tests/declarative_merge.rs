@@ -40,6 +40,16 @@ fn compose_layers(
     composer.layers()
 }
 
+fn compose_defaults_and_environment(
+    defaults: serde_json::Value,
+    environment: serde_json::Value,
+) -> Vec<MergeLayer<'static>> {
+    let mut composer = MergeComposer::new();
+    composer.push_defaults(defaults);
+    composer.push_environment(environment);
+    composer.layers()
+}
+
 #[rstest]
 #[case::cli_overrides(json!({"name": "default", "count": 1, "flag": false }), json!({}), json!({"count": 5}), 5)]
 #[case::env_over_defaults(json!({"name": "default", "count": 1, "flag": false }), json!({"count": 3}), json!({}), 3)]
@@ -129,11 +139,9 @@ fn merge_layers_append_vectors() {
 
 #[rstest]
 fn merge_layers_respect_option_nulls() {
-    let mut composer = MergeComposer::new();
-    composer.push_defaults(json!({ "flag": "present" }));
-    composer.push_environment(json!({ "flag": null }));
-
-    let config = OptionalSample::merge_from_layers(composer.layers()).expect("merge succeeds");
+    let layers =
+        compose_defaults_and_environment(json!({ "flag": "present" }), json!({ "flag": null }));
+    let config = OptionalSample::merge_from_layers(layers).expect("merge succeeds");
     assert!(config.flag.is_none());
 }
 #[rstest]
@@ -152,12 +160,13 @@ fn merge_from_layers_accepts_file_layers() {
 
 #[rstest]
 fn merge_layers_reject_non_object_values() {
-    let mut composer = MergeComposer::new();
-    composer.push_defaults(json!({ "name": "default", "count": 1, "flag": false }));
-    composer.push_environment(json!(true));
+    let layers = compose_defaults_and_environment(
+        json!({ "name": "default", "count": 1, "flag": false }),
+        json!(true),
+    );
 
-    let error = DeclarativeSample::merge_from_layers(composer.layers())
-        .expect_err("non-object layer is rejected");
+    let error =
+        DeclarativeSample::merge_from_layers(layers).expect_err("non-object layer is rejected");
     let message = error.to_string();
     assert!(
         message.contains("expects JSON objects"),

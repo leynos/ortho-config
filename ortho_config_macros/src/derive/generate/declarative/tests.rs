@@ -12,96 +12,8 @@ use quote::quote;
 use rstest::rstest;
 use syn::parse_str;
 
-#[rstest]
-fn unique_append_fields_filters_duplicates() {
-    let append_fields = vec![
-        (
-            parse_str("items").expect("first field ident"),
-            parse_str("String").expect("first field type"),
-        ),
-        (
-            parse_str("items").expect("second field ident"),
-            parse_str("String").expect("second field type"),
-        ),
-        (
-            parse_str("tags").expect("third field ident"),
-            parse_str("String").expect("third field type"),
-        ),
-    ];
-
-    let filtered = unique_append_fields(&append_fields);
-    assert_eq!(filtered.len(), 2);
-    assert_eq!(filtered[0].0.to_string(), "items");
-    assert_eq!(filtered[1].0.to_string(), "tags");
-}
-
-#[rstest]
-fn generate_declarative_state_struct_emits_storage() {
-    let state_ident = parse_str("__SampleDeclarativeMergeState").expect("state ident");
-    let tokens = generate_declarative_state_struct(&state_ident, &[]);
-    let expected = quote! {
-        #[derive(Default)]
-        struct __SampleDeclarativeMergeState {
-            value: ortho_config::serde_json::Value,
-        }
-    };
-    assert_eq!(tokens.to_string(), expected.to_string());
-}
-
-#[rstest]
-fn generate_declarative_state_struct_includes_append_fields() {
-    let state_ident = parse_str("__SampleDeclarativeMergeState").expect("state ident");
-    let append_fields = vec![(
-        parse_str("items").expect("field ident"),
-        parse_str("String").expect("field type"),
-    )];
-    let tokens = generate_declarative_state_struct(&state_ident, &append_fields);
-    let rendered = tokens.to_string();
-    assert!(rendered.contains("append_items"));
-}
-
-fn assert_deduplicates_append_fields<F>(generator: F)
-where
-    F: Fn(&[(syn::Ident, syn::Type)]) -> TokenStream2,
-{
-    let duplicate_fields = vec![
-        (
-            parse_str("items").expect("first duplicate field ident"),
-            parse_str("String").expect("first duplicate field type"),
-        ),
-        (
-            parse_str("items").expect("second duplicate field ident"),
-            parse_str("String").expect("second duplicate field type"),
-        ),
-    ];
-    let duplicate_tokens = generator(&duplicate_fields);
-
-    let deduplicated_fields = vec![(
-        parse_str("items").expect("deduplicated field ident"),
-        parse_str("String").expect("deduplicated field type"),
-    )];
-    let deduplicated_tokens = generator(&deduplicated_fields);
-
-    assert_eq!(
-        duplicate_tokens.to_string(),
-        deduplicated_tokens.to_string()
-    );
-}
-
-#[rstest]
-fn generate_declarative_state_struct_deduplicates_append_fields() {
-    let state_ident = parse_str("__SampleDeclarativeMergeState").expect("state ident");
-    assert_deduplicates_append_fields(|fields| {
-        generate_declarative_state_struct(&state_ident, fields)
-    });
-}
-
-#[rstest]
-fn generate_declarative_merge_impl_emits_trait_impl() {
-    let state_ident = parse_str("__SampleDeclarativeMergeState").expect("state ident");
-    let config_ident = parse_str("Sample").expect("config ident");
-    let tokens = generate_declarative_merge_impl(&state_ident, &config_ident, &[]);
-    let expected = quote! {
+fn expected_merge_impl_without_appends() -> TokenStream2 {
+    quote! {
         impl ortho_config::DeclarativeMerge for __SampleDeclarativeMergeState {
             type Output = Sample;
 
@@ -166,10 +78,109 @@ fn generate_declarative_merge_impl_emits_trait_impl() {
 
             fn finish(self) -> ortho_config::OrthoResult<Self::Output> {
                 let __SampleDeclarativeMergeState { mut value, } = self;
+                let mut appended = ortho_config::serde_json::Map::new();
+                if !appended.is_empty() {
+                    ortho_config::declarative::merge_value(
+                        &mut value,
+                        ortho_config::serde_json::Value::Object(appended),
+                    );
+                }
                 ortho_config::declarative::from_value(value)
             }
         }
+    }
+}
+
+#[rstest]
+fn unique_append_fields_filters_duplicates() {
+    let append_fields = vec![
+        (
+            parse_str("items").expect("first field ident"),
+            parse_str("String").expect("first field type"),
+        ),
+        (
+            parse_str("items").expect("second field ident"),
+            parse_str("String").expect("second field type"),
+        ),
+        (
+            parse_str("tags").expect("third field ident"),
+            parse_str("String").expect("third field type"),
+        ),
+    ];
+
+    let filtered = unique_append_fields(&append_fields);
+    assert_eq!(filtered.len(), 2);
+    assert_eq!(filtered[0].0.to_string(), "items");
+    assert_eq!(filtered[1].0.to_string(), "tags");
+}
+
+#[rstest]
+fn generate_declarative_state_struct_emits_storage() {
+    let state_ident = parse_str("__SampleDeclarativeMergeState").expect("state ident");
+    let tokens = generate_declarative_state_struct(&state_ident, &[]);
+    let expected = quote! {
+        #[derive(Default)]
+        struct __SampleDeclarativeMergeState {
+            value: ortho_config::serde_json::Value,
+        }
     };
+    assert_eq!(tokens.to_string(), expected.to_string());
+}
+
+#[rstest]
+fn generate_declarative_state_struct_includes_append_fields() {
+    let state_ident = parse_str("__SampleDeclarativeMergeState").expect("state ident");
+    let append_fields = vec![(
+        parse_str("items").expect("field ident"),
+        parse_str("String").expect("field type"),
+    )];
+    let tokens = generate_declarative_state_struct(&state_ident, &append_fields);
+    let norm = tokens.to_string().replace(' ', "");
+    assert!(norm.contains("append_items"));
+}
+
+fn assert_deduplicates_append_fields<F>(generator: F)
+where
+    F: Fn(&[(syn::Ident, syn::Type)]) -> TokenStream2,
+{
+    let duplicate_fields = vec![
+        (
+            parse_str("items").expect("first duplicate field ident"),
+            parse_str("String").expect("first duplicate field type"),
+        ),
+        (
+            parse_str("items").expect("second duplicate field ident"),
+            parse_str("String").expect("second duplicate field type"),
+        ),
+    ];
+    let duplicate_tokens = generator(&duplicate_fields);
+
+    let deduplicated_fields = vec![(
+        parse_str("items").expect("deduplicated field ident"),
+        parse_str("String").expect("deduplicated field type"),
+    )];
+    let deduplicated_tokens = generator(&deduplicated_fields);
+
+    assert_eq!(
+        duplicate_tokens.to_string(),
+        deduplicated_tokens.to_string()
+    );
+}
+
+#[rstest]
+fn generate_declarative_state_struct_deduplicates_append_fields() {
+    let state_ident = parse_str("__SampleDeclarativeMergeState").expect("state ident");
+    assert_deduplicates_append_fields(|fields| {
+        generate_declarative_state_struct(&state_ident, fields)
+    });
+}
+
+#[rstest]
+fn generate_declarative_merge_impl_emits_trait_impl() {
+    let state_ident = parse_str("__SampleDeclarativeMergeState").expect("state ident");
+    let config_ident = parse_str("Sample").expect("config ident");
+    let tokens = generate_declarative_merge_impl(&state_ident, &config_ident, &[]);
+    let expected = expected_merge_impl_without_appends();
     assert_eq!(tokens.to_string(), expected.to_string());
 }
 
@@ -182,12 +193,34 @@ fn generate_declarative_merge_impl_handles_append_fields() {
         parse_str("String").expect("field type"),
     )];
     let tokens = generate_declarative_merge_impl(&state_ident, &config_ident, &append_fields);
-    let rendered = tokens.to_string();
-    assert!(rendered.contains("append_items"));
-    assert!(rendered.contains("OrthoResultExt"));
-    assert!(rendered.contains("Map :: new"));
-    assert!(rendered.contains("Value :: Array"));
-    assert!(rendered.contains("message . push_str"));
+    let norm = tokens.to_string().replace(" :: ", "::").replace(' ', "");
+    assert!(norm.contains("append_items"));
+    assert!(norm.contains("OrthoResultExt"));
+    assert!(norm.contains("serde_json::Map::new"));
+    assert!(norm.contains("Value::Array"));
+    assert!(norm.contains("message.push_str(\"Source:\")"));
+}
+
+#[rstest]
+fn generate_declarative_merge_impl_emits_non_object_error_context() {
+    let state_ident = parse_str("__SampleDeclarativeMergeState").expect("state ident");
+    let config_ident = parse_str("Sample").expect("config ident");
+    let norm = generate_declarative_merge_impl(&state_ident, &config_ident, &[])
+        .to_string()
+        .replace(" :: ", "::")
+        .replace(' ', "");
+    assert!(
+        norm.contains("\"{provenance_label}layersupplied{value_kind}.\""),
+        "guard must cite provenance and value kind: {norm}"
+    );
+    assert!(
+        norm.contains("message.push_str(\"Source:\")"),
+        "guard must mention source paths: {norm}"
+    );
+    assert!(
+        norm.contains("Non-objectlayerswouldoverwriteaccumulatedstate"),
+        "guard must warn about overwriting state: {norm}"
+    );
 }
 
 #[rstest]
