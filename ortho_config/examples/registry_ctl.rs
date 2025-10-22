@@ -5,6 +5,7 @@ use clap_dispatch::clap_dispatch;
 use ortho_config::OrthoConfig;
 use ortho_config::SubcmdConfigMerge;
 use serde::{Deserialize, Serialize};
+use std::io::{self, Write};
 
 /// Command-line options for the `add-user` subcommand.
 ///
@@ -46,19 +47,27 @@ pub struct ListItemsArgs {
 
 impl Run for AddUserArgs {
     fn run(self, db_url: &str) -> Result<(), String> {
-        println!("Connecting to database at: {db_url}");
-        println!("Adding user: {:?}, Admin: {:?}", self.username, self.admin);
+        let mut stdout = io::stdout().lock();
+        write_line(&mut stdout, &format!("Connecting to database at: {db_url}"))?;
+        write_line(
+            &mut stdout,
+            &format!("Adding user: {:?}, Admin: {:?}", self.username, self.admin),
+        )?;
         Ok(())
     }
 }
 
 impl Run for ListItemsArgs {
     fn run(self, db_url: &str) -> Result<(), String> {
-        println!("Connecting to database at: {db_url}");
-        println!(
-            "Listing items in category {:?}, All: {:?}",
-            self.category, self.all
-        );
+        let mut stdout = io::stdout().lock();
+        write_line(&mut stdout, &format!("Connecting to database at: {db_url}"))?;
+        write_line(
+            &mut stdout,
+            &format!(
+                "Listing items in category {:?}, All: {:?}",
+                self.category, self.all
+            ),
+        )?;
         Ok(())
     }
 }
@@ -85,6 +94,15 @@ fn main() -> Result<(), String> {
         }
     };
     final_cmd.run(db_url)
+}
+
+fn write_line(writer: &mut impl Write, message: &str) -> Result<(), String> {
+    // Forward stdout failures through the existing `String` error channel
+    // so the example trait signature stays stable for consumers.
+    writer
+        .write_all(message.as_bytes())
+        .map_err(|err| err.to_string())?;
+    writer.write_all(b"\n").map_err(|err| err.to_string())
 }
 
 #[cfg(test)]

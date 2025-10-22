@@ -85,18 +85,19 @@ fn config_dir(#[default("")] cfg: &str) -> (TempDir, DirGuard) {
     Some("cli_ref"),
     vec!["file.txt".into()],
 )]
-#[allow(clippy::used_underscore_binding)]
 #[serial]
 fn test_pr_precedence(
-    #[case] _config_content: &str,
+    #[case] config_content: &str,
     #[case] env_val: Option<&str>,
     #[case] cli: PrArgs,
     #[case] expected_reference: Option<&str>,
     #[case] expected_files: Vec<String>,
     #[from(config_dir)]
-    #[with(_config_content)]
-    _workspace: (TempDir, DirGuard),
+    #[with(config_content)]
+    workspace: (TempDir, DirGuard),
 ) {
+    let (_temp_dir, _cwd_guard) = &workspace;
+    let _ = config_content;
     let _env = match env_val {
         Some(val) => env::set_var("VK_CMDS_PR_REFERENCE", val),
         None => env::remove_var("VK_CMDS_PR_REFERENCE"),
@@ -125,17 +126,18 @@ fn test_pr_precedence(
     IssueArgs { reference: Some("cli_ref".into()) },
     Some("cli_ref"),
 )]
-#[allow(clippy::used_underscore_binding)]
 #[serial]
 fn test_issue_precedence(
-    #[case] _config_content: &str,
+    #[case] config_content: &str,
     #[case] env_val: Option<&str>,
     #[case] cli: IssueArgs,
     #[case] expected_reference: Option<&str>,
     #[from(config_dir)]
-    #[with(_config_content)]
-    _workspace: (TempDir, DirGuard),
+    #[with(config_content)]
+    workspace: (TempDir, DirGuard),
 ) {
+    let (_temp_dir, _cwd_guard) = &workspace;
+    let _ = config_content;
     let _env = match env_val {
         Some(val) => env::set_var("VK_CMDS_ISSUE_REFERENCE", val),
         None => env::remove_var("VK_CMDS_ISSUE_REFERENCE"),

@@ -5,7 +5,7 @@
 //!
 //! `HelloWorldError` wraps the derive layer errors alongside local validation
 //! issues so the binary renders concise, actionable diagnostics.
-use std::sync::Arc;
+use std::{io, sync::Arc};
 use thiserror::Error;
 
 /// Errors raised by the hello world example.
@@ -17,6 +17,9 @@ pub enum HelloWorldError {
     /// Bubbles up validation issues detected before executing the command.
     #[error(transparent)]
     Validation(#[from] ValidationError),
+    /// Propagates standard output write failures.
+    #[error("failed to write output: {0}")]
+    Output(#[from] io::Error),
 }
 
 /// Validation issues detected while resolving global options.

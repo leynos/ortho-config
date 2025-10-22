@@ -34,15 +34,9 @@ pub async fn run_without_args(world: &mut World) {
 }
 
 #[when(expr = "I run the hello world example with arguments {string}")]
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "Cucumber step signature requires owned capture values"
-)]
-// Clippy cannot emit `needless_pass_by_value` for async functions because the
-// state machine must own each capture, so allow the resulting expectation lint.
-#[allow(unfulfilled_lint_expectations)]
-// Step captures arrive as owned `String` values from cucumber; forward them
-// to the world helper for tokenisation.
+// Step captures arrive as owned `String` values from cucumber; forward them to
+// the world helper for tokenisation while retaining ownership requirements of
+// the async state machine.
 pub async fn run_with_args(world: &mut World, args: String) {
     run_with_args_inner(world, args.as_str()).await;
 }

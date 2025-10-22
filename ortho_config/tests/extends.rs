@@ -5,7 +5,6 @@ use rstest::rstest;
 use serde::{Deserialize, Serialize};
 
 #[inline]
-#[allow(deprecated, reason = "figment::Jail is used for test isolation only")]
 fn with_jail<F>(f: F)
 where
     F: FnOnce(&mut figment::Jail) -> figment::error::Result<()>,

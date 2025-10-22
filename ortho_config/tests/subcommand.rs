@@ -1,6 +1,5 @@
 //! Tests for subcommand configuration helpers.
 
-#![allow(non_snake_case)]
 //! Utilities for subcommand test setup and loading.
 mod util;
 
@@ -90,7 +89,6 @@ fn loads_from_xdg_config() {
 }
 
 #[derive(Debug, Deserialize, Serialize, Parser, OrthoConfig, Default, PartialEq)]
-#[allow(non_snake_case)]
 #[ortho_config(prefix = "APP_")]
 #[command(name = "test")]
 struct PrefixedCfg {

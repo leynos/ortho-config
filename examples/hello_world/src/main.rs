@@ -21,12 +21,12 @@ fn run() -> Result<(), HelloWorldError> {
             let mut merged = args.load_and_merge()?;
             apply_greet_overrides(&mut merged)?;
             let plan = build_plan(&globals, &merged)?;
-            print_plan(&plan);
+            print_plan(&plan)?;
         }
         Commands::TakeLeave(args) => {
             let merged = args.load_and_merge()?;
             let plan = build_take_leave_plan(&globals, &merged)?;
-            print_take_leave(&plan);
+            print_take_leave(&plan)?;
         }
     }
     Ok(())

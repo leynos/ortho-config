@@ -1,27 +1,22 @@
 //! Tests for attribute handling in the derive macro.
 
-#![allow(non_snake_case)]
-
 use ortho_config::OrthoConfig;
 use rstest::rstest;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize, Serialize, OrthoConfig)]
-#[allow(dead_code)]
 struct CustomCli {
     #[ortho_config(cli_long = "my-val")]
     value: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize, OrthoConfig)]
-#[allow(dead_code)]
 #[ortho_config(prefix = "CFG_")]
 struct Prefixed {
     value: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize, OrthoConfig)]
-#[allow(dead_code)]
 struct Defaulted {
     #[ortho_config(default = 5)]
     #[serde(skip_serializing_if = "Option::is_none")]

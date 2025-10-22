@@ -1,6 +1,7 @@
 //! Greeting planning and rendering for the `hello_world` example.
 use crate::cli::{DeliveryMode, GreetCommand, HelloWorldCli, TakeLeaveCommand};
 use crate::error::HelloWorldError;
+use std::io::{self, Write};
 
 /// Computed greeting ready for display.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -220,18 +221,63 @@ fn format_farewell_message(config: &HelloWorldCli, command: &TakeLeaveCommand) -
     farewell
 }
 
-/// Prints the greeting to standard output.
-pub fn print_plan(plan: &GreetingPlan) {
+fn write_plan_to<W: Write>(writer: &mut W, plan: &GreetingPlan) -> io::Result<()> {
     if let Some(preamble) = plan.preamble() {
-        println!("{preamble}");
+        writer.write_all(preamble.as_bytes())?;
+        writer.write_all(b"\n")?;
     }
-    println!("{}", plan.message());
+    writer.write_all(plan.message().as_bytes())?;
+    writer.write_all(b"\n")
+}
+
+fn write_take_leave_to<W: Write>(writer: &mut W, plan: &TakeLeavePlan) -> io::Result<()> {
+    write_plan_to(writer, plan.greeting())?;
+    writer.write_all(plan.farewell().as_bytes())?;
+    writer.write_all(b"\n")
+}
+
+/// Prints the greeting to standard output.
+///
+/// # Errors
+///
+/// Returns an [`io::Error`] when writing to standard output fails.
+///
+/// # Examples
+///
+/// ```
+/// use hello_world::cli::{GreetCommand, HelloWorldCli};
+/// use hello_world::message::{build_plan, print_plan};
+///
+/// let globals = HelloWorldCli::default();
+/// let command = GreetCommand::default();
+/// let plan = build_plan(&globals, &command).expect("plan builds");
+/// print_plan(&plan).expect("stdout write succeeds");
+/// ```
+pub fn print_plan(plan: &GreetingPlan) -> io::Result<()> {
+    let mut stdout = io::stdout().lock();
+    write_plan_to(&mut stdout, plan)
 }
 
 /// Prints the farewell workflow to standard output.
-pub fn print_take_leave(plan: &TakeLeavePlan) {
-    print_plan(plan.greeting());
-    println!("{}", plan.farewell());
+///
+/// # Errors
+///
+/// Returns an [`io::Error`] when writing to standard output fails.
+///
+/// # Examples
+///
+/// ```
+/// use hello_world::cli::{HelloWorldCli, TakeLeaveCommand};
+/// use hello_world::message::{build_take_leave_plan, print_take_leave};
+///
+/// let globals = HelloWorldCli::default();
+/// let command = TakeLeaveCommand::default();
+/// let plan = build_take_leave_plan(&globals, &command).expect("plan builds");
+/// print_take_leave(&plan).expect("stdout write succeeds");
+/// ```
+pub fn print_take_leave(plan: &TakeLeavePlan) -> io::Result<()> {
+    let mut stdout = io::stdout().lock();
+    write_take_leave_to(&mut stdout, plan)
 }
 
 fn join_fragments(parts: &[String]) -> String {

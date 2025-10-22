@@ -32,12 +32,12 @@ fn parses_lists(#[case] raw: &str, #[case] expected: Vec<&str>) {
 #[rstest]
 #[case("")]
 #[case("single")]
-#[allow(clippy::should_panic_without_expect)]
-#[should_panic]
 fn fails_on_non_lists(#[case] raw: &str) {
     figment::Jail::expect_with(|j| {
         j.set_env("VALUES", raw);
-        let _cfg: Cfg = Figment::from(CsvEnv::raw()).extract().unwrap();
+        Figment::from(CsvEnv::raw())
+            .extract::<Cfg>()
+            .expect_err("non-list inputs must fail to parse");
         Ok(())
     });
 }

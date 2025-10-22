@@ -25,7 +25,7 @@ use super::{
 /// assert!(tokens.to_string().contains("DeclarativeMerge"));
 /// ```
 fn expected_declarative_merge_impl_empty() -> TokenStream2 {
-    let fixture = include_str!("tests/fixtures/expected_merge_impl_empty.rs.txt");
+    let fixture = include_str!("fixtures/expected_merge_impl_empty.rs.txt");
     TokenStream2::from_str(fixture).expect("fixture token stream")
 }
 
