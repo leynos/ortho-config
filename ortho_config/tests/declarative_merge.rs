@@ -131,11 +131,7 @@ fn merge_layers_append_vectors() {
 
 #[rstest]
 fn merge_layers_respect_option_nulls() {
-    let layers = compose_layers(
-        json!({ "flag": "present" }),
-        json!({ "flag": null }),
-        None,
-    );
+    let layers = compose_layers(json!({ "flag": "present" }), json!({ "flag": null }), None);
     let config = OptionalSample::merge_from_layers(layers).expect("merge succeeds");
     assert!(config.flag.is_none());
 }

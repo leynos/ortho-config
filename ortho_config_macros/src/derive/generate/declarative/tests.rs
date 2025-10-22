@@ -3,14 +3,17 @@
 //! Verifies that declarative merge helpers emit deduplicated state storage,
 //! trait implementations, and constructors that honour append semantics.
 
-use super::{
-    generate_declarative_impl, generate_declarative_merge_from_layers_fn,
-    generate_declarative_merge_impl, generate_declarative_state_struct, unique_append_fields,
-};
+use std::str::FromStr;
+
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
 use rstest::rstest;
 use syn::parse_str;
+
+use super::{
+    generate_declarative_impl, generate_declarative_merge_from_layers_fn,
+    generate_declarative_merge_impl, generate_declarative_state_struct, unique_append_fields,
+};
 
 /// Returns the expected `DeclarativeMerge` impl for an empty `append_fields`
 /// case.
@@ -22,82 +25,8 @@ use syn::parse_str;
 /// assert!(tokens.to_string().contains("DeclarativeMerge"));
 /// ```
 fn expected_declarative_merge_impl_empty() -> TokenStream2 {
-    quote! {
-        impl ortho_config::DeclarativeMerge for __SampleDeclarativeMergeState {
-            type Output = Sample;
-
-            fn merge_layer(
-                &mut self,
-                layer: ortho_config::MergeLayer<'_>
-            ) -> ortho_config::OrthoResult<()> {
-                use ortho_config::OrthoResultExt as _;
-
-                let provenance = layer.provenance();
-                let path = layer.path().map(|p| p.to_owned());
-                let value = layer.into_value();
-                let mut map = match value {
-                    ortho_config::serde_json::Value::Object(map) => map,
-                    other => {
-                        let provenance_label = match provenance {
-                            ortho_config::MergeProvenance::Defaults => "defaults",
-                            ortho_config::MergeProvenance::File => "file",
-                            ortho_config::MergeProvenance::Environment => "environment",
-                            ortho_config::MergeProvenance::Cli => "CLI",
-                            _ => "unknown",
-                        };
-                        let value_kind = match other {
-                            ortho_config::serde_json::Value::Null => "null",
-                            ortho_config::serde_json::Value::Bool(_) => "a boolean",
-                            ortho_config::serde_json::Value::Number(_) => "a number",
-                            ortho_config::serde_json::Value::String(_) => "a string",
-                            ortho_config::serde_json::Value::Array(_) => "an array",
-                            ortho_config::serde_json::Value::Object(_) => unreachable!(
-                                "objects handled by earlier match arm"
-                            ),
-                        };
-                        let mut message = format!(
-                            concat!(
-                                "Declarative merge for ",
-                                stringify!(Sample),
-                                " expects JSON objects but the ",
-                                "{provenance_label} layer supplied {value_kind}. "
-                            ),
-                            provenance_label = provenance_label,
-                            value_kind = value_kind,
-                        );
-                        if let Some(path) = path {
-                            message.push_str("Source: ");
-                            message.push_str(path.as_str());
-                            message.push_str(". ");
-                        }
-                        message.push_str("Non-object layers would overwrite accumulated state.");
-                        return Err(std::sync::Arc::new(ortho_config::OrthoError::merge(
-                            ortho_config::figment::Error::from(message),
-                        )));
-                    }
-                };
-                if !map.is_empty() {
-                    ortho_config::declarative::merge_value(
-                        &mut self.value,
-                        ortho_config::serde_json::Value::Object(map),
-                    );
-                }
-                Ok(())
-            }
-
-            fn finish(self) -> ortho_config::OrthoResult<Self::Output> {
-                let __SampleDeclarativeMergeState { mut value, } = self;
-                let mut appended = ortho_config::serde_json::Map::new();
-                if !appended.is_empty() {
-                    ortho_config::declarative::merge_value(
-                        &mut value,
-                        ortho_config::serde_json::Value::Object(appended),
-                    );
-                }
-                ortho_config::declarative::from_value(value)
-            }
-        }
-    }
+    let fixture = include_str!("tests/fixtures/expected_merge_impl_empty.rs.txt");
+    TokenStream2::from_str(fixture).expect("fixture token stream")
 }
 
 #[rstest]
