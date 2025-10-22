@@ -1,3 +1,8 @@
+#![expect(
+    clippy::expect_used,
+    reason = "tests panic when configuration fixtures fail"
+)]
+
 //! Tests for configuration file helpers.
 
 use super::*;
@@ -119,7 +124,8 @@ fn resolve_base_path_resolves(#[case] is_abs: bool) {
 
 #[test]
 fn resolve_base_path_errors_when_no_parent() {
-    let err = resolve_base_path(Path::new(""), PathBuf::from("base.toml")).unwrap_err();
+    let err = resolve_base_path(Path::new(""), PathBuf::from("base.toml"))
+        .expect_err("missing parent directory must error");
     assert!(
         err.to_string()
             .contains("Cannot determine parent directory")
@@ -138,7 +144,8 @@ fn resolve_base_path_reports_missing_file(#[case] is_abs: bool) {
         } else {
             PathBuf::from("missing.toml")
         };
-        let err = resolve_base_path(&current, base).unwrap_err();
+        let err =
+            resolve_base_path(&current, base).expect_err("missing configuration file must error");
         let msg = err.to_string();
         assert!(
             msg.contains(expected_base.to_string_lossy().as_ref()),
@@ -195,7 +202,8 @@ fn process_extends_errors_when_no_parent() {
     let figment = Figment::from(Toml::string("extends = \"base.toml\""));
     let mut visited = HashSet::new();
     let mut stack = Vec::new();
-    let err = process_extends(figment, Path::new(""), &mut visited, &mut stack).unwrap_err();
+    let err = process_extends(figment, Path::new(""), &mut visited, &mut stack)
+        .expect_err("missing parent directory must error");
     assert!(
         err.to_string()
             .contains("Cannot determine parent directory")
@@ -207,7 +215,8 @@ fn process_extends_errors_when_base_is_not_file() {
     with_fresh_graph(|j, _root, current, visited, stack| {
         j.create_dir("dir")?;
         let figment = Figment::from(Toml::string("extends = 'dir'"));
-        let err = process_extends(figment, current, visited, stack).unwrap_err();
+        let err = process_extends(figment, current, visited, stack)
+            .expect_err("non-file base must error");
         assert!(err.to_string().contains("not a regular file"));
         Ok(())
     });
@@ -218,7 +227,8 @@ fn process_extends_errors_when_extends_empty() {
     with_fresh_graph(|j, _root, current, visited, stack| {
         j.create_file("base.toml", "")?; // placeholder to satisfy Jail
         let figment = Figment::from(Toml::string("extends = \"\""));
-        let err = process_extends(figment, current, visited, stack).unwrap_err();
+        let err = process_extends(figment, current, visited, stack)
+            .expect_err("cycle detection must error");
         assert!(err.to_string().contains("non-empty"));
         Ok(())
     });

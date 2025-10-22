@@ -107,6 +107,10 @@ fn write_line(writer: &mut impl Write, message: &str) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
+    #![expect(
+        clippy::expect_used,
+        reason = "tests panic to surface configuration mistakes"
+    )]
     use super::*;
     use serde::de::DeserializeOwned;
 

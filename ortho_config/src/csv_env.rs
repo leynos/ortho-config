@@ -164,9 +164,11 @@ impl Provider for CsvEnv {
         let mut dict = Dict::new();
         for (k, v) in self.iter() {
             let value = Self::parse_value(&v);
-            let nested = nest(k.as_str(), value)
-                .into_dict()
-                .expect("key is non-empty: must have dict");
+            let Some(nested) = nest(k.as_str(), value).into_dict() else {
+                return Err(Error::from(format!(
+                    "environment key `{k}` produced a non-object value"
+                )));
+            };
             dict.extend(nested);
         }
         Ok(self.inner.profile.collect(dict))

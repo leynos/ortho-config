@@ -309,23 +309,25 @@ mod lit_str_tests {
     #[test]
     fn lit_str_parses_string_values() {
         let attr: Attribute = syn::parse_quote!(#[ortho_config(cli_long = "name")]);
-        attr.parse_nested_meta(|meta| {
+        if let Err(err) = attr.parse_nested_meta(|meta| {
             let s = super::__doc_lit_str(&meta, "cli_long")?;
             assert_eq!(s.value(), "name");
             Ok(())
-        })
-        .unwrap();
+        }) {
+            panic!("expected attribute parsing to succeed: {err}");
+        }
     }
 
     #[test]
     fn lit_char_parses_char_values() {
         let attr: syn::Attribute = syn::parse_quote!(#[ortho_config(cli_short = 'n')]);
-        attr.parse_nested_meta(|meta| {
+        if let Err(err) = attr.parse_nested_meta(|meta| {
             let c = super::lit_char(&meta, "cli_short")?;
             assert_eq!(c, 'n');
             Ok(())
-        })
-        .unwrap();
+        }) {
+            panic!("expected attribute parsing to succeed: {err}");
+        }
     }
 }
 
@@ -443,6 +445,10 @@ pub(crate) fn parse_input(
 
 #[cfg(test)]
 mod tests {
+    #![expect(
+        clippy::expect_used,
+        reason = "tests panic to surface configuration mistakes"
+    )]
     use super::*;
     use rstest::rstest;
     use syn::{Attribute, parse_quote};
@@ -465,10 +471,18 @@ mod tests {
         assert_eq!(fields.len(), 2);
         assert_eq!(struct_attrs.prefix.as_deref(), Some("CFG_"));
         assert_eq!(field_attrs.len(), 2);
-        assert_eq!(field_attrs[0].cli_long.as_deref(), Some("opt"));
-        assert_eq!(field_attrs[0].cli_short, Some('o'));
+        assert_eq!(
+            field_attrs
+                .first()
+                .and_then(|attrs| attrs.cli_long.as_deref()),
+            Some("opt")
+        );
+        assert_eq!(
+            field_attrs.first().and_then(|attrs| attrs.cli_short),
+            Some('o')
+        );
         assert!(matches!(
-            field_attrs[1].merge_strategy,
+            field_attrs.get(1).and_then(|attrs| attrs.merge_strategy),
             Some(MergeStrategy::Append)
         ));
     }
@@ -552,7 +566,12 @@ mod tests {
 
         assert_eq!(fields.len(), 1);
         assert_eq!(struct_attrs.prefix.as_deref(), Some("CFG_"));
-        assert_eq!(field_attrs[0].cli_long.as_deref(), cli_long);
+        assert_eq!(
+            field_attrs
+                .first()
+                .and_then(|attrs| attrs.cli_long.as_deref()),
+            cli_long
+        );
     }
 
     #[rstest]

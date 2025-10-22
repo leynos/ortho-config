@@ -14,7 +14,7 @@ fn main() -> color_eyre::Result<()> {
 
 fn run() -> Result<(), HelloWorldError> {
     let matches = CommandLine::command().get_matches();
-    let cli = CommandLine::from_arg_matches(&matches).expect("command validated");
+    let cli = CommandLine::from_arg_matches(&matches)?;
     let globals = load_global_config(&cli.globals, cli.config_path.as_deref())?;
     match cli.command {
         Commands::Greet(args) => {

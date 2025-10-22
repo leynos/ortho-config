@@ -286,6 +286,10 @@ fn build_macro_components(
 
 #[cfg(test)]
 mod tests {
+    #![expect(
+        clippy::expect_used,
+        reason = "tests panic to surface configuration mistakes"
+    )]
     //! Unit tests for the procedural macro token generators.
 
     use super::MacroComponents;

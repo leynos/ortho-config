@@ -1,4 +1,8 @@
 //! Tests for attribute handling in the derive macro.
+#![expect(
+    clippy::expect_used,
+    reason = "tests panic to surface configuration mistakes"
+)]
 
 use ortho_config::OrthoConfig;
 use rstest::rstest;

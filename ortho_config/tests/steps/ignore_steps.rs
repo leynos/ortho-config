@@ -1,4 +1,8 @@
 //! Steps for testing ignore pattern list handling.
+#![expect(
+    clippy::expect_used,
+    reason = "tests panic to surface configuration mistakes"
+)]
 
 use crate::{RulesConfig, World};
 use cucumber::{given, then, when};

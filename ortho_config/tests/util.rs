@@ -3,6 +3,10 @@
 //! These helpers run setup code inside a jailed environment before
 //! loading a subcommand configuration. They reduce boilerplate in
 //! tests by encapsulating the jail creation and configuration loading.
+#![expect(
+    clippy::expect_used,
+    reason = "tests panic to surface configuration mistakes"
+)]
 
 use clap::CommandFactory;
 use ortho_config::subcommand::Prefix;

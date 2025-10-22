@@ -1,4 +1,8 @@
 //! Tests for configuration inheritance using the `extends` key.
+#![expect(
+    clippy::expect_used,
+    reason = "tests panic to surface configuration mistakes"
+)]
 
 use ortho_config::{OrthoConfig, OrthoError};
 use rstest::rstest;
@@ -63,7 +67,7 @@ fn cyclic_inheritance_is_detected() {
         j.create_file("a.toml", "extends = \"b.toml\"\nfoo = \"a\"")?;
         j.create_file("b.toml", "extends = \"a.toml\"\nfoo = \"b\"")?;
         j.create_file(".config.toml", "extends = \"a.toml\"")?;
-        let err = ExtendsCfg::load_from_iter(["prog"]).unwrap_err();
+        let err = ExtendsCfg::load_from_iter(["prog"]).expect_err("cyclic extends detected");
         assert!(matches!(&*err, OrthoError::CyclicExtends { .. }));
         Ok(())
     });
@@ -78,7 +82,8 @@ fn cyclic_inheritance_detects_case_variants() {
     with_jail(|j| {
         j.create_file("Base.toml", "extends = \".CONFIG.toml\"\nfoo = \"base\"")?;
         j.create_file(".config.toml", "extends = \"base.toml\"\nfoo = \"config\"")?;
-        let err = ExtendsCfg::load_from_iter(["prog"]).unwrap_err();
+        let err =
+            ExtendsCfg::load_from_iter(["prog"]).expect_err("case-insensitive cyclic extends");
         assert!(matches!(&*err, OrthoError::CyclicExtends { .. }));
         let msg = err.to_string();
         assert!(msg.to_ascii_lowercase().contains("base.toml"));
@@ -100,7 +105,7 @@ fn missing_base_file_errors(#[case] is_abs: bool) {
             "missing.toml".to_string()
         };
         j.create_file(".config.toml", &format!("extends = {extends_value:?}"))?;
-        let err = ExtendsCfg::load_from_iter(["prog"]).unwrap_err();
+        let err = ExtendsCfg::load_from_iter(["prog"]).expect_err("missing base file must error");
         let msg = err.to_string();
         assert!(msg.contains(expected_base.to_string_lossy().as_ref()));
         assert!(msg.contains(".config.toml"));
@@ -113,7 +118,7 @@ fn missing_base_file_errors(#[case] is_abs: bool) {
 fn non_string_extends_errors() {
     with_jail(|j| {
         j.create_file(".config.toml", "extends = 1")?;
-        let err = ExtendsCfg::load_from_iter(["prog"]).unwrap_err();
+        let err = ExtendsCfg::load_from_iter(["prog"]).expect_err("non-string extends rejected");
         let msg = err.to_string();
         assert!(msg.contains("must be a string"));
         // Also assert the origin file is mentioned for better diagnostics.
@@ -127,7 +132,7 @@ fn empty_extends_errors() {
     with_jail(|j| {
         j.create_file("base.toml", "")?; // placeholder so Jail has root file
         j.create_file(".config.toml", "extends = ''")?;
-        let err = ExtendsCfg::load_from_iter(["prog"]).unwrap_err();
+        let err = ExtendsCfg::load_from_iter(["prog"]).expect_err("empty extends rejected");
         assert!(err.to_string().contains("non-empty"));
         Ok(())
     });
@@ -138,7 +143,7 @@ fn directory_extends_errors() {
     with_jail(|j| {
         j.create_dir("dir")?;
         j.create_file(".config.toml", "extends = 'dir'")?;
-        let err = ExtendsCfg::load_from_iter(["prog"]).unwrap_err();
+        let err = ExtendsCfg::load_from_iter(["prog"]).expect_err("directory extends rejected");
         assert!(err.to_string().contains("not a regular file"));
         Ok(())
     });

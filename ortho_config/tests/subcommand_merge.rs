@@ -1,4 +1,9 @@
 //! Tests subcommand configuration precedence (defaults < file < env < CLI) for pr and issue.
+#![expect(
+    clippy::expect_used,
+    reason = "tests panic to surface configuration mistakes"
+)]
+
 use camino::Utf8PathBuf;
 use cap_std::{ambient_authority, fs::Dir};
 use clap::Parser;

@@ -2,6 +2,10 @@
 //!
 //! Validates layer composition, precedence, append strategies for Vec fields,
 //! and Option null handling in the declarative merge system.
+#![expect(
+    clippy::expect_used,
+    reason = "tests panic to surface configuration mistakes"
+)]
 
 use camino::Utf8PathBuf;
 use ortho_config::{

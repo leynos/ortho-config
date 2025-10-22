@@ -4,6 +4,10 @@
 //! This module provides step definitions that verify the correct precedence and
 //! merging of configuration sources (CLI arguments, environment variables, and
 //! configuration files) when loading subcommand configurations.
+#![expect(
+    clippy::expect_used,
+    reason = "tests panic to surface configuration mistakes"
+)]
 
 use crate::{PrArgs, World};
 use clap::Parser;

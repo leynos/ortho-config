@@ -177,6 +177,10 @@ pub(crate) fn build_append_logic(fields: &[(Ident, Type)]) -> proc_macro2::Token
 
 #[cfg(test)]
 mod tests {
+    #![expect(
+        clippy::expect_used,
+        reason = "tests panic to surface configuration mistakes"
+    )]
     use super::*;
     use crate::derive::parse::StructAttrs;
 
@@ -200,7 +204,8 @@ mod tests {
         let (fields, field_attrs, _) = demo_input();
         let out = collect_append_fields(&fields, &field_attrs).expect("collect_append_fields");
         assert_eq!(out.len(), 1);
-        assert_eq!(out[0].0.to_string(), "field2");
+        let (ident, _) = out.first().expect("vector entry present");
+        assert_eq!(ident.to_string(), "field2");
     }
 
     #[test]

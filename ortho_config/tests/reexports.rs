@@ -1,5 +1,4 @@
 //! Ensures configuration helpers are accessible via re-exports.
-
 use ortho_config::{figment::Figment, uncased::UncasedStr};
 
 #[test]

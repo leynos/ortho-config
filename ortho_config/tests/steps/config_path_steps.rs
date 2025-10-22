@@ -1,4 +1,8 @@
 //! Steps demonstrating a renamed configuration path flag.
+#![expect(
+    clippy::expect_used,
+    reason = "tests panic to surface configuration mistakes"
+)]
 
 use crate::{RulesConfig, World};
 use cucumber::{given, then, when};

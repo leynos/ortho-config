@@ -13,7 +13,13 @@ pub(crate) fn build_default_struct_fields(fields: &[syn::Field]) -> Vec<proc_mac
     fields
         .iter()
         .map(|f| {
-            let name = f.ident.as_ref().expect("named field");
+            let Some(name) = f.ident.as_ref() else {
+                return syn::Error::new_spanned(
+                    f,
+                    "OrthoConfig defaults structs require named fields",
+                )
+                .to_compile_error();
+            };
             let ty = option_type_tokens(&f.ty);
             quote! {
                 #[serde(skip_serializing_if = "Option::is_none")]
@@ -31,7 +37,13 @@ pub(crate) fn build_default_struct_init(
         .iter()
         .zip(field_attrs.iter())
         .map(|(f, attr)| {
-            let name = f.ident.as_ref().expect("named field");
+            let Some(name) = f.ident.as_ref() else {
+                return syn::Error::new_spanned(
+                    f,
+                    "OrthoConfig defaults structs require named fields",
+                )
+                .to_compile_error();
+            };
             if let Some(expr) = &attr.default {
                 quote! { #name: Some(#expr) }
             } else {

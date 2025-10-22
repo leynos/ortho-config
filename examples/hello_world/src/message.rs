@@ -64,17 +64,23 @@ impl TakeLeavePlan {
 ///
 /// ```rust
 /// use hello_world::cli::{GreetCommand, HelloWorldCli};
+/// use hello_world::error::HelloWorldError;
 /// use hello_world::message::build_plan;
 ///
-/// let mut config = HelloWorldCli::default();
-/// config.recipient = String::from("Ada Lovelace");
-/// config.salutations = vec![String::from("Hello")];
+/// fn demo() -> Result<(), HelloWorldError> {
+///     let mut config = HelloWorldCli::default();
+///     config.recipient = String::from("Ada Lovelace");
+///     config.salutations = vec![String::from("Hello")];
 ///
-/// let command = GreetCommand::default();
-/// let plan = build_plan(&config, &command).expect("plan builds");
+///     let command = GreetCommand::default();
+///     let plan = build_plan(&config, &command)?;
 ///
-/// assert_eq!(plan.message(), "Hello, Ada Lovelace!");
-/// assert_eq!(plan.preamble(), None);
+///     assert_eq!(plan.message(), "Hello, Ada Lovelace!");
+///     assert_eq!(plan.preamble(), None);
+///     Ok(())
+/// }
+///
+/// assert!(demo().is_ok());
 /// ```
 pub fn build_plan(
     config: &HelloWorldCli,
@@ -117,28 +123,33 @@ pub fn build_plan(
 ///
 /// # Examples
 ///
-/// ```
+/// ```rust
 /// use hello_world::cli::{HelloWorldCli, TakeLeaveCommand};
+/// use hello_world::error::HelloWorldError;
 /// use hello_world::message::build_take_leave_plan;
 ///
-/// let mut config = HelloWorldCli::default();
-/// config.recipient = String::from("Ada Lovelace");
-/// config.salutations = vec![String::from("Hello there")];
+/// fn demo() -> Result<(), HelloWorldError> {
+///     let mut config = HelloWorldCli::default();
+///    config.recipient = String::from("Ada Lovelace");
+///    config.salutations = vec![String::from("Hello there")];
 ///
-/// let mut command = TakeLeaveCommand::default();
-/// command.parting = String::from("Cheerio");
-/// command.greeting_preamble = Some(String::from("Before we go"));
-/// command.greeting_punctuation = Some(String::from("?"));
+///    let mut command = TakeLeaveCommand::default();
+///    command.parting = String::from("Cheerio");
+///    command.greeting_preamble = Some(String::from("Before we go"));
+///    command.greeting_punctuation = Some(String::from("?"));
 ///
-/// let plan =
-///     build_take_leave_plan(&config, &command).expect("valid farewell inputs");
+///    let plan = build_take_leave_plan(&config, &command)?;
 ///
-/// assert_eq!(plan.greeting().preamble(), Some("Before we go"));
-/// assert_eq!(
-///     plan.greeting().message(),
-///     "Hello there, Ada Lovelace?"
-/// );
-/// assert_eq!(plan.farewell(), "Cheerio, Ada Lovelace.");
+///    assert_eq!(plan.greeting().preamble(), Some("Before we go"));
+///    assert_eq!(
+///        plan.greeting().message(),
+///        "Hello there, Ada Lovelace?"
+///    );
+///    assert_eq!(plan.farewell(), "Cheerio, Ada Lovelace.");
+///    Ok(())
+/// }
+///
+/// assert!(demo().is_ok());
 /// ```
 pub fn build_take_leave_plan(
     config: &HelloWorldCli,
@@ -162,22 +173,27 @@ pub fn build_take_leave_plan(
 ///
 /// # Examples
 ///
-/// ```
+/// ```rust
 /// use hello_world::cli::{GreetCommand, TakeLeaveCommand};
+/// use hello_world::error::HelloWorldError;
 /// use hello_world::message::build_greeting_defaults;
 ///
-/// let mut farewell = TakeLeaveCommand::default();
-/// farewell.greeting_preamble = Some(String::from("Mind the gap"));
-/// farewell.greeting_punctuation = Some(String::from("?"));
+/// fn demo() -> Result<(), HelloWorldError> {
+///     let mut farewell = TakeLeaveCommand::default();
+///     farewell.greeting_preamble = Some(String::from("Mind the gap"));
+///     farewell.greeting_punctuation = Some(String::from("?"));
 ///
-/// let defaults =
-///     build_greeting_defaults(&farewell).expect("defaults load successfully");
+///     let defaults = build_greeting_defaults(&farewell)?;
 ///
-/// assert_eq!(
-///     defaults.preamble,
-///     Some(String::from("Mind the gap"))
-/// );
-/// assert_eq!(defaults.punctuation, String::from("?"));
+///     assert_eq!(
+///         defaults.preamble,
+///         Some(String::from("Mind the gap"))
+///     );
+///     assert_eq!(defaults.punctuation, String::from("?"));
+///     Ok(())
+/// }
+///
+/// assert!(demo().is_ok());
 /// ```
 fn build_greeting_defaults(command: &TakeLeaveCommand) -> Result<GreetCommand, HelloWorldError> {
     let mut greeting_defaults = crate::cli::load_greet_defaults()?;
@@ -244,14 +260,20 @@ fn write_take_leave_to<W: Write>(writer: &mut W, plan: &TakeLeavePlan) -> io::Re
 ///
 /// # Examples
 ///
-/// ```
+/// ```rust
 /// use hello_world::cli::{GreetCommand, HelloWorldCli};
+/// use hello_world::error::HelloWorldError;
 /// use hello_world::message::{build_plan, print_plan};
 ///
-/// let globals = HelloWorldCli::default();
-/// let command = GreetCommand::default();
-/// let plan = build_plan(&globals, &command).expect("plan builds");
-/// print_plan(&plan).expect("stdout write succeeds");
+/// fn demo() -> Result<(), HelloWorldError> {
+///     let globals = HelloWorldCli::default();
+///     let command = GreetCommand::default();
+///     let plan = build_plan(&globals, &command)?;
+///     print_plan(&plan)?;
+///     Ok(())
+/// }
+///
+/// assert!(demo().is_ok());
 /// ```
 pub fn print_plan(plan: &GreetingPlan) -> io::Result<()> {
     let mut stdout = io::stdout().lock();
@@ -266,14 +288,20 @@ pub fn print_plan(plan: &GreetingPlan) -> io::Result<()> {
 ///
 /// # Examples
 ///
-/// ```
+/// ```rust
 /// use hello_world::cli::{HelloWorldCli, TakeLeaveCommand};
+/// use hello_world::error::HelloWorldError;
 /// use hello_world::message::{build_take_leave_plan, print_take_leave};
 ///
-/// let globals = HelloWorldCli::default();
-/// let command = TakeLeaveCommand::default();
-/// let plan = build_take_leave_plan(&globals, &command).expect("plan builds");
-/// print_take_leave(&plan).expect("stdout write succeeds");
+/// fn demo() -> Result<(), HelloWorldError> {
+///     let globals = HelloWorldCli::default();
+///     let command = TakeLeaveCommand::default();
+///     let plan = build_take_leave_plan(&globals, &command)?;
+///     print_take_leave(&plan)?;
+///     Ok(())
+/// }
+///
+/// assert!(demo().is_ok());
 /// ```
 pub fn print_take_leave(plan: &TakeLeavePlan) -> io::Result<()> {
     let mut stdout = io::stdout().lock();
@@ -281,21 +309,28 @@ pub fn print_take_leave(plan: &TakeLeavePlan) -> io::Result<()> {
 }
 
 fn join_fragments(parts: &[String]) -> String {
-    match parts.len() {
-        0 => String::new(),
-        1 => parts[0].clone(),
-        2 => format!("{} and {}", parts[0], parts[1]),
-        _ => {
-            let mut sentence = parts[..parts.len() - 1].join(", ");
-            sentence.push_str(", and ");
-            sentence.push_str(parts.last().expect("at least one fragment"));
-            sentence
-        }
+    match parts {
+        [] => String::new(),
+        [single] => single.clone(),
+        [first, second] => format!("{first} and {second}"),
+        _ => match parts.split_last() {
+            Some((last, rest)) => {
+                let mut sentence = rest.join(", ");
+                sentence.push_str(", and ");
+                sentence.push_str(last);
+                sentence
+            }
+            None => String::new(),
+        },
     }
 }
 
 #[cfg(test)]
 mod tests {
+    #![expect(
+        clippy::expect_used,
+        reason = "tests panic to surface configuration mistakes"
+    )]
     use super::*;
     use crate::cli::{FarewellChannel, GlobalArgs};
     use crate::error::ValidationError;

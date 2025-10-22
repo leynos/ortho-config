@@ -1,4 +1,8 @@
 //! Tests ensuring flattened CLI structs merge without overriding defaults.
+#![expect(
+    clippy::expect_used,
+    reason = "tests panic to surface configuration mistakes"
+)]
 
 use figment::{Figment, providers::Serialized};
 use ortho_config::sanitized_provider;

@@ -1,5 +1,10 @@
 //! Step definitions for the `hello_world` example.
 //! Drive the binary and assert its outputs.
+#![expect(
+    clippy::expect_used,
+    reason = "tests panic to surface configuration mistakes"
+)]
+
 use crate::{SampleConfigError, World};
 use camino::Utf8PathBuf;
 use cucumber::gherkin::Step as GherkinStep;

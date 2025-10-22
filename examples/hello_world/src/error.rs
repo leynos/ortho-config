@@ -5,6 +5,7 @@
 //!
 //! `HelloWorldError` wraps the derive layer errors alongside local validation
 //! issues so the binary renders concise, actionable diagnostics.
+use clap::Error as ClapError;
 use std::{io, sync::Arc};
 use thiserror::Error;
 
@@ -14,6 +15,9 @@ pub enum HelloWorldError {
     /// Wraps configuration parsing failures from `ortho_config`.
     #[error("failed to load configuration: {0}")]
     Configuration(#[from] Arc<ortho_config::OrthoError>),
+    /// Reports CLI parsing failures propagated from Clap.
+    #[error("failed to parse command line: {0}")]
+    Cli(#[from] ClapError),
     /// Bubbles up validation issues detected before executing the command.
     #[error(transparent)]
     Validation(#[from] ValidationError),

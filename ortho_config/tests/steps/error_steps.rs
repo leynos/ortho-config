@@ -1,4 +1,8 @@
 //! Steps verifying aggregated error reporting.
+#![expect(
+    clippy::expect_used,
+    reason = "tests panic to surface configuration mistakes"
+)]
 
 use crate::{ErrorConfig, World};
 use cucumber::{given, then, when};

@@ -3,6 +3,11 @@
 //! Verifies that declarative merge helpers emit deduplicated state storage,
 //! trait implementations, and constructors that honour append semantics.
 
+#![expect(
+    clippy::expect_used,
+    reason = "tests panic when parsing fixture identifiers fails"
+)]
+
 use std::str::FromStr;
 
 use proc_macro2::TokenStream as TokenStream2;
@@ -48,8 +53,20 @@ fn unique_append_fields_filters_duplicates() {
 
     let filtered = unique_append_fields(&append_fields);
     assert_eq!(filtered.len(), 2);
-    assert_eq!(filtered[0].0.to_string(), "items");
-    assert_eq!(filtered[1].0.to_string(), "tags");
+    assert_eq!(
+        filtered
+            .first()
+            .map(|(ident, _)| ident.to_string())
+            .as_deref(),
+        Some("items")
+    );
+    assert_eq!(
+        filtered
+            .get(1)
+            .map(|(ident, _)| ident.to_string())
+            .as_deref(),
+        Some("tags")
+    );
 }
 
 #[rstest]

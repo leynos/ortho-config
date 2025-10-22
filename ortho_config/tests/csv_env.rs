@@ -2,6 +2,10 @@
 //!
 //! Ensure that comma-separated environment variables are parsed into arrays
 //! and that existing JSON strings remain intact.
+#![expect(
+    clippy::expect_used,
+    reason = "tests panic to surface configuration mistakes"
+)]
 
 use figment::Figment;
 use ortho_config::CsvEnv;

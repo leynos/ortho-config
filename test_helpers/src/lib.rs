@@ -100,7 +100,7 @@ pub mod env {
     /// ```
     /// use test_helpers::env;
     /// let _g = env::set_var("FOO", "bar");
-    /// assert_eq!(std::env::var("FOO").expect("read env var"), "bar");
+    /// assert!(matches!(std::env::var("FOO"), Ok(ref value) if value == "bar"));
     /// // Dropping `_g` restores the prior value (or unsets it if none existed).
     /// ```
     pub fn set_var<K, V>(key: K, value: V) -> EnvVarGuard
@@ -159,6 +159,13 @@ pub mod env {
         use std::sync::{Arc, Barrier};
         use std::thread;
 
+        fn env_value(key: &str) -> String {
+            match std::env::var(key) {
+                Ok(value) => value,
+                Err(err) => panic!("expected environment variable {key}: {err}"),
+            }
+        }
+
         #[test]
         fn set_var_restores_original() {
             let key = "TEST_HELPERS_SET_VAR";
@@ -166,9 +173,9 @@ pub mod env {
             super::with_lock(|| unsafe { super::env_set_var(key, OsStr::new(original)) });
             {
                 let _guard = set_var(key, "temp");
-                assert_eq!(std::env::var(key).expect("read env var"), "temp");
+                assert_eq!(env_value(key), "temp");
             }
-            assert_eq!(std::env::var(key).expect("read env var"), original);
+            assert_eq!(env_value(key), original);
             super::with_lock(|| unsafe { super::env_remove_var(key) });
         }
 
@@ -181,7 +188,7 @@ pub mod env {
                 let _guard = remove_var(key);
                 assert!(std::env::var(key).is_err());
             }
-            assert_eq!(std::env::var(key).expect("read env var"), original);
+            assert_eq!(env_value(key), original);
             super::with_lock(|| unsafe { super::env_remove_var(key) });
         }
 
@@ -191,7 +198,7 @@ pub mod env {
             super::with_lock(|| unsafe { super::env_remove_var(key) });
             {
                 let _guard = set_var(key, "tmp");
-                assert_eq!(std::env::var(key).expect("read env var"), "tmp");
+                assert_eq!(env_value(key), "tmp");
             }
             assert!(std::env::var(key).is_err());
         }
@@ -213,13 +220,15 @@ pub mod env {
                         barrier.wait();
                         let value = format!("value-{key}");
                         let _g = set_var(&key, &value);
-                        assert_eq!(std::env::var(&key).expect("read env var"), value);
+                        assert_eq!(env_value(&key), value);
                     })
                 })
                 .collect();
 
             for handle in handles {
-                handle.join().expect("thread to join");
+                if let Err(err) = handle.join() {
+                    panic!("thread panicked: {err:?}");
+                }
             }
 
             for key in keys {
@@ -234,12 +243,12 @@ pub mod env {
             super::with_lock(|| unsafe { super::env_remove_var(key) });
             {
                 let _g1 = set_var(key, "v1");
-                assert_eq!(std::env::var(key).expect("read env var"), "v1");
+                assert_eq!(env_value(key), "v1");
                 {
                     let _g2 = set_var(key, "v2");
-                    assert_eq!(std::env::var(key).expect("read env var"), "v2");
+                    assert_eq!(env_value(key), "v2");
                 }
-                assert_eq!(std::env::var(key).expect("read env var"), "v1");
+                assert_eq!(env_value(key), "v1");
             }
             assert!(std::env::var(key).is_err());
         }

@@ -1,4 +1,8 @@
 //! Tests for the append merge strategy on vectors.
+#![expect(
+    clippy::expect_used,
+    reason = "tests panic to surface configuration mistakes"
+)]
 
 use ortho_config::OrthoConfig;
 use rstest::rstest;

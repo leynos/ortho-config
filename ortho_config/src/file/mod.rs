@@ -124,11 +124,10 @@ fn normalise_cycle_key(path: &Path) -> PathBuf {
     {
         use std::ffi::OsString;
 
-        let lowered = path
-            .as_os_str()
-            .to_str()
-            .expect("macOS paths are guaranteed UTF-8")
-            .to_lowercase();
+        let lowered = match path.as_os_str().to_str() {
+            Some(text) => text.to_lowercase(),
+            None => return path.to_path_buf(),
+        };
         PathBuf::from(OsString::from(lowered))
     }
 

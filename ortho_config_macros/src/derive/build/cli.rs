@@ -271,6 +271,10 @@ pub(crate) fn build_cli_struct_fields(
 
 #[cfg(test)]
 mod tests {
+    #![expect(
+        clippy::expect_used,
+        reason = "tests panic to surface configuration mistakes"
+    )]
     use super::*;
     use crate::derive::parse::FieldAttrs;
     use rstest::rstest;
@@ -371,7 +375,11 @@ mod tests {
     fn rejects_mismatched_field_metadata_lengths() {
         let fields: Vec<syn::Field> = vec![syn::parse_quote!(pub alpha: bool)];
         let mut attrs = vec![FieldAttrs::default(); 2];
-        attrs[0].cli_long = Some("alpha".into());
+        if let Some(first) = attrs.first_mut() {
+            first.cli_long = Some("alpha".into());
+        } else {
+            panic!("expected at least one attribute entry");
+        }
         let err = build_cli_struct_fields(&fields, &attrs).expect_err("should fail");
         assert!(err.to_string().contains("CLI field metadata mismatch"));
     }

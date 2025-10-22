@@ -1,5 +1,9 @@
 //! Behavioural tests ensuring empty configuration structs generate valid code
 //! and load successfully.
+#![expect(
+    clippy::expect_used,
+    reason = "tests panic to surface configuration mistakes"
+)]
 
 use ortho_config::OrthoConfig;
 use rstest::rstest;

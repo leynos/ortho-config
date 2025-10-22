@@ -1,4 +1,8 @@
 //! Steps for scenarios involving flattened CLI structures.
+#![expect(
+    clippy::expect_used,
+    reason = "tests panic to surface configuration mistakes"
+)]
 
 use crate::{FlatArgs, World};
 use clap::Parser;

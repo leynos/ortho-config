@@ -492,7 +492,7 @@ impl HelloWorldCli {
     /// # use hello_world::cli::{DeliveryMode, HelloWorldCli};
     /// let mut cli = HelloWorldCli::default();
     /// cli.is_excited = true;
-    /// cli.validate().unwrap();
+    /// assert!(cli.validate().is_ok());
     /// assert_eq!(cli.delivery_mode(), DeliveryMode::Enthusiastic);
     /// ```
     pub fn validate(&self) -> Result<(), ValidationError> {

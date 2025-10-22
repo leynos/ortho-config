@@ -148,7 +148,8 @@ impl OrthoError {
             return None;
         }
         Some(if arcs.len() == 1 {
-            match Arc::try_unwrap(arcs.pop().unwrap()) {
+            let last = arcs.pop()?;
+            match Arc::try_unwrap(last) {
                 Ok(err) => err,
                 Err(shared) => OrthoError::Aggregate(Box::new(AggregatedErrors::new(vec![shared]))),
             }
@@ -170,7 +171,10 @@ impl OrthoError {
         I: IntoIterator<Item = E>,
         E: Into<Arc<OrthoError>>,
     {
-        Self::try_aggregate(errors).expect("aggregate requires at least one error")
+        match Self::try_aggregate(errors) {
+            Some(err) => err,
+            None => panic!("aggregate requires at least one error"),
+        }
     }
 
     /// Construct a merge error from a [`figment::Error`].
@@ -328,7 +332,10 @@ mod tests {
 
     #[test]
     fn both_aggregate_behaviours() {
-        run_aggregate_tests("try_aggregate", |v| OrthoError::try_aggregate(v).unwrap());
+        run_aggregate_tests("try_aggregate", |v| match OrthoError::try_aggregate(v) {
+            Some(err) => err,
+            None => panic!("expected error aggregation to yield a value"),
+        });
         run_aggregate_tests("aggregate", OrthoError::aggregate);
     }
 }

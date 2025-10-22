@@ -5,6 +5,10 @@
 //! variable names, and file paths. Tests cover loading via CLI flags,
 //! environment variables, `XDG_CONFIG_HOME`, dotfile fallback, defaults, and
 //! error handling for missing or malformed configurations.
+#![expect(
+    clippy::expect_used,
+    reason = "tests panic to surface configuration mistakes"
+)]
 
 use ortho_config::{OrthoConfig, OrthoError};
 use rstest::rstest;

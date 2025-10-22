@@ -1,4 +1,8 @@
 //! Steps verifying CLI precedence over environment variables and files.
+#![expect(
+    clippy::expect_used,
+    reason = "tests panic to surface configuration mistakes"
+)]
 
 use crate::{RulesConfig, World};
 use cucumber::{given, then, when};

@@ -1,3 +1,8 @@
+#![expect(
+    clippy::expect_used,
+    reason = "tests panic when CLI fixtures fail to parse"
+)]
+
 use super::*;
 #[cfg(unix)]
 use crate::cli::discovery::collect_config_candidates;
@@ -81,7 +86,13 @@ fn hello_world_cli_detects_conflicting_modes(mut base_cli: HelloWorldCli) {
     ValidationError::MissingSalutation
 )]
 #[case::blank_salutation(
-    |cli: &mut HelloWorldCli| cli.salutations[0] = String::from("   "),
+    |cli: &mut HelloWorldCli| {
+        if let Some(first) = cli.salutations.first_mut() {
+            *first = String::from("   ");
+        } else {
+            panic!("expected at least one salutation");
+        }
+    },
     ValidationError::BlankSalutation(0)
 )]
 fn hello_world_cli_validation_errors<F>(

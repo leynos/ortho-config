@@ -1,4 +1,8 @@
 //! Tests for subcommand configuration helpers.
+#![expect(
+    clippy::expect_used,
+    reason = "tests panic to surface configuration mistakes"
+)]
 
 //! Utilities for subcommand test setup and loading.
 mod util;
@@ -40,9 +44,12 @@ fn loads_from_home() {
         |j| {
             let home = j.create_dir("home")?;
             j.create_file(home.join(".app.toml"), "[cmds.test]\nfoo = \"home\"")?;
-            j.set_env("HOME", home.to_str().unwrap());
+            j.set_env("HOME", home.to_str().expect("home path utf-8"));
             #[cfg(windows)]
-            j.set_env("USERPROFILE", home.to_str().unwrap());
+            j.set_env(
+                "USERPROFILE",
+                home.to_str().expect("user profile path utf-8"),
+            );
             Ok(())
         },
         &CmdCfg::default(),
@@ -57,9 +64,12 @@ fn local_overrides_home() {
         |j| {
             let home = j.create_dir("home")?;
             j.create_file(home.join(".app.toml"), "[cmds.test]\nfoo = \"home\"")?;
-            j.set_env("HOME", home.to_str().unwrap());
+            j.set_env("HOME", home.to_str().expect("home path utf-8"));
             #[cfg(windows)]
-            j.set_env("USERPROFILE", home.to_str().unwrap());
+            j.set_env(
+                "USERPROFILE",
+                home.to_str().expect("user profile path utf-8"),
+            );
             j.create_file(".app.toml", "[cmds.test]\nfoo = \"local\"")?;
             Ok(())
         },

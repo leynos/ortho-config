@@ -1,5 +1,4 @@
 //! Tests for composing declarative globals in the hello world example.
-
 use rstest::{fixture, rstest};
 
 #[fixture]

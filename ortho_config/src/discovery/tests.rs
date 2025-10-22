@@ -1,3 +1,8 @@
+#![expect(
+    clippy::expect_used,
+    reason = "tests panic when discovery helpers fail to create fixtures"
+)]
+
 use super::*;
 use rstest::rstest;
 use serde::Deserialize;
@@ -155,8 +160,7 @@ fn project_roots_replaces_existing_entries() {
         expected.len(),
         candidates.len()
     );
-    let tail = &candidates[candidates.len() - expected.len()..];
-    assert_eq!(tail, expected.as_slice());
+    assert!(candidates.ends_with(&expected));
     assert!(
         !candidates.contains(&PathBuf::from("legacy/.hello_world.toml")),
         "expected legacy project root to be cleared"

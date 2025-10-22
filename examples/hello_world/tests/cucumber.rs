@@ -1,4 +1,9 @@
 //! Cucumber test harness for the `hello_world` example.
+#![expect(
+    clippy::expect_used,
+    reason = "tests panic to surface configuration mistakes"
+)]
+
 use std::fs;
 use std::process::Stdio;
 use std::time::Duration;

@@ -275,9 +275,13 @@ pub(crate) fn build_merge_section(
 
         match fig.extract::<#config_ident>() {
             Ok(cfg) => {
-                if errors.is_empty() { Ok(cfg) }
-                else if errors.len() == 1 { Err(errors.pop().expect("one error")) }
-                else { Err(ortho_config::OrthoError::aggregate(errors).into()) }
+                if errors.is_empty() {
+                    Ok(cfg)
+                } else if errors.len() == 1 {
+                    Err(errors.remove(0))
+                } else {
+                    Err(ortho_config::OrthoError::aggregate(errors).into())
+                }
             }
             Err(e) => {
                 errors.push(std::sync::Arc::new(ortho_config::OrthoError::merge(e)));

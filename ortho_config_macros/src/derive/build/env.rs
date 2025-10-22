@@ -50,6 +50,10 @@ pub(crate) fn default_app_name(struct_attrs: &StructAttrs, ident: &Ident) -> Str
 
 #[cfg(test)]
 mod tests {
+    #![expect(
+        clippy::expect_used,
+        reason = "tests panic to surface configuration mistakes"
+    )]
     use super::*;
 
     fn demo_input() -> (

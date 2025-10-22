@@ -322,7 +322,9 @@ fn merge_object(target: &mut Value, map: Map<String, Value>) {
     if !target.is_object() {
         *target = Value::Object(Map::new());
     }
-    let target_map = target.as_object_mut().expect("object after initialisation");
+    let Some(target_map) = target.as_object_mut() else {
+        return;
+    };
     for (key, value) in map {
         match target_map.get_mut(&key) {
             Some(existing) => merge_value(existing, value),

@@ -64,6 +64,10 @@ pub(crate) fn build_config_flag_field(
 
 #[cfg(test)]
 mod tests {
+    #![expect(
+        clippy::expect_used,
+        reason = "tests panic to surface configuration mistakes"
+    )]
     use super::*;
     use crate::derive::build::build_cli_struct_fields;
     use crate::derive::parse::{DiscoveryAttrs, StructAttrs};

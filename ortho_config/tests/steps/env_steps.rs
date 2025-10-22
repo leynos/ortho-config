@@ -2,6 +2,10 @@
 //!
 //! Provides BDD steps for setting environment variables, loading configuration
 //! using [`CsvEnv`], and verifying parsed results.
+#![expect(
+    clippy::expect_used,
+    reason = "tests panic to surface configuration mistakes"
+)]
 
 use crate::{RulesConfig, World};
 use cucumber::{given, then, when};

@@ -191,6 +191,10 @@ pub(crate) fn candidate_paths(prefix: &Prefix) -> Vec<PathBuf> {
 
 #[cfg(test)]
 mod tests {
+    #![expect(
+        clippy::expect_used,
+        reason = "tests panic to surface configuration mistakes"
+    )]
     #[cfg(any(unix, target_os = "redox"))]
     use super::*;
     #[cfg(any(unix, target_os = "redox"))]
@@ -304,26 +308,32 @@ mod tests {
 
         let group_len: usize = EXT_GROUPS.iter().map(|g| g.len()).sum();
 
-        let home_parent = paths[0]
-            .parent()
+        let home_parent = paths
+            .first()
+            .and_then(|p| p.parent())
             .expect("HOME candidate must have a parent directory");
         assert!(
-            paths[..group_len]
+            paths
                 .iter()
+                .take(group_len)
                 .all(|p| p.parent() == Some(home_parent))
         );
 
-        let xdg_parent = paths[group_len]
-            .parent()
-            .expect("platform candidate must have a parent directory");
-        assert!(
-            paths[group_len..paths.len() - group_len]
-                .iter()
-                .all(|p| p.parent() == Some(xdg_parent))
-        );
+        let mid_slice = paths
+            .get(group_len..paths.len().saturating_sub(group_len))
+            .unwrap_or(&[]);
+        if let Some(first_mid) = mid_slice.first() {
+            let xdg_parent = first_mid
+                .parent()
+                .expect("platform candidate must have a parent directory");
+            assert!(mid_slice.iter().all(|p| p.parent() == Some(xdg_parent)));
+        }
 
+        let local_slice = paths
+            .get(paths.len().saturating_sub(group_len)..)
+            .unwrap_or(&[]);
         assert!(
-            paths[paths.len() - group_len..]
+            local_slice
                 .iter()
                 .all(|p| p.parent() == Some(Path::new(".")))
         );

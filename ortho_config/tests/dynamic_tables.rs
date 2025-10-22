@@ -1,4 +1,8 @@
 //! Tests for dynamic table deserialization into maps.
+#![expect(
+    clippy::expect_used,
+    reason = "tests panic to surface configuration mistakes"
+)]
 
 use figment::{
     Figment,
@@ -71,7 +75,9 @@ enabled = false
                     "b": { "enabled": false }
                 }
             }))),
-            _ => unreachable!("unknown source: {source}"),
+            other => {
+                return Err(figment::Error::from(format!("unknown source: {other}")));
+            }
         };
         let cfg: TableConfig = fig.extract().expect("extract");
         assert_basic_rules(&cfg);

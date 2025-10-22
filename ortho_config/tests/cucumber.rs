@@ -2,7 +2,6 @@
 //!
 //! Exercises end-to-end configuration loading using [`CsvEnv`] and the
 //! derive macro.
-
 use clap::{Args, Parser};
 use cucumber::World as _;
 use ortho_config::OrthoConfig;

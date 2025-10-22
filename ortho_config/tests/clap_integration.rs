@@ -1,4 +1,8 @@
 //! Tests covering CLI integration and error handling.
+#![expect(
+    clippy::expect_used,
+    reason = "tests panic to surface configuration mistakes"
+)]
 
 use ortho_config::{OrthoConfig, OrthoError};
 use rstest::rstest;
@@ -80,20 +84,23 @@ fn cli_combines_with_file() {
 
 #[rstest]
 fn invalid_cli_input_maps_error() {
-    let err = TestConfig::load_from_iter(["prog", "--bogus"]).unwrap_err();
+    let err = TestConfig::load_from_iter(["prog", "--bogus"])
+        .expect_err("unexpected CLI input must fail");
     assert!(matches!(&*err, OrthoError::CliParsing(_)));
 }
 
 #[rstest]
 fn invalid_cli_wrong_type_maps_error() {
-    let err = OptionConfig::load_from_iter(["prog", "--maybe", "notanumber"]).unwrap_err();
+    let err = OptionConfig::load_from_iter(["prog", "--maybe", "notanumber"])
+        .expect_err("option parsing should fail");
     assert!(matches!(&*err, OrthoError::CliParsing(_)));
 }
 
 #[rstest]
 fn invalid_cli_missing_required_maps_error() {
     figment::Jail::expect_with(|_| {
-        let err = RequiredConfig::load_from_iter(["prog"]).unwrap_err();
+        let err =
+            RequiredConfig::load_from_iter(["prog"]).expect_err("missing required config errors");
         assert!(matches!(&*err, OrthoError::Merge { .. }));
         Ok(())
     });
@@ -103,7 +110,7 @@ fn invalid_cli_missing_required_maps_error() {
 fn invalid_cli_duplicate_flag_maps_error() {
     let err =
         TestConfig::load_from_iter(["prog", "--sample-value", "foo", "--sample-value", "bar"])
-            .unwrap_err();
+            .expect_err("duplicate CLI flags must error");
     assert!(matches!(&*err, OrthoError::CliParsing(_)));
 }
 

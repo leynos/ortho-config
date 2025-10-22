@@ -1,4 +1,8 @@
 //! Tests for ignore pattern handling across sources.
+#![expect(
+    clippy::expect_used,
+    reason = "tests panic to surface configuration mistakes"
+)]
 
 use ortho_config::OrthoConfig;
 use rstest::rstest;
