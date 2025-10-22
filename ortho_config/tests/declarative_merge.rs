@@ -31,22 +31,14 @@ struct OptionalSample {
 fn compose_layers(
     defaults: serde_json::Value,
     environment: serde_json::Value,
-    cli: serde_json::Value,
+    cli: Option<serde_json::Value>,
 ) -> Vec<MergeLayer<'static>> {
     let mut composer = MergeComposer::new();
     composer.push_defaults(defaults);
     composer.push_environment(environment);
-    composer.push_cli(cli);
-    composer.layers()
-}
-
-fn compose_defaults_and_environment(
-    defaults: serde_json::Value,
-    environment: serde_json::Value,
-) -> Vec<MergeLayer<'static>> {
-    let mut composer = MergeComposer::new();
-    composer.push_defaults(defaults);
-    composer.push_environment(environment);
+    if let Some(cli) = cli {
+        composer.push_cli(cli);
+    }
     composer.layers()
 }
 
@@ -59,7 +51,7 @@ fn merge_layers_respect_precedence(
     #[case] cli: serde_json::Value,
     #[case] expected_count: u32,
 ) {
-    let layers = compose_layers(defaults, environment, cli);
+    let layers = compose_layers(defaults, environment, Some(cli));
     let config = DeclarativeSample::merge_from_layers(layers).expect("merge succeeds");
     assert_eq!(config.count, expected_count);
     assert_eq!(config.name, "default");
@@ -123,7 +115,7 @@ fn merge_layers_append_vectors() {
     let layers = compose_layers(
         json!({ "values": ["default"] }),
         json!({ "values": ["env"] }),
-        json!({ "values": ["cli"] }),
+        Some(json!({ "values": ["cli"] })),
     );
     let config = AppendSample::merge_from_layers(layers).expect("merge succeeds");
     assert_eq!(
@@ -139,8 +131,11 @@ fn merge_layers_append_vectors() {
 
 #[rstest]
 fn merge_layers_respect_option_nulls() {
-    let layers =
-        compose_defaults_and_environment(json!({ "flag": "present" }), json!({ "flag": null }));
+    let layers = compose_layers(
+        json!({ "flag": "present" }),
+        json!({ "flag": null }),
+        None,
+    );
     let config = OptionalSample::merge_from_layers(layers).expect("merge succeeds");
     assert!(config.flag.is_none());
 }
@@ -160,9 +155,10 @@ fn merge_from_layers_accepts_file_layers() {
 
 #[rstest]
 fn merge_layers_reject_non_object_values() {
-    let layers = compose_defaults_and_environment(
+    let layers = compose_layers(
         json!({ "name": "default", "count": 1, "flag": false }),
         json!(true),
+        None,
     );
 
     let error =
