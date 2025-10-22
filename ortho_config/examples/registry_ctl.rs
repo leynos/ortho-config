@@ -6,6 +6,16 @@ use ortho_config::OrthoConfig;
 use ortho_config::SubcmdConfigMerge;
 use serde::{Deserialize, Serialize};
 
+/// Command-line options for the `add-user` subcommand.
+///
+/// # Examples
+///
+/// ```
+/// use registry_ctl::AddUserArgs;
+/// let args = AddUserArgs::default();
+/// assert!(args.username.is_none());
+/// assert_eq!(args.admin, None);
+/// ```
 #[derive(Parser, Deserialize, Serialize, Default, Debug, Clone, PartialEq, OrthoConfig)]
 #[ortho_config(prefix = "REGCTL_")]
 pub struct AddUserArgs {
@@ -15,6 +25,16 @@ pub struct AddUserArgs {
     admin: Option<bool>,
 }
 
+/// Command-line options for the `list-items` subcommand.
+///
+/// # Examples
+///
+/// ```
+/// use registry_ctl::ListItemsArgs;
+/// let args = ListItemsArgs::default();
+/// assert!(args.category.is_none());
+/// assert_eq!(args.all, None);
+/// ```
 #[derive(Parser, Deserialize, Serialize, Default, Debug, Clone, PartialEq, OrthoConfig)]
 #[ortho_config(prefix = "REGCTL_")]
 pub struct ListItemsArgs {

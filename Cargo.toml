@@ -23,3 +23,7 @@ categories = ["config", "command-line-interface"]
 [workspace.lints.clippy]
 # make every pedantic lint emit a warning
 pedantic = "warn"
+
+[workspace.lints.rust]
+missing_docs = "forbid"
+missing_crate_level_docs = "forbid"

@@ -48,11 +48,17 @@ impl Default for World {
 /// Output captured from executing the CLI.
 #[derive(Debug, Default)]
 pub struct CommandResult {
+    /// Exit status reported by the subprocess, when available.
     pub status: Option<i32>,
+    /// Convenience flag reflecting whether the subprocess succeeded.
     pub success: bool,
+    /// Captured standard output emitted by the subprocess.
     pub stdout: String,
+    /// Captured standard error emitted by the subprocess.
     pub stderr: String,
+    /// Path to the binary that was executed for the scenario.
     pub binary: String,
+    /// Arguments used when launching the binary.
     pub args: Vec<String>,
 }
 
@@ -76,31 +82,48 @@ struct ConfigCopyParams<'a> {
     target_name: &'a str,
 }
 
+/// Errors raised while preparing fixture configuration for scenarios.
 #[derive(Debug, Error)]
 pub enum SampleConfigError {
+    /// Failed to open the directory containing sample configurations.
     #[error("failed to open hello world sample config directory: {path}")]
     OpenConfigDir {
+        /// Path to the directory that could not be opened.
         path: String,
+        /// Underlying IO error reported by the filesystem.
         #[source]
         source: std::io::Error,
     },
+    /// Encountered an invalid file name when selecting a sample.
     #[error("invalid hello world sample config name {name}")]
-    InvalidName { name: String },
+    InvalidName {
+        /// Name that violated the sample selection rules.
+        name: String,
+    },
+    /// Failed to open an individual sample configuration file.
     #[error("failed to open hello world sample config {name}")]
     OpenSample {
+        /// Name of the sample configuration involved in the failure.
         name: String,
+        /// Source error raised while opening the sample.
         #[source]
         source: std::io::Error,
     },
+    /// Failed to read from an opened sample configuration file.
     #[error("failed to read hello world sample config {name}")]
     ReadSample {
+        /// Name of the sample configuration being read.
         name: String,
+        /// Source error raised during file read.
         #[source]
         source: std::io::Error,
     },
+    /// Failed to write a sample configuration into the scenario directory.
     #[error("failed to write hello world sample config {name}")]
     WriteSample {
+        /// Name of the sample configuration that could not be written.
         name: String,
+        /// Source error raised during file write.
         #[source]
         source: std::io::Error,
     },

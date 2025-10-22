@@ -103,6 +103,7 @@ pub struct RulesConfig {
 #[derive(Debug, Deserialize, Serialize, OrthoConfig, Default)]
 #[ortho_config(prefix = "DDLINT_")]
 pub struct ErrorConfig {
+    /// Port number sourced from configuration layers for the test server.
     pub port: Option<u32>,
 }
 
