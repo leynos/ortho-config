@@ -9,16 +9,20 @@ use crate::derive::parse::FieldAttrs;
 
 use super::cli::option_type_tokens;
 
+fn require_named_field(field: &syn::Field) -> Result<&syn::Ident, proc_macro2::TokenStream> {
+    field.ident.as_ref().ok_or_else(|| {
+        syn::Error::new_spanned(field, "OrthoConfig defaults structs require named fields")
+            .to_compile_error()
+    })
+}
+
 pub(crate) fn build_default_struct_fields(fields: &[syn::Field]) -> Vec<proc_macro2::TokenStream> {
     fields
         .iter()
         .map(|f| {
-            let Some(name) = f.ident.as_ref() else {
-                return syn::Error::new_spanned(
-                    f,
-                    "OrthoConfig defaults structs require named fields",
-                )
-                .to_compile_error();
+            let name = match require_named_field(f) {
+                Ok(ident) => ident,
+                Err(err) => return err,
             };
             let ty = option_type_tokens(&f.ty);
             quote! {
@@ -37,12 +41,9 @@ pub(crate) fn build_default_struct_init(
         .iter()
         .zip(field_attrs.iter())
         .map(|(f, attr)| {
-            let Some(name) = f.ident.as_ref() else {
-                return syn::Error::new_spanned(
-                    f,
-                    "OrthoConfig defaults structs require named fields",
-                )
-                .to_compile_error();
+            let name = match require_named_field(f) {
+                Ok(ident) => ident,
+                Err(err) => return err,
             };
             attr.default.as_ref().map_or_else(
                 || quote! { #name: None },
