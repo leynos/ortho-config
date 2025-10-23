@@ -703,60 +703,122 @@ and the `client` to make requests.
 ```rust
 // In tests/steps/api_steps.rs
 use crate::ApiWorld;
-use cucumber::{given, when, then};
-use wiremock::{Mock, ResponseTemplate};
+use anyhow::Context;
+use bytes::Bytes;
+use cucumber::{given, then, when};
+use tokio::task::spawn;
+use thiserror::Error;
 use wiremock::matchers::{method, path};
+use wiremock::{Mock, ResponseTemplate};
+
+#[derive(Debug, Error)]
+pub enum ApiError {
+    #[error("no HTTP response recorded; call a client step first")]
+    MissingResponse,
+    #[error("unexpected status code: expected {expected}, found {actual}")]
+    StatusMismatch { expected: u16, actual: u16 },
+    #[error("unexpected response body: expected {expected}, found {actual}")]
+    BodyMismatch { expected: String, actual: String },
+    #[error(transparent)]
+    Transport(#[from] anyhow::Error),
+}
+
+type StepResult = std::result::Result<(), ApiError>;
 
 #[given(expr = "the key {string} does not exist in the store")]
-async fn key_does_not_exist(world: &mut ApiWorld, key: String) {
-    // For a GET, we mock a 404 response.
+async fn key_does_not_exist(world: &mut ApiWorld, key: String) -> StepResult {
+    // For a GET, we mock a 404 response until a value is written.
+    let resource_path = format!("/kv/{}", key);
     Mock::given(method("GET"))
-       .and(path(format!("/kv/{}", key)))
-       .respond_with(ResponseTemplate::new(404))
-       .mount(&world.server)
-       .await;
+        .and(path(resource_path.clone()))
+        .respond_with(ResponseTemplate::new(404))
+        .mount(&world.server)
+        .await;
 
-    // For a POST, we mock a 201 Created response.
-    // This mock will also store the value so a subsequent GET can find it.
+    // For a POST, we mock a 201 Created response and stage a follow-up GET.
+    let server = world.server.clone();
+    let resource_path_for_post = resource_path.clone();
     Mock::given(method("POST"))
-       .and(path(format!("/kv/{}", key)))
-       .respond_with(|req_body: &bytes::Bytes| {
-            // Mock the successful retrieval after creation
-            Mock::given(method("GET"))
-               .and(path(format!("/kv/{}", key)))
-               .respond_with(ResponseTemplate::new(200).set_body_bytes(req_body.clone()))
-               .mount(&world.server); // Note: cannot await here, but mount is sync
+        .and(path(resource_path_for_post.clone()))
+        .respond_with(move |req_body: &Bytes| {
+            let server = server.clone();
+            let get_path = resource_path_for_post.clone();
+            let body = req_body.clone();
+            spawn(async move {
+                Mock::given(method("GET"))
+                    .and(path(get_path))
+                    .respond_with(ResponseTemplate::new(200).set_body_bytes(body))
+                    .mount(&server)
+                    .await;
+            });
             ResponseTemplate::new(201)
         })
-       .mount(&world.server)
-       .await;
+        .mount(&world.server)
+        .await;
+
+    Ok(())
 }
 
-#
-async fn client_posts_value(world: &mut ApiWorld, value: String, path: String) {
+#[when(expr = "the client sends {string} to {string}")]
+async fn client_posts_value(world: &mut ApiWorld, value: String, path: String) -> StepResult {
     let url = format!("{}{}", world.server.uri(), path);
-    let response = world.client.post(&url).body(value).send().await.unwrap();
+    let response = world
+        .client
+        .post(&url)
+        .body(value)
+        .send()
+        .await
+        .context("send POST request")?;
     world.last_response = Some(response);
+    Ok(())
 }
 
-#
-async fn client_gets_path(world: &mut ApiWorld, path: String) {
+#[when(expr = "the client requests {string}")]
+async fn client_gets_path(world: &mut ApiWorld, path: String) -> StepResult {
     let url = format!("{}{}", world.server.uri(), path);
-    let response = world.client.get(&url).send().await.unwrap();
+    let response = world
+        .client
+        .get(&url)
+        .send()
+        .await
+        .context("send GET request")?;
     world.last_response = Some(response);
+    Ok(())
 }
 
 #[then(expr = "the response status should be {int}")]
-async fn check_response_status(world: &mut ApiWorld, expected_status: u16) {
-    let response = world.last_response.as_ref().expect("No response stored");
-    assert_eq!(response.status().as_u16(), expected_status);
+async fn check_response_status(world: &mut ApiWorld, expected_status: u16) -> StepResult {
+    let response = world
+        .last_response
+        .as_ref()
+        .ok_or(ApiError::MissingResponse)?;
+    let actual = response.status().as_u16();
+    if actual != expected_status {
+        return Err(ApiError::StatusMismatch {
+            expected: expected_status,
+            actual,
+        });
+    }
+    Ok(())
 }
 
 #[then(expr = "the response body should be {string}")]
-async fn check_response_body(world: &mut ApiWorld, expected_body: String) {
-    let response = world.last_response.take().expect("No response stored");
-    let body = response.text().await.unwrap();
-    assert_eq!(body, expected_body);
+async fn check_response_body(world: &mut ApiWorld, expected_body: String) -> StepResult {
+    let response = world
+        .last_response
+        .take()
+        .ok_or(ApiError::MissingResponse)?;
+    let body = response
+        .text()
+        .await
+        .context("read response body")?;
+    if body != expected_body {
+        return Err(ApiError::BodyMismatch {
+            expected: expected_body,
+            actual: body,
+        });
+    }
+    Ok(())
 }
 ```
 
