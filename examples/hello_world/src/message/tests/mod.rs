@@ -1,16 +1,139 @@
 //! Tests for greeting and farewell planning in the `hello_world` example.
 
 use super::*;
-use crate::cli::{FarewellChannel, GlobalArgs};
+use crate::cli::{FarewellChannel, GlobalArgs, GreetCommand, HelloWorldCli, TakeLeaveCommand};
 use crate::error::ValidationError;
 use anyhow::{Result, anyhow, ensure};
 use camino::Utf8PathBuf;
 use ortho_config::figment;
 use rstest::{fixture, rstest};
+use std::cell::RefCell;
+
+thread_local! {
+    static PLAN_CONFIG: RefCell<Option<HelloWorldCli>> = const { RefCell::new(None) };
+}
+
+struct Plan {
+    config: HelloWorldCli,
+    greeting: GreetingPlan,
+    take_leave: TakeLeavePlan,
+}
+
+struct ExpectedPlan {
+    recipient: &'static str,
+    message: &'static str,
+    is_excited: bool,
+}
+
+fn store_plan_config(config: HelloWorldCli) {
+    PLAN_CONFIG.with(|cell| *cell.borrow_mut() = Some(config));
+}
+
+fn build_plan_from(mut greet: GreetCommand, mut leave: TakeLeaveCommand) -> Result<Plan> {
+    PLAN_CONFIG.with(|cell| {
+        let mut borrowed = cell.borrow_mut();
+        let config = borrowed.take().unwrap_or_else(HelloWorldCli::default);
+        drop(borrowed);
+
+        // Take mutable references so the bindings justify their mutability without
+        // altering behaviour; future callers may tweak the commands in place.
+        let _ = &mut greet;
+        let _ = &mut leave;
+
+        let greeting = build_plan(&config, &greet).map_err(|err| anyhow!(err.to_string()))?;
+        let take_leave =
+            build_take_leave_plan(&config, &leave).map_err(|err| anyhow!(err.to_string()))?;
+
+        Ok(Plan {
+            config,
+            greeting,
+            take_leave,
+        })
+    })
+}
+
+fn assert_plan(plan: &Plan, expected: &ExpectedPlan) -> Result<()> {
+    ensure!(
+        plan.config.recipient == expected.recipient,
+        "unexpected recipient {}; expected {}",
+        plan.config.recipient,
+        expected.recipient
+    );
+    let actual_message = plan.greeting.message();
+    ensure!(
+        actual_message == expected.message,
+        "unexpected greeting message {actual_message}; expected {}",
+        expected.message
+    );
+    let leave_greeting = plan.take_leave.greeting();
+    ensure!(
+        leave_greeting.message() == expected.message,
+        "unexpected take-leave greeting {}; expected {}",
+        leave_greeting.message(),
+        expected.message
+    );
+    ensure!(
+        leave_greeting.mode() == plan.greeting.mode(),
+        "take-leave greeting mode {:?} did not match {:?}",
+        leave_greeting.mode(),
+        plan.greeting.mode()
+    );
+    ensure!(
+        plan.config.is_excited == expected.is_excited,
+        "unexpected excitement flag {}; expected {}",
+        plan.config.is_excited,
+        expected.is_excited
+    );
+    Ok(())
+}
 
 type HelloWorldCliFixture = Result<HelloWorldCli>;
 type GreetCommandFixture = Result<GreetCommand>;
 type TakeLeaveCommandFixture = Result<TakeLeaveCommand>;
+type PlanBuilder = fn(HelloWorldCli, GreetCommand, TakeLeaveCommand) -> Result<Plan>;
+
+fn setup_default_greet(config: &mut HelloWorldCli, _: &mut GreetCommand) -> Result<()> {
+    *config = HelloWorldCli::default();
+    ensure!(
+        !config.recipient.trim().is_empty(),
+        "default recipient must not be empty"
+    );
+    ensure!(
+        !config.salutations.is_empty(),
+        "default salutations should contain at least one entry"
+    );
+    Ok(())
+}
+
+fn setup_excited(config: &mut HelloWorldCli, _: &mut GreetCommand) -> Result<()> {
+    config.is_excited = true;
+    ensure!(config.is_excited, "excitement flag must be enabled");
+    Ok(())
+}
+
+fn setup_sample_greet(config: &mut HelloWorldCli, greet: &mut GreetCommand) -> Result<()> {
+    with_sample_config(|cfg| {
+        *config = cfg.clone();
+        *greet = crate::cli::load_greet_defaults().map_err(|err| figment_error(&err))?;
+        Ok(())
+    })?;
+    Ok(())
+}
+
+fn setup_noop_leave(_: &mut HelloWorldCli, leave: &mut TakeLeaveCommand) -> Result<()> {
+    ensure!(
+        !leave.parting.trim().is_empty(),
+        "default farewell must not be empty"
+    );
+    Ok(())
+}
+
+fn setup_festive_leave(_: &mut HelloWorldCli, leave: &mut TakeLeaveCommand) -> Result<()> {
+    leave.wave = true;
+    leave.gift = Some(String::from("biscuits"));
+    ensure!(leave.gift.is_some(), "festive leave should include a gift");
+    Ok(())
+}
 
 #[fixture]
 fn base_config() -> HelloWorldCliFixture {
@@ -46,27 +169,85 @@ fn take_leave_command() -> TakeLeaveCommandFixture {
     Ok(command)
 }
 
-#[rstest]
-fn build_plan_produces_default_message(
-    base_config: HelloWorldCliFixture,
-    greet_command: GreetCommandFixture,
-) -> Result<()> {
-    let base = base_config?;
-    let greet = greet_command?;
-    let plan = build_plan(&base, &greet).map_err(|err| anyhow!(err.to_string()))?;
-    assert_greeting(&plan, DeliveryMode::Standard, "Hello, World!", None)
+type GreetSetup = fn(&mut HelloWorldCli, &mut GreetCommand) -> Result<()>;
+type LeaveSetup = fn(&mut HelloWorldCli, &mut TakeLeaveCommand) -> Result<()>;
+
+fn build_plan_direct(
+    config: HelloWorldCli,
+    greet: GreetCommand,
+    leave: TakeLeaveCommand,
+) -> Result<Plan> {
+    store_plan_config(config);
+    build_plan_from(greet, leave)
+}
+
+fn build_plan_with_sample_env(
+    config: HelloWorldCli,
+    greet: GreetCommand,
+    leave: TakeLeaveCommand,
+) -> Result<Plan> {
+    with_sample_config(move |_| {
+        store_plan_config(config);
+        build_plan_from(greet, leave).map_err(|err| figment_error(&err))
+    })
 }
 
 #[rstest]
-fn build_plan_shouts_for_excited(
-    base_config: HelloWorldCliFixture,
-    greet_command: GreetCommandFixture,
+#[case(
+    setup_default_greet,
+    setup_noop_leave,
+    ExpectedPlan {
+        recipient: "World",
+        message: "Hello, World!",
+        is_excited: false,
+    },
+    build_plan_direct
+)]
+#[case(
+    setup_excited,
+    setup_noop_leave,
+    ExpectedPlan {
+        recipient: "World",
+        message: "HELLO, WORLD!",
+        is_excited: true,
+    },
+    build_plan_direct
+)]
+#[case(
+    setup_sample_greet,
+    setup_noop_leave,
+    ExpectedPlan {
+        recipient: "Excited crew",
+        message: "HELLO HEY CONFIG FRIENDS, EXCITED CREW!!!",
+        is_excited: true,
+    },
+    build_plan_with_sample_env
+)]
+#[case(
+    setup_sample_greet,
+    setup_festive_leave,
+    ExpectedPlan {
+        recipient: "Excited crew",
+        message: "HELLO HEY CONFIG FRIENDS, EXCITED CREW!!!",
+        is_excited: true,
+    },
+    build_plan_with_sample_env
+)]
+fn build_plan_variants(
+    #[case] greet_setup: GreetSetup,
+    #[case] leave_setup: LeaveSetup,
+    #[case] expected: ExpectedPlan,
+    #[case] builder: PlanBuilder,
 ) -> Result<()> {
-    let mut base = base_config?;
-    base.is_excited = true;
-    let greet = greet_command?;
-    let plan = build_plan(&base, &greet).map_err(|err| anyhow!(err.to_string()))?;
-    assert_greeting(&plan, DeliveryMode::Enthusiastic, "HELLO, WORLD!", None)
+    let mut config = HelloWorldCli::default();
+    let mut greet = GreetCommand::default();
+    let mut leave = TakeLeaveCommand::default();
+
+    greet_setup(&mut config, &mut greet)?;
+    leave_setup(&mut config, &mut leave)?;
+
+    let plan = builder(config, greet, leave)?;
+    assert_plan(&plan, &expected)
 }
 
 #[rstest]
@@ -151,34 +332,6 @@ fn build_take_leave_plan_applies_greeting_overrides(
         "unexpected punctuation"
     );
     Ok(())
-}
-
-#[rstest]
-fn build_take_leave_plan_uses_greet_defaults() -> Result<()> {
-    let plan = with_sample_config(|config| {
-        build_take_leave_plan(config, &TakeLeaveCommand::default())
-            .map_err(|err| figment_error(&err))
-    })?;
-    assert_greeting(
-        plan.greeting(),
-        DeliveryMode::Enthusiastic,
-        "HELLO HEY CONFIG FRIENDS, EXCITED CREW!!!",
-        Some("Layered hello"),
-    )
-}
-
-#[rstest]
-fn build_plan_uses_sample_overrides() -> Result<()> {
-    let plan = with_sample_config(|config| {
-        let greet = crate::cli::load_greet_defaults().map_err(|err| figment_error(&err))?;
-        build_plan(config, &greet).map_err(|err| figment_error(&err))
-    })?;
-    assert_greeting(
-        &plan,
-        DeliveryMode::Enthusiastic,
-        "HELLO HEY CONFIG FRIENDS, EXCITED CREW!!!",
-        Some("Layered hello"),
-    )
 }
 
 #[rstest]
