@@ -21,10 +21,8 @@ fn extract_docstring(step: &GherkinStep) -> Result<&str> {
         .ok_or_else(|| anyhow!("config docstring provided for hello world example"))
 }
 
-async fn run_with_args_inner(world: &mut World, args: &str) -> Result<()> {
-    // Clone the capture into an owned `String` so the world helper receives
-    // the same owned data the step signature promises.
-    world.run_hello(Some(args.to_owned())).await?;
+async fn run_with_args_inner(world: &mut World, args: String) -> Result<()> {
+    world.run_hello(Some(args)).await?;
     Ok(())
 }
 
@@ -47,7 +45,7 @@ pub async fn run_without_args(world: &mut World) -> Result<()> {
 // the world helper for tokenisation while retaining ownership requirements of
 // the async state machine.
 pub async fn run_with_args(world: &mut World, arguments: String) -> Result<()> {
-    run_with_args_inner(world, arguments.as_str()).await
+    run_with_args_inner(world, arguments).await
 }
 
 #[then("the command succeeds")]
