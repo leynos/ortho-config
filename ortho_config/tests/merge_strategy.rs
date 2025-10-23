@@ -12,7 +12,7 @@ struct VecConfig {
 
 #[derive(Debug, Deserialize, Serialize, OrthoConfig)]
 struct DefaultVec {
-    #[ortho_config(default = vec![String::from("def")], merge_strategy = "append")]
+    #[ortho_config(default = vec!["def".to_owned()], merge_strategy = "append")]
     values: Vec<String>,
 }
 
