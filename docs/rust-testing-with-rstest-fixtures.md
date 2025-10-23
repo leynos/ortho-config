@@ -887,51 +887,67 @@ its path or handle to the test, and ensure cleanup (often via RAII).
 Here's an illustrative example using the `tempfile` crate:
 
 ```rust
+use anyhow::{Context, Result, ensure};
 use rstest::*;
-use tempfile::{tempdir, TempDir}; // Add tempfile = "3" to [dev-dependencies]
 use std::fs::File;
-use std::io::{Write, Read};
-use std::path::PathBuf;
+use std::io::{Read, Write};
+use std::path::{Path, PathBuf};
+use tempfile::{tempdir, TempDir}; // Add tempfile = "3" to [dev-dependencies]
 
-// Fixture that provides a temporary directory.
-// The TempDir object ensures cleanup when it's dropped.
-#[fixture]
-fn temp_directory() -> TempDir {
-    tempdir().expect("Failed to create temporary directory")
+#[derive(Debug)]
+struct TempFile {
+    dir: TempDir,
+    path: PathBuf,
 }
 
-// Fixture that creates a temporary file with specific content within a temp directory.
-// It depends on the temp_directory fixture.
+impl TempFile {
+    fn path(&self) -> &Path { &self.path }
+}
+
 #[fixture]
 fn temp_file_with_content(
-    #[from(temp_directory)] // Use #[from] if name differs or for clarity
-    temp_dir: &TempDir, // Take a reference to ensure TempDir outlives this fixture's direct use
-    #[default("Hello, rstest from a temp file!")] content: &str
-) -> PathBuf {
-    let file_path = temp_dir.path().join("my_temp_file.txt");
-    let mut file = File::create(&file_path).expect("Failed to create temporary file");
-    file.write_all(content.as_bytes()).expect("Failed to write to temporary file");
-    file_path
+    #[default("Hello, rstest from a temp file!")] content: &str,
+) -> Result<TempFile> {
+    let dir = tempdir().context("create temporary directory")?;
+    let path = dir.path().join("my_temp_file.txt");
+    let mut file = File::create(&path)
+        .with_context(|| format!("create {}", path.display()))?;
+    file.write_all(content.as_bytes())
+        .with_context(|| format!("write to {}", path.display()))?;
+    Ok(TempFile { dir, path })
 }
 
 #[rstest]
-fn test_read_from_temp_file(temp_file_with_content: PathBuf) {
-    assert!(temp_file_with_content.exists());
-    let mut file = File::open(temp_file_with_content).expect("Failed to open temp file");
+fn test_read_from_temp_file(temp_file_with_content: Result<TempFile>) -> Result<()> {
+    let temp_file = temp_file_with_content?;
+    ensure!(
+        temp_file.path().exists(),
+        "temporary file {} should exist",
+        temp_file.path().display()
+    );
+    let mut file = File::open(temp_file.path())
+        .with_context(|| format!("open {}", temp_file.path().display()))?;
     let mut read_content = String::new();
-    file.read_to_string(&mut read_content).expect("Failed to read temp file");
-    assert_eq!(read_content, "Hello, rstest from a temp file!");
+    file.read_to_string(&mut read_content)
+        .with_context(|| format!("read {}", temp_file.path().display()))?;
+    ensure!(
+        read_content == "Hello, rstest from a temp file!",
+        "unexpected file contents: {read_content}"
+    );
+    Ok(())
 }
 ```
 
 By encapsulating temporary resource management within fixtures, tests become
-cleaner and less prone to errors related to resource setup or cleanup. The RAII
-(Resource Acquisition Is Initialization) pattern, common in Rust and
-exemplified by `tempfile::TempDir` (which cleans up the directory when
-dropped), works effectively with `rstest`'s fixture model. When a regular
-(non-`#[once]`) fixture returns a `TempDir` object, or an object that owns it,
-the resource is typically cleaned up after the test finishes, as the fixture's
-return value goes out of scope. This localizes resource management logic to the
+cleaner and less prone to errors related to resource setup or cleanup. Note how
+the fixture returns a `Result`; `rstest` simply passes that straight through to
+the consumer, letting the test decide whether to propagate the error (`?`) or
+handle it explicitly. The RAII (Resource Acquisition Is Initialization)
+pattern, common in Rust and exemplified by `tempfile::TempDir` (which cleans up
+the directory when dropped), works effectively with `rstest`'s fixture model.
+When a regular (non-`#[once]`) fixture returns a value that owns the resource,
+the resource is cleaned up after the test finishes as the fixture's return
+value goes out of scope. This localizes resource management logic to the
 fixture, keeping the test focused on its assertions. For temporary resources,
 regular (per-test) fixtures are generally preferred over `#[once]` fixtures to
 ensure proper cleanup, as `#[once]` fixtures are never dropped.

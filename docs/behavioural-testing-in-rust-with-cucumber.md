@@ -369,31 +369,37 @@ significant best practice.
 **Worked Example (using** `Result`**):**
 
 ```rust
-// In a custom error module
-# // Using the `thiserror` crate for convenience
+use anyhow::Context;
+use thiserror::Error;
+
+#[derive(Debug, Error)]
 pub enum TestError {
     #[error("API call failed: {0}")]
-    ApiError(#[from] reqwest::Error),
+    Api(#[from] reqwest::Error),
+    #[error("response has not been captured yet")]
+    MissingResponse,
     #[error("Unexpected status code: expected {expected}, got {actual}")]
     UnexpectedStatus { expected: u16, actual: u16 },
-    #
-    ParseError(#[from] serde_json::Error),
+    #[error("response body parse error: {0}")]
+    Parse(#[from] serde_json::Error),
 }
 
-// In a `then` step
 #[then(expr = "the response status should be {int}")]
 fn check_status(world: &mut ApiWorld, expected_status: u16) -> Result<(), TestError> {
-    let response = world.last_response.as_ref().expect("No response found");
+    let response = world
+        .last_response
+        .as_ref()
+        .ok_or(TestError::MissingResponse)?;
     let actual_status = response.status().as_u16();
 
-    if actual_status!= expected_status {
-        Err(TestError::UnexpectedStatus {
+    if actual_status != expected_status {
+        return Err(TestError::UnexpectedStatus {
             expected: expected_status,
             actual: actual_status,
-        })
-    } else {
-        Ok(())
+        });
     }
+
+    Ok(())
 }
 ```
 
@@ -483,25 +489,44 @@ Scenario: Checking stock levels
 
 ```rust
 // In tests/steps/inventory_steps.rs
+use anyhow::{Context, Result};
 use cucumber::{gherkin::Step, given};
 use crate::InventoryWorld;
-use std::collections::HashMap;
 
 #[given("the following items are in the warehouse:")]
-fn given_items_in_warehouse(world: &mut InventoryWorld, step: &Step) {
-    let table = step.table.as_ref().expect("Step should have a data table");
+fn given_items_in_warehouse(world: &mut InventoryWorld, step: &Step) -> Result<()> {
+    let table = step
+        .table
+        .as_ref()
+        .context("step must include a data table")?;
 
-    // The first row is the header.
-    let header = &table.rows;
-    let name_idx = header.iter().position(|h| h == "name").unwrap();
-    let quantity_idx = header.iter().position(|h| h == "quantity").unwrap();
+    let header = table
+        .rows
+        .first()
+        .context("data table must include a header row")?;
+    let name_idx = header
+        .iter()
+        .position(|h| h == "name")
+        .context("data table missing `name` column")?;
+    let quantity_idx = header
+        .iter()
+        .position(|h| h == "quantity")
+        .context("data table missing `quantity` column")?;
 
-    // Iterate over the data rows.
     for row in table.rows.iter().skip(1) {
-        let name = row[name_idx].clone();
-        let quantity: u32 = row[quantity_idx].parse().unwrap();
+        let name = row
+            .get(name_idx)
+            .context("row missing `name` value")?
+            .to_owned();
+        let quantity: u32 = row
+            .get(quantity_idx)
+            .context("row missing `quantity` value")?
+            .parse()
+            .with_context(|| format!("invalid quantity for item {name}"))?;
         world.stock.insert(name, quantity);
     }
+
+    Ok(())
 }
 ```
 
