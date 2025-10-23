@@ -381,13 +381,7 @@ mod tests {
         let base = base_config?;
         let greet = greet_command?;
         let plan = build_plan(&base, &greet).map_err(|err| anyhow!(err.to_string()))?;
-        ensure!(
-            plan.mode() == DeliveryMode::Standard,
-            "unexpected delivery mode"
-        );
-        ensure!(plan.message() == "Hello, World!", "unexpected message");
-        ensure!(plan.preamble().is_none(), "unexpected preamble");
-        Ok(())
+        assert_greeting(&plan, DeliveryMode::Standard, "Hello, World!", None)
     }
 
     #[rstest]
@@ -399,12 +393,7 @@ mod tests {
         base.is_excited = true;
         let greet = greet_command?;
         let plan = build_plan(&base, &greet).map_err(|err| anyhow!(err.to_string()))?;
-        ensure!(
-            plan.mode() == DeliveryMode::Enthusiastic,
-            "unexpected delivery mode"
-        );
-        ensure!(plan.message() == "HELLO, WORLD!", "unexpected message");
-        Ok(())
+        assert_greeting(&plan, DeliveryMode::Enthusiastic, "HELLO, WORLD!", None)
     }
 
     #[rstest]
@@ -416,11 +405,12 @@ mod tests {
         command.preamble = Some(String::from("Good morning"));
         let base = base_config?;
         let plan = build_plan(&base, &command).map_err(|err| anyhow!(err.to_string()))?;
-        ensure!(
-            plan.preamble() == Some("Good morning"),
-            "unexpected preamble"
-        );
-        Ok(())
+        assert_greeting(
+            &plan,
+            DeliveryMode::Standard,
+            "Hello, World!",
+            Some("Good morning"),
+        )
     }
 
     #[rstest]
@@ -497,19 +487,12 @@ mod tests {
             build_take_leave_plan(config, &TakeLeaveCommand::default())
                 .map_err(|err| figment_error(&err))
         })?;
-        ensure!(
-            plan.greeting().preamble() == Some("Layered hello"),
-            "unexpected preamble"
-        );
-        ensure!(
-            plan.greeting().message() == "HELLO HEY CONFIG FRIENDS, EXCITED CREW!!!",
-            "unexpected greeting message"
-        );
-        ensure!(
-            plan.greeting().mode() == DeliveryMode::Enthusiastic,
-            "unexpected delivery mode"
-        );
-        Ok(())
+        assert_greeting(
+            plan.greeting(),
+            DeliveryMode::Enthusiastic,
+            "HELLO HEY CONFIG FRIENDS, EXCITED CREW!!!",
+            Some("Layered hello"),
+        )
     }
 
     #[rstest]
@@ -518,19 +501,12 @@ mod tests {
             let greet = crate::cli::load_greet_defaults().map_err(|err| figment_error(&err))?;
             build_plan(config, &greet).map_err(|err| figment_error(&err))
         })?;
-        ensure!(
-            plan.preamble() == Some("Layered hello"),
-            "unexpected preamble"
-        );
-        ensure!(
-            plan.message() == "HELLO HEY CONFIG FRIENDS, EXCITED CREW!!!",
-            "unexpected greeting message"
-        );
-        ensure!(
-            plan.mode() == DeliveryMode::Enthusiastic,
-            "unexpected delivery mode"
-        );
-        Ok(())
+        assert_greeting(
+            &plan,
+            DeliveryMode::Enthusiastic,
+            "HELLO HEY CONFIG FRIENDS, EXCITED CREW!!!",
+            Some("Layered hello"),
+        )
     }
 
     #[rstest]
@@ -585,5 +561,23 @@ mod tests {
 
     fn figment_error<E: ToString>(err: &E) -> figment::Error {
         figment::Error::from(err.to_string())
+    }
+
+    fn assert_greeting(
+        plan: &GreetingPlan,
+        expected_mode: DeliveryMode,
+        expected_message: &str,
+        expected_preamble: Option<&str>,
+    ) -> Result<()> {
+        ensure!(plan.mode() == expected_mode, "unexpected delivery mode");
+        ensure!(
+            plan.message() == expected_message,
+            "unexpected greeting message"
+        );
+        ensure!(
+            plan.preamble() == expected_preamble,
+            "unexpected greeting preamble"
+        );
+        Ok(())
     }
 }
