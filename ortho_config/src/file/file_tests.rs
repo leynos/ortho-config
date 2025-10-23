@@ -49,6 +49,33 @@ where
         .map_err(|err| anyhow!(err.to_string()))
 }
 
+fn expect_process_extends_failure<F>(
+    setup: F,
+    failure_message: &str,
+    expected_fragment: &str,
+) -> Result<()>
+where
+    F: FnOnce(
+        &mut figment::Jail,
+        &Path,
+        &Path,
+        &mut HashSet<PathBuf>,
+        &mut Vec<PathBuf>,
+    ) -> Result<Figment>,
+{
+    with_fresh_graph(|j, root, current, visited, stack| {
+        let figment = setup(j, root, current, visited, stack)?;
+        let Err(err) = process_extends(figment, current, visited, stack) else {
+            return Err(anyhow!(failure_message));
+        };
+        ensure!(
+            err.to_string().contains(expected_fragment),
+            "unexpected error {err}"
+        );
+        Ok(())
+    })
+}
+
 enum ExtCase {
     Ok(Option<PathBuf>),
     Err(&'static str),
@@ -285,40 +312,26 @@ fn process_extends_errors_when_no_parent() -> Result<()> {
 
 #[test]
 fn process_extends_errors_when_base_is_not_file() -> Result<()> {
-    with_fresh_graph(|j, _root, current, visited, stack| {
-        j.create_dir("dir")?;
-        let figment = Figment::from(Toml::string("extends = 'dir'"));
-        let Err(err) = process_extends(figment, current, visited, stack) else {
-            return Err(anyhow!(
-                "expected process_extends to fail when base is not a regular file"
-            ));
-        };
-        ensure!(
-            err.to_string().contains("not a regular file"),
-            "unexpected error {err}"
-        );
-        Ok(())
-    })?;
-    Ok(())
+    expect_process_extends_failure(
+        |j, _root, _current, _visited, _stack| {
+            j.create_dir("dir")?;
+            Ok(Figment::from(Toml::string("extends = 'dir'")))
+        },
+        "expected process_extends to fail when base is not a regular file",
+        "not a regular file",
+    )
 }
 
 #[test]
 fn process_extends_errors_when_extends_empty() -> Result<()> {
-    with_fresh_graph(|j, _root, current, visited, stack| {
-        j.create_file("base.toml", "")?; // placeholder to satisfy Jail
-        let figment = Figment::from(Toml::string("extends = \"\""));
-        let Err(err) = process_extends(figment, current, visited, stack) else {
-            return Err(anyhow!(
-                "expected process_extends to fail when extends value is empty"
-            ));
-        };
-        ensure!(
-            err.to_string().contains("non-empty"),
-            "unexpected error {err}"
-        );
-        Ok(())
-    })?;
-    Ok(())
+    expect_process_extends_failure(
+        |j, _root, _current, _visited, _stack| {
+            j.create_file("base.toml", "")?;
+            Ok(Figment::from(Toml::string("extends = \"\"")))
+        },
+        "expected process_extends to fail when extends value is empty",
+        "non-empty",
+    )
 }
 
 #[cfg(not(any(windows, target_os = "macos")))]
