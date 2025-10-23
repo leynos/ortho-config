@@ -319,11 +319,15 @@ pub fn merge_value(target: &mut Value, layer: Value) {
 /// assert_eq!(target["nested"], json!({"emphasis": "wave"}));
 /// ```
 fn merge_object(target: &mut Value, map: Map<String, Value>) {
-    if !target.is_object() {
+    let target_map = if let Some(map_ref) = target.as_object_mut() {
+        map_ref
+    } else {
         *target = Value::Object(Map::new());
-    }
-    let Some(target_map) = target.as_object_mut() else {
-        return;
+        #[expect(
+            clippy::expect_used,
+            reason = "target was just initialised to an object"
+        )]
+        target.as_object_mut().expect("target is now an object")
     };
     for (key, value) in map {
         match target_map.get_mut(&key) {
