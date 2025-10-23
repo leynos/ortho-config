@@ -48,10 +48,12 @@ pub struct ListItemsArgs {
 impl Run for AddUserArgs {
     fn run(self, db_url: &str) -> Result<(), String> {
         with_locked_stdout(db_url, |stdout| {
-            write_line(
+            writeln!(
                 stdout,
-                &format!("Adding user: {:?}, Admin: {:?}", self.username, self.admin),
+                "Adding user: {:?}, Admin: {:?}",
+                self.username, self.admin
             )
+            .map_err(|err| err.to_string())
         })
     }
 }
@@ -59,13 +61,12 @@ impl Run for AddUserArgs {
 impl Run for ListItemsArgs {
     fn run(self, db_url: &str) -> Result<(), String> {
         with_locked_stdout(db_url, |stdout| {
-            write_line(
+            writeln!(
                 stdout,
-                &format!(
-                    "Listing items in category {:?}, All: {:?}",
-                    self.category, self.all
-                ),
+                "Listing items in category {:?}, All: {:?}",
+                self.category, self.all
             )
+            .map_err(|err| err.to_string())
         })
     }
 }
@@ -99,17 +100,8 @@ where
     F: FnOnce(&mut dyn Write) -> Result<(), String>,
 {
     let mut stdout = io::stdout().lock();
-    write_line(&mut stdout, &format!("Connecting to database at: {db_url}"))?;
+    writeln!(stdout, "Connecting to database at: {db_url}").map_err(|err| err.to_string())?;
     emit(&mut stdout)
-}
-
-fn write_line(writer: &mut dyn Write, message: &str) -> Result<(), String> {
-    // Forward stdout failures through the existing `String` error channel
-    // so the example trait signature stays stable for consumers.
-    writer
-        .write_all(message.as_bytes())
-        .map_err(|err| err.to_string())?;
-    writer.write_all(b"\n").map_err(|err| err.to_string())
 }
 
 #[cfg(test)]
