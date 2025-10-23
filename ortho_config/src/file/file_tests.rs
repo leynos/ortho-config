@@ -51,8 +51,8 @@ where
 
 fn expect_process_extends_failure<F>(
     setup: F,
-    failure_message: &str,
-    expected_fragment: &str,
+    failure_message: &'static str,
+    expected_fragment: &'static str,
 ) -> Result<()>
 where
     F: FnOnce(

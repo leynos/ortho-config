@@ -319,6 +319,10 @@ pub fn merge_value(target: &mut Value, layer: Value) {
 /// assert_eq!(target["nested"], json!({"emphasis": "wave"}));
 /// ```
 fn merge_object(target: &mut Value, map: Map<String, Value>) {
+    #[expect(
+        clippy::option_if_let_else,
+        reason = "initialising target object when absent requires mutable borrow"
+    )]
     let target_map = if let Some(map_ref) = target.as_object_mut() {
         map_ref
     } else {

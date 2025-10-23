@@ -328,10 +328,13 @@ mod tests {
         );
 
         let total_len = paths.len();
-        if total_len.saturating_sub(group_len) > group_len {
-            let mid_slice = &paths[group_len..total_len - group_len];
-            let xdg_parent = mid_slice[0]
-                .parent()
+        if let Some(mid_slice) = paths
+            .get(group_len..total_len.saturating_sub(group_len))
+            .filter(|slice| !slice.is_empty())
+        {
+            let xdg_parent = mid_slice
+                .first()
+                .and_then(|path| path.parent())
                 .ok_or_else(|| anyhow!("platform candidate must have a parent directory"))?;
             ensure!(
                 mid_slice.iter().all(|p| p.parent() == Some(xdg_parent)),

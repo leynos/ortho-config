@@ -97,16 +97,17 @@ type WorkspaceResult = Result<(TempDir, DirGuard)>;
 )]
 #[serial]
 fn test_pr_precedence(
-    #[case] _config_content: &str,
+    #[case] config_content: &str,
     #[case] env_val: Option<&str>,
     #[case] cli: PrArgs,
     #[case] expected_reference: Option<&str>,
     #[case] expected_files: Vec<String>,
     #[from(config_dir)]
-    #[with(_config_content)]
+    #[with(config_content)]
     workspace: WorkspaceResult,
 ) -> Result<()> {
     let (_temp_dir, _cwd_guard) = workspace?;
+    let _ = config_content;
     let _env = env_val.map_or_else(
         || env::remove_var("VK_CMDS_PR_REFERENCE"),
         |val| env::set_var("VK_CMDS_PR_REFERENCE", val),
