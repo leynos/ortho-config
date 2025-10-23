@@ -126,9 +126,13 @@ fn generate_declarative_merge_impl_emits_trait_impl() -> Result<()> {
     let config_ident = parse_ident("Sample")?;
     let tokens = generate_declarative_merge_impl(&state_ident, &config_ident, &[]);
     let expected = expected_declarative_merge_impl_empty()?;
+    let actual = tokens.to_string();
+    let expected_rendered = expected.to_string();
     ensure!(
-        tokens.to_string() == expected.to_string(),
-        "declarative merge impl tokens mismatch"
+        actual == expected_rendered,
+        "declarative merge impl tokens mismatch\nactual:\n{}\nexpected:\n{}",
+        actual,
+        expected_rendered
     );
     Ok(())
 }
@@ -243,9 +247,13 @@ fn generate_declarative_merge_from_layers_fn_emits_constructor() -> Result<()> {
             }
         }
     };
+    let actual = tokens.to_string();
+    let expected_rendered = expected.to_string();
     ensure!(
-        tokens.to_string() == expected.to_string(),
-        "merge_from_layers constructor mismatch"
+        actual == expected_rendered,
+        "merge_from_layers constructor mismatch\nactual:\n{}\nexpected:\n{}",
+        actual,
+        expected_rendered
     );
     Ok(())
 }
@@ -264,9 +272,13 @@ fn generate_declarative_impl_composes_helpers() -> Result<()> {
         #merge_impl
         #merge_fn
     };
+    let actual = tokens.to_string();
+    let expected_rendered = expected.to_string();
     ensure!(
-        tokens.to_string() == expected.to_string(),
-        "declarative impl composition mismatch"
+        actual == expected_rendered,
+        "declarative impl composition mismatch\nactual:\n{}\nexpected:\n{}",
+        actual,
+        expected_rendered
     );
     Ok(())
 }
