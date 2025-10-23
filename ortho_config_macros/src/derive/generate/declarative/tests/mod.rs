@@ -35,8 +35,7 @@ fn parse_type(src: &str) -> Result<syn::Type> {
 /// ```
 fn expected_declarative_merge_impl_empty() -> Result<TokenStream2> {
     let fixture = include_str!("fixtures/expected_merge_impl_empty.rs.txt");
-    TokenStream2::from_str(fixture)
-        .map_err(|err| anyhow!("parse merge impl fixture: {err}"))
+    TokenStream2::from_str(fixture).map_err(|err| anyhow!("parse merge impl fixture: {err}"))
 }
 
 #[rstest]

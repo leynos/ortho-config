@@ -327,192 +327,263 @@ fn join_fragments(parts: &[String]) -> String {
 
 #[cfg(test)]
 mod tests {
-    #![allow(
-        unfulfilled_lint_expectations,
-        reason = "clippy::expect_used is denied globally; tests may not hit those branches"
-    )]
-    #![expect(
-        clippy::expect_used,
-        reason = "tests panic to surface configuration mistakes"
-    )]
     use super::*;
     use crate::cli::{FarewellChannel, GlobalArgs};
     use crate::error::ValidationError;
+    use anyhow::{Result, anyhow, ensure};
     use camino::Utf8PathBuf;
+    use ortho_config::figment;
     use rstest::{fixture, rstest};
 
-    // Helper function for setting up test environment with sample configs
-    fn setup_sample_config_environment() -> HelloWorldCli {
-        with_sample_config_environment(HelloWorldCli::clone)
+    type HelloWorldCliFixture = Result<HelloWorldCli>;
+    type GreetCommandFixture = Result<GreetCommand>;
+    type TakeLeaveCommandFixture = Result<TakeLeaveCommand>;
+
+    #[fixture]
+    fn base_config() -> HelloWorldCliFixture {
+        let config = HelloWorldCli::default();
+        ensure!(
+            !config.recipient.trim().is_empty(),
+            "default recipient must not be empty"
+        );
+        ensure!(
+            !config.salutations.is_empty(),
+            "default salutations should contain at least one entry"
+        );
+        Ok(config)
     }
 
-    fn with_sample_config_environment<R>(action: impl FnOnce(&HelloWorldCli) -> R) -> R {
-        let mut result = None;
-        ortho_config::figment::Jail::expect_with(|jail| {
+    #[fixture]
+    fn greet_command() -> GreetCommandFixture {
+        let command = GreetCommand::default();
+        ensure!(
+            !command.punctuation.trim().is_empty(),
+            "default greet punctuation must not be empty"
+        );
+        Ok(command)
+    }
+
+    #[fixture]
+    fn take_leave_command() -> TakeLeaveCommandFixture {
+        let command = TakeLeaveCommand::default();
+        ensure!(
+            !command.parting.trim().is_empty(),
+            "default farewell must not be empty"
+        );
+        Ok(command)
+    }
+
+    #[rstest]
+    fn build_plan_produces_default_message(
+        base_config: HelloWorldCliFixture,
+        greet_command: GreetCommandFixture,
+    ) -> Result<()> {
+        let base = base_config?;
+        let greet = greet_command?;
+        let plan = build_plan(&base, &greet).map_err(|err| anyhow!(err.to_string()))?;
+        ensure!(
+            plan.mode() == DeliveryMode::Standard,
+            "unexpected delivery mode"
+        );
+        ensure!(plan.message() == "Hello, World!", "unexpected message");
+        ensure!(plan.preamble().is_none(), "unexpected preamble");
+        Ok(())
+    }
+
+    #[rstest]
+    fn build_plan_shouts_for_excited(
+        base_config: HelloWorldCliFixture,
+        greet_command: GreetCommandFixture,
+    ) -> Result<()> {
+        let mut base = base_config?;
+        base.is_excited = true;
+        let greet = greet_command?;
+        let plan = build_plan(&base, &greet).map_err(|err| anyhow!(err.to_string()))?;
+        ensure!(
+            plan.mode() == DeliveryMode::Enthusiastic,
+            "unexpected delivery mode"
+        );
+        ensure!(plan.message() == "HELLO, WORLD!", "unexpected message");
+        Ok(())
+    }
+
+    #[rstest]
+    fn build_plan_applies_preamble(
+        greet_command: GreetCommandFixture,
+        base_config: HelloWorldCliFixture,
+    ) -> Result<()> {
+        let mut command = greet_command?;
+        command.preamble = Some(String::from("Good morning"));
+        let base = base_config?;
+        let plan = build_plan(&base, &command).map_err(|err| anyhow!(err.to_string()))?;
+        ensure!(
+            plan.preamble() == Some("Good morning"),
+            "unexpected preamble"
+        );
+        Ok(())
+    }
+
+    #[rstest]
+    fn build_plan_propagates_validation_errors(base_config: HelloWorldCliFixture) -> Result<()> {
+        let mut config = base_config?;
+        config.salutations.clear();
+        let Err(err) = build_plan(&config, &GreetCommand::default()) else {
+            return Err(anyhow!("expected build_plan to fail"));
+        };
+        ensure!(
+            matches!(
+                err,
+                HelloWorldError::Validation(ValidationError::MissingSalutation)
+            ),
+            "expected missing salutation error"
+        );
+        Ok(())
+    }
+
+    #[rstest]
+    fn build_take_leave_plan_produces_steps() -> Result<()> {
+        let take_leave_command = TakeLeaveCommand {
+            wave: true,
+            gift: Some(String::from("biscuits")),
+            channel: Some(FarewellChannel::Email),
+            remind_in: Some(10),
+            ..TakeLeaveCommand::default()
+        };
+        let plan = build_take_leave_plan(&HelloWorldCli::default(), &take_leave_command)
+            .map_err(|err| anyhow!(err.to_string()))?;
+        ensure!(
+            plan.greeting().message() == "Hello, World!",
+            "unexpected greeting"
+        );
+        let farewell = plan.farewell();
+        ensure!(
+            farewell.contains("waves enthusiastically"),
+            "missing wave note"
+        );
+        ensure!(farewell.contains("leaves biscuits"), "missing gift note");
+        ensure!(
+            farewell.contains("follows up with an email"),
+            "missing email note"
+        );
+        ensure!(farewell.contains("10 minutes"), "missing reminder note");
+        Ok(())
+    }
+
+    #[rstest]
+    fn build_take_leave_plan_applies_greeting_overrides(
+        base_config: HelloWorldCliFixture,
+        take_leave_command: TakeLeaveCommandFixture,
+    ) -> Result<()> {
+        let mut command = take_leave_command?;
+        command.greeting_preamble = Some(String::from("Until next time"));
+        command.greeting_punctuation = Some(String::from("?"));
+        let base = base_config?;
+        let plan =
+            build_take_leave_plan(&base, &command).map_err(|err| anyhow!(err.to_string()))?;
+        ensure!(
+            plan.greeting().preamble() == Some("Until next time"),
+            "unexpected greeting preamble"
+        );
+        ensure!(
+            plan.greeting().message().ends_with('?'),
+            "unexpected punctuation"
+        );
+        Ok(())
+    }
+
+    #[rstest]
+    fn build_take_leave_plan_uses_greet_defaults() -> Result<()> {
+        let plan = with_sample_config(|config| {
+            build_take_leave_plan(config, &TakeLeaveCommand::default())
+                .map_err(|err| figment_error(&err))
+        })?;
+        ensure!(
+            plan.greeting().preamble() == Some("Layered hello"),
+            "unexpected preamble"
+        );
+        ensure!(
+            plan.greeting().message() == "HELLO HEY CONFIG FRIENDS, EXCITED CREW!!!",
+            "unexpected greeting message"
+        );
+        ensure!(
+            plan.greeting().mode() == DeliveryMode::Enthusiastic,
+            "unexpected delivery mode"
+        );
+        Ok(())
+    }
+
+    #[rstest]
+    fn build_plan_uses_sample_overrides() -> Result<()> {
+        let plan = with_sample_config(|config| {
+            let greet = crate::cli::load_greet_defaults().map_err(|err| figment_error(&err))?;
+            build_plan(config, &greet).map_err(|err| figment_error(&err))
+        })?;
+        ensure!(
+            plan.preamble() == Some("Layered hello"),
+            "unexpected preamble"
+        );
+        ensure!(
+            plan.message() == "HELLO HEY CONFIG FRIENDS, EXCITED CREW!!!",
+            "unexpected greeting message"
+        );
+        ensure!(
+            plan.mode() == DeliveryMode::Enthusiastic,
+            "unexpected delivery mode"
+        );
+        Ok(())
+    }
+
+    #[rstest]
+    fn join_fragments_writes_list() -> Result<()> {
+        let parts = vec![
+            String::from("waves"),
+            String::from("leaves biscuits"),
+            String::from("follows up with an email"),
+        ];
+        ensure!(
+            join_fragments(&parts) == "waves, leaves biscuits, and follows up with an email",
+            "unexpected triple fragment join"
+        );
+
+        let pair = vec![String::from("waves"), String::from("leaves biscuits")];
+        ensure!(
+            join_fragments(&pair) == "waves and leaves biscuits",
+            "unexpected double fragment join"
+        );
+        Ok(())
+    }
+
+    fn with_sample_config<R, F>(action: F) -> Result<R>
+    where
+        F: FnOnce(&HelloWorldCli) -> figment::error::Result<R>,
+    {
+        let mut output = None;
+        figment::Jail::try_with(|jail| {
             jail.clear_env();
             let manifest_dir = Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR"));
             let config_dir = cap_std::fs::Dir::open_ambient_dir(
                 manifest_dir.join("config").as_std_path(),
                 cap_std::ambient_authority(),
             )
-            .expect("open hello_world sample config directory");
+            .map_err(|err| figment_error(&err))?;
             let baseline = config_dir
                 .read_to_string("baseline.toml")
-                .expect("read baseline sample configuration");
+                .map_err(|err| figment_error(&err))?;
             let overrides = config_dir
                 .read_to_string("overrides.toml")
-                .expect("read overrides sample configuration");
+                .map_err(|err| figment_error(&err))?;
             jail.create_file("baseline.toml", &baseline)?;
             jail.create_file(".hello_world.toml", &overrides)?;
             let config = crate::cli::load_global_config(&GlobalArgs::default(), None)
-                .expect("load global config");
-            result = Some(action(&config));
+                .map_err(|err| figment_error(&err))?;
+            output = Some(action(&config)?);
             Ok(())
-        });
-        result.expect("sample config action")
+        })
+        .map_err(|err| anyhow!(err.to_string()))?;
+        output.ok_or_else(|| anyhow!("sample config action did not produce a value"))
     }
 
-    // Generic helper for testing plan building with sample configs
-    fn test_sample_config_plan<P, F>(plan_builder: F, plan_validator: impl FnOnce(&P))
-    where
-        F: FnOnce(&HelloWorldCli) -> Result<P, HelloWorldError>,
-    {
-        setup_sample_config_environment();
-        let plan = with_sample_config_environment(|config| plan_builder(config).expect("plan"));
-        plan_validator(&plan);
-    }
-
-    #[fixture]
-    fn base_config() -> HelloWorldCli {
-        HelloWorldCli::default()
-    }
-
-    #[fixture]
-    fn greet_command() -> GreetCommand {
-        GreetCommand::default()
-    }
-
-    #[fixture]
-    fn take_leave_command() -> TakeLeaveCommand {
-        TakeLeaveCommand::default()
-    }
-
-    #[rstest]
-    fn build_plan_produces_default_message(
-        base_config: HelloWorldCli,
-        greet_command: GreetCommand,
-    ) {
-        let plan = build_plan(&base_config, &greet_command).expect("plan");
-        assert_eq!(plan.mode(), DeliveryMode::Standard);
-        assert_eq!(plan.message(), "Hello, World!");
-        assert_eq!(plan.preamble(), None);
-    }
-
-    #[rstest]
-    fn build_plan_shouts_for_excited(mut base_config: HelloWorldCli, greet_command: GreetCommand) {
-        base_config.is_excited = true;
-        let plan = build_plan(&base_config, &greet_command).expect("plan");
-        assert_eq!(plan.mode(), DeliveryMode::Enthusiastic);
-        assert_eq!(plan.message(), "HELLO, WORLD!");
-    }
-
-    #[rstest]
-    fn build_plan_applies_preamble(mut greet_command: GreetCommand, base_config: HelloWorldCli) {
-        greet_command.preamble = Some(String::from("Good morning"));
-        let plan = build_plan(&base_config, &greet_command).expect("plan");
-        assert_eq!(plan.preamble(), Some("Good morning"));
-    }
-
-    #[rstest]
-    fn build_plan_propagates_validation_errors(mut base_config: HelloWorldCli) {
-        base_config.salutations.clear();
-        let err = build_plan(&base_config, &GreetCommand::default()).expect_err("invalid plan");
-        assert!(
-            matches!(
-                err,
-                HelloWorldError::Validation(ValidationError::MissingSalutation)
-            ),
-            "expected missing salutation error",
-        );
-    }
-
-    #[rstest]
-    fn build_take_leave_plan_produces_steps() {
-        ortho_config::figment::Jail::expect_with(|jail| {
-            jail.clear_env();
-            let take_leave_command = TakeLeaveCommand {
-                wave: true,
-                gift: Some(String::from("biscuits")),
-                channel: Some(FarewellChannel::Email),
-                remind_in: Some(10),
-                ..TakeLeaveCommand::default()
-            };
-            let plan = build_take_leave_plan(&HelloWorldCli::default(), &take_leave_command)
-                .expect("plan");
-            assert_eq!(plan.greeting().message(), "Hello, World!");
-            assert!(plan.farewell().contains("waves enthusiastically"));
-            assert!(plan.farewell().contains("leaves biscuits"));
-            assert!(plan.farewell().contains("follows up with an email"));
-            assert!(plan.farewell().contains("10 minutes"));
-            Ok(())
-        });
-    }
-
-    #[rstest]
-    fn build_take_leave_plan_applies_greeting_overrides(
-        base_config: HelloWorldCli,
-        mut take_leave_command: TakeLeaveCommand,
-    ) {
-        take_leave_command.greeting_preamble = Some(String::from("Until next time"));
-        take_leave_command.greeting_punctuation = Some(String::from("?"));
-        let plan = build_take_leave_plan(&base_config, &take_leave_command).expect("plan");
-        assert_eq!(plan.greeting().preamble(), Some("Until next time"));
-        assert!(plan.greeting().message().ends_with('?'));
-    }
-
-    #[rstest]
-    fn build_take_leave_plan_uses_greet_defaults() {
-        test_sample_config_plan(
-            |config| build_take_leave_plan(config, &TakeLeaveCommand::default()),
-            |plan| {
-                assert_eq!(plan.greeting().preamble(), Some("Layered hello"));
-                assert_eq!(
-                    plan.greeting().message(),
-                    "HELLO HEY CONFIG FRIENDS, EXCITED CREW!!!"
-                );
-                assert_eq!(plan.greeting().mode(), DeliveryMode::Enthusiastic);
-            },
-        );
-    }
-
-    #[rstest]
-    fn build_plan_uses_sample_overrides() {
-        test_sample_config_plan(
-            |config| {
-                let greet = crate::cli::load_greet_defaults().expect("load greet defaults");
-                build_plan(config, &greet)
-            },
-            |plan| {
-                assert_eq!(plan.preamble(), Some("Layered hello"));
-                assert_eq!(plan.message(), "HELLO HEY CONFIG FRIENDS, EXCITED CREW!!!");
-                assert_eq!(plan.mode(), DeliveryMode::Enthusiastic);
-            },
-        );
-    }
-
-    #[rstest]
-    fn join_fragments_writes_list() {
-        let parts = vec![
-            String::from("waves"),
-            String::from("leaves biscuits"),
-            String::from("follows up with an email"),
-        ];
-        assert_eq!(
-            join_fragments(&parts),
-            "waves, leaves biscuits, and follows up with an email"
-        );
-
-        let pair = vec![String::from("waves"), String::from("leaves biscuits")];
-        assert_eq!(join_fragments(&pair), "waves and leaves biscuits");
+    fn figment_error<E: ToString>(err: &E) -> figment::Error {
+        figment::Error::from(err.to_string())
     }
 }

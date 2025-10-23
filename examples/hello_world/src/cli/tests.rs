@@ -1,40 +1,54 @@
-#![allow(
-    unfulfilled_lint_expectations,
-    reason = "clippy::expect_used is denied globally; tests may not hit those branches"
-)]
-#![expect(
-    clippy::expect_used,
-    reason = "tests panic when CLI fixtures fail to parse"
-)]
+//! Behavioural coverage for the hello world CLI surface.
+//!
+//! Tests use fallible fixtures so setup failures surface as rich diagnostics
+//! rather than panicking via `expect`.
 
 use super::*;
 #[cfg(unix)]
 use crate::cli::discovery::collect_config_candidates;
+use crate::cli::{FarewellChannel, GlobalArgs, GreetOverrides};
 use crate::error::ValidationError;
+use anyhow::{Context, Result, anyhow, ensure};
 use camino::Utf8PathBuf;
+use ortho_config::figment;
 use rstest::{fixture, rstest};
 
-/// Provides a default CLI configuration for tests.
+type CommandAssertion = fn(CommandLine) -> Result<()>;
+
+type HelloWorldCliFixture = Result<HelloWorldCli>;
+type GreetCommandFixture = Result<GreetCommand>;
+type TakeLeaveCommandFixture = Result<TakeLeaveCommand>;
+
 #[fixture]
-fn base_cli() -> HelloWorldCli {
-    HelloWorldCli::default()
+fn base_cli() -> HelloWorldCliFixture {
+    let cli = HelloWorldCli::default();
+    ensure!(
+        !cli.salutations.is_empty(),
+        "default salutations should contain at least one entry"
+    );
+    Ok(cli)
 }
 
-/// Provides a default greet command for tests.
 #[fixture]
-fn greet_command() -> GreetCommand {
-    GreetCommand::default()
+fn greet_command() -> GreetCommandFixture {
+    let command = GreetCommand::default();
+    ensure!(
+        !command.punctuation.trim().is_empty(),
+        "default greet punctuation must not be empty"
+    );
+    Ok(command)
 }
 
-/// Provides a default take-leave command for tests.
 #[fixture]
-fn take_leave_command() -> TakeLeaveCommand {
-    TakeLeaveCommand::default()
+fn take_leave_command() -> TakeLeaveCommandFixture {
+    let command = TakeLeaveCommand::default();
+    ensure!(
+        !command.parting.trim().is_empty(),
+        "default farewell must not be empty"
+    );
+    Ok(command)
 }
 
-type CommandAssertion = fn(CommandLine);
-
-/// Parses command-line invocations and asserts the resulting command variant.
 #[rstest]
 #[case::greet(
     &[
@@ -69,237 +83,303 @@ type CommandAssertion = fn(CommandLine);
 fn command_line_parses_expected_variants(
     #[case] args: &[&str],
     #[case] assert_cli: CommandAssertion,
-) {
-    let cli = parse_command_line(args);
-    assert_cli(cli);
+) -> Result<()> {
+    let cli = parse_command_line(args)?;
+    assert_cli(cli)?;
+    Ok(())
 }
 
-/// Ensures the hello world CLI rejects conflicting delivery modes.
 #[rstest]
-fn hello_world_cli_detects_conflicting_modes(mut base_cli: HelloWorldCli) {
-    base_cli.is_excited = true;
-    base_cli.is_quiet = true;
-    let err = base_cli.validate().expect_err("validation should fail");
-    assert_eq!(err, ValidationError::ConflictingDeliveryModes);
+fn hello_world_cli_detects_conflicting_modes(base_cli: HelloWorldCliFixture) -> Result<()> {
+    let mut cli = base_cli?;
+    cli.is_excited = true;
+    cli.is_quiet = true;
+    let Err(err) = cli.validate() else {
+        return Err(anyhow!(
+            "expected conflicting delivery modes to fail validation"
+        ));
+    };
+    ensure!(
+        err == ValidationError::ConflictingDeliveryModes,
+        "unexpected validation error: {err:?}"
+    );
+    Ok(())
 }
 
-/// Enumerates validation errors for the global CLI options.
 #[rstest]
 #[case::missing_salutations(
-    |cli: &mut HelloWorldCli| cli.salutations.clear(),
+    |cli: &mut HelloWorldCli| {
+        cli.salutations.clear();
+        Ok(())
+    },
     ValidationError::MissingSalutation
 )]
 #[case::blank_salutation(
     |cli: &mut HelloWorldCli| {
-        if let Some(first) = cli.salutations.first_mut() {
-            *first = String::from("   ");
-        } else {
-            panic!("expected at least one salutation");
-        }
+        cli.salutations.first_mut().map_or_else(
+            || Err(anyhow!("expected at least one salutation")),
+            |first| {
+                *first = String::from("   ");
+                Ok(())
+            },
+        )
     },
     ValidationError::BlankSalutation(0)
 )]
 fn hello_world_cli_validation_errors<F>(
-    mut base_cli: HelloWorldCli,
+    base_cli: HelloWorldCliFixture,
     #[case] mutate: F,
     #[case] expected: ValidationError,
-) where
-    F: Fn(&mut HelloWorldCli),
+) -> Result<()>
+where
+    F: Fn(&mut HelloWorldCli) -> Result<()>,
 {
-    mutate(&mut base_cli);
-    let err = base_cli.validate().expect_err("validation should fail");
-    assert_eq!(err, expected);
+    let mut cli = base_cli?;
+    mutate(&mut cli)?;
+    let Err(err) = cli.validate() else {
+        return Err(anyhow!("expected validation to fail with {expected:?}"));
+    };
+    ensure!(err == expected, "unexpected validation error: {err:?}");
+    Ok(())
 }
 
-/// Derives the delivery mode based on global CLI flags.
 #[rstest]
 #[case::excited(true, false, DeliveryMode::Enthusiastic)]
 #[case::quiet(false, true, DeliveryMode::Quiet)]
 #[case::standard(false, false, DeliveryMode::Standard)]
 fn delivery_mode_from_flags(
-    mut base_cli: HelloWorldCli,
+    base_cli: HelloWorldCliFixture,
     #[case] excited: bool,
     #[case] quiet: bool,
     #[case] expected: DeliveryMode,
-) {
-    base_cli.is_excited = excited;
-    base_cli.is_quiet = quiet;
-    assert_eq!(base_cli.delivery_mode(), expected);
+) -> Result<()> {
+    let mut cli = base_cli?;
+    cli.is_excited = excited;
+    cli.is_quiet = quiet;
+    let mode = cli.delivery_mode();
+    ensure!(mode == expected, "unexpected delivery mode: {mode:?}");
+    Ok(())
 }
 
-/// Trims incidental whitespace from salutation overrides.
 #[rstest]
-fn trimmed_salutations_remove_whitespace(mut base_cli: HelloWorldCli) {
-    base_cli.salutations = vec![String::from("  Hi"), String::from("Team  ")];
-    assert_eq!(
-        base_cli.trimmed_salutations(),
-        vec![String::from("Hi"), String::from("Team")]
+fn trimmed_salutations_remove_whitespace(base_cli: HelloWorldCliFixture) -> Result<()> {
+    let mut cli = base_cli?;
+    cli.salutations = vec![String::from("  Hi"), String::from("Team  ")];
+    let expected = vec![String::from("Hi"), String::from("Team")];
+    ensure!(
+        cli.trimmed_salutations() == expected,
+        "expected trimmed salutations"
     );
+    Ok(())
 }
 
-/// Rejects blank inputs supplied to the greet command.
 #[rstest]
 #[case::punctuation(
-    |command: &mut GreetCommand| command.punctuation = String::from("   "),
+    |command: &mut GreetCommand| {
+        command.punctuation = String::from("   ");
+        Ok(())
+    },
     ValidationError::BlankPunctuation,
     "greeting punctuation must contain visible characters",
 )]
 #[case::preamble(
-    |command: &mut GreetCommand| command.preamble = Some(String::from("   ")),
+    |command: &mut GreetCommand| {
+        command.preamble = Some(String::from("   "));
+        Ok(())
+    },
     ValidationError::BlankPreamble,
     "preambles must contain visible characters when supplied",
 )]
 fn greet_command_rejects_blank_inputs<F>(
-    mut greet_command: GreetCommand,
+    greet_command: GreetCommandFixture,
     #[case] mutate: F,
     #[case] expected_error: ValidationError,
     #[case] expected_message: &str,
-) where
-    F: Fn(&mut GreetCommand),
+) -> Result<()>
+where
+    F: Fn(&mut GreetCommand) -> Result<()>,
 {
-    mutate(&mut greet_command);
-    let err = greet_command
-        .validate()
-        .expect_err("validation should fail");
-    assert_eq!(err, expected_error);
-    assert_eq!(err.to_string(), expected_message);
+    let mut command = greet_command?;
+    mutate(&mut command)?;
+    let Err(err) = command.validate() else {
+        return Err(anyhow!("expected validation to fail"));
+    };
+    ensure!(
+        err == expected_error,
+        "unexpected validation error: {err:?}"
+    );
+    ensure!(
+        err.to_string() == expected_message,
+        "unexpected validation message"
+    );
+    Ok(())
 }
 
-/// Enumerates validation errors raised by the take-leave command.
 #[rstest]
 #[case::blank_parting(
-    |cmd: &mut TakeLeaveCommand| cmd.parting = String::from(" "),
+    |cmd: &mut TakeLeaveCommand| {
+        cmd.parting = String::from(" ");
+        Ok(())
+    },
     ValidationError::BlankFarewell,
     "farewell messages must contain visible characters"
 )]
 #[case::zero_reminder(
-    |cmd: &mut TakeLeaveCommand| cmd.remind_in = Some(0),
+    |cmd: &mut TakeLeaveCommand| {
+        cmd.remind_in = Some(0);
+        Ok(())
+    },
     ValidationError::ReminderOutOfRange,
     "reminder minutes must be greater than zero"
 )]
 #[case::blank_gift(
-    |cmd: &mut TakeLeaveCommand| cmd.gift = Some(String::from("   ")),
+    |cmd: &mut TakeLeaveCommand| {
+        cmd.gift = Some(String::from("   "));
+        Ok(())
+    },
     ValidationError::BlankGift,
     "gift descriptions must contain visible characters"
 )]
 #[case::blank_greeting_preamble(
-    |cmd: &mut TakeLeaveCommand| cmd.greeting_preamble = Some(String::from("   ")),
+    |cmd: &mut TakeLeaveCommand| {
+        cmd.greeting_preamble = Some(String::from("   "));
+        Ok(())
+    },
     ValidationError::BlankPreamble,
     "preambles must contain visible characters when supplied"
 )]
 #[case::blank_greeting_punctuation(
-    |cmd: &mut TakeLeaveCommand| cmd.greeting_punctuation = Some(String::from("   ")),
+    |cmd: &mut TakeLeaveCommand| {
+        cmd.greeting_punctuation = Some(String::from("   "));
+        Ok(())
+    },
     ValidationError::BlankPunctuation,
     "greeting punctuation must contain visible characters"
 )]
 fn take_leave_command_validation_errors<F>(
-    mut take_leave_command: TakeLeaveCommand,
+    take_leave_command: TakeLeaveCommandFixture,
     #[case] setup: F,
     #[case] expected_error: ValidationError,
     #[case] expected_message: &str,
-) where
-    F: Fn(&mut TakeLeaveCommand),
+) -> Result<()>
+where
+    F: Fn(&mut TakeLeaveCommand) -> Result<()>,
 {
-    setup(&mut take_leave_command);
-    let err = take_leave_command
-        .validate()
-        .expect_err("validation should fail");
-    assert_eq!(err, expected_error);
-    assert_eq!(err.to_string(), expected_message);
+    let mut command = take_leave_command?;
+    setup(&mut command)?;
+    let Err(err) = command.validate() else {
+        return Err(anyhow!("expected validation to fail"));
+    };
+    ensure!(
+        err == expected_error,
+        "unexpected validation error: {err:?}"
+    );
+    ensure!(
+        err.to_string() == expected_message,
+        "unexpected validation message"
+    );
+    Ok(())
 }
 
-/// Loads configuration by merging CLI and environment sources.
 #[rstest]
-fn load_global_config_applies_overrides() {
-    ortho_config::figment::Jail::expect_with(|jail| {
+fn load_global_config_applies_overrides() -> Result<()> {
+    let cli = parse_command_line(&["-r", "Team", "-s", "Hi", "greet"])?;
+    let config = with_jail(|jail| {
         jail.clear_env();
         jail.set_env("HELLO_WORLD_RECIPIENT", "Team");
         jail.create_file(".hello_world.toml", "")?;
         jail.set_env("HELLO_WORLD_SALUTATIONS", "Hi");
-        let cli = parse_command_line(&["-r", "Team", "-s", "Hi", "greet"]);
-        let config = load_global_config(&cli.globals, None).expect("load config");
-        assert_eq!(config.recipient, "Team");
-        assert_eq!(config.trimmed_salutations(), vec![String::from("Hi")]);
-        Ok(())
-    });
-}
-
-/// Preserves environment-derived configuration when the CLI omits overrides.
-#[rstest]
-fn load_global_config_preserves_env_when_not_overridden() {
-    ortho_config::figment::Jail::expect_with(|jail| {
-        jail.clear_env();
-        jail.set_env("HELLO_WORLD_RECIPIENT", "Library");
-        let cli = parse_command_line(&["greet"]);
-        let config = load_global_config(&cli.globals, None).expect("load config");
-        assert_eq!(config.recipient, "Library");
-        Ok(())
-    });
-}
-
-// Propagate figment errors without erasing diagnostics.
-#[expect(
-    clippy::result_large_err,
-    reason = "figment::Error originates in an external crate"
-)]
-fn setup_sample_jail(
-    jail: &mut ortho_config::figment::Jail,
-) -> Result<(), ortho_config::figment::Error> {
-    jail.clear_env();
-    let manifest_dir = Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let config_dir = cap_std::fs::Dir::open_ambient_dir(
-        manifest_dir.join("config").as_std_path(),
-        cap_std::ambient_authority(),
-    )
-    .expect("open hello_world sample config directory");
-    let baseline = config_dir
-        .read_to_string("baseline.toml")
-        .expect("read baseline sample configuration");
-    let overrides = config_dir
-        .read_to_string("overrides.toml")
-        .expect("read overrides sample configuration");
-    jail.create_file("baseline.toml", &baseline)?;
-    jail.create_file(".hello_world.toml", &overrides)?;
+        load_global_config(&cli.globals, None).map_err(|err| figment_error(&err))
+    })?;
+    ensure!(
+        config.recipient == "Team",
+        "unexpected recipient: {}",
+        config.recipient
+    );
+    ensure!(
+        config.trimmed_salutations() == vec![String::from("Hi")],
+        "unexpected salutations"
+    );
     Ok(())
 }
 
-fn assert_sample_greet_defaults(greet: &GreetCommand) {
-    assert_eq!(greet.preamble.as_deref(), Some("Layered hello"));
-    assert_eq!(greet.punctuation, "!!!");
-}
-
-/// Loads the sample configuration shipped with the demo scripts.
 #[rstest]
-fn load_sample_configuration() {
-    ortho_config::figment::Jail::expect_with(|jail| {
-        setup_sample_jail(jail)?;
-        let config = load_global_config(&GlobalArgs::default(), None).expect("load config");
-        assert_eq!(config.recipient, "Excited crew");
-        assert_eq!(
-            config.trimmed_salutations(),
-            vec![String::from("Hello"), String::from("Hey config friends")]
-        );
-        assert!(config.is_excited);
-        let greet_defaults = load_greet_defaults().expect("merge greet defaults");
-        assert_sample_greet_defaults(&greet_defaults);
-        Ok(())
-    });
-}
-
-/// Returns `None` when no configuration file is present.
-#[rstest]
-fn load_config_overrides_returns_none_without_files() {
-    ortho_config::figment::Jail::expect_with(|jail| {
+fn load_global_config_preserves_env_when_not_overridden() -> Result<()> {
+    let cli = parse_command_line(&["greet"])?;
+    let config = with_jail(|jail| {
         jail.clear_env();
-        assert!(load_config_overrides().expect("load overrides").is_none());
-        Ok(())
-    });
+        jail.set_env("HELLO_WORLD_RECIPIENT", "Library");
+        load_global_config(&cli.globals, None).map_err(|err| figment_error(&err))
+    })?;
+    ensure!(
+        config.recipient == "Library",
+        "unexpected recipient: {}",
+        config.recipient
+    );
+    Ok(())
 }
 
-/// Reads overrides from an explicit configuration path when provided.
+fn assert_sample_greet_defaults(greet: &GreetCommand) -> Result<()> {
+    ensure!(
+        greet.preamble.as_deref() == Some("Layered hello"),
+        "unexpected sample greet preamble: {:?}",
+        greet.preamble
+    );
+    ensure!(
+        greet.punctuation == "!!!",
+        "unexpected sample punctuation: {}",
+        greet.punctuation
+    );
+    Ok(())
+}
+
 #[rstest]
-fn load_config_overrides_uses_explicit_path() {
-    ortho_config::figment::Jail::expect_with(|jail| {
+fn load_sample_configuration() -> Result<()> {
+    let (config, greet_defaults) = with_jail(|jail| {
+        jail.clear_env();
+        let manifest_dir = Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let config_dir = cap_std::fs::Dir::open_ambient_dir(
+            manifest_dir.join("config").as_std_path(),
+            cap_std::ambient_authority(),
+        )
+        .map_err(|err| figment_error(&err))?;
+        let baseline = config_dir
+            .read_to_string("baseline.toml")
+            .map_err(|err| figment_error(&err))?;
+        let overrides = config_dir
+            .read_to_string("overrides.toml")
+            .map_err(|err| figment_error(&err))?;
+        jail.create_file("baseline.toml", &baseline)?;
+        jail.create_file(".hello_world.toml", &overrides)?;
+        let config =
+            load_global_config(&GlobalArgs::default(), None).map_err(|err| figment_error(&err))?;
+        let greet_defaults = load_greet_defaults().map_err(|err| figment_error(&err))?;
+        Ok((config, greet_defaults))
+    })?;
+    ensure!(config.recipient == "Excited crew", "unexpected recipient");
+    ensure!(
+        config.trimmed_salutations()
+            == vec![String::from("Hello"), String::from("Hey config friends")],
+        "unexpected salutations"
+    );
+    ensure!(config.is_excited, "expected excited configuration");
+    assert_sample_greet_defaults(&greet_defaults)?;
+    Ok(())
+}
+
+#[rstest]
+fn load_config_overrides_returns_none_without_files() -> Result<()> {
+    let overrides = with_jail(|jail| {
+        jail.clear_env();
+        load_config_overrides().map_err(|err| figment_error(&err))
+    })?;
+    ensure!(overrides.is_none(), "expected overrides to be absent");
+    Ok(())
+}
+
+#[rstest]
+fn load_config_overrides_uses_explicit_path() -> Result<()> {
+    let overrides = with_jail(|jail| {
         jail.clear_env();
         jail.create_file(
             "custom.toml",
@@ -311,24 +391,27 @@ punctuation = "?"
 "#,
         )?;
         jail.set_env("HELLO_WORLD_CONFIG_PATH", "custom.toml");
-        let overrides = load_config_overrides()
-            .expect("load overrides")
-            .expect("overrides not found");
-        assert_eq!(overrides.is_excited, Some(true));
-        assert_eq!(
-            overrides.cmds.greet,
-            Some(GreetOverrides {
+        load_config_overrides().map_err(|err| figment_error(&err))
+    })?
+    .ok_or_else(|| anyhow!("expected overrides"))?;
+    ensure!(
+        overrides.is_excited == Some(true),
+        "unexpected excitement override"
+    );
+    ensure!(
+        overrides.cmds.greet
+            == Some(GreetOverrides {
                 preamble: Some(String::from("From explicit path")),
                 punctuation: Some(String::from("?")),
-            })
-        );
-        Ok(())
-    });
+            }),
+        "unexpected greet overrides"
+    );
+    Ok(())
 }
-/// Prefers XDG configuration directories before local files.
+
 #[rstest]
-fn load_config_overrides_prefers_xdg_directories() {
-    ortho_config::figment::Jail::expect_with(|jail| {
+fn load_config_overrides_prefers_xdg_directories() -> Result<()> {
+    let overrides = with_jail(|jail| {
         jail.clear_env();
         jail.create_dir("xdg")?;
         jail.create_dir("xdg/hello_world")?;
@@ -345,44 +428,42 @@ punctuation = "!!!"
 "#,
         )?;
         jail.set_env("XDG_CONFIG_HOME", "xdg");
-        let overrides = load_config_overrides()
-            .expect("load overrides")
-            .expect("expected overrides");
-        assert_eq!(overrides.is_excited, None);
-        assert_eq!(
-            overrides.cmds.greet,
-            Some(GreetOverrides {
+        load_config_overrides().map_err(|err| figment_error(&err))
+    })?
+    .ok_or_else(|| anyhow!("expected overrides"))?;
+    ensure!(
+        overrides.is_excited.is_none(),
+        "unexpected excitement override"
+    );
+    ensure!(
+        overrides.cmds.greet
+            == Some(GreetOverrides {
                 preamble: None,
                 punctuation: Some(String::from("???")),
-            })
-        );
-        Ok(())
-    });
+            }),
+        "unexpected greet overrides"
+    );
+    Ok(())
 }
 
 #[cfg(unix)]
-/// Falls back to system XDG directories when `XDG_CONFIG_DIRS` is unset.
 #[rstest]
-fn load_config_overrides_uses_xdg_fallback() {
-    ortho_config::figment::Jail::expect_with(|jail| {
-        jail.clear_env();
-        let candidates = collect_config_candidates();
-        assert!(
-            candidates.contains(&Utf8PathBuf::from("/etc/xdg/hello_world/hello_world.toml")),
-            "expected fallback hello world config in candidate list",
-        );
-        assert!(
-            candidates.contains(&Utf8PathBuf::from("/etc/xdg/.hello_world.toml")),
-            "expected fallback dotfile config in candidate list",
-        );
-        Ok(())
-    });
+fn load_config_overrides_uses_xdg_fallback() -> Result<()> {
+    let candidates = collect_config_candidates();
+    ensure!(
+        candidates.contains(&Utf8PathBuf::from("/etc/xdg/hello_world/hello_world.toml")),
+        "expected fallback hello world config in candidate list"
+    );
+    ensure!(
+        candidates.contains(&Utf8PathBuf::from("/etc/xdg/.hello_world.toml")),
+        "expected fallback dotfile config in candidate list"
+    );
+    Ok(())
 }
 
-/// Reads overrides from LOCALAPPDATA when APPDATA is unavailable.
 #[rstest]
-fn load_config_overrides_reads_localappdata() {
-    ortho_config::figment::Jail::expect_with(|jail| {
+fn load_config_overrides_reads_localappdata() -> Result<()> {
+    let overrides = with_jail(|jail| {
         jail.clear_env();
         jail.create_dir("localdata")?;
         jail.create_dir("localdata/hello_world")?;
@@ -392,18 +473,20 @@ fn load_config_overrides_reads_localappdata() {
         )?;
         jail.create_file(".hello_world.toml", "is_excited = false")?;
         jail.set_env("LOCALAPPDATA", "localdata");
-        let overrides = load_config_overrides()
-            .expect("load overrides")
-            .expect("expected overrides");
-        assert_eq!(overrides.is_excited, Some(true));
-        Ok(())
-    });
+        load_config_overrides().map_err(|err| figment_error(&err))
+    })?
+    .ok_or_else(|| anyhow!("expected overrides"))?;
+    ensure!(
+        overrides.is_excited == Some(true),
+        "unexpected excitement override"
+    );
+    Ok(())
 }
 
-/// Applies file overrides to the greet command defaults.
 #[rstest]
-fn apply_greet_overrides_updates_command(mut greet_command: GreetCommand) {
-    ortho_config::figment::Jail::expect_with(|jail| {
+fn apply_greet_overrides_updates_command(greet_command: GreetCommandFixture) -> Result<()> {
+    let mut command = greet_command?;
+    with_jail(|jail| {
         jail.clear_env();
         jail.create_file(
             ".hello_world.toml",
@@ -412,50 +495,91 @@ preamble = "From file"
 punctuation = "?!"
 "#,
         )?;
-        apply_greet_overrides(&mut greet_command).expect("apply overrides");
-        assert_eq!(greet_command.preamble.as_deref(), Some("From file"));
-        assert_eq!(greet_command.punctuation, String::from("?!"));
-        Ok(())
-    });
+        apply_greet_overrides(&mut command).map_err(|err| figment_error(&err))
+    })?;
+    ensure!(
+        command.preamble.as_deref() == Some("From file"),
+        "unexpected preamble override"
+    );
+    ensure!(
+        command.punctuation == "?!",
+        "unexpected punctuation override"
+    );
+    Ok(())
 }
 
-fn parse_command_line(args: &[&str]) -> CommandLine {
+fn parse_command_line(args: &[&str]) -> Result<CommandLine> {
     let mut full_args = Vec::with_capacity(args.len() + 1);
     full_args.push("hello-world");
     full_args.extend_from_slice(args);
-    CommandLine::try_parse_from(full_args).expect("parse command line")
+    CommandLine::try_parse_from(full_args).context("parse command line")
 }
 
-fn assert_greet_command(cli: CommandLine) {
-    assert!(cli.config_path.is_none());
-    assert_eq!(cli.globals.recipient.as_deref(), Some("Crew"));
-    assert_eq!(cli.globals.salutations, vec![String::from("Hi")]);
-    let greet = expect_greet(cli.command);
-    assert_eq!(greet.preamble.as_deref(), Some("Good morning"));
-    assert_eq!(greet.punctuation, "?!");
+fn assert_greet_command(cli: CommandLine) -> Result<()> {
+    ensure!(cli.config_path.is_none(), "unexpected config path override");
+    ensure!(
+        cli.globals.recipient.as_deref() == Some("Crew"),
+        "unexpected recipient: {:?}",
+        cli.globals.recipient
+    );
+    ensure!(
+        cli.globals.salutations == vec![String::from("Hi")],
+        "unexpected salutations"
+    );
+    let greet = expect_greet(cli.command)?;
+    ensure!(
+        greet.preamble.as_deref() == Some("Good morning"),
+        "unexpected preamble"
+    );
+    ensure!(greet.punctuation == "?!", "unexpected punctuation");
+    Ok(())
 }
 
-fn assert_take_leave_command(cli: CommandLine) {
-    assert!(cli.config_path.is_none());
-    assert!(cli.globals.is_excited);
-    let command = expect_take_leave(cli.command);
-    assert_eq!(command.parting, "Cheerio");
-    assert_eq!(command.gift.as_deref(), Some("flowers"));
-    assert_eq!(command.remind_in, Some(20));
-    assert_eq!(command.channel, Some(FarewellChannel::Message));
-    assert!(command.wave);
+fn assert_take_leave_command(cli: CommandLine) -> Result<()> {
+    ensure!(cli.config_path.is_none(), "unexpected config path override");
+    ensure!(cli.globals.is_excited, "expected excited global flags");
+    let command = expect_take_leave(cli.command)?;
+    ensure!(command.parting == "Cheerio", "unexpected parting");
+    ensure!(
+        command.gift.as_deref() == Some("flowers"),
+        "unexpected gift"
+    );
+    ensure!(command.remind_in == Some(20), "unexpected reminder");
+    ensure!(
+        command.channel == Some(FarewellChannel::Message),
+        "unexpected farewell channel"
+    );
+    ensure!(command.wave, "expected wave flag");
+    Ok(())
 }
 
-fn expect_greet(command: Commands) -> GreetCommand {
+fn expect_greet(command: Commands) -> Result<GreetCommand> {
     match command {
-        Commands::Greet(greet) => greet,
-        Commands::TakeLeave(_) => panic!("expected greet command, found take-leave"),
+        Commands::Greet(greet) => Ok(greet),
+        Commands::TakeLeave(_) => Err(anyhow!("expected greet command, found take-leave")),
     }
 }
 
-fn expect_take_leave(command: Commands) -> TakeLeaveCommand {
+fn expect_take_leave(command: Commands) -> Result<TakeLeaveCommand> {
     match command {
-        Commands::TakeLeave(take_leave) => take_leave,
-        Commands::Greet(_) => panic!("expected take-leave command, found greet"),
+        Commands::TakeLeave(take_leave) => Ok(take_leave),
+        Commands::Greet(_) => Err(anyhow!("expected take-leave command, found greet")),
     }
+}
+
+fn figment_error<E: ToString>(err: &E) -> figment::Error {
+    figment::Error::from(err.to_string())
+}
+
+fn with_jail<F, T>(f: F) -> Result<T>
+where
+    F: FnOnce(&mut figment::Jail) -> figment::error::Result<T>,
+{
+    let mut output = None;
+    figment::Jail::try_with(|j| {
+        output = Some(f(j)?);
+        Ok(())
+    })
+    .map_err(|err| anyhow!(err.to_string()))?;
+    output.ok_or_else(|| anyhow!("jail closure did not return a value"))
 }

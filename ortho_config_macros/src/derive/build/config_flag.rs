@@ -141,9 +141,7 @@ mod tests {
         let (_, fields, _, field_attrs) =
             crate::derive::parse::parse_input(&input).map_err(|err| anyhow!(err))?;
         let Err(err) = build_cli_struct_fields(&fields, &field_attrs) else {
-            return Err(anyhow!(
-                "expected duplicate `cli_long` validation to fail"
-            ));
+            return Err(anyhow!("expected duplicate `cli_long` validation to fail"));
         };
         ensure!(
             err.to_string().contains("duplicate `cli_long` value"),
