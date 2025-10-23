@@ -1,8 +1,4 @@
 //! Steps for scenarios involving flattened CLI structures.
-#![expect(
-    clippy::shadow_reuse,
-    reason = "Cucumber step macros rebind step arguments during code generation"
-)]
 
 use crate::{FlatArgs, World};
 use anyhow::{Result, anyhow, ensure};
@@ -41,6 +37,10 @@ fn load_flat(file: Option<&str>, args: &[&str]) -> Result<OrthoResult<FlatArgs>>
     clippy::needless_pass_by_value,
     reason = "Cucumber step signature requires owned String"
 )]
+#[expect(
+    clippy::shadow_reuse,
+    reason = "Cucumber step macros rebind step arguments during code generation"
+)]
 fn flattened_file(world: &mut World, val: String) -> Result<()> {
     ensure!(
         world.flat_file.is_none(),
@@ -51,6 +51,10 @@ fn flattened_file(world: &mut World, val: String) -> Result<()> {
 }
 
 #[given("a malformed flattened configuration file")]
+#[expect(
+    clippy::shadow_reuse,
+    reason = "Cucumber step macros rebind step arguments during code generation"
+)]
 fn malformed_flat_file(world: &mut World) -> Result<()> {
     ensure!(
         world.flat_file.is_none(),
@@ -61,6 +65,10 @@ fn malformed_flat_file(world: &mut World) -> Result<()> {
 }
 
 #[given("a flattened configuration file with invalid value")]
+#[expect(
+    clippy::shadow_reuse,
+    reason = "Cucumber step macros rebind step arguments during code generation"
+)]
 fn invalid_flat_file(world: &mut World) -> Result<()> {
     ensure!(
         world.flat_file.is_none(),
@@ -71,6 +79,10 @@ fn invalid_flat_file(world: &mut World) -> Result<()> {
 }
 
 #[when("the flattened config is loaded without CLI overrides")]
+#[expect(
+    clippy::shadow_reuse,
+    reason = "Cucumber step macros rebind step arguments during code generation"
+)]
 fn load_without_cli(world: &mut World) -> Result<()> {
     world.flat_result = Some(load_flat(world.flat_file.as_deref(), &["prog"])?);
     Ok(())
@@ -80,6 +92,10 @@ fn load_without_cli(world: &mut World) -> Result<()> {
 #[expect(
     clippy::needless_pass_by_value,
     reason = "Cucumber step signature requires owned String"
+)]
+#[expect(
+    clippy::shadow_reuse,
+    reason = "Cucumber step macros rebind step arguments during code generation"
 )]
 fn load_with_cli(world: &mut World, cli: String) -> Result<()> {
     world.flat_result = Some(load_flat(
@@ -93,6 +109,10 @@ fn load_with_cli(world: &mut World, cli: String) -> Result<()> {
 #[expect(
     clippy::needless_pass_by_value,
     reason = "Cucumber step signature requires owned String"
+)]
+#[expect(
+    clippy::shadow_reuse,
+    reason = "Cucumber step macros rebind step arguments during code generation"
 )]
 fn check_flattened(world: &mut World, expected_value: String) -> Result<()> {
     let result = world
@@ -114,6 +134,10 @@ fn check_flattened(world: &mut World, expected_value: String) -> Result<()> {
 }
 
 #[then("flattening fails with a merge error")]
+#[expect(
+    clippy::shadow_reuse,
+    reason = "Cucumber step macros rebind step arguments during code generation"
+)]
 fn flattening_fails(world: &mut World) -> Result<()> {
     let result = world
         .flat_result
