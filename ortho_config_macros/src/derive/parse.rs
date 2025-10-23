@@ -445,20 +445,13 @@ pub(crate) fn parse_input(
 
 #[cfg(test)]
 mod tests {
-    #![allow(
-        unfulfilled_lint_expectations,
-        reason = "clippy::expect_used is denied globally; tests may not hit those branches"
-    )]
-    #![expect(
-        clippy::expect_used,
-        reason = "tests panic to surface configuration mistakes"
-    )]
     use super::*;
+    use anyhow::{Result, anyhow, ensure};
     use rstest::rstest;
     use syn::{Attribute, parse_quote};
 
     #[test]
-    fn parses_struct_and_field_attributes() {
+    fn parses_struct_and_field_attributes() -> Result<()> {
         let input: DeriveInput = parse_quote! {
             #[ortho_config(prefix = "CFG_")]
             struct Demo {
@@ -469,30 +462,39 @@ mod tests {
             }
         };
 
-        let (ident, fields, struct_attrs, field_attrs) = parse_input(&input).expect("parse_input");
+        let (ident, fields, struct_attrs, field_attrs) =
+            parse_input(&input).map_err(|err| anyhow!(err))?;
 
-        assert_eq!(ident.to_string(), "Demo");
-        assert_eq!(fields.len(), 2);
-        assert_eq!(struct_attrs.prefix.as_deref(), Some("CFG_"));
-        assert_eq!(field_attrs.len(), 2);
-        assert_eq!(
+        ensure!(ident == "Demo", "expected Demo ident, got {ident}");
+        ensure!(fields.len() == 2, "expected 2 fields, got {}", fields.len());
+        ensure!(
+            struct_attrs.prefix.as_deref() == Some("CFG_"),
+            "expected CFG_ prefix"
+        );
+        ensure!(field_attrs.len() == 2, "expected 2 field attrs");
+        ensure!(
             field_attrs
                 .first()
-                .and_then(|attrs| attrs.cli_long.as_deref()),
-            Some("opt")
+                .and_then(|attrs| attrs.cli_long.as_deref())
+                == Some("opt"),
+            "expected first cli_long opt"
         );
-        assert_eq!(
-            field_attrs.first().and_then(|attrs| attrs.cli_short),
-            Some('o')
+        ensure!(
+            field_attrs.first().and_then(|attrs| attrs.cli_short) == Some('o'),
+            "expected first cli_short o"
         );
-        assert!(matches!(
-            field_attrs.get(1).and_then(|attrs| attrs.merge_strategy),
-            Some(MergeStrategy::Append)
-        ));
+        ensure!(
+            matches!(
+                field_attrs.get(1).and_then(|attrs| attrs.merge_strategy),
+                Some(MergeStrategy::Append)
+            ),
+            "expected second field append strategy"
+        );
+        Ok(())
     }
 
     #[test]
-    fn parses_discovery_attributes() {
+    fn parses_discovery_attributes() -> Result<()> {
         let input: DeriveInput = parse_quote! {
             #[ortho_config(prefix = "CFG_", discovery(
                 app_name = "demo",
@@ -509,19 +511,43 @@ mod tests {
             }
         };
 
-        let (_, _, struct_attrs, _) = parse_input(&input).expect("parse_input");
-        let discovery = struct_attrs.discovery.expect("discovery attrs");
-        assert_eq!(discovery.app_name.as_deref(), Some("demo"));
-        assert_eq!(discovery.env_var.as_deref(), Some("DEMO_CONFIG"));
-        assert_eq!(discovery.config_file_name.as_deref(), Some("demo.toml"));
-        assert_eq!(discovery.dotfile_name.as_deref(), Some(".demo.toml"));
-        assert_eq!(
-            discovery.project_file_name.as_deref(),
-            Some("demo-config.toml"),
+        let (_, _, struct_attrs, _) = parse_input(&input).map_err(|err| anyhow!(err))?;
+        let discovery = struct_attrs
+            .discovery
+            .ok_or_else(|| anyhow!("missing discovery attrs"))?;
+        ensure!(
+            discovery.app_name.as_deref() == Some("demo"),
+            "app_name mismatch"
         );
-        assert_eq!(discovery.config_cli_long.as_deref(), Some("config"));
-        assert_eq!(discovery.config_cli_short, Some('c'));
-        assert_eq!(discovery.config_cli_visible, Some(true));
+        ensure!(
+            discovery.env_var.as_deref() == Some("DEMO_CONFIG"),
+            "env_var mismatch"
+        );
+        ensure!(
+            discovery.config_file_name.as_deref() == Some("demo.toml"),
+            "config_file_name mismatch"
+        );
+        ensure!(
+            discovery.dotfile_name.as_deref() == Some(".demo.toml"),
+            "dotfile mismatch"
+        );
+        ensure!(
+            discovery.project_file_name.as_deref() == Some("demo-config.toml"),
+            "project file mismatch"
+        );
+        ensure!(
+            discovery.config_cli_long.as_deref() == Some("config"),
+            "cli long mismatch"
+        );
+        ensure!(
+            discovery.config_cli_short == Some('c'),
+            "cli short mismatch"
+        );
+        ensure!(
+            discovery.config_cli_visible == Some(true),
+            "visibility mismatch"
+        );
+        Ok(())
     }
 
     #[rstest]
@@ -565,29 +591,47 @@ mod tests {
         },
         Some("f1")
     )]
-    fn test_unknown_keys_handling(#[case] input: DeriveInput, #[case] cli_long: Option<&str>) {
-        let (_ident, fields, struct_attrs, field_attrs) = parse_input(&input).expect("parse_input");
+    fn test_unknown_keys_handling(
+        #[case] input: DeriveInput,
+        #[case] cli_long: Option<&str>,
+    ) -> Result<()> {
+        let (_ident, fields, struct_attrs, field_attrs) =
+            parse_input(&input).map_err(|err| anyhow!(err))?;
 
-        assert_eq!(fields.len(), 1);
-        assert_eq!(struct_attrs.prefix.as_deref(), Some("CFG_"));
-        assert_eq!(
-            field_attrs
-                .first()
-                .and_then(|attrs| attrs.cli_long.as_deref()),
+        ensure!(fields.len() == 1, "expected single field");
+        ensure!(
+            struct_attrs.prefix.as_deref() == Some("CFG_"),
+            "expected CFG_ prefix"
+        );
+        let parsed = field_attrs
+            .first()
+            .and_then(|attrs| attrs.cli_long.as_deref());
+        ensure!(
+            parsed == cli_long,
+            "cli_long mismatch: {:?} != {:?}",
+            parsed,
             cli_long
         );
+        Ok(())
     }
 
     #[rstest]
     #[case::missing_suffix("APP", "APP_")]
     #[case::with_suffix("APP_", "APP_")]
     #[case::empty("", "")]
-    fn struct_prefix_normalises_trailing_underscore(#[case] raw: &str, #[case] expected: &str) {
+    fn struct_prefix_normalises_trailing_underscore(
+        #[case] raw: &str,
+        #[case] expected: &str,
+    ) -> Result<()> {
         let lit = syn::LitStr::new(raw, proc_macro2::Span::call_site());
         let attr: Attribute = syn::parse_quote!(#[ortho_config(prefix = #lit)]);
-        let attrs = parse_struct_attrs(&[attr]).expect("struct attrs should parse");
+        let attrs = parse_struct_attrs(&[attr]).map_err(|err| anyhow!(err))?;
 
-        assert_eq!(attrs.prefix.as_deref(), Some(expected));
+        ensure!(
+            attrs.prefix.as_deref() == Some(expected),
+            "prefix normalisation mismatch"
+        );
+        Ok(())
     }
 
     #[rstest]
@@ -595,10 +639,11 @@ mod tests {
     #[case(parse_quote!(std::option::Option<u32>))]
     #[case(parse_quote!(core::option::Option<u32>))]
     #[case(parse_quote!(crate::option::Option<u32>))]
-    fn option_inner_matches_various_prefixes(#[case] ty: Type) {
+    fn option_inner_matches_various_prefixes(#[case] ty: Type) -> Result<()> {
         let expected: Type = parse_quote!(u32);
-        let inner = option_inner(&ty).expect("should extract");
-        assert_eq!(inner, &expected);
+        let inner = option_inner(&ty).ok_or_else(|| anyhow!("expected Option"))?;
+        ensure!(inner == &expected, "expected {expected:?}, got {inner:?}");
+        Ok(())
     }
 
     #[rstest]
@@ -606,9 +651,10 @@ mod tests {
     #[case(parse_quote!(std::vec::Vec<u8>))]
     #[case(parse_quote!(alloc::vec::Vec<u8>))]
     #[case(parse_quote!(crate::vec::Vec<u8>))]
-    fn vec_inner_matches_various_prefixes(#[case] ty: Type) {
+    fn vec_inner_matches_various_prefixes(#[case] ty: Type) -> Result<()> {
         let expected: Type = parse_quote!(u8);
-        let inner = vec_inner(&ty).expect("should extract");
-        assert_eq!(inner, &expected);
+        let inner = vec_inner(&ty).ok_or_else(|| anyhow!("expected Vec"))?;
+        ensure!(inner == &expected, "expected {expected:?}, got {inner:?}");
+        Ok(())
     }
 }

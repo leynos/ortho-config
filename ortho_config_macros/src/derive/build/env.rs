@@ -50,21 +50,14 @@ pub(crate) fn default_app_name(struct_attrs: &StructAttrs, ident: &Ident) -> Str
 
 #[cfg(test)]
 mod tests {
-    #![allow(
-        unfulfilled_lint_expectations,
-        reason = "clippy::expect_used is denied globally; tests may not hit those branches"
-    )]
-    #![expect(
-        clippy::expect_used,
-        reason = "tests panic to surface configuration mistakes"
-    )]
     use super::*;
+    use anyhow::{Result, anyhow, ensure};
 
-    fn demo_input() -> (
+    fn demo_input() -> Result<(
         Vec<syn::Field>,
         Vec<crate::derive::parse::FieldAttrs>,
         StructAttrs,
-    ) {
+    )> {
         let input: syn::DeriveInput = syn::parse_quote! {
             #[ortho_config(prefix = "CFG_")]
             struct Demo {
@@ -75,17 +68,18 @@ mod tests {
             }
         };
         let (_, fields, struct_attrs, field_attrs) =
-            crate::derive::parse::parse_input(&input).expect("parse_input");
-        (fields, field_attrs, struct_attrs)
+            crate::derive::parse::parse_input(&input).map_err(|err| anyhow!(err))?;
+        Ok((fields, field_attrs, struct_attrs))
     }
 
     #[test]
-    fn env_provider_tokens() {
-        let (_, _, struct_attrs) = demo_input();
+    fn env_provider_tokens() -> Result<()> {
+        let (_, _, struct_attrs) = demo_input()?;
         let ts = build_env_provider(&struct_attrs);
-        assert_eq!(
-            ts.to_string(),
-            "ortho_config :: CsvEnv :: prefixed (\"CFG_\")",
+        ensure!(
+            ts.to_string() == "ortho_config :: CsvEnv :: prefixed (\"CFG_\")",
+            "unexpected env provider tokens"
         );
+        Ok(())
     }
 }

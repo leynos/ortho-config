@@ -64,18 +64,12 @@ pub(crate) fn build_config_flag_field(
 
 #[cfg(test)]
 mod tests {
-    #![allow(
-        unfulfilled_lint_expectations,
-        reason = "clippy::expect_used is denied globally; tests may not hit those branches"
-    )]
-    #![expect(
-        clippy::expect_used,
-        reason = "tests panic to surface configuration mistakes"
-    )]
     use super::*;
     use crate::derive::build::build_cli_struct_fields;
     use crate::derive::parse::{DiscoveryAttrs, StructAttrs};
+    use anyhow::{Result, anyhow, ensure};
     use rstest::rstest;
+    use std::collections::HashSet;
 
     #[rstest]
     #[case::long(
@@ -107,19 +101,24 @@ mod tests {
         #[case] input: syn::DeriveInput,
         #[case] discovery_attrs: DiscoveryAttrs,
         #[case] expected_error: &str,
-    ) {
+    ) -> Result<()> {
         let (_, fields, mut struct_attrs, field_attrs) =
-            crate::derive::parse::parse_input(&input).expect("parse_input");
-        let cli = build_cli_struct_fields(&fields, &field_attrs).expect("build cli fields");
+            crate::derive::parse::parse_input(&input).map_err(|err| anyhow!(err))?;
+        let cli = build_cli_struct_fields(&fields, &field_attrs).map_err(|err| anyhow!(err))?;
         struct_attrs.discovery = Some(discovery_attrs);
-        let err = build_config_flag_field(
+        let Err(err) = build_config_flag_field(
             &struct_attrs,
             &cli.used_shorts,
             &cli.used_longs,
             &cli.field_names,
-        )
-        .expect_err("should fail");
-        assert!(err.to_string().contains(expected_error));
+        ) else {
+            return Err(anyhow!("expected config flag field generation to fail"));
+        };
+        ensure!(
+            err.to_string().contains(expected_error),
+            "unexpected error: {err}"
+        );
+        Ok(())
     }
 
     #[rstest]
@@ -138,15 +137,23 @@ mod tests {
             field_two: u32,
         }
     })]
-    fn rejects_duplicate_long_flags_scenarios(#[case] input: syn::DeriveInput) {
+    fn rejects_duplicate_long_flags_scenarios(#[case] input: syn::DeriveInput) -> Result<()> {
         let (_, fields, _, field_attrs) =
-            crate::derive::parse::parse_input(&input).expect("parse_input");
-        let err = build_cli_struct_fields(&fields, &field_attrs).expect_err("should fail");
-        assert!(err.to_string().contains("duplicate `cli_long` value"));
+            crate::derive::parse::parse_input(&input).map_err(|err| anyhow!(err))?;
+        let Err(err) = build_cli_struct_fields(&fields, &field_attrs) else {
+            return Err(anyhow!(
+                "expected duplicate `cli_long` validation to fail"
+            ));
+        };
+        ensure!(
+            err.to_string().contains("duplicate `cli_long` value"),
+            "unexpected error: {err}"
+        );
+        Ok(())
     }
 
     #[test]
-    fn bool_fields_do_not_emit_skip_serializing_if() {
+    fn bool_fields_do_not_emit_skip_serializing_if() -> Result<()> {
         #[derive(serde::Serialize)]
         struct __Cli {
             excited: Option<bool>,
@@ -158,48 +165,54 @@ mod tests {
             }
         };
         let (_, fields, _, field_attrs) =
-            crate::derive::parse::parse_input(&input).expect("parse_input");
-        let tokens = build_cli_struct_fields(&fields, &field_attrs).expect("build cli fields");
+            crate::derive::parse::parse_input(&input).map_err(|err| anyhow!(err))?;
+        let tokens = build_cli_struct_fields(&fields, &field_attrs).map_err(|err| anyhow!(err))?;
         let field_ts = tokens
             .fields
             .first()
-            .expect("generated field tokens")
-            .to_string();
-        assert!(
+            .map(std::string::ToString::to_string)
+            .ok_or_else(|| anyhow!("expected generated field tokens"))?;
+        ensure!(
             field_ts.contains("ArgAction :: SetTrue"),
-            "boolean CLI fields should use ArgAction::SetTrue",
+            "boolean CLI fields should use ArgAction::SetTrue"
         );
-        assert!(
+        ensure!(
             !field_ts.contains("skip_serializing_if"),
-            "boolean CLI fields should not emit skip_serializing_if",
+            "boolean CLI fields should not emit skip_serializing_if"
         );
 
         let cli = __Cli { excited: None };
         let figment = ortho_config::figment::Figment::from(
             ortho_config::figment::providers::Serialized::defaults(&cli),
         );
-        assert!(
+        ensure!(
             figment.extract_inner::<bool>("excited").is_err(),
-            "Absent boolean flags should not appear in Figment",
+            "absent boolean flags should not appear in Figment"
         );
+        Ok(())
     }
 
     #[test]
-    fn config_flag_field_name_conflict_errors() {
+    fn config_flag_field_name_conflict_errors() -> Result<()> {
         let used_shorts = HashSet::new();
         let used_longs = HashSet::new();
         let mut existing = HashSet::new();
         existing.insert(String::from("config_path"));
-        let err = build_config_flag_field(
+        let Err(err) = build_config_flag_field(
             &StructAttrs::default(),
             &used_shorts,
             &used_longs,
             &existing,
-        )
-        .expect_err("should fail on name conflict");
-        assert!(
+        ) else {
+            return Err(anyhow!(
+                "expected generated config flag field to conflict with user-defined field"
+            ));
+        };
+        ensure!(
             err.to_string()
-                .contains("generated config flag field conflicts with user-defined field")
+                .contains("generated config flag field conflicts with user-defined field"),
+            "unexpected error: {err}"
         );
+        Ok(())
     }
 }

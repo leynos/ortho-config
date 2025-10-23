@@ -1101,6 +1101,7 @@ dependencies = [
 name = "ortho_config_macros"
 version = "0.5.0"
 dependencies = [
+ "anyhow",
  "heck 0.5.0",
  "ortho_config",
  "proc-macro2",

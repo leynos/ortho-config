@@ -267,24 +267,19 @@ pub(crate) fn build_cli_struct_fields(
 
 #[cfg(test)]
 mod tests {
-    #![allow(
-        unfulfilled_lint_expectations,
-        reason = "clippy::expect_used is denied globally; tests may not hit those branches"
-    )]
-    #![expect(
-        clippy::expect_used,
-        reason = "tests panic to surface configuration mistakes"
-    )]
     use super::*;
     use crate::derive::parse::FieldAttrs;
+    use anyhow::{Result, anyhow, ensure};
     use rstest::rstest;
+    use std::collections::HashSet;
 
     #[rstest]
     #[case("alpha")]
     #[case("alpha-1")]
-    fn accepts_valid_long_flags(#[case] long: &str) {
+    fn accepts_valid_long_flags(#[case] long: &str) -> Result<()> {
         let name: Ident = syn::parse_quote!(field);
-        assert!(validate_cli_long(&name, long).is_ok());
+        validate_cli_long(&name, long).map_err(|err| anyhow!(err))?;
+        Ok(())
     }
 
     #[rstest]
@@ -295,58 +290,81 @@ mod tests {
     #[case("*")]
     #[case("_alpha")]
     #[case("-alpha")]
-    fn rejects_invalid_long_flags(#[case] bad: &str) {
+    fn rejects_invalid_long_flags(#[case] bad: &str) -> Result<()> {
         let name: Ident = syn::parse_quote!(field);
-        let err = validate_cli_long(&name, bad).expect_err("should fail");
-        assert!(err.to_string().contains("invalid `cli_long`"));
+        let Err(err) = validate_cli_long(&name, bad) else {
+            return Err(anyhow!("expected invalid long flag for {bad}"));
+        };
+        ensure!(
+            err.to_string().contains("invalid `cli_long`"),
+            "unexpected error: {err}"
+        );
+        Ok(())
     }
 
     #[rstest]
     #[case("help")]
     #[case("version")]
-    fn rejects_reserved_long_flags(#[case] long: &str) {
+    fn rejects_reserved_long_flags(#[case] long: &str) -> Result<()> {
         let name: Ident = syn::parse_quote!(field);
-        let err = validate_cli_long(&name, long).expect_err("should fail");
-        assert!(err.to_string().contains("reserved `cli_long`"));
+        let Err(err) = validate_cli_long(&name, long) else {
+            return Err(anyhow!("expected reserved long flag error for {long}"));
+        };
+        ensure!(
+            err.to_string().contains("reserved `cli_long`"),
+            "unexpected error: {err}"
+        );
+        Ok(())
     }
 
     #[rstest]
-    fn selects_default_lowercase() {
+    fn selects_default_lowercase() -> Result<()> {
         let name: Ident = syn::parse_quote!(field);
         let attrs = FieldAttrs::default();
         let mut used = HashSet::new();
-        let ch = resolve_short_flag(&name, &attrs, &mut used).expect("short flag");
-        assert_eq!(ch, 'f');
-        assert!(used.contains(&'f'));
+        let ch = resolve_short_flag(&name, &attrs, &mut used).map_err(|err| anyhow!(err))?;
+        ensure!(ch == 'f', "expected 'f', got {ch}");
+        ensure!(used.contains(&'f'), "expected 'f' to be recorded");
+        Ok(())
     }
 
     #[rstest]
-    fn falls_back_to_uppercase() {
+    fn falls_back_to_uppercase() -> Result<()> {
         let name: Ident = syn::parse_quote!(field);
         let attrs = FieldAttrs::default();
         let mut used = HashSet::from(['f']);
-        let ch = resolve_short_flag(&name, &attrs, &mut used).expect("short flag");
-        assert_eq!(ch, 'F');
-        assert!(used.contains(&'F'));
+        let ch = resolve_short_flag(&name, &attrs, &mut used).map_err(|err| anyhow!(err))?;
+        ensure!(ch == 'F', "expected 'F', got {ch}");
+        ensure!(used.contains(&'F'), "expected 'F' to be recorded");
+        Ok(())
     }
 
     #[rstest]
-    fn skips_leading_underscore_for_default_short() {
+    fn skips_leading_underscore_for_default_short() -> Result<()> {
         let name: Ident = syn::parse_quote!(_alpha);
         let attrs = FieldAttrs::default();
         let mut used = HashSet::new();
-        let ch = resolve_short_flag(&name, &attrs, &mut used).expect("short flag");
-        assert_eq!(ch, 'a');
-        assert!(used.contains(&'a'));
+        let ch = resolve_short_flag(&name, &attrs, &mut used).map_err(|err| anyhow!(err))?;
+        ensure!(ch == 'a', "expected 'a', got {ch}");
+        ensure!(used.contains(&'a'), "expected 'a' to be recorded");
+        Ok(())
     }
 
     #[rstest]
-    fn errors_when_no_alphanumeric_found() {
+    fn errors_when_no_alphanumeric_found() -> Result<()> {
         let name: Ident = syn::parse_quote!(__);
         let attrs = FieldAttrs::default();
         let mut used = HashSet::new();
-        let err = resolve_short_flag(&name, &attrs, &mut used).expect_err("should fail");
-        assert!(err.to_string().contains("unable to derive a short flag"));
+        match resolve_short_flag(&name, &attrs, &mut used) {
+            Ok(_) => Err(anyhow!("expected failure deriving short flag")),
+            Err(err) => {
+                ensure!(
+                    err.to_string().contains("unable to derive a short flag"),
+                    "unexpected error: {err}"
+                );
+                Ok(())
+            }
+        }
     }
 
     #[rstest]
@@ -361,26 +379,42 @@ mod tests {
         #[case] cli_short: char,
         #[case] mut used: HashSet<char>,
         #[case] expected_error: &str,
-    ) {
+    ) -> Result<()> {
         let name: Ident = syn::parse_quote!(field);
         let attrs = FieldAttrs {
             cli_short: Some(cli_short),
             ..FieldAttrs::default()
         };
-        let err = resolve_short_flag(&name, &attrs, &mut used).expect_err("should fail");
-        assert!(err.to_string().contains(expected_error));
+        match resolve_short_flag(&name, &attrs, &mut used) {
+            Ok(_) => Err(anyhow!("expected short flag error")),
+            Err(err) => {
+                ensure!(
+                    err.to_string().contains(expected_error),
+                    "unexpected error: {err}"
+                );
+                Ok(())
+            }
+        }
     }
 
     #[test]
-    fn rejects_mismatched_field_metadata_lengths() {
+    fn rejects_mismatched_field_metadata_lengths() -> Result<()> {
         let fields: Vec<syn::Field> = vec![syn::parse_quote!(pub alpha: bool)];
         let mut attrs = vec![FieldAttrs::default(); 2];
         if let Some(first) = attrs.first_mut() {
             first.cli_long = Some("alpha".into());
         } else {
-            panic!("expected at least one attribute entry");
+            return Err(anyhow!("expected at least one attribute entry"));
         }
-        let err = build_cli_struct_fields(&fields, &attrs).expect_err("should fail");
-        assert!(err.to_string().contains("CLI field metadata mismatch"));
+        match build_cli_struct_fields(&fields, &attrs) {
+            Ok(_) => Err(anyhow!("expected CLI field metadata mismatch")),
+            Err(err) => {
+                ensure!(
+                    err.to_string().contains("CLI field metadata mismatch"),
+                    "unexpected error: {err}"
+                );
+                Ok(())
+            }
+        }
     }
 }
