@@ -47,28 +47,26 @@ pub struct ListItemsArgs {
 
 impl Run for AddUserArgs {
     fn run(self, db_url: &str) -> Result<(), String> {
-        let mut stdout = io::stdout().lock();
-        write_line(&mut stdout, &format!("Connecting to database at: {db_url}"))?;
-        write_line(
-            &mut stdout,
-            &format!("Adding user: {:?}, Admin: {:?}", self.username, self.admin),
-        )?;
-        Ok(())
+        with_locked_stdout(db_url, |stdout| {
+            write_line(
+                stdout,
+                &format!("Adding user: {:?}, Admin: {:?}", self.username, self.admin),
+            )
+        })
     }
 }
 
 impl Run for ListItemsArgs {
     fn run(self, db_url: &str) -> Result<(), String> {
-        let mut stdout = io::stdout().lock();
-        write_line(&mut stdout, &format!("Connecting to database at: {db_url}"))?;
-        write_line(
-            &mut stdout,
-            &format!(
-                "Listing items in category {:?}, All: {:?}",
-                self.category, self.all
-            ),
-        )?;
-        Ok(())
+        with_locked_stdout(db_url, |stdout| {
+            write_line(
+                stdout,
+                &format!(
+                    "Listing items in category {:?}, All: {:?}",
+                    self.category, self.all
+                ),
+            )
+        })
     }
 }
 
@@ -96,7 +94,16 @@ fn main() -> Result<(), String> {
     final_cmd.run(db_url)
 }
 
-fn write_line(writer: &mut impl Write, message: &str) -> Result<(), String> {
+fn with_locked_stdout<F>(db_url: &str, emit: F) -> Result<(), String>
+where
+    F: FnOnce(&mut dyn Write) -> Result<(), String>,
+{
+    let mut stdout = io::stdout().lock();
+    write_line(&mut stdout, &format!("Connecting to database at: {db_url}"))?;
+    emit(&mut stdout)
+}
+
+fn write_line(writer: &mut dyn Write, message: &str) -> Result<(), String> {
     // Forward stdout failures through the existing `String` error channel
     // so the example trait signature stays stable for consumers.
     writer
