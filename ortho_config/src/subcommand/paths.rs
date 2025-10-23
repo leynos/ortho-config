@@ -228,14 +228,7 @@ mod tests {
     ) -> Result<()> {
         let (xdg_tempdir, _guard) = init_xdg_home()?;
         let dir_path = xdg_tempdir.path();
-        for dir_entry in fs::read_dir(dir_path).context("read xdg config directory")? {
-            let path = dir_entry.context("inspect directory entry")?.path();
-            if path.is_dir() {
-                fs::remove_dir_all(&path).context("remove existing XDG directory")?;
-            } else {
-                fs::remove_file(&path).context("remove existing XDG file")?;
-            }
-        }
+        // TempDir is empty on creation; no cleanup required.
 
         for file in files {
             fs::write(dir_path.join(file), "")
