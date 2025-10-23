@@ -159,6 +159,8 @@ pub mod env {
         use std::sync::{Arc, Barrier};
         use std::thread;
 
+        // Centralises environment variable lookups for the tests; panics on
+        // missing/invalid values so failures are loud and easy to diagnose.
         fn env_value(key: &str) -> String {
             match std::env::var(key) {
                 Ok(value) => value,
