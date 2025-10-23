@@ -71,7 +71,9 @@ fn generate_declarative_state_struct_emits_storage() -> Result<()> {
     };
     ensure!(
         tokens.to_string() == expected.to_string(),
-        "state struct tokens mismatch"
+        "state struct tokens mismatch\nactual:\n{}\nexpected:\n{}",
+        tokens.to_string(),
+        expected.to_string()
     );
     Ok(())
 }
