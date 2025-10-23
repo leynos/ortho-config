@@ -36,55 +36,45 @@ where
         .map_err(|err| anyhow!(err))
 }
 
+fn assert_config_values(
+    config: &TestConfig,
+    expected_sample: Option<&str>,
+    expected_other: Option<&str>,
+) -> Result<()> {
+    ensure!(
+        config.sample_value.as_deref() == expected_sample,
+        "expected sample_value {:?}, got {:?}",
+        expected_sample,
+        config.sample_value
+    );
+    ensure!(
+        config.other.as_deref() == expected_other,
+        "expected other {:?}, got {:?}",
+        expected_other,
+        config.other
+    );
+    Ok(())
+}
+
 #[rstest]
 fn parses_kebab_case_flags() -> Result<()> {
     let cfg = TestConfig::load_from_iter(["prog", "--sample-value", "hello", "--other", "val"])
         .map_err(|err| anyhow!(err))?;
-    ensure!(
-        cfg.sample_value.as_deref() == Some("hello"),
-        "expected sample_value hello, got {:?}",
-        cfg.sample_value
-    );
-    ensure!(
-        cfg.other.as_deref() == Some("val"),
-        "expected other val, got {:?}",
-        cfg.other
-    );
-    Ok(())
+    assert_config_values(&cfg, Some("hello"), Some("val"))
 }
 
 #[rstest]
 fn short_flags_work() -> Result<()> {
     let cfg = TestConfig::load_from_iter(["prog", "-s", "hi", "-o", "val"])
         .map_err(|err| anyhow!(err))?;
-    ensure!(
-        cfg.sample_value.as_deref() == Some("hi"),
-        "expected sample_value hi, got {:?}",
-        cfg.sample_value
-    );
-    ensure!(
-        cfg.other.as_deref() == Some("val"),
-        "expected other val, got {:?}",
-        cfg.other
-    );
-    Ok(())
+    assert_config_values(&cfg, Some("hi"), Some("val"))
 }
 
 #[rstest]
 fn cli_only_source() -> Result<()> {
     let cfg = TestConfig::load_from_iter(["prog", "--sample-value", "only", "--other", "x"])
         .map_err(|err| anyhow!(err))?;
-    ensure!(
-        cfg.sample_value.as_deref() == Some("only"),
-        "expected sample_value only, got {:?}",
-        cfg.sample_value
-    );
-    ensure!(
-        cfg.other.as_deref() == Some("x"),
-        "expected other x, got {:?}",
-        cfg.other
-    );
-    Ok(())
+    assert_config_values(&cfg, Some("only"), Some("x"))
 }
 
 #[rstest]
@@ -95,17 +85,7 @@ fn cli_overrides_other_sources() -> Result<()> {
         j.set_env("OTHER", "e");
         let cfg = TestConfig::load_from_iter(["prog", "--sample-value", "cli", "--other", "cli2"])
             .map_err(|err| anyhow!(err))?;
-        ensure!(
-            cfg.sample_value.as_deref() == Some("cli"),
-            "expected sample_value cli, got {:?}",
-            cfg.sample_value
-        );
-        ensure!(
-            cfg.other.as_deref() == Some("cli2"),
-            "expected other cli2, got {:?}",
-            cfg.other
-        );
-        Ok(())
+        assert_config_values(&cfg, Some("cli"), Some("cli2"))
     })?;
     Ok(())
 }
@@ -116,17 +96,7 @@ fn cli_combines_with_file() -> Result<()> {
         j.create_file(".config.toml", "other = \"file\"")?;
         let cfg = TestConfig::load_from_iter(["prog", "--sample-value", "cli", "--other", "cli2"])
             .map_err(|err| anyhow!(err))?;
-        ensure!(
-            cfg.sample_value.as_deref() == Some("cli"),
-            "expected sample_value cli, got {:?}",
-            cfg.sample_value
-        );
-        ensure!(
-            cfg.other.as_deref() == Some("cli2"),
-            "expected other cli2, got {:?}",
-            cfg.other
-        );
-        Ok(())
+        assert_config_values(&cfg, Some("cli"), Some("cli2"))
     })?;
     Ok(())
 }
