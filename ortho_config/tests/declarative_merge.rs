@@ -42,6 +42,10 @@ fn compose_layers(
     composer.layers()
 }
 
+fn to_anyhow<T, E: std::fmt::Display>(result: Result<T, E>) -> anyhow::Result<T> {
+    result.map_err(|err| anyhow!(err.to_string()))
+}
+
 #[rstest]
 #[case::cli_overrides(json!({"name": "default", "count": 1, "flag": false }), json!({}), json!({"count": 5}), 5)]
 #[case::env_over_defaults(json!({"name": "default", "count": 1, "flag": false }), json!({"count": 3}), json!({}), 3)]
@@ -52,7 +56,7 @@ fn merge_layers_respect_precedence(
     #[case] expected_count: u32,
 ) -> Result<()> {
     let layers = compose_layers(defaults, environment, Some(cli));
-    let config = DeclarativeSample::merge_from_layers(layers).map_err(|err| anyhow!(err))?;
+    let config = to_anyhow(DeclarativeSample::merge_from_layers(layers))?;
     ensure!(
         config.count == expected_count,
         "expected {expected_count}, got {}",
@@ -129,7 +133,7 @@ fn merge_layers_append_vectors() -> Result<()> {
         json!({ "values": ["env"] }),
         Some(json!({ "values": ["cli"] })),
     );
-    let config = AppendSample::merge_from_layers(layers).map_err(|err| anyhow!(err))?;
+    let config = to_anyhow(AppendSample::merge_from_layers(layers))?;
     let expected = vec![
         String::from("default"),
         String::from("env"),
@@ -147,7 +151,7 @@ fn merge_layers_append_vectors() -> Result<()> {
 #[rstest]
 fn merge_layers_respect_option_nulls() -> Result<()> {
     let layers = compose_layers(json!({ "flag": "present" }), json!({ "flag": null }), None);
-    let config = OptionalSample::merge_from_layers(layers).map_err(|err| anyhow!(err))?;
+    let config = to_anyhow(OptionalSample::merge_from_layers(layers))?;
     ensure!(
         config.flag.is_none(),
         "expected flag to be None, got {:?}",
@@ -163,8 +167,7 @@ fn merge_from_layers_accepts_file_layers() -> Result<()> {
         json!({ "name": "from_file", "count": 7, "flag": true }),
         Some(Utf8PathBuf::from("config.json")),
     );
-    let config =
-        DeclarativeSample::merge_from_layers(composer.layers()).map_err(|err| anyhow!(err))?;
+    let config = to_anyhow(DeclarativeSample::merge_from_layers(composer.layers()))?;
     ensure!(
         config.name == "from_file",
         "expected name from_file, got {}",

@@ -122,7 +122,8 @@ mod tests {
 
     #[test]
     fn parse_extends_array_mixed_types_filters_non_strings() {
-        let out = super::parse_extends(r#"extends = ["a.toml", 42, " b . toml ", "", { k = "v" }]"#);
+        let out =
+            super::parse_extends(r#"extends = ["a.toml", 42, " b . toml ", "", { k = "v" }]"#);
         assert_eq!(out, vec!["a.toml", "b . toml"]);
     }
 
