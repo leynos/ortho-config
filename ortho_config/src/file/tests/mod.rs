@@ -1,8 +1,7 @@
 //! Shared helpers for file module tests along with focused submodules.
 
 use super::*;
-use crate::result_ext::ResultIntoFigment;
-use anyhow::{Context, Result, anyhow, ensure};
+use anyhow::{Context, Result, anyhow};
 use figment::Figment;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -19,7 +18,7 @@ pub(super) fn canonical_root_and_current() -> Result<(PathBuf, PathBuf)> {
     Ok((root, current))
 }
 
-pub(super) fn with_fresh_graph<T, F>(f: F) -> Result<T>
+pub(super) fn with_fresh_graph<F>(f: F) -> Result<()>
 where
     F: FnOnce(
         &mut figment::Jail,
@@ -27,7 +26,7 @@ where
         &Path,
         &mut HashSet<PathBuf>,
         &mut Vec<PathBuf>,
-    ) -> Result<T>,
+    ) -> Result<()>,
 {
     figment::Jail::try_with(|j| {
         let (root, current) =
@@ -40,9 +39,9 @@ where
     .map_err(|err| anyhow!(err.to_string()))
 }
 
-pub(super) fn with_jail<T, F>(f: F) -> Result<T>
+pub(super) fn with_jail<F>(f: F) -> Result<()>
 where
-    F: FnOnce(&mut figment::Jail) -> Result<T>,
+    F: FnOnce(&mut figment::Jail) -> Result<()>,
 {
     figment::Jail::try_with(|j| f(j).map_err(|err| figment::Error::from(err.to_string())))
         .map_err(|err| anyhow!(err.to_string()))
