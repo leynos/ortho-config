@@ -343,6 +343,10 @@ mod tests {
             .get(paths.len().saturating_sub(group_len)..)
             .unwrap_or(&[]);
         ensure!(
+            local_slice.len() == group_len,
+            "local candidate count must equal EXT_GROUPS size"
+        );
+        ensure!(
             local_slice
                 .iter()
                 .all(|p| p.parent() == Some(Path::new("."))),
