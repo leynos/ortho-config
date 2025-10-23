@@ -327,11 +327,10 @@ mod tests {
             "home candidates must share the same parent directory"
         );
 
-        let mid_slice = paths
-            .get(group_len..paths.len().saturating_sub(group_len))
-            .unwrap_or(&[]);
-        if let Some(first_mid) = mid_slice.first() {
-            let xdg_parent = first_mid
+        let total_len = paths.len();
+        if total_len.saturating_sub(group_len) > group_len {
+            let mid_slice = &paths[group_len..total_len - group_len];
+            let xdg_parent = mid_slice[0]
                 .parent()
                 .ok_or_else(|| anyhow!("platform candidate must have a parent directory"))?;
             ensure!(
