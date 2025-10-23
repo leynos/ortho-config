@@ -1,11 +1,16 @@
+//! Integration tests for configuration discovery across multiple platforms.
+//!
+//! Verifies candidate ordering, XDG/Windows/HOME directory resolution, project roots,
+//! environment variable overrides, and error propagation for required/optional paths.
+
 use super::*;
 use anyhow::{Context, Result, anyhow, ensure};
-use rstest::rstest;
+use rstest::{fixture, rstest};
 use serde::Deserialize;
 use tempfile::TempDir;
 use test_helpers::env as test_env;
 
-fn clear_common_env() -> Vec<test_env::EnvVarGuard> {
+fn remove_common_env_vars() -> Vec<test_env::EnvVarGuard> {
     let mut guards = Vec::new();
     for key in [
         "HELLO_WORLD_CONFIG_PATH",
@@ -21,13 +26,19 @@ fn clear_common_env() -> Vec<test_env::EnvVarGuard> {
     guards
 }
 
-fn setup_env_override_discovery() -> (
+#[fixture]
+fn env_guards() -> Vec<test_env::EnvVarGuard> {
+    remove_common_env_vars()
+}
+
+#[fixture]
+fn env_override_discovery() -> (
     ConfigDiscovery,
     PathBuf,
     Vec<test_env::EnvVarGuard>,
     test_env::EnvVarGuard,
 ) {
-    let guards = clear_common_env();
+    let guards = remove_common_env_vars();
     let path = std::env::temp_dir().join("explicit.toml");
     let env_guard = test_env::set_var("HELLO_WORLD_CONFIG_PATH", &path);
     let discovery = ConfigDiscovery::builder("hello_world")
@@ -37,9 +48,30 @@ fn setup_env_override_discovery() -> (
     (discovery, path, guards, env_guard)
 }
 
+#[fixture]
+fn config_temp_dir() -> Result<TempDir> {
+    TempDir::new().context("create config directory")
+}
+
+#[fixture]
+fn sample_config_file(config_temp_dir: TempDir) -> Result<(TempDir, PathBuf)> {
+    let file_dir = config_temp_dir.path().join("hello_world");
+    std::fs::create_dir_all(&file_dir).context("create hello_world directory")?;
+    let file = file_dir.join("config.toml");
+    std::fs::write(&file, "value = true").context("write config file")?;
+    Ok((config_temp_dir, file))
+}
+
 #[rstest]
-fn env_override_precedes_other_candidates() -> Result<()> {
-    let (discovery, path, _guards, _env) = setup_env_override_discovery();
+fn env_override_precedes_other_candidates(
+    env_override_discovery: (
+        ConfigDiscovery,
+        PathBuf,
+        Vec<test_env::EnvVarGuard>,
+        test_env::EnvVarGuard,
+    ),
+) -> Result<()> {
+    let (discovery, path, _guards, _env) = env_override_discovery;
     let candidates = discovery.candidates();
     ensure!(
         candidates.first() == Some(&path),
@@ -49,17 +81,18 @@ fn env_override_precedes_other_candidates() -> Result<()> {
 }
 
 #[rstest]
-fn xdg_candidates_follow_explicit_paths() -> Result<()> {
-    let _guards = clear_common_env();
-    let dir = TempDir::new().context("create XDG temp directory")?;
-    let xdg_path = dir.path().join("hello_world");
+fn xdg_candidates_follow_explicit_paths(
+    _env_guards: Vec<test_env::EnvVarGuard>,
+    config_temp_dir: TempDir,
+) -> Result<()> {
+    let xdg_path = config_temp_dir.path().join("hello_world");
     std::fs::create_dir_all(&xdg_path).context("create hello_world directory under XDG home")?;
-    let _home = test_env::set_var("XDG_CONFIG_HOME", dir.path());
+    let _home = test_env::set_var("XDG_CONFIG_HOME", config_temp_dir.path());
 
     let discovery = ConfigDiscovery::builder("hello_world").build();
     let candidates = discovery.candidates();
     let expected_first = xdg_path.join("config.toml");
-    let expected_second = dir.path().join(".hello_world.toml");
+    let expected_second = config_temp_dir.path().join(".hello_world.toml");
     ensure!(
         candidates.first() == Some(&expected_first),
         "expected XDG config file candidate first"
@@ -73,8 +106,7 @@ fn xdg_candidates_follow_explicit_paths() -> Result<()> {
 
 #[cfg(any(unix, target_os = "redox"))]
 #[rstest]
-fn xdg_dirs_empty_falls_back_to_default() -> Result<()> {
-    let _guards = clear_common_env();
+fn xdg_dirs_empty_falls_back_to_default(_env_guards: Vec<test_env::EnvVarGuard>) -> Result<()> {
     let _dirs = test_env::set_var("XDG_CONFIG_DIRS", "");
 
     let discovery = ConfigDiscovery::builder("hello_world").build();
@@ -97,8 +129,7 @@ fn xdg_dirs_empty_falls_back_to_default() -> Result<()> {
 
 #[cfg(any(unix, target_os = "redox"))]
 #[rstest]
-fn xdg_dirs_with_values_excludes_default() -> Result<()> {
-    let _guards = clear_common_env();
+fn xdg_dirs_with_values_excludes_default(_env_guards: Vec<test_env::EnvVarGuard>) -> Result<()> {
     let _dirs = test_env::set_var("XDG_CONFIG_DIRS", "/opt/example:/etc/custom");
 
     let discovery = ConfigDiscovery::builder("hello_world").build();
@@ -127,8 +158,15 @@ fn xdg_dirs_with_values_excludes_default() -> Result<()> {
 }
 
 #[rstest]
-fn utf8_candidates_prioritise_env_paths() -> Result<()> {
-    let (discovery, path, _guards, _env) = setup_env_override_discovery();
+fn utf8_candidates_prioritise_env_paths(
+    env_override_discovery: (
+        ConfigDiscovery,
+        PathBuf,
+        Vec<test_env::EnvVarGuard>,
+        test_env::EnvVarGuard,
+    ),
+) -> Result<()> {
+    let (discovery, path, _guards, _env) = env_override_discovery;
     let candidates = discovery.utf8_candidates();
     let first = candidates
         .first()
@@ -146,8 +184,7 @@ fn utf8_candidates_prioritise_env_paths() -> Result<()> {
 }
 
 #[rstest]
-fn project_roots_append_last() -> Result<()> {
-    let _guards = clear_common_env();
+fn project_roots_append_last(_env_guards: Vec<test_env::EnvVarGuard>) -> Result<()> {
     let discovery = ConfigDiscovery::builder("hello_world")
         .clear_project_roots()
         .add_project_root("proj")
@@ -161,8 +198,7 @@ fn project_roots_append_last() -> Result<()> {
 }
 
 #[rstest]
-fn project_roots_replaces_existing_entries() -> Result<()> {
-    let _guards = clear_common_env();
+fn project_roots_replaces_existing_entries(_env_guards: Vec<test_env::EnvVarGuard>) -> Result<()> {
     let discovery = ConfigDiscovery::builder("hello_world")
         .add_project_root("legacy")
         .project_roots([PathBuf::from("alpha"), PathBuf::from("beta")])
@@ -197,13 +233,11 @@ struct SampleConfig {
 }
 
 #[rstest]
-fn load_first_reads_first_existing_file() -> Result<()> {
-    let _guards = clear_common_env();
-    let dir = TempDir::new().context("create config directory")?;
-    let file_dir = dir.path().join("hello_world");
-    std::fs::create_dir_all(&file_dir).context("create hello_world directory")?;
-    let file = file_dir.join("config.toml");
-    std::fs::write(&file, "value = true").context("write config file")?;
+fn load_first_reads_first_existing_file(
+    _env_guards: Vec<test_env::EnvVarGuard>,
+    sample_config_file: (TempDir, PathBuf),
+) -> Result<()> {
+    let (dir, _config_path) = sample_config_file;
     let _xdg = test_env::set_var("XDG_CONFIG_HOME", dir.path());
 
     let discovery = ConfigDiscovery::builder("hello_world").build();
@@ -220,11 +254,13 @@ fn load_first_reads_first_existing_file() -> Result<()> {
 }
 
 #[rstest]
-fn load_first_skips_invalid_candidates() -> Result<()> {
-    let _guards = clear_common_env();
-    let dir = TempDir::new().context("create config directory")?;
-    let invalid = dir.path().join("broken.toml");
-    let valid = dir.path().join("valid.toml");
+fn load_first_skips_invalid_candidates(
+    _env_guards: Vec<test_env::EnvVarGuard>,
+    config_temp_dir: TempDir,
+) -> Result<()> {
+    let dir_path = config_temp_dir.path();
+    let invalid = dir_path.join("broken.toml");
+    let valid = dir_path.join("valid.toml");
     std::fs::write(&invalid, "value = ???").context("write invalid config")?;
     std::fs::write(&valid, "value = false").context("write valid config")?;
     let _env = test_env::set_var("HELLO_WORLD_CONFIG_PATH", &invalid);
@@ -254,11 +290,13 @@ fn load_first_skips_invalid_candidates() -> Result<()> {
 }
 
 #[rstest]
-fn load_first_with_errors_reports_preceding_failures() -> Result<()> {
-    let _guards = clear_common_env();
-    let dir = TempDir::new().context("create config directory")?;
-    let missing = dir.path().join("absent.toml");
-    let valid = dir.path().join("valid.toml");
+fn load_first_with_errors_reports_preceding_failures(
+    _env_guards: Vec<test_env::EnvVarGuard>,
+    config_temp_dir: TempDir,
+) -> Result<()> {
+    let dir_path = config_temp_dir.path();
+    let missing = dir_path.join("absent.toml");
+    let valid = dir_path.join("valid.toml");
     std::fs::write(&valid, "value = true").context("write valid config")?;
 
     let discovery = ConfigDiscovery::builder("hello_world")
@@ -283,11 +321,13 @@ fn load_first_with_errors_reports_preceding_failures() -> Result<()> {
 }
 
 #[rstest]
-fn partitioned_errors_surface_required_failures() -> Result<()> {
-    let _guards = clear_common_env();
-    let dir = TempDir::new().context("create config directory")?;
-    let missing = dir.path().join("absent.toml");
-    let valid = dir.path().join("valid.toml");
+fn partitioned_errors_surface_required_failures(
+    _env_guards: Vec<test_env::EnvVarGuard>,
+    config_temp_dir: TempDir,
+) -> Result<()> {
+    let dir_path = config_temp_dir.path();
+    let missing = dir_path.join("absent.toml");
+    let valid = dir_path.join("valid.toml");
     std::fs::write(&valid, "value = true").context("write valid config")?;
 
     let discovery = ConfigDiscovery::builder("hello_world")
@@ -316,10 +356,11 @@ fn partitioned_errors_surface_required_failures() -> Result<()> {
 }
 
 #[rstest]
-fn required_paths_emit_missing_errors() -> Result<()> {
-    let _guards = clear_common_env();
-    let dir = TempDir::new().context("create config directory")?;
-    let missing = dir.path().join("absent.toml");
+fn required_paths_emit_missing_errors(
+    _env_guards: Vec<test_env::EnvVarGuard>,
+    config_temp_dir: TempDir,
+) -> Result<()> {
+    let missing = config_temp_dir.path().join("absent.toml");
 
     let discovery = ConfigDiscovery::builder("hello_world")
         .add_required_path(&missing)
@@ -338,10 +379,9 @@ fn required_paths_emit_missing_errors() -> Result<()> {
 
 #[cfg(windows)]
 #[rstest]
-fn windows_candidates_are_case_insensitive() -> Result<()> {
+fn windows_candidates_are_case_insensitive(_env_guards: Vec<test_env::EnvVarGuard>) -> Result<()> {
     use std::ffi::OsString;
 
-    let _guards = clear_common_env();
     let mut builder = ConfigDiscovery::builder("hello_world");
     builder = builder.add_explicit_path(PathBuf::from("C:/Config/FILE.TOML"));
     builder = builder.add_explicit_path(PathBuf::from("c:/config/file.toml"));
