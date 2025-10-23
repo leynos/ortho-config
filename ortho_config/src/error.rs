@@ -128,7 +128,13 @@ impl IntoIterator for AggregatedErrors {
 }
 
 impl OrthoError {
-    /// Try to build an [`OrthoError`] from an iterator of errors.
+    /// Tries to build an [`OrthoError`] from an iterator of errors.
+    ///
+    /// The iterator is consumed eagerly. It returns:
+    /// * `None` when no errors are supplied;
+    /// * the inner error when a single [`Arc`] is uniquely owned;
+    /// * [`Self::Aggregate`] containing that single [`Arc`] when the error is already shared; and
+    /// * [`Self::Aggregate`] combining every error for two or more inputs.
     ///
     /// Returns `None` if the iterator is empty.
     ///
