@@ -4,6 +4,10 @@ use ortho_config::{OrthoConfig, OrthoError};
 use rstest::rstest;
 use serde::Deserialize;
 
+#[path = "test_utils.rs"]
+mod test_utils;
+use test_utils::with_jail;
+
 #[derive(Debug, Deserialize, OrthoConfig)]
 struct AggConfig {
     #[expect(
@@ -25,14 +29,6 @@ struct AggConfig {
 struct DiscoveryErrorConfig {
     #[ortho_config(default = 0)]
     port: u32,
-}
-
-fn with_jail<F>(f: F) -> Result<()>
-where
-    F: FnOnce(&mut figment::Jail) -> Result<()>,
-{
-    figment::Jail::try_with(|j| f(j).map_err(|err| figment::Error::from(err.to_string())))
-        .map_err(|err| anyhow!(err))
 }
 
 #[rstest]

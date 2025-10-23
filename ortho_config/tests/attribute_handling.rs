@@ -4,6 +4,10 @@ use ortho_config::{OrthoConfig, ResultIntoFigment};
 use rstest::rstest;
 use serde::{Deserialize, Serialize};
 
+#[path = "test_utils.rs"]
+mod test_utils;
+use test_utils::with_jail;
+
 #[derive(Debug, Deserialize, Serialize, OrthoConfig)]
 struct CustomCli {
     #[ortho_config(cli_long = "my-val")]
@@ -21,14 +25,6 @@ struct Defaulted {
     #[ortho_config(default = 5)]
     #[serde(skip_serializing_if = "Option::is_none")]
     num: Option<u32>,
-}
-
-fn with_jail<F>(f: F) -> Result<()>
-where
-    F: FnOnce(&mut figment::Jail) -> Result<()>,
-{
-    figment::Jail::try_with(|j| f(j).map_err(|err| figment::Error::from(err.to_string())))
-        .map_err(|err| anyhow!(err))
 }
 
 #[rstest]

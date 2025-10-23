@@ -9,6 +9,10 @@ use serde::Deserialize;
 use serde_json::json;
 use std::collections::BTreeMap;
 
+#[path = "test_utils.rs"]
+mod test_utils;
+use test_utils::with_jail;
+
 #[derive(Debug, Deserialize)]
 struct TableConfig {
     #[serde(default)]
@@ -18,14 +22,6 @@ struct TableConfig {
 #[derive(Debug, Deserialize)]
 struct RuleCfg {
     enabled: bool,
-}
-
-fn with_jail<F>(f: F) -> Result<()>
-where
-    F: FnOnce(&mut figment::Jail) -> Result<()>,
-{
-    figment::Jail::try_with(|j| f(j).map_err(|err| figment::Error::from(err.to_string())))
-        .map_err(|err| anyhow!(err))
 }
 
 /// Asserts that `TableConfig` contains two rules, `a` enabled and `b` disabled.

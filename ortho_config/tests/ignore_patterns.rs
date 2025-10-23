@@ -4,19 +4,15 @@ use ortho_config::OrthoConfig;
 use rstest::rstest;
 use serde::{Deserialize, Serialize};
 
+#[path = "test_utils.rs"]
+mod test_utils;
+use test_utils::with_jail;
+
 #[derive(Debug, Deserialize, Serialize, OrthoConfig)]
 struct IgnoreCfg {
     #[serde(default)]
     #[ortho_config(merge_strategy = "append")]
     ignore_patterns: Vec<String>,
-}
-
-fn with_jail<F>(f: F) -> Result<()>
-where
-    F: FnOnce(&mut figment::Jail) -> Result<()>,
-{
-    figment::Jail::try_with(|j| f(j).map_err(|err| figment::Error::from(err.to_string())))
-        .map_err(|err| anyhow!(err))
 }
 
 #[rstest]

@@ -5,6 +5,15 @@ use ortho_config::{OrthoConfig, OrthoError, OrthoResult};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
+#[path = "../test_utils.rs"]
+mod test_utils;
+use test_utils::with_jail;
+
+#[path = "../clap_test_utils.rs"]
+mod clap_test_utils;
+pub(crate) use clap_test_utils::assert_config_values;
+use clap_test_utils::ConfigValueAssertions;
+
 pub(crate) trait OrthoResultExt<T> {
     fn to_anyhow(self) -> Result<T>;
 }
@@ -13,14 +22,6 @@ impl<T> OrthoResultExt<T> for ortho_config::OrthoResult<T> {
     fn to_anyhow(self) -> Result<T> {
         self.map_err(|err| anyhow!(err))
     }
-}
-
-pub(crate) fn with_jail<T, F>(f: F) -> Result<T>
-where
-    F: FnOnce(&mut figment::Jail) -> Result<T>,
-{
-    figment::Jail::try_with(|j| f(j).map_err(|err| figment::Error::from(err.to_string())))
-        .map_err(|err| anyhow!(err))
 }
 
 fn default_recipient() -> String { String::from("World") }
@@ -56,6 +57,21 @@ impl Default for TestConfig {
             sample_value: None,
             other: None,
         }
+    }
+}
+
+impl ConfigValueAssertions for TestConfig {
+    fn assert_values(
+        &self,
+        expected_sample: Option<&'static str>,
+        expected_other: Option<&'static str>,
+    ) -> Result<()> {
+        let expected = ExpectedConfig {
+            sample_value: expected_sample,
+            other: expected_other,
+            ..ExpectedConfig::default()
+        };
+        assert_config_eq(self, &expected).to_anyhow()
     }
 }
 
@@ -151,19 +167,6 @@ pub(crate) fn assert_config_eq(config: &TestConfig, expected: &ExpectedConfig) -
     }
 
     Ok(())
-}
-
-pub(crate) fn assert_config_values(
-    config: &TestConfig,
-    expected_sample: Option<&'static str>,
-    expected_other: Option<&'static str>,
-) -> Result<()> {
-    let expected = ExpectedConfig {
-        sample_value: expected_sample,
-        other: expected_other,
-        ..ExpectedConfig::default()
-    };
-    assert_config_eq(config, &expected).to_anyhow()
 }
 
 #[derive(Debug, Deserialize, Serialize, OrthoConfig)]
