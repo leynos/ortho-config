@@ -1,7 +1,8 @@
 //! Shared fixtures and utilities for CLI behaviour tests.
 
 use crate::cli::{
-    CommandLine, Commands, FarewellChannel, GreetCommand, HelloWorldCli, TakeLeaveCommand,
+    CommandLine, Commands, FarewellChannel, FileOverrides, GreetCommand, HelloWorldCli,
+    TakeLeaveCommand, load_config_overrides,
 };
 use anyhow::{Context, Result, anyhow, ensure};
 use clap::Parser;
@@ -51,15 +52,20 @@ pub fn parse_command_line(args: &[&str]) -> Result<CommandLine> {
     CommandLine::try_parse_from(full_args).context("parse command line")
 }
 
-pub fn assert_greet_command(cli: CommandLine) -> Result<()> {
+fn assert_common_cli_prechecks(cli: &CommandLine) -> Result<()> {
     ensure!(cli.config_path.is_none(), "unexpected config path override");
+    Ok(())
+}
+
+pub fn assert_greet_command(cli: CommandLine) -> Result<()> {
+    assert_common_cli_prechecks(&cli)?;
     ensure!(
         cli.globals.recipient.as_deref() == Some("Crew"),
         "unexpected recipient: {:?}",
         cli.globals.recipient
     );
     ensure!(
-        cli.globals.salutations == vec![String::from("Hi")],
+        cli.globals.salutations == vec!["Hi".to_owned()],
         "unexpected salutations"
     );
     let greet = expect_greet(cli.command)?;
@@ -72,7 +78,7 @@ pub fn assert_greet_command(cli: CommandLine) -> Result<()> {
 }
 
 pub fn assert_take_leave_command(cli: CommandLine) -> Result<()> {
-    ensure!(cli.config_path.is_none(), "unexpected config path override");
+    assert_common_cli_prechecks(&cli)?;
     ensure!(cli.globals.is_excited, "expected excited global flags");
     let command = expect_take_leave(cli.command)?;
     ensure!(command.parting == "Cheerio", "unexpected parting");
@@ -103,7 +109,11 @@ pub fn expect_take_leave(command: Commands) -> Result<TakeLeaveCommand> {
     }
 }
 
-pub fn figment_error<E: ToString>(err: &E) -> figment::Error {
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "accept ownership to allow map_err(figment_error) without closures"
+)]
+pub fn figment_error<E: ToString>(err: E) -> figment::Error {
     figment::Error::from(err.to_string())
 }
 
@@ -118,6 +128,23 @@ where
     })
     .map_err(|err| anyhow!(err.to_string()))?;
     output.ok_or_else(|| anyhow!("jail closure did not return a value"))
+}
+
+pub(crate) fn load_overrides_in_jail<S>(setup: S) -> Result<Option<FileOverrides>>
+where
+    S: FnOnce(&mut figment::Jail) -> figment::error::Result<()>,
+{
+    with_jail(|j| {
+        setup(j)?;
+        load_config_overrides().map_err(figment_error)
+    })
+}
+
+pub(crate) fn expect_overrides<S>(setup: S) -> Result<FileOverrides>
+where
+    S: FnOnce(&mut figment::Jail) -> figment::error::Result<()>,
+{
+    load_overrides_in_jail(setup)?.ok_or_else(|| anyhow!("expected overrides"))
 }
 
 pub fn assert_sample_greet_defaults(greet: &GreetCommand) -> Result<()> {

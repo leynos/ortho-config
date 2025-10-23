@@ -2,7 +2,6 @@
 
 use super::*;
 use anyhow::{Context, Result, anyhow};
-use figment::Figment;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
@@ -45,33 +44,6 @@ where
 {
     figment::Jail::try_with(|j| f(j).map_err(|err| figment::Error::from(err.to_string())))
         .map_err(|err| anyhow!(err.to_string()))
-}
-
-pub(super) fn expect_process_extends_failure<F>(
-    setup: F,
-    failure_message: &'static str,
-    expected_fragment: &'static str,
-) -> Result<()>
-where
-    F: FnOnce(
-        &mut figment::Jail,
-        &Path,
-        &Path,
-        &mut HashSet<PathBuf>,
-        &mut Vec<PathBuf>,
-    ) -> Result<Figment>,
-{
-    with_fresh_graph(|j, root, current, visited, stack| {
-        let figment = setup(j, root, current, visited, stack)?;
-        let Err(err) = process_extends(figment, current, visited, stack) else {
-            return Err(anyhow!(failure_message));
-        };
-        anyhow::ensure!(
-            err.to_string().contains(expected_fragment),
-            "unexpected error {err}"
-        );
-        Ok(())
-    })
 }
 
 pub(super) fn to_anyhow<T>(result: crate::OrthoResult<T>) -> Result<T> {

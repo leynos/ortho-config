@@ -114,7 +114,7 @@ fn setup_excited(config: &mut HelloWorldCli, _: &mut GreetCommand) -> Result<()>
 fn setup_sample_greet(config: &mut HelloWorldCli, greet: &mut GreetCommand) -> Result<()> {
     with_sample_config(|cfg| {
         *config = cfg.clone();
-        *greet = crate::cli::load_greet_defaults().map_err(|err| figment_error(&err))?;
+        *greet = crate::cli::load_greet_defaults().map_err(figment_error)?;
         Ok(())
     })?;
     Ok(())
@@ -188,7 +188,7 @@ fn build_plan_with_sample_env(
 ) -> Result<Plan> {
     with_sample_config(move |_| {
         store_plan_config(config);
-        build_plan_from(greet, leave).map_err(|err| figment_error(&err))
+        build_plan_from(greet, leave).map_err(figment_error)
     })
 }
 
@@ -265,6 +265,23 @@ fn build_plan_applies_preamble(
         "Hello, World!",
         Some("Good morning"),
     )
+}
+
+#[rstest]
+#[case::standard(false, DeliveryMode::Standard, "Hello, World!")]
+#[case::excited(true, DeliveryMode::Enthusiastic, "HELLO, WORLD!")]
+fn build_plan_respects_excitement_flag(
+    base_config: HelloWorldCliFixture,
+    greet_command: GreetCommandFixture,
+    #[case] is_excited: bool,
+    #[case] expected_mode: DeliveryMode,
+    #[case] expected_message: &str,
+) -> Result<()> {
+    let mut base = base_config?;
+    base.is_excited = is_excited;
+    let command = greet_command?;
+    let plan = build_plan(&base, &command).map_err(|err| anyhow!(err.to_string()))?;
+    assert_greeting(&plan, expected_mode, expected_message, None)
 }
 
 #[rstest]
@@ -354,6 +371,23 @@ fn join_fragments_writes_list() -> Result<()> {
     Ok(())
 }
 
+#[rstest]
+fn build_take_leave_plan_uses_greet_defaults() -> Result<()> {
+    assert_sample_config_greeting(|config| {
+        build_take_leave_plan(config, &TakeLeaveCommand::default())
+            .map(|plan| plan.greeting().clone())
+            .map_err(figment_error)
+    })
+}
+
+#[rstest]
+fn build_plan_uses_sample_overrides() -> Result<()> {
+    assert_sample_config_greeting(|config| {
+        let greet = crate::cli::load_greet_defaults().map_err(figment_error)?;
+        build_plan(config, &greet).map_err(figment_error)
+    })
+}
+
 fn with_sample_config<R, F>(action: F) -> Result<R>
 where
     F: FnOnce(&HelloWorldCli) -> figment::error::Result<R>,
@@ -366,17 +400,17 @@ where
             manifest_dir.join("config").as_std_path(),
             cap_std::ambient_authority(),
         )
-        .map_err(|err| figment_error(&err))?;
+        .map_err(figment_error)?;
         let baseline = config_dir
             .read_to_string("baseline.toml")
-            .map_err(|err| figment_error(&err))?;
+            .map_err(figment_error)?;
         let overrides = config_dir
             .read_to_string("overrides.toml")
-            .map_err(|err| figment_error(&err))?;
+            .map_err(figment_error)?;
         jail.create_file("baseline.toml", &baseline)?;
         jail.create_file(".hello_world.toml", &overrides)?;
-        let config = crate::cli::load_global_config(&GlobalArgs::default(), None)
-            .map_err(|err| figment_error(&err))?;
+        let config =
+            crate::cli::load_global_config(&GlobalArgs::default(), None).map_err(figment_error)?;
         output = Some(action(&config)?);
         Ok(())
     })
@@ -384,7 +418,24 @@ where
     output.ok_or_else(|| anyhow!("sample config action did not produce a value"))
 }
 
-fn figment_error<E: ToString>(err: &E) -> figment::Error {
+fn assert_sample_config_greeting<F>(build_fn: F) -> Result<()>
+where
+    F: FnOnce(&HelloWorldCli) -> figment::error::Result<GreetingPlan>,
+{
+    let plan = with_sample_config(build_fn)?;
+    assert_greeting(
+        &plan,
+        DeliveryMode::Enthusiastic,
+        "HELLO HEY CONFIG FRIENDS, EXCITED CREW!!!",
+        Some("Layered hello"),
+    )
+}
+
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "accept ownership to reuse figment_error in map_err"
+)]
+fn figment_error<E: ToString>(err: E) -> figment::Error {
     figment::Error::from(err.to_string())
 }
 

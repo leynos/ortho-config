@@ -36,7 +36,7 @@ fn hello_world_cli_detects_conflicting_modes(base_cli: HelloWorldCliFixture) -> 
         cli.salutations.first_mut().map_or_else(
             || Err(anyhow!("expected at least one salutation")),
             |first| {
-                *first = String::from("   ");
+                *first = "   ".to_owned();
                 Ok(())
             },
         )
@@ -81,8 +81,8 @@ fn delivery_mode_from_flags(
 #[rstest]
 fn trimmed_salutations_remove_whitespace(base_cli: HelloWorldCliFixture) -> Result<()> {
     let mut cli = base_cli?;
-    cli.salutations = vec![String::from("  Hi"), String::from("Team  ")];
-    let expected = vec![String::from("Hi"), String::from("Team")];
+    cli.salutations = vec!["  Hi".to_owned(), "Team  ".to_owned()];
+    let expected = vec!["Hi".to_owned(), "Team".to_owned()];
     ensure!(
         cli.trimmed_salutations() == expected,
         "expected trimmed salutations"
@@ -93,7 +93,7 @@ fn trimmed_salutations_remove_whitespace(base_cli: HelloWorldCliFixture) -> Resu
 #[rstest]
 #[case::punctuation(
     |command: &mut GreetCommand| {
-        command.punctuation = String::from("   ");
+        command.punctuation = "   ".to_owned();
         Ok(())
     },
     ValidationError::BlankPunctuation,
@@ -101,7 +101,7 @@ fn trimmed_salutations_remove_whitespace(base_cli: HelloWorldCliFixture) -> Resu
 )]
 #[case::preamble(
     |command: &mut GreetCommand| {
-        command.preamble = Some(String::from("   "));
+        command.preamble = Some("   ".to_owned());
         Ok(())
     },
     ValidationError::BlankPreamble,
@@ -135,7 +135,7 @@ where
 #[rstest]
 #[case::blank_parting(
     |cmd: &mut TakeLeaveCommand| {
-        cmd.parting = String::from(" ");
+        cmd.parting = " ".to_owned();
         Ok(())
     },
     ValidationError::BlankFarewell,
@@ -151,7 +151,7 @@ where
 )]
 #[case::blank_gift(
     |cmd: &mut TakeLeaveCommand| {
-        cmd.gift = Some(String::from("   "));
+        cmd.gift = Some("   ".to_owned());
         Ok(())
     },
     ValidationError::BlankGift,
@@ -159,7 +159,7 @@ where
 )]
 #[case::blank_greeting_preamble(
     |cmd: &mut TakeLeaveCommand| {
-        cmd.greeting_preamble = Some(String::from("   "));
+        cmd.greeting_preamble = Some("   ".to_owned());
         Ok(())
     },
     ValidationError::BlankPreamble,
@@ -167,7 +167,7 @@ where
 )]
 #[case::blank_greeting_punctuation(
     |cmd: &mut TakeLeaveCommand| {
-        cmd.greeting_punctuation = Some(String::from("   "));
+        cmd.greeting_punctuation = Some("   ".to_owned());
         Ok(())
     },
     ValidationError::BlankPunctuation,

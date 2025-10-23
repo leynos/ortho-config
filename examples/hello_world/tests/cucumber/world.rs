@@ -29,6 +29,14 @@ pub struct World {
     declarative_globals: Option<GlobalArgs>,
 }
 
+#[derive(Copy, Clone, Debug)]
+pub(crate) enum Expect<'a> {
+    Success,
+    Failure,
+    StdoutContains(&'a str),
+    StderrContains(&'a str),
+}
+
 impl World {
     pub(crate) fn new() -> Result<Self> {
         let workdir = TempDir::new().context("create hello_world workdir")?;
@@ -246,7 +254,8 @@ impl World {
             if trimmed.is_empty() {
                 Vec::new()
             } else {
-                split(trimmed).ok_or_else(|| anyhow!("parse CLI arguments"))?
+                split(trimmed)
+                    .ok_or_else(|| anyhow!("failed to tokenise shell arguments: {trimmed:?}"))?
             }
         } else {
             Vec::new()
@@ -328,76 +337,59 @@ impl World {
             .ok_or_else(|| anyhow!("command execution result unavailable"))
     }
 
-    fn with_result<T, F>(&self, action: F) -> Result<T>
-    where
-        F: FnOnce(&CommandResult) -> Result<T>,
-    {
+    pub(crate) fn assert_outcome(&mut self, expect: Expect<'_>) -> Result<()> {
         let result = self.result()?;
-        action(result)
-    }
-
-    pub(crate) fn assert_success(&self) -> Result<()> {
-        self.with_result(|result| {
-            ensure!(
+        let context = format!(
+            "status: {:?}; cmd: {} {:?}",
+            result.status, result.binary, result.args
+        );
+        match expect {
+            Expect::Success => ensure!(
                 result.success,
-                "expected success; status: {:?}; cmd: {} {:?}; stderr: {}",
-                result.status,
-                result.binary,
-                result.args,
+                "expected success; {context}; stderr: {}",
                 result.stderr
-            );
-            Ok(())
-        })
-    }
-
-    pub(crate) fn assert_failure(&self) -> Result<()> {
-        self.with_result(|result| {
-            ensure!(
+            ),
+            Expect::Failure => ensure!(
                 !result.success,
-                "expected failure; status: {:?}; cmd: {} {:?}; stdout: {}",
-                result.status,
-                result.binary,
-                result.args,
+                "expected failure; {context}; stdout: {}",
                 result.stdout
-            );
-            Ok(())
-        })
-    }
-
-    pub(crate) fn assert_stdout_contains<S>(&self, expected: S) -> Result<()>
-    where
-        S: AsRef<str>,
-    {
-        let expected_text = expected.as_ref();
-        self.with_result(|result| {
-            ensure!(
-                result.stdout.contains(expected_text),
-                "stdout did not contain {expected_text:?}; status: {:?}; cmd: {} {:?}; stdout was: {:?}",
-                result.status,
-                result.binary,
-                result.args,
+            ),
+            Expect::StdoutContains(expected) => ensure!(
+                result.stdout.contains(expected),
+                "stdout did not contain {expected:?}; {context}; stdout was: {:?}",
                 result.stdout
-            );
-            Ok(())
-        })
-    }
-
-    pub(crate) fn assert_stderr_contains<S>(&self, expected: S) -> Result<()>
-    where
-        S: AsRef<str>,
-    {
-        let expected_text = expected.as_ref();
-        self.with_result(|result| {
-            ensure!(
-                result.stderr.contains(expected_text),
-                "stderr did not contain {expected_text:?}; status: {:?}; cmd: {} {:?}; stderr was: {:?}",
-                result.status,
-                result.binary,
-                result.args,
+            ),
+            Expect::StderrContains(expected) => ensure!(
+                result.stderr.contains(expected),
+                "stderr did not contain {expected:?}; {context}; stderr was: {:?}",
                 result.stderr
-            );
-            Ok(())
-        })
+            ),
+        }
+        Ok(())
+    }
+
+    pub(crate) fn assert_success(&mut self) -> Result<()> {
+        self.assert_outcome(Expect::Success)
+    }
+
+    pub(crate) fn assert_failure(&mut self) -> Result<()> {
+        self.assert_outcome(Expect::Failure)
+    }
+
+    pub(crate) fn assert_stdout_contains<S>(&mut self, expected: S) -> Result<()>
+    where
+        S: AsRef<str>,
+    {
+        let expected_ref = expected.as_ref();
+        self.assert_outcome(Expect::StdoutContains(expected_ref))
+    }
+
+    pub(crate) fn assert_stderr_contains<S>(&mut self, expected: S) -> Result<()>
+    where
+        S: AsRef<str>,
+    {
+        let expected_ref = expected.as_ref();
+        self.assert_outcome(Expect::StderrContains(expected_ref))
     }
 }
 

@@ -1,20 +1,40 @@
 //! Tests focused on direct CLI parsing and merging behaviour.
 
-use super::common::{assert_config_values, with_jail, OrthoResultExt, TestConfig};
+use super::common::{
+    assert_config_eq, assert_config_values, load_from_iter, with_jail, ExpectedConfig, OrthoResultExt,
+    TestConfig,
+};
 use anyhow::Result;
 use rstest::rstest;
 
 #[rstest]
-#[case::kebab(&["prog", "--sample-value", "hello", "--other", "val"], Some("hello"), Some("val"))]
-#[case::short(&["prog", "-s", "hi", "-o", "val"], Some("hi"), Some("val"))]
-#[case::only(&["prog", "--sample-value", "only", "--other", "x"], Some("only"), Some("x"))]
-fn loads_cli_arguments(
-    #[case] args: &[&str],
-    #[case] expected_sample: Option<&str>,
-    #[case] expected_other: Option<&str>,
+#[case::defaults(&["prog"], ExpectedConfig::default())]
+#[case::sample_and_other(
+    &["prog", "--sample-value", "hello", "--other", "val"],
+    ExpectedConfig { sample_value: Some("hello"), other: Some("val"), ..ExpectedConfig::default() }
+)]
+#[case::recipient_and_salutations(
+    &["prog", "--recipient", "Team", "--salutations", "Hello", "--salutations", "All", "--is-excited"],
+    ExpectedConfig {
+        recipient: "Team",
+        salutations: &["Hello", "All"],
+        is_excited: true,
+        ..ExpectedConfig::default()
+    }
+)]
+#[case::quiet_flag(
+    &["prog", "--is-quiet"],
+    ExpectedConfig {
+        is_quiet: true,
+        ..ExpectedConfig::default()
+    }
+)]
+fn parses_cli_arguments(
+    #[case] args: &[&'static str],
+    #[case] expected: ExpectedConfig,
 ) -> Result<()> {
-    let cfg = TestConfig::load_from_iter(args.iter().copied()).to_anyhow()?;
-    assert_config_values(&cfg, expected_sample, expected_other)
+    let cfg = load_from_iter(args.iter().copied()).to_anyhow()?;
+    assert_config_eq(&cfg, &expected).to_anyhow()
 }
 
 #[rstest]
@@ -35,9 +55,9 @@ fn loads_cli_arguments(
 fn cli_merges_with_other_sources(
     #[case] files: &[(&str, &str)],
     #[case] env: &[(&str, &str)],
-    #[case] cli_args: &[&str],
-    #[case] expected_sample: Option<&str>,
-    #[case] expected_other: Option<&str>,
+    #[case] cli_args: &[&'static str],
+    #[case] expected_sample: Option<&'static str>,
+    #[case] expected_other: Option<&'static str>,
 ) -> Result<()> {
     with_jail(|j| {
         for (path, contents) in files {
@@ -46,7 +66,7 @@ fn cli_merges_with_other_sources(
         for (key, value) in env {
             j.set_env(key, value);
         }
-        let cfg = TestConfig::load_from_iter(cli_args.iter().copied()).to_anyhow()?;
+        let cfg = load_from_iter(cli_args.iter().copied()).to_anyhow()?;
         assert_config_values(&cfg, expected_sample, expected_other)
     })
 }
@@ -58,6 +78,7 @@ fn merges_cli_into_figment() -> Result<()> {
     let cli = TestConfig {
         sample_value: Some("hi".into()),
         other: Some("there".into()),
+        ..TestConfig::default()
     };
 
     let cfg: TestConfig = Figment::new()

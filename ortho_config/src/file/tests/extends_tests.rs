@@ -1,8 +1,9 @@
 //! Tests covering `extends` handling and dependency resolution.
 
 use super::super::*;
-use super::{expect_process_extends_failure, to_anyhow, with_fresh_graph};
+use super::{to_anyhow, with_fresh_graph};
 use crate::result_ext::ResultIntoFigment;
+use crate::{OrthoError, OrthoResult};
 use anyhow::{Context, Result, anyhow, ensure};
 use figment::{
     Figment,
@@ -10,11 +11,85 @@ use figment::{
 };
 use rstest::rstest;
 use std::collections::HashSet;
+use std::fs;
+use std::io;
 use std::path::{Path, PathBuf};
+use tempfile::tempdir;
 
 enum ExtCase {
     Ok(Option<PathBuf>),
     Err(&'static str),
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+enum FileError {
+    BaseNotAFile,
+    ExtendsEmpty,
+}
+
+fn classify_file_error(err: &OrthoError) -> Option<FileError> {
+    match err {
+        OrthoError::File { source, .. } => {
+            let io_err = source.downcast_ref::<io::Error>()?;
+            match io_err.kind() {
+                io::ErrorKind::InvalidInput => (io_err
+                    .to_string()
+                    .contains("extended path is not a regular file"))
+                .then_some(FileError::BaseNotAFile),
+                io::ErrorKind::InvalidData => (io_err
+                    .to_string()
+                    .contains("'extends' key must be a non-empty string"))
+                .then_some(FileError::ExtendsEmpty),
+                _ => None,
+            }
+        }
+        _ => None,
+    }
+}
+
+fn assert_extends_error(input: &str, expected: FileError) -> OrthoResult<()> {
+    let tempdir = tempdir().map_err(|err| file_error(Path::new("."), err))?;
+    let root = canonicalise(tempdir.path())?;
+    let current = root.join("config.toml");
+    fs::write(&current, input).map_err(|err| file_error(&current, err))?;
+
+    match expected {
+        FileError::BaseNotAFile => {
+            let dir_path = root.join("dir");
+            if !dir_path.exists() {
+                fs::create_dir(&dir_path).map_err(|err| file_error(&dir_path, err))?;
+            }
+        }
+        FileError::ExtendsEmpty => {
+            let base_path = root.join("base.toml");
+            if !base_path.exists() {
+                fs::write(&base_path, "").map_err(|err| file_error(&base_path, err))?;
+            }
+        }
+    }
+
+    let figment = Figment::from(Toml::string(input));
+    let mut visited = HashSet::new();
+    let mut stack = Vec::new();
+    let err_arc = process_extends(figment, &current, &mut visited, &mut stack)
+        .expect_err("process_extends should fail for these cases");
+    let actual = classify_file_error(err_arc.as_ref()).ok_or_else(|| {
+        file_error(
+            &current,
+            io::Error::other(format!("unexpected extends error: {err_arc:?}")),
+        )
+    })?;
+
+    if actual != expected {
+        return Err(file_error(
+            &current,
+            io::Error::other(format!(
+                "unexpected extends error {actual:?}; expected {expected:?}"
+            )),
+        ));
+    }
+
+    Ok(())
 }
 
 #[rstest]
@@ -127,28 +202,11 @@ fn process_extends_errors_when_no_parent() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn process_extends_errors_when_base_is_not_file() -> Result<()> {
-    expect_process_extends_failure(
-        |j, _root, _current, _visited, _stack| {
-            j.create_dir("dir")?;
-            Ok(Figment::from(Toml::string("extends = 'dir'")))
-        },
-        "expected process_extends to fail when base is not a regular file",
-        "not a regular file",
-    )
-}
-
-#[test]
-fn process_extends_errors_when_extends_empty() -> Result<()> {
-    expect_process_extends_failure(
-        |j, _root, _current, _visited, _stack| {
-            j.create_file("base.toml", "")?;
-            Ok(Figment::from(Toml::string("extends = \"\"")))
-        },
-        "expected process_extends to fail when extends value is empty",
-        "non-empty",
-    )
+#[rstest]
+#[case("extends = \"dir\"", FileError::BaseNotAFile)]
+#[case("extends = \"\"", FileError::ExtendsEmpty)]
+fn process_extends_errors(#[case] input: &str, #[case] expected: FileError) -> OrthoResult<()> {
+    assert_extends_error(input, expected)
 }
 
 #[test]

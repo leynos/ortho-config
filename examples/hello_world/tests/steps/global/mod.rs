@@ -26,6 +26,14 @@ async fn run_with_args_inner(world: &mut World, args: String) -> Result<()> {
     Ok(())
 }
 
+fn validate_env_key(key: &str) -> Result<()> {
+    anyhow::ensure!(
+        !key.trim().is_empty(),
+        "environment variable key must not be empty"
+    );
+    Ok(())
+}
+
 #[derive(Debug, Deserialize)]
 struct LayerInput {
     provenance: String,
@@ -86,10 +94,7 @@ pub fn stderr_contains(world: &mut World, expected_stderr: String) -> Result<()>
     reason = "Cucumber step signature requires owned capture values"
 )]
 pub fn environment_contains(world: &mut World, env_key: String, env_value: String) -> Result<()> {
-    anyhow::ensure!(
-        !env_key.trim().is_empty(),
-        "environment variable key must not be empty"
-    );
+    validate_env_key(&env_key)?;
     world.set_env(&env_key, &env_value);
     Ok(())
 }
@@ -100,10 +105,7 @@ pub fn environment_contains(world: &mut World, env_key: String, env_value: Strin
     reason = "Cucumber step signature requires owned capture values"
 )]
 pub fn environment_does_not_contain(world: &mut World, env_key: String) -> Result<()> {
-    anyhow::ensure!(
-        !env_key.trim().is_empty(),
-        "environment variable key must not be empty"
-    );
+    validate_env_key(&env_key)?;
     world.remove_env(&env_key);
     Ok(())
 }

@@ -313,15 +313,15 @@ fn join_fragments(parts: &[String]) -> String {
         [] => String::new(),
         [single] => single.clone(),
         [first, second] => format!("{first} and {second}"),
-        _ => match parts.split_last() {
-            Some((last, rest)) => {
-                let mut sentence = rest.join(", ");
+        _ => {
+            let rest = parts.get(..parts.len() - 1).unwrap_or(&[]);
+            let mut sentence = rest.join(", ");
+            if let Some(last) = parts.last() {
                 sentence.push_str(", and ");
                 sentence.push_str(last);
-                sentence
             }
-            None => String::new(),
-        },
+            sentence
+        }
     }
 }
 

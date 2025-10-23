@@ -7,7 +7,7 @@
 //! error handling for missing or malformed configurations.
 
 use anyhow::{Context, Result, anyhow, ensure};
-use ortho_config::{OrthoConfig, OrthoError};
+use ortho_config::{OrthoConfig, OrthoError, OrthoResult};
 use rstest::rstest;
 use serde::{Deserialize, Serialize};
 use std::env;
@@ -65,18 +65,49 @@ fn create_test_config(
     Ok(path)
 }
 
-fn load_with_xdg_home<F>(prepare: F) -> Result<DiscoveryConfig>
+fn validation_error(message: impl Into<String>) -> OrthoResult<()> {
+    Err(OrthoError::Validation {
+        key: "discovery_attributes".to_owned(),
+        message: message.into(),
+    }
+    .into())
+}
+
+fn with_xdg_home<F>(file_name: &str, content: &str, action: F) -> OrthoResult<()>
 where
-    F: FnOnce(&std::path::Path) -> Result<()>,
+    F: FnOnce() -> OrthoResult<()>,
 {
-    let _env = setup_clean_env();
-    let dir = TempDir::new().context("create temp dir")?;
-    let xdg_home = dir.path().join("xdg");
-    prepare(&xdg_home)?;
-    let guard = test_env::set_var("XDG_CONFIG_HOME", &xdg_home);
-    let cfg = DiscoveryConfig::load_from_iter(["prog"]).map_err(|err| anyhow!(err))?;
-    drop(guard);
-    Ok(cfg)
+    let result = (|| -> Result<()> {
+        let _env = setup_clean_env();
+        let dir = TempDir::new().context("create temp dir")?;
+        let xdg_home = dir.path().join("xdg");
+        let app_dir = xdg_home.join("demo_app");
+        fs::create_dir_all(&app_dir).context("create XDG application directory")?;
+        if !content.is_empty() {
+            write_file(&app_dir.join(file_name), content)?;
+        }
+        let xdg_value = xdg_home
+            .to_str()
+            .ok_or_else(|| anyhow!("XDG path must be UTF-8"))?
+            .to_owned();
+        let guard = test_env::set_var("XDG_CONFIG_HOME", &xdg_value);
+        action().map_err(|err| anyhow!(err))?;
+        drop(guard);
+        Ok(())
+    })();
+    result.map_err(|err| {
+        OrthoError::Validation {
+            key: "discovery_attributes".to_owned(),
+            message: err.to_string(),
+        }
+        .into()
+    })
+}
+
+#[derive(Clone, Copy)]
+struct Expected {
+    default: bool,
+    value: u32,
 }
 
 struct CwdGuard {
@@ -177,23 +208,23 @@ fn env_var_overrides_default_locations() -> Result<()> {
 }
 
 #[rstest]
-fn xdg_config_home_respects_custom_file_name() -> Result<()> {
-    let cfg = load_with_xdg_home(|xdg_home| {
-        let app_dir = xdg_home.join("demo_app");
-        create_test_config(&app_dir, "demo.toml", 64).map(|_| ())
-    })?;
-    ensure!(cfg.value == 64, "expected 64, got {}", cfg.value);
-    Ok(())
-}
-
-#[rstest]
-fn xdg_config_home_missing_file_returns_default() -> Result<()> {
-    let cfg = load_with_xdg_home(|xdg_home| {
-        fs::create_dir_all(xdg_home).context("create xdg home")?;
+#[case::missing("demo.toml", "", Expected { default: true, value: 1 })]
+#[case::custom("demo.toml", "value = 64", Expected { default: false, value: 64 })]
+fn xdg_config_home_cases(
+    #[case] file_name: &str,
+    #[case] content: &str,
+    #[case] expected: Expected,
+) -> OrthoResult<()> {
+    with_xdg_home(file_name, content, || {
+        let cfg = DiscoveryConfig::load_from_iter(["prog"])?;
+        if cfg.value != expected.value {
+            return validation_error(format!(
+                "expected value {} (default={}), got {}",
+                expected.value, expected.default, cfg.value
+            ));
+        }
         Ok(())
-    })?;
-    ensure!(cfg.value == 1, "expected default 1, got {}", cfg.value);
-    Ok(())
+    })
 }
 
 #[rstest]
