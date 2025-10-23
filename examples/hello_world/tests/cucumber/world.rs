@@ -1,25 +1,19 @@
-//! Cucumber test harness for the `hello_world` example.
-use std::fs;
-use std::process::Stdio;
-use std::time::Duration;
+//! World state and command helpers for the Cucumber harness.
 
+use super::config::{ConfigCopyParams, SampleConfigError, ensure_simple_filename, parse_extends};
+use super::{COMMAND_TIMEOUT, CONFIG_FILE, ENV_PREFIX, binary_path};
 use anyhow::{Context, Result, anyhow, ensure};
 use camino::Utf8PathBuf;
-use cucumber::World as _;
+use cap_std::fs::Dir;
 use hello_world::cli::GlobalArgs;
 use shlex::split;
 use std::collections::{BTreeMap, BTreeSet};
-use thiserror::Error;
+use std::fs;
+use std::process::Stdio;
+use tempfile::TempDir;
 use tokio::io::AsyncReadExt;
 use tokio::process::Command;
 use tokio::time::timeout;
-
-mod steps;
-
-const COMMAND_TIMEOUT: Duration = Duration::from_secs(10);
-
-const CONFIG_FILE: &str = ".hello_world.toml";
-const ENV_PREFIX: &str = "HELLO_WORLD_";
 
 /// Shared state threaded through Cucumber steps.
 #[derive(Debug, cucumber::World)]
@@ -28,7 +22,7 @@ pub struct World {
     /// Result captured after invoking the binary.
     result: Option<CommandResult>,
     /// Temporary working directory isolated per scenario.
-    workdir: tempfile::TempDir,
+    workdir: TempDir,
     /// Environment variables to inject when running the binary.
     env: BTreeMap<String, String>,
     /// Declaratively composed globals used by behavioural tests.
@@ -36,8 +30,8 @@ pub struct World {
 }
 
 impl World {
-    fn new() -> Result<Self> {
-        let workdir = tempfile::tempdir().context("create hello_world workdir")?;
+    pub(crate) fn new() -> Result<Self> {
+        let workdir = TempDir::new().context("create hello_world workdir")?;
         Ok(Self {
             result: None,
             workdir,
@@ -46,7 +40,7 @@ impl World {
         })
     }
 
-    async fn init() -> Result<Self> {
+    pub(crate) async fn init() -> Result<Self> {
         async { Self::new() }.await
     }
 
@@ -54,109 +48,9 @@ impl World {
     pub(crate) fn for_tests() -> Result<Self> {
         Self::new()
     }
-}
 
-/// Output captured from executing the CLI.
-#[derive(Debug, Default)]
-pub struct CommandResult {
-    /// Exit status reported by the subprocess, when available.
-    pub status: Option<i32>,
-    /// Convenience flag reflecting whether the subprocess succeeded.
-    pub success: bool,
-    /// Captured standard output emitted by the subprocess.
-    pub stdout: String,
-    /// Captured standard error emitted by the subprocess.
-    pub stderr: String,
-    /// Path to the binary that was executed for the scenario.
-    pub binary: String,
-    /// Arguments used when launching the binary.
-    pub args: Vec<String>,
-}
-
-impl From<std::process::Output> for CommandResult {
-    fn from(output: std::process::Output) -> Self {
-        Self {
-            status: output.status.code(),
-            success: output.status.success(),
-            stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
-            stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
-            binary: String::new(),
-            args: Vec::new(),
-        }
-    }
-}
-
-#[derive(Debug, Copy, Clone)]
-struct ConfigCopyParams<'a> {
-    source: &'a cap_std::fs::Dir,
-    source_name: &'a str,
-    target_name: &'a str,
-}
-
-/// Errors raised while preparing fixture configuration for scenarios.
-#[derive(Debug, Error)]
-pub enum SampleConfigError {
-    /// Failed to open the directory containing sample configurations.
-    #[error("failed to open hello world sample config directory: {path}")]
-    OpenConfigDir {
-        /// Path to the directory that could not be opened.
-        path: String,
-        /// Underlying IO error reported by the filesystem.
-        #[source]
-        source: std::io::Error,
-    },
-    /// Encountered an invalid file name when selecting a sample.
-    #[error("invalid hello world sample config name {name}")]
-    InvalidName {
-        /// Name that violated the sample selection rules.
-        name: String,
-    },
-    /// Failed to open an individual sample configuration file.
-    #[error("failed to open hello world sample config {name}")]
-    OpenSample {
-        /// Name of the sample configuration involved in the failure.
-        name: String,
-        /// Source error raised while opening the sample.
-        #[source]
-        source: std::io::Error,
-    },
-    /// Failed to read from an opened sample configuration file.
-    #[error("failed to read hello world sample config {name}")]
-    ReadSample {
-        /// Name of the sample configuration being read.
-        name: String,
-        /// Source error raised during file read.
-        #[source]
-        source: std::io::Error,
-    },
-    /// Failed to write a sample configuration into the scenario directory.
-    #[error("failed to write hello world sample config {name}")]
-    WriteSample {
-        /// Name of the sample configuration that could not be written.
-        name: String,
-        /// Source error raised during file write.
-        #[source]
-        source: std::io::Error,
-    },
-}
-
-fn is_simple_filename(name: &str) -> bool {
-    !name.is_empty() && !name.chars().any(std::path::is_separator)
-}
-
-fn ensure_simple_filename(name: &str) -> Result<(), SampleConfigError> {
-    if is_simple_filename(name) {
-        Ok(())
-    } else {
-        Err(SampleConfigError::InvalidName {
-            name: name.to_owned(),
-        })
-    }
-}
-
-impl World {
     /// Records an environment variable override scoped to the scenario.
-    pub fn set_env<K, V>(&mut self, key: K, value: V)
+    pub(crate) fn set_env<K, V>(&mut self, key: K, value: V)
     where
         K: Into<String>,
         V: Into<String>,
@@ -165,10 +59,7 @@ impl World {
     }
 
     /// Removes a scenario-scoped environment variable override.
-    ///
-    /// This only updates the world-scoped overrides map so the process
-    /// environment remains untouched during the scenario.
-    pub fn remove_env<S>(&mut self, key: S)
+    pub(crate) fn remove_env<S>(&mut self, key: S)
     where
         S: AsRef<str>,
     {
@@ -176,7 +67,7 @@ impl World {
     }
 
     /// Stores declaratively merged globals for later assertions.
-    pub fn set_declarative_globals(&mut self, globals: GlobalArgs) {
+    pub(crate) fn set_declarative_globals(&mut self, globals: GlobalArgs) {
         self.declarative_globals = Some(globals);
     }
 
@@ -186,12 +77,7 @@ impl World {
             .ok_or_else(|| anyhow!("declarative globals composed before assertion"))
     }
 
-    /// Asserts that the composed globals expose the expected recipient.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error when the stored recipient does not match `expected`.
-    pub fn assert_declarative_recipient<S>(&self, expected: S) -> Result<()>
+    pub(crate) fn assert_declarative_recipient<S>(&self, expected: S) -> Result<()>
     where
         S: AsRef<str>,
     {
@@ -204,12 +90,7 @@ impl World {
         Ok(())
     }
 
-    /// Asserts that the composed globals expose the expected salutations.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error when the stored salutations differ from `expected`.
-    pub fn assert_declarative_salutations(&self, expected: &[String]) -> Result<()> {
+    pub(crate) fn assert_declarative_salutations(&self, expected: &[String]) -> Result<()> {
         let globals = self.declarative_globals()?;
         ensure!(
             globals.salutations == expected,
@@ -219,13 +100,7 @@ impl World {
         Ok(())
     }
 
-    /// Writes a configuration file into the scenario work directory.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the temporary working directory cannot be opened or the
-    /// config file cannot be written.
-    pub fn write_config(&self, contents: &str) -> Result<()> {
+    pub(crate) fn write_config(&self, contents: &str) -> Result<()> {
         let dir = self
             .scenario_dir()
             .context("open hello_world workdir for config write")?;
@@ -234,18 +109,13 @@ impl World {
         Ok(())
     }
 
-    /// Writes an arbitrary configuration file into the scenario directory.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error when `name` is not a simple filename or the write fails.
-    pub fn write_named_file<S>(&self, name: S, contents: &str) -> Result<()>
+    pub(crate) fn write_named_file<S>(&self, name: S, contents: &str) -> Result<()>
     where
         S: AsRef<str>,
     {
         let name_ref = name.as_ref();
         ensure!(
-            is_simple_filename(name_ref),
+            super::config::is_simple_filename(name_ref),
             "custom config filename must not contain path separators: {name_ref}"
         );
         let dir = self
@@ -256,12 +126,7 @@ impl World {
         Ok(())
     }
 
-    /// Writes the provided contents to `hello_world.toml` under an XDG config home.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the XDG directory cannot be prepared or the file write fails.
-    pub fn write_xdg_config_home(&mut self, contents: &str) -> Result<()> {
+    pub(crate) fn write_xdg_config_home(&mut self, contents: &str) -> Result<()> {
         let base = self.workdir.path().join("xdg-config");
         let config_dir = base.join("hello_world");
         fs::create_dir_all(&config_dir).context("create XDG hello_world directory")?;
@@ -272,27 +137,15 @@ impl World {
         Ok(())
     }
 
-    /// Copies a repository sample configuration into the scenario directory.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if writing the sample configuration fails.
-    pub fn write_sample_config<S>(&self, sample: S) -> Result<()>
+    pub(crate) fn write_sample_config<S>(&self, sample: S) -> Result<()>
     where
         S: AsRef<str>,
     {
         self.try_write_sample_config(sample)
-            .map_err(|err| anyhow!(err))?;
-        Ok(())
+            .map_err(|err| anyhow!(err))
     }
 
-    /// Attempts to copy a repository sample configuration into the scenario directory.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error when the sample or any extended configuration cannot be read
-    /// or when writing into the scenario directory fails.
-    pub fn try_write_sample_config<S>(&self, sample: S) -> Result<(), SampleConfigError>
+    pub(crate) fn try_write_sample_config<S>(&self, sample: S) -> Result<(), SampleConfigError>
     where
         S: AsRef<str>,
     {
@@ -300,25 +153,21 @@ impl World {
         ensure_simple_filename(sample_name)?;
         let manifest_dir = Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         let config_dir = manifest_dir.join("config");
-        let source = cap_std::fs::Dir::open_ambient_dir(
-            config_dir.as_std_path(),
-            cap_std::ambient_authority(),
-        )
-        .map_err(|source| SampleConfigError::OpenConfigDir {
-            path: config_dir.as_str().to_owned(),
-            source,
-        })?;
+        let source = Dir::open_ambient_dir(config_dir.as_std_path(), cap_std::ambient_authority())
+            .map_err(|source| SampleConfigError::OpenConfigDir {
+                path: config_dir.as_str().to_owned(),
+                source,
+            })?;
         let mut visited = BTreeSet::new();
         let params = ConfigCopyParams {
             source: &source,
             source_name: sample_name,
             target_name: CONFIG_FILE,
         };
-        self.copy_sample_config(params, &mut visited)?;
-        Ok(())
+        self.copy_sample_config(params, &mut visited)
     }
 
-    fn copy_sample_config(
+    pub(crate) fn copy_sample_config(
         &self,
         params: ConfigCopyParams<'_>,
         visited: &mut BTreeSet<String>,
@@ -369,8 +218,8 @@ impl World {
         Ok(())
     }
 
-    fn scenario_dir(&self) -> std::io::Result<cap_std::fs::Dir> {
-        cap_std::fs::Dir::open_ambient_dir(self.workdir.path(), cap_std::ambient_authority())
+    fn scenario_dir(&self) -> std::io::Result<Dir> {
+        Dir::open_ambient_dir(self.workdir.path(), cap_std::ambient_authority())
     }
 
     fn configure_environment(&self, command: &mut Command) {
@@ -391,13 +240,7 @@ impl World {
         }
     }
 
-    /// Runs the `hello_world` binary with optional CLI arguments.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if argument tokenisation fails or the underlying command cannot
-    /// be executed successfully.
-    pub async fn run_hello(&mut self, args: Option<String>) -> Result<()> {
+    pub(crate) async fn run_hello(&mut self, args: Option<String>) -> Result<()> {
         let parsed = if let Some(raw) = args {
             let trimmed = raw.trim();
             if trimmed.is_empty() {
@@ -411,13 +254,7 @@ impl World {
         self.run_example(parsed).await
     }
 
-    /// Runs the example binary with the provided arguments.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if spawning the example binary fails or if the process does not exit
-    /// within [`COMMAND_TIMEOUT`].
-    pub async fn run_example(&mut self, args: Vec<String>) -> Result<()> {
+    pub(crate) async fn run_example(&mut self, args: Vec<String>) -> Result<()> {
         let binary = binary_path();
         let mut command = Command::new(binary.as_std_path());
         command.current_dir(self.workdir.path());
@@ -485,12 +322,7 @@ impl World {
         Ok(())
     }
 
-    /// Returns the captured command output from the most recent run.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the example has not been executed in the current scenario.
-    pub fn result(&self) -> Result<&CommandResult> {
+    pub(crate) fn result(&self) -> Result<&CommandResult> {
         self.result
             .as_ref()
             .ok_or_else(|| anyhow!("command execution result unavailable"))
@@ -504,12 +336,7 @@ impl World {
         action(result)
     }
 
-    /// Asserts that the most recent command succeeded.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the last invocation exited with a non-zero status.
-    pub fn assert_success(&self) -> Result<()> {
+    pub(crate) fn assert_success(&self) -> Result<()> {
         self.with_result(|result| {
             ensure!(
                 result.success,
@@ -523,12 +350,7 @@ impl World {
         })
     }
 
-    /// Asserts that the most recent command failed.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the last invocation exited successfully.
-    pub fn assert_failure(&self) -> Result<()> {
+    pub(crate) fn assert_failure(&self) -> Result<()> {
         self.with_result(|result| {
             ensure!(
                 !result.success,
@@ -542,12 +364,7 @@ impl World {
         })
     }
 
-    /// Asserts that stdout contains the expected substring.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if stdout does not include the provided fragment.
-    pub fn assert_stdout_contains<S>(&self, expected: S) -> Result<()>
+    pub(crate) fn assert_stdout_contains<S>(&self, expected: S) -> Result<()>
     where
         S: AsRef<str>,
     {
@@ -565,12 +382,7 @@ impl World {
         })
     }
 
-    /// Asserts that stderr contains the expected substring.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if stderr does not include the provided fragment.
-    pub fn assert_stderr_contains<S>(&self, expected: S) -> Result<()>
+    pub(crate) fn assert_stderr_contains<S>(&self, expected: S) -> Result<()>
     where
         S: AsRef<str>,
     {
@@ -589,87 +401,35 @@ impl World {
     }
 }
 
-fn parse_extends(contents: &str) -> Vec<String> {
-    let document: toml::Value = match toml::from_str(contents) {
-        Ok(value) => value,
-        Err(_) => return Vec::new(),
-    };
-
-    match document.get("extends") {
-        Some(toml::Value::String(path)) => extract_single_path(path),
-        Some(toml::Value::Array(values)) => extract_multiple_paths(values),
-        _ => Vec::new(),
-    }
+/// Output captured from executing the CLI.
+#[derive(Debug, Default)]
+pub(crate) struct CommandResult {
+    status: Option<i32>,
+    success: bool,
+    stdout: String,
+    stderr: String,
+    binary: String,
+    args: Vec<String>,
 }
 
-fn extract_single_path(path: &str) -> Vec<String> {
-    let trimmed = path.trim();
-    if trimmed.is_empty() {
-        Vec::new()
-    } else {
-        vec![trimmed.to_owned()]
-    }
-}
-
-fn extract_multiple_paths(values: &[toml::Value]) -> Vec<String> {
-    values.iter().filter_map(extract_string_value).collect()
-}
-
-fn extract_string_value(value: &toml::Value) -> Option<String> {
-    match value {
-        toml::Value::String(path) => {
-            let trimmed = path.trim();
-            if trimmed.is_empty() {
-                None
-            } else {
-                Some(trimmed.to_owned())
-            }
+impl From<std::process::Output> for CommandResult {
+    fn from(output: std::process::Output) -> Self {
+        Self {
+            status: output.status.code(),
+            success: output.status.success(),
+            stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
+            stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+            binary: String::new(),
+            args: Vec::new(),
         }
-        _ => None,
     }
-}
-
-fn binary_path() -> Utf8PathBuf {
-    Utf8PathBuf::from(env!(
-        "CARGO_BIN_EXE_hello_world",
-        "Cargo must set the hello_world binary path for integration tests",
-    ))
-}
-
-#[tokio::main]
-async fn main() {
-    World::run("tests/features").await;
 }
 
 #[cfg(test)]
 mod tests {
-    use anyhow::{Result, anyhow, ensure};
+    use super::*;
+    use anyhow::{anyhow, ensure};
     use rstest::rstest;
-
-    #[test]
-    fn parse_extends_single_string() {
-        let out = super::parse_extends(r#"extends = "base.toml""#);
-        assert_eq!(out, vec!["base.toml"]);
-    }
-
-    #[test]
-    fn parse_extends_array_mixed_types_filters_non_strings() {
-        let out =
-            super::parse_extends(r#"extends = ["a.toml", 42, " b . toml ", "", { k = "v" }]"#);
-        assert_eq!(out, vec!["a.toml", "b . toml"]);
-    }
-
-    #[test]
-    fn parse_extends_ignores_malformed_toml() {
-        let out = super::parse_extends(r#"extends = [ "a.toml", ""#);
-        assert!(out.is_empty());
-    }
-
-    #[test]
-    fn parse_extends_nested_array_filters_deeper_levels() {
-        let out = super::parse_extends(r#"extends = [["base.toml"], " extra.toml ", ""]"#);
-        assert_eq!(out, vec!["extra.toml"]);
-    }
 
     #[rstest]
     #[case("nonexistent.toml", "missing")]
@@ -678,14 +438,14 @@ mod tests {
         #[case] sample: &str,
         #[case] expected: &str,
     ) -> Result<()> {
-        let world = super::World::for_tests()?;
+        let world = World::for_tests()?;
         let Err(error) = world.try_write_sample_config(sample) else {
             return Err(anyhow!("sample config copy should fail"));
         };
 
         match (expected, error) {
-            ("missing", super::SampleConfigError::OpenSample { name, .. })
-            | ("invalid", super::SampleConfigError::InvalidName { name }) => {
+            ("missing", SampleConfigError::OpenSample { name, .. })
+            | ("invalid", SampleConfigError::InvalidName { name }) => {
                 ensure!(name == sample, "unexpected sample name: {name}");
             }
             (_, other) => return Err(anyhow!("unexpected sample config error: {other:?}")),
@@ -695,11 +455,10 @@ mod tests {
 
     #[rstest]
     fn copy_sample_config_writes_all_files() -> Result<()> {
-        let world = super::World::for_tests()?;
+        let world = World::for_tests()?;
         let tempdir = tempfile::tempdir().context("create sample source")?;
-        let source =
-            cap_std::fs::Dir::open_ambient_dir(tempdir.path(), cap_std::ambient_authority())
-                .context("open sample source dir")?;
+        let source = Dir::open_ambient_dir(tempdir.path(), cap_std::ambient_authority())
+            .context("open sample source dir")?;
         source
             .write("overrides.toml", r#"extends = ["baseline.toml"]"#)
             .context("write overrides sample")?;
@@ -707,21 +466,19 @@ mod tests {
             .write("baseline.toml", "")
             .context("write baseline sample")?;
 
-        let mut visited = std::collections::BTreeSet::new();
-        let params = super::ConfigCopyParams {
+        let mut visited = BTreeSet::new();
+        let params = ConfigCopyParams {
             source: &source,
             source_name: "overrides.toml",
-            target_name: ".hello_world.toml",
+            target_name: CONFIG_FILE,
         };
-        world
-            .copy_sample_config(params, &mut visited)
-            .map_err(|err| anyhow!(err))?;
+        world.copy_sample_config(params, &mut visited)?;
 
         let scenario = world
             .scenario_dir()
             .context("open hello_world scenario dir")?;
         let overrides = scenario
-            .read_to_string(".hello_world.toml")
+            .read_to_string(CONFIG_FILE)
             .context("read copied overrides")?;
         ensure!(overrides.contains("baseline.toml"));
         let baseline = scenario
@@ -733,11 +490,10 @@ mod tests {
 
     #[rstest]
     fn copy_sample_config_deduplicates_repeated_extends() -> Result<()> {
-        let world = super::World::for_tests()?;
+        let world = World::for_tests()?;
         let tempdir = tempfile::tempdir().context("create sample source")?;
-        let source =
-            cap_std::fs::Dir::open_ambient_dir(tempdir.path(), cap_std::ambient_authority())
-                .context("open sample source dir")?;
+        let source = Dir::open_ambient_dir(tempdir.path(), cap_std::ambient_authority())
+            .context("open sample source dir")?;
         source
             .write(
                 "overrides.toml",
@@ -748,15 +504,13 @@ mod tests {
             .write("baseline.toml", "")
             .context("write baseline sample")?;
 
-        let mut visited = std::collections::BTreeSet::new();
-        let params = super::ConfigCopyParams {
+        let mut visited = BTreeSet::new();
+        let params = ConfigCopyParams {
             source: &source,
             source_name: "overrides.toml",
-            target_name: ".hello_world.toml",
+            target_name: CONFIG_FILE,
         };
-        world
-            .copy_sample_config(params, &mut visited)
-            .map_err(|err| anyhow!(err))?;
+        world.copy_sample_config(params, &mut visited)?;
 
         let visited: Vec<_> = visited.into_iter().collect();
         ensure!(

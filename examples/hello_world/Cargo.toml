@@ -34,3 +34,4 @@ cfg-toml = ["ortho_config/toml"]
 [[test]]
 name = "cucumber"
 harness = false
+path = "tests/cucumber/mod.rs"
