@@ -107,43 +107,42 @@ fn write_line(writer: &mut impl Write, message: &str) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    #![allow(
-        unfulfilled_lint_expectations,
-        reason = "clippy::expect_used is denied globally; tests may not hit those branches"
-    )]
-    #![expect(
-        clippy::expect_used,
-        reason = "tests panic to surface configuration mistakes"
-    )]
     use super::*;
+    use anyhow::{Context, Result, ensure};
     use serde::de::DeserializeOwned;
 
     // Serialisation enables persisting configuration. This helper ensures
     // roundtrips do not drop data.
-    fn assert_roundtrip<T>(value: &T)
+    fn assert_roundtrip<T>(value: &T) -> Result<()>
     where
         T: Serialize + DeserializeOwned + PartialEq + std::fmt::Debug,
     {
-        let json = serde_json::to_string(value).expect("serialise");
-        let de: T = serde_json::from_str(&json).expect("deserialise");
-        assert_eq!(de, *value);
+        let json =
+            serde_json::to_string(value).context("serialise subcommand arguments to JSON")?;
+        let de: T =
+            serde_json::from_str(&json).context("deserialise subcommand arguments from JSON")?;
+        ensure!(
+            de == *value,
+            "roundtrip lost data: expected {value:?}, got {de:?}"
+        );
+        Ok(())
     }
 
     #[test]
-    fn add_user_args_roundtrip() {
+    fn add_user_args_roundtrip() -> Result<()> {
         let args = AddUserArgs {
             username: Some(String::from("alice")),
             admin: Some(true),
         };
-        assert_roundtrip(&args);
+        assert_roundtrip(&args)
     }
 
     #[test]
-    fn list_items_args_roundtrip() {
+    fn list_items_args_roundtrip() -> Result<()> {
         let args = ListItemsArgs {
             category: Some(String::from("tools")),
             all: Some(false),
         };
-        assert_roundtrip(&args);
+        assert_roundtrip(&args)
     }
 }

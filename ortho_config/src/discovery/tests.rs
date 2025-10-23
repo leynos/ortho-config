@@ -1,13 +1,5 @@
-#![allow(
-    unfulfilled_lint_expectations,
-    reason = "clippy::expect_used is denied globally; tests may not hit those branches"
-)]
-#![expect(
-    clippy::expect_used,
-    reason = "tests panic when discovery helpers fail to create fixtures"
-)]
-
 use super::*;
+use anyhow::{Context, Result, anyhow, ensure};
 use rstest::rstest;
 use serde::Deserialize;
 use tempfile::TempDir;
@@ -46,31 +38,42 @@ fn setup_env_override_discovery() -> (
 }
 
 #[rstest]
-fn env_override_precedes_other_candidates() {
+fn env_override_precedes_other_candidates() -> Result<()> {
     let (discovery, path, _guards, _env) = setup_env_override_discovery();
     let candidates = discovery.candidates();
-    assert_eq!(candidates.first(), Some(&path));
+    ensure!(
+        candidates.first() == Some(&path),
+        "expected explicit env override candidate to appear first"
+    );
+    Ok(())
 }
 
 #[rstest]
-fn xdg_candidates_follow_explicit_paths() {
+fn xdg_candidates_follow_explicit_paths() -> Result<()> {
     let _guards = clear_common_env();
-    let dir = TempDir::new().expect("xdg");
+    let dir = TempDir::new().context("create XDG temp directory")?;
     let xdg_path = dir.path().join("hello_world");
-    std::fs::create_dir_all(&xdg_path).expect("create xdg dir");
+    std::fs::create_dir_all(&xdg_path).context("create hello_world directory under XDG home")?;
     let _home = test_env::set_var("XDG_CONFIG_HOME", dir.path());
 
     let discovery = ConfigDiscovery::builder("hello_world").build();
     let candidates = discovery.candidates();
     let expected_first = xdg_path.join("config.toml");
     let expected_second = dir.path().join(".hello_world.toml");
-    assert_eq!(candidates.first(), Some(&expected_first));
-    assert_eq!(candidates.get(1), Some(&expected_second));
+    ensure!(
+        candidates.first() == Some(&expected_first),
+        "expected XDG config file candidate first"
+    );
+    ensure!(
+        candidates.get(1) == Some(&expected_second),
+        "expected XDG dotfile candidate second"
+    );
+    Ok(())
 }
 
 #[cfg(any(unix, target_os = "redox"))]
 #[rstest]
-fn xdg_dirs_empty_falls_back_to_default() {
+fn xdg_dirs_empty_falls_back_to_default() -> Result<()> {
     let _guards = clear_common_env();
     let _dirs = test_env::set_var("XDG_CONFIG_DIRS", "");
 
@@ -81,19 +84,20 @@ fn xdg_dirs_empty_falls_back_to_default() {
     let nested = default_base.join("hello_world").join("config.toml");
     let dotfile = default_base.join(".hello_world.toml");
 
-    assert!(
+    ensure!(
         candidates.contains(&nested),
         "expected fallback nested candidate present"
     );
-    assert!(
+    ensure!(
         candidates.contains(&dotfile),
         "expected fallback dotfile candidate present"
     );
+    Ok(())
 }
 
 #[cfg(any(unix, target_os = "redox"))]
 #[rstest]
-fn xdg_dirs_with_values_excludes_default() {
+fn xdg_dirs_with_values_excludes_default() -> Result<()> {
     let _guards = clear_common_env();
     let _dirs = test_env::set_var("XDG_CONFIG_DIRS", "/opt/example:/etc/custom");
 
@@ -107,46 +111,57 @@ fn xdg_dirs_with_values_excludes_default() {
         .join("hello_world")
         .join("config.toml");
 
-    assert!(
+    ensure!(
         candidates.contains(&provided_nested),
         "expected provided directory candidate present"
     );
-    assert!(
+    ensure!(
         !candidates.contains(&default_nested),
         "unexpected fallback nested candidate present"
     );
-    assert!(
+    ensure!(
         !candidates.contains(&default_dotfile),
         "unexpected fallback dotfile candidate present"
     );
+    Ok(())
 }
 
 #[rstest]
-fn utf8_candidates_prioritise_env_paths() {
+fn utf8_candidates_prioritise_env_paths() -> Result<()> {
     let (discovery, path, _guards, _env) = setup_env_override_discovery();
-    let mut candidates = discovery.utf8_candidates();
-    assert_eq!(
-        candidates.remove(0),
-        Utf8PathBuf::from_path_buf(path).expect("utf8 explicit path")
+    let candidates = discovery.utf8_candidates();
+    let first = candidates
+        .first()
+        .cloned()
+        .ok_or_else(|| anyhow!("expected at least one UTF-8 candidate"))?;
+    let expected =
+        Utf8PathBuf::from_path_buf(path).map_err(|_| anyhow!("explicit path not valid UTF-8"))?;
+    ensure!(
+        first == expected,
+        "unexpected first candidate {:?}, expected {:?}",
+        first,
+        expected
     );
+    Ok(())
 }
 
 #[rstest]
-fn project_roots_append_last() {
+fn project_roots_append_last() -> Result<()> {
     let _guards = clear_common_env();
     let discovery = ConfigDiscovery::builder("hello_world")
         .clear_project_roots()
         .add_project_root("proj")
         .build();
     let candidates = discovery.candidates();
-    assert_eq!(
-        candidates.last(),
-        Some(&PathBuf::from("proj/.hello_world.toml"))
+    ensure!(
+        candidates.last() == Some(&PathBuf::from("proj/.hello_world.toml")),
+        "expected project root candidate appended last"
     );
+    Ok(())
 }
 
 #[rstest]
-fn project_roots_replaces_existing_entries() {
+fn project_roots_replaces_existing_entries() -> Result<()> {
     let _guards = clear_common_env();
     let discovery = ConfigDiscovery::builder("hello_world")
         .add_project_root("legacy")
@@ -158,17 +173,22 @@ fn project_roots_replaces_existing_entries() {
         PathBuf::from("alpha/.hello_world.toml"),
         PathBuf::from("beta/.hello_world.toml"),
     ];
-    assert!(
+    ensure!(
         candidates.len() >= expected.len(),
         "expected at least {} candidates, found {}",
         expected.len(),
         candidates.len()
     );
-    assert!(candidates.ends_with(&expected));
-    assert!(
+    ensure!(
+        candidates.ends_with(&expected),
+        "expected configured project roots to appear at end; found {:?}",
+        candidates
+    );
+    ensure!(
         !candidates.contains(&PathBuf::from("legacy/.hello_world.toml")),
         "expected legacy project root to be cleared"
     );
+    Ok(())
 }
 
 #[derive(Debug, Deserialize)]
@@ -177,32 +197,36 @@ struct SampleConfig {
 }
 
 #[rstest]
-fn load_first_reads_first_existing_file() {
+fn load_first_reads_first_existing_file() -> Result<()> {
     let _guards = clear_common_env();
-    let dir = TempDir::new().expect("config dir");
+    let dir = TempDir::new().context("create config directory")?;
     let file_dir = dir.path().join("hello_world");
-    std::fs::create_dir_all(&file_dir).expect("create hello_world dir");
+    std::fs::create_dir_all(&file_dir).context("create hello_world directory")?;
     let file = file_dir.join("config.toml");
-    std::fs::write(&file, "value = true").expect("write config");
+    std::fs::write(&file, "value = true").context("write config file")?;
     let _xdg = test_env::set_var("XDG_CONFIG_HOME", dir.path());
 
     let discovery = ConfigDiscovery::builder("hello_world").build();
-    let figment = discovery
-        .load_first()
-        .expect("load figment")
-        .expect("figment present");
-    let config: SampleConfig = figment.extract().expect("extract sample config");
-    assert!(config.value);
+    let figment = match discovery.load_first() {
+        Ok(Some(figment)) => figment,
+        Ok(None) => return Err(anyhow!("expected configuration candidate to load")),
+        Err(err) => return Err(anyhow!("discovery failed to load config: {err}")),
+    };
+    let config: SampleConfig = figment
+        .extract()
+        .context("extract sample config from figment")?;
+    ensure!(config.value, "expected loaded config to set value=true");
+    Ok(())
 }
 
 #[rstest]
-fn load_first_skips_invalid_candidates() {
+fn load_first_skips_invalid_candidates() -> Result<()> {
     let _guards = clear_common_env();
-    let dir = TempDir::new().expect("config dir");
+    let dir = TempDir::new().context("create config directory")?;
     let invalid = dir.path().join("broken.toml");
     let valid = dir.path().join("valid.toml");
-    std::fs::write(&invalid, "value = ???").expect("write invalid config");
-    std::fs::write(&valid, "value = false").expect("write valid config");
+    std::fs::write(&invalid, "value = ???").context("write invalid config")?;
+    std::fs::write(&valid, "value = false").context("write valid config")?;
     let _env = test_env::set_var("HELLO_WORLD_CONFIG_PATH", &invalid);
 
     let discovery = ConfigDiscovery::builder("hello_world")
@@ -210,25 +234,32 @@ fn load_first_skips_invalid_candidates() {
         .add_explicit_path(valid.clone())
         .build();
 
-    let figment = discovery
-        .load_first()
-        .expect("load figment")
-        .expect("figment present");
-    let config: SampleConfig = figment.extract().expect("extract sample config");
-    assert!(!config.value);
-    assert!(
-        std::fs::metadata(&invalid).is_ok(),
-        "expected invalid file retained"
+    let figment = match discovery.load_first() {
+        Ok(Some(figment)) => figment,
+        Ok(None) => return Err(anyhow!("expected fallback configuration to load")),
+        Err(err) => return Err(anyhow!("discovery failed to load configuration: {err}")),
+    };
+    let config: SampleConfig = figment
+        .extract()
+        .context("extract sample config from figment")?;
+    ensure!(
+        !config.value,
+        "expected valid candidate to override invalid env file"
     );
+    ensure!(
+        std::fs::metadata(&invalid).is_ok(),
+        "expected invalid file retained for later diagnostics"
+    );
+    Ok(())
 }
 
 #[rstest]
-fn load_first_with_errors_reports_preceding_failures() {
+fn load_first_with_errors_reports_preceding_failures() -> Result<()> {
     let _guards = clear_common_env();
-    let dir = TempDir::new().expect("config dir");
+    let dir = TempDir::new().context("create config directory")?;
     let missing = dir.path().join("absent.toml");
     let valid = dir.path().join("valid.toml");
-    std::fs::write(&valid, "value = true").expect("write valid config");
+    std::fs::write(&valid, "value = true").context("write valid config")?;
 
     let discovery = ConfigDiscovery::builder("hello_world")
         .add_required_path(&missing)
@@ -237,26 +268,27 @@ fn load_first_with_errors_reports_preceding_failures() {
 
     let (loaded_fig, errors) = discovery.load_first_with_errors();
 
-    assert!(
+    ensure!(
         loaded_fig.is_some(),
         "expected successful load from valid fallback"
     );
-    assert!(
+    ensure!(
         errors.iter().any(|err| match err.as_ref() {
             OrthoError::File { path, .. } => path == &missing,
             _ => false,
         }),
         "expected discovery error collection to capture missing required candidate",
     );
+    Ok(())
 }
 
 #[rstest]
-fn partitioned_errors_surface_required_failures() {
+fn partitioned_errors_surface_required_failures() -> Result<()> {
     let _guards = clear_common_env();
-    let dir = TempDir::new().expect("config dir");
+    let dir = TempDir::new().context("create config directory")?;
     let missing = dir.path().join("absent.toml");
     let valid = dir.path().join("valid.toml");
-    std::fs::write(&valid, "value = true").expect("write valid config");
+    std::fs::write(&valid, "value = true").context("write valid config")?;
 
     let discovery = ConfigDiscovery::builder("hello_world")
         .add_required_path(&missing)
@@ -265,8 +297,8 @@ fn partitioned_errors_surface_required_failures() {
 
     let outcome = discovery.load_first_partitioned();
 
-    assert!(outcome.figment.is_some(), "expected fallback figment");
-    assert!(
+    ensure!(outcome.figment.is_some(), "expected fallback figment");
+    ensure!(
         outcome
             .required_errors
             .iter()
@@ -276,16 +308,17 @@ fn partitioned_errors_surface_required_failures() {
             }),
         "expected missing required candidate to be retained",
     );
-    assert!(
+    ensure!(
         outcome.optional_errors.is_empty(),
         "expected optional errors to remain empty when only required path fails",
     );
+    Ok(())
 }
 
 #[rstest]
-fn required_paths_emit_missing_errors() {
+fn required_paths_emit_missing_errors() -> Result<()> {
     let _guards = clear_common_env();
-    let dir = TempDir::new().expect("config dir");
+    let dir = TempDir::new().context("create config directory")?;
     let missing = dir.path().join("absent.toml");
 
     let discovery = ConfigDiscovery::builder("hello_world")
@@ -293,18 +326,19 @@ fn required_paths_emit_missing_errors() {
         .build();
     let (_, errors) = discovery.load_first_with_errors();
 
-    assert!(
+    ensure!(
         errors.iter().any(|err| match err.as_ref() {
             OrthoError::File { path, .. } => path == &missing,
             _ => false,
         }),
         "expected missing required path error"
     );
+    Ok(())
 }
 
 #[cfg(windows)]
 #[rstest]
-fn windows_candidates_are_case_insensitive() {
+fn windows_candidates_are_case_insensitive() -> Result<()> {
     use std::ffi::OsString;
 
     let _guards = clear_common_env();
@@ -313,9 +347,13 @@ fn windows_candidates_are_case_insensitive() {
     builder = builder.add_explicit_path(PathBuf::from("c:/config/file.toml"));
     let discovery = builder.build();
     let candidates = discovery.candidates();
-    assert_eq!(candidates.len(), 1);
-    assert_eq!(
-        candidates[0].as_os_str(),
-        OsString::from("C:/Config/FILE.TOML")
+    ensure!(
+        candidates.len() == 1,
+        "expected duplicate paths deduplicated"
     );
+    ensure!(
+        candidates[0].as_os_str() == OsString::from("C:/Config/FILE.TOML"),
+        "expected original casing preserved"
+    );
+    Ok(())
 }
