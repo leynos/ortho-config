@@ -65,6 +65,20 @@ fn create_test_config(
     Ok(path)
 }
 
+fn load_with_xdg_home<F>(prepare: F) -> Result<DiscoveryConfig>
+where
+    F: FnOnce(&std::path::Path) -> Result<()>,
+{
+    let _env = setup_clean_env();
+    let dir = TempDir::new().context("create temp dir")?;
+    let xdg_home = dir.path().join("xdg");
+    prepare(&xdg_home)?;
+    let guard = test_env::set_var("XDG_CONFIG_HOME", &xdg_home);
+    let cfg = DiscoveryConfig::load_from_iter(["prog"]).map_err(|err| anyhow!(err))?;
+    drop(guard);
+    Ok(cfg)
+}
+
 struct CwdGuard {
     original: std::path::PathBuf,
 }
@@ -164,31 +178,20 @@ fn env_var_overrides_default_locations() -> Result<()> {
 
 #[rstest]
 fn xdg_config_home_respects_custom_file_name() -> Result<()> {
-    let _env = setup_clean_env();
-    let dir = TempDir::new().context("create temp dir")?;
-    let xdg_home = dir.path().join("xdg");
-    let app_dir = xdg_home.join("demo_app");
-    let _ = create_test_config(&app_dir, "demo.toml", 64)?;
-
-    let guard = test_env::set_var("XDG_CONFIG_HOME", &xdg_home);
-    let cfg = DiscoveryConfig::load_from_iter(["prog"]).map_err(|err| anyhow!(err))?;
-    drop(guard);
-
+    let cfg = load_with_xdg_home(|xdg_home| {
+        let app_dir = xdg_home.join("demo_app");
+        create_test_config(&app_dir, "demo.toml", 64).map(|_| ())
+    })?;
     ensure!(cfg.value == 64, "expected 64, got {}", cfg.value);
     Ok(())
 }
 
 #[rstest]
 fn xdg_config_home_missing_file_returns_default() -> Result<()> {
-    let _env = setup_clean_env();
-    let dir = TempDir::new().context("create temp dir")?;
-    let xdg_home = dir.path().join("xdg_missing");
-    fs::create_dir_all(&xdg_home).context("create xdg home")?;
-
-    let guard = test_env::set_var("XDG_CONFIG_HOME", &xdg_home);
-    let cfg = DiscoveryConfig::load_from_iter(["prog"]).map_err(|err| anyhow!(err))?;
-    drop(guard);
-
+    let cfg = load_with_xdg_home(|xdg_home| {
+        fs::create_dir_all(xdg_home).context("create xdg home")?;
+        Ok(())
+    })?;
     ensure!(cfg.value == 1, "expected default 1, got {}", cfg.value);
     Ok(())
 }
