@@ -199,10 +199,9 @@ mod tests {
     fn collect_append_fields_selects_vec_fields() -> Result<()> {
         let (fields, field_attrs, _) = demo_input()?;
         let out = collect_append_fields(&fields, &field_attrs)?;
-        ensure!(out.len() == 1, "expected single append field");
-        let (ident, _) = out
-            .first()
-            .ok_or_else(|| anyhow!("expected vector entry"))?;
+        let [(ident, _)] = out.as_slice() else {
+            return Err(anyhow!("expected single append field"));
+        };
         ensure!(ident == "field2", "expected field2 append target");
         Ok(())
     }
