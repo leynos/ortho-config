@@ -54,7 +54,8 @@ fn config_temp_dir() -> Result<TempDir> {
 }
 
 #[fixture]
-fn sample_config_file(config_temp_dir: TempDir) -> Result<(TempDir, PathBuf)> {
+fn sample_config_file(config_temp_dir: Result<TempDir>) -> Result<(TempDir, PathBuf)> {
+    let config_temp_dir = config_temp_dir?;
     let file_dir = config_temp_dir.path().join("hello_world");
     std::fs::create_dir_all(&file_dir).context("create hello_world directory")?;
     let file = file_dir.join("config.toml");
@@ -83,8 +84,9 @@ fn env_override_precedes_other_candidates(
 #[rstest]
 fn xdg_candidates_follow_explicit_paths(
     _env_guards: Vec<test_env::EnvVarGuard>,
-    config_temp_dir: TempDir,
+    config_temp_dir: Result<TempDir>,
 ) -> Result<()> {
+    let config_temp_dir = config_temp_dir?;
     let xdg_path = config_temp_dir.path().join("hello_world");
     std::fs::create_dir_all(&xdg_path).context("create hello_world directory under XDG home")?;
     let _home = test_env::set_var("XDG_CONFIG_HOME", config_temp_dir.path());
@@ -235,9 +237,9 @@ struct SampleConfig {
 #[rstest]
 fn load_first_reads_first_existing_file(
     _env_guards: Vec<test_env::EnvVarGuard>,
-    sample_config_file: (TempDir, PathBuf),
+    sample_config_file: Result<(TempDir, PathBuf)>,
 ) -> Result<()> {
-    let (dir, _config_path) = sample_config_file;
+    let (dir, _config_path) = sample_config_file?;
     let _xdg = test_env::set_var("XDG_CONFIG_HOME", dir.path());
 
     let discovery = ConfigDiscovery::builder("hello_world").build();
@@ -256,8 +258,9 @@ fn load_first_reads_first_existing_file(
 #[rstest]
 fn load_first_skips_invalid_candidates(
     _env_guards: Vec<test_env::EnvVarGuard>,
-    config_temp_dir: TempDir,
+    config_temp_dir: Result<TempDir>,
 ) -> Result<()> {
+    let config_temp_dir = config_temp_dir?;
     let dir_path = config_temp_dir.path();
     let invalid = dir_path.join("broken.toml");
     let valid = dir_path.join("valid.toml");
@@ -292,8 +295,9 @@ fn load_first_skips_invalid_candidates(
 #[rstest]
 fn load_first_with_errors_reports_preceding_failures(
     _env_guards: Vec<test_env::EnvVarGuard>,
-    config_temp_dir: TempDir,
+    config_temp_dir: Result<TempDir>,
 ) -> Result<()> {
+    let config_temp_dir = config_temp_dir?;
     let dir_path = config_temp_dir.path();
     let missing = dir_path.join("absent.toml");
     let valid = dir_path.join("valid.toml");
@@ -323,8 +327,9 @@ fn load_first_with_errors_reports_preceding_failures(
 #[rstest]
 fn partitioned_errors_surface_required_failures(
     _env_guards: Vec<test_env::EnvVarGuard>,
-    config_temp_dir: TempDir,
+    config_temp_dir: Result<TempDir>,
 ) -> Result<()> {
+    let config_temp_dir = config_temp_dir?;
     let dir_path = config_temp_dir.path();
     let missing = dir_path.join("absent.toml");
     let valid = dir_path.join("valid.toml");
@@ -358,8 +363,9 @@ fn partitioned_errors_surface_required_failures(
 #[rstest]
 fn required_paths_emit_missing_errors(
     _env_guards: Vec<test_env::EnvVarGuard>,
-    config_temp_dir: TempDir,
+    config_temp_dir: Result<TempDir>,
 ) -> Result<()> {
+    let config_temp_dir = config_temp_dir?;
     let missing = config_temp_dir.path().join("absent.toml");
 
     let discovery = ConfigDiscovery::builder("hello_world")

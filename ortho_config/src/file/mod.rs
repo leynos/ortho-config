@@ -425,4 +425,4 @@ fn load_config_file_inner(
 }
 
 #[cfg(test)]
-mod file_tests;
+mod tests;
