@@ -191,15 +191,14 @@ mod tests {
                 field2: Vec<String>,
             }
         };
-        let (_, fields, struct_attrs, field_attrs) =
-            crate::derive::parse::parse_input(&input).map_err(|err| anyhow!(err))?;
+        let (_, fields, struct_attrs, field_attrs) = crate::derive::parse::parse_input(&input)?;
         Ok((fields, field_attrs, struct_attrs))
     }
 
     #[test]
     fn collect_append_fields_selects_vec_fields() -> Result<()> {
         let (fields, field_attrs, _) = demo_input()?;
-        let out = collect_append_fields(&fields, &field_attrs).map_err(|err| anyhow!(err))?;
+        let out = collect_append_fields(&fields, &field_attrs)?;
         ensure!(out.len() == 1, "expected single append field");
         let (ident, _) = out
             .first()
@@ -211,7 +210,7 @@ mod tests {
     #[test]
     fn build_override_struct_creates_struct() -> Result<()> {
         let (fields, field_attrs, _) = demo_input()?;
-        let append = collect_append_fields(&fields, &field_attrs).map_err(|err| anyhow!(err))?;
+        let append = collect_append_fields(&fields, &field_attrs)?;
         let (ts, init_ts) = build_override_struct(&syn::parse_quote!(Demo), &append);
         ensure!(
             ts.to_string().contains("struct __DemoVecOverride"),
@@ -232,8 +231,7 @@ mod tests {
                 field1: u32,
             }
         };
-        let (_, fields, _, field_attrs) =
-            crate::derive::parse::parse_input(&input).map_err(|err| anyhow!(err))?;
+        let (_, fields, _, field_attrs) = crate::derive::parse::parse_input(&input)?;
         let Err(err) = collect_append_fields(&fields, &field_attrs) else {
             return Err(anyhow!("expected append strategy validation to fail"));
         };
