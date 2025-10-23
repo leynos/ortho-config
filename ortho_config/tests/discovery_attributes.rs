@@ -12,6 +12,8 @@ use rstest::rstest;
 use serde::{Deserialize, Serialize};
 use std::env;
 use std::fs;
+use std::path::PathBuf;
+use std::sync::{Mutex, MutexGuard, OnceLock};
 use tempfile::TempDir;
 use test_helpers::env as test_env;
 
@@ -110,21 +112,39 @@ struct Expected {
     value: u32,
 }
 
+static CWD_MUTEX: OnceLock<Mutex<()>> = OnceLock::new();
+
 struct CwdGuard {
-    original: std::path::PathBuf,
+    original: PathBuf,
+    _lock: MutexGuard<'static, ()>,
 }
 
 impl CwdGuard {
     fn new() -> Result<Self> {
+        #[expect(
+            clippy::expect_used,
+            reason = "Tests must fail fast if the CWD mutex is poisoned"
+        )]
+        let lock = CWD_MUTEX
+            .get_or_init(|| Mutex::new(()))
+            .lock()
+            .expect("CwdGuard mutex poisoned while acquiring lock");
+        let original = env::current_dir().context("capture current directory")?;
         Ok(Self {
-            original: env::current_dir().context("capture current directory")?,
+            original,
+            _lock: lock,
         })
     }
 }
 
 impl Drop for CwdGuard {
     fn drop(&mut self) {
-        if env::set_current_dir(&self.original).is_err() {}
+        #[expect(
+            clippy::expect_used,
+            reason = "Restoring the original CWD must not fail in tests"
+        )]
+        env::set_current_dir(&self.original)
+            .expect("restore original working directory in CwdGuard::drop");
     }
 }
 

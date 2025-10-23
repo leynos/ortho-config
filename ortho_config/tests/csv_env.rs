@@ -3,7 +3,7 @@
 //! Ensure that comma-separated environment variables are parsed into arrays
 //! and that existing JSON strings remain intact.
 
-use anyhow::{Result, anyhow, ensure};
+use anyhow::{Context, Result, anyhow, ensure};
 use figment::Figment;
 use ortho_config::CsvEnv;
 use rstest::rstest;
@@ -30,7 +30,7 @@ fn parses_lists(#[case] raw: &str, #[case] expected: Vec<&str>) -> Result<()> {
         j.set_env("VALUES", raw);
         let cfg: Cfg = Figment::from(CsvEnv::raw())
             .extract()
-            .map_err(|err| anyhow!(err))?;
+            .context("failed to extract Cfg from CsvEnv")?;
         ensure!(
             cfg.values == want,
             "expected {:?}, got {:?}",

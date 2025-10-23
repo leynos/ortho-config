@@ -16,13 +16,26 @@ where
     F: FnOnce(&mut Jail) -> Result<T>,
 {
     let output = RefCell::new(None);
+    let error: RefCell<Option<anyhow::Error>> = RefCell::new(None);
     figment::Jail::try_with(|j| {
-        let result = f(j).map_err(|err| figment::Error::from(err.to_string()))?;
-        output.replace(Some(result));
+        match f(j) {
+            Ok(result) => {
+                output.replace(Some(result));
+            }
+            Err(err) => {
+                error.replace(Some(err));
+            }
+        }
         Ok(())
     })
-    .map_err(|err| anyhow!(err.to_string()))?;
-    output
-        .into_inner()
-        .ok_or_else(|| anyhow!("jail closure did not produce a result"))
+    .map_err(|err| anyhow!(err))?;
+
+    error.into_inner().map_or_else(
+        || {
+            output
+                .into_inner()
+                .ok_or_else(|| anyhow!("jail closure did not produce a result"))
+        },
+        Err,
+    )
 }
