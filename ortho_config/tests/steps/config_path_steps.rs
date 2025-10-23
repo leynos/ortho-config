@@ -1,24 +1,26 @@
 //! Steps demonstrating a renamed configuration path flag.
-#![allow(
-    unfulfilled_lint_expectations,
-    reason = "clippy::expect_used is denied globally; tests may not hit those branches"
-)]
-#![expect(
-    clippy::expect_used,
-    reason = "tests panic to surface configuration mistakes"
-)]
 #![expect(
     clippy::shadow_reuse,
     reason = "Cucumber step macros rebind step arguments during code generation"
 )]
 
 use crate::{RulesConfig, World};
+use anyhow::{Result, anyhow, ensure};
 use cucumber::{given, then, when};
 use ortho_config::OrthoConfig;
 
 #[given(expr = "an alternate config file with rule {string}")]
-fn alt_config_file(world: &mut World, val: String) {
+fn alt_config_file(world: &mut World, val: String) -> Result<()> {
+    ensure!(
+        !val.trim().is_empty(),
+        "alternate config rule must not be empty"
+    );
+    ensure!(
+        world.file_value.is_none(),
+        "alternate config file already initialised"
+    );
     world.file_value = Some(val);
+    Ok(())
 }
 
 #[when(expr = "the config is loaded with custom flag {string} {string}")]
@@ -26,27 +28,40 @@ fn alt_config_file(world: &mut World, val: String) {
     clippy::needless_pass_by_value,
     reason = "Cucumber step requires owned String"
 )]
-fn load_with_custom_flag(world: &mut World, flag: String, path: String) {
-    let file_val = world.file_value.take().expect("file value");
+fn load_with_custom_flag(world: &mut World, flag: String, path: String) -> Result<()> {
+    let file_val = world
+        .file_value
+        .take()
+        .ok_or_else(|| anyhow!("alternate config file value not provided"))?;
     let mut result = None;
-    figment::Jail::expect_with(|j| {
+    figment::Jail::try_with(|j| {
         j.create_file(&path, &format!("rules = [\"{file_val}\"]"))?;
         let args = ["prog", flag.as_str(), path.as_str()];
         result = Some(RulesConfig::load_from_iter(args));
         Ok(())
-    });
+    })
+    .map_err(|err| anyhow!(err.to_string()))?;
     world.result = result;
+    ensure!(
+        world.result.is_some(),
+        "configuration load did not produce a result"
+    );
+    Ok(())
 }
 
 #[then("config loading fails with a CLI parsing error")]
-fn cli_error(world: &mut World) {
-    let err = world
+fn cli_error(world: &mut World) -> Result<()> {
+    let result = world
         .result
         .take()
-        .expect("missing result")
-        .expect_err("expected CLI parsing error");
-    match &*err {
-        ortho_config::OrthoError::CliParsing(_) => {}
-        other => panic!("unexpected error: {other:?}"),
+        .ok_or_else(|| anyhow!("configuration result unavailable"))?;
+    match result {
+        Ok(_) => Err(anyhow!(
+            "expected CLI parsing error but configuration succeeded"
+        )),
+        Err(err) => match err.as_ref() {
+            ortho_config::OrthoError::CliParsing(_) => Ok(()),
+            other => Err(anyhow!("unexpected error: {other:?}")),
+        },
     }
 }
