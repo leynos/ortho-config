@@ -305,29 +305,38 @@ pub fn __doc_lit_str(meta: &syn::meta::ParseNestedMeta, key: &str) -> Result<Lit
 #[cfg(test)]
 mod lit_str_tests {
     use super::*;
+    use anyhow::{Result, anyhow, ensure};
 
     #[test]
-    fn lit_str_parses_string_values() {
+    fn lit_str_parses_string_values() -> Result<()> {
         let attr: Attribute = syn::parse_quote!(#[ortho_config(cli_long = "name")]);
-        if let Err(err) = attr.parse_nested_meta(|meta| {
+        let mut observed = None;
+        attr.parse_nested_meta(|meta| {
             let s = super::__doc_lit_str(&meta, "cli_long")?;
-            assert_eq!(s.value(), "name");
+            observed = Some(s.value());
             Ok(())
-        }) {
-            panic!("expected attribute parsing to succeed: {err}");
-        }
+        })
+        .map_err(|err| anyhow!("expected attribute parsing to succeed: {err}"))?;
+        let value =
+            observed.ok_or_else(|| anyhow!("cli_long attribute callback was not invoked"))?;
+        ensure!(value == "name", "unexpected cli_long value: {value}");
+        Ok(())
     }
 
     #[test]
-    fn lit_char_parses_char_values() {
+    fn lit_char_parses_char_values() -> Result<()> {
         let attr: syn::Attribute = syn::parse_quote!(#[ortho_config(cli_short = 'n')]);
-        if let Err(err) = attr.parse_nested_meta(|meta| {
+        let mut observed = None;
+        attr.parse_nested_meta(|meta| {
             let c = super::lit_char(&meta, "cli_short")?;
-            assert_eq!(c, 'n');
+            observed = Some(c);
             Ok(())
-        }) {
-            panic!("expected attribute parsing to succeed: {err}");
-        }
+        })
+        .map_err(|err| anyhow!("expected attribute parsing to succeed: {err}"))?;
+        let value =
+            observed.ok_or_else(|| anyhow!("cli_short attribute callback was not invoked"))?;
+        ensure!(value == 'n', "unexpected cli_short value: {value}");
+        Ok(())
     }
 }
 
