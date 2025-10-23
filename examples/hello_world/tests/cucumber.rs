@@ -496,22 +496,31 @@ impl World {
             .ok_or_else(|| anyhow!("command execution result unavailable"))
     }
 
+    fn with_result<T, F>(&self, action: F) -> Result<T>
+    where
+        F: FnOnce(&CommandResult) -> Result<T>,
+    {
+        let result = self.result()?;
+        action(result)
+    }
+
     /// Asserts that the most recent command succeeded.
     ///
     /// # Errors
     ///
     /// Returns an error if the last invocation exited with a non-zero status.
     pub fn assert_success(&self) -> Result<()> {
-        let result = self.result()?;
-        ensure!(
-            result.success,
-            "expected success; status: {:?}; cmd: {} {:?}; stderr: {}",
-            result.status,
-            result.binary,
-            result.args,
-            result.stderr
-        );
-        Ok(())
+        self.with_result(|result| {
+            ensure!(
+                result.success,
+                "expected success; status: {:?}; cmd: {} {:?}; stderr: {}",
+                result.status,
+                result.binary,
+                result.args,
+                result.stderr
+            );
+            Ok(())
+        })
     }
 
     /// Asserts that the most recent command failed.
@@ -520,16 +529,17 @@ impl World {
     ///
     /// Returns an error if the last invocation exited successfully.
     pub fn assert_failure(&self) -> Result<()> {
-        let result = self.result()?;
-        ensure!(
-            !result.success,
-            "expected failure; status: {:?}; cmd: {} {:?}; stdout: {}",
-            result.status,
-            result.binary,
-            result.args,
-            result.stdout
-        );
-        Ok(())
+        self.with_result(|result| {
+            ensure!(
+                !result.success,
+                "expected failure; status: {:?}; cmd: {} {:?}; stdout: {}",
+                result.status,
+                result.binary,
+                result.args,
+                result.stdout
+            );
+            Ok(())
+        })
     }
 
     /// Asserts that stdout contains the expected substring.
@@ -542,16 +552,17 @@ impl World {
         S: AsRef<str>,
     {
         let expected_text = expected.as_ref();
-        let result = self.result()?;
-        ensure!(
-            result.stdout.contains(expected_text),
-            "stdout did not contain {expected_text:?}; status: {:?}; cmd: {} {:?}; stdout was: {:?}",
-            result.status,
-            result.binary,
-            result.args,
-            result.stdout
-        );
-        Ok(())
+        self.with_result(|result| {
+            ensure!(
+                result.stdout.contains(expected_text),
+                "stdout did not contain {expected_text:?}; status: {:?}; cmd: {} {:?}; stdout was: {:?}",
+                result.status,
+                result.binary,
+                result.args,
+                result.stdout
+            );
+            Ok(())
+        })
     }
 
     /// Asserts that stderr contains the expected substring.
@@ -564,16 +575,17 @@ impl World {
         S: AsRef<str>,
     {
         let expected_text = expected.as_ref();
-        let result = self.result()?;
-        ensure!(
-            result.stderr.contains(expected_text),
-            "stderr did not contain {expected_text:?}; status: {:?}; cmd: {} {:?}; stderr was: {:?}",
-            result.status,
-            result.binary,
-            result.args,
-            result.stderr
-        );
-        Ok(())
+        self.with_result(|result| {
+            ensure!(
+                result.stderr.contains(expected_text),
+                "stderr did not contain {expected_text:?}; status: {:?}; cmd: {} {:?}; stderr was: {:?}",
+                result.status,
+                result.binary,
+                result.args,
+                result.stderr
+            );
+            Ok(())
+        })
     }
 }
 
