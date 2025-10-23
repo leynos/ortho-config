@@ -401,11 +401,10 @@ mod tests {
     fn rejects_mismatched_field_metadata_lengths() -> Result<()> {
         let fields: Vec<syn::Field> = vec![syn::parse_quote!(pub alpha: bool)];
         let mut attrs = vec![FieldAttrs::default(); 2];
-        if let Some(first) = attrs.first_mut() {
-            first.cli_long = Some("alpha".into());
-        } else {
-            return Err(anyhow!("expected at least one attribute entry"));
-        }
+        attrs
+            .first_mut()
+            .ok_or_else(|| anyhow!("expected at least one attribute entry"))?
+            .cli_long = Some("alpha".into());
         match build_cli_struct_fields(&fields, &attrs) {
             Ok(_) => Err(anyhow!("expected CLI field metadata mismatch")),
             Err(err) => {
