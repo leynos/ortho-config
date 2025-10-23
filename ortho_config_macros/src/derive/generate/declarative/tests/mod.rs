@@ -49,19 +49,11 @@ fn unique_append_fields_filters_duplicates() -> Result<()> {
     let filtered = unique_append_fields(&append_fields);
     ensure!(filtered.len() == 2, "expected two unique append fields");
     ensure!(
-        filtered
-            .first()
-            .map(|(ident, _)| ident.to_string())
-            .as_deref()
-            == Some("items"),
+        filtered.first().map(|(ident, _)| ident.to_string()) == Some("items".to_owned()),
         "expected items as first append field"
     );
     ensure!(
-        filtered
-            .get(1)
-            .map(|(ident, _)| ident.to_string())
-            .as_deref()
-            == Some("tags"),
+        filtered.get(1).map(|(ident, _)| ident.to_string()) == Some("tags".to_owned()),
         "expected tags as second append field"
     );
     Ok(())
