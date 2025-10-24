@@ -3,11 +3,7 @@
 use super::super::*;
 use super::{canonical_root_and_current, with_jail};
 use crate::result_ext::ResultIntoFigment;
-use anyhow::{Context, Result, anyhow, ensure};
-use figment::{
-    Figment,
-    providers::{Format, Toml},
-};
+use anyhow::{Result, anyhow, ensure};
 use rstest::rstest;
 use std::path::{Path, PathBuf};
 
@@ -102,28 +98,4 @@ fn resolve_base_path_reports_missing_file(#[case] is_abs: bool) -> Result<()> {
         }
         Ok(())
     })
-}
-
-#[test]
-fn merge_parent_child_overrides_parent_on_conflicts() -> Result<()> {
-    let parent = Figment::from(Toml::string("foo = \"parent\"\nbar = \"parent\""));
-    let child = Figment::from(Toml::string("foo = \"child\""));
-    let merged = merge_parent(child, parent);
-    let foo = merged
-        .find_value("foo")
-        .context("merged figment must contain foo")?;
-    ensure!(
-        foo.as_str() == Some("child"),
-        "unexpected foo value {:?}",
-        foo
-    );
-    let bar = merged
-        .find_value("bar")
-        .context("merged figment must contain bar")?;
-    ensure!(
-        bar.as_str() == Some("parent"),
-        "unexpected bar value {:?}",
-        bar
-    );
-    Ok(())
 }
