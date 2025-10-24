@@ -191,30 +191,40 @@ pub mod env {
             }
         }
 
+        /// Sets up an environment variable with a test value, returning the key for cleanup
+        fn setup_test_env(key: &str, value: &str) {
+            super::with_lock(|| unsafe { super::env_set_var(key, OsStr::new(value)) });
+        }
+
+        /// Cleans up an environment variable after a test
+        fn cleanup_test_env(key: &str) {
+            super::with_lock(|| unsafe { super::env_remove_var(key) });
+        }
+
         #[test]
         fn set_var_restores_original() {
             let key = "TEST_HELPERS_SET_VAR";
             let original = "orig";
-            super::with_lock(|| unsafe { super::env_set_var(key, OsStr::new(original)) });
+            setup_test_env(key, original);
             {
                 let _guard = set_var(key, "temp");
                 assert_eq!(env_value(key), "temp");
             }
             assert_eq!(env_value(key), original);
-            super::with_lock(|| unsafe { super::env_remove_var(key) });
+            cleanup_test_env(key);
         }
 
         #[test]
         fn remove_var_restores_value() {
             let key = "TEST_HELPERS_REMOVE_VAR";
             let original = "to-be-removed";
-            super::with_lock(|| unsafe { super::env_set_var(key, OsStr::new(original)) });
+            setup_test_env(key, original);
             {
                 let _guard = remove_var(key);
                 assert!(std::env::var(key).is_err());
             }
             assert_eq!(env_value(key), original);
-            super::with_lock(|| unsafe { super::env_remove_var(key) });
+            cleanup_test_env(key);
         }
 
         #[test]

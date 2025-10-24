@@ -180,6 +180,19 @@ impl ConfigDiscovery {
         }
     }
 
+    #[cfg(any(feature = "json5", feature = "yaml"))]
+    fn push_variants_for_extensions(
+        (paths, seen): (&mut Vec<PathBuf>, &mut HashSet<String>),
+        nested: &Path,
+        stem: &str,
+        extensions: &[&str],
+    ) {
+        for ext in extensions {
+            let filename = format!("{stem}.{ext}");
+            Self::push_unique(paths, seen, nested.join(&filename));
+        }
+    }
+
     #[cfg(feature = "json5")]
     fn push_json_variants(
         paths: &mut Vec<PathBuf>,
@@ -187,10 +200,7 @@ impl ConfigDiscovery {
         nested: &Path,
         stem: &str,
     ) {
-        for ext in ["json", "json5"] {
-            let filename = format!("{stem}.{ext}");
-            Self::push_unique(paths, seen, nested.join(&filename));
-        }
+        Self::push_variants_for_extensions((paths, seen), nested, stem, &["json", "json5"]);
     }
 
     #[cfg(feature = "yaml")]
@@ -200,10 +210,7 @@ impl ConfigDiscovery {
         nested: &Path,
         stem: &str,
     ) {
-        for ext in ["yaml", "yml"] {
-            let filename = format!("{stem}.{ext}");
-            Self::push_unique(paths, seen, nested.join(&filename));
-        }
+        Self::push_variants_for_extensions((paths, seen), nested, stem, &["yaml", "yml"]);
     }
 
     fn push_default_xdg(&self, paths: &mut Vec<PathBuf>, seen: &mut HashSet<String>) {
