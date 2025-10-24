@@ -204,11 +204,13 @@ fn cli_flag_config_loading(
             cfg.value
         );
     } else {
-        let err = DiscoveryConfig::load_from_iter(args).expect_err(description);
-        ensure!(
-            matches!(&*err, OrthoError::File { .. }),
-            "{description}: unexpected error {err:?}"
-        );
+        match DiscoveryConfig::load_from_iter(args) {
+            Ok(_) => ensure!(false, "{description}: expected Err but got Ok"),
+            Err(err) => ensure!(
+                matches!(&*err, OrthoError::File { .. }),
+                "{description}: unexpected error {err:?}"
+            ),
+        }
     }
     Ok(())
 }
