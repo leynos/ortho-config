@@ -81,6 +81,16 @@ pub(crate) struct CommandResult {
     args: Vec<String>,
 }
 
+impl CommandResult {
+    /// Formats common command execution context for error messages.
+    fn command_context(&self) -> String {
+        format!(
+            "status: {:?}; cmd: {} {:?}",
+            self.status, self.binary, self.args
+        )
+    }
+}
+
 impl From<std::process::Output> for CommandResult {
     fn from(output: std::process::Output) -> Self {
         Self {

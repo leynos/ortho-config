@@ -39,10 +39,7 @@ impl World {
 
     pub(crate) fn assert_outcome(&mut self, expect: Expect<'_>) -> Result<()> {
         let result = self.result()?;
-        let context = format!(
-            "status: {:?}; cmd: {} {:?}",
-            result.status, result.binary, result.args
-        );
+        let context = result.command_context();
         match expect {
             Expect::Success => ensure!(
                 result.success,
