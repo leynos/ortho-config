@@ -98,7 +98,7 @@ fn check_flattened(world: &mut World, expected_value: String) -> Result<()> {
         .flat_result
         .take()
         .ok_or_else(|| anyhow!("flattened configuration result unavailable"))?;
-    let cfg = result.map_err(|err| anyhow!(err))?;
+    let cfg = result?;
     let nested = cfg
         .nested
         .value
