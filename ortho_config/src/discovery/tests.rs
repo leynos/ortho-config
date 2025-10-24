@@ -54,8 +54,8 @@ fn config_temp_dir() -> Result<TempDir> {
 }
 
 #[fixture]
-fn sample_config_file(config_temp_dir: Result<TempDir>) -> Result<(TempDir, PathBuf)> {
-    let temp_dir = config_temp_dir?;
+fn sample_config_file() -> Result<(TempDir, PathBuf)> {
+    let temp_dir = config_temp_dir()?;
     let file_dir = temp_dir.path().join("hello_world");
     std::fs::create_dir_all(&file_dir).context("create hello_world directory")?;
     let file = file_dir.join("config.toml");
