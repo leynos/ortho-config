@@ -1,7 +1,9 @@
 //! Environment management helpers for the Cucumber world.
 use super::{ENV_PREFIX, World};
 use anyhow::{Context, Result};
-use std::fs;
+use cap_std::fs::OpenOptions;
+use cap_std::{ambient_authority, fs::Dir};
+use std::io::Write;
 use tokio::process::Command;
 
 impl World {
@@ -23,12 +25,21 @@ impl World {
     }
 
     pub(crate) fn write_xdg_config_home(&mut self, contents: &str) -> Result<()> {
-        let base = self.workdir.path().join("xdg-config");
-        let config_dir = base.join("hello_world");
-        fs::create_dir_all(&config_dir).context("create XDG hello_world directory")?;
-        fs::write(config_dir.join("hello_world.toml"), contents)
+        let base_path = self.workdir.path().join("xdg-config");
+        let work_dir = Dir::open_ambient_dir(self.workdir.path(), ambient_authority())
+            .context("open hello_world workdir for XDG setup")?;
+        work_dir
+            .create_dir_all("xdg-config/hello_world")
+            .context("create XDG hello_world directory")?;
+        let mut file = work_dir
+            .open_with(
+                "xdg-config/hello_world/hello_world.toml",
+                OpenOptions::new().write(true).create(true).truncate(true),
+            )
+            .context("open XDG hello_world config for write")?;
+        file.write_all(contents.as_bytes())
             .context("write XDG hello_world config")?;
-        let value = base.to_string_lossy().into_owned();
+        let value = base_path.to_string_lossy().into_owned();
         self.set_env("XDG_CONFIG_HOME", value);
         Ok(())
     }
