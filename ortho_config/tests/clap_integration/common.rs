@@ -1,6 +1,6 @@
 //! Shared types and helpers for the CLI integration tests.
 
-use anyhow::{Result, anyhow};
+use anyhow::{Result, anyhow, ensure};
 use ortho_config::{OrthoConfig, OrthoError, OrthoResult};
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -130,6 +130,32 @@ where
         validate(config.clone())?;
         Ok(config)
     })
+}
+
+pub(crate) fn assert_ortho_error<T, F>(
+    result: OrthoResult<T>,
+    expected_variant: &str,
+    predicate: F,
+) -> Result<()>
+where
+    T: fmt::Debug,
+    F: FnOnce(&OrthoError) -> bool,
+{
+    match result {
+        Ok(value) => Err(anyhow!(
+            "expected {expected_variant} error, got success: {:?}",
+            value
+        )),
+        Err(err) => {
+            ensure!(
+                predicate(err.as_ref()),
+                "expected {expected_variant} error, got {err:?}",
+                expected_variant = expected_variant,
+                err = err
+            );
+            Ok(())
+        }
+    }
 }
 
 fn validation_mismatch<T>(key: &str, expected: String, actual: T) -> OrthoResult<()>
