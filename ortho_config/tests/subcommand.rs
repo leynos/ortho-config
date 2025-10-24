@@ -8,7 +8,7 @@ use clap::Parser;
 use figment::Error as FigmentError;
 use ortho_config::OrthoConfig;
 use serde::{Deserialize, Serialize};
-use util::{with_merged_subcommand_cli, with_merged_subcommand_cli_for};
+use util::{path_to_utf8_string, with_merged_subcommand_cli, with_merged_subcommand_cli_for};
 
 #[derive(Debug, Serialize, Deserialize, Default, PartialEq, Parser)]
 #[command(name = "test")]
@@ -47,10 +47,7 @@ fn loads_from_home() -> Result<()> {
         |j| {
             let home = j.create_dir("home")?;
             j.create_file(home.join(".app.toml"), "[cmds.test]\nfoo = \"home\"")?;
-            let home_str = home
-                .to_str()
-                .ok_or_else(|| FigmentError::from("home path not valid UTF-8".to_owned()))?
-                .to_owned();
+            let home_str = path_to_utf8_string(&home, "home")?;
             j.set_env("HOME", &home_str);
             #[cfg(windows)]
             j.set_env("USERPROFILE", &home_str);
@@ -73,10 +70,7 @@ fn local_overrides_home() -> Result<()> {
         |j| {
             let home = j.create_dir("home")?;
             j.create_file(home.join(".app.toml"), "[cmds.test]\nfoo = \"home\"")?;
-            let home_str = home
-                .to_str()
-                .ok_or_else(|| FigmentError::from("home path not valid UTF-8".to_owned()))?
-                .to_owned();
+            let home_str = path_to_utf8_string(&home, "home")?;
             j.set_env("HOME", &home_str);
             #[cfg(windows)]
             j.set_env("USERPROFILE", &home_str);
@@ -105,11 +99,8 @@ fn loads_from_xdg_config() -> Result<()> {
                 .map_err(|err| FigmentError::from(err.to_string()))?;
             j.create_dir(abs.join("app"))?;
             j.create_file(abs.join("app/config.toml"), "[cmds.test]\nfoo = \"xdg\"")?;
-            let path = abs
-                .to_str()
-                .ok_or_else(|| FigmentError::from("xdg dir not valid UTF-8".to_owned()))?
-                .to_owned();
-            j.set_env("XDG_CONFIG_HOME", &path);
+            let xdg_path = path_to_utf8_string(&abs, "xdg config")?;
+            j.set_env("XDG_CONFIG_HOME", &xdg_path);
             Ok(())
         },
         &CmdCfg::default(),
