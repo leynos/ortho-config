@@ -1,8 +1,8 @@
 //! Tests focused on direct CLI parsing and merging behaviour.
 
 use super::common::{
-    assert_config_eq, assert_config_values, load_from_iter, with_jail, ExpectedConfig, OrthoResultExt,
-    TestConfig,
+    ExpectedConfig, OrthoResultExt, TestConfig, assert_config_eq, assert_config_values,
+    load_from_iter, run_config_case,
 };
 use anyhow::Result;
 use rstest::rstest;
@@ -59,21 +59,15 @@ fn cli_merges_with_other_sources(
     #[case] expected_sample: Option<&'static str>,
     #[case] expected_other: Option<&'static str>,
 ) -> Result<()> {
-    with_jail(|j| {
-        for (path, contents) in files {
-            j.create_file(path, contents)?;
-        }
-        for (key, value) in env {
-            j.set_env(key, value);
-        }
-        let cfg = load_from_iter(cli_args.iter().copied()).to_anyhow()?;
+    run_config_case::<TestConfig, _>(files, env, cli_args, |cfg| {
         assert_config_values(&cfg, expected_sample, expected_other)
-    })
+    })?;
+    Ok(())
 }
 
 #[rstest]
 fn merges_cli_into_figment() -> Result<()> {
-    use figment::{providers::Serialized, Figment, Profile};
+    use figment::{Figment, Profile, providers::Serialized};
 
     let cli = TestConfig {
         sample_value: Some("hi".into()),
