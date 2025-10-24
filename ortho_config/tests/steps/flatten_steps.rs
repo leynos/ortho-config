@@ -31,7 +31,7 @@ fn load_flat(file: Option<&str>, args: &[&str]) -> Result<OrthoResult<FlatArgs>>
         );
         Ok(())
     })
-    .map_err(|err| anyhow!(err.to_string()))?;
+    .map_err(anyhow::Error::new)?;
     res.ok_or_else(|| anyhow!("flattened configuration load did not produce a result"))
 }
 
