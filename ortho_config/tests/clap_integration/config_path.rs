@@ -1,7 +1,7 @@
 //! Tests covering configuration path resolution across CLI and environment.
 
-use super::common::{assert_config_values, with_jail, OrthoResultExt, RenamedPathConfig, TestConfig};
-use anyhow::{ensure, Result};
+use super::common::{RenamedPathConfig, TestConfig, assert_config_values, run_config_case};
+use anyhow::{Result, ensure};
 use rstest::rstest;
 
 struct ConfigPathCase {
@@ -38,16 +38,10 @@ struct ConfigPathCase {
     expected_other: Some("val"),
 })]
 fn resolves_config_path_priorities(#[case] case: ConfigPathCase) -> Result<()> {
-    with_jail(|j| {
-        for (path, contents) in case.files {
-            j.create_file(path, contents)?;
-        }
-        for (key, value) in case.env {
-            j.set_env(key, value);
-        }
-        let cfg = TestConfig::load_from_iter(case.cli_args.iter().copied()).to_anyhow()?;
+    run_config_case::<TestConfig, _>(case.files, case.env, case.cli_args, |cfg| {
         assert_config_values(&cfg, case.expected_sample, case.expected_other)
-    })
+    })?;
+    Ok(())
 }
 
 struct RenamedPathCase {
@@ -80,14 +74,7 @@ struct RenamedPathCase {
     expected_sample: "cli",
 })]
 fn resolves_custom_config_flag(#[case] case: RenamedPathCase) -> Result<()> {
-    with_jail(|j| {
-        for (path, contents) in case.files {
-            j.create_file(path, contents)?;
-        }
-        for (key, value) in case.env {
-            j.set_env(key, value);
-        }
-        let cfg = RenamedPathConfig::load_from_iter(case.cli_args.iter().copied()).to_anyhow()?;
+    run_config_case::<RenamedPathConfig, _>(case.files, case.env, case.cli_args, |cfg| {
         ensure!(
             cfg.sample.as_deref() == Some(case.expected_sample),
             "expected sample {}, got {:?}",
@@ -99,5 +86,6 @@ fn resolves_custom_config_flag(#[case] case: RenamedPathCase) -> Result<()> {
             "config_path should not be retained post-merge"
         );
         Ok(())
-    })
+    })?;
+    Ok(())
 }

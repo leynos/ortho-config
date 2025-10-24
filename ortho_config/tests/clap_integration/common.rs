@@ -1,6 +1,6 @@
 //! Shared types and helpers for the CLI integration tests.
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use ortho_config::{OrthoConfig, OrthoError, OrthoResult};
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -11,8 +11,8 @@ use test_utils::with_jail;
 
 #[path = "../clap_test_utils.rs"]
 mod clap_test_utils;
-pub(crate) use clap_test_utils::assert_config_values;
 use clap_test_utils::ConfigValueAssertions;
+pub(crate) use clap_test_utils::assert_config_values;
 
 pub(crate) trait OrthoResultExt<T> {
     fn to_anyhow(self) -> Result<T>;
@@ -24,11 +24,15 @@ impl<T> OrthoResultExt<T> for ortho_config::OrthoResult<T> {
     }
 }
 
-fn default_recipient() -> String { String::from("World") }
+fn default_recipient() -> String {
+    String::from("World")
+}
 
-fn default_salutations() -> Vec<String> { vec![String::from("Hello")] }
+fn default_salutations() -> Vec<String> {
+    vec![String::from("Hello")]
+}
 
-#[derive(Debug, Deserialize, Serialize, OrthoConfig)]
+#[derive(Debug, Deserialize, Serialize, OrthoConfig, Clone)]
 pub(crate) struct TestConfig {
     #[ortho_config(default = default_recipient())]
     pub(crate) recipient: String,
@@ -105,6 +109,29 @@ where
     TestConfig::load_from_iter(args)
 }
 
+pub(crate) fn run_config_case<T, F>(
+    files: &[(&str, &str)],
+    env: &[(&str, &str)],
+    cli_args: &[&str],
+    validate: F,
+) -> Result<T>
+where
+    T: OrthoConfig + Clone,
+    F: FnOnce(T) -> Result<()>,
+{
+    with_jail(|j| {
+        for (path, contents) in files {
+            j.create_file(path, contents)?;
+        }
+        for (key, value) in env {
+            j.set_env(key, value);
+        }
+        let config = T::load_from_iter(cli_args.iter().copied()).map_err(|err| anyhow!(err))?;
+        validate(config.clone())?;
+        Ok(config)
+    })
+}
+
 fn validation_mismatch<T>(key: &str, expected: String, actual: T) -> OrthoResult<()>
 where
     T: fmt::Debug,
@@ -143,11 +170,7 @@ pub(crate) fn assert_config_eq(config: &TestConfig, expected: &ExpectedConfig) -
     }
 
     if config.is_quiet != expected.is_quiet {
-        return validation_mismatch(
-            "is_quiet",
-            expected.is_quiet.to_string(),
-            config.is_quiet,
-        );
+        return validation_mismatch("is_quiet", expected.is_quiet.to_string(), config.is_quiet);
     }
 
     if config.sample_value.as_deref() != expected.sample_value {
@@ -169,23 +192,23 @@ pub(crate) fn assert_config_eq(config: &TestConfig, expected: &ExpectedConfig) -
     Ok(())
 }
 
-#[derive(Debug, Deserialize, Serialize, OrthoConfig)]
+#[derive(Debug, Deserialize, Serialize, OrthoConfig, Clone)]
 pub(crate) struct OptionConfig {
     pub(crate) maybe: Option<u32>,
 }
 
-#[derive(Debug, Deserialize, Serialize, OrthoConfig)]
+#[derive(Debug, Deserialize, Serialize, OrthoConfig, Clone)]
 pub(crate) struct RequiredConfig {
     pub(crate) sample_value: String,
 }
 
-#[derive(Debug, Deserialize, Serialize, OrthoConfig)]
+#[derive(Debug, Deserialize, Serialize, OrthoConfig, Clone)]
 pub(crate) struct ConflictConfig {
     pub(crate) second: Option<String>,
     pub(crate) sample: Option<String>,
 }
 
-#[derive(Debug, Deserialize, Serialize, OrthoConfig)]
+#[derive(Debug, Deserialize, Serialize, OrthoConfig, Clone)]
 pub(crate) struct RenamedPathConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) sample: Option<String>,
