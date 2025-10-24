@@ -40,7 +40,7 @@ fn load_with_custom_flag(world: &mut World, flag: String, path: String) -> Resul
         result = Some(RulesConfig::load_from_iter(args));
         Ok(())
     })
-    .map_err(|err| anyhow!(err.to_string()))?;
+    .map_err(anyhow::Error::new)?;
     world.result = result;
     ensure!(
         world.result.is_some(),
