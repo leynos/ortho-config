@@ -1,4 +1,10 @@
 //! World state and command helpers for the Cucumber harness.
+//! The harness isolates environment variables per scenario: values stored in
+//! `env` are applied only when launching the command and never leak between
+//! runs. Each scenario owns its own temporary working directory (`workdir`),
+//! which is removed automatically when the world is dropped. Command results
+//! and declaratively composed globals live only for the lifetime of a single
+//! scenario to keep assertions deterministic.
 
 use super::config::{ConfigCopyParams, SampleConfigError, ensure_simple_filename, parse_extends};
 use super::{COMMAND_TIMEOUT, CONFIG_FILE, ENV_PREFIX, binary_path};
