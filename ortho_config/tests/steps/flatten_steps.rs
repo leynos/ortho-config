@@ -1,5 +1,5 @@
 //! Steps for scenarios involving flattened CLI structures.
-#![allow(
+#![expect(
     clippy::shadow_reuse,
     reason = "Cucumber step macros rebind step arguments during code generation"
 )]

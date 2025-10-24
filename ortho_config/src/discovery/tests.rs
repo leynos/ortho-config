@@ -396,7 +396,7 @@ fn required_paths_emit_missing_errors(
 #[cfg(windows)]
 #[rstest]
 fn windows_candidates_are_case_insensitive(env_guards: Vec<test_env::EnvVarGuard>) -> Result<()> {
-    use std::ffi::OsString;
+    use std::ffi::OsStr;
 
     let _guards = env_guards;
     let mut builder = ConfigDiscovery::builder("hello_world");
@@ -409,7 +409,7 @@ fn windows_candidates_are_case_insensitive(env_guards: Vec<test_env::EnvVarGuard
         "expected duplicate paths deduplicated"
     );
     ensure!(
-        candidates[0].as_os_str() == OsString::from("C:/Config/FILE.TOML"),
+        candidates.first().map(|c| c.as_os_str()) == Some(OsStr::new("C:/Config/FILE.TOML")),
         "expected original casing preserved"
     );
     Ok(())
