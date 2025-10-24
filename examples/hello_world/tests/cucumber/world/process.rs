@@ -14,8 +14,9 @@ impl World {
             if trimmed.is_empty() {
                 Vec::new()
             } else {
-                split(trimmed)
-                    .ok_or_else(|| anyhow!("failed to tokenise shell arguments: {trimmed:?}"))?
+                split(trimmed).ok_or_else(|| {
+                    anyhow!("failed to tokenise shell arguments; raw={raw:?}, trimmed={trimmed:?}")
+                })?
             }
         } else {
             Vec::new()
