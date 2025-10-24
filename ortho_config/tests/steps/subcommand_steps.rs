@@ -16,7 +16,7 @@ use cucumber::{given, then, when};
 use ortho_config::SubcmdConfigMerge;
 
 /// Check if all configuration sources are absent.
-fn has_no_config_sources(world: &World) -> bool {
+const fn has_no_config_sources(world: &World) -> bool {
     world.sub_ref.is_none() && world.sub_file.is_none() && world.sub_env.is_none()
 }
 

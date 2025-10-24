@@ -14,43 +14,50 @@ struct ExtendsCfg {
     foo: Option<String>,
 }
 
+struct InheritanceCase {
+    base_value: &'static str,
+    config_value: &'static str,
+    cli_args: &'static [&'static str],
+    env_value: Option<&'static str>,
+    expected: &'static str,
+}
+
 #[rstest]
 #[case(
-    "base",
-    "child",
-    &[] as &[&str],
-    None,
-    "child",
+    InheritanceCase {
+        base_value: "base",
+        config_value: "child",
+        cli_args: &[] as &[&str],
+        env_value: None,
+        expected: "child",
+    }
 )]
 #[case(
-    "base",
-    "file",
-    &["--foo", "cli"],
-    Some("env"),
-    "cli",
+    InheritanceCase {
+        base_value: "base",
+        config_value: "file",
+        cli_args: &["--foo", "cli"],
+        env_value: Some("env"),
+        expected: "cli",
+    }
 )]
-fn inheritance_precedence(
-    #[case] base_value: &str,
-    #[case] config_value: &str,
-    #[case] cli_args: &[&str],
-    #[case] env_value: Option<&str>,
-    #[case] expected: &str,
-) -> Result<()> {
+fn inheritance_precedence(#[case] case: InheritanceCase) -> Result<()> {
     with_jail(|j| {
-        j.create_file("base.toml", &format!("foo = \"{base_value}\""))?;
+        j.create_file("base.toml", &format!("foo = \"{}\"", case.base_value))?;
         j.create_file(
             ".config.toml",
-            &format!("extends = \"base.toml\"\nfoo = \"{config_value}\""),
+            &format!("extends = \"base.toml\"\nfoo = \"{}\"", case.config_value),
         )?;
-        if let Some(val) = env_value {
+        if let Some(val) = case.env_value {
             j.set_env("FOO", val);
         }
         let mut args = vec!["prog"];
-        args.extend_from_slice(cli_args);
+        args.extend_from_slice(case.cli_args);
         let cfg = ExtendsCfg::load_from_iter(args).map_err(|err| anyhow!(err))?;
         ensure!(
-            cfg.foo.as_deref() == Some(expected),
-            "expected foo {expected}, got {:?}",
+            cfg.foo.as_deref() == Some(case.expected),
+            "expected foo {}, got {:?}",
+            case.expected,
             cfg.foo
         );
         Ok(())

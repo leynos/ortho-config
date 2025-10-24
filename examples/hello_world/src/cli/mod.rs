@@ -283,7 +283,7 @@ impl FarewellChannel {
     /// assert_eq!(FarewellChannel::Email.describe(), "an email");
     /// ```
     #[must_use]
-    pub fn describe(&self) -> &'static str {
+    pub const fn describe(&self) -> &'static str {
         match self {
             Self::Message => "a message",
             Self::Call => "a call",
@@ -476,7 +476,7 @@ pub enum DeliveryMode {
 
 impl HelloWorldCli {
     #[inline]
-    fn has_conflicting_modes(&self) -> bool {
+    const fn has_conflicting_modes(&self) -> bool {
         self.is_excited && self.is_quiet
     }
 

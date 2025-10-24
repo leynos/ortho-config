@@ -35,7 +35,7 @@ fn is_bool_type(ty: &Type) -> bool {
     )
 }
 
-fn is_empty_long(long: &str) -> bool {
+const fn is_empty_long(long: &str) -> bool {
     long.is_empty()
 }
 

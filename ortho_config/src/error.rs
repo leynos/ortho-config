@@ -75,7 +75,7 @@ pub struct AggregatedErrors(Vec<Arc<OrthoError>>);
 impl AggregatedErrors {
     /// Create a new aggregation from a vector of errors.
     #[must_use]
-    pub fn new(errors: Vec<Arc<OrthoError>>) -> Self {
+    pub const fn new(errors: Vec<Arc<OrthoError>>) -> Self {
         Self(errors)
     }
 
@@ -87,7 +87,7 @@ impl AggregatedErrors {
 
     /// Number of errors in the aggregation.
     #[must_use]
-    pub fn len(&self) -> usize {
+    pub const fn len(&self) -> usize {
         self.0.len()
     }
 }

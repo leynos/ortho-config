@@ -9,18 +9,10 @@ use tokio::time::timeout;
 
 impl World {
     pub(crate) async fn run_hello(&mut self, args: Option<String>) -> Result<()> {
-        let parsed = if let Some(raw) = args {
-            let trimmed = raw.trim();
-            if trimmed.is_empty() {
-                Vec::new()
-            } else {
-                split(trimmed).ok_or_else(|| {
-                    anyhow!("failed to tokenise shell arguments; raw={raw:?}, trimmed={trimmed:?}")
-                })?
-            }
-        } else {
-            Vec::new()
-        };
+        let parsed = args
+            .map(|raw| tokenise_shell_args(&raw))
+            .transpose()? // Option<Result<_>> -> Result<Option<_>>
+            .unwrap_or_default();
         self.run_example(parsed).await
     }
 
@@ -97,4 +89,15 @@ impl World {
             .as_ref()
             .ok_or_else(|| anyhow!("command execution result unavailable"))
     }
+}
+
+fn tokenise_shell_args(raw: &str) -> Result<Vec<String>> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    split(trimmed).ok_or_else(|| {
+        anyhow!("failed to tokenise shell arguments; raw={raw:?}, trimmed={trimmed:?}")
+    })
 }

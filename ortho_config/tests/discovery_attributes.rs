@@ -111,67 +111,78 @@ impl Drop for CwdGuard {
     }
 }
 
+struct CliFlagCase {
+    flag: &'static str,
+    filename: &'static str,
+    file_contents: &'static str,
+    expected_value: Option<u32>,
+    description: &'static str,
+}
+
 #[rstest]
-#[case(
-    "--config",
-    "explicit.toml",
-    "value = 41",
-    Some(41),
-    "load config from long flag"
-)]
-#[case("--config", "missing.toml", "", None, "error when CLI path missing")]
-#[case(
-    "-c",
-    "short.toml",
-    "value = 17",
-    Some(17),
-    "load config from short flag"
-)]
-fn cli_flag_config_loading(
-    #[case] flag: &str,
-    #[case] filename: &str,
-    #[case] file_contents: &str,
-    #[case] expected_value: Option<u32>,
-    #[case] description: &str,
-) -> Result<()> {
+#[case(CliFlagCase {
+    flag: "--config",
+    filename: "explicit.toml",
+    file_contents: "value = 41",
+    expected_value: Some(41),
+    description: "load config from long flag",
+})]
+#[case(CliFlagCase {
+    flag: "--config",
+    filename: "missing.toml",
+    file_contents: "",
+    expected_value: None,
+    description: "error when CLI path missing",
+})]
+#[case(CliFlagCase {
+    flag: "-c",
+    filename: "short.toml",
+    file_contents: "value = 17",
+    expected_value: Some(17),
+    description: "load config from short flag",
+})]
+fn cli_flag_config_loading(#[case] case: CliFlagCase) -> Result<()> {
     let _env = setup_clean_env();
     let dir = TempDir::new().context("create temp dir")?;
-    let config_path = if file_contents.is_empty() {
-        dir.path().join(filename)
-    } else if let Some(value) = expected_value {
+    let config_path = if case.file_contents.is_empty() {
+        dir.path().join(case.filename)
+    } else if let Some(value) = case.expected_value {
         let expected_contents = format!("value = {value}");
         ensure!(
-            file_contents == expected_contents,
-            "case {description} must provide canonical contents"
+            case.file_contents == expected_contents,
+            "case {} must provide canonical contents",
+            case.description
         );
-        create_test_config(dir.path(), filename, value)?
+        create_test_config(dir.path(), case.filename, value)?
     } else {
-        let path = dir.path().join(filename);
-        write_file(&path, file_contents)?;
+        let path = dir.path().join(case.filename);
+        write_file(&path, case.file_contents)?;
         path
     };
 
     let args = [
         "prog",
-        flag,
+        case.flag,
         config_path
             .to_str()
             .ok_or_else(|| anyhow!("temporary path must be valid UTF-8"))?,
     ];
 
-    if let Some(value) = expected_value {
+    if let Some(value) = case.expected_value {
         let cfg = DiscoveryConfig::load_from_iter(args).map_err(|err| anyhow!(err))?;
         ensure!(
             cfg.value == value,
-            "{description}: expected {value}, got {}",
+            "{}: expected {value}, got {}",
+            case.description,
             cfg.value
         );
     } else {
         match DiscoveryConfig::load_from_iter(args) {
-            Ok(_) => ensure!(false, "{description}: expected Err but got Ok"),
+            Ok(_) => ensure!(false, "{}: expected Err but got Ok", case.description),
             Err(err) => ensure!(
                 matches!(&*err, OrthoError::File { .. }),
-                "{description}: unexpected error {err:?}"
+                "{}: unexpected error {err:?}",
+                case.description
             ),
         }
     }

@@ -19,10 +19,6 @@ keywords = ["config", "configuration", "cli", "env", "settings"]
 categories = ["config", "command-line-interface"]
 
 # `cargo clippy` lints configuration
-[workspace.lints.rust]
-missing_docs = "forbid"
-missing_crate_level_docs = "forbid"
-
 [workspace.lints.clippy]
 pedantic = { level = "warn", priority = -1 }
 
@@ -31,6 +27,8 @@ allow_attributes                    = "deny"
 allow_attributes_without_reason     = "deny"
 blanket_clippy_restriction_lints    = "deny"
 cognitive_complexity                = "deny"
+needless_pass_by_value              = "deny"
+implicit_hasher                     = "deny"
 
 # 2. debugging leftovers
 dbg_macro                           = "deny"
@@ -62,10 +60,27 @@ shadow_same                         = "deny"
 shadow_unrelated                    = "deny"
 str_to_string                       = "deny"
 string_lit_as_bytes                 = "deny"
-#tests_outside_test_module           = "deny"
 try_err                             = "deny"
 unneeded_field_pattern              = "deny"
 use_self                            = "deny"
 
 # 6. numerical foot-guns
 float_arithmetic                    = "deny"
+cast_possible_truncation            = "deny"
+cast_possible_wrap                  = "deny"
+cast_precision_loss                 = "deny"
+lossy_float_literal                 = "deny"
+
+# 7. API ergonomics
+missing_const_for_fn                = "deny"
+must_use_candidate                  = "deny"
+unused_async                        = "deny"
+
+# 8. Error handling
+missing_panics_doc                  = "deny"
+error_impl_error                    = "deny"
+result_large_err                    = "deny"
+
+[workspace.lints.rust]
+missing_docs                        = "deny"
+missing_crate_level_docs            = "deny"

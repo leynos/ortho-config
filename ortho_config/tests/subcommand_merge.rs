@@ -71,104 +71,120 @@ fn config_dir(#[default("")] cfg: &str) -> Result<(TempDir, DirGuard)> {
     Ok((dir, guard))
 }
 
-type WorkspaceResult = Result<(TempDir, DirGuard)>;
+struct PrPrecedenceCase {
+    config_content: &'static str,
+    env_val: Option<&'static str>,
+    cli: PrArgs,
+    expected_reference: Option<&'static str>,
+    expected_files: Vec<String>,
+}
+
+struct IssuePrecedenceCase {
+    config_content: &'static str,
+    env_val: Option<&'static str>,
+    cli: IssueArgs,
+    expected_reference: Option<&'static str>,
+}
 
 #[rstest]
 #[case::env_over_file(
-    "[cmds.pr]\nreference = \"file_ref\"\nfiles = [\"file.txt\"]\n",
-    Some("env_ref"),
-    PrArgs { reference: None, files: vec![] },
-    Some("env_ref"),
-    vec!["file.txt".into()],
+    PrPrecedenceCase {
+        config_content: "[cmds.pr]\nreference = \"file_ref\"\nfiles = [\"file.txt\"]\n",
+        env_val: Some("env_ref"),
+        cli: PrArgs { reference: None, files: vec![] },
+        expected_reference: Some("env_ref"),
+        expected_files: vec!["file.txt".into()],
+    },
 )]
 #[case::file_over_defaults(
-    "[cmds.pr]\nreference = \"file_ref\"\nfiles = [\"file.txt\"]\n",
-    None,
-    PrArgs { reference: None, files: vec![] },
-    Some("file_ref"),
-    vec!["file.txt".into()],
+    PrPrecedenceCase {
+        config_content: "[cmds.pr]\nreference = \"file_ref\"\nfiles = [\"file.txt\"]\n",
+        env_val: None,
+        cli: PrArgs { reference: None, files: vec![] },
+        expected_reference: Some("file_ref"),
+        expected_files: vec!["file.txt".into()],
+    },
 )]
 #[case::cli_over_env_with_file_fallback(
-    "[cmds.pr]\nreference = \"file_ref\"\nfiles = [\"file.txt\"]\n",
-    Some("env_ref"),
-    PrArgs { reference: Some("cli_ref".into()), files: vec![] },
-    Some("cli_ref"),
-    vec!["file.txt".into()],
+    PrPrecedenceCase {
+        config_content: "[cmds.pr]\nreference = \"file_ref\"\nfiles = [\"file.txt\"]\n",
+        env_val: Some("env_ref"),
+        cli: PrArgs { reference: Some("cli_ref".into()), files: vec![] },
+        expected_reference: Some("cli_ref"),
+        expected_files: vec!["file.txt".into()],
+    },
 )]
 #[serial]
-fn test_pr_precedence(
-    #[case] config_content: &str,
-    #[case] env_val: Option<&str>,
-    #[case] cli: PrArgs,
-    #[case] expected_reference: Option<&str>,
-    #[case] expected_files: Vec<String>,
-    #[from(config_dir)]
-    #[with(config_content)]
-    workspace: WorkspaceResult,
-) -> Result<()> {
-    let (_temp_dir, _cwd_guard) = workspace?;
-    let _ = config_content;
-    let _env = env_val.map_or_else(
-        || env::remove_var("VK_CMDS_PR_REFERENCE"),
-        |val| env::set_var("VK_CMDS_PR_REFERENCE", val),
-    );
-    let merged = load_and_merge_subcommand_for(&cli).context("merge pr args")?;
+fn test_pr_precedence(#[case] case: PrPrecedenceCase) -> Result<()> {
+    let (_temp_dir, _cwd_guard) = config_dir(case.config_content)?;
+    let env_guard = case
+        .env_val
+        .map(|val| env::set_var("VK_CMDS_PR_REFERENCE", val));
+    let cleanup_guard = env_guard
+        .is_none()
+        .then(|| env::remove_var("VK_CMDS_PR_REFERENCE"));
+    let merged = load_and_merge_subcommand_for(&case.cli).context("merge pr args")?;
     ensure!(
-        merged.reference.as_deref() == expected_reference,
+        merged.reference.as_deref() == case.expected_reference,
         "expected reference {:?}, got {:?}",
-        expected_reference,
+        case.expected_reference,
         merged.reference
     );
     ensure!(
-        merged.files == expected_files,
+        merged.files == case.expected_files,
         "expected files {:?}, got {:?}",
-        expected_files,
+        case.expected_files,
         merged.files
     );
+    drop(env_guard);
+    drop(cleanup_guard);
+    drop(env::remove_var("VK_CMDS_PR_REFERENCE"));
     Ok(())
 }
 
 #[rstest]
 #[case::env_over_file(
-    "[cmds.issue]\nreference = \"file_ref\"\n",
-    Some("env_ref"),
-    IssueArgs { reference: None },
-    Some("env_ref"),
+    IssuePrecedenceCase {
+        config_content: "[cmds.issue]\nreference = \"file_ref\"\n",
+        env_val: Some("env_ref"),
+        cli: IssueArgs { reference: None },
+        expected_reference: Some("env_ref"),
+    },
 )]
 #[case::file_over_defaults(
-    "[cmds.issue]\nreference = \"file_ref\"\n",
-    None,
-    IssueArgs { reference: None },
-    Some("file_ref"),
+    IssuePrecedenceCase {
+        config_content: "[cmds.issue]\nreference = \"file_ref\"\n",
+        env_val: None,
+        cli: IssueArgs { reference: None },
+        expected_reference: Some("file_ref"),
+    },
 )]
 #[case::cli_over_env(
-    "[cmds.issue]\nreference = \"file_ref\"\n",
-    Some("env_ref"),
-    IssueArgs { reference: Some("cli_ref".into()) },
-    Some("cli_ref"),
+    IssuePrecedenceCase {
+        config_content: "[cmds.issue]\nreference = \"file_ref\"\n",
+        env_val: Some("env_ref"),
+        cli: IssueArgs { reference: Some("cli_ref".into()) },
+        expected_reference: Some("cli_ref"),
+    },
 )]
 #[serial]
-fn test_issue_precedence(
-    #[case] config_content: &str,
-    #[case] env_val: Option<&str>,
-    #[case] cli: IssueArgs,
-    #[case] expected_reference: Option<&str>,
-    #[from(config_dir)]
-    #[with(config_content)]
-    workspace: WorkspaceResult,
-) -> Result<()> {
-    let (_temp_dir, _cwd_guard) = workspace?;
-    let _ = config_content;
-    let _env = env_val.map_or_else(
-        || env::remove_var("VK_CMDS_ISSUE_REFERENCE"),
-        |val| env::set_var("VK_CMDS_ISSUE_REFERENCE", val),
-    );
-    let merged = load_and_merge_subcommand_for(&cli).context("merge issue args")?;
+fn test_issue_precedence(#[case] case: IssuePrecedenceCase) -> Result<()> {
+    let (_temp_dir, _cwd_guard) = config_dir(case.config_content)?;
+    let env_guard = case
+        .env_val
+        .map(|val| env::set_var("VK_CMDS_ISSUE_REFERENCE", val));
+    let cleanup_guard = env_guard
+        .is_none()
+        .then(|| env::remove_var("VK_CMDS_ISSUE_REFERENCE"));
+    let merged = load_and_merge_subcommand_for(&case.cli).context("merge issue args")?;
     ensure!(
-        merged.reference.as_deref() == expected_reference,
+        merged.reference.as_deref() == case.expected_reference,
         "expected reference {:?}, got {:?}",
-        expected_reference,
+        case.expected_reference,
         merged.reference
     );
+    drop(env_guard);
+    drop(cleanup_guard);
+    drop(env::remove_var("VK_CMDS_ISSUE_REFERENCE"));
     Ok(())
 }

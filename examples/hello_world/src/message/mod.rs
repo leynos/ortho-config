@@ -21,7 +21,7 @@ impl GreetingPlan {
     /// Returns the delivery mode associated with the greeting.
     #[cfg(test)]
     #[must_use]
-    pub fn mode(&self) -> DeliveryMode {
+    pub const fn mode(&self) -> DeliveryMode {
         self.mode
     }
 
@@ -42,7 +42,7 @@ pub struct TakeLeavePlan {
 impl TakeLeavePlan {
     /// Returns the embedded greeting.
     #[must_use]
-    pub fn greeting(&self) -> &GreetingPlan {
+    pub const fn greeting(&self) -> &GreetingPlan {
         &self.greeting
     }
 

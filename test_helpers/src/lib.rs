@@ -159,6 +159,29 @@ pub mod env {
         use std::sync::{Arc, Barrier};
         use std::thread;
 
+        fn spawn_env_worker(barrier: &Arc<Barrier>, key: String) -> thread::JoinHandle<()> {
+            let barrier_wait = Arc::clone(barrier);
+            thread::spawn(move || run_env_worker(barrier_wait, key))
+        }
+
+        #[expect(
+            clippy::needless_pass_by_value,
+            reason = "thread closure requires owned Arc and String to satisfy 'static"
+        )]
+        fn run_env_worker(barrier: Arc<Barrier>, key: String) {
+            barrier.wait();
+            let value = format!("value-{key}");
+            let guard = set_var(&key, &value);
+            assert_eq!(env_value(&key), value);
+            drop(guard);
+        }
+
+        fn assert_join_success(handle: thread::JoinHandle<()>) {
+            if let Err(err) = handle.join() {
+                panic!("thread panicked: {err:?}");
+            }
+        }
+
         // Centralises environment variable lookups for the tests; panics on
         // missing/invalid values so failures are loud and easy to diagnose.
         fn env_value(key: &str) -> String {
@@ -216,22 +239,10 @@ pub mod env {
             let handles: Vec<_> = keys
                 .iter()
                 .cloned()
-                .map(|key| {
-                    let barrier_wait = Arc::clone(&barrier);
-                    thread::spawn(move || {
-                        barrier_wait.wait();
-                        let value = format!("value-{key}");
-                        let _g = set_var(&key, &value);
-                        assert_eq!(env_value(&key), value);
-                    })
-                })
+                .map(|key| spawn_env_worker(&barrier, key))
                 .collect();
 
-            for handle in handles {
-                if let Err(err) = handle.join() {
-                    panic!("thread panicked: {err:?}");
-                }
-            }
+            handles.into_iter().for_each(assert_join_success);
 
             for key in keys {
                 assert!(std::env::var(key).is_err());
@@ -243,15 +254,15 @@ pub mod env {
             let key = "TEST_HELPERS_STACKING";
             // Ensure clean slate
             super::with_lock(|| unsafe { super::env_remove_var(key) });
-            {
-                let _g1 = set_var(key, "v1");
-                assert_eq!(env_value(key), "v1");
-                {
-                    let _g2 = set_var(key, "v2");
-                    assert_eq!(env_value(key), "v2");
-                }
-                assert_eq!(env_value(key), "v1");
-            }
+            let guard1 = set_var(key, "v1");
+            assert_eq!(env_value(key), "v1");
+
+            let guard2 = set_var(key, "v2");
+            assert_eq!(env_value(key), "v2");
+            drop(guard2);
+
+            assert_eq!(env_value(key), "v1");
+            drop(guard1);
             assert!(std::env::var(key).is_err());
         }
     }

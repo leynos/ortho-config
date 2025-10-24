@@ -18,6 +18,9 @@ pub(crate) trait OrthoResultExt<T> {
     fn to_anyhow(self) -> Result<T>;
 }
 
+const DEFAULT_RECIPIENT: &str = "World";
+const DEFAULT_SALUTATIONS: &[&str] = &["Hello"];
+
 impl<T> OrthoResultExt<T> for ortho_config::OrthoResult<T> {
     fn to_anyhow(self) -> Result<T> {
         self.map_err(|err| anyhow!(err))
@@ -25,11 +28,14 @@ impl<T> OrthoResultExt<T> for ortho_config::OrthoResult<T> {
 }
 
 fn default_recipient() -> String {
-    String::from("World")
+    String::from(DEFAULT_RECIPIENT)
 }
 
 fn default_salutations() -> Vec<String> {
-    vec![String::from("Hello")]
+    DEFAULT_SALUTATIONS
+        .iter()
+        .map(|s| String::from(*s))
+        .collect()
 }
 
 #[derive(Debug, Deserialize, Serialize, OrthoConfig, Clone)]
@@ -92,8 +98,8 @@ pub(crate) struct ExpectedConfig {
 impl Default for ExpectedConfig {
     fn default() -> Self {
         Self {
-            recipient: "World",
-            salutations: &["Hello"],
+            recipient: DEFAULT_RECIPIENT,
+            salutations: DEFAULT_SALUTATIONS,
             is_excited: false,
             is_quiet: false,
             sample_value: None,

@@ -128,19 +128,9 @@ impl ConfigDiscovery {
                 .and_then(|stem| stem.to_str())
             {
                 #[cfg(feature = "json5")]
-                {
-                    for ext in ["json", "json5"] {
-                        let filename = format!("{stem}.{ext}");
-                        Self::push_unique(paths, seen, nested.join(&filename));
-                    }
-                }
+                Self::push_json_variants(paths, seen, nested.as_path(), stem);
                 #[cfg(feature = "yaml")]
-                {
-                    for ext in ["yaml", "yml"] {
-                        let filename = format!("{stem}.{ext}");
-                        Self::push_unique(paths, seen, nested.join(&filename));
-                    }
-                }
+                Self::push_yaml_variants(paths, seen, nested.as_path(), stem);
             }
         }
     }
@@ -150,19 +140,18 @@ impl ConfigDiscovery {
             self.push_for_bases(std::iter::once(PathBuf::from(dir)), paths, seen);
         }
 
-        if let Some(dirs) = std::env::var_os("XDG_CONFIG_DIRS") {
-            let xdg_dirs: Vec<PathBuf> = std::env::split_paths(&dirs)
-                .filter(|path| !path.as_os_str().is_empty())
-                .collect();
-            if xdg_dirs.is_empty() {
-                if cfg!(any(unix, target_os = "redox")) {
-                    self.push_for_bases(std::iter::once(PathBuf::from("/etc/xdg")), paths, seen);
+        match std::env::var_os("XDG_CONFIG_DIRS") {
+            Some(dirs) => {
+                let xdg_dirs: Vec<PathBuf> = std::env::split_paths(&dirs)
+                    .filter(|path| !path.as_os_str().is_empty())
+                    .collect();
+                if xdg_dirs.is_empty() {
+                    self.push_default_xdg(paths, seen);
+                } else {
+                    self.push_for_bases(xdg_dirs, paths, seen);
                 }
-            } else {
-                self.push_for_bases(xdg_dirs, paths, seen);
             }
-        } else if cfg!(any(unix, target_os = "redox")) {
-            self.push_for_bases(std::iter::once(PathBuf::from("/etc/xdg")), paths, seen);
+            None => self.push_default_xdg(paths, seen),
         }
     }
 
@@ -189,6 +178,39 @@ impl ConfigDiscovery {
         for root in &self.project_roots {
             Self::push_unique(paths, seen, root.join(&self.project_file_name));
         }
+    }
+
+    #[cfg(feature = "json5")]
+    fn push_json_variants(
+        paths: &mut Vec<PathBuf>,
+        seen: &mut HashSet<String>,
+        nested: &Path,
+        stem: &str,
+    ) {
+        for ext in ["json", "json5"] {
+            let filename = format!("{stem}.{ext}");
+            Self::push_unique(paths, seen, nested.join(&filename));
+        }
+    }
+
+    #[cfg(feature = "yaml")]
+    fn push_yaml_variants(
+        paths: &mut Vec<PathBuf>,
+        seen: &mut HashSet<String>,
+        nested: &Path,
+        stem: &str,
+    ) {
+        for ext in ["yaml", "yml"] {
+            let filename = format!("{stem}.{ext}");
+            Self::push_unique(paths, seen, nested.join(&filename));
+        }
+    }
+
+    fn push_default_xdg(&self, paths: &mut Vec<PathBuf>, seen: &mut HashSet<String>) {
+        #[cfg(any(unix, target_os = "redox"))]
+        self.push_for_bases(std::iter::once(PathBuf::from("/etc/xdg")), paths, seen);
+        #[cfg(not(any(unix, target_os = "redox")))]
+        let _ = (paths, seen);
     }
 
     /// Returns the ordered configuration candidates.
@@ -287,24 +309,15 @@ impl ConfigDiscovery {
                         optional_errors,
                     };
                 }
-                Ok(None) => {
-                    if idx < required {
-                        let missing = Arc::new(OrthoError::File {
-                            path: path.clone(),
-                            source: Box::new(io::Error::new(
-                                io::ErrorKind::NotFound,
-                                "required configuration file not found",
-                            )),
-                        });
-                        required_errors.push(missing);
-                    }
+                Ok(None) if idx < required => {
+                    required_errors.push(Self::missing_required_error(&path));
+                }
+                Ok(None) => {}
+                Err(err) if idx < required => {
+                    required_errors.push(err);
                 }
                 Err(err) => {
-                    if idx < required {
-                        required_errors.push(err);
-                    } else {
-                        optional_errors.push(err);
-                    }
+                    optional_errors.push(err);
                 }
             }
         }
@@ -325,6 +338,16 @@ impl ConfigDiscovery {
         } = self.load_first_partitioned();
         required_errors.append(&mut optional_errors);
         (figment, required_errors)
+    }
+
+    fn missing_required_error(path: &Path) -> Arc<OrthoError> {
+        Arc::new(OrthoError::File {
+            path: path.to_path_buf(),
+            source: Box::new(io::Error::new(
+                io::ErrorKind::NotFound,
+                "required configuration file not found",
+            )),
+        })
     }
 }
 

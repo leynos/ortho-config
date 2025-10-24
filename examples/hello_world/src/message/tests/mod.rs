@@ -92,6 +92,13 @@ type GreetCommandFixture = Result<GreetCommand>;
 type TakeLeaveCommandFixture = Result<TakeLeaveCommand>;
 type PlanBuilder = fn(HelloWorldCli, GreetCommand, TakeLeaveCommand) -> Result<Plan>;
 
+struct PlanVariantCase {
+    greet_setup: GreetSetup,
+    leave_setup: LeaveSetup,
+    expected: ExpectedPlan,
+    builder: PlanBuilder,
+}
+
 fn setup_default_greet(config: &mut HelloWorldCli, _: &mut GreetCommand) -> Result<()> {
     *config = HelloWorldCli::default();
     ensure!(
@@ -192,72 +199,71 @@ fn build_plan_with_sample_env(
     })
 }
 
-#[rstest]
-#[case(
-    setup_default_greet,
-    setup_noop_leave,
-    ExpectedPlan {
-        recipient: "World",
-        message: "Hello, World!",
-        is_excited: false,
-    },
-    build_plan_direct
-)]
-#[case(
-    setup_excited,
-    setup_noop_leave,
-    ExpectedPlan {
-        recipient: "World",
-        message: "HELLO, WORLD!",
-        is_excited: true,
-    },
-    build_plan_direct
-)]
-#[case(
-    setup_sample_greet,
-    setup_noop_leave,
-    ExpectedPlan {
-        recipient: "Excited crew",
-        message: "HELLO HEY CONFIG FRIENDS, EXCITED CREW!!!",
-        is_excited: true,
-    },
-    build_plan_with_sample_env
-)]
-#[case(
-    setup_sample_greet,
-    setup_festive_leave,
-    ExpectedPlan {
-        recipient: "Excited crew",
-        message: "HELLO HEY CONFIG FRIENDS, EXCITED CREW!!!",
-        is_excited: true,
-    },
-    build_plan_with_sample_env
-)]
-fn build_plan_variants(
-    #[case] greet_setup: GreetSetup,
-    #[case] leave_setup: LeaveSetup,
-    #[case] expected: ExpectedPlan,
-    #[case] builder: PlanBuilder,
-) -> Result<()> {
-    let mut config = HelloWorldCli::default();
-    let mut greet = GreetCommand::default();
-    let mut leave = TakeLeaveCommand::default();
+#[test]
+fn build_plan_variants() -> Result<()> {
+    let cases = [
+        PlanVariantCase {
+            greet_setup: setup_default_greet,
+            leave_setup: setup_noop_leave,
+            expected: ExpectedPlan {
+                recipient: "World",
+                message: "Hello, World!",
+                is_excited: false,
+            },
+            builder: build_plan_direct,
+        },
+        PlanVariantCase {
+            greet_setup: setup_excited,
+            leave_setup: setup_noop_leave,
+            expected: ExpectedPlan {
+                recipient: "World",
+                message: "HELLO, WORLD!",
+                is_excited: true,
+            },
+            builder: build_plan_direct,
+        },
+        PlanVariantCase {
+            greet_setup: setup_sample_greet,
+            leave_setup: setup_noop_leave,
+            expected: ExpectedPlan {
+                recipient: "Excited crew",
+                message: "HELLO HEY CONFIG FRIENDS, EXCITED CREW!!!",
+                is_excited: true,
+            },
+            builder: build_plan_with_sample_env,
+        },
+        PlanVariantCase {
+            greet_setup: setup_sample_greet,
+            leave_setup: setup_festive_leave,
+            expected: ExpectedPlan {
+                recipient: "Excited crew",
+                message: "HELLO HEY CONFIG FRIENDS, EXCITED CREW!!!",
+                is_excited: true,
+            },
+            builder: build_plan_with_sample_env,
+        },
+    ];
 
-    greet_setup(&mut config, &mut greet)?;
-    leave_setup(&mut config, &mut leave)?;
+    for case in cases {
+        let mut config = HelloWorldCli::default();
+        let mut greet = GreetCommand::default();
+        let mut leave = TakeLeaveCommand::default();
 
-    let plan = builder(config, greet, leave)?;
-    assert_plan(&plan, &expected)
+        (case.greet_setup)(&mut config, &mut greet)?;
+        (case.leave_setup)(&mut config, &mut leave)?;
+
+        let plan = (case.builder)(config, greet, leave)?;
+        assert_plan(&plan, &case.expected)?;
+    }
+
+    Ok(())
 }
 
-#[rstest]
-fn build_plan_applies_preamble(
-    greet_command: GreetCommandFixture,
-    base_config: HelloWorldCliFixture,
-) -> Result<()> {
-    let mut command = greet_command?;
+#[test]
+fn build_plan_applies_preamble() -> Result<()> {
+    let mut command = greet_command()?;
     command.preamble = Some(String::from("Good morning"));
-    let base = base_config?;
+    let base = base_config()?;
     let plan = build_plan(&base, &command).map_err(|err| anyhow!(err.to_string()))?;
     assert_greeting(
         &plan,
@@ -267,26 +273,27 @@ fn build_plan_applies_preamble(
     )
 }
 
-#[rstest]
-#[case::standard(false, DeliveryMode::Standard, "Hello, World!")]
-#[case::excited(true, DeliveryMode::Enthusiastic, "HELLO, WORLD!")]
-fn build_plan_respects_excitement_flag(
-    base_config: HelloWorldCliFixture,
-    greet_command: GreetCommandFixture,
-    #[case] is_excited: bool,
-    #[case] expected_mode: DeliveryMode,
-    #[case] expected_message: &str,
-) -> Result<()> {
-    let mut base = base_config?;
-    base.is_excited = is_excited;
-    let command = greet_command?;
-    let plan = build_plan(&base, &command).map_err(|err| anyhow!(err.to_string()))?;
-    assert_greeting(&plan, expected_mode, expected_message, None)
+#[test]
+fn build_plan_respects_excitement_flag() -> Result<()> {
+    let cases = [
+        (false, DeliveryMode::Standard, "Hello, World!"),
+        (true, DeliveryMode::Enthusiastic, "HELLO, WORLD!"),
+    ];
+
+    for (is_excited, expected_mode, expected_message) in cases {
+        let mut base = base_config()?;
+        base.is_excited = is_excited;
+        let command = greet_command()?;
+        let plan = build_plan(&base, &command).map_err(|err| anyhow!(err.to_string()))?;
+        assert_greeting(&plan, expected_mode, expected_message, None)?;
+    }
+
+    Ok(())
 }
 
-#[rstest]
-fn build_plan_propagates_validation_errors(base_config: HelloWorldCliFixture) -> Result<()> {
-    let mut config = base_config?;
+#[test]
+fn build_plan_propagates_validation_errors() -> Result<()> {
+    let mut config = base_config()?;
     config.salutations.clear();
     let Err(err) = build_plan(&config, &GreetCommand::default()) else {
         return Err(anyhow!("expected build_plan to fail"));
@@ -301,7 +308,7 @@ fn build_plan_propagates_validation_errors(base_config: HelloWorldCliFixture) ->
     Ok(())
 }
 
-#[rstest]
+#[test]
 fn build_take_leave_plan_produces_steps() -> Result<()> {
     let take_leave_command = TakeLeaveCommand {
         wave: true,

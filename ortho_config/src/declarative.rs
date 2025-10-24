@@ -68,7 +68,7 @@ pub struct MergeLayer<'a> {
 impl<'a> MergeLayer<'a> {
     /// Construct a layer originating from default values.
     #[must_use]
-    pub fn defaults(value: Cow<'a, Value>) -> Self {
+    pub const fn defaults(value: Cow<'a, Value>) -> Self {
         Self {
             provenance: MergeProvenance::Defaults,
             value,
@@ -78,7 +78,7 @@ impl<'a> MergeLayer<'a> {
 
     /// Construct a layer originating from a configuration file.
     #[must_use]
-    pub fn file(value: Cow<'a, Value>, path: Option<Utf8PathBuf>) -> Self {
+    pub const fn file(value: Cow<'a, Value>, path: Option<Utf8PathBuf>) -> Self {
         Self {
             provenance: MergeProvenance::File,
             value,
@@ -88,7 +88,7 @@ impl<'a> MergeLayer<'a> {
 
     /// Construct a layer originating from environment variables.
     #[must_use]
-    pub fn environment(value: Cow<'a, Value>) -> Self {
+    pub const fn environment(value: Cow<'a, Value>) -> Self {
         Self {
             provenance: MergeProvenance::Environment,
             value,
@@ -98,7 +98,7 @@ impl<'a> MergeLayer<'a> {
 
     /// Construct a layer originating from CLI arguments.
     #[must_use]
-    pub fn cli(value: Cow<'a, Value>) -> Self {
+    pub const fn cli(value: Cow<'a, Value>) -> Self {
         Self {
             provenance: MergeProvenance::Cli,
             value,
@@ -108,7 +108,7 @@ impl<'a> MergeLayer<'a> {
 
     /// Returns the provenance of the layer.
     #[must_use]
-    pub fn provenance(&self) -> MergeProvenance {
+    pub const fn provenance(&self) -> MergeProvenance {
         self.provenance
     }
 
@@ -144,7 +144,7 @@ pub struct MergeComposer {
 impl MergeComposer {
     /// Create an empty composer.
     #[must_use]
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self { layers: Vec::new() }
     }
 
