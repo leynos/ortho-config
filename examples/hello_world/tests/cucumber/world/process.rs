@@ -77,10 +77,11 @@ impl World {
             stdout,
             stderr,
         };
-        let mut result = CommandResult::from(output);
-        binary.as_str().clone_into(&mut result.binary);
-        result.args = args;
-        self.result = Some(result);
+        self.result = Some(CommandResult::from_execution(
+            output,
+            binary.to_string(),
+            args,
+        ));
         Ok(())
     }
 

@@ -89,17 +89,19 @@ impl CommandResult {
             self.status, self.binary, self.args
         )
     }
-}
 
-impl From<std::process::Output> for CommandResult {
-    fn from(output: std::process::Output) -> Self {
+    pub(crate) fn from_execution(
+        output: std::process::Output,
+        binary: String,
+        args: Vec<String>,
+    ) -> Self {
         Self {
             status: output.status.code(),
             success: output.status.success(),
             stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
             stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
-            binary: String::new(),
-            args: Vec::new(),
+            binary,
+            args,
         }
     }
 }
