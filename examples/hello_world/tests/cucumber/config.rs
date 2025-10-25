@@ -140,6 +140,23 @@ mod tests {
     }
 
     #[test]
+    fn is_simple_filename_rejects_empty_string() {
+        assert!(!super::is_simple_filename(""));
+    }
+
+    #[test]
+    fn ensure_simple_filename_rejects_empty_string() {
+        let err = super::ensure_simple_filename("")
+            .expect_err("expected empty filename to be rejected");
+        match err {
+            super::SampleConfigError::InvalidName { ref name } => {
+                assert!(name.is_empty(), "unexpected name: {name}");
+            }
+            other => panic!("unexpected error variant: {other:?}"),
+        }
+    }
+
+    #[test]
     fn ensure_simple_filename_rejects_paths() {
         assert!(super::ensure_simple_filename("config.toml").is_ok());
         assert!(super::ensure_simple_filename("../config.toml").is_err());
