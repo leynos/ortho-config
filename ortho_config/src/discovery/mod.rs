@@ -68,13 +68,20 @@ impl ConfigDiscovery {
         ConfigDiscoveryBuilder::new(app_name)
     }
 
-    fn push_unique(paths: &mut Vec<PathBuf>, seen: &mut HashSet<String>, candidate: PathBuf) {
+    fn push_unique(
+        paths: &mut Vec<PathBuf>,
+        seen: &mut HashSet<String>,
+        candidate: PathBuf,
+    ) -> bool {
         if candidate.as_os_str().is_empty() {
-            return;
+            return false;
         }
         let key = Self::normalised_key(&candidate);
         if seen.insert(key) {
             paths.push(candidate);
+            true
+        } else {
+            false
         }
     }
 
@@ -87,24 +94,6 @@ impl ConfigDiscovery {
         #[cfg(not(windows))]
         {
             path.to_string_lossy().into_owned()
-        }
-    }
-
-    fn push_explicit(&self, paths: &mut Vec<PathBuf>, seen: &mut HashSet<String>) {
-        for path in &self.required_explicit_paths {
-            Self::push_unique(paths, seen, path.clone());
-        }
-
-        for path in &self.explicit_paths {
-            Self::push_unique(paths, seen, path.clone());
-        }
-
-        if let Some(value) = self
-            .env_var
-            .as_ref()
-            .and_then(|env_var| std::env::var_os(env_var).filter(|v| !v.is_empty()))
-        {
-            Self::push_unique(paths, seen, PathBuf::from(value));
         }
     }
 
@@ -235,16 +224,38 @@ impl ConfigDiscovery {
     /// Returns the ordered configuration candidates.
     #[must_use]
     pub fn candidates(&self) -> Vec<PathBuf> {
+        self.candidates_with_required_bound().0
+    }
+
+    fn candidates_with_required_bound(&self) -> (Vec<PathBuf>, usize) {
         let mut seen: HashSet<String> = HashSet::new();
         let mut paths = Vec::new();
+        let mut required_bound = 0;
 
-        self.push_explicit(&mut paths, &mut seen);
+        for path in &self.required_explicit_paths {
+            if Self::push_unique(&mut paths, &mut seen, path.clone()) {
+                required_bound += 1;
+            }
+        }
+
+        for path in &self.explicit_paths {
+            let _ = Self::push_unique(&mut paths, &mut seen, path.clone());
+        }
+
+        if let Some(value) = self
+            .env_var
+            .as_ref()
+            .and_then(|env_var| std::env::var_os(env_var).filter(|v| !v.is_empty()))
+        {
+            let _ = Self::push_unique(&mut paths, &mut seen, PathBuf::from(value));
+        }
+
         self.push_xdg(&mut paths, &mut seen);
         self.push_windows(&mut paths, &mut seen);
         self.push_home(&mut paths, &mut seen);
         self.push_projects(&mut paths, &mut seen);
 
-        paths
+        (paths, required_bound)
     }
 
     /// Returns the ordered configuration candidates as [`Utf8PathBuf`] values.
@@ -317,8 +328,7 @@ impl ConfigDiscovery {
     pub fn load_first_partitioned(&self) -> DiscoveryLoadOutcome {
         let mut required_errors = Vec::new();
         let mut optional_errors = Vec::new();
-        let candidates = self.candidates();
-        let required = self.required_explicit_paths.len();
+        let (candidates, required_bound) = self.candidates_with_required_bound();
         for (idx, path) in candidates.into_iter().enumerate() {
             match load_config_file(&path) {
                 Ok(Some(figment)) => {
@@ -328,11 +338,11 @@ impl ConfigDiscovery {
                         optional_errors,
                     };
                 }
-                Ok(None) if idx < required => {
+                Ok(None) if idx < required_bound => {
                     required_errors.push(Self::missing_required_error(&path));
                 }
                 Ok(None) => {}
-                Err(err) if idx < required => {
+                Err(err) if idx < required_bound => {
                     required_errors.push(err);
                 }
                 Err(err) => {
@@ -372,3 +382,42 @@ impl ConfigDiscovery {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod dedup_tests {
+    use super::*;
+    use std::fs;
+    use tempfile::tempdir;
+
+    fn assert_first_error_path(errors: &[Arc<OrthoError>], expected: &Path) {
+        let err = errors
+            .first()
+            .expect("expected at least one error when asserting path");
+        let path = match err.as_ref() {
+            OrthoError::File { path, .. } => path,
+            other => panic!("expected OrthoError::File, got {other:?}"),
+        };
+        assert_eq!(path, expected);
+    }
+
+    #[test]
+    fn load_first_partitioned_dedups_required_paths() {
+        let dir = tempdir().expect("create tempdir");
+        let required = dir.path().join("missing.toml");
+        let optional = dir.path().join("optional.toml");
+        fs::write(&optional, "invalid = {").expect("write invalid optional config");
+        let discovery = ConfigDiscovery::builder("app")
+            .add_required_path(&required)
+            .add_required_path(&required)
+            .add_explicit_path(&optional)
+            .build();
+
+        let outcome = discovery.load_first_partitioned();
+        assert!(outcome.figment.is_none());
+        assert_eq!(outcome.required_errors.len(), 1);
+        assert_eq!(outcome.optional_errors.len(), 1);
+
+        assert_first_error_path(&outcome.required_errors, &required);
+        assert_first_error_path(&outcome.optional_errors, &optional);
+    }
+}
