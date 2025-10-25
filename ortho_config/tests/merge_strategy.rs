@@ -44,8 +44,7 @@ fn append_merges_all_sources() -> Result<()> {
             cfg.values
         );
         Ok(())
-    })?;
-    Ok(())
+    })
 }
 
 #[rstest]
@@ -58,8 +57,7 @@ fn append_empty_sources_yields_empty() -> Result<()> {
             cfg.values
         );
         Ok(())
-    })?;
-    Ok(())
+    })
 }
 
 #[rstest]
@@ -80,6 +78,5 @@ fn append_includes_defaults() -> Result<()> {
             cfg.values
         );
         Ok(())
-    })?;
-    Ok(())
+    })
 }
