@@ -142,10 +142,10 @@ impl ConfigDiscovery {
 
         match std::env::var_os("XDG_CONFIG_DIRS") {
             Some(dirs) => {
-                let xdg_dirs: Vec<PathBuf> = std::env::split_paths(&dirs)
+                let mut xdg_dirs = std::env::split_paths(&dirs)
                     .filter(|path| !path.as_os_str().is_empty())
-                    .collect();
-                if xdg_dirs.is_empty() {
+                    .peekable();
+                if xdg_dirs.peek().is_none() {
                     self.push_default_xdg(paths, seen);
                 } else {
                     self.push_for_bases(xdg_dirs, paths, seen);
