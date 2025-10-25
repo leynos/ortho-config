@@ -140,13 +140,13 @@ impl CsvEnv {
         if Self::should_parse_as_csv(trimmed) {
             trimmed
                 .split(',')
-                .map(|s| Value::from(s.trim().to_string()))
+                .map(|s| Value::from(s.trim().to_owned()))
                 .collect::<Vec<_>>()
                 .into()
         } else {
             trimmed
                 .parse()
-                .unwrap_or_else(|_| Value::from(trimmed.to_string()))
+                .unwrap_or_else(|_| Value::from(trimmed.to_owned()))
         }
     }
 }
@@ -164,9 +164,11 @@ impl Provider for CsvEnv {
         let mut dict = Dict::new();
         for (k, v) in self.iter() {
             let value = Self::parse_value(&v);
-            let nested = nest(k.as_str(), value)
-                .into_dict()
-                .expect("key is non-empty: must have dict");
+            let Some(nested) = nest(k.as_str(), value).into_dict() else {
+                return Err(Error::from(format!(
+                    "environment key `{k}` produced a non-object value"
+                )));
+            };
             dict.extend(nested);
         }
         Ok(self.inner.profile.collect(dict))

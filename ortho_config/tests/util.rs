@@ -1,13 +1,15 @@
 //! Utilities for integration tests using `figment::Jail`.
-//!
 //! These helpers run setup code inside a jailed environment before
 //! loading a subcommand configuration. They reduce boilerplate in
 //! tests by encapsulating the jail creation and configuration loading.
 
+use std::{path::Path, sync::Arc};
+
 use clap::CommandFactory;
+use figment::Error as FigmentError;
 use ortho_config::subcommand::Prefix;
 use ortho_config::{
-    OrthoConfig, OrthoResult, OrthoResultExt, ResultIntoFigment, SubcmdConfigMerge,
+    OrthoConfig, OrthoError, OrthoResult, OrthoResultExt, ResultIntoFigment, SubcmdConfigMerge,
     load_and_merge_subcommand,
 };
 use serde::de::DeserializeOwned;
@@ -27,7 +29,39 @@ where
         Ok(())
     })
     .into_ortho()?;
-    Ok(result.into_inner().expect("loader executed"))
+    result.into_inner().ok_or_else(|| {
+        Arc::new(OrthoError::Validation {
+            key: "subcommand_loader".into(),
+            message: "loader did not run".into(),
+        })
+    })
+}
+
+/// Converts `path` into an owned UTF-8 [`String`] for use in environment
+/// variables.
+///
+/// # Errors
+///
+/// Returns an error when the provided path cannot be represented as UTF-8.
+///
+/// # Examples
+///
+/// ```ignore
+/// use std::path::Path;
+///
+/// let dir = Path::new("/tmp");
+/// let utf8 = path_to_utf8_string(dir, "tmp")?;
+/// assert_eq!(utf8, "/tmp");
+/// ```
+#[expect(
+    clippy::result_large_err,
+    reason = "figment::Error must be returned directly to integrate with Jail closures"
+)]
+pub fn path_to_utf8_string(path: &Path, context: &str) -> Result<String, FigmentError> {
+    path.to_str().map(str::to_owned).ok_or_else(|| {
+        let display = path.display();
+        FigmentError::from(format!("{context} path not valid UTF-8: {display}"))
+    })
 }
 
 /// Runs `setup` in a jailed environment, then loads defaults for the `test`

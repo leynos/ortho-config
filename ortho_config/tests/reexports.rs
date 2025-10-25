@@ -1,5 +1,4 @@
 //! Ensures configuration helpers are accessible via re-exports.
-
 use ortho_config::{figment::Figment, uncased::UncasedStr};
 
 #[test]
@@ -9,7 +8,7 @@ fn reexports_are_public() {
     #[cfg(feature = "toml")]
     {
         use ortho_config::toml;
-        let _ = toml::Value::String("ok".to_string());
+        let _ = toml::Value::String("ok".to_owned());
     }
     #[cfg(feature = "yaml")]
     {
@@ -21,7 +20,7 @@ fn reexports_are_public() {
         use ortho_config::figment::providers::Format as _;
         use ortho_config::{figment_json5::Json5, json5};
         let _ = Json5::file("dummy.json5");
-        let _: Result<serde_json::Value, _> = json5::from_str("{}");
+        assert!(json5::from_str::<serde_json::Value>("{}").is_ok());
     }
     #[cfg(any(unix, target_os = "redox"))]
     {

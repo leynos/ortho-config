@@ -89,7 +89,7 @@ impl IntoFigmentError for Arc<OrthoError> {
         // Prefer preserving structured Figment details when we can take
         // ownership of the error. This retains kind, metadata and sources for
         // Merge/Gathering variants via `From<OrthoError> for figment::Error`.
-        match Arc::try_unwrap(self) {
+        match Self::try_unwrap(self) {
             Ok(err) => err.into(),
             Err(shared) => clone_figment(&shared),
         }
@@ -103,7 +103,10 @@ impl IntoFigmentError for &Arc<OrthoError> {
 }
 
 /// Extension to convert `Result<T, Arc<OrthoError>>` into `Result<T, figment::Error>`.
-#[allow(clippy::result_large_err)] // figment::Error is large; this helper is test-facing only.
+#[expect(
+    clippy::result_large_err,
+    reason = "figment::Error is inherently large and this adapter serves only tests."
+)]
 pub trait ResultIntoFigment<T> {
     /// Map the `Arc<OrthoError>` error into a `figment::Error` using
     /// [`IntoFigmentError`].

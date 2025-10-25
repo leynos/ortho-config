@@ -283,11 +283,11 @@ impl FarewellChannel {
     /// assert_eq!(FarewellChannel::Email.describe(), "an email");
     /// ```
     #[must_use]
-    pub fn describe(&self) -> &'static str {
+    pub const fn describe(&self) -> &'static str {
         match self {
-            FarewellChannel::Message => "a message",
-            FarewellChannel::Call => "a call",
-            FarewellChannel::Email => "an email",
+            Self::Message => "a message",
+            Self::Call => "a call",
+            Self::Email => "an email",
         }
     }
 }
@@ -336,7 +336,7 @@ pub fn load_global_config(
             globals
                 .salutations
                 .iter()
-                .map(|value| value.trim().to_string())
+                .map(|value| value.trim().to_owned())
                 .collect(),
         )
     };
@@ -476,7 +476,7 @@ pub enum DeliveryMode {
 
 impl HelloWorldCli {
     #[inline]
-    fn has_conflicting_modes(&self) -> bool {
+    const fn has_conflicting_modes(&self) -> bool {
         self.is_excited && self.is_quiet
     }
 
@@ -492,7 +492,7 @@ impl HelloWorldCli {
     /// # use hello_world::cli::{DeliveryMode, HelloWorldCli};
     /// let mut cli = HelloWorldCli::default();
     /// cli.is_excited = true;
-    /// cli.validate().unwrap();
+    /// assert!(cli.validate().is_ok());
     /// assert_eq!(cli.delivery_mode(), DeliveryMode::Enthusiastic);
     /// ```
     pub fn validate(&self) -> Result<(), ValidationError> {

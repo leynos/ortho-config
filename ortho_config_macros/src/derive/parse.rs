@@ -10,6 +10,7 @@
 //! let _ = 1 + 1;
 //! ```
 
+use syn::meta::ParseNestedMeta;
 use syn::parenthesized;
 use syn::{
     Attribute, Data, DeriveInput, Expr, Fields, GenericArgument, Lit, LitStr, PathArguments, Token,
@@ -50,7 +51,7 @@ pub(crate) enum MergeStrategy {
 impl MergeStrategy {
     pub(crate) fn parse(s: &str, span: proc_macro2::Span) -> Result<Self, syn::Error> {
         match s {
-            "append" => Ok(MergeStrategy::Append),
+            "append" => Ok(Self::Append),
             _ => Err(syn::Error::new(span, "unknown merge_strategy")),
         }
     }
@@ -79,6 +80,75 @@ fn discard_unknown(meta: &syn::meta::ParseNestedMeta) -> syn::Result<()> {
     Ok(())
 }
 
+fn parse_prefix(meta: &ParseNestedMeta) -> syn::Result<String> {
+    let lit = meta.value()?.parse::<Lit>()?;
+    match lit {
+        Lit::Str(s) => {
+            let mut value = s.value();
+            if !value.is_empty() && !value.ends_with('_') {
+                value.push('_');
+            }
+            Ok(value)
+        }
+        other => Err(syn::Error::new(other.span(), "prefix must be a string")),
+    }
+}
+
+fn parse_discovery_meta(meta: &ParseNestedMeta, discovery: &mut DiscoveryAttrs) -> syn::Result<()> {
+    meta.parse_nested_meta(|nested| handle_discovery_nested(&nested, discovery))
+}
+
+fn handle_discovery_nested(
+    nested: &ParseNestedMeta,
+    discovery: &mut DiscoveryAttrs,
+) -> syn::Result<()> {
+    let Some(ident) = nested.path.get_ident().map(ToString::to_string) else {
+        return discard_unknown(nested);
+    };
+
+    match ident.as_str() {
+        "app_name" => assign_str(&mut discovery.app_name, nested, "app_name"),
+        "env_var" => assign_str(&mut discovery.env_var, nested, "env_var"),
+        "config_file_name" => {
+            assign_str(&mut discovery.config_file_name, nested, "config_file_name")
+        }
+        "dotfile_name" => assign_str(&mut discovery.dotfile_name, nested, "dotfile_name"),
+        "project_file_name" => assign_str(
+            &mut discovery.project_file_name,
+            nested,
+            "project_file_name",
+        ),
+        "config_cli_long" => assign_str(&mut discovery.config_cli_long, nested, "config_cli_long"),
+        "config_cli_short" => {
+            assign_char(&mut discovery.config_cli_short, nested, "config_cli_short")
+        }
+        "config_cli_visible" => assign_bool(
+            &mut discovery.config_cli_visible,
+            nested,
+            "config_cli_visible",
+        ),
+        _ => discard_unknown(nested),
+    }
+}
+
+fn assign_str(target: &mut Option<String>, nested: &ParseNestedMeta, key: &str) -> syn::Result<()> {
+    let value = lit_str(nested, key)?.value();
+    *target = Some(value);
+    Ok(())
+}
+
+fn assign_char(target: &mut Option<char>, nested: &ParseNestedMeta, key: &str) -> syn::Result<()> {
+    let value = lit_char(nested, key)?;
+    *target = Some(value);
+    Ok(())
+}
+
+fn assign_bool(target: &mut Option<bool>, nested: &ParseNestedMeta, key: &str) -> syn::Result<()> {
+    let value = lit_bool(nested, key)?;
+    *target = Some(value);
+    Ok(())
+}
+
 /// Extracts `#[ortho_config(...)]` metadata applied to a struct.
 ///
 /// Only the `prefix` key is currently recognised. Unknown keys are
@@ -92,72 +162,19 @@ fn discard_unknown(meta: &syn::meta::ParseNestedMeta) -> syn::Result<()> {
 pub(crate) fn parse_struct_attrs(attrs: &[Attribute]) -> Result<StructAttrs, syn::Error> {
     let mut out = StructAttrs::default();
     parse_ortho_config(attrs, |meta| {
-        if meta.path.is_ident("prefix") {
-            let val = meta.value()?.parse::<Lit>()?;
-            if let Lit::Str(s) = val {
-                let mut value = s.value();
-                if !value.is_empty() && !value.ends_with('_') {
-                    // Permit callers to omit the trailing underscore commonly used
-                    // for environment variable prefixes. Normalise the stored value
-                    // so downstream code can assume the delimiter is present.
-                    value.push('_');
-                }
+        match meta.path.get_ident().map(ToString::to_string).as_deref() {
+            Some("prefix") => {
+                let value = parse_prefix(meta)?;
                 out.prefix = Some(value);
-            } else {
-                return Err(syn::Error::new(val.span(), "prefix must be a string"));
-            }
-            Ok(())
-        } else if meta.path.is_ident("discovery") {
-            let mut discovery = out.discovery.take().unwrap_or_default();
-            meta.parse_nested_meta(|nested| {
-                let Some(ident) = nested.path.get_ident().map(ToString::to_string) else {
-                    return discard_unknown(&nested);
-                };
-                match ident.as_str() {
-                    "app_name" => {
-                        let s = lit_str(&nested, "app_name")?;
-                        discovery.app_name = Some(s.value());
-                    }
-                    "env_var" => {
-                        let s = lit_str(&nested, "env_var")?;
-                        discovery.env_var = Some(s.value());
-                    }
-                    "config_file_name" => {
-                        let s = lit_str(&nested, "config_file_name")?;
-                        discovery.config_file_name = Some(s.value());
-                    }
-                    "dotfile_name" => {
-                        let s = lit_str(&nested, "dotfile_name")?;
-                        discovery.dotfile_name = Some(s.value());
-                    }
-                    "project_file_name" => {
-                        let s = lit_str(&nested, "project_file_name")?;
-                        discovery.project_file_name = Some(s.value());
-                    }
-                    "config_cli_long" => {
-                        let s = lit_str(&nested, "config_cli_long")?;
-                        discovery.config_cli_long = Some(s.value());
-                    }
-                    "config_cli_short" => {
-                        let c = lit_char(&nested, "config_cli_short")?;
-                        discovery.config_cli_short = Some(c);
-                    }
-                    "config_cli_visible" => {
-                        let b = lit_bool(&nested, "config_cli_visible")?;
-                        discovery.config_cli_visible = Some(b);
-                    }
-                    _ => discard_unknown(&nested)?,
-                }
                 Ok(())
-            })?;
-            out.discovery = Some(discovery);
-            Ok(())
-        } else {
-            // Unknown attributes are intentionally discarded to preserve
-            // backwards compatibility. This allows new keys to be added without
-            // breaking callers, but unrecognized attributes will be silently
-            // ignored.
-            discard_unknown(meta)
+            }
+            Some("discovery") => {
+                let mut discovery = out.discovery.take().unwrap_or_default();
+                parse_discovery_meta(meta, &mut discovery)?;
+                out.discovery = Some(discovery);
+                Ok(())
+            }
+            _ => discard_unknown(meta),
         }
     })?;
     Ok(out)
@@ -186,19 +203,19 @@ fn parse_lit<T, F>(
 where
     F: FnOnce(Lit) -> Option<T>,
 {
-    let lit = meta.value()?.parse::<Lit>()?;
-    let span = lit.span();
-    extractor(lit).ok_or_else(|| {
-        let ty = std::any::type_name::<T>()
+    let literal = meta.value()?.parse::<Lit>()?;
+    let span = literal.span();
+    extractor(literal).ok_or_else(|| {
+        let type_name = std::any::type_name::<T>()
             .rsplit("::")
             .next()
             .unwrap_or("literal")
             .to_lowercase();
-        let ty = match ty.as_str() {
+        let display_type = match type_name.as_str() {
             "litstr" => "string",
             other => other,
         };
-        syn::Error::new(span, format!("{key} must be a {ty}"))
+        syn::Error::new(span, format!("{key} must be a {display_type}"))
     })
 }
 
@@ -305,27 +322,38 @@ pub fn __doc_lit_str(meta: &syn::meta::ParseNestedMeta, key: &str) -> Result<Lit
 #[cfg(test)]
 mod lit_str_tests {
     use super::*;
+    use anyhow::{Result, anyhow, ensure};
 
     #[test]
-    fn lit_str_parses_string_values() {
+    fn lit_str_parses_string_values() -> Result<()> {
         let attr: Attribute = syn::parse_quote!(#[ortho_config(cli_long = "name")]);
+        let mut observed = None;
         attr.parse_nested_meta(|meta| {
             let s = super::__doc_lit_str(&meta, "cli_long")?;
-            assert_eq!(s.value(), "name");
+            observed = Some(s.value());
             Ok(())
         })
-        .unwrap();
+        .map_err(|err| anyhow!("expected attribute parsing to succeed: {err}"))?;
+        let value =
+            observed.ok_or_else(|| anyhow!("cli_long attribute callback was not invoked"))?;
+        ensure!(value == "name", "unexpected cli_long value: {value}");
+        Ok(())
     }
 
     #[test]
-    fn lit_char_parses_char_values() {
+    fn lit_char_parses_char_values() -> Result<()> {
         let attr: syn::Attribute = syn::parse_quote!(#[ortho_config(cli_short = 'n')]);
+        let mut observed = None;
         attr.parse_nested_meta(|meta| {
             let c = super::lit_char(&meta, "cli_short")?;
-            assert_eq!(c, 'n');
+            observed = Some(c);
             Ok(())
         })
-        .unwrap();
+        .map_err(|err| anyhow!("expected attribute parsing to succeed: {err}"))?;
+        let value =
+            observed.ok_or_else(|| anyhow!("cli_short attribute callback was not invoked"))?;
+        ensure!(value == 'n', "unexpected cli_short value: {value}");
+        Ok(())
     }
 }
 
@@ -444,11 +472,12 @@ pub(crate) fn parse_input(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use anyhow::{Result, anyhow, ensure};
     use rstest::rstest;
     use syn::{Attribute, parse_quote};
 
     #[test]
-    fn parses_struct_and_field_attributes() {
+    fn parses_struct_and_field_attributes() -> Result<()> {
         let input: DeriveInput = parse_quote! {
             #[ortho_config(prefix = "CFG_")]
             struct Demo {
@@ -459,22 +488,39 @@ mod tests {
             }
         };
 
-        let (ident, fields, struct_attrs, field_attrs) = parse_input(&input).expect("parse_input");
+        let (ident, fields, struct_attrs, field_attrs) =
+            parse_input(&input).map_err(|err| anyhow!(err))?;
 
-        assert_eq!(ident.to_string(), "Demo");
-        assert_eq!(fields.len(), 2);
-        assert_eq!(struct_attrs.prefix.as_deref(), Some("CFG_"));
-        assert_eq!(field_attrs.len(), 2);
-        assert_eq!(field_attrs[0].cli_long.as_deref(), Some("opt"));
-        assert_eq!(field_attrs[0].cli_short, Some('o'));
-        assert!(matches!(
-            field_attrs[1].merge_strategy,
-            Some(MergeStrategy::Append)
-        ));
+        ensure!(ident == "Demo", "expected Demo ident, got {ident}");
+        ensure!(fields.len() == 2, "expected 2 fields, got {}", fields.len());
+        ensure!(
+            struct_attrs.prefix.as_deref() == Some("CFG_"),
+            "expected CFG_ prefix"
+        );
+        ensure!(field_attrs.len() == 2, "expected 2 field attrs");
+        ensure!(
+            field_attrs
+                .first()
+                .and_then(|attrs| attrs.cli_long.as_deref())
+                == Some("opt"),
+            "expected first cli_long opt"
+        );
+        ensure!(
+            field_attrs.first().and_then(|attrs| attrs.cli_short) == Some('o'),
+            "expected first cli_short o"
+        );
+        ensure!(
+            matches!(
+                field_attrs.get(1).and_then(|attrs| attrs.merge_strategy),
+                Some(MergeStrategy::Append)
+            ),
+            "expected second field append strategy"
+        );
+        Ok(())
     }
 
     #[test]
-    fn parses_discovery_attributes() {
+    fn parses_discovery_attributes() -> Result<()> {
         let input: DeriveInput = parse_quote! {
             #[ortho_config(prefix = "CFG_", discovery(
                 app_name = "demo",
@@ -491,19 +537,43 @@ mod tests {
             }
         };
 
-        let (_, _, struct_attrs, _) = parse_input(&input).expect("parse_input");
-        let discovery = struct_attrs.discovery.expect("discovery attrs");
-        assert_eq!(discovery.app_name.as_deref(), Some("demo"));
-        assert_eq!(discovery.env_var.as_deref(), Some("DEMO_CONFIG"));
-        assert_eq!(discovery.config_file_name.as_deref(), Some("demo.toml"));
-        assert_eq!(discovery.dotfile_name.as_deref(), Some(".demo.toml"));
-        assert_eq!(
-            discovery.project_file_name.as_deref(),
-            Some("demo-config.toml"),
+        let (_, _, struct_attrs, _) = parse_input(&input).map_err(|err| anyhow!(err))?;
+        let discovery = struct_attrs
+            .discovery
+            .ok_or_else(|| anyhow!("missing discovery attrs"))?;
+        ensure!(
+            discovery.app_name.as_deref() == Some("demo"),
+            "app_name mismatch"
         );
-        assert_eq!(discovery.config_cli_long.as_deref(), Some("config"));
-        assert_eq!(discovery.config_cli_short, Some('c'));
-        assert_eq!(discovery.config_cli_visible, Some(true));
+        ensure!(
+            discovery.env_var.as_deref() == Some("DEMO_CONFIG"),
+            "env_var mismatch"
+        );
+        ensure!(
+            discovery.config_file_name.as_deref() == Some("demo.toml"),
+            "config_file_name mismatch"
+        );
+        ensure!(
+            discovery.dotfile_name.as_deref() == Some(".demo.toml"),
+            "dotfile mismatch"
+        );
+        ensure!(
+            discovery.project_file_name.as_deref() == Some("demo-config.toml"),
+            "project file mismatch"
+        );
+        ensure!(
+            discovery.config_cli_long.as_deref() == Some("config"),
+            "cli long mismatch"
+        );
+        ensure!(
+            discovery.config_cli_short == Some('c'),
+            "cli short mismatch"
+        );
+        ensure!(
+            discovery.config_cli_visible == Some(true),
+            "visibility mismatch"
+        );
+        Ok(())
     }
 
     #[rstest]
@@ -547,24 +617,47 @@ mod tests {
         },
         Some("f1")
     )]
-    fn test_unknown_keys_handling(#[case] input: DeriveInput, #[case] cli_long: Option<&str>) {
-        let (_ident, fields, struct_attrs, field_attrs) = parse_input(&input).expect("parse_input");
+    fn test_unknown_keys_handling(
+        #[case] input: DeriveInput,
+        #[case] cli_long: Option<&str>,
+    ) -> Result<()> {
+        let (_ident, fields, struct_attrs, field_attrs) =
+            parse_input(&input).map_err(|err| anyhow!(err))?;
 
-        assert_eq!(fields.len(), 1);
-        assert_eq!(struct_attrs.prefix.as_deref(), Some("CFG_"));
-        assert_eq!(field_attrs[0].cli_long.as_deref(), cli_long);
+        ensure!(fields.len() == 1, "expected single field");
+        ensure!(
+            struct_attrs.prefix.as_deref() == Some("CFG_"),
+            "expected CFG_ prefix"
+        );
+        let parsed = field_attrs
+            .first()
+            .and_then(|attrs| attrs.cli_long.as_deref());
+        ensure!(
+            parsed == cli_long,
+            "cli_long mismatch: {:?} != {:?}",
+            parsed,
+            cli_long
+        );
+        Ok(())
     }
 
     #[rstest]
     #[case::missing_suffix("APP", "APP_")]
     #[case::with_suffix("APP_", "APP_")]
     #[case::empty("", "")]
-    fn struct_prefix_normalises_trailing_underscore(#[case] raw: &str, #[case] expected: &str) {
+    fn struct_prefix_normalises_trailing_underscore(
+        #[case] raw: &str,
+        #[case] expected: &str,
+    ) -> Result<()> {
         let lit = syn::LitStr::new(raw, proc_macro2::Span::call_site());
         let attr: Attribute = syn::parse_quote!(#[ortho_config(prefix = #lit)]);
-        let attrs = parse_struct_attrs(&[attr]).expect("struct attrs should parse");
+        let attrs = parse_struct_attrs(&[attr]).map_err(|err| anyhow!(err))?;
 
-        assert_eq!(attrs.prefix.as_deref(), Some(expected));
+        ensure!(
+            attrs.prefix.as_deref() == Some(expected),
+            "prefix normalisation mismatch"
+        );
+        Ok(())
     }
 
     #[rstest]
@@ -572,10 +665,11 @@ mod tests {
     #[case(parse_quote!(std::option::Option<u32>))]
     #[case(parse_quote!(core::option::Option<u32>))]
     #[case(parse_quote!(crate::option::Option<u32>))]
-    fn option_inner_matches_various_prefixes(#[case] ty: Type) {
+    fn option_inner_matches_various_prefixes(#[case] ty: Type) -> Result<()> {
         let expected: Type = parse_quote!(u32);
-        let inner = option_inner(&ty).expect("should extract");
-        assert_eq!(inner, &expected);
+        let inner = option_inner(&ty).ok_or_else(|| anyhow!("expected Option"))?;
+        ensure!(inner == &expected, "expected {expected:?}, got {inner:?}");
+        Ok(())
     }
 
     #[rstest]
@@ -583,9 +677,10 @@ mod tests {
     #[case(parse_quote!(std::vec::Vec<u8>))]
     #[case(parse_quote!(alloc::vec::Vec<u8>))]
     #[case(parse_quote!(crate::vec::Vec<u8>))]
-    fn vec_inner_matches_various_prefixes(#[case] ty: Type) {
+    fn vec_inner_matches_various_prefixes(#[case] ty: Type) -> Result<()> {
         let expected: Type = parse_quote!(u8);
-        let inner = vec_inner(&ty).expect("should extract");
-        assert_eq!(inner, &expected);
+        let inner = vec_inner(&ty).ok_or_else(|| anyhow!("expected Vec"))?;
+        ensure!(inner == &expected, "expected {expected:?}, got {inner:?}");
+        Ok(())
     }
 }

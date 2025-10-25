@@ -5,6 +5,7 @@ use clap_dispatch::clap_dispatch;
 use ortho_config::OrthoConfig;
 use ortho_config::SubcmdConfigMerge;
 use serde::{Deserialize, Serialize};
+use std::io::{self, Write};
 
 /// Command-line options for the `add-user` subcommand.
 ///
@@ -46,20 +47,27 @@ pub struct ListItemsArgs {
 
 impl Run for AddUserArgs {
     fn run(self, db_url: &str) -> Result<(), String> {
-        println!("Connecting to database at: {db_url}");
-        println!("Adding user: {:?}, Admin: {:?}", self.username, self.admin);
-        Ok(())
+        with_locked_stdout(db_url, |stdout| {
+            writeln!(
+                stdout,
+                "Adding user: {:?}, Admin: {:?}",
+                self.username, self.admin
+            )
+            .map_err(|err| err.to_string())
+        })
     }
 }
 
 impl Run for ListItemsArgs {
     fn run(self, db_url: &str) -> Result<(), String> {
-        println!("Connecting to database at: {db_url}");
-        println!(
-            "Listing items in category {:?}, All: {:?}",
-            self.category, self.all
-        );
-        Ok(())
+        with_locked_stdout(db_url, |stdout| {
+            writeln!(
+                stdout,
+                "Listing items in category {:?}, All: {:?}",
+                self.category, self.all
+            )
+            .map_err(|err| err.to_string())
+        })
     }
 }
 
@@ -87,37 +95,53 @@ fn main() -> Result<(), String> {
     final_cmd.run(db_url)
 }
 
+fn with_locked_stdout<F>(db_url: &str, emit: F) -> Result<(), String>
+where
+    F: FnOnce(&mut dyn Write) -> Result<(), String>,
+{
+    let mut stdout = io::stdout().lock();
+    writeln!(stdout, "Connecting to database at: {db_url}").map_err(|err| err.to_string())?;
+    emit(&mut stdout)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use anyhow::{Context, Result, ensure};
     use serde::de::DeserializeOwned;
 
     // Serialisation enables persisting configuration. This helper ensures
     // roundtrips do not drop data.
-    fn assert_roundtrip<T>(value: &T)
+    fn assert_roundtrip<T>(value: &T) -> Result<()>
     where
         T: Serialize + DeserializeOwned + PartialEq + std::fmt::Debug,
     {
-        let json = serde_json::to_string(value).expect("serialise");
-        let de: T = serde_json::from_str(&json).expect("deserialise");
-        assert_eq!(de, *value);
+        let json =
+            serde_json::to_string(value).context("serialise subcommand arguments to JSON")?;
+        let de: T =
+            serde_json::from_str(&json).context("deserialise subcommand arguments from JSON")?;
+        ensure!(
+            de == *value,
+            "roundtrip lost data: expected {value:?}, got {de:?}"
+        );
+        Ok(())
     }
 
     #[test]
-    fn add_user_args_roundtrip() {
+    fn add_user_args_roundtrip() -> Result<()> {
         let args = AddUserArgs {
             username: Some(String::from("alice")),
             admin: Some(true),
         };
-        assert_roundtrip(&args);
+        assert_roundtrip(&args)
     }
 
     #[test]
-    fn list_items_args_roundtrip() {
+    fn list_items_args_roundtrip() -> Result<()> {
         let args = ListItemsArgs {
             category: Some(String::from("tools")),
             all: Some(false),
         };
-        assert_roundtrip(&args);
+        assert_roundtrip(&args)
     }
 }

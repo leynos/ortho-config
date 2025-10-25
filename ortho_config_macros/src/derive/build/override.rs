@@ -179,8 +179,9 @@ pub(crate) fn build_append_logic(fields: &[(Ident, Type)]) -> proc_macro2::Token
 mod tests {
     use super::*;
     use crate::derive::parse::StructAttrs;
+    use anyhow::{Result, anyhow, ensure};
 
-    fn demo_input() -> (Vec<syn::Field>, Vec<FieldAttrs>, StructAttrs) {
+    fn demo_input() -> Result<(Vec<syn::Field>, Vec<FieldAttrs>, StructAttrs)> {
         let input: syn::DeriveInput = syn::parse_quote! {
             #[ortho_config(prefix = "CFG_")]
             struct Demo {
@@ -190,42 +191,54 @@ mod tests {
                 field2: Vec<String>,
             }
         };
-        let (_, fields, struct_attrs, field_attrs) =
-            crate::derive::parse::parse_input(&input).expect("parse_input");
-        (fields, field_attrs, struct_attrs)
+        let (_, fields, struct_attrs, field_attrs) = crate::derive::parse::parse_input(&input)?;
+        Ok((fields, field_attrs, struct_attrs))
     }
 
     #[test]
-    fn collect_append_fields_selects_vec_fields() {
-        let (fields, field_attrs, _) = demo_input();
-        let out = collect_append_fields(&fields, &field_attrs).expect("collect_append_fields");
-        assert_eq!(out.len(), 1);
-        assert_eq!(out[0].0.to_string(), "field2");
+    fn collect_append_fields_selects_vec_fields() -> Result<()> {
+        let (fields, field_attrs, _) = demo_input()?;
+        let out = collect_append_fields(&fields, &field_attrs)?;
+        let [(ident, _)] = out.as_slice() else {
+            return Err(anyhow!("expected single append field"));
+        };
+        ensure!(ident == "field2", "expected field2 append target");
+        Ok(())
     }
 
     #[test]
-    fn build_override_struct_creates_struct() {
-        let (fields, field_attrs, _) = demo_input();
-        let append = collect_append_fields(&fields, &field_attrs).expect("collect_append_fields");
+    fn build_override_struct_creates_struct() -> Result<()> {
+        let (fields, field_attrs, _) = demo_input()?;
+        let append = collect_append_fields(&fields, &field_attrs)?;
         let (ts, init_ts) = build_override_struct(&syn::parse_quote!(Demo), &append);
-        assert!(ts.to_string().contains("struct __DemoVecOverride"));
-        assert!(init_ts.to_string().contains("__DemoVecOverride"));
+        ensure!(
+            ts.to_string().contains("struct __DemoVecOverride"),
+            "override struct missing expected identifier"
+        );
+        ensure!(
+            init_ts.to_string().contains("__DemoVecOverride"),
+            "override init missing expected struct"
+        );
+        Ok(())
     }
 
     #[test]
-    fn collect_append_fields_errors_on_non_vec_append() {
+    fn collect_append_fields_errors_on_non_vec_append() -> Result<()> {
         let input: syn::DeriveInput = syn::parse_quote! {
             struct DemoAppendError {
                 #[ortho_config(merge_strategy = "append")]
                 field1: u32,
             }
         };
-        let (_, fields, _, field_attrs) =
-            crate::derive::parse::parse_input(&input).expect("parse_input");
-        let err = collect_append_fields(&fields, &field_attrs).expect_err("expected append error");
-        assert!(
+        let (_, fields, _, field_attrs) = crate::derive::parse::parse_input(&input)?;
+        let Err(err) = collect_append_fields(&fields, &field_attrs) else {
+            return Err(anyhow!("expected append strategy validation to fail"));
+        };
+        ensure!(
             err.to_string()
-                .contains("append merge strategy requires a Vec<_> field")
+                .contains("append merge strategy requires a Vec<_> field"),
+            "unexpected error: {err}"
         );
+        Ok(())
     }
 }

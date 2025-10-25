@@ -1,13 +1,14 @@
 //! Tests for subcommand configuration helpers.
+use anyhow::{Result, anyhow, ensure};
 
-#![allow(non_snake_case)]
-//! Utilities for subcommand test setup and loading.
+// Utilities for subcommand test setup and loading.
 mod util;
 
 use clap::Parser;
+use figment::Error as FigmentError;
 use ortho_config::OrthoConfig;
 use serde::{Deserialize, Serialize};
-use util::{with_merged_subcommand_cli, with_merged_subcommand_cli_for};
+use util::{path_to_utf8_string, with_merged_subcommand_cli, with_merged_subcommand_cli_for};
 
 #[derive(Debug, Serialize, Deserialize, Default, PartialEq, Parser)]
 #[command(name = "test")]
@@ -21,7 +22,7 @@ struct CmdCfg {
 }
 
 #[test]
-fn file_and_env_loading() {
+fn file_and_env_loading() -> Result<()> {
     let cfg: CmdCfg = with_merged_subcommand_cli(
         |j| {
             j.create_file(".app.toml", "[cmds.test]\nfoo = \"file\"\nbar = true")?;
@@ -30,67 +31,90 @@ fn file_and_env_loading() {
         },
         &CmdCfg::default(),
     )
-    .expect("config");
-    assert_eq!(cfg.foo.as_deref(), Some("env"));
-    assert_eq!(cfg.bar, Some(true));
+    .map_err(|err| anyhow!(err))?;
+    ensure!(
+        cfg.foo.as_deref() == Some("env"),
+        "expected env, got {:?}",
+        cfg.foo
+    );
+    ensure!(cfg.bar == Some(true), "expected true, got {:?}", cfg.bar);
+    Ok(())
 }
 
 #[test]
-fn loads_from_home() {
+fn loads_from_home() -> Result<()> {
     let cfg: CmdCfg = with_merged_subcommand_cli(
         |j| {
             let home = j.create_dir("home")?;
             j.create_file(home.join(".app.toml"), "[cmds.test]\nfoo = \"home\"")?;
-            j.set_env("HOME", home.to_str().unwrap());
+            let home_str = path_to_utf8_string(&home, "home")?;
+            j.set_env("HOME", &home_str);
             #[cfg(windows)]
-            j.set_env("USERPROFILE", home.to_str().unwrap());
+            j.set_env("USERPROFILE", &home_str);
             Ok(())
         },
         &CmdCfg::default(),
     )
-    .expect("config");
-    assert_eq!(cfg.foo.as_deref(), Some("home"));
+    .map_err(|err| anyhow!(err))?;
+    ensure!(
+        cfg.foo.as_deref() == Some("home"),
+        "expected home, got {:?}",
+        cfg.foo
+    );
+    Ok(())
 }
 
 #[test]
-fn local_overrides_home() {
+fn local_overrides_home() -> Result<()> {
     let cfg: CmdCfg = with_merged_subcommand_cli(
         |j| {
             let home = j.create_dir("home")?;
             j.create_file(home.join(".app.toml"), "[cmds.test]\nfoo = \"home\"")?;
-            j.set_env("HOME", home.to_str().unwrap());
+            let home_str = path_to_utf8_string(&home, "home")?;
+            j.set_env("HOME", &home_str);
             #[cfg(windows)]
-            j.set_env("USERPROFILE", home.to_str().unwrap());
+            j.set_env("USERPROFILE", &home_str);
             j.create_file(".app.toml", "[cmds.test]\nfoo = \"local\"")?;
             Ok(())
         },
         &CmdCfg::default(),
     )
-    .expect("config");
-    assert_eq!(cfg.foo.as_deref(), Some("local"));
+    .map_err(|err| anyhow!(err))?;
+    ensure!(
+        cfg.foo.as_deref() == Some("local"),
+        "expected local, got {:?}",
+        cfg.foo
+    );
+    Ok(())
 }
 
 // Windows lacks XDG support
 #[cfg(any(unix, target_os = "redox"))]
 #[test]
-fn loads_from_xdg_config() {
+fn loads_from_xdg_config() -> Result<()> {
     let cfg: CmdCfg = with_merged_subcommand_cli(
         |j| {
             let xdg = j.create_dir("xdg")?;
-            let abs = ortho_config::file::canonicalise(&xdg).expect("canonicalise xdg dir");
+            let abs = ortho_config::file::canonicalise(&xdg)
+                .map_err(|err| FigmentError::from(err.to_string()))?;
             j.create_dir(abs.join("app"))?;
             j.create_file(abs.join("app/config.toml"), "[cmds.test]\nfoo = \"xdg\"")?;
-            j.set_env("XDG_CONFIG_HOME", abs.to_str().expect("xdg dir to string"));
+            let xdg_path = path_to_utf8_string(&abs, "xdg config")?;
+            j.set_env("XDG_CONFIG_HOME", &xdg_path);
             Ok(())
         },
         &CmdCfg::default(),
     )
-    .expect("config");
-    assert_eq!(cfg.foo.as_deref(), Some("xdg"));
+    .map_err(|err| anyhow!(err))?;
+    ensure!(
+        cfg.foo.as_deref() == Some("xdg"),
+        "expected xdg, got {:?}",
+        cfg.foo
+    );
+    Ok(())
 }
 
 #[derive(Debug, Deserialize, Serialize, Parser, OrthoConfig, Default, PartialEq)]
-#[allow(non_snake_case)]
 #[ortho_config(prefix = "APP_")]
 #[command(name = "test")]
 struct PrefixedCfg {
@@ -98,7 +122,7 @@ struct PrefixedCfg {
 }
 
 #[test]
-fn wrapper_uses_struct_prefix() {
+fn wrapper_uses_struct_prefix() -> Result<()> {
     let cfg: PrefixedCfg = with_merged_subcommand_cli_for(
         |j| {
             j.create_file(".app.toml", "[cmds.test]\nfoo = \"val\"")?;
@@ -107,13 +131,18 @@ fn wrapper_uses_struct_prefix() {
         },
         &PrefixedCfg::default(),
     )
-    .expect("config");
-    assert_eq!(cfg.foo.as_deref(), Some("env"));
+    .map_err(|err| anyhow!(err))?;
+    ensure!(
+        cfg.foo.as_deref() == Some("env"),
+        "expected env, got {:?}",
+        cfg.foo
+    );
+    Ok(())
 }
 
 #[cfg(feature = "yaml")]
 #[test]
-fn loads_yaml_file() {
+fn loads_yaml_file() -> Result<()> {
     let cfg: CmdCfg = with_merged_subcommand_cli(
         |j| {
             j.create_file(".app.yml", "cmds:\n  test:\n    foo: yaml")?;
@@ -121,8 +150,13 @@ fn loads_yaml_file() {
         },
         &CmdCfg::default(),
     )
-    .expect("config");
-    assert_eq!(cfg.foo.as_deref(), Some("yaml"));
+    .map_err(|err| anyhow!(err))?;
+    ensure!(
+        cfg.foo.as_deref() == Some("yaml"),
+        "expected yaml, got {:?}",
+        cfg.foo
+    );
+    Ok(())
 }
 
 #[derive(Debug, Deserialize, serde::Serialize, Default, PartialEq, Parser)]
@@ -144,7 +178,7 @@ struct MergeArgs {
 /// ```
 /// merge_helper_combines_defaults_and_cli();
 /// ```
-fn merge_helper_combines_defaults_and_cli() {
+fn merge_helper_combines_defaults_and_cli() -> Result<()> {
     let cli = MergeArgs {
         foo: Some("cli".into()),
         bar: None,
@@ -156,9 +190,14 @@ fn merge_helper_combines_defaults_and_cli() {
         },
         &cli,
     )
-    .expect("merge");
-    assert_eq!(merged.foo.as_deref(), Some("cli"));
-    assert_eq!(merged.bar, None);
+    .map_err(|err| anyhow!(err))?;
+    ensure!(
+        merged.foo.as_deref() == Some("cli"),
+        "expected cli, got {:?}",
+        merged.foo
+    );
+    ensure!(merged.bar.is_none(), "expected None, got {:?}", merged.bar);
+    Ok(())
 }
 
 #[derive(Debug, Deserialize, serde::Serialize, OrthoConfig, Default, PartialEq, Parser)]
@@ -170,7 +209,7 @@ struct MergePrefixed {
 }
 
 #[test]
-fn merge_wrapper_respects_prefix() {
+fn merge_wrapper_respects_prefix() -> Result<()> {
     let cli = MergePrefixed { foo: None };
     let merged = with_merged_subcommand_cli_for(
         |j| {
@@ -179,8 +218,13 @@ fn merge_wrapper_respects_prefix() {
         },
         &cli,
     )
-    .expect("merge");
-    assert_eq!(merged.foo.as_deref(), Some("file"));
+    .map_err(|err| anyhow!(err))?;
+    ensure!(
+        merged.foo.as_deref() == Some("file"),
+        "expected file, got {:?}",
+        merged.foo
+    );
+    Ok(())
 }
 
 #[derive(Debug, Deserialize, serde::Serialize, Parser, Default, PartialEq)]
@@ -192,12 +236,18 @@ struct RequiredCli {
 }
 
 #[rstest::rstest]
-fn cli_only_values_are_accepted() {
+fn cli_only_values_are_accepted() -> Result<()> {
     let cli = RequiredCli {
         ref_id: Some("cli".into()),
     };
-    let merged: RequiredCli = with_merged_subcommand_cli(|_j| Ok(()), &cli).expect("merge");
-    assert_eq!(merged.ref_id.as_deref(), Some("cli"));
+    let merged: RequiredCli =
+        with_merged_subcommand_cli(|_j| Ok(()), &cli).map_err(|err| anyhow!(err))?;
+    ensure!(
+        merged.ref_id.as_deref() == Some("cli"),
+        "expected cli, got {:?}",
+        merged.ref_id
+    );
+    Ok(())
 }
 
 #[test]
@@ -210,7 +260,7 @@ fn error_when_required_cli_value_missing() {
 }
 
 #[test]
-fn conflicting_values_cli_takes_precedence() {
+fn conflicting_values_cli_takes_precedence() -> Result<()> {
     let cli = RequiredCli {
         ref_id: Some("cli".into()),
     };
@@ -222,12 +272,17 @@ fn conflicting_values_cli_takes_precedence() {
         },
         &cli,
     )
-    .expect("merge");
-    assert_eq!(merged.ref_id.as_deref(), Some("cli"));
+    .map_err(|err| anyhow!(err))?;
+    ensure!(
+        merged.ref_id.as_deref() == Some("cli"),
+        "expected cli, got {:?}",
+        merged.ref_id
+    );
+    Ok(())
 }
 
 #[test]
-fn env_value_used_when_cli_missing() {
+fn env_value_used_when_cli_missing() -> Result<()> {
     let cli = RequiredCli { ref_id: None };
     let merged: RequiredCli = with_merged_subcommand_cli(
         |j| {
@@ -236,8 +291,13 @@ fn env_value_used_when_cli_missing() {
         },
         &cli,
     )
-    .expect("merge");
-    assert_eq!(merged.ref_id.as_deref(), Some("from-env"));
+    .map_err(|err| anyhow!(err))?;
+    ensure!(
+        merged.ref_id.as_deref() == Some("from-env"),
+        "expected from-env, got {:?}",
+        merged.ref_id
+    );
+    Ok(())
 }
 #[derive(Debug, Deserialize, Serialize, Default, PartialEq, Parser)]
 #[command(name = "test")]
@@ -287,7 +347,7 @@ fn env_values_support_nesting_cases(
     #[case] port_kv: Option<(&str, &str)>,
     #[case] expect_host: Option<&str>,
     #[case] expect_port: Option<u16>,
-) {
+) -> Result<()> {
     let cfg: NestedCfg = with_merged_subcommand_cli(
         |j| {
             if let Some((k, v)) = host_kv {
@@ -300,9 +360,20 @@ fn env_values_support_nesting_cases(
         },
         &NestedCfg::default(),
     )
-    .expect("config");
-    assert_eq!(cfg.nested.host.as_deref(), expect_host);
-    assert_eq!(cfg.nested.port, expect_port);
+    .map_err(|err| anyhow!(err))?;
+    ensure!(
+        cfg.nested.host.as_deref() == expect_host,
+        "expected host {:?}, got {:?}",
+        expect_host,
+        cfg.nested.host
+    );
+    ensure!(
+        cfg.nested.port == expect_port,
+        "expected port {:?}, got {:?}",
+        expect_port,
+        cfg.nested.port
+    );
+    Ok(())
 }
 
 /// Tests multi-level splitting of environment variable keys.
@@ -322,7 +393,7 @@ fn env_values_support_nesting_cases(
 fn env_values_support_deeper_nesting(
     #[case] kv: Option<(&str, &str)>,
     #[case] expect_host: Option<&str>,
-) {
+) -> Result<()> {
     let cfg: DeepNestedCfg = with_merged_subcommand_cli(
         |j| {
             if let Some((k, v)) = kv {
@@ -332,6 +403,12 @@ fn env_values_support_deeper_nesting(
         },
         &DeepNestedCfg::default(),
     )
-    .expect("config");
-    assert_eq!(cfg.deep.nest.host.as_deref(), expect_host);
+    .map_err(|err| anyhow!(err))?;
+    ensure!(
+        cfg.deep.nest.host.as_deref() == expect_host,
+        "expected host {:?}, got {:?}",
+        expect_host,
+        cfg.deep.nest.host
+    );
+    Ok(())
 }

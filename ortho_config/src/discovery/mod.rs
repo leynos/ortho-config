@@ -33,8 +33,8 @@ pub struct ConfigDiscovery {
 
 /// Result of a discovery attempt that keeps required and optional errors separate.
 ///
-/// Callers can surface [`required_errors`] regardless of whether a configuration
-/// file eventually loads, while deferring [`optional_errors`] until fallbacks are
+/// Callers can surface [`DiscoveryLoadOutcome::required_errors`] regardless of whether a configuration
+/// file eventually loads, while deferring [`DiscoveryLoadOutcome::optional_errors`] until fallbacks are
 /// exhausted. This mirrors the builder contract where required explicit paths
 /// must exist.
 ///
@@ -68,13 +68,20 @@ impl ConfigDiscovery {
         ConfigDiscoveryBuilder::new(app_name)
     }
 
-    fn push_unique(paths: &mut Vec<PathBuf>, seen: &mut HashSet<String>, candidate: PathBuf) {
+    fn push_unique(
+        paths: &mut Vec<PathBuf>,
+        seen: &mut HashSet<String>,
+        candidate: PathBuf,
+    ) -> bool {
         if candidate.as_os_str().is_empty() {
-            return;
+            return false;
         }
         let key = Self::normalised_key(&candidate);
         if seen.insert(key) {
             paths.push(candidate);
+            true
+        } else {
+            false
         }
     }
 
@@ -90,57 +97,29 @@ impl ConfigDiscovery {
         }
     }
 
-    fn push_explicit(&self, paths: &mut Vec<PathBuf>, seen: &mut HashSet<String>) {
-        for path in &self.required_explicit_paths {
-            Self::push_unique(paths, seen, path.clone());
-        }
-
-        for path in &self.explicit_paths {
-            Self::push_unique(paths, seen, path.clone());
-        }
-
-        if let Some(value) = self
-            .env_var
-            .as_ref()
-            .and_then(|env_var| std::env::var_os(env_var).filter(|v| !v.is_empty()))
-        {
-            Self::push_unique(paths, seen, PathBuf::from(value));
-        }
-    }
-
     fn push_for_bases<I>(&self, bases: I, paths: &mut Vec<PathBuf>, seen: &mut HashSet<String>)
     where
         I: IntoIterator,
         I::Item: Into<PathBuf>,
     {
         for base in bases {
-            let base = base.into();
+            let base_path: PathBuf = base.into();
             let nested = if self.app_name.is_empty() {
-                base.clone()
+                base_path.clone()
             } else {
-                base.join(&self.app_name)
+                base_path.join(&self.app_name)
             };
             Self::push_unique(paths, seen, nested.join(&self.config_file_name));
-            Self::push_unique(paths, seen, base.join(&self.dotfile_name));
+            Self::push_unique(paths, seen, base_path.join(&self.dotfile_name));
             #[cfg(any(feature = "json5", feature = "yaml"))]
             if let Some(stem) = Path::new(&self.config_file_name)
                 .file_stem()
                 .and_then(|stem| stem.to_str())
             {
                 #[cfg(feature = "json5")]
-                {
-                    for ext in ["json", "json5"] {
-                        let filename = format!("{stem}.{ext}");
-                        Self::push_unique(paths, seen, nested.join(&filename));
-                    }
-                }
+                Self::push_json_variants(paths, seen, nested.as_path(), stem);
                 #[cfg(feature = "yaml")]
-                {
-                    for ext in ["yaml", "yml"] {
-                        let filename = format!("{stem}.{ext}");
-                        Self::push_unique(paths, seen, nested.join(&filename));
-                    }
-                }
+                Self::push_yaml_variants(paths, seen, nested.as_path(), stem);
             }
         }
     }
@@ -150,19 +129,18 @@ impl ConfigDiscovery {
             self.push_for_bases(std::iter::once(PathBuf::from(dir)), paths, seen);
         }
 
-        if let Some(dirs) = std::env::var_os("XDG_CONFIG_DIRS") {
-            let xdg_dirs: Vec<PathBuf> = std::env::split_paths(&dirs)
-                .filter(|path| !path.as_os_str().is_empty())
-                .collect();
-            if xdg_dirs.is_empty() {
-                if cfg!(any(unix, target_os = "redox")) {
-                    self.push_for_bases(std::iter::once(PathBuf::from("/etc/xdg")), paths, seen);
+        match std::env::var_os("XDG_CONFIG_DIRS") {
+            Some(dirs) => {
+                let mut xdg_dirs = std::env::split_paths(&dirs)
+                    .filter(|path| !path.as_os_str().is_empty())
+                    .peekable();
+                if xdg_dirs.peek().is_none() {
+                    self.push_default_xdg(paths, seen);
+                } else {
+                    self.push_for_bases(xdg_dirs, paths, seen);
                 }
-            } else {
-                self.push_for_bases(xdg_dirs, paths, seen);
             }
-        } else if cfg!(any(unix, target_os = "redox")) {
-            self.push_for_bases(std::iter::once(PathBuf::from("/etc/xdg")), paths, seen);
+            None => self.push_default_xdg(paths, seen),
         }
     }
 
@@ -191,19 +169,93 @@ impl ConfigDiscovery {
         }
     }
 
+    #[cfg(any(feature = "json5", feature = "yaml"))]
+    fn push_variants_for_extensions(
+        (paths, seen): (&mut Vec<PathBuf>, &mut HashSet<String>),
+        nested: &Path,
+        stem: &str,
+        extensions: &[&str],
+    ) {
+        for ext in extensions {
+            let filename = format!("{stem}.{ext}");
+            Self::push_unique(paths, seen, nested.join(&filename));
+        }
+    }
+
+    #[cfg(feature = "json5")]
+    fn push_json_variants(
+        paths: &mut Vec<PathBuf>,
+        seen: &mut HashSet<String>,
+        nested: &Path,
+        stem: &str,
+    ) {
+        Self::push_variants_for_extensions((paths, seen), nested, stem, &["json", "json5"]);
+    }
+
+    #[cfg(feature = "yaml")]
+    fn push_yaml_variants(
+        paths: &mut Vec<PathBuf>,
+        seen: &mut HashSet<String>,
+        nested: &Path,
+        stem: &str,
+    ) {
+        Self::push_variants_for_extensions((paths, seen), nested, stem, &["yaml", "yml"]);
+    }
+
+    #[cfg_attr(
+        not(any(unix, target_os = "redox")),
+        expect(
+            clippy::unused_self,
+            reason = "self is used on Unix/Redox platforms via push_for_bases"
+        )
+    )]
+    #[cfg_attr(
+        any(unix, target_os = "redox"),
+        expect(
+            clippy::used_underscore_binding,
+            reason = "underscore-prefixed parameters avoid unused warnings on other platforms"
+        )
+    )]
+    fn push_default_xdg(&self, _paths: &mut Vec<PathBuf>, _seen: &mut HashSet<String>) {
+        #[cfg(any(unix, target_os = "redox"))]
+        self.push_for_bases(std::iter::once(PathBuf::from("/etc/xdg")), _paths, _seen);
+    }
+
     /// Returns the ordered configuration candidates.
     #[must_use]
     pub fn candidates(&self) -> Vec<PathBuf> {
+        self.candidates_with_required_bound().0
+    }
+
+    fn candidates_with_required_bound(&self) -> (Vec<PathBuf>, usize) {
         let mut seen: HashSet<String> = HashSet::new();
         let mut paths = Vec::new();
+        let mut required_bound = 0;
 
-        self.push_explicit(&mut paths, &mut seen);
+        for path in &self.required_explicit_paths {
+            if Self::push_unique(&mut paths, &mut seen, path.clone()) {
+                required_bound += 1;
+            }
+        }
+
+        for path in &self.explicit_paths {
+            let _ = Self::push_unique(&mut paths, &mut seen, path.clone());
+        }
+
+        if let Some(value) = self
+            .env_var
+            .as_ref()
+            .and_then(|env_var| std::env::var_os(env_var).filter(|v| !v.is_empty()))
+        {
+            let _ = Self::push_unique(&mut paths, &mut seen, PathBuf::from(value));
+        }
+
         self.push_xdg(&mut paths, &mut seen);
         self.push_windows(&mut paths, &mut seen);
         self.push_home(&mut paths, &mut seen);
         self.push_projects(&mut paths, &mut seen);
 
-        paths
+        (paths, required_bound)
     }
 
     /// Returns the ordered configuration candidates as [`Utf8PathBuf`] values.
@@ -245,8 +297,8 @@ impl ConfigDiscovery {
     /// discovery diagnostics; if no candidates exist, returns `Ok(None)`.
     pub fn load_first(&self) -> OrthoResult<Option<figment::Figment>> {
         let (figment, errors) = self.load_first_with_errors();
-        if let Some(figment) = figment {
-            return Ok(Some(figment));
+        if let Some(found_figment) = figment {
+            return Ok(Some(found_figment));
         }
         if let Some(err) = OrthoError::try_aggregate(errors) {
             return Err(Arc::new(err));
@@ -276,8 +328,7 @@ impl ConfigDiscovery {
     pub fn load_first_partitioned(&self) -> DiscoveryLoadOutcome {
         let mut required_errors = Vec::new();
         let mut optional_errors = Vec::new();
-        let candidates = self.candidates();
-        let required = self.required_explicit_paths.len();
+        let (candidates, required_bound) = self.candidates_with_required_bound();
         for (idx, path) in candidates.into_iter().enumerate() {
             match load_config_file(&path) {
                 Ok(Some(figment)) => {
@@ -287,24 +338,15 @@ impl ConfigDiscovery {
                         optional_errors,
                     };
                 }
-                Ok(None) => {
-                    if idx < required {
-                        let missing = Arc::new(OrthoError::File {
-                            path: path.clone(),
-                            source: Box::new(io::Error::new(
-                                io::ErrorKind::NotFound,
-                                "required configuration file not found",
-                            )),
-                        });
-                        required_errors.push(missing);
-                    }
+                Ok(None) if idx < required_bound => {
+                    required_errors.push(Self::missing_required_error(&path));
+                }
+                Ok(None) => {}
+                Err(err) if idx < required_bound => {
+                    required_errors.push(err);
                 }
                 Err(err) => {
-                    if idx < required {
-                        required_errors.push(err);
-                    } else {
-                        optional_errors.push(err);
-                    }
+                    optional_errors.push(err);
                 }
             }
         }
@@ -326,7 +368,56 @@ impl ConfigDiscovery {
         required_errors.append(&mut optional_errors);
         (figment, required_errors)
     }
+
+    fn missing_required_error(path: &Path) -> Arc<OrthoError> {
+        Arc::new(OrthoError::File {
+            path: path.to_path_buf(),
+            source: Box::new(io::Error::new(
+                io::ErrorKind::NotFound,
+                "required configuration file not found",
+            )),
+        })
+    }
 }
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod dedup_tests {
+    use super::*;
+    use std::fs;
+    use tempfile::tempdir;
+
+    fn assert_first_error_path(errors: &[Arc<OrthoError>], expected: &Path) {
+        let err = errors
+            .first()
+            .expect("expected at least one error when asserting path");
+        let path = match err.as_ref() {
+            OrthoError::File { path, .. } => path,
+            other => panic!("expected OrthoError::File, got {other:?}"),
+        };
+        assert_eq!(path, expected);
+    }
+
+    #[test]
+    fn load_first_partitioned_dedups_required_paths() {
+        let dir = tempdir().expect("create tempdir");
+        let required = dir.path().join("missing.toml");
+        let optional = dir.path().join("optional.toml");
+        fs::write(&optional, "invalid = {").expect("write invalid optional config");
+        let discovery = ConfigDiscovery::builder("app")
+            .add_required_path(&required)
+            .add_required_path(&required)
+            .add_explicit_path(&optional)
+            .build();
+
+        let outcome = discovery.load_first_partitioned();
+        assert!(outcome.figment.is_none());
+        assert_eq!(outcome.required_errors.len(), 1);
+        assert_eq!(outcome.optional_errors.len(), 1);
+
+        assert_first_error_path(&outcome.required_errors, &required);
+        assert_first_error_path(&outcome.optional_errors, &optional);
+    }
+}

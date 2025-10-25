@@ -18,6 +18,9 @@ NULL_DEVICE ?= /dev/null
 endif
 UV_RUN := $(UV) run --python $(PYTHON_VERSION) --with-requirements $(PYTHON_DEPS_FILE)
 PYTEST ?= $(UV_RUN) --module pytest
+MDLINT ?= markdownlint-cli2
+NIXIE ?= nixie
+RUSTDOC_FLAGS ?= --cfg docsrs -D warnings
 
 build: target/debug/lib$(CRATE) ## Build debug binary
 release: target/release/lib$(CRATE) ## Build release binary
@@ -46,6 +49,7 @@ target/%/lib$(CRATE).rlib: ## Build library in debug or release
 	  $@
 
 lint: ## Run Clippy with warnings denied
+	RUSTDOCFLAGS="$(RUSTDOC_FLAGS)" $(CARGO) doc --workspace --no-deps
 	$(CARGO) clippy $(CLIPPY_FLAGS)
 
 fmt: ## Format Rust and Markdown sources
@@ -58,12 +62,12 @@ check-fmt: ## Verify formatting
 check: check-fmt lint test markdownlint nixie
 
 markdownlint: ## Lint Markdown files
-	find . -type f -name '*.md' -not -path './target/*' -print0 | xargs -0 -- $(MDLINT)
+	$(MDLINT) "**/*.md"
 
 nixie:
 	# CI currently requires --no-sandbox; remove once nixie supports
 	# environment variable control for this option
-	nixie --no-sandbox
+	$(NIXIE) --no-sandbox
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?##' $(MAKEFILE_LIST) | \

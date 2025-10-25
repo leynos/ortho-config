@@ -54,16 +54,16 @@ pub(crate) struct LoadImplArgs<'a> {
 /// "Configuration File Discovery" section of the design document. This mirrors
 /// standard XDG behaviour on Unix-like systems and uses `directories` on Windows.
 fn to_lit_str(value: Option<&String>) -> Option<syn::LitStr> {
-    value.map(|value| syn::LitStr::new(value, proc_macro2::Span::call_site()))
+    value.map(|contents| syn::LitStr::new(contents, proc_macro2::Span::call_site()))
 }
 
 fn build_optional_stmt(
     lit: Option<syn::LitStr>,
     method_name: &str,
 ) -> Option<proc_macro2::TokenStream> {
-    lit.map(|lit| {
+    lit.map(|lit_str| {
         let method_ident = syn::Ident::new(method_name, proc_macro2::Span::call_site());
-        quote! { builder = builder.#method_ident(#lit); }
+        quote! { builder = builder.#method_ident(#lit_str); }
     })
 }
 
@@ -168,20 +168,22 @@ pub(crate) fn build_file_discovery(
     tokens: &LoadImplTokens<'_>,
     has_config_path: bool,
 ) -> proc_macro2::TokenStream {
-    if let Some(discovery) = tokens.discovery {
-        build_discovery_based_loading(discovery, has_config_path)
-    } else {
-        let app_name = syn::LitStr::new(&tokens.legacy_app_name, proc_macro2::Span::call_site());
-        let config_env_var = tokens.config_env_var;
-        let dotfile_name = tokens.dotfile_name.clone();
-        let cli_chain = build_cli_chain_tokens(has_config_path);
-        let builder_init = quote! { ortho_config::ConfigDiscovery::builder(#app_name) };
-        let builder_steps = vec![
-            quote! { builder = builder.env_var(#config_env_var); },
-            quote! { builder = builder.dotfile_name(#dotfile_name); },
-        ];
-        build_discovery_loading_block(&builder_init, &builder_steps, &cli_chain)
-    }
+    tokens.discovery.map_or_else(
+        || {
+            let app_name =
+                syn::LitStr::new(&tokens.legacy_app_name, proc_macro2::Span::call_site());
+            let config_env_var = tokens.config_env_var;
+            let dotfile_name = tokens.dotfile_name.clone();
+            let cli_chain = build_cli_chain_tokens(has_config_path);
+            let builder_init = quote! { ortho_config::ConfigDiscovery::builder(#app_name) };
+            let builder_steps = vec![
+                quote! { builder = builder.env_var(#config_env_var); },
+                quote! { builder = builder.dotfile_name(#dotfile_name); },
+            ];
+            build_discovery_loading_block(&builder_init, &builder_steps, &cli_chain)
+        },
+        |discovery| build_discovery_based_loading(discovery, has_config_path),
+    )
 }
 
 /// Build the environment provider setup.
@@ -275,9 +277,13 @@ pub(crate) fn build_merge_section(
 
         match fig.extract::<#config_ident>() {
             Ok(cfg) => {
-                if errors.is_empty() { Ok(cfg) }
-                else if errors.len() == 1 { Err(errors.pop().expect("one error")) }
-                else { Err(ortho_config::OrthoError::aggregate(errors).into()) }
+                if errors.is_empty() {
+                    Ok(cfg)
+                } else if errors.len() == 1 {
+                    Err(errors.remove(0))
+                } else {
+                    Err(ortho_config::OrthoError::aggregate(errors).into())
+                }
             }
             Err(e) => {
                 errors.push(std::sync::Arc::new(ortho_config::OrthoError::merge(e)));

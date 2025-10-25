@@ -101,9 +101,7 @@ fn generate_non_object_guard(config_ident: &syn::Ident) -> TokenStream {
             ortho_config::serde_json::Value::Number(_) => "a number",
             ortho_config::serde_json::Value::String(_) => "a string",
             ortho_config::serde_json::Value::Array(_) => "an array",
-            ortho_config::serde_json::Value::Object(_) => unreachable!(
-                "objects handled by earlier match arm"
-            ),
+            ortho_config::serde_json::Value::Object(_) => "an object",
         };
         let mut message = format!(
             concat!(

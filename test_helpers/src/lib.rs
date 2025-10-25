@@ -61,12 +61,12 @@ pub mod env {
         K: Into<String>,
         F: FnOnce(&str),
     {
-        let key = key.into();
+        let key_string = key.into();
         let lock = ENV_MUTEX.lock();
-        let original = env::var_os(&key);
-        mutator(&key);
+        let original = env::var_os(&key_string);
+        mutator(&key_string);
         EnvVarGuard {
-            key,
+            key: key_string,
             original,
             _lock: lock,
         }
@@ -100,7 +100,7 @@ pub mod env {
     /// ```
     /// use test_helpers::env;
     /// let _g = env::set_var("FOO", "bar");
-    /// assert_eq!(std::env::var("FOO").expect("read env var"), "bar");
+    /// assert!(matches!(std::env::var("FOO"), Ok(ref value) if value == "bar"));
     /// // Dropping `_g` restores the prior value (or unsets it if none existed).
     /// ```
     pub fn set_var<K, V>(key: K, value: V) -> EnvVarGuard
@@ -159,39 +159,79 @@ pub mod env {
         use std::sync::{Arc, Barrier};
         use std::thread;
 
+        fn spawn_env_worker(barrier: &Arc<Barrier>, key: String) -> thread::JoinHandle<()> {
+            let barrier_wait = Arc::clone(barrier);
+            thread::spawn(move || run_env_worker(barrier_wait, key))
+        }
+
+        #[expect(
+            clippy::needless_pass_by_value,
+            reason = "thread closure requires owned Arc and String to satisfy 'static"
+        )]
+        fn run_env_worker(barrier: Arc<Barrier>, key: String) {
+            barrier.wait();
+            let value = format!("value-{key}");
+            let guard = set_var(&key, &value);
+            assert_eq!(env_value(&key), value);
+            drop(guard);
+        }
+
+        fn assert_join_success(handle: thread::JoinHandle<()>) {
+            if let Err(err) = handle.join() {
+                panic!("thread panicked: {err:?}");
+            }
+        }
+
+        // Centralises environment variable lookups for the tests; panics on
+        // missing/invalid values so failures are loud and easy to diagnose.
+        fn env_value(key: &str) -> String {
+            match std::env::var(key) {
+                Ok(value) => value,
+                Err(err) => panic!("expected environment variable {key}: {err}"),
+            }
+        }
+
+        fn setup_test_env(key: &str, value: &str) {
+            super::with_lock(|| unsafe { super::env_set_var(key, OsStr::new(value)) });
+        }
+
+        fn cleanup_test_env(key: &str) {
+            super::with_lock(|| unsafe { super::env_remove_var(key) });
+        }
+
         #[test]
         fn set_var_restores_original() {
             let key = "TEST_HELPERS_SET_VAR";
             let original = "orig";
-            super::with_lock(|| unsafe { super::env_set_var(key, OsStr::new(original)) });
+            setup_test_env(key, original);
             {
                 let _guard = set_var(key, "temp");
-                assert_eq!(std::env::var(key).expect("read env var"), "temp");
+                assert_eq!(env_value(key), "temp");
             }
-            assert_eq!(std::env::var(key).expect("read env var"), original);
-            super::with_lock(|| unsafe { super::env_remove_var(key) });
+            assert_eq!(env_value(key), original);
+            cleanup_test_env(key);
         }
 
         #[test]
         fn remove_var_restores_value() {
             let key = "TEST_HELPERS_REMOVE_VAR";
             let original = "to-be-removed";
-            super::with_lock(|| unsafe { super::env_set_var(key, OsStr::new(original)) });
+            setup_test_env(key, original);
             {
                 let _guard = remove_var(key);
                 assert!(std::env::var(key).is_err());
             }
-            assert_eq!(std::env::var(key).expect("read env var"), original);
-            super::with_lock(|| unsafe { super::env_remove_var(key) });
+            assert_eq!(env_value(key), original);
+            cleanup_test_env(key);
         }
 
         #[test]
         fn set_var_unsets_when_absent() {
             let key = "TEST_HELPERS_UNSET";
-            super::with_lock(|| unsafe { super::env_remove_var(key) });
+            cleanup_test_env(key);
             {
                 let _guard = set_var(key, "tmp");
-                assert_eq!(std::env::var(key).expect("read env var"), "tmp");
+                assert_eq!(env_value(key), "tmp");
             }
             assert!(std::env::var(key).is_err());
         }
@@ -207,20 +247,10 @@ pub mod env {
             let handles: Vec<_> = keys
                 .iter()
                 .cloned()
-                .map(|key| {
-                    let barrier = Arc::clone(&barrier);
-                    thread::spawn(move || {
-                        barrier.wait();
-                        let value = format!("value-{key}");
-                        let _g = set_var(&key, &value);
-                        assert_eq!(std::env::var(&key).expect("read env var"), value);
-                    })
-                })
+                .map(|key| spawn_env_worker(&barrier, key))
                 .collect();
 
-            for handle in handles {
-                handle.join().expect("thread to join");
-            }
+            handles.into_iter().for_each(assert_join_success);
 
             for key in keys {
                 assert!(std::env::var(key).is_err());
@@ -232,15 +262,15 @@ pub mod env {
             let key = "TEST_HELPERS_STACKING";
             // Ensure clean slate
             super::with_lock(|| unsafe { super::env_remove_var(key) });
-            {
-                let _g1 = set_var(key, "v1");
-                assert_eq!(std::env::var(key).expect("read env var"), "v1");
-                {
-                    let _g2 = set_var(key, "v2");
-                    assert_eq!(std::env::var(key).expect("read env var"), "v2");
-                }
-                assert_eq!(std::env::var(key).expect("read env var"), "v1");
-            }
+            let guard1 = set_var(key, "v1");
+            assert_eq!(env_value(key), "v1");
+
+            let guard2 = set_var(key, "v2");
+            assert_eq!(env_value(key), "v2");
+            drop(guard2);
+
+            assert_eq!(env_value(key), "v1");
+            drop(guard1);
             assert!(std::env::var(key).is_err());
         }
     }

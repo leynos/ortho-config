@@ -75,7 +75,7 @@ pub struct AggregatedErrors(Vec<Arc<OrthoError>>);
 impl AggregatedErrors {
     /// Create a new aggregation from a vector of errors.
     #[must_use]
-    pub fn new(errors: Vec<Arc<OrthoError>>) -> Self {
+    pub const fn new(errors: Vec<Arc<OrthoError>>) -> Self {
         Self(errors)
     }
 
@@ -87,7 +87,7 @@ impl AggregatedErrors {
 
     /// Number of errors in the aggregation.
     #[must_use]
-    pub fn len(&self) -> usize {
+    pub const fn len(&self) -> usize {
         self.0.len()
     }
 }
@@ -128,7 +128,13 @@ impl IntoIterator for AggregatedErrors {
 }
 
 impl OrthoError {
-    /// Try to build an [`OrthoError`] from an iterator of errors.
+    /// Tries to build an [`OrthoError`] from an iterator of errors.
+    ///
+    /// The iterator is consumed eagerly. It returns:
+    /// * `None` when no errors are supplied;
+    /// * the inner error when a single [`Arc`] is uniquely owned;
+    /// * [`Self::Aggregate`] containing that single [`Arc`] when the error is already shared; and
+    /// * [`Self::Aggregate`] combining every error for two or more inputs.
     ///
     /// Returns `None` if the iterator is empty.
     ///
@@ -141,19 +147,20 @@ impl OrthoError {
     pub fn try_aggregate<I, E>(errors: I) -> Option<Self>
     where
         I: IntoIterator<Item = E>,
-        E: Into<Arc<OrthoError>>,
+        E: Into<Arc<Self>>,
     {
-        let mut arcs: Vec<Arc<OrthoError>> = errors.into_iter().map(Into::into).collect();
+        let mut arcs: Vec<Arc<Self>> = errors.into_iter().map(Into::into).collect();
         if arcs.is_empty() {
             return None;
         }
         Some(if arcs.len() == 1 {
-            match Arc::try_unwrap(arcs.pop().unwrap()) {
+            let last = arcs.pop()?;
+            match Arc::try_unwrap(last) {
                 Ok(err) => err,
-                Err(shared) => OrthoError::Aggregate(Box::new(AggregatedErrors::new(vec![shared]))),
+                Err(shared) => Self::Aggregate(Box::new(AggregatedErrors::new(vec![shared]))),
             }
         } else {
-            OrthoError::Aggregate(Box::new(AggregatedErrors::new(arcs)))
+            Self::Aggregate(Box::new(AggregatedErrors::new(arcs)))
         })
     }
 
@@ -168,9 +175,12 @@ impl OrthoError {
     pub fn aggregate<I, E>(errors: I) -> Self
     where
         I: IntoIterator<Item = E>,
-        E: Into<Arc<OrthoError>>,
+        E: Into<Arc<Self>>,
     {
-        Self::try_aggregate(errors).expect("aggregate requires at least one error")
+        Self::try_aggregate(errors).map_or_else(
+            || panic!("aggregate requires at least one error"),
+            |err| err,
+        )
     }
 
     /// Construct a merge error from a [`figment::Error`].
@@ -185,7 +195,7 @@ impl OrthoError {
     /// ```
     #[must_use]
     pub fn merge(source: FigmentError) -> Self {
-        OrthoError::Merge {
+        Self::Merge {
             source: Box::new(source),
         }
     }
@@ -202,7 +212,7 @@ impl OrthoError {
     /// ```
     #[must_use]
     pub fn gathering(source: FigmentError) -> Self {
-        OrthoError::Gathering(Box::new(source))
+        Self::Gathering(Box::new(source))
     }
 
     /// Construct a gathering error from a [`figment::Error`] wrapped in an
@@ -229,7 +239,7 @@ impl OrthoError {
 /// [`OrthoError::Gathering`].
 impl From<serde_json::Error> for OrthoError {
     fn from(e: serde_json::Error) -> Self {
-        OrthoError::Gathering(Box::new(figment::Error::from(format!(
+        Self::Gathering(Box::new(figment::Error::from(format!(
             "JSON error: {} at line {}, column {}",
             e,
             e.line(),
@@ -240,13 +250,13 @@ impl From<serde_json::Error> for OrthoError {
 
 impl From<clap::Error> for OrthoError {
     fn from(e: clap::Error) -> Self {
-        OrthoError::CliParsing(e.into())
+        Self::CliParsing(e.into())
     }
 }
 
 impl From<FigmentError> for OrthoError {
     fn from(e: FigmentError) -> Self {
-        OrthoError::Gathering(e.into())
+        Self::Gathering(e.into())
     }
 }
 
@@ -257,7 +267,7 @@ impl From<OrthoError> for FigmentError {
             // Preserve the original Figment error (keeps kind, metadata, and sources).
             OrthoError::Merge { source: fe } | OrthoError::Gathering(fe) => *fe,
             // Fall back to a message for other variants.
-            other => FigmentError::from(other.to_string()),
+            other => Self::from(other.to_string()),
         }
     }
 }
@@ -267,58 +277,77 @@ mod tests {
     use super::OrthoError;
     use std::sync::Arc;
 
-    fn run_aggregate_tests<F>(name: &str, f: F)
+    fn run_aggregate_tests<F>(name: &str, runner: F)
     where
         F: Fn(Vec<Arc<OrthoError>>) -> OrthoError,
     {
-        // single-owned
+        assert_single_owned(name, &runner);
+        assert_single_shared(name, &runner);
+        assert_multi_entry(name, &runner);
+    }
+
+    fn assert_single_owned<F>(name: &str, runner: &F)
+    where
+        F: Fn(Vec<Arc<OrthoError>>) -> OrthoError,
+    {
         let err = Arc::new(OrthoError::Validation {
             key: "k".into(),
             message: "m".into(),
         });
-        let res = f(vec![err]);
-        match res {
-            OrthoError::Validation { .. } => {}
-            other => panic!("{name}: expected Validation, got {other:?}"),
-        }
+        let outcome = runner(vec![err]);
+        assert!(
+            matches!(outcome, OrthoError::Validation { .. }),
+            "{name}: expected Validation, got {outcome:?}"
+        );
+    }
 
-        // single-shared
+    fn assert_single_shared<F>(name: &str, runner: &F)
+    where
+        F: Fn(Vec<Arc<OrthoError>>) -> OrthoError,
+    {
         let shared = OrthoError::gathering_arc(figment::Error::from("boom"));
-        let res = f(vec![Arc::clone(&shared)]);
-        if let OrthoError::Aggregate(agg) = res {
-            assert_eq!(agg.len(), 1);
-        } else {
-            panic!("{name}: expected Aggregate");
-        }
-
-        // multi
-        let e1 = OrthoError::gathering_arc(figment::Error::from("one"));
-        let e2 = OrthoError::gathering_arc(figment::Error::from("two"));
-        let res = f(vec![e1, e2]);
-        if let OrthoError::Aggregate(agg) = res {
-            let agg = *agg;
-            let iter_items: Vec<_> = agg.iter().collect();
-            assert_eq!(iter_items.len(), 2);
-            let mut borrowed_items = Vec::new();
-            for e in &agg {
-                borrowed_items.push(e);
+        let outcome = runner(vec![Arc::clone(&shared)]);
+        match outcome {
+            OrthoError::Aggregate(aggregate) => {
+                assert_eq!(
+                    aggregate.len(),
+                    1,
+                    "{name}: expected single aggregate entry"
+                );
             }
-            assert_eq!(borrowed_items.len(), 2);
-            let display = agg.to_string();
-            let owned_items: Vec<_> = agg.into_iter().collect();
-            assert_eq!(owned_items.len(), 2);
-            assert!(display.starts_with("1:"));
-            assert!(display.contains("\n2:"));
-        } else {
-            panic!("{name}: expected Aggregate");
+            other => panic!("{name}: expected Aggregate, got {other:?}"),
+        }
+    }
+
+    fn assert_multi_entry<F>(name: &str, runner: &F)
+    where
+        F: Fn(Vec<Arc<OrthoError>>) -> OrthoError,
+    {
+        let first = OrthoError::gathering_arc(figment::Error::from("one"));
+        let second = OrthoError::gathering_arc(figment::Error::from("two"));
+        match runner(vec![first, second]) {
+            OrthoError::Aggregate(aggregate) => {
+                let errors = aggregate.as_ref();
+                assert_eq!(errors.len(), 2, "{name}: expected two aggregate entries");
+                let borrowed: Vec<_> = errors.iter().collect();
+                assert_eq!(borrowed.len(), 2, "{name}: borrowed iteration failed");
+                let display = errors.to_string();
+                let owned: Vec<_> = aggregate.into_iter().collect();
+                assert_eq!(owned.len(), 2, "{name}: owned iteration failed");
+                assert!(display.starts_with("1:"), "{name}: first entry missing");
+                assert!(display.contains("\n2:"), "{name}: second entry missing");
+            }
+            other => panic!("{name}: expected Aggregate, got {other:?}"),
         }
     }
 
     #[test]
-    #[should_panic(expected = "aggregate requires at least one error")]
     fn aggregate_panics_on_empty() {
         let empty: Vec<Arc<OrthoError>> = vec![];
-        let _ = OrthoError::aggregate(empty);
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            OrthoError::aggregate(empty)
+        }));
+        assert!(result.is_err());
     }
 
     #[test]
@@ -328,7 +357,12 @@ mod tests {
 
     #[test]
     fn both_aggregate_behaviours() {
-        run_aggregate_tests("try_aggregate", |v| OrthoError::try_aggregate(v).unwrap());
+        run_aggregate_tests("try_aggregate", |v| {
+            OrthoError::try_aggregate(v).map_or_else(
+                || panic!("expected error aggregation to yield a value"),
+                |err| err,
+            )
+        });
         run_aggregate_tests("aggregate", OrthoError::aggregate);
     }
 }

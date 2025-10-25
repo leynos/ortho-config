@@ -1,5 +1,5 @@
 //! Tests for dynamic table deserialization into maps.
-
+use anyhow::{Result, anyhow, ensure};
 use figment::{
     Figment,
     providers::{Env, Format, Serialized, Toml},
@@ -8,6 +8,10 @@ use rstest::rstest;
 use serde::Deserialize;
 use serde_json::json;
 use std::collections::BTreeMap;
+
+#[path = "test_utils.rs"]
+mod test_utils;
+use test_utils::with_jail;
 
 #[derive(Debug, Deserialize)]
 struct TableConfig {
@@ -34,20 +38,31 @@ struct RuleCfg {
 ///         ("b".into(), RuleCfg { enabled: false }),
 ///     ]),
 /// };
-/// assert_basic_rules(&cfg);
+/// assert_basic_rules(&cfg).unwrap();
 /// ```
-fn assert_basic_rules(cfg: &TableConfig) {
-    assert!(cfg.rules.get("a").is_some_and(|r| r.enabled));
-    assert!(cfg.rules.get("b").is_some_and(|r| !r.enabled));
-    assert_eq!(cfg.rules.len(), 2, "unexpected rule entries parsed");
+fn assert_basic_rules(cfg: &TableConfig) -> Result<()> {
+    ensure!(
+        cfg.rules.get("a").is_some_and(|r| r.enabled),
+        "expected rule 'a' to be enabled"
+    );
+    ensure!(
+        cfg.rules.get("b").is_some_and(|r| !r.enabled),
+        "expected rule 'b' to be disabled"
+    );
+    ensure!(
+        cfg.rules.len() == 2,
+        "unexpected rule entries parsed: {:?}",
+        cfg.rules
+    );
+    Ok(())
 }
 
 #[rstest]
 #[case::file("file")]
 #[case::env("env")]
 #[case::cli("cli")]
-fn loads_map_from_source(#[case] source: &str) {
-    figment::Jail::expect_with(|j| {
+fn loads_map_from_source(#[case] source: &str) -> Result<()> {
+    with_jail(|j| {
         let fig = match source {
             "file" => {
                 j.create_file(
@@ -71,17 +86,18 @@ enabled = false
                     "b": { "enabled": false }
                 }
             }))),
-            _ => unreachable!("unknown source: {source}"),
+            other => return Err(anyhow!("unknown source: {other}")),
         };
-        let cfg: TableConfig = fig.extract().expect("extract");
-        assert_basic_rules(&cfg);
+        let cfg: TableConfig = fig.extract().map_err(|err| anyhow!(err))?;
+        assert_basic_rules(&cfg)?;
         Ok(())
-    });
+    })?;
+    Ok(())
 }
 
 #[rstest]
-fn merges_map_from_sources() {
-    figment::Jail::expect_with(|j| {
+fn merges_map_from_sources() -> Result<()> {
+    with_jail(|j| {
         j.create_file(
             ".config.toml",
             r"[rules.a]
@@ -94,11 +110,25 @@ enabled = true
             .merge(Serialized::defaults(&json!({
                 "rules": { "c": { "enabled": true } }
             })));
-        let cfg: TableConfig = fig.extract().expect("extract");
-        assert!(cfg.rules.get("a").is_some_and(|r| r.enabled));
-        assert!(cfg.rules.get("b").is_some_and(|r| !r.enabled));
-        assert!(cfg.rules.get("c").is_some_and(|r| r.enabled));
-        assert_eq!(cfg.rules.len(), 3, "unexpected rule entries parsed");
+        let cfg: TableConfig = fig.extract().map_err(|err| anyhow!(err))?;
+        ensure!(
+            cfg.rules.get("a").is_some_and(|r| r.enabled),
+            "rule a must be enabled"
+        );
+        ensure!(
+            cfg.rules.get("b").is_some_and(|r| !r.enabled),
+            "rule b must be disabled"
+        );
+        ensure!(
+            cfg.rules.get("c").is_some_and(|r| r.enabled),
+            "rule c must be enabled"
+        );
+        ensure!(
+            cfg.rules.len() == 3,
+            "unexpected rule entries parsed: {:?}",
+            cfg.rules
+        );
         Ok(())
-    });
+    })?;
+    Ok(())
 }

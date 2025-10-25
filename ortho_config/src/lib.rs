@@ -1,3 +1,5 @@
+#![cfg_attr(docsrs, feature(doc_cfg))]
+
 //! Core crate for the `OrthoConfig` configuration framework.
 //!
 //! Defines the [`OrthoConfig`] trait, error types and sanitization helpers used
@@ -109,7 +111,7 @@ pub trait OrthoConfig: Sized + serde::de::DeserializeOwned {
     ///
     /// # Errors
     ///
-    /// Returns an [`OrthoError`] if parsing command-line arguments, reading
+    /// Returns an [`crate::OrthoError`] if parsing command-line arguments, reading
     /// files or deserializing configuration fails.
     fn load() -> OrthoResult<Self> {
         Self::load_from_iter(std::env::args_os())
@@ -120,7 +122,7 @@ pub trait OrthoConfig: Sized + serde::de::DeserializeOwned {
     ///
     /// # Errors
     ///
-    /// Returns an [`OrthoError`] if parsing command-line arguments, reading
+    /// Returns an [`crate::OrthoError`] if parsing command-line arguments, reading
     /// files or deserializing configuration fails.
     fn load_from_iter<I, T>(iter: I) -> OrthoResult<Self>
     where

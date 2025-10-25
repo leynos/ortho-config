@@ -54,6 +54,7 @@ serial_test = "3"
 cap-std = "3"
 tempfile = "3"
 test_helpers = { path = "../test_helpers" }
+anyhow = "1"
 
 [[test]]
 name = "cucumber"

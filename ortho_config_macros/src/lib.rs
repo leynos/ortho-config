@@ -31,15 +31,17 @@ use derive::load_impl::{
 };
 use derive::parse::parse_input;
 
-/// Derive macro for [`ortho_config::OrthoConfig`].
+/// Derive macro for the
+/// [`OrthoConfig`](https://docs.rs/ortho_config/latest/ortho_config/trait.OrthoConfig.html)
+/// trait.
 ///
 /// # Errors
 ///
 /// Returns a compile-time error if invoked on a struct that contains unnamed fields.
 #[proc_macro_derive(OrthoConfig, attributes(ortho_config))]
-pub fn derive_ortho_config(input: TokenStream) -> TokenStream {
-    let input = parse_macro_input!(input as DeriveInput);
-    let (ident, fields, struct_attrs, field_attrs) = match parse_input(&input) {
+pub fn derive_ortho_config(input_tokens: TokenStream) -> TokenStream {
+    let derive_input = parse_macro_input!(input_tokens as DeriveInput);
+    let (ident, fields, struct_attrs, field_attrs) = match parse_input(&derive_input) {
         Ok(v) => v,
         Err(e) => return e.to_compile_error().into(),
     };
@@ -292,6 +294,7 @@ mod tests {
     use crate::derive::generate::structs::{
         generate_cli_struct, generate_defaults_struct, generate_struct,
     };
+    use anyhow::{Context, Result, ensure};
     use proc_macro2::TokenStream as TokenStream2;
     use quote::quote;
     use rstest::rstest;
@@ -300,34 +303,40 @@ mod tests {
     fn build_components(
         default_struct_fields: Vec<TokenStream2>,
         cli_struct_fields: Vec<TokenStream2>,
-    ) -> MacroComponents {
-        MacroComponents {
-            defaults_ident: parse_str("DefaultsStruct").expect("defaults ident"),
+    ) -> Result<MacroComponents> {
+        Ok(MacroComponents {
+            defaults_ident: parse_str("DefaultsStruct").context("defaults ident")?,
             default_struct_fields,
-            cli_ident: parse_str("CliStruct").expect("cli ident"),
+            cli_ident: parse_str("CliStruct").context("cli ident")?,
             cli_struct_fields,
             override_struct_ts: quote! {},
             load_impl: quote! {},
             prefix_fn: None,
             append_fields: Vec::new(),
-        }
+        })
     }
 
     #[rstest]
-    fn generate_struct_handles_empty_fields() {
-        let ident = parse_str("Empty").expect("ident");
+    fn generate_struct_handles_empty_fields() -> Result<()> {
+        let ident = parse_str("Empty").context("parse Empty ident")?;
         let attrs = quote! { #[derive(Default)] };
         let tokens = generate_struct(&ident, &[], &attrs);
         let expected = quote! {
             #[derive(Default)]
             struct Empty {}
         };
-        assert_eq!(tokens.to_string(), expected.to_string());
+        ensure!(
+            tokens.to_string() == expected.to_string(),
+            "generated tokens differ: {} != {}",
+            tokens,
+            expected
+        );
+        Ok(())
     }
 
     #[rstest]
-    fn generate_struct_renders_fields_with_commas() {
-        let ident = parse_str("WithFields").expect("ident");
+    fn generate_struct_renders_fields_with_commas() -> Result<()> {
+        let ident = parse_str("WithFields").context("parse WithFields ident")?;
         let fields = vec![quote! { pub value: u32 }, quote! { pub other: String }];
         let attrs = quote! { #[derive(Default)] };
         let tokens = generate_struct(&ident, &fields, &attrs);
@@ -338,15 +347,21 @@ mod tests {
                 pub other: String,
             }
         };
-        assert_eq!(tokens.to_string(), expected.to_string());
+        ensure!(
+            tokens.to_string() == expected.to_string(),
+            "generated tokens differ: {} != {}",
+            tokens,
+            expected
+        );
+        Ok(())
     }
 
     #[rstest]
-    fn generate_cli_struct_emits_expected_tokens() {
+    fn generate_cli_struct_emits_expected_tokens() -> Result<()> {
         let components = build_components(
             vec![quote! { pub value: u32 }],
             vec![quote! { #[clap(long)] pub value: Option<u32> }],
-        );
+        )?;
         let tokens = generate_cli_struct(&components);
         let expected = quote! {
             #[derive(clap::Parser, serde::Serialize, Default)]
@@ -355,20 +370,32 @@ mod tests {
                 pub value: Option<u32>,
             }
         };
-        assert_eq!(tokens.to_string(), expected.to_string());
+        ensure!(
+            tokens.to_string() == expected.to_string(),
+            "generated CLI struct differs: {} != {}",
+            tokens,
+            expected
+        );
+        Ok(())
     }
 
     #[rstest]
-    fn generate_defaults_struct_supports_empty_fields() {
+    fn generate_defaults_struct_supports_empty_fields() -> Result<()> {
         let components = build_components(
             Vec::new(),
             vec![quote! { #[clap(long)] pub value: Option<u32> }],
-        );
+        )?;
         let tokens = generate_defaults_struct(&components);
         let expected = quote! {
             #[derive(serde::Serialize)]
             struct DefaultsStruct {}
         };
-        assert_eq!(tokens.to_string(), expected.to_string());
+        ensure!(
+            tokens.to_string() == expected.to_string(),
+            "generated defaults struct differs: {} != {}",
+            tokens,
+            expected
+        );
+        Ok(())
     }
 }

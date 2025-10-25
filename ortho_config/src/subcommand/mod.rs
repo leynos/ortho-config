@@ -48,9 +48,9 @@ fn load_from_files(paths: &[PathBuf], name: &CmdName) -> OrthoResult<Figment> {
 ///
 /// # Errors
 ///
-/// Returns [`OrthoError::Merge`] if CLI values cannot be merged or if
+/// Returns [`crate::OrthoError::Merge`] if CLI values cannot be merged or if
 /// deserialization fails. Because CLI merging occurs, this function does not
-/// return [`OrthoError::Gathering`].
+/// return [`crate::OrthoError::Gathering`].
 ///
 /// # Examples
 ///
@@ -104,7 +104,7 @@ where
 ///
 /// # Errors
 ///
-/// Returns [`OrthoError::Merge`] if CLI values cannot be merged or if
+/// Returns [`crate::OrthoError::Merge`] if CLI values cannot be merged or if
 /// deserialization fails.
 ///
 /// # Examples
@@ -133,7 +133,7 @@ where
     load_and_merge_subcommand(&Prefix::new(T::prefix()), cli)
 }
 
-/// Trait adding a convenience [`load_and_merge`] method to subcommand structs.
+/// Trait adding a convenience [`SubcmdConfigMerge::load_and_merge`] method to subcommand structs.
 ///
 /// Implemented for any type that satisfies the bounds required by
 /// [`load_and_merge_subcommand_for`]. This avoids writing identical
@@ -169,7 +169,7 @@ pub trait SubcmdConfigMerge: crate::OrthoConfig + CommandFactory + Sized {
     ///
     /// # Errors
     ///
-    /// Returns an [`OrthoError::Merge`] if CLI values cannot be merged or if
+    /// Returns an [`crate::OrthoError::Merge`] if CLI values cannot be merged or if
     /// deserialisation fails.
     fn load_and_merge(&self) -> OrthoResult<Self>
     where

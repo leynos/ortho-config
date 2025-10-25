@@ -28,6 +28,7 @@ yaml = []
 toml = []
 
 [dev-dependencies]
+anyhow = "1"
 rstest = "0.26.1"
 serde = { version = "1", features = ["derive"] }
 ortho_config = { path = "../ortho_config" }

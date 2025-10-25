@@ -1,8 +1,12 @@
 //! Tests for ignore pattern handling across sources.
-
+use anyhow::{Result, anyhow, ensure};
 use ortho_config::OrthoConfig;
 use rstest::rstest;
 use serde::{Deserialize, Serialize};
+
+#[path = "test_utils.rs"]
+mod test_utils;
+use test_utils::with_jail;
 
 #[derive(Debug, Deserialize, Serialize, OrthoConfig)]
 struct IgnoreCfg {
@@ -22,8 +26,8 @@ fn merges_ignore_patterns_matrix(
     #[case] env: Option<&str>,
     #[case] cli: Option<&str>,
     #[case] expected: Vec<&str>,
-) {
-    figment::Jail::expect_with(|j| {
+) -> Result<()> {
+    with_jail(|j| {
         if let Some(val) = env {
             j.set_env("IGNORE_PATTERNS", val);
         }
@@ -32,8 +36,15 @@ fn merges_ignore_patterns_matrix(
             args.push("--ignore-patterns");
             args.push(val.trim());
         }
-        let cfg = IgnoreCfg::load_from_iter(args).expect("load");
-        assert_eq!(cfg.ignore_patterns, expected);
+        let cfg = IgnoreCfg::load_from_iter(args).map_err(|err| anyhow!(err))?;
+        let expected_vec: Vec<String> = expected.into_iter().map(str::to_owned).collect();
+        ensure!(
+            cfg.ignore_patterns == expected_vec,
+            "expected {:?}, got {:?}",
+            expected_vec,
+            cfg.ignore_patterns
+        );
         Ok(())
-    });
+    })?;
+    Ok(())
 }
