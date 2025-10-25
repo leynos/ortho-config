@@ -15,6 +15,8 @@ pub type HelloWorldCliFixture = Result<HelloWorldCli>;
 pub type GreetCommandFixture = Result<GreetCommand>;
 pub type TakeLeaveCommandFixture = Result<TakeLeaveCommand>;
 
+pub use crate::test_support::figment_error;
+
 #[fixture]
 pub fn base_cli() -> HelloWorldCliFixture {
     let cli = HelloWorldCli::default();
@@ -107,14 +109,6 @@ pub fn expect_take_leave(command: Commands) -> Result<TakeLeaveCommand> {
         Commands::TakeLeave(take_leave) => Ok(take_leave),
         Commands::Greet(_) => Err(anyhow!("expected take-leave command, found greet")),
     }
-}
-
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "accept ownership to allow map_err(figment_error) without closures"
-)]
-pub fn figment_error<E: ToString>(err: E) -> figment::Error {
-    figment::Error::from(err.to_string())
 }
 
 pub fn with_jail<F, T>(f: F) -> Result<T>

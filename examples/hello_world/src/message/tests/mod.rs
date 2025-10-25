@@ -3,16 +3,11 @@
 use super::*;
 use crate::cli::{FarewellChannel, GlobalArgs, GreetCommand, HelloWorldCli, TakeLeaveCommand};
 use crate::error::ValidationError;
+use crate::test_support::figment_error;
 use anyhow::{Result, anyhow, ensure};
 use camino::Utf8PathBuf;
 use ortho_config::figment;
 use rstest::{fixture, rstest};
-use std::cell::RefCell;
-
-thread_local! {
-    static PLAN_CONFIG: RefCell<Option<HelloWorldCli>> = const { RefCell::new(None) };
-}
-
 struct Plan {
     config: HelloWorldCli,
     greeting: GreetingPlan,
@@ -436,14 +431,6 @@ where
         "HELLO HEY CONFIG FRIENDS, EXCITED CREW!!!",
         Some("Layered hello"),
     )
-}
-
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "accept ownership to reuse figment_error in map_err"
-)]
-fn figment_error<E: ToString>(err: E) -> figment::Error {
-    figment::Error::from(err.to_string())
 }
 
 fn assert_greeting(
