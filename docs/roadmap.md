@@ -251,6 +251,32 @@ references the relevant design guidance.
     configuration in one call, eliminating the repetitive `match` scaffolding
     in `hello_world`. [[Feedback](feedback-from-hello-world-example.md)]
 
+- [ ] **Replace `serde_yaml` with `serde-saphyr` for YAML parsing**
+  [[ADR-001](adr-001-replace-serde-yaml-with-serde-saphyr.md)]
+
+  - [ ] Update `ortho_config/Cargo.toml` features to remove the indirect
+    `figment/yaml` dependency, add optional `serde_saphyr` and `serde_json`
+    entries, and wire the YAML feature to these crates.
+    [[ADR-001](adr-001-replace-serde-yaml-with-serde-saphyr.md)]
+
+  - [ ] Implement the `SaphyrYaml` provider in `ortho_config/src/file.rs` that
+    reads YAML files, deserialises them with `serde-saphyr`, and converts the
+    output into `figment::value::Dict`.
+    [[ADR-001](adr-001-replace-serde-yaml-with-serde-saphyr.md)]
+
+  - [ ] Switch `parse_config_by_format` to use the new provider for `.yaml` and
+    `.yml` files, ensuring feature-gated builds continue to compile.
+    [[ADR-001](adr-001-replace-serde-yaml-with-serde-saphyr.md)]
+
+  - [ ] Extend `ortho_config/src/file/file_tests.rs` with YAML 1.2 compliance
+    coverage (`key: yes` remains a string, duplicates are rejected) and add
+    failure-path tests for malformed YAML inputs.
+    [[ADR-001](adr-001-replace-serde-yaml-with-serde-saphyr.md)]
+
+  - [ ] Document the migration in `CHANGELOG.md`, update user guides to call out
+    YAML 1.2 compliance, and plan a minor version bump for the release.
+    [[ADR-001](adr-001-replace-serde-yaml-with-serde-saphyr.md)]
+
 - [ ] **Address future enhancements**
 
   - [ ] Explore asynchronous loading of configuration files and environment
