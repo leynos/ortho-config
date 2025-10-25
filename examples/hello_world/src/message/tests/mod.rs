@@ -173,7 +173,14 @@ fn build_plan_direct(
     greet: GreetCommand,
     leave: TakeLeaveCommand,
 ) -> Result<Plan> {
-    build_plan_from(config, greet, leave)
+    let mut plan = None;
+    figment::Jail::try_with(|jail| {
+        jail.clear_env();
+        plan = Some(build_plan_from(config, greet, leave).map_err(figment_error)?);
+        Ok(())
+    })
+    .map_err(|err| anyhow!(err.to_string()))?;
+    plan.ok_or_else(|| anyhow!("direct plan builder did not produce a plan"))
 }
 
 fn build_plan_with_sample_env(
