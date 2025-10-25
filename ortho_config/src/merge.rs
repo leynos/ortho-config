@@ -69,7 +69,7 @@ pub fn value_without_nones<T: Serialize>(cli: &T) -> Result<Value, serde_json::E
 }
 
 /// Serialize `value` to JSON, pruning `None` fields and mapping errors to
-/// [`OrthoError`].
+/// [`crate::OrthoError`].
 ///
 /// # Examples
 ///
@@ -86,7 +86,7 @@ pub fn value_without_nones<T: Serialize>(cli: &T) -> Result<Value, serde_json::E
 ///
 /// # Errors
 ///
-/// Returns an [`OrthoError`] if JSON serialization fails.
+/// Returns an [`crate::OrthoError`] if JSON serialization fails.
 pub fn sanitize_value<T: Serialize>(value: &T) -> OrthoResult<Value> {
     value_without_nones(value).into_ortho()
 }
@@ -116,7 +116,7 @@ pub fn sanitize_value<T: Serialize>(value: &T) -> OrthoResult<Value> {
 ///
 /// # Errors
 ///
-/// Returns an [`OrthoError`] if JSON serialization fails.
+/// Returns an [`crate::OrthoError`] if JSON serialization fails.
 pub fn sanitized_provider<T: Serialize>(value: &T) -> OrthoResult<Serialized<serde_json::Value>> {
     sanitize_value(value).map(Serialized::defaults)
 }

@@ -31,7 +31,9 @@ use derive::load_impl::{
 };
 use derive::parse::parse_input;
 
-/// Derive macro for [`ortho_config::OrthoConfig`].
+/// Derive macro for the
+/// [`OrthoConfig`](https://docs.rs/ortho_config/latest/ortho_config/trait.OrthoConfig.html)
+/// trait.
 ///
 /// # Errors
 ///

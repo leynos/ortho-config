@@ -50,7 +50,7 @@ fn not_found(path: &Path, msg: impl Into<String>) -> std::sync::Arc<OrthoError> 
 ///
 /// Returns an absolute, normalised path with symlinks resolved.
 ///
-/// On Windows the [`dunce`] crate is used to avoid introducing UNC prefixes
+/// On Windows the [`dunce`](https://docs.rs/dunce/latest/dunce/) crate is used to avoid introducing UNC prefixes
 /// in diagnostic messages.
 ///
 /// # Errors

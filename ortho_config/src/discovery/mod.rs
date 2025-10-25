@@ -33,8 +33,8 @@ pub struct ConfigDiscovery {
 
 /// Result of a discovery attempt that keeps required and optional errors separate.
 ///
-/// Callers can surface [`required_errors`] regardless of whether a configuration
-/// file eventually loads, while deferring [`optional_errors`] until fallbacks are
+/// Callers can surface [`DiscoveryLoadOutcome::required_errors`] regardless of whether a configuration
+/// file eventually loads, while deferring [`DiscoveryLoadOutcome::optional_errors`] until fallbacks are
 /// exhausted. This mirrors the builder contract where required explicit paths
 /// must exist.
 ///
