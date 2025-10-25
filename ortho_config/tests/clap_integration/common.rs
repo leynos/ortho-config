@@ -18,14 +18,14 @@ pub(crate) trait OrthoResultExt<T> {
     fn to_anyhow(self) -> Result<T>;
 }
 
-pub(crate) const DEFAULT_RECIPIENT: &str = "World";
-pub(crate) const DEFAULT_SALUTATIONS: &[&str] = &["Hello"];
-
 impl<T> OrthoResultExt<T> for ortho_config::OrthoResult<T> {
     fn to_anyhow(self) -> Result<T> {
         self.map_err(|err| anyhow!(err))
     }
 }
+
+pub(crate) const DEFAULT_RECIPIENT: &str = "World";
+pub(crate) const DEFAULT_SALUTATIONS: &[&str] = &["Hello"];
 
 fn default_recipient() -> String {
     String::from(DEFAULT_RECIPIENT)
