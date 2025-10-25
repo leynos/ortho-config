@@ -6,20 +6,39 @@ use crate::error::ValidationError;
 use anyhow::{Result, anyhow, ensure};
 use rstest::rstest;
 
+fn assert_validation_failure<F>(
+    validate: F,
+    expected_error: &ValidationError,
+    expected_message: Option<&str>,
+    context: &str,
+) -> Result<()>
+where
+    F: FnOnce() -> Result<(), ValidationError>,
+{
+    let Err(err) = validate() else {
+        return Err(anyhow!(context.to_owned()));
+    };
+    ensure!(
+        err == *expected_error,
+        "unexpected validation error: {err:?}"
+    );
+    if let Some(message) = expected_message {
+        ensure!(err.to_string() == message, "unexpected validation message");
+    }
+    Ok(())
+}
+
 #[rstest]
 fn hello_world_cli_detects_conflicting_modes(base_cli: HelloWorldCliFixture) -> Result<()> {
     let mut cli = base_cli?;
     cli.is_excited = true;
     cli.is_quiet = true;
-    let Err(err) = cli.validate() else {
-        return Err(anyhow!(
-            "expected conflicting delivery modes to fail validation"
-        ));
-    };
-    ensure!(
-        err == ValidationError::ConflictingDeliveryModes,
-        "unexpected validation error: {err:?}"
-    );
+    assert_validation_failure(
+        || cli.validate(),
+        &ValidationError::ConflictingDeliveryModes,
+        None,
+        "expected conflicting delivery modes to fail validation",
+    )?;
     Ok(())
 }
 
@@ -53,10 +72,8 @@ where
 {
     let mut cli = base_cli?;
     mutate(&mut cli)?;
-    let Err(err) = cli.validate() else {
-        return Err(anyhow!("expected validation to fail with {expected:?}"));
-    };
-    ensure!(err == expected, "unexpected validation error: {err:?}");
+    let context = format!("expected validation to fail with {expected:?}");
+    assert_validation_failure(|| cli.validate(), &expected, None, &context)?;
     Ok(())
 }
 
@@ -118,17 +135,12 @@ where
 {
     let mut command = greet_command?;
     mutate(&mut command)?;
-    let Err(err) = command.validate() else {
-        return Err(anyhow!("expected validation to fail"));
-    };
-    ensure!(
-        err == expected_error,
-        "unexpected validation error: {err:?}"
-    );
-    ensure!(
-        err.to_string() == expected_message,
-        "unexpected validation message"
-    );
+    assert_validation_failure(
+        || command.validate(),
+        &expected_error,
+        Some(expected_message),
+        "expected validation to fail",
+    )?;
     Ok(())
 }
 
@@ -184,16 +196,11 @@ where
 {
     let mut command = take_leave_command?;
     setup(&mut command)?;
-    let Err(err) = command.validate() else {
-        return Err(anyhow!("expected validation to fail"));
-    };
-    ensure!(
-        err == expected_error,
-        "unexpected validation error: {err:?}"
-    );
-    ensure!(
-        err.to_string() == expected_message,
-        "unexpected validation message"
-    );
+    assert_validation_failure(
+        || command.validate(),
+        &expected_error,
+        Some(expected_message),
+        "expected validation to fail",
+    )?;
     Ok(())
 }
