@@ -20,30 +20,24 @@ struct ExpectedPlan {
     is_excited: bool,
 }
 
-fn store_plan_config(config: HelloWorldCli) {
-    PLAN_CONFIG.with(|cell| *cell.borrow_mut() = Some(config));
-}
+fn build_plan_from(
+    config: HelloWorldCli,
+    mut greet: GreetCommand,
+    mut leave: TakeLeaveCommand,
+) -> Result<Plan> {
+    // Take mutable references so the bindings justify their mutability without
+    // altering behaviour; future callers may tweak the commands in place.
+    let _ = &mut greet;
+    let _ = &mut leave;
 
-fn build_plan_from(mut greet: GreetCommand, mut leave: TakeLeaveCommand) -> Result<Plan> {
-    PLAN_CONFIG.with(|cell| {
-        let mut borrowed = cell.borrow_mut();
-        let config = borrowed.take().unwrap_or_else(HelloWorldCli::default);
-        drop(borrowed);
+    let greeting = build_plan(&config, &greet).map_err(|err| anyhow!(err.to_string()))?;
+    let take_leave =
+        build_take_leave_plan(&config, &leave).map_err(|err| anyhow!(err.to_string()))?;
 
-        // Take mutable references so the bindings justify their mutability without
-        // altering behaviour; future callers may tweak the commands in place.
-        let _ = &mut greet;
-        let _ = &mut leave;
-
-        let greeting = build_plan(&config, &greet).map_err(|err| anyhow!(err.to_string()))?;
-        let take_leave =
-            build_take_leave_plan(&config, &leave).map_err(|err| anyhow!(err.to_string()))?;
-
-        Ok(Plan {
-            config,
-            greeting,
-            take_leave,
-        })
+    Ok(Plan {
+        config,
+        greeting,
+        take_leave,
     })
 }
 
@@ -179,8 +173,7 @@ fn build_plan_direct(
     greet: GreetCommand,
     leave: TakeLeaveCommand,
 ) -> Result<Plan> {
-    store_plan_config(config);
-    build_plan_from(greet, leave)
+    build_plan_from(config, greet, leave)
 }
 
 fn build_plan_with_sample_env(
@@ -188,10 +181,7 @@ fn build_plan_with_sample_env(
     greet: GreetCommand,
     leave: TakeLeaveCommand,
 ) -> Result<Plan> {
-    with_sample_config(move |_| {
-        store_plan_config(config);
-        build_plan_from(greet, leave).map_err(figment_error)
-    })
+    with_sample_config(move |_| build_plan_from(config, greet, leave).map_err(figment_error))
 }
 
 #[test]
