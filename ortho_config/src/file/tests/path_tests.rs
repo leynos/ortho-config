@@ -1,6 +1,6 @@
 //! Tests covering base path resolution and graph merging.
 
-use super::super::*;
+use super::super::resolve_base_path;
 use super::{canonical_root_and_current, with_jail};
 use crate::result_ext::ResultIntoFigment;
 use anyhow::{Result, anyhow, ensure};
@@ -19,9 +19,7 @@ fn resolve_base_path_resolves(#[case] is_abs: bool) -> Result<()> {
         } else {
             PathBuf::from("base.toml")
         };
-        let resolved = resolve_base_path(&current, base_path)
-            .to_figment()
-            .map_err(|err| anyhow!(err.to_string()))?;
+        let resolved = resolve_base_path(&current, base_path).to_figment()?;
         ensure!(
             resolved == root.join("base.toml"),
             "unexpected resolved path {:?}",
