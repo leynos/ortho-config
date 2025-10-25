@@ -30,7 +30,7 @@ pub struct World {
     /// Environment variable reference for subcommand scenarios.
     sub_env: Option<String>,
     /// Result of subcommand configuration loading.
-    pub sub_result: Option<ortho_config::OrthoResult<PrArgs>>,
+    pub sub_result: Option<Result<PrArgs, anyhow::Error>>,
     /// Result of aggregated error scenario.
     pub agg_result: Option<ortho_config::OrthoResult<ErrorConfig>>,
     /// File contents for flattened merging scenarios.

@@ -59,8 +59,7 @@ fn env_ref(world: &mut World, reference: String) -> Result<()> {
 #[when("the subcommand configuration is loaded without defaults")]
 fn load_sub(world: &mut World) -> Result<()> {
     let result = if has_no_config_sources(world) {
-        PrArgs::try_parse_from(["test"])
-            .map_err(|error| ortho_config::OrthoError::from(error).into())
+        PrArgs::try_parse_from(["test"]).map_err(anyhow::Error::from)
     } else {
         let cli = PrArgs {
             reference: world.sub_ref.clone(),
@@ -74,10 +73,7 @@ fn load_sub(world: &mut World) -> Result<()> {
 }
 
 /// Set up test environment with configuration file and environment variables.
-fn setup_test_environment(
-    world: &World,
-    cli: &PrArgs,
-) -> Result<ortho_config::OrthoResult<PrArgs>> {
+fn setup_test_environment(world: &World, cli: &PrArgs) -> Result<Result<PrArgs, anyhow::Error>> {
     let mut result = None;
     figment::Jail::try_with(|j| {
         if let Some(file_reference) = world.sub_file.as_ref() {
@@ -89,7 +85,7 @@ fn setup_test_environment(
         if let Some(env_reference) = world.sub_env.as_ref() {
             j.set_env("APP_CMDS_TEST_REFERENCE", env_reference);
         }
-        result = Some(cli.load_and_merge());
+        result = Some(cli.load_and_merge().map_err(anyhow::Error::from));
         Ok(())
     })
     .map_err(|err| anyhow!(err.to_string()))?;
@@ -106,7 +102,7 @@ fn check_ref(world: &mut World, expected_reference: String) -> Result<()> {
         .sub_result
         .take()
         .ok_or_else(|| anyhow!("subcommand result unavailable"))?;
-    let cfg = result.map_err(|err| anyhow!(err))?;
+    let cfg = result?;
     ensure!(
         cfg.reference.as_deref() == Some(expected_reference.as_str()),
         "unexpected reference {:?}; expected {:?}",
