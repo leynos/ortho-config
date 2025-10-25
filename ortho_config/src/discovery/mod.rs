@@ -216,6 +216,16 @@ impl ConfigDiscovery {
             reason = "underscore-prefixed parameters avoid unused warnings on other platforms"
         )
     )]
+    #[cfg_attr(
+        windows,
+        expect(
+            clippy::missing_const_for_fn,
+            reason = "Windows builds do not call `push_for_bases`, but Unix builds rely on runtime allocation"
+        )
+    )]
+    // Clippy recommends making this function `const`, but that is incompatible
+    // with delegating to `push_for_bases`, which allocates `PathBuf`s and
+    // updates the caller-provided collections.
     fn push_default_xdg(&self, _paths: &mut Vec<PathBuf>, _seen: &mut HashSet<String>) {
         #[cfg(any(unix, target_os = "redox"))]
         self.push_for_bases(std::iter::once(PathBuf::from("/etc/xdg")), _paths, _seen);
