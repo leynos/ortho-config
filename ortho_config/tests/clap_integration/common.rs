@@ -18,8 +18,8 @@ pub(crate) trait OrthoResultExt<T> {
     fn to_anyhow(self) -> Result<T>;
 }
 
-const DEFAULT_RECIPIENT: &str = "World";
-const DEFAULT_SALUTATIONS: &[&str] = &["Hello"];
+pub(crate) const DEFAULT_RECIPIENT: &str = "World";
+pub(crate) const DEFAULT_SALUTATIONS: &[&str] = &["Hello"];
 
 impl<T> OrthoResultExt<T> for ortho_config::OrthoResult<T> {
     fn to_anyhow(self) -> Result<T> {
