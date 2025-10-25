@@ -28,12 +28,16 @@ where
     ) -> Result<()>,
 {
     figment::Jail::try_with(|j| {
-        let (root, current) =
-            canonical_root_and_current().map_err(|err| figment::Error::from(err.to_string()))?;
+        let (root, current) = canonical_root_and_current().map_err(|err| {
+            // figment::Error currently only implements `From<String>`, so stringify the source.
+            figment::Error::from(err.to_string())
+        })?;
         let mut visited = HashSet::new();
         let mut stack = Vec::new();
-        f(j, &root, &current, &mut visited, &mut stack)
-            .map_err(|err| figment::Error::from(err.to_string()))
+        f(j, &root, &current, &mut visited, &mut stack).map_err(|err| {
+            // figment::Error currently only implements `From<String>`, so stringify the source.
+            figment::Error::from(err.to_string())
+        })
     })
     .map_err(|err| anyhow!(err.to_string()))
 }
@@ -42,8 +46,13 @@ pub(super) fn with_jail<F>(f: F) -> Result<()>
 where
     F: FnOnce(&mut figment::Jail) -> Result<()>,
 {
-    figment::Jail::try_with(|j| f(j).map_err(|err| figment::Error::from(err.to_string())))
-        .map_err(|err| anyhow!(err.to_string()))
+    figment::Jail::try_with(|j| {
+        f(j).map_err(|err| {
+            // figment::Error currently only implements `From<String>`, so stringify the source.
+            figment::Error::from(err.to_string())
+        })
+    })
+    .map_err(|err| anyhow!(err.to_string()))
 }
 
 pub(super) fn to_anyhow<T>(result: crate::OrthoResult<T>) -> Result<T> {
