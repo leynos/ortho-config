@@ -146,8 +146,8 @@ mod tests {
 
     #[test]
     fn ensure_simple_filename_rejects_empty_string() {
-        let err = super::ensure_simple_filename("")
-            .expect_err("expected empty filename to be rejected");
+        let err =
+            super::ensure_simple_filename("").expect_err("expected empty filename to be rejected");
         match err {
             super::SampleConfigError::InvalidName { ref name } => {
                 assert!(name.is_empty(), "unexpected name: {name}");

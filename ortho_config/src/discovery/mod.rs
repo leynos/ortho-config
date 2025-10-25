@@ -220,11 +220,16 @@ impl ConfigDiscovery {
             reason = "self is used on Unix/Redox platforms via push_for_bases"
         )
     )]
-    fn push_default_xdg(&self, paths: &mut Vec<PathBuf>, seen: &mut HashSet<String>) {
+    #[cfg_attr(
+        any(unix, target_os = "redox"),
+        expect(
+            clippy::used_underscore_binding,
+            reason = "underscore-prefixed parameters avoid unused warnings on other platforms"
+        )
+    )]
+    fn push_default_xdg(&self, _paths: &mut Vec<PathBuf>, _seen: &mut HashSet<String>) {
         #[cfg(any(unix, target_os = "redox"))]
-        self.push_for_bases(std::iter::once(PathBuf::from("/etc/xdg")), paths, seen);
-        #[cfg(not(any(unix, target_os = "redox")))]
-        let _ = (paths, seen);
+        self.push_for_bases(std::iter::once(PathBuf::from("/etc/xdg")), _paths, _seen);
     }
 
     /// Returns the ordered configuration candidates.
