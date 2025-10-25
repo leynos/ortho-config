@@ -117,12 +117,9 @@ struct IssuePrecedenceCase {
 #[serial]
 fn test_pr_precedence(#[case] case: PrPrecedenceCase) -> Result<()> {
     let (_temp_dir, _cwd_guard) = config_dir(case.config_content)?;
-    let env_guard = case
+    let _guard = case
         .env_val
         .map(|val| env::set_var("VK_CMDS_PR_REFERENCE", val));
-    let cleanup_guard = env_guard
-        .is_none()
-        .then(|| env::remove_var("VK_CMDS_PR_REFERENCE"));
     let merged = load_and_merge_subcommand_for(&case.cli).context("merge pr args")?;
     ensure!(
         merged.reference.as_deref() == case.expected_reference,
@@ -136,9 +133,6 @@ fn test_pr_precedence(#[case] case: PrPrecedenceCase) -> Result<()> {
         case.expected_files,
         merged.files
     );
-    drop(env_guard);
-    drop(cleanup_guard);
-    drop(env::remove_var("VK_CMDS_PR_REFERENCE"));
     Ok(())
 }
 
@@ -170,12 +164,9 @@ fn test_pr_precedence(#[case] case: PrPrecedenceCase) -> Result<()> {
 #[serial]
 fn test_issue_precedence(#[case] case: IssuePrecedenceCase) -> Result<()> {
     let (_temp_dir, _cwd_guard) = config_dir(case.config_content)?;
-    let env_guard = case
+    let _guard = case
         .env_val
         .map(|val| env::set_var("VK_CMDS_ISSUE_REFERENCE", val));
-    let cleanup_guard = env_guard
-        .is_none()
-        .then(|| env::remove_var("VK_CMDS_ISSUE_REFERENCE"));
     let merged = load_and_merge_subcommand_for(&case.cli).context("merge issue args")?;
     ensure!(
         merged.reference.as_deref() == case.expected_reference,
@@ -183,8 +174,5 @@ fn test_issue_precedence(#[case] case: IssuePrecedenceCase) -> Result<()> {
         case.expected_reference,
         merged.reference
     );
-    drop(env_guard);
-    drop(cleanup_guard);
-    drop(env::remove_var("VK_CMDS_ISSUE_REFERENCE"));
     Ok(())
 }
