@@ -213,6 +213,13 @@ impl ConfigDiscovery {
         Self::push_variants_for_extensions((paths, seen), nested, stem, &["yaml", "yml"]);
     }
 
+    #[cfg_attr(
+        not(any(unix, target_os = "redox")),
+        expect(
+            clippy::unused_self,
+            reason = "self is used on Unix/Redox platforms via push_for_bases"
+        )
+    )]
     fn push_default_xdg(&self, paths: &mut Vec<PathBuf>, seen: &mut HashSet<String>) {
         #[cfg(any(unix, target_os = "redox"))]
         self.push_for_bases(std::iter::once(PathBuf::from("/etc/xdg")), paths, seen);
