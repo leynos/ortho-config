@@ -192,6 +192,14 @@ pub mod env {
             }
         }
 
+        fn setup_test_env(key: &str, value: &str) {
+            super::with_lock(|| unsafe { super::env_set_var(key, OsStr::new(value)) });
+        }
+
+        fn cleanup_test_env(key: &str) {
+            super::with_lock(|| unsafe { super::env_remove_var(key) });
+        }
+
         #[derive(Debug)]
         struct EnvFixture<'a> {
             key: &'a str,
@@ -200,7 +208,7 @@ pub mod env {
 
         impl<'a> EnvFixture<'a> {
             fn with_original(key: &'a str, original: &'a str) -> Self {
-                super::with_lock(|| unsafe { super::env_set_var(key, OsStr::new(original)) });
+                setup_test_env(key, original);
                 Self {
                     key,
                     original: Some(original),
@@ -208,7 +216,7 @@ pub mod env {
             }
 
             fn cleared(key: &'a str) -> Self {
-                super::with_lock(|| unsafe { super::env_remove_var(key) });
+                cleanup_test_env(key);
                 Self {
                     key,
                     original: None,
@@ -226,7 +234,7 @@ pub mod env {
 
         impl Drop for EnvFixture<'_> {
             fn drop(&mut self) {
-                super::with_lock(|| unsafe { super::env_remove_var(self.key) });
+                cleanup_test_env(self.key);
             }
         }
 
