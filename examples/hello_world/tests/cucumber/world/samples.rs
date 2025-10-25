@@ -34,8 +34,7 @@ impl World {
     where
         S: AsRef<str>,
     {
-        self.try_write_sample_config(sample)
-            .map_err(anyhow::Error::from)
+        self.try_write_sample_config(sample).map_err(Into::into)
     }
 
     pub(crate) fn try_write_sample_config<S>(&self, sample: S) -> Result<(), SampleConfigError>
