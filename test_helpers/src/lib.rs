@@ -155,6 +155,7 @@ pub mod env {
     #[cfg(test)]
     mod tests {
         use super::*;
+        use rstest::{fixture, rstest};
         use std::ffi::OsStr;
         use std::sync::{Arc, Barrier};
         use std::thread;
@@ -191,46 +192,88 @@ pub mod env {
             }
         }
 
-        /// Sets up an environment variable with a test value, returning the key for cleanup
-        fn setup_test_env(key: &str, value: &str) {
-            super::with_lock(|| unsafe { super::env_set_var(key, OsStr::new(value)) });
+        #[derive(Debug)]
+        struct EnvFixture<'a> {
+            key: &'a str,
+            original: Option<&'a str>,
         }
 
-        /// Cleans up an environment variable after a test
-        fn cleanup_test_env(key: &str) {
-            super::with_lock(|| unsafe { super::env_remove_var(key) });
+        impl<'a> EnvFixture<'a> {
+            fn with_original(key: &'a str, original: &'a str) -> Self {
+                super::with_lock(|| unsafe { super::env_set_var(key, OsStr::new(original)) });
+                Self {
+                    key,
+                    original: Some(original),
+                }
+            }
+
+            fn cleared(key: &'a str) -> Self {
+                super::with_lock(|| unsafe { super::env_remove_var(key) });
+                Self {
+                    key,
+                    original: None,
+                }
+            }
+
+            fn key(&self) -> &'a str {
+                self.key
+            }
+
+            fn original(&self) -> Option<&'a str> {
+                self.original
+            }
         }
 
-        #[test]
-        fn set_var_restores_original() {
-            let key = "TEST_HELPERS_SET_VAR";
-            let original = "orig";
-            setup_test_env(key, original);
+        impl Drop for EnvFixture<'_> {
+            fn drop(&mut self) {
+                super::with_lock(|| unsafe { super::env_remove_var(self.key) });
+            }
+        }
+
+        #[fixture]
+        fn env_with_original() -> EnvFixture<'static> {
+            EnvFixture::with_original("TEST_HELPERS_SET_VAR", "orig")
+        }
+
+        #[fixture]
+        fn env_to_remove() -> EnvFixture<'static> {
+            EnvFixture::with_original("TEST_HELPERS_REMOVE_VAR", "to-be-removed")
+        }
+
+        #[fixture]
+        fn cleared_env() -> EnvFixture<'static> {
+            EnvFixture::cleared("TEST_HELPERS_UNSET")
+        }
+
+        #[rstest]
+        fn set_var_restores_original(env_with_original: EnvFixture<'static>) {
+            let key = env_with_original.key();
+            let original = env_with_original
+                .original()
+                .expect("fixture configures original value");
             {
                 let _guard = set_var(key, "temp");
                 assert_eq!(env_value(key), "temp");
             }
             assert_eq!(env_value(key), original);
-            cleanup_test_env(key);
         }
 
-        #[test]
-        fn remove_var_restores_value() {
-            let key = "TEST_HELPERS_REMOVE_VAR";
-            let original = "to-be-removed";
-            setup_test_env(key, original);
+        #[rstest]
+        fn remove_var_restores_value(env_to_remove: EnvFixture<'static>) {
+            let key = env_to_remove.key();
+            let original = env_to_remove
+                .original()
+                .expect("fixture configures original value");
             {
                 let _guard = remove_var(key);
                 assert!(std::env::var(key).is_err());
             }
             assert_eq!(env_value(key), original);
-            cleanup_test_env(key);
         }
 
-        #[test]
-        fn set_var_unsets_when_absent() {
-            let key = "TEST_HELPERS_UNSET";
-            super::with_lock(|| unsafe { super::env_remove_var(key) });
+        #[rstest]
+        fn set_var_unsets_when_absent(cleared_env: EnvFixture<'static>) {
+            let key = cleared_env.key();
             {
                 let _guard = set_var(key, "tmp");
                 assert_eq!(env_value(key), "tmp");
