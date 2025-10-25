@@ -95,11 +95,16 @@ impl CommandResult {
         binary: String,
         args: Vec<String>,
     ) -> Self {
+        let std::process::Output {
+            status,
+            stdout,
+            stderr,
+        } = output;
         Self {
-            status: output.status.code(),
-            success: output.status.success(),
-            stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
-            stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+            status: status.code(),
+            success: status.success(),
+            stdout: String::from_utf8_lossy(&stdout).into_owned(),
+            stderr: String::from_utf8_lossy(&stderr).into_owned(),
             binary,
             args,
         }

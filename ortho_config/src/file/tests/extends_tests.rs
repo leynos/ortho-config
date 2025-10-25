@@ -1,6 +1,6 @@
 //! Tests covering `extends` handling and dependency resolution.
 
-use super::super::*;
+use super::super::{get_extends, merge_parent, process_extends};
 use super::{to_anyhow, with_fresh_graph};
 use crate::result_ext::ResultIntoFigment;
 use anyhow::{Context, Result, anyhow, ensure};
