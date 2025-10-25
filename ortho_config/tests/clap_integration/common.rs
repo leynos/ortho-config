@@ -122,8 +122,8 @@ pub(crate) fn run_config_case<T, F>(
     validate: F,
 ) -> Result<T>
 where
-    T: OrthoConfig + Clone,
-    F: FnOnce(T) -> Result<()>,
+    T: OrthoConfig,
+    F: FnOnce(&T) -> Result<()>,
 {
     with_jail(|j| {
         for (path, contents) in files {
@@ -133,7 +133,7 @@ where
             j.set_env(key, value);
         }
         let config = T::load_from_iter(cli_args.iter().copied()).map_err(|err| anyhow!(err))?;
-        validate(config.clone())?;
+        validate(&config)?;
         Ok(config)
     })
 }
