@@ -58,9 +58,10 @@ where
     reason = "figment::Error must be returned directly to integrate with Jail closures"
 )]
 pub fn path_to_utf8_string(path: &Path, context: &str) -> Result<String, FigmentError> {
-    path.to_str()
-        .map(str::to_owned)
-        .ok_or_else(|| FigmentError::from(format!("{context} path not valid UTF-8")))
+    path.to_str().map(str::to_owned).ok_or_else(|| {
+        let display = path.display();
+        FigmentError::from(format!("{context} path not valid UTF-8: {display}"))
+    })
 }
 
 /// Runs `setup` in a jailed environment, then loads defaults for the `test`
