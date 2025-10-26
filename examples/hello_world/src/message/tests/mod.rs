@@ -314,7 +314,7 @@ fn build_take_leave_plan_produces_steps() -> Result<()> {
         jail.clear_env();
         plan_result = Some(
             build_take_leave_plan(&HelloWorldCli::default(), &take_leave_command)
-                .map_err(|err| figment_error(err.to_string()))?,
+                .map_err(figment_error)?,
         );
         Ok(())
     })
