@@ -22,8 +22,7 @@ fn resolve_base_path_resolves(#[case] is_abs: bool) -> Result<()> {
         let resolved = resolve_base_path(&current, base_path).to_figment()?;
         ensure!(
             resolved == root.join("base.toml"),
-            "unexpected resolved path {:?}",
-            resolved
+            "unexpected resolved path {resolved:?}"
         );
         Ok(())
     })
@@ -34,8 +33,7 @@ fn resolve_base_path_errors_when_no_parent() -> Result<()> {
     let err = match resolve_base_path(Path::new(""), PathBuf::from("base.toml")) {
         Ok(path) => {
             return Err(anyhow!(
-                "expected resolve_base_path to fail for path without parent, got {:?}",
-                path
+                "expected resolve_base_path to fail for path without parent, got {path:?}"
             ));
         }
         Err(err) => err,
@@ -63,8 +61,7 @@ fn resolve_base_path_reports_missing_file(#[case] is_abs: bool) -> Result<()> {
         let err = match resolve_base_path(&current, base) {
             Ok(path) => {
                 return Err(anyhow!(
-                    "expected resolve_base_path to fail for missing file, got {:?}",
-                    path
+                    "expected resolve_base_path to fail for missing file, got {path:?}"
                 ));
             }
             Err(err) => err,
@@ -84,10 +81,10 @@ fn resolve_base_path_reports_missing_file(#[case] is_abs: bool) -> Result<()> {
                 let io_err = source
                     .downcast_ref::<std::io::Error>()
                     .ok_or_else(|| anyhow!("expected std::io::Error source"))?;
+                let actual = io_err.kind();
                 ensure!(
-                    io_err.kind() == std::io::ErrorKind::NotFound,
-                    "unexpected IO error kind: {:?}",
-                    io_err.kind()
+                    actual == std::io::ErrorKind::NotFound,
+                    "unexpected IO error kind: {actual:?}"
                 );
             }
             other => {

@@ -106,8 +106,7 @@ fn check_flattened(world: &mut World, expected_value: String) -> Result<()> {
         .ok_or_else(|| anyhow!("expected nested value to be present"))?;
     ensure!(
         nested == expected_value.as_str(),
-        "unexpected flattened value {nested:?}; expected {:?}",
-        expected_value
+        "unexpected flattened value {nested:?}; expected {expected_value:?}"
     );
     Ok(())
 }

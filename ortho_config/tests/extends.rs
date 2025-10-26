@@ -54,11 +54,11 @@ fn inheritance_precedence(#[case] case: InheritanceCase) -> Result<()> {
         let mut args = vec!["prog"];
         args.extend_from_slice(case.cli_args);
         let cfg = ExtendsCfg::load_from_iter(args).map_err(|err| anyhow!(err))?;
+        let actual = cfg.foo.as_deref();
+        let expected = case.expected;
         ensure!(
-            cfg.foo.as_deref() == Some(case.expected),
-            "expected foo {}, got {:?}",
-            case.expected,
-            cfg.foo
+            actual == Some(expected),
+            "expected foo {expected}, got {actual:?}"
         );
         Ok(())
     })?;
@@ -72,13 +72,12 @@ fn cyclic_inheritance_is_detected() -> Result<()> {
         j.create_file("b.toml", "extends = \"a.toml\"\nfoo = \"b\"")?;
         j.create_file(".config.toml", "extends = \"a.toml\"")?;
         let err = match ExtendsCfg::load_from_iter(["prog"]) {
-            Ok(cfg) => return Err(anyhow!("expected cyclic extends error, got {:?}", cfg)),
+            Ok(cfg) => return Err(anyhow!("expected cyclic extends error, got {cfg:?}")),
             Err(err) => err,
         };
         ensure!(
             matches!(&*err, OrthoError::CyclicExtends { .. }),
-            "unexpected error: {:?}",
-            err
+            "unexpected error: {err:?}"
         );
         Ok(())
     })?;
@@ -95,13 +94,12 @@ fn cyclic_inheritance_detects_case_variants() -> Result<()> {
         j.create_file("Base.toml", "extends = \".CONFIG.toml\"\nfoo = \"base\"")?;
         j.create_file(".config.toml", "extends = \"base.toml\"\nfoo = \"config\"")?;
         let err = match ExtendsCfg::load_from_iter(["prog"]) {
-            Ok(cfg) => return Err(anyhow!("expected cyclic extends error, got {:?}", cfg)),
+            Ok(cfg) => return Err(anyhow!("expected cyclic extends error, got {cfg:?}")),
             Err(err) => err,
         };
         ensure!(
             matches!(&*err, OrthoError::CyclicExtends { .. }),
-            "unexpected error: {:?}",
-            err
+            "unexpected error: {err:?}"
         );
         let msg = err.to_string();
         let lower = msg.to_ascii_lowercase();
@@ -132,7 +130,7 @@ fn missing_base_file_errors(#[case] is_abs: bool) -> Result<()> {
         };
         j.create_file(".config.toml", &format!("extends = {extends_value:?}"))?;
         let err = match ExtendsCfg::load_from_iter(["prog"]) {
-            Ok(cfg) => return Err(anyhow!("expected missing base error, got {:?}", cfg)),
+            Ok(cfg) => return Err(anyhow!("expected missing base error, got {cfg:?}")),
             Err(err) => err,
         };
         let msg = err.to_string();
@@ -156,7 +154,7 @@ fn non_string_extends_errors() -> Result<()> {
     with_jail(|j| {
         j.create_file(".config.toml", "extends = 1")?;
         let err = match ExtendsCfg::load_from_iter(["prog"]) {
-            Ok(cfg) => return Err(anyhow!("expected non-string extends error, got {:?}", cfg)),
+            Ok(cfg) => return Err(anyhow!("expected non-string extends error, got {cfg:?}")),
             Err(err) => err,
         };
         let msg = err.to_string();
@@ -179,13 +177,13 @@ fn empty_extends_errors() -> Result<()> {
         j.create_file("base.toml", "")?; // placeholder so Jail has root file
         j.create_file(".config.toml", "extends = ''")?;
         let err = match ExtendsCfg::load_from_iter(["prog"]) {
-            Ok(cfg) => return Err(anyhow!("expected empty extends error, got {:?}", cfg)),
+            Ok(cfg) => return Err(anyhow!("expected empty extends error, got {cfg:?}")),
             Err(err) => err,
         };
+        let display = err.to_string();
         ensure!(
-            err.to_string().contains("non-empty"),
-            "error missing non-empty message: {}",
-            err
+            display.contains("non-empty"),
+            "error missing non-empty message: {display}"
         );
         Ok(())
     })?;
@@ -198,13 +196,13 @@ fn directory_extends_errors() -> Result<()> {
         j.create_dir("dir")?;
         j.create_file(".config.toml", "extends = 'dir'")?;
         let err = match ExtendsCfg::load_from_iter(["prog"]) {
-            Ok(cfg) => return Err(anyhow!("expected directory extends error, got {:?}", cfg)),
+            Ok(cfg) => return Err(anyhow!("expected directory extends error, got {cfg:?}")),
             Err(err) => err,
         };
+        let display = err.to_string();
         ensure!(
-            err.to_string().contains("not a regular file"),
-            "error missing directory message: {}",
-            err
+            display.contains("not a regular file"),
+            "error missing directory message: {display}"
         );
         Ok(())
     })?;

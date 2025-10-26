@@ -11,12 +11,8 @@ use std::path::{Path, PathBuf};
 fn normalise_cycle_key_is_noop_on_case_sensitive_platforms() -> Result<()> {
     let path = PathBuf::from("/tmp/Config.toml");
     let normalised = normalise_cycle_key(&path);
-    ensure!(
-        normalised == path,
-        "expected {:?}, got {:?}",
-        path,
-        normalised
-    );
+    let actual = normalised;
+    ensure!(actual == path, "expected {path:?}, got {actual:?}");
 
     let unicode_mixed_case = PathBuf::from("/tmp/Café.toml");
     let unicode_upper_case = PathBuf::from("/tmp/CAFÉ.toml");

@@ -29,7 +29,7 @@ fn compose_declarative_globals_rejects_invalid_input(
     let mut world = world?;
     let result = super::compose_declarative_globals_from_contents(&mut world, input);
     let Err(err) = result else {
-        return Err(anyhow::anyhow!("{}", error_context));
+        return Err(anyhow::anyhow!("{error_context}"));
     };
     anyhow::ensure!(err.to_string().contains(expected_message_fragment));
     Ok(())

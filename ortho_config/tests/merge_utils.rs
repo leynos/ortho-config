@@ -25,12 +25,7 @@ fn cli_overrides_defaults() -> Result<()> {
         a: Some(1),
         b: Some("cli".into()),
     };
-    ensure!(
-        merged == expected,
-        "expected {:?}, got {:?}",
-        expected,
-        merged
-    );
+    ensure!(merged == expected, "expected {expected:?}, got {merged:?}");
     Ok(())
 }
 
@@ -60,12 +55,7 @@ fn nested_structs_merge_deeply() -> Result<()> {
             b: Some("cli".into()),
         }),
     };
-    ensure!(
-        merged == expected,
-        "expected {:?}, got {:?}",
-        expected,
-        merged
-    );
+    ensure!(merged == expected, "expected {expected:?}, got {merged:?}");
     Ok(())
 }
 
@@ -79,9 +69,7 @@ fn cli_none_fields_do_not_override_defaults() -> Result<()> {
     let merged = merge_via_sanitized_cli(&defaults, &cli)?;
     ensure!(
         merged == defaults,
-        "expected defaults {:?}, got {:?}",
-        defaults,
-        merged
+        "expected defaults {defaults:?}, got {merged:?}"
     );
     Ok(())
 }
@@ -107,12 +95,7 @@ fn nested_structs_partial_none_merge() -> Result<()> {
             b: Some("cli".into()),
         }),
     };
-    ensure!(
-        merged == expected,
-        "expected {:?}, got {:?}",
-        expected,
-        merged
-    );
+    ensure!(merged == expected, "expected {expected:?}, got {merged:?}");
     Ok(())
 }
 
@@ -133,12 +116,8 @@ fn arrays_nulls_are_pruned_and_replace_defaults_in_cli_layer() -> Result<()> {
     let merged = merge_via_sanitized_cli(&defaults, &cli)?;
     // Arrays are replaced at the CLI layer, not appended.
     let expected = vec![Some(2), Some(3)];
-    ensure!(
-        merged.items == expected,
-        "expected {:?}, got {:?}",
-        expected,
-        merged.items
-    );
+    let actual = merged.items;
+    ensure!(actual == expected, "expected {expected:?}, got {actual:?}");
     Ok(())
 }
 

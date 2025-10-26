@@ -634,9 +634,7 @@ mod tests {
             .and_then(|attrs| attrs.cli_long.as_deref());
         ensure!(
             parsed == cli_long,
-            "cli_long mismatch: {:?} != {:?}",
-            parsed,
-            cli_long
+            "cli_long mismatch: {parsed:?} != {cli_long:?}"
         );
         Ok(())
     }

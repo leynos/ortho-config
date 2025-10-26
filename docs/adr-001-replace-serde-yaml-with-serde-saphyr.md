@@ -2,7 +2,7 @@
 
 Date: 2025-10-17
 
-Status: Proposed
+Status: Accepted
 
 ## Context and Problem Statement
 
@@ -259,8 +259,8 @@ to validate the new implementation thoroughly.
 
    - A file containing `key: yes` results in the string `"yes"`, not the boolean
      `true`.
-   - A file containing duplicate keys returns a parsing error, as this is the
-     default and correct behaviour for `serde-saphyr`.
+   - A file containing duplicate mapping keys returns a parsing error, as this
+     is the default and correct behaviour for `serde-saphyr`.
 
 3. **Error Handling Tests**: Add tests to ensure that malformed YAML files
    produce clear and actionable errors from the `SaphyrYaml` provider.
@@ -276,6 +276,21 @@ to validate the new implementation thoroughly.
 3. **Release Versioning**: Given the potential for a minor breaking change in
    parsing behaviour, this update should correspond to a **minor version bump**
    (e.g., from `0.5.x` to `0.6.0`), in accordance with semantic versioning.
+
+### Implementation Outcome
+
+- Added a feature-gated `SaphyrYaml` provider that reads files or in-memory
+  strings, deserialises them with `serde-saphyr` using
+  `Options::strict_booleans`, and emits a `Dict` for `figment`.
+- Replaced the old `figment::providers::Yaml` integration in
+  `parse_config_by_format`, ensuring `.yaml` and `.yml` files are parsed
+  through the new provider when the `yaml` feature is enabled.
+- Extended the unit test suite with `rstest`-driven cases covering YAML 1.2
+  semantics (unquoted `yes` remains a string, duplicates and malformed input
+  raise errors) and added behavioural scenarios in the Hello World example to
+  exercise the new parsing behaviour end-to-end.
+- Updated the documentation set (roadmap, user guide, README, example README)
+  and changelog to highlight the migration and the stronger parsing guarantees.
 
 By following this comprehensive plan, the migration to `serde-saphyr` can be
 performed efficiently, safely, and with a high degree of confidence, ultimately

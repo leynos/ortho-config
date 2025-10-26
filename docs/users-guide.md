@@ -164,7 +164,16 @@ during discovery and do not cause errors if present.
 `ortho_config` re-exports its parsing dependencies, so consumers do not need to
 declare them directly. Access `figment`, `uncased`, `xdg` (on Unix-like and
 Redox targets), and the optional parsers (`figment_json5`, `json5`,
-`serde_yaml`, `toml`) via `ortho_config::` paths.
+`serde_saphyr`, `toml`) via `ortho_config::` paths. The `serde_json` re-export
+is enabled by default because the crate relies on it internally; disable
+default features only when explicitly opting back into `serde_json`.
+
+YAML parsing is handled by the pure-Rust `serde-saphyr` crate. It adheres to
+the YAML 1.2 specification, so unquoted scalars such as `yes`, `on`, and `off`
+remain strings. The provider enables `Options::strict_booleans`, ensuring only
+`true` and `false` deserialize as booleans while legacy YAML 1.1 literals are
+treated as plain strings. Duplicate mapping keys surface as parsing errors
+instead of silently accepting the last entry, helping catch typos early.
 
 ## Migrating from earlier versions
 

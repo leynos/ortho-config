@@ -648,17 +648,20 @@ to rename the hidden `--config-path` flag by defining their own field with a
   - `serde`: For serialization/deserialization.
   - `serde_json`: For manipulating configuration when pruning `None` CLI
     values.
-  - `toml`, `figment-json5`, `json5`, `serde_yaml`: As optional feature-gated
+  - `toml`, `figment-json5`, `json5`, `serde_saphyr`: As optional feature-gated
     dependencies for different file formats. `toml` should be a default
     feature. The `json5` feature uses `figment-json5` and `json5` to parse
     `.json` and `.json5` files and relies on `serde_json` for validation.
     Loading these formats without enabling `json5` should produce an error, so
-    users aren't surprised by silent TOML parsing.
+    users aren't surprised by silent TOML parsing. When the `yaml` feature is
+    active, `serde_saphyr` should be configured with `Options::strict_booleans`
+    so YAML 1.1 boolean shorthands (`yes`, `on`, `off`) remain strings and align
+    with the YAML 1.2 specification.
   - `thiserror`: For ergonomic error type definitions.
 
   The core crate re-exports `figment`, `uncased`, `xdg` (on Unix-like and
   Redox targets), and the optional format parsers (`figment_json5`, `json5`,
-  `serde_yaml`, `toml`), so downstream libraries can import them via
+  `serde_saphyr`, `toml`), so downstream libraries can import them via
   `ortho_config::` without declaring separate dependencies.
 
 ## 6. Implementation Roadmap

@@ -1,8 +1,6 @@
 //! Helpers for reading configuration files into Figment.
 
 use crate::{OrthoError, OrthoResult};
-#[cfg(feature = "yaml")]
-use figment::providers::Yaml;
 use figment::{
     Figment,
     providers::{Format, Toml},
@@ -13,6 +11,96 @@ use figment_json5::Json5;
 use std::collections::HashSet;
 use std::error::Error;
 use std::path::{Path, PathBuf};
+
+#[cfg(feature = "yaml")]
+use figment::{
+    Metadata, Profile, Provider,
+    error::Kind,
+    value::{Dict, Value},
+};
+#[cfg(feature = "yaml")]
+use serde_saphyr::Options;
+
+#[cfg(feature = "yaml")]
+#[derive(Debug, Clone)]
+enum YamlInput {
+    File,
+    Inline(String),
+}
+
+#[cfg(feature = "yaml")]
+#[derive(Debug, Clone)]
+/// Figment provider that reads YAML using `serde-saphyr`.
+pub struct SaphyrYaml {
+    path: PathBuf,
+    input: YamlInput,
+    profile: Option<Profile>,
+}
+
+#[cfg(feature = "yaml")]
+impl SaphyrYaml {
+    /// Construct a provider that reads configuration from `path` when queried.
+    #[must_use]
+    pub fn file<P: Into<PathBuf>>(path: P) -> Self {
+        Self {
+            path: path.into(),
+            input: YamlInput::File,
+            profile: None,
+        }
+    }
+
+    /// Construct a provider from in-memory YAML, primarily used by tests.
+    #[must_use]
+    pub fn string<P, S>(path: P, contents: S) -> Self
+    where
+        P: Into<PathBuf>,
+        S: Into<String>,
+    {
+        Self {
+            path: path.into(),
+            input: YamlInput::Inline(contents.into()),
+            profile: None,
+        }
+    }
+
+    /// Override the profile this provider emits values into.
+    #[must_use]
+    pub fn profile<P: Into<Profile>>(mut self, profile: P) -> Self {
+        self.profile = Some(profile.into());
+        self
+    }
+}
+
+#[cfg(feature = "yaml")]
+impl Provider for SaphyrYaml {
+    fn metadata(&self) -> Metadata {
+        Metadata::from("Saphyr YAML", self.path.as_path())
+    }
+
+    fn data(&self) -> Result<std::collections::BTreeMap<Profile, Dict>, figment::Error> {
+        let contents = match &self.input {
+            YamlInput::File => std::fs::read_to_string(&self.path).map_err(|err| {
+                figment::Error::from(format!("failed to read {}: {err}", self.path.display()))
+            })?,
+            YamlInput::Inline(contents) => contents.clone(),
+        };
+        let value: crate::serde_json::Value = serde_saphyr::from_str_with_options(
+            &contents,
+            Options {
+                strict_booleans: true,
+                ..Options::default()
+            },
+        )
+        .map_err(|err| figment::Error::from(err.to_string()))?;
+        let figment_value = Value::serialize(value)?;
+        let actual = figment_value.to_actual();
+        let dict = figment_value
+            .into_dict()
+            .ok_or_else(|| figment::Error::from(Kind::InvalidType(actual, "map".into())))?;
+        let profile = self.profile.clone().unwrap_or(Profile::Default);
+        Ok(profile.collect(dict))
+    }
+}
 
 /// Construct an [`OrthoError::File`] for a configuration path.
 fn file_error(
@@ -170,8 +258,7 @@ fn parse_config_by_format(path: &Path, data: &str) -> OrthoResult<Figment> {
         Some("yaml" | "yml") => {
             #[cfg(feature = "yaml")]
             {
-                serde_yaml::from_str::<serde_yaml::Value>(data).map_err(|e| file_error(path, e))?;
-                Figment::from(Yaml::string(data))
+                Figment::from(SaphyrYaml::string(path.to_path_buf(), data.to_owned()))
             }
             #[cfg(not(feature = "yaml"))]
             {

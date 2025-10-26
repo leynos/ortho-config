@@ -187,7 +187,7 @@ fn merge_layers_reject_non_object_values() -> Result<()> {
     );
 
     let error = match DeclarativeSample::merge_from_layers(layers) {
-        Ok(config) => return Err(anyhow!("expected merge failure, got config {:?}", config)),
+        Ok(config) => return Err(anyhow!("expected merge failure, got config {config:?}")),
         Err(err) => err,
     };
     let message = error.to_string();

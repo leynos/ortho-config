@@ -13,8 +13,7 @@ fn loads_empty_struct_successfully() -> Result<()> {
     let cfg = EmptyConfig::load_from_iter(["bin"]).map_err(|err| anyhow!(err))?;
     ensure!(
         cfg == EmptyConfig {},
-        "expected default empty config, got {:?}",
-        cfg
+        "expected default empty config, got {cfg:?}"
     );
     Ok(())
 }

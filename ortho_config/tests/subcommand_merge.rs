@@ -45,7 +45,7 @@ fn set_dir(dir: &TempDir) -> Result<DirGuard> {
     // SAFETY: Process CWD is mutated while holding CWD_MUTEX to prevent races with other tests.
     std::env::set_current_dir(dir.path()).context("set current dir")?;
     let old_utf8 = Utf8PathBuf::from_path_buf(old)
-        .map_err(|path| anyhow!("cwd is not valid UTF-8: {path:?}"))?;
+        .map_err(|path| anyhow!("cwd is not valid UTF-8: {}", path.display()))?;
     Ok(DirGuard {
         old: old_utf8,
         _lock: lock,

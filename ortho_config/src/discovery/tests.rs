@@ -181,9 +181,7 @@ fn utf8_candidates_prioritise_env_paths(
         Utf8PathBuf::from_path_buf(path).map_err(|_| anyhow!("explicit path not valid UTF-8"))?;
     ensure!(
         first == expected,
-        "unexpected first candidate {:?}, expected {:?}",
-        first,
-        expected
+        "unexpected first candidate {first:?}, expected {expected:?}"
     );
     Ok(())
 }
@@ -216,16 +214,15 @@ fn project_roots_replaces_existing_entries(env_guards: Vec<test_env::EnvVarGuard
         PathBuf::from("alpha/.hello_world.toml"),
         PathBuf::from("beta/.hello_world.toml"),
     ];
+    let actual_len = candidates.len();
+    let expected_len = expected.len();
     ensure!(
-        candidates.len() >= expected.len(),
-        "expected at least {} candidates, found {}",
-        expected.len(),
-        candidates.len()
+        actual_len >= expected_len,
+        "expected at least {expected_len} candidates, found {actual_len}"
     );
     ensure!(
         candidates.ends_with(&expected),
-        "expected configured project roots to appear at end; found {:?}",
-        candidates
+        "expected configured project roots to appear at end; found {candidates:?}"
     );
     ensure!(
         !candidates.contains(&PathBuf::from("legacy/.hello_world.toml")),

@@ -6,6 +6,11 @@
 //! to layer configuration from the CLI, files and environment. The derive macro
 //! lives in the companion `ortho_config_macros` crate.
 
+#[cfg(not(feature = "serde_json"))]
+compile_error!(
+    "The `serde_json` feature must be enabled. Disable default features only if you re-enable `serde_json`."
+);
+
 pub use ortho_config_macros::OrthoConfig;
 
 pub use figment;
@@ -15,10 +20,11 @@ pub use figment_json5;
 #[cfg(feature = "json5")]
 #[cfg_attr(docsrs, doc(cfg(feature = "json5")))]
 pub use json5;
+#[cfg(feature = "serde_json")]
 pub use serde_json;
 #[cfg(feature = "yaml")]
 #[cfg_attr(docsrs, doc(cfg(feature = "yaml")))]
-pub use serde_yaml;
+pub use serde_saphyr;
 #[cfg(feature = "toml")]
 #[cfg_attr(docsrs, doc(cfg(feature = "toml")))]
 pub use toml;

@@ -35,16 +35,13 @@ fn get_extends_cases(#[case] input: &str, #[case] expected: ExtCase) -> Result<(
             let ext = to_anyhow(get_extends(&figment, Path::new("cfg.toml")))?;
             ensure!(
                 ext == exp,
-                "unexpected extends result {:?}; expected {:?}",
-                ext,
-                exp
+                "unexpected extends result {ext:?}; expected {exp:?}"
             );
         }
         ExtCase::Err(msg) => match get_extends(&figment, Path::new("cfg.toml")) {
             Ok(value) => {
                 return Err(anyhow!(
-                    "expected extends to fail with message containing {msg}, got {:?}",
-                    value
+                    "expected extends to fail with message containing {msg}, got {value:?}"
                 ));
             }
             Err(err) => ensure!(
@@ -67,8 +64,7 @@ fn get_extends_reports_error_with_file_variant(
     let err = match get_extends(&figment, Path::new("cfg.toml")) {
         Ok(value) => {
             return Err(anyhow!(
-                "expected OrthoError::File but extends succeeded with {:?}",
-                value
+                "expected OrthoError::File but extends succeeded with {value:?}"
             ));
         }
         Err(err) => err,
@@ -128,8 +124,7 @@ fn process_extends_handles_relative_and_absolute(#[case] is_abs: bool) -> Result
             .context("merged figment must contain foo value")?;
         ensure!(
             value.as_str() == Some("base"),
-            "unexpected foo value {:?}",
-            value
+            "unexpected foo value {value:?}"
         );
         Ok(())
     })
@@ -197,16 +192,14 @@ fn merge_parent_child_overrides_parent_on_conflicts() -> Result<()> {
         .context("merged figment must contain foo")?;
     ensure!(
         foo.as_str() == Some("child"),
-        "unexpected foo value {:?}",
-        foo
+        "unexpected foo value {foo:?}"
     );
     let bar = merged
         .find_value("bar")
         .context("merged figment must contain bar")?;
     ensure!(
         bar.as_str() == Some("parent"),
-        "unexpected bar value {:?}",
-        bar
+        "unexpected bar value {bar:?}"
     );
     Ok(())
 }

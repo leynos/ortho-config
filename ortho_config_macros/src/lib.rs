@@ -327,9 +327,7 @@ mod tests {
         };
         ensure!(
             tokens.to_string() == expected.to_string(),
-            "generated tokens differ: {} != {}",
-            tokens,
-            expected
+            "generated tokens differ: {tokens} != {expected}"
         );
         Ok(())
     }
@@ -349,9 +347,7 @@ mod tests {
         };
         ensure!(
             tokens.to_string() == expected.to_string(),
-            "generated tokens differ: {} != {}",
-            tokens,
-            expected
+            "generated tokens differ: {tokens} != {expected}"
         );
         Ok(())
     }
@@ -372,9 +368,7 @@ mod tests {
         };
         ensure!(
             tokens.to_string() == expected.to_string(),
-            "generated CLI struct differs: {} != {}",
-            tokens,
-            expected
+            "generated CLI struct differs: {tokens} != {expected}"
         );
         Ok(())
     }
@@ -392,9 +386,7 @@ mod tests {
         };
         ensure!(
             tokens.to_string() == expected.to_string(),
-            "generated defaults struct differs: {} != {}",
-            tokens,
-            expected
+            "generated defaults struct differs: {tokens} != {expected}"
         );
         Ok(())
     }

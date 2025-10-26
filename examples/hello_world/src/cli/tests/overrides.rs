@@ -188,9 +188,7 @@ fn load_config_overrides_sources(
     let overrides = expect_overrides(setup)?;
     ensure!(
         overrides == expected,
-        "unexpected overrides: {:?}; expected {:?}",
-        overrides,
-        expected
+        "unexpected overrides: {overrides:?}; expected {expected:?}"
     );
     Ok(())
 }

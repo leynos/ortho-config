@@ -22,3 +22,8 @@ All notable changes to this project will be documented in this file.
   `Err` when every candidate fails and any discovery errors were recorded, and
   `Ok(None)` only when no candidates exist without errors. Update error
   handling in consumers accordingly.
+- Replace the legacy `serde_yaml` integration with a feature-gated
+  `SaphyrYaml` provider backed by `serde-saphyr`, enabling YAML 1.2 semantics
+  (strict boolean parsing keeps unquoted `yes` as a string and duplicate
+  mapping keys raise errors) and removing the transitive `figment/yaml`
+  dependency.
