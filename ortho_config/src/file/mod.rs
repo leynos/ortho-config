@@ -78,27 +78,43 @@ impl Provider for SaphyrYaml {
     }
 
     fn data(&self) -> Result<std::collections::BTreeMap<Profile, Dict>, figment::Error> {
-        let contents = match &self.input {
-            YamlInput::File => std::fs::read_to_string(&self.path).map_err(|err| {
-                figment::Error::from(format!("failed to read {}: {err}", self.path.display()))
-            })?,
-            YamlInput::Inline(contents) => contents.clone(),
-        };
-        let value: crate::serde_json::Value = serde_saphyr::from_str_with_options(
-            &contents,
+        let contents = self.read_contents().map_err(|err| {
+            figment::Error::from(format!("failed to read {}: {err}", self.path.display()))
+        })?;
+        let value = Self::parse_value(&contents).map_err(|err| {
+            figment::Error::from(Kind::Message(format!(
+                "failed to parse {}: {err}",
+                self.path.display()
+            )))
+        })?;
+        let actual = value.to_actual();
+        let dict = value
+            .into_dict()
+            .ok_or_else(|| figment::Error::from(Kind::InvalidType(actual, "map".into())))?;
+        let profile = self.profile.clone().unwrap_or(Profile::Default);
+        Ok(profile.collect(dict))
+    }
+}
+
+#[cfg(feature = "yaml")]
+impl SaphyrYaml {
+    /// Read the provider input into a `String`.
+    fn read_contents(&self) -> std::io::Result<String> {
+        match &self.input {
+            YamlInput::File => std::fs::read_to_string(&self.path),
+            YamlInput::Inline(contents) => Ok(contents.clone()),
+        }
+    }
+
+    /// Parse YAML contents into a Figment `Value` using strict boolean semantics.
+    fn parse_value(contents: &str) -> Result<Value, serde_saphyr::Error> {
+        serde_saphyr::from_str_with_options(
+            contents,
             Options {
                 strict_booleans: true,
                 ..Options::default()
             },
         )
-        .map_err(|err| figment::Error::from(err.to_string()))?;
-        let figment_value = Value::serialize(value)?;
-        let actual = figment_value.to_actual();
-        let dict = figment_value
-            .into_dict()
-            .ok_or_else(|| figment::Error::from(Kind::InvalidType(actual, "map".into())))?;
-        let profile = self.profile.clone().unwrap_or(Profile::Default);
-        Ok(profile.collect(dict))
     }
 }
 

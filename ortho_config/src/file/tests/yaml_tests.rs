@@ -11,13 +11,42 @@ use std::path::PathBuf;
 use crate::file::{SaphyrYaml, load_config_file};
 
 #[rstest]
-fn yaml_yes_remains_a_string() -> Result<()> {
+#[case("yes")]
+#[case("Yes")]
+#[case("YES")]
+#[case("no")]
+#[case("No")]
+#[case("NO")]
+#[case("on")]
+#[case("On")]
+#[case("ON")]
+#[case("off")]
+#[case("Off")]
+#[case("OFF")]
+fn yaml_legacy_boolean_literals_remain_strings(#[case] literal: &str) -> Result<()> {
     let path = PathBuf::from("config.yaml");
-    let figment = Figment::from(SaphyrYaml::string(&path, "recipient: yes"));
+    let figment = Figment::from(SaphyrYaml::string(&path, format!("recipient: {literal}")));
     let recipient = figment
         .extract_inner::<String>("recipient")
         .map_err(|err| anyhow!(err.to_string()))?;
-    ensure!(recipient == "yes", "expected string literal \"yes\"");
+    ensure!(recipient == literal, "expected string literal {literal:?}");
+    Ok(())
+}
+
+#[rstest]
+#[case("true", true)]
+#[case("false", false)]
+#[case("True", true)]
+#[case("TRUE", true)]
+#[case("False", false)]
+#[case("FALSE", false)]
+fn yaml_respects_lowercase_booleans(#[case] literal: &str, #[case] expected: bool) -> Result<()> {
+    let path = PathBuf::from("config.yaml");
+    let figment = Figment::from(SaphyrYaml::string(&path, format!("recipient: {literal}")));
+    let recipient = figment
+        .extract_inner::<bool>("recipient")
+        .map_err(|err| anyhow!(err.to_string()))?;
+    ensure!(recipient == expected, "expected boolean {expected}");
     Ok(())
 }
 
@@ -31,6 +60,20 @@ fn yaml_loader_reads_files_via_saphyr() -> Result<()> {
             .extract_inner::<String>("recipient")
             .map_err(|err| anyhow!(err.to_string()))?;
         ensure!(recipient == "friend", "expected YAML file recipient");
+        Ok(())
+    })
+}
+
+#[rstest]
+fn yaml_loader_reports_parse_errors_with_paths() -> Result<()> {
+    super::with_jail(|jail| {
+        jail.create_file("config.yaml", "recipient: [")?;
+        let err = to_anyhow(load_config_file(PathBuf::from("config.yaml").as_path()))
+            .expect_err("expected load failure for invalid YAML");
+        ensure!(
+            err.to_string().contains("config.yaml"),
+            "expected error to mention source path, got: {err}"
+        );
         Ok(())
     })
 }
