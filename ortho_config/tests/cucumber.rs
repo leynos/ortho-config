@@ -7,6 +7,7 @@ use clap::{Args, Parser};
 use cucumber::World as _;
 use ortho_config::OrthoConfig;
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
 /// Test world state shared between Cucumber steps.
 #[derive(Debug, Default, cucumber::World)]
@@ -37,6 +38,10 @@ pub struct World {
     flat_file: Option<String>,
     /// Result of flattened configuration loading.
     pub(crate) flat_result: Option<ortho_config::OrthoResult<FlatArgs>>,
+    /// Dynamic rules file contents for collection strategy scenarios.
+    dynamic_rules_file: Option<String>,
+    /// Environment-provided dynamic rules for collection strategy scenarios.
+    dynamic_rules_env: Vec<(String, bool)>,
 }
 
 /// CLI struct used for subcommand behavioural tests.
@@ -77,11 +82,21 @@ pub struct RulesConfig {
     #[serde(default)]
     #[ortho_config(merge_strategy = "append")]
     ignore_patterns: Vec<String>,
+    /// Dynamic rules table demonstrating replace semantics.
+    #[serde(default)]
+    #[ortho_config(skip_cli, merge_strategy = "replace")]
+    dynamic_rules: BTreeMap<String, DynamicRule>,
     /// Optional configuration path using a custom flag name.
     #[serde(skip)]
     #[ortho_config(cli_long = "config")]
     #[expect(dead_code, reason = "used indirectly via CLI flag in tests")]
     config_path: Option<std::path::PathBuf>,
+}
+
+/// Toggleable rule used by collection merge behavioural tests.
+#[derive(Debug, Deserialize, Serialize, Default)]
+pub struct DynamicRule {
+    enabled: bool,
 }
 
 /// Configuration used to verify aggregated error reporting.

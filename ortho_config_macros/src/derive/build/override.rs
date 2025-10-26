@@ -1,34 +1,66 @@
-//! Override helpers that build append structures for derived configuration.
+//! Override helpers that build collection structures for derived configuration.
 //!
-//! These utilities gather `Vec<_>` fields using append merge strategies and
-//! generate the supporting override struct plus load-time aggregation logic.
+//! These utilities analyse collection merge strategies, generate the supporting
+//! override struct, and emit load-time aggregation logic for vector append and
+//! map replacement semantics.
 
 use quote::{format_ident, quote};
 use syn::{Ident, Type};
 
-use crate::derive::parse::{FieldAttrs, MergeStrategy, vec_inner};
+use crate::derive::parse::{FieldAttrs, MergeStrategy, btree_map_inner, vec_inner};
 
-/// Identifies whether a field participates in append merging and extracts its element type.
+/// Collection strategy metadata gathered from struct fields.
+#[derive(Default)]
+pub(crate) struct CollectionStrategies {
+    pub append: Vec<(Ident, Type)>,
+    pub map_replace: Vec<(Ident, Type)>,
+}
+
+/// Collects fields that use collection merge strategies.
 ///
-/// The function inspects the field's merge strategy, defaulting to `Append` when no attribute
-/// is supplied so plain `Vec<_>` fields still opt into vector merging. It attempts to peel the
-/// inner type via `vec_inner` and returns `Ok(Some((name, inner_ty)))` when the effective
-/// strategy is `Append` and the field is a `Vec<_>`. For non-append strategies or non-vector
-/// fields it returns `Ok(None)` so callers can skip the field.
+/// Walks the parsed struct, capturing each named collection field configured
+/// with a merge strategy. `Vec<_>` fields default to the append strategy, while
+/// `BTreeMap<_, _>` fields default to keyed merges unless explicitly set to
+/// replace.
 ///
-/// The explicit merge strategy distinction exists to surface configuration bugs: a field that
-/// *explicitly* requests `Append` must be a vector, otherwise the function raises an error.
-/// When the strategy is only *implicitly* `Append` (because no attribute was provided) the code
-/// treats non-`Vec` fields as unsupported but benign by returning `Ok(None)`, avoiding false
-/// positives for non-vector fields that simply rely on the default strategy.
-fn process_vec_field(field: &syn::Field, attrs: &FieldAttrs) -> syn::Result<Option<(Ident, Type)>> {
+/// # Errors
+///
+/// Returns an error when merge strategies are applied to unsupported types or
+/// when tuple fields request strategy customisation.
+pub(crate) fn collect_collection_strategies(
+    fields: &[syn::Field],
+    field_attrs: &[FieldAttrs],
+) -> syn::Result<CollectionStrategies> {
+    let mut strategies = CollectionStrategies::default();
+    for (field, attrs) in fields.iter().zip(field_attrs) {
+        if let Some((ident, ty)) = process_vec_field(field, attrs)? {
+            strategies.append.push((ident, ty));
+            continue;
+        }
+        if let Some((ident, ty)) = process_map_field(field, attrs)? {
+            strategies.map_replace.push((ident, ty));
+            continue;
+        }
+        if attrs.merge_strategy.is_some() {
+            return Err(syn::Error::new_spanned(
+                field,
+                "merge_strategy is only supported on Vec<_> or BTreeMap<_, _> fields",
+            ));
+        }
+    }
+    Ok(strategies)
+}
+
+fn process_vec_field(
+    field: &syn::Field,
+    attrs: &FieldAttrs,
+) -> syn::Result<Option<(Ident, Type)>> {
     let Some(name) = field.ident.clone() else {
         return Err(syn::Error::new_spanned(
             field,
-            "unnamed (tuple) fields are not supported for append merge strategy",
+            "unnamed (tuple) fields do not support merge strategies",
         ));
     };
-    let strategy = attrs.merge_strategy.unwrap_or(MergeStrategy::Append);
     let Some(vec_ty) = vec_inner(&field.ty) else {
         if matches!(attrs.merge_strategy, Some(MergeStrategy::Append)) {
             return Err(syn::Error::new_spanned(
@@ -38,303 +70,203 @@ fn process_vec_field(field: &syn::Field, attrs: &FieldAttrs) -> syn::Result<Opti
         }
         return Ok(None);
     };
-    if strategy == MergeStrategy::Append {
-        Ok(Some((name, (*vec_ty).clone())))
-    } else {
-        Ok(None)
+
+    let strategy = attrs.merge_strategy.unwrap_or(MergeStrategy::Append);
+    match strategy {
+        MergeStrategy::Append => Ok(Some((name, (*vec_ty).clone()))),
+        MergeStrategy::Replace => Ok(None),
+        MergeStrategy::Keyed => Err(syn::Error::new_spanned(
+            field,
+            "keyed merge strategy is not supported for Vec<_> fields",
+        )),
     }
 }
 
-/// Collects fields that use the append merge strategy.
-///
-/// Walks the parsed struct, capturing each named `Vec<_>` field configured with
-/// the append merge strategy—either explicitly or via the implicit default for
-/// vectors—and returns the owned identifier and element type.
-///
-/// # Examples
-///
-/// ```rust,ignore
-/// # use crate::derive::build::r#override::collect_append_fields;
-/// # use crate::derive::parse::parse_input;
-/// let input: syn::DeriveInput = syn::parse_quote! {
-///     struct Demo {
-///         #[ortho_config(merge_strategy = "append")]
-///         values: Vec<String>,
-///     }
-/// };
-/// let (_, fields, _, field_attrs) = parse_input(&input).unwrap();
-/// let append = collect_append_fields(&fields, &field_attrs).unwrap();
-/// assert_eq!(append.len(), 1);
-/// assert_eq!(
-///     append[0].0,
-///     syn::parse_str::<syn::Ident>("values").unwrap()
-/// );
-/// ```
-///
-/// # Errors
-///
-/// Returns an error when an append strategy is requested for a field without a
-/// `Vec<_>` type or when an unnamed (tuple) field requests append merging.
-pub(crate) fn collect_append_fields(
-    fields: &[syn::Field],
-    field_attrs: &[FieldAttrs],
-) -> syn::Result<Vec<(Ident, Type)>> {
-    let mut append_fields = Vec::new();
-    for (field, attrs) in fields.iter().zip(field_attrs) {
-        if let Some(strategy) = process_vec_field(field, attrs)? {
-            append_fields.push(strategy);
-        }
+fn process_map_field(
+    field: &syn::Field,
+    attrs: &FieldAttrs,
+) -> syn::Result<Option<(Ident, Type)>> {
+    let Some(name) = field.ident.clone() else {
+        return Err(syn::Error::new_spanned(
+            field,
+            "unnamed (tuple) fields do not support merge strategies",
+        ));
+    };
+    if btree_map_inner(&field.ty).is_none() {
+        return Ok(None);
     }
-    Ok(append_fields)
+
+    let strategy = attrs.merge_strategy.unwrap_or(MergeStrategy::Keyed);
+    match strategy {
+        MergeStrategy::Append => Err(syn::Error::new_spanned(
+            field,
+            "append merge strategy is not supported for BTreeMap fields",
+        )),
+        MergeStrategy::Replace => Ok(Some((name, field.ty.clone()))),
+        MergeStrategy::Keyed => Ok(None),
+    }
 }
 
 /// Builds the override struct definition and initialisation expression.
 ///
-/// Generates the hidden `__<Base>VecOverride` struct containing
-/// `Option<Vec<T>>` fields for every append-enabled vector and an initialiser
-/// expression where each field starts as `None`.
-///
-/// # Examples
-///
-/// ```rust,ignore
-/// # use crate::derive::build::r#override::{
-/// #     build_override_struct, collect_append_fields
-/// # };
-/// # use crate::derive::parse::parse_input;
-/// let input: syn::DeriveInput = syn::parse_quote! {
-///     struct Demo {
-///         #[ortho_config(merge_strategy = "append")]
-///         values: Vec<String>,
-///     }
-/// };
-/// let (_, fields, _, field_attrs) = parse_input(&input).unwrap();
-/// let append = collect_append_fields(&fields, &field_attrs).unwrap();
-/// let (struct_def, init) = build_override_struct(
-///     &syn::parse_quote!(Demo),
-///     &append,
-/// );
-/// assert!(struct_def.to_string().contains("__DemoVecOverride"));
-/// assert!(init.to_string().contains("None"));
-/// ```
+/// Generates the hidden `__<Base>CollectionOverride` struct containing
+/// `Option<Vec<T>>` fields for every append-enabled vector and
+/// `Option<serde_json::Value>` fields for map replacements. Each field starts as
+/// `None`.
 ///
 /// Returns a tuple containing the struct definition tokens and the
 /// corresponding initialiser.
 pub(crate) fn build_override_struct(
     base: &Ident,
-    fields: &[(Ident, Type)],
+    strategies: &CollectionStrategies,
 ) -> (proc_macro2::TokenStream, proc_macro2::TokenStream) {
-    let ident = format_ident!("__{}VecOverride", base);
-    let struct_fields = fields.iter().map(|(name, ty)| {
+    let ident = format_ident!("__{}CollectionOverride", base);
+    let vec_fields = strategies.append.iter().map(|(name, ty)| {
         quote! {
             #[serde(skip_serializing_if = "Option::is_none")]
             pub #name: Option<Vec<#ty>>
         }
     });
-    let init = fields.iter().map(|(name, _)| quote! { #name: None });
-    let ts = quote! {
+    let map_fields = strategies.map_replace.iter().map(|(name, _)| {
+        quote! {
+            #[serde(skip_serializing_if = "Option::is_none")]
+            pub #name: Option<ortho_config::serde_json::Value>
+        }
+    });
+    let struct_fields = vec_fields.chain(map_fields);
+    let init_vec = strategies
+        .append
+        .iter()
+        .map(|(name, _)| quote! { #name: None });
+    let init_map = strategies
+        .map_replace
+        .iter()
+        .map(|(name, _)| quote! { #name: None });
+    let init = init_vec.chain(init_map);
+    let definition = quote! {
         #[derive(serde::Serialize)]
         struct #ident {
             #( #struct_fields, )*
         }
     };
-    let init_ts = quote! { #ident { #( #init, )* } };
-    (ts, init_ts)
+    let initialiser = quote! { #ident { #( #init, )* } };
+    (definition, initialiser)
 }
 
-/// Builds the append accumulation logic for vector fields.
-///
-/// Produces load-time accumulation code that drains `Vec<T>` values from the
-/// defaults, file, environment, and CLI layers in precedence order, combining
-/// them into the override struct only when a layer contributes data.
-///
-/// # Examples
-///
-/// ```rust,ignore
-/// # use crate::derive::build::r#override::{
-/// #     build_append_logic, collect_append_fields
-/// # };
-/// # use crate::derive::parse::parse_input;
-/// let input: syn::DeriveInput = syn::parse_quote! {
-///     struct Demo {
-///         #[ortho_config(merge_strategy = "append")]
-///         values: Vec<String>,
-///     }
-/// };
-/// let (_, fields, _, field_attrs) = parse_input(&input).unwrap();
-/// let append = collect_append_fields(&fields, &field_attrs).unwrap();
-/// let tokens = build_append_logic(&append);
-/// assert!(!tokens.is_empty());
-/// ```
-///
-/// Returns an empty token stream when no fields require append accumulation.
-pub(crate) fn build_append_logic(fields: &[(Ident, Type)]) -> proc_macro2::TokenStream {
-    if fields.is_empty() {
-        return quote! {};
-    }
+/// Aggregated token streams for collection merge logic.
+pub(crate) struct CollectionLogicTokens {
+    pub pre_merge: proc_macro2::TokenStream,
+    pub post_extract: proc_macro2::TokenStream,
+}
 
-    let logic = fields.iter().map(|(name, ty)| {
-        quote! {
-            {
-                let mut vec_acc: Vec<#ty> = Vec::new();
-                if let Some(val) = &defaults.#name { vec_acc.extend(val.clone()); }
-                if let Some(f) = &file_fig {
-                    if let Ok(v) = f.extract_inner::<Vec<#ty>>(stringify!(#name)) { vec_acc.extend(v); }
-                }
-                if let Ok(v) = env_figment.extract_inner::<Vec<#ty>>(stringify!(#name)) { vec_acc.extend(v); }
-                if let Ok(v) = cli_figment.extract_inner::<Vec<#ty>>(stringify!(#name)) { vec_acc.extend(v); }
-                if !vec_acc.is_empty() {
-                    overrides.#name = Some(vec_acc);
+fn build_append_blocks(strategies: &CollectionStrategies) -> Vec<proc_macro2::TokenStream> {
+    strategies
+        .append
+        .iter()
+        .map(|(name, ty)| {
+            quote! {
+                {
+                    let mut vec_acc: Vec<#ty> = Vec::new();
+                    if let Some(val) = &defaults.#name { vec_acc.extend(val.clone()); }
+                    if let Some(f) = &file_fig {
+                        if let Ok(v) = f.extract_inner::<Vec<#ty>>(stringify!(#name)) { vec_acc.extend(v); }
+                    }
+                    if let Ok(v) = env_figment.extract_inner::<Vec<#ty>>(stringify!(#name)) { vec_acc.extend(v); }
+                    if let Ok(v) = cli_figment.extract_inner::<Vec<#ty>>(stringify!(#name)) { vec_acc.extend(v); }
+                    if !vec_acc.is_empty() {
+                        overrides.#name = Some(vec_acc);
+                    }
                 }
             }
-        }
-    });
+        })
+        .collect()
+}
+
+fn build_map_state_decls(strategies: &CollectionStrategies) -> Vec<proc_macro2::TokenStream> {
+    strategies
+        .map_replace
+        .iter()
+        .map(|(name, ty)| {
+            let state_ident = format_ident!("replace_{}", name);
+            quote! { let mut #state_ident: Option<#ty> = None; }
+        })
+        .collect()
+}
+
+fn build_map_merge_blocks(strategies: &CollectionStrategies) -> Vec<proc_macro2::TokenStream> {
+    strategies
+        .map_replace
+        .iter()
+        .map(|(name, ty)| {
+            let state_ident = format_ident!("replace_{}", name);
+            quote! {
+                if let Some(f) = &file_fig {
+                    if let Ok(v) = f.extract_inner::<#ty>(stringify!(#name)) {
+                        #state_ident = Some(v);
+                    }
+                }
+                if let Ok(v) = env_figment.extract_inner::<#ty>(stringify!(#name)) {
+                    #state_ident = Some(v);
+                }
+                if let Ok(v) = cli_figment.extract_inner::<#ty>(stringify!(#name)) {
+                    #state_ident = Some(v);
+                }
+            }
+        })
+        .collect()
+}
+
+fn build_map_assignment_blocks(strategies: &CollectionStrategies) -> Vec<proc_macro2::TokenStream> {
+    strategies
+        .map_replace
+        .iter()
+        .map(|(name, _)| {
+            let state_ident = format_ident!("replace_{}", name);
+            quote! {
+                if let Some(value) = #state_ident {
+                    cfg.#name = value;
+                }
+            }
+        })
+        .collect()
+}
+
+fn build_pre_merge_tokens(strategies: &CollectionStrategies) -> proc_macro2::TokenStream {
+    let append_logic = build_append_blocks(strategies);
+    let map_state_decls = build_map_state_decls(strategies);
+    let map_logic = build_map_merge_blocks(strategies);
     quote! {
         let cli_figment = ortho_config::figment::Figment::from(
             ortho_config::figment::providers::Serialized::defaults(&cli),
         );
-        #( #logic )*
+        #( #map_state_decls )*
+        #( #append_logic )*
+        #( #map_logic )*
+    }
+}
+
+fn build_post_extract_tokens(strategies: &CollectionStrategies) -> proc_macro2::TokenStream {
+    let map_assignments = build_map_assignment_blocks(strategies);
+    quote! { #( #map_assignments )* }
+}
+
+pub(crate) fn build_collection_logic(
+    strategies: &CollectionStrategies,
+) -> CollectionLogicTokens {
+    if strategies.append.is_empty() && strategies.map_replace.is_empty() {
+        return CollectionLogicTokens {
+            pre_merge: quote! {},
+            post_extract: quote! {},
+        };
+    }
+
+    let pre_merge = build_pre_merge_tokens(strategies);
+    let post_extract = build_post_extract_tokens(strategies);
+    CollectionLogicTokens {
+        pre_merge,
+        post_extract,
     }
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::derive::parse::StructAttrs;
-    use anyhow::{Result, anyhow, ensure};
-    use rstest::rstest;
-
-    fn demo_input() -> Result<(Vec<syn::Field>, Vec<FieldAttrs>, StructAttrs)> {
-        let input: syn::DeriveInput = syn::parse_quote! {
-            #[ortho_config(prefix = "CFG_")]
-            struct Demo {
-                #[ortho_config(cli_long = "opt", cli_short = 'o', default = 5)]
-                field1: Option<u32>,
-                #[ortho_config(merge_strategy = "append")]
-                field2: Vec<String>,
-            }
-        };
-        let (_, fields, struct_attrs, field_attrs) = crate::derive::parse::parse_input(&input)?;
-        Ok((fields, field_attrs, struct_attrs))
-    }
-
-    fn setup_single_field_test(
-        input: &syn::DeriveInput,
-        description: &str,
-    ) -> Result<(syn::Field, FieldAttrs)> {
-        let (_, fields, _, field_attrs) = crate::derive::parse::parse_input(input)?;
-        let field = fields
-            .first()
-            .cloned()
-            .ok_or_else(|| anyhow!("missing {description} field"))?;
-        let attrs = field_attrs
-            .first()
-            .cloned()
-            .ok_or_else(|| anyhow!("missing {description} attributes"))?;
-        Ok((field, attrs))
-    }
-
-    #[test]
-    fn collect_append_fields_selects_vec_fields() -> Result<()> {
-        let (fields, field_attrs, _) = demo_input()?;
-        let out = collect_append_fields(&fields, &field_attrs)?;
-        let [(ident, _)] = out.as_slice() else {
-            return Err(anyhow!("expected single append field"));
-        };
-        ensure!(ident == "field2", "expected field2 append target");
-        Ok(())
-    }
-
-    #[test]
-    fn build_override_struct_creates_struct() -> Result<()> {
-        let (fields, field_attrs, _) = demo_input()?;
-        let append = collect_append_fields(&fields, &field_attrs)?;
-        let (ts, init_ts) = build_override_struct(&syn::parse_quote!(Demo), &append);
-        ensure!(
-            ts.to_string().contains("struct __DemoVecOverride"),
-            "override struct missing expected identifier"
-        );
-        ensure!(
-            init_ts.to_string().contains("__DemoVecOverride"),
-            "override init missing expected struct"
-        );
-        Ok(())
-    }
-
-    #[rstest]
-    #[case::identifies_append_vec(
-        syn::parse_quote! {
-            struct Demo {
-                #[ortho_config(merge_strategy = "append")]
-                field2: Vec<String>,
-            }
-        },
-        true,
-        "field2",
-        syn::parse_quote!(String),
-    )]
-    #[case::skips_non_vec_without_append(
-        syn::parse_quote! {
-            struct DemoSkip {
-                field: Option<String>,
-            }
-        },
-        false,
-        "",
-        syn::parse_quote!(()),
-    )]
-    fn process_vec_field_behaviour(
-        #[case] input: syn::DeriveInput,
-        #[case] expect_some: bool,
-        #[case] expected_ident: &str,
-        #[case] expected_ty: syn::Type,
-    ) -> Result<()> {
-        let (field, attrs) = setup_single_field_test(&input, "test")?;
-        let result = process_vec_field(&field, &attrs)?;
-
-        if expect_some {
-            let (ident, ty) = result.ok_or_else(|| anyhow!("expected Some"))?;
-            ensure!(ident == expected_ident, "unexpected append target");
-            ensure!(ty == expected_ty, "unexpected element type");
-        } else {
-            ensure!(result.is_none(), "expected process_vec_field to skip field");
-        }
-        Ok(())
-    }
-
-    #[test]
-    fn process_vec_field_errors_when_append_without_vec() -> Result<()> {
-        let input: syn::DeriveInput = syn::parse_quote! {
-            struct DemoInvalid {
-                #[ortho_config(merge_strategy = "append")]
-                field: Option<String>,
-            }
-        };
-        let (field, attrs) = setup_single_field_test(&input, "invalid")?;
-        let err = process_vec_field(&field, &attrs).expect_err("append requires Vec field");
-        ensure!(
-            err.to_string().contains("requires a Vec<_> field"),
-            "unexpected error: {err:?}"
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn collect_append_fields_errors_on_non_vec_append() -> Result<()> {
-        let input: syn::DeriveInput = syn::parse_quote! {
-            struct DemoAppendError {
-                #[ortho_config(merge_strategy = "append")]
-                field1: u32,
-            }
-        };
-        let (_, fields, _, field_attrs) = crate::derive::parse::parse_input(&input)?;
-        let Err(err) = collect_append_fields(&fields, &field_attrs) else {
-            return Err(anyhow!("expected append strategy validation to fail"));
-        };
-        ensure!(
-            err.to_string()
-                .contains("append merge strategy requires a Vec<_> field"),
-            "unexpected error: {err}"
-        );
-        Ok(())
-    }
-}
+mod tests;

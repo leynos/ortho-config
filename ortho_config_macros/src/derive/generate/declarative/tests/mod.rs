@@ -1,7 +1,7 @@
 //! Tests for declarative merge token generators.
 //!
 //! Verifies that declarative merge helpers emit deduplicated state storage,
-//! trait implementations, and constructors that honour append semantics.
+//! trait implementations, and constructors that honour collection semantics.
 
 use std::str::FromStr;
 
@@ -15,6 +15,7 @@ use super::{
     generate_declarative_impl, generate_declarative_merge_from_layers_fn,
     generate_declarative_merge_impl, generate_declarative_state_struct, unique_append_fields,
 };
+use crate::derive::build::CollectionStrategies;
 
 fn parse_ident(src: &str) -> Result<syn::Ident> {
     parse_str(src).map_err(|err| anyhow!(err))
@@ -62,7 +63,7 @@ fn unique_append_fields_filters_duplicates() -> Result<()> {
 #[rstest]
 fn generate_declarative_state_struct_emits_storage() -> Result<()> {
     let state_ident = parse_ident("__SampleDeclarativeMergeState")?;
-    let tokens = generate_declarative_state_struct(&state_ident, &[]);
+    let tokens = generate_declarative_state_struct(&state_ident, &CollectionStrategies::default());
     let expected = quote! {
         #[derive(Default)]
         struct __SampleDeclarativeMergeState {
@@ -79,8 +80,11 @@ fn generate_declarative_state_struct_emits_storage() -> Result<()> {
 #[rstest]
 fn generate_declarative_state_struct_includes_append_fields() -> Result<()> {
     let state_ident = parse_ident("__SampleDeclarativeMergeState")?;
-    let append_fields = vec![(parse_ident("items")?, parse_type("String")?)];
-    let tokens = generate_declarative_state_struct(&state_ident, &append_fields);
+    let strategies = CollectionStrategies {
+        append: vec![(parse_ident("items")?, parse_type("String")?)],
+        map_replace: Vec::new(),
+    };
+    let tokens = generate_declarative_state_struct(&state_ident, &strategies);
     let norm = tokens.to_string().replace(' ', "");
     ensure!(
         norm.contains("append_items"),
@@ -89,18 +93,44 @@ fn generate_declarative_state_struct_includes_append_fields() -> Result<()> {
     Ok(())
 }
 
+#[rstest]
+fn generate_declarative_state_struct_includes_map_fields() -> Result<()> {
+    let state_ident = parse_ident("__SampleDeclarativeMergeState")?;
+    let strategies = CollectionStrategies {
+        append: Vec::new(),
+        map_replace: vec![(
+            parse_ident("rules")?,
+            parse_type("std::collections::BTreeMap<String, u32>")?,
+        )],
+    };
+    let tokens = generate_declarative_state_struct(&state_ident, &strategies);
+    let norm = tokens.to_string().replace(' ', "");
+    ensure!(
+        norm.contains("replace_rules"),
+        "expected replace_rules storage field"
+    );
+    Ok(())
+}
+
+fn append_strategies(fields: Vec<(syn::Ident, syn::Type)>) -> CollectionStrategies {
+    CollectionStrategies {
+        append: fields,
+        map_replace: Vec::new(),
+    }
+}
+
 fn assert_deduplicates_append_fields<F>(generator: F) -> Result<()>
 where
-    F: Fn(&[(syn::Ident, syn::Type)]) -> TokenStream2,
+    F: Fn(CollectionStrategies) -> TokenStream2,
 {
     let duplicate_fields = vec![
         (parse_ident("items")?, parse_type("String")?),
         (parse_ident("items")?, parse_type("String")?),
     ];
-    let duplicate_tokens = generator(&duplicate_fields);
+    let duplicate_tokens = generator(append_strategies(duplicate_fields));
 
     let deduplicated_fields = vec![(parse_ident("items")?, parse_type("String")?)];
-    let deduplicated_tokens = generator(&deduplicated_fields);
+    let deduplicated_tokens = generator(append_strategies(deduplicated_fields));
 
     ensure!(
         duplicate_tokens.to_string() == deduplicated_tokens.to_string(),
@@ -113,7 +143,7 @@ where
 fn generate_declarative_state_struct_deduplicates_append_fields() -> Result<()> {
     let state_ident = parse_ident("__SampleDeclarativeMergeState")?;
     assert_deduplicates_append_fields(|fields| {
-        generate_declarative_state_struct(&state_ident, fields)
+        generate_declarative_state_struct(&state_ident, &fields)
     })?;
     Ok(())
 }
@@ -122,7 +152,11 @@ fn generate_declarative_state_struct_deduplicates_append_fields() -> Result<()> 
 fn generate_declarative_merge_impl_emits_trait_impl() -> Result<()> {
     let state_ident = parse_ident("__SampleDeclarativeMergeState")?;
     let config_ident = parse_ident("Sample")?;
-    let tokens = generate_declarative_merge_impl(&state_ident, &config_ident, &[]);
+    let tokens = generate_declarative_merge_impl(
+        &state_ident,
+        &config_ident,
+        &CollectionStrategies::default(),
+    );
     let expected = expected_declarative_merge_impl_empty()?;
     let actual = tokens.to_string();
     let expected_rendered = expected.to_string();
@@ -137,8 +171,8 @@ fn generate_declarative_merge_impl_emits_trait_impl() -> Result<()> {
 fn generate_declarative_merge_impl_handles_append_fields() -> Result<()> {
     let state_ident = parse_ident("__SampleDeclarativeMergeState")?;
     let config_ident = parse_ident("Sample")?;
-    let append_fields = vec![(parse_ident("items")?, parse_type("String")?)];
-    let tokens = generate_declarative_merge_impl(&state_ident, &config_ident, &append_fields);
+    let strategies = append_strategies(vec![(parse_ident("items")?, parse_type("String")?)]);
+    let tokens = generate_declarative_merge_impl(&state_ident, &config_ident, &strategies);
     let norm = tokens.to_string().replace(" :: ", "::").replace(' ', "");
     ensure!(
         norm.contains("append_items"),
@@ -164,13 +198,43 @@ fn generate_declarative_merge_impl_handles_append_fields() -> Result<()> {
 }
 
 #[rstest]
-fn generate_declarative_merge_impl_emits_non_object_error_context() -> Result<()> {
+fn generate_declarative_merge_impl_handles_map_fields() -> Result<()> {
     let state_ident = parse_ident("__SampleDeclarativeMergeState")?;
     let config_ident = parse_ident("Sample")?;
-    let norm = generate_declarative_merge_impl(&state_ident, &config_ident, &[])
+    let strategies = CollectionStrategies {
+        append: Vec::new(),
+        map_replace: vec![(
+            parse_ident("rules")?,
+            parse_type("std::collections::BTreeMap<String, u32>")?,
+        )],
+    };
+    let norm = generate_declarative_merge_impl(&state_ident, &config_ident, &strategies)
         .to_string()
         .replace(" :: ", "::")
         .replace(' ', "");
+    ensure!(
+        norm.contains("replace_rules"),
+        "expected replace_rules merge logic",
+    );
+    ensure!(
+        norm.contains("serde_json::Map::new"),
+        "expected map initialisation",
+    );
+    Ok(())
+}
+
+#[rstest]
+fn generate_declarative_merge_impl_emits_non_object_error_context() -> Result<()> {
+    let state_ident = parse_ident("__SampleDeclarativeMergeState")?;
+    let config_ident = parse_ident("Sample")?;
+    let norm = generate_declarative_merge_impl(
+        &state_ident,
+        &config_ident,
+        &CollectionStrategies::default(),
+    )
+    .to_string()
+    .replace(" :: ", "::")
+    .replace(' ', "");
     ensure!(
         norm.contains("\"{provenance_label}layersupplied{value_kind}.\""),
         "guard must cite provenance and value kind: {norm}"
@@ -191,7 +255,7 @@ fn generate_declarative_merge_impl_deduplicates_append_fields() -> Result<()> {
     let state_ident = parse_ident("__SampleDeclarativeMergeState")?;
     let config_ident = parse_ident("Sample")?;
     assert_deduplicates_append_fields(|fields| {
-        generate_declarative_merge_impl(&state_ident, &config_ident, fields)
+        generate_declarative_merge_impl(&state_ident, &config_ident, &fields)
     })?;
     Ok(())
 }
@@ -255,11 +319,11 @@ fn generate_declarative_merge_from_layers_fn_emits_constructor() -> Result<()> {
 #[rstest]
 fn generate_declarative_impl_composes_helpers() -> Result<()> {
     let config_ident = parse_ident("Sample")?;
-    let append_fields: Vec<(syn::Ident, syn::Type)> = Vec::new();
-    let tokens = generate_declarative_impl(&config_ident, &append_fields);
+    let strategies = CollectionStrategies::default();
+    let tokens = generate_declarative_impl(&config_ident, &strategies);
     let state_ident = parse_ident("__SampleDeclarativeMergeState")?;
-    let state_struct = generate_declarative_state_struct(&state_ident, &append_fields);
-    let merge_impl = generate_declarative_merge_impl(&state_ident, &config_ident, &append_fields);
+    let state_struct = generate_declarative_state_struct(&state_ident, &strategies);
+    let merge_impl = generate_declarative_merge_impl(&state_ident, &config_ident, &strategies);
     let merge_fn = generate_declarative_merge_from_layers_fn(&state_ident, &config_ident);
     let expected = quote! {
         #state_struct

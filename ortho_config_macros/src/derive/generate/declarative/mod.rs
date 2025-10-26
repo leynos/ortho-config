@@ -1,12 +1,116 @@
 //! Declarative merge code generation for `#[derive(OrthoConfig)]`.
 //!
 //! Emits merge-state structs, trait implementations, and helper constructors
-//! that layer declarative configuration values while honouring append
-//! semantics for vector fields.
+//! that layer declarative configuration values while honouring collection
+//! strategies such as vector appends and map replacements.
 
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 use std::collections::HashSet;
+
+use crate::derive::build::CollectionStrategies;
+
+struct AppendMergeTokens {
+    merge_logic: Vec<TokenStream>,
+    destructured: Vec<TokenStream>,
+    inserts: Vec<TokenStream>,
+}
+
+fn build_append_merge_tokens(strategies: &CollectionStrategies) -> AppendMergeTokens {
+    let unique_fields = unique_append_fields(&strategies.append);
+    let merge_logic = unique_fields
+        .iter()
+        .map(|(field_ident, _ty)| {
+            let state_field_ident = format_ident!("append_{}", field_ident);
+            let field_name = field_ident.to_string();
+            quote! {
+                if let Some(value) = map.remove(#field_name) {
+                    let incoming: Vec<_> =
+                        ortho_config::serde_json::from_value(value).into_ortho()?;
+                    let acc = self
+                        .#state_field_ident
+                        .get_or_insert_with(Default::default);
+                    acc.extend(incoming);
+                }
+            }
+        })
+        .collect();
+    let destructured = unique_fields
+        .iter()
+        .map(|(field_ident, _ty)| {
+            let state_field_ident = format_ident!("append_{}", field_ident);
+            quote! { #state_field_ident }
+        })
+        .collect();
+    let inserts = unique_fields
+        .iter()
+        .map(|(field_ident, _ty)| {
+            let state_field_ident = format_ident!("append_{}", field_ident);
+            let field_name = field_ident.to_string();
+            quote! {
+                if let Some(values) = #state_field_ident {
+                    appended.insert(
+                        #field_name.to_owned(),
+                        ortho_config::serde_json::Value::Array(values),
+                    );
+                }
+            }
+        })
+        .collect();
+    AppendMergeTokens {
+        merge_logic,
+        destructured,
+        inserts,
+    }
+}
+
+struct MapReplaceTokens {
+    merge_logic: Vec<TokenStream>,
+    destructured: Vec<TokenStream>,
+    inserts: Vec<TokenStream>,
+}
+
+fn build_map_replace_tokens(strategies: &CollectionStrategies) -> MapReplaceTokens {
+    let merge_logic = strategies
+        .map_replace
+        .iter()
+        .map(|(field_ident, _ty)| {
+            let state_field_ident = format_ident!("replace_{}", field_ident);
+            let field_name = field_ident.to_string();
+            quote! {
+                if let Some(value) = map.remove(#field_name) {
+                    self.#state_field_ident = Some(value);
+                }
+            }
+        })
+        .collect();
+    let destructured = strategies
+        .map_replace
+        .iter()
+        .map(|(field_ident, _ty)| {
+            let state_field_ident = format_ident!("replace_{}", field_ident);
+            quote! { #state_field_ident }
+        })
+        .collect();
+    let inserts = strategies
+        .map_replace
+        .iter()
+        .map(|(field_ident, _ty)| {
+            let state_field_ident = format_ident!("replace_{}", field_ident);
+            let field_name = field_ident.to_string();
+            quote! {
+                if let Some(value) = #state_field_ident {
+                    appended.insert(#field_name.to_owned(), value);
+                }
+            }
+        })
+        .collect();
+    MapReplaceTokens {
+        merge_logic,
+        destructured,
+        inserts,
+    }
+}
 
 /// Deduplicate append fields by identifier.
 ///
@@ -67,13 +171,19 @@ pub(crate) fn unique_append_fields(
 /// ```
 pub(crate) fn generate_declarative_state_struct(
     state_ident: &syn::Ident,
-    append_fields: &[(syn::Ident, syn::Type)],
+    strategies: &CollectionStrategies,
 ) -> TokenStream {
-    let unique_fields = unique_append_fields(append_fields);
+    let unique_fields = unique_append_fields(&strategies.append);
     let append_state_fields = unique_fields.iter().map(|(name, _ty)| {
         let state_field_ident = format_ident!("append_{}", name);
         quote! {
             #state_field_ident: Option<Vec<ortho_config::serde_json::Value>>
+        }
+    });
+    let map_replace_fields = strategies.map_replace.iter().map(|(name, _ty)| {
+        let state_field_ident = format_ident!("replace_{}", name);
+        quote! {
+            #state_field_ident: Option<ortho_config::serde_json::Value>
         }
     });
 
@@ -81,7 +191,8 @@ pub(crate) fn generate_declarative_state_struct(
         #[derive(Default)]
         struct #state_ident {
             value: ortho_config::serde_json::Value,
-            #( #append_state_fields ),*
+            #( #append_state_fields, )*
+            #( #map_replace_fields, )*
         }
     }
 }
@@ -142,42 +253,30 @@ fn generate_non_object_guard(config_ident: &syn::Ident) -> TokenStream {
 /// let tokens = generate_declarative_merge_impl(&state_ident, &config_ident, &[]);
 /// assert!(tokens.to_string().contains("impl ortho_config::DeclarativeMerge"));
 /// ```
+// The generated merge implementation mirrors the runtime branching structure of
+// the declarative merger, which naturally exceeds Clippy's cognitive
+// complexity threshold. Splitting it further would obscure the emitted code.
+#[expect(
+    clippy::cognitive_complexity,
+    reason = "Token assembly reflects the runtime merge branches"
+)]
 pub(crate) fn generate_declarative_merge_impl(
     state_ident: &syn::Ident,
     config_ident: &syn::Ident,
-    append_fields: &[(syn::Ident, syn::Type)],
+    strategies: &CollectionStrategies,
 ) -> TokenStream {
-    let unique_fields = unique_append_fields(append_fields);
-    let append_logic = unique_fields.iter().map(|(field_ident, _ty)| {
-        let state_field_ident = format_ident!("append_{}", field_ident);
-        let field_name = field_ident.to_string();
-        quote! {
-            if let Some(value) = map.remove(#field_name) {
-                let incoming: Vec<_> =
-                    ortho_config::serde_json::from_value(value).into_ortho()?;
-                let acc = self
-                    .#state_field_ident
-                    .get_or_insert_with(Default::default);
-                acc.extend(incoming);
-            }
-        }
-    });
-    let destructured_fields = unique_fields.iter().map(|(field_ident, _ty)| {
-        let state_field_ident = format_ident!("append_{}", field_ident);
-        quote! { #state_field_ident }
-    });
-    let append_inserts = unique_fields.iter().map(|(field_ident, _ty)| {
-        let state_field_ident = format_ident!("append_{}", field_ident);
-        let field_name = field_ident.to_string();
-        quote! {
-            if let Some(values) = #state_field_ident {
-                appended.insert(
-                    #field_name.to_owned(),
-                    ortho_config::serde_json::Value::Array(values),
-                );
-            }
-        }
-    });
+    let append_tokens = build_append_merge_tokens(strategies);
+    let map_tokens = build_map_replace_tokens(strategies);
+    let AppendMergeTokens {
+        merge_logic: append_merge_logic,
+        destructured: append_destructured,
+        inserts: append_inserts,
+    } = append_tokens;
+    let MapReplaceTokens {
+        merge_logic: map_merge_logic,
+        destructured: map_destructured,
+        inserts: map_inserts,
+    } = map_tokens;
     let non_object_guard = generate_non_object_guard(config_ident);
 
     quote! {
@@ -194,7 +293,8 @@ pub(crate) fn generate_declarative_merge_impl(
                     ortho_config::serde_json::Value::Object(map) => map,
                     other => { #non_object_guard }
                 };
-                #( #append_logic )*
+                #( #map_merge_logic )*
+                #( #append_merge_logic )*
                 if !map.is_empty() {
                     ortho_config::declarative::merge_value(
                         &mut self.value,
@@ -208,10 +308,12 @@ pub(crate) fn generate_declarative_merge_impl(
             fn finish(self) -> ortho_config::OrthoResult<Self::Output> {
                 let #state_ident {
                     mut value,
-                    #( #destructured_fields, )*
+                    #( #append_destructured, )*
+                    #( #map_destructured, )*
                 } = self;
                 let mut appended = ortho_config::serde_json::Map::new();
                 #( #append_inserts )*
+                #( #map_inserts )*
                 if !appended.is_empty() {
                     ortho_config::declarative::merge_value(
                         &mut value,
@@ -304,11 +406,11 @@ pub(crate) fn generate_declarative_merge_from_layers_fn(
 /// ```
 pub(crate) fn generate_declarative_impl(
     config_ident: &syn::Ident,
-    append_fields: &[(syn::Ident, syn::Type)],
+    strategies: &CollectionStrategies,
 ) -> TokenStream {
     let state_ident = format_ident!("__{}DeclarativeMergeState", config_ident);
-    let state_struct = generate_declarative_state_struct(&state_ident, append_fields);
-    let merge_impl = generate_declarative_merge_impl(&state_ident, config_ident, append_fields);
+    let state_struct = generate_declarative_state_struct(&state_ident, strategies);
+    let merge_impl = generate_declarative_merge_impl(&state_ident, config_ident, strategies);
     let merge_fn = generate_declarative_merge_from_layers_fn(&state_ident, config_ident);
 
     quote! {

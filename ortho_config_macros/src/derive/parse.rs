@@ -29,6 +29,7 @@ pub(crate) struct FieldAttrs {
     pub cli_short: Option<char>,
     pub default: Option<Expr>,
     pub merge_strategy: Option<MergeStrategy>,
+    pub skip_cli: bool,
 }
 
 #[derive(Default, Clone)]
@@ -46,12 +47,16 @@ pub(crate) struct DiscoveryAttrs {
 #[derive(Clone, Copy, PartialEq)]
 pub(crate) enum MergeStrategy {
     Append,
+    Replace,
+    Keyed,
 }
 
 impl MergeStrategy {
     pub(crate) fn parse(s: &str, span: proc_macro2::Span) -> Result<Self, syn::Error> {
         match s {
             "append" => Ok(Self::Append),
+            "replace" => Ok(Self::Replace),
+            "keyed" => Ok(Self::Keyed),
             _ => Err(syn::Error::new(span, "unknown merge_strategy")),
         }
     }
@@ -306,6 +311,10 @@ fn apply_field_attr(
             out.merge_strategy = Some(MergeStrategy::parse(&s.value(), s.span())?);
             Ok(true)
         }
+        () if meta.path.is_ident("skip_cli") => {
+            out.skip_cli = true;
+            Ok(true)
+        }
         () => Ok(false),
     }
 }
@@ -359,8 +368,8 @@ mod lit_str_tests {
 
 /// Parses field-level `#[ortho_config(...)]` attributes.
 ///
-/// Recognised keys include `cli_long`, `cli_short`, `default` and
-/// `merge_strategy`. Unknown keys are ignored, matching
+/// Recognised keys include `cli_long`, `cli_short`, `default`,
+/// `merge_strategy`, and `skip_cli`. Unknown keys are ignored, matching
 /// [`parse_struct_attrs`] for forwards compatibility. This lenience may
 /// permit misspelt attribute names; users wanting stricter validation can
 /// insert a manual `compile_error!` guard.
@@ -425,6 +434,31 @@ pub(crate) fn option_inner(ty: &Type) -> Option<&Type> {
 /// require special append merge logic.
 pub(crate) fn vec_inner(ty: &Type) -> Option<&Type> {
     type_inner(ty, "Vec")
+}
+
+/// Extracts the key and value types if `ty` is `BTreeMap<K, V>`.
+///
+/// The helper mirrors [`vec_inner`], matching both plain and fully-qualified
+/// paths where the final segment is `BTreeMap`.
+pub(crate) fn btree_map_inner(ty: &Type) -> Option<(&Type, &Type)> {
+    if let Type::Path(p) = ty {
+        let mut segs = p.path.segments.iter().rev();
+        let last = segs.next()?;
+        if last.ident != "BTreeMap" {
+            return None;
+        }
+        let _ = segs.next();
+        if let PathArguments::AngleBracketed(args) = &last.arguments {
+            let mut type_args = args.args.iter().filter_map(|arg| match arg {
+                GenericArgument::Type(inner) => Some(inner),
+                _ => None,
+            });
+            let key = type_args.next()?;
+            let value = type_args.next()?;
+            return Some((key, value));
+        }
+    }
+    None
 }
 
 /// Gathers information from the user-provided struct.

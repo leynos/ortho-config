@@ -1,8 +1,9 @@
-//! Tests for the append merge strategy on vectors.
+//! Tests for collection merge strategies on vectors and maps.
 use anyhow::{Result, anyhow, ensure};
 use ortho_config::OrthoConfig;
 use rstest::rstest;
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
 #[path = "test_utils.rs"]
 mod test_utils;
@@ -24,6 +25,24 @@ struct DefaultVec {
 struct EmptyVec {
     #[ortho_config(default = vec![], merge_strategy = "append")]
     values: Vec<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize, OrthoConfig)]
+struct ReplaceVec {
+    #[ortho_config(merge_strategy = "replace")]
+    values: Vec<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct Rule {
+    enabled: bool,
+}
+
+#[derive(Debug, Deserialize, Serialize, OrthoConfig)]
+struct ReplaceMap {
+    #[serde(default)]
+    #[ortho_config(skip_cli, merge_strategy = "replace")]
+    rules: BTreeMap<String, Rule>,
 }
 
 #[rstest]
@@ -76,6 +95,49 @@ fn append_includes_defaults() -> Result<()> {
             "expected {:?}, got {:?}",
             expected,
             cfg.values
+        );
+        Ok(())
+    })
+}
+
+#[rstest]
+fn replace_vectors_take_latest_layer() -> Result<()> {
+    with_jail(|j| {
+        j.create_file(".config.toml", "values = [\"file\"]")?;
+        j.set_env("VALUES", "[\"env\"]");
+        let cfg = ReplaceVec::load_from_iter(["prog", "--values", "cli1", "--values", "cli2"])
+            .map_err(|err| anyhow!(err))?;
+        let expected = vec![String::from("cli1"), String::from("cli2")];
+        ensure!(
+            cfg.values == expected,
+            "expected {:?}, got {:?}",
+            expected,
+            cfg.values
+        );
+        Ok(())
+    })
+}
+
+#[rstest]
+fn replace_maps_drop_lower_precedence_entries() -> Result<()> {
+    with_jail(|j| {
+        j.create_file(
+            ".config.toml",
+            "[rules.a]\nenabled = true\n[rules.b]\nenabled = false",
+        )?;
+        j.set_env("RULES__C__ENABLED", "true");
+        let cfg = ReplaceMap::load_from_iter(["prog"]).map_err(|err| anyhow!(err))?;
+        ensure!(
+            cfg.rules.get("c").is_some_and(|rule| rule.enabled),
+            "expected rule c to be enabled"
+        );
+        ensure!(
+            !cfg.rules.contains_key("a"),
+            "rule a from file should be replaced by higher precedence"
+        );
+        ensure!(
+            !cfg.rules.contains_key("b"),
+            "rule b from file should be replaced by higher precedence"
         );
         Ok(())
     })

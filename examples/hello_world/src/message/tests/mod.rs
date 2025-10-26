@@ -348,7 +348,15 @@ fn build_take_leave_plan_applies_greeting_overrides(
     command.greeting_preamble = Some(String::from("Until next time"));
     command.greeting_punctuation = Some(String::from("?"));
     let base = base_config?;
-    let plan = build_take_leave_plan(&base, &command).map_err(|err| anyhow!(err.to_string()))?;
+    let mut plan_result = None;
+    figment::Jail::try_with(|jail| {
+        jail.clear_env();
+        plan_result = Some(build_take_leave_plan(&base, &command).map_err(figment_error)?);
+        Ok(())
+    })
+    .map_err(|err| anyhow!(err.to_string()))?;
+    let plan =
+        plan_result.ok_or_else(|| anyhow!("take-leave plan builder did not produce a plan"))?;
     ensure!(
         plan.greeting().preamble() == Some("Until next time"),
         "unexpected greeting preamble"

@@ -11,6 +11,10 @@ production-ready complexity.
   parser exposes top-level configuration that applies to every command,
   covering boolean feature switches, repeated values, and precedence between
   defaults and caller-supplied input.
+- **Collection merge strategies**: demonstrate vector appends alongside map
+  replacement semantics. The `greeting_templates` field in `GlobalArgs` uses
+  the `merge_strategy = "replace"` attribute so configuration files can swap
+  the entire template set without leaking defaults from other layers.
 - **Subcommands**: implement a friendly `greet` command that accepts a name and
   configurable greeting, alongside a `take-leave` workflow that combines
   switches, optional arguments, and shared greeting customizations to decide

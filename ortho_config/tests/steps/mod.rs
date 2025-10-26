@@ -1,4 +1,5 @@
 pub mod cli_steps;
+pub mod collection_steps;
 pub mod config_path_steps;
 pub mod env_steps;
 pub mod error_steps;
