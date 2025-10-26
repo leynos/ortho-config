@@ -8,7 +8,6 @@ use crate::cli::{
     load_global_config, load_greet_defaults,
 };
 use anyhow::{Result, ensure};
-#[cfg(unix)]
 use camino::Utf8PathBuf;
 use ortho_config::figment;
 use rstest::rstest;
