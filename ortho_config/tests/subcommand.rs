@@ -5,6 +5,7 @@ use anyhow::{Result, anyhow, ensure};
 mod util;
 
 use clap::Parser;
+#[cfg(any(unix, target_os = "redox"))]
 use figment::Error as FigmentError;
 use ortho_config::OrthoConfig;
 use serde::{Deserialize, Serialize};

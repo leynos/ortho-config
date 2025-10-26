@@ -173,7 +173,14 @@ fn build_plan_direct(
     greet: GreetCommand,
     leave: TakeLeaveCommand,
 ) -> Result<Plan> {
-    build_plan_from(config, greet, leave)
+    let mut plan = None;
+    figment::Jail::try_with(|jail| {
+        jail.clear_env();
+        plan = Some(build_plan_from(config, greet, leave).map_err(figment_error)?);
+        Ok(())
+    })
+    .map_err(|err| anyhow!(err.to_string()))?;
+    plan.ok_or_else(|| anyhow!("direct plan builder did not produce a plan"))
 }
 
 fn build_plan_with_sample_env(
@@ -302,8 +309,18 @@ fn build_take_leave_plan_produces_steps() -> Result<()> {
         remind_in: Some(10),
         ..TakeLeaveCommand::default()
     };
-    let plan = build_take_leave_plan(&HelloWorldCli::default(), &take_leave_command)
-        .map_err(|err| anyhow!(err.to_string()))?;
+    let mut plan_result = None;
+    figment::Jail::try_with(|jail| {
+        jail.clear_env();
+        plan_result = Some(
+            build_take_leave_plan(&HelloWorldCli::default(), &take_leave_command)
+                .map_err(figment_error)?,
+        );
+        Ok(())
+    })
+    .map_err(|err| anyhow!(err.to_string()))?;
+    let plan =
+        plan_result.ok_or_else(|| anyhow!("take-leave plan builder did not produce a plan"))?;
     ensure!(
         plan.greeting().message() == "Hello, World!",
         "unexpected greeting"
