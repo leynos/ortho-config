@@ -11,6 +11,8 @@ mod config_flag;
 mod defaults;
 mod env;
 mod r#override;
+#[cfg(test)]
+mod override_tests;
 
 pub(crate) use cli::build_cli_struct_fields;
 pub(crate) use config_flag::build_config_flag_field;

@@ -344,6 +344,3 @@ pub(crate) fn build_collection_logic(strategies: &CollectionStrategies) -> Colle
         post_extract,
     }
 }
-
-#[cfg(test)]
-mod tests;
