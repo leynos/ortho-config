@@ -115,6 +115,48 @@ fn collect_collection_strategies_errors_on_invalid_usage() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn collect_collection_strategies_rejects_keyed_on_vec() -> Result<()> {
+    let input: syn::DeriveInput = syn::parse_quote! {
+        struct DemoKeyedVecError {
+            #[ortho_config(merge_strategy = "keyed")]
+            items: Vec<String>,
+        }
+    };
+    let (_, fields, _, field_attrs) = crate::derive::parse::parse_input(&input)?;
+    let Err(err) = collect_collection_strategies(&fields, &field_attrs) else {
+        return Err(anyhow!("expected keyed strategy on Vec to be rejected"));
+    };
+    ensure!(
+        err.to_string()
+            .contains("keyed merge strategy is not supported for Vec<_> fields"),
+        "unexpected error message: {err}"
+    );
+    Ok(())
+}
+
+#[test]
+fn collect_collection_strategies_rejects_append_on_btreemap() -> Result<()> {
+    let input: syn::DeriveInput = syn::parse_quote! {
+        struct DemoAppendMapError {
+            #[ortho_config(merge_strategy = "append")]
+            settings: std::collections::BTreeMap<String, i32>,
+        }
+    };
+    let (_, fields, _, field_attrs) = crate::derive::parse::parse_input(&input)?;
+    let Err(err) = collect_collection_strategies(&fields, &field_attrs) else {
+        return Err(anyhow!(
+            "expected append strategy on BTreeMap to be rejected"
+        ));
+    };
+    ensure!(
+        err.to_string()
+            .contains("append merge strategy is not supported for BTreeMap fields"),
+        "unexpected error message: {err}"
+    );
+    Ok(())
+}
+
 #[rstest]
 #[case::identifies_append_vec(
     syn::parse_quote! {

@@ -266,8 +266,8 @@ pub(crate) fn build_merge_section(
         if let Some(ref f) = file_fig {
             fig = fig.merge(f);
         }
-        let env_figment = Figment::from(env_provider);
-        fig = fig.merge(env_figment.clone());
+        let env_figment = Figment::from(env_provider.clone());
+        fig = fig.merge(Figment::from(env_provider));
         #cli_merge
 
         #collection_pre_merge

@@ -82,9 +82,10 @@ pub(crate) fn unique_append_fields(
 
 /// Generate the declarative merge state struct.
 ///
-/// Emits a `#[derive(Default)]` struct containing a backing `value` field and
-/// optional append buffers for each unique vector field configured with the
-/// append strategy.
+/// Emits a `#[derive(Default)]` struct containing a backing `value` field,
+/// optional append buffers for each unique vector field using the append
+/// strategy, and replace buffers (`Option<Value>`) for each `BTreeMap` field
+/// using the replace strategy.
 ///
 /// # Examples
 ///
@@ -174,7 +175,8 @@ fn generate_non_object_guard(config_ident: &syn::Ident) -> TokenStream {
 ///
 /// Produces merge logic that accumulates append field contributions into
 /// per-field JSON buffers and finalises the state into the concrete
-/// configuration type.
+/// configuration type, retaining replace buffers for map strategies along the
+/// way.
 ///
 /// # Examples
 ///
