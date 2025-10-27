@@ -132,19 +132,6 @@ fn replace_vectors_empty_when_no_layers() -> Result<()> {
 }
 
 #[rstest]
-fn replace_vectors_default_to_empty_when_unset() -> Result<()> {
-    with_jail(|_| {
-        let cfg = ReplaceVec::load_from_iter(["prog"]).map_err(|err| anyhow!(err))?;
-        ensure!(
-            cfg.values.is_empty(),
-            "expected empty values when replace strategy receives no inputs, got {:?}",
-            cfg.values
-        );
-        Ok(())
-    })
-}
-
-#[rstest]
 fn replace_maps_drop_lower_precedence_entries() -> Result<()> {
     with_jail(|j| {
         j.create_file(

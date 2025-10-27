@@ -3,7 +3,7 @@ use super::r#override::{
 };
 use crate::derive::parse::{FieldAttrs, StructAttrs, parse_input};
 use anyhow::{Result, anyhow, ensure};
-use quote::ToTokens;
+use quote::{ToTokens, quote};
 use rstest::{fixture, rstest};
 
 /// Convenience type used across tests to avoid recomputing the derive input.
@@ -31,10 +31,15 @@ fn demo_input() -> DemoInput {
 fn collect_collection_strategies_selects_collections(demo_input: DemoInput) -> Result<()> {
     let (fields, field_attrs, _) = demo_input;
     let strategies = collect_collection_strategies(&fields, &field_attrs)?;
-    ensure!(strategies.append.len() == 1, "expected single append field");
+    ensure!(
+        strategies.append.len() == 1,
+        "expected single append field, found {}",
+        strategies.append.len()
+    );
     ensure!(
         strategies.map_replace.len() == 1,
-        "expected single map replace field",
+        "expected single map replace field, found {}",
+        strategies.map_replace.len()
     );
     let (map_ident, map_ty) = strategies
         .map_replace
@@ -42,7 +47,7 @@ fn collect_collection_strategies_selects_collections(demo_input: DemoInput) -> R
         .expect("map replace strategies should contain an entry");
     ensure!(
         map_ident == "field3",
-        "expected map field identifier to match",
+        "expected map field identifier to match, found {map_ident}"
     );
     ensure!(
         map_ty.to_token_stream().to_string() == "std :: collections :: BTreeMap < String , u32 >",
@@ -55,10 +60,10 @@ fn collect_collection_strategies_selects_collections(demo_input: DemoInput) -> R
 fn build_collection_logic_includes_map_assignment(demo_input: DemoInput) -> Result<()> {
     let (fields, field_attrs, _) = demo_input;
     let strategies = collect_collection_strategies(&fields, &field_attrs)?;
-    let tokens = build_collection_logic(&strategies);
+    let tokens = build_collection_logic(&strategies, &quote!(std::option::Option::<&()>::None));
     ensure!(
         tokens.post_extract.to_string().contains("cfg . field3"),
-        "expected generated map reassignment",
+        "expected generated map reassignment"
     );
     Ok(())
 }

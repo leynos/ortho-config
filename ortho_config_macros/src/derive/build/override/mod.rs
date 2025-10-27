@@ -84,7 +84,8 @@ fn validate_non_collection_field(field: &syn::Field, attrs: &FieldAttrs) -> syn:
 /// };
 /// let (_, fields, _, field_attrs) =
 ///     parse_input(&input).expect("derive input should parse");
-/// let strategies = collect_collection_strategies(&fields, &field_attrs).unwrap();
+/// let strategies = collect_collection_strategies(&fields, &field_attrs)
+///     .expect("expected strategies to parse");
 /// assert_eq!(strategies.append.len(), 1);
 /// assert_eq!(strategies.map_replace.len(), 1);
 /// ```
@@ -106,20 +107,24 @@ pub(crate) fn collect_collection_strategies(
             ));
         };
         if let Some(vec_ty) = vec_inner(&field.ty) {
-            if let Some((vec_name, ty, true)) =
+            let Some((vec_name, ty, is_append)) =
                 process_vec_field(field, name.clone(), vec_ty, attrs)?
-            {
+            else {
+                continue;
+            };
+            if is_append {
                 strategies.append.push((vec_name, ty));
             }
             continue;
         }
 
         if btree_map_inner(&field.ty).is_some() {
-            if let Some((map_name, ty)) =
+            let Some((map_name, ty)) =
                 process_btree_map_field(field, name.clone(), &field.ty, attrs)?
-            {
-                strategies.map_replace.push((map_name, ty));
-            }
+            else {
+                continue;
+            };
+            strategies.map_replace.push((map_name, ty));
             continue;
         }
 
@@ -150,7 +155,8 @@ pub(crate) fn collect_collection_strategies(
 /// };
 /// let (_, fields, _, field_attrs) =
 ///     parse_input(&input).expect("derive input should parse");
-/// let strategies = collect_collection_strategies(&fields, &field_attrs).unwrap();
+/// let strategies = collect_collection_strategies(&fields, &field_attrs)
+///     .expect("expected strategies to parse");
 /// let (struct_def, init) = build_override_struct(
 ///     &syn::parse_quote!(Demo),
 ///     &strategies,
@@ -211,6 +217,7 @@ pub(crate) fn build_override_struct(
 /// #     build_collection_logic, collect_collection_strategies
 /// # };
 /// # use crate::derive::parse::parse_input;
+/// use quote::quote;
 /// let input: syn::DeriveInput = syn::parse_quote! {
 ///     struct Demo {
 ///         #[ortho_config(merge_strategy = "append")]
@@ -219,8 +226,10 @@ pub(crate) fn build_override_struct(
 /// };
 /// let (_, fields, _, field_attrs) =
 ///     parse_input(&input).expect("derive input should parse");
-/// let strategies = collect_collection_strategies(&fields, &field_attrs).unwrap();
-/// let tokens = build_collection_logic(&strategies);
+/// let strategies = collect_collection_strategies(&fields, &field_attrs)
+///     .expect("expected strategies to parse");
+/// let cli_binding = quote!(std::option::Option::<&()>::None);
+/// let tokens = build_collection_logic(&strategies, &cli_binding);
 /// assert!(!tokens.pre_merge.is_empty());
 /// ```
 ///
@@ -265,8 +274,8 @@ fn build_map_state_tokens(strategies: &CollectionStrategies) -> Option<proc_macr
         quote! { #name: None }
     });
     Some(quote! {
-        struct __OrthoReplaceState { #( #fields )* }
-        let mut replace = __OrthoReplaceState { #( #init, )* };
+        struct ReplaceState { #( #fields )* }
+        let mut replace = ReplaceState { #( #init, )* };
     })
 }
 
@@ -306,18 +315,22 @@ fn build_map_assignment_blocks(strategies: &CollectionStrategies) -> Vec<proc_ma
         .collect()
 }
 
-fn build_pre_merge_tokens(strategies: &CollectionStrategies) -> proc_macro2::TokenStream {
+fn build_pre_merge_tokens(
+    strategies: &CollectionStrategies,
+    cli_binding: &proc_macro2::TokenStream,
+) -> proc_macro2::TokenStream {
     let append_logic = build_append_blocks(strategies);
     let map_state = build_map_state_tokens(strategies);
     let map_logic = build_map_merge_blocks(strategies);
     let map_state_ts = map_state.unwrap_or_default();
     quote! {
-        let cli_figment = match &cli {
-            Some(cli) => ortho_config::figment::Figment::from(
+        #[allow(unused_mut)]
+        let mut cli_figment = ortho_config::figment::Figment::new();
+        if let Some(cli) = #cli_binding {
+            cli_figment = ortho_config::figment::Figment::from(
                 ortho_config::figment::providers::Serialized::defaults(cli),
-            ),
-            None => ortho_config::figment::Figment::new(),
-        };
+            );
+        }
         #map_state_ts
         #( #append_logic )*
         #( #map_logic )*
@@ -329,7 +342,10 @@ fn build_post_extract_tokens(strategies: &CollectionStrategies) -> proc_macro2::
     quote! { #( #map_assignments )* }
 }
 
-pub(crate) fn build_collection_logic(strategies: &CollectionStrategies) -> CollectionLogicTokens {
+pub(crate) fn build_collection_logic(
+    strategies: &CollectionStrategies,
+    cli_binding: &proc_macro2::TokenStream,
+) -> CollectionLogicTokens {
     if strategies.append.is_empty() && strategies.map_replace.is_empty() {
         return CollectionLogicTokens {
             pre_merge: quote! {},
@@ -337,7 +353,7 @@ pub(crate) fn build_collection_logic(strategies: &CollectionStrategies) -> Colle
         };
     }
 
-    let pre_merge = build_pre_merge_tokens(strategies);
+    let pre_merge = build_pre_merge_tokens(strategies, cli_binding);
     let post_extract = build_post_extract_tokens(strategies);
     CollectionLogicTokens {
         pre_merge,
