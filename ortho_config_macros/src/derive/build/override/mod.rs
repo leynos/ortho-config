@@ -82,7 +82,8 @@ fn validate_non_collection_field(field: &syn::Field, attrs: &FieldAttrs) -> syn:
 ///         rules: std::collections::BTreeMap<String, usize>,
 ///     }
 /// };
-/// let (_, fields, _, field_attrs) = parse_input(&input).unwrap();
+/// let (_, fields, _, field_attrs) =
+///     parse_input(&input).expect("derive input should parse");
 /// let strategies = collect_collection_strategies(&fields, &field_attrs).unwrap();
 /// assert_eq!(strategies.append.len(), 1);
 /// assert_eq!(strategies.map_replace.len(), 1);
@@ -147,7 +148,8 @@ pub(crate) fn collect_collection_strategies(
 ///         values: Vec<String>,
 ///     }
 /// };
-/// let (_, fields, _, field_attrs) = parse_input(&input).unwrap();
+/// let (_, fields, _, field_attrs) =
+///     parse_input(&input).expect("derive input should parse");
 /// let strategies = collect_collection_strategies(&fields, &field_attrs).unwrap();
 /// let (struct_def, init) = build_override_struct(
 ///     &syn::parse_quote!(Demo),
@@ -215,7 +217,8 @@ pub(crate) fn build_override_struct(
 ///         values: Vec<String>,
 ///     }
 /// };
-/// let (_, fields, _, field_attrs) = parse_input(&input).unwrap();
+/// let (_, fields, _, field_attrs) =
+///     parse_input(&input).expect("derive input should parse");
 /// let strategies = collect_collection_strategies(&fields, &field_attrs).unwrap();
 /// let tokens = build_collection_logic(&strategies);
 /// assert!(!tokens.pre_merge.is_empty());
@@ -250,15 +253,21 @@ fn build_append_blocks(strategies: &CollectionStrategies) -> Vec<proc_macro2::To
         .collect()
 }
 
-fn build_map_state_decls(strategies: &CollectionStrategies) -> Vec<proc_macro2::TokenStream> {
-    strategies
-        .map_replace
-        .iter()
-        .map(|(name, ty)| {
-            let state_ident = format_ident!("replace_{}", name);
-            quote! { let mut #state_ident: Option<#ty> = None; }
-        })
-        .collect()
+fn build_map_state_tokens(strategies: &CollectionStrategies) -> Option<proc_macro2::TokenStream> {
+    if strategies.map_replace.is_empty() {
+        return None;
+    }
+
+    let fields = strategies.map_replace.iter().map(|(name, ty)| {
+        quote! { #name: Option<#ty>, }
+    });
+    let init = strategies.map_replace.iter().map(|(name, _)| {
+        quote! { #name: None }
+    });
+    Some(quote! {
+        struct __OrthoReplaceState { #( #fields )* }
+        let mut replace = __OrthoReplaceState { #( #init, )* };
+    })
 }
 
 fn build_map_merge_blocks(strategies: &CollectionStrategies) -> Vec<proc_macro2::TokenStream> {
@@ -266,18 +275,17 @@ fn build_map_merge_blocks(strategies: &CollectionStrategies) -> Vec<proc_macro2:
         .map_replace
         .iter()
         .map(|(name, ty)| {
-            let state_ident = format_ident!("replace_{}", name);
             quote! {
                 if let Some(f) = &file_fig {
                     if let Ok(v) = f.extract_inner::<#ty>(stringify!(#name)) {
-                        #state_ident = Some(v);
+                        replace.#name = Some(v);
                     }
                 }
                 if let Ok(v) = env_figment.extract_inner::<#ty>(stringify!(#name)) {
-                    #state_ident = Some(v);
+                    replace.#name = Some(v);
                 }
                 if let Ok(v) = cli_figment.extract_inner::<#ty>(stringify!(#name)) {
-                    #state_ident = Some(v);
+                    replace.#name = Some(v);
                 }
             }
         })
@@ -289,9 +297,8 @@ fn build_map_assignment_blocks(strategies: &CollectionStrategies) -> Vec<proc_ma
         .map_replace
         .iter()
         .map(|(name, _ty)| {
-            let state_ident = format_ident!("replace_{}", name);
             quote! {
-                if let Some(value) = #state_ident {
+                if let Some(value) = replace.#name.take() {
                     cfg.#name = value;
                 }
             }
@@ -301,13 +308,17 @@ fn build_map_assignment_blocks(strategies: &CollectionStrategies) -> Vec<proc_ma
 
 fn build_pre_merge_tokens(strategies: &CollectionStrategies) -> proc_macro2::TokenStream {
     let append_logic = build_append_blocks(strategies);
-    let map_state_decls = build_map_state_decls(strategies);
+    let map_state = build_map_state_tokens(strategies);
     let map_logic = build_map_merge_blocks(strategies);
+    let map_state_ts = map_state.unwrap_or_default();
     quote! {
-        let cli_figment = ortho_config::figment::Figment::from(
-            ortho_config::figment::providers::Serialized::defaults(&cli),
-        );
-        #( #map_state_decls )*
+        let cli_figment = match &cli {
+            Some(cli) => ortho_config::figment::Figment::from(
+                ortho_config::figment::providers::Serialized::defaults(cli),
+            ),
+            None => ortho_config::figment::Figment::new(),
+        };
+        #map_state_ts
         #( #append_logic )*
         #( #map_logic )*
     }

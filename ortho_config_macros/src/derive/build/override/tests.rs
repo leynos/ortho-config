@@ -1,11 +1,15 @@
 //! Tests for collection override helpers.
 
 use super::*;
+use crate::derive::parse::StructAttrs;
 use anyhow::{Result, anyhow, ensure};
 use quote::ToTokens;
-use rstest::rstest;
+use rstest::{fixture, rstest};
 
-fn demo_input() -> Result<(Vec<syn::Field>, Vec<FieldAttrs>)> {
+type DemoInput = (Vec<syn::Field>, Vec<FieldAttrs>, StructAttrs);
+
+#[fixture]
+fn demo_input() -> DemoInput {
     let input: syn::DeriveInput = syn::parse_quote! {
         #[ortho_config(prefix = "CFG_")]
         struct Demo {
@@ -17,8 +21,9 @@ fn demo_input() -> Result<(Vec<syn::Field>, Vec<FieldAttrs>)> {
             field3: std::collections::BTreeMap<String, u32>,
         }
     };
-    let (_, fields, _, field_attrs) = crate::derive::parse::parse_input(&input)?;
-    Ok((fields, field_attrs))
+    crate::derive::parse::parse_input(&input)
+        .map(|(_, fields, struct_attrs, field_attrs)| (fields, field_attrs, struct_attrs))
+        .expect("fixture should parse derive input")
 }
 
 fn parse_single_field(
@@ -37,9 +42,9 @@ fn parse_single_field(
     Ok((field, attrs))
 }
 
-#[test]
-fn collect_collection_strategies_selects_collections() -> Result<()> {
-    let (fields, field_attrs) = demo_input()?;
+#[rstest]
+fn collect_collection_strategies_selects_collections(demo_input: DemoInput) -> Result<()> {
+    let (fields, field_attrs, _) = demo_input;
     let strategies = collect_collection_strategies(&fields, &field_attrs)?;
     ensure!(strategies.append.len() == 1, "expected single append field");
     ensure!(
@@ -62,9 +67,9 @@ fn collect_collection_strategies_selects_collections() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn build_collection_logic_includes_map_assignment() -> Result<()> {
-    let (fields, field_attrs) = demo_input()?;
+#[rstest]
+fn build_collection_logic_includes_map_assignment(demo_input: DemoInput) -> Result<()> {
+    let (fields, field_attrs, _) = demo_input;
     let strategies = collect_collection_strategies(&fields, &field_attrs)?;
     let tokens = build_collection_logic(&strategies);
     ensure!(
@@ -74,9 +79,9 @@ fn build_collection_logic_includes_map_assignment() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn build_override_struct_creates_struct() -> Result<()> {
-    let (fields, field_attrs) = demo_input()?;
+#[rstest]
+fn build_override_struct_creates_struct(demo_input: DemoInput) -> Result<()> {
+    let (fields, field_attrs, _) = demo_input;
     let strategies = collect_collection_strategies(&fields, &field_attrs)?;
     let (definition, initialiser) =
         build_override_struct(&syn::parse_quote!(Demo), &strategies);
