@@ -450,24 +450,25 @@ pub(crate) fn vec_inner(ty: &Type) -> Option<&Type> {
 /// The helper mirrors [`vec_inner`], matching both plain and fully-qualified
 /// paths where the final segment is `BTreeMap`.
 pub(crate) fn btree_map_inner(ty: &Type) -> Option<(&Type, &Type)> {
-    if let Type::Path(p) = ty {
-        let mut segs = p.path.segments.iter().rev();
-        let last = segs.next()?;
-        if last.ident != "BTreeMap" {
-            return None;
-        }
-        let _ = segs.next();
-        if let PathArguments::AngleBracketed(args) = &last.arguments {
-            let mut type_args = args.args.iter().filter_map(|arg| match arg {
-                GenericArgument::Type(inner) => Some(inner),
-                _ => None,
-            });
-            let key = type_args.next()?;
-            let value = type_args.next()?;
-            return Some((key, value));
-        }
+    let Type::Path(p) = ty else {
+        return None;
+    };
+    let mut segs = p.path.segments.iter().rev();
+    let last = segs.next()?;
+    if last.ident != "BTreeMap" {
+        return None;
     }
-    None
+    let _ = segs.next();
+    let PathArguments::AngleBracketed(args) = &last.arguments else {
+        return None;
+    };
+    let mut type_args = args.args.iter().filter_map(|arg| match arg {
+        GenericArgument::Type(inner) => Some(inner),
+        _ => None,
+    });
+    let key = type_args.next()?;
+    let value = type_args.next()?;
+    Some((key, value))
 }
 
 /// Gathers information from the user-provided struct.
