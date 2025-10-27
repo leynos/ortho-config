@@ -16,12 +16,77 @@ pub(crate) struct CollectionStrategies {
     pub map_replace: Vec<(Ident, Type)>,
 }
 
+fn process_vec_field(
+    field: &syn::Field,
+    name: Ident,
+    vec_ty: &Type,
+    attrs: &FieldAttrs,
+) -> syn::Result<Option<(Ident, Type, bool)>> {
+    let strategy = attrs.merge_strategy.unwrap_or(MergeStrategy::Append);
+    let is_append = matches!(strategy, MergeStrategy::Append);
+    match strategy {
+        MergeStrategy::Append | MergeStrategy::Replace => {
+            Ok(Some((name, (*vec_ty).clone(), is_append)))
+        }
+        MergeStrategy::Keyed => Err(syn::Error::new_spanned(
+            field,
+            "keyed merge strategy is not supported for Vec<_> fields",
+        )),
+    }
+}
+
+fn process_btree_map_field(
+    field: &syn::Field,
+    name: Ident,
+    field_ty: &Type,
+    attrs: &FieldAttrs,
+) -> syn::Result<Option<(Ident, Type)>> {
+    let strategy = attrs.merge_strategy.unwrap_or(MergeStrategy::Keyed);
+    match strategy {
+        MergeStrategy::Append => Err(syn::Error::new_spanned(
+            field,
+            "append merge strategy is not supported for BTreeMap fields",
+        )),
+        MergeStrategy::Replace => Ok(Some((name, field_ty.clone()))),
+        MergeStrategy::Keyed => Ok(None),
+    }
+}
+
+fn validate_non_collection_field(field: &syn::Field, attrs: &FieldAttrs) -> syn::Result<()> {
+    if attrs.merge_strategy.is_some() {
+        return Err(syn::Error::new_spanned(
+            field,
+            "merge_strategy is only supported on Vec<_> or BTreeMap<_, _> fields",
+        ));
+    }
+    Ok(())
+}
+
 /// Collects fields that use collection merge strategies.
 ///
 /// Walks the parsed struct, capturing each named collection field configured
 /// with a merge strategy. `Vec<_>` fields default to the append strategy, while
 /// `BTreeMap<_, _>` fields default to keyed merges unless explicitly set to
 /// replace.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// # use crate::derive::build::r#override::collect_collection_strategies;
+/// # use crate::derive::parse::parse_input;
+/// let input: syn::DeriveInput = syn::parse_quote! {
+///     struct Demo {
+///         #[ortho_config(merge_strategy = "append")]
+///         values: Vec<String>,
+///         #[ortho_config(merge_strategy = "replace")]
+///         rules: std::collections::BTreeMap<String, usize>,
+///     }
+/// };
+/// let (_, fields, _, field_attrs) = parse_input(&input).unwrap();
+/// let strategies = collect_collection_strategies(&fields, &field_attrs).unwrap();
+/// assert_eq!(strategies.append.len(), 1);
+/// assert_eq!(strategies.map_replace.len(), 1);
+/// ```
 ///
 /// # Errors
 ///
@@ -33,78 +98,33 @@ pub(crate) fn collect_collection_strategies(
 ) -> syn::Result<CollectionStrategies> {
     let mut strategies = CollectionStrategies::default();
     for (field, attrs) in fields.iter().zip(field_attrs) {
-        if let Some((ident, ty)) = process_vec_field(field, attrs)? {
-            strategies.append.push((ident, ty));
-            continue;
-        }
-        if let Some((ident, ty)) = process_map_field(field, attrs)? {
-            strategies.map_replace.push((ident, ty));
-            continue;
-        }
-        if attrs.merge_strategy.is_some() {
+        let Some(name) = field.ident.clone() else {
             return Err(syn::Error::new_spanned(
                 field,
-                "merge_strategy is only supported on Vec<_> or BTreeMap<_, _> fields",
+                "unnamed (tuple) fields do not support merge strategies",
             ));
+        };
+        if let Some(vec_ty) = vec_inner(&field.ty) {
+            if let Some((vec_name, ty, true)) =
+                process_vec_field(field, name.clone(), vec_ty, attrs)?
+            {
+                strategies.append.push((vec_name, ty));
+            }
+            continue;
         }
+
+        if btree_map_inner(&field.ty).is_some() {
+            if let Some((map_name, ty)) =
+                process_btree_map_field(field, name.clone(), &field.ty, attrs)?
+            {
+                strategies.map_replace.push((map_name, ty));
+            }
+            continue;
+        }
+
+        validate_non_collection_field(field, attrs)?;
     }
     Ok(strategies)
-}
-
-fn process_vec_field(
-    field: &syn::Field,
-    attrs: &FieldAttrs,
-) -> syn::Result<Option<(Ident, Type)>> {
-    let Some(name) = field.ident.clone() else {
-        return Err(syn::Error::new_spanned(
-            field,
-            "unnamed (tuple) fields do not support merge strategies",
-        ));
-    };
-    let Some(vec_ty) = vec_inner(&field.ty) else {
-        if matches!(attrs.merge_strategy, Some(MergeStrategy::Append)) {
-            return Err(syn::Error::new_spanned(
-                field,
-                "append merge strategy requires a Vec<_> field",
-            ));
-        }
-        return Ok(None);
-    };
-
-    let strategy = attrs.merge_strategy.unwrap_or(MergeStrategy::Append);
-    match strategy {
-        MergeStrategy::Append => Ok(Some((name, (*vec_ty).clone()))),
-        MergeStrategy::Replace => Ok(None),
-        MergeStrategy::Keyed => Err(syn::Error::new_spanned(
-            field,
-            "keyed merge strategy is not supported for Vec<_> fields",
-        )),
-    }
-}
-
-fn process_map_field(
-    field: &syn::Field,
-    attrs: &FieldAttrs,
-) -> syn::Result<Option<(Ident, Type)>> {
-    let Some(name) = field.ident.clone() else {
-        return Err(syn::Error::new_spanned(
-            field,
-            "unnamed (tuple) fields do not support merge strategies",
-        ));
-    };
-    if btree_map_inner(&field.ty).is_none() {
-        return Ok(None);
-    }
-
-    let strategy = attrs.merge_strategy.unwrap_or(MergeStrategy::Keyed);
-    match strategy {
-        MergeStrategy::Append => Err(syn::Error::new_spanned(
-            field,
-            "append merge strategy is not supported for BTreeMap fields",
-        )),
-        MergeStrategy::Replace => Ok(Some((name, field.ty.clone()))),
-        MergeStrategy::Keyed => Ok(None),
-    }
 }
 
 /// Builds the override struct definition and initialisation expression.
@@ -113,6 +133,29 @@ fn process_map_field(
 /// `Option<Vec<T>>` fields for every append-enabled vector and
 /// `Option<serde_json::Value>` fields for map replacements. Each field starts as
 /// `None`.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// # use crate::derive::build::r#override::{
+/// #     build_override_struct, collect_collection_strategies
+/// # };
+/// # use crate::derive::parse::parse_input;
+/// let input: syn::DeriveInput = syn::parse_quote! {
+///     struct Demo {
+///         #[ortho_config(merge_strategy = "append")]
+///         values: Vec<String>,
+///     }
+/// };
+/// let (_, fields, _, field_attrs) = parse_input(&input).unwrap();
+/// let strategies = collect_collection_strategies(&fields, &field_attrs).unwrap();
+/// let (struct_def, init) = build_override_struct(
+///     &syn::parse_quote!(Demo),
+///     &strategies,
+/// );
+/// assert!(struct_def.to_string().contains("__DemoCollectionOverride"));
+/// assert!(init.to_string().contains("None"));
+/// ```
 ///
 /// Returns a tuple containing the struct definition tokens and the
 /// corresponding initialiser.
@@ -127,7 +170,7 @@ pub(crate) fn build_override_struct(
             pub #name: Option<Vec<#ty>>
         }
     });
-    let map_fields = strategies.map_replace.iter().map(|(name, _)| {
+    let map_fields = strategies.map_replace.iter().map(|(name, _ty)| {
         quote! {
             #[serde(skip_serializing_if = "Option::is_none")]
             pub #name: Option<ortho_config::serde_json::Value>
@@ -143,17 +186,42 @@ pub(crate) fn build_override_struct(
         .iter()
         .map(|(name, _)| quote! { #name: None });
     let init = init_vec.chain(init_map);
-    let definition = quote! {
+    let ts = quote! {
         #[derive(serde::Serialize)]
         struct #ident {
             #( #struct_fields, )*
         }
     };
-    let initialiser = quote! { #ident { #( #init, )* } };
-    (definition, initialiser)
+    let init_ts = quote! { #ident { #( #init, )* } };
+    (ts, init_ts)
 }
 
-/// Aggregated token streams for collection merge logic.
+/// Builds the collection aggregation logic for override fields.
+///
+/// Produces load-time accumulation code that drains `Vec<T>` values from the
+/// defaults, file, environment, and CLI layers in precedence order (append) and
+/// captures the last non-empty map contribution for replace semantics.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// # use crate::derive::build::r#override::{
+/// #     build_collection_logic, collect_collection_strategies
+/// # };
+/// # use crate::derive::parse::parse_input;
+/// let input: syn::DeriveInput = syn::parse_quote! {
+///     struct Demo {
+///         #[ortho_config(merge_strategy = "append")]
+///         values: Vec<String>,
+///     }
+/// };
+/// let (_, fields, _, field_attrs) = parse_input(&input).unwrap();
+/// let strategies = collect_collection_strategies(&fields, &field_attrs).unwrap();
+/// let tokens = build_collection_logic(&strategies);
+/// assert!(!tokens.pre_merge.is_empty());
+/// ```
+///
+/// Returns an empty token stream when no collections require special handling.
 pub(crate) struct CollectionLogicTokens {
     pub pre_merge: proc_macro2::TokenStream,
     pub post_extract: proc_macro2::TokenStream,
@@ -220,7 +288,7 @@ fn build_map_assignment_blocks(strategies: &CollectionStrategies) -> Vec<proc_ma
     strategies
         .map_replace
         .iter()
-        .map(|(name, _)| {
+        .map(|(name, _ty)| {
             let state_ident = format_ident!("replace_{}", name);
             quote! {
                 if let Some(value) = #state_ident {
@@ -250,9 +318,7 @@ fn build_post_extract_tokens(strategies: &CollectionStrategies) -> proc_macro2::
     quote! { #( #map_assignments )* }
 }
 
-pub(crate) fn build_collection_logic(
-    strategies: &CollectionStrategies,
-) -> CollectionLogicTokens {
+pub(crate) fn build_collection_logic(strategies: &CollectionStrategies) -> CollectionLogicTokens {
     if strategies.append.is_empty() && strategies.map_replace.is_empty() {
         return CollectionLogicTokens {
             pre_merge: quote! {},

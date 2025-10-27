@@ -123,9 +123,16 @@ fn collect_collection_strategies_errors_on_invalid_usage() -> Result<()> {
             field: Vec<String>,
         }
     },
-    true,
-    "field",
-    syn::parse_quote!(String),
+    Some(("field", syn::parse_quote!(String), true)),
+)]
+#[case::identifies_replace_vec(
+    syn::parse_quote! {
+        struct DemoReplace {
+            #[ortho_config(merge_strategy = "replace")]
+            field: Vec<String>,
+        }
+    },
+    Some(("field", syn::parse_quote!(String), false)),
 )]
 #[case::skips_non_vec_without_strategy(
     syn::parse_quote! {
@@ -133,36 +140,26 @@ fn collect_collection_strategies_errors_on_invalid_usage() -> Result<()> {
             field: Option<String>,
         }
     },
-    false,
-    "",
-    syn::parse_quote!(()),
-)]
-#[case::skips_replace_vec(
-    syn::parse_quote! {
-        struct DemoReplace {
-            #[ortho_config(merge_strategy = "replace")]
-            field: Vec<String>,
-        }
-    },
-    false,
-    "",
-    syn::parse_quote!(()),
+    None,
 )]
 fn process_vec_field_behaviour(
     #[case] input: syn::DeriveInput,
-    #[case] expect_some: bool,
-    #[case] expected_ident: &str,
-    #[case] expected_ty: syn::Type,
+    #[case] expected: Option<(&str, syn::Type, bool)>,
 ) -> Result<()> {
     let (field, attrs) = parse_single_field(&input, "vector")?;
-    let result = process_vec_field(&field, &attrs)?;
-
-    if expect_some {
-        let (ident, ty) = result.ok_or_else(|| anyhow!("expected Some"))?;
-        ensure!(ident == expected_ident, "unexpected append target");
-        ensure!(ty == expected_ty, "unexpected element type");
+    let name = field.ident.clone().ok_or_else(|| anyhow!("missing vector ident"))?;
+    if let Some(vec_ty) = vec_inner(&field.ty) {
+        let result = process_vec_field(&field, name, vec_ty, &attrs)?;
+        if let Some((expected_ident, expected_ty, expected_append)) = expected {
+            let (ident, ty, is_append) = result.ok_or_else(|| anyhow!("expected Some"))?;
+            ensure!(ident == expected_ident, "unexpected vector target");
+            ensure!(ty == expected_ty, "unexpected element type");
+            ensure!(is_append == expected_append, "unexpected append flag");
+        } else {
+            ensure!(result.is_none(), "expected vector strategy to be skipped");
+        }
     } else {
-        ensure!(result.is_none(), "expected vector field to be skipped");
+        ensure!(expected.is_none(), "expected non-vector field to be skipped");
     }
     Ok(())
 }
@@ -176,29 +173,12 @@ fn process_vec_field_errors_for_keyed_strategy() -> Result<()> {
         }
     };
     let (field, attrs) = parse_single_field(&input, "invalid vector")?;
-    let err = process_vec_field(&field, &attrs)
+    let name = field.ident.clone().ok_or_else(|| anyhow!("missing vector ident"))?;
+    let vec_ty = vec_inner(&field.ty).expect("expected Vec field");
+    let err = process_vec_field(&field, name, vec_ty, &attrs)
         .expect_err("keyed merge strategy is unsupported for Vec<_>");
     ensure!(
         err.to_string().contains("keyed merge strategy"),
-        "unexpected error: {err}"
-    );
-    Ok(())
-}
-
-#[test]
-fn process_vec_field_errors_when_append_without_vec() -> Result<()> {
-    let input: syn::DeriveInput = syn::parse_quote! {
-        struct DemoAppendError {
-            #[ortho_config(merge_strategy = "append")]
-            field: u32,
-        }
-    };
-    let (field, attrs) = parse_single_field(&input, "non-vector")?;
-    let err = process_vec_field(&field, &attrs)
-        .expect_err("append requires Vec field");
-    ensure!(
-        err.to_string()
-            .contains("append merge strategy requires a Vec<_> field"),
         "unexpected error: {err}"
     );
     Ok(())
@@ -212,8 +192,7 @@ fn process_vec_field_errors_when_append_without_vec() -> Result<()> {
             field: std::collections::BTreeMap<String, u32>,
         }
     },
-    true,
-    "field",
+    Some("field"),
 )]
 #[case::skip_keyed_map(
     syn::parse_quote! {
@@ -222,18 +201,17 @@ fn process_vec_field_errors_when_append_without_vec() -> Result<()> {
             field: std::collections::BTreeMap<String, u32>,
         }
     },
-    false,
-    "",
+    None,
 )]
 fn process_map_field_behaviour(
     #[case] input: syn::DeriveInput,
-    #[case] expect_some: bool,
-    #[case] expected_ident: &str,
+    #[case] expected_ident: Option<&str>,
 ) -> Result<()> {
     let (field, attrs) = parse_single_field(&input, "map")?;
-    let result = process_map_field(&field, &attrs)?;
+    let name = field.ident.clone().ok_or_else(|| anyhow!("missing map ident"))?;
+    let result = process_btree_map_field(&field, name, &field.ty, &attrs)?;
 
-    if expect_some {
+    if let Some(expected_ident) = expected_ident {
         let (ident, _) = result.ok_or_else(|| anyhow!("expected Some"))?;
         ensure!(ident == expected_ident, "unexpected map override target");
     } else {
@@ -251,7 +229,8 @@ fn process_map_field_errors_for_append_strategy() -> Result<()> {
         }
     };
     let (field, attrs) = parse_single_field(&input, "invalid map")?;
-    let err = process_map_field(&field, &attrs)
+    let name = field.ident.clone().ok_or_else(|| anyhow!("missing map ident"))?;
+    let err = process_btree_map_field(&field, name, &field.ty, &attrs)
         .expect_err("append strategy is unsupported for maps");
     ensure!(
         err.to_string().contains("append merge strategy is not supported"),
