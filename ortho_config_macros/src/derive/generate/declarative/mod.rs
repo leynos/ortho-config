@@ -10,102 +10,36 @@ use std::collections::HashSet;
 
 use crate::derive::build::CollectionStrategies;
 
-struct AppendMergeTokens {
+struct CollectionTokens {
     merge_logic: Vec<TokenStream>,
     destructured: Vec<TokenStream>,
     inserts: Vec<TokenStream>,
 }
 
-fn build_append_merge_tokens(strategies: &CollectionStrategies) -> AppendMergeTokens {
-    let unique_fields = unique_append_fields(&strategies.append);
-    let merge_logic = unique_fields
-        .iter()
-        .map(|(field_ident, _ty)| {
-            let state_field_ident = format_ident!("append_{}", field_ident);
-            let field_name = field_ident.to_string();
-            quote! {
-                if let Some(value) = map.remove(#field_name) {
-                    let incoming: Vec<_> =
-                        ortho_config::serde_json::from_value(value).into_ortho()?;
-                    let acc = self
-                        .#state_field_ident
-                        .get_or_insert_with(Default::default);
-                    acc.extend(incoming);
-                }
-            }
-        })
-        .collect();
-    let destructured = unique_fields
-        .iter()
-        .map(|(field_ident, _ty)| {
-            let state_field_ident = format_ident!("append_{}", field_ident);
-            quote! { #state_field_ident }
-        })
-        .collect();
-    let inserts = unique_fields
-        .iter()
-        .map(|(field_ident, _ty)| {
-            let state_field_ident = format_ident!("append_{}", field_ident);
-            let field_name = field_ident.to_string();
-            quote! {
-                if let Some(values) = #state_field_ident {
-                    appended.insert(
-                        #field_name.to_owned(),
-                        ortho_config::serde_json::Value::Array(values),
-                    );
-                }
-            }
-        })
-        .collect();
-    AppendMergeTokens {
-        merge_logic,
-        destructured,
-        inserts,
+fn build_collection_tokens<'a, I, F, G>(
+    fields: I,
+    prefix: &str,
+    merge_fn: F,
+    insert_fn: G,
+) -> CollectionTokens
+where
+    I: IntoIterator<Item = (&'a syn::Ident, &'a syn::Type)>,
+    F: Fn(&syn::Ident, &proc_macro2::Ident, &str) -> TokenStream,
+    G: Fn(&syn::Ident, &proc_macro2::Ident, &str) -> TokenStream,
+{
+    let mut merge_logic = Vec::new();
+    let mut destructured = Vec::new();
+    let mut inserts = Vec::new();
+
+    for (field_ident, _ty) in fields {
+        let state_field_ident = format_ident!("{}{}", prefix, field_ident);
+        let field_name = field_ident.to_string();
+        merge_logic.push(merge_fn(field_ident, &state_field_ident, &field_name));
+        destructured.push(quote! { #state_field_ident });
+        inserts.push(insert_fn(field_ident, &state_field_ident, &field_name));
     }
-}
 
-struct MapReplaceTokens {
-    merge_logic: Vec<TokenStream>,
-    destructured: Vec<TokenStream>,
-    inserts: Vec<TokenStream>,
-}
-
-fn build_map_replace_tokens(strategies: &CollectionStrategies) -> MapReplaceTokens {
-    let merge_logic = strategies
-        .map_replace
-        .iter()
-        .map(|(field_ident, _ty)| {
-            let state_field_ident = format_ident!("replace_{}", field_ident);
-            let field_name = field_ident.to_string();
-            quote! {
-                if let Some(value) = map.remove(#field_name) {
-                    self.#state_field_ident = Some(value);
-                }
-            }
-        })
-        .collect();
-    let destructured = strategies
-        .map_replace
-        .iter()
-        .map(|(field_ident, _ty)| {
-            let state_field_ident = format_ident!("replace_{}", field_ident);
-            quote! { #state_field_ident }
-        })
-        .collect();
-    let inserts = strategies
-        .map_replace
-        .iter()
-        .map(|(field_ident, _ty)| {
-            let state_field_ident = format_ident!("replace_{}", field_ident);
-            let field_name = field_ident.to_string();
-            quote! {
-                if let Some(value) = #state_field_ident {
-                    appended.insert(#field_name.to_owned(), value);
-                }
-            }
-        })
-        .collect();
-    MapReplaceTokens {
+    CollectionTokens {
         merge_logic,
         destructured,
         inserts,
@@ -258,6 +192,7 @@ fn generate_non_object_guard(config_ident: &syn::Ident) -> TokenStream {
 // complexity threshold. Splitting it further would obscure the emitted code.
 #[expect(
     clippy::cognitive_complexity,
+    clippy::too_many_lines,
     reason = "Token assembly reflects the runtime merge branches"
 )]
 pub(crate) fn generate_declarative_merge_impl(
@@ -265,14 +200,56 @@ pub(crate) fn generate_declarative_merge_impl(
     config_ident: &syn::Ident,
     strategies: &CollectionStrategies,
 ) -> TokenStream {
-    let append_tokens = build_append_merge_tokens(strategies);
-    let map_tokens = build_map_replace_tokens(strategies);
-    let AppendMergeTokens {
+    let append_tokens = build_collection_tokens(
+        unique_append_fields(&strategies.append),
+        "append_",
+        |_, state_field_ident, field_name| {
+            quote! {
+                if let Some(value) = map.remove(#field_name) {
+                    let incoming: Vec<_> =
+                        ortho_config::serde_json::from_value(value).into_ortho()?;
+                    let acc = self
+                        .#state_field_ident
+                        .get_or_insert_with(Default::default);
+                    acc.extend(incoming);
+                }
+            }
+        },
+        |_, state_field_ident, field_name| {
+            quote! {
+                if let Some(values) = #state_field_ident {
+                    appended.insert(
+                        #field_name.to_owned(),
+                        ortho_config::serde_json::Value::Array(values),
+                    );
+                }
+            }
+        },
+    );
+    let map_tokens = build_collection_tokens(
+        strategies.map_replace.iter().map(|(ident, ty)| (ident, ty)),
+        "replace_",
+        |_, state_field_ident, field_name| {
+            quote! {
+                if let Some(value) = map.remove(#field_name) {
+                    self.#state_field_ident = Some(value);
+                }
+            }
+        },
+        |_, state_field_ident, field_name| {
+            quote! {
+                if let Some(value) = #state_field_ident {
+                    appended.insert(#field_name.to_owned(), value);
+                }
+            }
+        },
+    );
+    let CollectionTokens {
         merge_logic: append_merge_logic,
         destructured: append_destructured,
         inserts: append_inserts,
     } = append_tokens;
-    let MapReplaceTokens {
+    let CollectionTokens {
         merge_logic: map_merge_logic,
         destructured: map_destructured,
         inserts: map_inserts,

@@ -33,6 +33,13 @@ struct ReplaceVec {
     values: Vec<String>,
 }
 
+#[derive(Debug, Deserialize, Serialize, OrthoConfig)]
+struct ReplaceVecWithDefault {
+    #[serde(default)]
+    #[ortho_config(default = vec![], merge_strategy = "replace")]
+    values: Vec<String>,
+}
+
 #[derive(Debug, Deserialize, Serialize)]
 struct Rule {
     enabled: bool,
@@ -112,6 +119,19 @@ fn replace_vectors_take_latest_layer() -> Result<()> {
             cfg.values == expected,
             "expected {:?}, got {:?}",
             expected,
+            cfg.values
+        );
+        Ok(())
+    })
+}
+
+#[rstest]
+fn replace_vectors_default_to_empty_when_unset() -> Result<()> {
+    with_jail(|_| {
+        let cfg = ReplaceVecWithDefault::load_from_iter(["prog"]).map_err(|err| anyhow!(err))?;
+        ensure!(
+            cfg.values.is_empty(),
+            "expected empty values when replace strategy receives no inputs, got {:?}",
             cfg.values
         );
         Ok(())

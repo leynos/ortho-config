@@ -23,6 +23,15 @@ pub(crate) struct StructAttrs {
     pub discovery: Option<DiscoveryAttrs>,
 }
 
+/// Field-level attributes recognised by `#[derive(OrthoConfig)]`.
+///
+/// - `cli_long`/`cli_short` override generated CLI flags.
+/// - `default` supplies a compile-time default expression when no layer
+///   configures the field.
+/// - `merge_strategy` selects how collections combine during declarative
+///   merges.
+/// - `skip_cli` omits the field from CLI parsing whilst leaving declarative
+///   merging untouched.
 #[derive(Default, Clone)]
 pub(crate) struct FieldAttrs {
     pub cli_long: Option<String>,

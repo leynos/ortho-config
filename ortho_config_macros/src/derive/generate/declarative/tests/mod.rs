@@ -112,6 +112,29 @@ fn generate_declarative_state_struct_includes_map_fields() -> Result<()> {
     Ok(())
 }
 
+#[rstest]
+fn generate_declarative_state_struct_includes_all_collection_fields() -> Result<()> {
+    let state_ident = parse_ident("__SampleDeclarativeMergeState")?;
+    let strategies = CollectionStrategies {
+        append: vec![(parse_ident("items")?, parse_type("String")?)],
+        map_replace: vec![(
+            parse_ident("rules")?,
+            parse_type("std::collections::BTreeMap<String, u32>")?,
+        )],
+    };
+    let tokens = generate_declarative_state_struct(&state_ident, &strategies);
+    let norm = tokens.to_string().replace(' ', "");
+    ensure!(
+        norm.contains("append_items"),
+        "expected append_items storage field",
+    );
+    ensure!(
+        norm.contains("replace_rules"),
+        "expected replace_rules storage field",
+    );
+    Ok(())
+}
+
 fn append_strategies(fields: Vec<(syn::Ident, syn::Type)>) -> CollectionStrategies {
     CollectionStrategies {
         append: fields,
