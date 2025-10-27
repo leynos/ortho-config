@@ -142,32 +142,40 @@ fn append_strategies(fields: Vec<(syn::Ident, syn::Type)>) -> CollectionStrategi
     }
 }
 
-fn assert_deduplicates_append_fields<F>(generator: F) -> Result<()>
-where
-    F: Fn(CollectionStrategies) -> TokenStream2,
-{
+type TokenGenerator = fn(&CollectionStrategies) -> Result<TokenStream2>;
+
+fn state_struct_tokens(strategies: &CollectionStrategies) -> Result<TokenStream2> {
+    let state_ident = parse_ident("__SampleDeclarativeMergeState")?;
+    Ok(generate_declarative_state_struct(&state_ident, strategies))
+}
+
+fn merge_impl_tokens(strategies: &CollectionStrategies) -> Result<TokenStream2> {
+    let state_ident = parse_ident("__SampleDeclarativeMergeState")?;
+    let config_ident = parse_ident("Sample")?;
+    Ok(generate_declarative_merge_impl(
+        &state_ident,
+        &config_ident,
+        strategies,
+    ))
+}
+
+#[rstest(generator => [state_struct_tokens as TokenGenerator, merge_impl_tokens as TokenGenerator])]
+fn collection_generators_deduplicate_append_fields(generator: TokenGenerator) -> Result<()> {
     let duplicate_fields = vec![
         (parse_ident("items")?, parse_type("String")?),
         (parse_ident("items")?, parse_type("String")?),
     ];
-    let duplicate_tokens = generator(append_strategies(duplicate_fields));
+    let duplicate_strategies = append_strategies(duplicate_fields);
+    let duplicate_tokens = generator(&duplicate_strategies)?;
 
     let deduplicated_fields = vec![(parse_ident("items")?, parse_type("String")?)];
-    let deduplicated_tokens = generator(append_strategies(deduplicated_fields));
+    let deduplicated_strategies = append_strategies(deduplicated_fields);
+    let deduplicated_tokens = generator(&deduplicated_strategies)?;
 
     ensure!(
         duplicate_tokens.to_string() == deduplicated_tokens.to_string(),
         "duplicate append fields should be deduplicated"
     );
-    Ok(())
-}
-
-#[rstest]
-fn generate_declarative_state_struct_deduplicates_append_fields() -> Result<()> {
-    let state_ident = parse_ident("__SampleDeclarativeMergeState")?;
-    assert_deduplicates_append_fields(|fields| {
-        generate_declarative_state_struct(&state_ident, &fields)
-    })?;
     Ok(())
 }
 
@@ -270,16 +278,6 @@ fn generate_declarative_merge_impl_emits_non_object_error_context() -> Result<()
         norm.contains("Non-objectlayerswouldoverwriteaccumulatedstate"),
         "guard must warn about overwriting state: {norm}"
     );
-    Ok(())
-}
-
-#[rstest]
-fn generate_declarative_merge_impl_deduplicates_append_fields() -> Result<()> {
-    let state_ident = parse_ident("__SampleDeclarativeMergeState")?;
-    let config_ident = parse_ident("Sample")?;
-    assert_deduplicates_append_fields(|fields| {
-        generate_declarative_merge_impl(&state_ident, &config_ident, &fields)
-    })?;
     Ok(())
 }
 

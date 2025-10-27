@@ -29,12 +29,6 @@ struct EmptyVec {
 
 #[derive(Debug, Deserialize, Serialize, OrthoConfig)]
 struct ReplaceVec {
-    #[ortho_config(merge_strategy = "replace")]
-    values: Vec<String>,
-}
-
-#[derive(Debug, Deserialize, Serialize, OrthoConfig)]
-struct ReplaceVecWithDefault {
     #[serde(default)]
     #[ortho_config(default = vec![], merge_strategy = "replace")]
     values: Vec<String>,
@@ -126,9 +120,21 @@ fn replace_vectors_take_latest_layer() -> Result<()> {
 }
 
 #[rstest]
+fn replace_vectors_empty_when_no_layers() -> Result<()> {
+    with_jail(|_| {
+        let cfg = ReplaceVec::load_from_iter(["prog"]).map_err(|err| anyhow!(err))?;
+        ensure!(
+            cfg.values.is_empty(),
+            "expected empty values for replace with no sources"
+        );
+        Ok(())
+    })
+}
+
+#[rstest]
 fn replace_vectors_default_to_empty_when_unset() -> Result<()> {
     with_jail(|_| {
-        let cfg = ReplaceVecWithDefault::load_from_iter(["prog"]).map_err(|err| anyhow!(err))?;
+        let cfg = ReplaceVec::load_from_iter(["prog"]).map_err(|err| anyhow!(err))?;
         ensure!(
             cfg.values.is_empty(),
             "expected empty values when replace strategy receives no inputs, got {:?}",
