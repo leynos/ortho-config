@@ -5,6 +5,11 @@ use rstest::rstest;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
+/// Helper to load a config and convert figment errors to anyhow errors.
+fn load_config<T: OrthoConfig>(args: &[&str]) -> Result<T> {
+    T::load_from_iter(args).map_err(|err| anyhow!(err))
+}
+
 #[path = "test_utils.rs"]
 mod test_utils;
 use test_utils::with_jail;
@@ -51,8 +56,7 @@ fn append_merges_all_sources() -> Result<()> {
     with_jail(|j| {
         j.create_file(".config.toml", "values = [\"file\"]")?;
         j.set_env("VALUES", "[\"env\"]");
-        let cfg = VecConfig::load_from_iter(["prog", "--values", "cli1", "--values", "cli2"])
-            .map_err(|err| anyhow!(err))?;
+        let cfg = load_config::<VecConfig>(&["prog", "--values", "cli1", "--values", "cli2"])?;
         let expected = vec!["file", "env", "cli1", "cli2"]
             .into_iter()
             .map(String::from)
@@ -70,7 +74,7 @@ fn append_merges_all_sources() -> Result<()> {
 #[rstest]
 fn append_empty_sources_yields_empty() -> Result<()> {
     with_jail(|_| {
-        let cfg = EmptyVec::load_from_iter(["prog"]).map_err(|err| anyhow!(err))?;
+        let cfg = load_config::<EmptyVec>(&["prog"])?;
         ensure!(
             cfg.values.is_empty(),
             "expected empty values, got {:?}",
@@ -85,8 +89,7 @@ fn append_includes_defaults() -> Result<()> {
     with_jail(|j| {
         j.create_file(".config.toml", "values = [\"file\"]")?;
         j.set_env("VALUES", "[\"env\"]");
-        let cfg =
-            DefaultVec::load_from_iter(["prog", "--values", "cli"]).map_err(|err| anyhow!(err))?;
+        let cfg = load_config::<DefaultVec>(&["prog", "--values", "cli"])?;
         let expected = vec!["def", "file", "env", "cli"]
             .into_iter()
             .map(String::from)
@@ -106,8 +109,7 @@ fn replace_vectors_take_latest_layer() -> Result<()> {
     with_jail(|j| {
         j.create_file(".config.toml", "values = [\"file\"]")?;
         j.set_env("VALUES", "[\"env\"]");
-        let cfg = ReplaceVec::load_from_iter(["prog", "--values", "cli1", "--values", "cli2"])
-            .map_err(|err| anyhow!(err))?;
+        let cfg = load_config::<ReplaceVec>(&["prog", "--values", "cli1", "--values", "cli2"])?;
         let expected = vec![String::from("cli1"), String::from("cli2")];
         ensure!(
             cfg.values == expected,
@@ -122,7 +124,7 @@ fn replace_vectors_take_latest_layer() -> Result<()> {
 #[rstest]
 fn replace_vectors_empty_when_no_layers() -> Result<()> {
     with_jail(|_| {
-        let cfg = ReplaceVec::load_from_iter(["prog"]).map_err(|err| anyhow!(err))?;
+        let cfg = load_config::<ReplaceVec>(&["prog"])?;
         ensure!(
             cfg.values.is_empty(),
             "expected empty values for replace with no sources"
@@ -139,7 +141,7 @@ fn replace_maps_drop_lower_precedence_entries() -> Result<()> {
             "[rules.a]\nenabled = true\n[rules.b]\nenabled = false",
         )?;
         j.set_env("RULES__C__ENABLED", "true");
-        let cfg = ReplaceMap::load_from_iter(["prog"]).map_err(|err| anyhow!(err))?;
+        let cfg = load_config::<ReplaceMap>(&["prog"])?;
         ensure!(
             cfg.rules.get("c").is_some_and(|rule| rule.enabled),
             "expected rule c to be enabled"
