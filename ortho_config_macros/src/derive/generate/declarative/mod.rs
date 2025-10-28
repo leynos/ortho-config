@@ -46,6 +46,56 @@ where
     }
 }
 
+fn append_collection_tokens(strategies: &CollectionStrategies) -> CollectionTokens {
+    build_collection_tokens(
+        unique_append_fields(&strategies.append),
+        "append_",
+        |_, state_field_ident, field_name| {
+            quote! {
+                if let Some(value) = map.remove(#field_name) {
+                    let incoming: Vec<_> =
+                        ortho_config::serde_json::from_value(value).into_ortho()?;
+                    let acc = self
+                        .#state_field_ident
+                        .get_or_insert_with(Default::default);
+                    acc.extend(incoming);
+                }
+            }
+        },
+        |_, state_field_ident, field_name| {
+            quote! {
+                if let Some(values) = #state_field_ident {
+                    overlay.insert(
+                        #field_name.to_owned(),
+                        ortho_config::serde_json::Value::Array(values),
+                    );
+                }
+            }
+        },
+    )
+}
+
+fn map_collection_tokens(strategies: &CollectionStrategies) -> CollectionTokens {
+    build_collection_tokens(
+        strategies.map_replace.iter().map(|(ident, ty)| (ident, ty)),
+        "replace_",
+        |_, state_field_ident, field_name| {
+            quote! {
+                if let Some(value) = map.remove(#field_name) {
+                    self.#state_field_ident = Some(value);
+                }
+            }
+        },
+        |_, state_field_ident, field_name| {
+            quote! {
+                if let Some(value) = #state_field_ident {
+                    overlay.insert(#field_name.to_owned(), value);
+                }
+            }
+        },
+    )
+}
+
 /// Deduplicate append fields by identifier.
 ///
 /// Returns a vector of unique `(ident, type)` pairs, preserving the first
@@ -190,62 +240,14 @@ fn generate_non_object_guard(config_ident: &syn::Ident) -> TokenStream {
 /// assert!(tokens.to_string().contains("impl ortho_config::DeclarativeMerge"));
 /// ```
 // The generated merge implementation mirrors the runtime branching structure of
-// the declarative merger, which naturally exceeds Clippy's cognitive
-// complexity threshold. Splitting it further would obscure the emitted code.
-#[expect(
-    clippy::cognitive_complexity,
-    clippy::too_many_lines,
-    reason = "Token assembly reflects the runtime merge branches"
-)]
+// the declarative merger. Splitting it further would obscure the emitted code.
 pub(crate) fn generate_declarative_merge_impl(
     state_ident: &syn::Ident,
     config_ident: &syn::Ident,
     strategies: &CollectionStrategies,
 ) -> TokenStream {
-    let append_tokens = build_collection_tokens(
-        unique_append_fields(&strategies.append),
-        "append_",
-        |_, state_field_ident, field_name| {
-            quote! {
-                if let Some(value) = map.remove(#field_name) {
-                    let incoming: Vec<_> =
-                        ortho_config::serde_json::from_value(value).into_ortho()?;
-                    let acc = self
-                        .#state_field_ident
-                        .get_or_insert_with(Default::default);
-                    acc.extend(incoming);
-                }
-            }
-        },
-        |_, state_field_ident, field_name| {
-            quote! {
-                if let Some(values) = #state_field_ident {
-                    appended.insert(
-                        #field_name.to_owned(),
-                        ortho_config::serde_json::Value::Array(values),
-                    );
-                }
-            }
-        },
-    );
-    let map_tokens = build_collection_tokens(
-        strategies.map_replace.iter().map(|(ident, ty)| (ident, ty)),
-        "replace_",
-        |_, state_field_ident, field_name| {
-            quote! {
-                if let Some(value) = map.remove(#field_name) {
-                    self.#state_field_ident = Some(value);
-                }
-            }
-        },
-        |_, state_field_ident, field_name| {
-            quote! {
-                if let Some(value) = #state_field_ident {
-                    appended.insert(#field_name.to_owned(), value);
-                }
-            }
-        },
-    );
+    let append_tokens = append_collection_tokens(strategies);
+    let map_tokens = map_collection_tokens(strategies);
     let CollectionTokens {
         merge_logic: append_merge_logic,
         destructured: append_destructured,
@@ -256,52 +258,86 @@ pub(crate) fn generate_declarative_merge_impl(
         destructured: map_destructured,
         inserts: map_inserts,
     } = map_tokens;
-    let non_object_guard = generate_non_object_guard(config_ident);
+    let merge_layer_body = merge_layer_tokens(config_ident, &map_merge_logic, &append_merge_logic);
+    let finish_body = finish_tokens(
+        state_ident,
+        &append_destructured,
+        &map_destructured,
+        &append_inserts,
+        &map_inserts,
+    );
 
     quote! {
         impl ortho_config::DeclarativeMerge for #state_ident {
             type Output = #config_ident;
 
             fn merge_layer(&mut self, layer: ortho_config::MergeLayer<'_>) -> ortho_config::OrthoResult<()> {
-                use ortho_config::OrthoResultExt as _;
-
-                let provenance = layer.provenance();
-                let path = layer.path().map(|p| p.to_owned());
-                let value = layer.into_value();
-                let mut map = match value {
-                    ortho_config::serde_json::Value::Object(map) => map,
-                    other => { #non_object_guard }
-                };
-                #( #map_merge_logic )*
-                #( #append_merge_logic )*
-                if !map.is_empty() {
-                    ortho_config::declarative::merge_value(
-                        &mut self.value,
-                        ortho_config::serde_json::Value::Object(map),
-                    );
-                }
-
-                Ok(())
+                #merge_layer_body
             }
 
             fn finish(self) -> ortho_config::OrthoResult<Self::Output> {
-                let #state_ident {
-                    mut value,
-                    #( #append_destructured, )*
-                    #( #map_destructured, )*
-                } = self;
-                let mut appended = ortho_config::serde_json::Map::new();
-                #( #append_inserts )*
-                #( #map_inserts )*
-                if !appended.is_empty() {
-                    ortho_config::declarative::merge_value(
-                        &mut value,
-                        ortho_config::serde_json::Value::Object(appended),
-                    );
-                }
-                ortho_config::declarative::from_value(value)
+                #finish_body
             }
         }
+    }
+}
+
+fn merge_layer_tokens(
+    config_ident: &syn::Ident,
+    map_merge_logic: &[TokenStream],
+    append_merge_logic: &[TokenStream],
+) -> TokenStream {
+    let non_object_guard = generate_non_object_guard(config_ident);
+    quote! {
+        use ortho_config::OrthoResultExt as _;
+
+        let provenance = layer.provenance();
+        let path = layer.path().map(|p| p.to_owned());
+        let value = layer.into_value();
+        let mut map = match value {
+            ortho_config::serde_json::Value::Object(map) => map,
+            other => { #non_object_guard }
+        };
+        #( #map_merge_logic )*
+        #( #append_merge_logic )*
+        if !map.is_empty() {
+            ortho_config::declarative::merge_value(
+                &mut self.value,
+                ortho_config::serde_json::Value::Object(map),
+            );
+        }
+
+        Ok(())
+    }
+}
+
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Token assembly requires parallel slices"
+)]
+fn finish_tokens(
+    state_ident: &syn::Ident,
+    append_destructured: &[TokenStream],
+    map_destructured: &[TokenStream],
+    append_inserts: &[TokenStream],
+    map_inserts: &[TokenStream],
+) -> TokenStream {
+    quote! {
+        let #state_ident {
+            mut value,
+            #( #append_destructured, )*
+            #( #map_destructured, )*
+        } = self;
+        let mut overlay = ortho_config::serde_json::Map::new();
+        #( #append_inserts )*
+        #( #map_inserts )*
+        if !overlay.is_empty() {
+            ortho_config::declarative::merge_value(
+                &mut value,
+                ortho_config::serde_json::Value::Object(overlay),
+            );
+        }
+        ortho_config::declarative::from_value(value)
     }
 }
 

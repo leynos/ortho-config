@@ -24,7 +24,11 @@ pub(crate) struct LoadImplTokens<'a> {
     pub env_provider: &'a proc_macro2::TokenStream,
     pub default_struct_init: &'a [proc_macro2::TokenStream],
     pub override_init_ts: &'a proc_macro2::TokenStream,
+    /// Tokens executed before the figment merge to capture or remove
+    /// high-precedence collection inputs.
     pub collection_pre_merge: &'a proc_macro2::TokenStream,
+    /// Tokens executed after extraction to reapply the captured collection
+    /// inputs with the correct precedence.
     pub collection_post_extract: &'a proc_macro2::TokenStream,
     pub config_env_var: &'a proc_macro2::TokenStream,
     pub dotfile_name: &'a syn::LitStr,

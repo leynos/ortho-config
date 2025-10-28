@@ -564,6 +564,24 @@ mod tests {
     }
 
     #[test]
+    fn parses_skip_cli_flag() -> Result<()> {
+        let input: DeriveInput = parse_quote! {
+            struct Demo {
+                #[ortho_config(skip_cli)]
+                field: String,
+            }
+        };
+
+        let (_, fields, _, field_attrs) = parse_input(&input).map_err(|err| anyhow!(err))?;
+        ensure!(fields.len() == 1, "expected single field");
+        let attrs = field_attrs
+            .first()
+            .ok_or_else(|| anyhow!("missing field attributes"))?;
+        ensure!(attrs.skip_cli, "skip_cli flag was not set");
+        Ok(())
+    }
+
+    #[test]
     fn parses_discovery_attributes() -> Result<()> {
         let input: DeriveInput = parse_quote! {
             #[ortho_config(prefix = "CFG_", discovery(
@@ -616,6 +634,70 @@ mod tests {
         ensure!(
             discovery.config_cli_visible == Some(true),
             "visibility mismatch"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn parses_merge_strategy_variants() -> Result<()> {
+        let append_input: DeriveInput = parse_quote! {
+            struct AppendDemo {
+                #[ortho_config(merge_strategy = "append")]
+                values: Vec<String>,
+            }
+        };
+        let (_, _, _, append_attrs_vec) = parse_input(&append_input).map_err(|err| anyhow!(err))?;
+        let append_attrs = append_attrs_vec
+            .first()
+            .ok_or_else(|| anyhow!("missing append attributes"))?;
+        ensure!(
+            matches!(append_attrs.merge_strategy, Some(MergeStrategy::Append)),
+            "append strategy not parsed",
+        );
+
+        let replace_input: DeriveInput = parse_quote! {
+            struct ReplaceDemo {
+                #[ortho_config(merge_strategy = "replace")]
+                values: Vec<String>,
+            }
+        };
+        let (_, _, _, replace_attrs_vec) =
+            parse_input(&replace_input).map_err(|err| anyhow!(err))?;
+        let replace_attrs = replace_attrs_vec
+            .first()
+            .ok_or_else(|| anyhow!("missing replace attributes"))?;
+        ensure!(
+            matches!(replace_attrs.merge_strategy, Some(MergeStrategy::Replace)),
+            "replace strategy not parsed",
+        );
+
+        let map_input: DeriveInput = parse_quote! {
+            struct MapDemo {
+                #[ortho_config(merge_strategy = "keyed")]
+                rules: std::collections::BTreeMap<String, u32>,
+            }
+        };
+        let (_, _, _, map_attrs_vec) = parse_input(&map_input).map_err(|err| anyhow!(err))?;
+        let map_attrs = map_attrs_vec
+            .first()
+            .ok_or_else(|| anyhow!("missing map attributes"))?;
+        ensure!(
+            matches!(map_attrs.merge_strategy, Some(MergeStrategy::Keyed)),
+            "keyed strategy not parsed",
+        );
+
+        let invalid: DeriveInput = parse_quote! {
+            struct InvalidDemo {
+                #[ortho_config(merge_strategy = "unknown")]
+                values: Vec<String>,
+            }
+        };
+        let err = parse_input(&invalid)
+            .err()
+            .ok_or_else(|| anyhow!("expected merge strategy error"))?;
+        ensure!(
+            err.to_string().contains("unknown merge_strategy"),
+            "unexpected error message: {err}",
         );
         Ok(())
     }
@@ -723,6 +805,26 @@ mod tests {
         let expected: Type = parse_quote!(u8);
         let inner = vec_inner(&ty).ok_or_else(|| anyhow!("expected Vec"))?;
         ensure!(inner == &expected, "expected {expected:?}, got {inner:?}");
+        Ok(())
+    }
+
+    #[rstest]
+    #[case(parse_quote!(std::collections::BTreeMap<String, u8>), parse_quote!(String), parse_quote!(u8))]
+    #[case(parse_quote!(alloc::collections::BTreeMap<u16, (u8, u8)>), parse_quote!(u16), parse_quote!((u8, u8)))]
+    fn btree_map_inner_matches_various_prefixes(
+        #[case] ty: Type,
+        #[case] expected_key: Type,
+        #[case] expected_value: Type,
+    ) -> Result<()> {
+        let (key, value) = btree_map_inner(&ty).ok_or_else(|| anyhow!("expected BTreeMap"))?;
+        ensure!(
+            key == &expected_key,
+            "key mismatch: {key:?} vs {expected_key:?}"
+        );
+        ensure!(
+            value == &expected_value,
+            "value mismatch: {value:?} vs {expected_value:?}",
+        );
         Ok(())
     }
 }

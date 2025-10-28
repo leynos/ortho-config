@@ -47,8 +47,8 @@ fn dynamic_rule_env(world: &mut World, name: String, state: String) -> Result<()
 
 #[when("the configuration is loaded with replace map semantics")]
 fn load_replace_map(world: &mut World) -> Result<()> {
-    let file = world.dynamic_rules_file.clone();
-    let env_rules = world.dynamic_rules_env.clone();
+    let file = std::mem::take(&mut world.dynamic_rules_file);
+    let env_rules = std::mem::take(&mut world.dynamic_rules_env);
     let mut result = None;
     figment::Jail::try_with(|j| {
         if let Some(contents) = file.as_ref() {
@@ -63,8 +63,7 @@ fn load_replace_map(world: &mut World) -> Result<()> {
         }
         result = Some(RulesConfig::load_from_iter(["prog"]));
         Ok(())
-    })
-    .map_err(|err| anyhow!(err.to_string()))?;
+    })?;
     world.result = result;
     ensure!(
         world.result.is_some(),

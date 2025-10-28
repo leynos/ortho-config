@@ -96,7 +96,8 @@ pub struct RulesConfig {
 /// Toggleable rule used by collection merge behavioural tests.
 #[derive(Debug, Deserialize, Serialize, Default)]
 pub struct DynamicRule {
-    enabled: bool,
+    /// Whether the dynamic rule is active for the scenario.
+    pub enabled: bool,
 }
 
 /// Configuration used to verify aggregated error reporting.

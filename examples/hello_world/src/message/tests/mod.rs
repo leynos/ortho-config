@@ -12,9 +12,9 @@ use crate::test_support::{figment_error, with_jail};
 use anyhow::{Result, anyhow, ensure};
 use assertions::{assert_greeting, assert_plan, assert_sample_config_greeting};
 use fixtures::{
-    ExpectedPlan, HelloWorldCliFixture, PlanVariantCase, TakeLeaveCommandFixture, base_config,
-    build_plan_direct, build_plan_with_sample_env, greet_command, setup_default_greet,
-    setup_excited, setup_festive_leave, setup_noop_leave, setup_sample_greet, take_leave_command,
+    ExpectedPlan, HelloWorldCliFixture, PlanVariant, PlanVariantCase, TakeLeaveCommandFixture,
+    base_config, build_plan_variant, greet_command, setup_default_greet, setup_excited,
+    setup_festive_leave, setup_noop_leave, setup_sample_greet, take_leave_command,
 };
 use rstest::rstest;
 
@@ -29,7 +29,7 @@ fn build_plan_variants() -> Result<()> {
                 message: "Hello, World!",
                 is_excited: false,
             },
-            builder: build_plan_direct,
+            variant: PlanVariant::Direct,
         },
         PlanVariantCase {
             greet_setup: setup_excited,
@@ -39,7 +39,7 @@ fn build_plan_variants() -> Result<()> {
                 message: "HELLO, WORLD!",
                 is_excited: true,
             },
-            builder: build_plan_direct,
+            variant: PlanVariant::Direct,
         },
         PlanVariantCase {
             greet_setup: setup_sample_greet,
@@ -49,7 +49,7 @@ fn build_plan_variants() -> Result<()> {
                 message: "HELLO HEY CONFIG FRIENDS, EXCITED CREW!!!",
                 is_excited: true,
             },
-            builder: build_plan_with_sample_env,
+            variant: PlanVariant::SampleEnv,
         },
         PlanVariantCase {
             greet_setup: setup_sample_greet,
@@ -59,7 +59,7 @@ fn build_plan_variants() -> Result<()> {
                 message: "HELLO HEY CONFIG FRIENDS, EXCITED CREW!!!",
                 is_excited: true,
             },
-            builder: build_plan_with_sample_env,
+            variant: PlanVariant::SampleEnv,
         },
     ];
 
@@ -71,7 +71,7 @@ fn build_plan_variants() -> Result<()> {
         (case.greet_setup)(&mut config, &mut greet)?;
         (case.leave_setup)(&mut config, &mut leave)?;
 
-        let plan = (case.builder)(config, greet, leave)?;
+        let plan = build_plan_variant(config, greet, leave, case.variant)?;
         assert_plan(&plan, &case.expected)?;
     }
 

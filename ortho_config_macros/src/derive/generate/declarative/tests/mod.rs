@@ -78,60 +78,47 @@ fn generate_declarative_state_struct_emits_storage() -> Result<()> {
 }
 
 #[rstest]
-fn generate_declarative_state_struct_includes_append_fields() -> Result<()> {
-    let state_ident = parse_ident("__SampleDeclarativeMergeState")?;
-    let strategies = CollectionStrategies {
-        append: vec![(parse_ident("items")?, parse_type("String")?)],
-        map_replace: Vec::new(),
-    };
-    let tokens = generate_declarative_state_struct(&state_ident, &strategies);
-    let norm = tokens.to_string().replace(' ', "");
-    ensure!(
-        norm.contains("append_items"),
-        "expected append_items storage field"
-    );
-    Ok(())
-}
-
-#[rstest]
-fn generate_declarative_state_struct_includes_map_fields() -> Result<()> {
-    let state_ident = parse_ident("__SampleDeclarativeMergeState")?;
-    let strategies = CollectionStrategies {
+#[case(
+    append_strategies(vec![(parse_ident("items")?, parse_type("String")?)]),
+    vec!["append_items"],
+)]
+#[case(
+    CollectionStrategies {
         append: Vec::new(),
-        map_replace: vec![(
-            parse_ident("rules")?,
-            parse_type("std::collections::BTreeMap<String, u32>")?,
-        )],
-    };
-    let tokens = generate_declarative_state_struct(&state_ident, &strategies);
-    let norm = tokens.to_string().replace(' ', "");
-    ensure!(
-        norm.contains("replace_rules"),
-        "expected replace_rules storage field"
-    );
-    Ok(())
-}
-
-#[rstest]
-fn generate_declarative_state_struct_includes_all_collection_fields() -> Result<()> {
-    let state_ident = parse_ident("__SampleDeclarativeMergeState")?;
-    let strategies = CollectionStrategies {
+        map_replace: vec![
+            (
+                parse_ident("rules")?,
+                parse_type("std::collections::BTreeMap<String, u32>")?,
+            ),
+        ],
+    },
+    vec!["replace_rules"],
+)]
+#[case(
+    CollectionStrategies {
         append: vec![(parse_ident("items")?, parse_type("String")?)],
-        map_replace: vec![(
-            parse_ident("rules")?,
-            parse_type("std::collections::BTreeMap<String, u32>")?,
-        )],
-    };
+        map_replace: vec![
+            (
+                parse_ident("rules")?,
+                parse_type("std::collections::BTreeMap<String, u32>")?,
+            ),
+        ],
+    },
+    vec!["append_items", "replace_rules"],
+)]
+fn generate_declarative_state_struct_includes_collection_fields(
+    #[case] strategies: CollectionStrategies,
+    #[case] expected_fields: Vec<&'static str>,
+) -> Result<()> {
+    let state_ident = parse_ident("__SampleDeclarativeMergeState")?;
     let tokens = generate_declarative_state_struct(&state_ident, &strategies);
     let norm = tokens.to_string().replace(' ', "");
-    ensure!(
-        norm.contains("append_items"),
-        "expected append_items storage field",
-    );
-    ensure!(
-        norm.contains("replace_rules"),
-        "expected replace_rules storage field",
-    );
+    for field in expected_fields {
+        ensure!(
+            norm.contains(field),
+            "expected state struct to include {field}",
+        );
+    }
     Ok(())
 }
 
@@ -250,6 +237,39 @@ fn generate_declarative_merge_impl_handles_map_fields() -> Result<()> {
     ensure!(
         norm.contains("serde_json::Map::new"),
         "expected map initialisation",
+    );
+    Ok(())
+}
+
+#[rstest]
+fn generate_declarative_merge_impl_handles_mixed_fields() -> Result<()> {
+    let state_ident = parse_ident("__SampleDeclarativeMergeState")?;
+    let config_ident = parse_ident("Sample")?;
+    let strategies = CollectionStrategies {
+        append: vec![(parse_ident("items")?, parse_type("String")?)],
+        map_replace: vec![(
+            parse_ident("rules")?,
+            parse_type("std::collections::BTreeMap<String, u32>")?,
+        )],
+    };
+    let norm = generate_declarative_merge_impl(&state_ident, &config_ident, &strategies)
+        .to_string()
+        .replace(" :: ", "::")
+        .replace(' ', "");
+    ensure!(
+        norm.contains("replace_rules"),
+        "expected replace merge logic",
+    );
+    ensure!(norm.contains("append_items"), "expected append merge logic",);
+    let replace_index = norm
+        .find("replace_rules")
+        .expect("replace merge logic should render");
+    let append_index = norm
+        .find("append_items")
+        .expect("append merge logic should render");
+    ensure!(
+        replace_index < append_index,
+        "replace logic must precede append logic",
     );
     Ok(())
 }

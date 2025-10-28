@@ -25,13 +25,17 @@ pub(crate) type HelloWorldCliFixture = Result<HelloWorldCli>;
 pub(crate) type GreetCommandFixture = Result<GreetCommand>;
 pub(crate) type TakeLeaveCommandFixture = Result<TakeLeaveCommand>;
 
-pub(crate) type PlanBuilder = fn(HelloWorldCli, GreetCommand, TakeLeaveCommand) -> Result<Plan>;
+#[derive(Clone, Copy)]
+pub(crate) enum PlanVariant {
+    Direct,
+    SampleEnv,
+}
 
 pub(crate) struct PlanVariantCase {
     pub greet_setup: GreetSetup,
     pub leave_setup: LeaveSetup,
     pub expected: ExpectedPlan,
-    pub builder: PlanBuilder,
+    pub variant: PlanVariant,
 }
 
 pub(crate) type GreetSetup = fn(&mut HelloWorldCli, &mut GreetCommand) -> Result<()>;
@@ -139,23 +143,33 @@ pub(crate) fn take_leave_command() -> TakeLeaveCommandFixture {
     Ok(command)
 }
 
-pub(crate) fn build_plan_direct(
+pub(crate) fn build_plan_variant(
     config: HelloWorldCli,
     greet: GreetCommand,
     leave: TakeLeaveCommand,
+    variant: PlanVariant,
 ) -> Result<Plan> {
-    with_jail(|jail| {
-        jail.clear_env();
-        build_plan_from(config, greet, leave).map_err(figment_error)
-    })
+    match variant {
+        PlanVariant::Direct => with_jail(|jail| {
+            jail.clear_env();
+            plan_from_inputs(config, greet, leave)
+        }),
+        PlanVariant::SampleEnv => {
+            with_sample_config(move |_| plan_from_inputs(config, greet, leave))
+        }
+    }
 }
 
-pub(crate) fn build_plan_with_sample_env(
+#[expect(
+    clippy::result_large_err,
+    reason = "figment::Error originates upstream and remains unboxed elsewhere"
+)]
+fn plan_from_inputs(
     config: HelloWorldCli,
     greet: GreetCommand,
     leave: TakeLeaveCommand,
-) -> Result<Plan> {
-    with_sample_config(move |_| build_plan_from(config, greet, leave).map_err(figment_error))
+) -> figment::error::Result<Plan> {
+    build_plan_from(config, greet, leave).map_err(figment_error)
 }
 
 pub(crate) fn with_sample_config<R, F>(action: F) -> Result<R>
