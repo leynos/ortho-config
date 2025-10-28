@@ -16,6 +16,13 @@ struct CollectionTokens {
     inserts: Vec<TokenStream>,
 }
 
+struct FinishCollectionTokens<'a> {
+    append_destructured: &'a [TokenStream],
+    map_destructured: &'a [TokenStream],
+    append_inserts: &'a [TokenStream],
+    map_inserts: &'a [TokenStream],
+}
+
 fn build_collection_tokens<'a, I, F, G>(
     fields: I,
     prefix: &str,
@@ -261,10 +268,12 @@ pub(crate) fn generate_declarative_merge_impl(
     let merge_layer_body = merge_layer_tokens(config_ident, &map_merge_logic, &append_merge_logic);
     let finish_body = finish_tokens(
         state_ident,
-        &append_destructured,
-        &map_destructured,
-        &append_inserts,
-        &map_inserts,
+        &FinishCollectionTokens {
+            append_destructured: &append_destructured,
+            map_destructured: &map_destructured,
+            append_inserts: &append_inserts,
+            map_inserts: &map_inserts,
+        },
     );
 
     quote! {
@@ -311,17 +320,11 @@ fn merge_layer_tokens(
     }
 }
 
-#[expect(
-    clippy::too_many_arguments,
-    reason = "Token assembly requires parallel slices"
-)]
-fn finish_tokens(
-    state_ident: &syn::Ident,
-    append_destructured: &[TokenStream],
-    map_destructured: &[TokenStream],
-    append_inserts: &[TokenStream],
-    map_inserts: &[TokenStream],
-) -> TokenStream {
+fn finish_tokens(state_ident: &syn::Ident, collections: &FinishCollectionTokens<'_>) -> TokenStream {
+    let append_destructured = collections.append_destructured;
+    let map_destructured = collections.map_destructured;
+    let append_inserts = collections.append_inserts;
+    let map_inserts = collections.map_inserts;
     quote! {
         let #state_ident {
             mut value,

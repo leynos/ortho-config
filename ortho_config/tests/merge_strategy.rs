@@ -1,5 +1,6 @@
 //! Tests for collection merge strategies on vectors and maps.
 use anyhow::{Result, anyhow, ensure};
+use figment::Jail;
 use ortho_config::OrthoConfig;
 use rstest::rstest;
 use serde::{Deserialize, Serialize};
@@ -51,86 +52,122 @@ struct ReplaceMap {
     rules: BTreeMap<String, Rule>,
 }
 
-#[rstest]
-fn append_merges_all_sources() -> Result<()> {
+trait HasValues {
+    fn values(&self) -> &[String];
+}
+
+impl HasValues for VecConfig {
+    fn values(&self) -> &[String] {
+        &self.values
+    }
+}
+
+impl HasValues for DefaultVec {
+    fn values(&self) -> &[String] {
+        &self.values
+    }
+}
+
+impl HasValues for EmptyVec {
+    fn values(&self) -> &[String] {
+        &self.values
+    }
+}
+
+impl HasValues for ReplaceVec {
+    fn values(&self) -> &[String] {
+        &self.values
+    }
+}
+
+fn run_vector_case<T, Setup>(
+    args: &[&str],
+    setup: Setup,
+    expected: &[&str],
+    context: &str,
+) -> Result<()>
+where
+    T: OrthoConfig + HasValues,
+    Setup: Fn(&mut Jail) -> Result<()>,
+{
     with_jail(|j| {
-        j.create_file(".config.toml", "values = [\"file\"]")?;
-        j.set_env("VALUES", "[\"env\"]");
-        let cfg = load_config::<VecConfig>(&["prog", "--values", "cli1", "--values", "cli2"])?;
-        let expected = vec!["file", "env", "cli1", "cli2"]
-            .into_iter()
-            .map(String::from)
+        setup(j)?;
+        let cfg = load_config::<T>(args)?;
+        let expected_vec = expected
+            .iter()
+            .map(|&value| value.to_owned())
             .collect::<Vec<_>>();
         ensure!(
-            cfg.values == expected,
-            "expected {:?}, got {:?}",
-            expected,
-            cfg.values
+            cfg.values() == expected_vec.as_slice(),
+            "{}: expected {:?}, got {:?}",
+            context,
+            expected_vec,
+            cfg.values()
         );
         Ok(())
     })
+}
+
+#[rstest]
+fn append_merges_all_sources() -> Result<()> {
+    run_vector_case::<VecConfig, _>(
+        &["prog", "--values", "cli1", "--values", "cli2"],
+        |j| {
+            j.create_file(".config.toml", "values = [\"file\"]")?;
+            j.set_env("VALUES", "[\"env\"]");
+            Ok(())
+        },
+        &["file", "env", "cli1", "cli2"],
+        "append strategy should retain contributions from every source",
+    )
 }
 
 #[rstest]
 fn append_empty_sources_yields_empty() -> Result<()> {
-    with_jail(|_| {
-        let cfg = load_config::<EmptyVec>(&["prog"])?;
-        ensure!(
-            cfg.values.is_empty(),
-            "expected empty values, got {:?}",
-            cfg.values
-        );
-        Ok(())
-    })
+    run_vector_case::<EmptyVec, _>(
+        &["prog"],
+        |_| Ok(()),
+        &[],
+        "append strategy should yield defaults when no layers supply values",
+    )
 }
 
 #[rstest]
 fn append_includes_defaults() -> Result<()> {
-    with_jail(|j| {
-        j.create_file(".config.toml", "values = [\"file\"]")?;
-        j.set_env("VALUES", "[\"env\"]");
-        let cfg = load_config::<DefaultVec>(&["prog", "--values", "cli"])?;
-        let expected = vec!["def", "file", "env", "cli"]
-            .into_iter()
-            .map(String::from)
-            .collect::<Vec<_>>();
-        ensure!(
-            cfg.values == expected,
-            "expected {:?}, got {:?}",
-            expected,
-            cfg.values
-        );
-        Ok(())
-    })
+    run_vector_case::<DefaultVec, _>(
+        &["prog", "--values", "cli"],
+        |j| {
+            j.create_file(".config.toml", "values = [\"file\"]")?;
+            j.set_env("VALUES", "[\"env\"]");
+            Ok(())
+        },
+        &["def", "file", "env", "cli"],
+        "append strategy should prepend defaults before layered contributions",
+    )
 }
 
 #[rstest]
 fn replace_vectors_take_latest_layer() -> Result<()> {
-    with_jail(|j| {
-        j.create_file(".config.toml", "values = [\"file\"]")?;
-        j.set_env("VALUES", "[\"env\"]");
-        let cfg = load_config::<ReplaceVec>(&["prog", "--values", "cli1", "--values", "cli2"])?;
-        let expected = vec![String::from("cli1"), String::from("cli2")];
-        ensure!(
-            cfg.values == expected,
-            "expected {:?}, got {:?}",
-            expected,
-            cfg.values
-        );
-        Ok(())
-    })
+    run_vector_case::<ReplaceVec, _>(
+        &["prog", "--values", "cli1", "--values", "cli2"],
+        |j| {
+            j.create_file(".config.toml", "values = [\"file\"]")?;
+            j.set_env("VALUES", "[\"env\"]");
+            Ok(())
+        },
+        &["cli1", "cli2"],
+        "replace strategy should honour highest precedence (CLI) values",
+    )
 }
 
 #[rstest]
 fn replace_vectors_empty_when_no_layers() -> Result<()> {
-    with_jail(|_| {
-        let cfg = load_config::<ReplaceVec>(&["prog"])?;
-        ensure!(
-            cfg.values.is_empty(),
-            "expected empty values for replace with no sources"
-        );
-        Ok(())
-    })
+    run_vector_case::<ReplaceVec, _>(
+        &["prog"],
+        |_| Ok(()),
+        &[],
+        "replace strategy should fall back to defaults when no sources load",
+    )
 }
 
 #[rstest]
