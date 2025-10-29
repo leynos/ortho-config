@@ -274,33 +274,33 @@ fn build_map_state_tokens(strategies: &CollectionStrategies) -> Option<proc_macr
     })
 }
 
-fn build_optional_figment_extract(
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the review request requires these parameters explicitly"
+)]
+fn build_figment_extract(
     figment_binding: &proc_macro2::TokenStream,
     name: &Ident,
     ty: &Type,
     state_field: &proc_macro2::TokenStream,
+    is_optional: bool,
 ) -> proc_macro2::TokenStream {
-    quote! {
-        if let Some(f) = #figment_binding {
-            if let Ok(v) = f.extract_inner::<#ty>(stringify!(#name)) {
-                if !v.is_empty() {
-                    #state_field = Some(v);
+    if is_optional {
+        quote! {
+            if let Some(f) = #figment_binding {
+                if let Ok(v) = f.extract_inner::<#ty>(stringify!(#name)) {
+                    if !v.is_empty() {
+                        #state_field = Some(v);
+                    }
                 }
             }
         }
-    }
-}
-
-fn build_direct_figment_extract(
-    figment_binding: &proc_macro2::TokenStream,
-    name: &Ident,
-    ty: &Type,
-    state_field: &proc_macro2::TokenStream,
-) -> proc_macro2::TokenStream {
-    quote! {
-        if let Ok(v) = #figment_binding.extract_inner::<#ty>(stringify!(#name)) {
-            if !v.is_empty() {
-                #state_field = Some(v);
+    } else {
+        quote! {
+            if let Ok(v) = #figment_binding.extract_inner::<#ty>(stringify!(#name)) {
+                if !v.is_empty() {
+                    #state_field = Some(v);
+                }
             }
         }
     }
@@ -315,10 +315,9 @@ fn build_map_merge_blocks(strategies: &CollectionStrategies) -> Vec<proc_macro2:
             let file_binding = quote! { &file_fig };
             let env_binding = quote! { env_figment };
             let cli_binding = quote! { cli_figment };
-            let file_extract =
-                build_optional_figment_extract(&file_binding, name, ty, &state_field);
-            let env_extract = build_direct_figment_extract(&env_binding, name, ty, &state_field);
-            let cli_extract = build_direct_figment_extract(&cli_binding, name, ty, &state_field);
+            let file_extract = build_figment_extract(&file_binding, name, ty, &state_field, true);
+            let env_extract = build_figment_extract(&env_binding, name, ty, &state_field, false);
+            let cli_extract = build_figment_extract(&cli_binding, name, ty, &state_field, false);
             quote! {
                 #file_extract
                 #env_extract
