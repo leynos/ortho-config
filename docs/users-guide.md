@@ -171,7 +171,7 @@ default features only when explicitly opting back into `serde_json`.
 YAML parsing is handled by the pure-Rust `serde-saphyr` crate. It adheres to
 the YAML 1.2 specification, so unquoted scalars such as `yes`, `on`, and `off`
 remain strings. The provider enables `Options::strict_booleans`, ensuring only
-`true` and `false` deserialize as booleans while legacy YAML 1.1 literals are
+`true` and `false` deserialize as booleans, while legacy YAML 1.1 literals are
 treated as plain strings. Duplicate mapping keys surface as parsing errors
 instead of silently accepting the last entry, helping catch typos early.
 
