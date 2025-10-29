@@ -320,7 +320,10 @@ fn merge_layer_tokens(
     }
 }
 
-fn finish_tokens(state_ident: &syn::Ident, collections: &FinishCollectionTokens<'_>) -> TokenStream {
+fn finish_tokens(
+    state_ident: &syn::Ident,
+    collections: &FinishCollectionTokens<'_>,
+) -> TokenStream {
     let append_destructured = collections.append_destructured;
     let map_destructured = collections.map_destructured;
     let append_inserts = collections.append_inserts;

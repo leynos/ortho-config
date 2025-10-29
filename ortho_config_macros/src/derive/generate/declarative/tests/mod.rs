@@ -215,62 +215,60 @@ fn generate_declarative_merge_impl_handles_append_fields() -> Result<()> {
     Ok(())
 }
 
-#[rstest]
-fn generate_declarative_merge_impl_handles_map_fields() -> Result<()> {
-    let state_ident = parse_ident("__SampleDeclarativeMergeState")?;
-    let config_ident = parse_ident("Sample")?;
-    let strategies = CollectionStrategies {
+fn map_only_strategies() -> Result<CollectionStrategies> {
+    Ok(CollectionStrategies {
         append: Vec::new(),
         map_replace: vec![(
             parse_ident("rules")?,
             parse_type("std::collections::BTreeMap<String, u32>")?,
         )],
-    };
-    let norm = generate_declarative_merge_impl(&state_ident, &config_ident, &strategies)
-        .to_string()
-        .replace(" :: ", "::")
-        .replace(' ', "");
-    ensure!(
-        norm.contains("replace_rules"),
-        "expected replace_rules merge logic",
-    );
-    ensure!(
-        norm.contains("serde_json::Map::new"),
-        "expected map initialisation",
-    );
-    Ok(())
+    })
 }
 
-#[rstest]
-fn generate_declarative_merge_impl_handles_mixed_fields() -> Result<()> {
-    let state_ident = parse_ident("__SampleDeclarativeMergeState")?;
-    let config_ident = parse_ident("Sample")?;
-    let strategies = CollectionStrategies {
+fn mixed_strategies() -> Result<CollectionStrategies> {
+    Ok(CollectionStrategies {
         append: vec![(parse_ident("items")?, parse_type("String")?)],
         map_replace: vec![(
             parse_ident("rules")?,
             parse_type("std::collections::BTreeMap<String, u32>")?,
         )],
-    };
+    })
+}
+
+#[rstest]
+#[case(
+    map_only_strategies as fn() -> Result<CollectionStrategies>,
+    vec!["replace_rules", "serde_json::Map::new"],
+    None,
+)]
+#[case(
+    mixed_strategies as fn() -> Result<CollectionStrategies>,
+    vec!["replace_rules", "append_items", "serde_json::Map::new"],
+    Some(("replace_rules", "append_items")),
+)]
+fn generate_declarative_merge_impl_handles_map_fields(
+    #[case] strategies_fn: fn() -> Result<CollectionStrategies>,
+    #[case] expected_tokens: Vec<&'static str>,
+    #[case] ordering: Option<(&'static str, &'static str)>,
+) -> Result<()> {
+    let state_ident = parse_ident("__SampleDeclarativeMergeState")?;
+    let config_ident = parse_ident("Sample")?;
+    let strategies = strategies_fn()?;
     let norm = generate_declarative_merge_impl(&state_ident, &config_ident, &strategies)
         .to_string()
         .replace(" :: ", "::")
         .replace(' ', "");
-    ensure!(
-        norm.contains("replace_rules"),
-        "expected replace merge logic",
-    );
-    ensure!(norm.contains("append_items"), "expected append merge logic",);
-    let replace_index = norm
-        .find("replace_rules")
-        .expect("replace merge logic should render");
-    let append_index = norm
-        .find("append_items")
-        .expect("append merge logic should render");
-    ensure!(
-        replace_index < append_index,
-        "replace logic must precede append logic",
-    );
+    for token in expected_tokens {
+        ensure!(norm.contains(token), "expected merge logic for {token}",);
+    }
+    if let Some((first, second)) = ordering {
+        let first_index = norm.find(first).expect("first merge logic should render");
+        let second_index = norm.find(second).expect("second merge logic should render");
+        ensure!(
+            first_index < second_index,
+            "expected {first} logic before {second}",
+        );
+    }
     Ok(())
 }
 

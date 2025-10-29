@@ -78,7 +78,10 @@ struct LoadTokenRefs<'a> {
     env_provider: &'a proc_macro2::TokenStream,
     default_struct_init: &'a [proc_macro2::TokenStream],
     override_init_ts: &'a proc_macro2::TokenStream,
+    /// Tokens executed before Figment merge to capture high-precedence
+    /// collections.
     collection_pre_merge: &'a proc_macro2::TokenStream,
+    /// Tokens executed after extraction to re-apply high-precedence collections.
     collection_post_extract: &'a proc_macro2::TokenStream,
     config_env_var: &'a proc_macro2::TokenStream,
     dotfile_name: &'a syn::LitStr,
