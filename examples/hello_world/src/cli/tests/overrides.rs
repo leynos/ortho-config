@@ -11,6 +11,7 @@ use anyhow::{Result, ensure};
 use camino::Utf8PathBuf;
 use ortho_config::figment;
 use rstest::rstest;
+use std::path::Path;
 
 #[rstest]
 fn load_global_config_applies_overrides() -> Result<()> {
@@ -30,6 +31,20 @@ fn load_global_config_applies_overrides() -> Result<()> {
     ensure!(
         config.trimmed_salutations() == vec!["Hi".to_owned()],
         "unexpected salutations"
+    );
+    Ok(())
+}
+
+#[rstest]
+fn load_global_config_trims_cli_salutations() -> Result<()> {
+    let cli = parse_command_line(&["-s", "  Hello  ", "greet"])?;
+    let config = with_jail(|jail| {
+        jail.clear_env();
+        load_global_config(&cli.globals, None).map_err(figment_error)
+    })?;
+    ensure!(
+        config.salutations == vec!["Hello".to_owned()],
+        "expected trimmed salutation overrides",
     );
     Ok(())
 }
@@ -89,6 +104,62 @@ fn load_config_overrides_returns_none_without_files() -> Result<()> {
         Ok(())
     })?;
     ensure!(overrides.is_none(), "expected overrides to be absent");
+    Ok(())
+}
+
+#[rstest]
+fn load_global_config_prefers_cli_excited_flag() -> Result<()> {
+    let cli = parse_command_line(&["--is-excited", "greet"])?;
+    let config = with_jail(|jail| {
+        jail.clear_env();
+        jail.create_file(".hello_world.toml", "is_excited = false")?;
+        load_global_config(&cli.globals, None).map_err(figment_error)
+    })?;
+    ensure!(
+        config.is_excited,
+        "cli excited flag should override file value"
+    );
+    Ok(())
+}
+
+#[cfg(feature = "yaml")]
+#[rstest]
+fn load_yaml_config_activates_excited_flag() -> Result<()> {
+    let cli = parse_command_line(&["--config", "canonical.yaml", "greet"])?;
+    let config = with_jail(|jail| {
+        jail.clear_env();
+        jail.create_file("canonical.yaml", "is_excited: true")?;
+        if let Some(fig) = ortho_config::load_config_file(std::path::Path::new("canonical.yaml"))
+            .map_err(figment_error)?
+        {
+            let is_excited: bool = fig.extract_inner("is_excited").map_err(figment_error)?;
+            if !is_excited {
+                return Err(figment::Error::from(
+                    "expected canonical bool to parse as true",
+                ));
+            }
+        } else {
+            return Err(figment::Error::from("missing canonical.yaml"));
+        }
+        load_global_config(&cli.globals, cli.config_path.as_deref()).map_err(figment_error)
+    })?;
+    ensure!(config.is_excited, "expected excited configuration");
+    Ok(())
+}
+
+#[rstest]
+fn load_global_config_uses_explicit_override_file() -> Result<()> {
+    let cli = parse_command_line(&["greet"])?;
+    let config = with_jail(|jail| {
+        jail.clear_env();
+        jail.create_file(".hello_world.toml", "is_excited = false")?;
+        jail.create_file("override.toml", "is_excited = true")?;
+        load_global_config(&cli.globals, Some(Path::new("override.toml"))).map_err(figment_error)
+    })?;
+    ensure!(
+        config.is_excited,
+        "explicit override path should take precedence"
+    );
     Ok(())
 }
 

@@ -175,9 +175,10 @@ ortho_config = { version = "0.5.0", features = ["json5", "yaml"] }
 
 When the `yaml` feature is enabled, configuration files are parsed with
 `serde-saphyr` configured for YAML 1.2 semantics. The provider enables
-`Options::strict_booleans` so literals such as `yes`, `on`, or `off` remain
-strings, and duplicate mapping keys raise errors instead of being silently
-ignored.
+`Options::strict_booleans` so YAML 1.1 legacy literals such as `yes`, `on`, or
+`off` remain strings, while canonical booleans (`true`, `false`) continue to
+parse as booleans. Duplicate mapping keys raise errors instead of being
+silently ignored.
 
 ### Error interop helpers
 
