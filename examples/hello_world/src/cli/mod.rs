@@ -393,6 +393,11 @@ fn trimmed_salutations(globals: &GlobalArgs) -> Option<Vec<String>> {
     })
 }
 
+/// Resolves the `is_excited` value from configuration sources with priority fallback.
+///
+/// Attempts to extract the value from `config_override` first. If that source is absent,
+/// invalid, or parsing fails, falls back to the value in `file_overrides`. Returns `None`
+/// only if both sources are absent or yield no value.
 fn file_excited_value(
     file_overrides: Option<&FileOverrides>,
     config_override: Option<&Path>,
