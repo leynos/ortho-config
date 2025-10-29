@@ -6,14 +6,14 @@ use rstest::rstest;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
+#[path = "test_utils.rs"]
+mod test_utils;
+use test_utils::with_jail;
+
 /// Helper to load a config and convert figment errors to anyhow errors.
 fn load_config<T: OrthoConfig>(args: &[&str]) -> Result<T> {
     T::load_from_iter(args).map_err(|err| anyhow!(err))
 }
-
-#[path = "test_utils.rs"]
-mod test_utils;
-use test_utils::with_jail;
 
 #[derive(Debug, Deserialize, Serialize, OrthoConfig)]
 struct VecConfig {

@@ -274,29 +274,55 @@ fn build_map_state_tokens(strategies: &CollectionStrategies) -> Option<proc_macr
     })
 }
 
+fn build_optional_figment_extract(
+    figment_binding: &proc_macro2::TokenStream,
+    name: &Ident,
+    ty: &Type,
+    state_field: &proc_macro2::TokenStream,
+) -> proc_macro2::TokenStream {
+    quote! {
+        if let Some(f) = #figment_binding {
+            if let Ok(v) = f.extract_inner::<#ty>(stringify!(#name)) {
+                if !v.is_empty() {
+                    #state_field = Some(v);
+                }
+            }
+        }
+    }
+}
+
+fn build_direct_figment_extract(
+    figment_binding: &proc_macro2::TokenStream,
+    name: &Ident,
+    ty: &Type,
+    state_field: &proc_macro2::TokenStream,
+) -> proc_macro2::TokenStream {
+    quote! {
+        if let Ok(v) = #figment_binding.extract_inner::<#ty>(stringify!(#name)) {
+            if !v.is_empty() {
+                #state_field = Some(v);
+            }
+        }
+    }
+}
+
 fn build_map_merge_blocks(strategies: &CollectionStrategies) -> Vec<proc_macro2::TokenStream> {
     strategies
         .map_replace
         .iter()
         .map(|(name, ty)| {
+            let state_field = quote! { replace.#name };
+            let file_binding = quote! { &file_fig };
+            let env_binding = quote! { env_figment };
+            let cli_binding = quote! { cli_figment };
+            let file_extract =
+                build_optional_figment_extract(&file_binding, name, ty, &state_field);
+            let env_extract = build_direct_figment_extract(&env_binding, name, ty, &state_field);
+            let cli_extract = build_direct_figment_extract(&cli_binding, name, ty, &state_field);
             quote! {
-                if let Some(f) = &file_fig {
-                    if let Ok(v) = f.extract_inner::<#ty>(stringify!(#name)) {
-                        if !v.is_empty() {
-                            replace.#name = Some(v);
-                        }
-                    }
-                }
-                if let Ok(v) = env_figment.extract_inner::<#ty>(stringify!(#name)) {
-                    if !v.is_empty() {
-                        replace.#name = Some(v);
-                    }
-                }
-                if let Ok(v) = cli_figment.extract_inner::<#ty>(stringify!(#name)) {
-                    if !v.is_empty() {
-                        replace.#name = Some(v);
-                    }
-                }
+                #file_extract
+                #env_extract
+                #cli_extract
             }
         })
         .collect()

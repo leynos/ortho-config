@@ -11,12 +11,16 @@ type DemoInput = (Vec<syn::Field>, Vec<FieldAttrs>, StructAttrs);
 
 /// Assert that collecting strategies for the provided input emits the expected
 /// validation error.
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "the helper signature must own the input to satisfy the review request"
+)]
 fn assert_collection_strategy_error(
-    input: &syn::DeriveInput,
+    input: syn::DeriveInput,
     expected_error_substring: &str,
     context: &str,
 ) -> Result<()> {
-    let (_, fields, _, field_attrs) = parse_input(input)?;
+    let (_, fields, _, field_attrs) = parse_input(&input)?;
     let result = collect_collection_strategies(&fields, &field_attrs);
     let Err(err) = result else {
         return Err(anyhow!("{context}"));
@@ -126,7 +130,7 @@ fn collect_collection_strategies_errors_on_invalid_usage() -> Result<()> {
         }
     };
     assert_collection_strategy_error(
-        &input,
+        input,
         "merge_strategy is only supported on Vec<_> or BTreeMap<_, _> fields",
         "expected strategy validation to fail",
     )
@@ -141,7 +145,7 @@ fn collect_collection_strategies_rejects_keyed_on_vec() -> Result<()> {
         }
     };
     assert_collection_strategy_error(
-        &input,
+        input,
         "keyed merge strategy is not supported for Vec<_> fields",
         "expected keyed strategy on Vec to be rejected",
     )
@@ -156,7 +160,7 @@ fn collect_collection_strategies_rejects_append_on_btreemap() -> Result<()> {
         }
     };
     assert_collection_strategy_error(
-        &input,
+        input,
         "append merge strategy is not supported for BTreeMap fields",
         "expected append strategy on BTreeMap to be rejected",
     )
