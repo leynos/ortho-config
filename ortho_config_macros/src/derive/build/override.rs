@@ -8,6 +8,19 @@ use syn::{Ident, Type};
 
 use crate::derive::parse::{FieldAttrs, MergeStrategy, vec_inner};
 
+/// Identifies whether a field participates in append merging and extracts its element type.
+///
+/// The function inspects the field's merge strategy, defaulting to `Append` when no attribute
+/// is supplied so plain `Vec<_>` fields still opt into vector merging. It attempts to peel the
+/// inner type via `vec_inner` and returns `Ok(Some((name, inner_ty)))` when the effective
+/// strategy is `Append` and the field is a `Vec<_>`. For non-append strategies or non-vector
+/// fields it returns `Ok(None)` so callers can skip the field.
+///
+/// The explicit merge strategy distinction exists to surface configuration bugs: a field that
+/// *explicitly* requests `Append` must be a vector, otherwise the function raises an error.
+/// When the strategy is only *implicitly* `Append` (because no attribute was provided) the code
+/// treats non-`Vec` fields as unsupported but benign by returning `Ok(None)`, avoiding false
+/// positives for non-vector fields that simply rely on the default strategy.
 fn process_vec_field(field: &syn::Field, attrs: &FieldAttrs) -> syn::Result<Option<(Ident, Type)>> {
     let Some(name) = field.ident.clone() else {
         return Err(syn::Error::new_spanned(
