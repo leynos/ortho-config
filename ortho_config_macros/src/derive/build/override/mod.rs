@@ -274,35 +274,55 @@ fn build_map_state_tokens(strategies: &CollectionStrategies) -> Option<proc_macr
     })
 }
 
+/// Context for extracting a collection field value from a figment source.
+struct ExtractContext<'a> {
+    name: &'a Ident,
+    ty: &'a Type,
+    state_field: proc_macro2::TokenStream,
+}
+
+/// Generate tokens for extracting a value and assigning it if non-empty.
+fn build_inner_extract(
+    figment_expr: &proc_macro2::TokenStream,
+    context: &ExtractContext<'_>,
+) -> proc_macro2::TokenStream {
+    let name = context.name;
+    let ty = context.ty;
+    let state_field = &context.state_field;
+    quote! {
+        if let Ok(v) = #figment_expr.extract_inner::<#ty>(stringify!(#name)) {
+            if !v.is_empty() {
+                #state_field = Some(v);
+            }
+        }
+    }
+}
+
 #[expect(
-    clippy::too_many_arguments,
-    reason = "the review request requires these parameters explicitly"
+    clippy::needless_pass_by_value,
+    reason = "the review request specifies an owned extractor expression",
 )]
+fn build_extraction_check(
+    extractor_expr: proc_macro2::TokenStream,
+    context: &ExtractContext<'_>,
+) -> proc_macro2::TokenStream {
+    build_inner_extract(&extractor_expr, context)
+}
+
 fn build_figment_extract(
     figment_binding: &proc_macro2::TokenStream,
-    name: &Ident,
-    ty: &Type,
-    state_field: &proc_macro2::TokenStream,
+    context: &ExtractContext<'_>,
     is_optional: bool,
 ) -> proc_macro2::TokenStream {
     if is_optional {
+        let inner = build_extraction_check(quote! { f }, context);
         quote! {
             if let Some(f) = #figment_binding {
-                if let Ok(v) = f.extract_inner::<#ty>(stringify!(#name)) {
-                    if !v.is_empty() {
-                        #state_field = Some(v);
-                    }
-                }
+                #inner
             }
         }
     } else {
-        quote! {
-            if let Ok(v) = #figment_binding.extract_inner::<#ty>(stringify!(#name)) {
-                if !v.is_empty() {
-                    #state_field = Some(v);
-                }
-            }
-        }
+        build_extraction_check(figment_binding.clone(), context)
     }
 }
 
@@ -312,12 +332,17 @@ fn build_map_merge_blocks(strategies: &CollectionStrategies) -> Vec<proc_macro2:
         .iter()
         .map(|(name, ty)| {
             let state_field = quote! { replace.#name };
+            let context = ExtractContext {
+                name,
+                ty,
+                state_field,
+            };
             let file_binding = quote! { &file_fig };
             let env_binding = quote! { env_figment };
             let cli_binding = quote! { cli_figment };
-            let file_extract = build_figment_extract(&file_binding, name, ty, &state_field, true);
-            let env_extract = build_figment_extract(&env_binding, name, ty, &state_field, false);
-            let cli_extract = build_figment_extract(&cli_binding, name, ty, &state_field, false);
+            let file_extract = build_figment_extract(&file_binding, &context, true);
+            let env_extract = build_figment_extract(&env_binding, &context, false);
+            let cli_extract = build_figment_extract(&cli_binding, &context, false);
             quote! {
                 #file_extract
                 #env_extract
