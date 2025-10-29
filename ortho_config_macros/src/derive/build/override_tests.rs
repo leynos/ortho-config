@@ -9,6 +9,25 @@ use rstest::{fixture, rstest};
 /// Convenience type used across tests to avoid recomputing the derive input.
 type DemoInput = (Vec<syn::Field>, Vec<FieldAttrs>, StructAttrs);
 
+/// Assert that collecting strategies for the provided input emits the expected
+/// validation error.
+fn assert_collection_strategy_error(
+    input: &syn::DeriveInput,
+    expected_error_substring: &str,
+    context: &str,
+) -> Result<()> {
+    let (_, fields, _, field_attrs) = parse_input(input)?;
+    let result = collect_collection_strategies(&fields, &field_attrs);
+    let Err(err) = result else {
+        return Err(anyhow!("{context}"));
+    };
+    ensure!(
+        err.to_string().contains(expected_error_substring),
+        "unexpected error message: {err}",
+    );
+    Ok(())
+}
+
 #[fixture]
 fn demo_input() -> DemoInput {
     let input: syn::DeriveInput = syn::parse_quote! {
@@ -106,16 +125,11 @@ fn collect_collection_strategies_errors_on_invalid_usage() -> Result<()> {
             field1: u32,
         }
     };
-    let (_, fields, _, field_attrs) = parse_input(&input)?;
-    let Err(err) = collect_collection_strategies(&fields, &field_attrs) else {
-        return Err(anyhow!("expected strategy validation to fail"));
-    };
-    ensure!(
-        err.to_string()
-            .contains("merge_strategy is only supported on Vec<_> or BTreeMap<_, _> fields"),
-        "unexpected error: {err}",
-    );
-    Ok(())
+    assert_collection_strategy_error(
+        &input,
+        "merge_strategy is only supported on Vec<_> or BTreeMap<_, _> fields",
+        "expected strategy validation to fail",
+    )
 }
 
 #[test]
@@ -126,17 +140,11 @@ fn collect_collection_strategies_rejects_keyed_on_vec() -> Result<()> {
             items: Vec<String>,
         }
     };
-    let (_, fields, _, field_attrs) = parse_input(&input)?;
-    let result = collect_collection_strategies(&fields, &field_attrs);
-    let Err(err) = result else {
-        return Err(anyhow!("expected keyed strategy on Vec to be rejected"));
-    };
-    ensure!(
-        err.to_string()
-            .contains("keyed merge strategy is not supported for Vec<_> fields"),
-        "unexpected error message: {err}",
-    );
-    Ok(())
+    assert_collection_strategy_error(
+        &input,
+        "keyed merge strategy is not supported for Vec<_> fields",
+        "expected keyed strategy on Vec to be rejected",
+    )
 }
 
 #[test]
@@ -147,19 +155,11 @@ fn collect_collection_strategies_rejects_append_on_btreemap() -> Result<()> {
             settings: std::collections::BTreeMap<String, i32>,
         }
     };
-    let (_, fields, _, field_attrs) = parse_input(&input)?;
-    let result = collect_collection_strategies(&fields, &field_attrs);
-    let Err(err) = result else {
-        return Err(anyhow!(
-            "expected append strategy on BTreeMap to be rejected",
-        ));
-    };
-    ensure!(
-        err.to_string()
-            .contains("append merge strategy is not supported for BTreeMap fields"),
-        "unexpected error message: {err}",
-    );
-    Ok(())
+    assert_collection_strategy_error(
+        &input,
+        "append merge strategy is not supported for BTreeMap fields",
+        "expected append strategy on BTreeMap to be rejected",
+    )
 }
 
 #[test]
