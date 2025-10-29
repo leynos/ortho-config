@@ -811,6 +811,11 @@ mod tests {
     #[rstest]
     #[case(parse_quote!(std::collections::BTreeMap<String, u8>), parse_quote!(String), parse_quote!(u8))]
     #[case(parse_quote!(alloc::collections::BTreeMap<u16, (u8, u8)>), parse_quote!(u16), parse_quote!((u8, u8)))]
+    #[case(
+        parse_quote!(crate::collections::BTreeMap<String, Vec<Option<u8>>>),
+        parse_quote!(String),
+        parse_quote!(Vec<Option<u8>>),
+    )]
     fn btree_map_inner_matches_various_prefixes(
         #[case] ty: Type,
         #[case] expected_key: Type,
