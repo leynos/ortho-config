@@ -201,6 +201,7 @@ mod tests {
     use super::*;
     use crate::derive::parse::StructAttrs;
     use anyhow::{Result, anyhow, ensure};
+    use rstest::rstest;
 
     fn demo_input() -> Result<(Vec<syn::Field>, Vec<FieldAttrs>, StructAttrs)> {
         let input: syn::DeriveInput = syn::parse_quote! {
@@ -259,38 +260,44 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    fn process_vec_field_identifies_append_vec() -> Result<()> {
-        let (fields, field_attrs, _) = demo_input()?;
-        let field = fields
-            .get(1)
-            .ok_or_else(|| anyhow!("missing append field"))?;
-        let attrs = field_attrs
-            .get(1)
-            .ok_or_else(|| anyhow!("missing append attributes"))?;
-        let result = process_vec_field(field, attrs)?;
-        let (ident, ty) = result.ok_or_else(|| anyhow!("expected append strategy"))?;
-        ensure!(ident == "field2", "expected field2 append target");
-        ensure!(
-            ty == syn::parse_quote!(String),
-            "expected string vector element"
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn process_vec_field_skips_non_vec_without_append() -> Result<()> {
-        let input: syn::DeriveInput = syn::parse_quote! {
+    #[rstest]
+    #[case::identifies_append_vec(
+        syn::parse_quote! {
+            struct Demo {
+                #[ortho_config(merge_strategy = "append")]
+                field2: Vec<String>,
+            }
+        },
+        true,
+        "field2",
+        syn::parse_quote!(String),
+    )]
+    #[case::skips_non_vec_without_append(
+        syn::parse_quote! {
             struct DemoSkip {
                 field: Option<String>,
             }
-        };
-        let (field, attrs) = setup_single_field_test(&input, "replace")?;
+        },
+        false,
+        "",
+        syn::parse_quote!(()),
+    )]
+    fn process_vec_field_behaviour(
+        #[case] input: syn::DeriveInput,
+        #[case] expect_some: bool,
+        #[case] expected_ident: &str,
+        #[case] expected_ty: syn::Type,
+    ) -> Result<()> {
+        let (field, attrs) = setup_single_field_test(&input, "test")?;
         let result = process_vec_field(&field, &attrs)?;
-        ensure!(
-            result.is_none(),
-            "non-Vec fields without append should be ignored"
-        );
+
+        if expect_some {
+            let (ident, ty) = result.ok_or_else(|| anyhow!("expected Some"))?;
+            ensure!(ident == expected_ident, "unexpected append target");
+            ensure!(ty == expected_ty, "unexpected element type");
+        } else {
+            ensure!(result.is_none(), "expected process_vec_field to skip field");
+        }
         Ok(())
     }
 
