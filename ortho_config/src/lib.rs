@@ -39,8 +39,12 @@ pub mod file;
 mod merge;
 mod result_ext;
 pub mod subcommand;
+#[cfg(feature = "serde_json")]
+#[cfg_attr(docsrs, doc(cfg(feature = "serde_json")))]
 pub use crate::subcommand::SubcmdConfigMerge;
 pub use result_ext::{IntoFigmentError, OrthoMergeExt, OrthoResultExt, ResultIntoFigment};
+#[cfg(feature = "serde_json")]
+#[cfg_attr(docsrs, doc(cfg(feature = "serde_json")))]
 pub use subcommand::{load_and_merge_subcommand, load_and_merge_subcommand_for};
 
 /// Normalize a prefix by trimming trailing underscores and converting
