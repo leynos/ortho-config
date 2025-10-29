@@ -231,6 +231,70 @@ mod tests {
     }
 
     #[test]
+    fn process_vec_field_identifies_append_vec() -> Result<()> {
+        let (fields, field_attrs, _) = demo_input()?;
+        let field = fields
+            .get(1)
+            .ok_or_else(|| anyhow!("missing append field"))?;
+        let attrs = field_attrs
+            .get(1)
+            .ok_or_else(|| anyhow!("missing append attributes"))?;
+        let result = process_vec_field(field, attrs)?;
+        let (ident, ty) = result.ok_or_else(|| anyhow!("expected append strategy"))?;
+        ensure!(ident == "field2", "expected field2 append target");
+        ensure!(
+            ty == syn::parse_quote!(String),
+            "expected string vector element"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn process_vec_field_skips_non_vec_without_append() -> Result<()> {
+        let input: syn::DeriveInput = syn::parse_quote! {
+            struct DemoSkip {
+                field: Option<String>,
+            }
+        };
+        let (_, fields, _, field_attrs) = crate::derive::parse::parse_input(&input)?;
+        let field = fields
+            .first()
+            .ok_or_else(|| anyhow!("missing replace field"))?;
+        let attrs = field_attrs
+            .first()
+            .ok_or_else(|| anyhow!("missing replace attributes"))?;
+        let result = process_vec_field(field, attrs)?;
+        ensure!(
+            result.is_none(),
+            "non-Vec fields without append should be ignored"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn process_vec_field_errors_when_append_without_vec() -> Result<()> {
+        let input: syn::DeriveInput = syn::parse_quote! {
+            struct DemoInvalid {
+                #[ortho_config(merge_strategy = "append")]
+                field: Option<String>,
+            }
+        };
+        let (_, fields, _, field_attrs) = crate::derive::parse::parse_input(&input)?;
+        let field = fields
+            .first()
+            .ok_or_else(|| anyhow!("missing invalid field"))?;
+        let attrs = field_attrs
+            .first()
+            .ok_or_else(|| anyhow!("missing invalid attributes"))?;
+        let err = process_vec_field(field, attrs).expect_err("append requires Vec field");
+        ensure!(
+            err.to_string().contains("requires a Vec<_> field"),
+            "unexpected error: {err:?}"
+        );
+        Ok(())
+    }
+
+    #[test]
     fn collect_append_fields_errors_on_non_vec_append() -> Result<()> {
         let input: syn::DeriveInput = syn::parse_quote! {
             struct DemoAppendError {

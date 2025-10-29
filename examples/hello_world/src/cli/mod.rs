@@ -397,21 +397,13 @@ fn file_excited_value(
     file_overrides: Option<&FileOverrides>,
     config_override: Option<&Path>,
 ) -> Option<bool> {
-    fn file_default(file_overrides: Option<&FileOverrides>) -> Option<bool> {
-        file_overrides.and_then(|file| file.is_excited)
-    }
-
-    config_override.map_or_else(
-        || file_default(file_overrides),
-        |path| {
+    config_override
+        .and_then(|path| {
             ortho_config::load_config_file(path)
-                .ok()
-                .and_then(|maybe_fig| {
-                    maybe_fig.and_then(|fig| fig.extract_inner::<bool>("is_excited").ok())
-                })
-                .or_else(|| file_default(file_overrides))
-        },
-    )
+                .ok()?
+                .and_then(|fig| fig.extract_inner::<bool>("is_excited").ok())
+        })
+        .or_else(|| file_overrides.and_then(|file| file.is_excited))
 }
 
 fn load_config_overrides() -> Result<Option<FileOverrides>, HelloWorldError> {
