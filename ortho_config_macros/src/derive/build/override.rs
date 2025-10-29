@@ -203,6 +203,22 @@ mod tests {
         Ok((fields, field_attrs, struct_attrs))
     }
 
+    fn setup_single_field_test(
+        input: &syn::DeriveInput,
+        description: &str,
+    ) -> Result<(syn::Field, FieldAttrs)> {
+        let (_, fields, _, field_attrs) = crate::derive::parse::parse_input(input)?;
+        let field = fields
+            .first()
+            .cloned()
+            .ok_or_else(|| anyhow!("missing {description} field"))?;
+        let attrs = field_attrs
+            .first()
+            .cloned()
+            .ok_or_else(|| anyhow!("missing {description} attributes"))?;
+        Ok((field, attrs))
+    }
+
     #[test]
     fn collect_append_fields_selects_vec_fields() -> Result<()> {
         let (fields, field_attrs, _) = demo_input()?;
@@ -256,14 +272,8 @@ mod tests {
                 field: Option<String>,
             }
         };
-        let (_, fields, _, field_attrs) = crate::derive::parse::parse_input(&input)?;
-        let field = fields
-            .first()
-            .ok_or_else(|| anyhow!("missing replace field"))?;
-        let attrs = field_attrs
-            .first()
-            .ok_or_else(|| anyhow!("missing replace attributes"))?;
-        let result = process_vec_field(field, attrs)?;
+        let (field, attrs) = setup_single_field_test(&input, "replace")?;
+        let result = process_vec_field(&field, &attrs)?;
         ensure!(
             result.is_none(),
             "non-Vec fields without append should be ignored"
@@ -279,14 +289,8 @@ mod tests {
                 field: Option<String>,
             }
         };
-        let (_, fields, _, field_attrs) = crate::derive::parse::parse_input(&input)?;
-        let field = fields
-            .first()
-            .ok_or_else(|| anyhow!("missing invalid field"))?;
-        let attrs = field_attrs
-            .first()
-            .ok_or_else(|| anyhow!("missing invalid attributes"))?;
-        let err = process_vec_field(field, attrs).expect_err("append requires Vec field");
+        let (field, attrs) = setup_single_field_test(&input, "invalid")?;
+        let err = process_vec_field(&field, &attrs).expect_err("append requires Vec field");
         ensure!(
             err.to_string().contains("requires a Vec<_> field"),
             "unexpected error: {err:?}"
