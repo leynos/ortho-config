@@ -21,13 +21,11 @@ fn process_vec_field(
     name: Ident,
     vec_ty: &Type,
     attrs: &FieldAttrs,
-) -> syn::Result<Option<(Ident, Type, bool)>> {
+) -> syn::Result<Option<(Ident, Type)>> {
     let strategy = attrs.merge_strategy.unwrap_or(MergeStrategy::Append);
-    let is_append = matches!(strategy, MergeStrategy::Append);
     match strategy {
-        MergeStrategy::Append | MergeStrategy::Replace => {
-            Ok(Some((name, (*vec_ty).clone(), is_append)))
-        }
+        MergeStrategy::Append => Ok(Some((name, (*vec_ty).clone()))),
+        MergeStrategy::Replace => Ok(None),
         MergeStrategy::Keyed => Err(syn::Error::new_spanned(
             field,
             "keyed merge strategy is not supported for Vec<_> fields",
@@ -71,7 +69,7 @@ fn validate_non_collection_field(field: &syn::Field, attrs: &FieldAttrs) -> syn:
 ///
 /// # Examples
 ///
-/// ```rust,ignore
+/// ```rust,no_run
 /// # use crate::derive::build::r#override::collect_collection_strategies;
 /// # use crate::derive::parse::parse_input;
 /// let input: syn::DeriveInput = syn::parse_quote! {
@@ -107,14 +105,11 @@ pub(crate) fn collect_collection_strategies(
             ));
         };
         if let Some(vec_ty) = vec_inner(&field.ty) {
-            let Some((vec_name, ty, is_append)) =
-                process_vec_field(field, name.clone(), vec_ty, attrs)?
+            let Some((vec_name, ty)) = process_vec_field(field, name.clone(), vec_ty, attrs)?
             else {
                 continue;
             };
-            if is_append {
-                strategies.append.push((vec_name, ty));
-            }
+            strategies.append.push((vec_name, ty));
             continue;
         }
 
@@ -142,7 +137,7 @@ pub(crate) fn collect_collection_strategies(
 ///
 /// # Examples
 ///
-/// ```rust,ignore
+/// ```rust,no_run
 /// # use crate::derive::build::r#override::{
 /// #     build_override_struct, collect_collection_strategies
 /// # };
@@ -212,7 +207,7 @@ pub(crate) fn build_override_struct(
 ///
 /// # Examples
 ///
-/// ```rust,ignore
+/// ```rust,no_run
 /// # use crate::derive::build::r#override::{
 /// #     build_collection_logic, collect_collection_strategies
 /// # };
@@ -287,14 +282,20 @@ fn build_map_merge_blocks(strategies: &CollectionStrategies) -> Vec<proc_macro2:
             quote! {
                 if let Some(f) = &file_fig {
                     if let Ok(v) = f.extract_inner::<#ty>(stringify!(#name)) {
-                        replace.#name = Some(v);
+                        if !v.is_empty() {
+                            replace.#name = Some(v);
+                        }
                     }
                 }
                 if let Ok(v) = env_figment.extract_inner::<#ty>(stringify!(#name)) {
-                    replace.#name = Some(v);
+                    if !v.is_empty() {
+                        replace.#name = Some(v);
+                    }
                 }
                 if let Ok(v) = cli_figment.extract_inner::<#ty>(stringify!(#name)) {
-                    replace.#name = Some(v);
+                    if !v.is_empty() {
+                        replace.#name = Some(v);
+                    }
                 }
             }
         })

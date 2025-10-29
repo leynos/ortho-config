@@ -69,6 +69,20 @@ fn build_collection_logic_includes_map_assignment(demo_input: DemoInput) -> Resu
 }
 
 #[rstest]
+fn build_collection_logic_skips_empty_maps(demo_input: DemoInput) -> Result<()> {
+    let (fields, field_attrs, _) = demo_input;
+    let strategies = collect_collection_strategies(&fields, &field_attrs)?;
+    let tokens = build_collection_logic(&strategies, &quote!(std::option::Option::<&()>::None));
+    let pre_merge = tokens.pre_merge.to_string();
+    let guard_count = pre_merge.matches("! v . is_empty ()").count();
+    ensure!(
+        guard_count >= 3,
+        "expected is_empty guard for each figment source, found {guard_count}"
+    );
+    Ok(())
+}
+
+#[rstest]
 fn build_override_struct_creates_struct(demo_input: DemoInput) -> Result<()> {
     let (fields, field_attrs, _) = demo_input;
     let strategies = collect_collection_strategies(&fields, &field_attrs)?;
