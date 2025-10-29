@@ -253,12 +253,21 @@ When a struct applies the new `#[ortho_config(discovery(...))]` attribute the
 derive macro feeds the builder and adopts its output. Callers can therefore
 rename the generated CLI flag, expose a short alias, or change the default
 filenames used during discovery without introducing custom glue code. The
-attribute mirrors the builder surface (`app_name`, `env_var`,
-`config_file_name`, `dotfile_name`, `project_file_name`, `config_cli_long`,
-`config_cli_short`, and `config_cli_visible`) while retaining the previous
-defaults when omitted. Behavioural tests in the `hello_world` example exercise
-the new `--config`/`-c` flags alongside the environment overrides to confirm
-the precedence order is preserved.
+attribute mirrors the builder surface and lists:
+
+- `app_name`
+- `env_var`
+- `config_file_name`
+- `dotfile_name`
+- `project_file_name`
+- `config_cli_long`
+- `config_cli_short`
+- `config_cli_visible`
+
+It retains the previous defaults when callers omit these properties.
+Behavioural tests in the `hello_world` example exercise the new `--config`/`-c`
+flags alongside the environment overrides to confirm the precedence order is
+preserved.
 
 `ConfigDiscovery::load_first` delegates to `load_config_file`, short-circuiting
 once a readable file is found. Failed reads are skipped so later candidates can
