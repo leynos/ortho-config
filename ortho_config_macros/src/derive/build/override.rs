@@ -8,6 +8,30 @@ use syn::{Ident, Type};
 
 use crate::derive::parse::{FieldAttrs, MergeStrategy, vec_inner};
 
+fn process_vec_field(field: &syn::Field, attrs: &FieldAttrs) -> syn::Result<Option<(Ident, Type)>> {
+    let Some(name) = field.ident.clone() else {
+        return Err(syn::Error::new_spanned(
+            field,
+            "unnamed (tuple) fields are not supported for append merge strategy",
+        ));
+    };
+    let strategy = attrs.merge_strategy.unwrap_or(MergeStrategy::Append);
+    let Some(vec_ty) = vec_inner(&field.ty) else {
+        if matches!(attrs.merge_strategy, Some(MergeStrategy::Append)) {
+            return Err(syn::Error::new_spanned(
+                field,
+                "append merge strategy requires a Vec<_> field",
+            ));
+        }
+        return Ok(None);
+    };
+    if strategy == MergeStrategy::Append {
+        Ok(Some((name, (*vec_ty).clone())))
+    } else {
+        Ok(None)
+    }
+}
+
 /// Collects fields that use the append merge strategy.
 ///
 /// Walks the parsed struct, capturing each named `Vec<_>` field configured with
@@ -44,24 +68,8 @@ pub(crate) fn collect_append_fields(
 ) -> syn::Result<Vec<(Ident, Type)>> {
     let mut append_fields = Vec::new();
     for (field, attrs) in fields.iter().zip(field_attrs) {
-        let Some(name) = field.ident.clone() else {
-            return Err(syn::Error::new_spanned(
-                field,
-                "unnamed (tuple) fields are not supported for append merge strategy",
-            ));
-        };
-        let strategy = attrs.merge_strategy.unwrap_or(MergeStrategy::Append);
-        let Some(vec_ty) = vec_inner(&field.ty) else {
-            if matches!(attrs.merge_strategy, Some(MergeStrategy::Append)) {
-                return Err(syn::Error::new_spanned(
-                    field,
-                    "append merge strategy requires a Vec<_> field",
-                ));
-            }
-            continue;
-        };
-        if strategy == MergeStrategy::Append {
-            append_fields.push((name, (*vec_ty).clone()));
+        if let Some(strategy) = process_vec_field(field, attrs)? {
+            append_fields.push(strategy);
         }
     }
     Ok(append_fields)

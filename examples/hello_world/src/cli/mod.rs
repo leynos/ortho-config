@@ -42,6 +42,14 @@ pub struct CommandLine {
     pub command: Commands,
 }
 
+#[expect(
+    clippy::trivially_copy_pass_by_ref,
+    reason = "serde skip hooks receive references to field values"
+)]
+const fn is_false(value: &bool) -> bool {
+    !*value
+}
+
 /// CLI overrides for the global greeting options.
 #[derive(Debug, Default, Clone, PartialEq, Eq, Args, Deserialize, Serialize, OrthoConfig)]
 #[ortho_config(prefix = "HELLO_WORLD")]
@@ -61,10 +69,12 @@ pub struct GlobalArgs {
     pub salutations: Vec<String>,
     /// Enables an enthusiastic delivery mode from the CLI.
     #[arg(long = "is-excited", action = ArgAction::SetTrue, id = "is_excited")]
+    #[serde(skip_serializing_if = "crate::cli::is_false")]
     #[ortho_config(default = false)]
     pub is_excited: bool,
     /// Enables a quiet delivery mode from the CLI.
     #[arg(long = "is-quiet", action = ArgAction::SetTrue, id = "is_quiet")]
+    #[serde(skip_serializing_if = "crate::cli::is_false")]
     #[ortho_config(default = false)]
     pub is_quiet: bool,
 }
@@ -292,6 +302,24 @@ impl FarewellChannel {
     }
 }
 
+#[derive(Serialize)]
+struct Overrides<'a> {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    recipient: Option<&'a String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    salutations: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    is_excited: Option<bool>,
+    #[serde(skip_serializing_if = "crate::cli::is_false")]
+    is_quiet: bool,
+}
+
+#[derive(Serialize)]
+struct FileLayer {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    is_excited: Option<bool>,
+}
+
 /// Resolves the global configuration by layering defaults with CLI overrides.
 ///
 /// # Errors
@@ -302,51 +330,16 @@ pub fn load_global_config(
     globals: &GlobalArgs,
     config_override: Option<&Path>,
 ) -> Result<HelloWorldCli, HelloWorldError> {
-    #[derive(Serialize)]
-    struct Overrides<'a> {
-        #[serde(skip_serializing_if = "Option::is_none")]
-        recipient: Option<&'a String>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        salutations: Option<Vec<String>>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        is_excited: Option<bool>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        is_quiet: Option<bool>,
-    }
-
-    #[derive(Serialize)]
-    struct FileLayer {
-        #[serde(skip_serializing_if = "Option::is_none")]
-        is_excited: Option<bool>,
-    }
-
-    let binary = std::env::args_os()
-        .next()
-        .unwrap_or_else(|| OsString::from("hello-world"));
-    let mut args = vec![binary];
-    if let Some(path) = config_override {
-        args.push(OsString::from("--config"));
-        args.push(path.as_os_str().to_os_string());
-    }
-    let base = HelloWorldCli::load_from_iter(args.into_iter())?;
-    let salutations = if globals.salutations.is_empty() {
-        None
-    } else {
-        Some(
-            globals
-                .salutations
-                .iter()
-                .map(|value| value.trim().to_owned())
-                .collect(),
-        )
-    };
-    let overrides = Overrides {
-        recipient: globals.recipient.as_ref(),
-        salutations,
-        is_excited: globals.is_excited.then_some(true),
-        is_quiet: globals.is_quiet.then_some(true),
-    };
+    let base = HelloWorldCli::load_from_iter(build_cli_args(config_override).into_iter())?;
+    let salutations = trimmed_salutations(globals);
     let file_overrides = load_config_overrides()?;
+    let overrides = build_overrides(
+        globals,
+        salutations,
+        file_overrides.as_ref(),
+        config_override,
+    );
+
     let mut figment = ortho_config::figment::Figment::from(
         ortho_config::figment::providers::Serialized::defaults(&base),
     );
@@ -361,6 +354,64 @@ pub fn load_global_config(
     let merged = figment.extract::<HelloWorldCli>().into_ortho_merge()?;
     merged.validate()?;
     Ok(merged)
+}
+
+fn build_overrides<'a>(
+    globals: &'a GlobalArgs,
+    salutations: Option<Vec<String>>,
+    file_overrides: Option<&FileOverrides>,
+    config_override: Option<&Path>,
+) -> Overrides<'a> {
+    let file_is_excited = file_excited_value(file_overrides, config_override);
+    Overrides {
+        recipient: globals.recipient.as_ref(),
+        salutations,
+        is_excited: globals.is_excited.then_some(true).or(file_is_excited),
+        is_quiet: globals.is_quiet,
+    }
+}
+
+fn build_cli_args(config_override: Option<&Path>) -> Vec<OsString> {
+    let binary = std::env::args_os()
+        .next()
+        .unwrap_or_else(|| OsString::from("hello-world"));
+    let mut args = vec![binary];
+    if let Some(path) = config_override {
+        args.push(OsString::from("--config"));
+        args.push(path.as_os_str().to_os_string());
+    }
+    args
+}
+
+fn trimmed_salutations(globals: &GlobalArgs) -> Option<Vec<String>> {
+    (!globals.salutations.is_empty()).then(|| {
+        globals
+            .salutations
+            .iter()
+            .map(|value| value.trim().to_owned())
+            .collect()
+    })
+}
+
+fn file_excited_value(
+    file_overrides: Option<&FileOverrides>,
+    config_override: Option<&Path>,
+) -> Option<bool> {
+    fn file_default(file_overrides: Option<&FileOverrides>) -> Option<bool> {
+        file_overrides.and_then(|file| file.is_excited)
+    }
+
+    config_override.map_or_else(
+        || file_default(file_overrides),
+        |path| {
+            ortho_config::load_config_file(path)
+                .ok()
+                .and_then(|maybe_fig| {
+                    maybe_fig.and_then(|fig| fig.extract_inner::<bool>("is_excited").ok())
+                })
+                .or_else(|| file_default(file_overrides))
+        },
+    )
 }
 
 fn load_config_overrides() -> Result<Option<FileOverrides>, HelloWorldError> {

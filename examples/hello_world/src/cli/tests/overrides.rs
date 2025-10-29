@@ -92,6 +92,31 @@ fn load_config_overrides_returns_none_without_files() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "yaml")]
+#[rstest]
+fn load_yaml_config_activates_excited_flag() -> Result<()> {
+    let cli = parse_command_line(&["--config", "canonical.yaml", "greet"])?;
+    let config = with_jail(|jail| {
+        jail.clear_env();
+        jail.create_file("canonical.yaml", "is_excited: true")?;
+        if let Some(fig) = ortho_config::load_config_file(std::path::Path::new("canonical.yaml"))
+            .map_err(figment_error)?
+        {
+            let is_excited: bool = fig.extract_inner("is_excited").map_err(figment_error)?;
+            if !is_excited {
+                return Err(figment::Error::from(
+                    "expected canonical bool to parse as true",
+                ));
+            }
+        } else {
+            return Err(figment::Error::from("missing canonical.yaml"));
+        }
+        load_global_config(&cli.globals, cli.config_path.as_deref()).map_err(figment_error)
+    })?;
+    ensure!(config.is_excited, "expected excited configuration");
+    Ok(())
+}
+
 #[cfg(unix)]
 #[rstest]
 fn load_config_overrides_uses_xdg_fallback() -> Result<()> {

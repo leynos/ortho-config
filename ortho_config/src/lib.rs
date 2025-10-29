@@ -6,10 +6,8 @@
 //! to layer configuration from the CLI, files and environment. The derive macro
 //! lives in the companion `ortho_config_macros` crate.
 
-#[cfg(not(feature = "serde_json"))]
-compile_error!(
-    "The `serde_json` feature must be enabled. Disable default features only if you re-enable `serde_json`."
-);
+#[cfg(all(feature = "yaml", not(feature = "serde_json")))]
+compile_error!("The `serde_json` feature must be enabled when `yaml` support is active.");
 
 pub use ortho_config_macros::OrthoConfig;
 
@@ -87,6 +85,7 @@ pub use file::load_config_file;
 /// # Ok(())
 /// # }
 /// ```
+#[cfg(feature = "serde_json")]
 pub use merge::{sanitize_value, sanitized_provider, value_without_nones};
 use std::sync::Arc;
 

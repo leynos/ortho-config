@@ -237,6 +237,7 @@ impl OrthoError {
 
 /// Convert JSON encoding or decoding failures into
 /// [`OrthoError::Gathering`].
+#[cfg(feature = "serde_json")]
 impl From<serde_json::Error> for OrthoError {
     fn from(e: serde_json::Error) -> Self {
         Self::Gathering(Box::new(figment::Error::from(format!(

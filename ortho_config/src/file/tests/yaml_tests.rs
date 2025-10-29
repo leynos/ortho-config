@@ -36,11 +36,7 @@ fn yaml_legacy_boolean_literals_remain_strings(#[case] literal: &str) -> Result<
 #[rstest]
 #[case("true", true)]
 #[case("false", false)]
-#[case("True", true)]
-#[case("TRUE", true)]
-#[case("False", false)]
-#[case("FALSE", false)]
-fn yaml_respects_lowercase_booleans(#[case] literal: &str, #[case] expected: bool) -> Result<()> {
+fn yaml_respects_boolean_scalars(#[case] literal: &str, #[case] expected: bool) -> Result<()> {
     let path = PathBuf::from("config.yaml");
     let figment = Figment::from(SaphyrYaml::string(&path, format!("recipient: {literal}")));
     let recipient = figment

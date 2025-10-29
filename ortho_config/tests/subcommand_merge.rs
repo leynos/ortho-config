@@ -44,8 +44,14 @@ fn set_dir(dir: &TempDir) -> Result<DirGuard> {
     let old = std::env::current_dir().context("read current dir")?;
     // SAFETY: Process CWD is mutated while holding CWD_MUTEX to prevent races with other tests.
     std::env::set_current_dir(dir.path()).context("set current dir")?;
-    let old_utf8 = Utf8PathBuf::from_path_buf(old)
-        .map_err(|path| anyhow!("cwd is not valid UTF-8: {}", path.display()))?;
+    let old_utf8 = Utf8PathBuf::from_path_buf(old).map_err(|path| {
+        #[expect(
+            clippy::unnecessary_debug_formatting,
+            reason = "review requested debug formatting for path contexts"
+        )]
+        let debug_path = format!("{path:?}");
+        anyhow!("cwd is not valid UTF-8: {debug_path}")
+    })?;
     Ok(DirGuard {
         old: old_utf8,
         _lock: lock,
