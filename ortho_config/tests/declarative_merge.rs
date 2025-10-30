@@ -51,7 +51,7 @@ fn precedence_defaults() -> serde_json::Value {
     })
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct ExpectedDeclarativeSample {
     name: &'static str,
     count: u32,
@@ -63,104 +63,100 @@ const fn expected_sample(name: &'static str, count: u32, flag: bool) -> Expected
 }
 
 struct PrecedenceScenario {
+    label: &'static str,
     file: Option<serde_json::Value>,
     environment: Option<serde_json::Value>,
     cli: Option<serde_json::Value>,
     expected: ExpectedDeclarativeSample,
-}
-
-const fn precedence_case(
-    file: Option<serde_json::Value>,
-    environment: Option<serde_json::Value>,
-    cli: Option<serde_json::Value>,
-    expected: ExpectedDeclarativeSample,
-) -> PrecedenceScenario {
-    PrecedenceScenario {
-        file,
-        environment,
-        cli,
-        expected,
-    }
 }
 
 #[rstest]
-#[case::defaults_only(precedence_case(None, None, None, expected_sample("Default", 1, false)))]
-#[case::file_only(precedence_case(
-    Some(json!({"name": "File", "count": 2})),
-    None,
-    None,
-    expected_sample("File", 2, false),
-))]
-#[case::environment_only(precedence_case(
-    None,
-    Some(json!({"name": "Env", "count": 3, "flag": true})),
-    None,
-    expected_sample("Env", 3, true),
-))]
-#[case::cli_only(precedence_case(
-    None,
-    None,
-    Some(json!({"name": "Cli", "flag": true})),
-    expected_sample("Cli", 1, true),
-))]
-#[case::environment_over_file(precedence_case(
-    Some(json!({"name": "File", "count": 4})),
-    Some(json!({"name": "Env", "count": 6})),
-    None,
-    expected_sample("Env", 6, false),
-))]
-#[case::cli_overrides_file(precedence_case(
-    Some(json!({"name": "File", "count": 2, "flag": true})),
-    None,
-    Some(json!({"name": "Cli"})),
-    expected_sample("Cli", 2, true),
-))]
-#[case::cli_overrides_environment(precedence_case(
-    None,
-    Some(json!({"name": "Env", "count": 5, "flag": true})),
-    Some(json!({"count": 9})),
-    expected_sample("Env", 9, true),
-))]
-#[case::all_layers(precedence_case(
-    Some(json!({"name": "File", "count": 2, "flag": true})),
-    Some(json!({"name": "Env", "count": 7})),
-    Some(json!({"name": "Cli", "flag": false})),
-    expected_sample("Cli", 7, false),
-))]
+#[case::defaults_only(PrecedenceScenario {
+    label: "defaults_only",
+    file: None,
+    environment: None,
+    cli: None,
+    expected: expected_sample("Default", 1, false),
+})]
+#[case::file_only(PrecedenceScenario {
+    label: "file_only",
+    file: Some(json!({"name": "File", "count": 2})),
+    environment: None,
+    cli: None,
+    expected: expected_sample("File", 2, false),
+})]
+#[case::environment_only(PrecedenceScenario {
+    label: "environment_only",
+    file: None,
+    environment: Some(json!({"name": "Env", "count": 3, "flag": true})),
+    cli: None,
+    expected: expected_sample("Env", 3, true),
+})]
+#[case::cli_only(PrecedenceScenario {
+    label: "cli_only",
+    file: None,
+    environment: None,
+    cli: Some(json!({"name": "Cli", "flag": true})),
+    expected: expected_sample("Cli", 1, true),
+})]
+#[case::environment_over_file(PrecedenceScenario {
+    label: "environment_over_file",
+    file: Some(json!({"name": "File", "count": 4})),
+    environment: Some(json!({"name": "Env", "count": 6})),
+    cli: None,
+    expected: expected_sample("Env", 6, false),
+})]
+#[case::cli_overrides_file(PrecedenceScenario {
+    label: "cli_overrides_file",
+    file: Some(json!({"name": "File", "count": 2, "flag": true})),
+    environment: None,
+    cli: Some(json!({"name": "Cli"})),
+    expected: expected_sample("Cli", 2, true),
+})]
+#[case::cli_overrides_environment(PrecedenceScenario {
+    label: "cli_overrides_environment",
+    file: None,
+    environment: Some(json!({"name": "Env", "count": 5, "flag": true})),
+    cli: Some(json!({"count": 9})),
+    expected: expected_sample("Env", 9, true),
+})]
+#[case::all_layers(PrecedenceScenario {
+    label: "all_layers",
+    file: Some(json!({"name": "File", "count": 2, "flag": true})),
+    environment: Some(json!({"name": "Env", "count": 7})),
+    cli: Some(json!({"name": "Cli", "flag": false})),
+    expected: expected_sample("Cli", 7, false),
+})]
 fn merge_layers_respect_precedence_permutations(
     precedence_defaults: serde_json::Value,
     #[case] scenario: PrecedenceScenario,
 ) -> Result<()> {
+    let PrecedenceScenario {
+        label,
+        file,
+        environment,
+        cli,
+        expected,
+    } = scenario;
+
     let mut composer = MergeComposer::new();
     composer.push_defaults(precedence_defaults);
-    if let Some(file_value) = scenario.file {
+    if let Some(file_value) = file {
         composer.push_file(file_value, Some(Utf8PathBuf::from("config.json")));
     }
-    if let Some(environment_value) = scenario.environment {
+    if let Some(environment_value) = environment {
         composer.push_environment(environment_value);
     }
-    if let Some(cli_value) = scenario.cli {
+    if let Some(cli_value) = cli {
         composer.push_cli(cli_value);
     }
 
     let config = to_anyhow(DeclarativeSample::merge_from_layers(composer.layers()))?;
+    let expected_tuple = (expected.name, expected.count, expected.flag);
+    let observed = (config.name.as_str(), config.count, config.flag);
     ensure!(
-        config.name == scenario.expected.name,
-        "expected name {} but observed {}",
-        scenario.expected.name,
-        config.name,
-    );
-    ensure!(
-        config.count == scenario.expected.count,
-        "expected count {} but observed {}",
-        scenario.expected.count,
-        config.count,
-    );
-    ensure!(
-        config.flag == scenario.expected.flag,
-        "expected flag {} but observed {}",
-        scenario.expected.flag,
-        config.flag,
+        observed == expected_tuple,
+        "scenario {label} expected {expected_tuple:?} but observed {observed:?}",
     );
     Ok(())
 }

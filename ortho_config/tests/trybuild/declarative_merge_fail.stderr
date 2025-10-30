@@ -1,0 +1,5 @@
+error: unknown merge_strategy 'unknown'; expected one of "append", "replace", or "keyed"
+ --> tests/trybuild/declarative_merge_fail.rs:7:37
+  |
+7 |     #[ortho_config(merge_strategy = "unknown")]
+  |                                     ^^^^^^^^^

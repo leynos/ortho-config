@@ -8,4 +8,5 @@
 fn declarative_merge_compiles_with_collection_strategies() {
     let t = trybuild::TestCases::new();
     t.pass("tests/trybuild/declarative_merge_success.rs");
+    t.compile_fail("tests/trybuild/declarative_merge_fail.rs");
 }
