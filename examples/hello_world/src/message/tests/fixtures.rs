@@ -103,7 +103,6 @@ pub(crate) fn setup_festive_leave(
 ) -> Result<()> {
     leave.wave = true;
     leave.gift = Some(String::from("biscuits"));
-    ensure!(leave.gift.is_some(), "festive leave should include a gift");
     Ok(())
 }
 
