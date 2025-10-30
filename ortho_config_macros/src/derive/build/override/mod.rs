@@ -291,9 +291,7 @@ fn build_inner_extract(
     let state_field = &context.state_field;
     quote! {
         if let Ok(v) = #figment_expr.extract_inner::<#ty>(stringify!(#name)) {
-            if !v.is_empty() {
-                #state_field = Some(v);
-            }
+            #state_field = Some(v);
         }
     }
 }

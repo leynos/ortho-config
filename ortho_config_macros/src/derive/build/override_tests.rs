@@ -98,9 +98,14 @@ fn build_collection_logic_skips_empty_maps(demo_input: DemoInput) -> Result<()> 
     let tokens = build_collection_logic(&strategies, &quote!(std::option::Option::<&()>::None));
     let pre_merge = tokens.pre_merge.to_string();
     let guard_count = pre_merge.matches("! v . is_empty ()").count();
+    let assignment_count = pre_merge.matches("replace . field3 = Some (v").count();
     ensure!(
-        guard_count >= 3,
-        "expected is_empty guard for each figment source, found {guard_count}"
+        guard_count == 0,
+        "expected is_empty guard to be removed, found {guard_count}"
+    );
+    ensure!(
+        assignment_count >= 3,
+        "expected map assignments for each figment source, found {assignment_count}"
     );
     Ok(())
 }
