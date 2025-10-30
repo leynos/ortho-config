@@ -49,9 +49,6 @@ pub(crate) fn build_plan_from(
     mut greet: GreetCommand,
     mut leave: TakeLeaveCommand,
 ) -> Result<Plan> {
-    let _ = &mut greet;
-    let _ = &mut leave;
-
     let greeting = build_plan(&config, &greet).map_err(|err| anyhow!(err.to_string()))?;
     let take_leave =
         build_take_leave_plan(&config, &leave).map_err(|err| anyhow!(err.to_string()))?;
