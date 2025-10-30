@@ -1,3 +1,5 @@
+//! Tests covering collection override generation, ensuring append and replace
+//! strategies emit the correct helper structures and aggregation logic.
 use super::r#override::{
     CollectionStrategies, build_collection_logic, build_override_struct,
     collect_collection_strategies,
