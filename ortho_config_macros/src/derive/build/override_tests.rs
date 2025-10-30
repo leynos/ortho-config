@@ -41,6 +41,22 @@ fn collect_strategies(input: &syn::DeriveInput) -> Result<CollectionStrategies> 
     Ok(collect_collection_strategies(&fields, &field_attrs)?)
 }
 
+/// Assert that collecting strategies for the provided input results in an empty
+/// collection for the specified field type.
+fn assert_collection_skip(
+    input: syn::DeriveInput,
+    check_append: bool,
+    context: &str,
+) -> Result<()> {
+    let strategies = collect_strategies(&input)?;
+    if check_append {
+        ensure!(strategies.append.is_empty(), "{context}");
+    } else {
+        ensure!(strategies.map_replace.is_empty(), "{context}");
+    }
+    Ok(())
+}
+
 #[fixture]
 fn demo_input() -> DemoInput {
     let input: syn::DeriveInput = syn::parse_quote! {
@@ -182,12 +198,11 @@ fn collect_collection_strategies_skips_replace_vec() -> Result<()> {
             values: Vec<String>,
         }
     };
-    let strategies = collect_strategies(&input)?;
-    ensure!(
-        strategies.append.is_empty(),
-        "vector replace strategy should not populate append list"
-    );
-    Ok(())
+    assert_collection_skip(
+        input,
+        true,
+        "vector replace strategy should not populate append list",
+    )
 }
 
 #[test]
@@ -198,10 +213,9 @@ fn collect_collection_strategies_skips_keyed_map_entry() -> Result<()> {
             values: std::collections::BTreeMap<String, i32>,
         }
     };
-    let strategies = collect_strategies(&input)?;
-    ensure!(
-        strategies.map_replace.is_empty(),
-        "keyed map strategy should not populate replace list"
-    );
-    Ok(())
+    assert_collection_skip(
+        input,
+        false,
+        "keyed map strategy should not populate replace list",
+    )
 }
