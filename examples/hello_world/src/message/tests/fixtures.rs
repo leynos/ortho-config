@@ -130,9 +130,18 @@ pub(crate) fn build_plan_variant(
             jail.clear_env();
             plan_from_inputs(config, greet, leave)
         }),
-        PlanVariant::SampleEnv => {
-            with_sample_config(move |cfg| plan_from_inputs(cfg.clone(), greet, leave))
-        }
+        PlanVariant::SampleEnv => with_sample_config(move |cfg| {
+            let greet_defaults = load_greet_defaults().map_err(figment_error)?;
+            let mut sample_leave = take_leave_command().map_err(figment_error)?;
+            sample_leave.parting = leave.parting.clone();
+            sample_leave.greeting_preamble = leave.greeting_preamble.clone();
+            sample_leave.greeting_punctuation = leave.greeting_punctuation.clone();
+            sample_leave.channel = leave.channel;
+            sample_leave.remind_in = leave.remind_in;
+            sample_leave.gift = leave.gift.clone();
+            sample_leave.wave = leave.wave;
+            plan_from_inputs(cfg.clone(), greet_defaults, sample_leave)
+        }),
     }
 }
 
