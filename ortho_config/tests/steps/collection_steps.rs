@@ -82,7 +82,7 @@ fn assert_only_rule(world: &mut World, name: String) -> Result<()> {
         .result
         .take()
         .ok_or_else(|| anyhow!("configuration result unavailable"))?;
-    let cfg = result.map_err(|err| anyhow!(err))?;
+    let cfg = result?;
     ensure!(
         cfg.dynamic_rules.len() == 1,
         "expected exactly one dynamic rule, found {:?}",

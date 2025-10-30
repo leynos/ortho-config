@@ -34,8 +34,8 @@ fn assert_collection_strategy_error(
 }
 
 /// Collect strategies for the provided input, propagating parse failures.
-fn collect_strategies(input: syn::DeriveInput) -> Result<CollectionStrategies> {
-    let (_, fields, _, field_attrs) = parse_input(&input)?;
+fn collect_strategies(input: &syn::DeriveInput) -> Result<CollectionStrategies> {
+    let (_, fields, _, field_attrs) = parse_input(input)?;
     Ok(collect_collection_strategies(&fields, &field_attrs)?)
 }
 
@@ -180,12 +180,13 @@ fn collect_collection_strategies_rejects_append_on_btreemap() -> Result<()> {
 
 #[test]
 fn collect_collection_strategies_skips_replace_vec() -> Result<()> {
-    let strategies = collect_strategies(syn::parse_quote! {
+    let input: syn::DeriveInput = syn::parse_quote! {
         struct DemoReplaceVec {
             #[ortho_config(merge_strategy = "replace")]
             values: Vec<String>,
         }
-    })?;
+    };
+    let strategies = collect_strategies(&input)?;
     ensure!(
         strategies.append.is_empty(),
         "vector replace strategy should not populate append list"
@@ -195,12 +196,13 @@ fn collect_collection_strategies_skips_replace_vec() -> Result<()> {
 
 #[test]
 fn collect_collection_strategies_skips_keyed_map_entry() -> Result<()> {
-    let strategies = collect_strategies(syn::parse_quote! {
+    let input: syn::DeriveInput = syn::parse_quote! {
         struct DemoKeyedMap {
             #[ortho_config(merge_strategy = "keyed")]
             values: std::collections::BTreeMap<String, i32>,
         }
-    })?;
+    };
+    let strategies = collect_strategies(&input)?;
     ensure!(
         strategies.map_replace.is_empty(),
         "keyed map strategy should not populate replace list"
