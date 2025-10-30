@@ -66,7 +66,12 @@ impl MergeStrategy {
             "append" => Ok(Self::Append),
             "replace" => Ok(Self::Replace),
             "keyed" => Ok(Self::Keyed),
-            _ => Err(syn::Error::new(span, "unknown merge_strategy")),
+            _ => Err(syn::Error::new(
+                span,
+                format!(
+                    "unknown merge_strategy '{s}'; expected one of \"append\", \"replace\", or \"keyed\""
+                ),
+            )),
         }
     }
 }
