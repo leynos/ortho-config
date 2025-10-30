@@ -16,7 +16,7 @@ type DemoInput = (Vec<syn::Field>, Vec<FieldAttrs>, StructAttrs);
 /// validation error.
 #[expect(
     clippy::needless_pass_by_value,
-    reason = "the helper signature must own the input to satisfy the review request"
+    reason = "helper must take ownership so tests exercise move-only parse semantics"
 )]
 fn assert_collection_strategy_error(
     input: syn::DeriveInput,
