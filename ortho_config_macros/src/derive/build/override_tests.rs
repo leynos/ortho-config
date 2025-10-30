@@ -101,7 +101,7 @@ fn build_collection_logic_includes_map_assignment(demo_input: DemoInput) -> Resu
 }
 
 #[rstest]
-fn build_collection_logic_skips_empty_maps(demo_input: DemoInput) -> Result<()> {
+fn build_collection_logic_preserves_empty_maps(demo_input: DemoInput) -> Result<()> {
     let (fields, field_attrs, _) = demo_input;
     let strategies = collect_collection_strategies(&fields, &field_attrs)?;
     let tokens = build_collection_logic(&strategies, &quote!(std::option::Option::<&()>::None));
