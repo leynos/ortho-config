@@ -4,8 +4,12 @@
 //! override struct, and emit load-time aggregation logic for vector append and
 //! map replacement semantics.
 
+mod tokens;
+
 use quote::{format_ident, quote};
 use syn::{Ident, Type};
+
+use self::tokens::{build_post_extract_tokens, build_pre_merge_tokens};
 
 use crate::derive::parse::{FieldAttrs, MergeStrategy, btree_map_inner, vec_inner};
 
@@ -232,163 +236,6 @@ pub(crate) fn build_override_struct(
 pub(crate) struct CollectionLogicTokens {
     pub pre_merge: proc_macro2::TokenStream,
     pub post_extract: proc_macro2::TokenStream,
-}
-
-fn build_append_blocks(strategies: &CollectionStrategies) -> Vec<proc_macro2::TokenStream> {
-    strategies
-        .append
-        .iter()
-        .map(|(name, ty)| {
-            quote! {
-                {
-                    let mut vec_acc: Vec<#ty> = Vec::new();
-                    vec_acc.extend(defaults.#name.clone().unwrap_or_default());
-                    if let Some(f) = &file_fig {
-                        if let Ok(v) = f.extract_inner::<Vec<#ty>>(stringify!(#name)) { vec_acc.extend(v); }
-                    }
-                    if let Ok(v) = env_figment.extract_inner::<Vec<#ty>>(stringify!(#name)) { vec_acc.extend(v); }
-                    if let Ok(v) = cli_figment.extract_inner::<Vec<#ty>>(stringify!(#name)) { vec_acc.extend(v); }
-                    if !vec_acc.is_empty() {
-                        overrides.#name = Some(vec_acc);
-                    }
-                }
-            }
-        })
-        .collect()
-}
-
-fn build_map_state_tokens(strategies: &CollectionStrategies) -> Option<proc_macro2::TokenStream> {
-    if strategies.map_replace.is_empty() {
-        return None;
-    }
-
-    let fields = strategies.map_replace.iter().map(|(name, ty)| {
-        quote! { #name: Option<#ty>, }
-    });
-    let init = strategies.map_replace.iter().map(|(name, _)| {
-        quote! { #name: None }
-    });
-    Some(quote! {
-        struct ReplaceState { #( #fields )* }
-        let mut replace = ReplaceState { #( #init, )* };
-    })
-}
-
-/// Context for extracting a collection field value from a figment source.
-struct ExtractContext<'a> {
-    name: &'a Ident,
-    ty: &'a Type,
-    state_field: proc_macro2::TokenStream,
-}
-
-/// Generate tokens for extracting a value and assigning it if non-empty.
-fn build_inner_extract(
-    figment_expr: &proc_macro2::TokenStream,
-    context: &ExtractContext<'_>,
-) -> proc_macro2::TokenStream {
-    let name = context.name;
-    let ty = context.ty;
-    let state_field = &context.state_field;
-    quote! {
-        if let Ok(v) = #figment_expr.extract_inner::<#ty>(stringify!(#name)) {
-            #state_field = Some(v);
-        }
-    }
-}
-
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "the review request specifies an owned extractor expression"
-)]
-fn build_extraction_check(
-    extractor_expr: proc_macro2::TokenStream,
-    context: &ExtractContext<'_>,
-) -> proc_macro2::TokenStream {
-    build_inner_extract(&extractor_expr, context)
-}
-
-fn build_figment_extract(
-    figment_binding: &proc_macro2::TokenStream,
-    context: &ExtractContext<'_>,
-    is_optional: bool,
-) -> proc_macro2::TokenStream {
-    if is_optional {
-        let inner = build_extraction_check(quote! { f }, context);
-        quote! {
-            if let Some(f) = #figment_binding {
-                #inner
-            }
-        }
-    } else {
-        build_extraction_check(figment_binding.clone(), context)
-    }
-}
-
-fn build_map_merge_blocks(strategies: &CollectionStrategies) -> Vec<proc_macro2::TokenStream> {
-    strategies
-        .map_replace
-        .iter()
-        .map(|(name, ty)| {
-            let state_field = quote! { replace.#name };
-            let context = ExtractContext {
-                name,
-                ty,
-                state_field,
-            };
-            let file_binding = quote! { &file_fig };
-            let env_binding = quote! { env_figment };
-            let cli_binding = quote! { cli_figment };
-            let file_extract = build_figment_extract(&file_binding, &context, true);
-            let env_extract = build_figment_extract(&env_binding, &context, false);
-            let cli_extract = build_figment_extract(&cli_binding, &context, false);
-            quote! {
-                #file_extract
-                #env_extract
-                #cli_extract
-            }
-        })
-        .collect()
-}
-
-fn build_map_assignment_blocks(strategies: &CollectionStrategies) -> Vec<proc_macro2::TokenStream> {
-    strategies
-        .map_replace
-        .iter()
-        .map(|(name, _ty)| {
-            quote! {
-                if let Some(value) = replace.#name.take() {
-                    cfg.#name = value;
-                }
-            }
-        })
-        .collect()
-}
-
-fn build_pre_merge_tokens(
-    strategies: &CollectionStrategies,
-    cli_binding: &proc_macro2::TokenStream,
-) -> proc_macro2::TokenStream {
-    let append_logic = build_append_blocks(strategies);
-    let map_state = build_map_state_tokens(strategies);
-    let map_logic = build_map_merge_blocks(strategies);
-    let map_state_ts = map_state.unwrap_or_default();
-    quote! {
-        #[allow(unused_mut)]
-        let mut cli_figment = ortho_config::figment::Figment::new();
-        if let Some(cli) = #cli_binding {
-            cli_figment = ortho_config::figment::Figment::from(
-                ortho_config::figment::providers::Serialized::defaults(cli),
-            );
-        }
-        #map_state_ts
-        #( #append_logic )*
-        #( #map_logic )*
-    }
-}
-
-fn build_post_extract_tokens(strategies: &CollectionStrategies) -> proc_macro2::TokenStream {
-    let map_assignments = build_map_assignment_blocks(strategies);
-    quote! { #( #map_assignments )* }
 }
 
 pub(crate) fn build_collection_logic(
