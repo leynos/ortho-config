@@ -5,6 +5,7 @@ use ortho_config::OrthoConfig;
 use rstest::rstest;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
+use std::marker::PhantomData;
 
 #[path = "test_utils.rs"]
 mod test_utils;
@@ -86,6 +87,10 @@ fn configure_layered_sources(j: &mut Jail) -> Result<()> {
     Ok(())
 }
 
+fn noop_setup(_: &mut Jail) -> Result<()> {
+    Ok(())
+}
+
 fn run_vector_case<T, Setup>(
     args: &[&str],
     setup: Setup,
@@ -116,55 +121,55 @@ where
 
 const BASE_ARGS: &[&str] = &["prog"];
 const LAYERED_ARGS: &[&str] = &["prog", "--values", "cli1", "--values", "cli2"];
+const DEFAULT_APPEND_ARGS: &[&str] = &["prog", "--values", "cli"];
 
 #[rstest]
-fn append_merges_all_sources() -> Result<()> {
-    run_vector_case::<VecConfig, _>(
-        LAYERED_ARGS,
-        configure_layered_sources,
-        &["file", "env", "cli1", "cli2"],
-        "append strategy should retain contributions from every source",
-    )
-}
-
-#[rstest]
-fn append_empty_sources_yields_empty() -> Result<()> {
-    run_vector_case::<EmptyVec, _>(
-        BASE_ARGS,
-        |_| Ok(()),
-        &[],
-        "append strategy should yield defaults when no layers supply values",
-    )
-}
-
-#[rstest]
-fn append_includes_defaults() -> Result<()> {
-    run_vector_case::<DefaultVec, _>(
-        &["prog", "--values", "cli"],
-        configure_layered_sources,
-        &["def", "file", "env", "cli"],
-        "append strategy should prepend defaults before layered contributions",
-    )
-}
-
-#[rstest]
-fn replace_vectors_take_latest_layer() -> Result<()> {
-    run_vector_case::<ReplaceVec, _>(
-        LAYERED_ARGS,
-        configure_layered_sources,
-        &["cli1", "cli2"],
-        "replace strategy should honour highest precedence (CLI) values",
-    )
-}
-
-#[rstest]
-fn replace_vectors_empty_when_no_layers() -> Result<()> {
-    run_vector_case::<ReplaceVec, _>(
-        BASE_ARGS,
-        |_| Ok(()),
-        &[],
-        "replace strategy should fall back to defaults when no sources load",
-    )
+#[case::append_all_sources(
+    PhantomData::<VecConfig>,
+    LAYERED_ARGS,
+    configure_layered_sources as fn(&mut Jail) -> Result<()>,
+    &["file", "env", "cli1", "cli2"],
+    "append strategy should retain contributions from every source"
+)]
+#[case::append_empty(
+    PhantomData::<EmptyVec>,
+    BASE_ARGS,
+    noop_setup,
+    &[],
+    "append strategy should yield defaults when no layers supply values"
+)]
+#[case::append_includes_defaults(
+    PhantomData::<DefaultVec>,
+    DEFAULT_APPEND_ARGS,
+    configure_layered_sources as fn(&mut Jail) -> Result<()>,
+    &["def", "file", "env", "cli"],
+    "append strategy should prepend defaults before layered contributions"
+)]
+#[case::replace_latest_layer(
+    PhantomData::<ReplaceVec>,
+    LAYERED_ARGS,
+    configure_layered_sources as fn(&mut Jail) -> Result<()>,
+    &["cli1", "cli2"],
+    "replace strategy should honour highest precedence (CLI) values"
+)]
+#[case::replace_empty_sources(
+    PhantomData::<ReplaceVec>,
+    BASE_ARGS,
+    noop_setup,
+    &[],
+    "replace strategy should fall back to defaults when no sources load"
+)]
+fn vector_merge_strategies<T>(
+    #[case] _phantom: PhantomData<T>,
+    #[case] args: &[&str],
+    #[case] setup: fn(&mut Jail) -> Result<()>,
+    #[case] expected: &[&str],
+    #[case] context: &str,
+) -> Result<()>
+where
+    T: OrthoConfig + HasValues,
+{
+    run_vector_case::<T, _>(args, setup, expected, context)
 }
 
 #[rstest]
