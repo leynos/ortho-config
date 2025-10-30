@@ -45,6 +45,9 @@ struct Rule {
     enabled: bool,
 }
 
+const BASE_ARGS: &[&str] = &["prog"];
+const LAYERED_ARGS: &[&str] = &["prog", "--values", "cli1", "--values", "cli2"];
+
 #[derive(Debug, Deserialize, Serialize, OrthoConfig)]
 struct ReplaceMap {
     #[serde(default)]
@@ -80,6 +83,12 @@ impl HasValues for ReplaceVec {
     }
 }
 
+fn configure_layered_sources(j: &mut Jail) -> Result<()> {
+    j.create_file(".config.toml", "values = [\"file\"]")?;
+    j.set_env("VALUES", "[\"env\"]");
+    Ok(())
+}
+
 fn run_vector_case<T, Setup>(
     args: &[&str],
     setup: Setup,
@@ -111,12 +120,8 @@ where
 #[rstest]
 fn append_merges_all_sources() -> Result<()> {
     run_vector_case::<VecConfig, _>(
-        &["prog", "--values", "cli1", "--values", "cli2"],
-        |j| {
-            j.create_file(".config.toml", "values = [\"file\"]")?;
-            j.set_env("VALUES", "[\"env\"]");
-            Ok(())
-        },
+        LAYERED_ARGS,
+        configure_layered_sources,
         &["file", "env", "cli1", "cli2"],
         "append strategy should retain contributions from every source",
     )
@@ -125,7 +130,7 @@ fn append_merges_all_sources() -> Result<()> {
 #[rstest]
 fn append_empty_sources_yields_empty() -> Result<()> {
     run_vector_case::<EmptyVec, _>(
-        &["prog"],
+        BASE_ARGS,
         |_| Ok(()),
         &[],
         "append strategy should yield defaults when no layers supply values",
@@ -136,11 +141,7 @@ fn append_empty_sources_yields_empty() -> Result<()> {
 fn append_includes_defaults() -> Result<()> {
     run_vector_case::<DefaultVec, _>(
         &["prog", "--values", "cli"],
-        |j| {
-            j.create_file(".config.toml", "values = [\"file\"]")?;
-            j.set_env("VALUES", "[\"env\"]");
-            Ok(())
-        },
+        configure_layered_sources,
         &["def", "file", "env", "cli"],
         "append strategy should prepend defaults before layered contributions",
     )
@@ -149,12 +150,8 @@ fn append_includes_defaults() -> Result<()> {
 #[rstest]
 fn replace_vectors_take_latest_layer() -> Result<()> {
     run_vector_case::<ReplaceVec, _>(
-        &["prog", "--values", "cli1", "--values", "cli2"],
-        |j| {
-            j.create_file(".config.toml", "values = [\"file\"]")?;
-            j.set_env("VALUES", "[\"env\"]");
-            Ok(())
-        },
+        LAYERED_ARGS,
+        configure_layered_sources,
         &["cli1", "cli2"],
         "replace strategy should honour highest precedence (CLI) values",
     )
@@ -163,7 +160,7 @@ fn replace_vectors_take_latest_layer() -> Result<()> {
 #[rstest]
 fn replace_vectors_empty_when_no_layers() -> Result<()> {
     run_vector_case::<ReplaceVec, _>(
-        &["prog"],
+        BASE_ARGS,
         |_| Ok(()),
         &[],
         "replace strategy should fall back to defaults when no sources load",
