@@ -45,9 +45,6 @@ struct Rule {
     enabled: bool,
 }
 
-const BASE_ARGS: &[&str] = &["prog"];
-const LAYERED_ARGS: &[&str] = &["prog", "--values", "cli1", "--values", "cli2"];
-
 #[derive(Debug, Deserialize, Serialize, OrthoConfig)]
 struct ReplaceMap {
     #[serde(default)]
@@ -116,6 +113,9 @@ where
         Ok(())
     })
 }
+
+const BASE_ARGS: &[&str] = &["prog"];
+const LAYERED_ARGS: &[&str] = &["prog", "--values", "cli1", "--values", "cli2"];
 
 #[rstest]
 fn append_merges_all_sources() -> Result<()> {
