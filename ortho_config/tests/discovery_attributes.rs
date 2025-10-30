@@ -287,15 +287,14 @@ fn error_on_malformed_config() -> Result<()> {
 
     let guard = test_env::set_var("APP_CONFIG_PATH", &config_path);
     let err = match DiscoveryConfig::load_from_iter(["prog"]) {
-        Ok(cfg) => return Err(anyhow!("expected parse failure, got config {:?}", cfg)),
+        Ok(cfg) => return Err(anyhow!("expected parse failure, got config {cfg:?}")),
         Err(err) => err,
     };
     drop(guard);
 
     ensure!(
         matches!(&*err, OrthoError::File { .. }),
-        "unexpected error: {:?}",
-        err
+        "unexpected error: {err:?}"
     );
     Ok(())
 }

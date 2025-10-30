@@ -51,7 +51,7 @@ serde = { version = "1.0", features = ["derive"] }
 
 `ortho_config` re-exports its parsing dependencies, so applications can import
 `figment`, `uncased`, `xdg` (on Unix-like and Redox targets), and the optional
-format parsers (`figment_json5`, `json5`, `serde_yaml`, `toml`) without
+format parsers (`figment_json5`, `json5`, `serde_saphyr`, `toml`) without
 declaring them directly.
 
 1. **Define the configuration struct:**
@@ -173,6 +173,13 @@ support additional formats:
 ortho_config = { version = "0.5.0", features = ["json5", "yaml"] }
 ```
 
+When the `yaml` feature is enabled, configuration files are parsed with
+`serde-saphyr` configured for YAML 1.2 semantics. The loader enables
+`Options::strict_booleans` so that YAML 1.1 legacy boolean literals (such as
+`yes`, `on`, or `off`) remain strings whilst canonical booleans (`true` and
+`false`) parse as expected. Duplicate mapping keys raise errors instead of
+being silently overwritten.
+
 ### Error interop helpers
 
 `OrthoConfig` includes small extensions to simplify error conversions:
@@ -202,14 +209,14 @@ assert!(
 );
 ```
 
-The file loader selects the parser based on the extension (`.toml`, `.json`,
-`.json5`, `.yaml`, `.yml`). When the `json5` feature is active, both `.json`
-and `.json5` files are parsed using the JSON5 format. Standard JSON is valid
-JSON5, so existing `.json` files continue to work. Without this feature
-enabled, attempting to load a `.json` or `.json5` file will result in an error.
-When the `yaml` feature is enabled, `.yaml` and `.yml` files are also
-discovered and parsed. Without this feature, those extensions are ignored
-during path discovery.
+The file loader selects the parser based on the extension
+(`.toml`, `.json`, `.json5`, `.yaml`, `.yml`). When the `json5` feature is
+active, both `.json` and `.json5` files are parsed using the JSON5 format.
+Standard JSON is valid JSON5, so existing `.json` files continue to work.
+Without this feature enabled, attempting to load a `.json` or `.json5` file
+will result in an error. When the `yaml` feature is enabled, `.yaml` and `.yml`
+files are also discovered and parsed. Without this feature, those extensions
+are ignored during path discovery.
 
 JSON5 extends JSON with conveniences such as comments, trailing commas,
 single-quoted strings, and unquoted keys.

@@ -71,9 +71,7 @@ fn generate_declarative_state_struct_emits_storage() -> Result<()> {
     };
     ensure!(
         tokens.to_string() == expected.to_string(),
-        "state struct tokens mismatch\nactual:\n{}\nexpected:\n{}",
-        tokens.to_string(),
-        expected.to_string()
+        "state struct tokens mismatch\nactual:\n{tokens}\nexpected:\n{expected}"
     );
     Ok(())
 }
@@ -130,9 +128,7 @@ fn generate_declarative_merge_impl_emits_trait_impl() -> Result<()> {
     let expected_rendered = expected.to_string();
     ensure!(
         actual == expected_rendered,
-        "declarative merge impl tokens mismatch\nactual:\n{}\nexpected:\n{}",
-        actual,
-        expected_rendered
+        "declarative merge impl tokens mismatch\nactual:\n{actual}\nexpected:\n{expected_rendered}"
     );
     Ok(())
 }
@@ -251,9 +247,7 @@ fn generate_declarative_merge_from_layers_fn_emits_constructor() -> Result<()> {
     let expected_rendered = expected.to_string();
     ensure!(
         actual == expected_rendered,
-        "merge_from_layers constructor mismatch\nactual:\n{}\nexpected:\n{}",
-        actual,
-        expected_rendered
+        "merge_from_layers constructor mismatch\nactual:\n{actual}\nexpected:\n{expected_rendered}"
     );
     Ok(())
 }
@@ -276,9 +270,7 @@ fn generate_declarative_impl_composes_helpers() -> Result<()> {
     let expected_rendered = expected.to_string();
     ensure!(
         actual == expected_rendered,
-        "declarative impl composition mismatch\nactual:\n{}\nexpected:\n{}",
-        actual,
-        expected_rendered
+        "declarative impl composition mismatch\nactual:\n{actual}\nexpected:\n{expected_rendered}"
     );
     Ok(())
 }

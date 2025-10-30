@@ -1,9 +1,13 @@
 //! Helpers for sanitizing and merging command-line arguments with
 //! configuration defaults.
 
+#[cfg(feature = "serde_json")]
 use crate::{OrthoResult, OrthoResultExt};
+#[cfg(feature = "serde_json")]
 use figment::providers::Serialized;
+#[cfg(feature = "serde_json")]
 use serde::Serialize;
+#[cfg(feature = "serde_json")]
 use serde_json::Value;
 
 /// Recursively remove all [`Value::Null`] entries, pruning empty objects.
@@ -23,6 +27,7 @@ use serde_json::Value;
 /// Returns `true` if `value` becomes empty after pruning (that is, it is
 /// `Null` or an object with no remaining fields). Arrays never return `true`,
 /// even when emptied, to preserve explicit clearing semantics.
+#[cfg(feature = "serde_json")]
 fn strip_nulls(value: &mut Value) -> bool {
     match value {
         Value::Object(map) => {
@@ -62,6 +67,7 @@ fn strip_nulls(value: &mut Value) -> bool {
 /// # Errors
 ///
 /// Returns any [`serde_json::Error`] encountered during serialization.
+#[cfg(feature = "serde_json")]
 pub fn value_without_nones<T: Serialize>(cli: &T) -> Result<Value, serde_json::Error> {
     let mut value = serde_json::to_value(cli)?;
     let _ = strip_nulls(&mut value);
@@ -87,6 +93,7 @@ pub fn value_without_nones<T: Serialize>(cli: &T) -> Result<Value, serde_json::E
 /// # Errors
 ///
 /// Returns an [`crate::OrthoError`] if JSON serialization fails.
+#[cfg(feature = "serde_json")]
 pub fn sanitize_value<T: Serialize>(value: &T) -> OrthoResult<Value> {
     value_without_nones(value).into_ortho()
 }
@@ -117,6 +124,7 @@ pub fn sanitize_value<T: Serialize>(value: &T) -> OrthoResult<Value> {
 /// # Errors
 ///
 /// Returns an [`crate::OrthoError`] if JSON serialization fails.
+#[cfg(feature = "serde_json")]
 pub fn sanitized_provider<T: Serialize>(value: &T) -> OrthoResult<Serialized<serde_json::Value>> {
     sanitize_value(value).map(Serialized::defaults)
 }

@@ -24,9 +24,9 @@ camino = "1"
 dirs = "5"
 toml = { version = "0.9", optional = true }
 figment-json5 = { version = "0.1", optional = true }
-serde_yaml = { version = "0.9", optional = true }
+serde_saphyr = { package = "serde-saphyr", version = "0.0.6", optional = true }
 json5 = { version = "0.4", optional = true }
-serde_json = { version = "1" }
+serde_json = { version = "1", optional = true }
 
 [target.'cfg(not(any(unix, target_os = "redox")))'.dependencies]
 directories = "6"
@@ -38,10 +38,11 @@ xdg = "3"
 dunce = "1.0.0"
 
 [features]
-default = ["toml"]
+default = ["serde_json", "toml"]
+serde_json = ["dep:serde_json"]
 toml = ["figment/toml", "dep:toml", "ortho_config_macros/toml"]
 json5 = ["dep:figment-json5", "dep:json5", "ortho_config_macros/json5"]
-yaml = ["figment/yaml", "dep:serde_yaml", "ortho_config_macros/yaml"]
+yaml = ["dep:serde_saphyr", "serde_json", "ortho_config_macros/yaml"]
 
 [dev-dependencies]
 figment = { version = "0.10", features = ["toml", "env"] }

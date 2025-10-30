@@ -28,6 +28,10 @@ production-ready complexity.
   highlighting how environment variables, configuration files, and command-line
   overrides interact. Include examples covering default configuration,
   per-subcommand overrides, and the precedence order across the sources.
+- **YAML 1.2 parsing**: exercise the new `serde-saphyr` provider with
+  behavioural coverage that keeps unquoted scalars such as `yes` as strings via
+  strict boolean parsing and rejects duplicate mapping keys, mirroring the
+  semantics library users observe.
 
 ## Planned project layout
 

@@ -3,16 +3,23 @@
 //! Resolves defaults from files and the environment and exposes the
 //! [`SubcmdConfigMerge`] trait for merging them with CLI arguments.
 
+#[cfg(feature = "serde_json")]
 use crate::{OrthoMergeExt, OrthoResult, load_config_file, sanitized_provider};
+#[cfg(feature = "serde_json")]
 use clap::CommandFactory;
+#[cfg(feature = "serde_json")]
 use figment::{Figment, providers::Env};
+#[cfg(feature = "serde_json")]
 use serde::de::DeserializeOwned;
+#[cfg(feature = "serde_json")]
 use std::path::PathBuf;
+#[cfg(feature = "serde_json")]
 use uncased::Uncased;
 
 mod paths;
 mod types;
 
+#[cfg(feature = "serde_json")]
 use paths::candidate_paths;
 pub use paths::push_stem_candidates;
 pub use types::{CmdName, Prefix};
@@ -30,6 +37,7 @@ pub use types::{CmdName, Prefix};
 /// # Returns
 /// A `Figment` instance containing the merged configuration for the subcommand,
 /// or an error if loading fails.
+#[cfg(feature = "serde_json")]
 fn load_from_files(paths: &[PathBuf], name: &CmdName) -> OrthoResult<Figment> {
     let mut fig = Figment::new();
     for p in paths {
@@ -74,6 +82,8 @@ fn load_from_files(paths: &[PathBuf], name: &CmdName) -> OrthoResult<Figment> {
 /// # Ok(())
 /// # }
 /// ```
+#[cfg(feature = "serde_json")]
+#[cfg_attr(docsrs, doc(cfg(feature = "serde_json")))]
 pub fn load_and_merge_subcommand<T>(prefix: &Prefix, cli: &T) -> OrthoResult<T>
 where
     T: serde::Serialize + DeserializeOwned + Default + CommandFactory,
@@ -126,6 +136,8 @@ where
 /// # Ok(())
 /// # }
 /// ```
+#[cfg(feature = "serde_json")]
+#[cfg_attr(docsrs, doc(cfg(feature = "serde_json")))]
 pub fn load_and_merge_subcommand_for<T>(cli: &T) -> OrthoResult<T>
 where
     T: crate::OrthoConfig + serde::Serialize + Default + CommandFactory,
@@ -161,6 +173,8 @@ where
 /// # Ok(())
 /// # }
 /// ```
+#[cfg(feature = "serde_json")]
+#[cfg_attr(docsrs, doc(cfg(feature = "serde_json")))]
 pub trait SubcmdConfigMerge: crate::OrthoConfig + CommandFactory + Sized {
     /// Merge configuration defaults for this subcommand over CLI arguments.
     ///
@@ -179,6 +193,7 @@ pub trait SubcmdConfigMerge: crate::OrthoConfig + CommandFactory + Sized {
     }
 }
 
+#[cfg(feature = "serde_json")]
 impl<T> SubcmdConfigMerge for T where
     T: crate::OrthoConfig + serde::Serialize + Default + CommandFactory
 {

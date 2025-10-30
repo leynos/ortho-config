@@ -75,6 +75,36 @@ Feature: Global parameters govern greetings
     Then the command succeeds
     And stdout contains "CLI config"
 
+  Scenario: YAML 1.2 scalars remain strings
+    Given the file "semantic.yaml" contains:
+      """
+      recipient: yes
+      """
+    When I run the hello world example with arguments "--config semantic.yaml greet"
+    Then the command succeeds
+    And stdout contains "Hello, yes!"
+
+  Scenario: Duplicate YAML keys are rejected
+    Given the file "duplicate.yaml" contains:
+      """
+      recipient: first
+      recipient: second
+      """
+    When I run the hello world example with arguments "--config duplicate.yaml greet"
+    Then the command fails
+    And stderr contains "duplicate mapping key"
+
+  Scenario: Canonical YAML booleans remain booleans
+    Given the file "canonical_bools.yaml" contains:
+      """
+      recipient: world
+      is_excited: true
+      is_quiet: false
+      """
+    When I run the hello world example with arguments "--config canonical_bools.yaml greet"
+    Then the command succeeds
+    And stdout contains "HELLO, WORLD!"
+
   Scenario: XDG config home provides configuration
     Given the XDG config home contains:
       """

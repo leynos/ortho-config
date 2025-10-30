@@ -253,12 +253,21 @@ When a struct applies the new `#[ortho_config(discovery(...))]` attribute the
 derive macro feeds the builder and adopts its output. Callers can therefore
 rename the generated CLI flag, expose a short alias, or change the default
 filenames used during discovery without introducing custom glue code. The
-attribute mirrors the builder surface (`app_name`, `env_var`,
-`config_file_name`, `dotfile_name`, `project_file_name`, `config_cli_long`,
-`config_cli_short`, and `config_cli_visible`) while retaining the previous
-defaults when omitted. Behavioural tests in the `hello_world` example exercise
-the new `--config`/`-c` flags alongside the environment overrides to confirm
-the precedence order is preserved.
+attribute mirrors the builder surface and lists:
+
+- `app_name`
+- `env_var`
+- `config_file_name`
+- `dotfile_name`
+- `project_file_name`
+- `config_cli_long`
+- `config_cli_short`
+- `config_cli_visible`
+
+It retains the previous defaults when callers omit these properties.
+Behavioural tests in the `hello_world` example exercise the new `--config`/`-c`
+flags alongside the environment overrides to confirm the precedence order is
+preserved.
 
 `ConfigDiscovery::load_first` delegates to `load_config_file`, short-circuiting
 once a readable file is found. Failed reads are skipped so later candidates can
@@ -648,17 +657,20 @@ to rename the hidden `--config-path` flag by defining their own field with a
   - `serde`: For serialization/deserialization.
   - `serde_json`: For manipulating configuration when pruning `None` CLI
     values.
-  - `toml`, `figment-json5`, `json5`, `serde_yaml`: As optional feature-gated
+  - `toml`, `figment-json5`, `json5`, `serde_saphyr`: As optional feature-gated
     dependencies for different file formats. `toml` should be a default
     feature. The `json5` feature uses `figment-json5` and `json5` to parse
     `.json` and `.json5` files and relies on `serde_json` for validation.
     Loading these formats without enabling `json5` should produce an error, so
-    users aren't surprised by silent TOML parsing.
+    users aren't surprised by silent TOML parsing. When the `yaml` feature is
+    active, `serde_saphyr` should be configured with `Options::strict_booleans`
+    so YAML 1.1 boolean shorthands (`yes`, `on`, `off`) remain strings and align
+    with the YAML 1.2 specification.
   - `thiserror`: For ergonomic error type definitions.
 
   The core crate re-exports `figment`, `uncased`, `xdg` (on Unix-like and
   Redox targets), and the optional format parsers (`figment_json5`, `json5`,
-  `serde_yaml`, `toml`), so downstream libraries can import them via
+  `serde_saphyr`, `toml`), so downstream libraries can import them via
   `ortho_config::` without declaring separate dependencies.
 
 ## 6. Implementation Roadmap

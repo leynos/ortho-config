@@ -2,20 +2,27 @@
 //!
 //! Binds CLI, environment, and default layers via `OrthoConfig` so tests can
 //! drive the binary with predictable inputs.
-use std::{
-    ffi::OsString,
-    path::{Path, PathBuf},
-    sync::Arc,
-};
+use std::path::{Path, PathBuf};
 
-use clap::{ArgAction, Args, Parser, Subcommand, ValueEnum};
+use clap::{ArgAction, Args, Parser, Subcommand};
 use ortho_config::{OrthoConfig, OrthoMergeExt, SubcmdConfigMerge};
 use serde::{Deserialize, Serialize};
 
 use crate::error::{HelloWorldError, ValidationError};
 
+mod commands;
+mod config_loading;
 mod discovery;
-use self::discovery::discover_config_figment;
+mod overrides;
+
+use self::config_loading::FileLayer;
+#[cfg(test)]
+pub(crate) use self::config_loading::{
+    build_cli_args, build_overrides, file_excited_value, load_config_overrides, trimmed_salutations,
+};
+pub use commands::{FarewellChannel, GreetCommand, TakeLeaveCommand};
+#[cfg(test)]
+pub(crate) use overrides::{CommandOverrides, FileOverrides, GreetOverrides, Overrides};
 
 /// Command-line surface exposed by the example.
 #[derive(Debug, Parser)]
@@ -42,6 +49,14 @@ pub struct CommandLine {
     pub command: Commands,
 }
 
+#[expect(
+    clippy::trivially_copy_pass_by_ref,
+    reason = "serde skip hooks receive references to field values"
+)]
+const fn is_false(value: &bool) -> bool {
+    !*value
+}
+
 /// CLI overrides for the global greeting options.
 #[derive(Debug, Default, Clone, PartialEq, Eq, Args, Deserialize, Serialize, OrthoConfig)]
 #[ortho_config(prefix = "HELLO_WORLD")]
@@ -61,10 +76,12 @@ pub struct GlobalArgs {
     pub salutations: Vec<String>,
     /// Enables an enthusiastic delivery mode from the CLI.
     #[arg(long = "is-excited", action = ArgAction::SetTrue, id = "is_excited")]
+    #[serde(skip_serializing_if = "crate::cli::is_false")]
     #[ortho_config(default = false)]
     pub is_excited: bool,
     /// Enables a quiet delivery mode from the CLI.
     #[arg(long = "is-quiet", action = ArgAction::SetTrue, id = "is_quiet")]
+    #[serde(skip_serializing_if = "crate::cli::is_false")]
     #[ortho_config(default = false)]
     pub is_quiet: bool,
 }
@@ -80,218 +97,6 @@ pub enum Commands {
     TakeLeave(TakeLeaveCommand),
 }
 
-/// Customisation options for the `greet` command.
-#[derive(Debug, Clone, PartialEq, Eq, Parser, Deserialize, Serialize, OrthoConfig)]
-#[ortho_config(prefix = "HELLO_WORLD")]
-pub struct GreetCommand {
-    /// Optional preamble printed before the greeting.
-    #[arg(long, value_name = "PHRASE", id = "preamble")]
-    pub preamble: Option<String>,
-    /// Punctuation appended to the greeting when not whispered.
-    #[arg(
-        long,
-        value_name = "TEXT",
-        id = "punctuation",
-        default_value_t = default_punctuation()
-    )]
-    #[ortho_config(default = default_punctuation())]
-    pub punctuation: String,
-}
-
-impl Default for GreetCommand {
-    fn default() -> Self {
-        Self {
-            preamble: None,
-            punctuation: default_punctuation(),
-        }
-    }
-}
-
-impl GreetCommand {
-    /// Ensures user-provided options are well formed.
-    ///
-    /// # Errors
-    ///
-    /// Returns a [`ValidationError`] when punctuation or preamble values are
-    /// blank after trimming.
-    pub fn validate(&self) -> Result<(), ValidationError> {
-        if self.punctuation.trim().is_empty() {
-            return Err(ValidationError::BlankPunctuation);
-        }
-        if self
-            .preamble
-            .as_deref()
-            .is_some_and(|text| text.trim().is_empty())
-        {
-            return Err(ValidationError::BlankPreamble);
-        }
-        Ok(())
-    }
-}
-
-fn default_punctuation() -> String {
-    String::from("!")
-}
-
-/// Options controlling the `take-leave` workflow.
-#[derive(Debug, Clone, PartialEq, Eq, Parser, Deserialize, Serialize, OrthoConfig)]
-#[ortho_config(prefix = "HELLO_WORLD")]
-pub struct TakeLeaveCommand {
-    /// Parting phrase to use when saying goodbye.
-    #[arg(
-        long,
-        value_name = "PHRASE",
-        id = "parting",
-        default_value_t = default_parting()
-    )]
-    #[ortho_config(default = default_parting())]
-    pub parting: String,
-    /// Optional preamble printed before the farewell greeting.
-    #[arg(long = "preamble", value_name = "PHRASE", id = "farewell_preamble")]
-    pub greeting_preamble: Option<String>,
-    /// Optional punctuation override appended to the farewell greeting.
-    #[arg(long = "punctuation", value_name = "TEXT", id = "farewell_punctuation")]
-    pub greeting_punctuation: Option<String>,
-    /// Describes how the farewell follow-up will be delivered.
-    #[arg(long = "channel", value_enum, id = "channel")]
-    pub channel: Option<FarewellChannel>,
-    /// Optional reminder delay in minutes.
-    #[arg(long = "remind-in", value_name = "MINUTES", id = "remind_in")]
-    pub remind_in: Option<u16>,
-    /// Optional gift noted in the farewell.
-    #[arg(long, value_name = "ITEM", id = "gift")]
-    pub gift: Option<String>,
-    /// Records whether the caller waves while leaving.
-    #[arg(long, action = ArgAction::SetTrue, id = "wave")]
-    #[ortho_config(default = false)]
-    pub wave: bool,
-}
-
-impl Default for TakeLeaveCommand {
-    fn default() -> Self {
-        Self {
-            parting: default_parting(),
-            greeting_preamble: None,
-            greeting_punctuation: None,
-            channel: None,
-            remind_in: None,
-            gift: None,
-            wave: false,
-        }
-    }
-}
-
-impl TakeLeaveCommand {
-    /// Validates caller-provided farewell customisation.
-    ///
-    /// # Errors
-    ///
-    /// Returns a [`ValidationError`] when any validation check fails.
-    pub fn validate(&self) -> Result<(), ValidationError> {
-        self.validate_greeting_overrides()?;
-        self.validate_parting()?;
-        self.validate_reminder()?;
-        self.validate_gift()?;
-        Ok(())
-    }
-
-    /// Ensures the farewell parting phrase is not blank.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`ValidationError::BlankFarewell`] when the parting phrase
-    /// contains only whitespace.
-    fn validate_parting(&self) -> Result<(), ValidationError> {
-        if self.parting.trim().is_empty() {
-            return Err(ValidationError::BlankFarewell);
-        }
-        Ok(())
-    }
-
-    /// Ensures reminder durations fall within the supported range.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`ValidationError::ReminderOutOfRange`] when the reminder is
-    /// present but zero minutes.
-    fn validate_reminder(&self) -> Result<(), ValidationError> {
-        if self.remind_in.is_some_and(|minutes| minutes == 0) {
-            return Err(ValidationError::ReminderOutOfRange);
-        }
-        Ok(())
-    }
-
-    /// Ensures gifts, when provided, are not blank strings.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`ValidationError::BlankGift`] when the caller supplies an
-    /// empty gift description.
-    fn validate_gift(&self) -> Result<(), ValidationError> {
-        if self
-            .gift
-            .as_deref()
-            .is_some_and(|gift| gift.trim().is_empty())
-        {
-            return Err(ValidationError::BlankGift);
-        }
-        Ok(())
-    }
-
-    fn validate_greeting_overrides(&self) -> Result<(), ValidationError> {
-        if self
-            .greeting_preamble
-            .as_deref()
-            .is_some_and(|text| text.trim().is_empty())
-        {
-            return Err(ValidationError::BlankPreamble);
-        }
-        if self
-            .greeting_punctuation
-            .as_deref()
-            .is_some_and(|text| text.trim().is_empty())
-        {
-            return Err(ValidationError::BlankPunctuation);
-        }
-        Ok(())
-    }
-}
-
-fn default_parting() -> String {
-    String::from("Take care")
-}
-
-/// Delivery channels supported by the `take-leave` command.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, ValueEnum)]
-#[serde(rename_all = "kebab-case")]
-pub enum FarewellChannel {
-    /// Sends a follow-up via instant message.
-    Message,
-    /// Schedules a quick voice call.
-    Call,
-    /// Dispatches a friendly email.
-    Email,
-}
-
-impl FarewellChannel {
-    /// Describes how the farewell will be delivered for user messaging.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use hello_world::cli::FarewellChannel;
-    /// assert_eq!(FarewellChannel::Email.describe(), "an email");
-    /// ```
-    #[must_use]
-    pub const fn describe(&self) -> &'static str {
-        match self {
-            Self::Message => "a message",
-            Self::Call => "a call",
-            Self::Email => "an email",
-        }
-    }
-}
-
 /// Resolves the global configuration by layering defaults with CLI overrides.
 ///
 /// # Errors
@@ -302,51 +107,17 @@ pub fn load_global_config(
     globals: &GlobalArgs,
     config_override: Option<&Path>,
 ) -> Result<HelloWorldCli, HelloWorldError> {
-    #[derive(Serialize)]
-    struct Overrides<'a> {
-        #[serde(skip_serializing_if = "Option::is_none")]
-        recipient: Option<&'a String>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        salutations: Option<Vec<String>>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        is_excited: Option<bool>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        is_quiet: Option<bool>,
-    }
-
-    #[derive(Serialize)]
-    struct FileLayer {
-        #[serde(skip_serializing_if = "Option::is_none")]
-        is_excited: Option<bool>,
-    }
-
-    let binary = std::env::args_os()
-        .next()
-        .unwrap_or_else(|| OsString::from("hello-world"));
-    let mut args = vec![binary];
-    if let Some(path) = config_override {
-        args.push(OsString::from("--config"));
-        args.push(path.as_os_str().to_os_string());
-    }
-    let base = HelloWorldCli::load_from_iter(args.into_iter())?;
-    let salutations = if globals.salutations.is_empty() {
-        None
-    } else {
-        Some(
-            globals
-                .salutations
-                .iter()
-                .map(|value| value.trim().to_owned())
-                .collect(),
-        )
-    };
-    let overrides = Overrides {
-        recipient: globals.recipient.as_ref(),
+    let base =
+        HelloWorldCli::load_from_iter(config_loading::build_cli_args(config_override).into_iter())?;
+    let salutations = config_loading::trimmed_salutations(globals);
+    let file_overrides = config_loading::load_config_overrides()?;
+    let overrides = config_loading::build_overrides(
+        globals,
         salutations,
-        is_excited: globals.is_excited.then_some(true),
-        is_quiet: globals.is_quiet.then_some(true),
-    };
-    let file_overrides = load_config_overrides()?;
+        file_overrides.as_ref(),
+        config_override,
+    );
+
     let mut figment = ortho_config::figment::Figment::from(
         ortho_config::figment::providers::Serialized::defaults(&base),
     );
@@ -363,46 +134,15 @@ pub fn load_global_config(
     Ok(merged)
 }
 
-fn load_config_overrides() -> Result<Option<FileOverrides>, HelloWorldError> {
-    if let Some(figment) = discover_config_figment()? {
-        let overrides: FileOverrides = figment.extract().map_err(|err| {
-            HelloWorldError::Configuration(Arc::new(ortho_config::OrthoError::merge(err)))
-        })?;
-        Ok(Some(overrides))
-    } else {
-        Ok(None)
-    }
-}
-
-#[derive(Debug, Default, Deserialize, PartialEq, Eq)]
-struct FileOverrides {
-    #[serde(default)]
-    is_excited: Option<bool>,
-    #[serde(default)]
-    cmds: CommandOverrides,
-}
-
-#[derive(Debug, Default, Deserialize, PartialEq, Eq)]
-struct CommandOverrides {
-    #[serde(default)]
-    greet: Option<GreetOverrides>,
-}
-
-#[derive(Debug, Default, Deserialize, PartialEq, Eq)]
-struct GreetOverrides {
-    #[serde(default)]
-    preamble: Option<String>,
-    #[serde(default)]
-    punctuation: Option<String>,
-}
-
 /// Applies greeting-specific overrides derived from configuration defaults.
 ///
 /// # Errors
 ///
 /// Returns a [`HelloWorldError`] when greeting defaults cannot be loaded.
 pub fn apply_greet_overrides(command: &mut GreetCommand) -> Result<(), HelloWorldError> {
-    if let Some(greet) = load_config_overrides()?.and_then(|overrides| overrides.cmds.greet) {
+    if let Some(greet) =
+        config_loading::load_config_overrides()?.and_then(|overrides| overrides.cmds.greet)
+    {
         if let Some(preamble) = greet.preamble {
             command.preamble = Some(preamble);
         }

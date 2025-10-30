@@ -12,8 +12,15 @@ fn reexports_are_public() {
     }
     #[cfg(feature = "yaml")]
     {
-        use ortho_config::serde_yaml;
-        let _ = serde_yaml::Value::Null;
+        use ortho_config::serde_saphyr;
+        let value = serde_saphyr::from_str::<serde_json::Value>("key: value")
+            .expect("serde-saphyr should parse YAML");
+        let actual = value
+            .get("key")
+            .expect("expected key entry in parsed YAML")
+            .as_str()
+            .expect("expected YAML key to deserialize as string");
+        assert_eq!(actual, "value");
     }
     #[cfg(feature = "json5")]
     {

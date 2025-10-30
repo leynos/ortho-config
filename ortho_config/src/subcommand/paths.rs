@@ -309,8 +309,7 @@ mod tests {
             .collect::<Result<_>>()?;
         ensure!(
             files == expected_files,
-            "unexpected candidate ordering: {:?}",
-            files
+            "unexpected candidate ordering: {files:?}"
         );
 
         let group_len: usize = EXT_GROUPS.iter().map(|g| g.len()).sum();

@@ -8,6 +8,43 @@ use syn::{Ident, Type};
 
 use crate::derive::parse::{FieldAttrs, MergeStrategy, vec_inner};
 
+/// Identifies whether a field participates in append merging and extracts its element type.
+///
+/// The function inspects the field's merge strategy, defaulting to `Append` when no attribute
+/// is supplied so plain `Vec<_>` fields still opt into vector merging. It attempts to peel the
+/// inner type via `vec_inner` and returns `Ok(Some((name, inner_ty)))` when the effective
+/// strategy is `Append` and the field is a `Vec<_>`. For non-append strategies or non-vector
+/// fields it returns `Ok(None)` so callers can skip the field.
+///
+/// The explicit merge strategy distinction exists to surface configuration bugs: a field that
+/// *explicitly* requests `Append` must be a vector, otherwise the function raises an error.
+/// When the strategy is only *implicitly* `Append` (because no attribute was provided) the code
+/// treats non-`Vec` fields as unsupported but benign by returning `Ok(None)`, avoiding false
+/// positives for non-vector fields that simply rely on the default strategy.
+fn process_vec_field(field: &syn::Field, attrs: &FieldAttrs) -> syn::Result<Option<(Ident, Type)>> {
+    let Some(name) = field.ident.clone() else {
+        return Err(syn::Error::new_spanned(
+            field,
+            "unnamed (tuple) fields are not supported for append merge strategy",
+        ));
+    };
+    let strategy = attrs.merge_strategy.unwrap_or(MergeStrategy::Append);
+    let Some(vec_ty) = vec_inner(&field.ty) else {
+        if matches!(attrs.merge_strategy, Some(MergeStrategy::Append)) {
+            return Err(syn::Error::new_spanned(
+                field,
+                "append merge strategy requires a Vec<_> field",
+            ));
+        }
+        return Ok(None);
+    };
+    if strategy == MergeStrategy::Append {
+        Ok(Some((name, (*vec_ty).clone())))
+    } else {
+        Ok(None)
+    }
+}
+
 /// Collects fields that use the append merge strategy.
 ///
 /// Walks the parsed struct, capturing each named `Vec<_>` field configured with
@@ -44,24 +81,8 @@ pub(crate) fn collect_append_fields(
 ) -> syn::Result<Vec<(Ident, Type)>> {
     let mut append_fields = Vec::new();
     for (field, attrs) in fields.iter().zip(field_attrs) {
-        let Some(name) = field.ident.clone() else {
-            return Err(syn::Error::new_spanned(
-                field,
-                "unnamed (tuple) fields are not supported for append merge strategy",
-            ));
-        };
-        let strategy = attrs.merge_strategy.unwrap_or(MergeStrategy::Append);
-        let Some(vec_ty) = vec_inner(&field.ty) else {
-            if matches!(attrs.merge_strategy, Some(MergeStrategy::Append)) {
-                return Err(syn::Error::new_spanned(
-                    field,
-                    "append merge strategy requires a Vec<_> field",
-                ));
-            }
-            continue;
-        };
-        if strategy == MergeStrategy::Append {
-            append_fields.push((name, (*vec_ty).clone()));
+        if let Some(strategy) = process_vec_field(field, attrs)? {
+            append_fields.push(strategy);
         }
     }
     Ok(append_fields)
@@ -180,6 +201,7 @@ mod tests {
     use super::*;
     use crate::derive::parse::StructAttrs;
     use anyhow::{Result, anyhow, ensure};
+    use rstest::rstest;
 
     fn demo_input() -> Result<(Vec<syn::Field>, Vec<FieldAttrs>, StructAttrs)> {
         let input: syn::DeriveInput = syn::parse_quote! {
@@ -193,6 +215,22 @@ mod tests {
         };
         let (_, fields, struct_attrs, field_attrs) = crate::derive::parse::parse_input(&input)?;
         Ok((fields, field_attrs, struct_attrs))
+    }
+
+    fn setup_single_field_test(
+        input: &syn::DeriveInput,
+        description: &str,
+    ) -> Result<(syn::Field, FieldAttrs)> {
+        let (_, fields, _, field_attrs) = crate::derive::parse::parse_input(input)?;
+        let field = fields
+            .first()
+            .cloned()
+            .ok_or_else(|| anyhow!("missing {description} field"))?;
+        let attrs = field_attrs
+            .first()
+            .cloned()
+            .ok_or_else(|| anyhow!("missing {description} attributes"))?;
+        Ok((field, attrs))
     }
 
     #[test]
@@ -218,6 +256,64 @@ mod tests {
         ensure!(
             init_ts.to_string().contains("__DemoVecOverride"),
             "override init missing expected struct"
+        );
+        Ok(())
+    }
+
+    #[rstest]
+    #[case::identifies_append_vec(
+        syn::parse_quote! {
+            struct Demo {
+                #[ortho_config(merge_strategy = "append")]
+                field2: Vec<String>,
+            }
+        },
+        true,
+        "field2",
+        syn::parse_quote!(String),
+    )]
+    #[case::skips_non_vec_without_append(
+        syn::parse_quote! {
+            struct DemoSkip {
+                field: Option<String>,
+            }
+        },
+        false,
+        "",
+        syn::parse_quote!(()),
+    )]
+    fn process_vec_field_behaviour(
+        #[case] input: syn::DeriveInput,
+        #[case] expect_some: bool,
+        #[case] expected_ident: &str,
+        #[case] expected_ty: syn::Type,
+    ) -> Result<()> {
+        let (field, attrs) = setup_single_field_test(&input, "test")?;
+        let result = process_vec_field(&field, &attrs)?;
+
+        if expect_some {
+            let (ident, ty) = result.ok_or_else(|| anyhow!("expected Some"))?;
+            ensure!(ident == expected_ident, "unexpected append target");
+            ensure!(ty == expected_ty, "unexpected element type");
+        } else {
+            ensure!(result.is_none(), "expected process_vec_field to skip field");
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn process_vec_field_errors_when_append_without_vec() -> Result<()> {
+        let input: syn::DeriveInput = syn::parse_quote! {
+            struct DemoInvalid {
+                #[ortho_config(merge_strategy = "append")]
+                field: Option<String>,
+            }
+        };
+        let (field, attrs) = setup_single_field_test(&input, "invalid")?;
+        let err = process_vec_field(&field, &attrs).expect_err("append requires Vec field");
+        ensure!(
+            err.to_string().contains("requires a Vec<_> field"),
+            "unexpected error: {err:?}"
         );
         Ok(())
     }

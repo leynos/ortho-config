@@ -8,6 +8,8 @@ use std::path::{Path, PathBuf};
 pub(super) mod extends_tests;
 pub(super) mod normalise_tests;
 pub(super) mod path_tests;
+#[cfg(feature = "yaml")]
+pub(super) mod yaml_tests;
 
 pub(super) fn canonical_root_and_current() -> Result<(PathBuf, PathBuf)> {
     let root = canonicalise(Path::new("."))
@@ -75,8 +77,7 @@ pub(super) fn assert_normalise_cycle_key(
     };
     anyhow::ensure!(
         normalise_cycle_key(&input) == expected,
-        "normalised path mismatch for input {:?}",
-        input
+        "normalised path mismatch for input {input:?}"
     );
     Ok(())
 }
