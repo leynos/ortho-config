@@ -19,9 +19,7 @@ fn dynamic_rules_file(world: &mut World, name: String) -> Result<()> {
         world.dynamic_rules_file.is_none(),
         "dynamic rules file already initialised",
     );
-    let mut section = String::from("[dynamic_rules.");
-    section.push_str(&name);
-    section.push_str("]\nenabled = true\n");
+    let section = format!("[dynamic_rules.{name}]\nenabled = true\n");
     world.dynamic_rules_file = Some(section);
     Ok(())
 }
