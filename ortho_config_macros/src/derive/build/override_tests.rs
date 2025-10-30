@@ -44,11 +44,11 @@ fn collect_strategies(input: &syn::DeriveInput) -> Result<CollectionStrategies> 
 /// Assert that collecting strategies for the provided input results in an empty
 /// collection for the specified field type.
 fn assert_collection_skip(
-    input: syn::DeriveInput,
+    input: &syn::DeriveInput,
     check_append: bool,
     context: &str,
 ) -> Result<()> {
-    let strategies = collect_strategies(&input)?;
+    let strategies = collect_strategies(input)?;
     if check_append {
         ensure!(strategies.append.is_empty(), "{context}");
     } else {
@@ -199,7 +199,7 @@ fn collect_collection_strategies_skips_replace_vec() -> Result<()> {
         }
     };
     assert_collection_skip(
-        input,
+        &input,
         true,
         "vector replace strategy should not populate append list",
     )
@@ -214,7 +214,7 @@ fn collect_collection_strategies_skips_keyed_map_entry() -> Result<()> {
         }
     };
     assert_collection_skip(
-        input,
+        &input,
         false,
         "keyed map strategy should not populate replace list",
     )

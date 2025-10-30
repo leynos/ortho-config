@@ -242,10 +242,11 @@ where
 ///
 /// # Examples
 ///
-/// ```rust
+/// ```rust,ignore
 /// // Build a synthetic attribute and visit its nested meta so we can call into
-/// // the parsing helper in this crate. This example ensures the documented
-/// // function signature stays aligned with the implementation.
+/// // the parsing helper in this crate. The nightly-2025-09-16 toolchain that
+/// // backs this repository currently ICEs when compiling the snippet, so the
+/// // example is marked `ignore` until the regression is fixed.
 /// use syn::Attribute;
 /// let attr: Attribute = syn::parse_quote!(#[ortho_config(cli_long = "name")]);
 /// attr.parse_nested_meta(|meta| {
@@ -522,8 +523,45 @@ pub(crate) fn parse_input(
 mod tests {
     use super::*;
     use anyhow::{Result, anyhow, ensure};
+    use quote::quote;
     use rstest::rstest;
     use syn::{Attribute, parse_quote};
+
+    /// Helper to assert that a `merge_strategy` attribute is correctly parsed.
+    struct MergeStrategyCase<'a> {
+        strategy_name: &'a str,
+        expected: MergeStrategy,
+        struct_name: &'a str,
+        field_name: &'a str,
+        field_type: &'a proc_macro2::TokenStream,
+    }
+
+    fn assert_merge_strategy(case: &MergeStrategyCase<'_>) -> Result<()> {
+        let input: DeriveInput = syn::parse_str(&format!(
+            r#"
+        struct {struct_name} {{
+            #[ortho_config(merge_strategy = "{strategy_name}")]
+            {field_name}: {field_type},
+        }}
+        "#,
+            struct_name = case.struct_name,
+            strategy_name = case.strategy_name,
+            field_name = case.field_name,
+            field_type = case.field_type,
+        ))
+        .map_err(|err| anyhow!("failed to parse input: {err}"))?;
+
+        let (_, _, _, attrs_vec) = parse_input(&input).map_err(|err| anyhow!(err))?;
+        let attrs = attrs_vec
+            .first()
+            .ok_or_else(|| anyhow!("missing field attributes"))?;
+        ensure!(
+            attrs.merge_strategy == Some(case.expected),
+            "{strategy} strategy not parsed",
+            strategy = case.strategy_name,
+        );
+        Ok(())
+    }
 
     #[test]
     fn parses_struct_and_field_attributes() -> Result<()> {
@@ -645,60 +683,41 @@ mod tests {
 
     #[test]
     fn parses_merge_strategy_append() -> Result<()> {
-        let append_input: DeriveInput = parse_quote! {
-            struct AppendDemo {
-                #[ortho_config(merge_strategy = "append")]
-                values: Vec<String>,
-            }
+        let field_type = quote!(Vec<String>);
+        let case = MergeStrategyCase {
+            strategy_name: "append",
+            expected: MergeStrategy::Append,
+            struct_name: "AppendDemo",
+            field_name: "values",
+            field_type: &field_type,
         };
-        let (_, _, _, append_attrs_vec) = parse_input(&append_input).map_err(|err| anyhow!(err))?;
-        let append_attrs = append_attrs_vec
-            .first()
-            .ok_or_else(|| anyhow!("missing append attributes"))?;
-        ensure!(
-            matches!(append_attrs.merge_strategy, Some(MergeStrategy::Append)),
-            "append strategy not parsed",
-        );
-        Ok(())
+        assert_merge_strategy(&case)
     }
 
     #[test]
     fn parses_merge_strategy_replace() -> Result<()> {
-        let replace_input: DeriveInput = parse_quote! {
-            struct ReplaceDemo {
-                #[ortho_config(merge_strategy = "replace")]
-                values: Vec<String>,
-            }
+        let field_type = quote!(Vec<String>);
+        let case = MergeStrategyCase {
+            strategy_name: "replace",
+            expected: MergeStrategy::Replace,
+            struct_name: "ReplaceDemo",
+            field_name: "values",
+            field_type: &field_type,
         };
-        let (_, _, _, replace_attrs_vec) =
-            parse_input(&replace_input).map_err(|err| anyhow!(err))?;
-        let replace_attrs = replace_attrs_vec
-            .first()
-            .ok_or_else(|| anyhow!("missing replace attributes"))?;
-        ensure!(
-            matches!(replace_attrs.merge_strategy, Some(MergeStrategy::Replace)),
-            "replace strategy not parsed",
-        );
-        Ok(())
+        assert_merge_strategy(&case)
     }
 
     #[test]
     fn parses_merge_strategy_keyed() -> Result<()> {
-        let map_input: DeriveInput = parse_quote! {
-            struct MapDemo {
-                #[ortho_config(merge_strategy = "keyed")]
-                rules: std::collections::BTreeMap<String, u32>,
-            }
+        let field_type = quote!(std::collections::BTreeMap<String, u32>);
+        let case = MergeStrategyCase {
+            strategy_name: "keyed",
+            expected: MergeStrategy::Keyed,
+            struct_name: "MapDemo",
+            field_name: "rules",
+            field_type: &field_type,
         };
-        let (_, _, _, map_attrs_vec) = parse_input(&map_input).map_err(|err| anyhow!(err))?;
-        let map_attrs = map_attrs_vec
-            .first()
-            .ok_or_else(|| anyhow!("missing map attributes"))?;
-        ensure!(
-            matches!(map_attrs.merge_strategy, Some(MergeStrategy::Keyed)),
-            "keyed strategy not parsed",
-        );
-        Ok(())
+        assert_merge_strategy(&case)
     }
 
     #[test]
