@@ -66,31 +66,20 @@ pub(super) fn build_inner_extract(
     }
 }
 
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "token generator owns extractor expression for composed calls"
-)]
-pub(super) fn build_extraction_check(
-    extractor_expr: TokenStream,
-    context: &ExtractContext<'_>,
-) -> TokenStream {
-    build_inner_extract(&extractor_expr, context)
-}
-
 pub(super) fn build_figment_extract(
     figment_binding: &TokenStream,
     context: &ExtractContext<'_>,
     is_optional: bool,
 ) -> TokenStream {
     if is_optional {
-        let inner = build_extraction_check(quote! { f }, context);
+        let inner = build_inner_extract(&quote! { f }, context);
         quote! {
             if let Some(f) = #figment_binding {
                 #inner
             }
         }
     } else {
-        build_extraction_check(figment_binding.clone(), context)
+        build_inner_extract(figment_binding, context)
     }
 }
 
