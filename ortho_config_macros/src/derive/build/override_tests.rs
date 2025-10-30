@@ -135,49 +135,43 @@ fn build_override_struct_creates_struct(demo_input: DemoInput) -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn collect_collection_strategies_errors_on_invalid_usage() -> Result<()> {
-    let input: syn::DeriveInput = syn::parse_quote! {
+#[rstest]
+#[case::non_collection_append(
+    syn::parse_quote! {
         struct DemoAppendError {
             #[ortho_config(merge_strategy = "append")]
             field1: u32,
         }
-    };
-    assert_collection_strategy_error(
-        input,
-        "merge_strategy is only supported on Vec<_> or BTreeMap<_, _> fields",
-        "expected strategy validation to fail",
-    )
-}
-
-#[test]
-fn collect_collection_strategies_rejects_keyed_on_vec() -> Result<()> {
-    let input: syn::DeriveInput = syn::parse_quote! {
+    },
+    "merge_strategy is only supported on Vec<_> or BTreeMap<_, _> fields",
+    "expected strategy validation to fail"
+)]
+#[case::keyed_vec(
+    syn::parse_quote! {
         struct DemoKeyedVecError {
             #[ortho_config(merge_strategy = "keyed")]
             items: Vec<String>,
         }
-    };
-    assert_collection_strategy_error(
-        input,
-        "keyed merge strategy is not supported for Vec<_> fields",
-        "expected keyed strategy on Vec to be rejected",
-    )
-}
-
-#[test]
-fn collect_collection_strategies_rejects_append_on_btreemap() -> Result<()> {
-    let input: syn::DeriveInput = syn::parse_quote! {
+    },
+    "keyed merge strategy is not supported for Vec<_> fields",
+    "expected keyed strategy on Vec to be rejected"
+)]
+#[case::append_map(
+    syn::parse_quote! {
         struct DemoAppendMapError {
             #[ortho_config(merge_strategy = "append")]
             settings: std::collections::BTreeMap<String, i32>,
         }
-    };
-    assert_collection_strategy_error(
-        input,
-        "append merge strategy is not supported for BTreeMap fields",
-        "expected append strategy on BTreeMap to be rejected",
-    )
+    },
+    "append merge strategy is not supported for BTreeMap fields",
+    "expected append strategy on BTreeMap to be rejected"
+)]
+fn collect_collection_strategies_rejects_invalid_strategy_usage(
+    #[case] input: syn::DeriveInput,
+    #[case] expected_error: &str,
+    #[case] context: &str,
+) -> Result<()> {
+    assert_collection_strategy_error(input, expected_error, context)
 }
 
 #[test]
