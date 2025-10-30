@@ -1,3 +1,6 @@
+//! Shared fixtures and builders for message-planning tests, allowing
+//! scenarios to construct consistent `HelloWorldCli` configurations and
+//! expected plans across multiple cases.
 use super::*;
 use crate::cli::{
     GlobalArgs, GreetCommand, HelloWorldCli, TakeLeaveCommand, load_global_config,
