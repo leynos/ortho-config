@@ -777,6 +777,11 @@ experience, we can create a highly valuable addition to the Rust ecosystem.
   now accumulates vector fields in typed append buffers and emits per-field
   merge logic so defaults, nested structures, and enumerations survive layered
   declarative inputs without auxiliary helper structs.
+- **Enumerate declarative precedence via fixtures (2024-06-21):** Parameterised
+  `rstest` suites exercise `merge_from_layers` across defaults, file,
+  environment, and CLI permutations while `trybuild` pass cases guard the
+  generated helper signatures. This codifies precedence semantics and catches
+  regressions in the derive macro before they reach downstream crates.
 
 - **Prefix normalisation:** The `prefix` struct attribute now appends a trailing
   underscore when callers omit it (unless the string is empty). This keeps

@@ -132,7 +132,11 @@ making it trivial to drive unit and behavioural tests with hand-crafted layers.
 `Vec<_>` fields accumulate values from each layer in order, so defaults can
 coexist with environment or CLI extensions. The Hello World example’s
 behavioural suite includes a dedicated scenario that parses JSON descriptors
-into `MergeLayer` values and asserts the merged configuration via these helpers.
+into `MergeLayer` values and asserts the merged configuration via these
+helpers. Unit tests can mirror this approach with `rstest` fixtures: define
+fixtures for default payloads, then enumerate cases for file, environment, and
+CLI layers. This validates every precedence permutation without copy-pasting
+setup.
 
 ## Installation and dependencies
 

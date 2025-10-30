@@ -193,7 +193,7 @@ references the relevant design guidance.
       [[Rust Doctest Dry Guide](rust-doctest-dry-guide.md)]
       [[Behavioural Testing](behavioural-testing-in-rust-with-cucumber.md)]
 
-    - [ ] Cover the derive macro with `rstest`-powered fixture suites
+    - [x] Cover the derive macro with `rstest`-powered fixture suites
       that enumerate precedence permutations and validate generated code via
       `trybuild` where necessary.
       [[rstest fixtures guide](rust-testing-with-rstest-fixtures.md)]
