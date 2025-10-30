@@ -1,5 +1,6 @@
 use super::r#override::{
-    build_collection_logic, build_override_struct, collect_collection_strategies,
+    CollectionStrategies, build_collection_logic, build_override_struct,
+    collect_collection_strategies,
 };
 use crate::derive::parse::{FieldAttrs, StructAttrs, parse_input};
 use anyhow::{Result, anyhow, ensure};
@@ -30,6 +31,12 @@ fn assert_collection_strategy_error(
         "unexpected error message: {err}",
     );
     Ok(())
+}
+
+/// Collect strategies for the provided input, propagating parse failures.
+fn collect_strategies(input: syn::DeriveInput) -> Result<CollectionStrategies> {
+    let (_, fields, _, field_attrs) = parse_input(&input)?;
+    Ok(collect_collection_strategies(&fields, &field_attrs)?)
 }
 
 #[fixture]
@@ -173,14 +180,12 @@ fn collect_collection_strategies_rejects_append_on_btreemap() -> Result<()> {
 
 #[test]
 fn collect_collection_strategies_skips_replace_vec() -> Result<()> {
-    let input: syn::DeriveInput = syn::parse_quote! {
+    let strategies = collect_strategies(syn::parse_quote! {
         struct DemoReplaceVec {
             #[ortho_config(merge_strategy = "replace")]
             values: Vec<String>,
         }
-    };
-    let (_, fields, _, field_attrs) = parse_input(&input)?;
-    let strategies = collect_collection_strategies(&fields, &field_attrs)?;
+    })?;
     ensure!(
         strategies.append.is_empty(),
         "vector replace strategy should not populate append list"
@@ -190,14 +195,12 @@ fn collect_collection_strategies_skips_replace_vec() -> Result<()> {
 
 #[test]
 fn collect_collection_strategies_skips_keyed_map_entry() -> Result<()> {
-    let input: syn::DeriveInput = syn::parse_quote! {
+    let strategies = collect_strategies(syn::parse_quote! {
         struct DemoKeyedMap {
             #[ortho_config(merge_strategy = "keyed")]
             values: std::collections::BTreeMap<String, i32>,
         }
-    };
-    let (_, fields, _, field_attrs) = parse_input(&input)?;
-    let strategies = collect_collection_strategies(&fields, &field_attrs)?;
+    })?;
     ensure!(
         strategies.map_replace.is_empty(),
         "keyed map strategy should not populate replace list"
