@@ -86,8 +86,7 @@ pub(crate) fn setup_sample_greet(
         *config = cfg.clone();
         *greet = load_greet_defaults().map_err(figment_error)?;
         Ok(())
-    })?;
-    Ok(())
+    })
 }
 
 pub(crate) fn setup_noop_leave(_: &mut HelloWorldCli, leave: &mut TakeLeaveCommand) -> Result<()> {
