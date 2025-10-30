@@ -75,7 +75,6 @@ pub(crate) fn setup_default_greet(config: &mut HelloWorldCli, _: &mut GreetComma
 
 pub(crate) fn setup_excited(config: &mut HelloWorldCli, _: &mut GreetCommand) -> Result<()> {
     config.is_excited = true;
-    ensure!(config.is_excited, "excitement flag must be enabled");
     Ok(())
 }
 
