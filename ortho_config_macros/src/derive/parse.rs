@@ -644,7 +644,7 @@ mod tests {
     }
 
     #[test]
-    fn parses_merge_strategy_variants() -> Result<()> {
+    fn parses_merge_strategy_append() -> Result<()> {
         let append_input: DeriveInput = parse_quote! {
             struct AppendDemo {
                 #[ortho_config(merge_strategy = "append")]
@@ -659,7 +659,11 @@ mod tests {
             matches!(append_attrs.merge_strategy, Some(MergeStrategy::Append)),
             "append strategy not parsed",
         );
+        Ok(())
+    }
 
+    #[test]
+    fn parses_merge_strategy_replace() -> Result<()> {
         let replace_input: DeriveInput = parse_quote! {
             struct ReplaceDemo {
                 #[ortho_config(merge_strategy = "replace")]
@@ -675,7 +679,11 @@ mod tests {
             matches!(replace_attrs.merge_strategy, Some(MergeStrategy::Replace)),
             "replace strategy not parsed",
         );
+        Ok(())
+    }
 
+    #[test]
+    fn parses_merge_strategy_keyed() -> Result<()> {
         let map_input: DeriveInput = parse_quote! {
             struct MapDemo {
                 #[ortho_config(merge_strategy = "keyed")]
@@ -690,7 +698,11 @@ mod tests {
             matches!(map_attrs.merge_strategy, Some(MergeStrategy::Keyed)),
             "keyed strategy not parsed",
         );
+        Ok(())
+    }
 
+    #[test]
+    fn parses_merge_strategy_invalid() -> Result<()> {
         let invalid: DeriveInput = parse_quote! {
             struct InvalidDemo {
                 #[ortho_config(merge_strategy = "unknown")]
