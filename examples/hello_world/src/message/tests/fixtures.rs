@@ -2,7 +2,7 @@
 //! scenarios to construct consistent `HelloWorldCli` configurations and
 //! expected plans across multiple cases.
 use super::*;
-pub(crate) use crate::cli::tests::helpers::{greet_command, TakeLeaveCommandFixture};
+pub(crate) use crate::cli::tests::helpers::{greet_command, take_leave_command, TakeLeaveCommandFixture};
 use crate::cli::{
     GlobalArgs, GreetCommand, HelloWorldCli, TakeLeaveCommand, load_global_config,
     load_greet_defaults,
@@ -117,16 +117,6 @@ pub(crate) fn base_config() -> HelloWorldCliFixture {
         "default salutations should contain at least one entry"
     );
     Ok(config)
-}
-
-#[fixture]
-pub(crate) fn take_leave_command() -> TakeLeaveCommandFixture {
-    let command = TakeLeaveCommand::default();
-    ensure!(
-        !command.parting.trim().is_empty(),
-        "default farewell must not be empty"
-    );
-    Ok(command)
 }
 
 pub(crate) fn build_plan_variant(
