@@ -242,7 +242,7 @@ fn build_append_blocks(strategies: &CollectionStrategies) -> Vec<proc_macro2::To
             quote! {
                 {
                     let mut vec_acc: Vec<#ty> = Vec::new();
-                    vec_acc.extend(defaults.#name.clone());
+                    vec_acc.extend(defaults.#name.clone().unwrap_or_default());
                     if let Some(f) = &file_fig {
                         if let Ok(v) = f.extract_inner::<Vec<#ty>>(stringify!(#name)) { vec_acc.extend(v); }
                     }
