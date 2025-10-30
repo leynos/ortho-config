@@ -300,7 +300,7 @@ fn build_inner_extract(
 
 #[expect(
     clippy::needless_pass_by_value,
-    reason = "the review request specifies an owned extractor expression",
+    reason = "the review request specifies an owned extractor expression"
 )]
 fn build_extraction_check(
     extractor_expr: proc_macro2::TokenStream,
