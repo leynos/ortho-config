@@ -2,6 +2,7 @@
 //! scenarios to construct consistent `HelloWorldCli` configurations and
 //! expected plans across multiple cases.
 use super::*;
+pub(crate) use crate::cli::tests::helpers::{greet_command, TakeLeaveCommandFixture};
 use crate::cli::{
     GlobalArgs, GreetCommand, HelloWorldCli, TakeLeaveCommand, load_global_config,
     load_greet_defaults,
@@ -25,8 +26,6 @@ pub(crate) struct ExpectedPlan {
 }
 
 pub(crate) type HelloWorldCliFixture = Result<HelloWorldCli>;
-pub(crate) type GreetCommandFixture = Result<GreetCommand>;
-pub(crate) type TakeLeaveCommandFixture = Result<TakeLeaveCommand>;
 
 #[derive(Clone, Copy)]
 pub(crate) enum PlanVariant {
@@ -46,8 +45,8 @@ pub(crate) type LeaveSetup = fn(&mut HelloWorldCli, &mut TakeLeaveCommand) -> Re
 
 pub(crate) fn build_plan_from(
     config: HelloWorldCli,
-    mut greet: GreetCommand,
-    mut leave: TakeLeaveCommand,
+    greet: GreetCommand,
+    leave: TakeLeaveCommand,
 ) -> Result<Plan> {
     let greeting = build_plan(&config, &greet).map_err(|err| anyhow!(err.to_string()))?;
     let take_leave =
@@ -118,16 +117,6 @@ pub(crate) fn base_config() -> HelloWorldCliFixture {
         "default salutations should contain at least one entry"
     );
     Ok(config)
-}
-
-#[fixture]
-pub(crate) fn greet_command() -> GreetCommandFixture {
-    let command = GreetCommand::default();
-    ensure!(
-        !command.punctuation.trim().is_empty(),
-        "default greet punctuation must not be empty"
-    );
-    Ok(command)
 }
 
 #[fixture]

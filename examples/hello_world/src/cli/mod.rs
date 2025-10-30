@@ -297,4 +297,5 @@ fn default_salutations() -> Vec<String> {
 }
 
 #[cfg(test)]
-mod tests;
+#[cfg(test)]
+pub(crate) mod tests;
