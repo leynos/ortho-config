@@ -71,7 +71,7 @@ fn build_plan_variants() -> Result<()> {
         (case.greet_setup)(&mut config, &mut greet)?;
         (case.leave_setup)(&mut config, &mut leave)?;
 
-        let plan = build_plan_variant(config, greet, leave, case.variant)?;
+        let plan = build_plan_variant(config, &greet, &leave, case.variant)?;
         assert_plan(&plan, &case.expected)?;
     }
 

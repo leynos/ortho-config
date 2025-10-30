@@ -1,4 +1,4 @@
-error: unknown merge_strategy
+error: unknown merge_strategy 'bogus'; expected one of "append", "replace", or "keyed"
  --> tests/ui/invalid_merge_strategy.rs:8:37
   |
 8 |     #[ortho_config(merge_strategy = "bogus")]

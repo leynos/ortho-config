@@ -2,7 +2,9 @@
 //! scenarios to construct consistent `HelloWorldCli` configurations and
 //! expected plans across multiple cases.
 use super::*;
-pub(crate) use crate::cli::tests::helpers::{greet_command, take_leave_command, TakeLeaveCommandFixture};
+pub(crate) use crate::cli::tests::helpers::{
+    TakeLeaveCommandFixture, greet_command, take_leave_command,
+};
 use crate::cli::{
     GlobalArgs, GreetCommand, HelloWorldCli, TakeLeaveCommand, load_global_config,
     load_greet_defaults,
@@ -45,12 +47,12 @@ pub(crate) type LeaveSetup = fn(&mut HelloWorldCli, &mut TakeLeaveCommand) -> Re
 
 pub(crate) fn build_plan_from(
     config: HelloWorldCli,
-    greet: GreetCommand,
-    leave: TakeLeaveCommand,
+    greet: &GreetCommand,
+    leave: &TakeLeaveCommand,
 ) -> Result<Plan> {
-    let greeting = build_plan(&config, &greet).map_err(|err| anyhow!(err.to_string()))?;
+    let greeting = build_plan(&config, greet).map_err(|err| anyhow!(err.to_string()))?;
     let take_leave =
-        build_take_leave_plan(&config, &leave).map_err(|err| anyhow!(err.to_string()))?;
+        build_take_leave_plan(&config, leave).map_err(|err| anyhow!(err.to_string()))?;
 
     Ok(Plan {
         config,
@@ -73,6 +75,10 @@ pub(crate) fn setup_default_greet(config: &mut HelloWorldCli, _: &mut GreetComma
 }
 
 pub(crate) fn setup_excited(config: &mut HelloWorldCli, _: &mut GreetCommand) -> Result<()> {
+    ensure!(
+        !config.is_quiet,
+        "excited setup expects quiet delivery disabled",
+    );
     config.is_excited = true;
     Ok(())
 }
@@ -100,6 +106,10 @@ pub(crate) fn setup_festive_leave(
     _: &mut HelloWorldCli,
     leave: &mut TakeLeaveCommand,
 ) -> Result<()> {
+    ensure!(
+        !leave.parting.trim().is_empty(),
+        "festive leave requires a non-empty parting message",
+    );
     leave.wave = true;
     leave.gift = Some(String::from("biscuits"));
     Ok(())
@@ -121,8 +131,8 @@ pub(crate) fn base_config() -> HelloWorldCliFixture {
 
 pub(crate) fn build_plan_variant(
     config: HelloWorldCli,
-    greet: GreetCommand,
-    leave: TakeLeaveCommand,
+    greet: &GreetCommand,
+    leave: &TakeLeaveCommand,
     variant: PlanVariant,
 ) -> Result<Plan> {
     match variant {
@@ -131,16 +141,9 @@ pub(crate) fn build_plan_variant(
             plan_from_inputs(config, greet, leave)
         }),
         PlanVariant::SampleEnv => with_sample_config(move |cfg| {
-            let greet_defaults = load_greet_defaults().map_err(figment_error)?;
-            let mut sample_leave = take_leave_command().map_err(figment_error)?;
-            sample_leave.parting = leave.parting.clone();
-            sample_leave.greeting_preamble = leave.greeting_preamble.clone();
-            sample_leave.greeting_punctuation = leave.greeting_punctuation.clone();
-            sample_leave.channel = leave.channel;
-            sample_leave.remind_in = leave.remind_in;
-            sample_leave.gift = leave.gift.clone();
-            sample_leave.wave = leave.wave;
-            plan_from_inputs(cfg.clone(), greet_defaults, sample_leave)
+            let sample_greet = greet.clone();
+            let sample_leave = leave.clone();
+            plan_from_inputs(cfg.clone(), &sample_greet, &sample_leave)
         }),
     }
 }
@@ -151,8 +154,8 @@ pub(crate) fn build_plan_variant(
 )]
 fn plan_from_inputs(
     config: HelloWorldCli,
-    greet: GreetCommand,
-    leave: TakeLeaveCommand,
+    greet: &GreetCommand,
+    leave: &TakeLeaveCommand,
 ) -> figment::error::Result<Plan> {
     build_plan_from(config, greet, leave).map_err(figment_error)
 }

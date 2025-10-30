@@ -5,7 +5,6 @@ use ortho_config::OrthoConfig;
 use rstest::rstest;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-use std::marker::PhantomData;
 
 #[path = "test_utils.rs"]
 mod test_utils;
@@ -81,16 +80,6 @@ impl HasValues for ReplaceVec {
     }
 }
 
-fn configure_layered_sources(j: &mut Jail) -> Result<()> {
-    j.create_file(".config.toml", "values = [\"file\"]")?;
-    j.set_env("VALUES", "[\"env\"]");
-    Ok(())
-}
-
-fn noop_setup(_: &mut Jail) -> Result<()> {
-    Ok(())
-}
-
 fn run_vector_case<T, Setup>(
     args: &[&str],
     setup: Setup,
@@ -119,57 +108,69 @@ where
     })
 }
 
+fn configure_layered_sources(j: &mut Jail) -> Result<()> {
+    j.create_file(".config.toml", "values = [\"file\"]")?;
+    j.set_env("VALUES", "[\"env\"]");
+    Ok(())
+}
+
 const BASE_ARGS: &[&str] = &["prog"];
 const LAYERED_ARGS: &[&str] = &["prog", "--values", "cli1", "--values", "cli2"];
 const DEFAULT_APPEND_ARGS: &[&str] = &["prog", "--values", "cli"];
 
 #[rstest]
-#[case::append_all_sources(
-    PhantomData::<VecConfig>,
-    LAYERED_ARGS,
-    configure_layered_sources as fn(&mut Jail) -> Result<()>,
-    &["file", "env", "cli1", "cli2"],
-    "append strategy should retain contributions from every source"
-)]
-#[case::append_empty(
-    PhantomData::<EmptyVec>,
-    BASE_ARGS,
-    noop_setup,
-    &[],
-    "append strategy should yield defaults when no layers supply values"
-)]
-#[case::append_includes_defaults(
-    PhantomData::<DefaultVec>,
-    DEFAULT_APPEND_ARGS,
-    configure_layered_sources as fn(&mut Jail) -> Result<()>,
-    &["def", "file", "env", "cli"],
-    "append strategy should prepend defaults before layered contributions"
-)]
-#[case::replace_latest_layer(
-    PhantomData::<ReplaceVec>,
-    LAYERED_ARGS,
-    configure_layered_sources as fn(&mut Jail) -> Result<()>,
-    &["cli1", "cli2"],
-    "replace strategy should honour highest precedence (CLI) values"
-)]
-#[case::replace_empty_sources(
-    PhantomData::<ReplaceVec>,
-    BASE_ARGS,
-    noop_setup,
-    &[],
-    "replace strategy should fall back to defaults when no sources load"
-)]
-fn vector_merge_strategies<T>(
-    #[case] _phantom: PhantomData<T>,
-    #[case] args: &[&str],
-    #[case] setup: fn(&mut Jail) -> Result<()>,
-    #[case] expected: &[&str],
-    #[case] context: &str,
-) -> Result<()>
-where
-    T: OrthoConfig + HasValues,
-{
-    run_vector_case::<T, _>(args, setup, expected, context)
+#[case::append_all_sources(case_append_all_sources)]
+#[case::append_empty(case_append_empty)]
+#[case::append_includes_defaults(case_append_includes_defaults)]
+#[case::replace_latest_layer(case_replace_latest_layer)]
+#[case::replace_empty_sources(case_replace_empty_sources)]
+fn vector_merge_strategies(#[case] scenario: fn() -> Result<()>) -> Result<()> {
+    scenario()
+}
+
+fn case_append_all_sources() -> Result<()> {
+    run_vector_case::<VecConfig, _>(
+        LAYERED_ARGS,
+        configure_layered_sources,
+        &["file", "env", "cli1", "cli2"],
+        "append strategy should retain contributions from every source",
+    )
+}
+
+fn case_append_empty() -> Result<()> {
+    run_vector_case::<EmptyVec, _>(
+        BASE_ARGS,
+        |_| Ok(()),
+        &[],
+        "append strategy should yield defaults when no layers supply values",
+    )
+}
+
+fn case_append_includes_defaults() -> Result<()> {
+    run_vector_case::<DefaultVec, _>(
+        DEFAULT_APPEND_ARGS,
+        configure_layered_sources,
+        &["def", "file", "env", "cli"],
+        "append strategy should prepend defaults before layered contributions",
+    )
+}
+
+fn case_replace_latest_layer() -> Result<()> {
+    run_vector_case::<ReplaceVec, _>(
+        LAYERED_ARGS,
+        configure_layered_sources,
+        &["cli1", "cli2"],
+        "replace strategy should honour highest precedence (CLI) values",
+    )
+}
+
+fn case_replace_empty_sources() -> Result<()> {
+    run_vector_case::<ReplaceVec, _>(
+        BASE_ARGS,
+        |_| Ok(()),
+        &[],
+        "replace strategy should fall back to defaults when no sources load",
+    )
 }
 
 #[rstest]
