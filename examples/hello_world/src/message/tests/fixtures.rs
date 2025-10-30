@@ -155,7 +155,7 @@ pub(crate) fn build_plan_variant(
             plan_from_inputs(config, greet, leave)
         }),
         PlanVariant::SampleEnv => {
-            with_sample_config(move |_| plan_from_inputs(config, greet, leave))
+            with_sample_config(move |cfg| plan_from_inputs(cfg.clone(), greet, leave))
         }
     }
 }
