@@ -24,7 +24,12 @@ pub(crate) struct LoadImplTokens<'a> {
     pub env_provider: &'a proc_macro2::TokenStream,
     pub default_struct_init: &'a [proc_macro2::TokenStream],
     pub override_init_ts: &'a proc_macro2::TokenStream,
-    pub append_logic: &'a proc_macro2::TokenStream,
+    /// Tokens executed before the Figment merge to capture or strip
+    /// high-precedence collections.
+    pub collection_pre_merge: &'a proc_macro2::TokenStream,
+    /// Tokens executed after extraction to reapply the captured collections
+    /// with the correct precedence.
+    pub collection_post_extract: &'a proc_macro2::TokenStream,
     pub config_env_var: &'a proc_macro2::TokenStream,
     pub dotfile_name: &'a syn::LitStr,
     pub legacy_app_name: String,
@@ -247,7 +252,8 @@ pub(crate) fn build_merge_section(
     let LoadImplTokens {
         default_struct_init,
         override_init_ts,
-        append_logic,
+        collection_pre_merge,
+        collection_post_extract,
         ..
     } = tokens;
     let fig_ts = quote!(fig);
@@ -264,11 +270,11 @@ pub(crate) fn build_merge_section(
         if let Some(ref f) = file_fig {
             fig = fig.merge(f);
         }
-        let env_figment = Figment::from(env_provider);
-        fig = fig.merge(env_figment.clone());
+        let env_figment = Figment::from(env_provider.clone());
+        fig = fig.merge(Figment::from(env_provider));
         #cli_merge
 
-        #append_logic
+        #collection_pre_merge
 
         match ortho_config::sanitized_provider(&overrides) {
             Ok(p) => fig = fig.merge(p),
@@ -276,7 +282,8 @@ pub(crate) fn build_merge_section(
         }
 
         match fig.extract::<#config_ident>() {
-            Ok(cfg) => {
+            Ok(mut cfg) => {
+                #collection_post_extract
                 if errors.is_empty() {
                     Ok(cfg)
                 } else if errors.len() == 1 {

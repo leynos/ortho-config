@@ -645,6 +645,19 @@ The derive macro exposes the generated `config_path` field, allowing projects
 to rename the hidden `--config-path` flag by defining their own field with a
 `cli_long` attribute. The associated environment variable remains `CONFIG_PATH`.
 
+### 4.16. Collection merge strategies
+
+Vector fields continue to append values from each layer unless a caller
+explicitly opts into replacement. Applying
+`#[ortho_config(merge_strategy = "replace")]` ensures that higher-precedence
+layers discard previous entries instead of extending them. Map fields default to
+keyed merges where later layers only update the entries they define. When a
+configuration needs to swap the entire table—such as the hello_world example's
+`greeting_templates` map—setting the merge strategy to `"replace"` records the
+last observed map as typed data and reapplies it after processing all layers. This
+keeps keyed defaults available by default while providing a deterministic escape
+hatch for wholesale replacements.
+
 ## 5. Dependency Strategy
 
 - **`ortho_config_macros`:**

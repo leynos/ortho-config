@@ -60,11 +60,11 @@ impl ortho_config::DeclarativeMerge for __SampleDeclarativeMergeState {
 
     fn finish(self) -> ortho_config::OrthoResult<Self::Output> {
         let __SampleDeclarativeMergeState { mut value, } = self;
-        let mut appended = ortho_config::serde_json::Map::new();
-        if !appended.is_empty() {
+        let mut overlay = ortho_config::serde_json::Map::new();
+        if !overlay.is_empty() {
             ortho_config::declarative::merge_value(
                 &mut value,
-                ortho_config::serde_json::Value::Object(appended),
+                ortho_config::serde_json::Value::Object(overlay),
             );
         }
         ortho_config::declarative::from_value(value)

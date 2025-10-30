@@ -2,6 +2,7 @@
 //!
 //! Binds CLI, environment, and default layers via `OrthoConfig` so tests can
 //! drive the binary with predictable inputs.
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use clap::{ArgAction, Args, Parser, Subcommand};
@@ -84,6 +85,11 @@ pub struct GlobalArgs {
     #[serde(skip_serializing_if = "crate::cli::is_false")]
     #[ortho_config(default = false)]
     pub is_quiet: bool,
+    /// Template overrides loaded from configuration files.
+    #[arg(skip = BTreeMap::new())]
+    #[serde(default)]
+    #[ortho_config(skip_cli, merge_strategy = "replace")]
+    pub greeting_templates: BTreeMap<String, String>,
 }
 
 /// Subcommands implemented by the example.
@@ -291,4 +297,4 @@ fn default_salutations() -> Vec<String> {
 }
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;

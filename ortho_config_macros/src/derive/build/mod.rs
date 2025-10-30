@@ -11,6 +11,8 @@ mod config_flag;
 mod defaults;
 mod env;
 mod r#override;
+#[cfg(test)]
+mod override_tests;
 
 pub(crate) use cli::build_cli_struct_fields;
 pub(crate) use config_flag::build_config_flag_field;
@@ -19,4 +21,7 @@ pub(crate) use env::{
     build_config_env_var, build_env_provider, compute_config_env_var, compute_dotfile_name,
     default_app_name,
 };
-pub(crate) use r#override::{build_append_logic, build_override_struct, collect_append_fields};
+pub(crate) use r#override::{
+    CollectionStrategies, build_collection_logic, build_override_struct,
+    collect_collection_strategies,
+};

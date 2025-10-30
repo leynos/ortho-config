@@ -136,6 +136,51 @@ impl<'a> MergeLayer<'a> {
 }
 
 /// Builder that accumulates [`MergeLayer`] instances.
+///
+/// # Collection merge strategies
+///
+/// The composer honours field-level merge strategies emitted by the derive
+/// macro. Vector fields append by default but can opt into replacement; maps
+/// default to keyed merging and can be replaced wholesale.
+///
+/// ```rust
+/// use ortho_config::declarative::MergeComposer;
+/// use serde::{Deserialize, Serialize};
+/// use serde_json::json;
+/// use std::collections::BTreeMap;
+///
+/// #[derive(Debug, Deserialize, Serialize, ortho_config::OrthoConfig)]
+/// struct Templates {
+///     #[serde(default)]
+///     #[ortho_config(merge_strategy = "replace")]
+///     greetings: Vec<String>,
+///     #[serde(default)]
+///     #[ortho_config(merge_strategy = "replace")]
+///     templates: BTreeMap<String, String>,
+/// }
+///
+/// let mut composer = MergeComposer::new();
+/// composer.push_defaults(json!({
+///     "greetings": ["Hello"],
+///     "templates": { "friendly": "Hello, {name}!" }
+/// }));
+/// composer.push_environment(json!({
+///     "templates": { "formal": "Good day, {name}." }
+/// }));
+/// composer.push_cli(json!({
+///     "greetings": ["Hi"],
+///     "templates": { "casual": "Hey {name}!" }
+/// }));
+///
+/// let cfg = Templates::merge_from_layers(composer.layers())?;
+/// assert_eq!(cfg.greetings, vec![String::from("Hi")]);
+/// assert_eq!(cfg.templates.len(), 1);
+/// assert_eq!(
+///     cfg.templates.get("casual"),
+///     Some(&String::from("Hey {name}!"))
+/// );
+/// # Ok::<_, ortho_config::OrthoError>(())
+/// ```
 #[derive(Default)]
 pub struct MergeComposer {
     layers: Vec<MergeLayer<'static>>,

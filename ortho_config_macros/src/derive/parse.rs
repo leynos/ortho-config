@@ -23,12 +23,22 @@ pub(crate) struct StructAttrs {
     pub discovery: Option<DiscoveryAttrs>,
 }
 
+/// Field-level attributes recognised by `#[derive(OrthoConfig)]`.
+///
+/// - `cli_long`/`cli_short` override generated CLI flags.
+/// - `default` supplies a compile-time default expression when no layer
+///   configures the field.
+/// - `merge_strategy` selects how collections combine during declarative
+///   merges.
+/// - `skip_cli` omits the field from CLI parsing whilst leaving declarative
+///   merging untouched.
 #[derive(Default, Clone)]
 pub(crate) struct FieldAttrs {
     pub cli_long: Option<String>,
     pub cli_short: Option<char>,
     pub default: Option<Expr>,
     pub merge_strategy: Option<MergeStrategy>,
+    pub skip_cli: bool,
 }
 
 #[derive(Default, Clone)]
@@ -46,13 +56,22 @@ pub(crate) struct DiscoveryAttrs {
 #[derive(Clone, Copy, PartialEq)]
 pub(crate) enum MergeStrategy {
     Append,
+    Replace,
+    Keyed,
 }
 
 impl MergeStrategy {
     pub(crate) fn parse(s: &str, span: proc_macro2::Span) -> Result<Self, syn::Error> {
         match s {
             "append" => Ok(Self::Append),
-            _ => Err(syn::Error::new(span, "unknown merge_strategy")),
+            "replace" => Ok(Self::Replace),
+            "keyed" => Ok(Self::Keyed),
+            _ => Err(syn::Error::new(
+                span,
+                format!(
+                    "unknown merge_strategy '{s}'; expected one of \"append\", \"replace\", or \"keyed\""
+                ),
+            )),
         }
     }
 }
@@ -223,10 +242,11 @@ where
 ///
 /// # Examples
 ///
-/// ```rust
+/// ```rust,ignore
 /// // Build a synthetic attribute and visit its nested meta so we can call into
-/// // the parsing helper in this crate. This example ensures the documented
-/// // function signature stays aligned with the implementation.
+/// // the parsing helper in this crate. The nightly-2025-09-16 toolchain that
+/// // backs this repository currently ICEs when compiling the snippet, so the
+/// // example is marked `ignore` until the regression is fixed.
 /// use syn::Attribute;
 /// let attr: Attribute = syn::parse_quote!(#[ortho_config(cli_long = "name")]);
 /// attr.parse_nested_meta(|meta| {
@@ -306,6 +326,10 @@ fn apply_field_attr(
             out.merge_strategy = Some(MergeStrategy::parse(&s.value(), s.span())?);
             Ok(true)
         }
+        () if meta.path.is_ident("skip_cli") => {
+            out.skip_cli = true;
+            Ok(true)
+        }
         () => Ok(false),
     }
 }
@@ -359,8 +383,8 @@ mod lit_str_tests {
 
 /// Parses field-level `#[ortho_config(...)]` attributes.
 ///
-/// Recognised keys include `cli_long`, `cli_short`, `default` and
-/// `merge_strategy`. Unknown keys are ignored, matching
+/// Recognised keys include `cli_long`, `cli_short`, `default`,
+/// `merge_strategy`, and `skip_cli`. Unknown keys are ignored, matching
 /// [`parse_struct_attrs`] for forwards compatibility. This lenience may
 /// permit misspelt attribute names; users wanting stricter validation can
 /// insert a manual `compile_error!` guard.
@@ -427,6 +451,32 @@ pub(crate) fn vec_inner(ty: &Type) -> Option<&Type> {
     type_inner(ty, "Vec")
 }
 
+/// Extracts the key and value types if `ty` is `BTreeMap<K, V>`.
+///
+/// The helper mirrors [`vec_inner`], matching both plain and fully-qualified
+/// paths where the final segment is `BTreeMap`.
+pub(crate) fn btree_map_inner(ty: &Type) -> Option<(&Type, &Type)> {
+    let Type::Path(p) = ty else {
+        return None;
+    };
+    let mut segs = p.path.segments.iter().rev();
+    let last = segs.next()?;
+    if last.ident != "BTreeMap" {
+        return None;
+    }
+    let _ = segs.next();
+    let PathArguments::AngleBracketed(args) = &last.arguments else {
+        return None;
+    };
+    let mut type_args = args.args.iter().filter_map(|arg| match arg {
+        GenericArgument::Type(inner) => Some(inner),
+        _ => None,
+    });
+    let key = type_args.next()?;
+    let value = type_args.next()?;
+    Some((key, value))
+}
+
 /// Gathers information from the user-provided struct.
 ///
 /// The helper collects the struct identifier, its fields, and all
@@ -473,8 +523,45 @@ pub(crate) fn parse_input(
 mod tests {
     use super::*;
     use anyhow::{Result, anyhow, ensure};
+    use quote::quote;
     use rstest::rstest;
     use syn::{Attribute, parse_quote};
+
+    /// Helper to assert that a `merge_strategy` attribute is correctly parsed.
+    struct MergeStrategyCase<'a> {
+        strategy_name: &'a str,
+        expected: MergeStrategy,
+        struct_name: &'a str,
+        field_name: &'a str,
+        field_type: &'a proc_macro2::TokenStream,
+    }
+
+    fn assert_merge_strategy(case: &MergeStrategyCase<'_>) -> Result<()> {
+        let input: DeriveInput = syn::parse_str(&format!(
+            r#"
+        struct {struct_name} {{
+            #[ortho_config(merge_strategy = "{strategy_name}")]
+            {field_name}: {field_type},
+        }}
+        "#,
+            struct_name = case.struct_name,
+            strategy_name = case.strategy_name,
+            field_name = case.field_name,
+            field_type = case.field_type,
+        ))
+        .map_err(|err| anyhow!("failed to parse input: {err}"))?;
+
+        let (_, _, _, attrs_vec) = parse_input(&input).map_err(|err| anyhow!(err))?;
+        let attrs = attrs_vec
+            .first()
+            .ok_or_else(|| anyhow!("missing field attributes"))?;
+        ensure!(
+            attrs.merge_strategy == Some(case.expected),
+            "{strategy} strategy not parsed",
+            strategy = case.strategy_name,
+        );
+        Ok(())
+    }
 
     #[test]
     fn parses_struct_and_field_attributes() -> Result<()> {
@@ -516,6 +603,24 @@ mod tests {
             ),
             "expected second field append strategy"
         );
+        Ok(())
+    }
+
+    #[test]
+    fn parses_skip_cli_flag() -> Result<()> {
+        let input: DeriveInput = parse_quote! {
+            struct Demo {
+                #[ortho_config(skip_cli)]
+                field: String,
+            }
+        };
+
+        let (_, fields, _, field_attrs) = parse_input(&input).map_err(|err| anyhow!(err))?;
+        ensure!(fields.len() == 1, "expected single field");
+        let attrs = field_attrs
+            .first()
+            .ok_or_else(|| anyhow!("missing field attributes"))?;
+        ensure!(attrs.skip_cli, "skip_cli flag was not set");
         Ok(())
     }
 
@@ -572,6 +677,63 @@ mod tests {
         ensure!(
             discovery.config_cli_visible == Some(true),
             "visibility mismatch"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn parses_merge_strategy_append() -> Result<()> {
+        let field_type = quote!(Vec<String>);
+        let case = MergeStrategyCase {
+            strategy_name: "append",
+            expected: MergeStrategy::Append,
+            struct_name: "AppendDemo",
+            field_name: "values",
+            field_type: &field_type,
+        };
+        assert_merge_strategy(&case)
+    }
+
+    #[test]
+    fn parses_merge_strategy_replace() -> Result<()> {
+        let field_type = quote!(Vec<String>);
+        let case = MergeStrategyCase {
+            strategy_name: "replace",
+            expected: MergeStrategy::Replace,
+            struct_name: "ReplaceDemo",
+            field_name: "values",
+            field_type: &field_type,
+        };
+        assert_merge_strategy(&case)
+    }
+
+    #[test]
+    fn parses_merge_strategy_keyed() -> Result<()> {
+        let field_type = quote!(std::collections::BTreeMap<String, u32>);
+        let case = MergeStrategyCase {
+            strategy_name: "keyed",
+            expected: MergeStrategy::Keyed,
+            struct_name: "MapDemo",
+            field_name: "rules",
+            field_type: &field_type,
+        };
+        assert_merge_strategy(&case)
+    }
+
+    #[test]
+    fn parses_merge_strategy_invalid() -> Result<()> {
+        let invalid: DeriveInput = parse_quote! {
+            struct InvalidDemo {
+                #[ortho_config(merge_strategy = "unknown")]
+                values: Vec<String>,
+            }
+        };
+        let err = parse_input(&invalid)
+            .err()
+            .ok_or_else(|| anyhow!("expected merge strategy error"))?;
+        ensure!(
+            err.to_string().contains("unknown merge_strategy"),
+            "unexpected error message: {err}",
         );
         Ok(())
     }
@@ -679,6 +841,39 @@ mod tests {
         let expected: Type = parse_quote!(u8);
         let inner = vec_inner(&ty).ok_or_else(|| anyhow!("expected Vec"))?;
         ensure!(inner == &expected, "expected {expected:?}, got {inner:?}");
+        Ok(())
+    }
+
+    #[rstest]
+    #[case::std(
+        parse_quote!(std::collections::BTreeMap<String, u8>),
+        parse_quote!(String),
+        parse_quote!(u8),
+    )]
+    #[case::alloc(
+        parse_quote!(alloc::collections::BTreeMap<u16, (u8, u8)>),
+        parse_quote!(u16),
+        parse_quote!((u8, u8)),
+    )]
+    #[case::crate_prefix(
+        parse_quote!(crate::collections::BTreeMap<String, Vec<Option<u8>>>),
+        parse_quote!(String),
+        parse_quote!(Vec<Option<u8>>),
+    )]
+    fn btree_map_inner_matches_various_prefixes(
+        #[case] ty: Type,
+        #[case] expected_key: Type,
+        #[case] expected_value: Type,
+    ) -> Result<()> {
+        let (key, value) = btree_map_inner(&ty).ok_or_else(|| anyhow!("expected BTreeMap"))?;
+        ensure!(
+            key == &expected_key,
+            "key mismatch: {key:?} vs {expected_key:?}"
+        );
+        ensure!(
+            value == &expected_value,
+            "value mismatch: {value:?} vs {expected_value:?}",
+        );
         Ok(())
     }
 }

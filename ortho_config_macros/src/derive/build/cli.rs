@@ -247,6 +247,9 @@ pub(crate) fn build_cli_struct_fields(
     let mut result = Vec::with_capacity(fields.len());
 
     for (field, attrs) in fields.iter().zip(field_attrs) {
+        if attrs.skip_cli {
+            continue;
+        }
         let field_tokens = process_cli_field(field, attrs, &mut context)?;
         result.push(field_tokens);
     }
@@ -279,6 +282,23 @@ mod tests {
     fn accepts_valid_long_flags(#[case] long: &str) -> Result<()> {
         let name: Ident = syn::parse_quote!(field);
         validate_cli_long(&name, long).map_err(|err| anyhow!(err))?;
+        Ok(())
+    }
+
+    #[test]
+    fn skips_fields_marked_with_skip_cli() -> Result<()> {
+        let input: syn::DeriveInput = syn::parse_quote! {
+            struct Demo {
+                #[ortho_config(skip_cli)]
+                values: std::collections::BTreeMap<String, String>,
+            }
+        };
+        let (_, fields, _, field_attrs) = crate::derive::parse::parse_input(&input)?;
+        let tokens = build_cli_struct_fields(&fields, &field_attrs)?;
+        ensure!(
+            tokens.fields.is_empty(),
+            "expected CLI struct to omit skipped field"
+        );
         Ok(())
     }
 

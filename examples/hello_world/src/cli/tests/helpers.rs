@@ -15,7 +15,7 @@ pub type HelloWorldCliFixture = Result<HelloWorldCli>;
 pub type GreetCommandFixture = Result<GreetCommand>;
 pub type TakeLeaveCommandFixture = Result<TakeLeaveCommand>;
 
-pub use crate::test_support::figment_error;
+pub use crate::test_support::{figment_error, with_jail};
 
 #[fixture]
 pub fn base_cli() -> HelloWorldCliFixture {
@@ -109,19 +109,6 @@ pub fn expect_take_leave(command: Commands) -> Result<TakeLeaveCommand> {
         Commands::TakeLeave(take_leave) => Ok(take_leave),
         Commands::Greet(_) => Err(anyhow!("expected take-leave command, found greet")),
     }
-}
-
-pub fn with_jail<F, T>(f: F) -> Result<T>
-where
-    F: FnOnce(&mut figment::Jail) -> figment::error::Result<T>,
-{
-    let mut output = None;
-    figment::Jail::try_with(|j| {
-        output = Some(f(j)?);
-        Ok(())
-    })
-    .map_err(|err| anyhow!(err.to_string()))?;
-    output.ok_or_else(|| anyhow!("jail closure did not return a value"))
 }
 
 pub(crate) fn load_overrides_in_jail<S>(setup: S) -> Result<Option<FileOverrides>>

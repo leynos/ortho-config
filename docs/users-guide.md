@@ -764,9 +764,16 @@ fn interop(r: ortho_config::OrthoResult<MyCfg>) -> Result<MyCfg, figment::Error>
 
 - **Vector merging** – For `Vec<T>` fields the default merge strategy is
   `append`, meaning that values from the configuration file appear first, then
-  environment variables and finally CLI arguments. The
-  `merge_strategy = "append"` attribute can be used for clarity, though it is
-  implied.
+  environment variables and finally CLI arguments. Use
+  `merge_strategy = "append"` explicitly for clarity. When overrides should
+  discard earlier layers entirely (for example, to replace a default list with
+  a CLI-provided value) apply `merge_strategy = "replace"` instead.
+- **Map merging** – Map fields (such as `BTreeMap<String, _>`) default to keyed
+  merges, where later layers update only the entries they define. Apply
+  `merge_strategy = "replace"` when later layers must replace the entire map.
+  The hello_world example exposes a `greeting_templates` map that uses this
+  strategy, so declarative configuration files can swap the full template set
+  at once.
 
 - **Option&lt;T&gt; fields** – Fields of type `Option<T>` are not treated as
   required. They default to `None` and can be set via any source. Required CLI

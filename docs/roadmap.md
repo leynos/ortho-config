@@ -186,7 +186,7 @@ references the relevant design guidance.
       rules.
       [[Reliable Testing](reliable-testing-in-rust-via-dependency-injection.md)]
 
-    - [ ] Provide attribute-driven strategies for collections (e.g.
+    - [x] Provide attribute-driven strategies for collections (e.g.
       `Vec`, `BTreeMap`) so authors can pick append, replace, or keyed merges.
       Document the expected strategies with doctests that reuse the dry-guide
       patterns and behavioural cucumber coverage.
