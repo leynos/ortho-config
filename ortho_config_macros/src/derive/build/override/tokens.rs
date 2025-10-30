@@ -14,6 +14,9 @@ pub(super) fn build_append_blocks(strategies: &CollectionStrategies) -> Vec<Toke
             quote! {
                 {
                     let mut vec_acc: Vec<#ty> = Vec::new();
+                    // Defaults capture collections as Option<Vec<_>> so we can
+                    // distinguish unset layers; fall back to an empty vector
+                    // when the option is None.
                     vec_acc.extend(defaults.#name.clone().unwrap_or_default());
                     if let Some(f) = &file_fig {
                         if let Ok(v) = f.extract_inner::<Vec<#ty>>(stringify!(#name)) { vec_acc.extend(v); }
