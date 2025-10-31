@@ -58,10 +58,6 @@ struct ExpectedDeclarativeSample {
     flag: bool,
 }
 
-const fn expected_sample(name: &'static str, count: u32, flag: bool) -> ExpectedDeclarativeSample {
-    ExpectedDeclarativeSample { name, count, flag }
-}
-
 struct PrecedenceScenario {
     label: &'static str,
     file: Option<serde_json::Value>,
@@ -76,56 +72,88 @@ struct PrecedenceScenario {
     file: None,
     environment: None,
     cli: None,
-    expected: expected_sample("Default", 1, false),
+    expected: ExpectedDeclarativeSample {
+        name: "Default",
+        count: 1,
+        flag: false,
+    },
 })]
 #[case::file_only(PrecedenceScenario {
     label: "file_only",
     file: Some(json!({"name": "File", "count": 2})),
     environment: None,
     cli: None,
-    expected: expected_sample("File", 2, false),
+    expected: ExpectedDeclarativeSample {
+        name: "File",
+        count: 2,
+        flag: false,
+    },
 })]
 #[case::environment_only(PrecedenceScenario {
     label: "environment_only",
     file: None,
     environment: Some(json!({"name": "Env", "count": 3, "flag": true})),
     cli: None,
-    expected: expected_sample("Env", 3, true),
+    expected: ExpectedDeclarativeSample {
+        name: "Env",
+        count: 3,
+        flag: true,
+    },
 })]
 #[case::cli_only(PrecedenceScenario {
     label: "cli_only",
     file: None,
     environment: None,
     cli: Some(json!({"name": "Cli", "flag": true})),
-    expected: expected_sample("Cli", 1, true),
+    expected: ExpectedDeclarativeSample {
+        name: "Cli",
+        count: 1,
+        flag: true,
+    },
 })]
 #[case::environment_over_file(PrecedenceScenario {
     label: "environment_over_file",
     file: Some(json!({"name": "File", "count": 4})),
     environment: Some(json!({"name": "Env", "count": 6})),
     cli: None,
-    expected: expected_sample("Env", 6, false),
+    expected: ExpectedDeclarativeSample {
+        name: "Env",
+        count: 6,
+        flag: false,
+    },
 })]
 #[case::cli_overrides_file(PrecedenceScenario {
     label: "cli_overrides_file",
     file: Some(json!({"name": "File", "count": 2, "flag": true})),
     environment: None,
     cli: Some(json!({"name": "Cli"})),
-    expected: expected_sample("Cli", 2, true),
+    expected: ExpectedDeclarativeSample {
+        name: "Cli",
+        count: 2,
+        flag: true,
+    },
 })]
 #[case::cli_overrides_environment(PrecedenceScenario {
     label: "cli_overrides_environment",
     file: None,
     environment: Some(json!({"name": "Env", "count": 5, "flag": true})),
     cli: Some(json!({"count": 9})),
-    expected: expected_sample("Env", 9, true),
+    expected: ExpectedDeclarativeSample {
+        name: "Env",
+        count: 9,
+        flag: true,
+    },
 })]
 #[case::all_layers(PrecedenceScenario {
     label: "all_layers",
     file: Some(json!({"name": "File", "count": 2, "flag": true})),
     environment: Some(json!({"name": "Env", "count": 7})),
     cli: Some(json!({"name": "Cli", "flag": false})),
-    expected: expected_sample("Cli", 7, false),
+    expected: ExpectedDeclarativeSample {
+        name: "Cli",
+        count: 7,
+        flag: false,
+    },
 })]
 fn merge_layers_respect_precedence_permutations(
     precedence_defaults: serde_json::Value,
@@ -152,11 +180,23 @@ fn merge_layers_respect_precedence_permutations(
     }
 
     let config = to_anyhow(DeclarativeSample::merge_from_layers(composer.layers()))?;
-    let expected_tuple = (expected.name, expected.count, expected.flag);
-    let observed = (config.name.as_str(), config.count, config.flag);
     ensure!(
-        observed == expected_tuple,
-        "scenario {label} expected {expected_tuple:?} but observed {observed:?}",
+        config.name.as_str() == expected.name,
+        "scenario {label} expected name {} but observed {}",
+        expected.name,
+        config.name,
+    );
+    ensure!(
+        config.count == expected.count,
+        "scenario {label} expected count {} but observed {}",
+        expected.count,
+        config.count,
+    );
+    ensure!(
+        config.flag == expected.flag,
+        "scenario {label} expected flag {} but observed {}",
+        expected.flag,
+        config.flag,
     );
     Ok(())
 }
