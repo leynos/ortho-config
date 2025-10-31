@@ -7,7 +7,7 @@ use camino::Utf8PathBuf;
 use ortho_config::{
     MergeComposer, MergeLayer, MergeProvenance, OrthoConfig, declarative::merge_value,
 };
-use rstest::rstest;
+use rstest::{fixture, rstest};
 use serde::Deserialize;
 use serde_json::json;
 
@@ -40,6 +40,165 @@ fn compose_layers(
         composer.push_cli(layer);
     }
     composer.layers()
+}
+
+#[fixture]
+fn precedence_defaults() -> serde_json::Value {
+    json!({
+        "name": "Default",
+        "count": 1,
+        "flag": false,
+    })
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct ExpectedDeclarativeSample {
+    name: &'static str,
+    count: u32,
+    flag: bool,
+}
+
+struct PrecedenceScenario {
+    label: &'static str,
+    file: Option<serde_json::Value>,
+    environment: Option<serde_json::Value>,
+    cli: Option<serde_json::Value>,
+    expected: ExpectedDeclarativeSample,
+}
+
+#[rstest]
+#[case::defaults_only(PrecedenceScenario {
+    label: "defaults_only",
+    file: None,
+    environment: None,
+    cli: None,
+    expected: ExpectedDeclarativeSample {
+        name: "Default",
+        count: 1,
+        flag: false,
+    },
+})]
+#[case::file_only(PrecedenceScenario {
+    label: "file_only",
+    file: Some(json!({"name": "File", "count": 2})),
+    environment: None,
+    cli: None,
+    expected: ExpectedDeclarativeSample {
+        name: "File",
+        count: 2,
+        flag: false,
+    },
+})]
+#[case::environment_only(PrecedenceScenario {
+    label: "environment_only",
+    file: None,
+    environment: Some(json!({"name": "Env", "count": 3, "flag": true})),
+    cli: None,
+    expected: ExpectedDeclarativeSample {
+        name: "Env",
+        count: 3,
+        flag: true,
+    },
+})]
+#[case::cli_only(PrecedenceScenario {
+    label: "cli_only",
+    file: None,
+    environment: None,
+    cli: Some(json!({"name": "Cli", "flag": true})),
+    expected: ExpectedDeclarativeSample {
+        name: "Cli",
+        count: 1,
+        flag: true,
+    },
+})]
+#[case::environment_over_file(PrecedenceScenario {
+    label: "environment_over_file",
+    file: Some(json!({"name": "File", "count": 4})),
+    environment: Some(json!({"name": "Env", "count": 6})),
+    cli: None,
+    expected: ExpectedDeclarativeSample {
+        name: "Env",
+        count: 6,
+        flag: false,
+    },
+})]
+#[case::cli_overrides_file(PrecedenceScenario {
+    label: "cli_overrides_file",
+    file: Some(json!({"name": "File", "count": 2, "flag": true})),
+    environment: None,
+    cli: Some(json!({"name": "Cli"})),
+    expected: ExpectedDeclarativeSample {
+        name: "Cli",
+        count: 2,
+        flag: true,
+    },
+})]
+#[case::cli_overrides_environment(PrecedenceScenario {
+    label: "cli_overrides_environment",
+    file: None,
+    environment: Some(json!({"name": "Env", "count": 5, "flag": true})),
+    cli: Some(json!({"count": 9})),
+    expected: ExpectedDeclarativeSample {
+        name: "Env",
+        count: 9,
+        flag: true,
+    },
+})]
+#[case::all_layers(PrecedenceScenario {
+    label: "all_layers",
+    file: Some(json!({"name": "File", "count": 2, "flag": true})),
+    environment: Some(json!({"name": "Env", "count": 7})),
+    cli: Some(json!({"name": "Cli", "flag": false})),
+    expected: ExpectedDeclarativeSample {
+        name: "Cli",
+        count: 7,
+        flag: false,
+    },
+})]
+fn merge_layers_respect_precedence_permutations(
+    precedence_defaults: serde_json::Value,
+    #[case] scenario: PrecedenceScenario,
+) -> Result<()> {
+    let PrecedenceScenario {
+        label,
+        file,
+        environment,
+        cli,
+        expected,
+    } = scenario;
+
+    let mut composer = MergeComposer::new();
+    composer.push_defaults(precedence_defaults);
+    if let Some(file_value) = file {
+        composer.push_file(file_value, Some(Utf8PathBuf::from("config.json")));
+    }
+    if let Some(environment_value) = environment {
+        composer.push_environment(environment_value);
+    }
+    if let Some(cli_value) = cli {
+        composer.push_cli(cli_value);
+    }
+
+    let config = to_anyhow(DeclarativeSample::merge_from_layers(composer.layers()))?;
+    ensure!(
+        config.name.as_str() == expected.name,
+        "scenario {label} expected name {} but observed {}",
+        expected.name,
+        config.name,
+    );
+    ensure!(
+        config.count == expected.count,
+        "scenario {label} expected count {} but observed {}",
+        expected.count,
+        config.count,
+    );
+    ensure!(
+        config.flag == expected.flag,
+        "scenario {label} expected flag {} but observed {}",
+        expected.flag,
+        config.flag,
+    );
+    Ok(())
 }
 
 fn to_anyhow<T, E: std::fmt::Display>(result: Result<T, E>) -> anyhow::Result<T> {

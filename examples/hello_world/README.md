@@ -23,7 +23,9 @@ production-ready complexity.
 - **Testing disciplines**: add `rstest`-powered unit tests for deterministic
   components and `cucumber-rs` behavioural specifications that exercise the
   binary as a user would, capturing configuration precedence and cross-platform
-  quirks.
+  quirks. The unit suite now includes a declarative merging fixture that
+  enumerates precedence permutations. This pairs with the cucumber JSON-layer
+  scenario.
 - **Declarative merging**: demonstrate how `MergeComposer` and
   `merge_from_layers` build layered configuration without invoking the CLI by
   driving a behavioural scenario that composes JSON-described layers into
