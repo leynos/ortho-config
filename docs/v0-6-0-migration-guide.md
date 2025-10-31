@@ -136,11 +136,11 @@ Those helpers now benefit from the clarified error behaviour described next.
 `ConfigDiscovery::load_first` now returns an error when every candidate path
 fails to load and at least one of them produced an error. It only returns
 `Ok(None)` when no candidates were available. Callers should bubble up the new
-error instead of silently falling back to defaults.[^discovery-errors]
+error instead of silently falling back to defaults.
 
 In the `hello_world` example the shared discovery helper maps the error into
-`HelloWorldError`, ensuring the CLI exits with actionable diagnostics when
-misconfigured files exist.[^hello-world-discover-config]
+`HelloWorldError`[^discovery-errors], ensuring the CLI exits with actionable
+diagnostics when misconfigured files exist.[^hello-world-discover-config]
 
 ### Before: ignoring discovery errors
 
@@ -163,7 +163,7 @@ match config {
 
 Call sites that previously matched on `Ok(None)` to continue running with
 defaults should be audited. After upgrading, consider whether those branches
-now ought to abort with an error so broken configuration files do not pass
+now ought to abort with an error, so broken configuration files do not pass
 unnoticed.
 
 ## 5. Opt in to the stricter YAML provider
@@ -205,7 +205,7 @@ reflect the new dependency graph, discovery behaviour, and YAML semantics. The
 v0.6.0 CHANGELOG entries provide a concise summary for release
 announcements.[^changelog]
 
-### Before: documentation prior to v0.6.0
+### Before: documentation before v0.6.0
 
 ```markdown
 * ortho-config v0.5.0 provides YAML parsing via serde_yaml.
