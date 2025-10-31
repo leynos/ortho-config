@@ -3,8 +3,10 @@
 This guide helps you upgrade applications from `ortho-config` v0.5.0 to v0.6.0.
 The release focuses on removing redundant dependencies, improving configuration
 discovery, and tightening YAML parsing semantics. Each section explains the
-change, why it matters, and how to adapt code using the `hello_world` example
-as a reference.
+change, why it matters, and how to adapt code. For concrete usage, review the
+hello_world example
+(<https://github.com/leynos/ortho-config/tree/main/examples/hello_world>)
+throughout.
 
 ## 1. Update crate versions and feature flags
 
@@ -125,7 +127,7 @@ and backs the format-specific branch of `parse_config_by_format`.
 【F:ortho_config/src/file/mod.rs†L34-L86】
 【F:ortho_config/src/file/mod.rs†L253-L296】
 [^hello-world-yaml]: Behavioural tests in `hello_world` create YAML fixtures,
-load them through `ortho_config::load_config_file`, and assert the strict
-parsing behaviour.【F:examples/hello_world/src/cli/tests/overrides.rs†L125-L155】
+load them through `ortho_config::load_config_file`, and assert strict parsing
+behaviour.【F:examples/hello_world/src/cli/tests/overrides.rs†L125-L155】
 [^changelog]: The Unreleased changelog summarises the v0.6.0 additions and
 behaviour changes discussed in this guide.【F:CHANGELOG.md†L6-L26】
