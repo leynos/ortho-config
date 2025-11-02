@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+real_cargo=${CARGO_REAL:-}
+if [[ -z "${real_cargo}" ]]; then
+  echo "CARGO_REAL must point to the real cargo executable" >&2
+  exit 1
+fi
+
+if (($# == 0)); then
+  exec "${real_cargo}"
+fi
+
+subcommand=$1
+shift || true
+
+extra_args=()
+case "${subcommand}" in
+  check|test)
+    # Ensure preflight checks exercise every feature so behaviour matches CI.
+    extra_args+=("--all-features")
+    ;;
+esac
+
+exec "${real_cargo}" "${subcommand}" "${extra_args[@]}" "$@"

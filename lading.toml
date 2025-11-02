@@ -1,0 +1,7 @@
+[bump]
+
+[bump.documentation]
+globs = ["README.md", "docs/**/*.md"]
+
+[publish]
+strip_patches = "all"
