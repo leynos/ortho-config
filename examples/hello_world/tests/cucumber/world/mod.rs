@@ -101,14 +101,14 @@ impl CommandResult {
             stdout,
             stderr,
         } = output;
-        let stdout = normalise_newlines(String::from_utf8_lossy(&stdout));
-        let stderr = normalise_newlines(String::from_utf8_lossy(&stderr));
+        let normalised_stdout = normalise_newlines(String::from_utf8_lossy(&stdout));
+        let normalised_stderr = normalise_newlines(String::from_utf8_lossy(&stderr));
 
         Self {
             status: status.code(),
             success: status.success(),
-            stdout,
-            stderr,
+            stdout: normalised_stdout,
+            stderr: normalised_stderr,
             binary,
             args,
         }
@@ -117,12 +117,12 @@ impl CommandResult {
 
 /// Converts Windows newlines to their Unix equivalent so substring assertions
 /// behave consistently across platforms. We normalise both CRLF and bare CR
-/// sequences because PowerShell occasionally emits the latter when piping
+/// sequences because `PowerShell` occasionally emits the latter when piping
 /// output between commands.
 fn normalise_newlines(text: Cow<'_, str>) -> String {
     match text {
-        Cow::Borrowed(text) => normalise_borrowed(text),
-        Cow::Owned(text) => normalise_owned(text),
+        Cow::Borrowed(borrowed_text) => normalise_borrowed(borrowed_text),
+        Cow::Owned(owned_text) => normalise_owned(owned_text),
     }
 }
 
