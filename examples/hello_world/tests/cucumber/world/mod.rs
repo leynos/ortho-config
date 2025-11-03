@@ -20,6 +20,7 @@ pub(crate) use super::{COMMAND_TIMEOUT, CONFIG_FILE, ENV_PREFIX, binary_path};
 use anyhow::{Context, Result};
 use cap_std::fs::Dir;
 use hello_world::cli::GlobalArgs;
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 use tempfile::TempDir;
 
@@ -100,13 +101,45 @@ impl CommandResult {
             stdout,
             stderr,
         } = output;
+        let stdout = normalise_newlines(String::from_utf8_lossy(&stdout));
+        let stderr = normalise_newlines(String::from_utf8_lossy(&stderr));
+
         Self {
             status: status.code(),
             success: status.success(),
-            stdout: String::from_utf8_lossy(&stdout).into_owned(),
-            stderr: String::from_utf8_lossy(&stderr).into_owned(),
+            stdout,
+            stderr,
             binary,
             args,
         }
     }
+}
+
+/// Converts Windows newlines to their Unix equivalent so substring assertions
+/// behave consistently across platforms. We normalise both CRLF and bare CR
+/// sequences because PowerShell occasionally emits the latter when piping
+/// output between commands.
+fn normalise_newlines(text: Cow<'_, str>) -> String {
+    match text {
+        Cow::Borrowed(text) => normalise_borrowed(text),
+        Cow::Owned(text) => normalise_owned(text),
+    }
+}
+
+fn normalise_borrowed(text: &str) -> String {
+    if text.contains('\r') {
+        normalise_owned(text.to_owned())
+    } else {
+        text.to_owned()
+    }
+}
+
+fn normalise_owned(mut text: String) -> String {
+    if text.contains('\r') {
+        text = text.replace("\r\n", "\n");
+        if text.contains('\r') {
+            text = text.replace('\r', "\n");
+        }
+    }
+    text
 }
