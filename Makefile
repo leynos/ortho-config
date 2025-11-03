@@ -71,6 +71,7 @@ nixie:
 	$(NIXIE) --no-sandbox
 
 publish-check: ## Validate publish readiness with Lading
+	PYTHONPATH="$(CURDIR)/scripts/python$${PYTHONPATH:+:$$PYTHONPATH}" \
 	PATH="$(CURDIR)/scripts/bin:$$PATH" \
 	CARGO_REAL="$(shell command -v $(CARGO))" \
 	$(LADING) publish --allow-dirty
