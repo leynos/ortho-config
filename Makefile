@@ -1,7 +1,8 @@
-.PHONY: help all clean test build release lint fmt check-fmt markdownlint nixie check python-test-deps
+.PHONY: help all clean test build release lint fmt check-fmt markdownlint nixie check python-test-deps publish-check
 
-CRATE ?= ortho-config
+CRATE ?= ortho_config
 CARGO ?= cargo
+PUBLISH_CHECK_CARGO_REAL ?= $(shell command -v $(CARGO))
 BUILD_JOBS ?=
 CLIPPY_FLAGS ?= --all-targets --all-features -- -D warnings
 MDLINT ?= markdownlint
@@ -11,6 +12,7 @@ UV ?= uv
 PYTHON_VERSION ?= 3.13
 PYTHON_DEPS_FILE ?= scripts/requirements-test.txt
 PYTEST_FLAGS ?= --doctest-modules scripts/bump_version.py scripts/tests -q
+LADING ?= uvx --from git+https://github.com/leynos/lading lading
 ifeq ($(OS),Windows_NT)
 NULL_DEVICE ?= NUL
 else
@@ -22,8 +24,8 @@ MDLINT ?= markdownlint-cli2
 NIXIE ?= nixie
 RUSTDOC_FLAGS ?= --cfg docsrs -D warnings
 
-build: target/debug/lib$(CRATE) ## Build debug binary
-release: target/release/lib$(CRATE) ## Build release binary
+build: target/debug/lib$(CRATE).rlib ## Build debug library
+release: target/release/lib$(CRATE).rlib ## Build release library
 
 all: release ## Default target builds release binary
 
@@ -68,6 +70,11 @@ nixie:
 	# CI currently requires --no-sandbox; remove once nixie supports
 	# environment variable control for this option
 	$(NIXIE) --no-sandbox
+
+publish-check: ## Run Lading publish pre-flight checks
+	PATH="$(CURDIR)/scripts/publish-check/bin:$$PATH" \
+	  PUBLISH_CHECK_CARGO_REAL="$(PUBLISH_CHECK_CARGO_REAL)" \
+	  $(LADING) publish --allow-dirty --workspace-root $(CURDIR)
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?##' $(MAKEFILE_LIST) | \
