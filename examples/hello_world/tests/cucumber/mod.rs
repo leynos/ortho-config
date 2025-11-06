@@ -3,7 +3,7 @@
 use std::time::Duration;
 
 use camino::Utf8PathBuf;
-use cucumber::{gherkin, World as _};
+use cucumber::{World as _, gherkin};
 
 mod config;
 #[path = "../steps/mod.rs"]
