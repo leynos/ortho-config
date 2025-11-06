@@ -88,12 +88,18 @@ impl ConfigDiscovery {
     fn normalised_key(path: &Path) -> String {
         #[cfg(windows)]
         {
-            let mut key = path.to_string_lossy().into_owned();
-            if key.contains('/') {
-                key = key.replace('/', "\\");
-            }
-            key.make_ascii_lowercase();
-            key
+            use std::os::windows::ffi::OsStrExt;
+
+            let normalised: Vec<u16> = path
+                .as_os_str()
+                .encode_wide()
+                .map(|unit| match unit {
+                    65..=90 => unit + 32,
+                    47 => 92,
+                    _ => unit,
+                })
+                .collect();
+            String::from_utf16_lossy(&normalised)
         }
 
         #[cfg(not(windows))]
