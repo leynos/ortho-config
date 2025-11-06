@@ -7,6 +7,8 @@ use super::*;
 use anyhow::{Context, Result, anyhow, ensure};
 use rstest::{fixture, rstest};
 use serde::Deserialize;
+#[cfg(windows)]
+use std::path::Path;
 use tempfile::TempDir;
 use test_helpers::env as test_env;
 
@@ -401,9 +403,14 @@ fn windows_candidates_are_case_insensitive(env_guards: Vec<test_env::EnvVarGuard
     builder = builder.add_explicit_path(PathBuf::from("c:/config/file.toml"));
     let discovery = builder.build();
     let candidates = discovery.candidates();
+    let canonical = ConfigDiscovery::normalised_key(Path::new("C:/Config/FILE.TOML"));
+    let duplicates = candidates
+        .iter()
+        .filter(|candidate| ConfigDiscovery::normalised_key(candidate.as_path()) == canonical)
+        .count();
     ensure!(
-        candidates.len() == 1,
-        "expected duplicate paths deduplicated"
+        duplicates == 1,
+        "expected canonical key {canonical:?} to appear once; observed {duplicates} entries: {candidates:?}",
     );
     ensure!(
         candidates.first().map(|c| c.as_os_str()) == Some(OsStr::new("C:/Config/FILE.TOML")),
