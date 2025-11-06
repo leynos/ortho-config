@@ -220,28 +220,38 @@ where
     })
 }
 
-#[rstest]
-fn empty_extends_errors() -> Result<()> {
-    assert_extends_error(
-        |j| {
-            j.create_file("base.toml", "")?;
-            Ok(())
-        },
-        "",
-        "non-empty",
-        "empty extends",
-    )
+enum SetupType {
+    EmptyFile(&'static str),
+    Directory(&'static str),
 }
 
 #[rstest]
-fn directory_extends_errors() -> Result<()> {
+#[case::empty_extends(SetupType::EmptyFile("base.toml"), "", "non-empty", "empty extends")]
+#[case::directory_extends(
+    SetupType::Directory("dir"),
+    "dir",
+    "not a regular file",
+    "directory extends"
+)]
+fn extends_validation_errors(
+    #[case] setup: SetupType,
+    #[case] extends_value: &str,
+    #[case] expected_msg: &str,
+    #[case] error_desc: &str,
+) -> Result<()> {
     assert_extends_error(
-        |j| {
-            j.create_dir("dir")?;
-            Ok(())
+        |j| match setup {
+            SetupType::EmptyFile(path) => {
+                j.create_file(path, "")?;
+                Ok(())
+            }
+            SetupType::Directory(path) => {
+                j.create_dir(path)?;
+                Ok(())
+            }
         },
-        "dir",
-        "not a regular file",
-        "directory extends",
+        extends_value,
+        expected_msg,
+        error_desc,
     )
 }
