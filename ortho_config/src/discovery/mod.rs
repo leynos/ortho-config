@@ -14,6 +14,24 @@ use dirs::home_dir;
 
 use crate::{OrthoError, OrthoResult, load_config_file};
 
+#[cfg(windows)]
+/// Normalises a path according to Windows' ASCII-only case folding and
+/// separator rules while leaving non-ASCII code points untouched.
+fn windows_normalised_key(path: &Path) -> String {
+    let lossy = path.to_string_lossy();
+    let mut normalised = String::with_capacity(lossy.len());
+    for ch in lossy.chars() {
+        if ch == '/' {
+            normalised.push('\\');
+        } else if ch.is_ascii_uppercase() {
+            normalised.push(ch.to_ascii_lowercase());
+        } else {
+            normalised.push(ch);
+        }
+    }
+    normalised
+}
+
 mod builder;
 
 pub use builder::ConfigDiscoveryBuilder;
@@ -88,18 +106,7 @@ impl ConfigDiscovery {
     fn normalised_key(path: &Path) -> String {
         #[cfg(windows)]
         {
-            use std::os::windows::ffi::OsStrExt;
-
-            let normalised: Vec<u16> = path
-                .as_os_str()
-                .encode_wide()
-                .map(|unit| match unit {
-                    65..=90 => unit + 32,
-                    47 => 92,
-                    _ => unit,
-                })
-                .collect();
-            String::from_utf16_lossy(&normalised)
+            return windows_normalised_key(path);
         }
 
         #[cfg(not(windows))]
@@ -407,6 +414,17 @@ mod dedup_tests {
     use std::fs;
     use tempfile::tempdir;
 
+    #[cfg(windows)]
+    fn canonicalish(path: &Path) -> PathBuf {
+        dunce::canonicalize(path)
+            .unwrap_or_else(|err| panic!("failed to canonicalise {path:?}: {err}"))
+    }
+
+    #[cfg(not(windows))]
+    fn canonicalish(path: &Path) -> PathBuf {
+        path.to_path_buf()
+    }
+
     fn assert_first_error_path(errors: &[Arc<OrthoError>], expected: &Path) {
         let err = errors
             .first()
@@ -415,16 +433,7 @@ mod dedup_tests {
             OrthoError::File { path, .. } => path,
             other => panic!("expected OrthoError::File, got {other:?}"),
         };
-        #[cfg(windows)]
-        {
-            fn canonicalish(p: &Path) -> PathBuf {
-                dunce::canonicalize(p).unwrap_or_else(|_| p.to_path_buf())
-            }
-            assert_eq!(canonicalish(path), canonicalish(expected));
-        }
-
-        #[cfg(not(windows))]
-        assert_eq!(path, expected);
+        assert_eq!(canonicalish(path), canonicalish(expected));
     }
 
     #[test]
@@ -446,5 +455,19 @@ mod dedup_tests {
 
         assert_first_error_path(&outcome.required_errors, &required);
         assert_first_error_path(&outcome.optional_errors, &optional);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn normalised_key_lowercases_ascii_and_backslashes() {
+        let key = ConfigDiscovery::normalised_key(Path::new("C:/Config/FILE.TOML"));
+        assert_eq!(key, "c\\config\\file.toml");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn normalised_key_preserves_non_ascii_characters() {
+        let key = ConfigDiscovery::normalised_key(Path::new("C:/Temp/CAFÉ.toml"));
+        assert_eq!(key, "c\\temp\\CAFÉ.toml");
     }
 }

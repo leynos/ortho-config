@@ -3,6 +3,7 @@ use anyhow::{Result, anyhow, ensure};
 use ortho_config::{OrthoConfig, OrthoError};
 use rstest::rstest;
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 
 #[path = "test_utils.rs"]
 mod test_utils;
@@ -204,14 +205,19 @@ where
 }
 
 enum SetupType {
-    EmptyFile(&'static str),
-    Directory(&'static str),
+    EmptyFile(PathBuf),
+    Directory(PathBuf),
 }
 
 #[rstest]
-#[case::empty_extends(SetupType::EmptyFile("base.toml"), "", "non-empty", "empty extends")]
+#[case::empty_extends(
+    SetupType::EmptyFile(PathBuf::from("base.toml")),
+    "",
+    "non-empty",
+    "empty extends"
+)]
 #[case::directory_extends(
-    SetupType::Directory("dir"),
+    SetupType::Directory(PathBuf::from("dir")),
     "dir",
     "not a regular file",
     "directory extends"
@@ -223,7 +229,7 @@ fn extends_validation_errors(
     #[case] error_desc: &str,
 ) -> Result<()> {
     assert_extends_error(
-        |j| match setup {
+        |j| match &setup {
             SetupType::EmptyFile(path) => {
                 j.create_file(path, "")?;
                 Ok(())
