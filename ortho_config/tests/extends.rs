@@ -146,9 +146,10 @@ fn missing_base_file_errors(#[case] is_abs: bool) -> Result<()> {
 
             let msg_norm = normalise(msg.as_str());
             let base_lossy = expected_base.to_string_lossy();
-            let base_norm = normalise(&base_lossy);
-            let canonical_lossy = canonicalish(&expected_base).to_string_lossy();
-            let canonical_norm = normalise(&canonical_lossy);
+            let base_norm = normalise(base_lossy.as_ref());
+            let canonical_path = canonicalish(&expected_base);
+            let canonical_owned = canonical_path.to_string_lossy().into_owned();
+            let canonical_norm = normalise(&canonical_owned);
             ensure!(
                 msg_norm.contains(&base_norm) || msg_norm.contains(&canonical_norm),
                 "error missing path variants: {msg}"
@@ -194,40 +195,53 @@ fn non_string_extends_errors() -> Result<()> {
     Ok(())
 }
 
-#[rstest]
-fn empty_extends_errors() -> Result<()> {
+fn assert_extends_error<F>(
+    setup: F,
+    extends_value: &str,
+    expected_msg: &str,
+    error_desc: &str,
+) -> Result<()>
+where
+    F: Fn(&figment::Jail) -> Result<()>,
+{
     with_jail(|j| {
-        j.create_file("base.toml", "")?; // placeholder so Jail has root file
-        j.create_file(".config.toml", "extends = ''")?;
+        setup(j)?;
+        j.create_file(".config.toml", &format!("extends = '{extends_value}'"))?;
         let err = match ExtendsCfg::load_from_iter(["prog"]) {
-            Ok(cfg) => return Err(anyhow!("expected empty extends error, got {cfg:?}")),
+            Ok(cfg) => return Err(anyhow!("expected {error_desc} error, got {cfg:?}")),
             Err(err) => err,
         };
         let display = err.to_string();
         ensure!(
-            display.contains("non-empty"),
-            "error missing non-empty message: {display}"
+            display.contains(expected_msg),
+            "error missing {expected_msg:?}: {display}"
         );
         Ok(())
-    })?;
-    Ok(())
+    })
+}
+
+#[rstest]
+fn empty_extends_errors() -> Result<()> {
+    assert_extends_error(
+        |j| {
+            j.create_file("base.toml", "")?;
+            Ok(())
+        },
+        "",
+        "non-empty",
+        "empty extends",
+    )
 }
 
 #[rstest]
 fn directory_extends_errors() -> Result<()> {
-    with_jail(|j| {
-        j.create_dir("dir")?;
-        j.create_file(".config.toml", "extends = 'dir'")?;
-        let err = match ExtendsCfg::load_from_iter(["prog"]) {
-            Ok(cfg) => return Err(anyhow!("expected directory extends error, got {cfg:?}")),
-            Err(err) => err,
-        };
-        let display = err.to_string();
-        ensure!(
-            display.contains("not a regular file"),
-            "error missing directory message: {display}"
-        );
-        Ok(())
-    })?;
-    Ok(())
+    assert_extends_error(
+        |j| {
+            j.create_dir("dir")?;
+            Ok(())
+        },
+        "dir",
+        "not a regular file",
+        "directory extends",
+    )
 }
