@@ -115,7 +115,7 @@ impl CommandResult {
     }
 }
 
-/// Converts Windows newlines to their Unix equivalent so substring assertions
+/// Converts Windows newlines to their `Unix` equivalent so substring assertions
 /// behave consistently across platforms. We normalise both CRLF and bare CR
 /// sequences because `PowerShell` occasionally emits the latter when piping
 /// output between commands.
