@@ -402,6 +402,15 @@ to call `load_and_merge_subcommand_for` instead of manually merging defaults.
 ./scripts/bump_version.py 1.2.3
 ```
 
+## Publish checks
+
+Run `make publish-check` before releasing to execute the `lading` publish
+pre-flight validations with the repository's helper scripts on the `PATH`. The
+target is parameterised via `PUBLISH_CHECK_FLAGS`, which defaults to
+`--allow-dirty` for local development convenience. Continuous integration
+should invoke `make publish-check PUBLISH_CHECK_FLAGS=` so the command runs
+without the permissive flag.
+
 ## Contributing
 
 Contributions are welcome! Please feel free to submit issues, fork the
