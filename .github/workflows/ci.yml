@@ -65,7 +65,6 @@ jobs:
         run: make lint
 
       - name: Test and Measure Coverage (with features)
-        if: ${{ matrix.coverage && matrix.features != '' }}
         uses: leynos/shared-actions/.github/actions/generate-coverage@ebbaaa0d7a776ec3187f3940667e5c7c9379cdf5
         with:
           output-path: lcov.info
@@ -74,7 +73,6 @@ jobs:
           with-default-features: ${{ matrix.with-default-features }}
 
       - name: Test and Measure Coverage (no features)
-        if: ${{ matrix.coverage && matrix.features == '' }}
         uses: leynos/shared-actions/.github/actions/generate-coverage@ebbaaa0d7a776ec3187f3940667e5c7c9379cdf5
         with:
           output-path: lcov.info
