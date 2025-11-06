@@ -3,8 +3,6 @@ use anyhow::{Result, anyhow, ensure};
 use ortho_config::{OrthoConfig, OrthoError};
 use rstest::rstest;
 use serde::{Deserialize, Serialize};
-#[cfg(windows)]
-use std::borrow::Cow;
 
 #[path = "test_utils.rs"]
 mod test_utils;
@@ -138,19 +136,19 @@ fn missing_base_file_errors(#[case] is_abs: bool) -> Result<()> {
         let msg = err.to_string();
         #[cfg(windows)]
         {
-            use std::borrow::Cow;
-
             fn canonicalish(path: &std::path::Path) -> std::path::PathBuf {
                 dunce::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
             }
 
-            fn normalise(value: Cow<'_, str>) -> String {
+            fn normalise(value: &str) -> String {
                 value.to_ascii_lowercase().replace('/', "\\")
             }
 
-            let msg_norm = normalise(Cow::Borrowed(msg.as_str()));
-            let base_norm = normalise(expected_base.to_string_lossy());
-            let canonical_norm = normalise(canonicalish(&expected_base).to_string_lossy());
+            let msg_norm = normalise(msg.as_str());
+            let base_lossy = expected_base.to_string_lossy();
+            let base_norm = normalise(&base_lossy);
+            let canonical_lossy = canonicalish(&expected_base).to_string_lossy();
+            let canonical_norm = normalise(&canonical_lossy);
             ensure!(
                 msg_norm.contains(&base_norm) || msg_norm.contains(&canonical_norm),
                 "error missing path variants: {msg}"
