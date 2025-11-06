@@ -4,6 +4,33 @@ use super::World;
 use anyhow::{Result, anyhow, ensure};
 use rstest::rstest;
 
+#[test]
+fn command_result_normalises_windows_newlines() {
+    #[cfg(unix)]
+    let status = {
+        use std::os::unix::process::ExitStatusExt;
+        std::process::ExitStatus::from_raw(0)
+    };
+
+    #[cfg(windows)]
+    let status = {
+        use std::os::windows::process::ExitStatusExt;
+        std::process::ExitStatus::from_raw(0)
+    };
+
+    let output = std::process::Output {
+        status,
+        stdout: b"hello\r\nworld\rnext".to_vec(),
+        stderr: b"warn\r\nline".to_vec(),
+    };
+
+    let result = super::CommandResult::from_execution(output, "hello_world".into(), vec![]);
+
+    assert!(result.success);
+    assert_eq!(result.stdout, "hello\nworld\nnext");
+    assert_eq!(result.stderr, "warn\nline");
+}
+
 #[rstest]
 #[case("nonexistent.toml", "missing")]
 #[case("../invalid.toml", "invalid")]
