@@ -1,2 +1,5 @@
 [publish]
 strip_patches = "all"
+
+[preflight]
+unit_tests_only = true

@@ -7,6 +7,7 @@ BUILD_JOBS ?=
 CLIPPY_FLAGS ?= --all-targets --all-features -- -D warnings
 MDLINT ?= markdownlint
 NIXIE ?= nixie
+PUBLISH_CHECK_FLAGS ?= --allow-dirty
 PYTHON_VENV ?= scripts/.venv
 UV ?= uv
 PYTHON_VERSION ?= 3.13
@@ -74,7 +75,7 @@ nixie:
 publish-check: ## Run Lading publish pre-flight checks
 	PATH="$(CURDIR)/scripts/publish-check/bin:$$PATH" \
 	  PUBLISH_CHECK_CARGO_REAL="$(PUBLISH_CHECK_CARGO_REAL)" \
-	  $(LADING) publish --allow-dirty --workspace-root $(CURDIR)
+	  $(LADING) publish $(PUBLISH_CHECK_FLAGS) --workspace-root $(CURDIR)
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?##' $(MAKEFILE_LIST) | \
