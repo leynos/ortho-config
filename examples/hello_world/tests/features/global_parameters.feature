@@ -75,6 +75,7 @@ Feature: Global parameters govern greetings
     Then the command succeeds
     And stdout contains "CLI config"
 
+  @requires.yaml
   Scenario: YAML 1.2 scalars remain strings
     Given the file "semantic.yaml" contains:
       """
@@ -84,6 +85,7 @@ Feature: Global parameters govern greetings
     Then the command succeeds
     And stdout contains "Hello, yes!"
 
+  @requires.yaml
   Scenario: Duplicate YAML keys are rejected
     Given the file "duplicate.yaml" contains:
       """
@@ -94,6 +96,7 @@ Feature: Global parameters govern greetings
     Then the command fails
     And stderr contains "duplicate mapping key"
 
+  @requires.yaml
   Scenario: Canonical YAML booleans remain booleans
     Given the file "canonical_bools.yaml" contains:
       """
