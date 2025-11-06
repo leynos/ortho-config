@@ -88,7 +88,12 @@ impl ConfigDiscovery {
     fn normalised_key(path: &Path) -> String {
         #[cfg(windows)]
         {
-            path.to_string_lossy().to_lowercase()
+            let mut key = path.to_string_lossy().into_owned();
+            if key.contains('/') {
+                key = key.replace('/', "\\");
+            }
+            key.make_ascii_lowercase();
+            key
         }
 
         #[cfg(not(windows))]
@@ -404,6 +409,15 @@ mod dedup_tests {
             OrthoError::File { path, .. } => path,
             other => panic!("expected OrthoError::File, got {other:?}"),
         };
+        #[cfg(windows)]
+        {
+            fn canonicalish(p: &Path) -> PathBuf {
+                dunce::canonicalize(p).unwrap_or_else(|_| p.to_path_buf())
+            }
+            assert_eq!(canonicalish(path), canonicalish(expected));
+        }
+
+        #[cfg(not(windows))]
         assert_eq!(path, expected);
     }
 

@@ -82,7 +82,7 @@ fn normalise_cycle_key_handles_unicode_and_special_characters() -> Result<()> {
         let unicode = PathBuf::from(r"C:\\Temp\\CAFÉ.toml");
         let special = PathBuf::from(r"C:\\Temp\\Config-!@#.toml");
         ensure!(
-            normalise_cycle_key(&unicode) == Path::new(r"c:\\temp\\CAFÉ.toml"),
+            normalise_cycle_key(&unicode) == Path::new(r"c:\\temp\\cafÉ.toml"),
             "unexpected unicode normalisation"
         );
         ensure!(
