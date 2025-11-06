@@ -3,11 +3,13 @@
 use std::time::Duration;
 
 use camino::Utf8PathBuf;
-use cucumber::{World as _, gherkin};
+use cucumber::World as _;
+use tag_filters::requires_yaml;
 
 mod config;
 #[path = "../steps/mod.rs"]
 mod steps;
+mod tag_filters;
 mod world;
 
 pub use config::SampleConfigError;
@@ -24,36 +26,9 @@ fn binary_path() -> Utf8PathBuf {
     ))
 }
 
-/// Detect whether a feature, rule, or scenario includes the `@requires.yaml`
-/// tag so YAML-dependent scenarios can be skipped when that Cargo feature is
-/// disabled.
-///
-/// # Parameters
-/// - `feature`: Feature whose tags may enable YAML requirements.
-/// - `rule`: Optional rule that may contribute additional tags.
-/// - `scenario`: Scenario under evaluation.
-///
-/// # Returns
-/// `true` when any supplied tags equal `requires.yaml`, otherwise `false`.
-fn requires_yaml(
-    feature: &gherkin::Feature,
-    rule: Option<&gherkin::Rule>,
-    scenario: &gherkin::Scenario,
-) -> bool {
-    const TAG: &str = "requires.yaml";
-    feature
-        .tags
-        .iter()
-        .chain(rule.into_iter().flat_map(|r| r.tags.iter()))
-        .chain(scenario.tags.iter())
-        .any(|tag| tag == TAG)
-}
-
 #[tokio::main]
 async fn main() {
     let yaml_enabled = cfg!(feature = "yaml");
-    #[cfg(test)]
-    requires_yaml_tests::run();
     World::cucumber()
         .filter_run("tests/features", move |feature, rule, scenario| {
             yaml_enabled || !requires_yaml(feature, rule, scenario)
@@ -62,16 +37,12 @@ async fn main() {
 }
 
 #[cfg(test)]
-mod requires_yaml_tests {
-    use super::*;
+mod tests {
+    use cucumber::gherkin;
+    use rstest::{fixture, rstest};
 
-    pub(super) fn run() {
-        detects_multi_tag_yaml_scenarios();
-        detects_yaml_tag_on_rule();
-        returns_false_when_no_yaml_tags_present();
-    }
-
-    fn feature_with_tags(tags: &[&str]) -> gherkin::Feature {
+    #[fixture]
+    fn feature(#[default(&[])] tags: &[&str]) -> gherkin::Feature {
         gherkin::Feature {
             keyword: String::new(),
             name: String::new(),
@@ -86,7 +57,8 @@ mod requires_yaml_tests {
         }
     }
 
-    fn rule_with_tags(tags: &[&str]) -> gherkin::Rule {
+    #[fixture]
+    fn rule(#[default(&[])] tags: &[&str]) -> gherkin::Rule {
         gherkin::Rule {
             keyword: String::new(),
             name: String::new(),
@@ -99,7 +71,8 @@ mod requires_yaml_tests {
         }
     }
 
-    fn scenario_with_tags(tags: &[&str]) -> gherkin::Scenario {
+    #[fixture]
+    fn scenario(#[default(&[])] tags: &[&str]) -> gherkin::Scenario {
         gherkin::Scenario {
             keyword: String::new(),
             name: String::new(),
@@ -112,22 +85,28 @@ mod requires_yaml_tests {
         }
     }
 
-    fn detects_multi_tag_yaml_scenarios() {
-        let feature = feature_with_tags(&[]);
-        let scenario = scenario_with_tags(&["slow", "requires.yaml"]);
-        assert!(requires_yaml(&feature, None, &scenario));
+    #[rstest]
+    fn detects_multi_tag_yaml_scenarios(
+        feature: gherkin::Feature,
+        #[with(&["slow", "requires.yaml"])] scenario: gherkin::Scenario,
+    ) {
+        assert!(super::requires_yaml(&feature, None, &scenario));
     }
 
-    fn detects_yaml_tag_on_rule() {
-        let feature = feature_with_tags(&[]);
-        let rule = rule_with_tags(&["requires.yaml", "other"]);
-        let scenario = scenario_with_tags(&["fast"]);
-        assert!(requires_yaml(&feature, Some(&rule), &scenario));
+    #[rstest]
+    fn detects_yaml_tag_on_rule(
+        feature: gherkin::Feature,
+        #[with(&["requires.yaml", "other"])] rule: gherkin::Rule,
+        scenario: gherkin::Scenario,
+    ) {
+        assert!(super::requires_yaml(&feature, Some(&rule), &scenario));
     }
 
-    fn returns_false_when_no_yaml_tags_present() {
-        let feature = feature_with_tags(&["external"]);
-        let scenario = scenario_with_tags(&["slow"]);
-        assert!(!requires_yaml(&feature, None, &scenario));
+    #[rstest]
+    fn returns_false_when_no_yaml_tags_present(
+        #[with(&["external"])] feature: gherkin::Feature,
+        #[with(&["slow"])] scenario: gherkin::Scenario,
+    ) {
+        assert!(!super::requires_yaml(&feature, None, &scenario));
     }
 }
