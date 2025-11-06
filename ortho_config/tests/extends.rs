@@ -1,10 +1,10 @@
 //! Tests for configuration inheritance using the `extends` key.
 use anyhow::{Result, anyhow, ensure};
-#[cfg(windows)]
-use std::borrow::Cow;
 use ortho_config::{OrthoConfig, OrthoError};
 use rstest::rstest;
 use serde::{Deserialize, Serialize};
+#[cfg(windows)]
+use std::borrow::Cow;
 
 #[path = "test_utils.rs"]
 mod test_utils;
@@ -145,9 +145,7 @@ fn missing_base_file_errors(#[case] is_abs: bool) -> Result<()> {
             }
 
             fn normalise(value: Cow<'_, str>) -> String {
-                value
-                    .to_ascii_lowercase()
-                    .replace('/', "\\")
+                value.to_ascii_lowercase().replace('/', "\\")
             }
 
             let msg_norm = normalise(Cow::Borrowed(msg.as_str()));
