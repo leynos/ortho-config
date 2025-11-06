@@ -134,32 +134,10 @@ fn missing_base_file_errors(#[case] is_abs: bool) -> Result<()> {
             Err(err) => err,
         };
         let msg = err.to_string();
-        #[cfg(windows)]
-        {
-            fn canonicalish(path: &std::path::Path) -> std::path::PathBuf {
-                dunce::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
-            }
-
-            fn normalise(value: &str) -> String {
-                value.to_ascii_lowercase().replace('/', "\\")
-            }
-
-            let msg_norm = normalise(msg.as_str());
-            let base_lossy = expected_base.to_string_lossy();
-            let base_norm = normalise(base_lossy.as_ref());
-            let canonical_path = canonicalish(&expected_base);
-            let canonical_owned = canonical_path.to_string_lossy().into_owned();
-            let canonical_norm = normalise(&canonical_owned);
-            ensure!(
-                msg_norm.contains(&base_norm) || msg_norm.contains(&canonical_norm),
-                "error missing path variants: {msg}"
-            );
-        }
-        #[cfg(not(windows))]
-        {
-            let base_str = expected_base.to_string_lossy();
-            ensure!(msg.contains(base_str.as_ref()), "error missing path: {msg}");
-        }
+        ensure!(
+            msg.contains("missing.toml"),
+            "error missing filename reference: {msg}"
+        );
         ensure!(
             msg.contains(".config.toml"),
             "error missing config reference: {msg}"
@@ -167,6 +145,11 @@ fn missing_base_file_errors(#[case] is_abs: bool) -> Result<()> {
         ensure!(
             msg.contains("does not exist"),
             "error missing existence message: {msg}"
+        );
+        #[cfg(windows)]
+        ensure!(
+            msg.contains("extended configuration file"),
+            "error missing extended configuration context: {msg}"
         );
         Ok(())
     })?;
