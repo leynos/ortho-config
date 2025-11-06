@@ -69,16 +69,14 @@ jobs:
         with:
           output-path: lcov.info
           format: lcov
-          features: rstest-bdd/diagnostics ${{ matrix.features }}
-          with-default-features: ${{ matrix.with-default-features }}
+          features: serde_json toml json5 yaml
 
       - name: Test and Measure Coverage (no features)
         uses: leynos/shared-actions/.github/actions/generate-coverage@ebbaaa0d7a776ec3187f3940667e5c7c9379cdf5
         with:
           output-path: lcov.info
           format: lcov
-          features: rstest-bdd/diagnostics
-          with-default-features: ${{ matrix.with-default-features }}
+          with-default-features: false
 
       - name: Publish dry run
         run: make publish-check
