@@ -1,5 +1,7 @@
 //! Tests for configuration inheritance using the `extends` key.
 use anyhow::{Result, anyhow, ensure};
+#[cfg(windows)]
+use std::borrow::Cow;
 use ortho_config::{OrthoConfig, OrthoError};
 use rstest::rstest;
 use serde::{Deserialize, Serialize};
@@ -136,14 +138,23 @@ fn missing_base_file_errors(#[case] is_abs: bool) -> Result<()> {
         let msg = err.to_string();
         #[cfg(windows)]
         {
+            use std::borrow::Cow;
+
             fn canonicalish(path: &std::path::Path) -> std::path::PathBuf {
                 dunce::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
             }
-            let base_str = expected_base.to_string_lossy();
-            let canonical = canonicalish(&expected_base);
-            let canonical_str = canonical.to_string_lossy();
+
+            fn normalise(value: Cow<'_, str>) -> String {
+                value
+                    .to_ascii_lowercase()
+                    .replace('/', "\\")
+            }
+
+            let msg_norm = normalise(Cow::Borrowed(msg.as_str()));
+            let base_norm = normalise(expected_base.to_string_lossy());
+            let canonical_norm = normalise(canonicalish(&expected_base).to_string_lossy());
             ensure!(
-                msg.contains(base_str.as_ref()) || msg.contains(canonical_str.as_ref()),
+                msg_norm.contains(&base_norm) || msg_norm.contains(&canonical_norm),
                 "error missing path variants: {msg}"
             );
         }
