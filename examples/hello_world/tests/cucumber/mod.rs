@@ -3,7 +3,7 @@
 use std::time::Duration;
 
 use camino::Utf8PathBuf;
-use cucumber::World as _;
+use cucumber::{gherkin, World as _};
 
 mod config;
 #[path = "../steps/mod.rs"]
@@ -24,7 +24,28 @@ fn binary_path() -> Utf8PathBuf {
     ))
 }
 
+// Detect scenarios tagged with `@requires.yaml` so we can skip them when the
+// corresponding Cargo feature is disabled.
+fn requires_yaml(
+    feature: &gherkin::Feature,
+    rule: Option<&gherkin::Rule>,
+    scenario: &gherkin::Scenario,
+) -> bool {
+    const TAG: &str = "requires.yaml";
+    feature
+        .tags
+        .iter()
+        .chain(rule.into_iter().flat_map(|r| r.tags.iter()))
+        .chain(scenario.tags.iter())
+        .any(|tag| tag == TAG)
+}
+
 #[tokio::main]
 async fn main() {
-    World::run("tests/features").await;
+    let yaml_enabled = cfg!(feature = "yaml");
+    World::cucumber()
+        .filter_run("tests/features", move |feature, rule, scenario| {
+            yaml_enabled || !requires_yaml(feature, rule, scenario)
+        })
+        .await;
 }

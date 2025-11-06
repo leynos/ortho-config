@@ -27,3 +27,9 @@ All notable changes to this project will be documented in this file.
   (strict boolean parsing keeps unquoted `yes` as a string and duplicate
   mapping keys raise errors) and removing the transitive `figment/yaml`
   dependency.
+
+### Fixed
+
+- Skip YAML-specific `hello_world` Cucumber scenarios unless the `yaml`
+  feature is enabled so feature-disabled test runs no longer invoke YAML
+  parsing.
