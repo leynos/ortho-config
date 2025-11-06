@@ -73,9 +73,7 @@ nixie:
 	$(NIXIE) --no-sandbox
 
 publish-check: ## Run Lading publish pre-flight checks
-	PATH="$(CURDIR)/scripts/publish-check/bin:$$PATH" \
-	  PUBLISH_CHECK_CARGO_REAL="$(PUBLISH_CHECK_CARGO_REAL)" \
-	  $(LADING) publish $(PUBLISH_CHECK_FLAGS) --workspace-root $(CURDIR)
+	$(LADING) publish $(PUBLISH_CHECK_FLAGS) --workspace-root $(CURDIR)
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?##' $(MAKEFILE_LIST) | \
