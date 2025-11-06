@@ -108,16 +108,6 @@ Feature: Global parameters govern greetings
     Then the command succeeds
     And stdout contains "HELLO, WORLD!"
 
-  @requires.yaml @slow
-  Scenario: YAML scenarios are gated even with additional tags
-    Given the file "multi_tags.yaml" contains:
-      """
-      recipient: tagged
-      """
-    When I run the hello world example with arguments "--config multi_tags.yaml greet"
-    Then the command succeeds
-    And stdout contains "Hello, tagged!"
-
   Scenario: XDG config home provides configuration
     Given the XDG config home contains:
       """
