@@ -31,5 +31,5 @@ All notable changes to this project will be documented in this file.
 ### Fixed
 
 - Skip YAML-specific `hello_world` Cucumber scenarios unless the `yaml`
-  feature is enabled so feature-disabled test runs no longer invoke YAML
+  feature is enabled, so feature-disabled test runs no longer invoke YAML
   parsing.

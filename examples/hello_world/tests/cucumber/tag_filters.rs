@@ -24,5 +24,5 @@ pub(crate) fn requires_yaml(
         .iter()
         .chain(rule.into_iter().flat_map(|r| r.tags.iter()))
         .chain(scenario.tags.iter())
-        .any(|tag| tag == TAG)
+        .any(|tag| tag.as_str() == TAG)
 }
