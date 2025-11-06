@@ -13,7 +13,16 @@ use cucumber::gherkin;
 ///
 /// # Returns
 /// `true` when any supplied tags equal `requires.yaml`, otherwise `false`.
-pub(crate) fn requires_yaml(
+///
+/// # Example
+/// ```rust,ignore
+/// use cucumber::gherkin;
+///
+/// let feature = gherkin::Feature::default();
+/// let scenario = gherkin::Scenario::default();
+/// assert!(!has_yaml_requirement(&feature, None, &scenario));
+/// ```
+pub(crate) fn has_yaml_requirement(
     feature: &gherkin::Feature,
     rule: Option<&gherkin::Rule>,
     scenario: &gherkin::Scenario,

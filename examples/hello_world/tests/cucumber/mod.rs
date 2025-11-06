@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use camino::Utf8PathBuf;
 use cucumber::World as _;
-use tag_filters::requires_yaml;
+use tag_filters::has_yaml_requirement;
 
 mod config;
 #[path = "../steps/mod.rs"]
@@ -31,7 +31,7 @@ async fn main() {
     let yaml_enabled = cfg!(feature = "yaml");
     World::cucumber()
         .filter_run("tests/features", move |feature, rule, scenario| {
-            yaml_enabled || !requires_yaml(feature, rule, scenario)
+            yaml_enabled || !has_yaml_requirement(feature, rule, scenario)
         })
         .await;
 }
@@ -90,7 +90,7 @@ mod tests {
         feature: gherkin::Feature,
         #[with(&["slow", "requires.yaml"])] scenario: gherkin::Scenario,
     ) {
-        assert!(super::requires_yaml(&feature, None, &scenario));
+        assert!(super::has_yaml_requirement(&feature, None, &scenario));
     }
 
     #[rstest]
@@ -99,7 +99,11 @@ mod tests {
         #[with(&["requires.yaml", "other"])] rule: gherkin::Rule,
         scenario: gherkin::Scenario,
     ) {
-        assert!(super::requires_yaml(&feature, Some(&rule), &scenario));
+        assert!(super::has_yaml_requirement(
+            &feature,
+            Some(&rule),
+            &scenario
+        ));
     }
 
     #[rstest]
@@ -107,6 +111,6 @@ mod tests {
         #[with(&["external"])] feature: gherkin::Feature,
         #[with(&["slow"])] scenario: gherkin::Scenario,
     ) {
-        assert!(!super::requires_yaml(&feature, None, &scenario));
+        assert!(!super::has_yaml_requirement(&feature, None, &scenario));
     }
 }
