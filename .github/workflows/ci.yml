@@ -64,19 +64,19 @@ jobs:
       - name: Lint
         run: make lint
 
-      - name: Test and Measure Coverage (with features)
+      - name: Test and Measure Coverage (with serde_saphyr)
         uses: leynos/shared-actions/.github/actions/generate-coverage@ebbaaa0d7a776ec3187f3940667e5c7c9379cdf5
         with:
           output-path: lcov.info
           format: lcov
           features: serde_json toml json5 yaml
 
-      - name: Test and Measure Coverage (no features)
+      - name: Test and Measure Coverage (without serde_saphyr)
         uses: leynos/shared-actions/.github/actions/generate-coverage@ebbaaa0d7a776ec3187f3940667e5c7c9379cdf5
         with:
           output-path: lcov.info
           format: lcov
-          with-default-features: false
+          features: serde_json toml json5
 
       - name: Publish dry run
         run: make publish-check
