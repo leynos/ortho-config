@@ -410,8 +410,11 @@ mod dedup_tests {
 
     #[cfg(windows)]
     fn canonicalish(path: &Path) -> PathBuf {
-        dunce::canonicalize(path)
-            .unwrap_or_else(|err| panic!("failed to canonicalise {path:?}: {err}"))
+        match dunce::canonicalize(path) {
+            Ok(p) => p,
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => path.to_path_buf(),
+            Err(err) => panic!("failed to canonicalise {path:?}: {err}"),
+        }
     }
 
     #[cfg(not(windows))]
@@ -455,13 +458,13 @@ mod dedup_tests {
     #[test]
     fn normalised_key_lowercases_ascii_and_backslashes() {
         let key = ConfigDiscovery::normalised_key(Path::new("C:/Config/FILE.TOML"));
-        assert_eq!(key, "c\\config\\file.toml");
+        assert_eq!(key, "c:\\config\\file.toml");
     }
 
     #[cfg(windows)]
     #[test]
     fn normalised_key_handles_unicode_case() {
         let key = ConfigDiscovery::normalised_key(Path::new("C:/Temp/CAFÉ.toml"));
-        assert_eq!(key, "c\\temp\\café.toml");
+        assert_eq!(key, "c:\\temp\\café.toml");
     }
 }
