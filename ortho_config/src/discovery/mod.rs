@@ -15,21 +15,15 @@ use dirs::home_dir;
 use crate::{OrthoError, OrthoResult, load_config_file};
 
 #[cfg(windows)]
-/// Normalises a path according to Windows' ASCII-only case folding and
-/// separator rules while leaving non-ASCII code points untouched.
+/// Normalises a path according to Windows' case-insensitive comparison rules by
+/// lowercasing Unicode scalar values and replacing forward slashes with
+/// backslashes, mirroring the filesystem's treatment of separators.
 fn windows_normalised_key(path: &Path) -> String {
-    let lossy = path.to_string_lossy();
-    let mut normalised = String::with_capacity(lossy.len());
-    for ch in lossy.chars() {
-        if ch == '/' {
-            normalised.push('\\');
-        } else if ch.is_ascii_uppercase() {
-            normalised.push(ch.to_ascii_lowercase());
-        } else {
-            normalised.push(ch);
-        }
+    let mut lowercased = path.to_string_lossy().to_lowercase();
+    if lowercased.contains('/') {
+        lowercased = lowercased.replace('/', "\\");
     }
-    normalised
+    lowercased
 }
 
 mod builder;
@@ -106,7 +100,7 @@ impl ConfigDiscovery {
     fn normalised_key(path: &Path) -> String {
         #[cfg(windows)]
         {
-            return windows_normalised_key(path);
+            windows_normalised_key(path)
         }
 
         #[cfg(not(windows))]
@@ -466,8 +460,8 @@ mod dedup_tests {
 
     #[cfg(windows)]
     #[test]
-    fn normalised_key_preserves_non_ascii_characters() {
+    fn normalised_key_handles_unicode_case() {
         let key = ConfigDiscovery::normalised_key(Path::new("C:/Temp/CAFÉ.toml"));
-        assert_eq!(key, "c\\temp\\CAFÉ.toml");
+        assert_eq!(key, "c\\temp\\café.toml");
     }
 }
