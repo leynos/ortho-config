@@ -14,6 +14,18 @@ use dirs::home_dir;
 
 use crate::{OrthoError, OrthoResult, load_config_file};
 
+#[cfg(windows)]
+/// Normalises a path according to Windows' case-insensitive comparison rules by
+/// lowercasing Unicode scalar values and replacing forward slashes with
+/// backslashes, mirroring the filesystem's treatment of separators.
+fn windows_normalised_key(path: &Path) -> String {
+    let mut lowercased = path.to_string_lossy().to_lowercase();
+    if lowercased.contains('/') {
+        lowercased = lowercased.replace('/', "\\");
+    }
+    lowercased
+}
+
 mod builder;
 
 pub use builder::ConfigDiscoveryBuilder;
@@ -88,7 +100,7 @@ impl ConfigDiscovery {
     fn normalised_key(path: &Path) -> String {
         #[cfg(windows)]
         {
-            path.to_string_lossy().to_lowercase()
+            windows_normalised_key(path)
         }
 
         #[cfg(not(windows))]
@@ -396,6 +408,20 @@ mod dedup_tests {
     use std::fs;
     use tempfile::tempdir;
 
+    #[cfg(windows)]
+    fn canonicalish(path: &Path) -> PathBuf {
+        match dunce::canonicalize(path) {
+            Ok(p) => p,
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => path.to_path_buf(),
+            Err(err) => panic!("failed to canonicalise {path:?}: {err}"),
+        }
+    }
+
+    #[cfg(not(windows))]
+    fn canonicalish(path: &Path) -> PathBuf {
+        path.to_path_buf()
+    }
+
     fn assert_first_error_path(errors: &[Arc<OrthoError>], expected: &Path) {
         let err = errors
             .first()
@@ -404,7 +430,7 @@ mod dedup_tests {
             OrthoError::File { path, .. } => path,
             other => panic!("expected OrthoError::File, got {other:?}"),
         };
-        assert_eq!(path, expected);
+        assert_eq!(canonicalish(path), canonicalish(expected));
     }
 
     #[test]
@@ -426,5 +452,19 @@ mod dedup_tests {
 
         assert_first_error_path(&outcome.required_errors, &required);
         assert_first_error_path(&outcome.optional_errors, &optional);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn normalised_key_lowercases_ascii_and_backslashes() {
+        let key = ConfigDiscovery::normalised_key(Path::new("C:/Config/FILE.TOML"));
+        assert_eq!(key, "c:\\config\\file.toml");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn normalised_key_handles_unicode_case() {
+        let key = ConfigDiscovery::normalised_key(Path::new("C:/Temp/CAFÉ.toml"));
+        assert_eq!(key, "c:\\temp\\café.toml");
     }
 }

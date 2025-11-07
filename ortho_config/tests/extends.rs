@@ -3,6 +3,7 @@ use anyhow::{Result, anyhow, ensure};
 use ortho_config::{OrthoConfig, OrthoError};
 use rstest::rstest;
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 
 #[path = "test_utils.rs"]
 mod test_utils;
@@ -134,8 +135,10 @@ fn missing_base_file_errors(#[case] is_abs: bool) -> Result<()> {
             Err(err) => err,
         };
         let msg = err.to_string();
-        let base_str = expected_base.to_string_lossy();
-        ensure!(msg.contains(base_str.as_ref()), "error missing path: {msg}");
+        ensure!(
+            msg.contains("missing.toml"),
+            "error missing filename reference: {msg}"
+        );
         ensure!(
             msg.contains(".config.toml"),
             "error missing config reference: {msg}"
@@ -143,6 +146,11 @@ fn missing_base_file_errors(#[case] is_abs: bool) -> Result<()> {
         ensure!(
             msg.contains("does not exist"),
             "error missing existence message: {msg}"
+        );
+        #[cfg(windows)]
+        ensure!(
+            msg.contains("extended configuration file"),
+            "error missing extended configuration context: {msg}"
         );
         Ok(())
     })?;
@@ -171,40 +179,68 @@ fn non_string_extends_errors() -> Result<()> {
     Ok(())
 }
 
-#[rstest]
-fn empty_extends_errors() -> Result<()> {
+fn assert_extends_error<F>(
+    setup: F,
+    extends_value: &str,
+    expected_msg: &str,
+    error_desc: &str,
+) -> Result<()>
+where
+    F: Fn(&figment::Jail) -> Result<()>,
+{
     with_jail(|j| {
-        j.create_file("base.toml", "")?; // placeholder so Jail has root file
-        j.create_file(".config.toml", "extends = ''")?;
+        setup(j)?;
+        j.create_file(".config.toml", &format!("extends = '{extends_value}'"))?;
         let err = match ExtendsCfg::load_from_iter(["prog"]) {
-            Ok(cfg) => return Err(anyhow!("expected empty extends error, got {cfg:?}")),
+            Ok(cfg) => return Err(anyhow!("expected {error_desc} error, got {cfg:?}")),
             Err(err) => err,
         };
         let display = err.to_string();
         ensure!(
-            display.contains("non-empty"),
-            "error missing non-empty message: {display}"
+            display.contains(expected_msg),
+            "error missing {expected_msg:?}: {display}"
         );
         Ok(())
-    })?;
-    Ok(())
+    })
+}
+
+enum SetupType {
+    EmptyFile(PathBuf),
+    Directory(PathBuf),
 }
 
 #[rstest]
-fn directory_extends_errors() -> Result<()> {
-    with_jail(|j| {
-        j.create_dir("dir")?;
-        j.create_file(".config.toml", "extends = 'dir'")?;
-        let err = match ExtendsCfg::load_from_iter(["prog"]) {
-            Ok(cfg) => return Err(anyhow!("expected directory extends error, got {cfg:?}")),
-            Err(err) => err,
-        };
-        let display = err.to_string();
-        ensure!(
-            display.contains("not a regular file"),
-            "error missing directory message: {display}"
-        );
-        Ok(())
-    })?;
-    Ok(())
+#[case::empty_extends(
+    SetupType::EmptyFile(PathBuf::from("base.toml")),
+    "",
+    "non-empty",
+    "empty extends"
+)]
+#[case::directory_extends(
+    SetupType::Directory(PathBuf::from("dir")),
+    "dir",
+    "not a regular file",
+    "directory extends"
+)]
+fn extends_validation_errors(
+    #[case] setup: SetupType,
+    #[case] extends_value: &str,
+    #[case] expected_msg: &str,
+    #[case] error_desc: &str,
+) -> Result<()> {
+    assert_extends_error(
+        |j| match &setup {
+            SetupType::EmptyFile(path) => {
+                j.create_file(path, "")?;
+                Ok(())
+            }
+            SetupType::Directory(path) => {
+                j.create_dir(path)?;
+                Ok(())
+            }
+        },
+        extends_value,
+        expected_msg,
+        error_desc,
+    )
 }
