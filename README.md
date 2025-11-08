@@ -45,7 +45,7 @@ manual aliasing.
 
 ```toml
 [dependencies]
-ortho_config = "0.5.0" # Replace with the latest version
+ortho_config = "0.6.0" # Replace with the latest version
 serde = { version = "1.0", features = ["derive"] }
 ```
 
@@ -170,7 +170,7 @@ support additional formats:
 
 ```toml
 [dependencies]
-ortho_config = { version = "0.5.0", features = ["json5", "yaml"] }
+ortho_config = { version = "0.6.0", features = ["json5", "yaml"] }
 ```
 
 When the `yaml` feature is enabled, configuration files are parsed with
@@ -207,14 +207,14 @@ assert!(
 );
 ```
 
-The file loader selects the parser based on the extension (`.toml`, `.json`,
-`.json5`, `.yaml`, `.yml`). When the `json5` feature is active, both `.json`
-and `.json5` files are parsed using the JSON5 format. Standard JSON is valid
-JSON5, so existing `.json` files continue to work. Without this feature
-enabled, attempting to load a `.json` or `.json5` file will result in an error.
-When the `yaml` feature is enabled, `.yaml` and `.yml` files are also
-discovered and parsed. Without this feature, those extensions are ignored
-during path discovery.
+The file loader selects the parser based on the extension
+(`.toml`, `.json`, `.json5`, `.yaml`, `.yml`). When the `json5` feature is
+active, both `.json` and `.json5` files are parsed using the JSON5 format.
+Standard JSON is valid JSON5, so existing `.json` files continue to work.
+Without this feature enabled, attempting to load a `.json` or `.json5` file
+will result in an error. When the `yaml` feature is enabled, `.yaml` and `.yml`
+files are also discovered and parsed. Without this feature, those extensions
+are ignored during path discovery.
 
 JSON5 extends JSON with conveniences such as comments, trailing commas,
 single-quoted strings, and unquoted keys.
@@ -376,6 +376,24 @@ fn main() -> Result<(), String> {
   best suits their environment (CLI for quick overrides, env vars for CI/CD,
   files for persistent settings).
 - **Clear Precedence:** Predictable configuration resolution.
+
+## Migrating from 0.5 to 0.6
+
+Version v0.6.0 streamlines dependency management, discovery, and YAML parsing.
+For a full walkthrough see the
+[v0.6.0 migration guide](docs/v0-6-0-migration-guide.md); the highlights are:
+
+- Update every `ortho_config` and `ortho_config_macros` dependency to `0.6.0`.
+  Feature flags now flow from the runtime crate to the macros, so you can drop
+  duplicated feature declarations on the derive crate.
+- Use the crates re-exported via `ortho_config::figment` (and friends) instead
+  of keeping direct dependencies on Figment, `uncased`, or `xdg`.
+- Prefer the `#[ortho_config(discovery(...))]` attribute to configure search
+  paths declaratively and bubble up errors from `ConfigDiscovery::load_first`,
+  which now returns `Err` whenever every candidate failed to load.
+- Switch to the new `SaphyrYaml` provider (behind the existing `yaml`
+  feature) wherever Figment's YAML provider was used to benefit from YAML 1.2
+  semantics and duplicate-key validation.
 
 ## Migrating from 0.4 to 0.5
 

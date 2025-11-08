@@ -144,7 +144,7 @@ Add `ortho_config` as a dependency in `Cargo.toml` along with `serde`:
 
 ```toml
 [dependencies]
-ortho_config = "0.5.0"            # replace with the latest version
+ortho_config = "0.6.0"            # replace with the latest version
 serde = { version = "1.0", features = ["derive"] }
 clap = { version = "4", features = ["derive"] }    # required for CLI support
 ```
@@ -155,7 +155,7 @@ corresponding cargo features:
 
 ```toml
 [dependencies]
-ortho_config = { version = "0.5.0", features = ["json5", "yaml"] }
+ortho_config = { version = "0.6.0", features = ["json5", "yaml"] }
 # Enabling these features expands file formats; precedence stays: defaults < file < env < CLI.
 ```
 
@@ -167,10 +167,11 @@ during discovery and do not cause errors if present.
 
 `ortho_config` re-exports its parsing dependencies, so consumers do not need to
 declare them directly. Access `figment`, `uncased`, `xdg` (on Unix-like and
-Redox targets), and the optional parsers (`figment_json5`, `json5`,
-`serde_saphyr`, `toml`) via `ortho_config::` paths. The `serde_json` re-export
-is enabled by default because the crate relies on it internally; disable
-default features only when explicitly opting back into `serde_json`.
+Redox targets), and the optional parsers
+(`figment_json5`, `json5`, `serde_saphyr`, `toml`) via `ortho_config::` paths.
+The `serde_json` re-export is enabled by default because the crate relies on it
+internally; disable default features only when explicitly opting back into
+`serde_json`.
 
 YAML parsing is handled by the pure-Rust `serde-saphyr` crate. It adheres to
 the YAML 1.2 specification, so unquoted scalars such as `yes`, `on`, and `off`
@@ -510,9 +511,10 @@ CLI values.
 Environment variables are upper‑cased and use underscores. The struct‑level
 prefix (if supplied) is prepended without any separator, and nested fields are
 separated by double underscores. For the `AppConfig` and `DatabaseConfig`
-example above, valid environment variables include `APP_LOG_LEVEL`, `APP_PORT`,
-`APP_DATABASE__URL` and `APP_DATABASE__POOL_SIZE`. If the nested struct has its
-own prefix (`DB`), then the environment variable becomes `APP_DB_URL`.
+example above, valid environment variables include
+`APP_LOG_LEVEL`, `APP_PORT`, `APP_DATABASE__URL` and `APP_DATABASE__POOL_SIZE`.
+If the nested struct has its own prefix (`DB`), then the environment variable
+becomes `APP_DB_URL`.
 
 Comma-separated values such as `DDLINT_RULES=A,B,C` are parsed as lists. The
 loader converts these strings into arrays before merging, so array fields
@@ -572,11 +574,10 @@ flags via the `append` merge strategy.
 Many CLI applications use `clap` subcommands to perform different operations.
 `OrthoConfig` supports per‑subcommand defaults via a dedicated `cmds`
 namespace. The helper function `load_and_merge_subcommand_for` loads defaults
-for a specific subcommand and merges them beneath the CLI values. The legacy
-`load_subcommand_config` and `load_subcommand_config_for` helpers were removed
-in v0.5.0. The merged struct is returned as a new instance; the original `cli`
-struct remains unchanged. CLI fields left unset (`None`) do not override
-environment or file defaults, avoiding accidental loss of configuration.
+for a specific subcommand and merges them beneath the CLI values. The merged
+struct is returned as a new instance; the original `cli` struct remains
+unchanged. CLI fields left unset (`None`) do not override environment or file
+defaults, avoiding accidental loss of configuration.
 
 ### How it works
 
@@ -649,25 +650,28 @@ tool continues using the CLI value instead of exiting with an error.
 
 ### Hello world walkthrough
 
+<https://github.com/leynos/ortho-config/tree/main/examples/hello_world>
+
 The `hello_world` example crate demonstrates these patterns in a compact
 setting. Global options such as `--recipient` or `--salutation` are parsed via
 `load_global_config`, which layers configuration files and environment
 variables beneath any CLI overrides. The `greet` subcommand adds optional
 behaviour like a preamble (`--preamble "Good morning"`) or custom punctuation
 while reusing the merged global configuration. The `take-leave` subcommand
-combines switches and optional arguments (`--wave`, `--gift`,
-`--channel email`, `--remind-in 15`) alongside greeting adjustments
-(`--preamble "Until next time"`, `--punctuation ?`) to describe how the
-farewell should unfold. Each subcommand struct derives `OrthoConfig` so
+combines switches and optional arguments
+(`--wave`, `--gift`, `--channel email`, `--remind-in 15`) alongside greeting
+adjustments (`--preamble "Until next time"`, `--punctuation ?`) to describe how
+the farewell should unfold. Each subcommand struct derives `OrthoConfig` so
 defaults from `[cmds.greet]` or `[cmds.take-leave]` merge automatically when
 `load_and_merge()` is called.
 
 Behavioural tests in `examples/hello_world/tests` exercise scenarios such as
 `hello_world greet --preamble "Good morning"` and running
-`hello_world --is-excited take-leave` with `--gift biscuits`, `--remind-in 15`,
-`--channel email`, and `--wave`. These end-to-end checks verify that CLI
-arguments override configuration files and that validation errors surface
-cleanly when callers provide blank strings or conflicting switches.
+`hello_world --is-excited take-leave` with
+`--gift biscuits`, `--remind-in 15`, `--channel email`, and `--wave`. These
+end-to-end checks verify that CLI arguments override configuration files and
+that validation errors surface cleanly when callers provide blank strings or
+conflicting switches.
 
 Sample configuration files live in `examples/hello_world/config`. The
 `baseline.toml` defaults underpin both the automated tests and the demo
