@@ -8,7 +8,7 @@
 - [2. Simplify imports using the new re-exports](#2-simplify-imports-using-the-new-re-exports)
 - [3. Adopt declarative configuration discovery](#3-adopt-declarative-configuration-discovery)
 - [4. Handle stricter discovery outcomes](#4-handle-stricter-discovery-outcomes)
-- [5. Opt in to the stricter YAML provider](#5-opt-in-to-the-stricter-yaml-provider)
+- [5. Switch to the stricter YAML provider](#5-switch-to-the-new-stricter-yaml-provider)
 - [6. Review documentation and release notes](#6-review-documentation-and-release-notes)
 
 ## Introduction
@@ -28,7 +28,7 @@ throughout.
 | Dependency surface | Macro crate now inherits parser features and consumes the re-exported dependency graph.      | [1](#1-update-crate-versions-and-feature-flags), [2](#2-simplify-imports-using-the-new-re-exports) |
 | Discovery          | Declarative attributes replace bespoke builders, altering discovery configuration points.    | [3](#3-adopt-declarative-configuration-discovery)                                                  |
 | Error handling     | `ConfigDiscovery::load_first` now errors when every candidate fails, affecting control flow. | [4](#4-handle-stricter-discovery-outcomes)                                                         |
-| YAML parsing       | `SaphyrYaml` replaces the Figment YAML provider and enforces YAML 1.2 semantics.             | [5](#5-opt-in-to-the-stricter-yaml-provider)                                                       |
+| YAML parsing       | `SaphyrYaml` replaces the Figment YAML provider and enforces YAML 1.2 semantics.             | [5](#5-switch-to-the-new-stricter-yaml-provider)                                                   |
 
 ## 1. Update crate versions and feature flags
 
@@ -166,7 +166,7 @@ defaults should be audited. After upgrading, consider whether those branches
 now ought to abort with an error, so broken configuration files do not pass
 unnoticed.
 
-## 5. Opt in to the stricter YAML provider
+## 5. Switch to the new stricter YAML provider
 
 The legacy `serde_yaml` integration has been replaced with a new `SaphyrYaml`
 provider backed by `serde-saphyr`. The parser enforces YAML 1.2 rules, so
