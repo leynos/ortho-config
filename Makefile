@@ -1,4 +1,4 @@
-.PHONY: help all clean test build release lint fmt check-fmt markdownlint nixie check python-test-deps publish-check
+.PHONY: help all clean test build release lint fmt check-fmt markdownlint nixie check python-test-deps publish-check FORCE
 
 CRATE ?= ortho_config
 CARGO ?= cargo
@@ -42,14 +42,17 @@ python-test-deps: ## Ensure Python test dependencies are provisioned
 	$(PYTEST) --version > $(NULL_DEVICE)
 
 # will match target/debug/libmy_library.rlib and target/release/libmy_library.rlib
-target/%/lib$(CRATE).rlib: ## Build library in debug or release
+target/%/lib$(CRATE).rlib: FORCE ## Build library in debug or release
 	$(CARGO) build $(BUILD_JOBS)                            \
 	  $(if $(findstring release,$(@)),--release)            \
 	  --lib
-	@# copy the .rlib into your own target tree
-	install -Dm644                                           \
-	  target/$(if $(findstring release,$(@)),release,debug)/lib$(CRATE).rlib \
-	  $@
+	@# Copy artefacts only when the cargo output and make target differ.
+	src=target/$(if $(findstring release,$(@)),release,debug)/lib$(CRATE).rlib; \
+	if [ "$$src" != "$@" ]; then \
+	  install -Dm644 "$$src" "$@"; \
+	fi
+
+FORCE:
 
 lint: ## Run Clippy with warnings denied
 	RUSTDOCFLAGS="$(RUSTDOC_FLAGS)" $(CARGO) doc --workspace --no-deps
