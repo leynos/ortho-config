@@ -45,7 +45,7 @@ manual aliasing.
 
 ```toml
 [dependencies]
-ortho_config = "0.5.0" # Replace with the latest version
+ortho_config = "0.6.0" # Replace with the latest version
 serde = { version = "1.0", features = ["derive"] }
 ```
 
@@ -170,15 +170,13 @@ support additional formats:
 
 ```toml
 [dependencies]
-ortho_config = { version = "0.5.0", features = ["json5", "yaml"] }
+ortho_config = { version = "0.6.0", features = ["json5", "yaml"] }
 ```
 
 When the `yaml` feature is enabled, configuration files are parsed with
-`serde-saphyr` configured for YAML 1.2 semantics. The provider enables
-`Options::strict_booleans` so YAML 1.1 legacy literals such as `yes`, `on`, or
-`off` remain strings, while canonical booleans (`true`, `false`) continue to
-parse as booleans. Duplicate mapping keys raise errors instead of being
-silently ignored.
+`serde-saphyr` configured for YAML 1.2 semantics. `Options::strict_booleans`
+keeps legacy literals such as `yes` or `on` as plain strings, and duplicate
+mapping keys raise errors instead of being silently overwritten.
 
 ### Error interop helpers
 
@@ -379,6 +377,24 @@ fn main() -> Result<(), String> {
   files for persistent settings).
 - **Clear Precedence:** Predictable configuration resolution.
 
+## Migrating from 0.5 to 0.6
+
+Version v0.6.0 streamlines dependency management, discovery, and YAML parsing.
+For a full walkthrough see the
+[v0.6.0 migration guide](docs/v0-6-0-migration-guide.md); the highlights are:
+
+- Update every `ortho_config` and `ortho_config_macros` dependency to `0.6.0`.
+  Feature flags now flow from the runtime crate to the macros, so you can drop
+  duplicated feature declarations on the derive crate.
+- Use the crates re-exported via `ortho_config::figment` (and friends) instead
+  of keeping direct dependencies on Figment, `uncased`, or `xdg`.
+- Prefer the `#[ortho_config(discovery(...))]` attribute to configure search
+  paths declaratively and bubble up errors from `ConfigDiscovery::load_first`,
+  which now returns `Err` whenever every candidate failed to load.
+- Switch to the new `SaphyrYaml` provider (behind the existing `yaml`
+  feature) wherever Figment's YAML provider was used to benefit from YAML 1.2
+  semantics and duplicate-key validation.
+
 ## Migrating from 0.4 to 0.5
 
 Version v0.5.0 introduces a small API refinement:
@@ -403,6 +419,15 @@ to call `load_and_merge_subcommand_for` instead of manually merging defaults.
 ```sh
 ./scripts/bump_version.py 1.2.3
 ```
+
+## Publish checks
+
+Run `make publish-check` before releasing to execute the `lading` publish
+pre-flight validations with the repository's helper scripts on the `PATH`. The
+target is parameterised via `PUBLISH_CHECK_FLAGS`, which defaults to
+`--allow-dirty` for local development convenience. Continuous integration
+should invoke `make publish-check PUBLISH_CHECK_FLAGS=` so the command runs
+without the permissive flag.
 
 ## Contributing
 
