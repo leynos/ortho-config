@@ -277,6 +277,25 @@ references the relevant design guidance.
     YAML 1.2 compliance, and plan a minor version bump for the release.
     [[ADR-001](adr-001-replace-serde-yaml-with-serde-saphyr.md)]
 
+- [ ] **Replace `cucumber-rs` behavioural tests with `rstest-bdd`**
+  [[ADR-002](adr-002-replace-cucumber-with-rstest-bdd.md)]
+
+  - [ ] Add `rstest-bdd` scaffolding (dev-dependencies, fixture modules, and a
+    canary scenario) inside `ortho_config` and `hello_world` so the macros run
+    under `cargo test` without disabling the harness.
+
+  - [ ] Port every module under `ortho_config/tests/steps` to
+    `rstest_bdd_macros`, bind the existing feature files via `scenarios!` or
+    `#[scenario]`, and delete the bespoke `tests/cucumber.rs` runner.
+
+  - [ ] Migrate the `hello_world` example suite: convert the world helpers to
+    `rstest` fixtures, rebind the feature file using compile-time tag filters,
+    and drop the `tests/cucumber` harness plus its `[[test]]` entry.
+
+  - [ ] Remove the `cucumber`/`gherkin` dev-dependencies, clean the unused
+    Tokio bits, and update behavioural documentation plus the CHANGELOG to
+    describe the new workflow.
+
 - [ ] **Address future enhancements**
 
   - [ ] Explore asynchronous loading of configuration files and environment
