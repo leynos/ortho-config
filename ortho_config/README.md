@@ -207,14 +207,14 @@ assert!(
 );
 ```
 
-The file loader selects the parser based on the extension
-(`.toml`, `.json`, `.json5`, `.yaml`, `.yml`). When the `json5` feature is
-active, both `.json` and `.json5` files are parsed using the JSON5 format.
-Standard JSON is valid JSON5, so existing `.json` files continue to work.
-Without this feature enabled, attempting to load a `.json` or `.json5` file
-will result in an error. When the `yaml` feature is enabled, `.yaml` and `.yml`
-files are also discovered and parsed. Without this feature, those extensions
-are ignored during path discovery.
+The file loader selects the parser based on the extension (`.toml`, `.json`,
+`.json5`, `.yaml`, `.yml`). When the `json5` feature is active, both `.json`
+and `.json5` files are parsed using the JSON5 format. Standard JSON is valid
+JSON5, so existing `.json` files continue to work. Without this feature
+enabled, attempting to load a `.json` or `.json5` file will result in an error.
+When the `yaml` feature is enabled, `.yaml` and `.yml` files are also
+discovered and parsed. Without this feature, those extensions are ignored
+during path discovery.
 
 JSON5 extends JSON with conveniences such as comments, trailing commas,
 single-quoted strings, and unquoted keys.
@@ -424,10 +424,16 @@ to call `load_and_merge_subcommand_for` instead of manually merging defaults.
 
 Run `make publish-check` before releasing to execute the `lading` publish
 pre-flight validations with the repository's helper scripts on the `PATH`. The
-target is parameterised via `PUBLISH_CHECK_FLAGS`, which defaults to
-`--allow-dirty` for local development convenience. Continuous integration
-should invoke `make publish-check PUBLISH_CHECK_FLAGS=` so the command runs
-without the permissive flag.
+target is parameterised via `PUBLISH_CHECK_FLAGS`, which now defaults to an
+empty value so the command enforces a clean working tree. Developers who want
+the previous convenience may opt in explicitly:
+
+```sh
+PUBLISH_CHECK_FLAGS="--allow-dirty" make publish-check
+```
+
+Continuous integration should keep the strict default and call
+`make publish-check` without additional flags.
 
 ## Contributing
 
