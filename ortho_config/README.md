@@ -425,7 +425,7 @@ to call `load_and_merge_subcommand_for` instead of manually merging defaults.
 Run `make publish-check` before releasing to execute the `lading` publish
 pre-flight validations with the repository's helper scripts on the `PATH`. The
 target is parameterised via `PUBLISH_CHECK_FLAGS`, which now defaults to an
-empty value so the command enforces a clean working tree. Developers who want
+empty value, so the command enforces a clean working tree. Developers who want
 the previous convenience may opt in explicitly:
 
 ```sh
