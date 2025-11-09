@@ -6,6 +6,16 @@ Feature: Global parameters govern greetings
     Then the command succeeds
     And stdout contains "Hello, World!"
 
+  Scenario: CLI help exits successfully
+    When I run the hello world example with arguments "--help"
+    Then the command succeeds
+    And stdout contains "Usage: hello_world"
+
+  Scenario: CLI version exits successfully
+    When I run the hello world example with arguments "--version"
+    Then the command succeeds
+    And stdout contains the hello world version
+
   Scenario: Excited delivery shouts the greeting
     When I run the hello world example with arguments "--is-excited greet"
     Then the command succeeds

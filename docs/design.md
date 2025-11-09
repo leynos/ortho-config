@@ -471,6 +471,15 @@ possible. `Gathering` covers failures while sourcing defaults from files or the
 environment. When CLI values are overlaid onto those defaults, any merge or
 deserialization failures map to `Merge`.
 
+Some applications prefer `Cli::try_parse()` over `Cli::parse()` so they retain
+full control of diagnostics and error reporting. `clap` reports `--help` and
+`--version` via `ErrorKind::DisplayHelp` / `DisplayVersion`. To preserve the
+expected zero exit code without relinquishing control to `clap`, the runtime
+exposes `ortho_config::is_display_request`. Entry points inspect the error via
+this helper and delegate to `err.exit()` before mapping it into their own error
+type, keeping process exits well-defined and preventing regressions where help
+text is treated as a failure.
+
 ### 4.8. Configuration File Discovery
 
 On Unix-like systems and Redox, the crate uses the `xdg` crate to locate

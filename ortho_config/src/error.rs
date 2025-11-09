@@ -1,5 +1,6 @@
 //! Error types produced by the configuration loader.
 
+use clap::{Error as ClapError, error::ErrorKind};
 use figment::Error as FigmentError;
 use std::{error::Error, fmt, sync::Arc};
 use thiserror::Error;
@@ -53,6 +54,22 @@ pub enum OrthoError {
     /// Multiple errors occurred while loading configuration.
     #[error("multiple configuration errors:\n{0}")]
     Aggregate(Box<AggregatedErrors>),
+}
+
+/// Returns `true` when a [`clap::Error`] corresponds to `--help` or
+/// `--version`.
+///
+/// Clap surfaces these requests via specialised [`ErrorKind`] variants so
+/// entry points can delegate to [`clap::Error::exit`] and preserve the
+/// expected zero exit status. Derive users frequently need this inspection
+/// when they prefer `Cli::try_parse()` over `Cli::parse()` to keep full
+/// control over diagnostics and logging.
+#[must_use]
+pub fn is_display_request(err: &ClapError) -> bool {
+    matches!(
+        err.kind(),
+        ErrorKind::DisplayHelp | ErrorKind::DisplayVersion
+    )
 }
 
 /// Collection of [`OrthoError`]s produced during a single load attempt.
@@ -275,8 +292,30 @@ impl From<OrthoError> for FigmentError {
 
 #[cfg(test)]
 mod tests {
-    use super::OrthoError;
+    use super::{OrthoError, is_display_request};
+    use clap::{Command, error::ErrorKind};
+    use rstest::rstest;
     use std::sync::Arc;
+
+    fn build_error(kind: ErrorKind) -> clap::Error {
+        Command::new("demo").error(kind, "demo output")
+    }
+
+    #[rstest]
+    #[case(ErrorKind::DisplayHelp)]
+    #[case(ErrorKind::DisplayVersion)]
+    fn recognises_display_requests(#[case] kind: ErrorKind) {
+        let err = build_error(kind);
+        assert!(is_display_request(&err));
+    }
+
+    #[rstest]
+    #[case(ErrorKind::UnknownArgument)]
+    #[case(ErrorKind::InvalidValue)]
+    fn rejects_regular_errors(#[case] kind: ErrorKind) {
+        let err = build_error(kind);
+        assert!(!is_display_request(&err));
+    }
 
     fn run_aggregate_tests<F>(name: &str, runner: F)
     where
