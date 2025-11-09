@@ -293,7 +293,7 @@ references the relevant design guidance.
     and drop the `tests/cucumber` harness plus its `[[test]]` entry.
 
   - [ ] Remove the `cucumber`/`gherkin` dev-dependencies, clean the unused
-    Tokio bits, and update behavioural documentation plus the CHANGELOG to
+    Tokio bits, and update the behavioural documentation plus the CHANGELOG to
     describe the new workflow.
 
 - [ ] **Address future enhancements**
