@@ -61,7 +61,7 @@ pub enum OrthoError {
 ///
 /// Clap surfaces these requests via specialised [`ErrorKind`] variants so
 /// entry points can delegate to [`clap::Error::exit`] and preserve the
-/// expected zero exit status. Derive users frequently need this inspection
+/// expected zero exit status. Applications frequently need this inspection
 /// when they prefer `Cli::try_parse()` over `Cli::parse()` to keep full
 /// control over diagnostics and logging.
 #[must_use]
