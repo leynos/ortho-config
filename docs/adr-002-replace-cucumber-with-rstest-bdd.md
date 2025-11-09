@@ -31,7 +31,7 @@ reduces the maintenance burden of a separate async runner and world model.
 ## Decision drivers
 
 - **Single runner**: Execute every behavioural scenario under `cargo test`
-  using the stock harness so CI and local workflows remain consistent with the
+  using the stock harness, so CI and local workflows remain consistent with the
   `make test` expectation.
 - **Fixture reuse**: Reuse the `rstest` fixtures already described in
   `docs/rust-testing-with-rstest-fixtures.md`, rather than maintaining parallel
@@ -41,10 +41,10 @@ reduces the maintenance burden of a separate async runner and world model.
   runner.
 - **Typed step inputs**: Adopt `rstest-bdd`'s placeholder parsing,
   `#[step_args]` structs, docstring/data-table helpers, and `Slot<T>` scenario
-  storage so steps can be intention-revealing without re-parsing strings.
+  storage, so steps can be intention-revealing without re-parsing strings.
 - **Tag-aware filtering**: Replace the bespoke `requires.yaml` filter in
-  `hello_world` with `#[scenario(tags = ...)]` / `scenarios!(..., tags = ...)`
-  so compile-time filtering documents the dependency on optional Cargo features.
+  `hello_world` with `#[scenario(tags = …)]` / `scenarios!(…, tags = …)`, so
+  compile-time filtering documents the dependency on optional Cargo features.
 - **Better ergonomics**: Avoid the current pattern of re-exporting async helper
   methods purely to satisfy the Cucumber `World` trait; instead, share ordinary
   fixtures and helper structs across unit and behavioural tests.
@@ -102,7 +102,7 @@ entrypoints as the rest of the workspace.
 2. Document which step modules depend on async operations, Tokio, or the
    current `World` struct internals (e.g., command spawning, `figment::Jail`).
 3. Freeze the baseline by running `make test` and archiving the cucumber
-   JSON/text output so regressions can be compared after the port.
+   JSON/text output, so regressions can be compared after the port.
 
 ### Phase 1 – Introduce `rstest-bdd` scaffolding
 
@@ -111,7 +111,7 @@ entrypoints as the rest of the workspace.
 2. Create a shared `test_support::bdd` module (one per crate) that re-exports
    the macros, defines common fixtures (`#[fixture] fn jail() -> JailGuard`,
    command runners, temp directories), and provides helper traits for parsing
-   placeholders.
+   placeholders, so helper code stays focused on the core extraction logic.
 3. Ensure the new helpers compile by adding a canary test that binds a tiny
    `.feature` file via `#[scenario]` and `scenarios!`, proving that the macros
    integrate with our toolchain before touching the production suites.
@@ -122,13 +122,13 @@ entrypoints as the rest of the workspace.
    `rstest_bdd::ScenarioState` structs backed by `Slot<T>` for mutable per-
    scenario data (`CommandResult`, `MergeComposer`, etc.).
 2. Move helper methods (for spawning the CLI, managing env vars, composing
-   declarative layers, or resetting `figment::Jail`) onto plain structs so they
-   can be shared between unit, integration, and behavioural tests.
+   declarative layers, or resetting `figment::Jail`) onto plain structs, so
+   they can be shared between unit, integration, and behavioural tests.
 3. Provide synchronous wrappers around async helpers. For example, introduce a
    `CommandHarness` fixture that owns a `tokio::runtime::Runtime` (or switches
-   to `std::process::Command` where possible) so `#[given]` / `#[when]` /
+   to `std::process::Command` where possible), so `#[given]` / `#[when]` /
    `#[then]` functions can remain synchronous as required by `rstest-bdd`.
-4. Expose ergonomic constructors so step modules do not need to know whether a
+4. Expose ergonomic constructors, so step modules do not need to know whether a
    fixture uses Tokio internally.
 
 ### Phase 3 – Port `ortho_config` step modules and features
@@ -144,9 +144,9 @@ entrypoints as the rest of the workspace.
 2. Bind scenarios to tests:
    - Use `scenarios!("tests/features", tags = "not @wip")` for features that
      only need global fixtures.
-   - For modules that require custom fixtures (e.g., subcommand scenarios that
-     need CLI structs injected), create per-feature modules containing
-     `#[scenario(path = "tests/features/...", name = "...")]` functions that
+   - For modules that require custom fixtures (e.g., subcommand scenarios
+     requiring CLI structs), create per-feature modules containing
+     `#[scenario(path = "tests/features/…", name = "…")]` functions that
      request the necessary `rstest` fixtures.
    - Encode any tag-based exclusions (for example, YAML-only scenarios) as
      compile-time filters using the macro's `tags` argument.
@@ -188,7 +188,7 @@ entrypoints as the rest of the workspace.
 3. Update `docs/behavioural-tests.md`,
    `docs/behavioural-testing-in-rust-with-cucumber.md`, the `hello_world`
    README, and `docs/users-guide.md` to describe the `rstest-bdd` workflow.
-4. Capture the migration in `CHANGELOG.md` and cross-link this ADR so future
+4. Capture the migration in `CHANGELOG.md` and cross-link this ADR, so future
    contributors understand the rationale.
 5. Add CI guidance (e.g., `make test` already covers the suite, but note the
    new dependency) and ensure developer onboarding docs reference the
