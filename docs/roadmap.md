@@ -280,7 +280,7 @@ references the relevant design guidance.
 - [ ] **Replace `cucumber-rs` behavioural tests with `rstest-bdd`**
   [[ADR-002](adr-002-replace-cucumber-with-rstest-bdd.md)]
 
-  - [ ] Add `rstest-bdd` scaffolding (dev-dependencies, fixture modules, and a
+  - [x] Add `rstest-bdd` scaffolding (dev-dependencies, fixture modules, and a
     canary scenario) inside `ortho_config` and `hello_world` so the macros run
     under `cargo test` without disabling the harness.
 
