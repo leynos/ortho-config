@@ -10,11 +10,13 @@ pub struct HelloWorldState {
     pub cli: Slot<HelloWorldCli>,
 }
 
+/// Provides a resettable scenario state shared across hello_world steps.
 #[fixture]
 pub fn hello_world_state() -> HelloWorldState {
     HelloWorldState::default()
 }
 
+/// Supplies the canonical binary name so steps can build CLI arg lists.
 #[fixture]
 pub fn hello_world_binary() -> &'static str {
     "hello-world"
