@@ -77,6 +77,14 @@ pub fn stdout_contains(world: &mut World, expected_stdout: String) -> Result<()>
     world.assert_stdout_contains(&expected_stdout)
 }
 
+/// Ensures the reported version matches the crate metadata.
+#[then("stdout contains the hello world version")]
+pub fn stdout_contains_version(world: &mut World) -> Result<()> {
+    let version = env!("CARGO_PKG_VERSION");
+    let expected = format!("hello-world {version}");
+    world.assert_stdout_contains(&expected)
+}
+
 #[then(expr = "stderr contains {string}")]
 #[expect(
     clippy::needless_pass_by_value,

@@ -26,6 +26,10 @@ production-ready complexity.
   quirks. The unit suite now includes a declarative merging fixture that
   enumerates precedence permutations. This pairs with the cucumber JSON-layer
   scenario.
+- **Graceful help/version exits**: the entry point parses CLI arguments with
+  `clap::Parser::try_parse` and uses `ortho_config::is_display_request` to
+  detect `--help` / `--version` requests. It delegates to `clap::Error::exit`
+  so shells and completion generation keep their expected zero exit status.
 - **Declarative merging**: demonstrate how `MergeComposer` and
   `merge_from_layers` build layered configuration without invoking the CLI by
   driving a behavioural scenario that composes JSON-described layers into

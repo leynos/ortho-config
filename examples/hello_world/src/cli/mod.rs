@@ -29,6 +29,7 @@ pub(crate) use overrides::{CommandOverrides, FileOverrides, GreetOverrides, Over
 #[derive(Debug, Parser)]
 #[command(
     name = "hello-world",
+    bin_name = "hello-world",
     about = "Friendly greeting demo showcasing OrthoConfig layering",
     version
 )]
