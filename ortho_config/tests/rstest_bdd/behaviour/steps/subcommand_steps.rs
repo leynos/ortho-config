@@ -23,18 +23,41 @@ fn take_sources(world: &World) -> SubcommandSources {
         .unwrap_or_default()
 }
 
-#[given("a CLI reference {reference}")]
-fn set_cli_ref(world: &World, reference: String) -> Result<()> {
+fn set_reference<F, G>(
+    world: &World,
+    reference: String,
+    field_name: &str,
+    field_is_empty: G,
+    assign_field: F,
+) -> Result<()>
+where
+    G: Fn(&SubcommandSources) -> bool,
+    F: Fn(&mut SubcommandSources, String),
+{
     ensure!(
         !reference.trim().is_empty(),
-        "CLI reference must not be empty"
+        "{field_name} must not be empty"
     );
     let mut sources = world
         .sub_sources
         .get_or_insert_with(SubcommandSources::default);
-    ensure!(sources.cli.is_none(), "CLI reference already initialised");
-    sources.cli = Some(reference);
+    ensure!(
+        field_is_empty(&sources),
+        "{field_name} already initialised"
+    );
+    assign_field(&mut sources, reference);
     Ok(())
+}
+
+#[given("a CLI reference {reference}")]
+fn set_cli_ref(world: &World, reference: String) -> Result<()> {
+    set_reference(
+        world,
+        reference,
+        "CLI reference",
+        |sources| sources.cli.is_none(),
+        |sources, value| sources.cli = Some(value),
+    )
 }
 
 #[given("no CLI reference")]
@@ -51,36 +74,24 @@ fn no_cli_ref(world: &World) -> Result<()> {
 
 #[given("a configuration reference {reference}")]
 fn file_ref(world: &World, reference: String) -> Result<()> {
-    ensure!(
-        !reference.trim().is_empty(),
-        "configuration file reference must not be empty"
-    );
-    let mut sources = world
-        .sub_sources
-        .get_or_insert_with(SubcommandSources::default);
-    ensure!(
-        sources.file.is_none(),
-        "configuration file reference already initialised"
-    );
-    sources.file = Some(reference);
-    Ok(())
+    set_reference(
+        world,
+        reference,
+        "configuration file reference",
+        |sources| sources.file.is_none(),
+        |sources, value| sources.file = Some(value),
+    )
 }
 
 #[given("an environment reference {reference}")]
 fn env_ref(world: &World, reference: String) -> Result<()> {
-    ensure!(
-        !reference.trim().is_empty(),
-        "environment reference must not be empty"
-    );
-    let mut sources = world
-        .sub_sources
-        .get_or_insert_with(SubcommandSources::default);
-    ensure!(
-        sources.env.is_none(),
-        "environment reference already initialised"
-    );
-    sources.env = Some(reference);
-    Ok(())
+    set_reference(
+        world,
+        reference,
+        "environment reference",
+        |sources| sources.env.is_none(),
+        |sources, value| sources.env = Some(value),
+    )
 }
 
 #[when("the subcommand configuration is loaded without defaults")]

@@ -3,6 +3,7 @@
 use crate::fixtures::{RulesConfig, World};
 use anyhow::{Result, anyhow, ensure};
 use ortho_config::{OrthoConfig, OrthoResult};
+use rstest_bdd::Slot;
 use rstest_bdd_macros::{given, then, when};
 
 #[given("a configuration file extending a base file")]
@@ -49,58 +50,68 @@ where
     output.ok_or_else(|| anyhow!("loader did not run"))
 }
 
+fn load_with_flag<F>(
+    flag: &Slot<()>,
+    flag_name: &str,
+    setup: F,
+    world: &World,
+) -> Result<()>
+where
+    F: FnOnce(&mut figment::Jail) -> figment::error::Result<()>,
+{
+    ensure!(flag.is_filled(), "{flag_name} was not initialised");
+    flag.clear();
+    let result = with_jail_load(setup)?;
+    world.result.set(result);
+    Ok(())
+}
+
 #[when("the extended configuration is loaded")]
 fn load_extended(world: &World) -> Result<()> {
-    ensure!(
-        world.extends_flag.is_filled(),
-        "extended configuration was not initialised"
-    );
-    world.extends_flag.clear();
-    let result = with_jail_load(|j| {
+    load_with_flag(
+        &world.extends_flag,
+        "extended configuration",
+        |j| {
         j.create_file("base.toml", "rules = [\"base\"]")?;
         j.create_file(
             ".ddlint.toml",
             "extends = \"base.toml\"\nrules = [\"child\"]",
         )?;
         Ok(())
-    })?;
-    world.result.set(result);
-    Ok(())
+        },
+        world,
+    )
 }
 
 #[when("the cyclic configuration is loaded")]
 fn load_cyclic(world: &World) -> Result<()> {
-    ensure!(
-        world.cyclic_flag.is_filled(),
-        "cyclic configuration was not initialised"
-    );
-    world.cyclic_flag.clear();
-    let result = with_jail_load(|j| {
+    load_with_flag(
+        &world.cyclic_flag,
+        "cyclic configuration",
+        |j| {
         j.create_file("a.toml", "extends = \"b.toml\"\nrules = [\"a\"]")?;
         j.create_file("b.toml", "extends = \"a.toml\"\nrules = [\"b\"]")?;
         j.create_file(".ddlint.toml", "extends = \"a.toml\"")?;
         Ok(())
-    })?;
-    world.result.set(result);
-    Ok(())
+        },
+        world,
+    )
 }
 
 #[when("the configuration with missing base is loaded")]
 fn load_missing_base(world: &World) -> Result<()> {
-    ensure!(
-        world.missing_base_flag.is_filled(),
-        "missing-base configuration was not initialised"
-    );
-    world.missing_base_flag.clear();
-    let result = with_jail_load(|j| {
+    load_with_flag(
+        &world.missing_base_flag,
+        "missing-base configuration",
+        |j| {
         j.create_file(
             ".ddlint.toml",
             "extends = \"missing.toml\"\nrules = [\"main\"]",
         )?;
         Ok(())
-    })?;
-    world.result.set(result);
-    Ok(())
+        },
+        world,
+    )
 }
 
 #[then("an error occurs")]

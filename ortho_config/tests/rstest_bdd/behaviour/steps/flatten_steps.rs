@@ -32,36 +32,29 @@ fn load_flat(file: Option<String>, args: &[&str]) -> Result<OrthoResult<FlatArgs
     res.ok_or_else(|| anyhow!("flattened configuration load did not produce a result"))
 }
 
-#[given("the flattened configuration file has value {value}")]
-fn flattened_file(world: &World, value: String) -> Result<()> {
+/// Helper to initialise flat_file with given content.
+fn set_flat_file(world: &World, content: impl Into<String>) -> Result<()> {
     ensure!(
         world.flat_file.is_empty(),
         "flattened configuration already initialised"
     );
-    world
-        .flat_file
-        .set(format!("nested = {{ value = \"{value}\" }}"));
+    world.flat_file.set(content.into());
     Ok(())
+}
+
+#[given("the flattened configuration file has value {value}")]
+fn flattened_file(world: &World, value: String) -> Result<()> {
+    set_flat_file(world, format!("nested = {{ value = \"{value}\" }}"))
 }
 
 #[given("a malformed flattened configuration file")]
 fn malformed_flat_file(world: &World) -> Result<()> {
-    ensure!(
-        world.flat_file.is_empty(),
-        "flattened configuration already initialised"
-    );
-    world.flat_file.set("nested = 5".into());
-    Ok(())
+    set_flat_file(world, "nested = 5")
 }
 
 #[given("a flattened configuration file with invalid value")]
 fn invalid_flat_file(world: &World) -> Result<()> {
-    ensure!(
-        world.flat_file.is_empty(),
-        "flattened configuration already initialised"
-    );
-    world.flat_file.set("nested = { value = 5 }".into());
-    Ok(())
+    set_flat_file(world, "nested = { value = 5 }")
 }
 
 #[when("the flattened config is loaded without CLI overrides")]
