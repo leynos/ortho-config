@@ -1,4 +1,7 @@
 //! Fixtures shared by the `hello_world` rstest-bdd scaffolding.
+//!
+//! Exposes the `HelloWorldState` scenario storage plus the `hello_world_state`
+//! and `hello_world_binary` fixtures consumed by rstest-bdd scenarios.
 
 use hello_world::cli::HelloWorldCli;
 use rstest::fixture;

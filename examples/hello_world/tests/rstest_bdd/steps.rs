@@ -23,7 +23,7 @@ fn load_cli(
     let args = vec![
         hello_world_binary.to_string(),
         "--recipient".to_string(),
-        recipient.clone(),
+        recipient,
     ];
     let cli =
         HelloWorldCli::load_from_iter(args).expect("hello_world configuration should load");
