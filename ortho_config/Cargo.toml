@@ -48,8 +48,6 @@ yaml = ["dep:serde_saphyr", "serde_json", "ortho_config_macros/yaml"]
 figment = { version = "0.10", features = ["toml", "env"] }
 serde = { version = "1", features = ["derive"] }
 trybuild = "1"
-cucumber = "0.21.1"
-tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 rstest = "0.26.1"
 rstest-bdd = "0.1.0"
 rstest-bdd-macros = "0.1.0"
@@ -58,10 +56,6 @@ cap-std = "3"
 tempfile = "3"
 test_helpers = { path = "../test_helpers" }
 anyhow = "1"
-
-[[test]]
-name = "cucumber"
-harness = false
 
 [[example]]
 name = "registry_ctl"

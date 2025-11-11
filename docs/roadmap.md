@@ -284,7 +284,7 @@ references the relevant design guidance.
     canary scenario) inside `ortho_config` and `hello_world` so the macros run
     under `cargo test` without disabling the harness.
 
-  - [ ] Port every module under `ortho_config/tests/steps` to
+  - [x] Port every module under `ortho_config/tests/steps` to
     `rstest_bdd_macros`, bind the existing feature files via `scenarios!` or
     `#[scenario]`, and delete the bespoke `tests/cucumber.rs` runner.
 

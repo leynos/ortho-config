@@ -1,42 +1,38 @@
 //! Steps verifying aggregated error reporting.
-#![expect(
-    clippy::shadow_reuse,
-    reason = "Cucumber step macros rebind step arguments during code generation"
-)]
 
-use crate::{ErrorConfig, World};
+use crate::fixtures::{ErrorConfig, World};
 use anyhow::{Result, anyhow, ensure};
-use cucumber::{given, then, when};
 use ortho_config::OrthoConfig;
+use rstest_bdd_macros::{given, then, when};
 
 #[given("an invalid configuration file")]
-fn invalid_file(world: &mut World) -> Result<()> {
+fn invalid_file(world: &World) -> Result<()> {
     ensure!(
-        world.file_value.is_none(),
+        world.file_value.is_empty(),
         "invalid configuration file already initialised"
     );
-    world.file_value = Some("port = ".into());
+    world.file_value.set("port = ".into());
     Ok(())
 }
 
-#[given(expr = "the environment variable DDLINT_PORT is {string}")]
-fn env_port(world: &mut World, val: String) -> Result<()> {
+#[given("the environment variable DDLINT_PORT is {value}")]
+fn env_port(world: &World, value: String) -> Result<()> {
     ensure!(
-        !val.trim().is_empty(),
+        !value.trim().is_empty(),
         "environment port value must not be empty"
     );
     ensure!(
-        world.env_value.is_none(),
+        world.env_value.is_empty(),
         "environment port already initialised"
     );
-    world.env_value = Some(val);
+    world.env_value.set(value);
     Ok(())
 }
 
 #[when("the config is loaded with an invalid CLI argument")]
-fn load_invalid_cli(world: &mut World) -> Result<()> {
-    let file_val = world.file_value.clone();
-    let env_val = world.env_value.clone();
+fn load_invalid_cli(world: &World) -> Result<()> {
+    let file_val = world.file_value.get();
+    let env_val = world.env_value.get();
     let mut result = None;
     figment::Jail::try_with(|j| {
         if let Some(value) = file_val.as_ref() {
@@ -49,16 +45,14 @@ fn load_invalid_cli(world: &mut World) -> Result<()> {
         Ok(())
     })
     .map_err(|err| anyhow!(err.to_string()))?;
-    world.agg_result = result;
-    ensure!(
-        world.agg_result.is_some(),
-        "error aggregation load did not produce a result"
-    );
+    let config_result =
+        result.ok_or_else(|| anyhow!("error aggregation load did not produce a result"))?;
+    world.agg_result.set(config_result);
     Ok(())
 }
 
 #[then("CLI, file and environment errors are returned")]
-fn cli_file_env_errors(world: &mut World) -> Result<()> {
+fn cli_file_env_errors(world: &World) -> Result<()> {
     let result = world
         .agg_result
         .take()
@@ -90,7 +84,7 @@ fn cli_file_env_errors(world: &mut World) -> Result<()> {
 }
 
 #[then("a CLI parsing error is returned")]
-fn cli_error_only(world: &mut World) -> Result<()> {
+fn cli_error_only(world: &World) -> Result<()> {
     let result = world
         .agg_result
         .take()

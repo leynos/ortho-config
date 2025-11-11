@@ -1,3 +1,5 @@
+//! Behavioural step modules registered with `rstest-bdd`.
+
 pub mod cli_steps;
 pub mod collection_steps;
 pub mod config_path_steps;

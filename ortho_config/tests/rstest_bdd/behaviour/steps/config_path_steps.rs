@@ -1,34 +1,26 @@
 //! Steps demonstrating a renamed configuration path flag.
-#![expect(
-    clippy::shadow_reuse,
-    reason = "Cucumber step macros rebind step arguments during code generation"
-)]
 
-use crate::{RulesConfig, World};
+use crate::fixtures::{RulesConfig, World};
 use anyhow::{Result, anyhow, ensure};
-use cucumber::{given, then, when};
 use ortho_config::OrthoConfig;
+use rstest_bdd_macros::{given, then, when};
 
-#[given(expr = "an alternate config file with rule {string}")]
-fn alt_config_file(world: &mut World, val: String) -> Result<()> {
+#[given("an alternate config file with rule {value}")]
+fn alt_config_file(world: &World, value: String) -> Result<()> {
     ensure!(
-        !val.trim().is_empty(),
+        !value.trim().is_empty(),
         "alternate config rule must not be empty"
     );
     ensure!(
-        world.file_value.is_none(),
+        world.file_value.is_empty(),
         "alternate config file already initialised"
     );
-    world.file_value = Some(val);
+    world.file_value.set(value);
     Ok(())
 }
 
-#[when(expr = "the config is loaded with custom flag {string} {string}")]
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "Cucumber step requires owned String"
-)]
-fn load_with_custom_flag(world: &mut World, flag: String, path: String) -> Result<()> {
+#[when("the config is loaded with custom flag \"{flag}\" \"{path}\"")]
+fn load_with_custom_flag(world: &World, flag: String, path: String) -> Result<()> {
     let file_val = world
         .file_value
         .take()
@@ -41,16 +33,14 @@ fn load_with_custom_flag(world: &mut World, flag: String, path: String) -> Resul
         Ok(())
     })
     .map_err(anyhow::Error::new)?;
-    world.result = result;
-    ensure!(
-        world.result.is_some(),
-        "configuration load did not produce a result"
-    );
+    let config_result =
+        result.ok_or_else(|| anyhow!("configuration load did not produce a result"))?;
+    world.result.set(config_result);
     Ok(())
 }
 
 #[then("config loading fails with a CLI parsing error")]
-fn cli_error(world: &mut World) -> Result<()> {
+fn cli_error(world: &World) -> Result<()> {
     let result = world
         .result
         .take()

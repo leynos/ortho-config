@@ -1,22 +1,19 @@
 //! Steps for scenarios involving flattened CLI structures.
-#![expect(
-    clippy::shadow_reuse,
-    reason = "Cucumber step macros rebind step arguments during code generation"
-)]
-use crate::{FlatArgs, World};
+
+use crate::fixtures::{FlatArgs, World};
 use anyhow::{Result, anyhow, ensure};
 use clap::Parser;
-use cucumber::{given, then, when};
-use figment::{Figment, providers::Serialized};
+use figment::{providers::Serialized, Figment};
 use ortho_config::{
-    OrthoError, OrthoMergeExt, OrthoResult, ResultIntoFigment, load_config_file, sanitized_provider,
+    load_config_file, sanitized_provider, OrthoError, OrthoMergeExt, OrthoResult, ResultIntoFigment,
 };
+use rstest_bdd_macros::{given, then, when};
 use std::path::Path;
 
-fn load_flat(file: Option<&str>, args: &[&str]) -> Result<OrthoResult<FlatArgs>> {
+fn load_flat(file: Option<String>, args: &[&str]) -> Result<OrthoResult<FlatArgs>> {
     let mut res = None;
     figment::Jail::try_with(|j| {
-        if let Some(contents) = file {
+        if let Some(contents) = file.as_ref() {
             j.create_file(".flat.toml", contents)?;
         }
         let cli = FlatArgs::parse_from(args);
@@ -35,65 +32,56 @@ fn load_flat(file: Option<&str>, args: &[&str]) -> Result<OrthoResult<FlatArgs>>
     res.ok_or_else(|| anyhow!("flattened configuration load did not produce a result"))
 }
 
-#[given(expr = "the flattened configuration file has value {string}")]
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "Cucumber step signature requires owned String"
-)]
-fn flattened_file(world: &mut World, val: String) -> Result<()> {
+#[given("the flattened configuration file has value {value}")]
+fn flattened_file(world: &World, value: String) -> Result<()> {
     ensure!(
-        world.flat_file.is_none(),
+        world.flat_file.is_empty(),
         "flattened configuration already initialised"
     );
-    world.flat_file = Some(format!("nested = {{ value = \"{val}\" }}"));
+    world
+        .flat_file
+        .set(format!("nested = {{ value = \"{value}\" }}"));
     Ok(())
 }
 
 #[given("a malformed flattened configuration file")]
-fn malformed_flat_file(world: &mut World) -> Result<()> {
+fn malformed_flat_file(world: &World) -> Result<()> {
     ensure!(
-        world.flat_file.is_none(),
+        world.flat_file.is_empty(),
         "flattened configuration already initialised"
     );
-    world.flat_file = Some("nested = 5".into());
+    world.flat_file.set("nested = 5".into());
     Ok(())
 }
 
 #[given("a flattened configuration file with invalid value")]
-fn invalid_flat_file(world: &mut World) -> Result<()> {
+fn invalid_flat_file(world: &World) -> Result<()> {
     ensure!(
-        world.flat_file.is_none(),
+        world.flat_file.is_empty(),
         "flattened configuration already initialised"
     );
-    world.flat_file = Some("nested = { value = 5 }".into());
+    world.flat_file.set("nested = { value = 5 }".into());
     Ok(())
 }
 
 #[when("the flattened config is loaded without CLI overrides")]
-fn load_without_cli(world: &mut World) -> Result<()> {
-    world.flat_result = Some(load_flat(world.flat_file.as_deref(), &["prog"])?);
+fn load_without_cli(world: &World) -> Result<()> {
+    let file = world.flat_file.get();
+    let result = load_flat(file, &["prog"])?;
+    world.flat_result.set(result);
     Ok(())
 }
 
-#[when(expr = "the flattened config is loaded with CLI value {string}")]
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "Cucumber step signature requires owned String"
-)]
-fn load_with_cli(world: &mut World, cli: String) -> Result<()> {
-    world.flat_result = Some(load_flat(
-        world.flat_file.as_deref(),
-        &["prog", "--value", &cli],
-    )?);
+#[when("the flattened config is loaded with CLI value {value}")]
+fn load_with_cli(world: &World, value: String) -> Result<()> {
+    let file = world.flat_file.get();
+    let result = load_flat(file, &["prog", "--value", &value])?;
+    world.flat_result.set(result);
     Ok(())
 }
 
-#[then(expr = "the flattened value is {string}")]
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "Cucumber step signature requires owned String"
-)]
-fn check_flattened(world: &mut World, expected_value: String) -> Result<()> {
+#[then("the flattened value is {expected}")]
+fn check_flattened(world: &World, expected: String) -> Result<()> {
     let result = world
         .flat_result
         .take()
@@ -105,14 +93,14 @@ fn check_flattened(world: &mut World, expected_value: String) -> Result<()> {
         .as_deref()
         .ok_or_else(|| anyhow!("expected nested value to be present"))?;
     ensure!(
-        nested == expected_value.as_str(),
-        "unexpected flattened value {nested:?}; expected {expected_value:?}"
+        nested == expected.as_str(),
+        "unexpected flattened value {nested:?}; expected {expected:?}"
     );
     Ok(())
 }
 
 #[then("flattening fails with a merge error")]
-fn flattening_fails(world: &mut World) -> Result<()> {
+fn flattening_fails(world: &World) -> Result<()> {
     let result = world
         .flat_result
         .take()
