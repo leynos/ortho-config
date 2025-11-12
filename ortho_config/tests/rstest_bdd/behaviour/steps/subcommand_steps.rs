@@ -23,41 +23,59 @@ fn take_sources(world: &World) -> SubcommandSources {
         .unwrap_or_default()
 }
 
-fn set_reference<F, G>(
-    world: &World,
-    reference: String,
-    field_name: &str,
-    field_is_empty: G,
-    assign_field: F,
-) -> Result<()>
-where
-    G: Fn(&SubcommandSources) -> bool,
-    F: Fn(&mut SubcommandSources, String),
-{
+enum ReferenceField {
+    Cli,
+    File,
+    Env,
+}
+
+impl ReferenceField {
+    fn name(&self) -> &'static str {
+        match self {
+            Self::Cli => "CLI reference",
+            Self::File => "configuration file reference",
+            Self::Env => "environment reference",
+        }
+    }
+
+    fn is_empty(&self, sources: &SubcommandSources) -> bool {
+        match self {
+            Self::Cli => sources.cli.is_none(),
+            Self::File => sources.file.is_none(),
+            Self::Env => sources.env.is_none(),
+        }
+    }
+
+    fn assign(&self, sources: &mut SubcommandSources, value: String) {
+        match self {
+            Self::Cli => sources.cli = Some(value),
+            Self::File => sources.file = Some(value),
+            Self::Env => sources.env = Some(value),
+        }
+    }
+}
+
+fn set_reference(world: &World, reference: String, field: ReferenceField) -> Result<()> {
     ensure!(
         !reference.trim().is_empty(),
-        "{field_name} must not be empty"
+        "{} must not be empty",
+        field.name()
     );
     let mut sources = world
         .sub_sources
         .get_or_insert_with(SubcommandSources::default);
     ensure!(
-        field_is_empty(&sources),
-        "{field_name} already initialised"
+        field.is_empty(&sources),
+        "{} already initialised",
+        field.name()
     );
-    assign_field(&mut sources, reference);
+    field.assign(&mut sources, reference);
     Ok(())
 }
 
 #[given("a CLI reference {reference}")]
 fn set_cli_ref(world: &World, reference: String) -> Result<()> {
-    set_reference(
-        world,
-        reference,
-        "CLI reference",
-        |sources| sources.cli.is_none(),
-        |sources, value| sources.cli = Some(value),
-    )
+    set_reference(world, reference, ReferenceField::Cli)
 }
 
 #[given("no CLI reference")]
@@ -74,24 +92,12 @@ fn no_cli_ref(world: &World) -> Result<()> {
 
 #[given("a configuration reference {reference}")]
 fn file_ref(world: &World, reference: String) -> Result<()> {
-    set_reference(
-        world,
-        reference,
-        "configuration file reference",
-        |sources| sources.file.is_none(),
-        |sources, value| sources.file = Some(value),
-    )
+    set_reference(world, reference, ReferenceField::File)
 }
 
 #[given("an environment reference {reference}")]
 fn env_ref(world: &World, reference: String) -> Result<()> {
-    set_reference(
-        world,
-        reference,
-        "environment reference",
-        |sources| sources.env.is_none(),
-        |sources, value| sources.env = Some(value),
-    )
+    set_reference(world, reference, ReferenceField::Env)
 }
 
 #[when("the subcommand configuration is loaded without defaults")]
