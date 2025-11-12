@@ -4,6 +4,7 @@ use crate::fixtures::{RulesConfig, RulesContext};
 use anyhow::{Result, anyhow, ensure};
 use ortho_config::OrthoConfig;
 use rstest_bdd_macros::{given, then, when};
+use test_helpers::figment as figment_helpers;
 
 #[given("the environment variable DDLINT_IGNORE_PATTERNS is {value}")]
 fn set_ignore_env(rules_context: &RulesContext, value: String) -> Result<()> {
@@ -18,8 +19,7 @@ fn set_ignore_env(rules_context: &RulesContext, value: String) -> Result<()> {
 #[when("the config is loaded with CLI ignore {cli}")]
 fn load_ignore(rules_context: &RulesContext, cli: String) -> Result<()> {
     let env_val = rules_context.env_value.take();
-    let mut result = None;
-    figment::Jail::try_with(|j| {
+    let config_result = figment_helpers::with_jail(|j| {
         if let Some(val) = env_val.as_deref() {
             j.set_env("DDLINT_IGNORE_PATTERNS", val);
         }
@@ -29,14 +29,8 @@ fn load_ignore(rules_context: &RulesContext, cli: String) -> Result<()> {
             args.push(cli.trim().to_owned());
         }
         let refs: Vec<&str> = args.iter().map(String::as_str).collect();
-        result = Some(<RulesConfig as ortho_config::OrthoConfig>::load_from_iter(
-            refs,
-        ));
-        Ok(())
-    })
-    .map_err(|err| anyhow!(err.to_string()))?;
-    let config_result =
-        result.ok_or_else(|| anyhow!("configuration load did not produce a result"))?;
+        Ok(<RulesConfig as ortho_config::OrthoConfig>::load_from_iter(refs))
+    })?;
     rules_context.result.set(config_result);
     Ok(())
 }

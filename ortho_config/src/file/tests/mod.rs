@@ -4,6 +4,7 @@ use super::{canonicalise, normalise_cycle_key};
 use anyhow::{Context, Result, anyhow};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
+use test_helpers::figment as figment_helpers;
 
 pub(super) mod extends_tests;
 pub(super) mod normalise_tests;
@@ -29,32 +30,20 @@ where
         &mut Vec<PathBuf>,
     ) -> Result<()>,
 {
-    figment::Jail::try_with(|j| {
-        let (root, current) = canonical_root_and_current().map_err(|err| {
-            // figment::Error currently only implements `From<String>`, so stringify the source.
-            figment::Error::from(err.to_string())
-        })?;
+    figment_helpers::with_jail(|j| {
+        let (root, current) =
+            canonical_root_and_current().map_err(figment_helpers::figment_error)?;
         let mut visited = HashSet::new();
         let mut stack = Vec::new();
-        f(j, &root, &current, &mut visited, &mut stack).map_err(|err| {
-            // figment::Error currently only implements `From<String>`, so stringify the source.
-            figment::Error::from(err.to_string())
-        })
+        f(j, &root, &current, &mut visited, &mut stack).map_err(figment_helpers::figment_error)
     })
-    .map_err(|err| anyhow!(err.to_string()))
 }
 
 pub(super) fn with_jail<F>(f: F) -> Result<()>
 where
     F: FnOnce(&mut figment::Jail) -> Result<()>,
 {
-    figment::Jail::try_with(|j| {
-        f(j).map_err(|err| {
-            // figment::Error currently only implements `From<String>`, so stringify the source.
-            figment::Error::from(err.to_string())
-        })
-    })
-    .map_err(|err| anyhow!(err.to_string()))
+    figment_helpers::with_jail(|j| f(j).map_err(figment_helpers::figment_error))
 }
 
 pub(super) fn to_anyhow<T>(result: crate::OrthoResult<T>) -> Result<T> {

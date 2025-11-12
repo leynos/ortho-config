@@ -4,6 +4,7 @@ use crate::fixtures::{ErrorConfig, ErrorContext};
 use anyhow::{Result, anyhow, ensure};
 use ortho_config::OrthoConfig;
 use rstest_bdd_macros::{given, then, when};
+use test_helpers::figment as figment_helpers;
 
 #[given("an invalid configuration file")]
 fn invalid_file(error_context: &ErrorContext) -> Result<()> {
@@ -33,20 +34,15 @@ fn env_port(error_context: &ErrorContext, value: String) -> Result<()> {
 fn load_invalid_cli(error_context: &ErrorContext) -> Result<()> {
     let file_val = error_context.file_value.get();
     let env_val = error_context.env_value.get();
-    let mut result = None;
-    figment::Jail::try_with(|j| {
+    let config_result = figment_helpers::with_jail(|j| {
         if let Some(value) = file_val.as_ref() {
             j.create_file(".ddlint.toml", value)?;
         }
         if let Some(value) = env_val.as_ref() {
             j.set_env("DDLINT_PORT", value);
         }
-        result = Some(ErrorConfig::load_from_iter(["prog", "--bogus"]));
-        Ok(())
-    })
-    .map_err(|err| anyhow!(err.to_string()))?;
-    let config_result =
-        result.ok_or_else(|| anyhow!("error aggregation load did not produce a result"))?;
+        Ok(ErrorConfig::load_from_iter(["prog", "--bogus"]))
+    })?;
     error_context.agg_result.set(config_result);
     Ok(())
 }

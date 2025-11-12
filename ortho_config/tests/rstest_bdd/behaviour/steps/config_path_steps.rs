@@ -4,6 +4,7 @@ use crate::fixtures::{RulesConfig, RulesContext};
 use anyhow::{Result, anyhow, ensure};
 use ortho_config::OrthoConfig;
 use rstest_bdd_macros::{given, then, when};
+use test_helpers::figment as figment_helpers;
 
 #[given("an alternate config file with rule {value}")]
 fn alt_config_file(rules_context: &RulesContext, value: String) -> Result<()> {
@@ -25,16 +26,11 @@ fn load_with_custom_flag(rules_context: &RulesContext, flag: String, path: Strin
         .file_value
         .take()
         .ok_or_else(|| anyhow!("alternate config file value not provided"))?;
-    let mut result = None;
-    figment::Jail::try_with(|j| {
+    let config_result = figment_helpers::with_jail(|j| {
         j.create_file(&path, &format!("rules = [\"{file_val}\"]"))?;
         let args = ["prog", flag.as_str(), path.as_str()];
-        result = Some(RulesConfig::load_from_iter(args));
-        Ok(())
-    })
-    .map_err(anyhow::Error::new)?;
-    let config_result =
-        result.ok_or_else(|| anyhow!("configuration load did not produce a result"))?;
+        Ok(RulesConfig::load_from_iter(args))
+    })?;
     rules_context.result.set(config_result);
     Ok(())
 }

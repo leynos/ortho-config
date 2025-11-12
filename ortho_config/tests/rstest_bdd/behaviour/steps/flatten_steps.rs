@@ -9,10 +9,10 @@ use ortho_config::{
 };
 use rstest_bdd_macros::{given, then, when};
 use std::path::Path;
+use test_helpers::figment as figment_helpers;
 
 fn load_flat(file: Option<String>, args: &[&str]) -> Result<OrthoResult<FlatArgs>> {
-    let mut res = None;
-    figment::Jail::try_with(|j| {
+    figment_helpers::with_jail(|j| {
         if let Some(contents) = file.as_ref() {
             j.create_file(".flat.toml", contents)?;
         }
@@ -21,15 +21,12 @@ fn load_flat(file: Option<String>, args: &[&str]) -> Result<OrthoResult<FlatArgs
         if let Some(f) = load_config_file(Path::new(".flat.toml")).to_figment()? {
             fig = fig.merge(f);
         }
-        res = Some(
+        Ok(
             fig.merge(sanitized_provider(&cli).to_figment()?)
                 .extract()
                 .into_ortho_merge(),
-        );
-        Ok(())
+        )
     })
-    .map_err(anyhow::Error::new)?;
-    res.ok_or_else(|| anyhow!("flattened configuration load did not produce a result"))
 }
 
 /// Helper to initialise flat_file with given content.

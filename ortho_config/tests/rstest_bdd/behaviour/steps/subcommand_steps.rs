@@ -8,6 +8,7 @@ use anyhow::{Result, anyhow, ensure};
 use clap::Parser;
 use ortho_config::SubcmdConfigMerge;
 use rstest_bdd_macros::{given, then, when};
+use test_helpers::figment as figment_helpers;
 
 fn has_no_config_sources(subcommand_context: &SubcommandContext) -> bool {
     subcommand_context
@@ -123,8 +124,7 @@ fn setup_test_environment(
     sources: &SubcommandSources,
     cli: &PrArgs,
 ) -> Result<Result<PrArgs, anyhow::Error>> {
-    let mut result = None;
-    figment::Jail::try_with(|j| {
+    figment_helpers::with_jail(|j| {
         if let Some(file_reference) = sources.file.as_ref() {
             j.create_file(
                 ".app.toml",
@@ -134,11 +134,8 @@ fn setup_test_environment(
         if let Some(env_reference) = sources.env.as_ref() {
             j.set_env("APP_CMDS_TEST_REFERENCE", env_reference);
         }
-        result = Some(cli.load_and_merge().map_err(anyhow::Error::from));
-        Ok(())
+        Ok(cli.load_and_merge().map_err(anyhow::Error::from))
     })
-    .map_err(|err| anyhow!(err.to_string()))?;
-    result.ok_or_else(|| anyhow!("subcommand merge did not run within figment jail"))
 }
 
 #[then("the merged reference is {expected}")]

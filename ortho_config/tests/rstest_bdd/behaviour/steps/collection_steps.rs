@@ -4,6 +4,7 @@ use crate::fixtures::{CollectionContext, RulesConfig};
 use anyhow::{Result, anyhow, ensure};
 use ortho_config::OrthoConfig;
 use rstest_bdd_macros::{given, then, when};
+use test_helpers::figment as figment_helpers;
 
 #[given("the dynamic rules config enables {rule_name} via the configuration file")]
 fn dynamic_rules_file(collection_context: &CollectionContext, rule_name: String) -> Result<()> {
@@ -45,8 +46,7 @@ fn load_replace_map(collection_context: &CollectionContext) -> Result<()> {
         .dynamic_rules_env
         .take()
         .unwrap_or_else(Vec::new);
-    let mut result = None;
-    figment::Jail::try_with(|j| {
+    let config_result = figment_helpers::with_jail(|j| {
         if let Some(contents) = file.as_ref() {
             j.create_file(".ddlint.toml", contents)?;
         }
@@ -57,12 +57,8 @@ fn load_replace_map(collection_context: &CollectionContext) -> Result<()> {
                 if *enabled { "true" } else { "false" },
             );
         }
-        result = Some(RulesConfig::load_from_iter(["prog"]));
-        Ok(())
-    })
-    .map_err(anyhow::Error::new)?;
-    let config_result =
-        result.ok_or_else(|| anyhow!("configuration load did not produce a result"))?;
+        Ok(RulesConfig::load_from_iter(["prog"]))
+    })?;
     collection_context.result.set(config_result);
     Ok(())
 }

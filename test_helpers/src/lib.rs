@@ -5,6 +5,7 @@
 //! Usage scope:
 //! - Intended for test code only; do not use in production binaries or libraries.
 
+pub mod figment;
 pub mod env {
     //! Helpers for safely mutating environment variables in tests.
     //!

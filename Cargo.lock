@@ -940,6 +940,7 @@ dependencies = [
  "serde",
  "shlex",
  "tempfile",
+ "test_helpers",
  "thiserror 2.0.17",
  "tokio",
  "toml 0.8.23",
@@ -2197,6 +2198,8 @@ dependencies = [
 name = "test_helpers"
 version = "0.6.0"
 dependencies = [
+ "anyhow",
+ "figment",
  "parking_lot",
 ]
 

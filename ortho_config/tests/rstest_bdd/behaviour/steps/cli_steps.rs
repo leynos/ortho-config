@@ -4,20 +4,15 @@ use crate::fixtures::{RulesConfig, RulesContext};
 use anyhow::{Result, anyhow, ensure};
 use ortho_config::OrthoConfig;
 use rstest_bdd_macros::{given, then, when};
+use test_helpers::figment as figment_helpers;
 
 fn with_jail_loader<F>(rules_context: &RulesContext, setup: F) -> Result<()>
 where
-    F: FnOnce(&mut figment::Jail) -> figment::error::Result<Vec<String>>,
+    F: FnOnce(
+        &mut figment::Jail,
+    ) -> figment::error::Result<ortho_config::OrthoResult<RulesConfig>>,
 {
-    let mut result = None;
-    figment::Jail::try_with(|j| {
-        let args = setup(j)?;
-        result = Some(RulesConfig::load_from_iter(args));
-        Ok(())
-    })
-    .map_err(anyhow::Error::new)?;
-    let config_result =
-        result.ok_or_else(|| anyhow!("configuration load did not produce a result"))?;
+    let config_result = figment_helpers::with_jail(setup)?;
     rules_context.result.set(config_result);
     Ok(())
 }
@@ -47,7 +42,11 @@ fn load_with_cli(rules_context: &RulesContext, cli_rules: String) -> Result<()> 
         if let Some(value) = env_val.as_ref() {
             j.set_env("DDLINT_RULES", value);
         }
-        Ok(vec!["prog".to_owned(), "--rules".to_owned(), cli_rules])
+        Ok(RulesConfig::load_from_iter([
+            "prog",
+            "--rules",
+            cli_rules.as_str(),
+        ]))
     })
 }
 
