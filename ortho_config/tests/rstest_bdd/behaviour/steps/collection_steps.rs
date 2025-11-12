@@ -1,23 +1,27 @@
 //! Steps covering collection merge strategy scenarios.
 
-use crate::fixtures::{RulesConfig, World};
+use crate::fixtures::{CollectionContext, RulesConfig};
 use anyhow::{Result, anyhow, ensure};
 use ortho_config::OrthoConfig;
 use rstest_bdd_macros::{given, then, when};
 
 #[given("the dynamic rules config enables {rule_name} via the configuration file")]
-fn dynamic_rules_file(world: &World, rule_name: String) -> Result<()> {
+fn dynamic_rules_file(collection_context: &CollectionContext, rule_name: String) -> Result<()> {
     ensure!(
-        world.dynamic_rules_file.is_empty(),
+        collection_context.dynamic_rules_file.is_empty(),
         "dynamic rules file already initialised"
     );
     let section = format!("[dynamic_rules.{rule_name}]\nenabled = true\n");
-    world.dynamic_rules_file.set(section);
+    collection_context.dynamic_rules_file.set(section);
     Ok(())
 }
 
 #[given("the environment defines dynamic rule {rule_name} as {state}")]
-fn dynamic_rule_env(world: &World, rule_name: String, state: String) -> Result<()> {
+fn dynamic_rule_env(
+    collection_context: &CollectionContext,
+    rule_name: String,
+    state: String,
+) -> Result<()> {
     let enabled = match state.as_str() {
         "enabled" => true,
         "disabled" => false,
@@ -27,7 +31,7 @@ fn dynamic_rule_env(world: &World, rule_name: String, state: String) -> Result<(
             ));
         }
     };
-    let mut env_rules = world
+    let mut env_rules = collection_context
         .dynamic_rules_env
         .get_or_insert_with(Vec::new);
     env_rules.push((rule_name, enabled));
@@ -35,9 +39,9 @@ fn dynamic_rule_env(world: &World, rule_name: String, state: String) -> Result<(
 }
 
 #[when("the configuration is loaded with replace map semantics")]
-fn load_replace_map(world: &World) -> Result<()> {
-    let file = world.dynamic_rules_file.take();
-    let env_rules = world
+fn load_replace_map(collection_context: &CollectionContext) -> Result<()> {
+    let file = collection_context.dynamic_rules_file.take();
+    let env_rules = collection_context
         .dynamic_rules_env
         .take()
         .unwrap_or_else(Vec::new);
@@ -59,13 +63,13 @@ fn load_replace_map(world: &World) -> Result<()> {
     .map_err(anyhow::Error::new)?;
     let config_result =
         result.ok_or_else(|| anyhow!("configuration load did not produce a result"))?;
-    world.result.set(config_result);
+    collection_context.result.set(config_result);
     Ok(())
 }
 
 #[then("only the dynamic rule {rule_name} is enabled")]
-fn assert_only_rule(world: &World, rule_name: String) -> Result<()> {
-    let result = world
+fn assert_only_rule(collection_context: &CollectionContext, rule_name: String) -> Result<()> {
+    let result = collection_context
         .result
         .take()
         .ok_or_else(|| anyhow!("configuration result unavailable"))?;

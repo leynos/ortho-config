@@ -1,38 +1,38 @@
 //! Steps for testing configuration inheritance.
 
-use crate::fixtures::{RulesConfig, World};
+use crate::fixtures::{ExtendsContext, RulesConfig};
 use anyhow::{Result, anyhow, ensure};
 use ortho_config::{OrthoConfig, OrthoResult};
 use rstest_bdd::Slot;
 use rstest_bdd_macros::{given, then, when};
 
 #[given("a configuration file extending a base file")]
-fn create_files(world: &World) -> Result<()> {
+fn create_files(extends_context: &ExtendsContext) -> Result<()> {
     ensure!(
-        world.extends_flag.is_empty(),
+        extends_context.extends_flag.is_empty(),
         "extended configuration already initialised"
     );
-    world.extends_flag.set(());
+    extends_context.extends_flag.set(());
     Ok(())
 }
 
 #[given("a configuration file with cyclic inheritance")]
-fn create_cyclic(world: &World) -> Result<()> {
+fn create_cyclic(extends_context: &ExtendsContext) -> Result<()> {
     ensure!(
-        world.cyclic_flag.is_empty(),
+        extends_context.cyclic_flag.is_empty(),
         "cyclic configuration already initialised"
     );
-    world.cyclic_flag.set(());
+    extends_context.cyclic_flag.set(());
     Ok(())
 }
 
 #[given("a configuration file extending a missing base file")]
-fn create_missing_base(world: &World) -> Result<()> {
+fn create_missing_base(extends_context: &ExtendsContext) -> Result<()> {
     ensure!(
-        world.missing_base_flag.is_empty(),
+        extends_context.missing_base_flag.is_empty(),
         "missing-base configuration already initialised"
     );
-    world.missing_base_flag.set(());
+    extends_context.missing_base_flag.set(());
     Ok(())
 }
 
@@ -54,7 +54,7 @@ fn load_with_flag<F>(
     flag: &Slot<()>,
     flag_name: &str,
     setup: F,
-    world: &World,
+    extends_context: &ExtendsContext,
 ) -> Result<()>
 where
     F: FnOnce(&mut figment::Jail) -> figment::error::Result<()>,
@@ -62,14 +62,14 @@ where
     ensure!(flag.is_filled(), "{flag_name} was not initialised");
     flag.clear();
     let result = with_jail_load(setup)?;
-    world.result.set(result);
+    extends_context.result.set(result);
     Ok(())
 }
 
 #[when("the extended configuration is loaded")]
-fn load_extended(world: &World) -> Result<()> {
+fn load_extended(extends_context: &ExtendsContext) -> Result<()> {
     load_with_flag(
-        &world.extends_flag,
+        &extends_context.extends_flag,
         "extended configuration",
         |j| {
         j.create_file("base.toml", "rules = [\"base\"]")?;
@@ -79,14 +79,14 @@ fn load_extended(world: &World) -> Result<()> {
         )?;
         Ok(())
         },
-        world,
+        extends_context,
     )
 }
 
 #[when("the cyclic configuration is loaded")]
-fn load_cyclic(world: &World) -> Result<()> {
+fn load_cyclic(extends_context: &ExtendsContext) -> Result<()> {
     load_with_flag(
-        &world.cyclic_flag,
+        &extends_context.cyclic_flag,
         "cyclic configuration",
         |j| {
         j.create_file("a.toml", "extends = \"b.toml\"\nrules = [\"a\"]")?;
@@ -94,14 +94,14 @@ fn load_cyclic(world: &World) -> Result<()> {
         j.create_file(".ddlint.toml", "extends = \"a.toml\"")?;
         Ok(())
         },
-        world,
+        extends_context,
     )
 }
 
 #[when("the configuration with missing base is loaded")]
-fn load_missing_base(world: &World) -> Result<()> {
+fn load_missing_base(extends_context: &ExtendsContext) -> Result<()> {
     load_with_flag(
-        &world.missing_base_flag,
+        &extends_context.missing_base_flag,
         "missing-base configuration",
         |j| {
         j.create_file(
@@ -110,13 +110,13 @@ fn load_missing_base(world: &World) -> Result<()> {
         )?;
         Ok(())
         },
-        world,
+        extends_context,
     )
 }
 
 #[then("an error occurs")]
-fn error_occurs(world: &World) -> Result<()> {
-    let result = world
+fn error_occurs(extends_context: &ExtendsContext) -> Result<()> {
+    let result = extends_context
         .result
         .take()
         .ok_or_else(|| anyhow!("configuration result unavailable"))?;

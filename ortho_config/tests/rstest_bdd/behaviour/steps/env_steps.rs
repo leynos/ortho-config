@@ -3,29 +3,29 @@
 //! Provides BDD steps for setting environment variables, loading configuration
 //! using [`CsvEnv`], and verifying parsed results.
 
-use crate::fixtures::{RulesConfig, World};
+use crate::fixtures::{RulesConfig, RulesContext};
 use anyhow::{Result, anyhow, ensure};
 use ortho_config::OrthoConfig;
 use rstest_bdd_macros::{given, then, when};
 
 /// Sets `DDLINT_RULES` in the test environment.
 #[given("the environment variable DDLINT_RULES is {value}")]
-fn set_env(world: &World, value: String) -> Result<()> {
+fn set_env(rules_context: &RulesContext, value: String) -> Result<()> {
     ensure!(
         !value.trim().is_empty(),
         "environment rule value must not be empty"
     );
     ensure!(
-        world.env_value.is_empty(),
+        rules_context.env_value.is_empty(),
         "environment rule value already initialised"
     );
-    world.env_value.set(value);
+    rules_context.env_value.set(value);
     Ok(())
 }
 
 #[when("the configuration is loaded")]
-fn load_config(world: &World) -> Result<()> {
-    let value = world
+fn load_config(rules_context: &RulesContext) -> Result<()> {
+    let value = rules_context
         .env_value
         .get()
         .ok_or_else(|| anyhow!("environment value not configured"))?;
@@ -38,14 +38,14 @@ fn load_config(world: &World) -> Result<()> {
     .map_err(|err| anyhow!(err.to_string()))?;
     let config_result =
         result.ok_or_else(|| anyhow!("configuration load did not produce a result"))?;
-    world.result.set(config_result);
+    rules_context.result.set(config_result);
     Ok(())
 }
 
 /// Verifies that the parsed rule list matches the expected string.
 #[then("the rules are {rules}")]
-fn check_rules(world: &World, rules: String) -> Result<()> {
-    let result = world
+fn check_rules(rules_context: &RulesContext, rules: String) -> Result<()> {
+    let result = rules_context
         .result
         .take()
         .ok_or_else(|| anyhow!("configuration result unavailable"))?;

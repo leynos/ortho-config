@@ -1,38 +1,38 @@
 //! Steps verifying aggregated error reporting.
 
-use crate::fixtures::{ErrorConfig, World};
+use crate::fixtures::{ErrorConfig, ErrorContext};
 use anyhow::{Result, anyhow, ensure};
 use ortho_config::OrthoConfig;
 use rstest_bdd_macros::{given, then, when};
 
 #[given("an invalid configuration file")]
-fn invalid_file(world: &World) -> Result<()> {
+fn invalid_file(error_context: &ErrorContext) -> Result<()> {
     ensure!(
-        world.file_value.is_empty(),
+        error_context.file_value.is_empty(),
         "invalid configuration file already initialised"
     );
-    world.file_value.set("port = ".into());
+    error_context.file_value.set("port = ".into());
     Ok(())
 }
 
 #[given("the environment variable DDLINT_PORT is {value}")]
-fn env_port(world: &World, value: String) -> Result<()> {
+fn env_port(error_context: &ErrorContext, value: String) -> Result<()> {
     ensure!(
         !value.trim().is_empty(),
         "environment port value must not be empty"
     );
     ensure!(
-        world.env_value.is_empty(),
+        error_context.env_value.is_empty(),
         "environment port already initialised"
     );
-    world.env_value.set(value);
+    error_context.env_value.set(value);
     Ok(())
 }
 
 #[when("the config is loaded with an invalid CLI argument")]
-fn load_invalid_cli(world: &World) -> Result<()> {
-    let file_val = world.file_value.get();
-    let env_val = world.env_value.get();
+fn load_invalid_cli(error_context: &ErrorContext) -> Result<()> {
+    let file_val = error_context.file_value.get();
+    let env_val = error_context.env_value.get();
     let mut result = None;
     figment::Jail::try_with(|j| {
         if let Some(value) = file_val.as_ref() {
@@ -47,13 +47,13 @@ fn load_invalid_cli(world: &World) -> Result<()> {
     .map_err(|err| anyhow!(err.to_string()))?;
     let config_result =
         result.ok_or_else(|| anyhow!("error aggregation load did not produce a result"))?;
-    world.agg_result.set(config_result);
+    error_context.agg_result.set(config_result);
     Ok(())
 }
 
 #[then("CLI, file and environment errors are returned")]
-fn cli_file_env_errors(world: &World) -> Result<()> {
-    let result = world
+fn cli_file_env_errors(error_context: &ErrorContext) -> Result<()> {
+    let result = error_context
         .agg_result
         .take()
         .ok_or_else(|| anyhow!("aggregated result unavailable"))?;
@@ -84,8 +84,8 @@ fn cli_file_env_errors(world: &World) -> Result<()> {
 }
 
 #[then("a CLI parsing error is returned")]
-fn cli_error_only(world: &World) -> Result<()> {
-    let result = world
+fn cli_error_only(error_context: &ErrorContext) -> Result<()> {
+    let result = error_context
         .agg_result
         .take()
         .ok_or_else(|| anyhow!("aggregated result unavailable"))?;

@@ -10,22 +10,51 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
-/// Scenario state shared by the cucumber-parity behavioural tests.
+/// Scenario state for rules-oriented precedence scenarios (CLI, env, config path, ignore).
 #[derive(Debug, Default, ScenarioState)]
-pub struct World {
+pub struct RulesContext {
     pub env_value: Slot<String>,
     pub file_value: Slot<String>,
+    pub result: Slot<ortho_config::OrthoResult<RulesConfig>>,
+}
+
+/// Scenario state for collection merge scenarios.
+#[derive(Debug, Default, ScenarioState)]
+pub struct CollectionContext {
+    pub dynamic_rules_file: Slot<String>,
+    pub dynamic_rules_env: Slot<Vec<(String, bool)>>,
+    pub result: Slot<ortho_config::OrthoResult<RulesConfig>>,
+}
+
+/// Scenario state for configuration inheritance scenarios.
+#[derive(Debug, Default, ScenarioState)]
+pub struct ExtendsContext {
     pub extends_flag: Slot<()>,
     pub cyclic_flag: Slot<()>,
     pub missing_base_flag: Slot<()>,
     pub result: Slot<ortho_config::OrthoResult<RulesConfig>>,
-    pub sub_sources: Slot<SubcommandSources>,
-    pub sub_result: Slot<Result<PrArgs, Error>>,
+}
+
+/// Scenario state for aggregated error reporting scenarios.
+#[derive(Debug, Default, ScenarioState)]
+pub struct ErrorContext {
+    pub env_value: Slot<String>,
+    pub file_value: Slot<String>,
     pub agg_result: Slot<ortho_config::OrthoResult<ErrorConfig>>,
+}
+
+/// Scenario state for flattened CLI merging scenarios.
+#[derive(Debug, Default, ScenarioState)]
+pub struct FlattenContext {
     pub flat_file: Slot<String>,
     pub flat_result: Slot<ortho_config::OrthoResult<FlatArgs>>,
-    pub dynamic_rules_file: Slot<String>,
-    pub dynamic_rules_env: Slot<Vec<(String, bool)>>,
+}
+
+/// Scenario state for subcommand precedence scenarios.
+#[derive(Debug, Default, ScenarioState)]
+pub struct SubcommandContext {
+    pub sources: Slot<SubcommandSources>,
+    pub result: Slot<Result<PrArgs, Error>>,
 }
 
 /// Captures the optional reference inputs used by subcommand scenarios.
@@ -43,10 +72,40 @@ impl SubcommandSources {
     }
 }
 
-/// Provides a clean behavioural world state per scenario.
+/// Provides a clean rules context so precedence-focused steps can share state.
 #[fixture]
-pub fn world() -> World {
-    World::default()
+pub fn rules_context() -> RulesContext {
+    RulesContext::default()
+}
+
+/// Provides a clean collection context for collection merge scenarios.
+#[fixture]
+pub fn collection_context() -> CollectionContext {
+    CollectionContext::default()
+}
+
+/// Provides a clean extends context for inheritance scenarios.
+#[fixture]
+pub fn extends_context() -> ExtendsContext {
+    ExtendsContext::default()
+}
+
+/// Provides a clean error context for aggregated error scenarios.
+#[fixture]
+pub fn error_context() -> ErrorContext {
+    ErrorContext::default()
+}
+
+/// Provides a clean flatten context for flattened CLI scenarios.
+#[fixture]
+pub fn flatten_context() -> FlattenContext {
+    FlattenContext::default()
+}
+
+/// Provides a clean subcommand context so subcommand steps can share state.
+#[fixture]
+pub fn subcommand_context() -> SubcommandContext {
+    SubcommandContext::default()
 }
 
 /// Minimal configuration struct used by the rstest-bdd canary scenario.

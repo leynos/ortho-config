@@ -3,22 +3,22 @@
 //! This module verifies the precedence of CLI, environment, and configuration
 //! file sources when loading subcommand inputs.
 
-use crate::fixtures::{PrArgs, SubcommandSources, World};
+use crate::fixtures::{PrArgs, SubcommandContext, SubcommandSources};
 use anyhow::{Result, anyhow, ensure};
 use clap::Parser;
 use ortho_config::SubcmdConfigMerge;
 use rstest_bdd_macros::{given, then, when};
 
-fn has_no_config_sources(world: &World) -> bool {
-    world
-        .sub_sources
+fn has_no_config_sources(subcommand_context: &SubcommandContext) -> bool {
+    subcommand_context
+        .sources
         .with_ref(SubcommandSources::is_empty)
         .unwrap_or(true)
 }
 
-fn take_sources(world: &World) -> SubcommandSources {
-    world
-        .sub_sources
+fn take_sources(subcommand_context: &SubcommandContext) -> SubcommandSources {
+    subcommand_context
+        .sources
         .take()
         .unwrap_or_default()
 }
@@ -55,14 +55,18 @@ impl ReferenceField {
     }
 }
 
-fn set_reference(world: &World, reference: String, field: ReferenceField) -> Result<()> {
+fn set_reference(
+    subcommand_context: &SubcommandContext,
+    reference: String,
+    field: ReferenceField,
+) -> Result<()> {
     ensure!(
         !reference.trim().is_empty(),
         "{} must not be empty",
         field.name()
     );
-    let mut sources = world
-        .sub_sources
+    let mut sources = subcommand_context
+        .sources
         .get_or_insert_with(SubcommandSources::default);
     ensure!(
         field.is_empty(&sources),
@@ -74,15 +78,15 @@ fn set_reference(world: &World, reference: String, field: ReferenceField) -> Res
 }
 
 #[given("a CLI reference {reference}")]
-fn set_cli_ref(world: &World, reference: String) -> Result<()> {
-    set_reference(world, reference, ReferenceField::Cli)
+fn set_cli_ref(subcommand_context: &SubcommandContext, reference: String) -> Result<()> {
+    set_reference(subcommand_context, reference, ReferenceField::Cli)
 }
 
 #[given("no CLI reference")]
-fn no_cli_ref(world: &World) -> Result<()> {
+fn no_cli_ref(subcommand_context: &SubcommandContext) -> Result<()> {
     ensure!(
-        world
-            .sub_sources
+        subcommand_context
+            .sources
             .with_ref(|sources| sources.cli.is_none())
             .unwrap_or(true),
         "CLI reference already initialised"
@@ -91,18 +95,18 @@ fn no_cli_ref(world: &World) -> Result<()> {
 }
 
 #[given("a configuration reference {reference}")]
-fn file_ref(world: &World, reference: String) -> Result<()> {
-    set_reference(world, reference, ReferenceField::File)
+fn file_ref(subcommand_context: &SubcommandContext, reference: String) -> Result<()> {
+    set_reference(subcommand_context, reference, ReferenceField::File)
 }
 
 #[given("an environment reference {reference}")]
-fn env_ref(world: &World, reference: String) -> Result<()> {
-    set_reference(world, reference, ReferenceField::Env)
+fn env_ref(subcommand_context: &SubcommandContext, reference: String) -> Result<()> {
+    set_reference(subcommand_context, reference, ReferenceField::Env)
 }
 
 #[when("the subcommand configuration is loaded without defaults")]
-fn load_sub(world: &World) -> Result<()> {
-    let sources = take_sources(world);
+fn load_sub(subcommand_context: &SubcommandContext) -> Result<()> {
+    let sources = take_sources(subcommand_context);
     let result = if sources.is_empty() {
         PrArgs::try_parse_from(["test"]).map_err(anyhow::Error::from)
     } else {
@@ -111,7 +115,7 @@ fn load_sub(world: &World) -> Result<()> {
         };
         setup_test_environment(&sources, &cli)?
     };
-    world.sub_result.set(result);
+    subcommand_context.result.set(result);
     Ok(())
 }
 
@@ -138,9 +142,9 @@ fn setup_test_environment(
 }
 
 #[then("the merged reference is {expected}")]
-fn check_ref(world: &World, expected: String) -> Result<()> {
-    let result = world
-        .sub_result
+fn check_ref(subcommand_context: &SubcommandContext, expected: String) -> Result<()> {
+    let result = subcommand_context
+        .result
         .take()
         .ok_or_else(|| anyhow!("subcommand result unavailable"))?;
     let cfg = result?;
@@ -154,9 +158,9 @@ fn check_ref(world: &World, expected: String) -> Result<()> {
 }
 
 #[then("the subcommand load fails")]
-fn sub_error(world: &World) -> Result<()> {
-    let result = world
-        .sub_result
+fn sub_error(subcommand_context: &SubcommandContext) -> Result<()> {
+    let result = subcommand_context
+        .result
         .take()
         .ok_or_else(|| anyhow!("subcommand result unavailable"))?;
     ensure!(result.is_err(), "expected subcommand load to fail");

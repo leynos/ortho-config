@@ -1,6 +1,6 @@
 //! Steps for scenarios involving flattened CLI structures.
 
-use crate::fixtures::{FlatArgs, World};
+use crate::fixtures::{FlatArgs, FlattenContext};
 use anyhow::{Result, anyhow, ensure};
 use clap::Parser;
 use figment::{providers::Serialized, Figment};
@@ -33,49 +33,52 @@ fn load_flat(file: Option<String>, args: &[&str]) -> Result<OrthoResult<FlatArgs
 }
 
 /// Helper to initialise flat_file with given content.
-fn set_flat_file(world: &World, content: impl Into<String>) -> Result<()> {
+fn set_flat_file(flatten_context: &FlattenContext, content: impl Into<String>) -> Result<()> {
     ensure!(
-        world.flat_file.is_empty(),
+        flatten_context.flat_file.is_empty(),
         "flattened configuration already initialised"
     );
-    world.flat_file.set(content.into());
+    flatten_context.flat_file.set(content.into());
     Ok(())
 }
 
 #[given("the flattened configuration file has value {value}")]
-fn flattened_file(world: &World, value: String) -> Result<()> {
-    set_flat_file(world, format!("nested = {{ value = \"{value}\" }}"))
+fn flattened_file(flatten_context: &FlattenContext, value: String) -> Result<()> {
+    set_flat_file(
+        flatten_context,
+        format!("nested = {{ value = \"{value}\" }}"),
+    )
 }
 
 #[given("a malformed flattened configuration file")]
-fn malformed_flat_file(world: &World) -> Result<()> {
-    set_flat_file(world, "nested = 5")
+fn malformed_flat_file(flatten_context: &FlattenContext) -> Result<()> {
+    set_flat_file(flatten_context, "nested = 5")
 }
 
 #[given("a flattened configuration file with invalid value")]
-fn invalid_flat_file(world: &World) -> Result<()> {
-    set_flat_file(world, "nested = { value = 5 }")
+fn invalid_flat_file(flatten_context: &FlattenContext) -> Result<()> {
+    set_flat_file(flatten_context, "nested = { value = 5 }")
 }
 
 #[when("the flattened config is loaded without CLI overrides")]
-fn load_without_cli(world: &World) -> Result<()> {
-    let file = world.flat_file.get();
+fn load_without_cli(flatten_context: &FlattenContext) -> Result<()> {
+    let file = flatten_context.flat_file.get();
     let result = load_flat(file, &["prog"])?;
-    world.flat_result.set(result);
+    flatten_context.flat_result.set(result);
     Ok(())
 }
 
 #[when("the flattened config is loaded with CLI value {value}")]
-fn load_with_cli(world: &World, value: String) -> Result<()> {
-    let file = world.flat_file.get();
+fn load_with_cli(flatten_context: &FlattenContext, value: String) -> Result<()> {
+    let file = flatten_context.flat_file.get();
     let result = load_flat(file, &["prog", "--value", &value])?;
-    world.flat_result.set(result);
+    flatten_context.flat_result.set(result);
     Ok(())
 }
 
 #[then("the flattened value is {expected}")]
-fn check_flattened(world: &World, expected: String) -> Result<()> {
-    let result = world
+fn check_flattened(flatten_context: &FlattenContext, expected: String) -> Result<()> {
+    let result = flatten_context
         .flat_result
         .take()
         .ok_or_else(|| anyhow!("flattened configuration result unavailable"))?;
@@ -93,8 +96,8 @@ fn check_flattened(world: &World, expected: String) -> Result<()> {
 }
 
 #[then("flattening fails with a merge error")]
-fn flattening_fails(world: &World) -> Result<()> {
-    let result = world
+fn flattening_fails(flatten_context: &FlattenContext) -> Result<()> {
+    let result = flatten_context
         .flat_result
         .take()
         .ok_or_else(|| anyhow!("flattened configuration result unavailable"))?;

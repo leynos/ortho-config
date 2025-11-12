@@ -1,23 +1,23 @@
 //! Steps for testing ignore pattern list handling.
 
-use crate::fixtures::{RulesConfig, World};
+use crate::fixtures::{RulesConfig, RulesContext};
 use anyhow::{Result, anyhow, ensure};
 use ortho_config::OrthoConfig;
 use rstest_bdd_macros::{given, then, when};
 
 #[given("the environment variable DDLINT_IGNORE_PATTERNS is {value}")]
-fn set_ignore_env(world: &World, value: String) -> Result<()> {
+fn set_ignore_env(rules_context: &RulesContext, value: String) -> Result<()> {
     ensure!(
-        world.env_value.is_empty(),
+        rules_context.env_value.is_empty(),
         "ignore patterns environment value already initialised"
     );
-    world.env_value.set(value);
+    rules_context.env_value.set(value);
     Ok(())
 }
 
 #[when("the config is loaded with CLI ignore {cli}")]
-fn load_ignore(world: &World, cli: String) -> Result<()> {
-    let env_val = world.env_value.take();
+fn load_ignore(rules_context: &RulesContext, cli: String) -> Result<()> {
+    let env_val = rules_context.env_value.take();
     let mut result = None;
     figment::Jail::try_with(|j| {
         if let Some(val) = env_val.as_deref() {
@@ -37,13 +37,13 @@ fn load_ignore(world: &World, cli: String) -> Result<()> {
     .map_err(|err| anyhow!(err.to_string()))?;
     let config_result =
         result.ok_or_else(|| anyhow!("configuration load did not produce a result"))?;
-    world.result.set(config_result);
+    rules_context.result.set(config_result);
     Ok(())
 }
 
 #[then("the ignore patterns are {patterns}")]
-fn check_ignore(world: &World, patterns: String) -> Result<()> {
-    let result = world
+fn check_ignore(rules_context: &RulesContext, patterns: String) -> Result<()> {
+    let result = rules_context
         .result
         .take()
         .ok_or_else(|| anyhow!("configuration result unavailable"))?;
