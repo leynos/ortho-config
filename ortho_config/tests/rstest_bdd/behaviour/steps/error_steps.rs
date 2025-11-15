@@ -1,65 +1,55 @@
 //! Steps verifying aggregated error reporting.
-#![expect(
-    clippy::shadow_reuse,
-    reason = "Cucumber step macros rebind step arguments during code generation"
-)]
 
-use crate::{ErrorConfig, World};
+use crate::fixtures::{ErrorConfig, ErrorContext};
 use anyhow::{Result, anyhow, ensure};
-use cucumber::{given, then, when};
 use ortho_config::OrthoConfig;
+use rstest_bdd_macros::{given, then, when};
+use test_helpers::figment as figment_helpers;
 
 #[given("an invalid configuration file")]
-fn invalid_file(world: &mut World) -> Result<()> {
+fn invalid_file(error_context: &ErrorContext) -> Result<()> {
     ensure!(
-        world.file_value.is_none(),
+        error_context.file_value.is_empty(),
         "invalid configuration file already initialised"
     );
-    world.file_value = Some("port = ".into());
+    error_context.file_value.set("port = ".into());
     Ok(())
 }
 
-#[given(expr = "the environment variable DDLINT_PORT is {string}")]
-fn env_port(world: &mut World, val: String) -> Result<()> {
+#[given("the environment variable DDLINT_PORT is {value}")]
+fn env_port(error_context: &ErrorContext, value: String) -> Result<()> {
     ensure!(
-        !val.trim().is_empty(),
+        !value.trim().is_empty(),
         "environment port value must not be empty"
     );
     ensure!(
-        world.env_value.is_none(),
+        error_context.env_value.is_empty(),
         "environment port already initialised"
     );
-    world.env_value = Some(val);
+    error_context.env_value.set(value);
     Ok(())
 }
 
 #[when("the config is loaded with an invalid CLI argument")]
-fn load_invalid_cli(world: &mut World) -> Result<()> {
-    let file_val = world.file_value.clone();
-    let env_val = world.env_value.clone();
-    let mut result = None;
-    figment::Jail::try_with(|j| {
+fn load_invalid_cli(error_context: &ErrorContext) -> Result<()> {
+    let file_val = error_context.file_value.get();
+    let env_val = error_context.env_value.get();
+    let config_result = figment_helpers::with_jail(|j| {
         if let Some(value) = file_val.as_ref() {
             j.create_file(".ddlint.toml", value)?;
         }
         if let Some(value) = env_val.as_ref() {
             j.set_env("DDLINT_PORT", value);
         }
-        result = Some(ErrorConfig::load_from_iter(["prog", "--bogus"]));
-        Ok(())
-    })
-    .map_err(|err| anyhow!(err.to_string()))?;
-    world.agg_result = result;
-    ensure!(
-        world.agg_result.is_some(),
-        "error aggregation load did not produce a result"
-    );
+        Ok(ErrorConfig::load_from_iter(["prog", "--bogus"]))
+    })?;
+    error_context.agg_result.set(config_result);
     Ok(())
 }
 
 #[then("CLI, file and environment errors are returned")]
-fn cli_file_env_errors(world: &mut World) -> Result<()> {
-    let result = world
+fn cli_file_env_errors(error_context: &ErrorContext) -> Result<()> {
+    let result = error_context
         .agg_result
         .take()
         .ok_or_else(|| anyhow!("aggregated result unavailable"))?;
@@ -90,8 +80,8 @@ fn cli_file_env_errors(world: &mut World) -> Result<()> {
 }
 
 #[then("a CLI parsing error is returned")]
-fn cli_error_only(world: &mut World) -> Result<()> {
-    let result = world
+fn cli_error_only(error_context: &ErrorContext) -> Result<()> {
+    let result = error_context
         .agg_result
         .take()
         .ok_or_else(|| anyhow!("aggregated result unavailable"))?;

@@ -26,6 +26,7 @@ tempfile = "3"
 cap-std = "3"
 gherkin = "0.14"
 toml = "0.8"
+test_helpers = { path = "../../test_helpers", version = "^0.6.0" }
 
 [features]
 default = []
