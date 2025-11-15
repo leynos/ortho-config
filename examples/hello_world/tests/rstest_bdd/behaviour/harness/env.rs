@@ -1,12 +1,12 @@
-//! Environment management helpers for the Cucumber world.
-use super::{ENV_PREFIX, World};
+//! Environment management helpers for the behavioural harness.
+use super::{Harness, ENV_PREFIX};
 use anyhow::{Context, Result};
 use cap_std::fs::OpenOptions;
 use cap_std::{ambient_authority, fs::Dir};
 use std::io::Write;
-use tokio::process::Command;
+use std::process::Command;
 
-impl World {
+impl Harness {
     /// Records an environment variable override scoped to the scenario.
     pub(crate) fn set_env<K, V>(&mut self, key: K, value: V)
     where

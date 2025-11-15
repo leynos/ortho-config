@@ -1,6 +1,6 @@
 #![cfg(test)]
-//! Unit tests covering sample configuration helpers within the Cucumber world.
-use super::World;
+//! Unit tests covering sample configuration helpers within the behavioural harness.
+use super::Harness;
 use anyhow::{Result, anyhow, ensure};
 use rstest::rstest;
 
@@ -38,7 +38,7 @@ fn try_write_sample_config_reports_expected_errors(
     #[case] sample: &str,
     #[case] expected: &str,
 ) -> Result<()> {
-    let world = World::for_tests()?;
+    let world = Harness::for_tests()?;
     let Err(error) = world.try_write_sample_config(sample) else {
         return Err(anyhow!("sample config copy should fail"));
     };
@@ -59,7 +59,7 @@ fn copy_sample_config_writes_all_files() -> Result<()> {
     use cap_std::fs::Dir;
     use std::collections::BTreeSet;
 
-    let world = World::for_tests()?;
+    let world = Harness::for_tests()?;
     let tempdir = tempfile::tempdir().context("create sample source")?;
     let source = Dir::open_ambient_dir(tempdir.path(), cap_std::ambient_authority())
         .context("open sample source dir")?;
@@ -98,7 +98,7 @@ fn copy_sample_config_deduplicates_repeated_extends() -> Result<()> {
     use cap_std::fs::Dir;
     use std::collections::BTreeSet;
 
-    let world = World::for_tests()?;
+    let world = Harness::for_tests()?;
     let tempdir = tempfile::tempdir().context("create sample source")?;
     let source = Dir::open_ambient_dir(tempdir.path(), cap_std::ambient_authority())
         .context("open sample source dir")?;

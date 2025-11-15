@@ -1,12 +1,12 @@
-//! Sample configuration and file helpers for the Cucumber world.
-use super::config::{ConfigCopyParams, SampleConfigError, ensure_simple_filename, parse_extends};
-use super::{CONFIG_FILE, World};
+//! Sample configuration and file helpers for the behavioural harness.
+use super::config::{ensure_simple_filename, parse_extends, ConfigCopyParams, SampleConfigError};
+use super::{Harness, CONFIG_FILE};
 use anyhow::{Context, Result};
 use camino::Utf8PathBuf;
 use cap_std::fs::Dir;
 use std::collections::BTreeSet;
 
-impl World {
+impl Harness {
     pub(crate) fn write_config(&self, contents: &str) -> Result<()> {
         let dir = self
             .scenario_dir()

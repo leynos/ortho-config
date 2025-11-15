@@ -1,0 +1,127 @@
+//! Process execution helpers for running the `hello_world` binary in scenarios.
+use super::{binary_path, CommandResult, Harness, COMMAND_TIMEOUT};
+use anyhow::{anyhow, Context, Result};
+use shlex::split;
+use std::io::Read;
+use std::process::{Child, Command, ExitStatus, Output, Stdio};
+use std::thread;
+use std::time::{Duration, Instant};
+
+impl Harness {
+    pub(crate) fn run_hello(&mut self, args: Option<String>) -> Result<()> {
+        let parsed = args
+            .map(|raw| tokenise_shell_args(&raw))
+            .transpose()? // Option<Result<_>> -> Result<Option<_>>
+            .unwrap_or_default();
+        self.run_example(parsed)
+    }
+
+    pub(crate) fn run_example(&mut self, args: Vec<String>) -> Result<()> {
+        let binary = binary_path();
+        let mut command = Command::new(binary.as_std_path());
+        command.current_dir(self.workdir.path());
+        command.args(&args);
+        command.stdout(Stdio::piped());
+        command.stderr(Stdio::piped());
+        command.stdin(Stdio::null());
+        self.configure_environment(&mut command);
+        let mut child = command
+            .spawn()
+            .with_context(|| format!("spawn {binary} binary"))?;
+        let stdout_pipe = child
+            .stdout
+            .take()
+            .ok_or_else(|| anyhow!("capture hello_world stdout pipe"))?;
+        let stderr_pipe = child
+            .stderr
+            .take()
+            .ok_or_else(|| anyhow!("capture hello_world stderr pipe"))?;
+
+        let stdout_reader = spawn_pipe_reader(stdout_pipe, "hello_world stdout");
+        let stderr_reader = spawn_pipe_reader(stderr_pipe, "hello_world stderr");
+
+        let status = match wait_with_timeout(&mut child) {
+            Ok(status) => status,
+            Err(err) => {
+                let _ = join_reader(stdout_reader, "hello_world stdout");
+                let _ = join_reader(stderr_reader, "hello_world stderr");
+                return Err(err);
+            }
+        };
+        let stdout = join_reader(stdout_reader, "hello_world stdout")?;
+        let stderr = join_reader(stderr_reader, "hello_world stderr")?;
+        let output = Output {
+            status,
+            stdout,
+            stderr,
+        };
+        self.result = Some(CommandResult::from_execution(
+            output,
+            binary.to_string(),
+            args,
+        ));
+        Ok(())
+    }
+
+    pub(crate) fn result(&self) -> Result<&CommandResult> {
+        self.result
+            .as_ref()
+            .ok_or_else(|| anyhow!("command execution result unavailable"))
+    }
+}
+
+fn tokenise_shell_args(raw: &str) -> Result<Vec<String>> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    split(trimmed).ok_or_else(|| {
+        anyhow!("failed to tokenise shell arguments; raw={raw:?}, trimmed={trimmed:?}")
+    })
+}
+
+fn spawn_pipe_reader(
+    mut pipe: impl Read + Send + 'static,
+    context_label: &'static str,
+) -> thread::JoinHandle<Result<Vec<u8>>> {
+    thread::spawn(move || {
+        let mut buffer = Vec::new();
+        pipe.read_to_end(&mut buffer)
+            .with_context(|| format!("read {context_label}"))?;
+        Ok(buffer)
+    })
+}
+
+fn join_reader(
+    handle: thread::JoinHandle<Result<Vec<u8>>>,
+    label: &'static str,
+) -> Result<Vec<u8>> {
+    handle
+        .join()
+        .map_err(|_| anyhow!("{label} reader thread panicked"))?
+}
+
+fn wait_with_timeout(child: &mut Child) -> Result<ExitStatus> {
+    let start = Instant::now();
+    loop {
+        if let Some(status) = child
+            .try_wait()
+            .context("poll hello_world binary status")?
+        {
+            return Ok(status);
+        }
+
+        if start.elapsed() > COMMAND_TIMEOUT {
+            child
+                .kill()
+                .context("kill stalled hello_world binary")?;
+            child
+                .wait()
+                .context("wait for killed hello_world binary")?;
+            return Err(anyhow!("hello_world binary timed out"));
+        }
+
+        thread::sleep(Duration::from_millis(25));
+    }
+}

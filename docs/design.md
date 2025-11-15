@@ -210,12 +210,15 @@ for the workspace. Deterministic components such as CLI parsing, validation,
 and plan construction are covered with `rstest` parameterisations; fixtures
 expose pre-populated `HelloWorldCli`, `GreetCommand`, and `TakeLeaveCommand`
 values to exercise edge-cases like conflicting modes, blank input, and
-punctuation overrides. End-to-end workflows are expressed with `cucumber-rs`
-scenarios that invoke the compiled binary. The Cucumber world initializes a
-temporary working directory (`tempfile::TempDir`) per scenario, writes
-`.hello_world.toml` snapshots via `cap_std::fs_utf8`, and layers environment
-overrides before spawning the command. This isolates precedence checks (file →
-environment → CLI) while keeping the operating system environment pristine.
+punctuation overrides. End-to-end workflows are expressed with `rstest-bdd`
+scenarios that invoke the compiled binary under the stock Rust test harness.
+The behavioural harness exposes a `hello_world_harness` fixture that owns a
+`tempfile::TempDir`, writes `.hello_world.toml` snapshots via
+`cap_std::fs_utf8`, and layers environment overrides before spawning the
+command. Each scenario receives a fresh working directory, ensuring precedence
+checks (file → environment → CLI) stay deterministic and the developer's
+environment remains pristine. Compile-time tag filters keep `@requires.yaml`
+scenarios out of non-`yaml` builds without ad-hoc runtime filtering.
 
 The example now ships repository-managed samples in `config/baseline.toml` and
 `config/overrides.toml`. The baseline file captures the values exercised by the
@@ -750,11 +753,11 @@ explicit.
   for downstream rendering. This keeps the `main` function focused on
   orchestration.
 - Unit tests rely on `rstest` fixtures to exercise validation and message
-  rendering. Behavioural coverage uses `cucumber-rs` to execute the compiled
+  rendering. Behavioural coverage uses `rstest-bdd` to execute the compiled
   binary with different flag combinations, verifying exit codes and emitted
-  text.
-- Behavioural tests delegate CLI parsing and output assertions to the world
-  helpers so each cucumber step stays as a single, intention-revealing line.
+  text without a bespoke runner.
+- Behavioural tests delegate CLI parsing and output assertions to the shared
+  harness fixture so each step stays as a single, intention-revealing line.
 - Subcommands showcase layering strategies: the `greet` command customises
   punctuation and optional preambles, while `take-leave` composes switches,
   optional arguments, and shared greeting overrides to describe a farewell
@@ -792,6 +795,13 @@ experience, we can create a highly valuable addition to the Rust ecosystem.
   generated helper signatures. This codifies precedence semantics and catches
   regressions in the derive macro before they reach downstream crates.
 
+- **Adopt `rstest-bdd` for behavioural coverage (2025-11-15):** Workspace and
+  example behavioural suites now use `rstest-bdd` fixtures[^rstest-bdd-guide]
+  instead of a custom `cucumber-rs` runner. The shared harness spawns binaries
+  under `cargo test`, enforces execution timeouts, and binds feature files with
+  compile-time tag filters so feature-gated scenarios disappear from
+  unsupported builds.
+
 - **Prefix normalisation:** The `prefix` struct attribute now appends a trailing
   underscore when callers omit it (unless the string is empty). This keeps
   attribute usage ergonomic for API consumers—`#[ortho_config(prefix = "APP")]`
@@ -802,3 +812,4 @@ experience, we can create a highly valuable addition to the Rust ecosystem.
 [^behavioural-testing]: `docs/behavioural-testing-in-rust-with-cucumber.md`.
 [^design-rstest]: `docs/rust-testing-with-rstest-fixtures.md`.
 [^design-reliable]: `docs/reliable-testing-in-rust-via-dependency-injection.md`.
+[^rstest-bdd-guide]: `docs/rstest-bdd-users-guide.md`.

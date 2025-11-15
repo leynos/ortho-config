@@ -1,8 +1,9 @@
-//! World state and command helpers for the Cucumber harness.
+//! World state and command helpers for the `rstest-bdd` harness.
+//!
 //! The harness isolates environment variables per scenario: values stored in
 //! `env` are applied only when launching the command and never leak between
 //! runs. Each scenario owns its own temporary working directory (`workdir`),
-//! which is removed automatically when the world is dropped. Command results
+//! which is removed automatically when the harness is dropped. Command results
 //! and declaratively composed globals live only for the lifetime of a single
 //! scenario to keep assertions deterministic.
 
@@ -11,11 +12,12 @@ mod env;
 mod process;
 mod samples;
 
+#[cfg(test)]
 mod tests;
 
-pub(crate) use super::SampleConfigError;
 pub(crate) use super::config;
-pub(crate) use super::{COMMAND_TIMEOUT, CONFIG_FILE, ENV_PREFIX, binary_path};
+pub(crate) use super::SampleConfigError;
+pub(crate) use super::{binary_path, COMMAND_TIMEOUT, CONFIG_FILE, ENV_PREFIX};
 
 use anyhow::{Context, Result};
 use cap_std::fs::Dir;
@@ -24,10 +26,9 @@ use std::borrow::Cow;
 use std::collections::BTreeMap;
 use tempfile::TempDir;
 
-/// Shared state threaded through Cucumber steps.
-#[derive(Debug, cucumber::World)]
-#[world(init = Self::init)]
-pub struct World {
+/// Shared state threaded through behavioural steps.
+#[derive(Debug)]
+pub struct Harness {
     /// Result captured after invoking the binary.
     result: Option<CommandResult>,
     /// Temporary working directory isolated per scenario.
@@ -46,7 +47,7 @@ pub(crate) enum Expect<'a> {
     StderrContains(&'a str),
 }
 
-impl World {
+impl Harness {
     pub(crate) fn new() -> Result<Self> {
         let workdir = TempDir::new().context("create hello_world workdir")?;
         Ok(Self {
@@ -55,10 +56,6 @@ impl World {
             env: BTreeMap::new(),
             declarative_globals: None,
         })
-    }
-
-    pub(crate) async fn init() -> Result<Self> {
-        async { Self::new() }.await
     }
 
     #[cfg(test)]

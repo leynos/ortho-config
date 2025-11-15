@@ -21,11 +21,11 @@ production-ready complexity.
   switches, optional arguments, and shared greeting customizations to decide
   how a farewell is delivered.
 - **Testing disciplines**: add `rstest`-powered unit tests for deterministic
-  components and `cucumber-rs` behavioural specifications that exercise the
+  components and `rstest-bdd` behavioural specifications that exercise the
   binary as a user would, capturing configuration precedence and cross-platform
   quirks. The unit suite now includes a declarative merging fixture that
-  enumerates precedence permutations. This pairs with the cucumber JSON-layer
-  scenario.
+  enumerates precedence permutations. This pairs with the JSON-layer scenario
+  bound via compile-time tag filters.
 - **Graceful help/version exits**: the entry point parses CLI arguments with
   `clap::Parser::try_parse` and uses `ortho_config::is_display_request` to
   detect `--help` / `--version` requests. It delegates to `clap::Error::exit`
@@ -48,8 +48,8 @@ production-ready complexity.
 
 - `src/` will contain a small `main.rs` and supporting modules for
   option-parsing, command dispatch, and domain logic.
-- `tests/` will host Cucumber steps and supporting fixtures for behavioural
-  coverage.
+- `tests/` will host `rstest-bdd` steps, fixtures, and scenario bindings for
+  behavioural coverage.
 - `scripts/` will offer automation snippets, with mirrored POSIX shell and
   Windows `.cmd` scripts to showcase configuration strategies on each platform.
 - `config/` will collect sample configuration files that the scripts reference
@@ -111,7 +111,7 @@ without mutating the working directory.
 - [x] Implement the `greet` subcommand with its arguments and options.
 - [x] Implement the `take-leave` subcommand with its arguments and options.
 - [x] Add `rstest` unit tests covering parsing, validation, and command logic.
-- [x] Add `cucumber-rs` behavioural tests covering end-to-end workflows and
+- [x] Add `rstest-bdd` behavioural tests covering end-to-end workflows and
       configuration precedence.
 - [x] Create shell and Windows `.cmd` scripts showcasing configuration file
       usage and overrides.
