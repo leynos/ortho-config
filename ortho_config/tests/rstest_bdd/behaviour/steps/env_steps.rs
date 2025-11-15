@@ -46,7 +46,7 @@ fn check_rules(rules_context: &RulesContext, rules: String) -> Result<()> {
         .take()
         .ok_or_else(|| anyhow!("configuration result unavailable"))?;
     let cfg = result.map_err(|err| anyhow!(err))?;
-    let want: Vec<String> = rules.split(',').map(str::to_owned).collect();
+    let want: Vec<String> = rules.split(',').map(|s| s.trim().to_owned()).collect();
     ensure!(
         cfg.rules == want,
         "unexpected rules {:?}; expected {:?}",
