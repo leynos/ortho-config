@@ -4,7 +4,7 @@
 //! using [`CsvEnv`], and verifying parsed results.
 
 use crate::fixtures::{RulesConfig, RulesContext};
-use anyhow::{Result, anyhow, ensure};
+use anyhow::{Context, Result, anyhow, ensure};
 use ortho_config::OrthoConfig;
 use rstest_bdd_macros::{given, then, when};
 use test_helpers::figment as figment_helpers;
@@ -24,6 +24,7 @@ fn set_env(rules_context: &RulesContext, value: String) -> Result<()> {
     Ok(())
 }
 
+/// Loads configuration solely from the `DDLINT_RULES` environment value.
 #[when("the configuration is loaded")]
 fn load_config(rules_context: &RulesContext) -> Result<()> {
     let value = rules_context
@@ -33,7 +34,8 @@ fn load_config(rules_context: &RulesContext) -> Result<()> {
     let config_result = figment_helpers::with_jail(|j| {
         j.set_env("DDLINT_RULES", &value);
         Ok(RulesConfig::load_from_iter(["prog"]))
-    })?;
+    })
+    .context("failed to load rules configuration from jailed environment")?;
     rules_context.result.set(config_result);
     Ok(())
 }
@@ -45,7 +47,7 @@ fn check_rules(rules_context: &RulesContext, rules: String) -> Result<()> {
         .result
         .take()
         .ok_or_else(|| anyhow!("configuration result unavailable"))?;
-    let cfg = result.map_err(|err| anyhow!(err))?;
+    let cfg = result.context("failed to parse rules configuration")?;
     let want: Vec<String> = rules.split(',').map(|s| s.trim().to_owned()).collect();
     ensure!(
         cfg.rules == want,
