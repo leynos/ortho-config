@@ -1,6 +1,7 @@
-//! Tests for composing declarative globals in the hello world example.
+//! Tests for composing declarative globals and validating step behaviours.
 use crate::behaviour::harness::Harness;
 use anyhow::{anyhow, Result};
+use camino::Utf8PathBuf;
 use rstest::{fixture, rstest};
 
 #[fixture]
@@ -33,5 +34,23 @@ fn compose_declarative_globals_rejects_invalid_input(
         return Err(anyhow!("{error_context}"));
     };
     anyhow::ensure!(err.to_string().contains(expected_message_fragment));
+    Ok(())
+}
+
+#[test]
+fn environment_contains_rejects_blank_key() -> Result<()> {
+    let mut harness = Harness::for_tests()?;
+    let err = super::environment_contains(&mut harness, "  ".into(), "value".into())
+        .expect_err("blank keys must be rejected");
+    anyhow::ensure!(err.to_string().contains("must not be empty"));
+    Ok(())
+}
+
+#[test]
+fn run_without_args_errors_on_missing_binary() -> Result<()> {
+    let mut harness = Harness::for_tests()?;
+    harness.set_binary_override(Utf8PathBuf::from("/missing/hello_world"));
+    let err = super::run_without_args(&mut harness).expect_err("missing binary should fail");
+    anyhow::ensure!(err.to_string().contains("spawn"));
     Ok(())
 }

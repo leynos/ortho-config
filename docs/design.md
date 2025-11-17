@@ -795,7 +795,7 @@ experience, we can create a highly valuable addition to the Rust ecosystem.
   generated helper signatures. This codifies precedence semantics and catches
   regressions in the derive macro before they reach downstream crates.
 
-- **Adopt `rstest-bdd` for behavioural coverage (2025-11-15):** Workspace and
+- **Adopt `rstest-bdd` (Behaviour-Driven Development) for behavioural coverage (2025-11-15):** Workspace and
   example behavioural suites now use `rstest-bdd` fixtures[^rstest-bdd-guide]
   instead of a custom `cucumber-rs` runner. The shared harness spawns binaries
   under `cargo test`, enforces execution timeouts, and binds feature files with

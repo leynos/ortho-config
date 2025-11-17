@@ -1,6 +1,7 @@
 //! Binds the hello_world behavioural feature file to rstest-bdd scenarios.
 
 use crate::behaviour::harness::Harness;
+use anyhow::Result;
 use rstest_bdd_macros::scenario;
 
 macro_rules! hello_world_scenario {
@@ -10,8 +11,9 @@ macro_rules! hello_world_scenario {
             name = $scenario_name,
             tags = "not @requires.yaml"
         )]
-        fn $fn_name(hello_world_harness: Harness) {
+        fn $fn_name(hello_world_harness: Harness) -> Result<()> {
             let _ = hello_world_harness;
+            Ok(())
         }
     };
     ($fn_name:ident, $scenario_name:literal, yaml) => {
@@ -21,8 +23,9 @@ macro_rules! hello_world_scenario {
             name = $scenario_name,
             tags = "@requires.yaml"
         )]
-        fn $fn_name(hello_world_harness: Harness) {
+        fn $fn_name(hello_world_harness: Harness) -> Result<()> {
             let _ = hello_world_harness;
+            Ok(())
         }
     };
 }

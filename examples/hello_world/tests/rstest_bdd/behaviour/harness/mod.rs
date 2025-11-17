@@ -20,10 +20,12 @@ pub(crate) use super::SampleConfigError;
 pub(crate) use super::{binary_path, COMMAND_TIMEOUT, CONFIG_FILE, ENV_PREFIX};
 
 use anyhow::{Context, Result};
+use camino::Utf8PathBuf;
 use cap_std::fs::Dir;
 use hello_world::cli::GlobalArgs;
 use std::borrow::Cow;
 use std::collections::BTreeMap;
+use std::time::Duration;
 use tempfile::TempDir;
 
 /// Shared state threaded through behavioural steps.
@@ -37,6 +39,10 @@ pub struct Harness {
     env: BTreeMap<String, String>,
     /// Declaratively composed globals used by behavioural tests.
     declarative_globals: Option<GlobalArgs>,
+    /// Optional binary override used by targeted tests.
+    binary_override: Option<Utf8PathBuf>,
+    /// Optional timeout override (primarily for targeted tests).
+    timeout_override: Option<Duration>,
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -55,6 +61,8 @@ impl Harness {
             workdir,
             env: BTreeMap::new(),
             declarative_globals: None,
+            binary_override: None,
+            timeout_override: None,
         })
     }
 
@@ -65,6 +73,29 @@ impl Harness {
 
     fn scenario_dir(&self) -> std::io::Result<Dir> {
         Dir::open_ambient_dir(self.workdir.path(), cap_std::ambient_authority())
+    }
+
+    pub(crate) fn binary(&self) -> Utf8PathBuf {
+        self.binary_override
+            .clone()
+            .unwrap_or_else(super::binary_path)
+    }
+
+    pub(crate) fn command_timeout(&self) -> Duration {
+        self.timeout_override.unwrap_or(super::COMMAND_TIMEOUT)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn set_binary_override<P>(&mut self, path: P)
+    where
+        P: Into<Utf8PathBuf>,
+    {
+        self.binary_override = Some(path.into());
+    }
+
+    #[cfg(test)]
+    pub(crate) fn set_timeout_override(&mut self, duration: Duration) {
+        self.timeout_override = Some(duration);
     }
 }
 

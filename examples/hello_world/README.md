@@ -21,11 +21,12 @@ production-ready complexity.
   switches, optional arguments, and shared greeting customizations to decide
   how a farewell is delivered.
 - **Testing disciplines**: add `rstest`-powered unit tests for deterministic
-  components and `rstest-bdd` behavioural specifications that exercise the
-  binary as a user would, capturing configuration precedence and cross-platform
-  quirks. The unit suite now includes a declarative merging fixture that
-  enumerates precedence permutations. This pairs with the JSON-layer scenario
-  bound via compile-time tag filters.
+  components and `rstest-bdd` (Behaviour-Driven Development) behavioural
+  specifications that exercise the binary as a user would, capturing
+  configuration precedence and cross-platform quirks. The unit suite now
+  includes a declarative merging fixture that enumerates precedence
+  permutations. This pairs with the JSON-layer scenario bound via compile-time
+  tag filters.
 - **Graceful help/version exits**: the entry point parses CLI arguments with
   `clap::Parser::try_parse` and uses `ortho_config::is_display_request` to
   detect `--help` / `--version` requests. It delegates to `clap::Error::exit`

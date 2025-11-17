@@ -48,8 +48,8 @@ values from multiple sources. The core features are:
 The workspace bundles an executable Hello World example under
 `examples/hello_world`. It layers defaults, environment variables, and CLI
 flags via the derive macro; see its [README](../examples/hello_world/README.md)
-for a step-by-step walkthrough and the `rstest-bdd` scenarios that validate
-behaviour end-to-end.
+for a step-by-step walkthrough and the `rstest-bdd` (Behaviour-Driven
+Development) scenarios that validate behaviour end-to-end.
 
 Run `make test` to execute the example’s coverage. The unit suite uses `rstest`
 fixtures to exercise parsing, validation, and command planning across
