@@ -25,8 +25,8 @@ production-ready complexity.
   specifications that exercise the binary as a user would, capturing
   configuration precedence and cross-platform quirks. The unit suite now
   includes a declarative merging fixture that enumerates precedence
-  permutations. This pairs with the JSON-layer scenario bound via compile-time
-  tag filters.
+  permutations. This pairs with the JSON-layer scenario, which is bound via
+  compile-time tag filters.
 - **Graceful help/version exits**: the entry point parses CLI arguments with
   `clap::Parser::try_parse` and uses `ortho_config::is_display_request` to
   detect `--help` / `--version` requests. It delegates to `clap::Error::exit`
