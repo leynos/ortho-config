@@ -148,26 +148,13 @@ impl CommandResult {
 /// sequences because `PowerShell` occasionally emits the latter when piping
 /// output between commands.
 fn normalise_newlines(text: Cow<'_, str>) -> String {
-    match text {
-        Cow::Borrowed(borrowed_text) => normalise_borrowed(borrowed_text),
-        Cow::Owned(owned_text) => normalise_owned(owned_text),
+    if !text.contains('\r') {
+        return text.into_owned();
     }
-}
-
-fn normalise_borrowed(text: &str) -> String {
+    let mut text = text.into_owned();
+    text = text.replace("\r\n", "\n");
     if text.contains('\r') {
-        normalise_owned(text.to_owned())
-    } else {
-        text.to_owned()
-    }
-}
-
-fn normalise_owned(mut text: String) -> String {
-    if text.contains('\r') {
-        text = text.replace("\r\n", "\n");
-        if text.contains('\r') {
-            text = text.replace('\r', "\n");
-        }
+        text = text.replace('\r', "\n");
     }
     text
 }

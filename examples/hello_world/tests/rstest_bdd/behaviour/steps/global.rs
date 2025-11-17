@@ -147,7 +147,7 @@ pub fn named_file_contains(
 /// Writes docstring contents to the XDG config home directory.
 #[given("the XDG config home contains:")]
 pub fn xdg_config_home_contains(
-    #[from(hello_world_harness)] harness: &Harness,
+    #[from(hello_world_harness)] harness: &mut Harness,
     docstring: String,
 ) -> Result<()> {
     harness.write_xdg_config_home(&docstring)
@@ -252,4 +252,3 @@ pub fn assert_declarative_salutations(
 
 #[cfg(test)]
 mod tests;
-EOF
