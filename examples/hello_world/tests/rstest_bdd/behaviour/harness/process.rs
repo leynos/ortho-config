@@ -113,6 +113,12 @@ fn wait_with_timeout(child: &mut Child, timeout: Duration) -> Result<ExitStatus>
         }
 
         if start.elapsed() > timeout {
+            if let Some(status) = child
+                .try_wait()
+                .context("poll hello_world binary status after timeout")?
+            {
+                return Ok(status);
+            }
             child
                 .kill()
                 .context("kill stalled hello_world binary")?;

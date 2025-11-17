@@ -1,4 +1,4 @@
-//! World state and command helpers for the `rstest-bdd` harness.
+//! Harness state and command helpers for the `rstest-bdd` harness.
 //!
 //! The harness isolates environment variables per scenario: values stored in
 //! `env` are applied only when launching the command and never leak between

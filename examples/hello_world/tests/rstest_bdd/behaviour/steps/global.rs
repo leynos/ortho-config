@@ -1,10 +1,5 @@
 //! Step definitions for the `hello_world` example.
 //! Drive the binary and assert its observable outputs.
-#![expect(
-    clippy::shadow_reuse,
-    reason = "rstest-bdd step macros rebind placeholders during expansion"
-)]
-
 use crate::behaviour::config::SampleConfigError;
 use crate::behaviour::harness::Harness;
 use anyhow::{anyhow, Context, Result};
@@ -31,11 +26,13 @@ struct LayerInput {
 }
 
 /// Runs the binary without additional arguments.
+#[expect(clippy::shadow_reuse, reason = "rstest-bdd step macros rebind placeholders during expansion")]
 #[when("I run the hello world example")]
 pub fn run_without_args(#[from(hello_world_harness)] harness: &mut Harness) -> Result<()> {
     harness.run_hello(None)
 }
 
+#[expect(clippy::shadow_reuse, reason = "rstest-bdd step macros rebind placeholders during expansion")]
 #[when("I run the hello world example with arguments {string}")]
 #[expect(
     clippy::needless_pass_by_value,
@@ -48,16 +45,19 @@ pub fn run_with_args(
     harness.run_hello(Some(arguments))
 }
 
+#[expect(clippy::shadow_reuse, reason = "rstest-bdd step macros rebind placeholders during expansion")]
 #[then("the command succeeds")]
 pub fn command_succeeds(#[from(hello_world_harness)] harness: &mut Harness) -> Result<()> {
     harness.assert_success()
 }
 
+#[expect(clippy::shadow_reuse, reason = "rstest-bdd step macros rebind placeholders during expansion")]
 #[then("the command fails")]
 pub fn command_fails(#[from(hello_world_harness)] harness: &mut Harness) -> Result<()> {
     harness.assert_failure()
 }
 
+#[expect(clippy::shadow_reuse, reason = "rstest-bdd step macros rebind placeholders during expansion")]
 #[then("stdout contains {string}")]
 #[expect(
     clippy::needless_pass_by_value,
@@ -71,6 +71,7 @@ pub fn stdout_contains(
 }
 
 /// Ensures the reported version matches the crate metadata.
+#[expect(clippy::shadow_reuse, reason = "rstest-bdd step macros rebind placeholders during expansion")]
 #[then("stdout contains the hello world version")]
 pub fn stdout_contains_version(
     #[from(hello_world_harness)] harness: &mut Harness,
@@ -80,6 +81,7 @@ pub fn stdout_contains_version(
     harness.assert_stdout_contains(&expected)
 }
 
+#[expect(clippy::shadow_reuse, reason = "rstest-bdd step macros rebind placeholders during expansion")]
 #[then("stderr contains {string}")]
 #[expect(
     clippy::needless_pass_by_value,
@@ -92,6 +94,7 @@ pub fn stderr_contains(
     harness.assert_stderr_contains(&expected_stderr)
 }
 
+#[expect(clippy::shadow_reuse, reason = "rstest-bdd step macros rebind placeholders during expansion")]
 #[given("the environment contains {string} = {string}")]
 #[expect(
     clippy::needless_pass_by_value,
@@ -107,6 +110,7 @@ pub fn environment_contains(
     Ok(())
 }
 
+#[expect(clippy::shadow_reuse, reason = "rstest-bdd step macros rebind placeholders during expansion")]
 #[given("the environment does not contain {string}")]
 #[expect(
     clippy::needless_pass_by_value,
@@ -122,6 +126,7 @@ pub fn environment_does_not_contain(
 }
 
 /// Writes docstring contents to the default configuration file.
+#[expect(clippy::shadow_reuse, reason = "rstest-bdd step macros rebind placeholders during expansion")]
 #[given("the hello world config file contains:")]
 pub fn config_file(
     #[from(hello_world_harness)] harness: &Harness,
@@ -131,6 +136,7 @@ pub fn config_file(
 }
 
 /// Writes docstring contents to a named file.
+#[expect(clippy::shadow_reuse, reason = "rstest-bdd step macros rebind placeholders during expansion")]
 #[given("the file {string} contains:")]
 #[expect(
     clippy::needless_pass_by_value,
@@ -145,6 +151,7 @@ pub fn named_file_contains(
 }
 
 /// Writes docstring contents to the XDG config home directory.
+#[expect(clippy::shadow_reuse, reason = "rstest-bdd step macros rebind placeholders during expansion")]
 #[given("the XDG config home contains:")]
 pub fn xdg_config_home_contains(
     #[from(hello_world_harness)] harness: &mut Harness,
@@ -154,6 +161,7 @@ pub fn xdg_config_home_contains(
 }
 
 /// Initialises the scenario using a repository sample configuration.
+#[expect(clippy::shadow_reuse, reason = "rstest-bdd step macros rebind placeholders during expansion")]
 #[given("I start from the sample hello world config {string}")]
 #[expect(
     clippy::needless_pass_by_value,
@@ -166,6 +174,7 @@ pub fn start_from_sample_config(
     harness.write_sample_config(&sample)
 }
 
+#[expect(clippy::shadow_reuse, reason = "rstest-bdd step macros rebind placeholders during expansion")]
 #[given("I start from a missing or invalid sample config {string}")]
 #[expect(
     clippy::needless_pass_by_value,
@@ -216,6 +225,7 @@ fn compose_declarative_globals_from_contents(
     Ok(())
 }
 
+#[expect(clippy::shadow_reuse, reason = "rstest-bdd step macros rebind placeholders during expansion")]
 #[given("I compose hello world globals from declarative layers:")]
 pub fn compose_declarative_globals(
     #[from(hello_world_harness)] harness: &mut Harness,
@@ -224,6 +234,7 @@ pub fn compose_declarative_globals(
     compose_declarative_globals_from_contents(harness, &docstring)
 }
 
+#[expect(clippy::shadow_reuse, reason = "rstest-bdd step macros rebind placeholders during expansion")]
 #[then("the declarative globals recipient is {string}")]
 #[expect(
     clippy::needless_pass_by_value,
@@ -236,6 +247,7 @@ pub fn assert_declarative_recipient(
     harness.assert_declarative_recipient(&expected)
 }
 
+#[expect(clippy::shadow_reuse, reason = "rstest-bdd step macros rebind placeholders during expansion")]
 #[then("the declarative globals salutations are:")]
 pub fn assert_declarative_salutations(
     #[from(hello_world_harness)] harness: &Harness,
