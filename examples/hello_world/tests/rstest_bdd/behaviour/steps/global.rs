@@ -1,0 +1,276 @@
+//! Step definitions for the `hello_world` example.
+//! Drive the binary and assert its observable outputs.
+use crate::behaviour::config::SampleConfigError;
+use crate::behaviour::harness::Harness;
+use anyhow::{anyhow, Context, Result};
+use camino::Utf8PathBuf;
+use hello_world::cli::GlobalArgs;
+use ortho_config::serde_json::{self, Value};
+use ortho_config::MergeComposer;
+use rstest_bdd_macros::{given, then, when};
+use serde::Deserialize;
+
+fn validate_env_key(key: &str) -> Result<()> {
+    anyhow::ensure!(
+        !key.trim().is_empty(),
+        "environment variable key must not be empty"
+    );
+    Ok(())
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "lowercase")]
+enum LayerProvenance {
+    Defaults,
+    Environment,
+    Cli,
+    File,
+}
+
+#[derive(Debug, Deserialize)]
+struct LayerInput {
+    provenance: LayerProvenance,
+    value: Value,
+    path: Option<String>,
+}
+
+/// Runs the binary without additional arguments.
+#[expect(clippy::shadow_reuse, reason = "rstest-bdd step macros rebind placeholders during expansion")]
+#[when("I run the hello world example")]
+pub fn run_without_args(#[from(hello_world_harness)] harness: &mut Harness) -> Result<()> {
+    harness.run_hello(None)
+}
+
+#[expect(clippy::shadow_reuse, reason = "rstest-bdd step macros rebind placeholders during expansion")]
+#[when("I run the hello world example with arguments {string}")]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "rstest-bdd step macros require owned capture values"
+)]
+pub fn run_with_args(
+    #[from(hello_world_harness)] harness: &mut Harness,
+    arguments: String,
+) -> Result<()> {
+    harness.run_hello(Some(arguments))
+}
+
+#[expect(clippy::shadow_reuse, reason = "rstest-bdd step macros rebind placeholders during expansion")]
+#[then("the command succeeds")]
+pub fn command_succeeds(#[from(hello_world_harness)] harness: &mut Harness) -> Result<()> {
+    harness.assert_success()
+}
+
+#[expect(clippy::shadow_reuse, reason = "rstest-bdd step macros rebind placeholders during expansion")]
+#[then("the command fails")]
+pub fn command_fails(#[from(hello_world_harness)] harness: &mut Harness) -> Result<()> {
+    harness.assert_failure()
+}
+
+#[expect(clippy::shadow_reuse, reason = "rstest-bdd step macros rebind placeholders during expansion")]
+#[then("stdout contains {string}")]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "rstest-bdd step macros require owned capture values"
+)]
+pub fn stdout_contains(
+    #[from(hello_world_harness)] harness: &mut Harness,
+    expected_stdout: String,
+) -> Result<()> {
+    harness.assert_stdout_contains(&expected_stdout)
+}
+
+/// Ensures the reported version matches the crate metadata.
+#[expect(clippy::shadow_reuse, reason = "rstest-bdd step macros rebind placeholders during expansion")]
+#[then("stdout contains the hello world version")]
+pub fn stdout_contains_version(
+    #[from(hello_world_harness)] harness: &mut Harness,
+) -> Result<()> {
+    let version = env!("CARGO_PKG_VERSION");
+    let expected = format!("hello-world {version}");
+    harness.assert_stdout_contains(&expected)
+}
+
+#[expect(clippy::shadow_reuse, reason = "rstest-bdd step macros rebind placeholders during expansion")]
+#[then("stderr contains {string}")]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "rstest-bdd step macros require owned capture values"
+)]
+pub fn stderr_contains(
+    #[from(hello_world_harness)] harness: &mut Harness,
+    expected_stderr: String,
+) -> Result<()> {
+    harness.assert_stderr_contains(&expected_stderr)
+}
+
+#[expect(clippy::shadow_reuse, reason = "rstest-bdd step macros rebind placeholders during expansion")]
+#[given("the environment contains {string} = {string}")]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "rstest-bdd step macros require owned capture values"
+)]
+pub fn environment_contains(
+    #[from(hello_world_harness)] harness: &mut Harness,
+    env_key: String,
+    env_value: String,
+) -> Result<()> {
+    validate_env_key(&env_key)?;
+    harness.set_env(&env_key, &env_value);
+    Ok(())
+}
+
+#[expect(clippy::shadow_reuse, reason = "rstest-bdd step macros rebind placeholders during expansion")]
+#[given("the environment does not contain {string}")]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "rstest-bdd step macros require owned capture values"
+)]
+pub fn environment_does_not_contain(
+    #[from(hello_world_harness)] harness: &mut Harness,
+    env_key: String,
+) -> Result<()> {
+    validate_env_key(&env_key)?;
+    harness.remove_env(&env_key);
+    Ok(())
+}
+
+/// Writes docstring contents to the default configuration file.
+#[expect(clippy::shadow_reuse, reason = "rstest-bdd step macros rebind placeholders during expansion")]
+#[given("the hello world config file contains:")]
+pub fn config_file(
+    #[from(hello_world_harness)] harness: &Harness,
+    docstring: String,
+) -> Result<()> {
+    harness.write_config(&docstring)
+}
+
+/// Writes docstring contents to a named file.
+#[expect(clippy::shadow_reuse, reason = "rstest-bdd step macros rebind placeholders during expansion")]
+#[given("the file {string} contains:")]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "rstest-bdd step macros require owned capture values"
+)]
+pub fn named_file_contains(
+    #[from(hello_world_harness)] harness: &Harness,
+    name: String,
+    docstring: String,
+) -> Result<()> {
+    harness.write_named_file(&name, &docstring)
+}
+
+/// Writes docstring contents to the XDG config home directory.
+#[expect(clippy::shadow_reuse, reason = "rstest-bdd step macros rebind placeholders during expansion")]
+#[given("the XDG config home contains:")]
+pub fn xdg_config_home_contains(
+    #[from(hello_world_harness)] harness: &mut Harness,
+    docstring: String,
+) -> Result<()> {
+    harness.write_xdg_config_home(&docstring)
+}
+
+/// Initialises the scenario using a repository sample configuration.
+#[expect(clippy::shadow_reuse, reason = "rstest-bdd step macros rebind placeholders during expansion")]
+#[given("I start from the sample hello world config {string}")]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "rstest-bdd step macros require owned capture values"
+)]
+pub fn start_from_sample_config(
+    #[from(hello_world_harness)] harness: &Harness,
+    sample: String,
+) -> Result<()> {
+    harness.write_sample_config(&sample)
+}
+
+#[expect(clippy::shadow_reuse, reason = "rstest-bdd step macros rebind placeholders during expansion")]
+#[given("I start from a missing or invalid sample config {string}")]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "rstest-bdd step macros require owned capture values"
+)]
+pub fn start_from_invalid_sample_config(
+    #[from(hello_world_harness)] harness: &Harness,
+    sample_name: String,
+) -> Result<()> {
+    match harness.try_write_sample_config(&sample_name) {
+        Ok(()) => {
+            return Err(anyhow!(
+                "expected sample config {sample_name:?} to be missing or invalid"
+            ));
+        }
+        Err(
+            SampleConfigError::OpenSample { .. }
+            | SampleConfigError::ReadSample { .. }
+            | SampleConfigError::WriteSample { .. }
+            | SampleConfigError::InvalidName { .. }
+            | SampleConfigError::OpenConfigDir { .. },
+        ) => {}
+        Err(err) => return Err(anyhow!("unexpected sample config error: {err}")),
+    }
+    Ok(())
+}
+
+fn compose_declarative_globals_from_contents(
+    harness: &mut Harness,
+    contents: &str,
+) -> Result<()> {
+    let inputs: Vec<LayerInput> =
+        serde_json::from_str(contents).context("valid JSON describing declarative layers")?;
+    let mut composer = MergeComposer::new();
+    for input in inputs {
+        match input.provenance {
+            LayerProvenance::Defaults => composer.push_defaults(input.value),
+            LayerProvenance::Environment => composer.push_environment(input.value),
+            LayerProvenance::Cli => composer.push_cli(input.value),
+            LayerProvenance::File => {
+                let path = input.path.map(Utf8PathBuf::from);
+                composer.push_file(input.value, path);
+            }
+        }
+    }
+    let globals = GlobalArgs::merge_from_layers(composer.layers())
+        .context("declarative merge should succeed for globals")?;
+    harness.set_declarative_globals(globals);
+    Ok(())
+}
+
+#[expect(clippy::shadow_reuse, reason = "rstest-bdd step macros rebind placeholders during expansion")]
+#[given("I compose hello world globals from declarative layers:")]
+pub fn compose_declarative_globals(
+    #[from(hello_world_harness)] harness: &mut Harness,
+    docstring: String,
+) -> Result<()> {
+    compose_declarative_globals_from_contents(harness, &docstring)
+}
+
+#[expect(clippy::shadow_reuse, reason = "rstest-bdd step macros rebind placeholders during expansion")]
+#[then("the declarative globals recipient is {string}")]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "rstest-bdd step macros require owned capture values"
+)]
+pub fn assert_declarative_recipient(
+    #[from(hello_world_harness)] harness: &Harness,
+    expected: String,
+) -> Result<()> {
+    harness.assert_declarative_recipient(&expected)
+}
+
+#[expect(clippy::shadow_reuse, reason = "rstest-bdd step macros rebind placeholders during expansion")]
+#[then("the declarative globals salutations are:")]
+pub fn assert_declarative_salutations(
+    #[from(hello_world_harness)] harness: &Harness,
+    docstring: String,
+) -> Result<()> {
+    let expected: Vec<String> = docstring
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .map(str::to_owned)
+        .collect();
+    harness.assert_declarative_salutations(&expected)
+}
+
+#[cfg(test)]
+mod tests;

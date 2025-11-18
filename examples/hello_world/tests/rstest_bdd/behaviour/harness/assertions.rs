@@ -1,9 +1,9 @@
 //! Assertion helpers for validating command output and declarative globals.
-use super::{Expect, World};
+use super::{Expect, Harness};
 use anyhow::{Result, anyhow, ensure};
 use hello_world::cli::GlobalArgs;
 
-impl World {
+impl Harness {
     pub(crate) fn set_declarative_globals(&mut self, globals: GlobalArgs) {
         self.declarative_globals = Some(globals);
     }

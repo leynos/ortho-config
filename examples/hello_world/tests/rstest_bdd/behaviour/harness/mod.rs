@@ -1,8 +1,9 @@
-//! World state and command helpers for the Cucumber harness.
+//! Harness state and command helpers for the `rstest-bdd` harness.
+//!
 //! The harness isolates environment variables per scenario: values stored in
 //! `env` are applied only when launching the command and never leak between
 //! runs. Each scenario owns its own temporary working directory (`workdir`),
-//! which is removed automatically when the world is dropped. Command results
+//! which is removed automatically when the harness is dropped. Command results
 //! and declaratively composed globals live only for the lifetime of a single
 //! scenario to keep assertions deterministic.
 
@@ -11,23 +12,25 @@ mod env;
 mod process;
 mod samples;
 
+#[cfg(test)]
 mod tests;
 
-pub(crate) use super::SampleConfigError;
 pub(crate) use super::config;
-pub(crate) use super::{COMMAND_TIMEOUT, CONFIG_FILE, ENV_PREFIX, binary_path};
+pub(crate) use super::SampleConfigError;
+pub(crate) use super::{binary_path, COMMAND_TIMEOUT, CONFIG_FILE, ENV_PREFIX};
 
 use anyhow::{Context, Result};
+use camino::Utf8PathBuf;
 use cap_std::fs::Dir;
 use hello_world::cli::GlobalArgs;
 use std::borrow::Cow;
 use std::collections::BTreeMap;
+use std::time::Duration;
 use tempfile::TempDir;
 
-/// Shared state threaded through Cucumber steps.
-#[derive(Debug, cucumber::World)]
-#[world(init = Self::init)]
-pub struct World {
+/// Shared state threaded through behavioural steps.
+#[derive(Debug)]
+pub struct Harness {
     /// Result captured after invoking the binary.
     result: Option<CommandResult>,
     /// Temporary working directory isolated per scenario.
@@ -36,6 +39,10 @@ pub struct World {
     env: BTreeMap<String, String>,
     /// Declaratively composed globals used by behavioural tests.
     declarative_globals: Option<GlobalArgs>,
+    /// Optional binary override used by targeted tests.
+    binary_override: Option<Utf8PathBuf>,
+    /// Optional timeout override (primarily for targeted tests).
+    timeout_override: Option<Duration>,
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -46,7 +53,7 @@ pub(crate) enum Expect<'a> {
     StderrContains(&'a str),
 }
 
-impl World {
+impl Harness {
     pub(crate) fn new() -> Result<Self> {
         let workdir = TempDir::new().context("create hello_world workdir")?;
         Ok(Self {
@@ -54,11 +61,9 @@ impl World {
             workdir,
             env: BTreeMap::new(),
             declarative_globals: None,
+            binary_override: None,
+            timeout_override: None,
         })
-    }
-
-    pub(crate) async fn init() -> Result<Self> {
-        async { Self::new() }.await
     }
 
     #[cfg(test)]
@@ -68,6 +73,29 @@ impl World {
 
     fn scenario_dir(&self) -> std::io::Result<Dir> {
         Dir::open_ambient_dir(self.workdir.path(), cap_std::ambient_authority())
+    }
+
+    pub(crate) fn binary(&self) -> Utf8PathBuf {
+        self.binary_override
+            .clone()
+            .unwrap_or_else(super::binary_path)
+    }
+
+    pub(crate) fn command_timeout(&self) -> Duration {
+        self.timeout_override.unwrap_or(super::COMMAND_TIMEOUT)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn set_binary_override<P>(&mut self, path: P)
+    where
+        P: Into<Utf8PathBuf>,
+    {
+        self.binary_override = Some(path.into());
+    }
+
+    #[cfg(test)]
+    pub(crate) fn set_timeout_override(&mut self, duration: Duration) {
+        self.timeout_override = Some(duration);
     }
 }
 
@@ -120,26 +148,13 @@ impl CommandResult {
 /// sequences because `PowerShell` occasionally emits the latter when piping
 /// output between commands.
 fn normalise_newlines(text: Cow<'_, str>) -> String {
-    match text {
-        Cow::Borrowed(borrowed_text) => normalise_borrowed(borrowed_text),
-        Cow::Owned(owned_text) => normalise_owned(owned_text),
+    if !text.contains('\r') {
+        return text.into_owned();
     }
-}
-
-fn normalise_borrowed(text: &str) -> String {
+    let mut text = text.into_owned();
+    text = text.replace("\r\n", "\n");
     if text.contains('\r') {
-        normalise_owned(text.to_owned())
-    } else {
-        text.to_owned()
-    }
-}
-
-fn normalise_owned(mut text: String) -> String {
-    if text.contains('\r') {
-        text = text.replace("\r\n", "\n");
-        if text.contains('\r') {
-            text = text.replace('\r', "\n");
-        }
+        text = text.replace('\r', "\n");
     }
     text
 }
