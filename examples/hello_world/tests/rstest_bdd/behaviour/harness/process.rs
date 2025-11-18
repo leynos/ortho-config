@@ -43,6 +43,8 @@ impl Harness {
         let status = match wait_with_timeout(&mut child, self.command_timeout()) {
             Ok(status) => status,
             Err(err) => {
+                let _ = child.kill();
+                let _ = child.wait();
                 let _ = join_reader(stdout_reader, "hello_world stdout");
                 let _ = join_reader(stderr_reader, "hello_world stderr");
                 return Err(err);
