@@ -2,14 +2,16 @@
 //!
 //! Binds CLI, environment, and default layers via `OrthoConfig` so tests can
 //! drive the binary with predictable inputs.
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 
-use clap::{ArgAction, Args, Parser, Subcommand};
-use ortho_config::{OrthoConfig, OrthoMergeExt, SubcmdConfigMerge};
+use clap::{ArgAction, Args, CommandFactory, FromArgMatches, Parser, Subcommand};
+use fluent_bundle::FluentValue;
+use ortho_config::{LocalizationArgs, Localizer, OrthoConfig, OrthoMergeExt, SubcmdConfigMerge};
 use serde::{Deserialize, Serialize};
 
 use crate::error::{HelloWorldError, ValidationError};
+use crate::localizer::{CLI_ABOUT_MESSAGE_ID, CLI_LONG_ABOUT_MESSAGE_ID};
 
 mod commands;
 mod config_loading;
@@ -49,6 +51,41 @@ pub struct CommandLine {
     /// Selected workflow to execute.
     #[command(subcommand)]
     pub command: Commands,
+}
+
+impl CommandLine {
+    /// Builds the derived `clap::Command` with localised copy patched in.
+    #[must_use]
+    pub fn command_with_localizer(localizer: &dyn Localizer) -> clap::Command {
+        apply_command_localisation(Self::command(), localizer)
+    }
+
+    /// Parses command-line arguments using the supplied localiser.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`clap::Error`] when parsing fails.
+    pub fn try_parse_with_localizer(localizer: &dyn Localizer) -> Result<Self, clap::Error> {
+        Self::try_parse_from_localizer(std::env::args_os(), localizer)
+    }
+
+    /// Parses the provided iterator of arguments using the supplied localiser.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`clap::Error`] when parsing fails.
+    pub fn try_parse_from_localizer<I, T>(
+        iter: I,
+        localizer: &dyn Localizer,
+    ) -> Result<Self, clap::Error>
+    where
+        I: IntoIterator<Item = T>,
+        T: Into<std::ffi::OsString> + Clone,
+    {
+        let mut command = Self::command_with_localizer(localizer);
+        let mut matches = command.try_get_matches_from_mut(iter)?;
+        Self::from_arg_matches_mut(&mut matches).map_err(|err| err.with_cmd(&command))
+    }
 }
 
 #[expect(
@@ -102,6 +139,23 @@ pub enum Commands {
     /// Says goodbye while describing how the farewell will be delivered.
     #[command(name = "take-leave")]
     TakeLeave(TakeLeaveCommand),
+}
+
+fn apply_command_localisation(
+    mut command: clap::Command,
+    localizer: &dyn Localizer,
+) -> clap::Command {
+    if let Some(about) = localizer.get_message(CLI_ABOUT_MESSAGE_ID) {
+        command = command.about(about);
+    }
+    let mut args: LocalizationArgs<'_> = HashMap::new();
+    args.insert("binary", FluentValue::from(command.get_name()));
+    if let Some(long_about) =
+        localizer.get_message_with_args(CLI_LONG_ABOUT_MESSAGE_ID, Some(&args))
+    {
+        command = command.long_about(long_about);
+    }
+    command
 }
 
 /// Resolves the global configuration by layering defaults with CLI overrides.

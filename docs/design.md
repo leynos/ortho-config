@@ -633,6 +633,18 @@ catalogues guarantee that every message has a fallback, while consumer bundles
 unlock per-application phrasing and additional languages without forking the
 library.
 
+The implementation introduces a `LocalizationArgs<'a>` alias that wraps a
+`HashMap<&'a str, FluentValue<'a>>` so Fluent lookups retain access to named
+placeholders without forcing each caller to spell out the map shape. The
+`Localizer` trait itself is `Send + Sync`, exposing `get_message`,
+`get_message_with_args`, and helper methods (`message_or`,
+`message_with_args_or`) that simplify fallbacks to `clap`'s stock copy.
+A `NoOpLocalizer` ships alongside the trait so binaries that have not adopted
+translations can opt out without additional glue. The `hello_world` example
+exercises the trait via a `DemoLocalizer`, threading translations into
+`CommandLine::command_with_localizer` and `try_parse_with_localizer` to prove
+that CLI help text and errors can be patched without rewriting parser wiring.
+
 ### 4.13. Dynamic rule tables
 
 Configuration structures may include map fields such as

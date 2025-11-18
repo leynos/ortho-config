@@ -36,6 +36,12 @@ production-ready complexity.
   driving a behavioural scenario that composes JSON-described layers into
   `GlobalArgs`, asserting that default salutations are preserved when
   environment layers append new values.
+- **Localised help text**: ship a `DemoLocalizer` that implements
+  `ortho_config::Localizer`, then thread it through
+  `CommandLine::command_with_localizer` and
+  `CommandLine::try_parse_with_localizer` so the sample `--help` output and
+  validation errors use translated strings. This doubles as a reference for
+  applications adopting Fluent bundles.
 - **Shell and Windows automation**: provide paired `.sh` and `.cmd` scripts
   highlighting how environment variables, configuration files, and command-line
   overrides interact. Include examples covering default configuration,
@@ -64,6 +70,16 @@ production-ready complexity.
   automated coverage to demonstrate reproducibility.
 - Document how to run the example from a fresh checkout through the scripts and
   behavioural tests.
+
+## Localiser demonstration
+
+The `src/localizer.rs` module implements `DemoLocalizer`, a tiny catalogue that
+returns translated `about`/`long_about` strings for the CLI. The binary now
+instantiates this localiser before parsing arguments and calls
+`CommandLine::try_parse_with_localizer`, ensuring `--help` output reflects the
+translations. Consumers who are not ready to ship real strings can fall back to
+`DemoLocalizer::noop()` (a thin wrapper over `NoOpLocalizer`) until Fluent
+bundles land.
 
 ## Configuration samples and scripts
 

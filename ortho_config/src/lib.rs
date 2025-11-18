@@ -36,6 +36,7 @@ pub mod declarative;
 pub mod discovery;
 mod error;
 pub mod file;
+mod localizer;
 mod merge;
 mod result_ext;
 pub mod subcommand;
@@ -71,6 +72,7 @@ pub use declarative::{DeclarativeMerge, MergeComposer, MergeLayer, MergeProvenan
 pub use discovery::{ConfigDiscovery, ConfigDiscoveryBuilder, DiscoveryLoadOutcome};
 pub use error::{OrthoError, is_display_request};
 pub use file::load_config_file;
+pub use localizer::{LocalizationArgs, Localizer, NoOpLocalizer};
 /// Re-export sanitization helpers used to strip `None` fields and produce a
 /// Figment provider.
 ///

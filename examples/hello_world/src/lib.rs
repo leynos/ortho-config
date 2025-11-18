@@ -3,6 +3,7 @@
 
 pub mod cli;
 pub mod error;
+pub mod localizer;
 pub mod message;
 
 #[cfg(test)]
