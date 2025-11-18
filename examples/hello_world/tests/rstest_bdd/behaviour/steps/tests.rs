@@ -1,6 +1,5 @@
 //! Tests for composing declarative globals and validating step behaviours.
 use crate::behaviour::harness::Harness;
-use crate::fixtures::hello_world_harness;
 use anyhow::{anyhow, Result};
 use camino::Utf8PathBuf;
 use rstest::rstest;
@@ -10,7 +9,7 @@ use rstest::rstest;
     r#"[
         {"provenance": "unknown", "value": {"foo": "bar"}}
     ]"#,
-    "unknown provenance",
+    "unknown variant",
     "expected provenance error when composing declarative globals"
 )]
 #[case(
@@ -25,11 +24,13 @@ fn compose_declarative_globals_rejects_invalid_input(
     hello_world_harness: Result<Harness>,
 ) -> Result<()> {
     let mut harness = hello_world_harness?;
-    let result = super::compose_declarative_globals_from_contents(&mut harness, input);
-    let Err(err) = result else {
-        return Err(anyhow!("{error_context}"));
-    };
-    anyhow::ensure!(err.to_string().contains(expected_message_fragment));
+    let err = super
+        .compose_declarative_globals_from_contents(&mut harness, input)
+        .expect_err(error_context);
+    anyhow::ensure!(
+        err.to_string().contains(expected_message_fragment),
+        "expected error containing '{expected_message_fragment}', got: {err}"
+    );
     Ok(())
 }
 
@@ -38,7 +39,10 @@ fn environment_contains_rejects_blank_key(hello_world_harness: Result<Harness>) 
     let mut harness = hello_world_harness?;
     let err = super::environment_contains(&mut harness, "  ".into(), "value".into())
         .expect_err("blank keys must be rejected");
-    anyhow::ensure!(err.to_string().contains("must not be empty"));
+    anyhow::ensure!(
+        err.to_string().contains("must not be empty"),
+        "expected error containing 'must not be empty', got: {err}"
+    );
     Ok(())
 }
 
@@ -47,6 +51,9 @@ fn run_without_args_errors_on_missing_binary(hello_world_harness: Result<Harness
     let mut harness = hello_world_harness?;
     harness.set_binary_override(Utf8PathBuf::from("/missing/hello_world"));
     let err = super::run_without_args(&mut harness).expect_err("missing binary should fail");
-    anyhow::ensure!(err.to_string().contains("spawn"));
+    anyhow::ensure!(
+        err.to_string().contains("spawn"),
+        "expected error containing 'spawn', got: {err}"
+    );
     Ok(())
 }

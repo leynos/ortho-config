@@ -19,8 +19,17 @@ fn validate_env_key(key: &str) -> Result<()> {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "lowercase")]
+enum LayerProvenance {
+    Defaults,
+    Environment,
+    Cli,
+    File,
+}
+
+#[derive(Debug, Deserialize)]
 struct LayerInput {
-    provenance: String,
+    provenance: LayerProvenance,
     value: Value,
     path: Option<String>,
 }
@@ -193,7 +202,9 @@ pub fn start_from_invalid_sample_config(
         Err(
             SampleConfigError::OpenSample { .. }
             | SampleConfigError::ReadSample { .. }
-            | SampleConfigError::WriteSample { .. },
+            | SampleConfigError::WriteSample { .. }
+            | SampleConfigError::InvalidName { .. }
+            | SampleConfigError::OpenConfigDir { .. },
         ) => {}
         Err(err) => return Err(anyhow!("unexpected sample config error: {err}")),
     }
@@ -208,15 +219,14 @@ fn compose_declarative_globals_from_contents(
         serde_json::from_str(contents).context("valid JSON describing declarative layers")?;
     let mut composer = MergeComposer::new();
     for input in inputs {
-        match input.provenance.as_str() {
-            "defaults" => composer.push_defaults(input.value),
-            "environment" => composer.push_environment(input.value),
-            "cli" => composer.push_cli(input.value),
-            "file" => {
+        match input.provenance {
+            LayerProvenance::Defaults => composer.push_defaults(input.value),
+            LayerProvenance::Environment => composer.push_environment(input.value),
+            LayerProvenance::Cli => composer.push_cli(input.value),
+            LayerProvenance::File => {
                 let path = input.path.map(Utf8PathBuf::from);
                 composer.push_file(input.value, path);
             }
-            other => return Err(anyhow!("unknown provenance {other}")),
         }
     }
     let globals = GlobalArgs::merge_from_layers(composer.layers())

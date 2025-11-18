@@ -113,29 +113,35 @@ fn wait_with_timeout(child: &mut Child, timeout: Duration) -> Result<ExitStatus>
         }
 
         if start.elapsed() > timeout {
-            if let Some(status) = child
-                .try_wait()
-                .context("poll hello_world binary status after timeout")?
-            {
-                return Ok(status);
-            }
-            child
-                .kill()
-                .context("kill stalled hello_world binary")?;
-            child
-                .wait()
-                .context("wait for killed hello_world binary")?;
-            return Err(anyhow!("hello_world binary timed out"));
+            return handle_timeout(child);
         }
 
         thread::sleep(Duration::from_millis(25));
     }
 }
 
+fn handle_timeout(child: &mut Child) -> Result<ExitStatus> {
+    if let Some(status) = child
+        .try_wait()
+        .context("poll hello_world binary status after timeout")?
+    {
+        return Ok(status);
+    }
+    child
+        .kill()
+        .context("kill stalled hello_world binary")?;
+    child
+        .wait()
+        .context("wait for killed hello_world binary")?;
+    Err(anyhow!("hello_world binary timed out"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use anyhow::Result;
     use camino::Utf8PathBuf;
+    use std::process::Stdio;
     use tempfile::TempDir;
 
     struct CompiledBinary {
@@ -169,8 +175,30 @@ mod tests {
         }
     }
 
+    fn rustc_available() -> bool {
+        Command::new("rustc")
+            .arg("--version")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .map(|status| status.success())
+            .unwrap_or(false)
+    }
+
+    fn ensure_rustc_available() -> Result<bool> {
+        if rustc_available() {
+            Ok(true)
+        } else {
+            eprintln!("skipping hello_world harness process tests: rustc not available");
+            Ok(false)
+        }
+    }
+
     #[test]
     fn run_example_times_out() -> Result<()> {
+        if !ensure_rustc_available()? {
+            return Ok(());
+        }
         let binary = CompiledBinary::new(
             r#"
             fn main() {
@@ -190,6 +218,9 @@ mod tests {
 
     #[test]
     fn run_example_reports_spawn_errors() -> Result<()> {
+        if !ensure_rustc_available()? {
+            return Ok(());
+        }
         let mut harness = Harness::for_tests()?;
         harness.set_binary_override(Utf8PathBuf::from("/definitely/missing/binary"));
         let err = harness
@@ -201,6 +232,9 @@ mod tests {
 
     #[test]
     fn run_example_captures_failure_status() -> Result<()> {
+        if !ensure_rustc_available()? {
+            return Ok(());
+        }
         let binary = CompiledBinary::new(
             r#"
             fn main() {
