@@ -10,7 +10,7 @@ use std::time::{Duration, Instant};
 impl Harness {
     pub(crate) fn run_hello(&mut self, args: Option<String>) -> Result<()> {
         let parsed = args
-            .map(|raw| tokenise_shell_args(&raw))
+            .map(|raw| tokenize_shell_args(&raw))
             .transpose()? // Option<Result<_>> -> Result<Option<_>>
             .unwrap_or_default();
         self.run_example(parsed)
@@ -70,14 +70,14 @@ impl Harness {
     }
 }
 
-fn tokenise_shell_args(raw: &str) -> Result<Vec<String>> {
+fn tokenize_shell_args(raw: &str) -> Result<Vec<String>> {
     let trimmed = raw.trim();
     if trimmed.is_empty() {
         return Ok(Vec::new());
     }
 
     split(trimmed).ok_or_else(|| {
-        anyhow!("failed to tokenise shell arguments; raw={raw:?}, trimmed={trimmed:?}")
+        anyhow!("failed to tokenize shell arguments; raw={raw:?}, trimmed={trimmed:?}")
     })
 }
 
