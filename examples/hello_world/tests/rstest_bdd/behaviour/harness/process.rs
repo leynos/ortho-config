@@ -196,13 +196,13 @@ mod tests {
         }
     }
 
-    fn skip_if_no_rustc() -> Result<bool> {
-        Ok(!ensure_rustc_available()?)
+    fn has_rustc() -> Result<bool> {
+        ensure_rustc_available()
     }
 
     #[test]
     fn run_example_times_out() -> Result<()> {
-        if skip_if_no_rustc()? {
+        if !has_rustc()? {
             return Ok(());
         }
         let binary = CompiledBinary::new(
@@ -224,7 +224,7 @@ mod tests {
 
     #[test]
     fn run_example_reports_spawn_errors() -> Result<()> {
-        if skip_if_no_rustc()? {
+        if !has_rustc()? {
             return Ok(());
         }
         let mut harness = Harness::for_tests()?;
@@ -238,7 +238,7 @@ mod tests {
 
     #[test]
     fn run_example_captures_failure_status() -> Result<()> {
-        if skip_if_no_rustc()? {
+        if !has_rustc()? {
             return Ok(());
         }
         let binary = CompiledBinary::new(
