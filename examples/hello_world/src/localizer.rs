@@ -11,10 +11,18 @@ use std::collections::HashMap;
 use fluent_bundle::FluentValue;
 use ortho_config::{LocalizationArgs, Localizer, NoOpLocalizer};
 
+/// Base identifier for the hello world CLI catalogue.
+pub const CLI_BASE_MESSAGE_ID: &str = "hello_world.cli";
 /// Identifier used for the short CLI description.
 pub const CLI_ABOUT_MESSAGE_ID: &str = "hello_world.cli.about";
 /// Identifier used for the long CLI description.
 pub const CLI_LONG_ABOUT_MESSAGE_ID: &str = "hello_world.cli.long_about";
+/// Identifier for the usage string presented on `--help`.
+pub const CLI_USAGE_MESSAGE_ID: &str = "hello_world.cli.usage";
+/// Identifier for the greet subcommand description.
+pub const CLI_GREET_ABOUT_MESSAGE_ID: &str = "hello_world.cli.greet.about";
+/// Identifier for the take-leave subcommand description.
+pub const CLI_TAKE_LEAVE_ABOUT_MESSAGE_ID: &str = "hello_world.cli.take-leave.about";
 
 /// Localiser that returns baked-in demo strings for the CLI entry points.
 #[derive(Debug, Clone)]
@@ -32,6 +40,18 @@ impl Default for DemoLocalizer {
         catalogue.insert(
             CLI_LONG_ABOUT_MESSAGE_ID,
             "Use {binary} to explore layered greetings across config, env, and CLI",
+        );
+        catalogue.insert(
+            CLI_USAGE_MESSAGE_ID,
+            "Usage:\n  {binary} [OPTIONS] <COMMAND>\n\nVisit --help for details.",
+        );
+        catalogue.insert(
+            CLI_GREET_ABOUT_MESSAGE_ID,
+            "Prints a friendly greeting using any configured templates.",
+        );
+        catalogue.insert(
+            CLI_TAKE_LEAVE_ABOUT_MESSAGE_ID,
+            "Describes how the farewell workflow proceeds for the recipient.",
         );
         Self { catalogue }
     }
@@ -52,30 +72,25 @@ impl DemoLocalizer {
 }
 
 impl Localizer for DemoLocalizer {
-    fn get_message(&self, id: &str) -> Option<String> {
-        self.catalogue.get(id).map(|msg| String::from(*msg))
+    fn lookup(&self, id: &str, args: Option<&LocalizationArgs<'_>>) -> Option<String> {
+        let template = self.catalogue.get(id)?;
+        Some(args.map_or_else(
+            || (*template).to_owned(),
+            |values| render_template_with_args(template, values),
+        ))
     }
+}
 
-    fn get_message_with_args(
-        &self,
-        id: &str,
-        args: Option<&LocalizationArgs<'_>>,
-    ) -> Option<String> {
-        if id == CLI_LONG_ABOUT_MESSAGE_ID {
-            let binary = args
-                .and_then(|values| values.get("binary"))
-                .and_then(|value| match value {
-                    FluentValue::String(text) => Some(text.to_string()),
-                    _ => None,
-                })
-                .unwrap_or_else(|| String::from("hello-world"));
-            return Some(format!(
-                "Use {binary} to explore layered greetings across files, env vars, \
-                 and CLI flags.",
-            ));
-        }
-        self.get_message(id)
+fn render_template_with_args(template: &str, values: &LocalizationArgs<'_>) -> String {
+    let mut rendered = template.to_owned();
+    for (key, value) in values {
+        let FluentValue::String(text) = value else {
+            continue;
+        };
+        let placeholder = format!("{{{key}}}");
+        rendered = rendered.replace(&placeholder, text);
     }
+    rendered
 }
 
 #[cfg(test)]
@@ -87,7 +102,7 @@ mod tests {
     fn demo_localiser_returns_copy() {
         let localiser = DemoLocalizer::default();
         let about = localiser
-            .get_message(CLI_ABOUT_MESSAGE_ID)
+            .lookup(CLI_ABOUT_MESSAGE_ID, None)
             .expect("demo copy should exist");
         assert!(about.contains("demo"));
     }
@@ -98,7 +113,7 @@ mod tests {
         let mut args: LocalizationArgs<'_> = HashMap::new();
         args.insert("binary", "hello-world".into());
         let long_about = localiser
-            .get_message_with_args(CLI_LONG_ABOUT_MESSAGE_ID, Some(&args))
+            .lookup(CLI_LONG_ABOUT_MESSAGE_ID, Some(&args))
             .expect("long description should exist");
         assert!(long_about.contains("hello-world"));
     }

@@ -2,7 +2,8 @@
 //!
 //! Binds CLI, environment, and default layers via `OrthoConfig` so tests can
 //! drive the binary with predictable inputs.
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
+use std::mem;
 use std::path::{Path, PathBuf};
 
 use clap::{ArgAction, Args, CommandFactory, FromArgMatches, Parser, Subcommand};
@@ -11,7 +12,9 @@ use ortho_config::{LocalizationArgs, Localizer, OrthoConfig, OrthoMergeExt, Subc
 use serde::{Deserialize, Serialize};
 
 use crate::error::{HelloWorldError, ValidationError};
-use crate::localizer::{CLI_ABOUT_MESSAGE_ID, CLI_LONG_ABOUT_MESSAGE_ID};
+use crate::localizer::{
+    CLI_ABOUT_MESSAGE_ID, CLI_BASE_MESSAGE_ID, CLI_LONG_ABOUT_MESSAGE_ID, CLI_USAGE_MESSAGE_ID,
+};
 
 mod commands;
 mod config_loading;
@@ -54,19 +57,13 @@ pub struct CommandLine {
 }
 
 impl CommandLine {
-    /// Builds the derived `clap::Command` with localised copy patched in.
-    #[must_use]
-    pub fn command_with_localizer(localizer: &dyn Localizer) -> clap::Command {
-        apply_command_localisation(Self::command(), localizer)
-    }
-
     /// Parses command-line arguments using the supplied localiser.
     ///
     /// # Errors
     ///
     /// Returns a [`clap::Error`] when parsing fails.
-    pub fn try_parse_with_localizer(localizer: &dyn Localizer) -> Result<Self, clap::Error> {
-        Self::try_parse_from_localizer(std::env::args_os(), localizer)
+    pub fn try_parse_localized_env(localizer: &dyn Localizer) -> Result<Self, clap::Error> {
+        Self::try_parse_localized(std::env::args_os(), localizer)
     }
 
     /// Parses the provided iterator of arguments using the supplied localiser.
@@ -74,7 +71,7 @@ impl CommandLine {
     /// # Errors
     ///
     /// Returns a [`clap::Error`] when parsing fails.
-    pub fn try_parse_from_localizer<I, T>(
+    pub fn try_parse_localized<I, T>(
         iter: I,
         localizer: &dyn Localizer,
     ) -> Result<Self, clap::Error>
@@ -82,9 +79,72 @@ impl CommandLine {
         I: IntoIterator<Item = T>,
         T: Into<std::ffi::OsString> + Clone,
     {
-        let mut command = Self::command_with_localizer(localizer);
+        let mut command = Self::command().localize(localizer);
         let mut matches = command.try_get_matches_from_mut(iter)?;
         Self::from_arg_matches_mut(&mut matches).map_err(|err| err.with_cmd(&command))
+    }
+}
+
+/// Extension trait that applies localisation to a `clap::Command` tree.
+pub trait LocalizeCmd {
+    /// Rewrites the command metadata (about, help, usage, etc.) using the provided localiser.
+    #[must_use]
+    fn localize(self, localizer: &dyn Localizer) -> Self;
+}
+
+impl LocalizeCmd for clap::Command {
+    fn localize(mut self, localizer: &dyn Localizer) -> Self {
+        let mut path = Vec::new();
+        localize_command_tree(&mut self, localizer, &mut path);
+        self
+    }
+}
+
+fn localize_command_tree(
+    command: &mut clap::Command,
+    localizer: &dyn Localizer,
+    path: &mut Vec<String>,
+) {
+    apply_command_metadata(command, localizer, path);
+    for subcommand in command.get_subcommands_mut() {
+        path.push(subcommand.get_name().to_owned());
+        localize_command_tree(subcommand, localizer, path);
+        path.pop();
+    }
+}
+
+fn apply_command_metadata(command: &mut clap::Command, localizer: &dyn Localizer, path: &[String]) {
+    let args = localization_args_for(command);
+    let about_id = message_id(path, "about");
+    if let Some(about) = localizer.lookup(&about_id, None) {
+        *command = mem::take(command).about(about);
+    }
+    let long_about_id = message_id(path, "long_about");
+    if let Some(long_about) = localizer.lookup(&long_about_id, Some(&args)) {
+        *command = mem::take(command).long_about(long_about);
+    }
+    let usage_id = message_id(path, "usage");
+    if let Some(usage) = localizer.lookup(&usage_id, Some(&args)) {
+        *command = mem::take(command).override_usage(usage);
+    }
+}
+
+fn localization_args_for(command: &clap::Command) -> LocalizationArgs<'static> {
+    let mut args = LocalizationArgs::default();
+    args.insert("binary", FluentValue::from(command.get_name().to_owned()));
+    args
+}
+
+fn message_id(path: &[String], suffix: &str) -> String {
+    if path.is_empty() {
+        match suffix {
+            "about" => CLI_ABOUT_MESSAGE_ID.to_owned(),
+            "long_about" => CLI_LONG_ABOUT_MESSAGE_ID.to_owned(),
+            "usage" => CLI_USAGE_MESSAGE_ID.to_owned(),
+            other => format!("{CLI_BASE_MESSAGE_ID}.{other}"),
+        }
+    } else {
+        format!("{CLI_BASE_MESSAGE_ID}.{}.{}", path.join("."), suffix)
     }
 }
 
@@ -139,23 +199,6 @@ pub enum Commands {
     /// Says goodbye while describing how the farewell will be delivered.
     #[command(name = "take-leave")]
     TakeLeave(TakeLeaveCommand),
-}
-
-fn apply_command_localisation(
-    mut command: clap::Command,
-    localizer: &dyn Localizer,
-) -> clap::Command {
-    if let Some(about) = localizer.get_message(CLI_ABOUT_MESSAGE_ID) {
-        command = command.about(about);
-    }
-    let mut args: LocalizationArgs<'_> = HashMap::new();
-    args.insert("binary", FluentValue::from(command.get_name()));
-    if let Some(long_about) =
-        localizer.get_message_with_args(CLI_LONG_ABOUT_MESSAGE_ID, Some(&args))
-    {
-        command = command.long_about(long_about);
-    }
-    command
 }
 
 /// Resolves the global configuration by layering defaults with CLI overrides.

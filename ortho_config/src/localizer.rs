@@ -25,36 +25,12 @@ pub type LocalizationArgs<'value> = HashMap<&'value str, FluentValue<'value>>;
 /// applications to store it behind `Arc<dyn Localizer>` and thread it through
 /// builders at runtime.
 pub trait Localizer: Send + Sync {
-    /// Returns the message for the requested identifier.
-    fn get_message(&self, id: &str) -> Option<String>;
+    /// Performs a localisation lookup for the provided identifier.
+    fn lookup(&self, id: &str, args: Option<&LocalizationArgs<'_>>) -> Option<String>;
 
-    /// Returns the message for the identifier, formatting it with optional
-    /// arguments when available.
-    fn get_message_with_args(
-        &self,
-        id: &str,
-        args: Option<&LocalizationArgs<'_>>,
-    ) -> Option<String> {
-        let _ = args;
-        self.get_message(id)
-    }
-
-    /// Resolves the message, falling back to the provided string when no
-    /// translation exists.
-    fn message_or(&self, id: &str, fallback: &str) -> String {
-        self.message_with_args_or(id, None, fallback)
-    }
-
-    /// Resolves the message with arguments, falling back to a default when no
-    /// translation exists.
-    fn message_with_args_or(
-        &self,
-        id: &str,
-        args: Option<&LocalizationArgs<'_>>,
-        fallback: &str,
-    ) -> String {
-        self.get_message_with_args(id, args)
-            .unwrap_or_else(|| fallback.to_owned())
+    /// Resolves the message and returns a fallback string when no translation exists.
+    fn message(&self, id: &str, args: Option<&LocalizationArgs<'_>>, fallback: &str) -> String {
+        self.lookup(id, args).unwrap_or_else(|| fallback.to_owned())
     }
 }
 
@@ -71,7 +47,7 @@ impl NoOpLocalizer {
 }
 
 impl Localizer for NoOpLocalizer {
-    fn get_message(&self, _id: &str) -> Option<String> {
+    fn lookup(&self, _id: &str, _args: Option<&LocalizationArgs<'_>>) -> Option<String> {
         None
     }
 }
@@ -85,31 +61,27 @@ mod tests {
     #[rstest]
     fn noop_localizer_relies_on_fallback() {
         let localizer = NoOpLocalizer::new();
-        let resolved = localizer.message_or("cli.about", "fallback");
+        let resolved = localizer.message("cli.about", None, "fallback");
         assert_eq!(resolved, "fallback");
     }
 
     struct StubLocalizer;
 
     impl Localizer for StubLocalizer {
-        fn get_message(&self, id: &str) -> Option<String> {
-            Some(format!("{id}:no-args"))
-        }
-
-        fn get_message_with_args(
-            &self,
-            id: &str,
-            args: Option<&LocalizationArgs<'_>>,
-        ) -> Option<String> {
-            let values = args?;
-            let subject = values
-                .get("subject")
-                .and_then(|value| match value {
-                    FluentValue::String(text) => Some(text.to_string()),
-                    _ => None,
-                })
-                .unwrap_or_else(|| String::from("<missing>"));
-            Some(format!("{id}:{subject}"))
+        fn lookup(&self, id: &str, args: Option<&LocalizationArgs<'_>>) -> Option<String> {
+            Some(args.map_or_else(
+                || format!("{id}:no-args"),
+                |values| {
+                    let subject = values
+                        .get("subject")
+                        .and_then(|value| match value {
+                            FluentValue::String(text) => Some(text.to_string()),
+                            _ => None,
+                        })
+                        .unwrap_or_else(|| String::from("<missing>"));
+                    format!("{id}:{subject}")
+                },
+            ))
         }
     }
 
@@ -118,7 +90,7 @@ mod tests {
         let localizer = StubLocalizer;
         let mut args: LocalizationArgs<'static> = HashMap::new();
         args.insert("subject", FluentValue::from("hello"));
-        let resolved = localizer.message_with_args_or("cli.about", Some(&args), "fallback");
+        let resolved = localizer.message("cli.about", Some(&args), "fallback");
         assert_eq!(resolved, "cli.about:hello");
     }
 }

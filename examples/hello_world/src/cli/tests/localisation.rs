@@ -1,12 +1,13 @@
 //! Tests covering the CLI localisation helpers.
 
-use super::super::{CommandLine, Commands};
+use super::super::{CommandLine, Commands, LocalizeCmd};
 use crate::localizer::DemoLocalizer;
+use clap::CommandFactory;
 
 #[test]
 fn command_with_localiser_overrides_copy() {
     let localiser = DemoLocalizer::default();
-    let command = CommandLine::command_with_localizer(&localiser);
+    let command = CommandLine::command().localize(&localiser);
     let about = command
         .get_about()
         .expect("about text should be set")
@@ -21,10 +22,24 @@ fn command_with_localiser_overrides_copy() {
 }
 
 #[test]
+fn localises_subcommand_tree() {
+    let localiser = DemoLocalizer::default();
+    let command = CommandLine::command().localize(&localiser);
+    let greet = command
+        .get_subcommands()
+        .find(|sub| sub.get_name() == "greet")
+        .expect("greet subcommand must exist");
+    let about = greet
+        .get_about()
+        .expect("greet about should be localised")
+        .to_string();
+    assert!(about.contains("friendly greeting"));
+}
+
+#[test]
 fn try_parse_with_localiser_builds_cli() {
     let args = ["hello-world", "greet"];
     let localiser = DemoLocalizer::default();
-    let cli =
-        CommandLine::try_parse_from_localizer(args, &localiser).expect("expected to parse args");
+    let cli = CommandLine::try_parse_localized(args, &localiser).expect("expected to parse args");
     assert!(matches!(cli.command, Commands::Greet(_)));
 }

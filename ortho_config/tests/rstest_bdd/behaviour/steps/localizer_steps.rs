@@ -71,21 +71,16 @@ impl AsRef<str> for ExpectedText {
 struct SubjectLocalizer;
 
 impl Localizer for SubjectLocalizer {
-    fn get_message(&self, id: &str) -> Option<String> {
-        Some(format!("{id}:no-args"))
-    }
-
-    fn get_message_with_args(
-        &self,
-        id: &str,
-        args: Option<&LocalizationArgs<'_>>,
-    ) -> Option<String> {
-        let values = args?;
-        let subject = values.get("subject").and_then(|value| match value {
-            FluentValue::String(text) => Some(text.to_string()),
-            _ => None,
-        })?;
-        Some(format!("Hola, {subject}! ({id})"))
+    fn lookup(&self, id: &str, args: Option<&LocalizationArgs<'_>>) -> Option<String> {
+        if let Some(values) = args {
+            let subject = values.get("subject").and_then(|value| match value {
+                FluentValue::String(text) => Some(text.to_string()),
+                _ => None,
+            })?;
+            Some(format!("Hola, {subject}! ({id})"))
+        } else {
+            Some(format!("{id}:no-args"))
+        }
     }
 }
 
@@ -107,7 +102,7 @@ fn request_without_args(
 ) -> Result<()> {
     let resolved = context
         .localizer
-        .with_ref(|localizer| localizer.message_or(id.as_ref(), fallback.as_ref()))
+        .with_ref(|localizer| localizer.message(id.as_ref(), None, fallback.as_ref()))
         .ok_or_else(|| anyhow!("localizer must be initialised"))?;
     context.resolved.set(resolved);
     Ok(())
@@ -125,7 +120,7 @@ fn request_with_subject(
             let mut args: LocalizationArgs<'_> = HashMap::new();
             args.insert("subject", FluentValue::from(subject.as_ref()));
             let fallback_text = format!("missing:{}", id.as_ref());
-            localizer.message_with_args_or(id.as_ref(), Some(&args), fallback_text.as_str())
+            localizer.message(id.as_ref(), Some(&args), fallback_text.as_str())
         })
         .ok_or_else(|| anyhow!("localizer must be initialised"))?;
     context.resolved.set(resolved);

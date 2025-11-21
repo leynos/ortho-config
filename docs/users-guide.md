@@ -150,17 +150,17 @@ resolved messages or fall back to the stock help text. The helper type
 placeholder model, keeping argument-aware lookups ergonomic.
 
 The Hello World example ships `hello_world::localizer::DemoLocalizer`, which
-drives `CommandLine::command_with_localizer` and
-`CommandLine::try_parse_with_localizer`. This lets the sample wire translated
+drives `CommandLine::command().localize(&localiser)` and
+`CommandLine::try_parse_localized_env`. This lets the sample wire translated
 `about`/`long_about` strings into the generated `clap::Command` before any
 parsing occurs, so `--help` exits reuse the translated copy as well:
 
 ```rust
-use hello_world::cli::CommandLine;
+use hello_world::cli::{CommandLine, LocalizeCmd};
 use hello_world::localizer::DemoLocalizer;
 
 let localiser = DemoLocalizer::default();
-let command = CommandLine::command_with_localizer(&localiser);
+let command = CommandLine::command().localize(&localiser);
 assert!(command
     .get_about()
     .expect("demo about text")

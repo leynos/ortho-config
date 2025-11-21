@@ -33,7 +33,7 @@ fn run() -> Result<(), HelloWorldError> {
 
 fn parse_command_line() -> Result<CommandLine, HelloWorldError> {
     let localizer = DemoLocalizer::default();
-    match CommandLine::try_parse_with_localizer(&localizer) {
+    match CommandLine::try_parse_localized_env(&localizer) {
         Ok(cli) => Ok(cli),
         Err(err) => {
             if is_display_request(&err) {
