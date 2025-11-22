@@ -3,7 +3,6 @@
 //! Binds CLI, environment, and default layers via `OrthoConfig` so tests can
 //! drive the binary with predictable inputs.
 use std::collections::BTreeMap;
-use std::mem;
 use std::path::{Path, PathBuf};
 
 use clap::{ArgAction, Args, CommandFactory, FromArgMatches, Parser, Subcommand};
@@ -115,18 +114,20 @@ fn localize_command_tree(
 
 fn apply_command_metadata(command: &mut clap::Command, localizer: &dyn Localizer, path: &[String]) {
     let args = localization_args_for(command);
+    let mut working = command.clone();
     let about_id = message_id(path, "about");
     if let Some(about) = localizer.lookup(&about_id, None) {
-        *command = mem::take(command).about(about);
+        working = working.about(about);
     }
     let long_about_id = message_id(path, "long_about");
     if let Some(long_about) = localizer.lookup(&long_about_id, Some(&args)) {
-        *command = mem::take(command).long_about(long_about);
+        working = working.long_about(long_about);
     }
     let usage_id = message_id(path, "usage");
     if let Some(usage) = localizer.lookup(&usage_id, Some(&args)) {
-        *command = mem::take(command).override_usage(usage);
+        working = working.override_usage(usage);
     }
+    *command = working;
 }
 
 fn localization_args_for(command: &clap::Command) -> LocalizationArgs<'static> {

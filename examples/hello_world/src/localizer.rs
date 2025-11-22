@@ -35,7 +35,7 @@ impl Default for DemoLocalizer {
         let mut catalogue = HashMap::new();
         catalogue.insert(
             CLI_ABOUT_MESSAGE_ID,
-            "Friendly greeting demo showcasing localised help",
+            "Friendly greeting demo showcasing localized help",
         );
         catalogue.insert(
             CLI_LONG_ABOUT_MESSAGE_ID,
@@ -59,12 +59,34 @@ impl Default for DemoLocalizer {
 
 impl DemoLocalizer {
     /// Builds a demo localiser with the shipped catalogue.
+    ///
+    /// # Examples
+    /// ```rust
+    /// use clap::CommandFactory;
+    /// use hello_world::cli::{CommandLine, LocalizeCmd};
+    /// use hello_world::localizer::DemoLocalizer;
+    ///
+    /// let localizer = DemoLocalizer::new();
+    /// let command = CommandLine::command().localize(&localizer);
+    /// assert!(command.get_about().is_some());
+    /// ```
     #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Returns a no-op localiser for callers that do not ship translations yet.
+    ///
+    /// # Examples
+    /// ```rust
+    /// use clap::CommandFactory;
+    /// use hello_world::cli::{CommandLine, LocalizeCmd};
+    /// use hello_world::localizer::DemoLocalizer;
+    ///
+    /// let localizer = DemoLocalizer::noop();
+    /// let command = CommandLine::command().localize(&localizer);
+    /// assert!(command.get_about().is_some());
+    /// ```
     #[must_use]
     pub const fn noop() -> NoOpLocalizer {
         NoOpLocalizer::new()

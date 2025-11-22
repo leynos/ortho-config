@@ -29,6 +29,22 @@ pub trait Localizer: Send + Sync {
     fn lookup(&self, id: &str, args: Option<&LocalizationArgs<'_>>) -> Option<String>;
 
     /// Resolves the message and returns a fallback string when no translation exists.
+    ///
+    /// # Examples
+    /// ```rust
+    /// use ortho_config::{LocalizationArgs, Localizer};
+    ///
+    /// struct AlwaysFallback;
+    ///
+    /// impl Localizer for AlwaysFallback {
+    ///     fn lookup(&self, _id: &str, _args: Option<&LocalizationArgs<'_>>) -> Option<String> {
+    ///         None
+    ///     }
+    /// }
+    ///
+    /// let localizer = AlwaysFallback;
+    /// assert_eq!(localizer.message("cli.about", None, "fallback"), "fallback");
+    /// ```
     fn message(&self, id: &str, args: Option<&LocalizationArgs<'_>>, fallback: &str) -> String {
         self.lookup(id, args).unwrap_or_else(|| fallback.to_owned())
     }

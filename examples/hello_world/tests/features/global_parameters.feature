@@ -9,7 +9,7 @@ Feature: Global parameters govern greetings
   Scenario: CLI help exits successfully
     When I run the hello world example with arguments "--help"
     Then the command succeeds
-    And stdout contains "Friendly greeting demo showcasing localised help"
+    And stdout contains "Friendly greeting demo showcasing localized help"
 
   Scenario: CLI version exits successfully
     When I run the hello world example with arguments "--version"

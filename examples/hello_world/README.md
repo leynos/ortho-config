@@ -41,7 +41,8 @@ production-ready complexity.
   `CommandLine::command().localize(&localiser)` and
   `CommandLine::try_parse_localized_env` so the sample `--help` output and
   validation errors use translated strings. This doubles as a reference for
-  applications adopting Fluent bundles.
+  applications adopting Fluent bundles and demonstrates how localisation slots
+  into the CLI flow.
 - **Shell and Windows automation**: provide paired `.sh` and `.cmd` scripts
   highlighting how environment variables, configuration files, and command-line
   overrides interact. Include examples covering default configuration,
@@ -71,7 +72,7 @@ production-ready complexity.
 - Document how to run the example from a fresh checkout through the scripts and
   behavioural tests.
 
-## Localiser demonstration
+## Localisation demonstration
 
 The `src/localizer.rs` module implements `DemoLocalizer`, a tiny catalogue that
 returns translated `about`/`long_about` strings for the CLI. The binary now
@@ -79,7 +80,7 @@ instantiates this localiser before parsing arguments and calls
 `CommandLine::try_parse_localized_env`, ensuring `--help` output reflects the
 translations. Consumers who are not ready to ship real strings can fall back to
 `DemoLocalizer::noop()` (a thin wrapper over `NoOpLocalizer`) until Fluent
-bundles land.
+bundles land, giving them a migration path towards fuller localisation.
 
 ## Configuration samples and scripts
 

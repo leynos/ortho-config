@@ -5,14 +5,14 @@ use crate::localizer::DemoLocalizer;
 use clap::CommandFactory;
 
 #[test]
-fn command_with_localiser_overrides_copy() {
-    let localiser = DemoLocalizer::default();
-    let command = CommandLine::command().localize(&localiser);
+fn command_with_localizer_overrides_copy() {
+    let localizer = DemoLocalizer::default();
+    let command = CommandLine::command().localize(&localizer);
     let about = command
         .get_about()
         .expect("about text should be set")
         .to_string();
-    assert!(about.contains("localised"), "expected demo copy in about");
+    assert!(about.contains("localized"), "expected demo copy in about");
 
     let long_about = command
         .get_long_about()
@@ -22,9 +22,9 @@ fn command_with_localiser_overrides_copy() {
 }
 
 #[test]
-fn localises_subcommand_tree() {
-    let localiser = DemoLocalizer::default();
-    let command = CommandLine::command().localize(&localiser);
+fn localizes_subcommand_tree() {
+    let localizer = DemoLocalizer::default();
+    let command = CommandLine::command().localize(&localizer);
     let greet = command
         .get_subcommands()
         .find(|sub| sub.get_name() == "greet")
@@ -37,9 +37,9 @@ fn localises_subcommand_tree() {
 }
 
 #[test]
-fn try_parse_with_localiser_builds_cli() {
+fn try_parse_with_localizer_builds_cli() {
     let args = ["hello-world", "greet"];
-    let localiser = DemoLocalizer::default();
-    let cli = CommandLine::try_parse_localized(args, &localiser).expect("expected to parse args");
+    let localizer = DemoLocalizer::default();
+    let cli = CommandLine::try_parse_localized(args, &localizer).expect("expected to parse args");
     assert!(matches!(cli.command, Commands::Greet(_)));
 }

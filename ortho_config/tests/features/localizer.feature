@@ -1,4 +1,4 @@
-Feature: Localiser trait
+Feature: Localizer trait
   Localisation helpers must offer predictable fallback behaviour so CLI
   surfaces can opt into translations incrementally.
 
