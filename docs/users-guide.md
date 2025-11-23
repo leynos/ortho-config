@@ -140,9 +140,9 @@ fixtures for default payloads, then enumerate cases for file, environment, and
 CLI layers. This validates every precedence permutation without copy-pasting
 setup.
 
-### Localising CLI copy
+### Localizing CLI copy
 
-`ortho_config` exposes a `Localizer` trait so applications can swap the text
+`ortho_config` exposes a `Localizer` trait, so applications can swap the text
 `clap` displays without abandoning sensible defaults. Each implementation is
 `Send + Sync` and returns owned `String` instances, making it cheap to cache
 resolved messages or fall back to the stock help text. The helper type
@@ -150,7 +150,7 @@ resolved messages or fall back to the stock help text. The helper type
 placeholder model, keeping argument-aware lookups ergonomic.
 
 The Hello World example ships `hello_world::localizer::DemoLocalizer`, which
-drives `CommandLine::command().localize(&localiser)` and
+drives `CommandLine::command().localize(&localizer)` and
 `CommandLine::try_parse_localized_env`. This lets the sample wire translated
 `about`/`long_about` strings into the generated `clap::Command` before any
 parsing occurs, so `--help` exits reuse the translated copy as well:
@@ -159,19 +159,19 @@ parsing occurs, so `--help` exits reuse the translated copy as well:
 use hello_world::cli::{CommandLine, LocalizeCmd};
 use hello_world::localizer::DemoLocalizer;
 
-let localiser = DemoLocalizer::default();
-let command = CommandLine::command().localize(&localiser);
+let localizer = DemoLocalizer::default();
+let command = CommandLine::command().localize(&localizer);
 assert!(command
     .get_about()
     .expect("demo about text")
     .to_string()
-    .contains("localised"));
+    .contains("localized"));
 ```
 
 Projects that are not ready to translate strings today can call
 `NoOpLocalizer::new()` and keep the default copy until real Fluent bundles are
 available. Behavioural coverage for `ortho_config` itself now includes a
-localiser-focused scenario so the fallback semantics remain stable across
+localizer-focused scenario, so the fallback semantics remain stable across
 releases.
 
 ## Installation and dependencies

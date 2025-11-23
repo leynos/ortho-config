@@ -580,12 +580,12 @@ sequenceDiagram
     SC-->>CLI: Err(OrthoError::Gathering)
   end
 
-### 4.12. Localisation architecture
+### 4.12. Localization architecture
 
-`clap` surfaces every string presented to end users, so localisation must be
+`clap` surfaces every string presented to end users, so localization must be
 first-class. `ortho-config` introduces a `Localizer` trait that abstracts string
 lookup and delegates to a Fluent-powered implementation layered over built-in
-defaults. Consumers can therefore opt into internationalisation without giving
+defaults. Consumers can therefore opt into internationalization without giving
 up a working baseline.
 
 - **Trait surface:** The trait exposes a single lookup entry point,
@@ -610,14 +610,14 @@ up a working baseline.
   `FluentBundle<&FluentResource>` or supply paths that are loaded into a bundle
   before building `FluentLocalizer`. The derive macro's builder gains optional
   setters for locale selection and for registering consumer bundles so
-  applications can perform all localisation wiring alongside existing
+  applications can perform all localization wiring alongside existing
   configuration discovery.
 
 - **Macro participation:** Generated code accepts a `&dyn Localizer` and emits
   identifiers for every user-facing string. Developers can override the
   defaults with `#[ortho_config(help_id = "…")]` metadata; otherwise IDs are
   derived from the struct and field names. The generated `load_from_iter`
-  bootstrapper instantiates the localiser before building the `clap::Command`
+  bootstrapper instantiates the localizer before building the `clap::Command`
   tree and routes all `about`, `help`, and `long_help` strings through the
   abstraction.
 
@@ -625,10 +625,10 @@ up a working baseline.
   Fluent identifiers, injects any available context as Fluent arguments, and
   produces a final string through the shared `Localizer`. Applications install
   this formatter via `Command::error_handler` so validation failures are also
-  localised. When no translation exists the formatter delegates to the standard
+  localized. When no translation exists the formatter delegates to the standard
   `clap` display implementation.
 
-This architecture keeps localisation opt-in yet comprehensive. Default
+This architecture keeps localization opt-in yet comprehensive. Default
 catalogues guarantee that every message has a fallback, while consumer bundles
 unlock per-application phrasing and additional languages without forking the
 library.
