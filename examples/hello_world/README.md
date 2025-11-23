@@ -41,8 +41,8 @@ production-ready complexity.
   `CommandLine::command().localize(&localizer)` and
   `CommandLine::try_parse_localized_env` so the sample `--help` output and
   validation errors use translated strings. This doubles as a reference for
-  applications adopting Fluent bundles and demonstrates how localization slots
-  into the CLI flow.
+  applications adopting Fluent bundles and demonstrates how localization
+  slots into the CLI flow.
 - **Shell and Windows automation**: provide paired `.sh` and `.cmd` scripts
   highlighting how environment variables, configuration files, and command-line
   overrides interact. Include examples covering default configuration,
