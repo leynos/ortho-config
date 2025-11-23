@@ -31,7 +31,7 @@ fn localizes_subcommand_tree() {
         .expect("greet subcommand must exist");
     let about = greet
         .get_about()
-        .expect("greet about should be localised")
+        .expect("greet about should be localized")
         .to_string();
     assert!(about.contains("friendly greeting"));
 }

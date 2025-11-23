@@ -56,7 +56,7 @@ pub struct CommandLine {
 }
 
 impl CommandLine {
-    /// Parses command-line arguments using the supplied localiser.
+    /// Parses command-line arguments using the supplied localizer.
     ///
     /// # Errors
     ///
@@ -65,7 +65,7 @@ impl CommandLine {
         Self::try_parse_localized(std::env::args_os(), localizer)
     }
 
-    /// Parses the provided iterator of arguments using the supplied localiser.
+    /// Parses the provided iterator of arguments using the supplied localizer.
     ///
     /// # Errors
     ///
@@ -84,9 +84,9 @@ impl CommandLine {
     }
 }
 
-/// Extension trait that applies localisation to a `clap::Command` tree.
+/// Extension trait that applies localization to a `clap::Command` tree.
 pub trait LocalizeCmd {
-    /// Rewrites the command metadata (about, help, usage, etc.) using the provided localiser.
+    /// Rewrites the command metadata (about, help, usage, etc.) using the provided localizer.
     #[must_use]
     fn localize(self, localizer: &dyn Localizer) -> Self;
 }

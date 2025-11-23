@@ -1,13 +1,13 @@
 Feature: Localizer trait
-  Localisation helpers must offer predictable fallback behaviour so CLI
+  Localization helpers must offer predictable fallback behaviour so CLI
   surfaces can opt into translations incrementally.
 
-  Scenario: No-op localiser falls back to defaults
-    Given a noop localiser
+  Scenario: No-op localizer falls back to defaults
+    Given a noop localizer
     When I request id cli.about with fallback Default CLI about
-    Then the localised text is Default CLI about
+    Then the localized text is Default CLI about
 
-  Scenario: Subject-aware localiser formats Fluent arguments
-    Given a subject-aware localiser
+  Scenario: Subject-aware localizer formats Fluent arguments
+    Given a subject-aware localizer
     When I request id cli.about for subject Ada Lovelace
-    Then the localised text is Hola, Ada Lovelace! (cli.about)
+    Then the localized text is Hola, Ada Lovelace! (cli.about)

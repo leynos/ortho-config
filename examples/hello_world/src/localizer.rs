@@ -1,6 +1,6 @@
-//! Demo localiser used to showcase the `Localizer` trait in action.
+//! Demo localizer used to showcase the `Localizer` trait in action.
 //!
-//! The example keeps the localisation story simple by embedding a pair of
+//! The example keeps the localization story simple by embedding a pair of
 //! strings. Real applications would load Fluent resources from disk or embed
 //! bundles during compilation, but surfacing a concrete `Localizer`
 //! implementation here makes it obvious how consumers can plug their own
@@ -24,7 +24,7 @@ pub const CLI_GREET_ABOUT_MESSAGE_ID: &str = "hello_world.cli.greet.about";
 /// Identifier for the take-leave subcommand description.
 pub const CLI_TAKE_LEAVE_ABOUT_MESSAGE_ID: &str = "hello_world.cli.take-leave.about";
 
-/// Localiser that returns baked-in demo strings for the CLI entry points.
+/// Localizer that returns baked-in demo strings for the CLI entry points.
 #[derive(Debug, Clone)]
 pub struct DemoLocalizer {
     catalogue: HashMap<&'static str, &'static str>,

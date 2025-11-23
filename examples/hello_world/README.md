@@ -8,18 +8,18 @@ production-ready complexity.
 ## Demonstrated capabilities
 
 - **Global parameters (switches and arrays)**: illustrate how the command-line
-  parser exposes top-level configuration that applies to every command,
-  covering boolean feature switches, repeated values, and precedence between
-  defaults and caller-supplied input.
+  parser exposes top-level configuration that applies to every command, covering
+  boolean feature switches, repeated values, and precedence between defaults and
+  caller-supplied input.
 - **Collection merge strategies**: demonstrate vector appends alongside map
-  replacement semantics. The `greeting_templates` field in `GlobalArgs` uses
-  the `merge_strategy = "replace"` attribute, so configuration files can swap
-  the entire template set without leaking defaults from other layers. This
-  keeps the example defaults isolated when consumers override templates.
+  replacement semantics. The `greeting_templates` field in `GlobalArgs` uses the
+  `merge_strategy = "replace"` attribute, so configuration files can swap the
+  entire template set without leaking defaults from other layers. This keeps the
+  example defaults isolated when consumers override templates.
 - **Subcommands**: implement a friendly `greet` command that accepts a name and
   configurable greeting, alongside a `take-leave` workflow that combines
-  switches, optional arguments, and shared greeting customizations to decide
-  how a farewell is delivered.
+  switches, optional arguments, and shared greeting customizations to decide how
+  a farewell is delivered.
 - **Testing disciplines**: add `rstest`-powered unit tests for deterministic
   components and `rstest-bdd` (Behaviour-Driven Development) behavioural
   specifications that exercise the binary as a user would, capturing
@@ -27,10 +27,11 @@ production-ready complexity.
   includes a declarative merging fixture that enumerates precedence
   permutations. This pairs with the JSON-layer scenario, which is bound via
   compile-time tag filters.
-- **Graceful help/version exits**: the entry point parses Command-Line Interface (CLI) arguments with
-  `clap::Parser::try_parse` and uses `ortho_config::is_display_request` to
-  detect `--help` / `--version` requests. It delegates to `clap::Error::exit`
-  so shells and completion generation keep their expected zero exit status.
+- **Graceful help/version exits**: the entry point parses Command-Line Interface
+  (CLI) arguments with `clap::Parser::try_parse` and uses
+  `ortho_config::is_display_request` to detect `--help` / `--version` requests.
+  It delegates to `clap::Error::exit` so shells and completion generation keep
+  their expected zero exit status.
 - **Declarative merging**: demonstrate how `MergeComposer` and
   `merge_from_layers` build layered configuration without invoking the CLI by
   driving a behavioural scenario that composes JSON-described layers into
@@ -41,8 +42,8 @@ production-ready complexity.
   `CommandLine::command().localize(&localizer)` and
   `CommandLine::try_parse_localized_env` so the sample `--help` output and
   validation errors use translated strings. This doubles as a reference for
-  applications adopting Fluent bundles and demonstrates how localization
-  slots into the CLI flow.
+  applications adopting Fluent bundles and demonstrates how localization slots
+  into the CLI flow.
 - **Shell and Windows automation**: provide paired `.sh` and `.cmd` scripts
   highlighting how environment variables, configuration files, and command-line
   overrides interact. Include examples covering default configuration,
@@ -86,9 +87,9 @@ bundles land, giving them a migration path towards fuller localization.
 
 The `config/` directory contains `baseline.toml` and `overrides.toml`. The
 baseline file defines the defaults exercised by the behavioural tests and the
-demo scripts. `overrides.toml` extends the baseline to demonstrate
-configuration inheritance by changing the recipient and salutation while
-preserving the original repository state.
+demo scripts. `overrides.toml` extends the baseline to demonstrate configuration
+inheritance by changing the recipient and salutation while preserving the
+original repository state.
 
 When present, `.hello_world.toml` overrides both global excitement and nested
 `cmds.greet` fields. Discovery prefers `HELLO_WORLD_CONFIG_PATH`, then standard
@@ -97,18 +98,18 @@ and `%APPDATA%`), and finally falls back to `$HOME/.hello_world.toml` and the
 working directory. The shipped overrides enable a `Layered hello` preamble and
 triple exclamation marks, so the behavioural suite and demo scripts assert the
 shouted output (`HEY CONFIG FRIENDS, EXCITED CREW!!!`) to guard the layering.
-The derive uses `#[ortho_config(prefix = "HELLO_WORLD")]`; the macro appends
-the trailing underscore automatically so environment variables continue to use
-the `HELLO_WORLD_` prefix.
+The derive uses `#[ortho_config(prefix = "HELLO_WORLD")]`; the macro appends the
+trailing underscore automatically so environment variables continue to use the
+`HELLO_WORLD_` prefix.
 
 Once the workspace is built, `scripts/demo.sh` (or `scripts/demo.cmd` on
 Windows) can be executed. Each script creates an isolated temporary directory,
 copies the sample configuration files, and then invokes
 `cargo run -p hello_world` multiple times to show the precedence order: file
-defaults, environment overrides, and CLI flags. The scripts leave the
-repository tree untouched so they are safe to rerun. The derived CLI also
-exposes a `--config` / `-c` flag so ad hoc configuration files can be layered
-without mutating the working directory.
+defaults, environment overrides, and CLI flags. The scripts leave the repository
+tree untouched so they are safe to rerun. The derived CLI also exposes a
+`--config` / `-c` flag so ad hoc configuration files can be layered without
+mutating the working directory.
 
 ## Getting started
 
@@ -123,15 +124,15 @@ without mutating the working directory.
 ## Implementation checklist
 
 - [x] Scaffold the crate with `Cargo.toml`, `src/main.rs`, and supporting
-      modules.
-- [x] Define global command-line parameters, switches, and array parameters
-      with defaults and validation.
+  modules.
+- [x] Define global command-line parameters, switches, and array parameters with
+  defaults and validation.
 - [x] Implement the `greet` subcommand with its arguments and options.
 - [x] Implement the `take-leave` subcommand with its arguments and options.
 - [x] Add `rstest` unit tests covering parsing, validation, and command logic.
 - [x] Add `rstest-bdd` behavioural tests covering end-to-end workflows and
-      configuration precedence.
+  configuration precedence.
 - [x] Create shell and Windows `.cmd` scripts showcasing configuration file
-      usage and overrides.
+  usage and overrides.
 - [x] Provide sample configuration files aligned with the scripts and tests.
 - [x] Update documentation to reference the example and describe how to run it.
