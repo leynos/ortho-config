@@ -11,3 +11,4 @@ scenarios!("tests/features/extends.feature");
 scenarios!("tests/features/flatten.feature");
 scenarios!("tests/features/ignore_patterns.feature");
 scenarios!("tests/features/subcommand.feature");
+scenarios!("tests/features/localizer.feature");

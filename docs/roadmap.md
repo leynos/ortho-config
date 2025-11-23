@@ -200,7 +200,7 @@ references the relevant design guidance.
 
 - [ ] **Introduce Fluent localisation for `clap` integration**
 
-  - [ ] Define a `Localizer` trait and `NoOpLocalizer` implementation that wrap
+  - [x] Define a `Localizer` trait and `NoOpLocalizer` implementation that wrap
     message lookup and expose argument-aware helpers. [[Design](design.md)]
 
   - [ ] Ship a `FluentLocalizer` that layers consumer bundles over embedded

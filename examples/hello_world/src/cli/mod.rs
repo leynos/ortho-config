@@ -5,11 +5,15 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use clap::{ArgAction, Args, Parser, Subcommand};
-use ortho_config::{OrthoConfig, OrthoMergeExt, SubcmdConfigMerge};
+use clap::{ArgAction, Args, CommandFactory, FromArgMatches, Parser, Subcommand};
+use fluent_bundle::FluentValue;
+use ortho_config::{LocalizationArgs, Localizer, OrthoConfig, OrthoMergeExt, SubcmdConfigMerge};
 use serde::{Deserialize, Serialize};
 
 use crate::error::{HelloWorldError, ValidationError};
+use crate::localizer::{
+    CLI_ABOUT_MESSAGE_ID, CLI_BASE_MESSAGE_ID, CLI_LONG_ABOUT_MESSAGE_ID, CLI_USAGE_MESSAGE_ID,
+};
 
 mod commands;
 mod config_loading;
@@ -49,6 +53,100 @@ pub struct CommandLine {
     /// Selected workflow to execute.
     #[command(subcommand)]
     pub command: Commands,
+}
+
+impl CommandLine {
+    /// Parses command-line arguments using the supplied localizer.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`clap::Error`] when parsing fails.
+    pub fn try_parse_localized_env(localizer: &dyn Localizer) -> Result<Self, clap::Error> {
+        Self::try_parse_localized(std::env::args_os(), localizer)
+    }
+
+    /// Parses the provided iterator of arguments using the supplied localizer.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`clap::Error`] when parsing fails.
+    pub fn try_parse_localized<I, T>(
+        iter: I,
+        localizer: &dyn Localizer,
+    ) -> Result<Self, clap::Error>
+    where
+        I: IntoIterator<Item = T>,
+        T: Into<std::ffi::OsString> + Clone,
+    {
+        let mut command = Self::command().localize(localizer);
+        let mut matches = command.try_get_matches_from_mut(iter)?;
+        Self::from_arg_matches_mut(&mut matches).map_err(|err| err.with_cmd(&command))
+    }
+}
+
+/// Extension trait that applies localization to a `clap::Command` tree.
+pub trait LocalizeCmd {
+    /// Rewrites the command metadata (about, help, usage, etc.) using the provided localizer.
+    #[must_use]
+    fn localize(self, localizer: &dyn Localizer) -> Self;
+}
+
+impl LocalizeCmd for clap::Command {
+    fn localize(mut self, localizer: &dyn Localizer) -> Self {
+        let mut path = Vec::new();
+        localize_command_tree(&mut self, localizer, &mut path);
+        self
+    }
+}
+
+fn localize_command_tree(
+    command: &mut clap::Command,
+    localizer: &dyn Localizer,
+    path: &mut Vec<String>,
+) {
+    apply_command_metadata(command, localizer, path);
+    for subcommand in command.get_subcommands_mut() {
+        path.push(subcommand.get_name().to_owned());
+        localize_command_tree(subcommand, localizer, path);
+        path.pop();
+    }
+}
+
+fn apply_command_metadata(command: &mut clap::Command, localizer: &dyn Localizer, path: &[String]) {
+    let args = localization_args_for(command);
+    let mut working = command.clone();
+    let about_id = message_id(path, "about");
+    if let Some(about) = localizer.lookup(&about_id, None) {
+        working = working.about(about);
+    }
+    let long_about_id = message_id(path, "long_about");
+    if let Some(long_about) = localizer.lookup(&long_about_id, Some(&args)) {
+        working = working.long_about(long_about);
+    }
+    let usage_id = message_id(path, "usage");
+    if let Some(usage) = localizer.lookup(&usage_id, Some(&args)) {
+        working = working.override_usage(usage);
+    }
+    *command = working;
+}
+
+fn localization_args_for(command: &clap::Command) -> LocalizationArgs<'static> {
+    let mut args = LocalizationArgs::default();
+    args.insert("binary", FluentValue::from(command.get_name().to_owned()));
+    args
+}
+
+fn message_id(path: &[String], suffix: &str) -> String {
+    if path.is_empty() {
+        match suffix {
+            "about" => CLI_ABOUT_MESSAGE_ID.to_owned(),
+            "long_about" => CLI_LONG_ABOUT_MESSAGE_ID.to_owned(),
+            "usage" => CLI_USAGE_MESSAGE_ID.to_owned(),
+            other => format!("{CLI_BASE_MESSAGE_ID}.{other}"),
+        }
+    } else {
+        format!("{CLI_BASE_MESSAGE_ID}.{}.{}", path.join("."), suffix)
+    }
 }
 
 #[expect(

@@ -2,7 +2,7 @@
 
 use anyhow::Error;
 use clap::{Args, Parser};
-use ortho_config::OrthoConfig;
+use ortho_config::{Localizer, OrthoConfig};
 use rstest::fixture;
 use rstest_bdd::Slot;
 use rstest_bdd_macros::ScenarioState;
@@ -57,6 +57,13 @@ pub struct SubcommandContext {
     pub result: Slot<Result<PrArgs, Error>>,
 }
 
+/// Scenario state for localisation helper scenarios.
+#[derive(Debug, Default, ScenarioState)]
+pub struct LocalizerContext {
+    pub localizer: Slot<Box<dyn Localizer + 'static>>,
+    pub resolved: Slot<String>,
+}
+
 /// Captures the optional reference inputs used by subcommand scenarios.
 #[derive(Debug, Default, Clone)]
 pub struct SubcommandSources {
@@ -106,6 +113,12 @@ pub fn flatten_context() -> FlattenContext {
 #[fixture]
 pub fn subcommand_context() -> SubcommandContext {
     SubcommandContext::default()
+}
+
+/// Provides a clean localisation context so translation scenarios share state.
+#[fixture]
+pub fn localizer_context() -> LocalizerContext {
+    LocalizerContext::default()
 }
 
 /// Minimal configuration struct used by the rstest-bdd canary scenario.

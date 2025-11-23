@@ -580,19 +580,19 @@ sequenceDiagram
     SC-->>CLI: Err(OrthoError::Gathering)
   end
 
-### 4.12. Localisation architecture
+### 4.12. Localization architecture
 
-`clap` surfaces every string presented to end users, so localisation must be
+`clap` surfaces every string presented to end users, so localization must be
 first-class. `ortho-config` introduces a `Localizer` trait that abstracts string
 lookup and delegates to a Fluent-powered implementation layered over built-in
-defaults. Consumers can therefore opt into internationalisation without giving
+defaults. Consumers can therefore opt into internationalization without giving
 up a working baseline.
 
-- **Trait surface:** The trait exposes helpers for plain messages via
-  `fn get_message(&self, id: &str) -> Option<String>` and accepts arguments via
-  `fn get_message_with_args(&self, id: &str, args: Option<&HashMap<&str,
-  FluentValue<'_>>>) -> Option<String>`. A `NoOpLocalizer` implements the trait
-  for applications that decline to ship translations.
+- **Trait surface:** The trait exposes a single lookup entry point,
+  `fn lookup(&self, id: &str, args: Option<&HashMap<&str, FluentValue<'_>>>)`,
+  plus a convenience `message` helper that accepts the same arguments and a
+  fallback string. A `NoOpLocalizer` implements the trait for applications that
+  decline to ship translations.
 
 - **Fluent-backed implementation:** `FluentLocalizer` wraps a default bundle of
   library strings and an optional consumer bundle. Lookups favour the consumer
@@ -610,14 +610,14 @@ up a working baseline.
   `FluentBundle<&FluentResource>` or supply paths that are loaded into a bundle
   before building `FluentLocalizer`. The derive macro's builder gains optional
   setters for locale selection and for registering consumer bundles so
-  applications can perform all localisation wiring alongside existing
+  applications can perform all localization wiring alongside existing
   configuration discovery.
 
 - **Macro participation:** Generated code accepts a `&dyn Localizer` and emits
   identifiers for every user-facing string. Developers can override the
   defaults with `#[ortho_config(help_id = "…")]` metadata; otherwise IDs are
   derived from the struct and field names. The generated `load_from_iter`
-  bootstrapper instantiates the localiser before building the `clap::Command`
+  bootstrapper instantiates the localizer before building the `clap::Command`
   tree and routes all `about`, `help`, and `long_help` strings through the
   abstraction.
 
@@ -625,13 +625,25 @@ up a working baseline.
   Fluent identifiers, injects any available context as Fluent arguments, and
   produces a final string through the shared `Localizer`. Applications install
   this formatter via `Command::error_handler` so validation failures are also
-  localised. When no translation exists the formatter delegates to the standard
+  localized. When no translation exists the formatter delegates to the standard
   `clap` display implementation.
 
-This architecture keeps localisation opt-in yet comprehensive. Default
+This architecture keeps localization opt-in yet comprehensive. Default
 catalogues guarantee that every message has a fallback, while consumer bundles
 unlock per-application phrasing and additional languages without forking the
 library.
+
+The implementation introduces a `LocalizationArgs<'a>` alias that wraps a
+`HashMap<&'a str, FluentValue<'a>>` so Fluent lookups retain access to named
+placeholders without forcing each caller to spell out the map shape. The
+`Localizer` trait itself is `Send + Sync`, exposing `lookup` for optional
+translations and `message` when callers need a convenient fallback string.
+A `NoOpLocalizer` ships alongside the trait so binaries that have not adopted
+translations can opt out without additional glue. The `hello_world` example
+exercises the trait via a `DemoLocalizer`, threading translations into
+`CommandLine::command().localize(&demo)` and `try_parse_localized_env` to prove
+that the Command-Line Interface (CLI) help text and errors can be patched
+without rewriting parser wiring.
 
 ### 4.13. Dynamic rule tables
 

@@ -1,10 +1,10 @@
 //! Hello World example entry-point: load config, build greeting plan, print message.
 
-use clap::Parser;
 use ortho_config::{SubcmdConfigMerge, is_display_request};
 
 use hello_world::cli::{CommandLine, Commands, apply_greet_overrides, load_global_config};
 use hello_world::error::HelloWorldError;
+use hello_world::localizer::DemoLocalizer;
 use hello_world::message::{build_plan, build_take_leave_plan, print_plan, print_take_leave};
 
 fn main() -> color_eyre::Result<()> {
@@ -32,7 +32,8 @@ fn run() -> Result<(), HelloWorldError> {
 }
 
 fn parse_command_line() -> Result<CommandLine, HelloWorldError> {
-    match CommandLine::try_parse() {
+    let localizer = DemoLocalizer::default();
+    match CommandLine::try_parse_localized_env(&localizer) {
         Ok(cli) => Ok(cli),
         Err(err) => {
             if is_display_request(&err) {
