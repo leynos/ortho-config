@@ -140,9 +140,9 @@ fixtures for default payloads, then enumerate cases for file, environment, and
 CLI layers. This validates every precedence permutation without copy-pasting
 setup.
 
-### Localizing CLI copy
+### Localising CLI copy
 
-`ortho_config` exposes a `Localizer` trait so applications can swap the text
+`ortho_config` exposes a `Localizer` trait, so applications can swap the text
 `clap` displays without abandoning sensible defaults. Each implementation is
 `Send + Sync` and returns owned `String` instances, making it cheap to cache
 resolved messages or fall back to the stock help text. The helper type
@@ -180,7 +180,7 @@ need to capture Fluent formatting errors alongside command parsing failures.
 The Hello World example ships `hello_world::localizer::DemoLocalizer`, which
 builds a `FluentLocalizer` from `examples/hello_world/locales/en-US` and drives
 `CommandLine::command().localize(&localizer)` plus
-`CommandLine::try_parse_localized_env`. If localisation setup ever fails the
+`CommandLine::try_parse_localized_env`. If localisation setup ever fails, the
 example falls back to `NoOpLocalizer`, preserving the stock `clap` strings
 until translations are fixed.
 

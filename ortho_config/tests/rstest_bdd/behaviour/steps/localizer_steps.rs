@@ -198,15 +198,9 @@ fn assert_localised(context: &LocalizerContext, expected: ExpectedText) -> Resul
 
 #[then("a localisation formatting error is recorded")]
 fn assert_formatting_issue_logged(context: &LocalizerContext) -> Result<()> {
-    let issues = context
-        .issues
-        .take()
-        .ok_or_else(|| anyhow!("expected formatting issues slot"))?;
-    let guard = issues
-        .lock()
-        .map_err(|_| anyhow!("formatting issue log mutex poisoned"))?;
+    let issues = context.take_issues();
     ensure!(
-        !guard.is_empty(),
+        !issues.is_empty(),
         "expected at least one formatting issue to be captured"
     );
     Ok(())
@@ -217,23 +211,20 @@ fn install_fluent_localizer(
     resources: &[&'static str],
     capture_errors: bool,
 ) {
-    let reporter = capture_errors.then(|| {
-        let issues = Arc::new(Mutex::new(Vec::new()));
-        context.issues.set(Arc::clone(&issues));
-        Arc::new(move |issue: &FormattingIssue| {
-            let mut guard = issues
-                .lock()
-                .expect("formatting issue mutex poisoned during capture");
-            guard.push(issue.id.clone());
-        }) as Arc<dyn Fn(&FormattingIssue) + Send + Sync>
-    });
-
     let mut builder = FluentLocalizer::builder(langid!("en-US"))
-        .with_consumer_resources(resources.iter().copied());
-
-    if let Some(hook) = reporter {
-        builder = builder.with_error_reporter(hook);
-    }
+        .with_consumer_resources(resources.iter().copied())
+        .with_error_reporter(Arc::new({
+            let issues = context
+                .issues
+                .with_ref(|slot| Arc::clone(slot))
+                .unwrap_or_else(|| Arc::new(Mutex::new(Vec::new())));
+            move |issue: &FormattingIssue| {
+                let mut guard = issues
+                    .lock()
+                    .expect("formatting issue mutex poisoned during capture");
+                guard.push(issue.id.clone());
+            }
+        }));
 
     let localizer = builder
         .try_build()

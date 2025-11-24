@@ -43,7 +43,7 @@ fn stub_localizer_uses_args() {
 #[rstest]
 fn fluent_localizer_prefers_consumer_catalogue() {
     let localizer = FluentLocalizer::builder(langid!("en-US"))
-        .with_consumer_resources(["cli-about = Consumer about text"])
+        .with_consumer_resources(["cli.about = Consumer about text"])
         .try_build()
         .expect("consumer bundle should build");
 
@@ -81,7 +81,7 @@ fn fluent_localizer_logs_and_falls_back_on_format_error() {
     args.insert("binary", FluentValue::from("demo"));
 
     let localizer = FluentLocalizer::builder(langid!("en-US"))
-        .with_consumer_resources(["cli-usage = Usage: { $binary } and { $missing }"])
+        .with_consumer_resources(["cli.usage = Usage: { $binary } and { $missing }"])
         .with_error_reporter(reporter)
         .try_build()
         .expect("consumer bundle should build");

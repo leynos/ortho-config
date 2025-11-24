@@ -81,6 +81,41 @@ impl SubcommandSources {
     }
 }
 
+impl LocalizerContext {
+    #[must_use]
+    pub fn init_issues() -> Slot<Arc<Mutex<Vec<String>>>> {
+        let slot = Slot::default();
+        slot.set(Arc::new(Mutex::new(Vec::new())));
+        slot
+    }
+
+    fn issues_arc(&self) -> Option<Arc<Mutex<Vec<String>>>> {
+        self.issues.with_ref(|issues| Arc::clone(issues))
+    }
+
+    pub fn record_issue(&self, id: String) {
+        if let Some(issues) = self.issues_arc() {
+            if let Ok(mut guard) = issues.lock() {
+                guard.push(id);
+            }
+        }
+    }
+
+    #[must_use]
+    pub fn take_issues(&self) -> Vec<String> {
+        if let Some(issues) = self.issues.take() {
+            let mut guard = issues
+                .lock()
+                .expect("formatting issue mutex poisoned during take");
+            let collected = guard.clone();
+            guard.clear();
+            collected
+        } else {
+            Vec::new()
+        }
+    }
+}
+
 /// Provides a clean rules context so precedence-focused steps can share state.
 #[fixture]
 pub fn rules_context() -> RulesContext {
@@ -120,7 +155,10 @@ pub fn subcommand_context() -> SubcommandContext {
 /// Provides a clean localisation context so translation scenarios share state.
 #[fixture]
 pub fn localizer_context() -> LocalizerContext {
-    LocalizerContext::default()
+    LocalizerContext {
+        issues: LocalizerContext::init_issues(),
+        ..LocalizerContext::default()
+    }
 }
 
 /// Minimal configuration struct used by the rstest-bdd canary scenario.

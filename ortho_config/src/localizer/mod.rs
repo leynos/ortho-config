@@ -172,17 +172,23 @@ impl FluentLocalizer {
 impl Localizer for FluentLocalizer {
     fn lookup(&self, id: &str, args: Option<&LocalizationArgs<'_>>) -> Option<String> {
         let fluent_args = args.map(fluent_args_from);
-        let lookup_id = normalize_identifier(id);
+        let normalized_id = normalize_identifier(id);
+        let lookup_ids = if normalized_id.as_ref() == id {
+            [id, id]
+        } else {
+            [id, normalized_id.as_ref()]
+        };
         let bundles = [self.consumer.as_ref(), Some(&self.defaults)];
 
         for bundle in bundles.into_iter().flatten() {
-            let Some(pattern) = bundle
-                .bundle
-                .get_message(lookup_id.as_ref())
-                .and_then(|message| message.value())
-            else {
-                continue;
-            };
+            let pattern_opt = lookup_ids.iter().find_map(|lookup_id| {
+                bundle
+                    .bundle
+                    .get_message(lookup_id)
+                    .and_then(|message| message.value())
+            });
+
+            let Some(pattern) = pattern_opt else { continue };
 
             let mut errors = Vec::new();
             let rendered = bundle
@@ -319,7 +325,7 @@ impl fmt::Debug for FluentLocalizerBuilder {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("FluentLocalizerBuilder")
             .field("locale", &self.locale)
-            .field("consumer_resources", &self.consumer_resources)
+            .field("consumer_resources_len", &self.consumer_resources.len())
             .field(
                 "consumer_bundle",
                 &self.consumer_bundle.as_ref().map(|bundle| &bundle.locale),
@@ -364,13 +370,15 @@ fn bundle_from_resources(
 ) -> Result<BundleWithLocale, FluentLocalizerError> {
     let mut bundle = FluentBundle::new_concurrent(vec![locale.clone()]);
     for resource in resources {
-        let parsed = Arc::new(FluentResource::try_new((*resource).to_owned()).map_err(
-            |(_resource, errors)| FluentLocalizerError::Parser {
-                locale: locale.clone(),
-                catalogue,
-                errors,
-            },
-        )?);
+        let parsed = Arc::new(
+            FluentResource::try_new(normalize_resource_ids(resource)).map_err(
+                |(_resource, errors)| FluentLocalizerError::Parser {
+                    locale: locale.clone(),
+                    catalogue,
+                    errors,
+                },
+            )?,
+        );
 
         bundle
             .add_resource(parsed)
@@ -394,6 +402,51 @@ fn normalize_identifier(id: &str) -> Cow<'_, str> {
     } else {
         Cow::Borrowed(id)
     }
+}
+
+fn normalize_resource_ids(resource: &str) -> String {
+    resource
+        .lines()
+        .map(|line| {
+            let trimmed = line.trim_start();
+            if trimmed.is_empty() || trimmed.starts_with('#') {
+                return line.to_owned();
+            }
+
+            let first_char = trimmed.chars().next().unwrap_or(' ');
+            if !first_char.is_ascii_alphabetic() {
+                return line.to_owned();
+            }
+
+            let Some(eq_pos) = line.find('=') else {
+                return line.to_owned();
+            };
+            let (left, right) = line.split_at(eq_pos);
+
+            let leading_ws_len = line.len() - trimmed.len();
+            let id_end = left.trim_end().len();
+            if id_end <= leading_ws_len {
+                return line.to_owned();
+            }
+
+            let Some(id_segment) = left.get(leading_ws_len..id_end) else {
+                return line.to_owned();
+            };
+            let normalised_id = id_segment.replace('.', "-");
+
+            let mut rebuilt = String::with_capacity(line.len());
+            if let Some(prefix) = left.get(..leading_ws_len) {
+                rebuilt.push_str(prefix);
+            }
+            rebuilt.push_str(&normalised_id);
+            if let Some(trailing) = left.get(id_end..) {
+                rebuilt.push_str(trailing);
+            }
+            rebuilt.push_str(right);
+            rebuilt
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 #[cfg(test)]

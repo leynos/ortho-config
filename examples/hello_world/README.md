@@ -76,11 +76,11 @@ production-ready complexity.
 ## Localizer demonstration
 
 The `src/localizer.rs` module builds a `FluentLocalizer` from the embedded
-`examples/hello_world/locales/en-US/hello_world.ftl` catalogue and layers it
-over `ortho_config`’s default messages. The binary instantiates this localizer
+`examples/hello_world/locales/en-US/messages.ftl` catalogue and layers it over
+`ortho_config`’s default messages. The binary instantiates this localizer
 before parsing arguments and calls `CommandLine::try_parse_localized_env`,
 ensuring `--help` output reflects the translated copy. If catalogue parsing
-fails the demo logs a warning and falls back to `NoOpLocalizer`, keeping the
+fails, the demo logs a warning and falls back to `NoOpLocalizer`, keeping the
 stock `clap` strings available while translations are repaired. Consumers who
 are not ready to ship real strings can explicitly choose
 `DemoLocalizer::noop()` for the same effect.
@@ -101,7 +101,7 @@ working directory. The shipped overrides enable a `Layered hello` preamble and
 triple exclamation marks, so the behavioural suite and demo scripts assert the
 shouted output (`HEY CONFIG FRIENDS, EXCITED CREW!!!`) to guard the layering.
 The derive uses `#[ortho_config(prefix = "HELLO_WORLD")]`; the macro appends
-the trailing underscore automatically so environment variables continue to use
+the trailing underscore automatically, so environment variables continue to use
 the `HELLO_WORLD_` prefix.
 
 Once the workspace is built, `scripts/demo.sh` (or `scripts/demo.cmd` on
@@ -110,7 +110,7 @@ copies the sample configuration files, and then invokes
 `cargo run -p hello_world` multiple times to show the precedence order: file
 defaults, environment overrides, and CLI flags. The scripts leave the
 repository tree untouched so they are safe to rerun. The derived CLI also
-exposes a `--config` / `-c` flag so ad hoc configuration files can be layered
+exposes a `--config` / `-c` flag, so ad hoc configuration files can be layered
 without mutating the working directory.
 
 ## Getting started
