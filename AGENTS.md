@@ -22,8 +22,8 @@
 - **Group by feature, not layer.** Colocate views, logic, fixtures, and helpers
   related to a domain concept rather than splitting by type.
 - **Use consistent spelling and grammar.** Comments must use en-GB-oxendict
-  ("-ize" / "-yse" / "-our") spelling and grammar, except for references to
-  external APIs.
+  ("-ize" / "-yse" / "-our") spelling and grammar, with the exception of
+  references to external APIs.
 - **Illustrate with clear examples.** Function documentation must include clear
   examples demonstrating the usage and outcome of the function. Test
   documentation should omit examples where the example serves only to reiterate
@@ -158,19 +158,14 @@ project:
 - Document public APIs using Rustdoc comments (`///`) so documentation can be
   generated with cargo doc.
 - Prefer immutable data and avoid unnecessary `mut` bindings.
-- Handle errors with the `Result` type instead of panicking where feasible.
 - Use explicit version ranges in `Cargo.toml` and keep dependencies up-to-date.
 - Avoid `unsafe` code unless absolutely necessary, and document any usage
-  clearly.
+  clearly with a "SAFETY" comment.
 - Place function attributes **after** doc comments.
 - Do not use `return` in single-line functions.
 - Use predicate functions for conditional criteria with more than two branches.
 - Lints must not be silenced except as a **last resort**.
 - Lint rule suppressions must be tightly scoped and include a clear reason.
-- Prefer `expect` over `allow`.
-- Use `rstest` fixtures for shared setup.
-- Replace duplicated tests with `#[rstest(...)]` parameterized cases.
-- Prefer `mockall` for mocks/stubs.
 - Use `concat!()` to combine long string literals rather than escaping newlines
   with a backslash.
 - Prefer single line versions of functions where appropriate. i.e.,
@@ -201,6 +196,20 @@ project:
   consistent without per-type boilerplate. Combine approaches: lean on
   `newt-hype` for the common case, tuple structs for outliers, and
   `the-newtype` to unify behaviour when owning the trait definitions.
+- Use `cap_std` and `cap_std::fs_utf8` / `camino` in place of `std::fs` and
+  `std::path` for enhanced cross platform support and capabilities oriented
+  filesystem access.
+
+### Testing
+
+- Use `rstest` fixtures for shared setup.
+- Replace duplicated tests with `#[rstest(...)]` parameterized cases.
+- Prefer `mockall` for ad hoc mocks/stubs.
+- For testing of functionality depending upon environment variables, dependency
+  injection and the `mockable` crate are the preferred option.
+- If mockable cannot be used, env mutations in tests MUST be wrapped in shared
+  guards and mutexes placed in a shared `test_utils` or `test_helpers` crate.
+  Direct environment mutation is FORBIDDEN in tests.
 
 ### Dependency Management
 
