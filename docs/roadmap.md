@@ -203,11 +203,11 @@ references the relevant design guidance.
   - [x] Define a `Localizer` trait and `NoOpLocalizer` implementation that wrap
     message lookup and expose argument-aware helpers. [[Design](design.md)]
 
-  - [ ] Ship a `FluentLocalizer` that layers consumer bundles over embedded
+  - [x] Ship a `FluentLocalizer` that layers consumer bundles over embedded
     defaults, logging formatting errors and falling back cleanly when lookups
     fail. [[Design](design.md)]
 
-  - [ ] Embed default `.ftl` catalogues for supported locales and provide a
+  - [x] Embed default `.ftl` catalogues for supported locales and provide a
     loader that constructs the baseline `FluentBundle` for a requested language
     identifier. Success is measured by loading at least the bundled English
     resources without runtime allocation failures. [[Design](design.md)]

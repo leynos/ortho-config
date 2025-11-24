@@ -72,7 +72,10 @@ pub use declarative::{DeclarativeMerge, MergeComposer, MergeLayer, MergeProvenan
 pub use discovery::{ConfigDiscovery, ConfigDiscoveryBuilder, DiscoveryLoadOutcome};
 pub use error::{OrthoError, is_display_request};
 pub use file::load_config_file;
-pub use localizer::{LocalizationArgs, Localizer, NoOpLocalizer};
+pub use localizer::{
+    FluentBundleSource, FluentLocalizer, FluentLocalizerBuilder, FluentLocalizerError,
+    FormattingIssue, LocalizationArgs, Localizer, NoOpLocalizer,
+};
 /// Re-export sanitization helpers used to strip `None` fields and produce a
 /// Figment provider.
 ///
@@ -94,6 +97,7 @@ pub use localizer::{LocalizationArgs, Localizer, NoOpLocalizer};
 #[cfg(feature = "serde_json")]
 pub use merge::{sanitize_value, sanitized_provider, value_without_nones};
 use std::sync::Arc;
+pub use unic_langid::{LanguageIdentifier, langid};
 
 /// Trait implemented for structs that represent application configuration.
 pub trait OrthoConfig: Sized + serde::de::DeserializeOwned {

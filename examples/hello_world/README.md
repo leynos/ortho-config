@@ -8,18 +8,18 @@ production-ready complexity.
 ## Demonstrated capabilities
 
 - **Global parameters (switches and arrays)**: illustrate how the command-line
-  parser exposes top-level configuration that applies to every command, covering
-  boolean feature switches, repeated values, and precedence between defaults and
-  caller-supplied input.
+  parser exposes top-level configuration that applies to every command,
+  covering boolean feature switches, repeated values, and precedence between
+  defaults and caller-supplied input.
 - **Collection merge strategies**: demonstrate vector appends alongside map
-  replacement semantics. The `greeting_templates` field in `GlobalArgs` uses the
-  `merge_strategy = "replace"` attribute, so configuration files can swap the
-  entire template set without leaking defaults from other layers. This keeps the
-  example defaults isolated when consumers override templates.
+  replacement semantics. The `greeting_templates` field in `GlobalArgs` uses
+  the `merge_strategy = "replace"` attribute, so configuration files can swap
+  the entire template set without leaking defaults from other layers. This
+  keeps the example defaults isolated when consumers override templates.
 - **Subcommands**: implement a friendly `greet` command that accepts a name and
   configurable greeting, alongside a `take-leave` workflow that combines
-  switches, optional arguments, and shared greeting customizations to decide how
-  a farewell is delivered.
+  switches, optional arguments, and shared greeting customizations to decide
+  how a farewell is delivered.
 - **Testing disciplines**: add `rstest`-powered unit tests for deterministic
   components and `rstest-bdd` (Behaviour-Driven Development) behavioural
   specifications that exercise the binary as a user would, capturing
@@ -37,13 +37,13 @@ production-ready complexity.
   driving a behavioural scenario that composes JSON-described layers into
   `GlobalArgs`, asserting that default salutations are preserved when
   environment layers append new values.
-- **Localized help text**: ship a `DemoLocalizer` that implements
-  `ortho_config::Localizer`, then thread it through
-  `CommandLine::command().localize(&localizer)` and
-  `CommandLine::try_parse_localized_env` so the sample `--help` output and
-  validation errors use translated strings. This doubles as a reference for
-  applications adopting Fluent bundles and demonstrates how localization slots
-  into the CLI flow.
+- **Localized help text**: ship a `DemoLocalizer` backed by
+  `FluentLocalizer`, layer the example’s bundled catalogue over
+  `ortho_config`’s defaults, and thread it through
+  `CommandLine::command().localize(&localizer)` plus
+  `CommandLine::try_parse_localized_env`. Formatting errors are logged and the
+  default bundle is used as a fallback, illustrating how applications can adopt
+  Fluent without sacrificing existing help copy.
 - **Shell and Windows automation**: provide paired `.sh` and `.cmd` scripts
   highlighting how environment variables, configuration files, and command-line
   overrides interact. Include examples covering default configuration,
@@ -75,21 +75,23 @@ production-ready complexity.
 
 ## Localizer demonstration
 
-The `src/localizer.rs` module implements `DemoLocalizer`, a tiny catalogue that
-returns translated `about`/`long_about` strings for the CLI. The binary now
-instantiates this localizer before parsing arguments and calls
-`CommandLine::try_parse_localized_env`, ensuring `--help` output reflects the
-translations. Consumers who are not ready to ship real strings can fall back to
-`DemoLocalizer::noop()` (a thin wrapper over `NoOpLocalizer`) until Fluent
-bundles land, giving them a migration path towards fuller localization.
+The `src/localizer.rs` module builds a `FluentLocalizer` from the embedded
+`examples/hello_world/locales/en-US/hello_world.ftl` catalogue and layers it
+over `ortho_config`’s default messages. The binary instantiates this localizer
+before parsing arguments and calls `CommandLine::try_parse_localized_env`,
+ensuring `--help` output reflects the translated copy. If catalogue parsing
+fails the demo logs a warning and falls back to `NoOpLocalizer`, keeping the
+stock `clap` strings available while translations are repaired. Consumers who
+are not ready to ship real strings can explicitly choose
+`DemoLocalizer::noop()` for the same effect.
 
 ## Configuration samples and scripts
 
 The `config/` directory contains `baseline.toml` and `overrides.toml`. The
 baseline file defines the defaults exercised by the behavioural tests and the
-demo scripts. `overrides.toml` extends the baseline to demonstrate configuration
-inheritance by changing the recipient and salutation while preserving the
-original repository state.
+demo scripts. `overrides.toml` extends the baseline to demonstrate
+configuration inheritance by changing the recipient and salutation while
+preserving the original repository state.
 
 When present, `.hello_world.toml` overrides both global excitement and nested
 `cmds.greet` fields. Discovery prefers `HELLO_WORLD_CONFIG_PATH`, then standard
@@ -98,18 +100,18 @@ and `%APPDATA%`), and finally falls back to `$HOME/.hello_world.toml` and the
 working directory. The shipped overrides enable a `Layered hello` preamble and
 triple exclamation marks, so the behavioural suite and demo scripts assert the
 shouted output (`HEY CONFIG FRIENDS, EXCITED CREW!!!`) to guard the layering.
-The derive uses `#[ortho_config(prefix = "HELLO_WORLD")]`; the macro appends the
-trailing underscore automatically so environment variables continue to use the
-`HELLO_WORLD_` prefix.
+The derive uses `#[ortho_config(prefix = "HELLO_WORLD")]`; the macro appends
+the trailing underscore automatically so environment variables continue to use
+the `HELLO_WORLD_` prefix.
 
 Once the workspace is built, `scripts/demo.sh` (or `scripts/demo.cmd` on
 Windows) can be executed. Each script creates an isolated temporary directory,
 copies the sample configuration files, and then invokes
 `cargo run -p hello_world` multiple times to show the precedence order: file
-defaults, environment overrides, and CLI flags. The scripts leave the repository
-tree untouched so they are safe to rerun. The derived CLI also exposes a
-`--config` / `-c` flag so ad hoc configuration files can be layered without
-mutating the working directory.
+defaults, environment overrides, and CLI flags. The scripts leave the
+repository tree untouched so they are safe to rerun. The derived CLI also
+exposes a `--config` / `-c` flag so ad hoc configuration files can be layered
+without mutating the working directory.
 
 ## Getting started
 

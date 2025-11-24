@@ -601,7 +601,7 @@ up a working baseline.
   to `clap`'s native message.
 
 - **Bundling defaults:** Default message catalogues live under
-  `locales/<lang>/ortho_config.ftl` and are embedded with `include_str!`. A
+  `locales/<lang>/messages.ftl` and are embedded with `include_str!`. A
   helper constructs the default `FluentBundle` for the selected locale, parsing
   the static resources once at start-up. Additional locales reuse the same
   helper by passing a different language identifier.
@@ -632,6 +632,14 @@ This architecture keeps localization opt-in yet comprehensive. Default
 catalogues guarantee that every message has a fallback, while consumer bundles
 unlock per-application phrasing and additional languages without forking the
 library.
+
+The shipped implementation builds a concurrent `FluentBundle` from the embedded
+`locales/en-US/messages.ftl` catalogue and layers any consumer-provided
+resources over it. Formatting errors raised during `format_pattern` are logged
+via `tracing::warn!` by default and yield `None`, allowing the next bundle—or
+the caller’s fallback string—to supply the final message. Builders expose
+`with_error_reporter` so applications and tests can capture these issues
+without reconfiguring global loggers.
 
 The implementation introduces a `LocalizationArgs<'a>` alias that wraps a
 `HashMap<&'a str, FluentValue<'a>>` so Fluent lookups retain access to named
@@ -678,9 +686,9 @@ layers discard previous entries instead of extending them. Map fields default to
 keyed merges where later layers only update the entries they define. When a
 configuration needs to swap the entire table—such as the hello_world example's
 `greeting_templates` map—setting the merge strategy to `"replace"` records the
-last observed map as typed data and reapplies it after processing all layers. This
-keeps keyed defaults available by default while providing a deterministic escape
-hatch for wholesale replacements.
+last observed map as typed data and reapplies it after processing all layers.
+This keeps keyed defaults available by default while providing a deterministic
+escape hatch for wholesale replacements.
 
 ## 5. Dependency Strategy
 
@@ -807,12 +815,12 @@ experience, we can create a highly valuable addition to the Rust ecosystem.
   generated helper signatures. This codifies precedence semantics and catches
   regressions in the derive macro before they reach downstream crates.
 
-- **Adopt `rstest-bdd` (Behaviour-Driven Development) for behavioural coverage (2025-11-15):** Workspace and
-  example behavioural suites now use `rstest-bdd` fixtures[^rstest-bdd-guide]
-  instead of a custom `cucumber-rs` runner. The shared harness spawns binaries
-  under `cargo test`, enforces execution timeouts, and binds feature files with
-  compile-time tag filters so feature-gated scenarios disappear from
-  unsupported builds.
+- **Adopt `rstest-bdd` (Behaviour-Driven Development) for behavioural coverage
+  (2025-11-15):** Workspace and example behavioural suites now use
+  `rstest-bdd` fixtures[^rstest-bdd-guide] instead of a custom `cucumber-rs`
+  runner. The shared harness spawns binaries under `cargo test`, enforces
+  execution timeouts, and binds feature files with compile-time tag filters so
+  feature-gated scenarios disappear from unsupported builds.
 
 - **Prefix normalisation:** The `prefix` struct attribute now appends a trailing
   underscore when callers omit it (unless the string is empty). This keeps

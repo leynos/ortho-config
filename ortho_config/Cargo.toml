@@ -20,9 +20,12 @@ clap = { version = "4", features = ["derive"] }
 clap-dispatch = "0.1"
 figment = { version = "0.10", default-features = false, features = ["env", "test"] }
 fluent-bundle = "0.16.0"
+fluent-syntax = "0.12"
 uncased = "0.9"
 camino = "1"
 dirs = "5"
+tracing = "0.1"
+unic-langid = { version = "0.9", features = ["macros"] }
 toml = { version = "0.9", optional = true }
 figment-json5 = { version = "0.1", optional = true }
 serde_saphyr = { package = "serde-saphyr", version = "0.0.6", optional = true }

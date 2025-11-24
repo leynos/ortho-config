@@ -9,6 +9,7 @@ use rstest_bdd_macros::ScenarioState;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 
 /// Scenario state for rules-oriented precedence scenarios (CLI, env, config path, ignore).
 #[derive(Debug, Default, ScenarioState)]
@@ -62,6 +63,7 @@ pub struct SubcommandContext {
 pub struct LocalizerContext {
     pub localizer: Slot<Box<dyn Localizer + 'static>>,
     pub resolved: Slot<String>,
+    pub issues: Slot<Arc<Mutex<Vec<String>>>>,
 }
 
 /// Captures the optional reference inputs used by subcommand scenarios.
