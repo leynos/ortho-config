@@ -1,3 +1,5 @@
+//! Unit tests for localisation helpers and Fluent-backed behaviour.
+
 use super::*;
 use crate::langid;
 use rstest::rstest;

@@ -38,12 +38,11 @@ production-ready complexity.
   `GlobalArgs`, asserting that default salutations are preserved when
   environment layers append new values.
 - **Localized help text**: ship a `DemoLocalizer` backed by
-  `FluentLocalizer`, layer the example’s bundled catalogue over
-  `ortho_config`’s defaults, and thread it through
-  `CommandLine::command().localize(&localizer)` plus
-  `CommandLine::try_parse_localized_env`. Formatting errors are logged and the
-  default bundle is used as a fallback, illustrating how applications can adopt
-  Fluent without sacrificing existing help copy.
+`FluentLocalizer`, layer the example’s bundled catalogue over `ortho_config`’s
+defaults, and thread it through `CommandLine::command().localize(&localizer)`
+plus `CommandLine::try_parse_localized_env`. Formatting errors are logged, and
+the default bundle is used as a fallback, illustrating how applications can
+adopt Fluent without sacrificing existing help copy.
 - **Shell and Windows automation**: provide paired `.sh` and `.cmd` scripts
   highlighting how environment variables, configuration files, and command-line
   overrides interact. Include examples covering default configuration,

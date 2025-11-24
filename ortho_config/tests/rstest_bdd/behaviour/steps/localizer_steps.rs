@@ -212,8 +212,15 @@ fn install_fluent_localizer(
     capture_errors: bool,
 ) {
     let mut builder = FluentLocalizer::builder(langid!("en-US"))
-        .with_consumer_resources(resources.iter().copied())
-        .with_error_reporter(Arc::new({
+        .with_consumer_resources(resources.iter().copied());
+
+    if capture_errors {
+        let issues = context
+            .issues
+            .with_ref(|slot| Arc::clone(slot))
+            .unwrap_or_else(|| Arc::new(Mutex::new(Vec::new())));
+
+        builder = builder.with_error_reporter(Arc::new({
             let issues = context
                 .issues
                 .with_ref(|slot| Arc::clone(slot))
@@ -225,6 +232,7 @@ fn install_fluent_localizer(
                 guard.push(issue.id.clone());
             }
         }));
+    }
 
     let localizer = builder
         .try_build()
