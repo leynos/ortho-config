@@ -166,6 +166,20 @@ impl FluentLocalizer {
     pub fn builder(locale: LanguageIdentifier) -> FluentLocalizerBuilder {
         FluentLocalizerBuilder::new(locale)
     }
+
+    /// Builds a localiser using only the embedded catalogue for the locale.
+    ///
+    /// This helper avoids repeating `builder(locale).try_build()` in consumers
+    /// that do not need to layer additional resources.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`FluentLocalizerError::UnsupportedLocale`] when no embedded
+    /// catalogue exists for the requested locale or propagates parsing and
+    /// registration failures surfaced while constructing the bundles.
+    pub fn embedded(locale: LanguageIdentifier) -> Result<Self, FluentLocalizerError> {
+        Self::builder(locale).try_build()
+    }
 }
 
 impl Localizer for FluentLocalizer {
@@ -234,13 +248,9 @@ impl FluentLocalizerBuilder {
 
     /// Supplies a pre-built consumer bundle, bypassing resource parsing.
     #[must_use]
-    pub fn with_consumer_bundle(
-        mut self,
-        locale: LanguageIdentifier,
-        bundle: FluentBundle<Arc<FluentResource>>,
-    ) -> Self {
+    pub fn with_consumer_bundle(mut self, bundle: FluentBundle<Arc<FluentResource>>) -> Self {
         self.consumer_bundle = Some(BundleWithLocale {
-            locale,
+            locale: self.locale.clone(),
             bundle,
             kind: FluentBundleSource::Consumer,
         });

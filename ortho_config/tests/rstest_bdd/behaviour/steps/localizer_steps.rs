@@ -8,7 +8,6 @@ use ortho_config::{
 };
 use rstest_bdd_macros::{given, then, when};
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
 
 #[derive(Debug, Clone)]
 struct MessageId(String);
@@ -215,16 +214,9 @@ fn install_fluent_localizer(
         .with_consumer_resources(resources.iter().copied());
 
     if capture_errors {
-        let issues = context
-            .issues
-            .with_ref(|slot| Arc::clone(slot))
-            .unwrap_or_else(|| Arc::new(Mutex::new(Vec::new())));
-
+        let ctx = context.clone();
         builder = builder.with_error_reporter(Arc::new(move |issue: &FormattingIssue| {
-            let mut guard = issues
-                .lock()
-                .expect("formatting issue mutex poisoned during capture");
-            guard.push(issue.id.clone());
+            ctx.record_issue(issue.id.clone());
         }));
     }
 

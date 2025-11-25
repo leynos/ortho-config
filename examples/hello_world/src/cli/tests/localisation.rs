@@ -47,3 +47,31 @@ fn try_parse_with_localizer_builds_cli(demo_localizer: DemoLocalizer) {
         CommandLine::try_parse_localized(args, &demo_localizer).expect("expected to parse args");
     assert!(matches!(cli.command, Commands::Greet(_)));
 }
+
+#[test]
+fn command_with_noop_localizer_uses_stock_clap_strings() {
+    let mut default_command = CommandLine::command();
+
+    let noop_localizer = DemoLocalizer::noop();
+    let mut noop_localized_command = CommandLine::command().localize(&noop_localizer);
+
+    let default_about = default_command
+        .get_about()
+        .expect("about text should be set for default command")
+        .to_string();
+    let noop_about = noop_localized_command
+        .get_about()
+        .expect("about text should be set for noop-localised command")
+        .to_string();
+    assert_eq!(
+        default_about, noop_about,
+        "DemoLocalizer::noop() should not change the about text"
+    );
+
+    let default_usage = default_command.render_usage();
+    let noop_usage = noop_localized_command.render_usage();
+    assert_eq!(
+        default_usage, noop_usage,
+        "DemoLocalizer::noop() should not change the usage text"
+    );
+}

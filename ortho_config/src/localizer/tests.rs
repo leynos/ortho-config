@@ -101,3 +101,19 @@ fn fluent_localizer_logs_and_falls_back_on_format_error() {
 fn strip_bidi_isolates(text: &str) -> String {
     text.replace(['\u{2068}', '\u{2069}'], "")
 }
+
+#[test]
+fn unsupported_locale_returns_structured_error() {
+    let builder = FluentLocalizer::builder(langid!("xx-YY"));
+
+    let err = builder
+        .try_build()
+        .expect_err("expected UnsupportedLocale error for xx-YY");
+
+    match err {
+        FluentLocalizerError::UnsupportedLocale { locale, .. } => {
+            assert_eq!(locale, langid!("xx-YY"));
+        }
+        other => panic!("expected FluentLocalizerError::UnsupportedLocale, got {other:?}"),
+    }
+}

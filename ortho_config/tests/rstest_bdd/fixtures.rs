@@ -59,7 +59,7 @@ pub struct SubcommandContext {
 }
 
 /// Scenario state for localisation helper scenarios.
-#[derive(Debug, Default, ScenarioState)]
+#[derive(Debug, Default, ScenarioState, Clone)]
 pub struct LocalizerContext {
     pub localizer: Slot<Box<dyn Localizer + 'static>>,
     pub resolved: Slot<String>,

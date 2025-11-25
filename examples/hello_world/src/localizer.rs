@@ -9,7 +9,6 @@
 use ortho_config::{
     FluentLocalizer, FluentLocalizerError, LocalizationArgs, Localizer, NoOpLocalizer, langid,
 };
-use std::{fmt, sync::Arc};
 use tracing::warn;
 
 /// Base identifier for the hello world CLI catalogue.
@@ -27,22 +26,21 @@ pub const CLI_TAKE_LEAVE_ABOUT_MESSAGE_ID: &str = "hello_world.cli.take-leave.ab
 
 const HELLO_WORLD_EN_US: &str = include_str!("../locales/en-US/messages.ftl");
 
+#[derive(Debug)]
+enum InnerLocalizer {
+    Fluent(Box<FluentLocalizer>),
+    NoOp(NoOpLocalizer),
+}
+
 /// Localiser that layers the example's Fluent catalogue over the embedded defaults.
+#[derive(Debug)]
 pub struct DemoLocalizer {
-    inner: Arc<dyn Localizer + Send + Sync>,
+    inner: InnerLocalizer,
 }
 
 impl Default for DemoLocalizer {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-impl Clone for DemoLocalizer {
-    fn clone(&self) -> Self {
-        Self {
-            inner: Arc::clone(&self.inner),
-        }
     }
 }
 
@@ -65,7 +63,7 @@ impl DemoLocalizer {
         Self::try_new().unwrap_or_else(|error| {
             warn!(?error, "falling back to no-op localiser");
             Self {
-                inner: Arc::new(NoOpLocalizer::new()),
+                inner: InnerLocalizer::NoOp(NoOpLocalizer::new()),
             }
         })
     }
@@ -78,7 +76,7 @@ impl DemoLocalizer {
     /// or registered.
     pub fn try_new() -> Result<Self, FluentLocalizerError> {
         Ok(Self {
-            inner: Arc::new(build_fluent_localizer()?),
+            inner: InnerLocalizer::Fluent(Box::new(build_fluent_localizer()?)),
         })
     }
 
@@ -101,15 +99,10 @@ impl DemoLocalizer {
 
 impl Localizer for DemoLocalizer {
     fn lookup(&self, id: &str, args: Option<&LocalizationArgs<'_>>) -> Option<String> {
-        self.inner.lookup(id, args)
-    }
-}
-
-impl fmt::Debug for DemoLocalizer {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("DemoLocalizer")
-            .field("inner", &"<localizer>")
-            .finish()
+        match &self.inner {
+            InnerLocalizer::Fluent(fluent) => fluent.lookup(id, args),
+            InnerLocalizer::NoOp(noop) => noop.lookup(id, args),
+        }
     }
 }
 

@@ -84,44 +84,46 @@ pub(super) fn normalize_identifier(id: &str) -> Cow<'_, str> {
 pub(super) fn normalize_resource_ids(resource: &str) -> String {
     resource
         .lines()
-        .map(|line| {
-            let trimmed = line.trim_start();
-            if trimmed.is_empty() || trimmed.starts_with('#') {
-                return line.to_owned();
-            }
-
-            let first_char = trimmed.chars().next().unwrap_or(' ');
-            if !first_char.is_ascii_alphabetic() {
-                return line.to_owned();
-            }
-
-            let Some(eq_pos) = line.find('=') else {
-                return line.to_owned();
-            };
-            let (left, right) = line.split_at(eq_pos);
-
-            let leading_ws_len = line.len() - trimmed.len();
-            let id_end = left.trim_end().len();
-            if id_end <= leading_ws_len {
-                return line.to_owned();
-            }
-
-            let Some(id_segment) = left.get(leading_ws_len..id_end) else {
-                return line.to_owned();
-            };
-            let normalised_id = id_segment.replace('.', "-");
-
-            let mut rebuilt = String::with_capacity(line.len());
-            if let Some(prefix) = left.get(..leading_ws_len) {
-                rebuilt.push_str(prefix);
-            }
-            rebuilt.push_str(&normalised_id);
-            if let Some(trailing) = left.get(id_end..) {
-                rebuilt.push_str(trailing);
-            }
-            rebuilt.push_str(right);
-            rebuilt
-        })
+        .map(normalize_id_line)
         .collect::<Vec<_>>()
         .join("\n")
+}
+
+fn normalize_id_line(line: &str) -> String {
+    let trimmed = line.trim_start();
+    if trimmed.is_empty() || trimmed.starts_with('#') {
+        return line.to_owned();
+    }
+
+    let Some((left, right)) = line.split_once('=') else {
+        return line.to_owned();
+    };
+
+    let first_char = trimmed.chars().next().unwrap_or(' ');
+    if !first_char.is_ascii_alphabetic() {
+        return line.to_owned();
+    }
+
+    let leading_ws_len = left.len() - left.trim_start().len();
+    let id_end = left.trim_end().len();
+    if id_end <= leading_ws_len {
+        return line.to_owned();
+    }
+
+    let Some(id_segment) = left.get(leading_ws_len..id_end) else {
+        return line.to_owned();
+    };
+    let normalised_id = normalize_identifier(id_segment).into_owned();
+
+    let mut rebuilt = String::with_capacity(line.len());
+    if let Some(prefix) = left.get(..leading_ws_len) {
+        rebuilt.push_str(prefix);
+    }
+    rebuilt.push_str(&normalised_id);
+    if let Some(trailing) = left.get(id_end..) {
+        rebuilt.push_str(trailing);
+    }
+    rebuilt.push('=');
+    rebuilt.push_str(right);
+    rebuilt
 }

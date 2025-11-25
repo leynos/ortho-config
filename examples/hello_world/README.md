@@ -37,7 +37,7 @@ production-ready complexity.
   driving a behavioural scenario that composes JSON-described layers into
   `GlobalArgs`, asserting that default salutations are preserved when
   environment layers append new values.
-- **Localized help text**: ship a `DemoLocalizer` backed by
+- **Localised help text**: ship a `DemoLocalizer` backed by
 `FluentLocalizer`, layer the example’s bundled catalogue over `ortho_config`’s
 defaults, and thread it through `CommandLine::command().localize(&localizer)`
 plus `CommandLine::try_parse_localized_env`. Formatting errors are logged, and
