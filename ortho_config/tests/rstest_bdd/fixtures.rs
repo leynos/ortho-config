@@ -9,6 +9,7 @@ use rstest_bdd_macros::ScenarioState;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 
 /// Scenario state for rules-oriented precedence scenarios (CLI, env, config path, ignore).
 #[derive(Debug, Default, ScenarioState)]
@@ -58,10 +59,11 @@ pub struct SubcommandContext {
 }
 
 /// Scenario state for localisation helper scenarios.
-#[derive(Debug, Default, ScenarioState)]
+#[derive(Debug, Default, ScenarioState, Clone)]
 pub struct LocalizerContext {
     pub localizer: Slot<Box<dyn Localizer + 'static>>,
     pub resolved: Slot<String>,
+    pub issues: Slot<Arc<Mutex<Vec<String>>>>,
 }
 
 /// Captures the optional reference inputs used by subcommand scenarios.
@@ -76,6 +78,41 @@ impl SubcommandSources {
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.cli.is_none() && self.file.is_none() && self.env.is_none()
+    }
+}
+
+impl LocalizerContext {
+    #[must_use]
+    pub fn init_issues() -> Slot<Arc<Mutex<Vec<String>>>> {
+        let slot = Slot::default();
+        slot.set(Arc::new(Mutex::new(Vec::new())));
+        slot
+    }
+
+    fn issues_arc(&self) -> Option<Arc<Mutex<Vec<String>>>> {
+        self.issues.with_ref(|issues| Arc::clone(issues))
+    }
+
+    pub fn record_issue(&self, id: String) {
+        if let Some(issues) = self.issues_arc() {
+            if let Ok(mut guard) = issues.lock() {
+                guard.push(id);
+            }
+        }
+    }
+
+    #[must_use]
+    pub fn take_issues(&self) -> Vec<String> {
+        if let Some(issues) = self.issues.take() {
+            let mut guard = issues
+                .lock()
+                .expect("formatting issue mutex poisoned during take");
+            let collected = guard.clone();
+            guard.clear();
+            collected
+        } else {
+            Vec::new()
+        }
     }
 }
 
@@ -118,7 +155,10 @@ pub fn subcommand_context() -> SubcommandContext {
 /// Provides a clean localisation context so translation scenarios share state.
 #[fixture]
 pub fn localizer_context() -> LocalizerContext {
-    LocalizerContext::default()
+    LocalizerContext {
+        issues: LocalizerContext::init_issues(),
+        ..LocalizerContext::default()
+    }
 }
 
 /// Minimal configuration struct used by the rstest-bdd canary scenario.

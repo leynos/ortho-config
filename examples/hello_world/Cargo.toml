@@ -15,6 +15,7 @@ clap = { version = "4", features = ["derive"] }
 fluent-bundle = "0.16"
 color-eyre = "0.6"
 camino = "1"
+tracing = "0.1"
 [dev-dependencies]
 anyhow = "1"
 rstest = "0.23"

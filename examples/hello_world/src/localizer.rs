@@ -1,15 +1,15 @@
-//! Demo localizer used to showcase the `Localizer` trait in action.
+//! Demo localiser showcasing how applications can layer Fluent resources over
+//! the embedded defaults provided by `ortho_config`.
 //!
-//! The example keeps the localization story simple by embedding a pair of
-//! strings. Real applications would load Fluent resources from disk or embed
-//! bundles during compilation, but surfacing a concrete `Localizer`
-//! implementation here makes it obvious how consumers can plug their own
-//! translation strategy into `clap` once the derive macro wires it through.
+//! The example embeds a small English catalogue and builds a
+//! [`FluentLocalizer`] so the CLI copy is translated through the same abstraction
+//! used by consumer binaries. Should localisation setup fail, the localiser
+//! falls back to [`NoOpLocalizer`] and retains the stock `clap` strings.
 
-use std::collections::HashMap;
-
-use fluent_bundle::FluentValue;
-use ortho_config::{LocalizationArgs, Localizer, NoOpLocalizer};
+use ortho_config::{
+    FluentLocalizer, FluentLocalizerError, LocalizationArgs, Localizer, NoOpLocalizer,
+};
+use tracing::warn;
 
 /// Base identifier for the hello world CLI catalogue.
 pub const CLI_BASE_MESSAGE_ID: &str = "hello_world.cli";
@@ -24,41 +24,21 @@ pub const CLI_GREET_ABOUT_MESSAGE_ID: &str = "hello_world.cli.greet.about";
 /// Identifier for the take-leave subcommand description.
 pub const CLI_TAKE_LEAVE_ABOUT_MESSAGE_ID: &str = "hello_world.cli.take-leave.about";
 
-/// Localizer that returns baked-in demo strings for the CLI entry points.
-#[derive(Debug, Clone)]
+const HELLO_WORLD_EN_US: &str = include_str!("../locales/en-US/messages.ftl");
+
+/// Localiser that layers the example's Fluent catalogue over the embedded defaults.
 pub struct DemoLocalizer {
-    catalogue: HashMap<&'static str, &'static str>,
+    inner: Box<dyn Localizer>,
 }
 
 impl Default for DemoLocalizer {
     fn default() -> Self {
-        let mut catalogue = HashMap::new();
-        catalogue.insert(
-            CLI_ABOUT_MESSAGE_ID,
-            "Friendly greeting demo showcasing localized help",
-        );
-        catalogue.insert(
-            CLI_LONG_ABOUT_MESSAGE_ID,
-            "Use {binary} to explore layered greetings across config, env, and CLI",
-        );
-        catalogue.insert(
-            CLI_USAGE_MESSAGE_ID,
-            "Usage:\n  {binary} [OPTIONS] <COMMAND>\n\nVisit --help for details.",
-        );
-        catalogue.insert(
-            CLI_GREET_ABOUT_MESSAGE_ID,
-            "Prints a friendly greeting using any configured templates.",
-        );
-        catalogue.insert(
-            CLI_TAKE_LEAVE_ABOUT_MESSAGE_ID,
-            "Describes how the farewell workflow proceeds for the recipient.",
-        );
-        Self { catalogue }
+        Self::new()
     }
 }
 
 impl DemoLocalizer {
-    /// Builds a demo localiser with the shipped catalogue.
+    /// Builds the demo localiser, falling back to [`NoOpLocalizer`] if Fluent setup fails.
     ///
     /// # Examples
     /// ```rust
@@ -70,23 +50,40 @@ impl DemoLocalizer {
     /// let command = CommandLine::command().localize(&localizer);
     /// assert!(command.get_about().is_some());
     /// ```
+    ///
     #[must_use]
     pub fn new() -> Self {
-        Self::default()
+        Self::try_new().unwrap_or_else(|error| {
+            warn!(?error, "falling back to no-op localiser");
+            Self {
+                inner: Box::new(NoOpLocalizer::new()),
+            }
+        })
     }
 
-    /// Returns a no-op localiser for callers that do not ship translations yet.
+    /// Attempts to construct the demo localiser without falling back.
     ///
-    /// # Examples
-    /// ```rust
-    /// use clap::CommandFactory;
-    /// use hello_world::cli::{CommandLine, LocalizeCmd};
-    /// use hello_world::localizer::DemoLocalizer;
+    /// # Errors
     ///
-    /// let localizer = DemoLocalizer::noop();
-    /// let command = CommandLine::command().localize(&localizer);
-    /// assert!(command.get_about().is_some());
-    /// ```
+    /// Returns an error when the embedded Fluent catalogue cannot be parsed
+    /// or registered.
+    pub fn try_new() -> Result<Self, FluentLocalizerError> {
+        Ok(Self {
+            inner: Box::new(FluentLocalizer::with_en_us_defaults([HELLO_WORLD_EN_US])?),
+        })
+    }
+
+    /// Returns the underlying [`FluentLocalizer`] so consumers can reuse the catalogue.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the embedded catalogue fails to parse or when
+    /// Fluent rejects the resources while building the bundle.
+    pub fn fluent() -> Result<FluentLocalizer, FluentLocalizerError> {
+        FluentLocalizer::with_en_us_defaults([HELLO_WORLD_EN_US])
+    }
+
+    /// Provides a no-op localiser for callers that do not ship translations yet.
     #[must_use]
     pub const fn noop() -> NoOpLocalizer {
         NoOpLocalizer::new()
@@ -95,24 +92,16 @@ impl DemoLocalizer {
 
 impl Localizer for DemoLocalizer {
     fn lookup(&self, id: &str, args: Option<&LocalizationArgs<'_>>) -> Option<String> {
-        let template = self.catalogue.get(id)?;
-        Some(args.map_or_else(
-            || (*template).to_owned(),
-            |values| render_template_with_args(template, values),
-        ))
+        self.inner.lookup(id, args)
     }
 }
 
-fn render_template_with_args(template: &str, values: &LocalizationArgs<'_>) -> String {
-    let mut rendered = template.to_owned();
-    for (key, value) in values {
-        let FluentValue::String(text) = value else {
-            continue;
-        };
-        let placeholder = format!("{{{key}}}");
-        rendered = rendered.replace(&placeholder, text);
+impl std::fmt::Debug for DemoLocalizer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DemoLocalizer")
+            .field("inner", &"<localizer>")
+            .finish()
     }
-    rendered
 }
 
 #[cfg(test)]
@@ -122,16 +111,16 @@ mod tests {
 
     #[test]
     fn demo_localiser_returns_copy() {
-        let localiser = DemoLocalizer::default();
+        let localiser = DemoLocalizer::try_new().expect("demo localiser should build");
         let about = localiser
             .lookup(CLI_ABOUT_MESSAGE_ID, None)
             .expect("demo copy should exist");
-        assert!(about.contains("demo"));
+        assert!(about.contains("greeting"));
     }
 
     #[test]
     fn demo_localiser_formats_long_description() {
-        let localiser = DemoLocalizer::default();
+        let localiser = DemoLocalizer::try_new().expect("demo localiser should build");
         let mut args: LocalizationArgs<'_> = HashMap::new();
         args.insert("binary", "hello-world".into());
         let long_about = localiser

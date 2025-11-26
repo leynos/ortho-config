@@ -149,30 +149,40 @@ resolved messages or fall back to the stock help text. The helper type
 `LocalizationArgs<'a> = HashMap<&'a str, FluentValue<'a>>` mirrors Fluent’s
 placeholder model, keeping argument-aware lookups ergonomic.
 
-The Hello World example ships `hello_world::localizer::DemoLocalizer`, which
-drives `CommandLine::command().localize(&localizer)` and
-`CommandLine::try_parse_localized_env`. This lets the sample wire translated
-`about`/`long_about` strings into the generated `clap::Command` before any
-parsing occurs, so `--help` exits reuse the translated copy as well:
+The crate now ships a Fluent-backed implementation. `FluentLocalizer` embeds an
+English catalogue at `locales/en-US/messages.ftl`, layers any consumer bundles
+over those defaults, logs formatting errors with `tracing`, and falls back to
+the next bundle when a lookup fails:
 
 ```rust
-use hello_world::cli::{CommandLine, LocalizeCmd};
-use hello_world::localizer::DemoLocalizer;
+use ortho_config::{langid, FluentLocalizer, LocalizationArgs, Localizer};
 
-let localizer = DemoLocalizer::default();
-let command = CommandLine::command().localize(&localizer);
-assert!(command
-    .get_about()
-    .expect("demo about text")
-    .to_string()
-    .contains("localized"));
+static APP_EN: &str = include_str!("../locales/en-US/app.ftl");
+
+let localizer = FluentLocalizer::builder(langid!("en-US"))
+    .with_consumer_resources([APP_EN])
+    .try_build()
+    .expect("embedded locales load successfully");
+
+let mut args: LocalizationArgs<'_> = LocalizationArgs::default();
+args.insert("binary", "demo".into());
+assert_eq!(
+    localizer
+        .lookup("cli.usage", Some(&args))
+        .expect("usage copy exists"),
+    "Usage: demo [OPTIONS] <COMMAND>"
+);
 ```
 
-Projects that are not ready to translate strings today can call
-`NoOpLocalizer::new()` and keep the default copy until real Fluent bundles are
-available. Behavioural coverage for `ortho_config` itself now includes a
-localizer-focused scenario, so the fallback semantics remain stable across
-releases.
+Applications can inject a custom logger with `with_error_reporter` when they
+need to capture Fluent formatting errors alongside command parsing failures.
+
+The Hello World example ships `hello_world::localizer::DemoLocalizer`, which
+builds a `FluentLocalizer` from `examples/hello_world/locales/en-US` and drives
+`CommandLine::command().localize(&localizer)` and
+`CommandLine::try_parse_localized_env`. If the localization setup ever fails,
+the example falls back to `NoOpLocalizer`, preserving the stock `clap` strings
+until translations are fixed.
 
 ## Installation and dependencies
 
