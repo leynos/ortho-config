@@ -88,14 +88,42 @@ fn fluent_localizer_logs_and_falls_back_on_format_error() {
         .try_build()
         .expect("consumer bundle should build");
 
-    let resolved = localizer.message("cli.usage", Some(&args), "fallback usage");
+    let resolved = localizer
+        .lookup("cli.usage", Some(&args))
+        .expect("default bundle should provide fallback copy");
     let sanitised = strip_bidi_isolates(&resolved);
-    assert!(sanitised.starts_with("Usage: demo"), "resolved: {resolved}");
+    assert_eq!(sanitised, "Usage: demo [OPTIONS] <COMMAND>");
 
     let logged = issues
         .lock()
         .expect("issue log mutex poisoned during assertion");
     assert_eq!(*logged, vec![String::from("cli.usage")]);
+}
+
+#[rstest]
+fn fluent_localizer_returns_none_when_formatting_fails_without_defaults() {
+    let issues = Arc::new(Mutex::new(Vec::new()));
+    let reporter: FormattingIssueReporter = {
+        let captured_issues = Arc::clone(&issues);
+        Arc::new(move |issue: &FormattingIssue| {
+            let mut guard = captured_issues.lock().expect("issue log mutex poisoned");
+            guard.push(issue.id.clone());
+        })
+    };
+
+    let localizer = FluentLocalizer::builder(langid!("en-US"))
+        .disable_defaults()
+        .with_consumer_resources(["cli.about = About { $missing }"])
+        .with_error_reporter(reporter)
+        .try_build()
+        .expect("consumer bundle should build");
+
+    assert!(localizer.lookup("cli.about", None).is_none());
+
+    let logged = issues
+        .lock()
+        .expect("issue log mutex poisoned during assertion");
+    assert_eq!(*logged, vec![String::from("cli.about")]);
 }
 
 fn strip_bidi_isolates(text: &str) -> String {

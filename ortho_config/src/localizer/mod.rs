@@ -148,15 +148,6 @@ pub enum FluentLocalizerError {
         /// Errors returned by Fluent during registration.
         errors: Vec<FluentError>,
     },
-
-    /// Consumer bundle locale did not match the builder's locale.
-    #[error("consumer bundle locale {consumer} mismatches builder locale {builder}")]
-    ConsumerLocaleMismatch {
-        /// Locale requested for the localiser.
-        builder: LanguageIdentifier,
-        /// Locale attached to the provided consumer bundle.
-        consumer: LanguageIdentifier,
-    },
 }
 
 impl FluentLocalizer {
@@ -223,20 +214,21 @@ impl Localizer for FluentLocalizer {
     fn lookup(&self, id: &str, args: Option<&LocalizationArgs<'_>>) -> Option<String> {
         let fluent_args = args.map(fluent_args_from);
         let normalized_id = normalize_identifier(id);
-        let lookup_ids = if normalized_id.as_ref() == id {
-            [id, id]
-        } else {
-            [id, normalized_id.as_ref()]
-        };
+        let use_fallback_id = normalized_id.as_ref() != id;
         let bundles = [self.consumer.as_ref(), self.defaults.as_ref()];
 
         for bundle in bundles.into_iter().flatten() {
-            let pattern_opt = lookup_ids.iter().find_map(|lookup_id| {
-                bundle
+            let mut pattern_opt = bundle
+                .bundle
+                .get_message(id)
+                .and_then(|message| message.value());
+
+            if pattern_opt.is_none() && use_fallback_id {
+                pattern_opt = bundle
                     .bundle
-                    .get_message(lookup_id)
-                    .and_then(|message| message.value())
-            });
+                    .get_message(normalized_id.as_ref())
+                    .and_then(|message| message.value());
+            }
 
             let Some(pattern) = pattern_opt else { continue };
 
@@ -255,6 +247,9 @@ impl Localizer for FluentLocalizer {
                 source: bundle.kind,
                 errors,
             });
+
+            // Continue to the next bundle when formatting fails so callers can
+            // fall back to defaults or their own copy.
         }
 
         None
