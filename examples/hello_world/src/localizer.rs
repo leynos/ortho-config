@@ -7,7 +7,7 @@
 //! falls back to [`NoOpLocalizer`] and retains the stock `clap` strings.
 
 use ortho_config::{
-    FluentLocalizer, FluentLocalizerError, LocalizationArgs, Localizer, NoOpLocalizer, langid,
+    FluentLocalizer, FluentLocalizerError, LocalizationArgs, Localizer, NoOpLocalizer,
 };
 use tracing::warn;
 
@@ -26,16 +26,9 @@ pub const CLI_TAKE_LEAVE_ABOUT_MESSAGE_ID: &str = "hello_world.cli.take-leave.ab
 
 const HELLO_WORLD_EN_US: &str = include_str!("../locales/en-US/messages.ftl");
 
-#[derive(Debug)]
-enum InnerLocalizer {
-    Fluent(Box<FluentLocalizer>),
-    NoOp(NoOpLocalizer),
-}
-
 /// Localiser that layers the example's Fluent catalogue over the embedded defaults.
-#[derive(Debug)]
 pub struct DemoLocalizer {
-    inner: InnerLocalizer,
+    inner: Box<dyn Localizer>,
 }
 
 impl Default for DemoLocalizer {
@@ -63,7 +56,7 @@ impl DemoLocalizer {
         Self::try_new().unwrap_or_else(|error| {
             warn!(?error, "falling back to no-op localiser");
             Self {
-                inner: InnerLocalizer::NoOp(NoOpLocalizer::new()),
+                inner: Box::new(NoOpLocalizer::new()),
             }
         })
     }
@@ -76,7 +69,7 @@ impl DemoLocalizer {
     /// or registered.
     pub fn try_new() -> Result<Self, FluentLocalizerError> {
         Ok(Self {
-            inner: InnerLocalizer::Fluent(Box::new(build_fluent_localizer()?)),
+            inner: Box::new(FluentLocalizer::with_en_us_defaults([HELLO_WORLD_EN_US])?),
         })
     }
 
@@ -87,7 +80,7 @@ impl DemoLocalizer {
     /// Returns an error when the embedded catalogue fails to parse or when
     /// Fluent rejects the resources while building the bundle.
     pub fn fluent() -> Result<FluentLocalizer, FluentLocalizerError> {
-        build_fluent_localizer()
+        FluentLocalizer::with_en_us_defaults([HELLO_WORLD_EN_US])
     }
 
     /// Provides a no-op localiser for callers that do not ship translations yet.
@@ -99,17 +92,16 @@ impl DemoLocalizer {
 
 impl Localizer for DemoLocalizer {
     fn lookup(&self, id: &str, args: Option<&LocalizationArgs<'_>>) -> Option<String> {
-        match &self.inner {
-            InnerLocalizer::Fluent(fluent) => fluent.lookup(id, args),
-            InnerLocalizer::NoOp(noop) => noop.lookup(id, args),
-        }
+        self.inner.lookup(id, args)
     }
 }
 
-fn build_fluent_localizer() -> Result<FluentLocalizer, FluentLocalizerError> {
-    FluentLocalizer::builder(langid!("en-US"))
-        .with_consumer_resources([HELLO_WORLD_EN_US])
-        .try_build()
+impl std::fmt::Debug for DemoLocalizer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DemoLocalizer")
+            .field("inner", &"<localizer>")
+            .finish()
+    }
 }
 
 #[cfg(test)]

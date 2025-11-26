@@ -13,7 +13,7 @@ use std::collections::HashMap;
 use std::fmt;
 use std::sync::Arc;
 use thiserror::Error;
-use unic_langid::LanguageIdentifier;
+use unic_langid::{LanguageIdentifier, langid};
 
 mod fluent;
 use fluent::{BundleWithLocale, bundle_from_resources, default_resources, normalize_identifier};
@@ -189,6 +189,34 @@ impl FluentLocalizer {
     /// registration failures surfaced while constructing the bundles.
     pub fn embedded(locale: LanguageIdentifier) -> Result<Self, FluentLocalizerError> {
         Self::builder(locale).try_build()
+    }
+
+    /// Builds a localiser that layers consumer resources over the embedded defaults.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`FluentLocalizerError`] when the embedded catalogue is missing
+    /// for the requested locale or when any provided resource fails to parse or
+    /// register.
+    pub fn with_embedded_and(
+        locale: LanguageIdentifier,
+        resources: impl IntoIterator<Item = &'static str>,
+    ) -> Result<Self, FluentLocalizerError> {
+        Self::builder(locale)
+            .with_consumer_resources(resources)
+            .try_build()
+    }
+
+    /// Builds an English (en-US) localiser with the provided consumer resources.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`FluentLocalizerError`] when the embedded en-US catalogue or
+    /// consumer resources fail to parse or register.
+    pub fn with_en_us_defaults(
+        resources: impl IntoIterator<Item = &'static str>,
+    ) -> Result<Self, FluentLocalizerError> {
+        Self::with_embedded_and(langid!("en-US"), resources)
     }
 }
 
