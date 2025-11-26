@@ -126,6 +126,46 @@ fn fluent_localizer_returns_none_when_formatting_fails_without_defaults() {
     assert_eq!(*logged, vec![String::from("cli.about")]);
 }
 
+#[rstest]
+fn lookup_prefers_original_id_over_normalized() {
+    let localizer = FluentLocalizer::builder(langid!("en-US"))
+        .with_consumer_resources(["cli.about = Original consumer"])
+        .try_build()
+        .expect("consumer bundle should build");
+
+    let resolved = localizer.lookup("cli.about", None);
+    assert_eq!(resolved.as_deref(), Some("Original consumer"));
+}
+
+#[rstest]
+fn lookup_falls_back_to_normalized_consumer_id() {
+    let localizer = FluentLocalizer::builder(langid!("en-US"))
+        .disable_defaults()
+        .with_consumer_resources(["cli-about = Normalised only"])
+        .try_build()
+        .expect("consumer-only bundle should build");
+
+    let resolved = localizer.lookup("cli.about", None);
+    assert_eq!(resolved.as_deref(), Some("Normalised only"));
+}
+
+#[rstest]
+fn lookup_falls_back_to_default_when_consumer_formatting_fails() {
+    let mut args: LocalizationArgs<'static> = HashMap::new();
+    args.insert("binary", FluentValue::from("demo"));
+
+    let localizer = FluentLocalizer::builder(langid!("en-US"))
+        .with_consumer_resources(["cli.usage = Usage { $binary } { $missing }"])
+        .try_build()
+        .expect("bundles should build");
+
+    let resolved = localizer
+        .lookup("cli.usage", Some(&args))
+        .expect("default bundle should provide usage copy");
+    let sanitised = strip_bidi_isolates(&resolved);
+    assert_eq!(sanitised, "Usage: demo [OPTIONS] <COMMAND>");
+}
+
 fn strip_bidi_isolates(text: &str) -> String {
     text.replace(['\u{2068}', '\u{2069}'], "")
 }

@@ -29,6 +29,7 @@ const HELLO_WORLD_EN_US: &str = include_str!("../locales/en-US/messages.ftl");
 /// Localiser that layers the example's Fluent catalogue over the embedded defaults.
 pub struct DemoLocalizer {
     inner: Option<FluentLocalizer>,
+    noop: NoOpLocalizer,
 }
 
 impl Default for DemoLocalizer {
@@ -55,7 +56,10 @@ impl DemoLocalizer {
     pub fn new() -> Self {
         Self::try_new().unwrap_or_else(|error| {
             warn!(?error, "falling back to no-op localiser");
-            Self { inner: None }
+            Self {
+                inner: None,
+                noop: NoOpLocalizer::new(),
+            }
         })
     }
 
@@ -68,6 +72,7 @@ impl DemoLocalizer {
     pub fn try_new() -> Result<Self, FluentLocalizerError> {
         Ok(Self {
             inner: Some(FluentLocalizer::with_en_us_defaults([HELLO_WORLD_EN_US])?),
+            noop: NoOpLocalizer::new(),
         })
     }
 
@@ -88,7 +93,7 @@ impl DemoLocalizer {
 impl Localizer for DemoLocalizer {
     fn lookup(&self, id: &str, args: Option<&LocalizationArgs<'_>>) -> Option<String> {
         self.inner.as_ref().map_or_else(
-            || NoOpLocalizer::new().lookup(id, args),
+            || self.noop.lookup(id, args),
             |fluent| fluent.lookup(id, args),
         )
     }
@@ -104,6 +109,7 @@ impl std::fmt::Debug for DemoLocalizer {
 
         f.debug_struct("DemoLocalizer")
             .field("inner", &inner)
+            .field("noop", &self.noop)
             .finish()
     }
 }
@@ -148,7 +154,10 @@ mod tests {
 
     #[test]
     fn fluent_is_none_when_noop() {
-        let localiser = DemoLocalizer { inner: None };
+        let localiser = DemoLocalizer {
+            inner: None,
+            noop: NoOpLocalizer::new(),
+        };
 
         assert!(localiser.fluent().is_none());
     }

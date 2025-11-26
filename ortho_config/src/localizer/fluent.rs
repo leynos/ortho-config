@@ -92,16 +92,23 @@ pub(super) fn normalize_resource_ids(resource: &str) -> String {
         .join("\n")
 }
 
-const fn is_valid_fluent_id_char(ch: char) -> bool {
-    ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_' | '.')
+/// Returns true when `ch` is valid in a Fluent message identifier.
+///
+/// Fluent identifiers permit Unicode letters and digits alongside `-`, `_`,
+/// and `.`. This matches the grammar used by Fluent and avoids excluding
+/// non-ASCII locales. See <https://projectfluent.org/fluent/guide/grammar.html>.
+fn is_valid_fluent_id_char(ch: char) -> bool {
+    ch.is_alphanumeric() || matches!(ch, '-' | '_' | '.')
 }
 
+/// Validates a Fluent identifier, ensuring the first character is alphabetic
+/// and all subsequent characters are permitted by `is_valid_fluent_id_char`.
 fn is_valid_fluent_identifier(id: &str) -> bool {
     let mut chars = id.chars();
     let Some(first) = chars.next() else {
         return false;
     };
-    first.is_ascii_alphabetic() && chars.all(is_valid_fluent_id_char)
+    first.is_alphabetic() && chars.all(is_valid_fluent_id_char)
 }
 
 fn normalize_id_line(line: &str) -> String {
@@ -242,6 +249,7 @@ impl fmt::Debug for FluentLocalizerBuilder {
 
 #[cfg(test)]
 mod tests {
+    //! Tests for Fluent resource parsing and identifier normalisation helpers.
     use super::*;
 
     #[test]
@@ -264,5 +272,12 @@ mod tests {
         let normalised = normalize_resource_ids(resource);
         assert!(normalised.contains("-term.id = Term value"));
         assert!(normalised.contains("    .label = Label"));
+    }
+
+    #[test]
+    fn normalises_unicode_identifiers() {
+        let resource = "ключ.значение = Привет";
+        let normalised = normalize_resource_ids(resource);
+        assert!(normalised.starts_with("ключ-значение = Привет"));
     }
 }
