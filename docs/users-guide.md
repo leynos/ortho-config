@@ -179,7 +179,7 @@ need to capture Fluent formatting errors alongside command parsing failures.
 
 The Hello World example ships `hello_world::localizer::DemoLocalizer`, which
 builds a `FluentLocalizer` from `examples/hello_world/locales/en-US` and drives
-`CommandLine::command().localize(&localizer)` plus
+`CommandLine::command().localize(&localizer)` and
 `CommandLine::try_parse_localized_env`. If the localization setup ever fails,
 the example falls back to `NoOpLocalizer`, preserving the stock `clap` strings
 until translations are fixed.

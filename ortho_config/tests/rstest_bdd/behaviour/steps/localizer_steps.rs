@@ -8,6 +8,7 @@ use ortho_config::{
 };
 use rstest_bdd_macros::{given, then, when};
 use std::collections::HashMap;
+use std::sync::Arc;
 
 #[derive(Debug, Clone)]
 struct MessageId(String);

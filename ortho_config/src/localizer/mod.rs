@@ -105,7 +105,7 @@ pub type FormattingIssueReporter = Arc<dyn Fn(&FormattingIssue) + Send + Sync>;
 /// Fluent-powered localiser that layers consumer bundles over embedded defaults.
 pub struct FluentLocalizer {
     consumer: Option<BundleWithLocale>,
-    defaults: BundleWithLocale,
+    defaults: Option<BundleWithLocale>,
     report_issue: FormattingIssueReporter,
 }
 
@@ -115,6 +115,7 @@ pub struct FluentLocalizerBuilder {
     consumer_resources: Vec<&'static str>,
     consumer_bundle: Option<BundleWithLocale>,
     report_issue: FormattingIssueReporter,
+    use_defaults: bool,
 }
 
 /// Errors surfaced when constructing a [`FluentLocalizer`].
@@ -147,6 +148,15 @@ pub enum FluentLocalizerError {
         catalogue: FluentBundleSource,
         /// Errors returned by Fluent during registration.
         errors: Vec<FluentError>,
+    },
+
+    /// Consumer bundle locale did not match the builder's locale.
+    #[error("consumer bundle locale {consumer} mismatches builder locale {builder}")]
+    ConsumerLocaleMismatch {
+        /// Locale requested for the localiser.
+        builder: LanguageIdentifier,
+        /// Locale attached to the provided consumer bundle.
+        consumer: LanguageIdentifier,
     },
 }
 
@@ -191,7 +201,7 @@ impl Localizer for FluentLocalizer {
         } else {
             [id, normalized_id.as_ref()]
         };
-        let bundles = [self.consumer.as_ref(), Some(&self.defaults)];
+        let bundles = [self.consumer.as_ref(), self.defaults.as_ref()];
 
         for bundle in bundles.into_iter().flatten() {
             let pattern_opt = lookup_ids.iter().find_map(|lookup_id| {
@@ -233,6 +243,7 @@ impl FluentLocalizerBuilder {
             consumer_resources: Vec::new(),
             consumer_bundle: None,
             report_issue: default_reporter(),
+            use_defaults: true,
         }
     }
 
@@ -257,6 +268,13 @@ impl FluentLocalizerBuilder {
         self
     }
 
+    /// Disables loading embedded defaults, enabling consumer-only catalogues.
+    #[must_use]
+    pub const fn disable_defaults(mut self) -> Self {
+        self.use_defaults = false;
+        self
+    }
+
     /// Installs a hook to report formatting issues surfaced by Fluent.
     #[must_use]
     pub fn with_error_reporter(mut self, reporter: FormattingIssueReporter) -> Self {
@@ -271,15 +289,28 @@ impl FluentLocalizerBuilder {
     /// Returns [`FluentLocalizerError`] if any catalogue fails to parse or
     /// registers conflicting identifiers.
     pub fn try_build(self) -> Result<FluentLocalizer, FluentLocalizerError> {
-        let defaults = bundle_from_resources(
-            &self.locale,
-            default_resources(&self.locale).ok_or_else(|| {
-                FluentLocalizerError::UnsupportedLocale {
-                    locale: self.locale.clone(),
-                }
-            })?,
-            FluentBundleSource::Default,
-        )?;
+        if let Some(bundle) = &self.consumer_bundle
+            && bundle.locale != self.locale
+        {
+            return Err(FluentLocalizerError::ConsumerLocaleMismatch {
+                builder: self.locale,
+                consumer: bundle.locale.clone(),
+            });
+        }
+
+        let defaults = if self.use_defaults {
+            Some(bundle_from_resources(
+                &self.locale,
+                default_resources(&self.locale).ok_or_else(|| {
+                    FluentLocalizerError::UnsupportedLocale {
+                        locale: self.locale.clone(),
+                    }
+                })?,
+                FluentBundleSource::Default,
+            )?)
+        } else {
+            None
+        };
 
         let consumer = if let Some(bundle) = self.consumer_bundle {
             Some(bundle)
@@ -308,7 +339,10 @@ impl fmt::Debug for FluentLocalizer {
                 "consumer",
                 &self.consumer.as_ref().map(|bundle| &bundle.locale),
             )
-            .field("defaults", &self.defaults.locale)
+            .field(
+                "defaults",
+                &self.defaults.as_ref().map(|bundle| &bundle.locale),
+            )
             .field("report_issue", &"<formatter>")
             .finish()
     }
@@ -323,6 +357,7 @@ impl fmt::Debug for FluentLocalizerBuilder {
                 "consumer_bundle",
                 &self.consumer_bundle.as_ref().map(|bundle| &bundle.locale),
             )
+            .field("use_defaults", &self.use_defaults)
             .field("report_issue", &"<formatter>")
             .finish()
     }
