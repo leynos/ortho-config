@@ -92,6 +92,18 @@ pub(super) fn normalize_resource_ids(resource: &str) -> String {
         .join("\n")
 }
 
+const fn is_valid_fluent_id_char(ch: char) -> bool {
+    ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_' | '.')
+}
+
+fn is_valid_fluent_identifier(id: &str) -> bool {
+    let mut chars = id.chars();
+    let Some(first) = chars.next() else {
+        return false;
+    };
+    first.is_ascii_alphabetic() && chars.all(is_valid_fluent_id_char)
+}
+
 fn normalize_id_line(line: &str) -> String {
     let trimmed = line.trim_start();
     if trimmed.is_empty() || trimmed.starts_with('#') {
@@ -109,14 +121,7 @@ fn normalize_id_line(line: &str) -> String {
     }
 
     let id_segment = left.trim_end();
-    let mut chars = id_segment.chars();
-    let Some(first_char) = chars.next() else {
-        return line.to_owned();
-    };
-
-    if !first_char.is_ascii_alphabetic()
-        || !chars.all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_' | '.'))
-    {
+    if !is_valid_fluent_identifier(id_segment) {
         return line.to_owned();
     }
 
