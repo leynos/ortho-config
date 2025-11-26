@@ -6,8 +6,7 @@
 //! return owned `String` values so callers can cache the resolved text or fall
 //! back to defaults supplied by `clap` when no translation exists.
 
-use fluent_bundle::concurrent::FluentBundle;
-use fluent_bundle::{FluentArgs, FluentError, FluentResource, FluentValue};
+use fluent_bundle::{FluentArgs, FluentError, FluentValue};
 use fluent_syntax::parser::ParserError;
 use std::collections::HashMap;
 use std::fmt;
@@ -16,7 +15,7 @@ use thiserror::Error;
 use unic_langid::{LanguageIdentifier, langid};
 
 mod fluent;
-use fluent::{BundleWithLocale, bundle_from_resources, default_resources, normalize_identifier};
+use fluent::{BundleWithLocale, normalize_identifier};
 
 /// Arguments forwarded to localisation lookups.
 ///
@@ -262,104 +261,6 @@ impl Localizer for FluentLocalizer {
     }
 }
 
-impl FluentLocalizerBuilder {
-    /// Creates a builder for the requested locale.
-    #[must_use]
-    pub fn new(locale: LanguageIdentifier) -> Self {
-        Self {
-            locale,
-            consumer_resources: Vec::new(),
-            consumer_bundle: None,
-            report_issue: default_reporter(),
-            use_defaults: true,
-        }
-    }
-
-    /// Adds consumer-provided Fluent resources to layer over the defaults.
-    #[must_use]
-    pub fn with_consumer_resources(
-        mut self,
-        resources: impl IntoIterator<Item = &'static str>,
-    ) -> Self {
-        self.consumer_resources.extend(resources);
-        self
-    }
-
-    /// Supplies a pre-built consumer bundle, bypassing resource parsing.
-    #[must_use]
-    pub fn with_consumer_bundle(mut self, bundle: FluentBundle<Arc<FluentResource>>) -> Self {
-        self.consumer_bundle = Some(BundleWithLocale {
-            locale: self.locale.clone(),
-            bundle,
-            kind: FluentBundleSource::Consumer,
-        });
-        self
-    }
-
-    /// Disables loading embedded defaults, enabling consumer-only catalogues.
-    #[must_use]
-    pub const fn disable_defaults(mut self) -> Self {
-        self.use_defaults = false;
-        self
-    }
-
-    /// Installs a hook to report formatting issues surfaced by Fluent.
-    #[must_use]
-    pub fn with_error_reporter(mut self, reporter: FormattingIssueReporter) -> Self {
-        self.report_issue = reporter;
-        self
-    }
-
-    /// Builds the [`FluentLocalizer`], validating both default and consumer bundles.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`FluentLocalizerError`] if any catalogue fails to parse or
-    /// registers conflicting identifiers.
-    pub fn try_build(self) -> Result<FluentLocalizer, FluentLocalizerError> {
-        if let Some(bundle) = &self.consumer_bundle
-            && bundle.locale != self.locale
-        {
-            return Err(FluentLocalizerError::ConsumerLocaleMismatch {
-                builder: self.locale,
-                consumer: bundle.locale.clone(),
-            });
-        }
-
-        let defaults = if self.use_defaults {
-            Some(bundle_from_resources(
-                &self.locale,
-                default_resources(&self.locale).ok_or_else(|| {
-                    FluentLocalizerError::UnsupportedLocale {
-                        locale: self.locale.clone(),
-                    }
-                })?,
-                FluentBundleSource::Default,
-            )?)
-        } else {
-            None
-        };
-
-        let consumer = if let Some(bundle) = self.consumer_bundle {
-            Some(bundle)
-        } else if self.consumer_resources.is_empty() {
-            None
-        } else {
-            Some(bundle_from_resources(
-                &self.locale,
-                &self.consumer_resources,
-                FluentBundleSource::Consumer,
-            )?)
-        };
-
-        Ok(FluentLocalizer {
-            consumer,
-            defaults,
-            report_issue: self.report_issue,
-        })
-    }
-}
-
 impl fmt::Debug for FluentLocalizer {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("FluentLocalizer")
@@ -376,21 +277,7 @@ impl fmt::Debug for FluentLocalizer {
     }
 }
 
-impl fmt::Debug for FluentLocalizerBuilder {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("FluentLocalizerBuilder")
-            .field("locale", &self.locale)
-            .field("consumer_resources_len", &self.consumer_resources.len())
-            .field(
-                "consumer_bundle",
-                &self.consumer_bundle.as_ref().map(|bundle| &bundle.locale),
-            )
-            .field("use_defaults", &self.use_defaults)
-            .field("report_issue", &"<formatter>")
-            .finish()
-    }
-}
-
+#[must_use]
 fn default_reporter() -> FormattingIssueReporter {
     Arc::new(|issue: &FormattingIssue| {
         tracing::warn!(

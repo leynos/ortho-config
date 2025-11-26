@@ -11,7 +11,10 @@ use std::fmt;
 use std::sync::Arc;
 use unic_langid::{LanguageIdentifier, langid};
 
-use super::{FluentBundleSource, FluentLocalizerError};
+use super::{
+    FluentBundleSource, FluentLocalizer, FluentLocalizerBuilder, FluentLocalizerError,
+    FormattingIssueReporter,
+};
 
 pub(super) struct BundleWithLocale {
     pub(super) locale: LanguageIdentifier,
@@ -126,4 +129,117 @@ fn normalize_id_line(line: &str) -> String {
     rebuilt.push('=');
     rebuilt.push_str(right);
     rebuilt
+}
+
+impl FluentLocalizerBuilder {
+    /// Creates a builder for the requested locale.
+    #[must_use]
+    pub fn new(locale: LanguageIdentifier) -> Self {
+        Self {
+            locale,
+            consumer_resources: Vec::new(),
+            consumer_bundle: None,
+            report_issue: super::default_reporter(),
+            use_defaults: true,
+        }
+    }
+
+    /// Adds consumer-provided Fluent resources to layer over the defaults.
+    #[must_use]
+    pub fn with_consumer_resources(
+        mut self,
+        resources: impl IntoIterator<Item = &'static str>,
+    ) -> Self {
+        self.consumer_resources.extend(resources);
+        self
+    }
+
+    /// Supplies a pre-built consumer bundle, bypassing resource parsing.
+    #[must_use]
+    pub fn with_consumer_bundle(mut self, bundle: FluentBundle<Arc<FluentResource>>) -> Self {
+        self.consumer_bundle = Some(BundleWithLocale {
+            locale: self.locale.clone(),
+            bundle,
+            kind: FluentBundleSource::Consumer,
+        });
+        self
+    }
+
+    /// Disables loading embedded defaults, enabling consumer-only catalogues.
+    #[must_use]
+    pub const fn disable_defaults(mut self) -> Self {
+        self.use_defaults = false;
+        self
+    }
+
+    /// Installs a hook to report formatting issues surfaced by Fluent.
+    #[must_use]
+    pub fn with_error_reporter(mut self, reporter: FormattingIssueReporter) -> Self {
+        self.report_issue = reporter;
+        self
+    }
+
+    /// Builds the [`FluentLocalizer`], validating both default and consumer bundles.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`FluentLocalizerError`] if any catalogue fails to parse or
+    /// registers conflicting identifiers.
+    pub fn try_build(self) -> Result<FluentLocalizer, FluentLocalizerError> {
+        if let Some(bundle) = &self.consumer_bundle
+            && bundle.locale != self.locale
+        {
+            return Err(FluentLocalizerError::ConsumerLocaleMismatch {
+                builder: self.locale,
+                consumer: bundle.locale.clone(),
+            });
+        }
+
+        let defaults = if self.use_defaults {
+            Some(bundle_from_resources(
+                &self.locale,
+                default_resources(&self.locale).ok_or_else(|| {
+                    FluentLocalizerError::UnsupportedLocale {
+                        locale: self.locale.clone(),
+                    }
+                })?,
+                FluentBundleSource::Default,
+            )?)
+        } else {
+            None
+        };
+
+        let consumer = if let Some(bundle) = self.consumer_bundle {
+            Some(bundle)
+        } else if self.consumer_resources.is_empty() {
+            None
+        } else {
+            Some(bundle_from_resources(
+                &self.locale,
+                &self.consumer_resources,
+                FluentBundleSource::Consumer,
+            )?)
+        };
+
+        Ok(FluentLocalizer {
+            consumer,
+            defaults,
+            report_issue: self.report_issue,
+        })
+    }
+}
+
+impl fmt::Debug for FluentLocalizerBuilder {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("FluentLocalizerBuilder")
+            .field("locale", &self.locale)
+            .field("consumer_resources_len", &self.consumer_resources.len())
+            .field(
+                "consumer_bundle",
+                &self.consumer_bundle.as_ref().map(|bundle| &bundle.locale),
+            )
+            .field("use_defaults", &self.use_defaults)
+            .field("report_issue", &"<formatter>")
+            .finish()
+    }
 }
