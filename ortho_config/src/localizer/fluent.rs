@@ -92,6 +92,25 @@ pub(super) fn normalize_resource_ids(resource: &str) -> String {
         .join("\n")
 }
 
+/// Returns true when `ch` is valid in a Fluent message identifier.
+///
+/// Fluent identifiers permit Unicode letters and digits alongside `-`, `_`,
+/// and `.`. This matches the grammar used by Fluent and avoids excluding
+/// non-ASCII locales. See <https://projectfluent.org/fluent/guide/grammar.html>.
+fn is_valid_fluent_id_char(ch: char) -> bool {
+    ch.is_alphanumeric() || matches!(ch, '-' | '_' | '.')
+}
+
+/// Validates a Fluent identifier, ensuring the first character is alphabetic
+/// and all subsequent characters are permitted by `is_valid_fluent_id_char`.
+fn is_valid_fluent_identifier(id: &str) -> bool {
+    let mut chars = id.chars();
+    let Some(first) = chars.next() else {
+        return false;
+    };
+    first.is_alphabetic() && chars.all(is_valid_fluent_id_char)
+}
+
 fn normalize_id_line(line: &str) -> String {
     let trimmed = line.trim_start();
     if trimmed.is_empty() || trimmed.starts_with('#') {
@@ -102,30 +121,23 @@ fn normalize_id_line(line: &str) -> String {
         return line.to_owned();
     };
 
-    let first_char = trimmed.chars().next().unwrap_or(' ');
-    if !first_char.is_ascii_alphabetic() {
+    // Only normalise top-level identifiers. Indented lines belong to message
+    // bodies, attributes, or variants and must be left untouched.
+    if left.chars().next().is_some_and(char::is_whitespace) {
         return line.to_owned();
     }
 
-    let leading_ws_len = left.len() - left.trim_start().len();
-    let id_end = left.trim_end().len();
-    if id_end <= leading_ws_len {
+    let id_segment = left.trim_end();
+    if !is_valid_fluent_identifier(id_segment) {
         return line.to_owned();
     }
 
-    let Some(id_segment) = left.get(leading_ws_len..id_end) else {
-        return line.to_owned();
-    };
     let normalised_id = normalize_identifier(id_segment).into_owned();
+    let trailing_ws = left.strip_prefix(id_segment).unwrap_or_default();
 
     let mut rebuilt = String::with_capacity(line.len());
-    if let Some(prefix) = left.get(..leading_ws_len) {
-        rebuilt.push_str(prefix);
-    }
     rebuilt.push_str(&normalised_id);
-    if let Some(trailing) = left.get(id_end..) {
-        rebuilt.push_str(trailing);
-    }
+    rebuilt.push_str(trailing_ws);
     rebuilt.push('=');
     rebuilt.push_str(right);
     rebuilt
@@ -186,15 +198,6 @@ impl FluentLocalizerBuilder {
     /// Returns [`FluentLocalizerError`] if any catalogue fails to parse or
     /// registers conflicting identifiers.
     pub fn try_build(self) -> Result<FluentLocalizer, FluentLocalizerError> {
-        if let Some(bundle) = &self.consumer_bundle
-            && bundle.locale != self.locale
-        {
-            return Err(FluentLocalizerError::ConsumerLocaleMismatch {
-                builder: self.locale,
-                consumer: bundle.locale.clone(),
-            });
-        }
-
         let defaults = if self.use_defaults {
             Some(bundle_from_resources(
                 &self.locale,
@@ -241,5 +244,40 @@ impl fmt::Debug for FluentLocalizerBuilder {
             .field("use_defaults", &self.use_defaults)
             .field("report_issue", &"<formatter>")
             .finish()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    //! Tests for Fluent resource parsing and identifier normalisation helpers.
+    use super::*;
+
+    #[test]
+    fn normalises_top_level_dotted_ids() {
+        let resource = "cli.about = About text";
+        let normalised = normalize_resource_ids(resource);
+        assert_eq!(normalised, "cli-about = About text");
+    }
+
+    #[test]
+    fn leaves_indented_lines_with_equals_untouched() {
+        let resource = "message =\n    section.title = Title line";
+        let normalised = normalize_resource_ids(resource);
+        assert!(normalised.contains("    section.title = Title line"));
+    }
+
+    #[test]
+    fn leaves_terms_and_attributes_unchanged() {
+        let resource = "-term.id = Term value\nmessage = Value\n    .label = Label";
+        let normalised = normalize_resource_ids(resource);
+        assert!(normalised.contains("-term.id = Term value"));
+        assert!(normalised.contains("    .label = Label"));
+    }
+
+    #[test]
+    fn normalises_unicode_identifiers() {
+        let resource = "ключ.значение = Привет";
+        let normalised = normalize_resource_ids(resource);
+        assert!(normalised.starts_with("ключ-значение = Привет"));
     }
 }

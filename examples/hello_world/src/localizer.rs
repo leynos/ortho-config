@@ -28,7 +28,8 @@ const HELLO_WORLD_EN_US: &str = include_str!("../locales/en-US/messages.ftl");
 
 /// Localiser that layers the example's Fluent catalogue over the embedded defaults.
 pub struct DemoLocalizer {
-    inner: Box<dyn Localizer>,
+    inner: Option<FluentLocalizer>,
+    noop: NoOpLocalizer,
 }
 
 impl Default for DemoLocalizer {
@@ -56,7 +57,8 @@ impl DemoLocalizer {
         Self::try_new().unwrap_or_else(|error| {
             warn!(?error, "falling back to no-op localiser");
             Self {
-                inner: Box::new(NoOpLocalizer::new()),
+                inner: None,
+                noop: NoOpLocalizer::new(),
             }
         })
     }
@@ -69,18 +71,16 @@ impl DemoLocalizer {
     /// or registered.
     pub fn try_new() -> Result<Self, FluentLocalizerError> {
         Ok(Self {
-            inner: Box::new(FluentLocalizer::with_en_us_defaults([HELLO_WORLD_EN_US])?),
+            inner: Some(FluentLocalizer::with_en_us_defaults([HELLO_WORLD_EN_US])?),
+            noop: NoOpLocalizer::new(),
         })
     }
 
-    /// Returns the underlying [`FluentLocalizer`] so consumers can reuse the catalogue.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error when the embedded catalogue fails to parse or when
-    /// Fluent rejects the resources while building the bundle.
-    pub fn fluent() -> Result<FluentLocalizer, FluentLocalizerError> {
-        FluentLocalizer::with_en_us_defaults([HELLO_WORLD_EN_US])
+    /// Returns the underlying [`FluentLocalizer`] when available so consumers
+    /// can reuse the same catalogue instance.
+    #[must_use]
+    pub const fn fluent(&self) -> Option<&FluentLocalizer> {
+        self.inner.as_ref()
     }
 
     /// Provides a no-op localiser for callers that do not ship translations yet.
@@ -92,14 +92,24 @@ impl DemoLocalizer {
 
 impl Localizer for DemoLocalizer {
     fn lookup(&self, id: &str, args: Option<&LocalizationArgs<'_>>) -> Option<String> {
-        self.inner.lookup(id, args)
+        self.inner.as_ref().map_or_else(
+            || self.noop.lookup(id, args),
+            |fluent| fluent.lookup(id, args),
+        )
     }
 }
 
 impl std::fmt::Debug for DemoLocalizer {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let inner = if self.inner.is_some() {
+            "fluent"
+        } else {
+            "noop"
+        };
+
         f.debug_struct("DemoLocalizer")
-            .field("inner", &"<localizer>")
+            .field("inner", &inner)
+            .field("noop", &self.noop)
             .finish()
     }
 }
@@ -127,5 +137,28 @@ mod tests {
             .lookup(CLI_LONG_ABOUT_MESSAGE_ID, Some(&args))
             .expect("long description should exist");
         assert!(long_about.contains("hello-world"));
+    }
+
+    #[test]
+    fn fluent_returns_inner_reference() {
+        let localiser = DemoLocalizer::try_new().expect("demo localiser should build");
+        let inner_ptr = localiser
+            .inner
+            .as_ref()
+            .map(std::ptr::from_ref::<FluentLocalizer>)
+            .expect("expected fluent inner");
+
+        let exposed = localiser.fluent().expect("fluent inner should be exposed");
+        assert!(std::ptr::eq(inner_ptr, exposed));
+    }
+
+    #[test]
+    fn fluent_is_none_when_noop() {
+        let localiser = DemoLocalizer {
+            inner: None,
+            noop: NoOpLocalizer::new(),
+        };
+
+        assert!(localiser.fluent().is_none());
     }
 }

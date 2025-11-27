@@ -88,14 +88,82 @@ fn fluent_localizer_logs_and_falls_back_on_format_error() {
         .try_build()
         .expect("consumer bundle should build");
 
-    let resolved = localizer.message("cli.usage", Some(&args), "fallback usage");
+    let resolved = localizer
+        .lookup("cli.usage", Some(&args))
+        .expect("default bundle should provide fallback copy");
     let sanitised = strip_bidi_isolates(&resolved);
-    assert!(sanitised.starts_with("Usage: demo"), "resolved: {resolved}");
+    assert_eq!(sanitised, "Usage: demo [OPTIONS] <COMMAND>");
 
     let logged = issues
         .lock()
         .expect("issue log mutex poisoned during assertion");
     assert_eq!(*logged, vec![String::from("cli.usage")]);
+}
+
+#[rstest]
+fn fluent_localizer_returns_none_when_formatting_fails_without_defaults() {
+    let issues = Arc::new(Mutex::new(Vec::new()));
+    let reporter: FormattingIssueReporter = {
+        let captured_issues = Arc::clone(&issues);
+        Arc::new(move |issue: &FormattingIssue| {
+            let mut guard = captured_issues.lock().expect("issue log mutex poisoned");
+            guard.push(issue.id.clone());
+        })
+    };
+
+    let localizer = FluentLocalizer::builder(langid!("en-US"))
+        .disable_defaults()
+        .with_consumer_resources(["cli.about = About { $missing }"])
+        .with_error_reporter(reporter)
+        .try_build()
+        .expect("consumer bundle should build");
+
+    assert!(localizer.lookup("cli.about", None).is_none());
+
+    let logged = issues
+        .lock()
+        .expect("issue log mutex poisoned during assertion");
+    assert_eq!(*logged, vec![String::from("cli.about")]);
+}
+
+#[rstest]
+fn lookup_prefers_original_id_over_normalized() {
+    let localizer = FluentLocalizer::builder(langid!("en-US"))
+        .with_consumer_resources(["cli.about = Original consumer"])
+        .try_build()
+        .expect("consumer bundle should build");
+
+    let resolved = localizer.lookup("cli.about", None);
+    assert_eq!(resolved.as_deref(), Some("Original consumer"));
+}
+
+#[rstest]
+fn lookup_falls_back_to_normalized_consumer_id() {
+    let localizer = FluentLocalizer::builder(langid!("en-US"))
+        .disable_defaults()
+        .with_consumer_resources(["cli-about = Normalised only"])
+        .try_build()
+        .expect("consumer-only bundle should build");
+
+    let resolved = localizer.lookup("cli.about", None);
+    assert_eq!(resolved.as_deref(), Some("Normalised only"));
+}
+
+#[rstest]
+fn lookup_falls_back_to_default_when_consumer_formatting_fails() {
+    let mut args: LocalizationArgs<'static> = HashMap::new();
+    args.insert("binary", FluentValue::from("demo"));
+
+    let localizer = FluentLocalizer::builder(langid!("en-US"))
+        .with_consumer_resources(["cli.usage = Usage { $binary } { $missing }"])
+        .try_build()
+        .expect("bundles should build");
+
+    let resolved = localizer
+        .lookup("cli.usage", Some(&args))
+        .expect("default bundle should provide usage copy");
+    let sanitised = strip_bidi_isolates(&resolved);
+    assert_eq!(sanitised, "Usage: demo [OPTIONS] <COMMAND>");
 }
 
 fn strip_bidi_isolates(text: &str) -> String {
