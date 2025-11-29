@@ -166,17 +166,21 @@ fn request_without_args(
     Ok(())
 }
 
-#[when("I request id {id} for subject {subject}")]
-fn request_with_subject(
+/// Requests a localised message using a single Fluent argument key/value pair.
+fn request_with_arg<T>(
     context: &LocalizerContext,
     id: MessageId,
-    subject: SubjectName,
-) -> Result<()> {
+    arg_name: &str,
+    arg_value: T,
+) -> Result<()>
+where
+    T: AsRef<str>,
+{
     let resolved = context
         .localizer
         .with_ref(|localizer| {
             let mut args: LocalizationArgs<'_> = HashMap::new();
-            args.insert("subject", FluentValue::from(subject.as_ref()));
+            args.insert(arg_name, FluentValue::from(arg_value.as_ref()));
             let fallback_text = format!("missing:{}", id.as_ref());
             localizer.message(id.as_ref(), Some(&args), fallback_text.as_str())
         })
@@ -185,23 +189,22 @@ fn request_with_subject(
     Ok(())
 }
 
+#[when("I request id {id} for subject {subject}")]
+fn request_with_subject(
+    context: &LocalizerContext,
+    id: MessageId,
+    subject: SubjectName,
+) -> Result<()> {
+    request_with_arg(context, id, "subject", subject)
+}
+
 #[when("I request id {id} for binary {binary}")]
 fn request_with_binary(
     context: &LocalizerContext,
     id: MessageId,
     binary: BinaryName,
 ) -> Result<()> {
-    let resolved = context
-        .localizer
-        .with_ref(|localizer| {
-            let mut args: LocalizationArgs<'_> = HashMap::new();
-            args.insert("binary", FluentValue::from(binary.as_ref()));
-            let fallback_text = format!("missing:{}", id.as_ref());
-            localizer.message(id.as_ref(), Some(&args), fallback_text.as_str())
-        })
-        .ok_or_else(|| anyhow!("localizer must be initialised"))?;
-    context.resolved.set(resolved);
-    Ok(())
+    request_with_arg(context, id, "binary", binary)
 }
 
 #[given("a clap error for a missing argument")]
@@ -233,18 +236,32 @@ fn localize_clap_error_step(context: &LocalizerContext) -> Result<()> {
     Ok(())
 }
 
-#[then("the localized text is {expected}")]
-fn assert_localised(context: &LocalizerContext, expected: ExpectedText) -> Result<()> {
+/// Executes an assertion against the last resolved message, optionally restoring it.
+fn with_resolved<R, F>(context: &LocalizerContext, preserve: bool, f: F) -> Result<R>
+where
+    F: FnOnce(&str) -> Result<R>,
+{
     let actual = context
         .resolved
         .take()
         .ok_or_else(|| anyhow!("expected a resolved message"))?;
-    ensure!(
-        actual == expected.as_ref(),
-        "resolved {actual:?}; expected {:?}",
-        expected.as_ref()
-    );
-    Ok(())
+    let result = f(&actual);
+    if preserve {
+        context.resolved.set(actual);
+    }
+    result
+}
+
+#[then("the localized text is {expected}")]
+fn assert_localised(context: &LocalizerContext, expected: ExpectedText) -> Result<()> {
+    with_resolved(context, false, |actual| {
+        ensure!(
+            actual == expected.as_ref(),
+            "resolved {actual:?}; expected {:?}",
+            expected.as_ref()
+        );
+        Ok(())
+    })
 }
 
 #[then("a localisation formatting error is recorded")]
@@ -259,16 +276,13 @@ fn assert_formatting_issue_logged(context: &LocalizerContext) -> Result<()> {
 
 #[then("the localized text contains {expected}")]
 fn localized_text_contains(context: &LocalizerContext, expected: ExpectedText) -> Result<()> {
-    let actual = context
-        .resolved
-        .take()
-        .ok_or_else(|| anyhow!("expected a resolved message"))?;
-    ensure!(
-        actual.contains(expected.as_ref()),
-        "expected '{expected:?}' to appear in {actual:?}"
-    );
-    context.resolved.set(actual);
-    Ok(())
+    with_resolved(context, true, |actual| {
+        ensure!(
+            actual.contains(expected.as_ref()),
+            "expected '{expected:?}' to appear in {actual:?}"
+        );
+        Ok(())
+    })
 }
 
 #[then("the localized text matches the baseline clap output")]
