@@ -4,8 +4,8 @@ use crate::fixtures::LocalizerContext;
 use anyhow::{Result, anyhow, ensure};
 use fluent_bundle::FluentValue;
 use ortho_config::{
-    langid, localize_clap_error, FluentLocalizer, FormattingIssue, LocalizationArgs, Localizer,
-    NoOpLocalizer,
+    langid, localize_clap_error, localize_clap_error_with_command, FluentLocalizer,
+    FormattingIssue, LocalizationArgs, Localizer, NoOpLocalizer,
 };
 use rstest_bdd_macros::{given, then, when};
 use std::collections::HashMap;
@@ -205,6 +205,44 @@ fn request_with_binary(
     binary: BinaryName,
 ) -> Result<()> {
     request_with_arg(context, id, "binary", binary)
+}
+
+#[when("I parse a demo command without a subcommand")]
+fn parse_demo_command_without_subcommand(context: &LocalizerContext) -> Result<()> {
+    let mut command = clap::Command::new("demo")
+        .subcommand(clap::Command::new("greet"))
+        .subcommand(clap::Command::new("take-leave"));
+
+    let error = command
+        .try_get_matches_from_mut(["demo"])
+        .expect_err("missing subcommand should produce a clap error");
+
+    context.baseline_error.set(error.to_string());
+    let rendered = context
+        .localizer
+        .with_ref(|localizer| {
+            localize_clap_error_with_command(error, localizer.as_ref(), Some(&command)).to_string()
+        })
+        .ok_or_else(|| anyhow!("localizer must be initialised before localisation"))?;
+    context.resolved.set(rendered);
+    Ok(())
+}
+
+#[when("I parse a demo command missing an argument")]
+fn parse_demo_command_missing_argument(context: &LocalizerContext) -> Result<()> {
+    let mut command = clap::Command::new("demo").arg(clap::Arg::new("path").required(true));
+    let error = command
+        .try_get_matches_from_mut(["demo"])
+        .expect_err("missing argument should produce a clap error");
+    context.baseline_error.set(error.to_string());
+    let rendered = context
+        .localizer
+        .with_ref(|localizer| {
+            localize_clap_error_with_command(error, localizer.as_ref(), Some(&command)).to_string()
+        })
+        .ok_or_else(|| anyhow!("localizer must be initialised before localisation"))?;
+    context.resolved.set(rendered);
+    Ok(())
 }
 
 #[given("a clap error for a missing argument")]

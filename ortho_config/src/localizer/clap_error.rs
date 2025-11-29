@@ -3,7 +3,10 @@
 //! Provides a formatter that maps [`clap::ErrorKind`] variants onto Fluent
 //! identifiers and forwards any captured argument context to the supplied
 //! [`Localizer`]. When no translation exists the original `clap` message is
-//! preserved so applications retain the stock diagnostics.
+//! preserved so applications retain the stock diagnostics. The formatter is
+//! intended for display purposes: it rewrites the user-facing message and
+//! preserves the rendered usage tail, but it does not carry over the internal
+//! `clap` context beyond what is present in the original `Display` output.
 
 use crate::{LocalizationArgs, Localizer};
 use clap::{
@@ -79,6 +82,7 @@ pub fn localize_clap_error_with_command(
         format!("{localised}\n{tail}")
     };
 
+    let _ = command; // preserved for API symmetry; context is not retained
     ClapError::raw(error.kind(), message)
 }
 

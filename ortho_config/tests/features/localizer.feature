@@ -35,3 +35,15 @@ Feature: Localizer trait
     And a clap error for a missing argument
     When I localize the clap error
     Then the localized text matches the baseline clap output
+
+  Scenario: CLI parse missing subcommand uses translations
+    Given a clap-aware localizer
+    When I parse a demo command without a subcommand
+    Then the localized text contains clap-error-missing-subcommand
+    And the localized text contains greet
+    And the localized text contains take-leave
+
+  Scenario: CLI parse missing argument falls back without translations
+    Given a noop localizer
+    When I parse a demo command missing an argument
+    Then the localized text matches the baseline clap output
