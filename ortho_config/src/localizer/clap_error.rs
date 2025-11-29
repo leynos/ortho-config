@@ -37,6 +37,9 @@ pub fn clap_error_formatter(
 ///   example, `argument`, `value`, `expected`, `actual`).
 /// - Falls back to the original `clap` message when the localiser does not
 ///   return a translation.
+/// - Intended for display-only scenarios: the returned [`ClapError`] carries
+///   the translated text and original rendered tail but does not preserve the
+///   internal `clap` context/command metadata.
 #[must_use]
 pub fn localize_clap_error(error: ClapError, localizer: &dyn Localizer) -> ClapError {
     localize_clap_error_with_command(error, localizer, None)
@@ -128,6 +131,7 @@ fn localization_args(
         error.get(ContextKind::ValidSubcommand),
     );
 
+    // let-chains require edition 2024 (stabilised in Rust 1.88).
     if !args.contains_key("valid_subcommands")
         && let Some(cmd) = command
     {
@@ -171,7 +175,10 @@ fn stringify_context(context: &ContextValue) -> String {
             .collect::<Vec<_>>()
             .join(", "),
         ContextValue::Number(count) => count.to_string(),
-        _ => String::new(),
+        _ => {
+            tracing::debug!(?context, "unhandled clap context value");
+            String::new()
+        }
     }
 }
 

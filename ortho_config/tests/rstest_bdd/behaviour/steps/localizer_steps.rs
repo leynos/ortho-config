@@ -325,37 +325,32 @@ fn localized_text_contains(context: &LocalizerContext, expected: ExpectedText) -
 
 #[then("the localized text matches the baseline clap output")]
 fn localized_text_matches_baseline(context: &LocalizerContext) -> Result<()> {
-    let actual = context
-        .resolved
-        .take()
-        .ok_or_else(|| anyhow!("expected a resolved message"))?;
     let baseline = context
         .baseline_error
         .take()
         .ok_or_else(|| anyhow!("expected baseline clap output to be recorded"))?;
-    ensure!(
-        actual == baseline,
-        "expected localisation fallback to keep clap message"
-    );
-    Ok(())
+    with_resolved(context, false, |actual| {
+        ensure!(
+            actual == baseline,
+            "expected localisation fallback to keep clap message"
+        );
+        Ok(())
+    })
 }
 
 #[then("the localized text includes the clap argument label")]
 fn localized_text_includes_argument(context: &LocalizerContext) -> Result<()> {
-    let actual = context
-        .resolved
-        .take()
-        .ok_or_else(|| anyhow!("expected a resolved message"))?;
     let argument = context
         .argument_label
         .take()
         .ok_or_else(|| anyhow!("expected argument label to be captured"))?;
-    ensure!(
-        actual.contains(&argument),
-        "expected argument label {argument:?} in {actual:?}"
-    );
-    context.resolved.set(actual);
-    Ok(())
+    with_resolved(context, true, |actual| {
+        ensure!(
+            actual.contains(&argument),
+            "expected argument label {argument:?} in {actual:?}"
+        );
+        Ok(())
+    })
 }
 
 fn install_fluent_localizer(

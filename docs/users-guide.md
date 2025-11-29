@@ -184,13 +184,13 @@ builds a `FluentLocalizer` from `examples/hello_world/locales/en-US` and drives
 the example falls back to `NoOpLocalizer`, preserving the stock `clap` strings
 until translations are fixed.
 
-Errors surfaced by `clap` can be localised as well. Use
+Errors surfaced by `clap` can be localized as well. Use
 `localize_clap_error_with_command` to map each `ErrorKind` to a Fluent
 identifier of the form `clap-error-<kebab-case>`, forwarding argument context
 such as the missing flag or the offending value. Supplying the command enables
 the helper to populate missing context (for example, the available subcommands
 when `clap` emits `DisplayHelpOnMissingArgumentOrSubcommand`). When no
-translation exists the helper returns the original `clap` error unchanged:
+translation exists, the helper returns the original `clap` error unchanged:
 
 ```rust
 use clap::CommandFactory;

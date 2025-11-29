@@ -255,7 +255,6 @@ fn falls_back_to_stock_clap_message_when_translation_missing() {
 #[rstest]
 fn localizes_clap_errors_with_command_enriches_valid_subcommands() {
     use clap::Command;
-    use std::sync::{Arc, Mutex};
 
     struct CapturingLocalizer {
         captured: Arc<Mutex<Option<String>>>,

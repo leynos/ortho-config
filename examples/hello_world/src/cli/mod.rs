@@ -72,9 +72,9 @@ impl CommandLine {
     ///
     /// # Errors
     ///
-    /// Returns a [`clap::Error`] when parsing fails. Errors are localised via
-    /// [`ortho_config::localize_clap_error`], falling back to the stock
-    /// `clap` message when a translation is unavailable.
+    /// Returns a [`clap::Error`] when parsing fails. Errors are localized via
+    /// [`ortho_config::localize_clap_error_with_command`], falling back to the
+    /// stock `clap` message when a translation is unavailable.
     pub fn try_parse_localized<I, T>(
         iter: I,
         localizer: &dyn Localizer,
