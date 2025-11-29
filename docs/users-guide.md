@@ -167,9 +167,9 @@ let localizer = FluentLocalizer::builder(langid!("en-US"))
 let mut args: LocalizationArgs<'_> = LocalizationArgs::default();
 args.insert("binary", "demo".into());
 assert_eq!(
-    localizer
-        .lookup("cli.usage", Some(&args))
-        .expect("usage copy exists"),
+localizer
+    .lookup("cli.usage", Some(&args))
+    .expect("usage copy exists"),
     "Usage: demo [OPTIONS] <COMMAND>"
 );
 ```
@@ -183,6 +183,35 @@ builds a `FluentLocalizer` from `examples/hello_world/locales/en-US` and drives
 `CommandLine::try_parse_localized_env`. If the localization setup ever fails,
 the example falls back to `NoOpLocalizer`, preserving the stock `clap` strings
 until translations are fixed.
+
+Errors surfaced by `clap` can be localised as well. Use
+`localize_clap_error_with_command` to map each `ErrorKind` to a Fluent
+identifier of the form `clap-error-<kebab-case>`, forwarding argument context
+such as the missing flag or the offending value. Supplying the command enables
+the helper to populate missing context (for example, the available subcommands
+when `clap` emits `DisplayHelpOnMissingArgumentOrSubcommand`). When no
+translation exists the helper returns the original `clap` error unchanged:
+
+```rust
+use clap::CommandFactory;
+use ortho_config::{localize_clap_error_with_command, Localizer};
+
+# #[derive(clap::Parser)]
+# struct Cli {}
+fn parse(localizer: &dyn Localizer) -> Result<Cli, clap::Error> {
+    let mut command = Cli::command().localize(localizer);
+    let mut matches = command
+        .try_get_matches()
+        .map_err(|err| {
+            localize_clap_error_with_command(err, localizer, Some(&command))
+        })?;
+
+    Cli::from_arg_matches_mut(&mut matches).map_err(|err| {
+        let err = err.with_cmd(&command);
+        localize_clap_error_with_command(err, localizer, Some(&command))
+    })
+}
+```
 
 ## Installation and dependencies
 

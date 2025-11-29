@@ -7,7 +7,10 @@ use std::path::{Path, PathBuf};
 
 use clap::{ArgAction, Args, CommandFactory, FromArgMatches, Parser, Subcommand};
 use fluent_bundle::FluentValue;
-use ortho_config::{LocalizationArgs, Localizer, OrthoConfig, OrthoMergeExt, SubcmdConfigMerge};
+use ortho_config::{
+    LocalizationArgs, Localizer, OrthoConfig, OrthoMergeExt, SubcmdConfigMerge,
+    localize_clap_error_with_command,
+};
 use serde::{Deserialize, Serialize};
 
 use crate::error::{HelloWorldError, ValidationError};
@@ -69,7 +72,9 @@ impl CommandLine {
     ///
     /// # Errors
     ///
-    /// Returns a [`clap::Error`] when parsing fails.
+    /// Returns a [`clap::Error`] when parsing fails. Errors are localised via
+    /// [`ortho_config::localize_clap_error`], falling back to the stock
+    /// `clap` message when a translation is unavailable.
     pub fn try_parse_localized<I, T>(
         iter: I,
         localizer: &dyn Localizer,
@@ -79,8 +84,13 @@ impl CommandLine {
         T: Into<std::ffi::OsString> + Clone,
     {
         let mut command = Self::command().localize(localizer);
-        let mut matches = command.try_get_matches_from_mut(iter)?;
-        Self::from_arg_matches_mut(&mut matches).map_err(|err| err.with_cmd(&command))
+        let mut matches = command
+            .try_get_matches_from_mut(iter)
+            .map_err(|err| localize_clap_error_with_command(err, localizer, Some(&command)))?;
+        Self::from_arg_matches_mut(&mut matches).map_err(|parse_err| {
+            let err_with_command = parse_err.with_cmd(&command);
+            localize_clap_error_with_command(err_with_command, localizer, Some(&command))
+        })
     }
 }
 

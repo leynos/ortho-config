@@ -185,3 +185,69 @@ fn unsupported_locale_returns_structured_error() {
         other => panic!("expected FluentLocalizerError::UnsupportedLocale, got {other:?}"),
     }
 }
+
+#[rstest]
+fn localizes_clap_errors_when_translation_exists() {
+    use clap::{Arg, Command, error::ContextKind};
+
+    struct ClapStubLocalizer;
+
+    impl Localizer for ClapStubLocalizer {
+        fn lookup(&self, id: &str, args: Option<&LocalizationArgs<'_>>) -> Option<String> {
+            let argument = args
+                .and_then(|values| values.get("argument"))
+                .and_then(|value| match value {
+                    FluentValue::String(text) => Some(text.to_string()),
+                    _ => None,
+                })
+                .unwrap_or_else(|| "<none>".to_owned());
+            Some(format!("{id}:{argument}"))
+        }
+    }
+
+    let mut command = Command::new("demo").arg(Arg::new("path").required(true).value_name("PATH"));
+    let error = command
+        .try_get_matches_from_mut(["demo"])
+        .expect_err("missing required argument should raise a clap error");
+    let original = error.to_string();
+    let expected_argument = match error.get(ContextKind::InvalidArg) {
+        Some(clap::error::ContextValue::Strings(values)) => values.join(", "),
+        Some(clap::error::ContextValue::String(value)) => value.clone(),
+        _ => String::from("<none>"),
+    };
+
+    let localised = localize_clap_error(error, &ClapStubLocalizer);
+    let rendered = localised.to_string();
+
+    assert!(
+        rendered.contains("clap-error-missing-argument"),
+        "expected clap error id in localised output: {rendered}"
+    );
+    assert!(
+        rendered.contains(&expected_argument),
+        "expected argument context '{expected_argument}' in output: {rendered}"
+    );
+    assert_ne!(
+        rendered, original,
+        "localised output should differ from the default clap message"
+    );
+}
+
+#[rstest]
+fn falls_back_to_stock_clap_message_when_translation_missing() {
+    use clap::{Arg, Command};
+
+    let mut command = Command::new("demo").arg(Arg::new("path").required(true));
+    let error = command
+        .try_get_matches_from_mut(["demo"])
+        .expect_err("missing required argument should raise a clap error");
+    let original = error.to_string();
+
+    let localised = localize_clap_error(error, &NoOpLocalizer::new());
+
+    assert_eq!(
+        localised.to_string(),
+        original,
+        "expected to fall back to the stock clap message when localisation fails"
+    );
+}

@@ -4,7 +4,8 @@ use crate::fixtures::LocalizerContext;
 use anyhow::{Result, anyhow, ensure};
 use fluent_bundle::FluentValue;
 use ortho_config::{
-    langid, FluentLocalizer, FormattingIssue, LocalizationArgs, Localizer, NoOpLocalizer,
+    langid, localize_clap_error, FluentLocalizer, FormattingIssue, LocalizationArgs, Localizer,
+    NoOpLocalizer,
 };
 use rstest_bdd_macros::{given, then, when};
 use std::collections::HashMap;
@@ -102,6 +103,22 @@ impl Localizer for SubjectLocalizer {
     }
 }
 
+#[derive(Debug)]
+struct ClapAwareLocalizer;
+
+impl Localizer for ClapAwareLocalizer {
+    fn lookup(&self, id: &str, args: Option<&LocalizationArgs<'_>>) -> Option<String> {
+        let argument = args
+            .and_then(|values| values.get("argument"))
+            .and_then(|value| match value {
+                FluentValue::String(text) => Some(text.to_string()),
+                _ => None,
+            })
+            .unwrap_or_else(|| "<missing>".to_owned());
+        Some(format!("{id}:{argument}"))
+    }
+}
+
 #[given("a noop localizer")]
 fn noop_localizer(context: &LocalizerContext) {
     context.localizer.set(Box::new(NoOpLocalizer::new()));
@@ -110,6 +127,11 @@ fn noop_localizer(context: &LocalizerContext) {
 #[given("a subject-aware localizer")]
 fn subject_localizer(context: &LocalizerContext) {
     context.localizer.set(Box::new(SubjectLocalizer));
+}
+
+#[given("a clap-aware localizer")]
+fn clap_aware_localizer(context: &LocalizerContext) {
+    context.localizer.set(Box::new(ClapAwareLocalizer));
 }
 
 #[given("a fluent localizer with consumer overrides")]
@@ -182,6 +204,35 @@ fn request_with_binary(
     Ok(())
 }
 
+#[given("a clap error for a missing argument")]
+fn clap_error_for_missing_argument(context: &LocalizerContext) {
+    let mut command = clap::Command::new("bdd")
+        .arg(clap::Arg::new("config").required(true).value_name("CONFIG"));
+
+    let error = command
+        .try_get_matches_from_mut(["bdd"])
+        .expect_err("expected clap error for missing argument");
+
+    let argument = extract_argument(&error);
+    context.argument_label.set(argument);
+    context.baseline_error.set(error.to_string());
+    context.clap_error.set(error);
+}
+
+#[when("I localize the clap error")]
+fn localize_clap_error_step(context: &LocalizerContext) -> Result<()> {
+    let error = context
+        .clap_error
+        .take()
+        .ok_or_else(|| anyhow!("expected clap error to be initialised"))?;
+    let rendered = context
+        .localizer
+        .with_ref(|localizer| localize_clap_error(error, localizer.as_ref()).to_string())
+        .ok_or_else(|| anyhow!("localizer must be initialised before localisation"))?;
+    context.resolved.set(rendered);
+    Ok(())
+}
+
 #[then("the localized text is {expected}")]
 fn assert_localised(context: &LocalizerContext, expected: ExpectedText) -> Result<()> {
     let actual = context
@@ -206,6 +257,55 @@ fn assert_formatting_issue_logged(context: &LocalizerContext) -> Result<()> {
     Ok(())
 }
 
+#[then("the localized text contains {expected}")]
+fn localized_text_contains(context: &LocalizerContext, expected: ExpectedText) -> Result<()> {
+    let actual = context
+        .resolved
+        .take()
+        .ok_or_else(|| anyhow!("expected a resolved message"))?;
+    ensure!(
+        actual.contains(expected.as_ref()),
+        "expected '{expected:?}' to appear in {actual:?}"
+    );
+    context.resolved.set(actual);
+    Ok(())
+}
+
+#[then("the localized text matches the baseline clap output")]
+fn localized_text_matches_baseline(context: &LocalizerContext) -> Result<()> {
+    let actual = context
+        .resolved
+        .take()
+        .ok_or_else(|| anyhow!("expected a resolved message"))?;
+    let baseline = context
+        .baseline_error
+        .take()
+        .ok_or_else(|| anyhow!("expected baseline clap output to be recorded"))?;
+    ensure!(
+        actual == baseline,
+        "expected localisation fallback to keep clap message"
+    );
+    Ok(())
+}
+
+#[then("the localized text includes the clap argument label")]
+fn localized_text_includes_argument(context: &LocalizerContext) -> Result<()> {
+    let actual = context
+        .resolved
+        .take()
+        .ok_or_else(|| anyhow!("expected a resolved message"))?;
+    let argument = context
+        .argument_label
+        .take()
+        .ok_or_else(|| anyhow!("expected argument label to be captured"))?;
+    ensure!(
+        actual.contains(&argument),
+        "expected argument label {argument:?} in {actual:?}"
+    );
+    context.resolved.set(actual);
+    Ok(())
+}
+
 fn install_fluent_localizer(
     context: &LocalizerContext,
     resources: &[&'static str],
@@ -225,4 +325,13 @@ fn install_fluent_localizer(
         .try_build()
         .expect("fluent localizer should be constructed in tests");
     context.localizer.set(Box::new(localizer));
+}
+
+fn extract_argument(error: &clap::Error) -> String {
+    match error.get(clap::error::ContextKind::InvalidArg) {
+        Some(clap::error::ContextValue::Strings(values)) => values.join(", "),
+        Some(clap::error::ContextValue::String(value)) => value.clone(),
+        Some(other) => other.to_string(),
+        None => "<missing>".to_owned(),
+    }
 }
