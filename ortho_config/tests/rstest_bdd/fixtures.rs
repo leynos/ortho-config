@@ -64,6 +64,9 @@ pub struct LocalizerContext {
     pub localizer: Slot<Box<dyn Localizer + 'static>>,
     pub resolved: Slot<String>,
     pub issues: Slot<Arc<Mutex<Vec<String>>>>,
+    pub clap_error: Slot<clap::Error>,
+    pub baseline_error: Slot<String>,
+    pub argument_label: Slot<String>,
 }
 
 /// Captures the optional reference inputs used by subcommand scenarios.

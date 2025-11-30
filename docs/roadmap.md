@@ -218,7 +218,7 @@ references the relevant design guidance.
     confirm defaults remain functional when localisation is disabled.
     [[Design](design.md)]
 
-  - [ ] Provide a custom `clap` error formatter that maps `ErrorKind` variants
+  - [x] Provide a custom `clap` error formatter that maps `ErrorKind` variants
     onto Fluent identifiers and forwards argument context, with unit tests that
     verify fallback to the stock `clap` message when no translation exists.
     [[Design](design.md)]

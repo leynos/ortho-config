@@ -161,4 +161,17 @@ mod tests {
 
         assert!(localiser.fluent().is_none());
     }
+
+    #[test]
+    fn demo_localiser_translates_clap_errors() {
+        let localiser = DemoLocalizer::try_new().expect("demo localiser should build");
+        let mut args: LocalizationArgs<'_> = HashMap::new();
+        args.insert("valid_subcommands", "greet, take-leave".into());
+
+        let message = localiser
+            .lookup("clap-error-missing-subcommand", Some(&args))
+            .expect("demo catalogue should include clap error copy");
+
+        assert!(message.contains("Pick a workflow"));
+    }
 }

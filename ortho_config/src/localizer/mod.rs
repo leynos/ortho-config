@@ -14,6 +14,7 @@ use std::sync::Arc;
 use thiserror::Error;
 use unic_langid::{LanguageIdentifier, langid};
 
+mod clap_error;
 mod fluent;
 use fluent::{BundleWithLocale, normalize_identifier};
 
@@ -23,6 +24,7 @@ use fluent::{BundleWithLocale, normalize_identifier};
 /// Fluent-backed scenarios the map keys correspond to the placeholder names
 /// declared in the `.ftl` resources.
 pub type LocalizationArgs<'value> = HashMap<&'value str, FluentValue<'value>>;
+pub use clap_error::{clap_error_formatter, localize_clap_error, localize_clap_error_with_command};
 
 /// Provides localised strings for user-facing CLI output.
 ///
