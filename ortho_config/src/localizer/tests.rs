@@ -6,6 +6,12 @@ use rstest::rstest;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
+mod support_localizers {
+    use crate as crate_root;
+    include!("../../tests/support/localizers.rs");
+}
+use support_localizers::ArgumentEchoLocalizer;
+
 #[rstest]
 fn noop_localizer_relies_on_fallback() {
     let localizer = NoOpLocalizer::new();
@@ -190,21 +196,6 @@ fn unsupported_locale_returns_structured_error() {
 fn localizes_clap_errors_when_translation_exists() {
     use clap::{Arg, Command, error::ContextKind};
 
-    struct ClapStubLocalizer;
-
-    impl Localizer for ClapStubLocalizer {
-        fn lookup(&self, id: &str, args: Option<&LocalizationArgs<'_>>) -> Option<String> {
-            let argument = args
-                .and_then(|values| values.get("argument"))
-                .and_then(|value| match value {
-                    FluentValue::String(text) => Some(text.to_string()),
-                    _ => None,
-                })
-                .unwrap_or_else(|| "<none>".to_owned());
-            Some(format!("{id}:{argument}"))
-        }
-    }
-
     let mut command = Command::new("demo").arg(Arg::new("path").required(true).value_name("PATH"));
     let error = command
         .try_get_matches_from_mut(["demo"])
@@ -216,7 +207,7 @@ fn localizes_clap_errors_when_translation_exists() {
         _ => String::from("<none>"),
     };
 
-    let localised = localize_clap_error(error, &ClapStubLocalizer);
+    let localised = localize_clap_error(error, &ArgumentEchoLocalizer::new("<none>"));
     let rendered = localised.to_string();
 
     assert!(

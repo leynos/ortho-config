@@ -11,6 +11,12 @@ use rstest_bdd_macros::{given, then, when};
 use std::collections::HashMap;
 use std::sync::Arc;
 
+mod support_localizers {
+    use ortho_config as crate_root;
+    include!("../../support/localizers.rs");
+}
+use support_localizers::ArgumentEchoLocalizer;
+
 #[derive(Debug, Clone)]
 struct MessageId(String);
 
@@ -103,22 +109,6 @@ impl Localizer for SubjectLocalizer {
     }
 }
 
-#[derive(Debug)]
-struct ClapAwareLocalizer;
-
-impl Localizer for ClapAwareLocalizer {
-    fn lookup(&self, id: &str, args: Option<&LocalizationArgs<'_>>) -> Option<String> {
-        let argument = args
-            .and_then(|values| values.get("argument"))
-            .and_then(|value| match value {
-                FluentValue::String(text) => Some(text.to_string()),
-                _ => None,
-            })
-            .unwrap_or_else(|| "<missing>".to_owned());
-        Some(format!("{id}:{argument}"))
-    }
-}
-
 #[given("a noop localizer")]
 fn noop_localizer(context: &LocalizerContext) {
     context.localizer.set(Box::new(NoOpLocalizer::new()));
@@ -131,7 +121,9 @@ fn subject_localizer(context: &LocalizerContext) {
 
 #[given("a clap-aware localizer")]
 fn clap_aware_localizer(context: &LocalizerContext) {
-    context.localizer.set(Box::new(ClapAwareLocalizer));
+    context
+        .localizer
+        .set(Box::new(ArgumentEchoLocalizer::new("<missing>")));
 }
 
 #[given("a fluent localizer with consumer overrides")]
