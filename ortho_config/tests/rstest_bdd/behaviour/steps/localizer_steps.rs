@@ -283,11 +283,11 @@ where
         .resolved
         .take()
         .ok_or_else(|| anyhow!("expected a resolved message"))?;
-    let result = f(&actual);
+    let result = f(&actual)?;
     if preserve {
         context.resolved.set(actual);
     }
-    result
+    Ok(result)
 }
 
 #[then("the localized text is {expected}")]
