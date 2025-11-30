@@ -48,6 +48,38 @@ fn try_parse_with_localizer_builds_cli(demo_localizer: DemoLocalizer) {
     assert!(matches!(cli.command, Commands::Greet(_)));
 }
 
+#[rstest]
+fn try_parse_with_localizer_localises_errors(demo_localizer: DemoLocalizer) {
+    let err = CommandLine::try_parse_localized(["hello-world"], &demo_localizer)
+        .expect_err("missing subcommand should be reported");
+    let rendered = err.to_string();
+    assert!(
+        rendered.contains("Pick a workflow"),
+        "expected consumer translation in error output: {rendered}"
+    );
+    assert!(
+        rendered.contains("greet") && rendered.contains("take-leave"),
+        "expected available subcommands to flow into translation: {rendered}"
+    );
+}
+
+#[test]
+fn noop_localizer_keeps_stock_error_messages() {
+    let baseline = CommandLine::command()
+        .try_get_matches_from(["hello-world"])
+        .expect_err("default clap parsing should fail without subcommand")
+        .to_string();
+
+    let err = CommandLine::try_parse_localized(["hello-world"], &DemoLocalizer::noop())
+        .expect_err("expected parse failure to bubble up");
+
+    assert_eq!(
+        err.to_string(),
+        baseline,
+        "noop localizer should preserve clap error formatting"
+    );
+}
+
 #[test]
 fn command_with_noop_localizer_uses_stock_clap_strings() {
     let mut default_command = CommandLine::command();

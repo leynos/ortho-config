@@ -22,3 +22,28 @@ Feature: Localizer trait
     When I request id cli.usage for binary demo-cli
     Then the localized text is Usage: demo-cli [OPTIONS] <COMMAND>
     And a localisation formatting error is recorded
+
+  Scenario: Clap errors localize when translations exist
+    Given a clap-aware localizer
+    And a clap error for a missing argument
+    When I localize the clap error
+    Then the localized text contains clap-error-missing-argument
+    And the localized text includes the clap argument label
+
+  Scenario: Clap errors fall back without translations
+    Given a noop localizer
+    And a clap error for a missing argument
+    When I localize the clap error
+    Then the localized text matches the baseline clap output
+
+  Scenario: CLI parse missing subcommand uses translations
+    Given a clap-aware localizer
+    When I parse a demo command without a subcommand
+    Then the localized text contains clap-error-missing-subcommand
+    And the localized text contains greet
+    And the localized text contains take-leave
+
+  Scenario: CLI parse missing argument falls back without translations
+    Given a noop localizer
+    When I parse a demo command missing an argument
+    Then the localized text matches the baseline clap output

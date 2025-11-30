@@ -644,14 +644,29 @@ without reconfiguring global loggers.
 The implementation introduces a `LocalizationArgs<'a>` alias that wraps a
 `HashMap<&'a str, FluentValue<'a>>` so Fluent lookups retain access to named
 placeholders without forcing each caller to spell out the map shape. The
-`Localizer` trait itself is `Send + Sync`, exposing `lookup` for optional
-translations and `message` when callers need a convenient fallback string.
-A `NoOpLocalizer` ships alongside the trait so binaries that have not adopted
-translations can opt out without additional glue. The `hello_world` example
-exercises the trait via a `DemoLocalizer`, threading translations into
-`CommandLine::command().localize(&demo)` and `try_parse_localized_env` to prove
-that the Command-Line Interface (CLI) help text and errors can be patched
-without rewriting parser wiring.
+  `Localizer` trait itself is `Send + Sync`, exposing `lookup` for optional
+  translations and `message` when callers need a convenient fallback string.
+  A `NoOpLocalizer` ships alongside the trait so binaries that have not adopted
+  translations can opt out without additional glue. The `hello_world` example
+  exercises the trait via a `DemoLocalizer`, threading translations into
+  `CommandLine::command().localize(&demo)` and `try_parse_localized_env` to prove
+  that the Command-Line Interface (CLI) help text and errors can be patched
+  without rewriting parser wiring.
+
+- **Error formatter:** `localize_clap_error_with_command` maps each `ErrorKind`
+  onto a Fluent identifier (`clap-error-<kebab-kind>`), special-casing help on
+  missing subcommands to reuse the `clap-error-missing-subcommand` copy. It
+  forwards context values such as the invalid argument, offending value, and
+  available subcommands using keys like `argument`, `value`, `expected`,
+  `actual`, `subcommand`, and `valid_subcommands`. When `clap` omits these
+  details (for example, `DisplayHelpOnMissingArgumentOrSubcommand`), the
+  command is inspected to populate subcommand names. Display requests
+  (`--help`/`--version`) bypass localisation. When a lookup fails, the original
+  `clap` message is preserved, ensuring the formatter is non-destructive. A
+  companion `clap_error_formatter` closure wraps a shared `Arc<dyn Localizer>`
+  so command builders can reuse the formatter without cloning localiser
+  internals; `localize_clap_error` remains as a convenience when the command is
+  unavailable.
 
 ### 4.13. Dynamic rule tables
 
