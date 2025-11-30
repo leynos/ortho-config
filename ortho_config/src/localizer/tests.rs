@@ -262,6 +262,7 @@ fn localizes_clap_errors_with_command_enriches_valid_subcommands() {
 
     impl Localizer for CapturingLocalizer {
         fn lookup(&self, _id: &str, args: Option<&LocalizationArgs<'_>>) -> Option<String> {
+            // let-chains are edition-2024 only, stabilised in Rust 1.88 (2025-06-26).
             if let Some(args_map) = args
                 && let Some(FluentValue::String(text)) = args_map.get("valid_subcommands")
             {
