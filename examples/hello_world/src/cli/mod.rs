@@ -2,13 +2,15 @@
 //!
 //! Binds CLI, environment, and default layers via `OrthoConfig` so tests can
 //! drive the binary with predictable inputs.
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use clap::{ArgAction, Args, CommandFactory, FromArgMatches, Parser, Subcommand};
 use fluent_bundle::FluentValue;
 use ortho_config::{
-    LocalizationArgs, Localizer, OrthoConfig, OrthoMergeExt, SubcmdConfigMerge,
+    LocalizationArgs, Localizer, MergeLayer, OrthoConfig, OrthoError, SubcmdConfigMerge,
     localize_clap_error_with_command,
 };
 use serde::{Deserialize, Serialize};
@@ -23,7 +25,6 @@ mod config_loading;
 mod discovery;
 mod overrides;
 
-use self::config_loading::FileLayer;
 #[cfg(test)]
 pub(crate) use self::config_loading::{
     build_cli_args, build_overrides, file_excited_value, load_config_overrides, trimmed_salutations,
@@ -222,31 +223,55 @@ pub fn load_global_config(
     globals: &GlobalArgs,
     config_override: Option<&Path>,
 ) -> Result<HelloWorldCli, HelloWorldError> {
-    let base =
-        HelloWorldCli::load_from_iter(config_loading::build_cli_args(config_override).into_iter())?;
+    let composition =
+        HelloWorldCli::compose_layers_from_iter(config_loading::build_cli_args(config_override));
+    let (mut layers, mut errors) = composition.into_parts();
+
     let salutations = config_loading::trimmed_salutations(globals);
     let file_overrides = config_loading::load_config_overrides()?;
     let overrides = config_loading::build_overrides(
         globals,
         salutations,
-        file_overrides.as_ref(),
+        file_overrides.as_ref().map(|(overrides, _)| overrides),
         config_override,
     );
 
-    let mut figment = ortho_config::figment::Figment::from(
-        ortho_config::figment::providers::Serialized::defaults(&base),
-    );
-    if let Some(ref file) = file_overrides {
-        figment = figment.merge(ortho_config::figment::providers::Serialized::defaults(
-            &FileLayer {
-                is_excited: file.is_excited,
-            },
-        ));
+    if let Some((ref file, path)) = file_overrides {
+        match ortho_config::sanitize_value(file) {
+            Ok(value) => layers.push(MergeLayer::file(Cow::Owned(value), path)),
+            Err(err) => errors.push(err),
+        }
     }
-    figment = figment.merge(ortho_config::sanitized_provider(&overrides)?);
-    let merged = figment.extract::<HelloWorldCli>().into_ortho_merge()?;
-    merged.validate()?;
-    Ok(merged)
+
+    if overrides.salutations.is_some() {
+        layers.push(MergeLayer::cli(Cow::Owned(
+            ortho_config::serde_json::json!({
+                "salutations": null,
+            }),
+        )));
+    }
+
+    match ortho_config::sanitize_value(&overrides) {
+        Ok(value) => layers.push(MergeLayer::cli(Cow::Owned(value))),
+        Err(err) => errors.push(err),
+    }
+
+    match HelloWorldCli::merge_from_layers(layers) {
+        Ok(cfg) if errors.is_empty() => {
+            cfg.validate()?;
+            Ok(cfg)
+        }
+        Ok(cfg) => {
+            cfg.validate()?;
+            let aggregated = OrthoError::aggregate(errors);
+            Err(HelloWorldError::Configuration(Arc::new(aggregated)))
+        }
+        Err(err) => {
+            errors.push(err);
+            let aggregated = OrthoError::aggregate(errors);
+            Err(HelloWorldError::Configuration(Arc::new(aggregated)))
+        }
+    }
 }
 
 /// Applies greeting-specific overrides derived from configuration defaults.
@@ -255,8 +280,8 @@ pub fn load_global_config(
 ///
 /// Returns a [`HelloWorldError`] when greeting defaults cannot be loaded.
 pub fn apply_greet_overrides(command: &mut GreetCommand) -> Result<(), HelloWorldError> {
-    if let Some(greet) =
-        config_loading::load_config_overrides()?.and_then(|overrides| overrides.cmds.greet)
+    if let Some((overrides, _)) = config_loading::load_config_overrides()?
+        && let Some(greet) = overrides.cmds.greet
     {
         if let Some(preamble) = greet.preamble {
             command.preamble = Some(preamble);

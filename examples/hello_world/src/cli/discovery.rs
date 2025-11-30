@@ -12,6 +12,8 @@
 #[cfg(all(test, unix))]
 use camino::Utf8PathBuf;
 
+use std::sync::Arc;
+
 use crate::error::HelloWorldError;
 
 fn discovery() -> ortho_config::ConfigDiscovery {
@@ -28,7 +30,16 @@ pub(super) fn collect_config_candidates() -> Vec<Utf8PathBuf> {
     discovery().utf8_candidates()
 }
 
-pub(super) fn discover_config_figment()
--> Result<Option<ortho_config::figment::Figment>, HelloWorldError> {
-    discovery().load_first().map_err(HelloWorldError::from)
+pub(super) fn discover_config_layer()
+-> Result<Option<ortho_config::MergeLayer<'static>>, HelloWorldError> {
+    let mut outcome = discovery().compose_layer();
+    if let Some(layer) = outcome.layer {
+        return Ok(Some(layer));
+    }
+
+    outcome.required_errors.append(&mut outcome.optional_errors);
+    ortho_config::OrthoError::try_aggregate(outcome.required_errors).map_or_else(
+        || Ok(None),
+        |err| Err(HelloWorldError::Configuration(Arc::new(err))),
+    )
 }

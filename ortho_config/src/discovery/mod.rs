@@ -4,6 +4,7 @@
 //! candidates in the same order exercised by the `hello_world` example. The
 //! helper inspects explicit paths, XDG directories, Windows application data
 //! folders, the user's home directory and project roots.
+use std::borrow::Cow;
 use std::collections::HashSet;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -12,7 +13,7 @@ use std::sync::Arc;
 use camino::Utf8PathBuf;
 use dirs::home_dir;
 
-use crate::{OrthoError, OrthoResult, load_config_file};
+use crate::{MergeLayer, OrthoError, OrthoMergeExt, OrthoResult, load_config_file};
 
 #[cfg(windows)]
 /// Normalises a path according to Windows' case-insensitive comparison rules by
@@ -67,6 +68,18 @@ pub struct ConfigDiscovery {
 pub struct DiscoveryLoadOutcome {
     /// Successfully loaded configuration file, if any.
     pub figment: Option<figment::Figment>,
+    /// Errors originating from required explicit candidates.
+    pub required_errors: Vec<Arc<OrthoError>>,
+    /// Errors produced by optional discovery candidates.
+    pub optional_errors: Vec<Arc<OrthoError>>,
+}
+
+/// Composition result that captures the first discovered configuration layer.
+#[derive(Debug, Default)]
+#[must_use]
+pub struct DiscoveryLayerOutcome {
+    /// Successfully composed merge layer, if any.
+    pub layer: Option<MergeLayer<'static>>,
     /// Errors originating from required explicit candidates.
     pub required_errors: Vec<Arc<OrthoError>>,
     /// Errors produced by optional discovery candidates.
@@ -371,6 +384,46 @@ impl ConfigDiscovery {
         }
         DiscoveryLoadOutcome {
             figment: None,
+            required_errors,
+            optional_errors,
+        }
+    }
+
+    /// Composes the first available configuration file into a merge layer.
+    ///
+    /// Captures errors for required and optional candidates separately so
+    /// callers can mirror the aggregation semantics of [`Self::load_first`].
+    pub fn compose_layer(&self) -> DiscoveryLayerOutcome {
+        let mut required_errors = Vec::new();
+        let mut optional_errors = Vec::new();
+        let (candidates, required_bound) = self.candidates_with_required_bound();
+        for (idx, path) in candidates.into_iter().enumerate() {
+            match load_config_file(&path) {
+                Ok(Some(figment)) => match figment
+                    .extract::<crate::serde_json::Value>()
+                    .into_ortho_merge()
+                {
+                    Ok(value) => {
+                        let utf8_path = Utf8PathBuf::from_path_buf(path).ok();
+                        return DiscoveryLayerOutcome {
+                            layer: Some(MergeLayer::file(Cow::Owned(value), utf8_path)),
+                            required_errors,
+                            optional_errors,
+                        };
+                    }
+                    Err(err) if idx < required_bound => required_errors.push(err),
+                    Err(err) => optional_errors.push(err),
+                },
+                Ok(None) if idx < required_bound => {
+                    required_errors.push(Self::missing_required_error(&path));
+                }
+                Ok(None) => {}
+                Err(err) if idx < required_bound => required_errors.push(err),
+                Err(err) => optional_errors.push(err),
+            }
+        }
+        DiscoveryLayerOutcome {
+            layer: None,
             required_errors,
             optional_errors,
         }

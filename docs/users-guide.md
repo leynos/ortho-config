@@ -140,6 +140,13 @@ fixtures for default payloads, then enumerate cases for file, environment, and
 CLI layers. This validates every precedence permutation without copy-pasting
 setup.
 
+Every derived configuration also exposes `compose_layers()` and
+`compose_layers_from_iter(..)`. These helpers discover configuration files,
+serialise environment variables, and capture CLI input as a `LayerComposition`,
+keeping discovery separate from merging. The returned composition includes both
+the ordered layers and any collected errors, letting callers push additional
+layers or aggregate errors before invoking `merge_from_layers`.
+
 ### Localizing CLI copy
 
 `ortho_config` exposes a `Localizer` trait, so applications can swap the text

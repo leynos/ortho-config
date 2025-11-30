@@ -223,7 +223,7 @@ references the relevant design guidance.
     verify fallback to the stock `clap` message when no translation exists.
     [[Design](design.md)]
 
-  - [ ] Emit a `MergeComposer` builder that discovers file layers and serializes
+  - [x] Emit a `MergeComposer` builder that discovers file layers and serializes
     CLI and environment input into `MergeLayer` instances without exposing
     Figment publicly.
 

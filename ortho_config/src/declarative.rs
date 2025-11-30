@@ -36,12 +36,12 @@
 //! [`DeclarativeMerge`], so `merge_from_layers` can iterate through
 //! [`MergeLayer`] values deterministically.
 
-use std::borrow::Cow;
+use std::{borrow::Cow, sync::Arc};
 
 use camino::{Utf8Path, Utf8PathBuf};
 use serde_json::{Map, Value};
 
-use crate::{OrthoResult, OrthoResultExt};
+use crate::{OrthoError, OrthoResult, OrthoResultExt};
 
 /// Provenance of a merge layer.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -230,6 +230,41 @@ impl MergeComposer {
     #[must_use]
     pub fn layers(self) -> Vec<MergeLayer<'static>> {
         self.layers
+    }
+}
+
+/// Result of composing configuration layers alongside any collected errors.
+#[derive(Debug)]
+pub struct LayerComposition {
+    layers: Vec<MergeLayer<'static>>,
+    errors: Vec<Arc<OrthoError>>,
+}
+
+impl LayerComposition {
+    /// Create a new composition from `layers` and `errors`.
+    #[must_use]
+    #[expect(
+        clippy::missing_const_for_fn,
+        reason = "Constructing Vec-based compositions requires allocation"
+    )]
+    pub fn new(layers: Vec<MergeLayer<'static>>, errors: Vec<Arc<OrthoError>>) -> Self {
+        Self { layers, errors }
+    }
+
+    /// Decompose the composition into its constituent parts.
+    #[must_use]
+    pub fn into_parts(self) -> (Vec<MergeLayer<'static>>, Vec<Arc<OrthoError>>) {
+        (self.layers, self.errors)
+    }
+
+    /// Indicates whether any errors were captured while composing layers.
+    #[must_use]
+    #[expect(
+        clippy::missing_const_for_fn,
+        reason = "Borrowing the error buffer is not const in stable Rust"
+    )]
+    pub fn has_errors(&self) -> bool {
+        !self.errors.is_empty()
     }
 }
 
