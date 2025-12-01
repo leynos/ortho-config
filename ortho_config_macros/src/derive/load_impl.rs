@@ -210,21 +210,9 @@ fn build_cli_layer_tokens() -> proc_macro2::TokenStream {
     }
 }
 
-fn build_result_with_errors_tokens() -> proc_macro2::TokenStream {
+/// Generate tokens that aggregate pending errors into the appropriate result.
+fn build_error_result_tokens() -> proc_macro2::TokenStream {
     quote! {
-        if errors.is_empty() {
-            Ok(cfg)
-        } else if errors.len() == 1 {
-            Err(errors.remove(0))
-        } else {
-            Err(ortho_config::OrthoError::aggregate(errors).into())
-        }
-    }
-}
-
-fn build_error_aggregation_tokens() -> proc_macro2::TokenStream {
-    quote! {
-        errors.push(err);
         if errors.len() == 1 {
             Err(errors.remove(0))
         } else {
@@ -233,96 +221,98 @@ fn build_error_aggregation_tokens() -> proc_macro2::TokenStream {
     }
 }
 
-/// Assemble the final `load_from_iter` method using the helper snippets.
-#[expect(
-    clippy::too_many_lines,
-    reason = "Token assembly stays readable when the full flow remains inline"
-)]
-pub(crate) fn build_load_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStream {
+fn build_result_with_errors_tokens() -> proc_macro2::TokenStream {
+    let aggregate = build_error_result_tokens();
+    quote! {
+        if errors.is_empty() {
+            Ok(cfg)
+        } else {
+            #aggregate
+        }
+    }
+}
+
+fn build_error_aggregation_tokens() -> proc_macro2::TokenStream {
+    let aggregate = build_error_result_tokens();
+    quote! {
+        errors.push(err);
+        #aggregate
+    }
+}
+
+fn build_compose_layers_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStream {
     let LoadImplArgs {
         idents,
         tokens,
         has_config_path,
     } = args;
-    let LoadImplIdents {
-        cli_ident,
-        config_ident,
-        ..
-    } = idents;
     let defaults_ident = idents.defaults_ident;
     let default_struct_init = tokens.default_struct_init;
     let file_discovery = build_file_discovery(tokens, *has_config_path);
     let env_section = build_env_section(tokens);
     let cli_layer_tokens = build_cli_layer_tokens();
-    let result_with_errors = build_result_with_errors_tokens();
-    let error_aggregation = build_error_aggregation_tokens();
 
     quote! {
-        impl #cli_ident {
-            #[expect(dead_code, reason = "Generated method may not be used in all builds")]
-            pub fn compose_layers_from_iter<I, T>(iter: I) -> ortho_config::declarative::LayerComposition
-            where
-                I: IntoIterator<Item = T>,
-                T: Into<std::ffi::OsString> + Clone,
-            {
-                use clap::Parser as _;
-                use ortho_config::figment::Figment;
-                use ortho_config::OrthoMergeExt as _;
+        use clap::Parser as _;
+        use ortho_config::figment::Figment;
+        use ortho_config::OrthoMergeExt as _;
 
-                let mut errors: Vec<std::sync::Arc<ortho_config::OrthoError>> = Vec::new();
-                let cli = match Self::try_parse_from(iter) {
-                    Ok(c) => Some(c),
-                    Err(e) => {
-                        errors.push(std::sync::Arc::new(e.into()));
-                        None
-                    }
-                };
-
-                let mut composer = ortho_config::MergeComposer::with_capacity(4);
-                let defaults = #defaults_ident { #( #default_struct_init, )* };
-                match ortho_config::sanitize_value(&defaults) {
-                    Ok(value) => composer.push_defaults(value),
-                    Err(err) => errors.push(err),
-                }
-
-                let file_layer = #file_discovery;
-                if let Some(layer) = file_layer {
-                    composer.push_layer(layer);
-                }
-
-                #env_section
-                match Figment::from(env_provider.clone())
-                    .extract::<ortho_config::serde_json::Value>()
-                    .into_ortho_merge()
-                {
-                    Ok(value) => composer.push_environment(value),
-                    Err(err) => errors.push(err),
-                }
-
-                { #cli_layer_tokens }
-
-                ortho_config::declarative::LayerComposition::new(composer.layers(), errors)
+        let mut errors: Vec<std::sync::Arc<ortho_config::OrthoError>> = Vec::new();
+        let cli = match Self::try_parse_from(iter) {
+            Ok(c) => Some(c),
+            Err(e) => {
+                errors.push(std::sync::Arc::new(e.into()));
+                None
             }
+        };
 
-            #[expect(dead_code, reason = "Generated method may not be used in all builds")]
-            pub fn compose_layers() -> ortho_config::declarative::LayerComposition {
-                Self::compose_layers_from_iter(std::env::args_os())
-            }
-
-            pub fn load_from_iter<I, T>(iter: I) -> ortho_config::OrthoResult<#config_ident>
-            where
-                I: IntoIterator<Item = T>,
-                T: Into<std::ffi::OsString> + Clone,
-            {
-                let composition = Self::compose_layers_from_iter(iter);
-                let (layers, mut errors) = composition.into_parts();
-                match #config_ident::merge_from_layers(layers) {
-                    Ok(cfg) => { #result_with_errors }
-                    Err(err) => { #error_aggregation }
-                }
-            }
+        let mut composer = ortho_config::MergeComposer::with_capacity(4);
+        let defaults = #defaults_ident { #( #default_struct_init, )* };
+        match ortho_config::sanitize_value(&defaults) {
+            Ok(value) => composer.push_defaults(value),
+            Err(err) => errors.push(err),
         }
 
+        let file_layer = #file_discovery;
+        if let Some(layer) = file_layer {
+            composer.push_layer(layer);
+        }
+
+        #env_section
+        match Figment::from(env_provider.clone())
+            .extract::<ortho_config::serde_json::Value>()
+            .into_ortho_merge()
+        {
+            Ok(value) => composer.push_environment(value),
+            Err(err) => errors.push(err),
+        }
+
+        { #cli_layer_tokens }
+
+        ortho_config::declarative::LayerComposition::new(composer.layers(), errors)
+    }
+}
+
+fn build_load_from_iter_impl(
+    config_ident: &Ident,
+    result_with_errors: &proc_macro2::TokenStream,
+    error_aggregation: &proc_macro2::TokenStream,
+) -> proc_macro2::TokenStream {
+    quote! {
+        let composition = Self::compose_layers_from_iter(iter);
+        let (layers, mut errors) = composition.into_parts();
+        match #config_ident::merge_from_layers(layers) {
+            Ok(cfg) => { #result_with_errors }
+            Err(err) => { #error_aggregation }
+        }
+    }
+}
+
+fn build_config_impl_delegates(
+    cli_ident: &Ident,
+    config_ident: &Ident,
+) -> proc_macro2::TokenStream {
+    quote! {
         impl #config_ident {
             /// Compose merge layers using the current process arguments.
             pub fn compose_layers() -> ortho_config::declarative::LayerComposition {
@@ -338,5 +328,48 @@ pub(crate) fn build_load_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStre
                 #cli_ident::compose_layers_from_iter(iter)
             }
         }
+    }
+}
+
+/// Assemble the final `load_from_iter` method using the helper snippets.
+pub(crate) fn build_load_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStream {
+    let idents = &args.idents;
+    let LoadImplIdents {
+        cli_ident,
+        config_ident,
+        ..
+    } = idents;
+    let result_with_errors = build_result_with_errors_tokens();
+    let error_aggregation = build_error_aggregation_tokens();
+    let compose_layers_impl = build_compose_layers_impl(args);
+    let load_from_iter_impl =
+        build_load_from_iter_impl(config_ident, &result_with_errors, &error_aggregation);
+    let config_impl = build_config_impl_delegates(cli_ident, config_ident);
+
+    quote! {
+        impl #cli_ident {
+            #[expect(dead_code, reason = "Generated method may not be used in all builds")]
+            pub fn compose_layers_from_iter<I, T>(iter: I) -> ortho_config::declarative::LayerComposition
+            where
+                I: IntoIterator<Item = T>,
+                T: Into<std::ffi::OsString> + Clone,
+            {
+                #compose_layers_impl
+            }
+
+            #[expect(dead_code, reason = "Generated method may not be used in all builds")]
+            pub fn compose_layers() -> ortho_config::declarative::LayerComposition {
+                Self::compose_layers_from_iter(std::env::args_os())
+            }
+
+            pub fn load_from_iter<I, T>(iter: I) -> ortho_config::OrthoResult<#config_ident>
+            where
+                I: IntoIterator<Item = T>,
+                T: Into<std::ffi::OsString> + Clone,
+            {
+                #load_from_iter_impl
+            }
+        }
+        #config_impl
     }
 }
