@@ -199,6 +199,40 @@ pub(crate) fn build_env_section(tokens: &LoadImplTokens<'_>) -> proc_macro2::Tok
     }
 }
 
+fn build_cli_layer_tokens() -> proc_macro2::TokenStream {
+    quote! {
+        if let Some(ref cli) = cli {
+            match ortho_config::sanitize_value(cli) {
+                Ok(value) => composer.push_cli(value),
+                Err(err) => errors.push(err),
+            }
+        }
+    }
+}
+
+fn build_result_with_errors_tokens() -> proc_macro2::TokenStream {
+    quote! {
+        if errors.is_empty() {
+            Ok(cfg)
+        } else if errors.len() == 1 {
+            Err(errors.remove(0))
+        } else {
+            Err(ortho_config::OrthoError::aggregate(errors).into())
+        }
+    }
+}
+
+fn build_error_aggregation_tokens() -> proc_macro2::TokenStream {
+    quote! {
+        errors.push(err);
+        if errors.len() == 1 {
+            Err(errors.remove(0))
+        } else {
+            Err(ortho_config::OrthoError::aggregate(errors).into())
+        }
+    }
+}
+
 /// Assemble the final `load_from_iter` method using the helper snippets.
 #[expect(
     clippy::too_many_lines,
@@ -219,6 +253,9 @@ pub(crate) fn build_load_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStre
     let default_struct_init = tokens.default_struct_init;
     let file_discovery = build_file_discovery(tokens, *has_config_path);
     let env_section = build_env_section(tokens);
+    let cli_layer_tokens = build_cli_layer_tokens();
+    let result_with_errors = build_result_with_errors_tokens();
+    let error_aggregation = build_error_aggregation_tokens();
 
     quote! {
         impl #cli_ident {
@@ -262,12 +299,7 @@ pub(crate) fn build_load_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStre
                     Err(err) => errors.push(err),
                 }
 
-                if let Some(ref cli) = cli {
-                    match ortho_config::sanitize_value(cli) {
-                        Ok(value) => composer.push_cli(value),
-                        Err(err) => errors.push(err),
-                    }
-                }
+                #cli_layer_tokens
 
                 ortho_config::declarative::LayerComposition::new(composer.layers(), errors)
             }
@@ -285,23 +317,8 @@ pub(crate) fn build_load_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStre
                 let composition = Self::compose_layers_from_iter(iter);
                 let (layers, mut errors) = composition.into_parts();
                 match #config_ident::merge_from_layers(layers) {
-                    Ok(cfg) => {
-                        if errors.is_empty() {
-                            Ok(cfg)
-                        } else if errors.len() == 1 {
-                            Err(errors.remove(0))
-                        } else {
-                            Err(ortho_config::OrthoError::aggregate(errors).into())
-                        }
-                    }
-                    Err(err) => {
-                        errors.push(err);
-                        if errors.len() == 1 {
-                            Err(errors.remove(0))
-                        } else {
-                            Err(ortho_config::OrthoError::aggregate(errors).into())
-                        }
-                    }
+                    Ok(cfg) => #result_with_errors,
+                    Err(err) => #error_aggregation,
                 }
             }
         }

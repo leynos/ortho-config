@@ -236,13 +236,30 @@ pub fn load_global_config(
         config_override,
     );
 
-    if let Some((ref file, path)) = file_overrides {
-        match ortho_config::sanitize_value(file) {
-            Ok(value) => layers.push(MergeLayer::file(Cow::Owned(value), path)),
-            Err(err) => errors.push(err),
-        }
-    }
+    process_file_overrides(&mut layers, &mut errors, file_overrides);
+    process_cli_overrides(&mut layers, &mut errors, &overrides);
+    merge_and_validate(layers, errors)
+}
 
+fn process_file_overrides(
+    layers: &mut Vec<MergeLayer<'static>>,
+    errors: &mut Vec<Arc<OrthoError>>,
+    file_overrides: Option<(overrides::FileOverrides, Option<camino::Utf8PathBuf>)>,
+) {
+    let Some((file, path)) = file_overrides else {
+        return;
+    };
+    match ortho_config::sanitize_value(&file) {
+        Ok(value) => layers.push(MergeLayer::file(Cow::Owned(value), path)),
+        Err(err) => errors.push(err),
+    }
+}
+
+fn process_cli_overrides(
+    layers: &mut Vec<MergeLayer<'static>>,
+    errors: &mut Vec<Arc<OrthoError>>,
+    overrides: &overrides::Overrides<'_>,
+) {
     if overrides.salutations.is_some() {
         layers.push(MergeLayer::cli(Cow::Owned(
             ortho_config::serde_json::json!({
@@ -251,26 +268,39 @@ pub fn load_global_config(
         )));
     }
 
-    match ortho_config::sanitize_value(&overrides) {
+    match ortho_config::sanitize_value(overrides) {
         Ok(value) => layers.push(MergeLayer::cli(Cow::Owned(value))),
         Err(err) => errors.push(err),
     }
+}
 
-    match HelloWorldCli::merge_from_layers(layers) {
-        Ok(cfg) if errors.is_empty() => {
-            cfg.validate()?;
-            Ok(cfg)
-        }
-        Ok(cfg) => {
-            cfg.validate()?;
-            let aggregated = OrthoError::aggregate(errors);
-            Err(HelloWorldError::Configuration(Arc::new(aggregated)))
-        }
+fn merge_and_validate(
+    layers: Vec<MergeLayer<'static>>,
+    mut errors: Vec<Arc<OrthoError>>,
+) -> Result<HelloWorldCli, HelloWorldError> {
+    let cfg = match HelloWorldCli::merge_from_layers(layers) {
+        Ok(cfg) => cfg,
         Err(err) => {
             errors.push(err);
-            let aggregated = OrthoError::aggregate(errors);
-            Err(HelloWorldError::Configuration(Arc::new(aggregated)))
+            let aggregated = if errors.len() == 1 {
+                errors.remove(0)
+            } else {
+                Arc::new(OrthoError::aggregate(errors))
+            };
+            return Err(HelloWorldError::Configuration(aggregated));
         }
+    };
+
+    cfg.validate()?;
+
+    if errors.is_empty() {
+        Ok(cfg)
+    } else if errors.len() == 1 {
+        Err(HelloWorldError::Configuration(errors.remove(0)))
+    } else {
+        Err(HelloWorldError::Configuration(Arc::new(
+            OrthoError::aggregate(errors),
+        )))
     }
 }
 
