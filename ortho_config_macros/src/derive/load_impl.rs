@@ -299,7 +299,7 @@ pub(crate) fn build_load_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStre
                     Err(err) => errors.push(err),
                 }
 
-                #cli_layer_tokens
+                { #cli_layer_tokens }
 
                 ortho_config::declarative::LayerComposition::new(composer.layers(), errors)
             }
@@ -317,8 +317,8 @@ pub(crate) fn build_load_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStre
                 let composition = Self::compose_layers_from_iter(iter);
                 let (layers, mut errors) = composition.into_parts();
                 match #config_ident::merge_from_layers(layers) {
-                    Ok(cfg) => #result_with_errors,
-                    Err(err) => #error_aggregation,
+                    Ok(cfg) => { #result_with_errors }
+                    Err(err) => { #error_aggregation }
                 }
             }
         }
