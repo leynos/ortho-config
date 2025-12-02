@@ -1,3 +1,7 @@
+//! Outcome container shared by configuration discovery operations.
+//!
+//! Captures a discovered value alongside partitioned required and optional
+//! errors so callers can preserve provenance when aggregating failures.
 use std::sync::Arc;
 
 use crate::OrthoError;
