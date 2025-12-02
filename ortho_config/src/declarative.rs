@@ -36,12 +36,12 @@
 //! [`DeclarativeMerge`], so `merge_from_layers` can iterate through
 //! [`MergeLayer`] values deterministically.
 
-use std::borrow::Cow;
+use std::{borrow::Cow, sync::Arc};
 
 use camino::{Utf8Path, Utf8PathBuf};
 use serde_json::{Map, Value};
 
-use crate::{OrthoResult, OrthoResultExt};
+use crate::{OrthoError, OrthoResult, result_ext::OrthoResultExt};
 
 /// Provenance of a merge layer.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -230,6 +230,78 @@ impl MergeComposer {
     #[must_use]
     pub fn layers(self) -> Vec<MergeLayer<'static>> {
         self.layers
+    }
+}
+
+/// Result of composing configuration layers alongside any collected errors.
+#[derive(Debug)]
+pub struct LayerComposition {
+    layers: Vec<MergeLayer<'static>>,
+    errors: Vec<Arc<OrthoError>>,
+}
+
+impl LayerComposition {
+    /// Create a new composition from `layers` and `errors`.
+    #[must_use]
+    #[expect(
+        clippy::missing_const_for_fn,
+        reason = "Constructing Vec-based compositions requires allocation"
+    )]
+    pub fn new(layers: Vec<MergeLayer<'static>>, errors: Vec<Arc<OrthoError>>) -> Self {
+        Self { layers, errors }
+    }
+
+    /// Decompose the composition into its constituent parts.
+    #[must_use]
+    pub fn into_parts(self) -> (Vec<MergeLayer<'static>>, Vec<Arc<OrthoError>>) {
+        (self.layers, self.errors)
+    }
+
+    /// Indicates whether any errors were captured while composing layers.
+    #[must_use]
+    #[expect(
+        clippy::missing_const_for_fn,
+        reason = "Borrowing the error buffer is not const in stable Rust"
+    )]
+    pub fn has_errors(&self) -> bool {
+        !self.errors.is_empty()
+    }
+
+    fn errors_to_result<T>(mut errors: Vec<Arc<OrthoError>>) -> OrthoResult<T> {
+        if errors.len() == 1 {
+            Err(errors.remove(0))
+        } else {
+            Err(Arc::new(OrthoError::aggregate(errors)))
+        }
+    }
+
+    /// Consume the composition and merge layers using `merge`.
+    ///
+    /// Aggregates any pre-recorded composition errors with merge failures to
+    /// mirror the behaviour of the generated `load_from_iter` path.
+    ///
+    /// # Errors
+    ///
+    /// Returns an aggregated [`crate::OrthoError`] when either composition or
+    /// merge steps fail.
+    pub fn into_merge_result<T, F>(self, merge: F) -> OrthoResult<T>
+    where
+        F: FnOnce(Vec<MergeLayer<'static>>) -> OrthoResult<T>,
+    {
+        let (layers, mut errors) = self.into_parts();
+        match merge(layers) {
+            Ok(cfg) => {
+                if errors.is_empty() {
+                    Ok(cfg)
+                } else {
+                    Self::errors_to_result(errors)
+                }
+            }
+            Err(err) => {
+                errors.push(err);
+                Self::errors_to_result(errors)
+            }
+        }
     }
 }
 

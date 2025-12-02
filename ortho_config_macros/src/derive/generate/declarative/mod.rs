@@ -60,12 +60,20 @@ fn append_collection_tokens(strategies: &CollectionStrategies) -> CollectionToke
         |_, state_field_ident, field_name| {
             quote! {
                 if let Some(value) = map.remove(#field_name) {
-                    let incoming: Vec<_> =
-                        ortho_config::serde_json::from_value(value).into_ortho()?;
-                    let acc = self
-                        .#state_field_ident
-                        .get_or_insert_with(Default::default);
-                    acc.extend(incoming);
+                    if value.is_null() {
+                        self.#state_field_ident = Some(Vec::new());
+                    } else {
+                        let normalised = match value {
+                            ortho_config::serde_json::Value::Array(_) => value,
+                            other => ortho_config::serde_json::Value::Array(vec![other]),
+                        };
+                        let incoming: Vec<_> =
+                            ortho_config::serde_json::from_value(normalised).into_ortho()?;
+                        let acc = self
+                            .#state_field_ident
+                            .get_or_insert_with(Default::default);
+                        acc.extend(incoming);
+                    }
                 }
             }
         },

@@ -19,15 +19,12 @@ pub(crate) fn generate_ortho_impl(
 ) -> TokenStream {
     let MacroComponents {
         cli_ident,
-        override_struct_ts,
         load_impl,
         prefix_fn,
         ..
     } = components;
     let prefix_tokens = prefix_fn.clone().unwrap_or_else(|| quote! {});
     quote! {
-        #override_struct_ts
-
         #load_impl
 
         impl ortho_config::OrthoConfig for #config_ident {

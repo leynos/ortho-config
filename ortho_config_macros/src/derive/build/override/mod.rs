@@ -4,11 +4,14 @@
 //! override struct, and emit load-time aggregation logic for vector append and
 //! map replacement semantics.
 
+#[cfg(test)]
 mod tokens;
 
+#[cfg(test)]
 use quote::{format_ident, quote};
 use syn::{Ident, Type};
 
+#[cfg(test)]
 use self::tokens::{build_post_extract_tokens, build_pre_merge_tokens};
 
 use crate::derive::parse::{FieldAttrs, MergeStrategy, btree_map_inner, vec_inner};
@@ -174,6 +177,7 @@ pub(crate) fn collect_collection_strategies(
 ///
 /// Returns a tuple containing the struct definition tokens and the
 /// corresponding initialiser.
+#[cfg(test)]
 pub(crate) fn build_override_struct(
     base: &Ident,
     strategies: &CollectionStrategies,
@@ -245,11 +249,13 @@ pub(crate) fn build_override_struct(
 /// ```
 ///
 /// Returns an empty token stream when no collections require special handling.
+#[cfg(test)]
 pub(crate) struct CollectionLogicTokens {
     pub pre_merge: proc_macro2::TokenStream,
     pub post_extract: proc_macro2::TokenStream,
 }
 
+#[cfg(test)]
 pub(crate) fn build_collection_logic(
     strategies: &CollectionStrategies,
     cli_binding: &proc_macro2::TokenStream,

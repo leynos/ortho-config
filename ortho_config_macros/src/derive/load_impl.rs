@@ -23,13 +23,6 @@ pub(crate) struct LoadImplIdents<'a> {
 pub(crate) struct LoadImplTokens<'a> {
     pub env_provider: &'a proc_macro2::TokenStream,
     pub default_struct_init: &'a [proc_macro2::TokenStream],
-    pub override_init_ts: &'a proc_macro2::TokenStream,
-    /// Tokens executed before the Figment merge to capture or strip
-    /// high-precedence collections.
-    pub collection_pre_merge: &'a proc_macro2::TokenStream,
-    /// Tokens executed after extraction to reapply the captured collections
-    /// with the correct precedence.
-    pub collection_post_extract: &'a proc_macro2::TokenStream,
     pub config_env_var: &'a proc_macro2::TokenStream,
     pub dotfile_name: &'a syn::LitStr,
     pub legacy_app_name: String,
@@ -117,25 +110,22 @@ fn build_discovery_loading_block(
     builder_steps: &[proc_macro2::TokenStream],
     cli_chain: &proc_macro2::TokenStream,
 ) -> proc_macro2::TokenStream {
-    quote! {
-        let mut file_fig = None;
+    quote! {{
         let mut builder = #builder_init;
         #(#builder_steps)*
         #cli_chain
         let discovery = builder.build();
-        let ortho_config::discovery::DiscoveryLoadOutcome {
-            figment: loaded_fig,
+        let ortho_config::discovery::DiscoveryLayerOutcome {
+            layer,
             mut required_errors,
             mut optional_errors,
-        } = discovery.load_first_partitioned();
-        if let Some(fig) = loaded_fig {
-            file_fig = Some(fig);
-        }
+        } = discovery.compose_layer();
         errors.append(&mut required_errors);
-        if file_fig.is_none() {
+        if layer.is_none() {
             errors.append(&mut optional_errors);
         }
-    }
+        layer
+    }}
 }
 
 fn build_discovery_based_loading(
@@ -209,92 +199,99 @@ pub(crate) fn build_env_section(tokens: &LoadImplTokens<'_>) -> proc_macro2::Tok
     }
 }
 
-/// Build tokens that merge a sanitized CLI provider into a `Figment`.
-///
-/// The generated code merges the provider when present and pushes any
-/// resulting errors onto the supplied collection.
-///
-/// # Examples
-/// ```ignore
-/// use quote::quote;
-/// let fig = quote!(fig);
-/// let errors = quote!(errors);
-/// let tokens = merge_cli_provider_tokens(&fig, &errors);
-/// # let _ = tokens;
-/// ```
-fn merge_cli_provider_tokens(
-    fig_var: &proc_macro2::TokenStream,
-    errors_var: &proc_macro2::TokenStream,
-) -> proc_macro2::TokenStream {
+fn build_compose_layers_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStream {
+    let LoadImplArgs {
+        idents,
+        tokens,
+        has_config_path,
+    } = args;
+    let defaults_ident = idents.defaults_ident;
+    let default_struct_init = tokens.default_struct_init;
+    let file_discovery = build_file_discovery(tokens, *has_config_path);
+    let env_section = build_env_section(tokens);
+
     quote! {
+        use clap::Parser as _;
+        use ortho_config::figment::Figment;
+        use ortho_config::OrthoMergeExt as _;
+
+        let mut errors: Vec<std::sync::Arc<ortho_config::OrthoError>> = Vec::new();
+        let cli = match Self::try_parse_from(iter) {
+            Ok(c) => Some(c),
+            Err(e) => {
+                errors.push(std::sync::Arc::new(e.into()));
+                None
+            }
+        };
+
+        let mut composer = ortho_config::MergeComposer::with_capacity(4);
+        let defaults = #defaults_ident { #( #default_struct_init, )* };
+        let mut defaults_value = None;
+        match ortho_config::sanitize_value(&defaults) {
+            Ok(value) => {
+                defaults_value = Some(value.clone());
+                composer.push_defaults(value);
+            }
+            Err(err) => errors.push(err),
+        }
+
+        let file_layer = #file_discovery;
+        if let Some(layer) = file_layer {
+            composer.push_layer(layer);
+        }
+
+        #env_section
+        match Figment::from(env_provider.clone())
+            .extract::<ortho_config::serde_json::Value>()
+            .into_ortho_merge()
+        {
+            Ok(value) => composer.push_environment(value),
+            Err(err) => errors.push(err),
+        }
+
         if let Some(ref cli) = cli {
-            match ortho_config::sanitized_provider(cli) {
-                Ok(p) => #fig_var = #fig_var.merge(p),
-                Err(e) => #errors_var.push(e),
+            match ortho_config::sanitize_value(cli) {
+                Ok(value) => {
+                    let differs_from_defaults = defaults_value
+                        .as_ref()
+                        .map_or(true, |defaults| defaults != &value);
+                    if differs_from_defaults {
+                        composer.push_cli(value);
+                    }
+                }
+                Err(err) => errors.push(err),
             }
         }
+
+        ortho_config::declarative::LayerComposition::new(composer.layers(), errors)
     }
 }
 
-/// Build the merging and final extraction portion of `load_and_merge`.
-///
-/// Providers are layered as defaults, file, environment, then CLI as described
-/// in the design document's "Primary data flow" section.
-pub(crate) fn build_merge_section(
-    idents: &LoadImplIdents<'_>,
-    tokens: &LoadImplTokens<'_>,
-) -> proc_macro2::TokenStream {
-    let LoadImplIdents {
-        defaults_ident,
-        config_ident,
-        ..
-    } = *idents;
-    let LoadImplTokens {
-        default_struct_init,
-        override_init_ts,
-        collection_pre_merge,
-        collection_post_extract,
-        ..
-    } = tokens;
-    let fig_ts = quote!(fig);
-    let errors_ts = quote!(errors);
-    let cli_merge = merge_cli_provider_tokens(&fig_ts, &errors_ts);
+fn build_load_from_iter_impl(config_ident: &Ident) -> proc_macro2::TokenStream {
     quote! {
-        let mut fig = Figment::new();
-        let defaults = #defaults_ident { #( #default_struct_init, )* };
+        let composition = Self::compose_layers_from_iter(iter);
+        composition.into_merge_result(|layers| #config_ident::merge_from_layers(layers))
+    }
+}
 
-        let mut overrides = #override_init_ts;
-
-        fig = fig.merge(Serialized::defaults(&defaults));
-
-        if let Some(ref f) = file_fig {
-            fig = fig.merge(f);
-        }
-        let env_figment = Figment::from(env_provider.clone());
-        fig = fig.merge(Figment::from(env_provider));
-        #cli_merge
-
-        #collection_pre_merge
-
-        match ortho_config::sanitized_provider(&overrides) {
-            Ok(p) => fig = fig.merge(p),
-            Err(e) => errors.push(e),
-        }
-
-        match fig.extract::<#config_ident>() {
-            Ok(mut cfg) => {
-                #collection_post_extract
-                if errors.is_empty() {
-                    Ok(cfg)
-                } else if errors.len() == 1 {
-                    Err(errors.remove(0))
-                } else {
-                    Err(ortho_config::OrthoError::aggregate(errors).into())
-                }
+fn build_config_impl_delegates(
+    cli_ident: &Ident,
+    config_ident: &Ident,
+) -> proc_macro2::TokenStream {
+    quote! {
+        impl #config_ident {
+            /// Compose merge layers using the current process arguments.
+            pub fn compose_layers() -> ortho_config::declarative::LayerComposition {
+                #cli_ident::compose_layers()
             }
-            Err(e) => {
-                errors.push(std::sync::Arc::new(ortho_config::OrthoError::merge(e)));
-                Err(ortho_config::OrthoError::aggregate(errors).into())
+
+            /// Compose merge layers from an iterator of command-line arguments.
+            pub fn compose_layers_from_iter<I, T>(iter: I) -> ortho_config::declarative::LayerComposition
+            where
+                I: IntoIterator<Item = T>,
+                T: Into<std::ffi::OsString> + Clone,
+            {
+                #cli_ident::compose_layers_from_iter(iter)
             }
         }
     }
@@ -302,44 +299,40 @@ pub(crate) fn build_merge_section(
 
 /// Assemble the final `load_from_iter` method using the helper snippets.
 pub(crate) fn build_load_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStream {
-    let LoadImplArgs {
-        idents,
-        tokens,
-        has_config_path,
-    } = args;
+    let idents = &args.idents;
     let LoadImplIdents {
         cli_ident,
         config_ident,
         ..
     } = idents;
-    let file_discovery = build_file_discovery(tokens, *has_config_path);
-    let env_section = build_env_section(tokens);
-    let merge_section = build_merge_section(idents, tokens);
+    let compose_layers_impl = build_compose_layers_impl(args);
+    let load_from_iter_impl = build_load_from_iter_impl(config_ident);
+    let config_impl = build_config_impl_delegates(cli_ident, config_ident);
 
     quote! {
         impl #cli_ident {
             #[expect(dead_code, reason = "Generated method may not be used in all builds")]
+            pub fn compose_layers_from_iter<I, T>(iter: I) -> ortho_config::declarative::LayerComposition
+            where
+                I: IntoIterator<Item = T>,
+                T: Into<std::ffi::OsString> + Clone,
+            {
+                #compose_layers_impl
+            }
+
+            #[expect(dead_code, reason = "Generated method may not be used in all builds")]
+            pub fn compose_layers() -> ortho_config::declarative::LayerComposition {
+                Self::compose_layers_from_iter(std::env::args_os())
+            }
+
             pub fn load_from_iter<I, T>(iter: I) -> ortho_config::OrthoResult<#config_ident>
             where
                 I: IntoIterator<Item = T>,
                 T: Into<std::ffi::OsString> + Clone,
             {
-                use clap::Parser as _;
-                use ortho_config::figment::{providers::Serialized, Figment};
-
-                let mut errors: Vec<std::sync::Arc<ortho_config::OrthoError>> = Vec::new();
-                let cli = match Self::try_parse_from(iter) {
-                    Ok(c) => Some(c),
-                    Err(e) => {
-                        errors.push(std::sync::Arc::new(e.into()));
-                        None
-                    }
-                };
-
-                #file_discovery
-                #env_section
-                #merge_section
+                #load_from_iter_impl
             }
         }
+        #config_impl
     }
 }

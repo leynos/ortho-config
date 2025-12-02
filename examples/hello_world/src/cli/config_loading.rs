@@ -5,21 +5,16 @@
 
 use std::{ffi::OsString, path::Path, sync::Arc};
 
-use ortho_config::OrthoError;
+use camino::Utf8PathBuf;
+use ortho_config::MergeLayer;
 
 use crate::error::HelloWorldError;
 
 use super::{
     GlobalArgs,
-    discovery::discover_config_figment,
+    discovery::discover_config_layer,
     overrides::{FileOverrides, Overrides},
 };
-
-#[derive(serde::Serialize)]
-pub(super) struct FileLayer {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(super) is_excited: Option<bool>,
-}
 
 pub(crate) fn build_overrides<'a>(
     globals: &'a GlobalArgs,
@@ -76,13 +71,22 @@ pub(crate) fn file_excited_value(
         .or_else(|| file_overrides.and_then(|file| file.is_excited))
 }
 
-pub(crate) fn load_config_overrides() -> Result<Option<FileOverrides>, HelloWorldError> {
-    if let Some(figment) = discover_config_figment()? {
-        let overrides: FileOverrides = figment
-            .extract()
-            .map_err(|err| HelloWorldError::Configuration(Arc::new(OrthoError::merge(err))))?;
-        Ok(Some(overrides))
-    } else {
-        Ok(None)
-    }
+pub(crate) fn load_config_overrides_with_layer(
+    candidate: Option<MergeLayer<'static>>,
+) -> Result<Option<(FileOverrides, Option<Utf8PathBuf>)>, HelloWorldError> {
+    let Some(layer) = candidate else {
+        return Ok(None);
+    };
+
+    let path = layer.path().map(camino::Utf8PathBuf::from);
+    let value = layer.into_value();
+    let overrides: FileOverrides = ortho_config::serde_json::from_value(value)
+        .map_err(|err| HelloWorldError::Configuration(Arc::new(err.into())))?;
+    Ok(Some((overrides, path)))
+}
+
+pub(crate) fn load_config_overrides()
+-> Result<Option<(FileOverrides, Option<Utf8PathBuf>)>, HelloWorldError> {
+    let layer = discover_config_layer()?;
+    load_config_overrides_with_layer(layer)
 }

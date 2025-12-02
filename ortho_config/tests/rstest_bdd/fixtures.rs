@@ -2,7 +2,7 @@
 
 use anyhow::Error;
 use clap::{Args, Parser};
-use ortho_config::{Localizer, OrthoConfig};
+use ortho_config::{Localizer, MergeLayer, OrthoConfig};
 use rstest::fixture;
 use rstest_bdd::Slot;
 use rstest_bdd_macros::ScenarioState;
@@ -34,6 +34,13 @@ pub struct ExtendsContext {
     pub cyclic_flag: Slot<()>,
     pub missing_base_flag: Slot<()>,
     pub result: Slot<ortho_config::OrthoResult<RulesConfig>>,
+}
+
+/// Scenario state for merge composer builder scenarios.
+#[derive(Debug, Default, ScenarioState)]
+pub struct ComposerContext {
+    pub layers: Slot<Vec<MergeLayer<'static>>>,
+    pub config: Slot<RulesConfig>,
 }
 
 /// Scenario state for aggregated error reporting scenarios.
@@ -135,6 +142,12 @@ pub fn collection_context() -> CollectionContext {
 #[fixture]
 pub fn extends_context() -> ExtendsContext {
     ExtendsContext::default()
+}
+
+/// Provides a clean composer context for layer-composition scenarios.
+#[fixture]
+pub fn composer_context() -> ComposerContext {
+    ComposerContext::default()
 }
 
 /// Provides a clean error context for aggregated error scenarios.

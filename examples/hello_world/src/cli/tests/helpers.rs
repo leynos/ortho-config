@@ -117,7 +117,9 @@ where
 {
     with_jail(|j| {
         setup(j)?;
-        load_config_overrides().map_err(figment_error)
+        load_config_overrides()
+            .map(|result| result.map(|(overrides, _)| overrides))
+            .map_err(figment_error)
     })
 }
 

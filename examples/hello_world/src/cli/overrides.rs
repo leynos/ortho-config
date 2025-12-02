@@ -20,7 +20,7 @@ pub(crate) struct Overrides<'a> {
     pub(crate) is_quiet: bool,
 }
 
-#[derive(Debug, Default, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
 pub(crate) struct FileOverrides {
     #[serde(default)]
     pub(crate) is_excited: Option<bool>,
@@ -28,13 +28,13 @@ pub(crate) struct FileOverrides {
     pub(crate) cmds: CommandOverrides,
 }
 
-#[derive(Debug, Default, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
 pub(crate) struct CommandOverrides {
     #[serde(default)]
     pub(crate) greet: Option<GreetOverrides>,
 }
 
-#[derive(Debug, Default, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
 pub(crate) struct GreetOverrides {
     #[serde(default)]
     pub(crate) preamble: Option<String>,

@@ -4,6 +4,7 @@
 //! candidates in the same order exercised by the `hello_world` example. The
 //! helper inspects explicit paths, XDG directories, Windows application data
 //! folders, the user's home directory and project roots.
+use std::borrow::Cow;
 use std::collections::HashSet;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -12,7 +13,7 @@ use std::sync::Arc;
 use camino::Utf8PathBuf;
 use dirs::home_dir;
 
-use crate::{OrthoError, OrthoResult, load_config_file};
+use crate::{MergeLayer, OrthoError, OrthoMergeExt, OrthoResult, load_config_file};
 
 #[cfg(windows)]
 /// Normalises a path according to Windows' case-insensitive comparison rules by
@@ -27,8 +28,10 @@ fn windows_normalised_key(path: &Path) -> String {
 }
 
 mod builder;
+mod outcome;
 
 pub use builder::ConfigDiscoveryBuilder;
+use outcome::DiscoveryOutcome;
 
 /// Cross-platform configuration discovery helper mirroring the `hello_world` example.
 #[derive(Debug, Clone)]
@@ -73,11 +76,58 @@ pub struct DiscoveryLoadOutcome {
     pub optional_errors: Vec<Arc<OrthoError>>,
 }
 
+/// Composition result that captures the first discovered configuration layer.
+#[derive(Debug, Default)]
+#[must_use]
+pub struct DiscoveryLayerOutcome {
+    /// Successfully composed merge layer, if any.
+    pub layer: Option<MergeLayer<'static>>,
+    /// Errors originating from required explicit candidates.
+    pub required_errors: Vec<Arc<OrthoError>>,
+    /// Errors produced by optional discovery candidates.
+    pub optional_errors: Vec<Arc<OrthoError>>,
+}
+
 impl ConfigDiscovery {
     /// Creates a new builder initialised for `app_name`.
     #[must_use]
     pub fn builder(app_name: impl Into<String>) -> ConfigDiscoveryBuilder {
         ConfigDiscoveryBuilder::new(app_name)
+    }
+
+    fn discover_first<T, F>(&self, mut build: F) -> DiscoveryOutcome<T>
+    where
+        F: FnMut(figment::Figment, &Path) -> Result<T, Arc<OrthoError>>,
+    {
+        let mut required_errors = Vec::new();
+        let mut optional_errors = Vec::new();
+        let (candidates, required_bound) = self.candidates_with_required_bound();
+        for (idx, path) in candidates.into_iter().enumerate() {
+            match load_config_file(&path) {
+                Ok(Some(figment)) => match build(figment, &path) {
+                    Ok(value) => {
+                        return DiscoveryOutcome {
+                            value: Some(value),
+                            required_errors,
+                            optional_errors,
+                        };
+                    }
+                    Err(err) if idx < required_bound => required_errors.push(err),
+                    Err(err) => optional_errors.push(err),
+                },
+                Ok(None) if idx < required_bound => {
+                    required_errors.push(Self::missing_required_error(&path));
+                }
+                Ok(None) => {}
+                Err(err) if idx < required_bound => required_errors.push(err),
+                Err(err) => optional_errors.push(err),
+            }
+        }
+        DiscoveryOutcome {
+            value: None,
+            required_errors,
+            optional_errors,
+        }
     }
 
     fn push_unique(
@@ -345,34 +395,34 @@ impl ConfigDiscovery {
     /// assert_eq!(outcome.required_errors.len(), 1);
     /// ```
     pub fn load_first_partitioned(&self) -> DiscoveryLoadOutcome {
-        let mut required_errors = Vec::new();
-        let mut optional_errors = Vec::new();
-        let (candidates, required_bound) = self.candidates_with_required_bound();
-        for (idx, path) in candidates.into_iter().enumerate() {
-            match load_config_file(&path) {
-                Ok(Some(figment)) => {
-                    return DiscoveryLoadOutcome {
-                        figment: Some(figment),
-                        required_errors,
-                        optional_errors,
-                    };
-                }
-                Ok(None) if idx < required_bound => {
-                    required_errors.push(Self::missing_required_error(&path));
-                }
-                Ok(None) => {}
-                Err(err) if idx < required_bound => {
-                    required_errors.push(err);
-                }
-                Err(err) => {
-                    optional_errors.push(err);
-                }
-            }
-        }
+        let outcome = self.discover_first(|figment, _| Ok(figment));
         DiscoveryLoadOutcome {
-            figment: None,
-            required_errors,
-            optional_errors,
+            figment: outcome.value,
+            required_errors: outcome.required_errors,
+            optional_errors: outcome.optional_errors,
+        }
+    }
+
+    /// Composes the first available configuration file into a merge layer.
+    ///
+    /// Captures errors for required and optional candidates separately so
+    /// callers can mirror the aggregation semantics of [`Self::load_first`].
+    pub fn compose_layer(&self) -> DiscoveryLayerOutcome {
+        let outcome = self.discover_first(|figment, path| {
+            figment
+                .extract::<crate::serde_json::Value>()
+                .into_ortho_merge()
+                .map(|value| {
+                    let utf8_path = Utf8PathBuf::from_path_buf(path.to_path_buf())
+                        .ok()
+                        .unwrap_or_else(|| Utf8PathBuf::from(path.to_string_lossy().into_owned()));
+                    MergeLayer::file(Cow::Owned(value), Some(utf8_path))
+                })
+        });
+        DiscoveryLayerOutcome {
+            layer: outcome.value,
+            required_errors: outcome.required_errors,
+            optional_errors: outcome.optional_errors,
         }
     }
 

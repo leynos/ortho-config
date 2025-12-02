@@ -2,28 +2,26 @@
 //!
 //! Binds CLI, environment, and default layers via `OrthoConfig` so tests can
 //! drive the binary with predictable inputs.
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use clap::{ArgAction, Args, CommandFactory, FromArgMatches, Parser, Subcommand};
-use fluent_bundle::FluentValue;
 use ortho_config::{
-    LocalizationArgs, Localizer, OrthoConfig, OrthoMergeExt, SubcmdConfigMerge,
-    localize_clap_error_with_command,
+    Localizer, MergeLayer, MergeProvenance, OrthoConfig, OrthoError, SubcmdConfigMerge,
 };
 use serde::{Deserialize, Serialize};
 
 use crate::error::{HelloWorldError, ValidationError};
-use crate::localizer::{
-    CLI_ABOUT_MESSAGE_ID, CLI_BASE_MESSAGE_ID, CLI_LONG_ABOUT_MESSAGE_ID, CLI_USAGE_MESSAGE_ID,
-};
-
 mod commands;
 mod config_loading;
 mod discovery;
+mod localization;
 mod overrides;
 
-use self::config_loading::FileLayer;
+use self::localization::{LocalizeCmd, localize_parse_error};
+
 #[cfg(test)]
 pub(crate) use self::config_loading::{
     build_cli_args, build_overrides, file_excited_value, load_config_overrides, trimmed_salutations,
@@ -86,76 +84,11 @@ impl CommandLine {
         let mut command = Self::command().localize(localizer);
         let mut matches = command
             .try_get_matches_from_mut(iter)
-            .map_err(|err| localize_clap_error_with_command(err, localizer, Some(&command)))?;
+            .map_err(|err| localize_parse_error(err, localizer, &command))?;
         Self::from_arg_matches_mut(&mut matches).map_err(|parse_err| {
             let err_with_command = parse_err.with_cmd(&command);
-            localize_clap_error_with_command(err_with_command, localizer, Some(&command))
+            localize_parse_error(err_with_command, localizer, &command)
         })
-    }
-}
-
-/// Extension trait that applies localization to a `clap::Command` tree.
-pub trait LocalizeCmd {
-    /// Rewrites the command metadata (about, help, usage, etc.) using the provided localizer.
-    #[must_use]
-    fn localize(self, localizer: &dyn Localizer) -> Self;
-}
-
-impl LocalizeCmd for clap::Command {
-    fn localize(mut self, localizer: &dyn Localizer) -> Self {
-        let mut path = Vec::new();
-        localize_command_tree(&mut self, localizer, &mut path);
-        self
-    }
-}
-
-fn localize_command_tree(
-    command: &mut clap::Command,
-    localizer: &dyn Localizer,
-    path: &mut Vec<String>,
-) {
-    apply_command_metadata(command, localizer, path);
-    for subcommand in command.get_subcommands_mut() {
-        path.push(subcommand.get_name().to_owned());
-        localize_command_tree(subcommand, localizer, path);
-        path.pop();
-    }
-}
-
-fn apply_command_metadata(command: &mut clap::Command, localizer: &dyn Localizer, path: &[String]) {
-    let args = localization_args_for(command);
-    let mut working = command.clone();
-    let about_id = message_id(path, "about");
-    if let Some(about) = localizer.lookup(&about_id, None) {
-        working = working.about(about);
-    }
-    let long_about_id = message_id(path, "long_about");
-    if let Some(long_about) = localizer.lookup(&long_about_id, Some(&args)) {
-        working = working.long_about(long_about);
-    }
-    let usage_id = message_id(path, "usage");
-    if let Some(usage) = localizer.lookup(&usage_id, Some(&args)) {
-        working = working.override_usage(usage);
-    }
-    *command = working;
-}
-
-fn localization_args_for(command: &clap::Command) -> LocalizationArgs<'static> {
-    let mut args = LocalizationArgs::default();
-    args.insert("binary", FluentValue::from(command.get_name().to_owned()));
-    args
-}
-
-fn message_id(path: &[String], suffix: &str) -> String {
-    if path.is_empty() {
-        match suffix {
-            "about" => CLI_ABOUT_MESSAGE_ID.to_owned(),
-            "long_about" => CLI_LONG_ABOUT_MESSAGE_ID.to_owned(),
-            "usage" => CLI_USAGE_MESSAGE_ID.to_owned(),
-            other => format!("{CLI_BASE_MESSAGE_ID}.{other}"),
-        }
-    } else {
-        format!("{CLI_BASE_MESSAGE_ID}.{}.{}", path.join("."), suffix)
     }
 }
 
@@ -222,31 +155,72 @@ pub fn load_global_config(
     globals: &GlobalArgs,
     config_override: Option<&Path>,
 ) -> Result<HelloWorldCli, HelloWorldError> {
-    let base =
-        HelloWorldCli::load_from_iter(config_loading::build_cli_args(config_override).into_iter())?;
+    let composition =
+        HelloWorldCli::compose_layers_from_iter(config_loading::build_cli_args(config_override));
+    let (mut layers, mut errors) = composition.into_parts();
+    let discovered_file = layers
+        .iter()
+        .find(|layer| layer.provenance() == MergeProvenance::File)
+        .cloned();
+
     let salutations = config_loading::trimmed_salutations(globals);
-    let file_overrides = config_loading::load_config_overrides()?;
+    let file_overrides = config_loading::load_config_overrides_with_layer(discovered_file)?;
     let overrides = config_loading::build_overrides(
         globals,
         salutations,
-        file_overrides.as_ref(),
+        file_overrides.as_ref().map(|(overrides, _)| overrides),
         config_override,
     );
 
-    let mut figment = ortho_config::figment::Figment::from(
-        ortho_config::figment::providers::Serialized::defaults(&base),
-    );
-    if let Some(ref file) = file_overrides {
-        figment = figment.merge(ortho_config::figment::providers::Serialized::defaults(
-            &FileLayer {
-                is_excited: file.is_excited,
-            },
-        ));
+    process_file_overrides(&mut layers, &mut errors, file_overrides);
+    process_cli_overrides(&mut layers, &mut errors, &overrides);
+    merge_and_validate(layers, errors)
+}
+
+fn process_file_overrides(
+    layers: &mut Vec<MergeLayer<'static>>,
+    errors: &mut Vec<Arc<OrthoError>>,
+    file_overrides: Option<(overrides::FileOverrides, Option<camino::Utf8PathBuf>)>,
+) {
+    let Some((file, path)) = file_overrides else {
+        return;
+    };
+    match ortho_config::sanitize_value(&file) {
+        Ok(value) => layers.push(MergeLayer::file(Cow::Owned(value), path)),
+        Err(err) => errors.push(err),
     }
-    figment = figment.merge(ortho_config::sanitized_provider(&overrides)?);
-    let merged = figment.extract::<HelloWorldCli>().into_ortho_merge()?;
-    merged.validate()?;
-    Ok(merged)
+}
+
+fn process_cli_overrides(
+    layers: &mut Vec<MergeLayer<'static>>,
+    errors: &mut Vec<Arc<OrthoError>>,
+    overrides: &overrides::Overrides<'_>,
+) {
+    if overrides.salutations.is_some() {
+        // Clear inherited salutations so CLI values replace rather than append.
+        layers.push(MergeLayer::cli(Cow::Owned(
+            ortho_config::serde_json::json!({
+                "salutations": null,
+            }),
+        )));
+    }
+
+    match ortho_config::sanitize_value(overrides) {
+        Ok(value) => layers.push(MergeLayer::cli(Cow::Owned(value))),
+        Err(err) => errors.push(err),
+    }
+}
+
+fn merge_and_validate(
+    layers: Vec<MergeLayer<'static>>,
+    errors: Vec<Arc<OrthoError>>,
+) -> Result<HelloWorldCli, HelloWorldError> {
+    let composition = ortho_config::declarative::LayerComposition::new(layers, errors);
+    let cfg = composition
+        .into_merge_result(HelloWorldCli::merge_from_layers)
+        .map_err(HelloWorldError::Configuration)?;
+    cfg.validate()?;
+    Ok(cfg)
 }
 
 /// Applies greeting-specific overrides derived from configuration defaults.
@@ -255,8 +229,8 @@ pub fn load_global_config(
 ///
 /// Returns a [`HelloWorldError`] when greeting defaults cannot be loaded.
 pub fn apply_greet_overrides(command: &mut GreetCommand) -> Result<(), HelloWorldError> {
-    if let Some(greet) =
-        config_loading::load_config_overrides()?.and_then(|overrides| overrides.cmds.greet)
+    if let Some((overrides, _)) = config_loading::load_config_overrides()?
+        && let Some(greet) = overrides.cmds.greet
     {
         if let Some(preamble) = greet.preamble {
             command.preamble = Some(preamble);

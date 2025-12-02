@@ -203,6 +203,14 @@ static TOML blobs in doctests following the guidance in
 [Rust doctest DRY guide](rust-doctest-dry-guide.md)) while keeping the
 production loader unchanged.
 
+Generated configuration structs now include `compose_layers()` and
+`compose_layers_from_iter(..)` helpers that assemble the default, discovered
+file, environment, and CLI layers into a `LayerComposition` without exposing
+Figment. The public `load()` path delegates to this builder before invoking
+`merge_from_layers`, keeping discovery concerns separate from merge semantics
+and enabling callers to inject bespoke layers (for example, application
+overrides) ahead of the final merge.
+
 ### 4.4. Hello world example testing strategy
 
 The `examples/hello_world` crate now anchors both unit and behavioural testing
