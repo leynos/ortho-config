@@ -226,8 +226,12 @@ fn build_compose_layers_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStrea
 
         let mut composer = ortho_config::MergeComposer::with_capacity(4);
         let defaults = #defaults_ident { #( #default_struct_init, )* };
+        let mut defaults_value = None;
         match ortho_config::sanitize_value(&defaults) {
-            Ok(value) => composer.push_defaults(value),
+            Ok(value) => {
+                defaults_value = Some(value.clone());
+                composer.push_defaults(value);
+            }
             Err(err) => errors.push(err),
         }
 
@@ -247,7 +251,14 @@ fn build_compose_layers_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStrea
 
         if let Some(ref cli) = cli {
             match ortho_config::sanitize_value(cli) {
-                Ok(value) => composer.push_cli(value),
+                Ok(value) => {
+                    let differs_from_defaults = defaults_value
+                        .as_ref()
+                        .map_or(true, |defaults| defaults != &value);
+                    if differs_from_defaults {
+                        composer.push_cli(value);
+                    }
+                }
                 Err(err) => errors.push(err),
             }
         }

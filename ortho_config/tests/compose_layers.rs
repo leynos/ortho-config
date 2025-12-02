@@ -91,9 +91,9 @@ fn compose_layers_collects_env_and_file_errors() -> Result<()> {
                 "expected merge_from_layers to fail with malformed layers",
             ));
         }
-        if !errors.is_empty() && errors.len() < 1 {
+        if errors.is_empty() && merged.is_ok() {
             return Err(figment::Error::from(
-                "expected at least one composition error when malformed values are present",
+                "expected composition or merge errors when malformed values are present",
             ));
         }
         Ok(())

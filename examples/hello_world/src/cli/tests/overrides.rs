@@ -122,7 +122,7 @@ fn load_config_overrides_returns_path() -> Result<()> {
     let file_name = path
         .as_deref()
         .and_then(|p| p.file_name())
-        .map(|name| name.to_string());
+        .map(std::string::ToString::to_string);
     ensure!(
         file_name.as_deref() == Some(".hello_world.toml"),
         "expected returned path to match discovered file"
