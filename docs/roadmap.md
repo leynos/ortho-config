@@ -223,9 +223,9 @@ references the relevant design guidance.
     verify fallback to the stock `clap` message when no translation exists.
     [[Design](design.md)]
 
-  - [x] Emit a `MergeComposer` builder that discovers file layers and serializes
-    CLI and environment input into `MergeLayer` instances without exposing
-    Figment publicly.
+  - [x] Emit a `MergeComposer` builder that discovers file layers and
+    serializes CLI and environment input into `MergeLayer` instances without
+    exposing Figment publicly.
 
   - [ ] Replace `load_global_config` and related helpers in examples with the
     new API. Add regression coverage using the behavioural testing

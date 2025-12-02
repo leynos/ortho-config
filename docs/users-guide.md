@@ -142,7 +142,7 @@ setup.
 
 Every derived configuration also exposes `compose_layers()` and
 `compose_layers_from_iter(..)`. These helpers discover configuration files,
-serialise environment variables, and capture CLI input as a `LayerComposition`,
+serialize environment variables, and capture CLI input as a `LayerComposition`,
 keeping discovery separate from merging. The returned composition includes both
 the ordered layers and any collected errors, letting callers push additional
 layers or aggregate errors before invoking `merge_from_layers`.

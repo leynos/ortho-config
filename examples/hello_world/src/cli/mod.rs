@@ -8,22 +8,19 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use clap::{ArgAction, Args, CommandFactory, FromArgMatches, Parser, Subcommand};
-use fluent_bundle::FluentValue;
 use ortho_config::{
-    LocalizationArgs, Localizer, MergeLayer, MergeProvenance, OrthoConfig, OrthoError,
-    SubcmdConfigMerge, localize_clap_error_with_command,
+    Localizer, MergeLayer, MergeProvenance, OrthoConfig, OrthoError, SubcmdConfigMerge,
 };
 use serde::{Deserialize, Serialize};
 
 use crate::error::{HelloWorldError, ValidationError};
-use crate::localizer::{
-    CLI_ABOUT_MESSAGE_ID, CLI_BASE_MESSAGE_ID, CLI_LONG_ABOUT_MESSAGE_ID, CLI_USAGE_MESSAGE_ID,
-};
-
 mod commands;
 mod config_loading;
 mod discovery;
+mod localization;
 mod overrides;
+
+use self::localization::{LocalizeCmd, localize_parse_error};
 
 #[cfg(test)]
 pub(crate) use self::config_loading::{
@@ -87,76 +84,11 @@ impl CommandLine {
         let mut command = Self::command().localize(localizer);
         let mut matches = command
             .try_get_matches_from_mut(iter)
-            .map_err(|err| localize_clap_error_with_command(err, localizer, Some(&command)))?;
+            .map_err(|err| localize_parse_error(err, localizer, &command))?;
         Self::from_arg_matches_mut(&mut matches).map_err(|parse_err| {
             let err_with_command = parse_err.with_cmd(&command);
-            localize_clap_error_with_command(err_with_command, localizer, Some(&command))
+            localize_parse_error(err_with_command, localizer, &command)
         })
-    }
-}
-
-/// Extension trait that applies localization to a `clap::Command` tree.
-pub trait LocalizeCmd {
-    /// Rewrites the command metadata (about, help, usage, etc.) using the provided localizer.
-    #[must_use]
-    fn localize(self, localizer: &dyn Localizer) -> Self;
-}
-
-impl LocalizeCmd for clap::Command {
-    fn localize(mut self, localizer: &dyn Localizer) -> Self {
-        let mut path = Vec::new();
-        localize_command_tree(&mut self, localizer, &mut path);
-        self
-    }
-}
-
-fn localize_command_tree(
-    command: &mut clap::Command,
-    localizer: &dyn Localizer,
-    path: &mut Vec<String>,
-) {
-    apply_command_metadata(command, localizer, path);
-    for subcommand in command.get_subcommands_mut() {
-        path.push(subcommand.get_name().to_owned());
-        localize_command_tree(subcommand, localizer, path);
-        path.pop();
-    }
-}
-
-fn apply_command_metadata(command: &mut clap::Command, localizer: &dyn Localizer, path: &[String]) {
-    let args = localization_args_for(command);
-    let mut working = command.clone();
-    let about_id = message_id(path, "about");
-    if let Some(about) = localizer.lookup(&about_id, None) {
-        working = working.about(about);
-    }
-    let long_about_id = message_id(path, "long_about");
-    if let Some(long_about) = localizer.lookup(&long_about_id, Some(&args)) {
-        working = working.long_about(long_about);
-    }
-    let usage_id = message_id(path, "usage");
-    if let Some(usage) = localizer.lookup(&usage_id, Some(&args)) {
-        working = working.override_usage(usage);
-    }
-    *command = working;
-}
-
-fn localization_args_for(command: &clap::Command) -> LocalizationArgs<'static> {
-    let mut args = LocalizationArgs::default();
-    args.insert("binary", FluentValue::from(command.get_name().to_owned()));
-    args
-}
-
-fn message_id(path: &[String], suffix: &str) -> String {
-    if path.is_empty() {
-        match suffix {
-            "about" => CLI_ABOUT_MESSAGE_ID.to_owned(),
-            "long_about" => CLI_LONG_ABOUT_MESSAGE_ID.to_owned(),
-            "usage" => CLI_USAGE_MESSAGE_ID.to_owned(),
-            other => format!("{CLI_BASE_MESSAGE_ID}.{other}"),
-        }
-    } else {
-        format!("{CLI_BASE_MESSAGE_ID}.{}.{}", path.join("."), suffix)
     }
 }
 
@@ -280,38 +212,14 @@ fn process_cli_overrides(
 
 fn merge_and_validate(
     layers: Vec<MergeLayer<'static>>,
-    mut errors: Vec<Arc<OrthoError>>,
+    errors: Vec<Arc<OrthoError>>,
 ) -> Result<HelloWorldCli, HelloWorldError> {
-    let cfg = match HelloWorldCli::merge_from_layers(layers) {
-        Ok(cfg) => cfg,
-        Err(err) => {
-            errors.push(err);
-            let aggregated = if errors.len() == 1 {
-                errors.remove(0)
-            } else {
-                Arc::new(OrthoError::aggregate(errors))
-            };
-            return Err(HelloWorldError::Configuration(aggregated));
-        }
-    };
-
+    let composition = ortho_config::declarative::LayerComposition::new(layers, errors);
+    let cfg = composition
+        .into_merge_result(HelloWorldCli::merge_from_layers)
+        .map_err(HelloWorldError::Configuration)?;
     cfg.validate()?;
-    finalize_errors(cfg, errors)
-}
-
-fn finalize_errors(
-    cfg: HelloWorldCli,
-    mut errors: Vec<Arc<OrthoError>>,
-) -> Result<HelloWorldCli, HelloWorldError> {
-    if errors.is_empty() {
-        return Ok(cfg);
-    }
-    if errors.len() == 1 {
-        return Err(HelloWorldError::Configuration(errors.remove(0)));
-    }
-    Err(HelloWorldError::Configuration(Arc::new(
-        OrthoError::aggregate(errors),
-    )))
+    Ok(cfg)
 }
 
 /// Applies greeting-specific overrides derived from configuration defaults.

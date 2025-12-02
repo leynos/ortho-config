@@ -29,8 +29,8 @@ fn compose_rule_layers(
         ]))
     })?;
 
-    let (layers, mut errors) = composition.into_parts();
-    if let Some(err) = OrthoError::try_aggregate(errors.clone()) {
+    let (layers, errors) = composition.into_parts();
+    if let Some(err) = OrthoError::try_aggregate(errors) {
         return Err(anyhow!(err));
     }
 

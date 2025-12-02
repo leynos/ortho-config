@@ -41,7 +41,7 @@ use std::{borrow::Cow, sync::Arc};
 use camino::{Utf8Path, Utf8PathBuf};
 use serde_json::{Map, Value};
 
-use crate::{OrthoError, OrthoResult, OrthoResultExt};
+use crate::{OrthoError, OrthoResult, result_ext::OrthoResultExt};
 
 /// Provenance of a merge layer.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -267,6 +267,14 @@ impl LayerComposition {
         !self.errors.is_empty()
     }
 
+    fn errors_to_result<T>(mut errors: Vec<Arc<OrthoError>>) -> OrthoResult<T> {
+        if errors.len() == 1 {
+            Err(errors.remove(0))
+        } else {
+            Err(Arc::new(OrthoError::aggregate(errors)))
+        }
+    }
+
     /// Consume the composition and merge layers using `merge`.
     ///
     /// Aggregates any pre-recorded composition errors with merge failures to
@@ -285,19 +293,13 @@ impl LayerComposition {
             Ok(cfg) => {
                 if errors.is_empty() {
                     Ok(cfg)
-                } else if errors.len() == 1 {
-                    Err(errors.remove(0))
                 } else {
-                    Err(Arc::new(OrthoError::aggregate(errors)))
+                    Self::errors_to_result(errors)
                 }
             }
             Err(err) => {
                 errors.push(err);
-                if errors.len() == 1 {
-                    Err(errors.remove(0))
-                } else {
-                    Err(Arc::new(OrthoError::aggregate(errors)))
-                }
+                Self::errors_to_result(errors)
             }
         }
     }
