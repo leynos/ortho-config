@@ -70,14 +70,18 @@ fn localization_args_for(command: &clap::Command) -> LocalizationArgs<'static> {
     args
 }
 
+fn base_message_id_for_suffix(suffix: &str) -> String {
+    match suffix {
+        "about" => CLI_ABOUT_MESSAGE_ID.to_owned(),
+        "long_about" => CLI_LONG_ABOUT_MESSAGE_ID.to_owned(),
+        "usage" => CLI_USAGE_MESSAGE_ID.to_owned(),
+        other => format!("{CLI_BASE_MESSAGE_ID}.{other}"),
+    }
+}
+
 fn message_id(path: &[String], suffix: &str) -> String {
     if path.is_empty() {
-        match suffix {
-            "about" => CLI_ABOUT_MESSAGE_ID.to_owned(),
-            "long_about" => CLI_LONG_ABOUT_MESSAGE_ID.to_owned(),
-            "usage" => CLI_USAGE_MESSAGE_ID.to_owned(),
-            other => format!("{CLI_BASE_MESSAGE_ID}.{other}"),
-        }
+        base_message_id_for_suffix(suffix)
     } else {
         format!("{CLI_BASE_MESSAGE_ID}.{}.{}", path.join("."), suffix)
     }

@@ -197,6 +197,7 @@ fn process_cli_overrides(
     overrides: &overrides::Overrides<'_>,
 ) {
     if overrides.salutations.is_some() {
+        // Clear inherited salutations so CLI values replace rather than append.
         layers.push(MergeLayer::cli(Cow::Owned(
             ortho_config::serde_json::json!({
                 "salutations": null,

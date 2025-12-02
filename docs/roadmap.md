@@ -198,7 +198,7 @@ references the relevant design guidance.
       `trybuild` where necessary.
       [[rstest fixtures guide](rust-testing-with-rstest-fixtures.md)]
 
-- [x] **Introduce Fluent localisation for `clap` integration**
+- [x] **Introduce Fluent localization for `clap` integration**
 
   - [x] Define a `Localizer` trait and `NoOpLocalizer` implementation that wrap
     message lookup and expose argument-aware helpers. [[Design](design.md)]

@@ -34,8 +34,13 @@ fn compose_rule_layers(
         return Err(anyhow!(err));
     }
 
-    composer_context.layers.set(layers.clone());
-    let config = RulesConfig::merge_from_layers(layers).map_err(|err| anyhow!(err))?;
+    composer_context.layers.set(layers);
+    let layers_for_merge = composer_context
+        .layers
+        .with_ref(|ls| ls.clone())
+        .ok_or_else(|| anyhow!("layers should be available for merge"))?;
+    let config =
+        RulesConfig::merge_from_layers(layers_for_merge).map_err(|err| anyhow!(err))?;
     composer_context.config.set(config);
     Ok(())
 }
