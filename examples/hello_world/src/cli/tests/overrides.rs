@@ -5,7 +5,7 @@ use super::helpers::*;
 use crate::cli::discovery::collect_config_candidates;
 use crate::cli::{
     CommandOverrides, FileOverrides, GlobalArgs, GreetOverrides, apply_greet_overrides,
-    load_global_config, load_greet_defaults,
+    load_config_overrides, load_global_config, load_greet_defaults,
 };
 use anyhow::{Result, ensure};
 use camino::Utf8PathBuf;
@@ -104,6 +104,29 @@ fn load_config_overrides_returns_none_without_files() -> Result<()> {
         Ok(())
     })?;
     ensure!(overrides.is_none(), "expected overrides to be absent");
+    Ok(())
+}
+
+#[rstest]
+fn load_config_overrides_returns_path() -> Result<()> {
+    let (overrides, path) = with_jail(|jail| {
+        jail.clear_env();
+        jail.create_file(".hello_world.toml", "is_excited = true")?;
+        let result = load_config_overrides().map_err(figment_error)?;
+        result.ok_or_else(|| figment::Error::from("expected overrides to load"))
+    })?;
+    ensure!(
+        overrides.is_excited == Some(true),
+        "unexpected overrides value"
+    );
+    let file_name = path
+        .as_deref()
+        .and_then(|p| p.file_name())
+        .map(|name| name.to_string());
+    ensure!(
+        file_name.as_deref() == Some(".hello_world.toml"),
+        "expected returned path to match discovered file"
+    );
     Ok(())
 }
 

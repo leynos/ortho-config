@@ -266,6 +266,41 @@ impl LayerComposition {
     pub fn has_errors(&self) -> bool {
         !self.errors.is_empty()
     }
+
+    /// Consume the composition and merge layers using `merge`.
+    ///
+    /// Aggregates any pre-recorded composition errors with merge failures to
+    /// mirror the behaviour of the generated `load_from_iter` path.
+    ///
+    /// # Errors
+    ///
+    /// Returns an aggregated [`crate::OrthoError`] when either composition or
+    /// merge steps fail.
+    pub fn into_merge_result<T, F>(self, merge: F) -> OrthoResult<T>
+    where
+        F: FnOnce(Vec<MergeLayer<'static>>) -> OrthoResult<T>,
+    {
+        let (layers, mut errors) = self.into_parts();
+        match merge(layers) {
+            Ok(cfg) => {
+                if errors.is_empty() {
+                    Ok(cfg)
+                } else if errors.len() == 1 {
+                    Err(errors.remove(0))
+                } else {
+                    Err(Arc::new(OrthoError::aggregate(errors)))
+                }
+            }
+            Err(err) => {
+                errors.push(err);
+                if errors.len() == 1 {
+                    Err(errors.remove(0))
+                } else {
+                    Err(Arc::new(OrthoError::aggregate(errors)))
+                }
+            }
+        }
+    }
 }
 
 impl IntoIterator for MergeComposer {

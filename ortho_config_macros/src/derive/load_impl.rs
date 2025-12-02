@@ -199,47 +199,6 @@ pub(crate) fn build_env_section(tokens: &LoadImplTokens<'_>) -> proc_macro2::Tok
     }
 }
 
-fn build_cli_layer_tokens() -> proc_macro2::TokenStream {
-    quote! {
-        if let Some(ref cli) = cli {
-            match ortho_config::sanitize_value(cli) {
-                Ok(value) => composer.push_cli(value),
-                Err(err) => errors.push(err),
-            }
-        }
-    }
-}
-
-/// Generate tokens that aggregate pending errors into the appropriate result.
-fn build_error_result_tokens() -> proc_macro2::TokenStream {
-    quote! {
-        if errors.len() == 1 {
-            Err(errors.remove(0))
-        } else {
-            Err(ortho_config::OrthoError::aggregate(errors).into())
-        }
-    }
-}
-
-fn build_result_with_errors_tokens() -> proc_macro2::TokenStream {
-    let aggregate = build_error_result_tokens();
-    quote! {
-        if errors.is_empty() {
-            Ok(cfg)
-        } else {
-            #aggregate
-        }
-    }
-}
-
-fn build_error_aggregation_tokens() -> proc_macro2::TokenStream {
-    let aggregate = build_error_result_tokens();
-    quote! {
-        errors.push(err);
-        #aggregate
-    }
-}
-
 fn build_compose_layers_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStream {
     let LoadImplArgs {
         idents,
@@ -250,7 +209,6 @@ fn build_compose_layers_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStrea
     let default_struct_init = tokens.default_struct_init;
     let file_discovery = build_file_discovery(tokens, *has_config_path);
     let env_section = build_env_section(tokens);
-    let cli_layer_tokens = build_cli_layer_tokens();
 
     quote! {
         use clap::Parser as _;
@@ -287,24 +245,21 @@ fn build_compose_layers_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStrea
             Err(err) => errors.push(err),
         }
 
-        { #cli_layer_tokens }
+        if let Some(ref cli) = cli {
+            match ortho_config::sanitize_value(cli) {
+                Ok(value) => composer.push_cli(value),
+                Err(err) => errors.push(err),
+            }
+        }
 
         ortho_config::declarative::LayerComposition::new(composer.layers(), errors)
     }
 }
 
-fn build_load_from_iter_impl(
-    config_ident: &Ident,
-    result_with_errors: &proc_macro2::TokenStream,
-    error_aggregation: &proc_macro2::TokenStream,
-) -> proc_macro2::TokenStream {
+fn build_load_from_iter_impl(config_ident: &Ident) -> proc_macro2::TokenStream {
     quote! {
         let composition = Self::compose_layers_from_iter(iter);
-        let (layers, mut errors) = composition.into_parts();
-        match #config_ident::merge_from_layers(layers) {
-            Ok(cfg) => { #result_with_errors }
-            Err(err) => { #error_aggregation }
-        }
+        composition.into_merge_result(|layers| #config_ident::merge_from_layers(layers))
     }
 }
 
@@ -339,11 +294,8 @@ pub(crate) fn build_load_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStre
         config_ident,
         ..
     } = idents;
-    let result_with_errors = build_result_with_errors_tokens();
-    let error_aggregation = build_error_aggregation_tokens();
     let compose_layers_impl = build_compose_layers_impl(args);
-    let load_from_iter_impl =
-        build_load_from_iter_impl(config_ident, &result_with_errors, &error_aggregation);
+    let load_from_iter_impl = build_load_from_iter_impl(config_ident);
     let config_impl = build_config_impl_delegates(cli_ident, config_ident);
 
     quote! {

@@ -6,6 +6,7 @@
 use std::{ffi::OsString, path::Path, sync::Arc};
 
 use camino::Utf8PathBuf;
+use ortho_config::MergeLayer;
 
 use crate::error::HelloWorldError;
 
@@ -70,9 +71,10 @@ pub(crate) fn file_excited_value(
         .or_else(|| file_overrides.and_then(|file| file.is_excited))
 }
 
-pub(crate) fn load_config_overrides()
--> Result<Option<(FileOverrides, Option<Utf8PathBuf>)>, HelloWorldError> {
-    let Some(layer) = discover_config_layer()? else {
+pub(crate) fn load_config_overrides_with_layer(
+    candidate: Option<MergeLayer<'static>>,
+) -> Result<Option<(FileOverrides, Option<Utf8PathBuf>)>, HelloWorldError> {
+    let Some(layer) = candidate else {
         return Ok(None);
     };
 
@@ -81,4 +83,10 @@ pub(crate) fn load_config_overrides()
     let overrides: FileOverrides = ortho_config::serde_json::from_value(value)
         .map_err(|err| HelloWorldError::Configuration(Arc::new(err.into())))?;
     Ok(Some((overrides, path)))
+}
+
+pub(crate) fn load_config_overrides()
+-> Result<Option<(FileOverrides, Option<Utf8PathBuf>)>, HelloWorldError> {
+    let layer = discover_config_layer()?;
+    load_config_overrides_with_layer(layer)
 }

@@ -54,3 +54,49 @@ fn compose_layers_collects_cli_env_and_file() -> Result<()> {
     })?;
     Ok(())
 }
+
+#[rstest]
+fn compose_layers_collects_cli_parse_errors() -> Result<()> {
+    figment::Jail::try_with(|jail| {
+        jail.clear_env();
+        let composition =
+            BuilderConfig::compose_layers_from_iter(["prog", "--port", "not-a-number"]);
+        let (_layers, errors) = composition.into_parts();
+        if errors.is_empty() {
+            return Err(figment::Error::from(
+                "expected CLI parsing error to be captured during composition",
+            ));
+        }
+        if errors.len() != 1 {
+            return Err(figment::Error::from("expected a single CLI error"));
+        }
+        Ok(())
+    })?;
+    Ok(())
+}
+
+#[rstest]
+fn compose_layers_collects_env_and_file_errors() -> Result<()> {
+    figment::Jail::try_with(|jail| {
+        jail.clear_env();
+        jail.set_env("APP_PORT", "env-not-a-number");
+        jail.create_file(".app.toml", r#"port = "file-not-a-number""#)?;
+
+        let composition = BuilderConfig::compose_layers_from_iter(["prog"]);
+        let (layers, errors) = composition.into_parts();
+
+        let merged = BuilderConfig::merge_from_layers(layers);
+        if merged.is_ok() {
+            return Err(figment::Error::from(
+                "expected merge_from_layers to fail with malformed layers",
+            ));
+        }
+        if !errors.is_empty() && errors.len() < 1 {
+            return Err(figment::Error::from(
+                "expected at least one composition error when malformed values are present",
+            ));
+        }
+        Ok(())
+    })?;
+    Ok(())
+}

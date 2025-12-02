@@ -10,8 +10,8 @@ use std::sync::Arc;
 use clap::{ArgAction, Args, CommandFactory, FromArgMatches, Parser, Subcommand};
 use fluent_bundle::FluentValue;
 use ortho_config::{
-    LocalizationArgs, Localizer, MergeLayer, OrthoConfig, OrthoError, SubcmdConfigMerge,
-    localize_clap_error_with_command,
+    LocalizationArgs, Localizer, MergeLayer, MergeProvenance, OrthoConfig, OrthoError,
+    SubcmdConfigMerge, localize_clap_error_with_command,
 };
 use serde::{Deserialize, Serialize};
 
@@ -226,9 +226,13 @@ pub fn load_global_config(
     let composition =
         HelloWorldCli::compose_layers_from_iter(config_loading::build_cli_args(config_override));
     let (mut layers, mut errors) = composition.into_parts();
+    let discovered_file = layers
+        .iter()
+        .find(|layer| layer.provenance() == MergeProvenance::File)
+        .cloned();
 
     let salutations = config_loading::trimmed_salutations(globals);
-    let file_overrides = config_loading::load_config_overrides()?;
+    let file_overrides = config_loading::load_config_overrides_with_layer(discovered_file)?;
     let overrides = config_loading::build_overrides(
         globals,
         salutations,
@@ -292,16 +296,22 @@ fn merge_and_validate(
     };
 
     cfg.validate()?;
+    finalize_errors(cfg, errors)
+}
 
+fn finalize_errors(
+    cfg: HelloWorldCli,
+    mut errors: Vec<Arc<OrthoError>>,
+) -> Result<HelloWorldCli, HelloWorldError> {
     if errors.is_empty() {
-        Ok(cfg)
-    } else if errors.len() == 1 {
-        Err(HelloWorldError::Configuration(errors.remove(0)))
-    } else {
-        Err(HelloWorldError::Configuration(Arc::new(
-            OrthoError::aggregate(errors),
-        )))
+        return Ok(cfg);
     }
+    if errors.len() == 1 {
+        return Err(HelloWorldError::Configuration(errors.remove(0)));
+    }
+    Err(HelloWorldError::Configuration(Arc::new(
+        OrthoError::aggregate(errors),
+    )))
 }
 
 /// Applies greeting-specific overrides derived from configuration defaults.
