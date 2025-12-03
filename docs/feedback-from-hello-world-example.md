@@ -75,6 +75,9 @@ providers([4](examples/hello_world/src/cli/mod.rs#L293-L301))([4](examples/hello
 represent differences, then explicitly merging each into a `Figment`. While
 `ortho-config` automates a lot via its derive, the need for this function
 suggests the library could better handle merging without so much custom code.
+The example now leans on the derive-generated `compose_layers_from_iter` helper
+plus a small CLI clearing layer, eliminating the bespoke Figment setup outlined
+here; the discussion below remains as historical context.
 
 **Proposal:** Introduce a **more powerful merging API or trait** in
 `ortho-config` that developers can leverage to combine configuration layers in

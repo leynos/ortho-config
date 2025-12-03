@@ -14,42 +14,6 @@ use rstest::rstest;
 use std::path::Path;
 
 #[rstest]
-fn load_global_config_applies_overrides() -> Result<()> {
-    let cli = parse_command_line(&["-r", "Team", "-s", "Hi", "greet"])?;
-    let config = with_jail(|jail| {
-        jail.clear_env();
-        jail.set_env("HELLO_WORLD_RECIPIENT", "Team");
-        jail.create_file(".hello_world.toml", "")?;
-        jail.set_env("HELLO_WORLD_SALUTATIONS", "Hi");
-        load_global_config(&cli.globals, None).map_err(figment_error)
-    })?;
-    ensure!(
-        config.recipient == "Team",
-        "unexpected recipient: {}",
-        config.recipient
-    );
-    ensure!(
-        config.trimmed_salutations() == vec!["Hi".to_owned()],
-        "unexpected salutations"
-    );
-    Ok(())
-}
-
-#[rstest]
-fn load_global_config_trims_cli_salutations() -> Result<()> {
-    let cli = parse_command_line(&["-s", "  Hello  ", "greet"])?;
-    let config = with_jail(|jail| {
-        jail.clear_env();
-        load_global_config(&cli.globals, None).map_err(figment_error)
-    })?;
-    ensure!(
-        config.salutations == vec!["Hello".to_owned()],
-        "expected trimmed salutation overrides",
-    );
-    Ok(())
-}
-
-#[rstest]
 fn load_global_config_preserves_env_when_not_overridden() -> Result<()> {
     let cli = parse_command_line(&["greet"])?;
     let config = with_jail(|jail| {

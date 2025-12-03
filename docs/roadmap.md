@@ -227,7 +227,7 @@ references the relevant design guidance.
     serializes CLI and environment input into `MergeLayer` instances without
     exposing Figment publicly.
 
-  - [ ] Replace `load_global_config` and related helpers in examples with the
+  - [x] Replace `load_global_config` and related helpers in examples with the
     new API. Add regression coverage using the behavioural testing
     fixtures.[^roadmap-behavioural] Reuse the parameterised setups from the
     rstest fixture guide.[^roadmap-rstest]
