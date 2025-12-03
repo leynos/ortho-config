@@ -5,9 +5,12 @@
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use clap::{ArgAction, Args, CommandFactory, FromArgMatches, Parser, Subcommand};
-use ortho_config::{Localizer, MergeLayer, MergeProvenance, OrthoConfig, SubcmdConfigMerge};
+use ortho_config::{
+    Localizer, MergeLayer, MergeProvenance, OrthoConfig, OrthoError, SubcmdConfigMerge,
+};
 use serde::{Deserialize, Serialize};
 
 use crate::error::{HelloWorldError, ValidationError};
@@ -149,13 +152,14 @@ pub enum Commands {
 pub fn load_global_config(
     globals: &GlobalArgs,
     config_override: Option<&Path>,
+    program_name: impl AsRef<std::ffi::OsStr>,
 ) -> Result<HelloWorldCli, HelloWorldError> {
-    let args = build_composition_args(config_override);
+    let args = build_composition_args(program_name.as_ref(), config_override);
     let composition = HelloWorldCli::compose_layers_from_iter(args);
-    let (mut layers, errors) = composition.into_parts();
+    let (mut layers, mut errors) = composition.into_parts();
 
     layers.retain(|layer| layer.provenance() != MergeProvenance::Cli);
-    push_cli_overrides(globals, &mut layers)?;
+    push_cli_overrides(globals, &mut layers, &mut errors);
 
     let resolved = ortho_config::declarative::LayerComposition::new(layers, errors)
         .into_merge_result(HelloWorldCli::merge_from_layers)
@@ -164,12 +168,12 @@ pub fn load_global_config(
     Ok(resolved)
 }
 
-fn build_composition_args(config_override: Option<&Path>) -> Vec<std::ffi::OsString> {
+fn build_composition_args(
+    program_name: &std::ffi::OsStr,
+    config_override: Option<&Path>,
+) -> Vec<std::ffi::OsString> {
     let mut args = Vec::new();
-    let binary = std::env::args_os()
-        .next()
-        .unwrap_or_else(|| std::ffi::OsString::from("hello-world"));
-    args.push(binary);
+    args.push(program_name.to_owned());
 
     if let Some(path) = config_override {
         args.push(std::ffi::OsString::from("--config"));
@@ -182,7 +186,8 @@ fn build_composition_args(config_override: Option<&Path>) -> Vec<std::ffi::OsStr
 fn push_cli_overrides(
     globals: &GlobalArgs,
     layers: &mut Vec<MergeLayer<'static>>,
-) -> Result<(), HelloWorldError> {
+    errors: &mut Vec<Arc<OrthoError>>,
+) {
     let salutations: Vec<String> = trimmed_salutations(globals).collect();
     if !salutations.is_empty() {
         layers.push(MergeLayer::cli(Cow::Owned(
@@ -199,9 +204,8 @@ fn push_cli_overrides(
 
     match ortho_config::sanitize_value(&overrides) {
         Ok(value) => layers.push(MergeLayer::cli(Cow::Owned(value))),
-        Err(err) => return Err(HelloWorldError::Configuration(err)),
+        Err(err) => errors.push(err),
     }
-    Ok(())
 }
 
 fn trimmed_salutations(globals: &GlobalArgs) -> impl Iterator<Item = String> + '_ {

@@ -48,7 +48,7 @@ fn load_global_config_accumulates_salutations(
                 .ok_or_else(|| figment::Error::from("expected key=value pair"))?;
             jail.set_env(key, value);
         }
-        load_global_config(&cli.globals, None).map_err(figment_error)
+        load_global_config(&cli.globals, None, "hello-world").map_err(figment_error)
     })?;
 
     ensure!(
@@ -64,7 +64,7 @@ fn load_global_config_trims_cli_salutations() -> Result<()> {
     let cli = parse_command_line(&["-s", "  Hello  ", "greet"])?;
     let merged = with_jail(|jail| {
         jail.clear_env();
-        load_global_config(&cli.globals, None).map_err(figment_error)
+        load_global_config(&cli.globals, None, "hello-world").map_err(figment_error)
     })?;
     ensure!(
         merged.salutations.ends_with(&[String::from("Hello")]),
@@ -79,7 +79,8 @@ fn load_global_config_respects_explicit_override() -> Result<()> {
     let merged = with_jail(|jail| {
         jail.clear_env();
         jail.create_file("override.toml", r#"recipient = "Explicit""#)?;
-        load_global_config(&cli, Some(Path::new("override.toml"))).map_err(figment_error)
+        load_global_config(&cli, Some(Path::new("override.toml")), "hello-world")
+            .map_err(figment_error)
     })?;
     ensure!(
         merged.recipient == "Explicit",

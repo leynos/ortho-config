@@ -180,7 +180,8 @@ where
             .map_err(figment_error)?;
         jail.create_file("baseline.toml", &baseline)?;
         jail.create_file(".hello_world.toml", &overrides)?;
-        let config = load_global_config(&GlobalArgs::default(), None).map_err(figment_error)?;
+        let config = load_global_config(&GlobalArgs::default(), None, "hello-world")
+            .map_err(figment_error)?;
         action(&config)
     })
 }

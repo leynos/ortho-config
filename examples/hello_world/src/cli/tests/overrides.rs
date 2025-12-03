@@ -19,7 +19,7 @@ fn load_global_config_preserves_env_when_not_overridden() -> Result<()> {
     let config = with_jail(|jail| {
         jail.clear_env();
         jail.set_env("HELLO_WORLD_RECIPIENT", "Library");
-        load_global_config(&cli.globals, None).map_err(figment_error)
+        load_global_config(&cli.globals, None, "hello-world").map_err(figment_error)
     })?;
     ensure!(
         config.recipient == "Library",
@@ -47,7 +47,8 @@ fn load_sample_configuration() -> Result<()> {
             .map_err(figment_error)?;
         jail.create_file("baseline.toml", &baseline)?;
         jail.create_file(".hello_world.toml", &overrides)?;
-        let config = load_global_config(&GlobalArgs::default(), None).map_err(figment_error)?;
+        let config = load_global_config(&GlobalArgs::default(), None, "hello-world")
+            .map_err(figment_error)?;
         let greet_defaults = load_greet_defaults().map_err(figment_error)?;
         Ok((config, greet_defaults))
     })?;
@@ -100,7 +101,7 @@ fn load_global_config_prefers_cli_excited_flag() -> Result<()> {
     let config = with_jail(|jail| {
         jail.clear_env();
         jail.create_file(".hello_world.toml", "is_excited = false")?;
-        load_global_config(&cli.globals, None).map_err(figment_error)
+        load_global_config(&cli.globals, None, "hello-world").map_err(figment_error)
     })?;
     ensure!(
         config.is_excited,
@@ -128,7 +129,8 @@ fn load_yaml_config_activates_excited_flag() -> Result<()> {
         } else {
             return Err(figment::Error::from("missing canonical.yaml"));
         }
-        load_global_config(&cli.globals, cli.config_path.as_deref()).map_err(figment_error)
+        load_global_config(&cli.globals, cli.config_path.as_deref(), "hello-world")
+            .map_err(figment_error)
     })?;
     ensure!(config.is_excited, "expected excited configuration");
     Ok(())
@@ -141,7 +143,12 @@ fn load_global_config_uses_explicit_override_file() -> Result<()> {
         jail.clear_env();
         jail.create_file(".hello_world.toml", "is_excited = false")?;
         jail.create_file("override.toml", "is_excited = true")?;
-        load_global_config(&cli.globals, Some(Path::new("override.toml"))).map_err(figment_error)
+        load_global_config(
+            &cli.globals,
+            Some(Path::new("override.toml")),
+            "hello-world",
+        )
+        .map_err(figment_error)
     })?;
     ensure!(
         config.is_excited,
