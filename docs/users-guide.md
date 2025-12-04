@@ -737,7 +737,7 @@ setting. Global options such as `--recipient` or `--salutation` are resolved by
 `load_global_config`, which now reuses
 `HelloWorldCli::compose_layers_from_iter` to collect defaults, discovered files
 and environment variables before applying CLI overrides. When callers pass
-`-s/--salutation`, the helper clears earlier vector contributions so CLI input
+`-s/--salutation`, the helper clears earlier vector contributions, so CLI input
 replaces file or environment values. The `greet` subcommand adds optional
 behaviour like a preamble (`--preamble "Good morning"`) or custom punctuation
 while reusing the merged global configuration. The `take-leave` subcommand
