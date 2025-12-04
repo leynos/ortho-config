@@ -41,7 +41,7 @@ use std::{borrow::Cow, sync::Arc};
 use camino::{Utf8Path, Utf8PathBuf};
 use serde_json::{Map, Value};
 
-use crate::{OrthoError, OrthoResult, result_ext::OrthoResultExt};
+use crate::{OrthoError, OrthoResult};
 
 /// Provenance of a merge layer.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -481,5 +481,12 @@ fn merge_object(target: &mut Value, map: Map<String, Value>) {
 /// assert_eq!(app.port, 8080);
 /// ```
 pub fn from_value<T: serde::de::DeserializeOwned>(value: Value) -> OrthoResult<T> {
-    serde_json::from_value(value).into_ortho()
+    serde_json::from_value(value).map_err(|err| {
+        let message = format!(
+            "merge deserialisation failed: {err} at line {}, column {}",
+            err.line(),
+            err.column()
+        );
+        Arc::new(OrthoError::merge(crate::figment::Error::from(message)))
+    })
 }

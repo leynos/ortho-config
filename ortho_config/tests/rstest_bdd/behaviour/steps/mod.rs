@@ -9,5 +9,6 @@ pub mod extends_steps;
 pub mod flatten_steps;
 pub mod ignore_steps;
 pub mod localizer_steps;
+pub mod merge_error_steps;
 pub mod merge_composer_steps;
 pub mod subcommand_steps;

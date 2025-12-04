@@ -40,6 +40,10 @@ production-ready complexity.
   driving a behavioural scenario that composes JSON-described layers into
   `GlobalArgs`, asserting that default salutations are preserved when
   environment layers append new values.
+- **Unified merge errors**: both the derive-generated loaders and the
+  subcommand helpers now surface merge-time failures as `OrthoError::Merge`, so
+  the binary reports a single variant when globals and subcommands disagree
+  during configuration composition.
 - **Localized help text**: ship a `DemoLocalizer` backed by
 `FluentLocalizer`, layer the example’s bundled catalogue over `ortho_config`’s
 defaults, and thread it through `CommandLine::command().localize(&localizer)`

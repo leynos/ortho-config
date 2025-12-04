@@ -234,7 +234,7 @@ references the relevant design guidance.
 
 - [ ] **Streamline subcommand configuration overrides**
 
-  - [ ] Route merge failures through `OrthoError::Merge` so binaries rely on a
+  - [x] Route merge failures through `OrthoError::Merge` so binaries rely on a
     single shared error surface when combining loaders.
     [[Feedback](feedback-from-hello-world-example.md)]
 
