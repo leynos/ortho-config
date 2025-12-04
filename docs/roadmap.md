@@ -232,11 +232,11 @@ references the relevant design guidance.
     fixtures.[^roadmap-behavioural] Reuse the parameterised setups from the
     rstest fixture guide.[^roadmap-rstest]
 
+- [ ] **Streamline subcommand configuration overrides**
+
   - [ ] Route merge failures through `OrthoError::Merge` so binaries rely on a
     single shared error surface when combining loaders.
     [[Feedback](feedback-from-hello-world-example.md)]
-
-- [ ] **Streamline subcommand configuration overrides**
 
   - [ ] Make `load_and_merge` treat CLI defaults as absent when the user did
     not override them, allowing subcommand sections such as `[cmds.greet]` to
