@@ -207,7 +207,7 @@ fn push_cli_overrides(
     let overrides = overrides::Overrides {
         recipient: globals.recipient.as_ref(),
         salutations: (!salutations.is_empty()).then_some(salutations),
-        is_excited: globals.is_excited.then_some(globals.is_excited),
+        is_excited: globals.is_excited,
         is_quiet: globals.is_quiet,
     };
 
