@@ -857,6 +857,9 @@ small extension traits:
   `OrthoResult<T>` when `E: Into<OrthoError>` (e.g., `serde_json::Error`).
 - `OrthoMergeExt::into_ortho_merge()` converts `Result<T, figment::Error>`
   into `OrthoResult<T>` as `OrthoError::Merge`.
+- `declarative::from_value` wraps `serde_json::Error` values in
+  `OrthoError::Merge`, keeping `merge_from_layers` failures aligned with
+  subcommand merge helpers.
 - `IntoFigmentError::into_figment()` converts `Arc<OrthoError>` (or
   `&Arc<OrthoError>`) into `figment::Error` for interop in tests or adapters,
   cloning the inner error to preserve structured details where possible.

@@ -13,3 +13,4 @@ scenarios!("tests/features/ignore_patterns.feature");
 scenarios!("tests/features/subcommand.feature");
 scenarios!("tests/features/localizer.feature");
 scenarios!("tests/features/merge_composer.feature");
+scenarios!("tests/features/merge_errors.feature");

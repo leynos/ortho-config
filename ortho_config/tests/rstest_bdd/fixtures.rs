@@ -51,6 +51,13 @@ pub struct ErrorContext {
     pub agg_result: Slot<ortho_config::OrthoResult<ErrorConfig>>,
 }
 
+/// Scenario state for merge error surface scenarios.
+#[derive(Debug, Default, ScenarioState)]
+pub struct MergeErrorContext {
+    pub layers: Slot<Vec<MergeLayer<'static>>>,
+    pub result: Slot<ortho_config::OrthoResult<RulesConfig>>,
+}
+
 /// Scenario state for flattened CLI merging scenarios.
 #[derive(Debug, Default, ScenarioState)]
 pub struct FlattenContext {
@@ -154,6 +161,12 @@ pub fn composer_context() -> ComposerContext {
 #[fixture]
 pub fn error_context() -> ErrorContext {
     ErrorContext::default()
+}
+
+/// Provides a clean merge error context so merge surface steps can share state.
+#[fixture]
+pub fn merge_error_context() -> MergeErrorContext {
+    MergeErrorContext::default()
 }
 
 /// Provides a clean flatten context for flattened CLI scenarios.

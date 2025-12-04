@@ -153,6 +153,10 @@ This design removes Figment from the public API. Applications call the new
 disappear; their functionality is subsumed by `MergeLayer`. Failures inside
 `merge_layer` immediately map to `OrthoError::Merge`, so downstream binaries no
 longer wrap Figment errors by hand.[^hello-world-feedback]
+`declarative::from_value` now wraps `serde_json::Error` instances in
+lightweight `figment::Error` values before constructing `OrthoError::Merge`,
+keeping merge-time failures aligned with the CLI merge helpers even when
+configuration layers are supplied by bespoke loaders.
 
 Deriving `DeclarativeMerge` keeps configuration structs declarative. Each field
 expands to a match arm that decides how to overlay the incoming value. Scalars

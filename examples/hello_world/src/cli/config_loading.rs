@@ -1,7 +1,5 @@
 //! Helpers that expose configuration file overrides for subcommands.
 
-use std::sync::Arc;
-
 use camino::Utf8PathBuf;
 use ortho_config::MergeLayer;
 
@@ -18,8 +16,8 @@ pub(crate) fn load_config_overrides_with_layer(
 
     let path = layer.path().map(camino::Utf8PathBuf::from);
     let value = layer.into_value();
-    let overrides: FileOverrides = ortho_config::serde_json::from_value(value)
-        .map_err(|err| HelloWorldError::Configuration(Arc::new(err.into())))?;
+    let overrides =
+        ortho_config::declarative::from_value(value).map_err(HelloWorldError::Configuration)?;
     Ok(Some((overrides, path)))
 }
 
