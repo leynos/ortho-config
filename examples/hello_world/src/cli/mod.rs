@@ -145,6 +145,15 @@ pub enum Commands {
 
 /// Resolves the global configuration by layering defaults with CLI overrides.
 ///
+/// # Parameters
+///
+/// * `globals` - Global CLI arguments containing recipient, salutations, and
+///   delivery flags.
+/// * `config_override` - Optional explicit path used to override configuration
+///   file discovery.
+/// * `program_name` - Programme name forwarded as `argv[0]` to the composition
+///   layer.
+///
 /// # Errors
 ///
 /// Returns a [`HelloWorldError`] when discovery fails or configuration cannot
