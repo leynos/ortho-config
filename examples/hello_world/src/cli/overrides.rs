@@ -14,8 +14,8 @@ pub(crate) struct Overrides<'a> {
     pub(crate) recipient: Option<&'a String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) salutations: Option<Vec<String>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) is_excited: Option<bool>,
+    #[serde(skip_serializing_if = "is_false")]
+    pub(crate) is_excited: bool,
     #[serde(skip_serializing_if = "is_false")]
     pub(crate) is_quiet: bool,
 }

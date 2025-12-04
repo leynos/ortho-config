@@ -66,6 +66,10 @@ hello_world_scenario!(
     "CLI overrides environment overrides configuration files"
 );
 hello_world_scenario!(
+    cli_salutations_replace_discovered_layers,
+    "CLI salutations replace discovered layers"
+);
+hello_world_scenario!(
     explicit_config_path_overrides_discovery_order,
     "Explicit config path overrides discovery order"
 );

@@ -733,9 +733,12 @@ tool continues using the CLI value instead of exiting with an error.
 <https://github.com/leynos/ortho-config/tree/main/examples/hello_world>
 
 The `hello_world` example crate demonstrates these patterns in a compact
-setting. Global options such as `--recipient` or `--salutation` are parsed via
-`load_global_config`, which layers configuration files and environment
-variables beneath any CLI overrides. The `greet` subcommand adds optional
+setting. Global options such as `--recipient` or `--salutation` are resolved by
+`load_global_config`, which now reuses
+`HelloWorldCli::compose_layers_from_iter` to collect defaults, discovered files
+and environment variables before applying CLI overrides. When callers pass
+`-s/--salutation`, the helper clears earlier vector contributions, so CLI input
+replaces file or environment values. The `greet` subcommand adds optional
 behaviour like a preamble (`--preamble "Good morning"`) or custom punctuation
 while reusing the merged global configuration. The `take-leave` subcommand
 combines switches and optional arguments (`--wave`, `--gift`,

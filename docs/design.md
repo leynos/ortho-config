@@ -118,8 +118,12 @@ to read without hiding the semantics of error mapping.
 
 Figment kept the hello_world example readable, yet it forced the
 `load_global_config` helper to juggle manual providers, bespoke overrides, and
-bespoke error wiring.[^hello-world-feedback] The library now owns that
-responsibility via a trait-driven merge pipeline:
+bespoke error wiring.[^hello-world-feedback] The derive-generated
+`compose_layers_from_iter` now owns discovery and base layer assembly. The
+example adds only a single CLI layer that clears and re-applies salutation
+overrides when callers pass `-s/--salutation`, avoiding hand-rolled Figment
+providers while keeping replacement semantics for CLI vectors. The library now
+owns the rest of the merge pipeline via the trait-driven design below:
 
 - `DeclarativeMerge` is derived for every `#[derive(OrthoConfig)]` struct. The
   trait exposes two methods:

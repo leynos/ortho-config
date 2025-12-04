@@ -10,7 +10,10 @@ production-ready complexity.
 - **Global parameters (switches and arrays)**: illustrate how the command-line
   parser exposes top-level configuration that applies to every command,
   covering boolean feature switches, repeated values, and precedence between
-  defaults and caller-supplied input.
+  defaults and caller-supplied input. The loader now reuses the
+  derive-generated `compose_layers_from_iter` output and clears salutation
+  defaults when callers pass `-s/--salutation`, so CLI vectors replace file or
+  environment entries.
 - **Collection merge strategies**: demonstrate vector appends alongside map
   replacement semantics. The `greeting_templates` field in `GlobalArgs` uses
   the `merge_strategy = "replace"` attribute, so configuration files can swap

@@ -23,12 +23,10 @@ mod overrides;
 use self::localization::{LocalizeCmd, localize_parse_error};
 
 #[cfg(test)]
-pub(crate) use self::config_loading::{
-    build_cli_args, build_overrides, file_excited_value, load_config_overrides, trimmed_salutations,
-};
+pub(crate) use self::config_loading::load_config_overrides;
 pub use commands::{FarewellChannel, GreetCommand, TakeLeaveCommand};
 #[cfg(test)]
-pub(crate) use overrides::{CommandOverrides, FileOverrides, GreetOverrides, Overrides};
+pub(crate) use overrides::{CommandOverrides, FileOverrides, GreetOverrides};
 
 /// Command-line surface exposed by the example.
 #[derive(Debug, Parser)]
@@ -147,6 +145,15 @@ pub enum Commands {
 
 /// Resolves the global configuration by layering defaults with CLI overrides.
 ///
+/// # Parameters
+///
+/// * `globals` - Global CLI arguments containing recipient, salutations, and
+///   delivery flags.
+/// * `config_override` - Optional explicit path used to override configuration
+///   file discovery.
+/// * `program_name` - Programme name forwarded as `argv[0]` to the composition
+///   layer.
+///
 /// # Errors
 ///
 /// Returns a [`HelloWorldError`] when discovery fails or configuration cannot
@@ -154,73 +161,67 @@ pub enum Commands {
 pub fn load_global_config(
     globals: &GlobalArgs,
     config_override: Option<&Path>,
+    program_name: impl AsRef<std::ffi::OsStr>,
 ) -> Result<HelloWorldCli, HelloWorldError> {
-    let composition =
-        HelloWorldCli::compose_layers_from_iter(config_loading::build_cli_args(config_override));
+    let args = build_composition_args(program_name.as_ref(), config_override);
+    let composition = HelloWorldCli::compose_layers_from_iter(args);
     let (mut layers, mut errors) = composition.into_parts();
-    let discovered_file = layers
-        .iter()
-        .find(|layer| layer.provenance() == MergeProvenance::File)
-        .cloned();
 
-    let salutations = config_loading::trimmed_salutations(globals);
-    let file_overrides = config_loading::load_config_overrides_with_layer(discovered_file)?;
-    let overrides = config_loading::build_overrides(
-        globals,
-        salutations,
-        file_overrides.as_ref().map(|(overrides, _)| overrides),
-        config_override,
-    );
+    layers.retain(|layer| layer.provenance() != MergeProvenance::Cli);
+    push_cli_overrides(globals, &mut layers, &mut errors);
 
-    process_file_overrides(&mut layers, &mut errors, file_overrides);
-    process_cli_overrides(&mut layers, &mut errors, &overrides);
-    merge_and_validate(layers, errors)
+    let resolved = ortho_config::declarative::LayerComposition::new(layers, errors)
+        .into_merge_result(HelloWorldCli::merge_from_layers)
+        .map_err(HelloWorldError::Configuration)?;
+    resolved.validate()?;
+    Ok(resolved)
 }
 
-fn process_file_overrides(
-    layers: &mut Vec<MergeLayer<'static>>,
-    errors: &mut Vec<Arc<OrthoError>>,
-    file_overrides: Option<(overrides::FileOverrides, Option<camino::Utf8PathBuf>)>,
-) {
-    let Some((file, path)) = file_overrides else {
-        return;
-    };
-    match ortho_config::sanitize_value(&file) {
-        Ok(value) => layers.push(MergeLayer::file(Cow::Owned(value), path)),
-        Err(err) => errors.push(err),
+fn build_composition_args(
+    program_name: &std::ffi::OsStr,
+    config_override: Option<&Path>,
+) -> Vec<std::ffi::OsString> {
+    let mut args = Vec::new();
+    args.push(program_name.to_owned());
+
+    if let Some(path) = config_override {
+        args.push(std::ffi::OsString::from("--config"));
+        args.push(path.as_os_str().to_owned());
     }
+
+    args
 }
 
-fn process_cli_overrides(
+fn push_cli_overrides(
+    globals: &GlobalArgs,
     layers: &mut Vec<MergeLayer<'static>>,
     errors: &mut Vec<Arc<OrthoError>>,
-    overrides: &overrides::Overrides<'_>,
 ) {
-    if overrides.salutations.is_some() {
-        // Clear inherited salutations so CLI values replace rather than append.
+    let salutations: Vec<String> = trimmed_salutations(globals).collect();
+    if !salutations.is_empty() {
         layers.push(MergeLayer::cli(Cow::Owned(
-            ortho_config::serde_json::json!({
-                "salutations": null,
-            }),
+            ortho_config::serde_json::json!({ "salutations": null }),
         )));
     }
 
-    match ortho_config::sanitize_value(overrides) {
+    let overrides = overrides::Overrides {
+        recipient: globals.recipient.as_ref(),
+        salutations: (!salutations.is_empty()).then_some(salutations),
+        is_excited: globals.is_excited,
+        is_quiet: globals.is_quiet,
+    };
+
+    match ortho_config::sanitize_value(&overrides) {
         Ok(value) => layers.push(MergeLayer::cli(Cow::Owned(value))),
         Err(err) => errors.push(err),
     }
 }
 
-fn merge_and_validate(
-    layers: Vec<MergeLayer<'static>>,
-    errors: Vec<Arc<OrthoError>>,
-) -> Result<HelloWorldCli, HelloWorldError> {
-    let composition = ortho_config::declarative::LayerComposition::new(layers, errors);
-    let cfg = composition
-        .into_merge_result(HelloWorldCli::merge_from_layers)
-        .map_err(HelloWorldError::Configuration)?;
-    cfg.validate()?;
-    Ok(cfg)
+fn trimmed_salutations(globals: &GlobalArgs) -> impl Iterator<Item = String> + '_ {
+    globals
+        .salutations
+        .iter()
+        .map(|value| value.trim().to_owned())
 }
 
 /// Applies greeting-specific overrides derived from configuration defaults.

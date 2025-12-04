@@ -14,7 +14,10 @@ fn main() -> color_eyre::Result<()> {
 
 fn run() -> Result<(), HelloWorldError> {
     let cli = parse_command_line()?;
-    let globals = load_global_config(&cli.globals, cli.config_path.as_deref())?;
+    let program = std::env::args_os()
+        .next()
+        .unwrap_or_else(|| std::ffi::OsString::from("hello-world"));
+    let globals = load_global_config(&cli.globals, cli.config_path.as_deref(), &program)?;
     match cli.command {
         Commands::Greet(args) => {
             let mut merged = args.load_and_merge()?;

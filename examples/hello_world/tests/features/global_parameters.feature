@@ -66,6 +66,17 @@ Feature: Global parameters govern greetings
     Then the command succeeds
     And stdout contains "EnvOne EnvTwo, Cli!"
 
+  Scenario: CLI salutations replace discovered layers
+    Given the hello world config file contains:
+      """
+      recipient = "Layered"
+      salutations = ["From file"]
+      """
+    And the environment contains "HELLO_WORLD_SALUTATIONS" = "From env"
+    When I run the hello world example with arguments "-s FromCli greet"
+    Then the command succeeds
+    And stdout contains "FromCli, Layered!"
+
   Scenario: Explicit config path overrides discovery order
     Given the file "custom.toml" contains:
       """
