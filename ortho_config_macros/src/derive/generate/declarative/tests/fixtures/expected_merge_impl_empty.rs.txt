@@ -5,7 +5,7 @@ impl ortho_config::DeclarativeMerge for __SampleDeclarativeMergeState {
         &mut self,
         layer: ortho_config::MergeLayer < '_ >
     ) -> ortho_config::OrthoResult<()> {
-        use ortho_config::OrthoResultExt as _;
+        use ortho_config::{OrthoJsonMergeExt as _, OrthoResultExt as _};
 
         let provenance = layer.provenance();
         let path = layer.path().map(|p| p.to_owned());
@@ -67,6 +67,6 @@ impl ortho_config::DeclarativeMerge for __SampleDeclarativeMergeState {
                 ortho_config::serde_json::Value::Object(overlay),
             );
         }
-        ortho_config::declarative::from_value(value)
+        ortho_config::declarative::from_value_merge(value)
     }
 }

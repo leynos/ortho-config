@@ -68,6 +68,47 @@ impl<T> OrthoMergeExt<T> for Result<T, figment::Error> {
     }
 }
 
+/// Extension tailored to mapping `serde_json::Error` into a merge failure.
+///
+/// Use this trait when deserializing JSON values in a merge context where
+/// failures should be attributed to the merge phase rather than the gathering
+/// phase.
+///
+/// # Examples
+///
+/// ```rust
+/// use ortho_config::{OrthoJsonMergeExt, OrthoError};
+///
+/// let bad_json: Result<i32, serde_json::Error> = serde_json::from_str("\"not_a_number\"");
+/// let result = bad_json.into_ortho_merge_json();
+/// assert!(matches!(&*result.unwrap_err(), OrthoError::Merge { .. }));
+/// ```
+#[cfg(feature = "serde_json")]
+pub trait OrthoJsonMergeExt<T> {
+    /// Convert `Result<T, serde_json::Error>` into `OrthoResult<T>` as an
+    /// [`OrthoError::Merge`].
+    ///
+    /// # Errors
+    ///
+    /// Returns an `OrthoError::Merge` wrapped in `Arc` when the input is `Err`.
+    fn into_ortho_merge_json(self) -> OrthoResult<T>;
+}
+
+#[cfg(feature = "serde_json")]
+impl<T> OrthoJsonMergeExt<T> for Result<T, serde_json::Error> {
+    fn into_ortho_merge_json(self) -> OrthoResult<T> {
+        self.map_err(|e| {
+            let figment_err = figment::Error::from(format!(
+                "JSON error: {} at line {}, column {}",
+                e,
+                e.line(),
+                e.column()
+            ));
+            Arc::new(OrthoError::merge(figment_err))
+        })
+    }
+}
+
 /// Convert shared Ortho errors into `figment::Error` for interop in tests and
 /// integrations that expect Figment's error type.
 pub trait IntoFigmentError {
@@ -120,5 +161,44 @@ pub trait ResultIntoFigment<T> {
 impl<T> ResultIntoFigment<T> for Result<T, Arc<OrthoError>> {
     fn to_figment(self) -> Result<T, figment::Error> {
         self.map_err(IntoFigmentError::into_figment)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rstest::rstest;
+
+    #[rstest]
+    fn into_ortho_merge_json_produces_merge_error() {
+        let bad_json: Result<i32, serde_json::Error> = serde_json::from_str("\"not_a_number\"");
+        let ortho_result = bad_json.into_ortho_merge_json();
+        let err = ortho_result.expect_err("expected error from invalid JSON");
+
+        assert!(
+            matches!(&*err, OrthoError::Merge { .. }),
+            "expected Merge error variant, got {err:?}"
+        );
+    }
+
+    #[rstest]
+    fn into_ortho_merge_json_preserves_ok_value() {
+        let ok_result: Result<i32, serde_json::Error> = Ok(42);
+        let ortho_result = ok_result.into_ortho_merge_json();
+
+        assert_eq!(ortho_result.expect("expected Ok"), 42);
+    }
+
+    #[rstest]
+    fn into_ortho_merge_json_error_message_contains_location() {
+        let bad_json: Result<i32, serde_json::Error> = serde_json::from_str("\"bad\"");
+        let ortho_result = bad_json.into_ortho_merge_json();
+        let err = ortho_result.expect_err("expected error");
+
+        let message = err.to_string();
+        assert!(
+            message.contains("line") && message.contains("column"),
+            "error message should contain line and column: {message}"
+        );
     }
 }

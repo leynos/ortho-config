@@ -41,7 +41,7 @@ use std::{borrow::Cow, sync::Arc};
 use camino::{Utf8Path, Utf8PathBuf};
 use serde_json::{Map, Value};
 
-use crate::{OrthoError, OrthoResult, result_ext::OrthoResultExt};
+use crate::{OrthoError, OrthoResult, result_ext::OrthoJsonMergeExt, result_ext::OrthoResultExt};
 
 /// Provenance of a merge layer.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -482,4 +482,41 @@ fn merge_object(target: &mut Value, map: Map<String, Value>) {
 /// ```
 pub fn from_value<T: serde::de::DeserializeOwned>(value: Value) -> OrthoResult<T> {
     serde_json::from_value(value).into_ortho()
+}
+
+/// Deserialise a JSON [`Value`] into `T`, routing errors to [`OrthoError::Merge`].
+///
+/// Use this function when deserializing in a merge context where failures should
+/// be attributed to the merge phase rather than the gathering phase. This
+/// semantic distinction clarifies that failures at the merge phase (combining
+/// and deserializing) are separate from failures during the gathering phase
+/// (reading sources).
+///
+/// # Errors
+///
+/// Returns an [`crate::OrthoError::Merge`] when deserialisation fails.
+///
+/// # Examples
+///
+/// ```rust
+/// use ortho_config::declarative::from_value_merge;
+/// use ortho_config::OrthoError;
+/// use serde::Deserialize;
+/// use serde_json::json;
+///
+/// #[derive(Debug, Deserialize, PartialEq)]
+/// struct App { port: u16 }
+///
+/// // Valid input deserialises successfully.
+/// let v = json!({"port": 8080});
+/// let app: App = from_value_merge(v).expect("value deserialises");
+/// assert_eq!(app.port, 8080);
+///
+/// // Invalid input produces Merge error.
+/// let invalid = json!({"port": "not_a_number"});
+/// let err = from_value_merge::<App>(invalid).unwrap_err();
+/// assert!(matches!(&*err, OrthoError::Merge { .. }));
+/// ```
+pub fn from_value_merge<T: serde::de::DeserializeOwned>(value: Value) -> OrthoResult<T> {
+    serde_json::from_value(value).into_ortho_merge_json()
 }

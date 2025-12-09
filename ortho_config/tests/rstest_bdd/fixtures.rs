@@ -253,6 +253,27 @@ pub struct DynamicRule {
     pub enabled: bool,
 }
 
+/// Scenario state for merge error routing scenarios.
+#[derive(Debug, Default, ScenarioState)]
+pub struct MergeErrorContext {
+    pub layers: Slot<Vec<MergeLayer<'static>>>,
+    pub result: Slot<ortho_config::OrthoResult<MergeErrorSample>>,
+}
+
+/// Minimal struct used by merge error routing behavioural tests.
+#[derive(Debug, Deserialize, OrthoConfig)]
+#[ortho_config(prefix = "TEST")]
+pub struct MergeErrorSample {
+    #[ortho_config(default = 8080)]
+    pub port: u16,
+}
+
+/// Provides a clean merge error context for error routing scenarios.
+#[fixture]
+pub fn merge_error_context() -> MergeErrorContext {
+    MergeErrorContext::default()
+}
+
 /// Configuration used to verify aggregated error reporting.
 ///
 /// # Examples
