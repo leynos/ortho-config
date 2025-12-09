@@ -164,7 +164,7 @@ impl<T> ResultIntoFigment<T> for Result<T, Arc<OrthoError>> {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "serde_json"))]
 mod tests {
     use super::*;
     use rstest::rstest;

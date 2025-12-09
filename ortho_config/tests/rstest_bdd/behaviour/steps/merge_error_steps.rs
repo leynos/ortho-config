@@ -1,18 +1,10 @@
 //! Steps verifying merge error routing to `OrthoError::Merge`.
 
-use crate::fixtures::MergeErrorContext;
+use crate::fixtures::{MergeErrorContext, MergeErrorSample};
 use anyhow::{Result, anyhow, ensure};
 use ortho_config::{MergeComposer, OrthoConfig, OrthoError};
 use rstest_bdd_macros::{given, then, when};
-use serde::Deserialize;
 use serde_json::json;
-
-#[derive(Debug, Deserialize, OrthoConfig)]
-#[ortho_config(prefix = "TEST")]
-struct MergeErrorConfig {
-    #[ortho_config(default = 8080)]
-    port: u16,
-}
 
 #[given("a merge layer with port set to {value}")]
 fn layer_with_port(merge_error_context: &MergeErrorContext, value: String) -> Result<()> {
@@ -38,7 +30,7 @@ fn merge_layers(merge_error_context: &MergeErrorContext) -> Result<()> {
         .layers
         .take()
         .ok_or_else(|| anyhow!("layers not initialised"))?;
-    let result = MergeErrorConfig::merge_from_layers(layers);
+    let result = MergeErrorSample::merge_from_layers(layers);
     merge_error_context.result.set(result);
     Ok(())
 }
