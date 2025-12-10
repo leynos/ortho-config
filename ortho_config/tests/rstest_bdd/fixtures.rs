@@ -270,9 +270,7 @@ pub struct MergeErrorSample {
 
 /// Provides a clean merge error context for error routing scenarios.
 #[fixture]
-pub fn merge_error_context() -> MergeErrorContext {
-    MergeErrorContext::default()
-}
+pub fn merge_error_context() -> MergeErrorContext { MergeErrorContext::default() }
 
 /// Configuration used to verify aggregated error reporting.
 ///

@@ -492,10 +492,10 @@ pub fn from_value<T: serde::de::DeserializeOwned>(value: Value) -> OrthoResult<T
 
 /// Deserialise a JSON [`Value`] into `T`, routing errors to [`OrthoError::Merge`].
 ///
-/// Use this function when deserializing in a merge context where failures should
+/// Use this function when deserialising in a merge context where failures should
 /// be attributed to the merge phase rather than the gathering phase. This
 /// semantic distinction clarifies that failures at the merge phase (combining
-/// and deserializing) are separate from failures during the gathering phase
+/// and deserialising) are separate from failures during the gathering phase
 /// (reading sources).
 ///
 /// # Errors
@@ -515,7 +515,7 @@ pub fn from_value<T: serde::de::DeserializeOwned>(value: Value) -> OrthoResult<T
 ///
 /// // Valid input deserialises successfully.
 /// let v = json!({"port": 8080});
-/// let app: App = from_value_merge(v).expect("value deserialises");
+/// let app: App = from_value_merge(v).expect("value deserialises successfully");
 /// assert_eq!(app.port, 8080);
 ///
 /// // Invalid input produces Merge error.

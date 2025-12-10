@@ -32,6 +32,8 @@ pub use uncased;
 pub use xdg;
 
 mod csv_env;
+#[cfg(feature = "serde_json")]
+#[cfg_attr(docsrs, doc(cfg(feature = "serde_json")))]
 pub mod declarative;
 pub mod discovery;
 mod error;
@@ -71,6 +73,8 @@ pub fn normalize_prefix(prefix: &str) -> String {
 }
 
 pub use csv_env::CsvEnv;
+#[cfg(feature = "serde_json")]
+#[cfg_attr(docsrs, doc(cfg(feature = "serde_json")))]
 pub use declarative::{DeclarativeMerge, MergeComposer, MergeLayer, MergeProvenance};
 pub use discovery::{ConfigDiscovery, ConfigDiscoveryBuilder, DiscoveryLoadOutcome};
 pub use error::{OrthoError, is_display_request};

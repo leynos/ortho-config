@@ -1,10 +1,11 @@
 //! Integration tests verifying merge failures route through `OrthoError::Merge`.
 //!
-//! Ensures deserialization errors during the merge phase (not gathering phase)
+//! Ensures deserialisation errors during the merge phase (not gathering phase)
 //! produce the correct error variant, establishing a clear semantic distinction.
 //!
-//! The `MergeErrorSample` struct mirrors the definition in `rstest_bdd/fixtures.rs`
-//! to maintain consistency across test modules.
+//! Note: `MergeErrorSample` is intentionally defined locally rather than imported
+//! from `rstest_bdd/fixtures.rs` to keep these integration tests self-contained.
+//! Both definitions must remain synchronised (port: u16 with default 8080).
 
 use anyhow::{Result, ensure};
 use ortho_config::{MergeComposer, OrthoConfig, OrthoError};
@@ -103,8 +104,8 @@ fn merge_error_contains_helpful_message() -> Result<()> {
 
     let message = error.to_string();
     ensure!(
-        message.contains("merge") || message.contains("Merge"),
-        "error message should reference merge: {message}"
+        message.to_lowercase().contains("merge"),
+        "error message should reference merge context: {message}"
     );
 
     Ok(())
