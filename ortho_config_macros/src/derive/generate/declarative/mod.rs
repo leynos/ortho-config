@@ -428,6 +428,14 @@ pub(crate) fn generate_declarative_merge_from_layers_fn(
 /// Combines the state struct, `DeclarativeMerge` trait implementation, and
 /// inherent constructor into a single token stream.
 ///
+/// # Feature Requirements
+///
+/// The generated code references `ortho_config::declarative::*` and
+/// `ortho_config::OrthoJsonMergeExt`, which are feature-gated behind
+/// `serde_json` in the `ortho_config` crate. If a downstream crate disables
+/// `serde_json`, compilation will fail with clear "module not found" errors
+/// pointing to the missing types.
+///
 /// # Examples
 ///
 /// ```rust,ignore

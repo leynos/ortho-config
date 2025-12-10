@@ -15,7 +15,14 @@ use serde_json::json;
 
 /// Minimal struct used by merge error routing tests.
 ///
-/// Mirrors `MergeErrorSample` in `rstest_bdd/fixtures.rs`.
+/// This struct mirrors `MergeErrorSample` in `rstest_bdd/fixtures.rs`. Both
+/// definitions must remain synchronised: a single `port: u16` field with
+/// default 8080 and prefix "TEST".
+///
+/// The duplication exists because Cargo compiles each integration test as a
+/// separate crate, preventing direct imports between test files. The rstest-bdd
+/// fixtures module cannot be imported here without restructuring the test
+/// layout.
 #[derive(Debug, Deserialize, OrthoConfig)]
 #[ortho_config(prefix = "TEST")]
 struct MergeErrorSample {
