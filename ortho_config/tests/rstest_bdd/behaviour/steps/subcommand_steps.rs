@@ -18,10 +18,7 @@ fn has_no_config_sources(subcommand_context: &SubcommandContext) -> bool {
 }
 
 fn take_sources(subcommand_context: &SubcommandContext) -> SubcommandSources {
-    subcommand_context
-        .sources
-        .take()
-        .unwrap_or_default()
+    subcommand_context.sources.take().unwrap_or_default()
 }
 
 enum ReferenceField {

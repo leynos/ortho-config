@@ -316,6 +316,12 @@ impl IntoIterator for MergeComposer {
 
 /// Trait implemented by derive-generated merge state machines.
 ///
+/// # Feature Requirements
+///
+/// Declarative merging requires the `serde_json` feature (enabled by default).
+/// The derive-generated implementations use [`serde_json::Value`] for layer
+/// composition and will not compile without this feature.
+///
 /// # Example
 ///
 /// ```rust

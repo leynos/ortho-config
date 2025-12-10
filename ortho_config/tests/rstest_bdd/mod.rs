@@ -5,7 +5,7 @@
 //! `rstest-bdd` macros execute under `cargo test` without needing to disable
 //! the harness.
 
-mod fixtures;
-mod canary_steps;
-mod canary;
 mod behaviour;
+mod canary;
+mod canary_steps;
+mod fixtures;

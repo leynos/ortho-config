@@ -2,6 +2,9 @@
 //!
 //! Ensures deserialization errors during the merge phase (not gathering phase)
 //! produce the correct error variant, establishing a clear semantic distinction.
+//!
+//! The `MergeErrorSample` struct mirrors the definition in `rstest_bdd/fixtures.rs`
+//! to maintain consistency across test modules.
 
 use anyhow::{Result, ensure};
 use ortho_config::{MergeComposer, OrthoConfig, OrthoError};
@@ -9,12 +12,14 @@ use rstest::rstest;
 use serde::Deserialize;
 use serde_json::json;
 
+/// Minimal struct used by merge error routing tests.
+///
+/// Mirrors `MergeErrorSample` in `rstest_bdd/fixtures.rs`.
 #[derive(Debug, Deserialize, OrthoConfig)]
 #[ortho_config(prefix = "TEST")]
 struct MergeErrorSample {
     #[ortho_config(default = 8080)]
     port: u16,
-    name: String,
 }
 
 #[expect(
@@ -32,8 +37,7 @@ struct VecAppendSample {
 fn merge_deserialization_error_produces_merge_variant() -> Result<()> {
     let mut composer = MergeComposer::new();
     composer.push_defaults(json!({
-        "port": "not_a_number",
-        "name": "test"
+        "port": "not_a_number"
     }));
 
     let result = MergeErrorSample::merge_from_layers(composer.layers());
@@ -69,8 +73,7 @@ fn vector_append_deserialization_error_produces_merge_variant() -> Result<()> {
 fn successful_merge_produces_correct_result() -> Result<()> {
     let mut composer = MergeComposer::new();
     composer.push_defaults(json!({
-        "port": 8080,
-        "name": "default"
+        "port": 8080
     }));
     composer.push_environment(json!({
         "port": 9090
@@ -83,11 +86,6 @@ fn successful_merge_produces_correct_result() -> Result<()> {
         "expected port 9090, got {}",
         config.port
     );
-    ensure!(
-        config.name == "default",
-        "expected name 'default', got '{}'",
-        config.name
-    );
 
     Ok(())
 }
@@ -97,8 +95,7 @@ fn successful_merge_produces_correct_result() -> Result<()> {
 fn merge_error_contains_helpful_message() -> Result<()> {
     let mut composer = MergeComposer::new();
     composer.push_defaults(json!({
-        "port": "invalid",
-        "name": "test"
+        "port": "invalid"
     }));
 
     let result = MergeErrorSample::merge_from_layers(composer.layers());

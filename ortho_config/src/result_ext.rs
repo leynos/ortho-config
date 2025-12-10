@@ -98,12 +98,10 @@ pub trait OrthoJsonMergeExt<T> {
 impl<T> OrthoJsonMergeExt<T> for Result<T, serde_json::Error> {
     fn into_ortho_merge_json(self) -> OrthoResult<T> {
         self.map_err(|e| {
-            let figment_err = figment::Error::from(format!(
-                "JSON error: {} at line {}, column {}",
-                e,
-                e.line(),
-                e.column()
-            ));
+            // Preserve structured error information via figment's Kind::Message.
+            // serde_json::Error's Display includes the error category (syntax, data, io),
+            // the specific message, and location details when available.
+            let figment_err = figment::Error::from(e.to_string());
             Arc::new(OrthoError::merge(figment_err))
         })
     }

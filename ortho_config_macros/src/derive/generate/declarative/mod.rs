@@ -383,6 +383,10 @@ pub(crate) fn generate_declarative_merge_from_layers_fn(
             /// [declarative merging design](https://github.com/leynos/ortho-config/blob/main/docs/design.md#43-declarative-configuration-merging)
             /// for background and trade-offs.
             ///
+            /// # Feature Requirements
+            ///
+            /// This method requires the `serde_json` feature (enabled by default).
+            ///
             /// # Examples
             ///
             /// ```rust,ignore
