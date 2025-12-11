@@ -54,6 +54,15 @@ pub struct CommandLine {
     pub command: Commands,
 }
 
+/// Result of parsing command-line arguments, including the raw matches.
+#[derive(Debug)]
+pub struct ParsedCommandLine {
+    /// The parsed command-line structure.
+    pub cli: CommandLine,
+    /// The raw argument matches for subcommand CLI extraction.
+    pub matches: clap::ArgMatches,
+}
+
 impl CommandLine {
     /// Parses command-line arguments using the supplied localizer.
     ///
@@ -61,10 +70,27 @@ impl CommandLine {
     ///
     /// Returns a [`clap::Error`] when parsing fails.
     pub fn try_parse_localized_env(localizer: &dyn Localizer) -> Result<Self, clap::Error> {
+        Self::try_parse_localized(std::env::args_os(), localizer).map(|parsed| parsed.cli)
+    }
+
+    /// Parses command-line arguments, returning both the struct and matches.
+    ///
+    /// This variant is useful when you need access to `ArgMatches` for
+    /// features like `cli_default_as_absent`.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`clap::Error`] when parsing fails.
+    pub fn try_parse_localized_with_matches_env(
+        localizer: &dyn Localizer,
+    ) -> Result<ParsedCommandLine, clap::Error> {
         Self::try_parse_localized(std::env::args_os(), localizer)
     }
 
     /// Parses the provided iterator of arguments using the supplied localizer.
+    ///
+    /// Returns both the parsed struct and the raw `ArgMatches` for use with
+    /// `load_and_merge_with_matches`.
     ///
     /// # Errors
     ///
@@ -74,19 +100,36 @@ impl CommandLine {
     pub fn try_parse_localized<I, T>(
         iter: I,
         localizer: &dyn Localizer,
-    ) -> Result<Self, clap::Error>
+    ) -> Result<ParsedCommandLine, clap::Error>
     where
         I: IntoIterator<Item = T>,
         T: Into<std::ffi::OsString> + Clone,
     {
         let mut command = Self::command().localize(localizer);
-        let mut matches = command
+        let matches = command
             .try_get_matches_from_mut(iter)
             .map_err(|err| localize_parse_error(err, localizer, &command))?;
-        Self::from_arg_matches_mut(&mut matches).map_err(|parse_err| {
+        let cli = Self::from_arg_matches(&matches).map_err(|parse_err| {
             let err_with_command = parse_err.with_cmd(&command);
             localize_parse_error(err_with_command, localizer, &command)
-        })
+        })?;
+        Ok(ParsedCommandLine { cli, matches })
+    }
+
+    /// Extracts the subcommand matches for the greet command.
+    ///
+    /// Returns `None` if the greet subcommand was not invoked.
+    #[must_use]
+    pub fn greet_matches(matches: &clap::ArgMatches) -> Option<&clap::ArgMatches> {
+        matches.subcommand_matches("greet")
+    }
+
+    /// Extracts the subcommand matches for the take-leave command.
+    ///
+    /// Returns `None` if the take-leave subcommand was not invoked.
+    #[must_use]
+    pub fn take_leave_matches(matches: &clap::ArgMatches) -> Option<&clap::ArgMatches> {
+        matches.subcommand_matches("take-leave")
     }
 }
 

@@ -29,6 +29,7 @@ use derive::load_impl::{
     DiscoveryTokens, LoadImplArgs, LoadImplIdents, LoadImplTokens, build_load_impl,
 };
 use derive::parse::parse_input;
+use heck::ToKebabCase;
 
 /// Derive macro for the
 /// [`OrthoConfig`](https://docs.rs/ortho_config/latest/ortho_config/trait.OrthoConfig.html)
@@ -60,6 +61,17 @@ pub fn derive_ortho_config(input_tokens: TokenStream) -> TokenStream {
     TokenStream::from(expanded)
 }
 
+/// Metadata about a field used for `CliValueExtractor` generation.
+#[derive(Clone)]
+pub(crate) struct CliFieldInfo {
+    /// The field's identifier.
+    pub name: syn::Ident,
+    /// The CLI argument ID (kebab-case or user-specified).
+    pub arg_id: String,
+    /// Whether this field has the `cli_default_as_absent` attribute.
+    pub default_as_absent: bool,
+}
+
 /// Internal data generated during macro expansion.
 struct MacroComponents {
     defaults_ident: syn::Ident,
@@ -69,6 +81,8 @@ struct MacroComponents {
     load_impl: proc_macro2::TokenStream,
     prefix_fn: Option<proc_macro2::TokenStream>,
     collection_strategies: CollectionStrategies,
+    /// Field info for `CliValueExtractor` generation.
+    cli_field_info: Vec<CliFieldInfo>,
 }
 
 #[derive(Clone, Copy)]
@@ -77,6 +91,14 @@ struct LoadTokenRefs<'a> {
     default_struct_init: &'a [proc_macro2::TokenStream],
     config_env_var: &'a proc_macro2::TokenStream,
     dotfile_name: &'a syn::LitStr,
+}
+
+/// Result of building CLI struct tokens.
+struct CliStructBuildResult {
+    /// The generated CLI struct fields.
+    fields: Vec<proc_macro2::TokenStream>,
+    /// Metadata for each field used in `CliValueExtractor` generation.
+    field_info: Vec<CliFieldInfo>,
 }
 
 /// Build CLI struct field tokens, conditionally adding a generated
@@ -98,7 +120,7 @@ fn build_cli_struct_tokens(
     fields: &[syn::Field],
     field_attrs: &[derive::parse::FieldAttrs],
     struct_attrs: &derive::parse::StructAttrs,
-) -> syn::Result<Vec<proc_macro2::TokenStream>> {
+) -> syn::Result<CliStructBuildResult> {
     let mut cli_struct = build_cli_struct_fields(fields, field_attrs)?;
     if !cli_struct.field_names.contains("config_path") {
         let config_field = build_config_flag_field(
@@ -109,7 +131,31 @@ fn build_cli_struct_tokens(
         )?;
         cli_struct.fields.push(config_field);
     }
-    Ok(cli_struct.fields)
+
+    // Build field info for CliValueExtractor generation
+    let field_info: Vec<CliFieldInfo> = fields
+        .iter()
+        .zip(field_attrs)
+        .filter(|(_, attrs)| !attrs.skip_cli)
+        .filter_map(|(field, attrs)| {
+            let name = field.ident.clone()?;
+            let field_name = name.to_string();
+            let arg_id = attrs
+                .cli_long
+                .clone()
+                .unwrap_or_else(|| field_name.to_kebab_case());
+            Some(CliFieldInfo {
+                name,
+                arg_id,
+                default_as_absent: attrs.cli_default_as_absent,
+            })
+        })
+        .collect();
+
+    Ok(CliStructBuildResult {
+        fields: cli_struct.fields,
+        field_info,
+    })
 }
 
 /// Build discovery tokens from struct-level `discovery(...)` attributes.
@@ -222,7 +268,7 @@ fn build_macro_components(
     let defaults_ident = format_ident!("__{}Defaults", ident);
     let default_struct_fields = build_default_struct_fields(fields);
     let cli_ident = format_ident!("__{}Cli", ident);
-    let cli_struct_fields = build_cli_struct_tokens(fields, field_attrs, struct_attrs)?;
+    let cli_build_result = build_cli_struct_tokens(fields, field_attrs, struct_attrs)?;
     let default_struct_init = build_default_struct_init(fields, field_attrs);
     let env_provider = build_env_provider(struct_attrs);
     let config_env_var = build_config_env_var(struct_attrs);
@@ -266,10 +312,11 @@ fn build_macro_components(
         defaults_ident,
         default_struct_fields,
         cli_ident,
-        cli_struct_fields,
+        cli_struct_fields: cli_build_result.fields,
         load_impl,
         prefix_fn,
         collection_strategies,
+        cli_field_info: cli_build_result.field_info,
     })
 }
 
@@ -300,6 +347,7 @@ mod tests {
             load_impl: quote! {},
             prefix_fn: None,
             collection_strategies: CollectionStrategies::default(),
+            cli_field_info: Vec::new(),
         })
     }
 

@@ -337,6 +337,7 @@ Field attributes modify how a field is sourced or merged:
 | `cli_long = "name"`         | Overrides the automatically generated long CLI flag (kebab-case).                                                                                                             |
 | `cli_short = 'c'`           | Adds a single-letter short flag for the field.                                                                                                                                |
 | `merge_strategy = "append"` | For `Vec<T>` fields, specifies that values from different sources should be concatenated. This is currently the only supported strategy and is the default for vector fields. |
+| `cli_default_as_absent`     | Treats clap's `default_value_t` as absent during subcommand merging. File and environment values take precedence over clap defaults while explicit CLI overrides still win.   |
 
 Unrecognized keys are ignored by the derive macro for forwards compatibility.
 Unknown keys will therefore silently do nothing. Developers who require
@@ -763,6 +764,48 @@ by adjusting the recipient and salutation. The paired `scripts/demo.sh` and
 running `cargo run -p hello_world`, illustrating how file defaults, environment
 variables, and CLI arguments override one another without mutating the working
 tree.
+
+### Treating clap defaults as absent
+
+Non‑`Option` fields annotated with `#[arg(default_value_t = ...)]` normally
+override configuration files and environment variables because `clap` always
+populates them. The `cli_default_as_absent` attribute changes this behaviour:
+when the user does not explicitly provide a value on the command line, the
+field is excluded from the CLI layer so that file and environment values take
+precedence.
+
+Add the attribute alongside the matching `default` attribute:
+
+```rust
+#[derive(Parser, Deserialize, Serialize, OrthoConfig)]
+#[ortho_config(prefix = "APP_")]
+struct GreetArgs {
+    #[arg(long, default_value_t = String::from("!"))]
+    #[ortho_config(default = String::from("!"), cli_default_as_absent)]
+    punctuation: String,
+}
+```
+
+**Precedence with the attribute (lowest to highest):**
+
+1. Struct default (`#[ortho_config(default = ...)]`)
+2. Configuration file
+3. Environment variable
+4. Explicit CLI override (e.g. `--punctuation "?"`)
+
+Without `cli_default_as_absent`, the clap default would always beat the file
+and environment layers. With the attribute, calling `greet` without
+`--punctuation` allows a `[cmds.greet] punctuation = "?"` file entry or
+`APP_CMDS_GREET_PUNCTUATION=?` environment variable to win.
+
+When using this attribute with `load_and_merge_subcommand_with_matches`, pass
+the `ArgMatches` so the crate can inspect `value_source()`:
+
+```rust
+let matches = GreetArgs::command().get_matches();
+let cli = GreetArgs::from_arg_matches(&matches)?;
+let merged = cli.load_and_merge_subcommand_with_matches("greet", &matches)?;
+```
 
 ### Dispatching with `clap‑dispatch`
 

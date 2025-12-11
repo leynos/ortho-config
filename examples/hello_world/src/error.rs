@@ -9,6 +9,9 @@ use clap::Error as ClapError;
 use std::{io, sync::Arc};
 use thiserror::Error;
 
+/// Result alias for operations returning [`HelloWorldError`].
+pub type Result<T> = std::result::Result<T, HelloWorldError>;
+
 /// Errors raised by the hello world example.
 #[derive(Debug, Error)]
 pub enum HelloWorldError {
@@ -24,6 +27,9 @@ pub enum HelloWorldError {
     /// Propagates standard output write failures.
     #[error("failed to write output: {0}")]
     Output(#[from] io::Error),
+    /// Indicates the subcommand match tree is inconsistent with the parsed enum.
+    #[error("internal error: subcommand matches missing for '{0}'")]
+    MissingSubcommandMatches(&'static str),
 }
 
 /// Validation issues detected while resolving global options.

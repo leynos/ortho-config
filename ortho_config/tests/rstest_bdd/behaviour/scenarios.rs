@@ -2,6 +2,7 @@
 
 use rstest_bdd_macros::scenarios;
 
+scenarios!("tests/features/cli_default_as_absent.feature");
 scenarios!("tests/features/cli_precedence.feature");
 scenarios!("tests/features/collection_merge.feature");
 scenarios!("tests/features/config_path.feature");

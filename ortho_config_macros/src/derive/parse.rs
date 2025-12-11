@@ -32,6 +32,8 @@ pub(crate) struct StructAttrs {
 ///   merges.
 /// - `skip_cli` omits the field from CLI parsing whilst leaving declarative
 ///   merging untouched.
+/// - `cli_default_as_absent` treats clap's default value as absent during
+///   merge, allowing file/env values to take precedence over CLI defaults.
 #[derive(Default, Clone)]
 pub(crate) struct FieldAttrs {
     pub cli_long: Option<String>,
@@ -39,6 +41,7 @@ pub(crate) struct FieldAttrs {
     pub default: Option<Expr>,
     pub merge_strategy: Option<MergeStrategy>,
     pub skip_cli: bool,
+    pub cli_default_as_absent: bool,
 }
 
 #[derive(Default, Clone)]
@@ -328,6 +331,10 @@ fn apply_field_attr(
         }
         () if meta.path.is_ident("skip_cli") => {
             out.skip_cli = true;
+            Ok(true)
+        }
+        () if meta.path.is_ident("cli_default_as_absent") => {
+            out.cli_default_as_absent = true;
             Ok(true)
         }
         () => Ok(false),
@@ -621,6 +628,27 @@ mod tests {
             .first()
             .ok_or_else(|| anyhow!("missing field attributes"))?;
         ensure!(attrs.skip_cli, "skip_cli flag was not set");
+        Ok(())
+    }
+
+    #[test]
+    fn parses_cli_default_as_absent_flag() -> Result<()> {
+        let input: DeriveInput = parse_quote! {
+            struct Demo {
+                #[ortho_config(cli_default_as_absent)]
+                field: String,
+            }
+        };
+
+        let (_, fields, _, field_attrs) = parse_input(&input).map_err(|err| anyhow!(err))?;
+        ensure!(fields.len() == 1, "expected single field");
+        let attrs = field_attrs
+            .first()
+            .ok_or_else(|| anyhow!("missing field attributes"))?;
+        ensure!(
+            attrs.cli_default_as_absent,
+            "cli_default_as_absent flag was not set"
+        );
         Ok(())
     }
 
