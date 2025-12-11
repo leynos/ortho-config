@@ -1,6 +1,6 @@
 //! Integration tests verifying merge failures route through `OrthoError::Merge`.
 //!
-//! Ensures deserialisation errors during the merge phase (not gathering phase)
+//! Ensures deserialization errors during the merge phase (not gathering phase)
 //! produce the correct error variant, establishing a clear semantic distinction.
 //!
 //! Note: `MergeErrorSample` is intentionally defined locally rather than imported
@@ -30,13 +30,11 @@ struct MergeErrorSample {
     port: u16,
 }
 
-#[expect(
-    dead_code,
-    reason = "Fields used only for deserialization testing, not directly accessed"
-)]
+/// Minimal struct used by vector append merge error routing tests.
 #[derive(Debug, Deserialize, OrthoConfig)]
 #[ortho_config(prefix = "TEST")]
 struct VecAppendSample {
+    #[ortho_config(merge_strategy = "append")]
     items: Vec<u32>,
 }
 
@@ -113,6 +111,24 @@ fn merge_error_contains_helpful_message() -> Result<()> {
     ensure!(
         message.to_lowercase().contains("merge"),
         "error message should reference merge context: {message}"
+    );
+
+    Ok(())
+}
+
+/// Tests that successful vector appending works correctly.
+#[rstest]
+fn successful_vector_append_produces_correct_result() -> Result<()> {
+    let mut composer = MergeComposer::new();
+    composer.push_defaults(json!({ "items": [1, 2] }));
+    composer.push_environment(json!({ "items": [3, 4] }));
+
+    let config = VecAppendSample::merge_from_layers(composer.layers())?;
+
+    ensure!(
+        config.items == vec![1, 2, 3, 4],
+        "expected items [1, 2, 3, 4], got {:?}",
+        config.items
     );
 
     Ok(())

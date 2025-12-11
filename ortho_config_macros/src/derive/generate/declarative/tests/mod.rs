@@ -197,8 +197,8 @@ fn generate_declarative_merge_impl_handles_append_fields() -> Result<()> {
         "expected append_items merge logic"
     );
     ensure!(
-        norm.contains("OrthoResultExt"),
-        "expected OrthoResultExt usage"
+        norm.contains("from_value_merge"),
+        "expected from_value_merge usage for append field deserialization"
     );
     ensure!(
         norm.contains("serde_json::Map::new"),

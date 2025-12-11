@@ -68,7 +68,7 @@ fn append_collection_tokens(strategies: &CollectionStrategies) -> CollectionToke
                             other => ortho_config::serde_json::Value::Array(vec![other]),
                         };
                         let incoming: Vec<_> =
-                            ortho_config::serde_json::from_value(normalised).into_ortho_merge_json()?;
+                            ortho_config::declarative::from_value_merge(normalised)?;
                         let acc = self
                             .#state_field_ident
                             .get_or_insert_with(Default::default);
@@ -306,8 +306,6 @@ fn merge_layer_tokens(
 ) -> TokenStream {
     let non_object_guard = generate_non_object_guard(config_ident);
     quote! {
-        use ortho_config::{OrthoJsonMergeExt as _, OrthoResultExt as _};
-
         let provenance = layer.provenance();
         let path = layer.path().map(|p| p.to_owned());
         let value = layer.into_value();
