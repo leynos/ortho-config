@@ -11,6 +11,8 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
+pub use super::common::merge_fixtures::MergeErrorSample;
+
 /// Scenario state for rules-oriented precedence scenarios (CLI, env, config path, ignore).
 #[derive(Debug, Default, ScenarioState)]
 pub struct RulesContext {
@@ -260,13 +262,6 @@ pub struct MergeErrorContext {
     pub result: Slot<ortho_config::OrthoResult<MergeErrorSample>>,
 }
 
-/// Minimal struct used by merge error routing behavioural tests.
-#[derive(Debug, Deserialize, OrthoConfig)]
-#[ortho_config(prefix = "TEST")]
-pub struct MergeErrorSample {
-    #[ortho_config(default = 8080)]
-    pub port: u16,
-}
 
 /// Provides a clean merge error context for error routing scenarios.
 #[fixture]

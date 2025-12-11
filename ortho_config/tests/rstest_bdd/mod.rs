@@ -5,6 +5,9 @@
 //! `rstest-bdd` macros execute under `cargo test` without needing to disable
 //! the harness.
 
+#[path = "../common/mod.rs"]
+pub mod common;
+
 mod behaviour;
 mod canary;
 mod canary_steps;

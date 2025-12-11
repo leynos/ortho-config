@@ -2,41 +2,14 @@
 //!
 //! Ensures deserialization errors during the merge phase (not gathering phase)
 //! produce the correct error variant, establishing a clear semantic distinction.
-//!
-//! Note: `MergeErrorSample` is intentionally defined locally rather than imported
-//! from `rstest_bdd/fixtures.rs` to keep these integration tests self-contained.
-//! Both definitions must remain synchronised (port: u16 with default 8080).
+
+mod common;
 
 use anyhow::{Result, ensure};
-use ortho_config::{MergeComposer, OrthoConfig, OrthoError};
+use common::merge_fixtures::{MergeErrorSample, VecAppendSample};
+use ortho_config::{MergeComposer, OrthoError};
 use rstest::rstest;
-use serde::Deserialize;
 use serde_json::json;
-
-/// Minimal struct used by merge error routing tests.
-///
-/// This struct mirrors `MergeErrorSample` in `rstest_bdd/fixtures.rs`. Both
-/// definitions must remain synchronised: a single `port: u16` field with
-/// default 8080 and prefix "TEST".
-///
-/// The duplication exists because Cargo compiles each integration test as a
-/// separate crate, preventing direct imports between test files. The rstest-bdd
-/// fixtures module cannot be imported here without restructuring the test
-/// layout.
-#[derive(Debug, Deserialize, OrthoConfig)]
-#[ortho_config(prefix = "TEST")]
-struct MergeErrorSample {
-    #[ortho_config(default = 8080)]
-    port: u16,
-}
-
-/// Minimal struct used by vector append merge error routing tests.
-#[derive(Debug, Deserialize, OrthoConfig)]
-#[ortho_config(prefix = "TEST")]
-struct VecAppendSample {
-    #[ortho_config(merge_strategy = "append")]
-    items: Vec<u32>,
-}
 
 /// Tests that type mismatches during final deserialization produce `Merge` errors.
 #[rstest]
