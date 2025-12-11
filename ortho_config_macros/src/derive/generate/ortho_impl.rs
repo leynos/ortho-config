@@ -46,6 +46,38 @@ pub(crate) fn generate_ortho_impl(
     }
 }
 
+/// Generate the extraction logic for a single field.
+///
+/// Produces a `TokenStream` that extracts the field value from the base map
+/// and inserts it into the output map. For fields with `cli_default_as_absent`,
+/// checks `value_source()` to ensure only explicitly provided values are included.
+fn generate_field_extraction(field: &CliFieldInfo) -> TokenStream {
+    let field_name = &field.name;
+    let field_name_str = field_name.to_string();
+    let arg_id = &field.arg_id;
+
+    // Common logic for moving a value from base_map to the output map
+    let move_value = quote! {
+        if let Some(value) = base_map.remove(#field_name_str) {
+            map.insert(#field_name_str.to_owned(), value);
+        }
+    };
+
+    if field.default_as_absent {
+        // Check value_source before including this field
+        quote! {
+            if matches.value_source(#arg_id)
+                == Some(clap::parser::ValueSource::CommandLine)
+            {
+                #move_value
+            }
+        }
+    } else {
+        // Include normally (already in sanitised base)
+        move_value
+    }
+}
+
 /// Generate the `CliValueExtractor` trait implementation.
 ///
 /// This generates code that uses clap's `ArgMatches::value_source()` to
@@ -71,31 +103,7 @@ fn generate_cli_value_extractor_impl(
     // Generate field extraction logic
     let field_extractions: Vec<TokenStream> = cli_field_info
         .iter()
-        .map(|field| {
-            let field_name = &field.name;
-            let field_name_str = field_name.to_string();
-            let arg_id = &field.arg_id;
-
-            if field.default_as_absent {
-                // Check value_source before including this field
-                quote! {
-                    if matches.value_source(#arg_id)
-                        == Some(clap::parser::ValueSource::CommandLine)
-                    {
-                        if let Some(value) = base_map.remove(#field_name_str) {
-                            map.insert(#field_name_str.to_owned(), value);
-                        }
-                    }
-                }
-            } else {
-                // Include normally (already in sanitised base)
-                quote! {
-                    if let Some(value) = base_map.remove(#field_name_str) {
-                        map.insert(#field_name_str.to_owned(), value);
-                    }
-                }
-            }
-        })
+        .map(generate_field_extraction)
         .collect();
 
     quote! {
