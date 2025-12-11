@@ -8,9 +8,7 @@ use test_helpers::figment as figment_helpers;
 
 fn with_jail_loader<F>(rules_context: &RulesContext, setup: F) -> Result<()>
 where
-    F: FnOnce(
-        &mut figment::Jail,
-    ) -> figment::error::Result<ortho_config::OrthoResult<RulesConfig>>,
+    F: FnOnce(&mut figment::Jail) -> figment::error::Result<ortho_config::OrthoResult<RulesConfig>>,
 {
     let config_result = figment_helpers::with_jail(setup)?;
     rules_context.result.set(config_result);

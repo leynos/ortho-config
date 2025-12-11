@@ -4,8 +4,8 @@ use crate::fixtures::LocalizerContext;
 use anyhow::{Result, anyhow, ensure};
 use fluent_bundle::FluentValue;
 use ortho_config::{
-    langid, localize_clap_error, localize_clap_error_with_command, FluentLocalizer,
-    FormattingIssue, LocalizationArgs, Localizer, NoOpLocalizer,
+    FluentLocalizer, FormattingIssue, LocalizationArgs, Localizer, NoOpLocalizer, langid,
+    localize_clap_error, localize_clap_error_with_command,
 };
 use rstest_bdd_macros::{given, then, when};
 use std::collections::HashMap;
@@ -239,8 +239,8 @@ fn parse_demo_command_missing_argument(context: &LocalizerContext) -> Result<()>
 
 #[given("a clap error for a missing argument")]
 fn clap_error_for_missing_argument(context: &LocalizerContext) {
-    let mut command = clap::Command::new("bdd")
-        .arg(clap::Arg::new("config").required(true).value_name("CONFIG"));
+    let mut command =
+        clap::Command::new("bdd").arg(clap::Arg::new("config").required(true).value_name("CONFIG"));
 
     let error = command
         .try_get_matches_from_mut(["bdd"])

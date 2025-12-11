@@ -197,8 +197,8 @@ fn generate_declarative_merge_impl_handles_append_fields() -> Result<()> {
         "expected append_items merge logic"
     );
     ensure!(
-        norm.contains("OrthoResultExt"),
-        "expected OrthoResultExt usage"
+        norm.contains("from_value_merge"),
+        "expected from_value_merge usage for append field deserialization"
     );
     ensure!(
         norm.contains("serde_json::Map::new"),
@@ -311,6 +311,10 @@ fn generate_declarative_merge_from_layers_fn_emits_constructor() -> Result<()> {
             /// See the
             /// [declarative merging design](https://github.com/leynos/ortho-config/blob/main/docs/design.md#43-declarative-configuration-merging)
             /// for background and trade-offs.
+            ///
+            /// # Feature Requirements
+            ///
+            /// This method requires the `serde_json` feature (enabled by default).
             ///
             /// # Examples
             ///

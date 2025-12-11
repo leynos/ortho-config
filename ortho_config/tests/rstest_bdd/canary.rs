@@ -1,6 +1,6 @@
 //! Binds the canary feature file to the reusable fixtures.
 
-use super::fixtures::{binary_name, canary_state, CanaryState};
+use super::fixtures::{CanaryState, binary_name, canary_state};
 use rstest_bdd_macros::scenario;
 
 #[scenario(path = "tests/features/rstest_bdd_canary.feature")]

@@ -3,9 +3,9 @@
 use crate::fixtures::{FlatArgs, FlattenContext};
 use anyhow::{Result, anyhow, ensure};
 use clap::Parser;
-use figment::{providers::Serialized, Figment};
+use figment::{Figment, providers::Serialized};
 use ortho_config::{
-    load_config_file, sanitized_provider, OrthoError, OrthoMergeExt, OrthoResult, ResultIntoFigment,
+    OrthoError, OrthoMergeExt, OrthoResult, ResultIntoFigment, load_config_file, sanitized_provider,
 };
 use rstest_bdd_macros::{given, then, when};
 use std::path::Path;
@@ -21,11 +21,10 @@ fn load_flat(file: Option<String>, args: &[&str]) -> Result<OrthoResult<FlatArgs
         if let Some(f) = load_config_file(Path::new(".flat.toml")).to_figment()? {
             fig = fig.merge(f);
         }
-        Ok(
-            fig.merge(sanitized_provider(&cli).to_figment()?)
-                .extract()
-                .into_ortho_merge(),
-        )
+        Ok(fig
+            .merge(sanitized_provider(&cli).to_figment()?)
+            .extract()
+            .into_ortho_merge())
     })
 }
 

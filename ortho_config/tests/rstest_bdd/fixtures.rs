@@ -11,6 +11,8 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
+pub use super::common::merge_fixtures::MergeErrorSample;
+
 /// Scenario state for rules-oriented precedence scenarios (CLI, env, config path, ignore).
 #[derive(Debug, Default, ScenarioState)]
 pub struct RulesContext {
@@ -252,6 +254,18 @@ pub struct RulesConfig {
 pub struct DynamicRule {
     pub enabled: bool,
 }
+
+/// Scenario state for merge error routing scenarios.
+#[derive(Debug, Default, ScenarioState)]
+pub struct MergeErrorContext {
+    pub layers: Slot<Vec<MergeLayer<'static>>>,
+    pub result: Slot<ortho_config::OrthoResult<MergeErrorSample>>,
+}
+
+
+/// Provides a clean merge error context for error routing scenarios.
+#[fixture]
+pub fn merge_error_context() -> MergeErrorContext { MergeErrorContext::default() }
 
 /// Configuration used to verify aggregated error reporting.
 ///

@@ -855,6 +855,16 @@ experience, we can create a highly valuable addition to the Rust ecosystem.
   produces environment variables such as `APP_PORT`—whilst preserving existing
   behaviour for code that already includes the delimiter.
 
+- **Route merge deserialization errors to `OrthoError::Merge` (2025-12-09):**
+  Deserialization errors during declarative merging now produce
+  `OrthoError::Merge` instead of `OrthoError::Gathering`. This semantic
+  distinction clarifies that failures at the merge phase (combining and
+  deserializing layers) are separate from failures during the gathering phase
+  (reading configuration sources). The `from_value_merge` function and
+  `OrthoJsonMergeExt` trait provide explicit merge-context error routing,
+  ensuring downstream binaries rely on a single shared error surface when
+  combining loaders.
+
 [^hello-world-feedback]: `docs/feedback-from-hello-world-example.md`.
 [^behavioural-testing]: `docs/behavioural-testing-in-rust-with-cucumber.md`.
 [^design-rstest]: `docs/rust-testing-with-rstest-fixtures.md`.

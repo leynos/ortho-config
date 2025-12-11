@@ -68,7 +68,7 @@ fn append_collection_tokens(strategies: &CollectionStrategies) -> CollectionToke
                             other => ortho_config::serde_json::Value::Array(vec![other]),
                         };
                         let incoming: Vec<_> =
-                            ortho_config::serde_json::from_value(normalised).into_ortho()?;
+                            ortho_config::declarative::from_value_merge(normalised)?;
                         let acc = self
                             .#state_field_ident
                             .get_or_insert_with(Default::default);
@@ -306,8 +306,6 @@ fn merge_layer_tokens(
 ) -> TokenStream {
     let non_object_guard = generate_non_object_guard(config_ident);
     quote! {
-        use ortho_config::OrthoResultExt as _;
-
         let provenance = layer.provenance();
         let path = layer.path().map(|p| p.to_owned());
         let value = layer.into_value();
@@ -351,7 +349,7 @@ fn finish_tokens(
                 ortho_config::serde_json::Value::Object(overlay),
             );
         }
-        ortho_config::declarative::from_value(value)
+        ortho_config::declarative::from_value_merge(value)
     }
 }
 
@@ -382,6 +380,10 @@ pub(crate) fn generate_declarative_merge_from_layers_fn(
             /// See the
             /// [declarative merging design](https://github.com/leynos/ortho-config/blob/main/docs/design.md#43-declarative-configuration-merging)
             /// for background and trade-offs.
+            ///
+            /// # Feature Requirements
+            ///
+            /// This method requires the `serde_json` feature (enabled by default).
             ///
             /// # Examples
             ///
@@ -423,6 +425,13 @@ pub(crate) fn generate_declarative_merge_from_layers_fn(
 ///
 /// Combines the state struct, `DeclarativeMerge` trait implementation, and
 /// inherent constructor into a single token stream.
+///
+/// # Feature Requirements
+///
+/// The generated code references `ortho_config::declarative::*`, which is
+/// feature-gated behind `serde_json` in the `ortho_config` crate. If a
+/// downstream crate disables `serde_json`, compilation will fail with clear
+/// "module not found" errors pointing to the missing declarative module.
 ///
 /// # Examples
 ///

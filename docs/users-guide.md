@@ -848,6 +848,25 @@ let err = OrthoError::aggregate(vec![
 ]);
 ```
 
+### Gathering vs Merge errors
+
+`OrthoConfig` distinguishes between two phases of configuration loading:
+
+- **Gathering** (`OrthoError::Gathering`): Errors that occur while reading
+  configuration sources (files, environment variables). These indicate problems
+  with the source data itself, such as malformed TOML or invalid JSON.
+
+- **Merge** (`OrthoError::Merge`): Errors that occur while combining layers and
+  deserializing the final configuration. These indicate incompatibilities
+  between the merged data and the target struct, such as type mismatches or
+  invalid field values.
+
+When deserializing the final merged configuration fails (for example, because a
+field has an invalid type after all layers are combined), the error is reported
+as `Merge`. This distinction helps diagnose whether an issue lies with a
+specific source file (Gathering) or with the combined result of all layers
+(Merge).
+
 ### Mapping errors ergonomically
 
 To reduce boiler‑plate when converting between error types, the crate exposes
@@ -857,6 +876,9 @@ small extension traits:
   `OrthoResult<T>` when `E: Into<OrthoError>` (e.g., `serde_json::Error`).
 - `OrthoMergeExt::into_ortho_merge()` converts `Result<T, figment::Error>`
   into `OrthoResult<T>` as `OrthoError::Merge`.
+- `OrthoJsonMergeExt::into_ortho_merge_json()` converts
+  `Result<T, serde_json::Error>` into `OrthoResult<T>` as `OrthoError::Merge`,
+  preserving location information from the JSON parser.
 - `IntoFigmentError::into_figment()` converts `Arc<OrthoError>` (or
   `&Arc<OrthoError>`) into `figment::Error` for interop in tests or adapters,
   cloning the inner error to preserve structured details where possible.

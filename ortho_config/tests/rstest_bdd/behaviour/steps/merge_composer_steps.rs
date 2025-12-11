@@ -39,8 +39,7 @@ fn compose_rule_layers(
         .layers
         .with_ref(|ls| ls.clone())
         .ok_or_else(|| anyhow!("layers should be available for merge"))?;
-    let config =
-        RulesConfig::merge_from_layers(layers_for_merge).map_err(|err| anyhow!(err))?;
+    let config = RulesConfig::merge_from_layers(layers_for_merge).map_err(|err| anyhow!(err))?;
     composer_context.config.set(config);
     Ok(())
 }
@@ -51,8 +50,7 @@ fn composed_order_is_stable(composer_context: &ComposerContext) -> Result<()> {
         .layers
         .with_ref(|layers| layers.clone())
         .ok_or_else(|| anyhow!("expected layers to be composed"))?;
-    let provenances: Vec<MergeProvenance> =
-        layers.iter().map(|layer| layer.provenance()).collect();
+    let provenances: Vec<MergeProvenance> = layers.iter().map(|layer| layer.provenance()).collect();
     ensure!(
         provenances
             == vec![
@@ -73,8 +71,10 @@ fn merged_rules_match(composer_context: &ComposerContext, expected: String) -> R
         .config
         .with_ref(|cfg| cfg.clone())
         .ok_or_else(|| anyhow!("expected configuration to be composed"))?;
-    let expected_rules: Vec<String> =
-        expected.split(',').map(|value| value.trim().to_owned()).collect();
+    let expected_rules: Vec<String> = expected
+        .split(',')
+        .map(|value| value.trim().to_owned())
+        .collect();
     ensure!(
         config.rules == expected_rules,
         "unexpected rules {:?}; expected {:?}",

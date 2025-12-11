@@ -29,7 +29,9 @@ fn load_ignore(rules_context: &RulesContext, cli: String) -> Result<()> {
             args.push(cli.trim().to_owned());
         }
         let refs: Vec<&str> = args.iter().map(String::as_str).collect();
-        Ok(<RulesConfig as ortho_config::OrthoConfig>::load_from_iter(refs))
+        Ok(<RulesConfig as ortho_config::OrthoConfig>::load_from_iter(
+            refs,
+        ))
     })?;
     rules_context.result.set(config_result);
     Ok(())
@@ -42,10 +44,7 @@ fn check_ignore(rules_context: &RulesContext, patterns: String) -> Result<()> {
         .take()
         .ok_or_else(|| anyhow!("configuration result unavailable"))?;
     let cfg = result.map_err(|err| anyhow!(err))?;
-    let want: Vec<String> = patterns
-        .split(',')
-        .map(|s| s.trim().to_owned())
-        .collect();
+    let want: Vec<String> = patterns.split(',').map(|s| s.trim().to_owned()).collect();
     ensure!(
         cfg.ignore_patterns == want,
         "unexpected ignore patterns {:?}; expected {:?}",
