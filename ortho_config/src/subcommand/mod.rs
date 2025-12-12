@@ -50,6 +50,25 @@ fn load_from_files(paths: &[PathBuf], name: &CmdName) -> OrthoResult<Figment> {
     Ok(fig)
 }
 
+#[cfg(feature = "serde_json")]
+fn load_file_and_env_defaults<T>(prefix: &Prefix) -> OrthoResult<Figment>
+where
+    T: CommandFactory,
+{
+    let name = CmdName::new(T::command().get_name());
+    let paths = candidate_paths(prefix);
+    let mut fig = load_from_files(&paths, &name)?;
+
+    let env_name = name.env_key();
+    let env_prefix = format!("{}CMDS_{env_name}_", prefix.raw());
+    let env_provider = Env::prefixed(&env_prefix)
+        .map(|k| Uncased::from(k))
+        .split("__");
+    fig = fig.merge(env_provider);
+
+    Ok(fig)
+}
+
 /// Loads defaults for a subcommand and merges CLI-provided values over them.
 ///
 /// This convenience function loads default configuration from files and
@@ -90,16 +109,7 @@ pub fn load_and_merge_subcommand<T>(prefix: &Prefix, cli: &T) -> OrthoResult<T>
 where
     T: serde::Serialize + DeserializeOwned + Default + CommandFactory,
 {
-    let name = CmdName::new(T::command().get_name());
-    let paths = candidate_paths(prefix);
-    let mut fig = load_from_files(&paths, &name)?;
-
-    let env_name = name.env_key();
-    let env_prefix = format!("{}CMDS_{env_name}_", prefix.raw());
-    let env_provider = Env::prefixed(&env_prefix)
-        .map(|k| Uncased::from(k))
-        .split("__");
-    fig = fig.merge(env_provider);
+    let fig = load_file_and_env_defaults::<T>(prefix)?;
 
     // CLI values are merged over defaults; map failures to `Merge`.
     fig.merge(sanitized_provider(cli)?)
@@ -195,16 +205,7 @@ pub fn load_and_merge_subcommand_with_matches<T>(
 where
     T: serde::Serialize + DeserializeOwned + Default + CommandFactory + CliValueExtractor,
 {
-    let name = CmdName::new(T::command().get_name());
-    let paths = candidate_paths(prefix);
-    let mut fig = load_from_files(&paths, &name)?;
-
-    let env_name = name.env_key();
-    let env_prefix = format!("{}CMDS_{env_name}_", prefix.raw());
-    let env_provider = Env::prefixed(&env_prefix)
-        .map(|k| Uncased::from(k))
-        .split("__");
-    fig = fig.merge(env_provider);
+    let fig = load_file_and_env_defaults::<T>(prefix)?;
 
     // Extract only user-provided CLI values, respecting cli_default_as_absent
     let cli_value = cli.extract_user_provided(matches)?;

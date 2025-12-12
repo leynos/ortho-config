@@ -130,32 +130,39 @@ fn check_punctuation(cli_default_context: &CliDefaultContext, expected: String) 
     Ok(())
 }
 
-#[then("punctuation is absent from extracted values")]
-fn check_punctuation_absent(cli_default_context: &CliDefaultContext) -> Result<()> {
+fn check_punctuation_presence(
+    cli_default_context: &CliDefaultContext,
+    should_be_present: bool,
+) -> Result<()> {
     let extracted = cli_default_context
         .extracted
         .take()
         .ok_or_else(|| anyhow!("extracted values unavailable"))?;
     let has_punctuation = extracted.get("punctuation").is_some();
-    ensure!(
-        !has_punctuation,
-        "expected punctuation to be absent, but it was present: {:?}",
-        extracted
-    );
+
+    if should_be_present {
+        ensure!(
+            has_punctuation,
+            "expected punctuation to be present, but it was absent: {:?}",
+            extracted
+        );
+    } else {
+        ensure!(
+            !has_punctuation,
+            "expected punctuation to be absent, but it was present: {:?}",
+            extracted
+        );
+    }
+
     Ok(())
+}
+
+#[then("punctuation is absent from extracted values")]
+fn check_punctuation_absent(cli_default_context: &CliDefaultContext) -> Result<()> {
+    check_punctuation_presence(cli_default_context, false)
 }
 
 #[then("punctuation is present in extracted values")]
 fn check_punctuation_present(cli_default_context: &CliDefaultContext) -> Result<()> {
-    let extracted = cli_default_context
-        .extracted
-        .take()
-        .ok_or_else(|| anyhow!("extracted values unavailable"))?;
-    let has_punctuation = extracted.get("punctuation").is_some();
-    ensure!(
-        has_punctuation,
-        "expected punctuation to be present, but it was absent: {:?}",
-        extracted
-    );
-    Ok(())
+    check_punctuation_presence(cli_default_context, true)
 }
