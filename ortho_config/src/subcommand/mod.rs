@@ -60,7 +60,9 @@ where
     let mut fig = load_from_files(&paths, &name)?;
 
     let env_name = name.env_key();
-    let env_prefix = format!("{}CMDS_{env_name}_", prefix.raw());
+    let raw = prefix.raw();
+    let raw_without_suffix = raw.strip_suffix('_').unwrap_or(raw);
+    let env_prefix = format!("{raw_without_suffix}_CMDS_{env_name}_");
     let env_provider = Env::prefixed(&env_prefix)
         .map(|k| Uncased::from(k))
         .split("__");
@@ -205,7 +207,8 @@ pub fn load_and_merge_subcommand_with_matches<T>(
 where
     T: serde::Serialize + DeserializeOwned + Default + CommandFactory + CliValueExtractor,
 {
-    let fig = load_file_and_env_defaults::<T>(prefix)?;
+    let fig = Figment::from(Serialized::defaults(T::default()))
+        .merge(load_file_and_env_defaults::<T>(prefix)?);
 
     // Extract only user-provided CLI values, respecting cli_default_as_absent
     let cli_value = cli.extract_user_provided(matches)?;

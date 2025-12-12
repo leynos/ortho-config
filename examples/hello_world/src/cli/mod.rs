@@ -115,22 +115,6 @@ impl CommandLine {
         })?;
         Ok(ParsedCommandLine { cli, matches })
     }
-
-    /// Extracts the subcommand matches for the greet command.
-    ///
-    /// Returns `None` if the greet subcommand was not invoked.
-    #[must_use]
-    pub fn greet_matches(matches: &clap::ArgMatches) -> Option<&clap::ArgMatches> {
-        matches.subcommand_matches("greet")
-    }
-
-    /// Extracts the subcommand matches for the take-leave command.
-    ///
-    /// Returns `None` if the take-leave subcommand was not invoked.
-    #[must_use]
-    pub fn take_leave_matches(matches: &clap::ArgMatches) -> Option<&clap::ArgMatches> {
-        matches.subcommand_matches("take-leave")
-    }
 }
 
 #[expect(

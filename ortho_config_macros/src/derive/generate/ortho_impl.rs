@@ -63,7 +63,7 @@ fn generate_field_extraction(field: &CliFieldInfo) -> TokenStream {
         }
     };
 
-    if field.default_as_absent {
+    if field.is_default_as_absent {
         // Check value_source before including this field
         quote! {
             if matches.value_source(#arg_id)
@@ -92,7 +92,7 @@ fn generate_cli_value_extractor_impl(
     cli_field_info: &[CliFieldInfo],
 ) -> TokenStream {
     // Check if any field has cli_default_as_absent
-    let has_default_as_absent = cli_field_info.iter().any(|f| f.default_as_absent);
+    let has_default_as_absent = cli_field_info.iter().any(|f| f.is_default_as_absent);
 
     if !has_default_as_absent {
         // No fields with cli_default_as_absent; the blanket impl in ortho_config
@@ -115,13 +115,46 @@ fn generate_cli_value_extractor_impl(
                 use ortho_config::OrthoResultExt;
                 use ortho_config::serde_json;
 
-                // Serialise self (the parsed CLI struct) and strip None fields
-                let base = serde_json::to_value(self)
-                    .into_ortho()?;
+                fn prune_nulls_inner(value: &mut serde_json::Value, is_root: bool) {
+                    match value {
+                        serde_json::Value::Object(map) => {
+                            for value in map.values_mut() {
+                                prune_nulls_inner(value, false);
+                            }
+                            map.retain(|_, value| !value.is_null());
+                            if !is_root && map.is_empty() {
+                                *value = serde_json::Value::Null;
+                            }
+                        }
+                        serde_json::Value::Array(values) => {
+                            for value in values.iter_mut() {
+                                prune_nulls_inner(value, false);
+                            }
+                            values.retain(|value| !value.is_null());
+                        }
+                        _ => {}
+                    }
+                }
+
+                fn prune_nulls(value: &mut serde_json::Value) {
+                    prune_nulls_inner(value, true);
+                }
+
+                // Serialise self (the parsed CLI struct) and strip null values so
+                // absent options do not clobber file/environment defaults.
+                let mut base = serde_json::to_value(self).into_ortho()?;
+                prune_nulls(&mut base);
 
                 let mut base_map = match base {
                     serde_json::Value::Object(m) => m,
-                    _ => serde_json::Map::new(),
+                    other => {
+                        return Err(std::sync::Arc::new(ortho_config::OrthoError::Validation {
+                            key: String::from("cli"),
+                            message: format!(
+                                "expected parsed CLI values to serialize to an object, got {other:?}",
+                            ),
+                        }));
+                    }
                 };
 
                 let mut map = serde_json::Map::new();

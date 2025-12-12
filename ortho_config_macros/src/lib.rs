@@ -29,7 +29,6 @@ use derive::load_impl::{
     DiscoveryTokens, LoadImplArgs, LoadImplIdents, LoadImplTokens, build_load_impl,
 };
 use derive::parse::parse_input;
-use heck::ToKebabCase;
 
 /// Derive macro for the
 /// [`OrthoConfig`](https://docs.rs/ortho_config/latest/ortho_config/trait.OrthoConfig.html)
@@ -66,10 +65,13 @@ pub fn derive_ortho_config(input_tokens: TokenStream) -> TokenStream {
 pub(crate) struct CliFieldInfo {
     /// The field's identifier.
     pub name: syn::Ident,
-    /// The CLI argument ID (kebab-case or user-specified).
+    /// The clap argument ID used with `ArgMatches::value_source()`.
+    ///
+    /// This is the field identifier (`snake_case`) unless the generated clap
+    /// attributes override `id`.
     pub arg_id: String,
     /// Whether this field has the `cli_default_as_absent` attribute.
-    pub default_as_absent: bool,
+    pub is_default_as_absent: bool,
 }
 
 /// Internal data generated during macro expansion.
@@ -140,14 +142,11 @@ fn build_cli_struct_tokens(
         .filter_map(|(field, attrs)| {
             let name = field.ident.clone()?;
             let field_name = name.to_string();
-            let arg_id = attrs
-                .cli_long
-                .clone()
-                .unwrap_or_else(|| field_name.to_kebab_case());
+            let arg_id = field_name.clone();
             Some(CliFieldInfo {
                 name,
                 arg_id,
-                default_as_absent: attrs.cli_default_as_absent,
+                is_default_as_absent: attrs.cli_default_as_absent,
             })
         })
         .collect();

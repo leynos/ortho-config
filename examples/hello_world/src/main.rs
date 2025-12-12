@@ -23,7 +23,9 @@ fn run() -> Result<()> {
             // Use load_and_merge_with_matches to respect cli_default_as_absent.
             // This allows [cmds.greet] file config to take precedence over clap
             // defaults when the user doesn't explicitly provide --punctuation.
-            let subcommand_matches = CommandLine::greet_matches(&matches)
+            let subcommand_matches = matches
+                .subcommand()
+                .map(|(_, subcommand_matches)| subcommand_matches)
                 .ok_or(HelloWorldError::MissingSubcommandMatches("greet"))?;
             let merged = args.load_and_merge_with_matches(subcommand_matches)?;
             let plan = build_plan(&globals, &merged)?;

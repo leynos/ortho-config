@@ -3,7 +3,7 @@
 //! This attribute allows non-`Option` fields with clap defaults to be treated as
 //! absent when the user did not provide a value on the command line. This enables
 //! file and environment configuration to take precedence over clap defaults while
-//! still honoring explicit CLI overrides.
+//! still honouring explicit CLI overrides.
 //!
 //! Precedence (lowest -> highest): struct defaults < file < environment < CLI.
 //! Fields marked with `cli_default_as_absent` are only included in the CLI layer
@@ -28,7 +28,7 @@ fn default_punct() -> String {
 }
 
 /// Subcommand with `cli_default_as_absent` attribute on a non-Option field.
-#[derive(Debug, Parser, Serialize, Deserialize, OrthoConfig, Default, PartialEq)]
+#[derive(Debug, Parser, Serialize, Deserialize, OrthoConfig, PartialEq)]
 #[command(name = "greet")]
 #[ortho_config(prefix = "APP_")]
 struct GreetArgs {
@@ -42,8 +42,17 @@ struct GreetArgs {
     name: Option<String>,
 }
 
+impl Default for GreetArgs {
+    fn default() -> Self {
+        Self {
+            punctuation: default_punct(),
+            name: None,
+        }
+    }
+}
+
 /// Subcommand without `cli_default_as_absent` for comparison (baseline).
-#[derive(Debug, Parser, Serialize, Deserialize, OrthoConfig, Default, PartialEq)]
+#[derive(Debug, Parser, Serialize, Deserialize, OrthoConfig, PartialEq)]
 #[command(name = "baseline")]
 #[ortho_config(prefix = "APP_")]
 struct BaselineArgs {
@@ -54,6 +63,15 @@ struct BaselineArgs {
 
     #[arg(long)]
     name: Option<String>,
+}
+
+impl Default for BaselineArgs {
+    fn default() -> Self {
+        Self {
+            punctuation: default_punct(),
+            name: None,
+        }
+    }
 }
 
 static CWD_MUTEX: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
@@ -104,6 +122,14 @@ struct GreetPrecedenceCase {
 
 /// Test that `cli_default_as_absent` allows file values to override clap defaults.
 #[rstest]
+#[case::clap_default_used_when_no_other_sources(
+    GreetPrecedenceCase {
+        config_content: "",
+        env_val: None,
+        cli_args: vec!["greet"],
+        expected_punctuation: "!",
+    },
+)]
 #[case::file_overrides_clap_default(
     GreetPrecedenceCase {
         config_content: "[cmds.greet]\npunctuation = \"?\"\n",
@@ -153,6 +179,27 @@ fn test_cli_default_as_absent_precedence(#[case] case: GreetPrecedenceCase) -> R
         merged.punctuation == case.expected_punctuation,
         "expected punctuation {:?}, got {:?}",
         case.expected_punctuation,
+        merged.punctuation
+    );
+    Ok(())
+}
+
+/// Test that clap defaults in a regular subcommand override file and environment configuration.
+#[test]
+#[serial]
+fn test_baseline_args_clap_default_overrides_config() -> Result<()> {
+    let (_temp_dir, _cwd_guard) = config_dir("[cmds.baseline]\npunctuation = \"?\"\n")?;
+
+    let matches = BaselineArgs::command().get_matches_from(["baseline"]);
+    let args = BaselineArgs::from_arg_matches(&matches).context("parse baseline args")?;
+    let prefix = Prefix::new("APP_");
+    let merged =
+        ortho_config::load_and_merge_subcommand(&prefix, &args).context("merge baseline args")?;
+
+    ensure!(
+        merged.punctuation == default_punct(),
+        "expected punctuation {:?}, got {:?}",
+        default_punct(),
         merged.punctuation
     );
     Ok(())
