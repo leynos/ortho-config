@@ -14,7 +14,10 @@ use camino::Utf8PathBuf;
 use cap_std::{ambient_authority, fs::Dir};
 use clap::{CommandFactory, FromArgMatches, Parser};
 use ortho_config::subcommand::Prefix;
-use ortho_config::{CliValueExtractor, OrthoConfig, load_and_merge_subcommand_with_matches};
+use ortho_config::{
+    CliValueExtractor, OrthoConfig, load_and_merge_subcommand,
+    load_and_merge_subcommand_with_matches,
+};
 use rstest::{fixture, rstest};
 use serde::{Deserialize, Serialize};
 use serial_test::serial;
@@ -51,29 +54,6 @@ impl Default for GreetArgs {
     }
 }
 
-/// Subcommand without `cli_default_as_absent` for comparison (baseline).
-#[derive(Debug, Parser, Serialize, Deserialize, OrthoConfig, PartialEq)]
-#[command(name = "baseline")]
-#[ortho_config(prefix = "APP_")]
-struct BaselineArgs {
-    /// Punctuation without `cli_default_as_absent` - always included if serialized.
-    #[arg(long, default_value_t = default_punct())]
-    #[ortho_config(default = default_punct())]
-    punctuation: String,
-
-    #[arg(long)]
-    name: Option<String>,
-}
-
-impl Default for BaselineArgs {
-    fn default() -> Self {
-        Self {
-            punctuation: default_punct(),
-            name: None,
-        }
-    }
-}
-
 static CWD_MUTEX: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
 
 struct DirGuard {
@@ -97,6 +77,8 @@ fn set_dir(dir: &TempDir) -> Result<DirGuard> {
 
 impl Drop for DirGuard {
     fn drop(&mut self) {
+        // PANIC: Drop cannot return Result; failing to restore the cwd would
+        // leave the test process in a broken state, so we fail fast.
         if let Err(err) = std::env::set_current_dir(&self.old) {
             panic!("restore current dir: {err}");
         }
@@ -184,17 +166,16 @@ fn test_cli_default_as_absent_precedence(#[case] case: GreetPrecedenceCase) -> R
     Ok(())
 }
 
-/// Test that clap defaults in a regular subcommand override file and environment configuration.
+/// Test that `load_and_merge_subcommand` keeps clap defaults over file configuration.
 #[test]
 #[serial]
-fn test_baseline_args_clap_default_overrides_config() -> Result<()> {
-    let (_temp_dir, _cwd_guard) = config_dir("[cmds.baseline]\npunctuation = \"?\"\n")?;
+fn test_load_and_merge_subcommand_keeps_clap_default() -> Result<()> {
+    let (_temp_dir, _cwd_guard) = config_dir("[cmds.greet]\npunctuation = \"?\"\n")?;
 
-    let matches = BaselineArgs::command().get_matches_from(["baseline"]);
-    let args = BaselineArgs::from_arg_matches(&matches).context("parse baseline args")?;
+    let matches = GreetArgs::command().get_matches_from(["greet"]);
+    let args = GreetArgs::from_arg_matches(&matches).context("parse greet args")?;
     let prefix = Prefix::new("APP_");
-    let merged =
-        ortho_config::load_and_merge_subcommand(&prefix, &args).context("merge baseline args")?;
+    let merged = load_and_merge_subcommand(&prefix, &args).context("merge greet args")?;
 
     ensure!(
         merged.punctuation == default_punct(),
@@ -202,6 +183,40 @@ fn test_baseline_args_clap_default_overrides_config() -> Result<()> {
         default_punct(),
         merged.punctuation
     );
+    Ok(())
+}
+
+/// Verify that `extract_user_provided` uses custom clap argument IDs.
+#[derive(Debug, Parser, Serialize, Deserialize, OrthoConfig, PartialEq)]
+#[command(name = "custom-id")]
+#[ortho_config(prefix = "APP_")]
+struct CustomIdArgs {
+    #[arg(long, id = "custom_punctuation", default_value_t = default_punct())]
+    #[ortho_config(default = default_punct(), cli_default_as_absent)]
+    punctuation: String,
+}
+
+impl Default for CustomIdArgs {
+    fn default() -> Self {
+        Self {
+            punctuation: default_punct(),
+        }
+    }
+}
+
+#[test]
+fn test_extract_user_provided_respects_custom_arg_id() -> Result<()> {
+    let matches = CustomIdArgs::command().get_matches_from(["custom-id", "--punctuation", "?"]);
+    let args = CustomIdArgs::from_arg_matches(&matches).context("parse CLI args")?;
+    let extracted = args
+        .extract_user_provided(&matches)
+        .context("extract user provided")?;
+
+    ensure!(
+        extracted.get("punctuation").is_some(),
+        "expected punctuation to be present, but it was absent: {extracted:?}"
+    );
+
     Ok(())
 }
 

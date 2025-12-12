@@ -78,15 +78,10 @@ fn generate_field_extraction(field: &CliFieldInfo) -> TokenStream {
     }
 }
 
-/// Generate the `CliValueExtractor` trait implementation.
+/// Generate helper functions for pruning null values from `serde_json` trees.
 ///
-/// This generates code that uses clap's `ArgMatches::value_source()` to
-/// distinguish between values explicitly provided on the CLI and clap defaults.
-/// Fields marked with `cli_default_as_absent` are only included when the user
-/// explicitly provided them.
-///
-/// If no fields have `cli_default_as_absent`, no implementation is generated
-/// because the blanket impl in `ortho_config` covers the default case.
+/// This returns a `TokenStream` containing helper functions that remove `null`
+/// values from objects and arrays, and collapses empty nested objects to `null`.
 fn generate_prune_nulls_helpers() -> TokenStream {
     quote! {
         fn prune_nulls_inner(value: &mut serde_json::Value, is_root: bool) {
@@ -116,6 +111,15 @@ fn generate_prune_nulls_helpers() -> TokenStream {
     }
 }
 
+/// Generate the `CliValueExtractor` trait implementation.
+///
+/// This generates code that uses clap's `ArgMatches::value_source()` to
+/// distinguish between values explicitly provided on the CLI and clap defaults.
+/// Fields marked with `cli_default_as_absent` are only included when the user
+/// explicitly provided them.
+///
+/// If no fields have `cli_default_as_absent`, no implementation is generated
+/// because the blanket impl in `ortho_config` covers the default case.
 fn generate_cli_value_extractor_impl(
     config_ident: &Ident,
     cli_field_info: &[CliFieldInfo],
@@ -138,6 +142,7 @@ fn generate_cli_value_extractor_impl(
     let prune_nulls_helpers = generate_prune_nulls_helpers();
 
     quote! {
+        #[cfg(feature = "serde_json")]
         impl ortho_config::CliValueExtractor for #config_ident {
             fn extract_user_provided(
                 &self,

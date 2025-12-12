@@ -798,14 +798,18 @@ and environment layers. With the attribute, calling `greet` without
 `--punctuation` allows a `[cmds.greet] punctuation = "?"` file entry or
 `APP_CMDS_GREET_PUNCTUATION=?` environment variable to win.
 
-When using this attribute with `load_and_merge_subcommand_with_matches`, pass
-the `ArgMatches` so the crate can inspect `value_source()`:
+When using this attribute, pass the `ArgMatches` so the crate can inspect
+`value_source()`:
 
 ```rust
 let matches = GreetArgs::command().get_matches();
 let cli = GreetArgs::from_arg_matches(&matches)?;
-let merged = cli.load_and_merge_subcommand_with_matches("greet", &matches)?;
+let merged = cli.load_and_merge_with_matches(&matches)?;
 ```
+
+Clap's `value_source()` uses argument IDs (the field identifier unless
+`#[arg(id = "...")]` overrides it). This behaviour requires the `serde_json`
+feature (enabled by default).
 
 ### Dispatching with `clap‑dispatch`
 
