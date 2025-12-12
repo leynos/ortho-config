@@ -8,6 +8,8 @@ use proc_macro2::TokenStream;
 use quote::quote;
 use syn::Ident;
 
+use super::generated_doc;
+
 use crate::MacroComponents;
 
 /// Generate a struct definition with optional field tokens.
@@ -46,29 +48,43 @@ pub(crate) fn generate_struct(
 }
 
 /// Generate the hidden `clap::Parser` struct.
-pub(crate) fn generate_cli_struct(components: &MacroComponents) -> TokenStream {
+pub(crate) fn generate_cli_struct(
+    config_ident: &Ident,
+    components: &MacroComponents,
+) -> TokenStream {
     let MacroComponents {
         cli_ident,
         cli_struct_fields,
         ..
     } = components;
+    let doc = generated_doc(config_ident, "CLI parser struct");
     generate_struct(
         cli_ident,
         cli_struct_fields,
-        &quote! { #[derive(clap::Parser, serde::Serialize, Default)] },
+        &quote! {
+            #[doc = #doc]
+            #[derive(clap::Parser, serde::Serialize, Default)]
+        },
     )
 }
 
 /// Generate the struct used to store default values.
-pub(crate) fn generate_defaults_struct(components: &MacroComponents) -> TokenStream {
+pub(crate) fn generate_defaults_struct(
+    config_ident: &Ident,
+    components: &MacroComponents,
+) -> TokenStream {
     let MacroComponents {
         defaults_ident,
         default_struct_fields,
         ..
     } = components;
+    let doc = generated_doc(config_ident, "Defaults storage struct");
     generate_struct(
         defaults_ident,
         default_struct_fields,
-        &quote! { #[derive(serde::Serialize)] },
+        &quote! {
+            #[doc = #doc]
+            #[derive(serde::Serialize)]
+        },
     )
 }

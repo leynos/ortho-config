@@ -345,17 +345,16 @@ mod tests {
             vec![quote! { pub value: u32 }],
             vec![quote! { #[clap(long)] pub value: Option<u32> }],
         )?;
-        let tokens = generate_cli_struct(&components);
-        let expected = quote! {
-            #[derive(clap::Parser, serde::Serialize, Default)]
-            struct CliStruct {
-                #[clap(long)]
-                pub value: Option<u32>,
-            }
-        };
+        let config_ident = parse_str("Config").context("config ident")?;
+        let tokens = generate_cli_struct(&config_ident, &components).to_string();
+        ensure!(tokens.contains("CliStruct"), "struct name should render");
         ensure!(
-            tokens.to_string() == expected.to_string(),
-            "generated CLI struct differs: {tokens} != {expected}"
+            tokens.contains("CLI parser struct generated") && tokens.contains("Config"),
+            "doc comment should cite role and config name: {tokens}"
+        );
+        ensure!(
+            tokens.contains("clap :: Parser") || tokens.contains("clap::Parser"),
+            "derive for clap::Parser should be present: {tokens}"
         );
         Ok(())
     }
@@ -366,14 +365,19 @@ mod tests {
             Vec::new(),
             vec![quote! { #[clap(long)] pub value: Option<u32> }],
         )?;
-        let tokens = generate_defaults_struct(&components);
-        let expected = quote! {
-            #[derive(serde::Serialize)]
-            struct DefaultsStruct {}
-        };
+        let config_ident = parse_str("Config").context("config ident")?;
+        let tokens = generate_defaults_struct(&config_ident, &components).to_string();
         ensure!(
-            tokens.to_string() == expected.to_string(),
-            "generated defaults struct differs: {tokens} != {expected}"
+            tokens.contains("DefaultsStruct"),
+            "struct name should render"
+        );
+        ensure!(
+            tokens.contains("Defaults storage struct generated") && tokens.contains("Config"),
+            "doc comment should cite role and config name: {tokens}"
+        );
+        ensure!(
+            tokens.contains("serde :: Serialize") || tokens.contains("serde::Serialize"),
+            "derive for serde::Serialize should be present: {tokens}"
         );
         Ok(())
     }

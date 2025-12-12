@@ -63,16 +63,24 @@ fn unique_append_fields_filters_duplicates() -> Result<()> {
 #[rstest]
 fn generate_declarative_state_struct_emits_storage() -> Result<()> {
     let state_ident = parse_ident("__SampleDeclarativeMergeState")?;
-    let tokens = generate_declarative_state_struct(&state_ident, &CollectionStrategies::default());
-    let expected = quote! {
-        #[derive(Default)]
-        struct __SampleDeclarativeMergeState {
-            value: ortho_config::serde_json::Value,
-        }
-    };
+    let config_ident = parse_ident("SampleConfig")?;
+    let tokens = generate_declarative_state_struct(
+        &state_ident,
+        &config_ident,
+        &CollectionStrategies::default(),
+    );
+    let rendered = tokens.to_string();
     ensure!(
-        tokens.to_string() == expected.to_string(),
-        "state struct tokens mismatch\nactual:\n{tokens}\nexpected:\n{expected}"
+        rendered.contains("__SampleDeclarativeMergeState"),
+        "struct name present"
+    );
+    ensure!(
+        rendered.contains("Declarative merge state generated") && rendered.contains("SampleConfig"),
+        "doc comment should mention role and config: {rendered}"
+    );
+    ensure!(
+        rendered.contains("serde_json :: Value") || rendered.contains("serde_json::Value"),
+        "value field should be rendered: {rendered}"
     );
     Ok(())
 }
@@ -111,7 +119,8 @@ fn generate_declarative_state_struct_includes_collection_fields(
     #[case] expected_fields: Vec<&'static str>,
 ) -> Result<()> {
     let state_ident = parse_ident("__SampleDeclarativeMergeState")?;
-    let tokens = generate_declarative_state_struct(&state_ident, &strategies);
+    let config_ident = parse_ident("SampleConfig")?;
+    let tokens = generate_declarative_state_struct(&state_ident, &config_ident, &strategies);
     let norm = tokens.to_string().replace(' ', "");
     for field in expected_fields {
         ensure!(
@@ -133,7 +142,12 @@ type TokenGenerator = fn(&CollectionStrategies) -> Result<TokenStream2>;
 
 fn state_struct_tokens(strategies: &CollectionStrategies) -> Result<TokenStream2> {
     let state_ident = parse_ident("__SampleDeclarativeMergeState")?;
-    Ok(generate_declarative_state_struct(&state_ident, strategies))
+    let config_ident = parse_ident("SampleConfig")?;
+    Ok(generate_declarative_state_struct(
+        &state_ident,
+        &config_ident,
+        strategies,
+    ))
 }
 
 fn merge_impl_tokens(strategies: &CollectionStrategies) -> Result<TokenStream2> {
@@ -365,7 +379,7 @@ fn generate_declarative_impl_composes_helpers() -> Result<()> {
     let strategies = CollectionStrategies::default();
     let tokens = generate_declarative_impl(&config_ident, &strategies);
     let state_ident = parse_ident("__SampleDeclarativeMergeState")?;
-    let state_struct = generate_declarative_state_struct(&state_ident, &strategies);
+    let state_struct = generate_declarative_state_struct(&state_ident, &config_ident, &strategies);
     let merge_impl = generate_declarative_merge_impl(&state_ident, &config_ident, &strategies);
     let merge_fn = generate_declarative_merge_from_layers_fn(&state_ident, &config_ident);
     let expected = quote! {

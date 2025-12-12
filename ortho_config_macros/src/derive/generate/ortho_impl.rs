@@ -54,8 +54,8 @@ pub(crate) fn generate_trait_implementation(
     config_ident: &Ident,
     components: &MacroComponents,
 ) -> TokenStream {
-    let cli_struct = generate_cli_struct(components);
-    let defaults_struct = generate_defaults_struct(components);
+    let cli_struct = generate_cli_struct(config_ident, components);
+    let defaults_struct = generate_defaults_struct(config_ident, components);
     let ortho_impl = generate_ortho_impl(config_ident, components);
     quote! {
         #cli_struct
