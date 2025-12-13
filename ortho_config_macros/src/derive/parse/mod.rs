@@ -19,7 +19,9 @@ use syn::{
 
 mod clap_attrs;
 
-pub(crate) use clap_attrs::{clap_arg_id, is_clap_attribute};
+pub(crate) use clap_attrs::{clap_arg_id, clap_arg_id_from_attribute, is_clap_attribute};
+
+const _: fn(&Attribute, &mut Option<LitStr>) -> syn::Result<()> = clap_arg_id_from_attribute;
 
 #[derive(Default, Clone)]
 pub(crate) struct StructAttrs {

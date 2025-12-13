@@ -43,10 +43,21 @@ pub(crate) fn parse_id_from_meta(
     Ok(())
 }
 
+pub(crate) fn clap_arg_id_from_attribute(
+    attr: &syn::Attribute,
+    existing_id: &mut Option<syn::LitStr>,
+) -> syn::Result<()> {
+    let syn::Meta::List(list) = &attr.meta else {
+        return Ok(());
+    };
+
+    list.parse_nested_meta(|meta| parse_id_from_meta(&meta, existing_id))
+}
+
 pub(crate) fn clap_arg_id(field: &syn::Field) -> syn::Result<Option<String>> {
     let mut arg_id: Option<syn::LitStr> = None;
     for attr in field.attrs.iter().filter(|attr| is_clap_attribute(attr)) {
-        attr.parse_nested_meta(|meta| parse_id_from_meta(&meta, &mut arg_id))?;
+        clap_arg_id_from_attribute(attr, &mut arg_id)?;
     }
     Ok(arg_id.map(|lit| lit.value()))
 }
