@@ -91,7 +91,10 @@ fn generate_defaults_struct_supports_empty_fields() -> Result<()> {
     )?;
     let config_ident = parse_str("Config").context("config ident")?;
     let tokens = generate_defaults_struct(&config_ident, &components).to_string();
-    ensure!(tokens.contains("DefaultsStruct"), "struct name should render");
+    ensure!(
+        tokens.contains("DefaultsStruct"),
+        "struct name should render"
+    );
     ensure!(
         tokens.contains("Defaults storage struct generated") && tokens.contains("Config"),
         "doc comment should cite role and config name: {tokens}"
