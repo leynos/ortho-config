@@ -9,7 +9,6 @@
 
 use proc_macro::TokenStream;
 use quote::{format_ident, quote};
-use syn::parse::Parser;
 use syn::{DeriveInput, parse_macro_input};
 
 mod derive {
@@ -29,7 +28,7 @@ use derive::generate::ortho_impl::generate_trait_implementation;
 use derive::load_impl::{
     DiscoveryTokens, LoadImplArgs, LoadImplIdents, LoadImplTokens, build_load_impl,
 };
-use derive::parse::parse_input;
+use derive::parse::{clap_arg_id, is_clap_attribute, parse_input};
 
 /// Derive macro for the
 /// [`OrthoConfig`](https://docs.rs/ortho_config/latest/ortho_config/trait.OrthoConfig.html)
@@ -112,66 +111,6 @@ struct CliStructBuildResult {
     field_info: Vec<CliFieldInfo>,
 }
 
-fn is_clap_attribute(attr: &syn::Attribute) -> bool {
-    attr.path().is_ident("arg") || attr.path().is_ident("clap")
-}
-
-fn clap_arg_id_from_attribute(attr: &syn::Attribute) -> syn::Result<Option<String>> {
-    let syn::Meta::List(list) = &attr.meta else {
-        return Ok(None);
-    };
-
-    let metas = syn::punctuated::Punctuated::<syn::Meta, syn::Token![,]>::parse_terminated
-        .parse2(list.tokens.clone())?;
-
-    let mut arg_id: Option<String> = None;
-    for meta in metas {
-        let syn::Meta::NameValue(name_value) = meta else {
-            continue;
-        };
-        if !name_value.path.is_ident("id") {
-            continue;
-        }
-        let syn::Expr::Lit(expr_lit) = name_value.value else {
-            return Err(syn::Error::new_spanned(
-                &name_value.path,
-                "clap argument `id` must be a string literal",
-            ));
-        };
-        let syn::Lit::Str(lit_str) = expr_lit.lit else {
-            return Err(syn::Error::new_spanned(
-                &name_value.path,
-                "clap argument `id` must be a string literal",
-            ));
-        };
-
-        if arg_id.replace(lit_str.value()).is_some() {
-            return Err(syn::Error::new_spanned(
-                &name_value.path,
-                "duplicate clap argument `id` override",
-            ));
-        }
-    }
-
-    Ok(arg_id)
-}
-
-fn clap_arg_id(field: &syn::Field) -> syn::Result<Option<String>> {
-    let mut arg_id: Option<String> = None;
-    for attr in field.attrs.iter().filter(|attr| is_clap_attribute(attr)) {
-        let Some(candidate) = clap_arg_id_from_attribute(attr)? else {
-            continue;
-        };
-        if arg_id.replace(candidate).is_some() {
-            return Err(syn::Error::new_spanned(
-                attr,
-                "duplicate clap argument `id` override",
-            ));
-        }
-    }
-    Ok(arg_id)
-}
-
 /// Build CLI struct field tokens, conditionally adding a generated
 /// `config_path` field.
 ///
@@ -213,7 +152,11 @@ fn build_cli_struct_tokens(
                 syn::Error::new_spanned(field, "unnamed fields are not supported")
             })?;
             let field_name = name.to_string();
-            let arg_id = clap_arg_id(field)?.unwrap_or_else(|| field_name.clone());
+            let arg_id = if field.attrs.iter().any(is_clap_attribute) {
+                clap_arg_id(field)?.unwrap_or_else(|| field_name.clone())
+            } else {
+                field_name.clone()
+            };
             Ok(CliFieldInfo {
                 name,
                 arg_id,
@@ -391,112 +334,4 @@ fn build_macro_components(
 }
 
 #[cfg(test)]
-mod tests {
-    //! Unit tests for the procedural macro token generators.
-
-    use super::MacroComponents;
-    use crate::derive::build::CollectionStrategies;
-    use crate::derive::generate::structs::{
-        generate_cli_struct, generate_defaults_struct, generate_struct,
-    };
-    use anyhow::{Context, Result, ensure};
-    use proc_macro2::TokenStream as TokenStream2;
-    use quote::quote;
-    use rstest::rstest;
-    use syn::parse_str;
-
-    fn build_components(
-        default_struct_fields: Vec<TokenStream2>,
-        cli_struct_fields: Vec<TokenStream2>,
-    ) -> Result<MacroComponents> {
-        Ok(MacroComponents {
-            defaults_ident: parse_str("DefaultsStruct").context("defaults ident")?,
-            default_struct_fields,
-            cli_ident: parse_str("CliStruct").context("cli ident")?,
-            cli_struct_fields,
-            load_impl: quote! {},
-            prefix_fn: None,
-            collection_strategies: CollectionStrategies::default(),
-            cli_field_info: Vec::new(),
-        })
-    }
-
-    #[rstest]
-    fn generate_struct_handles_empty_fields() -> Result<()> {
-        let ident = parse_str("Empty").context("parse Empty ident")?;
-        let attrs = quote! { #[derive(Default)] };
-        let tokens = generate_struct(&ident, &[], &attrs);
-        let expected = quote! {
-            #[derive(Default)]
-            struct Empty {}
-        };
-        ensure!(
-            tokens.to_string() == expected.to_string(),
-            "generated tokens differ: {tokens} != {expected}"
-        );
-        Ok(())
-    }
-
-    #[rstest]
-    fn generate_struct_renders_fields_with_commas() -> Result<()> {
-        let ident = parse_str("WithFields").context("parse WithFields ident")?;
-        let fields = vec![quote! { pub value: u32 }, quote! { pub other: String }];
-        let attrs = quote! { #[derive(Default)] };
-        let tokens = generate_struct(&ident, &fields, &attrs);
-        let expected = quote! {
-            #[derive(Default)]
-            struct WithFields {
-                pub value: u32,
-                pub other: String,
-            }
-        };
-        ensure!(
-            tokens.to_string() == expected.to_string(),
-            "generated tokens differ: {tokens} != {expected}"
-        );
-        Ok(())
-    }
-
-    #[rstest]
-    fn generate_cli_struct_emits_expected_tokens() -> Result<()> {
-        let components = build_components(
-            vec![quote! { pub value: u32 }],
-            vec![quote! { #[clap(long)] pub value: Option<u32> }],
-        )?;
-        let config_ident = parse_str("Config").context("config ident")?;
-        let tokens = generate_cli_struct(&config_ident, &components).to_string();
-        ensure!(tokens.contains("CliStruct"), "struct name should render");
-        ensure!(
-            tokens.contains("CLI parser struct generated") && tokens.contains("Config"),
-            "doc comment should cite role and config name: {tokens}"
-        );
-        ensure!(
-            tokens.contains("clap :: Parser") || tokens.contains("clap::Parser"),
-            "derive for clap::Parser should be present: {tokens}"
-        );
-        Ok(())
-    }
-
-    #[rstest]
-    fn generate_defaults_struct_supports_empty_fields() -> Result<()> {
-        let components = build_components(
-            Vec::new(),
-            vec![quote! { #[clap(long)] pub value: Option<u32> }],
-        )?;
-        let config_ident = parse_str("Config").context("config ident")?;
-        let tokens = generate_defaults_struct(&config_ident, &components).to_string();
-        ensure!(
-            tokens.contains("DefaultsStruct"),
-            "struct name should render"
-        );
-        ensure!(
-            tokens.contains("Defaults storage struct generated") && tokens.contains("Config"),
-            "doc comment should cite role and config name: {tokens}"
-        );
-        ensure!(
-            tokens.contains("serde :: Serialize") || tokens.contains("serde::Serialize"),
-            "derive for serde::Serialize should be present: {tokens}"
-        );
-        Ok(())
-    }
-}
+mod tests;

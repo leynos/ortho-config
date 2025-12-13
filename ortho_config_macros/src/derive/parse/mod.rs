@@ -17,6 +17,10 @@ use syn::{
     Type,
 };
 
+mod clap_attrs;
+
+pub(crate) use clap_attrs::{clap_arg_id, is_clap_attribute};
+
 #[derive(Default, Clone)]
 pub(crate) struct StructAttrs {
     pub prefix: Option<String>,
