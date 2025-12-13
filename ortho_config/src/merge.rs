@@ -4,6 +4,8 @@
 #[cfg(feature = "serde_json")]
 use crate::{OrthoResult, OrthoResultExt};
 #[cfg(feature = "serde_json")]
+use clap::ArgMatches;
+#[cfg(feature = "serde_json")]
 use figment::providers::Serialized;
 #[cfg(feature = "serde_json")]
 use serde::Serialize;
@@ -127,4 +129,54 @@ pub fn sanitize_value<T: Serialize>(value: &T) -> OrthoResult<Value> {
 #[cfg(feature = "serde_json")]
 pub fn sanitized_provider<T: Serialize>(value: &T) -> OrthoResult<Serialized<serde_json::Value>> {
     sanitize_value(value).map(Serialized::defaults)
+}
+
+/// Trait for extracting CLI values whilst treating clap defaults as absent.
+///
+/// Types implementing this trait can distinguish between values explicitly
+/// provided on the command line and values filled in by clap's `default_value_t`
+/// or similar mechanisms. Fields marked with `#[ortho_config(cli_default_as_absent)]`
+/// are only included in the extracted JSON when `value_source()` returns
+/// [`clap::parser::ValueSource::CommandLine`].
+///
+/// This allows file and environment configuration to take precedence over CLI
+/// defaults while still honouring explicit CLI overrides.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// use clap::{ArgMatches, Parser};
+/// use ortho_config::{CliValueExtractor, OrthoConfig, OrthoResult};
+/// use serde::{Deserialize, Serialize};
+///
+/// #[derive(Parser, Deserialize, Serialize, OrthoConfig, Default)]
+/// #[ortho_config(prefix = "APP_")]
+/// struct MyCommand {
+///     #[arg(long, default_value_t = String::from("!"))]
+///     #[ortho_config(default = String::from("!"), cli_default_as_absent)]
+///     punctuation: String,
+/// }
+///
+/// // When parsed without --punctuation flag, extract_user_provided returns {}
+/// // When parsed with --punctuation "?", extract_user_provided returns {"punctuation": "?"}
+/// ```
+#[cfg(feature = "serde_json")]
+#[cfg_attr(docsrs, doc(cfg(feature = "serde_json")))]
+pub trait CliValueExtractor: Sized {
+    /// Extract only values explicitly provided on the command line.
+    ///
+    /// Takes the parsed CLI struct (`self`) and the `ArgMatches` from clap.
+    /// Fields marked with `cli_default_as_absent` are excluded unless the user
+    /// explicitly provided them via the CLI. Other fields are serialised
+    /// normally with `None` values stripped.
+    ///
+    /// This trait is automatically implemented by the `OrthoConfig` derive macro
+    /// for types that have at least one field with `#[ortho_config(cli_default_as_absent)]`.
+    /// Types without this attribute should use the regular [`sanitized_provider`]
+    /// function instead.
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`crate::OrthoError`] if serialisation fails.
+    fn extract_user_provided(&self, matches: &ArgMatches) -> OrthoResult<Value>;
 }

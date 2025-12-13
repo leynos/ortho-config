@@ -238,7 +238,7 @@ references the relevant design guidance.
     single shared error surface when combining loaders.
     [[Feedback](feedback-from-hello-world-example.md)]
 
-  - [ ] Make `load_and_merge` treat CLI defaults as absent when the user did
+  - [x] Make `load_and_merge` treat CLI defaults as absent when the user did
     not override them, allowing subcommand sections such as `[cmds.greet]` to
     flow through automatically.
     [[Feedback](feedback-from-hello-world-example.md)]

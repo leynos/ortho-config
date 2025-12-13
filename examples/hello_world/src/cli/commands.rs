@@ -17,13 +17,17 @@ pub struct GreetCommand {
     #[arg(long, value_name = "PHRASE", id = "preamble")]
     pub preamble: Option<String>,
     /// Punctuation appended to the greeting when not whispered.
+    ///
+    /// The `cli_default_as_absent` attribute ensures that file/environment
+    /// configuration takes precedence over the clap default when the user
+    /// does not explicitly provide `--punctuation` on the command line.
     #[arg(
         long,
         value_name = "TEXT",
         id = "punctuation",
         default_value_t = default_punctuation()
     )]
-    #[ortho_config(default = default_punctuation())]
+    #[ortho_config(default = default_punctuation(), cli_default_as_absent)]
     pub punctuation: String,
 }
 

@@ -43,9 +43,9 @@ fn localizes_subcommand_tree(demo_localizer: DemoLocalizer) {
 #[rstest]
 fn try_parse_with_localizer_builds_cli(demo_localizer: DemoLocalizer) {
     let args = ["hello-world", "greet"];
-    let cli =
+    let parsed =
         CommandLine::try_parse_localized(args, &demo_localizer).expect("expected to parse args");
-    assert!(matches!(cli.command, Commands::Greet(_)));
+    assert!(matches!(parsed.cli.command, Commands::Greet(_)));
 }
 
 #[rstest]
