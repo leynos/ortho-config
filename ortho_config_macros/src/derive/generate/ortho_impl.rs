@@ -141,8 +141,11 @@ fn generate_cli_value_extractor_impl(
 
     let prune_nulls_helpers = generate_prune_nulls_helpers();
 
+    if !cfg!(feature = "serde_json") {
+        return quote! {};
+    }
+
     quote! {
-        #[cfg(feature = "serde_json")]
         impl ortho_config::CliValueExtractor for #config_ident {
             fn extract_user_provided(
                 &self,

@@ -25,7 +25,9 @@ fn run() -> Result<()> {
             // defaults when the user doesn't explicitly provide --punctuation.
             let subcommand_matches = matches
                 .subcommand()
-                .and_then(|(name, subcommand_matches)| (name == "greet").then_some(subcommand_matches))
+                .and_then(|(name, subcommand_matches)| {
+                    (name == "greet").then_some(subcommand_matches)
+                })
                 .ok_or(HelloWorldError::MissingSubcommandMatches("greet"))?;
             let merged = args.load_and_merge_with_matches(subcommand_matches)?;
             let plan = build_plan(&globals, &merged)?;

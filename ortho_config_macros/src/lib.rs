@@ -9,6 +9,7 @@
 
 use proc_macro::TokenStream;
 use quote::{format_ident, quote};
+use syn::parse::Parser;
 use syn::{DeriveInput, parse_macro_input};
 
 mod derive {
@@ -111,28 +112,64 @@ struct CliStructBuildResult {
     field_info: Vec<CliFieldInfo>,
 }
 
-fn clap_arg_id(field: &syn::Field) -> syn::Result<Option<String>> {
-    let mut arg_id: Option<syn::LitStr> = None;
-    for attr in &field.attrs {
-        if !(attr.path().is_ident("arg") || attr.path().is_ident("clap")) {
+fn is_clap_attribute(attr: &syn::Attribute) -> bool {
+    attr.path().is_ident("arg") || attr.path().is_ident("clap")
+}
+
+fn clap_arg_id_from_attribute(attr: &syn::Attribute) -> syn::Result<Option<String>> {
+    let syn::Meta::List(list) = &attr.meta else {
+        return Ok(None);
+    };
+
+    let metas = syn::punctuated::Punctuated::<syn::Meta, syn::Token![,]>::parse_terminated
+        .parse2(list.tokens.clone())?;
+
+    let mut arg_id: Option<String> = None;
+    for meta in metas {
+        let syn::Meta::NameValue(name_value) = meta else {
+            continue;
+        };
+        if !name_value.path.is_ident("id") {
             continue;
         }
-        attr.parse_nested_meta(|meta| {
-            if meta.path.is_ident("id") {
-                let value = meta.value()?;
-                let lit: syn::LitStr = value.parse()?;
-                if arg_id.is_some() {
-                    return Err(syn::Error::new_spanned(
-                        &meta.path,
-                        "duplicate clap argument `id` override",
-                    ));
-                }
-                arg_id = Some(lit);
-            }
-            Ok(())
-        })?;
+        let syn::Expr::Lit(expr_lit) = name_value.value else {
+            return Err(syn::Error::new_spanned(
+                &name_value.path,
+                "clap argument `id` must be a string literal",
+            ));
+        };
+        let syn::Lit::Str(lit_str) = expr_lit.lit else {
+            return Err(syn::Error::new_spanned(
+                &name_value.path,
+                "clap argument `id` must be a string literal",
+            ));
+        };
+
+        if arg_id.replace(lit_str.value()).is_some() {
+            return Err(syn::Error::new_spanned(
+                &name_value.path,
+                "duplicate clap argument `id` override",
+            ));
+        }
     }
-    Ok(arg_id.map(|lit| lit.value()))
+
+    Ok(arg_id)
+}
+
+fn clap_arg_id(field: &syn::Field) -> syn::Result<Option<String>> {
+    let mut arg_id: Option<String> = None;
+    for attr in field.attrs.iter().filter(|attr| is_clap_attribute(attr)) {
+        let Some(candidate) = clap_arg_id_from_attribute(attr)? else {
+            continue;
+        };
+        if arg_id.replace(candidate).is_some() {
+            return Err(syn::Error::new_spanned(
+                attr,
+                "duplicate clap argument `id` override",
+            ));
+        }
+    }
+    Ok(arg_id)
 }
 
 /// Build CLI struct field tokens, conditionally adding a generated

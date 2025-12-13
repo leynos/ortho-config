@@ -78,7 +78,8 @@ fn set_dir(dir: &TempDir) -> Result<DirGuard> {
 impl Drop for DirGuard {
     fn drop(&mut self) {
         // PANIC: Drop cannot return Result; failing to restore the cwd would
-        // leave the test process in a broken state, so we fail fast.
+        // leave the test environment in a broken state, so we panic to fail
+        // fast.
         if let Err(err) = std::env::set_current_dir(&self.old) {
             panic!("restore current dir: {err}");
         }
