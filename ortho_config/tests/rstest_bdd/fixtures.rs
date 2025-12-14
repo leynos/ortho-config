@@ -289,15 +289,14 @@ pub struct CliDefaultContext {
 #[ortho_config(prefix = "APP_")]
 pub struct CliDefaultArgs {
     /// Punctuation at the end of the greeting.
-    #[arg(long, id = "punctuation", default_value_t = default_punct())]
-    #[ortho_config(default = default_punct(), cli_default_as_absent)]
+    #[arg(
+        long,
+        id = "punctuation",
+        default_value_t = crate::default_punct::default_punct()
+    )]
+    #[ortho_config(default = crate::default_punct::default_punct(), cli_default_as_absent)]
     pub punctuation: String,
 }
-
-fn default_punct() -> String {
-    "!".into()
-}
-
 
 /// Provides a clean merge error context for error routing scenarios.
 #[fixture]

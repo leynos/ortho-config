@@ -8,6 +8,9 @@
 #[path = "../common/mod.rs"]
 pub mod common;
 
+#[path = "../support/default_punct.rs"]
+mod default_punct;
+
 mod behaviour;
 mod canary;
 mod canary_steps;

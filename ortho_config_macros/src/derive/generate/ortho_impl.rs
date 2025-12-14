@@ -5,7 +5,7 @@
 //! procedural macro entrypoint makes the flow easier to audit and test.
 
 use proc_macro2::TokenStream;
-use quote::{quote, quote_spanned};
+use quote::quote;
 use syn::Ident;
 
 use crate::{CliFieldInfo, MacroComponents};
@@ -133,21 +133,14 @@ fn generate_cli_value_extractor_impl(
         return quote! {};
     }
 
-    // Generate field extraction logic
-    let field_extractions: Vec<TokenStream> = cli_field_info
-        .iter()
-        .map(generate_field_extraction)
-        .collect();
-
-    let prune_nulls_helpers = generate_prune_nulls_helpers();
-
-    if !cfg!(feature = "serde_json") {
+    #[cfg(not(feature = "serde_json"))]
+    {
         let compile_errors: Vec<TokenStream> = cli_field_info
             .iter()
             .filter(|field| field.is_default_as_absent)
             .map(|field| {
                 let field_name = &field.name;
-                quote_spanned! { field_name.span()=>
+                quote::quote_spanned! { field_name.span()=>
                     compile_error!("cli_default_as_absent requires the serde_json feature");
                 }
             })
@@ -155,6 +148,14 @@ fn generate_cli_value_extractor_impl(
 
         return quote! { #(#compile_errors)* };
     }
+
+    // Generate field extraction logic
+    let field_extractions: Vec<TokenStream> = cli_field_info
+        .iter()
+        .map(generate_field_extraction)
+        .collect();
+
+    let prune_nulls_helpers = generate_prune_nulls_helpers();
 
     quote! {
         impl ortho_config::CliValueExtractor for #config_ident {

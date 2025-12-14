@@ -9,6 +9,9 @@
 //! Fields marked with `cli_default_as_absent` are only included in the CLI layer
 //! when `value_source()` returns `CommandLine`.
 
+#[path = "support/default_punct.rs"]
+mod default_punct;
+
 use anyhow::{Context, Result, anyhow, ensure};
 use camino::Utf8PathBuf;
 use cap_std::{ambient_authority, fs::Dir};
@@ -25,19 +28,18 @@ use std::sync::{LazyLock, Mutex, MutexGuard};
 use tempfile::TempDir;
 use test_helpers::env;
 
-/// Default punctuation used when neither file nor CLI provides a value.
-fn default_punct() -> String {
-    "!".into()
-}
-
 /// Subcommand with `cli_default_as_absent` attribute on a non-Option field.
 #[derive(Debug, Parser, Serialize, Deserialize, OrthoConfig, PartialEq)]
 #[command(name = "greet")]
 #[ortho_config(prefix = "APP_")]
 struct GreetArgs {
     /// Punctuation at the end of the greeting.
-    #[arg(long, id = "punctuation", default_value_t = default_punct())]
-    #[ortho_config(default = default_punct(), cli_default_as_absent)]
+    #[arg(
+        long,
+        id = "punctuation",
+        default_value_t = default_punct::default_punct()
+    )]
+    #[ortho_config(default = default_punct::default_punct(), cli_default_as_absent)]
     punctuation: String,
 
     /// Regular Option field for comparison.
@@ -48,7 +50,7 @@ struct GreetArgs {
 impl Default for GreetArgs {
     fn default() -> Self {
         Self {
-            punctuation: default_punct(),
+            punctuation: default_punct::default_punct(),
             name: None,
         }
     }
@@ -179,9 +181,9 @@ fn test_load_and_merge_subcommand_keeps_clap_default() -> Result<()> {
     let merged = load_and_merge_subcommand(&prefix, &args).context("merge greet args")?;
 
     ensure!(
-        merged.punctuation == default_punct(),
+        merged.punctuation == default_punct::default_punct(),
         "expected punctuation {:?}, got {:?}",
-        default_punct(),
+        default_punct::default_punct(),
         merged.punctuation
     );
     Ok(())
@@ -192,15 +194,19 @@ fn test_load_and_merge_subcommand_keeps_clap_default() -> Result<()> {
 #[command(name = "custom-id")]
 #[ortho_config(prefix = "APP_")]
 struct CustomIdArgs {
-    #[arg(long, id = "custom_punctuation", default_value_t = default_punct())]
-    #[ortho_config(default = default_punct(), cli_default_as_absent)]
+    #[arg(
+        long,
+        id = "custom_punctuation",
+        default_value_t = default_punct::default_punct()
+    )]
+    #[ortho_config(default = default_punct::default_punct(), cli_default_as_absent)]
     punctuation: String,
 }
 
 impl Default for CustomIdArgs {
     fn default() -> Self {
         Self {
-            punctuation: default_punct(),
+            punctuation: default_punct::default_punct(),
         }
     }
 }

@@ -126,6 +126,27 @@ struct CliStructBuildResult {
 /// # Errors
 ///
 /// Returns an error if CLI flag collisions are detected.
+fn build_cli_field_info(
+    field: &syn::Field,
+    attrs: &derive::parse::FieldAttrs,
+) -> syn::Result<CliFieldInfo> {
+    let name = field
+        .ident
+        .clone()
+        .ok_or_else(|| syn::Error::new_spanned(field, "unnamed fields are not supported"))?;
+    let field_name = name.to_string();
+    let arg_id = if field.attrs.iter().any(is_clap_attribute) {
+        clap_arg_id(field)?.unwrap_or_else(|| field_name.clone())
+    } else {
+        field_name.clone()
+    };
+    Ok(CliFieldInfo {
+        name,
+        arg_id,
+        is_default_as_absent: attrs.cli_default_as_absent,
+    })
+}
+
 fn build_cli_struct_tokens(
     fields: &[syn::Field],
     field_attrs: &[derive::parse::FieldAttrs],
@@ -147,22 +168,7 @@ fn build_cli_struct_tokens(
         .iter()
         .zip(field_attrs)
         .filter(|(_, attrs)| !attrs.skip_cli)
-        .map(|(field, attrs)| {
-            let name = field.ident.clone().ok_or_else(|| {
-                syn::Error::new_spanned(field, "unnamed fields are not supported")
-            })?;
-            let field_name = name.to_string();
-            let arg_id = if field.attrs.iter().any(is_clap_attribute) {
-                clap_arg_id(field)?.unwrap_or_else(|| field_name.clone())
-            } else {
-                field_name.clone()
-            };
-            Ok(CliFieldInfo {
-                name,
-                arg_id,
-                is_default_as_absent: attrs.cli_default_as_absent,
-            })
-        })
+        .map(|(field, attrs)| build_cli_field_info(field, attrs))
         .collect::<syn::Result<Vec<_>>>()?;
 
     Ok(CliStructBuildResult {
