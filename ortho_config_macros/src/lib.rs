@@ -28,7 +28,9 @@ use derive::generate::ortho_impl::generate_trait_implementation;
 use derive::load_impl::{
     DiscoveryTokens, LoadImplArgs, LoadImplIdents, LoadImplTokens, build_load_impl,
 };
-use derive::parse::{clap_arg_id, is_clap_attribute, parse_input};
+use derive::parse::{
+    SerdeRenameAll, clap_arg_id, parse_input, serde_rename_all, serde_serialized_field_key,
+};
 
 /// Derive macro for the
 /// [`OrthoConfig`](https://docs.rs/ortho_config/latest/ortho_config/trait.OrthoConfig.html)
@@ -45,7 +47,20 @@ pub fn derive_ortho_config(input_tokens: TokenStream) -> TokenStream {
         Err(e) => return e.to_compile_error().into(),
     };
 
-    let components = match build_macro_components(&ident, &fields, &struct_attrs, &field_attrs) {
+    let serde_rename_all = match serde_rename_all(&derive_input.attrs) {
+        Ok(v) => v,
+        Err(e) => return e.to_compile_error().into(),
+    };
+
+    let component_args = MacroComponentArgs {
+        ident: &ident,
+        fields: &fields,
+        struct_attrs: &struct_attrs,
+        field_attrs: &field_attrs,
+        serde_rename_all,
+    };
+
+    let components = match build_macro_components(&component_args) {
         Ok(v) => v,
         Err(e) => return e.to_compile_error().into(),
     };
@@ -63,8 +78,11 @@ pub fn derive_ortho_config(input_tokens: TokenStream) -> TokenStream {
 /// Metadata about a field used for `CliValueExtractor` generation.
 #[derive(Clone)]
 pub(crate) struct CliFieldInfo {
-    /// The field's identifier.
-    pub name: syn::Ident,
+    /// The field name used by serde during serialization.
+    ///
+    /// This respects `#[serde(rename = "...")]` and `#[serde(rename_all = "...")]`
+    /// so `CliValueExtractor` can reliably map values from `serde_json::to_value(self)`.
+    pub serialized_key: String,
     /// The clap argument ID used with `ArgMatches::value_source()`.
     ///
     /// This is the `id = "..."` override from `#[arg(...)]`/`#[clap(...)]` when
@@ -129,19 +147,17 @@ struct CliStructBuildResult {
 fn build_cli_field_info(
     field: &syn::Field,
     attrs: &derive::parse::FieldAttrs,
+    serde_rename_all: Option<SerdeRenameAll>,
 ) -> syn::Result<CliFieldInfo> {
     let name = field
         .ident
         .clone()
         .ok_or_else(|| syn::Error::new_spanned(field, "unnamed fields are not supported"))?;
     let field_name = name.to_string();
-    let arg_id = if field.attrs.iter().any(is_clap_attribute) {
-        clap_arg_id(field)?.unwrap_or_else(|| field_name.clone())
-    } else {
-        field_name.clone()
-    };
+    let arg_id = clap_arg_id(field)?.unwrap_or_else(|| field_name.clone());
+    let serialized_key = serde_serialized_field_key(field, serde_rename_all)?;
     Ok(CliFieldInfo {
-        name,
+        serialized_key,
         arg_id,
         is_default_as_absent: attrs.cli_default_as_absent,
     })
@@ -151,6 +167,7 @@ fn build_cli_struct_tokens(
     fields: &[syn::Field],
     field_attrs: &[derive::parse::FieldAttrs],
     struct_attrs: &derive::parse::StructAttrs,
+    serde_rename_all: Option<SerdeRenameAll>,
 ) -> syn::Result<CliStructBuildResult> {
     let mut cli_struct = build_cli_struct_fields(fields, field_attrs)?;
     if !cli_struct.field_names.contains("config_path") {
@@ -168,7 +185,7 @@ fn build_cli_struct_tokens(
         .iter()
         .zip(field_attrs)
         .filter(|(_, attrs)| !attrs.skip_cli)
-        .map(|(field, attrs)| build_cli_field_info(field, attrs))
+        .map(|(field, attrs)| build_cli_field_info(field, attrs, serde_rename_all))
         .collect::<syn::Result<Vec<_>>>()?;
 
     Ok(CliStructBuildResult {
@@ -225,6 +242,14 @@ struct LoadImplResult<'a> {
     legacy_app_name_storage: String,
 }
 
+struct MacroComponentArgs<'a> {
+    ident: &'a syn::Ident,
+    fields: &'a [syn::Field],
+    struct_attrs: &'a derive::parse::StructAttrs,
+    field_attrs: &'a [derive::parse::FieldAttrs],
+    serde_rename_all: Option<SerdeRenameAll>,
+}
+
 /// Construct `LoadImplArgs` from identifiers, token references, and discovery
 /// configuration.
 ///
@@ -278,16 +303,20 @@ fn build_load_impl_args<'a>(
 }
 
 /// Build all components required for macro output.
-fn build_macro_components(
-    ident: &syn::Ident,
-    fields: &[syn::Field],
-    struct_attrs: &derive::parse::StructAttrs,
-    field_attrs: &[derive::parse::FieldAttrs],
-) -> syn::Result<MacroComponents> {
+fn build_macro_components(args: &MacroComponentArgs<'_>) -> syn::Result<MacroComponents> {
+    let MacroComponentArgs {
+        ident,
+        fields,
+        struct_attrs,
+        field_attrs,
+        serde_rename_all,
+    } = args;
+
     let defaults_ident = format_ident!("__{}Defaults", ident);
     let default_struct_fields = build_default_struct_fields(fields);
     let cli_ident = format_ident!("__{}Cli", ident);
-    let cli_build_result = build_cli_struct_tokens(fields, field_attrs, struct_attrs)?;
+    let cli_build_result =
+        build_cli_struct_tokens(fields, field_attrs, struct_attrs, *serde_rename_all)?;
     let default_struct_init = build_default_struct_init(fields, field_attrs);
     let env_provider = build_env_provider(struct_attrs);
     let config_env_var = build_config_env_var(struct_attrs);

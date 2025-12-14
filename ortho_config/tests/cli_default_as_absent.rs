@@ -154,7 +154,20 @@ fn test_cli_default_as_absent_precedence(#[case] case: GreetPrecedenceCase) -> R
         .env_val
         .map(|val| env::set_var("APP_CMDS_GREET_PUNCTUATION", val));
 
+    let punctuation_on_cli = case.cli_args.contains(&"--punctuation");
     let matches = GreetArgs::command().get_matches_from(case.cli_args);
+    let punctuation_source = matches.value_source("punctuation");
+    if punctuation_on_cli {
+        ensure!(
+            punctuation_source == Some(clap::parser::ValueSource::CommandLine),
+            "expected punctuation source=CommandLine when --punctuation is present, got {punctuation_source:?}",
+        );
+    } else {
+        ensure!(
+            punctuation_source != Some(clap::parser::ValueSource::CommandLine),
+            "expected punctuation source != CommandLine when --punctuation is absent, got {punctuation_source:?}",
+        );
+    }
     let args = GreetArgs::from_arg_matches(&matches).context("parse CLI args")?;
     let prefix = Prefix::new("APP_");
     let merged = load_and_merge_subcommand_with_matches(&prefix, &args, &matches)
@@ -222,6 +235,41 @@ fn test_extract_user_provided_respects_custom_arg_id() -> Result<()> {
     ensure!(
         extracted.get("punctuation").is_some(),
         "expected punctuation to be present, but it was absent: {extracted:?}"
+    );
+
+    Ok(())
+}
+
+/// Verify that extraction keys follow serde renaming rules.
+#[derive(Debug, Parser, Serialize, Deserialize, OrthoConfig, PartialEq)]
+#[command(name = "rename-all")]
+#[ortho_config(prefix = "APP_")]
+#[serde(rename_all = "kebab-case")]
+struct RenameAllArgs {
+    #[arg(long, default_value_t = default_punct::default_punct())]
+    #[ortho_config(default = default_punct::default_punct(), cli_default_as_absent)]
+    verbose_mode: String,
+}
+
+impl Default for RenameAllArgs {
+    fn default() -> Self {
+        Self {
+            verbose_mode: default_punct::default_punct(),
+        }
+    }
+}
+
+#[test]
+fn test_extract_user_provided_respects_serde_rename_all() -> Result<()> {
+    let matches = RenameAllArgs::command().get_matches_from(["rename-all", "--verbose-mode", "?"]);
+    let args = RenameAllArgs::from_arg_matches(&matches).context("parse CLI args")?;
+    let extracted = args
+        .extract_user_provided(&matches)
+        .context("extract user provided")?;
+
+    ensure!(
+        extracted.get("verbose-mode").is_some(),
+        "expected verbose-mode to be present, but it was absent: {extracted:?}"
     );
 
     Ok(())
