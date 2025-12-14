@@ -133,22 +133,6 @@ fn generate_cli_value_extractor_impl(
         return quote! {};
     }
 
-    #[cfg(not(feature = "serde_json"))]
-    {
-        let compile_errors: Vec<TokenStream> = cli_field_info
-            .iter()
-            .filter(|field| field.is_default_as_absent)
-            .map(|field| {
-                let field_name = &field.name;
-                quote::quote_spanned! { field_name.span()=>
-                    compile_error!("cli_default_as_absent requires the serde_json feature");
-                }
-            })
-            .collect();
-
-        return quote! { #(#compile_errors)* };
-    }
-
     // Generate field extraction logic
     let field_extractions: Vec<TokenStream> = cli_field_info
         .iter()
