@@ -140,50 +140,40 @@ fn generate_cli_value_extractor_impl(
 
     let prune_nulls_helpers = generate_prune_nulls_helpers();
 
-    if cfg!(feature = "serde_json") {
-        quote! {
-            impl ortho_config::CliValueExtractor for #config_ident {
-                fn extract_user_provided(
-                    &self,
-                    matches: &clap::ArgMatches,
-                ) -> ortho_config::OrthoResult<ortho_config::serde_json::Value> {
-                    use ortho_config::OrthoResultExt;
-                    use ortho_config::serde_json;
+    quote! {
+        impl ortho_config::CliValueExtractor for #config_ident {
+            fn extract_user_provided(
+                &self,
+                matches: &clap::ArgMatches,
+            ) -> ortho_config::OrthoResult<ortho_config::serde_json::Value> {
+                use ortho_config::OrthoResultExt;
+                use ortho_config::serde_json;
 
-                    #prune_nulls_helpers
+                #prune_nulls_helpers
 
-                    // Serialise self (the parsed CLI struct) and strip null values so
-                    // absent options do not clobber file/environment defaults.
-                    let mut base = serde_json::to_value(self).into_ortho()?;
-                    prune_nulls(&mut base);
+                // Serialise self (the parsed CLI struct) and strip null values so
+                // absent options do not clobber file/environment defaults.
+                let mut base = serde_json::to_value(self).into_ortho()?;
+                prune_nulls(&mut base);
 
-                    let mut base_map = match base {
-                        serde_json::Value::Object(m) => m,
-                        other => {
-                            return Err(std::sync::Arc::new(ortho_config::OrthoError::Validation {
-                                key: String::from("cli"),
-                                message: format!(
-                                    "expected parsed CLI values to serialize to an object, got {other:?}",
-                                ),
-                            }));
-                        }
-                    };
+                let mut base_map = match base {
+                    serde_json::Value::Object(m) => m,
+                    other => {
+                        return Err(std::sync::Arc::new(ortho_config::OrthoError::Validation {
+                            key: String::from("cli"),
+                            message: format!(
+                                "expected parsed CLI values to serialize to an object, got {other:?}",
+                            ),
+                        }));
+                    }
+                };
 
-                    let mut map = serde_json::Map::new();
+                let mut map = serde_json::Map::new();
 
-                    #(#field_extractions)*
+                #(#field_extractions)*
 
-                    Ok(serde_json::Value::Object(map))
-                }
+                Ok(serde_json::Value::Object(map))
             }
-        }
-    } else {
-        quote! {
-            const _: () = {
-                compile_error!(
-                    "cli_default_as_absent requires enabling the ortho_config `serde_json` feature"
-                );
-            };
         }
     }
 }

@@ -224,20 +224,28 @@ impl Default for CustomIdArgs {
     }
 }
 
-#[test]
-fn test_extract_user_provided_respects_custom_arg_id() -> Result<()> {
-    let matches = CustomIdArgs::command().get_matches_from(["custom-id", "--punctuation", "?"]);
-    let args = CustomIdArgs::from_arg_matches(&matches).context("parse CLI args")?;
+/// Parse `cli_args` into `T` and ensure `extract_user_provided` contains `expected_key`.
+fn check_extraction_key<T>(cli_args: &[&str], expected_key: &str) -> Result<()>
+where
+    T: CommandFactory + FromArgMatches + CliValueExtractor,
+{
+    let matches = T::command().get_matches_from(cli_args.to_vec());
+    let args = T::from_arg_matches(&matches).context("parse CLI args")?;
     let extracted = args
         .extract_user_provided(&matches)
         .context("extract user provided")?;
 
     ensure!(
-        extracted.get("punctuation").is_some(),
-        "expected punctuation to be present, but it was absent: {extracted:?}"
+        extracted.get(expected_key).is_some(),
+        "expected {expected_key} to be present, but it was absent: {extracted:?}",
     );
 
     Ok(())
+}
+
+#[test]
+fn test_extract_user_provided_respects_custom_arg_id() -> Result<()> {
+    check_extraction_key::<CustomIdArgs>(&["custom-id", "--punctuation", "?"], "punctuation")
 }
 
 /// Verify that extraction keys follow serde renaming rules.
@@ -261,18 +269,7 @@ impl Default for RenameAllArgs {
 
 #[test]
 fn test_extract_user_provided_respects_serde_rename_all() -> Result<()> {
-    let matches = RenameAllArgs::command().get_matches_from(["rename-all", "--verbose-mode", "?"]);
-    let args = RenameAllArgs::from_arg_matches(&matches).context("parse CLI args")?;
-    let extracted = args
-        .extract_user_provided(&matches)
-        .context("extract user provided")?;
-
-    ensure!(
-        extracted.get("verbose-mode").is_some(),
-        "expected verbose-mode to be present, but it was absent: {extracted:?}"
-    );
-
-    Ok(())
+    check_extraction_key::<RenameAllArgs>(&["rename-all", "--verbose-mode", "?"], "verbose-mode")
 }
 
 /// Test that `extract_user_provided` excludes fields with clap defaults.

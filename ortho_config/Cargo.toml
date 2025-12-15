@@ -43,10 +43,10 @@ dunce = "1.0.0"
 
 [features]
 default = ["serde_json", "toml"]
-serde_json = ["dep:serde_json", "ortho_config_macros/serde_json"]
-toml = ["figment/toml", "dep:toml", "ortho_config_macros/toml"]
-json5 = ["dep:figment-json5", "dep:json5", "ortho_config_macros/json5"]
-yaml = ["dep:serde_saphyr", "serde_json", "ortho_config_macros/yaml"]
+serde_json = ["dep:serde_json"]
+toml = ["figment/toml", "dep:toml"]
+json5 = ["dep:figment-json5", "dep:json5"]
+yaml = ["dep:serde_saphyr", "serde_json"]
 
 [dev-dependencies]
 figment = { version = "0.10", features = ["toml", "env"] }
