@@ -229,7 +229,8 @@ fn check_extraction_key<T>(cli_args: &[&str], expected_key: &str) -> Result<()>
 where
     T: CommandFactory + FromArgMatches + CliValueExtractor,
 {
-    let matches = T::command().get_matches_from(cli_args.to_vec());
+    let args_iter = cli_args.iter().copied();
+    let matches = T::command().get_matches_from(args_iter);
     let args = T::from_arg_matches(&matches).context("parse CLI args")?;
     let extracted = args
         .extract_user_provided(&matches)
