@@ -85,43 +85,46 @@ fn parses_struct_and_field_attributes() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn parses_skip_cli_flag() -> Result<()> {
-    let input: DeriveInput = parse_quote! {
-        struct Demo {
-            #[ortho_config(skip_cli)]
+/// Verify that a single-field `#[ortho_config(...)]` flag is correctly parsed.
+fn assert_field_flag<F>(attribute: &str, check: F, error_msg: &str) -> Result<()>
+where
+    F: FnOnce(&FieldAttrs) -> bool,
+{
+    let input: DeriveInput = syn::parse_str(&format!(
+        r"
+        struct Demo {{
+            #[ortho_config({attribute})]
             field: String,
-        }
-    };
+        }}
+        ",
+    ))
+    .map_err(|err| anyhow!("failed to parse input: {err}"))?;
 
     let (_, fields, _, field_attrs) = parse_input(&input).map_err(|err| anyhow!(err))?;
     ensure!(fields.len() == 1, "expected single field");
     let attrs = field_attrs
         .first()
         .ok_or_else(|| anyhow!("missing field attributes"))?;
-    ensure!(attrs.skip_cli, "skip_cli flag was not set");
+    ensure!(check(attrs), "{error_msg}");
     Ok(())
 }
 
 #[test]
-fn parses_cli_default_as_absent_flag() -> Result<()> {
-    let input: DeriveInput = parse_quote! {
-        struct Demo {
-            #[ortho_config(cli_default_as_absent)]
-            field: String,
-        }
-    };
+fn parses_skip_cli_flag() -> Result<()> {
+    assert_field_flag(
+        "skip_cli",
+        |attrs| attrs.skip_cli,
+        "skip_cli flag was not set",
+    )
+}
 
-    let (_, fields, _, field_attrs) = parse_input(&input).map_err(|err| anyhow!(err))?;
-    ensure!(fields.len() == 1, "expected single field");
-    let attrs = field_attrs
-        .first()
-        .ok_or_else(|| anyhow!("missing field attributes"))?;
-    ensure!(
-        attrs.cli_default_as_absent,
-        "cli_default_as_absent flag was not set"
-    );
-    Ok(())
+#[test]
+fn parses_cli_default_as_absent_flag() -> Result<()> {
+    assert_field_flag(
+        "cli_default_as_absent",
+        |attrs| attrs.cli_default_as_absent,
+        "cli_default_as_absent flag was not set",
+    )
 }
 
 #[test]
