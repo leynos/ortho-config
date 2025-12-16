@@ -245,6 +245,22 @@ where
 }
 
 #[test]
+fn test_extract_user_provided_excludes_clap_default_with_custom_id() -> Result<()> {
+    let matches = CustomIdArgs::command().get_matches_from(["custom-id"]);
+    let args = CustomIdArgs::from_arg_matches(&matches).context("parse CLI args")?;
+    let extracted = args
+        .extract_user_provided(&matches)
+        .context("extract user provided")?;
+
+    ensure!(
+        extracted.get("punctuation").is_none(),
+        "expected punctuation to be absent when using clap default, got: {extracted:?}",
+    );
+
+    Ok(())
+}
+
+#[test]
 fn test_extract_user_provided_respects_custom_arg_id() -> Result<()> {
     check_extraction_key::<CustomIdArgs>(&["custom-id", "--punctuation", "?"], "punctuation")
 }
@@ -283,7 +299,6 @@ fn test_extract_user_provided_respects_serde_rename_all() -> Result<()> {
     vec!["greet", "--punctuation", "!!!"],
     true, // expect punctuation to be present
 )]
-#[serial]
 fn test_extract_user_provided_respects_value_source(
     #[case] cli_args: Vec<&str>,
     #[case] expect_punctuation: bool,
@@ -319,7 +334,6 @@ fn test_extract_user_provided_respects_value_source(
     Some("World"),
     true, // punctuation present
 )]
-#[serial]
 fn test_extract_user_provided_with_mixed_fields(
     #[case] cli_args: Vec<&str>,
     #[case] expected_name: Option<&str>,

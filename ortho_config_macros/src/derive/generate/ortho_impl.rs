@@ -141,6 +141,7 @@ fn generate_cli_value_extractor_impl(
     let prune_nulls_helpers = generate_prune_nulls_helpers();
 
     quote! {
+        #[cfg(feature = "serde_json")]
         impl ortho_config::CliValueExtractor for #config_ident {
             fn extract_user_provided(
                 &self,
@@ -175,6 +176,13 @@ fn generate_cli_value_extractor_impl(
                 Ok(serde_json::Value::Object(map))
             }
         }
+
+        #[cfg(not(feature = "serde_json"))]
+        const _: () = {
+            compile_error!(
+                "cli_default_as_absent requires enabling the ortho_config `serde_json` feature"
+            );
+        };
     }
 }
 

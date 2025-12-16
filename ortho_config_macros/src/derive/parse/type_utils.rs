@@ -6,34 +6,42 @@
 
 use syn::{GenericArgument, PathArguments, Type};
 
+/// Extract the first type argument from a `PathArguments` container.
+fn extract_first_type_argument(args: &PathArguments) -> Option<&Type> {
+    let PathArguments::AngleBracketed(angle_args) = args else {
+        return None;
+    };
+    let first = angle_args.args.first()?;
+    let GenericArgument::Type(inner) = first else {
+        return None;
+    };
+    Some(inner)
+}
+
 /// Returns the generic parameter if `ty` is the provided wrapper.
 ///
 /// The check is shallow: it inspects only the outermost path and supports
 /// common fully-qualified forms like `std::option::Option<T>`. The function is
 /// not recursive.
 fn type_inner<'a>(ty: &'a Type, wrapper: &str) -> Option<&'a Type> {
-    if let Type::Path(p) = ty {
-        // Grab the final two segments (if available) to match paths such as
-        // `std::option::Option<T>` or `crate::option::Option<T>` without caring
-        // about the full prefix.
-        let mut segs = p.path.segments.iter().rev();
-        let last = segs.next()?;
-        if last.ident != wrapper {
-            return None;
-        }
+    let Type::Path(p) = ty else {
+        return None;
+    };
 
-        // Ignore the parent segment so crate-relative forms such as
-        // `crate::option::Option<T>` and custom module paths match.
-        let _ = segs.next();
-
-        if let PathArguments::AngleBracketed(args) = &last.arguments {
-            return args.args.first().and_then(|arg| match arg {
-                GenericArgument::Type(inner) => Some(inner),
-                _ => None,
-            });
-        }
+    // Grab the final two segments (if available) to match paths such as
+    // `std::option::Option<T>` or `crate::option::Option<T>` without caring
+    // about the full prefix.
+    let mut segs = p.path.segments.iter().rev();
+    let last = segs.next()?;
+    if last.ident != wrapper {
+        return None;
     }
-    None
+
+    // Ignore the parent segment so crate-relative forms such as
+    // `crate::option::Option<T>` and custom module paths match.
+    let _ = segs.next();
+
+    extract_first_type_argument(&last.arguments)
 }
 
 /// Returns the inner type if `ty` is `Option<T>`.

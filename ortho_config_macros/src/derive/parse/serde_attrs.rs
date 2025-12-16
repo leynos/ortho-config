@@ -2,7 +2,7 @@
 //!
 //! The derive macro uses these utilities to compute the JSON keys serde will
 //! emit when serializing the parsed CLI struct. This is required for
-//! `cli_default_as_absent` extraction: we serialise `self` to JSON and then
+//! `cli_default_as_absent` extraction: we serialize `self` to JSON and then
 //! pluck individual fields out of the resulting object, so the lookup key must
 //! respect `#[serde(rename = "...")]` and `#[serde(rename_all = "...")]`.
 
