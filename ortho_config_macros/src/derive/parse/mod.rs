@@ -230,7 +230,7 @@ pub(crate) fn parse_struct_attrs(attrs: &[Attribute]) -> Result<StructAttrs, syn
 /// })?;
 /// # Ok(())
 /// # }
-/// ```rust,ignore
+/// ```
 fn parse_lit<T, F>(
     meta: &syn::meta::ParseNestedMeta,
     key: &str,
@@ -290,7 +290,7 @@ fn lit_str(meta: &syn::meta::ParseNestedMeta, key: &str) -> Result<LitStr, syn::
 /// assert_eq!(c, 'n');
 /// # Ok(())
 /// # }
-/// ```rust,ignore
+/// ```
 fn lit_char(meta: &syn::meta::ParseNestedMeta, key: &str) -> Result<char, syn::Error> {
     parse_lit(meta, key, |lit| match lit {
         Lit::Char(c) => Some(c.value()),

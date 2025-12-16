@@ -1,4 +1,4 @@
-.PHONY: help all clean test build release lint fmt check-fmt markdownlint nixie check python-test-deps publish-check FORCE
+.PHONY: help all clean test build release lint fmt check-fmt markdownlint nixie check typecheck python-test-deps publish-check FORCE
 
 CRATE ?= ortho_config
 CARGO ?= cargo
@@ -57,6 +57,9 @@ FORCE:
 lint: ## Run Clippy with warnings denied
 	RUSTDOCFLAGS="$(RUSTDOC_FLAGS)" $(CARGO) doc --workspace --no-deps
 	$(CARGO) clippy $(CLIPPY_FLAGS)
+
+typecheck: ## Typecheck workspace (cargo check)
+	RUSTFLAGS="-D warnings" $(CARGO) check --workspace --all-targets --all-features $(BUILD_JOBS)
 
 fmt: ## Format Rust and Markdown sources
 	$(CARGO) fmt --all

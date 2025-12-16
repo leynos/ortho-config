@@ -12,7 +12,7 @@ struct MergeStrategyCase<'a> {
     expected: MergeStrategy,
     struct_name: &'a str,
     field_name: &'a str,
-    field_type: &'a proc_macro2::TokenStream,
+    field_type: proc_macro2::TokenStream,
 }
 
 fn assert_merge_strategy(case: &MergeStrategyCase<'_>) -> Result<()> {
@@ -26,7 +26,7 @@ fn assert_merge_strategy(case: &MergeStrategyCase<'_>) -> Result<()> {
         struct_name = case.struct_name,
         strategy_name = case.strategy_name,
         field_name = case.field_name,
-        field_type = case.field_type,
+        field_type = &case.field_type,
     ))
     .map_err(|err| anyhow!("failed to parse input: {err}"))?;
 
@@ -184,41 +184,69 @@ fn parses_discovery_attributes() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn parses_merge_strategy_append() -> Result<()> {
-    let field_type = quote!(Vec<String>);
-    let case = MergeStrategyCase {
-        strategy_name: "append",
-        expected: MergeStrategy::Append,
-        struct_name: "AppendDemo",
-        field_name: "values",
-        field_type: &field_type,
-    };
+#[cfg(clippy)]
+#[rstest]
+#[case::append(MergeStrategyCase {
+    strategy_name: "append",
+    expected: MergeStrategy::Append,
+    struct_name: "AppendDemo",
+    field_name: "values",
+    field_type: quote!(Vec<String>),
+})]
+#[case::replace(MergeStrategyCase {
+    strategy_name: "replace",
+    expected: MergeStrategy::Replace,
+    struct_name: "ReplaceDemo",
+    field_name: "items",
+    field_type: quote!(Vec<u32>),
+})]
+#[case::keyed(MergeStrategyCase {
+    strategy_name: "keyed",
+    expected: MergeStrategy::Keyed,
+    struct_name: "KeyedDemo",
+    field_name: "mapping",
+    field_type: quote!(BTreeMap<String, String>),
+})]
+fn parses_merge_strategy(#[case] case: MergeStrategyCase<'static>) -> Result<()> {
     assert_merge_strategy(&case)
 }
 
-#[test]
-fn parses_merge_strategy_replace() -> Result<()> {
-    let field_type = quote!(Vec<String>);
+#[cfg(not(clippy))]
+#[rstest]
+#[case::append(
+    "append",
+    MergeStrategy::Append,
+    "AppendDemo",
+    "values",
+    quote!(Vec<String>)
+)]
+#[case::replace(
+    "replace",
+    MergeStrategy::Replace,
+    "ReplaceDemo",
+    "items",
+    quote!(Vec<u32>)
+)]
+#[case::keyed(
+    "keyed",
+    MergeStrategy::Keyed,
+    "KeyedDemo",
+    "mapping",
+    quote!(BTreeMap<String, String>)
+)]
+fn parses_merge_strategy(
+    #[case] strategy_name: &str,
+    #[case] expected: MergeStrategy,
+    #[case] struct_name: &str,
+    #[case] field_name: &str,
+    #[case] field_type: proc_macro2::TokenStream,
+) -> Result<()> {
     let case = MergeStrategyCase {
-        strategy_name: "replace",
-        expected: MergeStrategy::Replace,
-        struct_name: "ReplaceDemo",
-        field_name: "values",
-        field_type: &field_type,
-    };
-    assert_merge_strategy(&case)
-}
-
-#[test]
-fn parses_merge_strategy_keyed() -> Result<()> {
-    let field_type = quote!(std::collections::BTreeMap<String, u32>);
-    let case = MergeStrategyCase {
-        strategy_name: "keyed",
-        expected: MergeStrategy::Keyed,
-        struct_name: "MapDemo",
-        field_name: "rules",
-        field_type: &field_type,
+        strategy_name,
+        expected,
+        struct_name,
+        field_name,
+        field_type,
     };
     assert_merge_strategy(&case)
 }
