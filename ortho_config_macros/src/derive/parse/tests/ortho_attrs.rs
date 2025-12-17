@@ -193,7 +193,6 @@ fn parses_discovery_attributes() -> Result<()> {
     Ok(())
 }
 
-#[cfg(clippy)]
 #[rstest]
 #[case::append(MergeStrategyCase {
     strategy_name: "append",
@@ -217,46 +216,6 @@ fn parses_discovery_attributes() -> Result<()> {
     field_type: quote!(BTreeMap<String, String>),
 })]
 fn parses_merge_strategy(#[case] case: MergeStrategyCase<'static>) -> Result<()> {
-    assert_merge_strategy(&case)
-}
-
-#[cfg(not(clippy))]
-#[rstest]
-#[case::append(
-    "append",
-    MergeStrategy::Append,
-    "AppendDemo",
-    "values",
-    quote!(Vec<String>)
-)]
-#[case::replace(
-    "replace",
-    MergeStrategy::Replace,
-    "ReplaceDemo",
-    "items",
-    quote!(Vec<u32>)
-)]
-#[case::keyed(
-    "keyed",
-    MergeStrategy::Keyed,
-    "KeyedDemo",
-    "mapping",
-    quote!(BTreeMap<String, String>)
-)]
-fn parses_merge_strategy(
-    #[case] strategy_name: &str,
-    #[case] expected: MergeStrategy,
-    #[case] struct_name: &str,
-    #[case] field_name: &str,
-    #[case] field_type: proc_macro2::TokenStream,
-) -> Result<()> {
-    let case = MergeStrategyCase {
-        strategy_name,
-        expected,
-        struct_name,
-        field_name,
-        field_type,
-    };
     assert_merge_strategy(&case)
 }
 
