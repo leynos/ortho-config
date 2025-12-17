@@ -323,35 +323,44 @@ fn apply_field_attr(
     meta: &syn::meta::ParseNestedMeta,
     out: &mut FieldAttrs,
 ) -> Result<bool, syn::Error> {
-    match () {
-        () if meta.path.is_ident("cli_long") => {
+    let Some(ident) = meta.path.get_ident() else {
+        return Ok(false);
+    };
+    let key = ident.to_string();
+    match key.as_str() {
+        "cli_long" => {
             let s = lit_str(meta, "cli_long")?;
             out.cli_long = Some(s.value());
             Ok(true)
         }
-        () if meta.path.is_ident("cli_short") => {
+        "cli_short" => {
             let c = lit_char(meta, "cli_short")?;
             out.cli_short = Some(c);
             Ok(true)
         }
-        () if meta.path.is_ident("default") => {
+        "default" => {
             out.default = Some(meta.value()?.parse()?);
             Ok(true)
         }
-        () if meta.path.is_ident("merge_strategy") => {
+        "merge_strategy" => {
             let s = lit_str(meta, "merge_strategy")?;
             out.merge_strategy = Some(MergeStrategy::parse(&s.value(), s.span())?);
             Ok(true)
         }
-        () if meta.path.is_ident("skip_cli") => {
+        "skip_cli" => {
             out.skip_cli = true;
             Ok(true)
         }
-        () if meta.path.is_ident("cli_default_as_absent") => {
-            out.cli_default_as_absent = true;
+        "cli_default_as_absent" => {
+            let v = if meta.input.peek(Token![=]) {
+                meta.value()?.parse::<syn::LitBool>()?.value
+            } else {
+                true
+            };
+            out.cli_default_as_absent = v;
             Ok(true)
         }
-        () => Ok(false),
+        _ => Ok(false),
     }
 }
 

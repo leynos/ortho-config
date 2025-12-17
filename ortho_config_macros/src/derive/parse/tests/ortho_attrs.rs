@@ -128,6 +128,15 @@ fn parses_cli_default_as_absent_flag() -> Result<()> {
 }
 
 #[test]
+fn parses_cli_default_as_absent_false_disables_flag() -> Result<()> {
+    assert_field_flag(
+        "cli_default_as_absent = false",
+        |attrs| !attrs.cli_default_as_absent,
+        "cli_default_as_absent flag remained enabled",
+    )
+}
+
+#[test]
 fn parses_discovery_attributes() -> Result<()> {
     let input: DeriveInput = parse_quote! {
         #[ortho_config(prefix = "CFG_", discovery(
