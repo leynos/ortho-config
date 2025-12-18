@@ -168,7 +168,7 @@ struct GreetArgs {
 
 impl PostMergeHook for GreetArgs {
     fn post_merge(&mut self, _ctx: &PostMergeContext) -> OrthoResult<()> {
-        // Normalise whitespace-only preambles to None
+        // Normalize whitespace-only preambles to None
         if self.preamble.as_ref().is_some_and(|p| p.trim().is_empty()) {
             self.preamble = None;
         }
@@ -187,7 +187,7 @@ Use post-merge hooks sparingly. Most configuration needs are satisfied by the
 standard merge pipeline combined with field-level attributes like
 `cli_default_as_absent` and `merge_strategy`. Hooks are best suited for:
 
-- Normalising values after all layers have been applied
+- Normalizing values after all layers have been applied
 - Performing validation that depends on multiple fields being merged
 - Conditional transformations based on which sources contributed
 

@@ -20,7 +20,7 @@ use camino::Utf8PathBuf;
 /// of use cases. Consider implementing this trait when you need to:
 ///
 /// - Apply validation that depends on multiple fields being merged
-/// - Normalise values after all layers have been applied
+/// - Normalize values after all layers have been applied
 /// - Perform conditional transformations based on which sources contributed
 /// - Clean up or adjust fields that interact in complex ways
 ///
@@ -40,7 +40,7 @@ use camino::Utf8PathBuf;
 ///
 /// impl PostMergeHook for GreetArgs {
 ///     fn post_merge(&mut self, _ctx: &PostMergeContext) -> OrthoResult<()> {
-///         // Normalise empty preambles to None
+///         // Normalize empty preambles to None
 ///         if self.preamble.as_ref().is_some_and(|p| p.trim().is_empty()) {
 ///             self.preamble = None;
 ///         }
@@ -58,8 +58,9 @@ pub trait PostMergeHook: Sized {
     ///
     /// # Errors
     ///
-    /// Returns an [`crate::OrthoError`] if post-merge adjustments fail. Errors
-    /// are propagated to the caller of `merge_from_layers` or `load_and_merge`.
+    /// Returns an error via [`crate::OrthoResult`] if post-merge adjustments
+    /// fail. Errors are propagated to the caller of `merge_from_layers` or
+    /// `load_and_merge`.
     fn post_merge(&mut self, ctx: &PostMergeContext) -> OrthoResult<()>;
 }
 
@@ -75,9 +76,9 @@ pub trait PostMergeHook: Sized {
 /// use ortho_config::PostMergeContext;
 /// use camino::Utf8PathBuf;
 ///
-/// let ctx = PostMergeContext::new("APP_")
-///     .with_file(Utf8PathBuf::from("/etc/app/config.toml"))
-///     .with_cli_input();
+/// let mut ctx = PostMergeContext::new("APP_");
+/// ctx.with_file(Utf8PathBuf::from("/etc/app/config.toml"))
+///    .with_cli_input();
 ///
 /// assert_eq!(ctx.prefix(), "APP_");
 /// assert!(ctx.has_cli_input());
@@ -118,12 +119,11 @@ impl PostMergeContext {
     /// use ortho_config::PostMergeContext;
     /// use camino::Utf8PathBuf;
     ///
-    /// let ctx = PostMergeContext::new("APP_")
-    ///     .with_file(Utf8PathBuf::from("/etc/app.toml"));
+    /// let mut ctx = PostMergeContext::new("APP_");
+    /// ctx.with_file(Utf8PathBuf::from("/etc/app.toml"));
     /// assert_eq!(ctx.loaded_files().len(), 1);
     /// ```
-    #[must_use]
-    pub fn with_file(mut self, path: Utf8PathBuf) -> Self {
+    pub fn with_file(&mut self, path: Utf8PathBuf) -> &mut Self {
         self.loaded_files.push(path);
         self
     }
@@ -135,11 +135,11 @@ impl PostMergeContext {
     /// ```rust
     /// use ortho_config::PostMergeContext;
     ///
-    /// let ctx = PostMergeContext::new("APP_").with_cli_input();
+    /// let mut ctx = PostMergeContext::new("APP_");
+    /// ctx.with_cli_input();
     /// assert!(ctx.has_cli_input());
     /// ```
-    #[must_use]
-    pub const fn with_cli_input(mut self) -> Self {
+    pub const fn with_cli_input(&mut self) -> &mut Self {
         self.has_cli_input = true;
         self
     }
@@ -167,9 +167,9 @@ impl PostMergeContext {
     /// use ortho_config::PostMergeContext;
     /// use camino::Utf8PathBuf;
     ///
-    /// let ctx = PostMergeContext::new("APP_")
-    ///     .with_file(Utf8PathBuf::from("/etc/app.toml"))
-    ///     .with_file(Utf8PathBuf::from("~/.config/app.toml"));
+    /// let mut ctx = PostMergeContext::new("APP_");
+    /// ctx.with_file(Utf8PathBuf::from("/etc/app.toml"))
+    ///    .with_file(Utf8PathBuf::from("~/.config/app.toml"));
     /// assert_eq!(ctx.loaded_files().len(), 2);
     /// ```
     #[must_use]
@@ -210,8 +210,8 @@ mod tests {
 
     #[test]
     fn context_with_file_adds_path() {
-        let ctx = PostMergeContext::new("TEST_")
-            .with_file(Utf8PathBuf::from("/etc/test.toml"))
+        let mut ctx = PostMergeContext::new("TEST_");
+        ctx.with_file(Utf8PathBuf::from("/etc/test.toml"))
             .with_file(Utf8PathBuf::from("/home/user/.test.toml"));
         assert_eq!(ctx.loaded_files().len(), 2);
         assert_eq!(
@@ -226,14 +226,15 @@ mod tests {
 
     #[test]
     fn context_with_cli_input_sets_flag() {
-        let ctx = PostMergeContext::new("TEST_").with_cli_input();
+        let mut ctx = PostMergeContext::new("TEST_");
+        ctx.with_cli_input();
         assert!(ctx.has_cli_input());
     }
 
     #[test]
     fn context_builders_chain() {
-        let ctx = PostMergeContext::new("APP_")
-            .with_file(Utf8PathBuf::from("/etc/app.toml"))
+        let mut ctx = PostMergeContext::new("APP_");
+        ctx.with_file(Utf8PathBuf::from("/etc/app.toml"))
             .with_cli_input()
             .with_file(Utf8PathBuf::from("~/.app.toml"));
 

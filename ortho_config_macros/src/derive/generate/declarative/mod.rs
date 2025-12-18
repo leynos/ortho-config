@@ -388,31 +388,47 @@ pub(crate) fn generate_declarative_merge_from_layers_fn(
     config_ident: &syn::Ident,
     has_post_merge_hook: bool,
 ) -> TokenStream {
-    let merge_body = if has_post_merge_hook {
+    let ctx_init = if has_post_merge_hook {
         quote! {
-            let mut state = #state_ident::default();
             let mut ctx = ortho_config::PostMergeContext::new(Self::prefix());
-            for layer in layers {
-                if let Some(path) = layer.path() {
-                    ctx = ctx.with_file(path.to_owned());
-                }
-                if layer.provenance() == ortho_config::MergeProvenance::Cli {
-                    ctx = ctx.with_cli_input();
-                }
-                ortho_config::DeclarativeMerge::merge_layer(&mut state, layer)?;
+        }
+    } else {
+        quote! {}
+    };
+
+    let ctx_per_layer = if has_post_merge_hook {
+        quote! {
+            if let Some(path) = layer.path() {
+                ctx.with_file(path.to_owned());
             }
+            if layer.provenance() == ortho_config::MergeProvenance::Cli {
+                ctx.with_cli_input();
+            }
+        }
+    } else {
+        quote! {}
+    };
+
+    let post_merge = if has_post_merge_hook {
+        quote! {
             let mut result = ortho_config::DeclarativeMerge::finish(state)?;
             ortho_config::PostMergeHook::post_merge(&mut result, &ctx)?;
             Ok(result)
         }
     } else {
         quote! {
-            let mut state = #state_ident::default();
-            for layer in layers {
-                ortho_config::DeclarativeMerge::merge_layer(&mut state, layer)?;
-            }
             ortho_config::DeclarativeMerge::finish(state)
         }
+    };
+
+    let merge_body = quote! {
+        let mut state = #state_ident::default();
+        #ctx_init
+        for layer in layers {
+            #ctx_per_layer
+            ortho_config::DeclarativeMerge::merge_layer(&mut state, layer)?;
+        }
+        #post_merge
     };
 
     quote! {

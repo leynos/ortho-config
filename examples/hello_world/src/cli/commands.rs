@@ -9,10 +9,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::ValidationError;
 
-/// Customisation options for the `greet` command.
+/// Customization options for the `greet` command.
 ///
 /// The `post_merge_hook` attribute enables a [`PostMergeHook`] implementation
-/// that normalises empty preambles to `None` after configuration layers merge.
+/// that normalizes empty preambles to `None` after configuration layers merge.
 #[derive(Debug, Clone, PartialEq, Eq, Parser, Deserialize, Serialize, OrthoConfig)]
 #[ortho_config(prefix = "HELLO_WORLD", post_merge_hook)]
 pub struct GreetCommand {
@@ -44,13 +44,13 @@ impl Default for GreetCommand {
 }
 
 impl PostMergeHook for GreetCommand {
-    /// Normalises the merged configuration after all layers have been applied.
+    /// Normalizes the merged configuration after all layers have been applied.
     ///
     /// This hook trims whitespace-only preambles to `None`, ensuring that
     /// configuration files with empty strings behave consistently with absent
     /// values.
     fn post_merge(&mut self, _ctx: &PostMergeContext) -> OrthoResult<()> {
-        // Normalise whitespace-only preambles to None
+        // Normalize whitespace-only preambles to None
         if self
             .preamble
             .as_ref()

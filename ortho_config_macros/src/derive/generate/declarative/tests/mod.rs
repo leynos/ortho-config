@@ -314,6 +314,44 @@ fn generate_declarative_merge_impl_emits_non_object_error_context() -> Result<()
 }
 
 #[rstest]
+fn generate_declarative_merge_from_layers_fn_emits_post_merge_hook() -> Result<()> {
+    let state_ident = parse_ident("__SampleDeclarativeMergeState")?;
+    let config_ident = parse_ident("Sample")?;
+    let tokens = generate_declarative_merge_from_layers_fn(&state_ident, &config_ident, true);
+    let norm = tokens.to_string().replace(" :: ", "::").replace(' ', "");
+
+    // Check for PostMergeContext::new(Self::prefix())
+    ensure!(
+        norm.contains("PostMergeContext::new(Self::prefix())"),
+        "expected PostMergeContext::new(Self::prefix()): {norm}"
+    );
+
+    // Check for ctx.with_file(...) when layer.path() is Some
+    ensure!(
+        norm.contains("ctx.with_file(path.to_owned())"),
+        "expected ctx.with_file(path.to_owned()): {norm}"
+    );
+
+    // Check for MergeProvenance::Cli check that calls ctx.with_cli_input()
+    ensure!(
+        norm.contains("MergeProvenance::Cli"),
+        "expected MergeProvenance::Cli check: {norm}"
+    );
+    ensure!(
+        norm.contains("ctx.with_cli_input()"),
+        "expected ctx.with_cli_input(): {norm}"
+    );
+
+    // Check for PostMergeHook::post_merge(&mut result, &ctx)?
+    ensure!(
+        norm.contains("PostMergeHook::post_merge(&mutresult,&ctx)?"),
+        "expected PostMergeHook::post_merge(&mut result, &ctx)?: {norm}"
+    );
+
+    Ok(())
+}
+
+#[rstest]
 fn generate_declarative_merge_from_layers_fn_emits_constructor() -> Result<()> {
     let state_ident = parse_ident("__SampleDeclarativeMergeState")?;
     let config_ident = parse_ident("Sample")?;
