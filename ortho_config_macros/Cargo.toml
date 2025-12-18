@@ -23,6 +23,7 @@ heck = "0.5.0"
 # Mirrors optional format parsers in `ortho_config` so
 # macro output enables them when selected.
 default = []
+serde_json = []
 json5 = []
 yaml = []
 toml = []

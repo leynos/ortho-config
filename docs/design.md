@@ -865,6 +865,18 @@ experience, we can create a highly valuable addition to the Rust ecosystem.
   ensuring downstream binaries rely on a single shared error surface when
   combining loaders.
 
+- **Treat clap defaults as absent for subcommand merging (2025-12-11):**
+  Fields marked with `#[ortho_config(cli_default_as_absent)]` are excluded from
+  the CLI layer when `clap::ArgMatches::value_source()` indicates the value came
+  from a default rather than explicit user input. This allows configuration file
+  and environment variable values to take precedence over clap's `default_value_t`
+  while still honouring explicit CLI overrides. The derive macro generates a
+  `CliValueExtractor` implementation that inspects `value_source()` for each
+  annotated field, and `load_and_merge_subcommand_with_matches` uses this trait
+  to extract only user-provided CLI values before merging. This eliminates the
+  need for workarounds where `[cmds.greet]` sections were ignored because clap
+  defaults always populated the CLI layer.
+
 [^hello-world-feedback]: `docs/feedback-from-hello-world-example.md`.
 [^behavioural-testing]: `docs/behavioural-testing-in-rust-with-cucumber.md`.
 [^design-rstest]: `docs/rust-testing-with-rstest-fixtures.md`.

@@ -28,7 +28,8 @@ toml = "0.8"
 test_helpers = { path = "../../test_helpers", version = "^0.6.0" }
 
 [features]
-default = []
+default = ["serde_json"]
+serde_json = ["ortho_config/serde_json"]
 json5 = ["ortho_config/json5"]
 yaml = ["ortho_config/yaml"]
-cfg-toml = ["ortho_config/toml"]
+toml = ["ortho_config/toml"]
