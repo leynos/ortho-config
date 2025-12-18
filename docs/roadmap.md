@@ -243,7 +243,7 @@ references the relevant design guidance.
     flow through automatically.
     [[Feedback](feedback-from-hello-world-example.md)]
 
-  - [ ] Provide an attribute- or trait-based hook for bespoke subcommand merge
+  - [x] Provide an attribute- or trait-based hook for bespoke subcommand merge
     logic so advanced cases can adjust the merged struct without manual glue
     code. [[Feedback](feedback-from-hello-world-example.md)]
 

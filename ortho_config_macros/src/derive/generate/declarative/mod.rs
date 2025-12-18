@@ -370,6 +370,9 @@ fn finish_tokens(
 /// folds each layer into it, and calls `finish` to produce the configuration
 /// value.
 ///
+/// When `has_post_merge_hook` is `true`, the generated function also builds a
+/// `PostMergeContext` and invokes `PostMergeHook::post_merge` after finishing.
+///
 /// # Examples
 ///
 /// ```rust,ignore
@@ -377,13 +380,41 @@ fn finish_tokens(
 ///
 /// let state_ident = parse_str("__SampleDeclarativeMergeState").unwrap();
 /// let config_ident = parse_str("SampleConfig").unwrap();
-/// let tokens = generate_declarative_merge_from_layers_fn(&state_ident, &config_ident);
+/// let tokens = generate_declarative_merge_from_layers_fn(&state_ident, &config_ident, false);
 /// assert!(tokens.to_string().contains("merge_from_layers"));
 /// ```
 pub(crate) fn generate_declarative_merge_from_layers_fn(
     state_ident: &syn::Ident,
     config_ident: &syn::Ident,
+    has_post_merge_hook: bool,
 ) -> TokenStream {
+    let merge_body = if has_post_merge_hook {
+        quote! {
+            let mut state = #state_ident::default();
+            let mut ctx = ortho_config::PostMergeContext::new(Self::prefix());
+            for layer in layers {
+                if let Some(path) = layer.path() {
+                    ctx = ctx.with_file(path.to_owned());
+                }
+                if layer.provenance() == ortho_config::MergeProvenance::Cli {
+                    ctx = ctx.with_cli_input();
+                }
+                ortho_config::DeclarativeMerge::merge_layer(&mut state, layer)?;
+            }
+            let mut result = ortho_config::DeclarativeMerge::finish(state)?;
+            ortho_config::PostMergeHook::post_merge(&mut result, &ctx)?;
+            Ok(result)
+        }
+    } else {
+        quote! {
+            let mut state = #state_ident::default();
+            for layer in layers {
+                ortho_config::DeclarativeMerge::merge_layer(&mut state, layer)?;
+            }
+            ortho_config::DeclarativeMerge::finish(state)
+        }
+    };
+
     quote! {
         impl #config_ident {
             /// Merge the configuration struct from declarative layers.
@@ -422,11 +453,7 @@ pub(crate) fn generate_declarative_merge_from_layers_fn(
             where
                 I: IntoIterator<Item = ortho_config::MergeLayer<'a>>,
             {
-                let mut state = #state_ident::default();
-                for layer in layers {
-                    ortho_config::DeclarativeMerge::merge_layer(&mut state, layer)?;
-                }
-                ortho_config::DeclarativeMerge::finish(state)
+                #merge_body
             }
         }
     }
@@ -436,6 +463,10 @@ pub(crate) fn generate_declarative_merge_from_layers_fn(
 ///
 /// Combines the state struct, `DeclarativeMerge` trait implementation, and
 /// inherent constructor into a single token stream.
+///
+/// When `has_post_merge_hook` is `true`, the generated `merge_from_layers`
+/// builds a `PostMergeContext` and invokes `PostMergeHook::post_merge` after
+/// finishing.
 ///
 /// # Feature Requirements
 ///
@@ -452,17 +483,19 @@ pub(crate) fn generate_declarative_merge_from_layers_fn(
 ///
 /// let config_ident = parse_str("SampleConfig").unwrap();
 /// let strategies = CollectionStrategies::default();
-/// let tokens = generate_declarative_impl(&config_ident, &strategies);
+/// let tokens = generate_declarative_impl(&config_ident, &strategies, false);
 /// assert!(tokens.to_string().contains("DeclarativeMerge"));
 /// ```
 pub(crate) fn generate_declarative_impl(
     config_ident: &syn::Ident,
     strategies: &CollectionStrategies,
+    has_post_merge_hook: bool,
 ) -> TokenStream {
     let state_ident = format_ident!("__{}DeclarativeMergeState", config_ident);
     let state_struct = generate_declarative_state_struct(&state_ident, config_ident, strategies);
     let merge_impl = generate_declarative_merge_impl(&state_ident, config_ident, strategies);
-    let merge_fn = generate_declarative_merge_from_layers_fn(&state_ident, config_ident);
+    let merge_fn =
+        generate_declarative_merge_from_layers_fn(&state_ident, config_ident, has_post_merge_hook);
 
     quote! {
         #state_struct

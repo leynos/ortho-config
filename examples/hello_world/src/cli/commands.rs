@@ -4,14 +4,17 @@
 //! module whilst preserving a focused public surface.
 
 use clap::{ArgAction, Parser, ValueEnum};
-use ortho_config::OrthoConfig;
+use ortho_config::{OrthoConfig, OrthoResult, PostMergeContext, PostMergeHook};
 use serde::{Deserialize, Serialize};
 
 use crate::error::ValidationError;
 
 /// Customisation options for the `greet` command.
+///
+/// The `post_merge_hook` attribute enables a [`PostMergeHook`] implementation
+/// that normalises empty preambles to `None` after configuration layers merge.
 #[derive(Debug, Clone, PartialEq, Eq, Parser, Deserialize, Serialize, OrthoConfig)]
-#[ortho_config(prefix = "HELLO_WORLD")]
+#[ortho_config(prefix = "HELLO_WORLD", post_merge_hook)]
 pub struct GreetCommand {
     /// Optional preamble printed before the greeting.
     #[arg(long, value_name = "PHRASE", id = "preamble")]
@@ -37,6 +40,25 @@ impl Default for GreetCommand {
             preamble: None,
             punctuation: default_punctuation(),
         }
+    }
+}
+
+impl PostMergeHook for GreetCommand {
+    /// Normalises the merged configuration after all layers have been applied.
+    ///
+    /// This hook trims whitespace-only preambles to `None`, ensuring that
+    /// configuration files with empty strings behave consistently with absent
+    /// values.
+    fn post_merge(&mut self, _ctx: &PostMergeContext) -> OrthoResult<()> {
+        // Normalise whitespace-only preambles to None
+        if self
+            .preamble
+            .as_ref()
+            .is_some_and(|text| text.trim().is_empty())
+        {
+            self.preamble = None;
+        }
+        Ok(())
     }
 }
 

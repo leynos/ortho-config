@@ -24,6 +24,7 @@ fn build_components(
         prefix_fn: None,
         collection_strategies: CollectionStrategies::default(),
         cli_field_info: Vec::new(),
+        post_merge_hook: false,
     })
 }
 

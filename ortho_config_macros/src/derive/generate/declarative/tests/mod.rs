@@ -317,7 +317,7 @@ fn generate_declarative_merge_impl_emits_non_object_error_context() -> Result<()
 fn generate_declarative_merge_from_layers_fn_emits_constructor() -> Result<()> {
     let state_ident = parse_ident("__SampleDeclarativeMergeState")?;
     let config_ident = parse_ident("Sample")?;
-    let tokens = generate_declarative_merge_from_layers_fn(&state_ident, &config_ident);
+    let tokens = generate_declarative_merge_from_layers_fn(&state_ident, &config_ident, false);
     let expected = quote! {
         impl Sample {
             /// Merge the configuration struct from declarative layers.
@@ -377,11 +377,11 @@ fn generate_declarative_merge_from_layers_fn_emits_constructor() -> Result<()> {
 fn generate_declarative_impl_composes_helpers() -> Result<()> {
     let config_ident = parse_ident("Sample")?;
     let strategies = CollectionStrategies::default();
-    let tokens = generate_declarative_impl(&config_ident, &strategies);
+    let tokens = generate_declarative_impl(&config_ident, &strategies, false);
     let state_ident = parse_ident("__SampleDeclarativeMergeState")?;
     let state_struct = generate_declarative_state_struct(&state_ident, &config_ident, &strategies);
     let merge_impl = generate_declarative_merge_impl(&state_ident, &config_ident, &strategies);
-    let merge_fn = generate_declarative_merge_from_layers_fn(&state_ident, &config_ident);
+    let merge_fn = generate_declarative_merge_from_layers_fn(&state_ident, &config_ident, false);
     let expected = quote! {
         #state_struct
         #merge_impl
