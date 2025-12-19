@@ -1,15 +1,16 @@
 //! Unit tests for the procedural macro token generators.
 
-use super::MacroComponents;
+use super::{MacroComponentArgs, MacroComponents, build_macro_components};
 use crate::derive::build::CollectionStrategies;
 use crate::derive::generate::structs::{
     generate_cli_struct, generate_defaults_struct, generate_struct,
 };
-use anyhow::{Context, Result, ensure};
+use crate::derive::parse::parse_input;
+use anyhow::{Context, Result, anyhow, ensure};
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
 use rstest::rstest;
-use syn::parse_str;
+use syn::{DeriveInput, parse_quote, parse_str};
 
 fn build_components(
     default_struct_fields: Vec<TokenStream2>,
@@ -77,43 +78,48 @@ where
     Ok(generator(&config_ident, &components).to_string())
 }
 
-#[rstest]
-fn generate_cli_struct_emits_expected_tokens() -> Result<()> {
-    let tokens = test_generated_struct(
-        vec![quote! { pub value: u32 }],
-        vec![quote! { #[clap(long)] pub value: Option<u32> }],
-        generate_cli_struct,
-    )?;
-    ensure!(tokens.contains("CliStruct"), "struct name should render");
-    ensure!(
-        tokens.contains("CLI parser struct generated") && tokens.contains("Config"),
-        "doc comment should cite role and config name: {tokens}"
-    );
-    ensure!(
-        tokens.contains("clap :: Parser") || tokens.contains("clap::Parser"),
-        "derive for clap::Parser should be present: {tokens}"
-    );
-    Ok(())
+/// Test case for generated struct validation.
+struct GeneratedStructCase {
+    default_fields: Vec<TokenStream2>,
+    cli_fields: Vec<TokenStream2>,
+    generator: fn(&syn::Ident, &MacroComponents) -> TokenStream2,
+    struct_name: &'static str,
+    doc_fragment: &'static str,
+    derive_variants: &'static [&'static str],
 }
 
 #[rstest]
-fn generate_defaults_struct_supports_empty_fields() -> Result<()> {
-    let tokens = test_generated_struct(
-        Vec::new(),
-        vec![quote! { #[clap(long)] pub value: Option<u32> }],
-        generate_defaults_struct,
-    )?;
+#[case::cli_struct(GeneratedStructCase {
+    default_fields: vec![quote! { pub value: u32 }],
+    cli_fields: vec![quote! { #[clap(long)] pub value: Option<u32> }],
+    generator: generate_cli_struct,
+    struct_name: "CliStruct",
+    doc_fragment: "CLI parser struct generated",
+    derive_variants: &["clap :: Parser", "clap::Parser"],
+})]
+#[case::defaults_struct(GeneratedStructCase {
+    default_fields: Vec::new(),
+    cli_fields: vec![quote! { #[clap(long)] pub value: Option<u32> }],
+    generator: generate_defaults_struct,
+    struct_name: "DefaultsStruct",
+    doc_fragment: "Defaults storage struct generated",
+    derive_variants: &["serde :: Serialize", "serde::Serialize"],
+})]
+fn generated_struct_emits_expected_tokens(#[case] case: GeneratedStructCase) -> Result<()> {
+    let tokens = test_generated_struct(case.default_fields, case.cli_fields, case.generator)?;
     ensure!(
-        tokens.contains("DefaultsStruct"),
+        tokens.contains(case.struct_name),
         "struct name should render"
     );
     ensure!(
-        tokens.contains("Defaults storage struct generated") && tokens.contains("Config"),
+        tokens.contains(case.doc_fragment) && tokens.contains("Config"),
         "doc comment should cite role and config name: {tokens}"
     );
     ensure!(
-        tokens.contains("serde :: Serialize") || tokens.contains("serde::Serialize"),
-        "derive for serde::Serialize should be present: {tokens}"
+        case.derive_variants
+            .iter()
+            .any(|variant| tokens.contains(variant)),
+        "expected derive should be present: {tokens}"
     );
     Ok(())
 }
@@ -158,6 +164,84 @@ fn macro_components_default_post_merge_hook_is_false() -> Result<()> {
     ensure!(
         !components.post_merge_hook,
         "post_merge_hook should default to false"
+    );
+    Ok(())
+}
+
+/// Build `MacroComponents` from a parsed `DeriveInput` using the full parsing pipeline.
+fn build_components_from_input(input: &DeriveInput) -> Result<MacroComponents> {
+    let (ident, fields, struct_attrs, field_attrs) =
+        parse_input(input).map_err(|err| anyhow!(err))?;
+    let args = MacroComponentArgs {
+        ident: &ident,
+        fields: &fields,
+        struct_attrs: &struct_attrs,
+        field_attrs: &field_attrs,
+        serde_rename_all: None,
+    };
+    build_macro_components(&args).map_err(|err| anyhow!(err))
+}
+
+#[rstest]
+fn parsing_pipeline_propagates_post_merge_hook_true() -> Result<()> {
+    let input: DeriveInput = parse_quote! {
+        #[ortho_config(prefix = "TEST_", post_merge_hook)]
+        struct Config {
+            value: String,
+        }
+    };
+    let components = build_components_from_input(&input)?;
+    ensure!(
+        components.post_merge_hook,
+        "post_merge_hook should be true when parsed from #[ortho_config(post_merge_hook)]"
+    );
+    Ok(())
+}
+
+#[rstest]
+fn parsing_pipeline_propagates_post_merge_hook_explicit_true() -> Result<()> {
+    let input: DeriveInput = parse_quote! {
+        #[ortho_config(prefix = "TEST_", post_merge_hook = true)]
+        struct Config {
+            value: String,
+        }
+    };
+    let components = build_components_from_input(&input)?;
+    ensure!(
+        components.post_merge_hook,
+        "post_merge_hook should be true when parsed from #[ortho_config(post_merge_hook = true)]"
+    );
+    Ok(())
+}
+
+#[rstest]
+fn parsing_pipeline_propagates_post_merge_hook_false() -> Result<()> {
+    let input: DeriveInput = parse_quote! {
+        #[ortho_config(prefix = "TEST_", post_merge_hook = false)]
+        struct Config {
+            value: String,
+        }
+    };
+    let components = build_components_from_input(&input)?;
+    ensure!(
+        !components.post_merge_hook,
+        "post_merge_hook should be false when parsed from #[ortho_config(post_merge_hook = false)]"
+    );
+    Ok(())
+}
+
+#[rstest]
+fn parsing_pipeline_defaults_post_merge_hook_to_false() -> Result<()> {
+    let input: DeriveInput = parse_quote! {
+        #[ortho_config(prefix = "TEST_")]
+        struct Config {
+            value: String,
+        }
+    };
+    let components = build_components_from_input(&input)?;
+    ensure!(
+        !components.post_merge_hook,
+        "post_merge_hook should default to false when not specified in attributes"
     );
     Ok(())
 }
