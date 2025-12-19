@@ -183,65 +183,44 @@ fn build_components_from_input(input: &DeriveInput) -> Result<MacroComponents> {
 }
 
 #[rstest]
-fn parsing_pipeline_propagates_post_merge_hook_true() -> Result<()> {
-    let input: DeriveInput = parse_quote! {
+#[case::short_form(
+    parse_quote! {
         #[ortho_config(prefix = "TEST_", post_merge_hook)]
-        struct Config {
-            value: String,
-        }
-    };
-    let components = build_components_from_input(&input)?;
-    ensure!(
-        components.post_merge_hook,
-        "post_merge_hook should be true when parsed from #[ortho_config(post_merge_hook)]"
-    );
-    Ok(())
-}
-
-#[rstest]
-fn parsing_pipeline_propagates_post_merge_hook_explicit_true() -> Result<()> {
-    let input: DeriveInput = parse_quote! {
+        struct Config { value: String }
+    },
+    true,
+    "post_merge_hook should be true when parsed from #[ortho_config(post_merge_hook)]"
+)]
+#[case::explicit_true(
+    parse_quote! {
         #[ortho_config(prefix = "TEST_", post_merge_hook = true)]
-        struct Config {
-            value: String,
-        }
-    };
-    let components = build_components_from_input(&input)?;
-    ensure!(
-        components.post_merge_hook,
-        "post_merge_hook should be true when parsed from #[ortho_config(post_merge_hook = true)]"
-    );
-    Ok(())
-}
-
-#[rstest]
-fn parsing_pipeline_propagates_post_merge_hook_false() -> Result<()> {
-    let input: DeriveInput = parse_quote! {
+        struct Config { value: String }
+    },
+    true,
+    "post_merge_hook should be true when parsed from #[ortho_config(post_merge_hook = true)]"
+)]
+#[case::explicit_false(
+    parse_quote! {
         #[ortho_config(prefix = "TEST_", post_merge_hook = false)]
-        struct Config {
-            value: String,
-        }
-    };
-    let components = build_components_from_input(&input)?;
-    ensure!(
-        !components.post_merge_hook,
-        "post_merge_hook should be false when parsed from #[ortho_config(post_merge_hook = false)]"
-    );
-    Ok(())
-}
-
-#[rstest]
-fn parsing_pipeline_defaults_post_merge_hook_to_false() -> Result<()> {
-    let input: DeriveInput = parse_quote! {
+        struct Config { value: String }
+    },
+    false,
+    "post_merge_hook should be false when parsed from #[ortho_config(post_merge_hook = false)]"
+)]
+#[case::default_false(
+    parse_quote! {
         #[ortho_config(prefix = "TEST_")]
-        struct Config {
-            value: String,
-        }
-    };
+        struct Config { value: String }
+    },
+    false,
+    "post_merge_hook should default to false when not specified in attributes"
+)]
+fn parsing_pipeline_propagates_post_merge_hook(
+    #[case] input: DeriveInput,
+    #[case] expected: bool,
+    #[case] error_msg: &str,
+) -> Result<()> {
     let components = build_components_from_input(&input)?;
-    ensure!(
-        !components.post_merge_hook,
-        "post_merge_hook should default to false when not specified in attributes"
-    );
+    ensure!(components.post_merge_hook == expected, "{error_msg}");
     Ok(())
 }
