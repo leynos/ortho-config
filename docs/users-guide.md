@@ -776,6 +776,53 @@ Subcommands `pr` and `issue` load their defaults from the `cmds` namespace and
 environment variables. If the `reference` field is missing in the defaults, the
 tool continues using the CLI value instead of exiting with an error.
 
+### Merging a selected subcommand enum
+
+When your root CLI parses into a `Commands` enum, you can derive
+`SelectedSubcommandMerge` and merge the selected variant in one call, instead
+of matching only to call `load_and_merge()` per branch.
+
+Variants that rely on `cli_default_as_absent` (because they use
+`default_value_t`) should be annotated with `#[ortho_subcommand(with_matches)]`
+so the merge can consult `ArgMatches` and treat clap defaults as absent.
+
+If you want to load the global configuration and merge the selected subcommand
+in one expression, use `load_globals_and_merge_selected_subcommand` and supply
+your global loader as a closure.
+
+```rust
+use clap::{CommandFactory, FromArgMatches, Parser, Subcommand};
+use ortho_config::{SelectedSubcommandMerge, load_globals_and_merge_selected_subcommand};
+
+#[derive(Parser)]
+struct Cli {
+    #[command(subcommand)]
+    command: Commands,
+}
+
+#[derive(Subcommand, SelectedSubcommandMerge)]
+enum Commands {
+    #[ortho_subcommand(with_matches)]
+    Greet(GreetArgs),
+    Run(RunArgs),
+}
+
+struct GreetArgs;
+struct RunArgs;
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+let mut cmd = Cli::command();
+let matches = cmd.get_matches();
+let cli = Cli::from_arg_matches(&matches)?;
+let (_globals, _merged) = load_globals_and_merge_selected_subcommand(
+    &matches,
+    cli.command,
+    || Ok::<_, std::io::Error>(()),
+)?;
+Ok(())
+}
+```
+
 ### Hello world walkthrough
 
 <https://github.com/leynos/ortho-config/tree/main/examples/hello_world>
@@ -794,7 +841,7 @@ combines switches and optional arguments (`--wave`, `--gift`,
 (`--preamble "Until next time"`, `--punctuation ?`) to describe how the
 farewell should unfold. Each subcommand struct derives `OrthoConfig` so
 defaults from `[cmds.greet]` or `[cmds.take-leave]` merge automatically when
-`load_and_merge()` is called.
+`load_and_merge_selected()` is invoked on the derived `Commands` enum.
 
 Behavioural tests in `examples/hello_world/tests` exercise scenarios such as
 `hello_world greet --preamble "Good morning"` and running

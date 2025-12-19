@@ -232,7 +232,7 @@ references the relevant design guidance.
     fixtures.[^roadmap-behavioural] Reuse the parameterised setups from the
     rstest fixture guide.[^roadmap-rstest]
 
-- [ ] **Streamline subcommand configuration overrides**
+- [x] **Streamline subcommand configuration overrides**
 
   - [x] Route merge failures through `OrthoError::Merge` so binaries rely on a
     single shared error surface when combining loaders.
@@ -247,7 +247,7 @@ references the relevant design guidance.
     logic so advanced cases can adjust the merged struct without manual glue
     code. [[Feedback](feedback-from-hello-world-example.md)]
 
-  - [ ] Offer a unified API that returns merged global and selected subcommand
+  - [x] Offer a unified API that returns merged global and selected subcommand
     configuration in one call, eliminating the repetitive `match` scaffolding
     in `hello_world`. [[Feedback](feedback-from-hello-world-example.md)]
 

@@ -19,11 +19,18 @@ use std::path::PathBuf;
 use uncased::Uncased;
 
 mod paths;
+#[cfg(feature = "serde_json")]
+mod selected;
 mod types;
 
 #[cfg(feature = "serde_json")]
 use paths::candidate_paths;
 pub use paths::push_stem_candidates;
+#[cfg(feature = "serde_json")]
+pub use selected::{
+    LoadGlobalsAndSelectedSubcommandError, SelectedSubcommandMerge, SelectedSubcommandMergeError,
+    load_globals_and_merge_selected_subcommand,
+};
 pub use types::{CmdName, Prefix};
 
 /// Load and merge `[cmds.<name>]` sections from the given paths.
