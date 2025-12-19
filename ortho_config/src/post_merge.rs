@@ -139,7 +139,11 @@ impl PostMergeContext {
     /// ctx.with_cli_input();
     /// assert!(ctx.has_cli_input());
     /// ```
-    pub const fn with_cli_input(&mut self) -> &mut Self {
+    #[expect(
+        clippy::missing_const_for_fn,
+        reason = "Not const for API consistency with `with_file`, which cannot be const due to Vec::push"
+    )]
+    pub fn with_cli_input(&mut self) -> &mut Self {
         self.has_cli_input = true;
         self
     }

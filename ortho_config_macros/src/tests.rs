@@ -139,32 +139,19 @@ fn build_components_with_hook(post_merge_hook: bool) -> Result<MacroComponents> 
 }
 
 #[rstest]
-fn macro_components_propagates_post_merge_hook_true() -> Result<()> {
-    let components = build_components_with_hook(true)?;
-    ensure!(
-        components.post_merge_hook,
-        "post_merge_hook should be true when set"
-    );
-    Ok(())
-}
-
-#[rstest]
-fn macro_components_propagates_post_merge_hook_false() -> Result<()> {
-    let components = build_components_with_hook(false)?;
-    ensure!(
-        !components.post_merge_hook,
-        "post_merge_hook should be false when not set"
-    );
-    Ok(())
-}
-
-#[rstest]
-fn macro_components_default_post_merge_hook_is_false() -> Result<()> {
-    let components = build_components(Vec::new(), Vec::new())?;
-    ensure!(
-        !components.post_merge_hook,
-        "post_merge_hook should default to false"
-    );
+#[case::explicit_true(Some(true), true, "post_merge_hook should be true when set")]
+#[case::explicit_false(Some(false), false, "post_merge_hook should be false when not set")]
+#[case::default_false(None, false, "post_merge_hook should default to false")]
+fn macro_components_propagates_post_merge_hook(
+    #[case] hook_input: Option<bool>,
+    #[case] expected: bool,
+    #[case] error_msg: &str,
+) -> Result<()> {
+    let components = hook_input.map_or_else(
+        || build_components(Vec::new(), Vec::new()),
+        build_components_with_hook,
+    )?;
+    ensure!(components.post_merge_hook == expected, "{error_msg}");
     Ok(())
 }
 

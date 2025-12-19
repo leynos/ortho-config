@@ -15,6 +15,10 @@ use serde_json::json;
 #[derive(Debug, Deserialize, OrthoConfig)]
 #[ortho_config(prefix = "HOOK_TEST_", post_merge_hook)]
 struct HookSample {
+    #[expect(
+        dead_code,
+        reason = "Required for JSON deserialization but not read in tests"
+    )]
     name: String,
     preamble: Option<String>,
 }
@@ -37,6 +41,10 @@ impl PostMergeHook for HookSample {
 #[derive(Debug, Deserialize, OrthoConfig)]
 #[ortho_config(prefix = "CTX_TEST_", post_merge_hook)]
 struct ContextAwareSample {
+    #[expect(
+        dead_code,
+        reason = "Required for JSON deserialization but not read in tests"
+    )]
     value: String,
     cli_was_present: bool,
     file_count: usize,
@@ -63,130 +71,110 @@ fn merge_context_aware_sample(composer: MergeComposer) -> Result<ContextAwareSam
 }
 
 #[rstest]
-fn post_merge_hook_normalizes_whitespace_preamble() -> Result<()> {
+#[case::whitespace("   ", None, "whitespace-only preamble should be normalized to None")]
+#[case::empty("", None, "empty string preamble should be normalized to None")]
+#[case::valid("Hello!", Some("Hello!"), "valid preamble should be preserved")]
+fn post_merge_hook_normalizes_preamble(
+    #[case] input_preamble: &str,
+    #[case] expected: Option<&str>,
+    #[case] error_msg: &str,
+) -> Result<()> {
     let mut composer = MergeComposer::new();
-    composer.push_defaults(json!({ "name": "Test", "preamble": "   " }));
+    composer.push_defaults(json!({ "name": "Test", "preamble": input_preamble }));
 
     let config = merge_hook_sample(composer)?;
-    ensure!(config.name == "Test", "unexpected name: {}", config.name);
     ensure!(
-        config.preamble.is_none(),
-        "expected preamble to be None after normalization, got {:?}",
+        config.preamble.as_deref() == expected,
+        "{error_msg}, got {:?}",
         config.preamble
     );
     Ok(())
 }
 
-#[rstest]
-fn post_merge_hook_preserves_valid_preamble() -> Result<()> {
-    let mut composer = MergeComposer::new();
-    composer.push_defaults(json!({ "name": "Test", "preamble": "Hello!" }));
-
-    let config = merge_hook_sample(composer)?;
-    ensure!(
-        config.preamble.as_deref() == Some("Hello!"),
-        "expected preamble to be preserved, got {:?}",
-        config.preamble
-    );
-    Ok(())
+/// Layer configuration for context-aware tests.
+#[derive(Clone, Copy)]
+enum LayerConfig {
+    CliOnly,
+    EnvOnly,
+    TwoFiles,
+    EnvAndCli,
 }
 
-#[rstest]
-fn post_merge_hook_normalizes_empty_string_preamble() -> Result<()> {
-    let mut composer = MergeComposer::new();
-    composer.push_defaults(json!({ "name": "Test", "preamble": "" }));
-
-    let config = merge_hook_sample(composer)?;
-    ensure!(
-        config.preamble.is_none(),
-        "expected empty preamble to be normalized to None, got {:?}",
-        config.preamble
-    );
-    Ok(())
-}
-
-#[rstest]
-fn post_merge_context_detects_cli_input() -> Result<()> {
+fn setup_context_aware_composer(layer_config: LayerConfig) -> MergeComposer {
     let mut composer = MergeComposer::new();
     composer.push_defaults(json!({
         "value": "default",
         "cli_was_present": false,
         "file_count": 0
     }));
-    composer.push_cli(json!({ "value": "from_cli" }));
+    match layer_config {
+        LayerConfig::CliOnly => {
+            composer.push_cli(json!({ "value": "from_cli" }));
+        }
+        LayerConfig::EnvOnly => {
+            composer.push_environment(json!({ "value": "from_env" }));
+        }
+        LayerConfig::TwoFiles => {
+            composer.push_file(
+                json!({ "value": "file1" }),
+                Some(Utf8PathBuf::from("/etc/config.toml")),
+            );
+            composer.push_file(
+                json!({ "value": "file2" }),
+                Some(Utf8PathBuf::from("/home/user/.config.toml")),
+            );
+        }
+        LayerConfig::EnvAndCli => {
+            composer.push_environment(json!({ "value": "env" }));
+            composer.push_cli(json!({ "value": "cli" }));
+        }
+    }
+    composer
+}
 
+#[rstest]
+#[case::with_cli(
+    LayerConfig::CliOnly,
+    true,
+    "cli_was_present should be true when CLI layer is added"
+)]
+#[case::without_cli(
+    LayerConfig::EnvOnly,
+    false,
+    "cli_was_present should be false when no CLI layer is added"
+)]
+fn post_merge_context_detects_cli_input(
+    #[case] layer_config: LayerConfig,
+    #[case] expected: bool,
+    #[case] error_msg: &str,
+) -> Result<()> {
+    let composer = setup_context_aware_composer(layer_config);
     let config = merge_context_aware_sample(composer)?;
-    ensure!(
-        config.value == "from_cli",
-        "unexpected value: {}",
-        config.value
-    );
-    ensure!(
-        config.cli_was_present,
-        "expected cli_was_present to be true when CLI layer was added"
-    );
+    ensure!(config.cli_was_present == expected, "{error_msg}");
     Ok(())
 }
 
 #[rstest]
-fn post_merge_context_detects_no_cli_input() -> Result<()> {
-    let mut composer = MergeComposer::new();
-    composer.push_defaults(json!({
-        "value": "default",
-        "cli_was_present": false,
-        "file_count": 0
-    }));
-    composer.push_environment(json!({ "value": "from_env" }));
-
+#[case::two_files(
+    LayerConfig::TwoFiles,
+    2,
+    "file_count should be 2 when two files are loaded"
+)]
+#[case::zero_files(
+    LayerConfig::EnvAndCli,
+    0,
+    "file_count should be 0 when no files are loaded"
+)]
+fn post_merge_context_counts_file_layers(
+    #[case] layer_config: LayerConfig,
+    #[case] expected: usize,
+    #[case] error_msg: &str,
+) -> Result<()> {
+    let composer = setup_context_aware_composer(layer_config);
     let config = merge_context_aware_sample(composer)?;
     ensure!(
-        !config.cli_was_present,
-        "expected cli_was_present to be false when no CLI layer was added"
-    );
-    Ok(())
-}
-
-#[rstest]
-fn post_merge_context_counts_file_layers() -> Result<()> {
-    let mut composer = MergeComposer::new();
-    composer.push_defaults(json!({
-        "value": "default",
-        "cli_was_present": false,
-        "file_count": 0
-    }));
-    composer.push_file(
-        json!({ "value": "file1" }),
-        Some(Utf8PathBuf::from("/etc/config.toml")),
-    );
-    composer.push_file(
-        json!({ "value": "file2" }),
-        Some(Utf8PathBuf::from("/home/user/.config.toml")),
-    );
-
-    let config = merge_context_aware_sample(composer)?;
-    ensure!(
-        config.file_count == 2,
-        "expected file_count to be 2, got {}",
-        config.file_count
-    );
-    Ok(())
-}
-
-#[rstest]
-fn post_merge_context_counts_zero_file_layers() -> Result<()> {
-    let mut composer = MergeComposer::new();
-    composer.push_defaults(json!({
-        "value": "default",
-        "cli_was_present": false,
-        "file_count": 0
-    }));
-    composer.push_environment(json!({ "value": "env" }));
-    composer.push_cli(json!({ "value": "cli" }));
-
-    let config = merge_context_aware_sample(composer)?;
-    ensure!(
-        config.file_count == 0,
-        "expected file_count to be 0 when no files were loaded, got {}",
+        config.file_count == expected,
+        "{error_msg}, got {}",
         config.file_count
     );
     Ok(())
