@@ -106,3 +106,47 @@ fn generate_defaults_struct_supports_empty_fields() -> Result<()> {
     );
     Ok(())
 }
+
+fn build_components_with_hook(post_merge_hook: bool) -> Result<MacroComponents> {
+    Ok(MacroComponents {
+        defaults_ident: parse_str("DefaultsStruct").context("defaults ident")?,
+        default_struct_fields: vec![quote! { pub value: u32 }],
+        cli_ident: parse_str("CliStruct").context("cli ident")?,
+        cli_struct_fields: vec![quote! { #[clap(long)] pub value: Option<u32> }],
+        load_impl: quote! {},
+        prefix_fn: Some(quote! { "TEST_" }),
+        collection_strategies: CollectionStrategies::default(),
+        cli_field_info: Vec::new(),
+        post_merge_hook,
+    })
+}
+
+#[rstest]
+fn macro_components_propagates_post_merge_hook_true() -> Result<()> {
+    let components = build_components_with_hook(true)?;
+    ensure!(
+        components.post_merge_hook,
+        "post_merge_hook should be true when set"
+    );
+    Ok(())
+}
+
+#[rstest]
+fn macro_components_propagates_post_merge_hook_false() -> Result<()> {
+    let components = build_components_with_hook(false)?;
+    ensure!(
+        !components.post_merge_hook,
+        "post_merge_hook should be false when not set"
+    );
+    Ok(())
+}
+
+#[rstest]
+fn macro_components_default_post_merge_hook_is_false() -> Result<()> {
+    let components = build_components(Vec::new(), Vec::new())?;
+    ensure!(
+        !components.post_merge_hook,
+        "post_merge_hook should default to false"
+    );
+    Ok(())
+}

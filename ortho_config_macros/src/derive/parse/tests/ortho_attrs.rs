@@ -109,6 +109,13 @@ where
     Ok(())
 }
 
+/// Verify that the `post_merge_hook` struct attribute is correctly parsed.
+fn assert_post_merge_hook(input: &DeriveInput, expected: bool, error_msg: &str) -> Result<()> {
+    let (_, _, struct_attrs, _) = parse_input(input).map_err(|err| anyhow!(err))?;
+    ensure!(struct_attrs.post_merge_hook == expected, "{error_msg}");
+    Ok(())
+}
+
 #[test]
 fn parses_skip_cli_flag() -> Result<()> {
     assert_field_flag(
@@ -321,67 +328,47 @@ fn struct_prefix_normalises_trailing_underscore(
 
 #[test]
 fn parses_post_merge_hook_short_form() -> Result<()> {
-    let input: DeriveInput = parse_quote! {
-        #[ortho_config(post_merge_hook)]
-        struct Config {
-            field: String,
-        }
-    };
-
-    let (_, _, struct_attrs, _) = parse_input(&input).map_err(|err| anyhow!(err))?;
-    ensure!(
-        struct_attrs.post_merge_hook,
-        "post_merge_hook should be true when using short form"
-    );
-    Ok(())
+    assert_post_merge_hook(
+        &parse_quote! {
+            #[ortho_config(post_merge_hook)]
+            struct Config { field: String }
+        },
+        true,
+        "post_merge_hook should be true when using short form",
+    )
 }
 
 #[test]
 fn parses_post_merge_hook_explicit_true() -> Result<()> {
-    let input: DeriveInput = parse_quote! {
-        #[ortho_config(post_merge_hook = true)]
-        struct Config {
-            field: String,
-        }
-    };
-
-    let (_, _, struct_attrs, _) = parse_input(&input).map_err(|err| anyhow!(err))?;
-    ensure!(
-        struct_attrs.post_merge_hook,
-        "post_merge_hook should be true when explicitly set to true"
-    );
-    Ok(())
+    assert_post_merge_hook(
+        &parse_quote! {
+            #[ortho_config(post_merge_hook = true)]
+            struct Config { field: String }
+        },
+        true,
+        "post_merge_hook should be true when explicitly set to true",
+    )
 }
 
 #[test]
 fn parses_post_merge_hook_explicit_false() -> Result<()> {
-    let input: DeriveInput = parse_quote! {
-        #[ortho_config(post_merge_hook = false)]
-        struct Config {
-            field: String,
-        }
-    };
-
-    let (_, _, struct_attrs, _) = parse_input(&input).map_err(|err| anyhow!(err))?;
-    ensure!(
-        !struct_attrs.post_merge_hook,
-        "post_merge_hook should be false when explicitly set to false"
-    );
-    Ok(())
+    assert_post_merge_hook(
+        &parse_quote! {
+            #[ortho_config(post_merge_hook = false)]
+            struct Config { field: String }
+        },
+        false,
+        "post_merge_hook should be false when explicitly set to false",
+    )
 }
 
 #[test]
 fn post_merge_hook_defaults_to_false() -> Result<()> {
-    let input: DeriveInput = parse_quote! {
-        struct Config {
-            field: String,
-        }
-    };
-
-    let (_, _, struct_attrs, _) = parse_input(&input).map_err(|err| anyhow!(err))?;
-    ensure!(
-        !struct_attrs.post_merge_hook,
-        "post_merge_hook should default to false when not specified"
-    );
-    Ok(())
+    assert_post_merge_hook(
+        &parse_quote! {
+            struct Config { field: String }
+        },
+        false,
+        "post_merge_hook should default to false when not specified",
+    )
 }
