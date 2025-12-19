@@ -54,12 +54,20 @@ fn to_anyhow<T, E: std::fmt::Display>(result: Result<T, E>) -> anyhow::Result<T>
     result.map_err(|err| anyhow!(err.to_string()))
 }
 
+fn merge_hook_sample(composer: MergeComposer) -> Result<HookSample> {
+    to_anyhow(HookSample::merge_from_layers(composer.layers()))
+}
+
+fn merge_context_aware_sample(composer: MergeComposer) -> Result<ContextAwareSample> {
+    to_anyhow(ContextAwareSample::merge_from_layers(composer.layers()))
+}
+
 #[rstest]
 fn post_merge_hook_normalizes_whitespace_preamble() -> Result<()> {
     let mut composer = MergeComposer::new();
     composer.push_defaults(json!({ "name": "Test", "preamble": "   " }));
 
-    let config = to_anyhow(HookSample::merge_from_layers(composer.layers()))?;
+    let config = merge_hook_sample(composer)?;
     ensure!(config.name == "Test", "unexpected name: {}", config.name);
     ensure!(
         config.preamble.is_none(),
@@ -74,7 +82,7 @@ fn post_merge_hook_preserves_valid_preamble() -> Result<()> {
     let mut composer = MergeComposer::new();
     composer.push_defaults(json!({ "name": "Test", "preamble": "Hello!" }));
 
-    let config = to_anyhow(HookSample::merge_from_layers(composer.layers()))?;
+    let config = merge_hook_sample(composer)?;
     ensure!(
         config.preamble.as_deref() == Some("Hello!"),
         "expected preamble to be preserved, got {:?}",
@@ -88,7 +96,7 @@ fn post_merge_hook_normalizes_empty_string_preamble() -> Result<()> {
     let mut composer = MergeComposer::new();
     composer.push_defaults(json!({ "name": "Test", "preamble": "" }));
 
-    let config = to_anyhow(HookSample::merge_from_layers(composer.layers()))?;
+    let config = merge_hook_sample(composer)?;
     ensure!(
         config.preamble.is_none(),
         "expected empty preamble to be normalized to None, got {:?}",
@@ -107,7 +115,7 @@ fn post_merge_context_detects_cli_input() -> Result<()> {
     }));
     composer.push_cli(json!({ "value": "from_cli" }));
 
-    let config = to_anyhow(ContextAwareSample::merge_from_layers(composer.layers()))?;
+    let config = merge_context_aware_sample(composer)?;
     ensure!(
         config.value == "from_cli",
         "unexpected value: {}",
@@ -130,7 +138,7 @@ fn post_merge_context_detects_no_cli_input() -> Result<()> {
     }));
     composer.push_environment(json!({ "value": "from_env" }));
 
-    let config = to_anyhow(ContextAwareSample::merge_from_layers(composer.layers()))?;
+    let config = merge_context_aware_sample(composer)?;
     ensure!(
         !config.cli_was_present,
         "expected cli_was_present to be false when no CLI layer was added"
@@ -155,7 +163,7 @@ fn post_merge_context_counts_file_layers() -> Result<()> {
         Some(Utf8PathBuf::from("/home/user/.config.toml")),
     );
 
-    let config = to_anyhow(ContextAwareSample::merge_from_layers(composer.layers()))?;
+    let config = merge_context_aware_sample(composer)?;
     ensure!(
         config.file_count == 2,
         "expected file_count to be 2, got {}",
@@ -175,7 +183,7 @@ fn post_merge_context_counts_zero_file_layers() -> Result<()> {
     composer.push_environment(json!({ "value": "env" }));
     composer.push_cli(json!({ "value": "cli" }));
 
-    let config = to_anyhow(ContextAwareSample::merge_from_layers(composer.layers()))?;
+    let config = merge_context_aware_sample(composer)?;
     ensure!(
         config.file_count == 0,
         "expected file_count to be 0 when no files were loaded, got {}",

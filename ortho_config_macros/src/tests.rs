@@ -64,14 +64,26 @@ fn generate_struct_renders_fields_with_commas() -> Result<()> {
     Ok(())
 }
 
+fn test_generated_struct<F>(
+    default_fields: Vec<TokenStream2>,
+    cli_fields: Vec<TokenStream2>,
+    generator: F,
+) -> Result<String>
+where
+    F: FnOnce(&syn::Ident, &MacroComponents) -> TokenStream2,
+{
+    let components = build_components(default_fields, cli_fields)?;
+    let config_ident = parse_str("Config").context("config ident")?;
+    Ok(generator(&config_ident, &components).to_string())
+}
+
 #[rstest]
 fn generate_cli_struct_emits_expected_tokens() -> Result<()> {
-    let components = build_components(
+    let tokens = test_generated_struct(
         vec![quote! { pub value: u32 }],
         vec![quote! { #[clap(long)] pub value: Option<u32> }],
+        generate_cli_struct,
     )?;
-    let config_ident = parse_str("Config").context("config ident")?;
-    let tokens = generate_cli_struct(&config_ident, &components).to_string();
     ensure!(tokens.contains("CliStruct"), "struct name should render");
     ensure!(
         tokens.contains("CLI parser struct generated") && tokens.contains("Config"),
@@ -86,12 +98,11 @@ fn generate_cli_struct_emits_expected_tokens() -> Result<()> {
 
 #[rstest]
 fn generate_defaults_struct_supports_empty_fields() -> Result<()> {
-    let components = build_components(
+    let tokens = test_generated_struct(
         Vec::new(),
         vec![quote! { #[clap(long)] pub value: Option<u32> }],
+        generate_defaults_struct,
     )?;
-    let config_ident = parse_str("Config").context("config ident")?;
-    let tokens = generate_defaults_struct(&config_ident, &components).to_string();
     ensure!(
         tokens.contains("DefaultsStruct"),
         "struct name should render"

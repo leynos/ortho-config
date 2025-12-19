@@ -326,40 +326,37 @@ fn struct_prefix_normalises_trailing_underscore(
     Ok(())
 }
 
-#[test]
-fn parses_post_merge_hook_short_form() -> Result<()> {
-    assert_post_merge_hook(
-        &parse_quote! {
-            #[ortho_config(post_merge_hook)]
-            struct Config { field: String }
-        },
-        true,
-        "post_merge_hook should be true when using short form",
-    )
-}
-
-#[test]
-fn parses_post_merge_hook_explicit_true() -> Result<()> {
-    assert_post_merge_hook(
-        &parse_quote! {
-            #[ortho_config(post_merge_hook = true)]
-            struct Config { field: String }
-        },
-        true,
-        "post_merge_hook should be true when explicitly set to true",
-    )
-}
-
-#[test]
-fn parses_post_merge_hook_explicit_false() -> Result<()> {
-    assert_post_merge_hook(
-        &parse_quote! {
-            #[ortho_config(post_merge_hook = false)]
-            struct Config { field: String }
-        },
-        false,
-        "post_merge_hook should be false when explicitly set to false",
-    )
+#[rstest]
+#[case::short_form(
+    parse_quote! {
+        #[ortho_config(post_merge_hook)]
+        struct Config { field: String }
+    },
+    true,
+    "post_merge_hook should be true when using short form"
+)]
+#[case::explicit_true(
+    parse_quote! {
+        #[ortho_config(post_merge_hook = true)]
+        struct Config { field: String }
+    },
+    true,
+    "post_merge_hook should be true when explicitly set to true"
+)]
+#[case::explicit_false(
+    parse_quote! {
+        #[ortho_config(post_merge_hook = false)]
+        struct Config { field: String }
+    },
+    false,
+    "post_merge_hook should be false when explicitly set to false"
+)]
+fn parses_post_merge_hook(
+    #[case] input: DeriveInput,
+    #[case] expected: bool,
+    #[case] error_msg: &str,
+) -> Result<()> {
+    assert_post_merge_hook(&input, expected, error_msg)
 }
 
 #[test]

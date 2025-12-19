@@ -14,103 +14,79 @@ fn to_anyhow<T, E: std::fmt::Display>(result: Result<T, E>) -> anyhow::Result<T>
     result.map_err(|err| anyhow!(err.to_string()))
 }
 
-#[rstest]
-fn greet_command_normalizes_whitespace_preamble() -> Result<()> {
+fn assert_preamble_normalization(
+    preamble_input: Option<&str>,
+    expected: Option<&str>,
+    error_msg: &str,
+) -> Result<()> {
     let mut composer = MergeComposer::new();
-    composer.push_defaults(json!({
-        "punctuation": "!",
-        "preamble": "   "
-    }));
+    let defaults = preamble_input.map_or_else(
+        || json!({ "punctuation": "!" }),
+        |preamble| json!({ "punctuation": "!", "preamble": preamble }),
+    );
+    composer.push_defaults(defaults);
 
     let config = to_anyhow(GreetCommand::merge_from_layers(composer.layers()))?;
     ensure!(
-        config.preamble.is_none(),
-        "expected whitespace-only preamble to be normalized to None, got {:?}",
+        config.preamble.as_deref() == expected,
+        "{error_msg}, got {:?}",
         config.preamble
     );
     Ok(())
+}
+
+#[rstest]
+fn greet_command_normalizes_whitespace_preamble() -> Result<()> {
+    assert_preamble_normalization(
+        Some("   "),
+        None,
+        "expected whitespace-only preamble to be normalized to None",
+    )
 }
 
 #[rstest]
 fn greet_command_normalizes_empty_preamble() -> Result<()> {
-    let mut composer = MergeComposer::new();
-    composer.push_defaults(json!({
-        "punctuation": "!",
-        "preamble": ""
-    }));
-
-    let config = to_anyhow(GreetCommand::merge_from_layers(composer.layers()))?;
-    ensure!(
-        config.preamble.is_none(),
-        "expected empty preamble to be normalized to None, got {:?}",
-        config.preamble
-    );
-    Ok(())
+    assert_preamble_normalization(
+        Some(""),
+        None,
+        "expected empty preamble to be normalized to None",
+    )
 }
 
 #[rstest]
 fn greet_command_preserves_valid_preamble() -> Result<()> {
-    let mut composer = MergeComposer::new();
-    composer.push_defaults(json!({
-        "punctuation": "!",
-        "preamble": "Good morning"
-    }));
-
-    let config = to_anyhow(GreetCommand::merge_from_layers(composer.layers()))?;
-    ensure!(
-        config.preamble.as_deref() == Some("Good morning"),
-        "expected preamble to be preserved, got {:?}",
-        config.preamble
-    );
-    Ok(())
+    assert_preamble_normalization(
+        Some("Good morning"),
+        Some("Good morning"),
+        "expected preamble to be preserved",
+    )
 }
 
 #[rstest]
 fn greet_command_normalizes_tabs_only_preamble() -> Result<()> {
-    let mut composer = MergeComposer::new();
-    composer.push_defaults(json!({
-        "punctuation": "!",
-        "preamble": "\t\t"
-    }));
-
-    let config = to_anyhow(GreetCommand::merge_from_layers(composer.layers()))?;
-    ensure!(
-        config.preamble.is_none(),
-        "expected tab-only preamble to be normalized to None, got {:?}",
-        config.preamble
-    );
-    Ok(())
+    assert_preamble_normalization(
+        Some("\t\t"),
+        None,
+        "expected tab-only preamble to be normalized to None",
+    )
 }
 
 #[rstest]
 fn greet_command_normalizes_newlines_only_preamble() -> Result<()> {
-    let mut composer = MergeComposer::new();
-    composer.push_defaults(json!({
-        "punctuation": "!",
-        "preamble": "\n\n"
-    }));
-
-    let config = to_anyhow(GreetCommand::merge_from_layers(composer.layers()))?;
-    ensure!(
-        config.preamble.is_none(),
-        "expected newline-only preamble to be normalized to None, got {:?}",
-        config.preamble
-    );
-    Ok(())
+    assert_preamble_normalization(
+        Some("\n\n"),
+        None,
+        "expected newline-only preamble to be normalized to None",
+    )
 }
 
 #[rstest]
 fn greet_command_preserves_none_preamble() -> Result<()> {
-    let mut composer = MergeComposer::new();
-    composer.push_defaults(json!({ "punctuation": "!" }));
-
-    let config = to_anyhow(GreetCommand::merge_from_layers(composer.layers()))?;
-    ensure!(
-        config.preamble.is_none(),
-        "expected preamble to remain None when not specified, got {:?}",
-        config.preamble
-    );
-    Ok(())
+    assert_preamble_normalization(
+        None,
+        None,
+        "expected preamble to remain None when not specified",
+    )
 }
 
 #[rstest]
