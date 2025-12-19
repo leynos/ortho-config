@@ -35,6 +35,7 @@ const _: fn(&[Attribute]) -> syn::Result<Option<String>> = serde_field_rename;
 pub(crate) struct StructAttrs {
     pub prefix: Option<String>,
     pub discovery: Option<DiscoveryAttrs>,
+    pub post_merge_hook: bool,
 }
 
 /// Field-level attributes recognised by `#[derive(OrthoConfig)]`.
@@ -208,6 +209,16 @@ pub(crate) fn parse_struct_attrs(attrs: &[Attribute]) -> Result<StructAttrs, syn
                 let mut discovery = out.discovery.take().unwrap_or_default();
                 parse_discovery_meta(meta, &mut discovery)?;
                 out.discovery = Some(discovery);
+                Ok(())
+            }
+            Some("post_merge_hook") => {
+                // Accept both `post_merge_hook` and `post_merge_hook = true`
+                let v = if meta.input.peek(Token![=]) {
+                    meta.value()?.parse::<syn::LitBool>()?.value
+                } else {
+                    true
+                };
+                out.post_merge_hook = v;
                 Ok(())
             }
             _ => discard_unknown(meta),

@@ -877,6 +877,22 @@ experience, we can create a highly valuable addition to the Rust ecosystem.
   need for workarounds where `[cmds.greet]` sections were ignored because clap
   defaults always populated the CLI layer.
 
+- **Introduce post-merge hooks for custom configuration logic (2025-12-18):**
+  The `PostMergeHook` trait and `#[ortho_config(post_merge_hook)]` attribute
+  provide an opt-in mechanism for custom post-processing after declarative
+  merging completes. When a struct has the attribute, the generated
+  `merge_from_layers` function builds a `PostMergeContext` containing the
+  prefix, loaded file paths, and whether CLI input was present, then invokes
+  `PostMergeHook::post_merge(&mut result, &ctx)` before returning. This allows
+  advanced cases to adjust the merged struct without manual glue code, addressing
+  the boilerplate highlighted in the hello_world example where
+  `apply_greet_overrides` had to be called separately.[^hello-world-feedback]
+  The hybrid trait-plus-attribute approach was chosen over alternatives:
+  - Pure trait-based: Would require manual invocation, defeating the purpose
+  - Attribute-only with function pointer: Less type-safe, no IDE support
+  - The hybrid approach provides a clear contract via the trait while the
+    attribute signals automatic invocation by the derive macro.
+
 [^hello-world-feedback]: `docs/feedback-from-hello-world-example.md`.
 [^behavioural-testing]: `docs/behavioural-testing-in-rust-with-cucumber.md`.
 [^design-rstest]: `docs/rust-testing-with-rstest-fixtures.md`.

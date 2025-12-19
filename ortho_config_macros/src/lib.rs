@@ -66,7 +66,11 @@ pub fn derive_ortho_config(input_tokens: TokenStream) -> TokenStream {
     };
 
     let core_tokens = generate_trait_implementation(&ident, &components);
-    let declarative_impl = generate_declarative_impl(&ident, &components.collection_strategies);
+    let declarative_impl = generate_declarative_impl(
+        &ident,
+        &components.collection_strategies,
+        components.post_merge_hook,
+    );
     let expanded = quote! {
         #core_tokens
         #declarative_impl
@@ -108,6 +112,11 @@ struct MacroComponents {
     /// as the optional `config_path` flag), because those fields are not present
     /// in the configuration struct and therefore cannot be extracted.
     cli_field_info: Vec<CliFieldInfo>,
+    /// Whether the struct has `#[ortho_config(post_merge_hook)]`.
+    ///
+    /// When true, the generated `merge_from_layers` invokes
+    /// [`PostMergeHook::post_merge`] after declarative merging completes.
+    post_merge_hook: bool,
 }
 
 #[derive(Clone, Copy)]
@@ -365,6 +374,7 @@ fn build_macro_components(args: &MacroComponentArgs<'_>) -> syn::Result<MacroCom
         prefix_fn,
         collection_strategies,
         cli_field_info: cli_build_result.field_info,
+        post_merge_hook: struct_attrs.post_merge_hook,
     })
 }
 

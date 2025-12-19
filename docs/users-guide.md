@@ -147,6 +147,53 @@ keeping discovery separate from merging. The returned composition includes both
 the ordered layers and any collected errors, letting callers push additional
 layers or aggregate errors before invoking `merge_from_layers`.
 
+### Post-merge hooks
+
+Some configuration structs require custom adjustments after the standard merge
+pipeline completes. The `PostMergeHook` trait provides an opt-in hook that the
+library invokes automatically when the `#[ortho_config(post_merge_hook)]`
+attribute is present.
+
+```rust
+use ortho_config::{OrthoConfig, OrthoResult, PostMergeContext, PostMergeHook};
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Default, Deserialize, Serialize, OrthoConfig)]
+#[ortho_config(prefix = "APP_", post_merge_hook)]
+struct GreetArgs {
+    #[ortho_config(default = String::from("!"))]
+    punctuation: String,
+    preamble: Option<String>,
+}
+
+impl PostMergeHook for GreetArgs {
+    fn post_merge(&mut self, _ctx: &PostMergeContext) -> OrthoResult<()> {
+        // Normalize whitespace-only preambles to None
+        if self.preamble.as_ref().is_some_and(|p| p.trim().is_empty()) {
+            self.preamble = None;
+        }
+        Ok(())
+    }
+}
+```
+
+The `PostMergeContext` provides metadata about the merge process:
+
+- `prefix()` – the environment variable prefix used during loading
+- `loaded_files()` – paths of configuration files that contributed to the merge
+- `has_cli_input()` – whether CLI arguments were present in the merge
+
+Use post-merge hooks sparingly. Most configuration needs are satisfied by the
+standard merge pipeline combined with field-level attributes like
+`cli_default_as_absent` and `merge_strategy`. Hooks are best suited for:
+
+- Normalizing values after all layers have been applied
+- Performing validation that depends on multiple fields being merged
+- Conditional transformations based on which sources contributed
+
+The Hello World example demonstrates this pattern with `GreetCommand`, which
+uses a post-merge hook to clean up whitespace-only preambles.
+
 ### Localizing CLI copy
 
 `ortho_config` exposes a `Localizer` trait, so applications can swap the text

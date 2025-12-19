@@ -40,6 +40,7 @@ mod error;
 pub mod file;
 mod localizer;
 mod merge;
+mod post_merge;
 mod result_ext;
 pub mod subcommand;
 #[cfg(feature = "serde_json")]
@@ -107,6 +108,7 @@ pub use localizer::{
 /// ```
 #[cfg(feature = "serde_json")]
 pub use merge::{CliValueExtractor, sanitize_value, sanitized_provider, value_without_nones};
+pub use post_merge::{PostMergeContext, PostMergeHook};
 use std::sync::Arc;
 pub use unic_langid::{LanguageIdentifier, langid};
 

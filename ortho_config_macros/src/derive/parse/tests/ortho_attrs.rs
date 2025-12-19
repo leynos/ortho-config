@@ -109,6 +109,13 @@ where
     Ok(())
 }
 
+/// Verify that the `post_merge_hook` struct attribute is correctly parsed.
+fn assert_post_merge_hook(input: &DeriveInput, expected: bool, error_msg: &str) -> Result<()> {
+    let (_, _, struct_attrs, _) = parse_input(input).map_err(|err| anyhow!(err))?;
+    ensure!(struct_attrs.post_merge_hook == expected, "{error_msg}");
+    Ok(())
+}
+
 #[test]
 fn parses_skip_cli_flag() -> Result<()> {
     assert_field_flag(
@@ -317,4 +324,48 @@ fn struct_prefix_normalises_trailing_underscore(
         "prefix normalisation mismatch"
     );
     Ok(())
+}
+
+#[rstest]
+#[case::short_form(
+    parse_quote! {
+        #[ortho_config(post_merge_hook)]
+        struct Config { field: String }
+    },
+    true,
+    "post_merge_hook should be true when using short form"
+)]
+#[case::explicit_true(
+    parse_quote! {
+        #[ortho_config(post_merge_hook = true)]
+        struct Config { field: String }
+    },
+    true,
+    "post_merge_hook should be true when explicitly set to true"
+)]
+#[case::explicit_false(
+    parse_quote! {
+        #[ortho_config(post_merge_hook = false)]
+        struct Config { field: String }
+    },
+    false,
+    "post_merge_hook should be false when explicitly set to false"
+)]
+fn parses_post_merge_hook(
+    #[case] input: DeriveInput,
+    #[case] expected: bool,
+    #[case] error_msg: &str,
+) -> Result<()> {
+    assert_post_merge_hook(&input, expected, error_msg)
+}
+
+#[test]
+fn post_merge_hook_defaults_to_false() -> Result<()> {
+    assert_post_merge_hook(
+        &parse_quote! {
+            struct Config { field: String }
+        },
+        false,
+        "post_merge_hook should default to false when not specified",
+    )
 }
