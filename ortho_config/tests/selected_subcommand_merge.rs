@@ -13,7 +13,7 @@ struct Cli {
     cmd: Commands,
 }
 
-#[derive(Debug, Subcommand, SelectedSubcommandMerge)]
+#[derive(Debug, Subcommand, ortho_config_macros::SelectedSubcommandMerge)]
 enum Commands {
     #[command(name = "run")]
     Run(RunArgs),

@@ -63,7 +63,7 @@ pub enum SelectedSubcommandMergeError {
 ///     command: Commands,
 /// }
 ///
-/// #[derive(Debug, Subcommand, SelectedSubcommandMerge)]
+/// #[derive(Debug, Subcommand, ortho_config_macros::SelectedSubcommandMerge)]
 /// enum Commands {
 ///     Run(RunArgs),
 /// }
@@ -140,7 +140,7 @@ where
 ///     command: Commands,
 /// }
 ///
-/// #[derive(Debug, Subcommand, SelectedSubcommandMerge)]
+/// #[derive(Debug, Subcommand, ortho_config_macros::SelectedSubcommandMerge)]
 /// enum Commands {
 ///     Run(RunArgs),
 /// }

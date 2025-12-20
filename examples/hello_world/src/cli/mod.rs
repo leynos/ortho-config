@@ -160,7 +160,14 @@ pub struct GlobalArgs {
 }
 
 /// Subcommands implemented by the example.
-#[derive(Debug, Clone, PartialEq, Eq, Subcommand, ortho_config::SelectedSubcommandMerge)]
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    Subcommand,
+    ortho_config_macros::SelectedSubcommandMerge
+)]
 pub enum Commands {
     /// Prints a greeting using the configured style.
     #[command(name = "greet")]

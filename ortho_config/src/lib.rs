@@ -12,7 +12,7 @@ compile_error!("The `serde_json` feature must be enabled when `yaml` support is 
 pub use ortho_config_macros::OrthoConfig;
 #[cfg(feature = "serde_json")]
 #[cfg_attr(docsrs, doc(cfg(feature = "serde_json")))]
-pub use ortho_config_macros::SelectedSubcommandMerge;
+pub use crate::subcommand::SelectedSubcommandMerge;
 
 pub use figment;
 #[cfg(feature = "json5")]
@@ -56,7 +56,7 @@ pub use result_ext::{IntoFigmentError, OrthoMergeExt, OrthoResultExt, ResultInto
 #[cfg(feature = "serde_json")]
 #[cfg_attr(docsrs, doc(cfg(feature = "serde_json")))]
 pub use subcommand::{
-    LoadGlobalsAndSelectedSubcommandError, SelectedSubcommandMerge, SelectedSubcommandMergeError,
+    LoadGlobalsAndSelectedSubcommandError, SelectedSubcommandMergeError,
     load_globals_and_merge_selected_subcommand,
 };
 #[cfg(feature = "serde_json")]

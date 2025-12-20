@@ -779,8 +779,10 @@ tool continues using the CLI value instead of exiting with an error.
 ### Merging a selected subcommand enum
 
 When your root CLI parses into a `Commands` enum, you can derive
-`SelectedSubcommandMerge` and merge the selected variant in one call, instead
-of matching only to call `load_and_merge()` per branch.
+`ortho_config_macros::SelectedSubcommandMerge` and import the
+`SelectedSubcommandMerge` trait from `ortho_config` to merge the selected
+variant in one call, instead of matching only to call `load_and_merge()` per
+branch.
 
 Variants that rely on `cli_default_as_absent` (because they use
 `default_value_t`) should be annotated with `#[ortho_subcommand(with_matches)]`
@@ -800,7 +802,7 @@ struct Cli {
     command: Commands,
 }
 
-#[derive(Subcommand, SelectedSubcommandMerge)]
+#[derive(Subcommand, ortho_config_macros::SelectedSubcommandMerge)]
 enum Commands {
     #[ortho_subcommand(with_matches)]
     Greet(GreetArgs),
