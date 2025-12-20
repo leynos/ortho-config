@@ -771,6 +771,7 @@ dependencies = [
  "color-eyre",
  "fluent-bundle",
  "ortho_config",
+ "ortho_config_macros",
  "rstest 0.23.0",
  "rstest-bdd",
  "rstest-bdd-macros",
