@@ -2,7 +2,8 @@
 
 use clap::{CommandFactory, FromArgMatches, Parser, Subcommand};
 use ortho_config::{
-    OrthoConfig, SelectedSubcommandMerge, load_globals_and_merge_selected_subcommand,
+    LoadGlobalsAndSelectedSubcommandError, OrthoConfig, SelectedSubcommandMerge,
+    SelectedSubcommandMergeError, load_globals_and_merge_selected_subcommand,
 };
 use rstest::rstest;
 use serde::{Deserialize, Serialize};
@@ -62,7 +63,7 @@ fn selected_subcommand_merge_respects_cli_default_as_absent() {
         let merged = cli
             .cmd
             .load_and_merge_selected(&matches)
-            .map_err(|err| figment::Error::from(err.to_string()))?;
+            .map_err(<figment::Error as serde::de::Error>::custom)?;
         let Commands::Greet(cfg) = merged else {
             panic!("expected greet command");
         };
@@ -86,13 +87,76 @@ fn unified_helper_returns_globals_and_merged_command() {
             load_globals_and_merge_selected_subcommand(&matches, cli.cmd, || {
                 Ok::<_, std::io::Error>(Globals { value: 7 })
             })
-            .map_err(|err| figment::Error::from(err.to_string()))?;
+            .map_err(<figment::Error as serde::de::Error>::custom)?;
 
         assert_eq!(globals, Globals { value: 7 });
         let Commands::Run(cfg) = merged else {
             panic!("expected run command");
         };
         assert_eq!(cfg.option.as_deref(), Some("file"));
+        Ok(())
+    });
+}
+
+#[rstest]
+fn selected_subcommand_merge_errors_when_missing_subcommand_matches() {
+    let matches = clap::ArgMatches::default();
+
+    let selected_command = Commands::Greet(GreetArgs::default());
+    let err = selected_command
+        .load_and_merge_selected(&matches)
+        .expect_err("expected missing subcommand matches error");
+
+    assert!(
+        matches!(
+            err,
+            SelectedSubcommandMergeError::MissingSubcommandMatches {
+                selected: selected_name
+            } if selected_name == "Greet"
+        ),
+        "expected MissingSubcommandMatches for Greet, got {err:?}"
+    );
+}
+
+#[rstest]
+fn unified_helper_surfaces_globals_error() {
+    let command = Cli::command();
+    let matches = command
+        .try_get_matches_from(["prog", "run"])
+        .expect("expected clap parsing to succeed");
+    let cli = Cli::from_arg_matches(&matches).expect("expected clap decoding to succeed");
+
+    let err = load_globals_and_merge_selected_subcommand(&matches, cli.cmd, || {
+        Err::<Globals, std::io::Error>(std::io::Error::other("boom"))
+    })
+    .expect_err("expected globals error");
+
+    assert!(
+        matches!(err, LoadGlobalsAndSelectedSubcommandError::Globals(_)),
+        "expected globals error, got {err:?}"
+    );
+}
+
+#[rstest]
+fn selected_subcommand_merge_surfaces_merge_error() {
+    figment::Jail::expect_with(|jail| {
+        jail.create_file(".app.toml", "[cmds.greet]\npunctuation = 123")?;
+
+        let command = Cli::command();
+        let matches = command
+            .try_get_matches_from(["prog", "greet"])
+            .expect("expected clap parsing to succeed");
+        let cli = Cli::from_arg_matches(&matches).expect("expected clap decoding to succeed");
+
+        let err = cli
+            .cmd
+            .load_and_merge_selected(&matches)
+            .expect_err("expected merge error");
+
+        assert!(
+            matches!(err, SelectedSubcommandMergeError::Merge(_)),
+            "expected merge error, got {err:?}"
+        );
         Ok(())
     });
 }

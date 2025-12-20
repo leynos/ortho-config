@@ -2,21 +2,18 @@
 //!
 //! Binds CLI, environment, and default layers via `OrthoConfig` so tests can
 //! drive the binary with predictable inputs.
-use std::borrow::Cow;
 use std::collections::BTreeMap;
-use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::path::PathBuf;
 
 use clap::{ArgAction, Args, CommandFactory, FromArgMatches, Parser, Subcommand};
-use ortho_config::{
-    Localizer, MergeLayer, MergeProvenance, OrthoConfig, OrthoError, SubcmdConfigMerge,
-};
+use ortho_config::{Localizer, OrthoConfig};
 use serde::{Deserialize, Serialize};
 
-use crate::error::{HelloWorldError, ValidationError};
+use crate::error::ValidationError;
 mod commands;
 mod config_loading;
 mod discovery;
+mod global_config;
 mod localization;
 mod overrides;
 
@@ -25,6 +22,7 @@ use self::localization::{LocalizeCmd, localize_parse_error};
 #[cfg(test)]
 pub(crate) use self::config_loading::load_config_overrides;
 pub use commands::{FarewellChannel, GreetCommand, TakeLeaveCommand};
+pub use global_config::{apply_greet_overrides, load_global_config, load_greet_defaults};
 #[cfg(test)]
 pub(crate) use overrides::{CommandOverrides, FileOverrides, GreetOverrides};
 
@@ -169,112 +167,6 @@ pub enum Commands {
     /// Says goodbye while describing how the farewell will be delivered.
     #[command(name = "take-leave")]
     TakeLeave(TakeLeaveCommand),
-}
-
-/// Resolves the global configuration by layering defaults with CLI overrides.
-///
-/// # Parameters
-///
-/// * `globals` - Global CLI arguments containing recipient, salutations, and
-///   delivery flags.
-/// * `config_override` - Optional explicit path used to override configuration
-///   file discovery.
-/// * `program_name` - Programme name forwarded as `argv[0]` to the composition
-///   layer.
-///
-/// # Errors
-///
-/// Returns a [`HelloWorldError`] when discovery fails or configuration cannot
-/// be deserialised.
-pub fn load_global_config(
-    globals: &GlobalArgs,
-    config_override: Option<&Path>,
-    program_name: impl AsRef<std::ffi::OsStr>,
-) -> Result<HelloWorldCli, HelloWorldError> {
-    let args = build_composition_args(program_name.as_ref(), config_override);
-    let composition = HelloWorldCli::compose_layers_from_iter(args);
-    let (mut layers, mut errors) = composition.into_parts();
-
-    layers.retain(|layer| layer.provenance() != MergeProvenance::Cli);
-    push_cli_overrides(globals, &mut layers, &mut errors);
-
-    let resolved = ortho_config::declarative::LayerComposition::new(layers, errors)
-        .into_merge_result(HelloWorldCli::merge_from_layers)
-        .map_err(HelloWorldError::Configuration)?;
-    resolved.validate()?;
-    Ok(resolved)
-}
-
-fn build_composition_args(
-    program_name: &std::ffi::OsStr,
-    config_override: Option<&Path>,
-) -> Vec<std::ffi::OsString> {
-    let mut args = Vec::new();
-    args.push(program_name.to_owned());
-
-    if let Some(path) = config_override {
-        args.push(std::ffi::OsString::from("--config"));
-        args.push(path.as_os_str().to_owned());
-    }
-
-    args
-}
-
-fn push_cli_overrides(
-    globals: &GlobalArgs,
-    layers: &mut Vec<MergeLayer<'static>>,
-    errors: &mut Vec<Arc<OrthoError>>,
-) {
-    let salutations: Vec<String> = trimmed_salutations(globals).collect();
-    if !salutations.is_empty() {
-        layers.push(MergeLayer::cli(Cow::Owned(
-            ortho_config::serde_json::json!({ "salutations": null }),
-        )));
-    }
-
-    let overrides = overrides::Overrides {
-        recipient: globals.recipient.as_ref(),
-        salutations: (!salutations.is_empty()).then_some(salutations),
-        is_excited: globals.is_excited,
-        is_quiet: globals.is_quiet,
-    };
-
-    match ortho_config::sanitize_value(&overrides) {
-        Ok(value) => layers.push(MergeLayer::cli(Cow::Owned(value))),
-        Err(err) => errors.push(err),
-    }
-}
-
-fn trimmed_salutations(globals: &GlobalArgs) -> impl Iterator<Item = String> + '_ {
-    globals
-        .salutations
-        .iter()
-        .map(|value| value.trim().to_owned())
-}
-
-/// Applies greeting-specific overrides derived from configuration defaults.
-///
-/// # Errors
-///
-/// Returns a [`HelloWorldError`] when greeting defaults cannot be loaded.
-pub fn apply_greet_overrides(command: &mut GreetCommand) -> Result<(), HelloWorldError> {
-    if let Some((overrides, _)) = config_loading::load_config_overrides()?
-        && let Some(greet) = overrides.cmds.greet
-    {
-        if let Some(preamble) = greet.preamble {
-            command.preamble = Some(preamble);
-        }
-        if let Some(punctuation) = greet.punctuation {
-            command.punctuation = punctuation;
-        }
-    }
-    Ok(())
-}
-
-pub(crate) fn load_greet_defaults() -> Result<GreetCommand, HelloWorldError> {
-    let mut command = GreetCommand::default().load_and_merge()?;
-    apply_greet_overrides(&mut command)?;
-    Ok(command)
 }
 
 /// Top-level configuration for the hello world demo.

@@ -77,7 +77,7 @@ pub enum SelectedSubcommandMergeError {
 /// }
 ///
 /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
-/// let mut cmd = Cli::command();
+/// let cmd = Cli::command();
 /// let matches = cmd.get_matches();
 /// let cli = Cli::from_arg_matches(&matches)?;
 /// let _merged = cli.command.load_and_merge_selected(&matches)?;
@@ -154,7 +154,7 @@ where
 /// }
 ///
 /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
-/// let mut cmd = Cli::command();
+/// let cmd = Cli::command();
 /// let matches = cmd.get_matches();
 /// let cli = Cli::from_arg_matches(&matches)?;
 /// let (globals, merged) = load_globals_and_merge_selected_subcommand(

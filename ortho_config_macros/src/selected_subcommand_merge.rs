@@ -1,3 +1,8 @@
+//! Generates `SelectedSubcommandMerge` implementations for subcommand enums.
+//!
+//! This module powers the derive macro by validating the input enum and
+//! emitting the per-variant merge logic.
+
 use quote::quote;
 use syn::DeriveInput;
 
@@ -72,6 +77,7 @@ fn build_arm(
     }
 }
 
+/// Build the `SelectedSubcommandMerge` implementation for the input enum.
 pub(crate) fn derive_selected_subcommand_merge(
     input: DeriveInput,
 ) -> syn::Result<proc_macro2::TokenStream> {

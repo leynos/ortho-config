@@ -25,31 +25,7 @@ fn run() -> Result<()> {
         load_globals_and_merge_selected_subcommand(&matches, cli.command, || {
             load_global_config(&cli.globals, cli.config_path.as_deref(), &program)
         })
-        .map_err(|load_err| match load_err {
-            LoadGlobalsAndSelectedSubcommandError::Globals(globals_err) => globals_err,
-            LoadGlobalsAndSelectedSubcommandError::Subcommand(subcommand_err) => {
-                match subcommand_err {
-                    SelectedSubcommandMergeError::MissingSubcommandMatches { selected } => {
-                        HelloWorldError::MissingSubcommandMatches(selected)
-                    }
-                    SelectedSubcommandMergeError::Merge(merge_err) => {
-                        HelloWorldError::Configuration(merge_err)
-                    }
-                    other => HelloWorldError::Configuration(std::sync::Arc::new(
-                        ortho_config::OrthoError::Validation {
-                            key: String::from("internal"),
-                            message: other.to_string(),
-                        },
-                    )),
-                }
-            }
-            other => HelloWorldError::Configuration(std::sync::Arc::new(
-                ortho_config::OrthoError::Validation {
-                    key: String::from("internal"),
-                    message: other.to_string(),
-                },
-            )),
-        })?;
+        .map_err(map_load_error)?;
 
     match command {
         Commands::Greet(merged) => {
@@ -74,5 +50,27 @@ fn parse_command_line() -> Result<ParsedCommandLine> {
             }
             Err(err.into())
         }
+    }
+}
+
+fn map_load_error(
+    load_err: LoadGlobalsAndSelectedSubcommandError<HelloWorldError>,
+) -> HelloWorldError {
+    match load_err {
+        LoadGlobalsAndSelectedSubcommandError::Globals(globals_err) => globals_err,
+        LoadGlobalsAndSelectedSubcommandError::Subcommand(subcommand_err) => {
+            map_selected_subcommand_error(subcommand_err)
+        }
+        other => HelloWorldError::Internal(Box::new(other)),
+    }
+}
+
+fn map_selected_subcommand_error(error: SelectedSubcommandMergeError) -> HelloWorldError {
+    match error {
+        SelectedSubcommandMergeError::MissingSubcommandMatches { selected } => {
+            HelloWorldError::MissingSubcommandMatches(selected)
+        }
+        SelectedSubcommandMergeError::Merge(merge_err) => HelloWorldError::Configuration(merge_err),
+        other => HelloWorldError::Internal(Box::new(other)),
     }
 }

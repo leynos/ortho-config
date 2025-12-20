@@ -1,7 +1,8 @@
 //! Utilities for loading configuration for individual subcommands.
 //!
 //! Resolves defaults from files and the environment and exposes the
-//! [`SubcmdConfigMerge`] trait for merging them with CLI arguments.
+//! [`SubcmdConfigMerge`] trait for merging them with CLI arguments, and
+//! [`SelectedSubcommandMerge`] for deriving merge behaviour on subcommand enums.
 
 #[cfg(feature = "serde_json")]
 use crate::{CliValueExtractor, OrthoMergeExt, OrthoResult, load_config_file, sanitized_provider};

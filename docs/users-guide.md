@@ -778,7 +778,7 @@ tool continues using the CLI value instead of exiting with an error.
 
 ### Merging a selected subcommand enum
 
-When your root CLI parses into a `Commands` enum, you can derive
+When the root CLI parses into a `Commands` enum, it is possible to derive
 `ortho_config_macros::SelectedSubcommandMerge` and import the
 `SelectedSubcommandMerge` trait from `ortho_config` to merge the selected
 variant in one call, instead of matching only to call `load_and_merge()` per
@@ -788,9 +788,9 @@ Variants that rely on `cli_default_as_absent` (because they use
 `default_value_t`) should be annotated with `#[ortho_subcommand(with_matches)]`
 so the merge can consult `ArgMatches` and treat clap defaults as absent.
 
-If you want to load the global configuration and merge the selected subcommand
-in one expression, use `load_globals_and_merge_selected_subcommand` and supply
-your global loader as a closure.
+To load the global configuration and merge the selected subcommand in one
+expression, use `load_globals_and_merge_selected_subcommand` and supply a
+global loader as a closure.
 
 ```rust
 use clap::{CommandFactory, FromArgMatches, Parser, Subcommand};
@@ -809,6 +809,8 @@ enum Commands {
     Run(RunArgs),
 }
 
+// Placeholder types for the example; real subcommands define fields and derive
+// `OrthoConfig`.
 struct GreetArgs;
 struct RunArgs;
 

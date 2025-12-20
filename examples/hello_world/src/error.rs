@@ -30,6 +30,9 @@ pub enum HelloWorldError {
     /// Indicates the subcommand match tree is inconsistent with the parsed enum.
     #[error("internal error: subcommand matches missing for '{0}'")]
     MissingSubcommandMatches(&'static str),
+    /// Captures unexpected errors without discarding their context.
+    #[error(transparent)]
+    Internal(#[from] Box<dyn std::error::Error + Send + Sync>),
 }
 
 /// Validation issues detected while resolving global options.
