@@ -112,9 +112,9 @@ fn selected_subcommand_merge_errors_when_missing_subcommand_matches() {
             err,
             SelectedSubcommandMergeError::MissingSubcommandMatches {
                 selected: selected_name
-            } if selected_name == "Greet"
+            } if selected_name == "greet"
         ),
-        "expected MissingSubcommandMatches for Greet, got {err:?}"
+        "expected MissingSubcommandMatches for greet, got {err:?}"
     );
 }
 
