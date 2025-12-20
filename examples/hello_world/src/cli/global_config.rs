@@ -71,7 +71,7 @@ fn push_cli_overrides(
     layers: &mut Vec<MergeLayer<'static>>,
     errors: &mut Vec<Arc<OrthoError>>,
 ) {
-    let salutations: Vec<String> = trimmed_salutations(globals).collect();
+    let salutations = globals.trimmed_salutations();
     if !salutations.is_empty() {
         layers.push(MergeLayer::cli(Cow::Owned(
             ortho_config::serde_json::json!({ "salutations": null }),
@@ -89,13 +89,6 @@ fn push_cli_overrides(
         Ok(value) => layers.push(MergeLayer::cli(Cow::Owned(value))),
         Err(err) => errors.push(err),
     }
-}
-
-fn trimmed_salutations(globals: &GlobalArgs) -> impl Iterator<Item = String> + '_ {
-    globals
-        .salutations
-        .iter()
-        .map(|value| value.trim().to_owned())
 }
 
 /// Loads the greet defaults and applies configuration overrides.

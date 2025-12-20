@@ -157,6 +157,25 @@ pub struct GlobalArgs {
     pub greeting_templates: BTreeMap<String, String>,
 }
 
+impl GlobalArgs {
+    /// Strips incidental whitespace from salutations for consistent output.
+    ///
+    /// # Examples
+    /// ```ignore
+    /// # use hello_world::cli::GlobalArgs;
+    /// let mut globals = GlobalArgs::default();
+    /// globals.salutations = vec!["  Hello".into(), "world  ".into()];
+    /// assert_eq!(globals.trimmed_salutations(), vec!["Hello", "world"]);
+    /// ```
+    #[must_use]
+    pub fn trimmed_salutations(&self) -> Vec<String> {
+        self.salutations
+            .iter()
+            .map(|value| value.trim().to_owned())
+            .collect()
+    }
+}
+
 /// Subcommands implemented by the example.
 #[derive(Debug, Clone, PartialEq, Eq, Subcommand, ortho_config_macros::SelectedSubcommandMerge)]
 pub enum Commands {
