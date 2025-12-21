@@ -25,7 +25,7 @@ use super::overrides::Overrides;
 ///   delivery flags.
 /// * `config_override` - Optional explicit path used to override configuration
 ///   file discovery.
-/// * `program_name` - Programme name forwarded as `argv[0]` to the composition
+/// * `program_name` - Program name forwarded as `argv[0]` to the composition
 ///   layer.
 ///
 /// # Errors
@@ -106,7 +106,7 @@ pub fn load_greet_defaults() -> Result<GreetCommand, HelloWorldError> {
 ///
 /// # Errors
 ///
-/// Returns a [`HelloWorldError`] when greeting defaults cannot be loaded.
+/// Returns a [`HelloWorldError`] when greeting overrides cannot be loaded.
 pub fn apply_greet_overrides(command: &mut GreetCommand) -> Result<(), HelloWorldError> {
     if let Some((overrides, _)) = config_loading::load_config_overrides()?
         && let Some(greet) = overrides.cmds.greet
