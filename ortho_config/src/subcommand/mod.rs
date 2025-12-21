@@ -119,9 +119,11 @@ pub fn load_and_merge_subcommand<T>(prefix: &Prefix, cli: &T) -> OrthoResult<T>
 where
     T: serde::Serialize + DeserializeOwned + Default + CommandFactory,
 {
+    // Gathering phase: resolve file/env defaults before CLI overrides so any
+    // failures here are reported as `Gathering` errors.
     let fig = load_file_and_env_defaults::<T>(prefix)?;
 
-    // CLI values are merged over defaults; map failures to `Merge`.
+    // Merge phase: CLI overrides and final extraction failures map to `Merge`.
     fig.merge(sanitized_provider(cli)?)
         .extract()
         .into_ortho_merge()
@@ -220,6 +222,7 @@ where
 
     // Extract only user-provided CLI values, respecting cli_default_as_absent
     let cli_value = cli.extract_user_provided(matches)?;
+    // Merge phase: CLI overrides and final extraction failures map to `Merge`.
     fig.merge(Serialized::defaults(cli_value))
         .extract()
         .into_ortho_merge()
