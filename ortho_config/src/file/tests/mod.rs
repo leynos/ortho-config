@@ -1,7 +1,7 @@
 //! Shared helpers for file module tests along with focused submodules.
 
 use super::{canonicalise, normalise_cycle_key};
-use anyhow::{Context, Result, anyhow};
+use anyhow::{Context, Result};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use test_helpers::figment as figment_helpers;
@@ -14,7 +14,7 @@ pub(super) mod yaml_tests;
 
 pub(super) fn canonical_root_and_current() -> Result<(PathBuf, PathBuf)> {
     let root = canonicalise(Path::new("."))
-        .map_err(|err| anyhow!(err.to_string()))
+        .map_err(anyhow::Error::new)
         .context("canonicalise configuration root directory")?;
     let current = root.join("config.toml");
     Ok((root, current))
@@ -47,7 +47,7 @@ where
 }
 
 pub(super) fn to_anyhow<T>(result: crate::OrthoResult<T>) -> Result<T> {
-    result.map_err(|err| anyhow!(err.to_string()))
+    result.map_err(anyhow::Error::new)
 }
 
 pub(super) fn assert_normalise_cycle_key(
