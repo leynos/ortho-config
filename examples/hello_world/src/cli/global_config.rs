@@ -31,7 +31,7 @@ use super::overrides::Overrides;
 /// # Errors
 ///
 /// Returns a [`HelloWorldError`] when discovery fails or configuration cannot
-/// be deserialised.
+/// be deserialized.
 pub fn load_global_config(
     globals: &GlobalArgs,
     config_override: Option<&Path>,
