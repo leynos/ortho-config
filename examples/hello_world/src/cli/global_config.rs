@@ -95,7 +95,7 @@ fn push_cli_overrides(
 ///
 /// # Errors
 ///
-/// Returns a [`HelloWorldError`] when greeting defaults cannot be loaded.
+/// Returns a [`HelloWorldError`] when loading greeting overrides fails.
 pub fn load_greet_defaults() -> Result<GreetCommand, HelloWorldError> {
     let mut command = GreetCommand::default().load_and_merge()?;
     apply_greet_overrides(&mut command)?;
