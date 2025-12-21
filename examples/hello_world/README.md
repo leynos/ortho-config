@@ -22,7 +22,10 @@ production-ready complexity.
 - **Subcommands**: implement a friendly `greet` command that accepts a name and
   configurable greeting, alongside a `take-leave` workflow that combines
   switches, optional arguments, and shared greeting customizations to decide
-  how a farewell is delivered.
+  how a farewell is delivered. The `Commands` enum derives
+  `SelectedSubcommandMerge` so the entry point can merge the selected
+  subcommand configuration without duplicating `load_and_merge()` calls in a
+  `match`.
 - **Testing disciplines**: add `rstest`-powered unit tests for deterministic
   components and `rstest-bdd` (Behaviour-Driven Development) behavioural
   specifications that exercise the binary as a user would, capturing

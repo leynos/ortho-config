@@ -70,6 +70,10 @@ hello_world_scenario!(
     "CLI salutations replace discovered layers"
 );
 hello_world_scenario!(
+    subcommand_defaults_override_clap_defaults_when_unset,
+    "Subcommand defaults override clap defaults when unset"
+);
+hello_world_scenario!(
     explicit_config_path_overrides_discovery_order,
     "Explicit config path overrides discovery order"
 );

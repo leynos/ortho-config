@@ -1,7 +1,8 @@
 //! Utilities for loading configuration for individual subcommands.
 //!
 //! Resolves defaults from files and the environment and exposes the
-//! [`SubcmdConfigMerge`] trait for merging them with CLI arguments.
+//! [`SubcmdConfigMerge`] trait for merging them with CLI arguments, and
+//! [`SelectedSubcommandMerge`] for deriving merge behaviour on subcommand enums.
 
 #[cfg(feature = "serde_json")]
 use crate::{CliValueExtractor, OrthoMergeExt, OrthoResult, load_config_file, sanitized_provider};
@@ -19,11 +20,18 @@ use std::path::PathBuf;
 use uncased::Uncased;
 
 mod paths;
+#[cfg(feature = "serde_json")]
+mod selected;
 mod types;
 
 #[cfg(feature = "serde_json")]
 use paths::candidate_paths;
 pub use paths::push_stem_candidates;
+#[cfg(feature = "serde_json")]
+pub use selected::{
+    LoadGlobalsAndSelectedSubcommandError, SelectedSubcommandMerge, SelectedSubcommandMergeError,
+    load_globals_and_merge_selected_subcommand,
+};
 pub use types::{CmdName, Prefix};
 
 /// Load and merge `[cmds.<name>]` sections from the given paths.

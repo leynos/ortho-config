@@ -17,6 +17,7 @@ mod derive {
     pub(crate) mod load_impl;
     pub(crate) mod parse;
 }
+mod selected_subcommand_merge;
 
 use derive::build::{
     CollectionStrategies, build_cli_struct_fields, build_config_env_var, build_config_flag_field,
@@ -77,6 +78,23 @@ pub fn derive_ortho_config(input_tokens: TokenStream) -> TokenStream {
     };
 
     TokenStream::from(expanded)
+}
+
+/// Derive macro for the `ortho_config::SelectedSubcommandMerge` trait.
+///
+/// Apply this derive to a `clap::Subcommand` enum to generate a
+/// `load_and_merge_selected` method that merges configuration defaults for the
+/// selected variant.
+///
+/// Variants can opt into `ArgMatches`-aware merging (required for
+/// `cli_default_as_absent` support) using `#[ortho_subcommand(with_matches)]`.
+#[proc_macro_derive(SelectedSubcommandMerge, attributes(ortho_subcommand))]
+pub fn derive_selected_subcommand_merge(input_tokens: TokenStream) -> TokenStream {
+    let derive_input = parse_macro_input!(input_tokens as DeriveInput);
+    match selected_subcommand_merge::derive_selected_subcommand_merge(derive_input) {
+        Ok(tokens) => tokens.into(),
+        Err(err) => err.to_compile_error().into(),
+    }
 }
 
 /// Metadata about a field used for `CliValueExtractor` generation.

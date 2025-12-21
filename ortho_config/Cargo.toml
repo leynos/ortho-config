@@ -60,6 +60,7 @@ cap-std = "3"
 tempfile = "3"
 test_helpers = { path = "../test_helpers" }
 anyhow = "1"
+ortho_config_macros = { path = "../ortho_config_macros", version = "0.6.0" }
 
 [[example]]
 name = "registry_ctl"

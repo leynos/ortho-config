@@ -77,6 +77,16 @@ Feature: Global parameters govern greetings
     Then the command succeeds
     And stdout contains "FromCli, Layered!"
 
+  Scenario: Subcommand defaults override clap defaults when unset
+    Given the hello world config file contains:
+      """
+      [cmds.greet]
+      punctuation = "??"
+      """
+    When I run the hello world example with arguments "greet"
+    Then the command succeeds
+    And stdout contains "Hello, World??"
+
   Scenario: Explicit config path overrides discovery order
     Given the file "custom.toml" contains:
       """

@@ -893,6 +893,19 @@ experience, we can create a highly valuable addition to the Rust ecosystem.
   - The hybrid approach provides a clear contract via the trait while the
     attribute signals automatic invocation by the derive macro.
 
+- **Merge selected subcommand enums (2025-12-19):** Introduce the
+  `SelectedSubcommandMerge` derive alongside
+  `load_globals_and_merge_selected_subcommand` so applications can resolve
+  merged global configuration and the selected subcommand configuration in a
+  single call. This removes repetitive `match` scaffolding that existed solely
+  to call `load_and_merge()` for each variant, keeping entry points focused on
+  orchestration and business logic. The derive supports
+  `cli_default_as_absent` by allowing variants to opt into `ArgMatches`-aware
+  merging via `#[ortho_subcommand(with_matches)]`; this explicit marker was
+  chosen over implicit detection to keep generated bounds predictable and to
+  avoid surprising compile errors when a subcommand type does not implement
+  `CliValueExtractor`.
+
 [^hello-world-feedback]: `docs/feedback-from-hello-world-example.md`.
 [^behavioural-testing]: `docs/behavioural-testing-in-rust-with-cucumber.md`.
 [^design-rstest]: `docs/rust-testing-with-rstest-fixtures.md`.
