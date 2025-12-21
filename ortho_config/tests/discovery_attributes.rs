@@ -8,7 +8,7 @@
 
 use anyhow::{Context, Result, anyhow, ensure};
 use ortho_config::{OrthoConfig, OrthoError, OrthoResult};
-use rstest::rstest;
+use rstest::{fixture, rstest};
 use serde::{Deserialize, Serialize};
 use std::env;
 use std::fs;
@@ -33,6 +33,11 @@ use test_helpers::env as test_env;
 struct DiscoveryConfig {
     #[ortho_config(default = 1)]
     value: u32,
+}
+
+#[fixture]
+fn env_lock() -> test_env::EnvVarLock {
+    test_env::lock()
 }
 
 fn write_file(path: &std::path::Path, contents: &str) -> Result<()> {
@@ -141,7 +146,11 @@ struct CliFlagCase {
     expected_value: Some(17),
     description: "load config from short flag",
 })]
-fn cli_flag_config_loading(#[case] case: CliFlagCase) -> Result<()> {
+fn cli_flag_config_loading(
+    #[case] case: CliFlagCase,
+    env_lock: test_env::EnvVarLock,
+) -> Result<()> {
+    let _env_lock = env_lock;
     let _env = setup_clean_env();
     let dir = TempDir::new().context("create temp dir")?;
     let config_path = if case.file_contents.is_empty() {
@@ -190,7 +199,8 @@ fn cli_flag_config_loading(#[case] case: CliFlagCase) -> Result<()> {
 }
 
 #[rstest]
-fn env_var_overrides_default_locations() -> Result<()> {
+fn env_var_overrides_default_locations(env_lock: test_env::EnvVarLock) -> Result<()> {
+    let _env_lock = env_lock;
     let _env = setup_clean_env();
     let dir = TempDir::new().context("create temp dir")?;
     let config_path = create_test_config(dir.path(), "env.toml", 99)?;
@@ -244,12 +254,14 @@ where
 }
 
 #[rstest]
-fn xdg_config_home_missing_uses_default() -> OrthoResult<()> {
+fn xdg_config_home_missing_uses_default(env_lock: test_env::EnvVarLock) -> OrthoResult<()> {
+    let _env_lock = env_lock;
     assert_xdg_cfg_value(1, |_| Ok(()))
 }
 
 #[rstest]
-fn xdg_config_home_reads_custom_file() -> OrthoResult<()> {
+fn xdg_config_home_reads_custom_file(env_lock: test_env::EnvVarLock) -> OrthoResult<()> {
+    let _env_lock = env_lock;
     assert_xdg_cfg_value(64, |app_dir| {
         write_file(&app_dir.join("demo.toml"), "value = 64")?;
         Ok(())
@@ -257,7 +269,8 @@ fn xdg_config_home_reads_custom_file() -> OrthoResult<()> {
 }
 
 #[rstest]
-fn dotfile_fallback_uses_custom_name() -> Result<()> {
+fn dotfile_fallback_uses_custom_name(env_lock: test_env::EnvVarLock) -> Result<()> {
+    let _env_lock = env_lock;
     let _env = setup_clean_env();
     let dir = TempDir::new().context("create temp dir")?;
     let _ = create_test_config(dir.path(), ".demo.toml", 23)?;
@@ -271,7 +284,8 @@ fn dotfile_fallback_uses_custom_name() -> Result<()> {
 }
 
 #[rstest]
-fn defaults_apply_when_no_config_found() -> Result<()> {
+fn defaults_apply_when_no_config_found(env_lock: test_env::EnvVarLock) -> Result<()> {
+    let _env_lock = env_lock;
     let _env = setup_clean_env();
     let cfg = DiscoveryConfig::load_from_iter(["prog"]).map_err(|err| anyhow!(err))?;
     ensure!(cfg.value == 1, "expected default 1, got {}", cfg.value);
@@ -279,7 +293,8 @@ fn defaults_apply_when_no_config_found() -> Result<()> {
 }
 
 #[rstest]
-fn error_on_malformed_config() -> Result<()> {
+fn error_on_malformed_config(env_lock: test_env::EnvVarLock) -> Result<()> {
+    let _env_lock = env_lock;
     let _env = setup_clean_env();
     let dir = TempDir::new().context("create temp dir")?;
     let config_path = dir.path().join("broken.toml");

@@ -9,17 +9,23 @@ pub mod figment;
 pub mod env {
     //! Helpers for safely mutating environment variables in tests.
     //!
-    //! Each mutation acquires a global re-entrant mutex and returns an RAII guard that:
-    //! - Holds the mutex for the entire lifetime of the guard to serialise all
-    //!   environment mutations across threads.
+    //! Each mutation acquires a global re-entrant mutex only for the duration of
+    //! the set/remove operation, returning an RAII guard that:
     //! - Restores the previous state when dropped (removing the variable if it
     //!   was previously absent).
+    //! - Re-acquires the mutex during restoration to avoid overlapping writes.
     //!
     //! Behaviour:
     //! - Stacking multiple guards for the same key is supported and restores in
     //!   LIFO order.
-    //! - The coarse-grained lock trades parallelism for safety; tests that mutate
-    //!   the environment will be serialised while a guard is in scope.
+    //! - Operations on different keys may interleave between guard creation and
+    //!   drop, improving parallelism while still preventing races inside each
+    //!   mutation operation.
+    //! - Overlapping guards for the same key across threads can still observe
+    //!   last-drop-wins semantics; avoid interleaving mutations of the same key
+    //!   unless you coordinate access externally.
+    //! - Use [`lock`] when tests need exclusive access across multiple
+    //!   operations that touch shared keys.
     //!
     //! # Examples
     //!
@@ -63,13 +69,15 @@ pub mod env {
         F: FnOnce(&str),
     {
         let key_string = key.into();
-        let lock = ENV_MUTEX.lock();
-        let original = env::var_os(&key_string);
-        mutator(&key_string);
+        let original = {
+            let _guard = ENV_MUTEX.lock();
+            let original = env::var_os(&key_string);
+            mutator(&key_string);
+            original
+        };
         EnvVarGuard {
             key: key_string,
             original,
-            _lock: lock,
         }
     }
 
@@ -78,7 +86,24 @@ pub mod env {
     pub struct EnvVarGuard {
         key: String,
         original: Option<OsString>,
-        _lock: ReentrantMutexGuard<'static, ()>,
+    }
+
+    /// RAII guard that serialises environment access for its lifetime.
+    ///
+    /// Use this when a test needs exclusive access to environment state across
+    /// multiple operations, such as coordinating shared keys across threads.
+    ///
+    /// # Examples
+    /// ```
+    /// use test_helpers::env;
+    ///
+    /// let _lock = env::lock();
+    /// let _guard = env::set_var("KEY", "VALUE");
+    /// // Environment mutations remain serialised while `_lock` is alive.
+    /// ```
+    #[must_use = "dropping releases the environment lock"]
+    pub struct EnvVarLock {
+        _guard: ReentrantMutexGuard<'static, ()>,
     }
 
     impl fmt::Debug for EnvVarGuard {
@@ -94,8 +119,9 @@ pub mod env {
     ///
     /// # Safety
     /// Although this function is safe to call, it mutates process-wide state.
-    /// Access is serialised by a global re-entrant mutex held by the returned
-    /// guard.
+    /// Access is serialised by a global re-entrant mutex during the mutation
+    /// and again during restoration; other keys may interleave between those
+    /// operations.
     ///
     /// # Examples
     /// ```
@@ -116,8 +142,9 @@ pub mod env {
     ///
     /// # Safety
     /// Although this function is safe to call, it mutates process-wide state.
-    /// Access is serialised by a global re-entrant mutex held by the returned
-    /// guard.
+    /// Access is serialised by a global re-entrant mutex during the mutation
+    /// and again during restoration; other keys may interleave between those
+    /// operations.
     ///
     /// # Examples
     /// ```
@@ -135,18 +162,43 @@ pub mod env {
 
     impl Drop for EnvVarGuard {
         fn drop(&mut self) {
+            let _guard = ENV_MUTEX.lock();
             if let Some(val) = self.original.take() {
-                // SAFETY: Guard still holds `ENV_MUTEX`.
+                // SAFETY: We hold `ENV_MUTEX` during restoration.
                 unsafe { env_set_var(&self.key, &val) };
             } else {
-                // SAFETY: Guard still holds `ENV_MUTEX`.
+                // SAFETY: We hold `ENV_MUTEX` during restoration.
                 unsafe { env_remove_var(&self.key) };
             }
         }
     }
 
-    #[cfg(test)]
-    pub(crate) fn with_lock<F, R>(f: F) -> R
+    /// Acquire the global environment lock for the lifetime of the guard.
+    ///
+    /// # Examples
+    /// ```
+    /// use test_helpers::env;
+    ///
+    /// let _lock = env::lock();
+    /// let _guard = env::set_var("KEY", "VALUE");
+    /// ```
+    pub fn lock() -> EnvVarLock {
+        EnvVarLock {
+            _guard: ENV_MUTEX.lock(),
+        }
+    }
+
+    /// Run a closure while holding the global environment lock.
+    ///
+    /// # Examples
+    /// ```
+    /// use test_helpers::env;
+    ///
+    /// env::with_lock(|| {
+    ///     let _guard = env::set_var("KEY", "VALUE");
+    /// });
+    /// ```
+    pub fn with_lock<F, R>(f: F) -> R
     where
         F: FnOnce() -> R,
     {
@@ -238,7 +290,7 @@ pub mod env {
         }
 
         #[test]
-        fn concurrent_mutations_are_serialised() {
+        fn concurrent_mutations_restore_values() {
             const THREADS: usize = 4;
             let keys: Vec<_> = (0..THREADS)
                 .map(|i| format!("TEST_HELPERS_CONCURRENT_{i}"))

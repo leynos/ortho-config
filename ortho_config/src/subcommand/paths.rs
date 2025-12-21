@@ -226,6 +226,7 @@ mod tests {
         #[case] exts: &[&str],
         #[case] files: &[&str],
     ) -> Result<()> {
+        let _env_lock = test_env::lock();
         let (xdg_tempdir, _guard) = init_xdg_home()?;
         let dir_path = xdg_tempdir.path();
         // TempDir is empty on creation; no cleanup required.
@@ -260,6 +261,7 @@ mod tests {
     #[case("")]
     #[case("myapp")]
     fn candidate_paths_ordering(#[case] prefix_raw: &str) -> Result<()> {
+        let _env_lock = test_env::lock();
         let home = TempDir::new().context("create home directory")?;
         let home_guard = test_env::set_var("HOME", home.path());
 
