@@ -15,6 +15,24 @@ struct ExtendsCfg {
     foo: Option<String>,
 }
 
+#[derive(Debug, Deserialize, Serialize, OrthoConfig)]
+struct MultiLevelCfg {
+    app_name: String,
+    retries: u8,
+    enabled: bool,
+    tags: Vec<String>,
+    nested: MultiLevelNested,
+    parent_only: Option<String>,
+    child_only: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct MultiLevelNested {
+    region: String,
+    threshold: u8,
+    mode: Option<String>,
+}
+
 struct InheritanceCase {
     base_value: &'static str,
     config_value: &'static str,
@@ -60,6 +78,86 @@ fn inheritance_precedence(#[case] case: InheritanceCase) -> Result<()> {
         ensure!(
             actual == Some(expected),
             "expected foo {expected}, got {actual:?}"
+        );
+        Ok(())
+    })?;
+    Ok(())
+}
+
+#[rstest]
+fn multi_level_inheritance_merges_in_order() -> Result<()> {
+    with_jail(|j| {
+        let grandparent = concat!(
+            "app_name = \"base\"\n",
+            "retries = 1\n",
+            "enabled = true\n",
+            "tags = [\"base\"]\n",
+            "[nested]\n",
+            "region = \"base\"\n",
+            "threshold = 1\n",
+        );
+        let parent = concat!(
+            "extends = \"grandparent.toml\"\n",
+            "retries = 2\n",
+            "tags = [\"parent\"]\n",
+            "parent_only = \"parent\"\n",
+            "[nested]\n",
+            "threshold = 2\n",
+            "mode = \"parent\"\n",
+        );
+        let child = concat!(
+            "extends = \"parent.toml\"\n",
+            "enabled = false\n",
+            "tags = [\"child\"]\n",
+            "child_only = \"child\"\n",
+            "[nested]\n",
+            "region = \"child\"\n",
+        );
+        j.create_file("grandparent.toml", grandparent)?;
+        j.create_file("parent.toml", parent)?;
+        j.create_file(".config.toml", child)?;
+
+        let cfg = MultiLevelCfg::load_from_iter(["prog"]).map_err(|err| anyhow!(err))?;
+        ensure!(
+            cfg.app_name == "base",
+            "expected app_name base, got {:?}",
+            cfg.app_name
+        );
+        ensure!(cfg.retries == 2, "expected retries 2, got {}", cfg.retries);
+        ensure!(
+            !cfg.enabled,
+            "expected enabled false, got {}",
+            cfg.enabled
+        );
+        ensure!(
+            cfg.tags == vec![String::from("child")],
+            "expected tags [\"child\"], got {:?}",
+            cfg.tags
+        );
+        ensure!(
+            cfg.nested.region == "child",
+            "expected nested region child, got {:?}",
+            cfg.nested.region
+        );
+        ensure!(
+            cfg.nested.threshold == 2,
+            "expected nested threshold 2, got {}",
+            cfg.nested.threshold
+        );
+        ensure!(
+            cfg.nested.mode.as_deref() == Some("parent"),
+            "expected nested mode parent, got {:?}",
+            cfg.nested.mode
+        );
+        ensure!(
+            cfg.parent_only.as_deref() == Some("parent"),
+            "expected parent_only parent, got {:?}",
+            cfg.parent_only
+        );
+        ensure!(
+            cfg.child_only.as_deref() == Some("child"),
+            "expected child_only child, got {:?}",
+            cfg.child_only
         );
         Ok(())
     })?;

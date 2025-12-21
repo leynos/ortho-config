@@ -35,6 +35,7 @@ pub struct ExtendsContext {
     pub extends_flag: Slot<()>,
     pub cyclic_flag: Slot<()>,
     pub missing_base_flag: Slot<()>,
+    pub multi_level_flag: Slot<()>,
     pub result: Slot<ortho_config::OrthoResult<RulesConfig>>,
 }
 
