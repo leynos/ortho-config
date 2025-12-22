@@ -201,8 +201,11 @@ fn merge_layers_respect_precedence_permutations(
     Ok(())
 }
 
-fn to_anyhow<T, E: std::fmt::Display>(result: Result<T, E>) -> anyhow::Result<T> {
-    result.map_err(|err| anyhow!(err.to_string()))
+fn to_anyhow<T, E>(result: Result<T, E>) -> anyhow::Result<T>
+where
+    E: std::error::Error + Send + Sync + 'static,
+{
+    result.map_err(anyhow::Error::new)
 }
 
 #[rstest]

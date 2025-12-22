@@ -4,6 +4,7 @@ use super::{canonicalise, normalise_cycle_key};
 use anyhow::{Context, Result};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use test_helpers::figment as figment_helpers;
 
 pub(super) mod extends_tests;
@@ -13,7 +14,14 @@ pub(super) mod path_tests;
 pub(super) mod yaml_tests;
 
 pub(super) fn canonical_root_and_current() -> Result<(PathBuf, PathBuf)> {
-    let root = canonicalise(Path::new("."))
+    canonical_root_and_current_with(canonicalise)
+}
+
+fn canonical_root_and_current_with<F>(canonicalise_fn: F) -> Result<(PathBuf, PathBuf)>
+where
+    F: FnOnce(&Path) -> crate::OrthoResult<PathBuf>,
+{
+    let root = canonicalise_fn(Path::new("."))
         .map_err(anyhow::Error::new)
         .context("canonicalise configuration root directory")?;
     let current = root.join("config.toml");
@@ -67,6 +75,79 @@ pub(super) fn assert_normalise_cycle_key(
     anyhow::ensure!(
         normalise_cycle_key(&input) == expected,
         "normalised path mismatch for input {input:?}"
+    );
+    Ok(())
+}
+
+#[derive(Debug)]
+struct InnerError;
+
+impl std::fmt::Display for InnerError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "inner error")
+    }
+}
+
+impl std::error::Error for InnerError {}
+
+#[derive(Debug)]
+struct OuterError {
+    source: InnerError,
+}
+
+impl std::fmt::Display for OuterError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "outer error")
+    }
+}
+
+impl std::error::Error for OuterError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(&self.source)
+    }
+}
+
+fn sample_file_error(path: &str) -> Arc<crate::OrthoError> {
+    Arc::new(crate::OrthoError::File {
+        path: PathBuf::from(path),
+        source: Box::new(OuterError { source: InnerError }),
+    })
+}
+
+#[test]
+fn canonical_root_and_current_preserves_error_chain() -> Result<()> {
+    let err = canonical_root_and_current_with(|_| Err(sample_file_error("config.toml")))
+        .expect_err("expected canonical_root_and_current to fail");
+    let chain: Vec<String> = err.chain().map(|error| error.to_string()).collect();
+    assert!(
+        chain
+            .iter()
+            .any(|message| message.contains("canonicalise configuration root directory")),
+        "expected context message in error chain, got {chain:?}"
+    );
+    assert!(
+        chain.iter().any(|message| message == "outer error"),
+        "expected outer error in chain, got {chain:?}"
+    );
+    assert!(
+        chain.iter().any(|message| message == "inner error"),
+        "expected inner error in chain, got {chain:?}"
+    );
+    Ok(())
+}
+
+#[test]
+fn to_anyhow_preserves_error_chain() -> Result<()> {
+    let err = to_anyhow(Err(sample_file_error("config.toml")))
+        .expect_err("expected to_anyhow to fail");
+    let chain: Vec<String> = err.chain().map(|error| error.to_string()).collect();
+    assert!(
+        chain.iter().any(|message| message == "outer error"),
+        "expected outer error in chain, got {chain:?}"
+    );
+    assert!(
+        chain.iter().any(|message| message == "inner error"),
+        "expected inner error in chain, got {chain:?}"
     );
     Ok(())
 }
