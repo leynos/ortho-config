@@ -22,7 +22,7 @@ pub(crate) struct CliStructTokens {
     pub field_names: HashSet<String>,
 }
 
-pub(super) fn option_type_tokens(ty: &Type) -> proc_macro2::TokenStream {
+pub(in crate::derive::build) fn option_type_tokens(ty: &Type) -> proc_macro2::TokenStream {
     option_inner(ty).map_or_else(|| quote! { Option<#ty> }, |inner| quote! { Option<#inner> })
 }
 
@@ -87,7 +87,7 @@ fn long_validation_error(long: &str) -> Option<String> {
 /// used.insert(ch);
 /// assert_eq!(ch, 'f');
 /// ```
-pub(super) fn validate_user_cli_short(
+pub(in crate::derive::build) fn validate_user_cli_short(
     name: &Ident,
     user: char,
     used_shorts: &HashSet<char>,
@@ -137,7 +137,7 @@ pub(super) fn resolve_short_flag(
     Ok(derived)
 }
 
-pub(super) fn validate_cli_long(name: &Ident, long: &str) -> syn::Result<()> {
+pub(in crate::derive::build) fn validate_cli_long(name: &Ident, long: &str) -> syn::Result<()> {
     if let Some(message) = long_validation_error(long) {
         return Err(syn::Error::new_spanned(name, message));
     }
