@@ -106,6 +106,65 @@ pub mod env {
         _guard: ReentrantMutexGuard<'static, ()>,
     }
 
+    /// RAII scope that holds the environment lock while retaining guards.
+    ///
+    /// This is useful when a test needs to clear or set multiple environment
+    /// variables and keep the lock for the duration of the test to avoid
+    /// interleaving with other environment mutations.
+    ///
+    /// # Examples
+    /// ```
+    /// use test_helpers::env;
+    ///
+    /// let guards = vec![env::remove_var("FOO"), env::remove_var("BAR")];
+    /// let _scope = env::EnvScope::new(guards);
+    /// ```
+    #[must_use = "dropping releases the environment lock and restores guards"]
+    pub struct EnvScope {
+        _lock: EnvVarLock,
+        _guards: Vec<EnvVarGuard>,
+    }
+
+    impl EnvScope {
+        /// Create a scope that holds the global lock and retains the guards.
+        ///
+        /// # Examples
+        /// ```
+        /// use test_helpers::env;
+        ///
+        /// let guards = vec![env::remove_var("FOO"), env::remove_var("BAR")];
+        /// let _scope = env::EnvScope::new(guards);
+        /// ```
+        pub fn new(guards: Vec<EnvVarGuard>) -> Self {
+            Self {
+                _lock: lock(),
+                _guards: guards,
+            }
+        }
+
+        /// Create a scope after running the provided builder while holding the lock.
+        ///
+        /// # Examples
+        /// ```
+        /// use test_helpers::env;
+        ///
+        /// let _scope = env::EnvScope::new_with(|| {
+        ///     vec![env::remove_var("FOO"), env::remove_var("BAR")]
+        /// });
+        /// ```
+        pub fn new_with<F>(builder: F) -> Self
+        where
+            F: FnOnce() -> Vec<EnvVarGuard>,
+        {
+            let lock = lock();
+            let guards = builder();
+            Self {
+                _lock: lock,
+                _guards: guards,
+            }
+        }
+    }
+
     impl fmt::Debug for EnvVarGuard {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             f.debug_struct("EnvVarGuard")
@@ -186,6 +245,33 @@ pub mod env {
         EnvVarLock {
             _guard: ENV_MUTEX.lock(),
         }
+    }
+
+    /// Create a scope that holds the global lock and retains the guards.
+    ///
+    /// # Examples
+    /// ```
+    /// use test_helpers::env;
+    ///
+    /// let _scope = env::scope(vec![env::remove_var("FOO")]);
+    /// ```
+    pub fn scope(guards: Vec<EnvVarGuard>) -> EnvScope {
+        EnvScope::new(guards)
+    }
+
+    /// Create a scope after running the provided builder while holding the lock.
+    ///
+    /// # Examples
+    /// ```
+    /// use test_helpers::env;
+    ///
+    /// let _scope = env::scope_with(|| vec![env::remove_var("FOO")]);
+    /// ```
+    pub fn scope_with<F>(builder: F) -> EnvScope
+    where
+        F: FnOnce() -> Vec<EnvVarGuard>,
+    {
+        EnvScope::new_with(builder)
     }
 
     /// Run a closure while holding the global environment lock.

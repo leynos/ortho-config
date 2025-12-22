@@ -10,12 +10,7 @@ use serde::Deserialize;
 #[cfg(windows)]
 use std::path::Path;
 use tempfile::TempDir;
-use test_helpers::env as test_env;
-
-struct EnvScope {
-    _lock: test_env::EnvVarLock,
-    _guards: Vec<test_env::EnvVarGuard>,
-}
+use test_helpers::env::{self as test_env, EnvScope};
 
 fn remove_common_env_vars() -> Vec<test_env::EnvVarGuard> {
     let mut guards = Vec::new();
@@ -35,33 +30,19 @@ fn remove_common_env_vars() -> Vec<test_env::EnvVarGuard> {
 
 #[fixture]
 fn env_guards() -> EnvScope {
-    let env_lock = test_env::lock();
-    let guards = remove_common_env_vars();
-    EnvScope {
-        _lock: env_lock,
-        _guards: guards,
-    }
+    test_env::EnvScope::new_with(remove_common_env_vars)
 }
 
 #[fixture]
 fn env_override_discovery() -> (ConfigDiscovery, PathBuf, EnvScope, test_env::EnvVarGuard) {
-    let env_lock = test_env::lock();
-    let guards = remove_common_env_vars();
+    let scope = test_env::EnvScope::new_with(remove_common_env_vars);
     let path = std::env::temp_dir().join("explicit.toml");
     let env_guard = test_env::set_var("HELLO_WORLD_CONFIG_PATH", &path);
     let discovery = ConfigDiscovery::builder("hello_world")
         .env_var("HELLO_WORLD_CONFIG_PATH")
         .build();
 
-    (
-        discovery,
-        path,
-        EnvScope {
-            _lock: env_lock,
-            _guards: guards,
-        },
-        env_guard,
-    )
+    (discovery, path, scope, env_guard)
 }
 
 #[fixture]
