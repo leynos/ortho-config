@@ -124,11 +124,7 @@ fn multi_level_inheritance_merges_in_order() -> Result<()> {
             cfg.app_name
         );
         ensure!(cfg.retries == 2, "expected retries 2, got {}", cfg.retries);
-        ensure!(
-            !cfg.enabled,
-            "expected enabled false, got {}",
-            cfg.enabled
-        );
+        ensure!(!cfg.enabled, "expected enabled false, got {}", cfg.enabled);
         ensure!(
             cfg.tags == vec![String::from("child")],
             "expected tags [\"child\"], got {:?}",
