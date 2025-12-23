@@ -178,18 +178,38 @@ fn error_occurs(extends_context: &ExtendsContext) -> Result<()> {
     Ok(())
 }
 
+fn strip_rule_quotes(value: &str) -> &str {
+    let trimmed = value.trim();
+    if let Some(stripped) = trimmed.strip_prefix('"').and_then(|val| val.strip_suffix('"')) {
+        return stripped;
+    }
+    if let Some(stripped) = trimmed.strip_prefix('\'').and_then(|val| val.strip_suffix('\'')) {
+        return stripped;
+    }
+    trimmed
+}
+
+fn parse_rules_list(rules: &str) -> Vec<String> {
+    rules
+        .split(',')
+        .map(|value| strip_rule_quotes(value))
+        .filter(|value| !value.is_empty())
+        .map(str::to_owned)
+        .collect()
+}
+
 #[then("the inherited rules are {rules}")]
 fn inherited_rules(extends_context: &ExtendsContext, rules: String) -> Result<()> {
-    let result = extends_context
+    let actual = extends_context
         .result
-        .take()
-        .ok_or_else(|| anyhow!("configuration result unavailable"))?;
-    let cfg = result?;
-    let expected: Vec<String> = rules.split(',').map(|s| s.trim().to_owned()).collect();
+        .with_ref(|result| result.as_ref().map(|cfg| cfg.rules.clone()))
+        .ok_or_else(|| anyhow!("configuration result unavailable"))?
+        .map_err(|err| anyhow!(err))?;
+    let expected = parse_rules_list(&rules);
     ensure!(
-        cfg.rules == expected,
+        actual == expected,
         "unexpected rules {:?}; expected {:?}",
-        cfg.rules,
+        actual,
         expected
     );
     Ok(())
