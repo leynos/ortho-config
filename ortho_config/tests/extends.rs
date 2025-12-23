@@ -132,7 +132,7 @@ fn setup_multi_level_test_files(j: &mut figment::Jail) -> Result<()> {
     Ok(())
 }
 
-fn ensure_eq<T>(actual: T, expected: T, label: &str) -> Result<()>
+fn ensure_eq<T>(actual: &T, expected: &T, label: &str) -> Result<()>
 where
     T: PartialEq + std::fmt::Debug,
 {
@@ -144,16 +144,16 @@ where
 }
 
 fn verify_multi_level_config(cfg: &MultiLevelCfg) -> Result<()> {
-    ensure_eq(cfg.app_name.as_str(), "base", "app_name")?;
-    ensure_eq(cfg.retries, 2, "retries")?;
-    ensure_eq(cfg.enabled, false, "enabled")?;
+    ensure_eq(&cfg.app_name.as_str(), &"base", "app_name")?;
+    ensure_eq(&cfg.retries, &2, "retries")?;
+    ensure_eq(&cfg.enabled, &false, "enabled")?;
     let expected_tags = vec![String::from("child")];
     ensure_eq(&cfg.tags, &expected_tags, "tags")?;
-    ensure_eq(cfg.nested.region.as_str(), "child", "nested.region")?;
-    ensure_eq(cfg.nested.threshold, 2, "nested.threshold")?;
-    ensure_eq(cfg.nested.mode.as_deref(), Some("parent"), "nested.mode")?;
-    ensure_eq(cfg.parent_only.as_deref(), Some("parent"), "parent_only")?;
-    ensure_eq(cfg.child_only.as_deref(), Some("child"), "child_only")?;
+    ensure_eq(&cfg.nested.region.as_str(), &"child", "nested.region")?;
+    ensure_eq(&cfg.nested.threshold, &2, "nested.threshold")?;
+    ensure_eq(&cfg.nested.mode.as_deref(), &Some("parent"), "nested.mode")?;
+    ensure_eq(&cfg.parent_only.as_deref(), &Some("parent"), "parent_only")?;
+    ensure_eq(&cfg.child_only.as_deref(), &Some("child"), "child_only")?;
     Ok(())
 }
 
