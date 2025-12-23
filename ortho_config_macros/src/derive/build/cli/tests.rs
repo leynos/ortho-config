@@ -1,6 +1,8 @@
 //! Tests for CLI flag validation and builders.
 
-use super::cli_flags::{build_cli_struct_fields, resolve_short_flag, validate_cli_long};
+use super::cli_flags::{
+    build_cli_struct_fields, resolve_short_flag, validate_cli_long, validate_user_cli_short,
+};
 use crate::derive::parse::FieldAttrs;
 use anyhow::{Result, anyhow, ensure};
 use rstest::rstest;
@@ -146,6 +148,38 @@ fn rejects_invalid_short_flags(
             Ok(())
         }
     }
+}
+
+#[rstest]
+#[case('a', HashSet::new(), Some('a'), None)]
+#[case('*', HashSet::new(), None, Some("invalid `cli_short`"))]
+#[case('h', HashSet::new(), None, Some("reserved `cli_short`"))]
+#[case('f', HashSet::from(['f']), None, Some("duplicate `cli_short` value"))]
+fn validates_user_short_flags(
+    #[case] cli_short: char,
+    #[case] used: HashSet<char>,
+    #[case] expected_ok: Option<char>,
+    #[case] expected_err: Option<&str>,
+) -> Result<()> {
+    let name: Ident = syn::parse_quote!(field);
+    match validate_user_cli_short(&name, cli_short, &used) {
+        Ok(ch) => {
+            let Some(expected) = expected_ok else {
+                return Err(anyhow!("expected short flag error"));
+            };
+            ensure!(ch == expected, "expected {expected}, got {ch}");
+        }
+        Err(err) => {
+            let Some(expected) = expected_err else {
+                return Err(anyhow!("expected short flag to be accepted"));
+            };
+            ensure!(
+                err.to_string().contains(expected),
+                "unexpected error: {err}"
+            );
+        }
+    }
+    Ok(())
 }
 
 #[test]

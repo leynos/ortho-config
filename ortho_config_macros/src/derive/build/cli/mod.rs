@@ -3,6 +3,10 @@
 //! This module encapsulates generation and validation of CLI flag metadata.
 //! It keeps track of claimed short and long flags to avoid collisions and
 //! surfaces ergonomic diagnostics when callers need to supply overrides.
+//!
+//! Use the re-exports from this module when working in the derive builder; the
+//! `cli_flags` submodule is an internal detail and should not be depended on
+//! directly to avoid coupling to the private layout.
 
 mod cli_flags;
 #[cfg(test)]
