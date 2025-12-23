@@ -138,8 +138,8 @@ fn canonical_root_and_current_preserves_error_chain() -> Result<()> {
 
 #[test]
 fn to_anyhow_preserves_error_chain() -> Result<()> {
-    let err =
-        to_anyhow(Err(sample_file_error("config.toml"))).expect_err("expected to_anyhow to fail");
+    let err = to_anyhow::<()>(Err(sample_file_error("config.toml")))
+        .expect_err("expected to_anyhow to fail");
     let chain: Vec<String> = err.chain().map(|error| error.to_string()).collect();
     assert!(
         chain.iter().any(|message| message == "outer error"),
