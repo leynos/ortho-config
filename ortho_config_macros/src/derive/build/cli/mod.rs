@@ -12,5 +12,24 @@ mod cli_flags;
 #[cfg(test)]
 mod tests;
 
+use std::collections::HashSet;
+
+use syn::{Ident, Type};
+
 pub(crate) use cli_flags::build_cli_struct_fields;
-pub(super) use cli_flags::{option_type_tokens, validate_cli_long, validate_user_cli_short};
+
+pub(super) fn option_type_tokens(ty: &Type) -> proc_macro2::TokenStream {
+    cli_flags::option_type_tokens(ty)
+}
+
+pub(super) fn validate_cli_long(name: &Ident, long: &str) -> syn::Result<()> {
+    cli_flags::validate_cli_long(name, long)
+}
+
+pub(super) fn validate_user_cli_short(
+    name: &Ident,
+    user: char,
+    used_shorts: &HashSet<char>,
+) -> syn::Result<char> {
+    cli_flags::validate_user_cli_short(name, user, used_shorts)
+}
