@@ -299,6 +299,7 @@ pub mod env {
         let _guard = ENV_MUTEX.lock();
         f()
     }
+
     #[cfg(test)]
     mod tests {
         use super::*;
