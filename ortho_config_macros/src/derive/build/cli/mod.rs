@@ -9,5 +9,4 @@ mod cli_flags;
 mod tests;
 
 pub(crate) use cli_flags::build_cli_struct_fields;
-pub(crate) type CliStructTokens = cli_flags::CliStructTokens;
 pub(super) use cli_flags::{option_type_tokens, validate_cli_long, validate_user_cli_short};
