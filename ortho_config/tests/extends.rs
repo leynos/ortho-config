@@ -21,6 +21,7 @@ struct MultiLevelCfg {
     retries: u8,
     enabled: bool,
     tags: Vec<String>,
+    #[ortho_config(skip_cli)]
     nested: MultiLevelNested,
     parent_only: Option<String>,
     child_only: Option<String>,
