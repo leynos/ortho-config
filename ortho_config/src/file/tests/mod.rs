@@ -118,18 +118,18 @@ fn sample_file_error(path: &str) -> Arc<crate::OrthoError> {
 fn canonical_root_and_current_preserves_error_chain() -> Result<()> {
     let err = canonical_root_and_current_with(|_| Err(sample_file_error("config.toml")))
         .expect_err("expected canonical_root_and_current to fail");
-    let chain: Vec<String> = err.chain().map(|error| error.to_string()).collect();
-    assert!(
+    let chain: Vec<String> = err.chain().map(ToString::to_string).collect();
+    anyhow::ensure!(
         chain
             .iter()
             .any(|message| message.contains("canonicalise configuration root directory")),
         "expected context message in error chain, got {chain:?}"
     );
-    assert!(
+    anyhow::ensure!(
         chain.iter().any(|message| message == "outer error"),
         "expected outer error in chain, got {chain:?}"
     );
-    assert!(
+    anyhow::ensure!(
         chain.iter().any(|message| message == "inner error"),
         "expected inner error in chain, got {chain:?}"
     );
@@ -140,12 +140,12 @@ fn canonical_root_and_current_preserves_error_chain() -> Result<()> {
 fn to_anyhow_preserves_error_chain() -> Result<()> {
     let err = to_anyhow::<()>(Err(sample_file_error("config.toml")))
         .expect_err("expected to_anyhow to fail");
-    let chain: Vec<String> = err.chain().map(|error| error.to_string()).collect();
-    assert!(
+    let chain: Vec<String> = err.chain().map(ToString::to_string).collect();
+    anyhow::ensure!(
         chain.iter().any(|message| message == "outer error"),
         "expected outer error in chain, got {chain:?}"
     );
-    assert!(
+    anyhow::ensure!(
         chain.iter().any(|message| message == "inner error"),
         "expected inner error in chain, got {chain:?}"
     );
