@@ -122,7 +122,7 @@ pub mod env {
     #[must_use = "dropping releases the environment lock and restores guards"]
     pub struct EnvScope {
         _lock: EnvVarLock,
-        _guards: Vec<EnvVarGuard>,
+        guards: Vec<EnvVarGuard>,
     }
 
     impl EnvScope {
@@ -138,7 +138,7 @@ pub mod env {
         pub fn new(guards: Vec<EnvVarGuard>) -> Self {
             Self {
                 _lock: lock(),
-                _guards: guards,
+                guards,
             }
         }
 
@@ -160,8 +160,16 @@ pub mod env {
             let guards = builder();
             Self {
                 _lock: lock,
-                _guards: guards,
+                guards,
             }
+        }
+    }
+
+    impl Drop for EnvScope {
+        fn drop(&mut self) {
+            // Ensure guard restoration happens while the environment lock is held.
+            let guards = std::mem::take(&mut self.guards);
+            drop(guards);
         }
     }
 
