@@ -86,9 +86,11 @@ pub use csv_env::CsvEnv;
 #[cfg(feature = "serde_json")]
 #[cfg_attr(docsrs, doc(cfg(feature = "serde_json")))]
 pub use declarative::{DeclarativeMerge, MergeComposer, MergeLayer, MergeProvenance};
-pub use discovery::{ConfigDiscovery, ConfigDiscoveryBuilder, DiscoveryLoadOutcome};
+pub use discovery::{
+    ConfigDiscovery, ConfigDiscoveryBuilder, DiscoveryLayersOutcome, DiscoveryLoadOutcome,
+};
 pub use error::{OrthoError, is_display_request};
-pub use file::load_config_file;
+pub use file::{FileLayerChain, load_config_file, load_config_file_as_chain};
 pub use localizer::{
     FluentBundleSource, FluentLocalizer, FluentLocalizerBuilder, FluentLocalizerError,
     FormattingIssue, LocalizationArgs, Localizer, NoOpLocalizer, clap_error_formatter,

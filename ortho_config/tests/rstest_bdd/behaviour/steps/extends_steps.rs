@@ -214,3 +214,8 @@ fn inherited_rules(extends_context: &ExtendsContext, rules: String) -> Result<()
     );
     Ok(())
 }
+
+#[then("the rules are {rules}")]
+fn rules_are(extends_context: &ExtendsContext, rules: String) -> Result<()> {
+    inherited_rules(extends_context, rules)
+}

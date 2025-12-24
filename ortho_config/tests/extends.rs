@@ -147,7 +147,12 @@ fn verify_multi_level_config(cfg: &MultiLevelCfg) -> Result<()> {
     ensure_eq(&cfg.app_name.as_str(), &"base", "app_name")?;
     ensure_eq(&cfg.retries, &2, "retries")?;
     ensure_eq(&cfg.enabled, &false, "enabled")?;
-    let expected_tags = vec![String::from("child")];
+    // With declarative merge semantics, Vec<T> appends across the extends chain
+    let expected_tags = vec![
+        String::from("base"),
+        String::from("parent"),
+        String::from("child"),
+    ];
     ensure_eq(&cfg.tags, &expected_tags, "tags")?;
     ensure_eq(&cfg.nested.region.as_str(), &"child", "nested.region")?;
     ensure_eq(&cfg.nested.threshold, &2, "nested.threshold")?;
@@ -334,4 +339,28 @@ fn extends_validation_errors(
         expected_msg,
         error_desc,
     )
+}
+
+/// Config struct with explicit replace strategy for the tags field.
+#[derive(Debug, Deserialize, Serialize, OrthoConfig)]
+struct ReplaceTagsCfg {
+    #[ortho_config(merge_strategy = "replace")]
+    tags: Vec<String>,
+}
+
+/// Verifies that `merge_strategy = "replace"` still works with extends.
+#[rstest]
+fn extends_with_replace_strategy_replaces_arrays() -> Result<()> {
+    with_jail(|j| {
+        j.create_file("parent.toml", "tags = [\"parent\"]")?;
+        j.create_file(
+            ".config.toml",
+            "extends = \"parent.toml\"\ntags = [\"child\"]",
+        )?;
+        let cfg = ReplaceTagsCfg::load_from_iter(["prog"]).map_err(|err| anyhow!(err))?;
+        let expected = vec![String::from("child")];
+        ensure_eq(&cfg.tags, &expected, "tags")?;
+        Ok(())
+    })?;
+    Ok(())
 }

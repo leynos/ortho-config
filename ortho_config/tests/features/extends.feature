@@ -2,7 +2,7 @@ Feature: Configuration inheritance
   Scenario: load config from base file
     Given a configuration file extending a base file
     When the extended configuration is loaded
-    Then the rules are "child"
+    Then the rules are "base","child"
 
   Scenario: cyclic inheritance error
     Given a configuration file with cyclic inheritance
@@ -17,4 +17,4 @@ Feature: Configuration inheritance
   Scenario: multi-level inheritance
     Given a configuration file extending a parent file that extends a grandparent file
     When the multi-level configuration is loaded
-    Then the inherited rules are "child"
+    Then the inherited rules are "grandparent","parent","child"
