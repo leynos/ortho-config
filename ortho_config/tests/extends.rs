@@ -147,7 +147,11 @@ fn verify_multi_level_config(cfg: &MultiLevelCfg) -> Result<()> {
     ensure_eq(&cfg.app_name.as_str(), &"base", "app_name")?;
     ensure_eq(&cfg.retries, &2, "retries")?;
     ensure_eq(&cfg.enabled, &false, "enabled")?;
-    let expected_tags = vec![String::from("child")];
+    let expected_tags = vec![
+        String::from("base"),
+        String::from("parent"),
+        String::from("child"),
+    ];
     ensure_eq(&cfg.tags, &expected_tags, "tags")?;
     ensure_eq(&cfg.nested.region.as_str(), &"child", "nested.region")?;
     ensure_eq(&cfg.nested.threshold, &2, "nested.threshold")?;
