@@ -37,6 +37,16 @@ fn create_missing_base(extends_context: &ExtendsContext) -> Result<()> {
     Ok(())
 }
 
+#[given("a configuration file extending a parent file that extends a grandparent file")]
+fn create_multi_level(extends_context: &ExtendsContext) -> Result<()> {
+    ensure!(
+        extends_context.multi_level_flag.is_empty(),
+        "multi-level configuration already initialised"
+    );
+    extends_context.multi_level_flag.set(());
+    Ok(())
+}
+
 fn with_jail_load<F>(setup: F) -> Result<OrthoResult<RulesConfig>>
 where
     F: FnOnce(&mut figment::Jail) -> figment::error::Result<()>,
@@ -68,6 +78,7 @@ enum ExtendsScenario {
     Extended,
     Cyclic,
     MissingBase,
+    MultiLevel,
 }
 
 impl ExtendsScenario {
@@ -76,6 +87,7 @@ impl ExtendsScenario {
             Self::Extended => &context.extends_flag,
             Self::Cyclic => &context.cyclic_flag,
             Self::MissingBase => &context.missing_base_flag,
+            Self::MultiLevel => &context.multi_level_flag,
         }
     }
 
@@ -84,6 +96,7 @@ impl ExtendsScenario {
             Self::Extended => "extended configuration",
             Self::Cyclic => "cyclic configuration",
             Self::MissingBase => "missing-base configuration",
+            Self::MultiLevel => "multi-level configuration",
         }
     }
 
@@ -106,6 +119,20 @@ impl ExtendsScenario {
                     ".ddlint.toml",
                     "extends = \"missing.toml\"\nrules = [\"main\"]",
                 )?;
+            }
+            Self::MultiLevel => {
+                let grandparent = concat!("rules = [\"grandparent\"]\n");
+                let parent = concat!(
+                    "extends = \"grandparent.toml\"\n",
+                    "rules = [\"parent\"]\n",
+                );
+                let child = concat!(
+                    "extends = \"parent.toml\"\n",
+                    "rules = [\"child\"]\n",
+                );
+                j.create_file("grandparent.toml", grandparent)?;
+                j.create_file("parent.toml", parent)?;
+                j.create_file(".ddlint.toml", child)?;
             }
         }
         Ok(())
@@ -136,6 +163,11 @@ fn load_missing_base(extends_context: &ExtendsContext) -> Result<()> {
     load_scenario(ExtendsScenario::MissingBase, extends_context)
 }
 
+#[when("the multi-level configuration is loaded")]
+fn load_multi_level(extends_context: &ExtendsContext) -> Result<()> {
+    load_scenario(ExtendsScenario::MultiLevel, extends_context)
+}
+
 #[then("an error occurs")]
 fn error_occurs(extends_context: &ExtendsContext) -> Result<()> {
     let result = extends_context
@@ -143,5 +175,42 @@ fn error_occurs(extends_context: &ExtendsContext) -> Result<()> {
         .take()
         .ok_or_else(|| anyhow!("configuration result unavailable"))?;
     ensure!(result.is_err(), "expected configuration to fail");
+    Ok(())
+}
+
+fn strip_rule_quotes(value: &str) -> &str {
+    let trimmed = value.trim();
+    if let Some(stripped) = trimmed.strip_prefix('"').and_then(|val| val.strip_suffix('"')) {
+        return stripped;
+    }
+    if let Some(stripped) = trimmed.strip_prefix('\'').and_then(|val| val.strip_suffix('\'')) {
+        return stripped;
+    }
+    trimmed
+}
+
+fn parse_rules_list(rules: &str) -> Vec<String> {
+    rules
+        .split(',')
+        .map(|value| strip_rule_quotes(value))
+        .filter(|value| !value.is_empty())
+        .map(str::to_owned)
+        .collect()
+}
+
+#[then("the inherited rules are {rules}")]
+fn inherited_rules(extends_context: &ExtendsContext, rules: String) -> Result<()> {
+    let actual = extends_context
+        .result
+        .with_ref(|result| result.as_ref().map(|cfg| cfg.rules.clone()))
+        .ok_or_else(|| anyhow!("configuration result unavailable"))?
+        .map_err(|err| anyhow!(err))?;
+    let expected = parse_rules_list(&rules);
+    ensure!(
+        actual == expected,
+        "unexpected rules {:?}; expected {:?}",
+        actual,
+        expected
+    );
     Ok(())
 }

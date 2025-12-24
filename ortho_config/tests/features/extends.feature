@@ -13,3 +13,8 @@ Feature: Configuration inheritance
     Given a configuration file extending a missing base file
     When the configuration with missing base is loaded
     Then an error occurs
+
+  Scenario: multi-level inheritance
+    Given a configuration file extending a parent file that extends a grandparent file
+    When the multi-level configuration is loaded
+    Then the inherited rules are "child"

@@ -15,6 +15,54 @@ struct ExtendsCfg {
     foo: Option<String>,
 }
 
+#[derive(Debug, Deserialize, Serialize, OrthoConfig)]
+struct MultiLevelCfg {
+    app_name: String,
+    retries: u8,
+    enabled: bool,
+    tags: Vec<String>,
+    #[ortho_config(skip_cli)]
+    nested: MultiLevelNested,
+    parent_only: Option<String>,
+    child_only: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct MultiLevelNested {
+    region: String,
+    threshold: u8,
+    mode: Option<String>,
+}
+
+const GRANDPARENT_TOML: &str = concat!(
+    "app_name = \"base\"\n",
+    "retries = 1\n",
+    "enabled = true\n",
+    "tags = [\"base\"]\n",
+    "[nested]\n",
+    "region = \"base\"\n",
+    "threshold = 1\n",
+);
+
+const PARENT_TOML: &str = concat!(
+    "extends = \"grandparent.toml\"\n",
+    "retries = 2\n",
+    "tags = [\"parent\"]\n",
+    "parent_only = \"parent\"\n",
+    "[nested]\n",
+    "threshold = 2\n",
+    "mode = \"parent\"\n",
+);
+
+const CHILD_TOML: &str = concat!(
+    "extends = \"parent.toml\"\n",
+    "enabled = false\n",
+    "tags = [\"child\"]\n",
+    "child_only = \"child\"\n",
+    "[nested]\n",
+    "region = \"child\"\n",
+);
+
 struct InheritanceCase {
     base_value: &'static str,
     config_value: &'static str,
@@ -63,6 +111,49 @@ fn inheritance_precedence(#[case] case: InheritanceCase) -> Result<()> {
         );
         Ok(())
     })?;
+    Ok(())
+}
+
+#[rstest]
+fn multi_level_inheritance_merges_in_order() -> Result<()> {
+    with_jail(|j| {
+        setup_multi_level_test_files(j)?;
+        let cfg = MultiLevelCfg::load_from_iter(["prog"]).map_err(|err| anyhow!(err))?;
+        verify_multi_level_config(&cfg)?;
+        Ok(())
+    })?;
+    Ok(())
+}
+
+fn setup_multi_level_test_files(j: &mut figment::Jail) -> Result<()> {
+    j.create_file("grandparent.toml", GRANDPARENT_TOML)?;
+    j.create_file("parent.toml", PARENT_TOML)?;
+    j.create_file(".config.toml", CHILD_TOML)?;
+    Ok(())
+}
+
+fn ensure_eq<T>(actual: &T, expected: &T, label: &str) -> Result<()>
+where
+    T: PartialEq + std::fmt::Debug,
+{
+    ensure!(
+        actual == expected,
+        "unexpected {label} {actual:?}; expected {expected:?}"
+    );
+    Ok(())
+}
+
+fn verify_multi_level_config(cfg: &MultiLevelCfg) -> Result<()> {
+    ensure_eq(&cfg.app_name.as_str(), &"base", "app_name")?;
+    ensure_eq(&cfg.retries, &2, "retries")?;
+    ensure_eq(&cfg.enabled, &false, "enabled")?;
+    let expected_tags = vec![String::from("child")];
+    ensure_eq(&cfg.tags, &expected_tags, "tags")?;
+    ensure_eq(&cfg.nested.region.as_str(), &"child", "nested.region")?;
+    ensure_eq(&cfg.nested.threshold, &2, "nested.threshold")?;
+    ensure_eq(&cfg.nested.mode.as_deref(), &Some("parent"), "nested.mode")?;
+    ensure_eq(&cfg.parent_only.as_deref(), &Some("parent"), "parent_only")?;
+    ensure_eq(&cfg.child_only.as_deref(), &Some("child"), "child_only")?;
     Ok(())
 }
 
