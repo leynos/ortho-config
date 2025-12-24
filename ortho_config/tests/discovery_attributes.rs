@@ -116,6 +116,16 @@ impl Drop for CwdGuard {
     }
 }
 
+/// Execute a test closure under the environment lock.
+fn with_env_lock<F, R>(env_lock: test_env::EnvVarLock, f: F) -> R
+where
+    F: FnOnce() -> R,
+{
+    let result = f();
+    drop(env_lock);
+    result
+}
+
 struct CliFlagCase {
     flag: &'static str,
     filename: &'static str,
@@ -150,7 +160,7 @@ fn cli_flag_config_loading(
     #[case] case: CliFlagCase,
     env_lock: test_env::EnvVarLock,
 ) -> Result<()> {
-    let result = (|| {
+    with_env_lock(env_lock, || {
         let _env = setup_clean_env();
         let dir = TempDir::new().context("create temp dir")?;
         let config_path = if case.file_contents.is_empty() {
@@ -196,14 +206,12 @@ fn cli_flag_config_loading(
             }
         }
         Ok(())
-    })();
-    drop(env_lock);
-    result
+    })
 }
 
 #[rstest]
 fn env_var_overrides_default_locations(env_lock: test_env::EnvVarLock) -> Result<()> {
-    let result = (|| {
+    with_env_lock(env_lock, || {
         let _env = setup_clean_env();
         let dir = TempDir::new().context("create temp dir")?;
         let config_path = create_test_config(dir.path(), "env.toml", 99)?;
@@ -214,9 +222,7 @@ fn env_var_overrides_default_locations(env_lock: test_env::EnvVarLock) -> Result
 
         ensure!(cfg.value == 99, "expected 99, got {}", cfg.value);
         Ok(())
-    })();
-    drop(env_lock);
-    result
+    })
 }
 
 fn load_xdg_config<F>(setup: F) -> OrthoResult<DiscoveryConfig>
@@ -261,24 +267,22 @@ where
 
 #[rstest]
 fn xdg_config_home_missing_uses_default(env_lock: test_env::EnvVarLock) -> OrthoResult<()> {
-    let result = assert_xdg_cfg_value(1, |_| Ok(()));
-    drop(env_lock);
-    result
+    with_env_lock(env_lock, || assert_xdg_cfg_value(1, |_| Ok(())))
 }
 
 #[rstest]
 fn xdg_config_home_reads_custom_file(env_lock: test_env::EnvVarLock) -> OrthoResult<()> {
-    let result = assert_xdg_cfg_value(64, |app_dir| {
-        write_file(&app_dir.join("demo.toml"), "value = 64")?;
-        Ok(())
-    });
-    drop(env_lock);
-    result
+    with_env_lock(env_lock, || {
+        assert_xdg_cfg_value(64, |app_dir| {
+            write_file(&app_dir.join("demo.toml"), "value = 64")?;
+            Ok(())
+        })
+    })
 }
 
 #[rstest]
 fn dotfile_fallback_uses_custom_name(env_lock: test_env::EnvVarLock) -> Result<()> {
-    let result = (|| {
+    with_env_lock(env_lock, || {
         let _env = setup_clean_env();
         let dir = TempDir::new().context("create temp dir")?;
         let _ = create_test_config(dir.path(), ".demo.toml", 23)?;
@@ -289,26 +293,22 @@ fn dotfile_fallback_uses_custom_name(env_lock: test_env::EnvVarLock) -> Result<(
 
         ensure!(cfg.value == 23, "expected 23, got {}", cfg.value);
         Ok(())
-    })();
-    drop(env_lock);
-    result
+    })
 }
 
 #[rstest]
 fn defaults_apply_when_no_config_found(env_lock: test_env::EnvVarLock) -> Result<()> {
-    let result = (|| {
+    with_env_lock(env_lock, || {
         let _env = setup_clean_env();
         let cfg = DiscoveryConfig::load_from_iter(["prog"]).map_err(|err| anyhow!(err))?;
         ensure!(cfg.value == 1, "expected default 1, got {}", cfg.value);
         Ok(())
-    })();
-    drop(env_lock);
-    result
+    })
 }
 
 #[rstest]
 fn error_on_malformed_config(env_lock: test_env::EnvVarLock) -> Result<()> {
-    let result = (|| {
+    with_env_lock(env_lock, || {
         let _env = setup_clean_env();
         let dir = TempDir::new().context("create temp dir")?;
         let config_path = dir.path().join("broken.toml");
@@ -326,7 +326,5 @@ fn error_on_malformed_config(env_lock: test_env::EnvVarLock) -> Result<()> {
             "unexpected error: {err:?}"
         );
         Ok(())
-    })();
-    drop(env_lock);
-    result
+    })
 }
