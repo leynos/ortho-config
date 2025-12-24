@@ -4,7 +4,7 @@
 //! `PostMergeHook::post_merge` method after `merge_from_layers` completes, and
 //! that the `PostMergeContext` provides accurate metadata about the merge.
 
-use anyhow::{Result, anyhow, ensure};
+use anyhow::{Result, ensure};
 use camino::Utf8PathBuf;
 use ortho_config::{MergeComposer, OrthoConfig, OrthoResult, PostMergeContext, PostMergeHook};
 use rstest::rstest;
@@ -58,8 +58,11 @@ impl PostMergeHook for ContextAwareSample {
     }
 }
 
-fn to_anyhow<T, E: std::fmt::Display>(result: Result<T, E>) -> anyhow::Result<T> {
-    result.map_err(|err| anyhow!(err.to_string()))
+fn to_anyhow<T, E>(result: Result<T, E>) -> anyhow::Result<T>
+where
+    E: std::error::Error + Send + Sync + 'static,
+{
+    result.map_err(anyhow::Error::new)
 }
 
 fn merge_hook_sample(composer: MergeComposer) -> Result<HookSample> {
