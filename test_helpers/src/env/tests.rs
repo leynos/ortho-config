@@ -30,9 +30,9 @@ fn run_env_worker(barrier: Arc<Barrier>, key: String, iterations: usize) {
 }
 
 fn assert_join_success(handle: thread::JoinHandle<()>) {
-    if let Err(err) = handle.join() {
-        panic!("thread panicked: {err:?}");
-    }
+    handle
+        .join()
+        .expect("thread panicked during join");
 }
 
 // Centralizes environment variable lookups for the tests; panics on
@@ -45,11 +45,17 @@ fn env_value(key: &str) -> String {
 }
 
 fn setup_test_env(key: &str, value: &str) {
-    super::with_lock(|| unsafe { super::env_set_var(key, OsStr::new(value)) });
+    super::with_lock(|| {
+        // SAFETY: Serialised by ENV_MUTEX held via with_lock; no concurrent env access.
+        unsafe { super::env_set_var(key, OsStr::new(value)) }
+    });
 }
 
 fn cleanup_test_env(key: &str) {
-    super::with_lock(|| unsafe { super::env_remove_var(key) });
+    super::with_lock(|| {
+        // SAFETY: Serialised by ENV_MUTEX held via with_lock; no concurrent env access.
+        unsafe { super::env_remove_var(key) }
+    });
 }
 
 fn test_guard_lifecycle<F, A>(key: &str, original: &str, create_guard: F, assert_during: A)
@@ -139,8 +145,11 @@ fn concurrent_mutations_restore_values() {
 #[test]
 fn stacking_restores_in_lifo() {
     let key = "TEST_HELPERS_STACKING";
-    // Ensure clean slate
-    super::with_lock(|| unsafe { super::env_remove_var(key) });
+    // Ensure clean slate.
+    super::with_lock(|| {
+        // SAFETY: Serialised by ENV_MUTEX held via with_lock; no concurrent env access.
+        unsafe { super::env_remove_var(key) }
+    });
     let guard1 = set_var(key, "v1");
     assert_eq!(env_value(key), "v1");
 
