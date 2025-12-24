@@ -52,12 +52,7 @@ fn cleanup_test_env(key: &str) {
     super::with_lock(|| unsafe { super::env_remove_var(key) });
 }
 
-fn test_guard_lifecycle<F, A>(
-    key: &str,
-    original: &str,
-    create_guard: F,
-    assert_during: A,
-)
+fn test_guard_lifecycle<F, A>(key: &str, original: &str, create_guard: F, assert_during: A)
 where
     F: FnOnce(&str) -> EnvVarGuard,
     A: FnOnce(&str),
