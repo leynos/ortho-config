@@ -143,6 +143,10 @@ impl CsvEnv {
                 .map(|s| Value::from(s.trim().to_owned()))
                 .collect::<Vec<_>>()
                 .into()
+        } else if trimmed.eq_ignore_ascii_case("true") {
+            true.into()
+        } else if trimmed.eq_ignore_ascii_case("false") {
+            false.into()
         } else {
             trimmed
                 .parse()
