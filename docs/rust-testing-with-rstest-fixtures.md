@@ -563,8 +563,8 @@ When using `#[once]`, there are critical warnings:
    and cannot be generic functions (neither with generic type parameters nor
    using `impl Trait` in arguments or return types).
 3. **Attribute Propagation:** `rstest` macros currently drop `#[expect]`
-   attributes. If you must suppress a lint inside an rstest fixture, use
-   `#[allow(lint, reason = "rstest drops #[expect]; FIXME: switch when fixed")]`
+   attributes. When suppressing a lint inside a rstest fixture, use
+   `#[allow(dead_code, reason = "rstest drops #[expect]; FIXME: switch when fixed")]`
    to document the workaround. Prefer `#[expect]` everywhere else.
 
 The "never dropped" behaviour arises because `rstest` typically creates a
