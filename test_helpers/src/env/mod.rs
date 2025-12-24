@@ -168,6 +168,10 @@ impl EnvScope {
     /// `lock.set_var`/`lock.remove_var`) instead of the standalone helpers to
     /// avoid re-entrant locking overhead.
     ///
+    /// Builders must use the provided lock's methods (for example
+    /// `lock.set_var`/`lock.remove_var`) instead of the standalone helpers to
+    /// avoid re-entrant locking overhead.
+    ///
     /// # Examples
     /// ```
     /// use test_helpers::env;
@@ -300,6 +304,10 @@ pub fn scope(guards: Vec<EnvVarGuard>) -> EnvScope {
 }
 
 /// Create a scope after running the provided builder while holding the lock.
+///
+/// Builders must use the provided lock's methods (for example
+/// `lock.set_var`/`lock.remove_var`) instead of the standalone helpers to
+/// avoid re-entrant locking overhead.
 ///
 /// # Examples
 /// ```
