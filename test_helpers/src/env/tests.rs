@@ -52,30 +52,44 @@ fn cleanup_test_env(key: &str) {
     super::with_lock(|| unsafe { super::env_remove_var(key) });
 }
 
-#[test]
-fn set_var_restores_original() {
-    let key = "TEST_HELPERS_SET_VAR";
-    let original = "orig";
+/// Test that a guard restores the original environment variable value.
+fn test_guard_restoration<F, A>(
+    key: &str,
+    original: &str,
+    guard_fn: F,
+    assert_during: A,
+)
+where
+    F: FnOnce(&str) -> EnvVarGuard,
+    A: FnOnce(),
+{
     setup_test_env(key, original);
     {
-        let _guard = set_var(key, "temp");
-        assert_eq!(env_value(key), "temp");
+        let _guard = guard_fn(key);
+        assert_during();
     }
     assert_eq!(env_value(key), original);
     cleanup_test_env(key);
 }
 
 #[test]
+fn set_var_restores_original() {
+    test_guard_restoration(
+        "TEST_HELPERS_SET_VAR",
+        "orig",
+        |key| set_var(key, "temp"),
+        || assert_eq!(env_value("TEST_HELPERS_SET_VAR"), "temp"),
+    );
+}
+
+#[test]
 fn remove_var_restores_value() {
-    let key = "TEST_HELPERS_REMOVE_VAR";
-    let original = "to-be-removed";
-    setup_test_env(key, original);
-    {
-        let _guard = remove_var(key);
-        assert!(std::env::var(key).is_err());
-    }
-    assert_eq!(env_value(key), original);
-    cleanup_test_env(key);
+    test_guard_restoration(
+        "TEST_HELPERS_REMOVE_VAR",
+        "to-be-removed",
+        remove_var,
+        || assert!(std::env::var("TEST_HELPERS_REMOVE_VAR").is_err()),
+    );
 }
 
 #[test]
