@@ -35,7 +35,7 @@ fn assert_join_success(handle: thread::JoinHandle<()>) {
     }
 }
 
-// Centralises environment variable lookups for the tests; panics on
+// Centralizes environment variable lookups for the tests; panics on
 // missing/invalid values so failures are loud and easy to diagnose.
 fn env_value(key: &str) -> String {
     match std::env::var(key) {
