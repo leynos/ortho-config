@@ -62,23 +62,29 @@ pub mod env {
         unsafe { env::remove_var(key) };
     }
 
-    /// Helper function that handles the common pattern of environment variable mutation
+    /// Helper function that handles the common pattern of environment variable mutation.
     fn mutate_env_var<K, F>(key: K, mutator: F) -> EnvVarGuard
     where
         K: Into<String>,
         F: FnOnce(&str),
     {
         let key_string = key.into();
-        let original = {
-            let _guard = ENV_MUTEX.lock();
-            let original = env::var_os(&key_string);
-            mutator(&key_string);
-            original
-        };
-        EnvVarGuard {
-            key: key_string,
-            original,
-        }
+        let guard = ENV_MUTEX.lock();
+        mutate_env_var_locked(key_string, mutator, &guard)
+    }
+
+    /// Helper for mutating environment variables when the lock is already held.
+    fn mutate_env_var_locked<F>(
+        key: String,
+        mutator: F,
+        _guard: &ReentrantMutexGuard<'static, ()>,
+    ) -> EnvVarGuard
+    where
+        F: FnOnce(&str),
+    {
+        let original = env::var_os(&key);
+        mutator(&key);
+        EnvVarGuard { key, original }
     }
 
     /// RAII guard restoring an environment variable to its prior value on drop.
@@ -103,7 +109,30 @@ pub mod env {
     /// ```
     #[must_use = "dropping releases the environment lock"]
     pub struct EnvVarLock {
-        _guard: ReentrantMutexGuard<'static, ()>,
+        guard: ReentrantMutexGuard<'static, ()>,
+    }
+
+    impl EnvVarLock {
+        /// Sets an environment variable while holding the global lock.
+        pub fn set_var<K, V>(&self, key: K, value: V) -> EnvVarGuard
+        where
+            K: Into<String>,
+            V: AsRef<OsStr>,
+        {
+            mutate_env_var_locked(
+                key.into(),
+                |k| unsafe { env_set_var(k, value.as_ref()) },
+                &self.guard,
+            )
+        }
+
+        /// Removes an environment variable while holding the global lock.
+        pub fn remove_var<K>(&self, key: K) -> EnvVarGuard
+        where
+            K: Into<String>,
+        {
+            mutate_env_var_locked(key.into(), |k| unsafe { env_remove_var(k) }, &self.guard)
+        }
     }
 
     /// RAII scope that holds the environment lock while retaining guards.
@@ -148,20 +177,28 @@ pub mod env {
         /// ```
         /// use test_helpers::env;
         ///
-        /// let _scope = env::EnvScope::new_with(|| {
-        ///     vec![env::remove_var("FOO"), env::remove_var("BAR")]
+        /// let _scope = env::EnvScope::new_with(|lock| {
+        ///     vec![lock.remove_var("FOO"), lock.remove_var("BAR")]
         /// });
         /// ```
         pub fn new_with<F>(builder: F) -> Self
         where
-            F: FnOnce() -> Vec<EnvVarGuard>,
+            F: FnOnce(&EnvVarLock) -> Vec<EnvVarGuard>,
         {
             let lock = lock();
-            let guards = builder();
+            let guards = builder(&lock);
             Self {
                 _lock: lock,
                 guards,
             }
+        }
+
+        /// Create a scope from an iterator of guards.
+        pub fn from_guards<I>(guards: I) -> Self
+        where
+            I: IntoIterator<Item = EnvVarGuard>,
+        {
+            Self::new(guards.into_iter().collect())
         }
     }
 
@@ -251,7 +288,7 @@ pub mod env {
     /// ```
     pub fn lock() -> EnvVarLock {
         EnvVarLock {
-            _guard: ENV_MUTEX.lock(),
+            guard: ENV_MUTEX.lock(),
         }
     }
 
@@ -273,13 +310,28 @@ pub mod env {
     /// ```
     /// use test_helpers::env;
     ///
-    /// let _scope = env::scope_with(|| vec![env::remove_var("FOO")]);
+    /// let _scope = env::scope_with(|lock| vec![lock.remove_var("FOO")]);
     /// ```
     pub fn scope_with<F>(builder: F) -> EnvScope
     where
-        F: FnOnce() -> Vec<EnvVarGuard>,
+        F: FnOnce(&EnvVarLock) -> Vec<EnvVarGuard>,
     {
         EnvScope::new_with(builder)
+    }
+
+    /// Create a scope from an iterator of guards.
+    ///
+    /// # Examples
+    /// ```
+    /// use test_helpers::env;
+    ///
+    /// let _scope = env::scope_from_iter([env::remove_var("FOO")]);
+    /// ```
+    pub fn scope_from_iter<I>(guards: I) -> EnvScope
+    where
+        I: IntoIterator<Item = EnvVarGuard>,
+    {
+        EnvScope::from_guards(guards)
     }
 
     /// Run a closure while holding the global environment lock.
@@ -307,21 +359,28 @@ pub mod env {
         use std::sync::{Arc, Barrier};
         use std::thread;
 
-        fn spawn_env_worker(barrier: &Arc<Barrier>, key: String) -> thread::JoinHandle<()> {
+        fn spawn_env_worker(
+            barrier: &Arc<Barrier>,
+            key: String,
+            iterations: usize,
+        ) -> thread::JoinHandle<()> {
             let barrier_wait = Arc::clone(barrier);
-            thread::spawn(move || run_env_worker(barrier_wait, key))
+            thread::spawn(move || run_env_worker(barrier_wait, key, iterations))
         }
 
         #[expect(
             clippy::needless_pass_by_value,
             reason = "thread closure requires owned Arc and String to satisfy 'static"
         )]
-        fn run_env_worker(barrier: Arc<Barrier>, key: String) {
+        fn run_env_worker(barrier: Arc<Barrier>, key: String, iterations: usize) {
             barrier.wait();
-            let value = format!("value-{key}");
-            let guard = set_var(&key, &value);
-            assert_eq!(env_value(&key), value);
-            drop(guard);
+            for iter in 0..iterations {
+                let value = format!("value-{key}-{iter}");
+                let guard = set_var(&key, &value);
+                assert_eq!(env_value(&key), value);
+                drop(guard);
+                assert_eq!(env_value(&key), "original");
+            }
         }
 
         fn assert_join_success(handle: thread::JoinHandle<()>) {
@@ -387,21 +446,27 @@ pub mod env {
         #[test]
         fn concurrent_mutations_restore_values() {
             const THREADS: usize = 4;
+            const ITERATIONS: usize = 8;
             let keys: Vec<_> = (0..THREADS)
                 .map(|i| format!("TEST_HELPERS_CONCURRENT_{i}"))
                 .collect();
             let barrier = Arc::new(Barrier::new(THREADS));
 
+            for key in &keys {
+                setup_test_env(key, "original");
+            }
+
             let handles: Vec<_> = keys
                 .iter()
                 .cloned()
-                .map(|key| spawn_env_worker(&barrier, key))
+                .map(|key| spawn_env_worker(&barrier, key, ITERATIONS))
                 .collect();
 
             handles.into_iter().for_each(assert_join_success);
 
             for key in keys {
-                assert!(std::env::var(key).is_err());
+                assert_eq!(env_value(&key), "original");
+                cleanup_test_env(&key);
             }
 
             let same_key = "TEST_HELPERS_CONCURRENT_SAME_KEY";

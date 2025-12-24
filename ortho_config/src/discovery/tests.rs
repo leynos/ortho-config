@@ -12,7 +12,7 @@ use std::path::Path;
 use tempfile::TempDir;
 use test_helpers::env::{self as test_env, EnvScope};
 
-fn remove_common_env_vars() -> Vec<test_env::EnvVarGuard> {
+fn remove_common_env_vars(env_lock: &test_env::EnvVarLock) -> Vec<test_env::EnvVarGuard> {
     let mut guards = Vec::new();
     for key in [
         "HELLO_WORLD_CONFIG_PATH",
@@ -23,7 +23,7 @@ fn remove_common_env_vars() -> Vec<test_env::EnvVarGuard> {
         "HOME",
         "USERPROFILE",
     ] {
-        guards.push(test_env::remove_var(key));
+        guards.push(env_lock.remove_var(key));
     }
     guards
 }
