@@ -403,6 +403,18 @@ pub mod env {
             for key in keys {
                 assert!(std::env::var(key).is_err());
             }
+
+            let same_key = "TEST_HELPERS_CONCURRENT_SAME_KEY";
+            setup_test_env(same_key, "base");
+            let guard1 = set_var(same_key, "v1");
+            assert_eq!(env_value(same_key), "v1");
+            let guard2 = set_var(same_key, "v2");
+            assert_eq!(env_value(same_key), "v2");
+            drop(guard2);
+            assert_eq!(env_value(same_key), "v1");
+            drop(guard1);
+            assert_eq!(env_value(same_key), "base");
+            cleanup_test_env(same_key);
         }
 
         #[test]
