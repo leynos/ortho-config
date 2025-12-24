@@ -130,6 +130,10 @@ fn canonical_root_and_current_preserves_error_chain() -> Result<()> {
         "expected outer error in chain, got {chain:?}"
     );
     anyhow::ensure!(
+        chain.iter().any(|message| message.contains("config.toml")),
+        "expected file path context in chain, got {chain:?}"
+    );
+    anyhow::ensure!(
         chain.iter().any(|message| message == "inner error"),
         "expected inner error in chain, got {chain:?}"
     );
