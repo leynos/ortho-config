@@ -1,7 +1,7 @@
 //! Tests for CLI flag validation and builders.
 
-use super::{build_cli_struct_fields, validate_cli_long, validate_user_cli_short};
 use super::cli_flags::resolve_short_flag;
+use super::{build_cli_struct_fields, validate_cli_long, validate_user_cli_short};
 use crate::derive::parse::FieldAttrs;
 use anyhow::{Result, anyhow, ensure};
 use rstest::rstest;
