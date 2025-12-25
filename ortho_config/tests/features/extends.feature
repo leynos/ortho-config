@@ -18,3 +18,8 @@ Feature: Configuration inheritance
     Given a configuration file extending a parent file that extends a grandparent file
     When the multi-level configuration is loaded
     Then the inherited rules are "grandparent","parent","child"
+
+  Scenario: replacement strategy on annotated fields
+    Given a configuration file extending a base file with replace strategy on rules
+    When the replace-strategy configuration is loaded
+    Then the rules are "child"

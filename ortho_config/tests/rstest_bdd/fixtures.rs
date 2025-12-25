@@ -36,7 +36,9 @@ pub struct ExtendsContext {
     pub cyclic_flag: Slot<()>,
     pub missing_base_flag: Slot<()>,
     pub multi_level_flag: Slot<()>,
+    pub replace_strategy_flag: Slot<()>,
     pub result: Slot<ortho_config::OrthoResult<RulesConfig>>,
+    pub replace_result: Slot<ortho_config::OrthoResult<ReplaceRulesConfig>>,
 }
 
 /// Scenario state for merge composer builder scenarios.
@@ -254,6 +256,18 @@ pub struct RulesConfig {
 #[derive(Debug, Deserialize, Serialize, Default)]
 pub struct DynamicRule {
     pub enabled: bool,
+}
+
+/// Configuration struct with replacement strategy for rules.
+///
+/// Used to test that `merge_strategy = "replace"` restores replacement
+/// semantics when using `extends` file inheritance.
+#[derive(Debug, Deserialize, Serialize, OrthoConfig, Default)]
+#[ortho_config(prefix = "DDLINT_")]
+pub struct ReplaceRulesConfig {
+    #[serde(default)]
+    #[ortho_config(merge_strategy = "replace")]
+    pub rules: Vec<String>,
 }
 
 /// Scenario state for merge error routing scenarios.
