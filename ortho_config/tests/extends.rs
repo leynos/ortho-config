@@ -349,17 +349,60 @@ struct ReplaceTagsCfg {
     tags: Vec<String>,
 }
 
-/// Verifies that `merge_strategy = "replace"` still works with extends.
+struct ReplaceStrategyCase {
+    files: Vec<(&'static str, &'static str)>,
+    expected_tags: Vec<&'static str>,
+}
+
+/// Verifies that `merge_strategy = "replace"` works correctly with extends.
 #[rstest]
-fn extends_with_replace_strategy_replaces_arrays() -> Result<()> {
+#[case::single_level(
+    // Verifies that `merge_strategy = "replace"` still works with extends.
+    ReplaceStrategyCase {
+        files: vec![
+            ("parent.toml", "tags = [\"parent\"]"),
+            (".config.toml", "extends = \"parent.toml\"\ntags = [\"child\"]"),
+        ],
+        expected_tags: vec!["child"],
+    }
+)]
+#[case::multi_level_chain(
+    // Verifies multi-level extends where `merge_strategy = "replace"` is applied
+    // at an intermediate config and again at the leaf, ensuring that earlier
+    // values are fully discarded.
+    ReplaceStrategyCase {
+        files: vec![
+            ("grandparent.toml", "tags = [\"grandparent\"]"),
+            ("parent.toml", "extends = \"grandparent.toml\"\ntags = [\"parent\"]"),
+            (".config.toml", "extends = \"parent.toml\"\ntags = [\"child\"]"),
+        ],
+        expected_tags: vec!["child"],
+    }
+)]
+#[case::empty_array(
+    // Verifies that replacing with an explicit empty vector discards all tags
+    // from ancestor configs when `merge_strategy = "replace"` is used.
+    ReplaceStrategyCase {
+        files: vec![
+            ("parent.toml", "tags = [\"parent\"]"),
+            (".config.toml", "extends = \"parent.toml\"\ntags = []"),
+        ],
+        expected_tags: vec![],
+    }
+)]
+fn extends_with_replace_strategy_behaviour(#[case] case: ReplaceStrategyCase) -> Result<()> {
     with_jail(|j| {
-        j.create_file("parent.toml", "tags = [\"parent\"]")?;
-        j.create_file(
-            ".config.toml",
-            "extends = \"parent.toml\"\ntags = [\"child\"]",
-        )?;
+        for (filename, content) in case.files {
+            j.create_file(filename, content)?;
+        }
+
         let cfg = ReplaceTagsCfg::load_from_iter(["prog"]).map_err(|err| anyhow!(err))?;
-        let expected = vec![String::from("child")];
+        let expected: Vec<String> = case
+            .expected_tags
+            .iter()
+            .map(|s| String::from(*s))
+            .collect();
+
         ensure_eq(&cfg.tags, &expected, "tags")?;
         Ok(())
     })?;
