@@ -104,20 +104,24 @@ pub struct EnvVarLock {
 }
 
 impl EnvVarLock {
+    fn mutate<K, F>(&self, key: K, f: F) -> EnvVarGuard
+    where
+        K: Into<String>,
+        F: FnOnce(&str),
+    {
+        mutate_env_var_locked(key.into(), f, &self.guard)
+    }
+
     /// Sets an environment variable while holding the global lock.
     pub fn set_var<K, V>(&self, key: K, value: V) -> EnvVarGuard
     where
         K: Into<String>,
         V: AsRef<OsStr>,
     {
-        mutate_env_var_locked(
-            key.into(),
-            |k| {
-                // SAFETY: The caller holds the global env lock for this mutation.
-                unsafe { env_set_var(k, value.as_ref()) }
-            },
-            &self.guard,
-        )
+        self.mutate(key, |k| {
+            // SAFETY: The caller holds the global env lock for this mutation.
+            unsafe { env_set_var(k, value.as_ref()) }
+        })
     }
 
     /// Removes an environment variable while holding the global lock.
@@ -125,14 +129,10 @@ impl EnvVarLock {
     where
         K: Into<String>,
     {
-        mutate_env_var_locked(
-            key.into(),
-            |k| {
-                // SAFETY: The caller holds the global env lock for this mutation.
-                unsafe { env_remove_var(k) }
-            },
-            &self.guard,
-        )
+        self.mutate(key, |k| {
+            // SAFETY: The caller holds the global env lock for this mutation.
+            unsafe { env_remove_var(k) }
+        })
     }
 }
 
@@ -209,7 +209,8 @@ impl EnvScope {
 
 impl Drop for EnvScope {
     fn drop(&mut self) {
-        // Ensure guard restoration happens while the environment lock is held.
+        // Drop runs before field destructors, so `_lock` remains held while
+        // `guards` are dropped and restore environment values.
         let guards = std::mem::take(&mut self.guards);
         drop(guards);
     }
@@ -355,16 +356,18 @@ where
 /// ```
 /// use test_helpers::env;
 ///
-/// env::with_lock(|| {
-///     let _guard = env::set_var("KEY", "VALUE");
+/// env::with_lock(|lock| {
+///     let _guard = lock.set_var("KEY", "VALUE");
 /// });
 /// ```
 pub fn with_lock<F, R>(f: F) -> R
 where
-    F: FnOnce() -> R,
+    F: FnOnce(&EnvVarLock) -> R,
 {
-    let _guard = ENV_MUTEX.lock();
-    f()
+    let lock = EnvVarLock {
+        guard: ENV_MUTEX.lock(),
+    };
+    f(&lock)
 }
 
 #[cfg(test)]

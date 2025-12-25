@@ -43,14 +43,14 @@ fn env_value(key: &str) -> String {
 }
 
 fn setup_test_env(key: &str, value: &str) {
-    super::with_lock(|| {
+    super::with_lock(|_lock| {
         // SAFETY: Serialised by ENV_MUTEX held via with_lock; no concurrent env access.
         unsafe { super::env_set_var(key, OsStr::new(value)) }
     });
 }
 
 fn cleanup_test_env(key: &str) {
-    super::with_lock(|| {
+    super::with_lock(|_lock| {
         // SAFETY: Serialised by ENV_MUTEX held via with_lock; no concurrent env access.
         unsafe { super::env_remove_var(key) }
     });
@@ -144,7 +144,7 @@ fn concurrent_mutations_restore_values() {
 fn stacking_restores_in_lifo() {
     let key = "TEST_HELPERS_STACKING";
     // Ensure clean slate.
-    super::with_lock(|| {
+    super::with_lock(|_lock| {
         // SAFETY: Serialised by ENV_MUTEX held via with_lock; no concurrent env access.
         unsafe { super::env_remove_var(key) }
     });
