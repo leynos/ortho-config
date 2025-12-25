@@ -88,6 +88,7 @@ pub use csv_env::CsvEnv;
 pub use declarative::{DeclarativeMerge, MergeComposer, MergeLayer, MergeProvenance};
 pub use discovery::{
     ConfigDiscovery, ConfigDiscoveryBuilder, DiscoveryLayersOutcome, DiscoveryLoadOutcome,
+    LayerDiscoveryOutcome,
 };
 pub use error::{OrthoError, is_display_request};
 pub use file::{FileLayerChain, load_config_file, load_config_file_as_chain};

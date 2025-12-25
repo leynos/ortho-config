@@ -364,3 +364,45 @@ fn extends_with_replace_strategy_replaces_arrays() -> Result<()> {
     })?;
     Ok(())
 }
+
+/// Verifies multi-level extends where `merge_strategy = "replace"` is applied
+/// at an intermediate config and again at the leaf, ensuring that earlier
+/// values are fully discarded.
+#[rstest]
+fn extends_with_replace_strategy_multi_level_chain_replaces_arrays() -> Result<()> {
+    with_jail(|j| {
+        j.create_file("grandparent.toml", "tags = [\"grandparent\"]")?;
+        j.create_file(
+            "parent.toml",
+            "extends = \"grandparent.toml\"\ntags = [\"parent\"]",
+        )?;
+        j.create_file(
+            ".config.toml",
+            "extends = \"parent.toml\"\ntags = [\"child\"]",
+        )?;
+
+        let cfg = ReplaceTagsCfg::load_from_iter(["prog"]).map_err(|err| anyhow!(err))?;
+        let expected = vec![String::from("child")];
+
+        ensure_eq(&cfg.tags, &expected, "tags")?;
+        Ok(())
+    })?;
+    Ok(())
+}
+
+/// Verifies that replacing with an explicit empty vector discards all tags
+/// from ancestor configs when `merge_strategy = "replace"` is used.
+#[rstest]
+fn extends_with_replace_strategy_replaces_with_empty_array() -> Result<()> {
+    with_jail(|j| {
+        j.create_file("parent.toml", "tags = [\"parent\"]")?;
+        j.create_file(".config.toml", "extends = \"parent.toml\"\ntags = []")?;
+
+        let cfg = ReplaceTagsCfg::load_from_iter(["prog"]).map_err(|err| anyhow!(err))?;
+        let expected: Vec<String> = Vec::new();
+
+        ensure_eq(&cfg.tags, &expected, "tags")?;
+        Ok(())
+    })?;
+    Ok(())
+}

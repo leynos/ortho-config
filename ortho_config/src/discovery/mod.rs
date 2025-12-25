@@ -14,8 +14,7 @@ use camino::Utf8PathBuf;
 use dirs::home_dir;
 
 use crate::{
-    FileLayerChain, MergeLayer, OrthoError, OrthoMergeExt, OrthoResult, load_config_file,
-    load_config_file_as_chain,
+    MergeLayer, OrthoError, OrthoMergeExt, OrthoResult, load_config_file, load_config_file_as_chain,
 };
 
 #[cfg(windows)]
@@ -79,34 +78,30 @@ pub struct DiscoveryLoadOutcome {
     pub optional_errors: Vec<Arc<OrthoError>>,
 }
 
-/// Composition result that captures the first discovered configuration layer.
+/// Generic composition result that captures a discovered value along with errors.
+///
+/// This type unifies single-layer and multi-layer discovery outcomes, avoiding
+/// duplication of error-handling logic.
 #[derive(Debug, Default)]
 #[must_use]
-pub struct DiscoveryLayerOutcome {
-    /// Successfully composed merge layer, if any.
-    pub layer: Option<MergeLayer<'static>>,
+pub struct LayerDiscoveryOutcome<T> {
+    /// Successfully composed value, if any.
+    pub value: T,
     /// Errors originating from required explicit candidates.
     pub required_errors: Vec<Arc<OrthoError>>,
     /// Errors produced by optional discovery candidates.
     pub optional_errors: Vec<Arc<OrthoError>>,
 }
 
+/// Composition result that captures the first discovered configuration layer.
+pub type DiscoveryLayerOutcome = LayerDiscoveryOutcome<Option<MergeLayer<'static>>>;
+
 /// Composition result that captures multiple file layers from an extends chain.
 ///
 /// When a configuration file uses `extends`, each file in the inheritance chain
 /// is returned as a separate layer. This allows declarative merge strategies
 /// (such as append for vectors) to be applied across the chain.
-#[derive(Debug, Default)]
-#[must_use]
-pub struct DiscoveryLayersOutcome {
-    /// Successfully composed merge layers from the file chain.
-    /// Ordered ancestor-first when extends is used.
-    pub layers: Vec<MergeLayer<'static>>,
-    /// Errors originating from required explicit candidates.
-    pub required_errors: Vec<Arc<OrthoError>>,
-    /// Errors produced by optional discovery candidates.
-    pub optional_errors: Vec<Arc<OrthoError>>,
-}
+pub type DiscoveryLayersOutcome = LayerDiscoveryOutcome<Vec<MergeLayer<'static>>>;
 
 impl ConfigDiscovery {
     /// Creates a new builder initialised for `app_name`.
@@ -150,39 +145,21 @@ impl ConfigDiscovery {
         }
     }
 
-    fn discover_first_chain<T, F>(&self, mut build: F) -> DiscoveryOutcome<T>
-    where
-        F: FnMut(FileLayerChain) -> Result<T, Arc<OrthoError>>,
-    {
-        let mut required_errors = Vec::new();
-        let mut optional_errors = Vec::new();
-        let (candidates, required_bound) = self.candidates_with_required_bound();
-        for (idx, path) in candidates.into_iter().enumerate() {
-            match load_config_file_as_chain(&path) {
-                Ok(Some(chain)) => match build(chain) {
-                    Ok(value) => {
-                        return DiscoveryOutcome {
-                            value: Some(value),
-                            required_errors,
-                            optional_errors,
-                        };
-                    }
-                    Err(err) if idx < required_bound => required_errors.push(err),
-                    Err(err) => optional_errors.push(err),
-                },
-                Ok(None) if idx < required_bound => {
-                    required_errors.push(Self::missing_required_error(&path));
-                }
-                Ok(None) => {}
-                Err(err) if idx < required_bound => required_errors.push(err),
-                Err(err) => optional_errors.push(err),
-            }
+    /// Records a missing candidate error if this is a required path.
+    fn record_missing_candidate(
+        idx: usize,
+        required_bound: usize,
+        path: &Path,
+        required_errors: &mut Vec<Arc<OrthoError>>,
+    ) {
+        if idx < required_bound {
+            required_errors.push(Self::missing_required_error(path));
         }
-        DiscoveryOutcome {
-            value: None,
-            required_errors,
-            optional_errors,
-        }
+    }
+
+    /// Returns true if the candidate at `idx` is required.
+    const fn is_required_candidate(idx: usize, required_bound: usize) -> bool {
+        idx < required_bound
     }
 
     fn push_unique(
@@ -475,7 +452,7 @@ impl ConfigDiscovery {
                 })
         });
         DiscoveryLayerOutcome {
-            layer: outcome.value,
+            value: outcome.value,
             required_errors: outcome.required_errors,
             optional_errors: outcome.optional_errors,
         }
@@ -491,18 +468,45 @@ impl ConfigDiscovery {
     /// Captures errors for required and optional candidates separately so
     /// callers can mirror the aggregation semantics of [`Self::load_first`].
     pub fn compose_layers(&self) -> DiscoveryLayersOutcome {
-        let outcome = self.discover_first_chain(|chain| {
-            let layers = chain
-                .values
-                .into_iter()
-                .map(|(value, path)| MergeLayer::file(Cow::Owned(value), Some(path)))
-                .collect();
-            Ok(layers)
-        });
+        let mut required_errors = Vec::new();
+        let mut optional_errors = Vec::new();
+        let (candidates, required_bound) = self.candidates_with_required_bound();
+
+        for (idx, candidate_path) in candidates.into_iter().enumerate() {
+            match load_config_file_as_chain(&candidate_path) {
+                Ok(Some(chain)) => {
+                    let layers = chain
+                        .values
+                        .into_iter()
+                        .map(|(value, path)| MergeLayer::file(Cow::Owned(value), Some(path)))
+                        .collect();
+                    return DiscoveryLayersOutcome {
+                        value: layers,
+                        required_errors,
+                        optional_errors,
+                    };
+                }
+                Ok(None) => {
+                    Self::record_missing_candidate(
+                        idx,
+                        required_bound,
+                        &candidate_path,
+                        &mut required_errors,
+                    );
+                }
+                Err(err) if Self::is_required_candidate(idx, required_bound) => {
+                    required_errors.push(err);
+                }
+                Err(err) => {
+                    optional_errors.push(err);
+                }
+            }
+        }
+
         DiscoveryLayersOutcome {
-            layers: outcome.value.unwrap_or_default(),
-            required_errors: outcome.required_errors,
-            optional_errors: outcome.optional_errors,
+            value: Vec::new(),
+            required_errors,
+            optional_errors,
         }
     }
 

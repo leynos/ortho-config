@@ -120,7 +120,7 @@ fn build_discovery_loading_block(
         #cli_chain
         let discovery = builder.build();
         let ortho_config::discovery::DiscoveryLayersOutcome {
-            layers,
+            value: layers,
             mut required_errors,
             mut optional_errors,
         } = discovery.compose_layers();
