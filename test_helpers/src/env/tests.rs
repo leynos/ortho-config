@@ -30,9 +30,7 @@ fn run_env_worker(barrier: Arc<Barrier>, key: String, iterations: usize) {
 }
 
 fn assert_join_success(handle: thread::JoinHandle<()>) {
-    handle
-        .join()
-        .expect("thread panicked during join");
+    handle.join().expect("thread panicked during join");
 }
 
 // Centralizes environment variable lookups for the tests; panics on
