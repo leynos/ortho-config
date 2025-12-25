@@ -135,6 +135,22 @@ impl CsvEnv {
         trimmed.contains(',') && !matches!(trimmed.chars().next(), Some('[' | '{' | '"' | '\''))
     }
 
+    /// Parse a scalar (non-CSV) string into a [`Value`].
+    ///
+    /// Handles boolean literals case-insensitively, then falls back to
+    /// `serde_json` parsing, and finally treats the input as a plain string.
+    fn parse_scalar(trimmed: &str) -> Value {
+        if trimmed.eq_ignore_ascii_case("true") {
+            return true.into();
+        }
+        if trimmed.eq_ignore_ascii_case("false") {
+            return false.into();
+        }
+        trimmed
+            .parse()
+            .unwrap_or_else(|_| Value::from(trimmed.to_owned()))
+    }
+
     fn parse_value(raw: &str) -> Value {
         let trimmed = raw.trim();
         if Self::should_parse_as_csv(trimmed) {
@@ -144,9 +160,7 @@ impl CsvEnv {
                 .collect::<Vec<_>>()
                 .into()
         } else {
-            trimmed
-                .parse()
-                .unwrap_or_else(|_| Value::from(trimmed.to_owned()))
+            Self::parse_scalar(trimmed)
         }
     }
 }
@@ -186,5 +200,30 @@ impl Deref for CsvEnv {
 
     fn deref(&self) -> &Env {
         &self.inner
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use figment::value::Tag;
+    use rstest::rstest;
+
+    #[rstest]
+    #[case("true", Value::Bool(Tag::Default, true))]
+    #[case("false", Value::Bool(Tag::Default, false))]
+    #[case("TRUE", Value::Bool(Tag::Default, true))]
+    #[case("FALSE", Value::Bool(Tag::Default, false))]
+    #[case("True", Value::Bool(Tag::Default, true))]
+    #[case("False", Value::Bool(Tag::Default, false))]
+    fn parse_scalar_handles_boolean_strings(#[case] input: &str, #[case] expected: Value) {
+        assert_eq!(CsvEnv::parse_scalar(input), expected);
+    }
+
+    #[rstest]
+    #[case("hello")]
+    #[case("some_value")]
+    fn parse_scalar_falls_back_to_string(#[case] input: &str) {
+        assert_eq!(CsvEnv::parse_scalar(input), Value::from(input.to_owned()));
     }
 }

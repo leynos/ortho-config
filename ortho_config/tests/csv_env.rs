@@ -58,3 +58,33 @@ fn fails_on_non_lists(#[case] raw: &str) -> Result<()> {
     })?;
     Ok(())
 }
+
+#[derive(Debug, Deserialize)]
+struct BoolCfg {
+    flag: bool,
+}
+
+#[rstest]
+#[case("true", true)]
+#[case("false", false)]
+#[case("TRUE", true)]
+#[case("FALSE", false)]
+#[case("True", true)]
+#[case("False", false)]
+#[case("  true  ", true)]
+#[case("  false  ", false)]
+fn parses_booleans(#[case] raw: &str, #[case] expected: bool) -> Result<()> {
+    with_jail(|j| {
+        j.set_env("FLAG", raw);
+        let cfg: BoolCfg = Figment::from(CsvEnv::raw())
+            .extract()
+            .context("failed to extract BoolCfg from CsvEnv")?;
+        ensure!(
+            cfg.flag == expected,
+            "expected {expected}, got {}",
+            cfg.flag
+        );
+        Ok(())
+    })?;
+    Ok(())
+}
