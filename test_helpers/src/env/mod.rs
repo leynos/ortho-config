@@ -85,7 +85,7 @@ pub struct EnvVarGuard {
     original: Option<OsString>,
 }
 
-/// RAII guard that serialises environment access for its lifetime.
+/// RAII guard that serializes environment access for its lifetime.
 ///
 /// Use this when a test needs exclusive access to environment state across
 /// multiple operations, such as coordinating shared keys across threads.
@@ -95,8 +95,8 @@ pub struct EnvVarGuard {
 /// use test_helpers::env;
 ///
 /// let _lock = env::lock();
-/// let _guard = env::set_var("KEY", "VALUE");
-/// // Environment mutations remain serialised while `_lock` is alive.
+/// let _guard = _lock.set_var("KEY", "VALUE");
+/// // Environment mutations remain serialized while `_lock` is alive.
 /// ```
 #[must_use = "dropping releases the environment lock"]
 pub struct EnvVarLock {
@@ -234,7 +234,7 @@ impl fmt::Debug for EnvVarGuard {
 ///
 /// # Safety
 /// Although this function is safe to call, it mutates process-wide state.
-/// Access is serialised by a global re-entrant mutex during the mutation
+/// Access is serialized by a global re-entrant mutex during the mutation
 /// and again during restoration; other keys may interleave between those
 /// operations.
 ///
@@ -260,7 +260,7 @@ where
 ///
 /// # Safety
 /// Although this function is safe to call, it mutates process-wide state.
-/// Access is serialised by a global re-entrant mutex during the mutation
+/// Access is serialized by a global re-entrant mutex during the mutation
 /// and again during restoration; other keys may interleave between those
 /// operations.
 ///
@@ -369,9 +369,7 @@ pub fn with_lock<F, R>(f: F) -> R
 where
     F: FnOnce(&EnvVarLock) -> R,
 {
-    let lock = EnvVarLock {
-        guard: ENV_MUTEX.lock(),
-    };
+    let lock = lock();
     f(&lock)
 }
 
