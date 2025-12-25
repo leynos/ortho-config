@@ -344,6 +344,7 @@ fn extends_validation_errors(
 /// Config struct with explicit replace strategy for the tags field.
 #[derive(Debug, Deserialize, Serialize, OrthoConfig)]
 struct ReplaceTagsCfg {
+    #[serde(default)]
     #[ortho_config(merge_strategy = "replace")]
     tags: Vec<String>,
 }
