@@ -104,12 +104,12 @@ pub struct EnvVarLock {
 }
 
 impl EnvVarLock {
-    fn mutate<K, F>(&self, key: K, f: F) -> EnvVarGuard
+    /// Internal helper for environment mutations using the held lock.
+    fn mutate_with<F>(&self, key: String, operation: F) -> EnvVarGuard
     where
-        K: Into<String>,
         F: FnOnce(&str),
     {
-        mutate_env_var_locked(key.into(), f, &self.guard)
+        mutate_env_var_locked(key, operation, &self.guard)
     }
 
     /// Sets an environment variable while holding the global lock.
@@ -118,7 +118,7 @@ impl EnvVarLock {
         K: Into<String>,
         V: AsRef<OsStr>,
     {
-        self.mutate(key, |k| {
+        self.mutate_with(key.into(), |k| {
             // SAFETY: The caller holds the global env lock for this mutation.
             unsafe { env_set_var(k, value.as_ref()) }
         })
@@ -129,7 +129,7 @@ impl EnvVarLock {
     where
         K: Into<String>,
     {
-        self.mutate(key, |k| {
+        self.mutate_with(key.into(), |k| {
             // SAFETY: The caller holds the global env lock for this mutation.
             unsafe { env_remove_var(k) }
         })
