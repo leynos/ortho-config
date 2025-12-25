@@ -39,7 +39,7 @@ static ENV_MUTEX: LazyLock<ReentrantMutex<()>> = LazyLock::new(ReentrantMutex::d
 ///
 /// # Safety
 ///
-/// Callers must ensure the global environment is synchronised.
+/// Callers must ensure the global environment is synchronized.
 unsafe fn env_set_var(key: &str, value: &OsStr) {
     unsafe { env::set_var(key, value) };
 }
@@ -48,7 +48,7 @@ unsafe fn env_set_var(key: &str, value: &OsStr) {
 ///
 /// # Safety
 ///
-/// Callers must ensure the global environment is synchronised.
+/// Callers must ensure the global environment is synchronized.
 unsafe fn env_remove_var(key: &str) {
     unsafe { env::remove_var(key) };
 }
