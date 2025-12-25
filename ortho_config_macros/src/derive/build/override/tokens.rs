@@ -135,7 +135,7 @@ pub(super) fn build_pre_merge_tokens(
     let map_logic = build_map_merge_blocks(strategies);
     let map_state_ts = map_state.unwrap_or_default();
     quote! {
-        #[allow(unused_mut)]
+        #[allow(unused_mut, reason = "mutation depends on generated append/merge blocks")]
         let mut cli_figment = ortho_config::figment::Figment::new();
         if let Some(cli) = #cli_binding {
             cli_figment = ortho_config::figment::Figment::from(
