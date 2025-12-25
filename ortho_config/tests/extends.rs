@@ -119,10 +119,8 @@ fn multi_level_inheritance_merges_in_order() -> Result<()> {
     with_jail(|j| {
         setup_multi_level_test_files(j)?;
         let cfg = MultiLevelCfg::load_from_iter(["prog"]).map_err(|err| anyhow!(err))?;
-        verify_multi_level_config(&cfg)?;
-        Ok(())
-    })?;
-    Ok(())
+        verify_multi_level_config(&cfg)
+    })
 }
 
 fn setup_multi_level_test_files(j: &mut figment::Jail) -> Result<()> {
@@ -177,8 +175,7 @@ fn cyclic_inheritance_is_detected() -> Result<()> {
             "unexpected error: {err:?}"
         );
         Ok(())
-    })?;
-    Ok(())
+    })
 }
 
 #[rstest]
@@ -209,8 +206,7 @@ fn cyclic_inheritance_detects_case_variants() -> Result<()> {
             "error missing config reference: {msg}"
         );
         Ok(())
-    })?;
-    Ok(())
+    })
 }
 
 #[rstest]
@@ -249,8 +245,7 @@ fn missing_base_file_errors(#[case] is_abs: bool) -> Result<()> {
             "error missing extended configuration context: {msg}"
         );
         Ok(())
-    })?;
-    Ok(())
+    })
 }
 
 #[rstest]
@@ -271,8 +266,7 @@ fn non_string_extends_errors() -> Result<()> {
             "error missing origin mention: {msg}"
         );
         Ok(())
-    })?;
-    Ok(())
+    })
 }
 
 fn assert_extends_error<F>(
@@ -356,57 +350,41 @@ struct ReplaceStrategyCase {
 
 /// Verifies that `merge_strategy = "replace"` works correctly with extends.
 #[rstest]
-#[case::single_level(
-    // Verifies that `merge_strategy = "replace"` still works with extends.
-    ReplaceStrategyCase {
-        files: vec![
-            ("parent.toml", "tags = [\"parent\"]"),
-            (".config.toml", "extends = \"parent.toml\"\ntags = [\"child\"]"),
-        ],
-        expected_tags: vec!["child"],
-    }
-)]
-#[case::multi_level_chain(
-    // Verifies multi-level extends where `merge_strategy = "replace"` is applied
-    // at an intermediate config and again at the leaf, ensuring that earlier
-    // values are fully discarded.
-    ReplaceStrategyCase {
-        files: vec![
-            ("grandparent.toml", "tags = [\"grandparent\"]"),
-            ("parent.toml", "extends = \"grandparent.toml\"\ntags = [\"parent\"]"),
-            (".config.toml", "extends = \"parent.toml\"\ntags = [\"child\"]"),
-        ],
-        expected_tags: vec!["child"],
-    }
-)]
-#[case::empty_array(
-    // Verifies that replacing with an explicit empty vector discards all tags
-    // from ancestor configs when `merge_strategy = "replace"` is used.
-    ReplaceStrategyCase {
-        files: vec![
-            ("parent.toml", "tags = [\"parent\"]"),
-            (".config.toml", "extends = \"parent.toml\"\ntags = []"),
-        ],
-        expected_tags: vec![],
-    }
-)]
+#[case::single_level(ReplaceStrategyCase {
+    files: vec![
+        ("parent.toml", "tags = [\"parent\"]"),
+        (".config.toml", "extends = \"parent.toml\"\ntags = [\"child\"]"),
+    ],
+    expected_tags: vec!["child"],
+})]
+#[case::multi_level_chain(ReplaceStrategyCase {
+    files: vec![
+        ("grandparent.toml", "tags = [\"grandparent\"]"),
+        ("parent.toml", "extends = \"grandparent.toml\"\ntags = [\"parent\"]"),
+        (".config.toml", "extends = \"parent.toml\"\ntags = [\"child\"]"),
+    ],
+    expected_tags: vec!["child"],
+})]
+#[case::empty_array(ReplaceStrategyCase {
+    files: vec![
+        ("parent.toml", "tags = [\"parent\"]"),
+        (".config.toml", "extends = \"parent.toml\"\ntags = []"),
+    ],
+    expected_tags: vec![],
+})]
 fn extends_with_replace_strategy_behaviour(#[case] case: ReplaceStrategyCase) -> Result<()> {
     with_jail(|j| {
         for (filename, content) in case.files {
             j.create_file(filename, content)?;
         }
-
         let cfg = ReplaceTagsCfg::load_from_iter(["prog"]).map_err(|err| anyhow!(err))?;
         let expected: Vec<String> = case
             .expected_tags
             .iter()
             .map(|s| String::from(*s))
             .collect();
-
-        ensure_eq(&cfg.tags, &expected, "tags")?;
-        Ok(())
-    })?;
-    Ok(())
+        ensure_eq(&cfg.tags, &expected, "tags")
+    })
 }
 
 /// Verifies multi-level extends where `merge_strategy = "replace"` is applied
