@@ -112,7 +112,10 @@ impl EnvVarLock {
     {
         mutate_env_var_locked(
             key.into(),
-            |k| unsafe { env_set_var(k, value.as_ref()) },
+            |k| {
+                // SAFETY: The caller holds the global env lock for this mutation.
+                unsafe { env_set_var(k, value.as_ref()) }
+            },
             &self.guard,
         )
     }
@@ -122,7 +125,14 @@ impl EnvVarLock {
     where
         K: Into<String>,
     {
-        mutate_env_var_locked(key.into(), |k| unsafe { env_remove_var(k) }, &self.guard)
+        mutate_env_var_locked(
+            key.into(),
+            |k| {
+                // SAFETY: The caller holds the global env lock for this mutation.
+                unsafe { env_remove_var(k) }
+            },
+            &self.guard,
+        )
     }
 }
 
@@ -234,7 +244,10 @@ where
     K: Into<String>,
     V: AsRef<OsStr>,
 {
-    mutate_env_var(key, |k| unsafe { env_set_var(k, value.as_ref()) })
+    mutate_env_var(key, |k| {
+        // SAFETY: mutate_env_var holds the global env lock for this mutation.
+        unsafe { env_set_var(k, value.as_ref()) }
+    })
 }
 
 /// Removes an environment variable and returns a guard restoring its prior value.
@@ -256,7 +269,10 @@ pub fn remove_var<K>(key: K) -> EnvVarGuard
 where
     K: Into<String>,
 {
-    mutate_env_var(key, |k| unsafe { env_remove_var(k) })
+    mutate_env_var(key, |k| {
+        // SAFETY: mutate_env_var holds the global env lock for this mutation.
+        unsafe { env_remove_var(k) }
+    })
 }
 
 impl Drop for EnvVarGuard {
