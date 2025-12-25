@@ -158,6 +158,11 @@ pub struct EnvScope {
 impl EnvScope {
     /// Create a scope that holds the global lock and retains the guards.
     ///
+    /// Creating guards before calling this function can leave a window where
+    /// other threads interleave between guard creation and scope construction;
+    /// use helpers that build guards under the lock or pass guards directly
+    /// when atomicity is required.
+    ///
     /// # Examples
     /// ```
     /// use test_helpers::env;
