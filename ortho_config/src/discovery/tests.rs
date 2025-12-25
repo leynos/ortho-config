@@ -10,9 +10,9 @@ use serde::Deserialize;
 #[cfg(windows)]
 use std::path::Path;
 use tempfile::TempDir;
-use test_helpers::env as test_env;
+use test_helpers::env::{self as test_env, EnvScope};
 
-fn remove_common_env_vars() -> Vec<test_env::EnvVarGuard> {
+fn remove_common_env_vars(env_lock: &test_env::EnvVarLock) -> Vec<test_env::EnvVarGuard> {
     let mut guards = Vec::new();
     for key in [
         "HELLO_WORLD_CONFIG_PATH",
@@ -23,31 +23,26 @@ fn remove_common_env_vars() -> Vec<test_env::EnvVarGuard> {
         "HOME",
         "USERPROFILE",
     ] {
-        guards.push(test_env::remove_var(key));
+        guards.push(env_lock.remove_var(key));
     }
     guards
 }
 
 #[fixture]
-fn env_guards() -> Vec<test_env::EnvVarGuard> {
-    remove_common_env_vars()
+fn env_guards() -> EnvScope {
+    test_env::EnvScope::new_with(remove_common_env_vars)
 }
 
 #[fixture]
-fn env_override_discovery() -> (
-    ConfigDiscovery,
-    PathBuf,
-    Vec<test_env::EnvVarGuard>,
-    test_env::EnvVarGuard,
-) {
-    let guards = remove_common_env_vars();
+fn env_override_discovery() -> (ConfigDiscovery, PathBuf, EnvScope, test_env::EnvVarGuard) {
+    let scope = test_env::EnvScope::new_with(remove_common_env_vars);
     let path = std::env::temp_dir().join("explicit.toml");
     let env_guard = test_env::set_var("HELLO_WORLD_CONFIG_PATH", &path);
     let discovery = ConfigDiscovery::builder("hello_world")
         .env_var("HELLO_WORLD_CONFIG_PATH")
         .build();
 
-    (discovery, path, guards, env_guard)
+    (discovery, path, scope, env_guard)
 }
 
 #[fixture]
@@ -67,14 +62,9 @@ fn sample_config_file() -> Result<(TempDir, PathBuf)> {
 
 #[rstest]
 fn env_override_precedes_other_candidates(
-    env_override_discovery: (
-        ConfigDiscovery,
-        PathBuf,
-        Vec<test_env::EnvVarGuard>,
-        test_env::EnvVarGuard,
-    ),
+    env_override_discovery: (ConfigDiscovery, PathBuf, EnvScope, test_env::EnvVarGuard),
 ) -> Result<()> {
-    let (discovery, path, _guards, _env) = env_override_discovery;
+    let (discovery, path, _scope, _env) = env_override_discovery;
     let candidates = discovery.candidates();
     ensure!(
         candidates.first() == Some(&path),
@@ -85,7 +75,7 @@ fn env_override_precedes_other_candidates(
 
 #[rstest]
 fn xdg_candidates_follow_explicit_paths(
-    env_guards: Vec<test_env::EnvVarGuard>,
+    env_guards: EnvScope,
     config_temp_dir: Result<TempDir>,
 ) -> Result<()> {
     let _guards = env_guards;
@@ -111,7 +101,7 @@ fn xdg_candidates_follow_explicit_paths(
 
 #[cfg(any(unix, target_os = "redox"))]
 #[rstest]
-fn xdg_dirs_empty_falls_back_to_default(env_guards: Vec<test_env::EnvVarGuard>) -> Result<()> {
+fn xdg_dirs_empty_falls_back_to_default(env_guards: EnvScope) -> Result<()> {
     let _guards = env_guards;
     let _dirs = test_env::set_var("XDG_CONFIG_DIRS", "");
 
@@ -135,7 +125,7 @@ fn xdg_dirs_empty_falls_back_to_default(env_guards: Vec<test_env::EnvVarGuard>) 
 
 #[cfg(any(unix, target_os = "redox"))]
 #[rstest]
-fn xdg_dirs_with_values_excludes_default(env_guards: Vec<test_env::EnvVarGuard>) -> Result<()> {
+fn xdg_dirs_with_values_excludes_default(env_guards: EnvScope) -> Result<()> {
     let _guards = env_guards;
     let _dirs = test_env::set_var("XDG_CONFIG_DIRS", "/opt/example:/etc/custom");
 
@@ -166,14 +156,9 @@ fn xdg_dirs_with_values_excludes_default(env_guards: Vec<test_env::EnvVarGuard>)
 
 #[rstest]
 fn utf8_candidates_prioritise_env_paths(
-    env_override_discovery: (
-        ConfigDiscovery,
-        PathBuf,
-        Vec<test_env::EnvVarGuard>,
-        test_env::EnvVarGuard,
-    ),
+    env_override_discovery: (ConfigDiscovery, PathBuf, EnvScope, test_env::EnvVarGuard),
 ) -> Result<()> {
-    let (discovery, path, _guards, _env) = env_override_discovery;
+    let (discovery, path, _scope, _env) = env_override_discovery;
     let candidates = discovery.utf8_candidates();
     let first = candidates
         .first()
@@ -189,7 +174,7 @@ fn utf8_candidates_prioritise_env_paths(
 }
 
 #[rstest]
-fn project_roots_append_last(env_guards: Vec<test_env::EnvVarGuard>) -> Result<()> {
+fn project_roots_append_last(env_guards: EnvScope) -> Result<()> {
     let _guards = env_guards;
     let discovery = ConfigDiscovery::builder("hello_world")
         .clear_project_roots()
@@ -204,7 +189,7 @@ fn project_roots_append_last(env_guards: Vec<test_env::EnvVarGuard>) -> Result<(
 }
 
 #[rstest]
-fn project_roots_replaces_existing_entries(env_guards: Vec<test_env::EnvVarGuard>) -> Result<()> {
+fn project_roots_replaces_existing_entries(env_guards: EnvScope) -> Result<()> {
     let _guards = env_guards;
     let discovery = ConfigDiscovery::builder("hello_world")
         .add_project_root("legacy")
@@ -240,7 +225,7 @@ struct SampleConfig {
 
 #[rstest]
 fn load_first_reads_first_existing_file(
-    env_guards: Vec<test_env::EnvVarGuard>,
+    env_guards: EnvScope,
     sample_config_file: Result<(TempDir, PathBuf)>,
 ) -> Result<()> {
     let _guards = env_guards;
@@ -262,7 +247,7 @@ fn load_first_reads_first_existing_file(
 
 #[rstest]
 fn load_first_skips_invalid_candidates(
-    env_guards: Vec<test_env::EnvVarGuard>,
+    env_guards: EnvScope,
     config_temp_dir: Result<TempDir>,
 ) -> Result<()> {
     let _guards = env_guards;
@@ -300,7 +285,7 @@ fn load_first_skips_invalid_candidates(
 
 #[rstest]
 fn load_first_with_errors_reports_preceding_failures(
-    env_guards: Vec<test_env::EnvVarGuard>,
+    env_guards: EnvScope,
     config_temp_dir: Result<TempDir>,
 ) -> Result<()> {
     let _guards = env_guards;
@@ -333,7 +318,7 @@ fn load_first_with_errors_reports_preceding_failures(
 
 #[rstest]
 fn partitioned_errors_surface_required_failures(
-    env_guards: Vec<test_env::EnvVarGuard>,
+    env_guards: EnvScope,
     config_temp_dir: Result<TempDir>,
 ) -> Result<()> {
     let _guards = env_guards;
@@ -370,7 +355,7 @@ fn partitioned_errors_surface_required_failures(
 
 #[rstest]
 fn required_paths_emit_missing_errors(
-    env_guards: Vec<test_env::EnvVarGuard>,
+    env_guards: EnvScope,
     config_temp_dir: Result<TempDir>,
 ) -> Result<()> {
     let _guards = env_guards;
@@ -394,7 +379,7 @@ fn required_paths_emit_missing_errors(
 
 #[cfg(windows)]
 #[rstest]
-fn windows_candidates_are_case_insensitive(env_guards: Vec<test_env::EnvVarGuard>) -> Result<()> {
+fn windows_candidates_are_case_insensitive(env_guards: EnvScope) -> Result<()> {
     use std::ffi::OsStr;
 
     let _guards = env_guards;
