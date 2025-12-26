@@ -33,7 +33,7 @@ pub(super) fn collect_config_candidates() -> Vec<Utf8PathBuf> {
 pub(super) fn discover_config_layer()
 -> Result<Option<ortho_config::MergeLayer<'static>>, HelloWorldError> {
     let mut outcome = discovery().compose_layer();
-    if let Some(layer) = outcome.layer {
+    if let Some(layer) = outcome.value {
         return Ok(Some(layer));
     }
 

@@ -41,12 +41,13 @@ fn build_plan_variants() -> Result<()> {
             },
             variant: PlanVariant::Direct,
         },
+        // With declarative merge semantics, Vec<T> appends across defaults + extends chain
         PlanVariantCase {
             greet_setup: setup_sample_greet,
             leave_setup: setup_noop_leave,
             expected: ExpectedPlan {
                 recipient: "Excited crew",
-                message: "HELLO HEY CONFIG FRIENDS, EXCITED CREW!!!",
+                message: "HELLO HELLO FROM CONFIG HEY CONFIG FRIENDS, EXCITED CREW!!!",
                 is_excited: true,
             },
             variant: PlanVariant::SampleEnv,
@@ -56,7 +57,7 @@ fn build_plan_variants() -> Result<()> {
             leave_setup: setup_festive_leave,
             expected: ExpectedPlan {
                 recipient: "Excited crew",
-                message: "HELLO HEY CONFIG FRIENDS, EXCITED CREW!!!",
+                message: "HELLO HELLO FROM CONFIG HEY CONFIG FRIENDS, EXCITED CREW!!!",
                 is_excited: true,
             },
             variant: PlanVariant::SampleEnv,

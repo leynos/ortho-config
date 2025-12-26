@@ -119,10 +119,8 @@ fn multi_level_inheritance_merges_in_order() -> Result<()> {
     with_jail(|j| {
         setup_multi_level_test_files(j)?;
         let cfg = MultiLevelCfg::load_from_iter(["prog"]).map_err(|err| anyhow!(err))?;
-        verify_multi_level_config(&cfg)?;
-        Ok(())
-    })?;
-    Ok(())
+        verify_multi_level_config(&cfg)
+    })
 }
 
 fn setup_multi_level_test_files(j: &mut figment::Jail) -> Result<()> {
@@ -147,7 +145,12 @@ fn verify_multi_level_config(cfg: &MultiLevelCfg) -> Result<()> {
     ensure_eq(&cfg.app_name.as_str(), &"base", "app_name")?;
     ensure_eq(&cfg.retries, &2, "retries")?;
     ensure_eq(&cfg.enabled, &false, "enabled")?;
-    let expected_tags = vec![String::from("child")];
+    // With declarative merge semantics, Vec<T> appends across the extends chain
+    let expected_tags = vec![
+        String::from("base"),
+        String::from("parent"),
+        String::from("child"),
+    ];
     ensure_eq(&cfg.tags, &expected_tags, "tags")?;
     ensure_eq(&cfg.nested.region.as_str(), &"child", "nested.region")?;
     ensure_eq(&cfg.nested.threshold, &2, "nested.threshold")?;
@@ -172,8 +175,7 @@ fn cyclic_inheritance_is_detected() -> Result<()> {
             "unexpected error: {err:?}"
         );
         Ok(())
-    })?;
-    Ok(())
+    })
 }
 
 #[rstest]
@@ -204,8 +206,7 @@ fn cyclic_inheritance_detects_case_variants() -> Result<()> {
             "error missing config reference: {msg}"
         );
         Ok(())
-    })?;
-    Ok(())
+    })
 }
 
 #[rstest]
@@ -244,8 +245,7 @@ fn missing_base_file_errors(#[case] is_abs: bool) -> Result<()> {
             "error missing extended configuration context: {msg}"
         );
         Ok(())
-    })?;
-    Ok(())
+    })
 }
 
 #[rstest]
@@ -266,8 +266,7 @@ fn non_string_extends_errors() -> Result<()> {
             "error missing origin mention: {msg}"
         );
         Ok(())
-    })?;
-    Ok(())
+    })
 }
 
 fn assert_extends_error<F>(
@@ -334,4 +333,58 @@ fn extends_validation_errors(
         expected_msg,
         error_desc,
     )
+}
+
+/// Config struct with explicit replace strategy for the tags field.
+#[derive(Debug, Deserialize, Serialize, OrthoConfig)]
+struct ReplaceTagsCfg {
+    #[serde(default)]
+    #[ortho_config(merge_strategy = "replace")]
+    tags: Vec<String>,
+}
+
+#[derive(Debug)]
+struct ReplaceStrategyCase {
+    files: Vec<(&'static str, &'static str)>,
+    expected_tags: Vec<&'static str>,
+}
+
+/// Verifies that `merge_strategy = "replace"` works correctly with extends.
+#[rstest]
+#[case::single_level(ReplaceStrategyCase {
+    files: vec![
+        ("parent.toml", "tags = [\"parent\"]"),
+        (".config.toml", "extends = \"parent.toml\"\ntags = [\"child\"]"),
+    ],
+    expected_tags: vec!["child"],
+})]
+#[case::multi_level_chain(ReplaceStrategyCase {
+    files: vec![
+        ("grandparent.toml", "tags = [\"grandparent\"]"),
+        ("parent.toml", "extends = \"grandparent.toml\"\ntags = [\"parent\"]"),
+        (".config.toml", "extends = \"parent.toml\"\ntags = [\"child\"]"),
+    ],
+    expected_tags: vec!["child"],
+})]
+#[case::empty_array(ReplaceStrategyCase {
+    files: vec![
+        ("parent.toml", "tags = [\"parent\"]"),
+        (".config.toml", "extends = \"parent.toml\"\ntags = []"),
+    ],
+    expected_tags: vec![],
+})]
+fn extends_with_replace_strategy_behaviour(#[case] case: ReplaceStrategyCase) -> Result<()> {
+    with_jail(|j| {
+        for (filename, content) in case.files {
+            j.create_file(filename, content)?;
+        }
+        let cfg = ReplaceTagsCfg::load_from_iter(["prog"]).map_err(|err| anyhow!(err))?;
+        let expected: Vec<String> = case
+            .expected_tags
+            .iter()
+            .copied()
+            .map(String::from)
+            .collect();
+        ensure_eq(&cfg.tags, &expected, "tags")
+    })
 }

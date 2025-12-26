@@ -42,10 +42,11 @@ where
     F: FnOnce(&HelloWorldCli) -> ortho_config::figment::error::Result<GreetingPlan>,
 {
     let plan = with_sample_config(build_fn)?;
+    // With declarative merge semantics, Vec<T> appends across defaults + extends chain
     assert_greeting(
         &plan,
         DeliveryMode::Enthusiastic,
-        "HELLO HEY CONFIG FRIENDS, EXCITED CREW!!!",
+        "HELLO HELLO FROM CONFIG HEY CONFIG FRIENDS, EXCITED CREW!!!",
         Some("Layered hello"),
     )
 }

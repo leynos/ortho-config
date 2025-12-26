@@ -55,8 +55,14 @@ fn load_sample_configuration() -> Result<()> {
         Ok((config, greet_defaults))
     })?;
     ensure!(config.recipient == "Excited crew", "unexpected recipient");
+    // With declarative merge semantics, Vec<T> appends across defaults + extends chain
     ensure!(
-        config.trimmed_salutations() == vec!["Hello".to_owned(), "Hey config friends".to_owned()],
+        config.trimmed_salutations()
+            == vec![
+                "Hello".to_owned(),
+                "Hello from config".to_owned(),
+                "Hey config friends".to_owned(),
+            ],
         "unexpected salutations"
     );
     ensure!(config.is_excited, "expected excited configuration");

@@ -1,6 +1,6 @@
 //! Steps for testing configuration inheritance.
 
-use crate::fixtures::{ExtendsContext, RulesConfig};
+use crate::fixtures::{ExtendsContext, ReplaceRulesConfig, RulesConfig};
 use anyhow::{Result, anyhow, ensure};
 use ortho_config::{OrthoConfig, OrthoResult};
 use rstest_bdd::Slot;
@@ -44,6 +44,16 @@ fn create_multi_level(extends_context: &ExtendsContext) -> Result<()> {
         "multi-level configuration already initialised"
     );
     extends_context.multi_level_flag.set(());
+    Ok(())
+}
+
+#[given("a configuration file extending a base file with replace strategy on rules")]
+fn create_replace_strategy(extends_context: &ExtendsContext) -> Result<()> {
+    ensure!(
+        extends_context.replace_strategy_flag.is_empty(),
+        "replace-strategy configuration already initialised"
+    );
+    extends_context.replace_strategy_flag.set(());
     Ok(())
 }
 
@@ -139,6 +149,16 @@ impl ExtendsScenario {
     }
 }
 
+fn with_jail_load_replace<F>(setup: F) -> Result<OrthoResult<ReplaceRulesConfig>>
+where
+    F: FnOnce(&mut figment::Jail) -> figment::error::Result<()>,
+{
+    figment_helpers::with_jail(|j| {
+        setup(j)?;
+        Ok(ReplaceRulesConfig::load_from_iter(["prog"]))
+    })
+}
+
 fn load_scenario(scenario: ExtendsScenario, context: &ExtendsContext) -> Result<()> {
     load_with_flag(
         scenario.flag(context),
@@ -212,5 +232,44 @@ fn inherited_rules(extends_context: &ExtendsContext, rules: String) -> Result<()
         actual,
         expected
     );
+    Ok(())
+}
+
+#[then("the rules are {rules}")]
+fn rules_are(extends_context: &ExtendsContext, rules: String) -> Result<()> {
+    // Check replace_result first if available, otherwise fall back to result
+    if let Some(replace_result) = extends_context
+        .replace_result
+        .with_ref(|r| r.as_ref().map(|cfg| cfg.rules.clone()))
+    {
+        let expected = parse_rules_list(&rules);
+        let actual = replace_result.map_err(|err| anyhow!(err))?;
+        ensure!(
+            actual == expected,
+            "unexpected rules {:?}; expected {:?}",
+            actual,
+            expected
+        );
+        return Ok(());
+    }
+    inherited_rules(extends_context, rules)
+}
+
+#[when("the replace-strategy configuration is loaded")]
+fn load_replace_strategy(extends_context: &ExtendsContext) -> Result<()> {
+    ensure!(
+        extends_context.replace_strategy_flag.is_filled(),
+        "replace-strategy configuration was not initialised"
+    );
+    extends_context.replace_strategy_flag.clear();
+    let result = with_jail_load_replace(|j| {
+        j.create_file("base.toml", "rules = [\"base\"]")?;
+        j.create_file(
+            ".ddlint.toml",
+            "extends = \"base.toml\"\nrules = [\"child\"]",
+        )?;
+        Ok(())
+    })?;
+    extends_context.replace_result.set(result);
     Ok(())
 }

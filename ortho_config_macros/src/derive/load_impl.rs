@@ -87,6 +87,10 @@ fn build_cli_chain_tokens(has_config_path: bool) -> proc_macro2::TokenStream {
 /// Required-path errors are always appended to the main error collection to
 /// preserve the builder API's guarantees.
 ///
+/// This uses `compose_layers()` to preserve each file in an `extends` chain
+/// as a separate layer, enabling declarative merge strategies (such as append
+/// for vectors) to work across the inheritance chain.
+///
 /// # Parameters
 /// - `builder_init`: Tokens initialising the `ConfigDiscovery::builder`.
 /// - `builder_steps`: Sequence of builder method calls (for example
@@ -115,16 +119,16 @@ fn build_discovery_loading_block(
         #(#builder_steps)*
         #cli_chain
         let discovery = builder.build();
-        let ortho_config::discovery::DiscoveryLayerOutcome {
-            layer,
+        let ortho_config::discovery::DiscoveryLayersOutcome {
+            value: layers,
             mut required_errors,
             mut optional_errors,
-        } = discovery.compose_layer();
+        } = discovery.compose_layers();
         errors.append(&mut required_errors);
-        if layer.is_none() {
+        if layers.is_empty() {
             errors.append(&mut optional_errors);
         }
-        layer
+        layers
     }}
 }
 
@@ -235,8 +239,8 @@ fn build_compose_layers_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStrea
             Err(err) => errors.push(err),
         }
 
-        let file_layer = #file_discovery;
-        if let Some(layer) = file_layer {
+        let file_layers = #file_discovery;
+        for layer in file_layers {
             composer.push_layer(layer);
         }
 
