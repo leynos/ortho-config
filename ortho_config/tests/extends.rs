@@ -382,7 +382,8 @@ fn extends_with_replace_strategy_behaviour(#[case] case: ReplaceStrategyCase) ->
         let expected: Vec<String> = case
             .expected_tags
             .iter()
-            .map(|s| String::from(*s))
+            .copied()
+            .map(String::from)
             .collect();
         ensure_eq(&cfg.tags, &expected, "tags")
     })
