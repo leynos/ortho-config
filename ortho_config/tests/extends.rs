@@ -343,6 +343,7 @@ struct ReplaceTagsCfg {
     tags: Vec<String>,
 }
 
+#[derive(Debug)]
 struct ReplaceStrategyCase {
     files: Vec<(&'static str, &'static str)>,
     expected_tags: Vec<&'static str>,
