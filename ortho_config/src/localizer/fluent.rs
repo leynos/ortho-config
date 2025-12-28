@@ -33,11 +33,16 @@ impl fmt::Debug for BundleWithLocale {
 }
 
 const EN_US_CATALOGUE: &str = include_str!("../../locales/en-US/messages.ftl");
+const JA_CATALOGUE: &str = include_str!("../../locales/ja/messages.ftl");
+
 static EN_US_RESOURCES: [&str; 1] = [EN_US_CATALOGUE];
+static JA_RESOURCES: [&str; 1] = [JA_CATALOGUE];
 
 pub(super) fn default_resources(locale: &LanguageIdentifier) -> Option<&'static [&'static str]> {
     if locale == &langid!("en-US") {
         Some(&EN_US_RESOURCES)
+    } else if locale.language.as_str() == "ja" {
+        Some(&JA_RESOURCES)
     } else {
         None
     }

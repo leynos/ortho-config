@@ -19,6 +19,8 @@ camino = "1"
 tracing = "0.1"
 [dev-dependencies]
 anyhow = "1"
+assert_cmd = "2.0"
+insta = { version = "1.41", features = ["filters"] }
 rstest = "0.23"
 rstest-bdd = "0.1.0"
 rstest-bdd-macros = "0.1.0"

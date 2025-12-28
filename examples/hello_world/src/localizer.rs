@@ -1,13 +1,18 @@
 //! Demo localiser showcasing how applications can layer Fluent resources over
 //! the embedded defaults provided by `ortho_config`.
 //!
-//! The example embeds a small English catalogue and builds a
+//! The example embeds English and Japanese catalogues and builds a
 //! [`FluentLocalizer`] so the CLI copy is translated through the same abstraction
 //! used by consumer binaries. Should localisation setup fail, the localiser
 //! falls back to [`NoOpLocalizer`] and retains the stock `clap` strings.
+//!
+//! Locale selection is performed by inspecting environment variables (`LANG`,
+//! `LC_ALL`, `LC_MESSAGES`) in priority order, falling back to `en-US` when no
+//! supported locale is detected.
 
 use ortho_config::{
-    FluentLocalizer, FluentLocalizerError, LocalizationArgs, Localizer, NoOpLocalizer,
+    FluentLocalizer, FluentLocalizerBuilder, FluentLocalizerError, LanguageIdentifier,
+    LocalizationArgs, Localizer, NoOpLocalizer, langid,
 };
 use tracing::warn;
 
@@ -25,6 +30,10 @@ pub const CLI_GREET_ABOUT_MESSAGE_ID: &str = "hello_world.cli.greet.about";
 pub const CLI_TAKE_LEAVE_ABOUT_MESSAGE_ID: &str = "hello_world.cli.take-leave.about";
 
 const HELLO_WORLD_EN_US: &str = include_str!("../locales/en-US/messages.ftl");
+const HELLO_WORLD_JA: &str = include_str!("../locales/ja/messages.ftl");
+
+/// Environment variable names checked for locale preference, in priority order.
+const LOCALE_ENV_VARS: [&str; 3] = ["LC_ALL", "LC_MESSAGES", "LANG"];
 
 /// Localiser that layers the example's Fluent catalogue over the embedded defaults.
 pub struct DemoLocalizer {
@@ -39,7 +48,8 @@ impl Default for DemoLocalizer {
 }
 
 impl DemoLocalizer {
-    /// Builds the demo localiser, falling back to [`NoOpLocalizer`] if Fluent setup fails.
+    /// Builds the demo localiser using the detected system locale,
+    /// falling back to [`NoOpLocalizer`] if Fluent setup fails.
     ///
     /// # Examples
     /// ```rust
@@ -54,8 +64,15 @@ impl DemoLocalizer {
     ///
     #[must_use]
     pub fn new() -> Self {
-        Self::try_new().unwrap_or_else(|error| {
-            warn!(?error, "falling back to no-op localiser");
+        Self::for_locale(&detect_locale())
+    }
+
+    /// Builds the demo localiser for a specific locale,
+    /// falling back to [`NoOpLocalizer`] if Fluent setup fails.
+    #[must_use]
+    pub fn for_locale(locale: &LanguageIdentifier) -> Self {
+        Self::try_for_locale(locale.clone()).unwrap_or_else(|error| {
+            warn!(?error, %locale, "falling back to no-op localiser");
             Self {
                 inner: None,
                 noop: NoOpLocalizer::new(),
@@ -63,17 +80,32 @@ impl DemoLocalizer {
         })
     }
 
-    /// Attempts to construct the demo localiser without falling back.
+    /// Attempts to construct the demo localiser for a specific locale.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the embedded Fluent catalogue cannot be parsed
+    /// or registered for the requested locale.
+    pub fn try_for_locale(locale: LanguageIdentifier) -> Result<Self, FluentLocalizerError> {
+        let resources = consumer_resources_for(&locale);
+        Ok(Self {
+            inner: Some(
+                FluentLocalizerBuilder::new(locale)
+                    .with_consumer_resources(resources)
+                    .try_build()?,
+            ),
+            noop: NoOpLocalizer::new(),
+        })
+    }
+
+    /// Attempts to construct the demo localiser for English (en-US).
     ///
     /// # Errors
     ///
     /// Returns an error when the embedded Fluent catalogue cannot be parsed
     /// or registered.
     pub fn try_new() -> Result<Self, FluentLocalizerError> {
-        Ok(Self {
-            inner: Some(FluentLocalizer::with_en_us_defaults([HELLO_WORLD_EN_US])?),
-            noop: NoOpLocalizer::new(),
-        })
+        Self::try_for_locale(langid!("en-US"))
     }
 
     /// Returns the underlying [`FluentLocalizer`] when available so consumers
@@ -112,6 +144,66 @@ impl std::fmt::Debug for DemoLocalizer {
             .field("noop", &self.noop)
             .finish()
     }
+}
+
+/// Returns the consumer resources appropriate for the given locale.
+fn consumer_resources_for(locale: &LanguageIdentifier) -> Vec<&'static str> {
+    if is_japanese(locale) {
+        vec![HELLO_WORLD_JA]
+    } else {
+        vec![HELLO_WORLD_EN_US]
+    }
+}
+
+/// Checks whether the locale represents a Japanese variant.
+fn is_japanese(locale: &LanguageIdentifier) -> bool {
+    locale.language.as_str() == "ja"
+}
+
+/// Detects the preferred locale from environment variables.
+///
+/// Inspects `LC_ALL`, `LC_MESSAGES`, and `LANG` in priority order, parsing
+/// POSIX-style locale strings (e.g., `ja_JP.UTF-8`) into language identifiers.
+/// Falls back to `en-US` when no supported locale is detected.
+#[must_use]
+pub fn detect_locale() -> LanguageIdentifier {
+    for var_name in LOCALE_ENV_VARS {
+        if let Some(locale) = parse_locale_from_env(var_name) {
+            return locale;
+        }
+    }
+    langid!("en-US")
+}
+
+/// Parses a locale from the named environment variable.
+fn parse_locale_from_env(var_name: &str) -> Option<LanguageIdentifier> {
+    let value = std::env::var(var_name).ok()?;
+    parse_posix_locale(&value)
+}
+
+/// Parses a POSIX locale string into a `LanguageIdentifier`.
+///
+/// Handles formats like `ja_JP.UTF-8` by stripping the encoding suffix and
+/// converting underscores to hyphens for BCP 47 compatibility. Special values
+/// `C` and `POSIX` are treated as English.
+fn parse_posix_locale(value: &str) -> Option<LanguageIdentifier> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    // Handle "C" and "POSIX" special cases
+    if trimmed == "C" || trimmed == "POSIX" {
+        return Some(langid!("en-US"));
+    }
+
+    // Strip encoding suffix (e.g., ".UTF-8")
+    let without_encoding = trimmed.split('.').next()?;
+
+    // Replace underscore with hyphen for BCP 47 compatibility
+    let normalized = without_encoding.replace('_', "-");
+
+    normalized.parse().ok()
 }
 
 #[cfg(test)]
@@ -173,5 +265,59 @@ mod tests {
             .expect("demo catalogue should include clap error copy");
 
         assert!(message.contains("Pick a workflow"));
+    }
+
+    #[test]
+    fn japanese_localiser_returns_japanese_copy() {
+        let localiser =
+            DemoLocalizer::try_for_locale(langid!("ja")).expect("Japanese localiser should build");
+        let about = localiser
+            .lookup(CLI_ABOUT_MESSAGE_ID, None)
+            .expect("Japanese demo copy should exist");
+        assert!(about.contains("挨拶"));
+    }
+
+    #[test]
+    fn japanese_localiser_translates_clap_errors() {
+        let localiser =
+            DemoLocalizer::try_for_locale(langid!("ja")).expect("Japanese localiser should build");
+        let mut args: LocalizationArgs<'_> = HashMap::new();
+        args.insert("valid_subcommands", "greet, take-leave".into());
+
+        let message = localiser
+            .lookup("clap-error-missing-subcommand", Some(&args))
+            .expect("Japanese catalogue should include clap error copy");
+
+        assert!(message.contains("ワークフロー"));
+    }
+
+    #[test]
+    fn parse_posix_locale_handles_utf8_suffix() {
+        let locale = parse_posix_locale("ja_JP.UTF-8").expect("should parse");
+        assert_eq!(locale.language.as_str(), "ja");
+    }
+
+    #[test]
+    fn parse_posix_locale_handles_bare_language() {
+        let locale = parse_posix_locale("en").expect("should parse");
+        assert_eq!(locale.language.as_str(), "en");
+    }
+
+    #[test]
+    fn parse_posix_locale_handles_c_locale() {
+        let locale = parse_posix_locale("C").expect("should parse");
+        assert_eq!(locale, langid!("en-US"));
+    }
+
+    #[test]
+    fn parse_posix_locale_handles_posix_locale() {
+        let locale = parse_posix_locale("POSIX").expect("should parse");
+        assert_eq!(locale, langid!("en-US"));
+    }
+
+    #[test]
+    fn parse_posix_locale_returns_none_for_empty() {
+        assert!(parse_posix_locale("").is_none());
+        assert!(parse_posix_locale("   ").is_none());
     }
 }

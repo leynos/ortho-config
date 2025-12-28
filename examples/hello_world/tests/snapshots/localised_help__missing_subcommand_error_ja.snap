@@ -1,0 +1,51 @@
+---
+source: examples/hello_world/tests/localised_help.rs
+expression: output
+---
+Error: 
+   0: [91mfailed to parse command line: error: ワークフローを選択してください: ⁨greet, take-leave, help⁩
+
+      Usage: 使用方法:
+      ⁨hello-world⁩ [オプション] <コマンド>
+
+      詳細は --help を参照してください。
+
+      Commands:
+        greet       設定されたテンプレートを使用してフレンドリーな挨拶を表示します。
+        take-leave  受信者への別れのワークフローの進行を説明します。
+        help        Print this message or the help of the given subcommand(s)
+
+      Options:
+        -c, --config <PATH>      Path to the configuration file
+        -r, --recipient <NAME>   Recipient of the greeting when supplied on the CLI
+        -s, --salutation <WORD>  Replacement salutations supplied on the CLI
+            --is-excited         Enables an enthusiastic delivery mode from the CLI
+            --is-quiet           Enables a quiet delivery mode from the CLI
+        -h, --help               Print help (see more with '--help')
+        -V, --version            Print version[0m
+   1: [91merror: ワークフローを選択してください: ⁨greet, take-leave, help⁩
+
+      Usage: 使用方法:
+      ⁨hello-world⁩ [オプション] <コマンド>
+
+      詳細は --help を参照してください。
+
+      Commands:
+        greet       設定されたテンプレートを使用してフレンドリーな挨拶を表示します。
+        take-leave  受信者への別れのワークフローの進行を説明します。
+        help        Print this message or the help of the given subcommand(s)
+
+      Options:
+        -c, --config <PATH>      Path to the configuration file
+        -r, --recipient <NAME>   Recipient of the greeting when supplied on the CLI
+        -s, --salutation <WORD>  Replacement salutations supplied on the CLI
+            --is-excited         Enables an enthusiastic delivery mode from the CLI
+            --is-quiet           Enables a quiet delivery mode from the CLI
+        -h, --help               Print help (see more with '--help')
+        -V, --version            Print version[0m
+
+Location:
+   [35m/rustc/a454fccb02df9d361f1201b747c01257f58a8b37/library/core/src/ops/function.rs[0m:[35m250[0m
+
+Backtrace omitted. Run with RUST_BACKTRACE=1 environment variable to display it.
+Run with RUST_BACKTRACE=full to include source snippets.
