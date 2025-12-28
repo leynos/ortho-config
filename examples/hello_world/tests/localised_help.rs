@@ -22,6 +22,10 @@ fn run_with_locale(locale: &str, args: &[&str]) -> String {
     cmd.env_remove("LANG");
     cmd.env("LANG", locale);
 
+    // Disable backtraces to ensure consistent output across environments
+    // (CI coverage runs set RUST_BACKTRACE=1 which would include full backtraces)
+    cmd.env("RUST_BACKTRACE", "0");
+
     cmd.args(args);
 
     #[expect(clippy::expect_used, reason = "test panics are acceptable")]
