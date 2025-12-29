@@ -9,7 +9,7 @@ use fluent_bundle::concurrent::FluentBundle;
 use std::borrow::Cow;
 use std::fmt;
 use std::sync::Arc;
-use unic_langid::{LanguageIdentifier, langid};
+use unic_langid::LanguageIdentifier;
 
 use super::{
     FluentBundleSource, FluentLocalizer, FluentLocalizerBuilder, FluentLocalizerError,
@@ -39,12 +39,10 @@ static EN_US_RESOURCES: [&str; 1] = [EN_US_CATALOGUE];
 static JA_RESOURCES: [&str; 1] = [JA_CATALOGUE];
 
 pub(super) fn default_resources(locale: &LanguageIdentifier) -> Option<&'static [&'static str]> {
-    if locale == &langid!("en-US") {
-        Some(&EN_US_RESOURCES)
-    } else if locale.language.as_str() == "ja" {
-        Some(&JA_RESOURCES)
-    } else {
-        None
+    match locale.language.as_str() {
+        "en" => Some(&EN_US_RESOURCES),
+        "ja" => Some(&JA_RESOURCES),
+        _ => None,
     }
 }
 
@@ -256,6 +254,78 @@ impl fmt::Debug for FluentLocalizerBuilder {
 mod tests {
     //! Tests for Fluent resource parsing and identifier normalisation helpers.
     use super::*;
+    use unic_langid::langid;
+
+    // =========================================================================
+    // default_resources tests
+    // =========================================================================
+
+    #[test]
+    fn default_resources_returns_english_for_en_us() {
+        let locale = langid!("en-US");
+        let resources = default_resources(&locale);
+        assert!(resources.is_some(), "en-US should return English resources");
+        assert!(
+            resources
+                .expect("checked above")
+                .iter()
+                .any(|r| r.contains("cli-about"))
+        );
+    }
+
+    #[test]
+    fn default_resources_returns_english_for_en_gb() {
+        let locale = langid!("en-GB");
+        let resources = default_resources(&locale);
+        assert!(
+            resources.is_some(),
+            "en-GB should return English resources (language-based matching)"
+        );
+    }
+
+    #[test]
+    fn default_resources_returns_english_for_bare_en() {
+        let locale = langid!("en");
+        let resources = default_resources(&locale);
+        assert!(
+            resources.is_some(),
+            "bare 'en' should return English resources"
+        );
+    }
+
+    #[test]
+    fn default_resources_returns_japanese_for_ja() {
+        let locale = langid!("ja");
+        let resources = default_resources(&locale);
+        assert!(resources.is_some(), "ja should return Japanese resources");
+        assert!(
+            resources
+                .expect("checked above")
+                .iter()
+                .any(|r| r.contains("cli-about"))
+        );
+    }
+
+    #[test]
+    fn default_resources_returns_japanese_for_ja_jp() {
+        let locale = langid!("ja-JP");
+        let resources = default_resources(&locale);
+        assert!(
+            resources.is_some(),
+            "ja-JP should return Japanese resources (language-based matching)"
+        );
+    }
+
+    #[test]
+    fn default_resources_returns_none_for_unsupported_locale() {
+        let locale = langid!("fr-FR");
+        let resources = default_resources(&locale);
+        assert!(resources.is_none(), "unsupported locale should return None");
+    }
+
+    // =========================================================================
+    // Identifier normalisation tests
+    // =========================================================================
 
     #[test]
     fn normalises_top_level_dotted_ids() {

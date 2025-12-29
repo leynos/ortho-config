@@ -64,20 +64,23 @@ impl DemoLocalizer {
     ///
     #[must_use]
     pub fn new() -> Self {
-        Self::for_locale(&detect_locale())
+        Self::for_locale(detect_locale())
     }
 
     /// Builds the demo localiser for a specific locale,
     /// falling back to [`NoOpLocalizer`] if Fluent setup fails.
     #[must_use]
-    pub fn for_locale(locale: &LanguageIdentifier) -> Self {
-        Self::try_for_locale(locale.clone()).unwrap_or_else(|error| {
-            warn!(?error, %locale, "falling back to no-op localiser");
-            Self {
-                inner: None,
-                noop: NoOpLocalizer::new(),
+    pub fn for_locale(locale: LanguageIdentifier) -> Self {
+        match Self::try_for_locale(locale) {
+            Ok(localiser) => localiser,
+            Err(error) => {
+                warn!(?error, "falling back to no-op localiser");
+                Self {
+                    inner: None,
+                    noop: NoOpLocalizer::new(),
+                }
             }
-        })
+        }
     }
 
     /// Attempts to construct the demo localiser for a specific locale.
@@ -256,26 +259,27 @@ mod tests {
 
     /// Asserts that the localiser for the given locale translates clap error
     /// messages containing the expected substring.
-    fn assert_clap_error_translation(locale: &LanguageIdentifier, expected_substring: &str) {
-        let localiser = DemoLocalizer::try_for_locale(locale.clone())
-            .unwrap_or_else(|e| panic!("localiser for {locale} should build: {e}"));
+    fn assert_clap_error_translation(locale: LanguageIdentifier, expected_substring: &str) {
+        let locale_str = locale.to_string();
+        let localiser = DemoLocalizer::try_for_locale(locale)
+            .unwrap_or_else(|e| panic!("localiser for {locale_str} should build: {e}"));
 
         let mut args: LocalizationArgs<'_> = HashMap::new();
         args.insert("valid_subcommands", "greet, take-leave".into());
 
         let message = localiser
             .lookup("clap-error-missing-subcommand", Some(&args))
-            .unwrap_or_else(|| panic!("catalogue for {locale} should include clap error copy"));
+            .unwrap_or_else(|| panic!("catalogue for {locale_str} should include clap error copy"));
 
         assert!(
             message.contains(expected_substring),
-            "expected '{expected_substring}' in clap error for {locale}, got: {message}"
+            "expected '{expected_substring}' in clap error for {locale_str}, got: {message}"
         );
     }
 
     #[test]
     fn demo_localiser_translates_clap_errors() {
-        assert_clap_error_translation(&langid!("en-US"), "Pick a workflow");
+        assert_clap_error_translation(langid!("en-US"), "Pick a workflow");
     }
 
     #[test]
@@ -290,7 +294,7 @@ mod tests {
 
     #[test]
     fn japanese_localiser_translates_clap_errors() {
-        assert_clap_error_translation(&langid!("ja"), "ワークフロー");
+        assert_clap_error_translation(langid!("ja"), "ワークフロー");
     }
 
     #[test]
