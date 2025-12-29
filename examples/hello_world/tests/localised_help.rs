@@ -43,8 +43,10 @@ fn run_with_locale(locale: &str, args: &[&str]) -> String {
         stdout.into_owned()
     };
 
-    // Normalize CRLF to LF for cross-platform consistency
-    combined.replace("\r\n", "\n")
+    // Normalize for cross-platform consistency:
+    // - CRLF to LF for line endings
+    // - Backslashes to forward slashes for paths (Windows uses backslashes in error output)
+    combined.replace("\r\n", "\n").replace('\\', "/")
 }
 
 // =============================================================================
