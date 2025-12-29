@@ -254,17 +254,28 @@ mod tests {
         assert!(localiser.fluent().is_none());
     }
 
-    #[test]
-    fn demo_localiser_translates_clap_errors() {
-        let localiser = DemoLocalizer::try_new().expect("demo localiser should build");
+    /// Asserts that the localiser for the given locale translates clap error
+    /// messages containing the expected substring.
+    fn assert_clap_error_translation(locale: &LanguageIdentifier, expected_substring: &str) {
+        let localiser = DemoLocalizer::try_for_locale(locale.clone())
+            .unwrap_or_else(|e| panic!("localiser for {locale} should build: {e}"));
+
         let mut args: LocalizationArgs<'_> = HashMap::new();
         args.insert("valid_subcommands", "greet, take-leave".into());
 
         let message = localiser
             .lookup("clap-error-missing-subcommand", Some(&args))
-            .expect("demo catalogue should include clap error copy");
+            .unwrap_or_else(|| panic!("catalogue for {locale} should include clap error copy"));
 
-        assert!(message.contains("Pick a workflow"));
+        assert!(
+            message.contains(expected_substring),
+            "expected '{expected_substring}' in clap error for {locale}, got: {message}"
+        );
+    }
+
+    #[test]
+    fn demo_localiser_translates_clap_errors() {
+        assert_clap_error_translation(&langid!("en-US"), "Pick a workflow");
     }
 
     #[test]
@@ -279,16 +290,7 @@ mod tests {
 
     #[test]
     fn japanese_localiser_translates_clap_errors() {
-        let localiser =
-            DemoLocalizer::try_for_locale(langid!("ja")).expect("Japanese localiser should build");
-        let mut args: LocalizationArgs<'_> = HashMap::new();
-        args.insert("valid_subcommands", "greet, take-leave".into());
-
-        let message = localiser
-            .lookup("clap-error-missing-subcommand", Some(&args))
-            .expect("Japanese catalogue should include clap error copy");
-
-        assert!(message.contains("ワークフロー"));
+        assert_clap_error_translation(&langid!("ja"), "ワークフロー");
     }
 
     #[test]
