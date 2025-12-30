@@ -254,6 +254,7 @@ impl fmt::Debug for FluentLocalizerBuilder {
 mod tests {
     //! Tests for Fluent resource parsing and identifier normalisation helpers.
     use super::*;
+    use rstest::rstest;
     use unic_langid::langid;
 
     // =========================================================================
@@ -277,54 +278,25 @@ mod tests {
         );
     }
 
-    #[test]
-    fn default_resources_returns_english_for_en_us() {
-        assert_default_resources_contain_key(
-            &langid!("en-US"),
-            "en-US should return English resources",
-        );
-    }
-
-    #[test]
-    fn default_resources_returns_english_for_en_gb() {
-        let locale = langid!("en-GB");
-        let resources = default_resources(&locale);
-        assert!(
-            resources.is_some(),
-            "en-GB should return English resources (language-based matching)"
-        );
-    }
-
-    #[test]
-    fn default_resources_returns_english_for_bare_en() {
-        let locale = langid!("en");
-        let resources = default_resources(&locale);
-        assert!(
-            resources.is_some(),
-            "bare 'en' should return English resources"
-        );
-    }
-
-    #[test]
-    fn default_resources_returns_japanese_for_ja() {
-        assert_default_resources_contain_key(&langid!("ja"), "ja should return Japanese resources");
-    }
-
-    #[test]
-    fn default_resources_returns_japanese_for_ja_jp() {
-        let locale = langid!("ja-JP");
-        let resources = default_resources(&locale);
-        assert!(
-            resources.is_some(),
-            "ja-JP should return Japanese resources (language-based matching)"
-        );
-    }
-
-    #[test]
-    fn default_resources_returns_none_for_unsupported_locale() {
-        let locale = langid!("fr-FR");
-        let resources = default_resources(&locale);
-        assert!(resources.is_none(), "unsupported locale should return None");
+    #[rstest]
+    #[case::en_us(langid!("en-US"), true, true, "en-US should return English resources")]
+    #[case::en_gb(langid!("en-GB"), true, false, "en-GB should return English resources (language-based matching)")]
+    #[case::bare_en(langid!("en"), true, false, "bare 'en' should return English resources")]
+    #[case::ja(langid!("ja"), true, true, "ja should return Japanese resources")]
+    #[case::ja_jp(langid!("ja-JP"), true, false, "ja-JP should return Japanese resources (language-based matching)")]
+    #[case::fr_fr(langid!("fr-FR"), false, false, "unsupported locale should return None")]
+    fn default_resources_returns_expected_result(
+        #[case] locale: LanguageIdentifier,
+        #[case] expect_some: bool,
+        #[case] check_key: bool,
+        #[case] description: &str,
+    ) {
+        if check_key {
+            assert_default_resources_contain_key(&locale, description);
+        } else {
+            let resources = default_resources(&locale);
+            assert_eq!(resources.is_some(), expect_some, "{description}");
+        }
     }
 
     // =========================================================================
