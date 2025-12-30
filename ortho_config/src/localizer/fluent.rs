@@ -261,14 +261,19 @@ mod tests {
     // default_resources tests
     // =========================================================================
 
-    /// Asserts that `default_resources` returns the expected resource catalogue.
-    fn assert_returns_resources(
-        locale: &LanguageIdentifier,
-        expected_resources: &'static [&'static str],
-        resource_name: &str,
-        description: &str,
+    #[rstest]
+    #[case::en_us(langid!("en-US"), EN_US_RESOURCES.as_slice(), "EN_US_RESOURCES", "en-US should return English resources")]
+    #[case::en_gb(langid!("en-GB"), EN_US_RESOURCES.as_slice(), "EN_US_RESOURCES", "en-GB should return English resources (language-based matching)")]
+    #[case::bare_en(langid!("en"), EN_US_RESOURCES.as_slice(), "EN_US_RESOURCES", "bare 'en' should return English resources")]
+    #[case::ja(langid!("ja"), JA_RESOURCES.as_slice(), "JA_RESOURCES", "ja should return Japanese resources")]
+    #[case::ja_jp(langid!("ja-JP"), JA_RESOURCES.as_slice(), "JA_RESOURCES", "ja-JP should return Japanese resources (language-based matching)")]
+    fn default_resources_returns_expected_catalogue(
+        #[case] locale: LanguageIdentifier,
+        #[case] expected_resources: &'static [&'static str],
+        #[case] resource_name: &str,
+        #[case] description: &str,
     ) {
-        let resources = default_resources(locale);
+        let resources = default_resources(&locale);
         assert!(
             resources.is_some(),
             "{description}: should return Some for locale {locale}"
@@ -277,42 +282,6 @@ mod tests {
             std::ptr::eq(resources.expect("checked above"), expected_resources),
             "{description}: should return {resource_name} for locale {locale}"
         );
-    }
-
-    /// Asserts that `default_resources` returns the English (`EN_US_RESOURCES`) catalogue.
-    fn assert_returns_english_resources(locale: &LanguageIdentifier, description: &str) {
-        assert_returns_resources(
-            locale,
-            EN_US_RESOURCES.as_slice(),
-            "EN_US_RESOURCES",
-            description,
-        );
-    }
-
-    /// Asserts that `default_resources` returns the Japanese (`JA_RESOURCES`) catalogue.
-    fn assert_returns_japanese_resources(locale: &LanguageIdentifier, description: &str) {
-        assert_returns_resources(locale, JA_RESOURCES.as_slice(), "JA_RESOURCES", description);
-    }
-
-    #[rstest]
-    #[case::en_us(langid!("en-US"), "en-US should return English resources")]
-    #[case::en_gb(langid!("en-GB"), "en-GB should return English resources (language-based matching)")]
-    #[case::bare_en(langid!("en"), "bare 'en' should return English resources")]
-    fn default_resources_returns_english(
-        #[case] locale: LanguageIdentifier,
-        #[case] description: &str,
-    ) {
-        assert_returns_english_resources(&locale, description);
-    }
-
-    #[rstest]
-    #[case::ja(langid!("ja"), "ja should return Japanese resources")]
-    #[case::ja_jp(langid!("ja-JP"), "ja-JP should return Japanese resources (language-based matching)")]
-    fn default_resources_returns_japanese(
-        #[case] locale: LanguageIdentifier,
-        #[case] description: &str,
-    ) {
-        assert_returns_japanese_resources(&locale, description);
     }
 
     #[test]
