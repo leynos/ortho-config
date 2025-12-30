@@ -260,16 +260,28 @@ mod tests {
     // default_resources tests
     // =========================================================================
 
-    #[test]
-    fn default_resources_returns_english_for_en_us() {
-        let locale = langid!("en-US");
-        let resources = default_resources(&locale);
-        assert!(resources.is_some(), "en-US should return English resources");
+    /// Asserts that `default_resources` returns resources containing `"cli-about"` for
+    /// the given locale.
+    fn assert_default_resources_contain_key(locale: &LanguageIdentifier, description: &str) {
+        let resources = default_resources(locale);
+        assert!(
+            resources.is_some(),
+            "{description}: should return resources for locale {locale}"
+        );
         assert!(
             resources
                 .expect("checked above")
                 .iter()
-                .any(|r| r.contains("cli-about"))
+                .any(|r| r.contains("cli-about")),
+            "{description}: resources should contain 'cli-about' key"
+        );
+    }
+
+    #[test]
+    fn default_resources_returns_english_for_en_us() {
+        assert_default_resources_contain_key(
+            &langid!("en-US"),
+            "en-US should return English resources",
         );
     }
 
@@ -295,15 +307,7 @@ mod tests {
 
     #[test]
     fn default_resources_returns_japanese_for_ja() {
-        let locale = langid!("ja");
-        let resources = default_resources(&locale);
-        assert!(resources.is_some(), "ja should return Japanese resources");
-        assert!(
-            resources
-                .expect("checked above")
-                .iter()
-                .any(|r| r.contains("cli-about"))
-        );
+        assert_default_resources_contain_key(&langid!("ja"), "ja should return Japanese resources");
     }
 
     #[test]

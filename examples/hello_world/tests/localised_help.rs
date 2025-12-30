@@ -172,48 +172,53 @@ fn posix_locale_uses_english() {
 // Locale environment variable precedence tests
 // =============================================================================
 
+/// Asserts that the locale precedence rules produce output containing the expected
+/// substring when the given environment variables are set.
+fn assert_locale_precedence(
+    env_vars: &[(&str, &str)],
+    expected_substring: &str,
+    description: &str,
+) {
+    let output = run_with_env(env_vars, &["--help"]);
+    assert!(
+        output.contains(expected_substring),
+        "{description}, got: {output}"
+    );
+}
+
 #[test]
 fn lc_all_takes_precedence_over_lang() {
     // LC_ALL should override LANG
-    let output = run_with_env(
-        &[("LC_ALL", "ja_JP.UTF-8"), ("LANG", "en_US.UTF-8")],
-        &["--help"],
-    );
     // Output should be Japanese (from LC_ALL) even though LANG is en_US
-    assert!(
-        output.contains("挨拶"),
-        "expected Japanese text when LC_ALL=ja, got: {output}"
+    assert_locale_precedence(
+        &[("LC_ALL", "ja_JP.UTF-8"), ("LANG", "en_US.UTF-8")],
+        "挨拶",
+        "expected Japanese text when LC_ALL=ja",
     );
 }
 
 #[test]
 fn lc_messages_takes_precedence_over_lang() {
     // LC_MESSAGES should override LANG (when LC_ALL is not set)
-    let output = run_with_env(
-        &[("LC_MESSAGES", "ja_JP.UTF-8"), ("LANG", "en_US.UTF-8")],
-        &["--help"],
-    );
     // Output should be Japanese (from LC_MESSAGES) even though LANG is en_US
-    assert!(
-        output.contains("挨拶"),
-        "expected Japanese text when LC_MESSAGES=ja, got: {output}"
+    assert_locale_precedence(
+        &[("LC_MESSAGES", "ja_JP.UTF-8"), ("LANG", "en_US.UTF-8")],
+        "挨拶",
+        "expected Japanese text when LC_MESSAGES=ja",
     );
 }
 
 #[test]
 fn lc_all_takes_precedence_over_lc_messages() {
     // LC_ALL should override both LC_MESSAGES and LANG
-    let output = run_with_env(
+    // Output should be English (from LC_ALL) even though LC_MESSAGES and LANG are Japanese
+    assert_locale_precedence(
         &[
             ("LC_ALL", "en_US.UTF-8"),
             ("LC_MESSAGES", "ja_JP.UTF-8"),
             ("LANG", "ja_JP.UTF-8"),
         ],
-        &["--help"],
-    );
-    // Output should be English (from LC_ALL) even though LC_MESSAGES and LANG are Japanese
-    assert!(
-        output.contains("layered greetings"),
-        "expected English text when LC_ALL=en, got: {output}"
+        "layered greetings",
+        "expected English text when LC_ALL=en",
     );
 }
