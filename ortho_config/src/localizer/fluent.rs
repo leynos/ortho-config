@@ -261,30 +261,37 @@ mod tests {
     // default_resources tests
     // =========================================================================
 
-    /// Asserts that `default_resources` returns the English (`EN_US_RESOURCES`) catalogue.
-    fn assert_returns_english_resources(locale: &LanguageIdentifier, description: &str) {
+    /// Asserts that `default_resources` returns the expected resource catalogue.
+    fn assert_returns_resources(
+        locale: &LanguageIdentifier,
+        expected_resources: &'static [&'static str],
+        resource_name: &str,
+        description: &str,
+    ) {
         let resources = default_resources(locale);
         assert!(
             resources.is_some(),
             "{description}: should return Some for locale {locale}"
         );
         assert!(
-            std::ptr::eq(resources.expect("checked above"), EN_US_RESOURCES.as_slice()),
-            "{description}: should return EN_US_RESOURCES for locale {locale}"
+            std::ptr::eq(resources.expect("checked above"), expected_resources),
+            "{description}: should return {resource_name} for locale {locale}"
+        );
+    }
+
+    /// Asserts that `default_resources` returns the English (`EN_US_RESOURCES`) catalogue.
+    fn assert_returns_english_resources(locale: &LanguageIdentifier, description: &str) {
+        assert_returns_resources(
+            locale,
+            EN_US_RESOURCES.as_slice(),
+            "EN_US_RESOURCES",
+            description,
         );
     }
 
     /// Asserts that `default_resources` returns the Japanese (`JA_RESOURCES`) catalogue.
     fn assert_returns_japanese_resources(locale: &LanguageIdentifier, description: &str) {
-        let resources = default_resources(locale);
-        assert!(
-            resources.is_some(),
-            "{description}: should return Some for locale {locale}"
-        );
-        assert!(
-            std::ptr::eq(resources.expect("checked above"), JA_RESOURCES.as_slice()),
-            "{description}: should return JA_RESOURCES for locale {locale}"
-        );
+        assert_returns_resources(locale, JA_RESOURCES.as_slice(), "JA_RESOURCES", description);
     }
 
     #[rstest]
