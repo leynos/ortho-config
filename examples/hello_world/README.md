@@ -98,6 +98,37 @@ command tree. The demo catalogue overrides `clap-error-missing-argument` and
 the embedded defaults while still deferring to stock `clap` messages whenever a
 translation is absent.
 
+### Running with Japanese locale
+
+The example ships with both English (`en-US`) and Japanese (`ja`) catalogues.
+Locale selection inspects the `LC_ALL`, `LC_MESSAGES`, and `LANG` environment
+variables in priority order, falling back to English when no supported locale
+is detected.
+
+To run the example with Japanese help text:
+
+```sh
+# View top-level help in Japanese
+LANG=ja_JP.UTF-8 cargo run -p hello_world -- --help
+
+# View greet subcommand help in Japanese
+LANG=ja_JP.UTF-8 cargo run -p hello_world -- greet --help
+
+# Trigger a localised error message (missing required argument)
+LANG=ja_JP.UTF-8 cargo run -p hello_world -- greet
+```
+
+On Windows Command Prompt, set the variable before the command:
+
+```cmd
+set LANG=ja_JP.UTF-8
+cargo run -p hello_world -- --help
+```
+
+The `LC_ALL` variable takes precedence over `LC_MESSAGES`, which in turn takes
+precedence over `LANG`. This allows fine-grained control when multiple locale
+variables are set.
+
 ## Configuration samples and scripts
 
 The `config/` directory contains `baseline.toml` and `overrides.toml`. The
