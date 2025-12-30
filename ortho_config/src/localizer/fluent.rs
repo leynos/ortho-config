@@ -1,6 +1,6 @@
 //! Fluent bundle utilities extracted from the localisation module.
 //!
-//! Keeping parsing, resource registration, and identifier normalisation in a
+//! Keeping parsing, resource registration, and identifier normalization in a
 //! dedicated module keeps `mod.rs` concise while retaining cohesion around
 //! Fluent-specific concerns.
 
@@ -252,7 +252,7 @@ impl fmt::Debug for FluentLocalizerBuilder {
 
 #[cfg(test)]
 mod tests {
-    //! Tests for Fluent resource parsing and identifier normalisation helpers.
+    //! Tests for Fluent resource parsing and identifier normalization helpers.
     use super::*;
     use rstest::rstest;
     use unic_langid::langid;
@@ -300,7 +300,7 @@ mod tests {
     }
 
     // =========================================================================
-    // Identifier normalisation tests
+    // Identifier normalization tests
     // =========================================================================
 
     #[test]
