@@ -261,42 +261,58 @@ mod tests {
     // default_resources tests
     // =========================================================================
 
-    /// Asserts that `default_resources` returns resources containing `"cli-about"` for
-    /// the given locale.
-    fn assert_default_resources_contain_key(locale: &LanguageIdentifier, description: &str) {
+    /// Asserts that `default_resources` returns the English (`EN_US_RESOURCES`) catalogue.
+    fn assert_returns_english_resources(locale: &LanguageIdentifier, description: &str) {
         let resources = default_resources(locale);
         assert!(
             resources.is_some(),
-            "{description}: should return resources for locale {locale}"
+            "{description}: should return Some for locale {locale}"
         );
         assert!(
-            resources
-                .expect("checked above")
-                .iter()
-                .any(|r| r.contains("cli-about")),
-            "{description}: resources should contain 'cli-about' key"
+            std::ptr::eq(resources.expect("checked above"), EN_US_RESOURCES.as_slice()),
+            "{description}: should return EN_US_RESOURCES for locale {locale}"
+        );
+    }
+
+    /// Asserts that `default_resources` returns the Japanese (`JA_RESOURCES`) catalogue.
+    fn assert_returns_japanese_resources(locale: &LanguageIdentifier, description: &str) {
+        let resources = default_resources(locale);
+        assert!(
+            resources.is_some(),
+            "{description}: should return Some for locale {locale}"
+        );
+        assert!(
+            std::ptr::eq(resources.expect("checked above"), JA_RESOURCES.as_slice()),
+            "{description}: should return JA_RESOURCES for locale {locale}"
         );
     }
 
     #[rstest]
-    #[case::en_us(langid!("en-US"), true, true, "en-US should return English resources")]
-    #[case::en_gb(langid!("en-GB"), true, false, "en-GB should return English resources (language-based matching)")]
-    #[case::bare_en(langid!("en"), true, false, "bare 'en' should return English resources")]
-    #[case::ja(langid!("ja"), true, true, "ja should return Japanese resources")]
-    #[case::ja_jp(langid!("ja-JP"), true, false, "ja-JP should return Japanese resources (language-based matching)")]
-    #[case::fr_fr(langid!("fr-FR"), false, false, "unsupported locale should return None")]
-    fn default_resources_returns_expected_result(
+    #[case::en_us(langid!("en-US"), "en-US should return English resources")]
+    #[case::en_gb(langid!("en-GB"), "en-GB should return English resources (language-based matching)")]
+    #[case::bare_en(langid!("en"), "bare 'en' should return English resources")]
+    fn default_resources_returns_english(
         #[case] locale: LanguageIdentifier,
-        #[case] expect_some: bool,
-        #[case] check_key: bool,
         #[case] description: &str,
     ) {
-        if check_key {
-            assert_default_resources_contain_key(&locale, description);
-        } else {
-            let resources = default_resources(&locale);
-            assert_eq!(resources.is_some(), expect_some, "{description}");
-        }
+        assert_returns_english_resources(&locale, description);
+    }
+
+    #[rstest]
+    #[case::ja(langid!("ja"), "ja should return Japanese resources")]
+    #[case::ja_jp(langid!("ja-JP"), "ja-JP should return Japanese resources (language-based matching)")]
+    fn default_resources_returns_japanese(
+        #[case] locale: LanguageIdentifier,
+        #[case] description: &str,
+    ) {
+        assert_returns_japanese_resources(&locale, description);
+    }
+
+    #[test]
+    fn default_resources_returns_none_for_unsupported_locale() {
+        let locale = langid!("fr-FR");
+        let resources = default_resources(&locale);
+        assert!(resources.is_none(), "unsupported locale should return None");
     }
 
     // =========================================================================
