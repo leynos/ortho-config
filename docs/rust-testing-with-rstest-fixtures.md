@@ -565,7 +565,7 @@ When using `#[once]`, there are critical warnings:
 3. **Attribute Propagation:** `rstest` macros currently drop `#[expect]`
    attributes. When suppressing a lint inside a rstest fixture, use
    `#[allow(dead_code, reason = "rstest drops #[expect]; FIXME: switch when fixed")]`
-   to document the workaround. Prefer `#[expect]` everywhere else.
+    to document the workaround. Prefer `#[expect]` everywhere else.
 
 The "never dropped" behaviour arises because `rstest` typically creates a
 `static` variable to hold the result of the `#[once]` fixture. `static`

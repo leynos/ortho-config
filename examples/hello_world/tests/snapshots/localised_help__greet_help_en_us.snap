@@ -1,0 +1,24 @@
+---
+source: examples/hello_world/tests/localised_help.rs
+expression: output
+---
+Prints a friendly greeting using any configured templates.
+
+Usage: hello-world greet [OPTIONS]
+
+Options:
+  -c, --config <PATH>
+          Path to the configuration file
+
+      --preamble <PHRASE>
+          Optional preamble printed before the greeting
+
+      --punctuation <TEXT>
+          Punctuation appended to the greeting when not whispered.
+          
+          The `cli_default_as_absent` attribute ensures that file/environment configuration takes precedence over the clap default when the user does not explicitly provide `--punctuation` on the command line.
+          
+          [default: !]
+
+  -h, --help
+          Print help (see a summary with '-h')

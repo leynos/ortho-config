@@ -1,0 +1,42 @@
+---
+source: examples/hello_world/tests/localised_help.rs
+expression: output
+---
+受信者への別れのワークフローの進行を説明します。
+
+Usage: hello-world take-leave [OPTIONS]
+
+Options:
+  -c, --config <PATH>
+          Path to the configuration file
+
+      --parting <PHRASE>
+          Parting phrase to use when saying goodbye
+          
+          [default: "Take care"]
+
+      --preamble <PHRASE>
+          Optional preamble printed before the farewell greeting
+
+      --punctuation <TEXT>
+          Optional punctuation override appended to the farewell greeting
+
+      --channel <channel>
+          Describes how the farewell follow-up will be delivered
+
+          Possible values:
+          - message: Sends a follow-up via instant message
+          - call:    Schedules a quick voice call
+          - email:   Dispatches a friendly email
+
+      --remind-in <MINUTES>
+          Optional reminder delay in minutes
+
+      --gift <ITEM>
+          Optional gift noted in the farewell
+
+      --wave
+          Records whether the caller waves whilst leaving
+
+  -h, --help
+          Print help (see a summary with '-h')

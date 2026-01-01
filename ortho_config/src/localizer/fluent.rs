@@ -1,6 +1,6 @@
 //! Fluent bundle utilities extracted from the localisation module.
 //!
-//! Keeping parsing, resource registration, and identifier normalisation in a
+//! Keeping parsing, resource registration, and identifier normalization in a
 //! dedicated module keeps `mod.rs` concise while retaining cohesion around
 //! Fluent-specific concerns.
 
@@ -9,7 +9,7 @@ use fluent_bundle::concurrent::FluentBundle;
 use std::borrow::Cow;
 use std::fmt;
 use std::sync::Arc;
-use unic_langid::{LanguageIdentifier, langid};
+use unic_langid::LanguageIdentifier;
 
 use super::{
     FluentBundleSource, FluentLocalizer, FluentLocalizerBuilder, FluentLocalizerError,
@@ -33,13 +33,16 @@ impl fmt::Debug for BundleWithLocale {
 }
 
 const EN_US_CATALOGUE: &str = include_str!("../../locales/en-US/messages.ftl");
+const JA_CATALOGUE: &str = include_str!("../../locales/ja/messages.ftl");
+
 static EN_US_RESOURCES: [&str; 1] = [EN_US_CATALOGUE];
+static JA_RESOURCES: [&str; 1] = [JA_CATALOGUE];
 
 pub(super) fn default_resources(locale: &LanguageIdentifier) -> Option<&'static [&'static str]> {
-    if locale == &langid!("en-US") {
-        Some(&EN_US_RESOURCES)
-    } else {
-        None
+    match locale.language.as_str() {
+        "en" => Some(&EN_US_RESOURCES),
+        "ja" => Some(&JA_RESOURCES),
+        _ => None,
     }
 }
 
@@ -249,8 +252,48 @@ impl fmt::Debug for FluentLocalizerBuilder {
 
 #[cfg(test)]
 mod tests {
-    //! Tests for Fluent resource parsing and identifier normalisation helpers.
+    //! Tests for Fluent resource parsing and identifier normalization helpers.
     use super::*;
+    use rstest::rstest;
+    use unic_langid::langid;
+
+    // =========================================================================
+    // default_resources tests
+    // =========================================================================
+
+    #[rstest]
+    #[case::en_us(langid!("en-US"), EN_US_RESOURCES.as_slice(), "EN_US_RESOURCES", "en-US should return English resources")]
+    #[case::en_gb(langid!("en-GB"), EN_US_RESOURCES.as_slice(), "EN_US_RESOURCES", "en-GB should return English resources (language-based matching)")]
+    #[case::bare_en(langid!("en"), EN_US_RESOURCES.as_slice(), "EN_US_RESOURCES", "bare 'en' should return English resources")]
+    #[case::ja(langid!("ja"), JA_RESOURCES.as_slice(), "JA_RESOURCES", "ja should return Japanese resources")]
+    #[case::ja_jp(langid!("ja-JP"), JA_RESOURCES.as_slice(), "JA_RESOURCES", "ja-JP should return Japanese resources (language-based matching)")]
+    fn default_resources_returns_expected_catalogue(
+        #[case] locale: LanguageIdentifier,
+        #[case] expected_resources: &'static [&'static str],
+        #[case] resource_name: &str,
+        #[case] description: &str,
+    ) {
+        let resources = default_resources(&locale);
+        assert!(
+            resources.is_some(),
+            "{description}: should return Some for locale {locale}"
+        );
+        assert!(
+            std::ptr::eq(resources.expect("checked above"), expected_resources),
+            "{description}: should return {resource_name} for locale {locale}"
+        );
+    }
+
+    #[test]
+    fn default_resources_returns_none_for_unsupported_locale() {
+        let locale = langid!("fr-FR");
+        let resources = default_resources(&locale);
+        assert!(resources.is_none(), "unsupported locale should return None");
+    }
+
+    // =========================================================================
+    // Identifier normalization tests
+    // =========================================================================
 
     #[test]
     fn normalises_top_level_dotted_ids() {
