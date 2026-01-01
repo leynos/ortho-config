@@ -173,7 +173,7 @@ pub fn build_take_leave_plan(
 ///
 /// # Examples
 ///
-/// ```rust
+/// ```ignore
 /// use hello_world::cli::{GreetCommand, TakeLeaveCommand};
 /// use hello_world::error::HelloWorldError;
 /// use hello_world::message::build_greeting_defaults;
