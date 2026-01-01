@@ -23,6 +23,10 @@ use self::localization::localize_parse_error;
 pub(crate) use self::config_loading::load_config_overrides;
 pub use commands::{FarewellChannel, GreetCommand, TakeLeaveCommand};
 pub use global_config::{apply_greet_overrides, load_global_config, load_greet_defaults};
+/// Extension trait for applying localisation to a [`clap::Command`] tree.
+///
+/// Re-exported to allow consumers to localise CLI metadata (about, help, usage)
+/// using a [`Localizer`] implementation.
 pub use localization::LocalizeCmd;
 #[cfg(test)]
 pub(crate) use overrides::{CommandOverrides, FileOverrides, GreetOverrides};

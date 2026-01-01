@@ -171,30 +171,16 @@ pub fn build_take_leave_plan(
 ///
 /// Returns a [`HelloWorldError`] when greeting defaults cannot be loaded.
 ///
-/// # Examples
-///
-/// ```ignore
-/// use hello_world::cli::{GreetCommand, TakeLeaveCommand};
-/// use hello_world::error::HelloWorldError;
-/// use hello_world::message::build_greeting_defaults;
-///
-/// fn demo() -> Result<(), HelloWorldError> {
-///     let mut farewell = TakeLeaveCommand::default();
-///     farewell.greeting_preamble = Some(String::from("Mind the gap"));
-///     farewell.greeting_punctuation = Some(String::from("?"));
-///
-///     let defaults = build_greeting_defaults(&farewell)?;
-///
-///     assert_eq!(
-///         defaults.preamble,
-///         Some(String::from("Mind the gap"))
-///     );
-///     assert_eq!(defaults.punctuation, String::from("?"));
-///     Ok(())
-/// }
-///
-/// assert!(demo().is_ok());
-/// ```
+// Example usage (internal reference):
+//
+//     let mut farewell = TakeLeaveCommand::default();
+//     farewell.greeting_preamble = Some(String::from("Mind the gap"));
+//     farewell.greeting_punctuation = Some(String::from("?"));
+//
+//     let defaults = build_greeting_defaults(&farewell)?;
+//
+//     assert_eq!(defaults.preamble, Some(String::from("Mind the gap")));
+//     assert_eq!(defaults.punctuation, String::from("?"));
 fn build_greeting_defaults(command: &TakeLeaveCommand) -> Result<GreetCommand, HelloWorldError> {
     let mut greeting_defaults = crate::cli::load_greet_defaults()?;
     if let Some(preamble) = &command.greeting_preamble {
