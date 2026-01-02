@@ -3,3 +3,6 @@ strip_patches = "all"
 
 [preflight]
 unit_tests_only = true
+
+[bump.documentation]
+globs = ["README.md", "docs/users-guide.md"]

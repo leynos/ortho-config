@@ -1,6 +1,6 @@
 [package]
 name = "ortho_config"
-version = "0.6.0"
+version = "0.7.0"
 edition = "2024"
 readme = "README.md"
 description.workspace = true
@@ -13,7 +13,7 @@ repository.workspace = true
 workspace = true
 
 [dependencies]
-ortho_config_macros = { path = "../ortho_config_macros", version = "0.6.0" }
+ortho_config_macros = { path = "../ortho_config_macros", version = "0.7.0" }
 serde = { version = "1", features = ["derive"] }
 thiserror = "2"
 clap = { version = "4", features = ["derive"] }
@@ -60,7 +60,7 @@ cap-std = "3"
 tempfile = "3"
 test_helpers = { path = "../test_helpers" }
 anyhow = "1"
-ortho_config_macros = { path = "../ortho_config_macros", version = "0.6.0" }
+ortho_config_macros = { path = "../ortho_config_macros", version = "0.7.0" }
 
 [[example]]
 name = "registry_ctl"

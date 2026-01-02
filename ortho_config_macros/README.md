@@ -45,7 +45,7 @@ manual aliasing.
 
 ```toml
 [dependencies]
-ortho_config = "0.6.0" # Replace with the latest version
+ortho_config = "0.7.0" # Replace with the latest version
 serde = { version = "1.0", features = ["derive"] }
 ```
 
@@ -170,7 +170,7 @@ support additional formats:
 
 ```toml
 [dependencies]
-ortho_config = { version = "0.6.0", features = ["json5", "yaml"] }
+ortho_config = { version = "0.7.0", features = ["json5", "yaml"] }
 ```
 
 When the `yaml` feature is enabled, configuration files are parsed with

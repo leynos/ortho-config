@@ -17,8 +17,9 @@ paths([1](examples/hello_world/src/cli/discovery.rs#L14-L23)). This includes
 checking an explicit environment variable (`HELLO_WORLD_CONFIG_PATH`) for a
 config file and searching standard locations (XDG directories, `%APPDATA%`,
 home directory, working
-directory)([1](examples/hello_world/src/cli/discovery.rs#L29-L37))([1](examples/hello_world/src/cli/discovery.rs#L68-L76)).
- Writing and maintaining this logic is tedious and error-prone.
+directory)([1](examples/hello_world/src/cli/discovery.rs#L29-L37))(
+[1](examples/hello_world/src/cli/discovery.rs#L68-L76)). Writing and
+maintaining this logic is tedious and error-prone.
 
 **Proposal:** Integrate a **cross-platform configuration discovery utility**
 into `ortho-config` itself, so applications can locate config files in one
@@ -43,11 +44,12 @@ call. Specifically:
   discovery module could be replaced by a single call, e.g.
   `let figment = ortho_config::discover_config("hello_world")?;`, eliminating
   the need to manually push candidate paths and iterate through
-  them([1](examples/hello_world/src/cli/discovery.rs#L14-L23))([1](examples/hello_world/src/cli/discovery.rs#L106-L115)).
-   The library would ensure the search order is correct (explicit path first,
-  then XDG/standard locations, then local file) and handle OS differences
-  internally. This follows the “convention over configuration” goal from the
-  design docs by providing sensible default behavior for config file lookup.
+  them([1](examples/hello_world/src/cli/discovery.rs#L14-L23))(
+  [1](examples/hello_world/src/cli/discovery.rs#L106-L115)). The library would
+  ensure the search order is correct (explicit path first, then XDG/standard
+  locations, then local file) and handle OS differences internally. This
+  follows the “convention over configuration” goal from the design docs by
+  providing sensible default behavior for config file lookup.
 
 - **Customization via attributes:** For flexibility, the derive macro could
   allow an attribute on the root config struct to customize the config file
@@ -70,14 +72,15 @@ OS-specific code. This not only reduces boilerplate but also ensures all
 multiple sources still requires manual work. In `hello_world`, the
 `load_global_config` function manually constructs a base config, then merges in
 file overrides and CLI overrides using Figment
-providers([4](examples/hello_world/src/cli/mod.rs#L293-L301))([4](examples/hello_world/src/cli/mod.rs#L2-L5)).
- This involves creating intermediate structs (`Overrides` and `FileLayer`) to
-represent differences, then explicitly merging each into a `Figment`. While
-`ortho-config` automates a lot via its derive, the need for this function
-suggests the library could better handle merging without so much custom code.
-The example now leans on the derive-generated `compose_layers_from_iter` helper
-plus a small CLI clearing layer, eliminating the bespoke Figment setup outlined
-here; the discussion below remains as historical context.
+providers([4](examples/hello_world/src/cli/mod.rs#L293-L301))(
+[4](examples/hello_world/src/cli/mod.rs#L2-L5)). This involves creating
+intermediate structs (`Overrides` and `FileLayer`) to represent differences,
+then explicitly merging each into a `Figment`. While `ortho-config` automates a
+lot via its derive, the need for this function suggests the library could
+better handle merging without so much custom code. The example now leans on the
+derive-generated `compose_layers_from_iter` helper plus a small CLI clearing
+layer, eliminating the bespoke Figment setup outlined here; the discussion
+below remains as historical context.
 
 **Proposal:** Introduce a **more powerful merging API or trait** in
 `ortho-config` that developers can leverage to combine configuration layers in
@@ -165,20 +168,21 @@ transparently:
 - **Automatic Section Merging:** The library already supports defining config
   file sections for subcommands (the `load_and_merge_subcommand` function
   focuses on `[cmds.<name>]` in each
-  file([6](ortho_config/src/subcommand/mod.rs#L34-L42))([6](ortho_config/src/subcommand/mod.rs#L36-L44))).
-   This should be leveraged such that calling `args.load_and_merge()` on a
-  subcommand *always* accounts for any file or env values specific to that
-  subcommand. If there are gaps (like the `greet` punctuation default issue),
-  the implementation should address them. One approach is to treat **clap
-  default values as “absent” if the user didn’t override them** – e.g., the
-  derive macro could internally represent optional CLI inputs as `Option`
-  fields so that if a flag isn’t provided, the field stays `None` and doesn’t
-  override file defaults. In the `greet` example, if `punctuation` were
-  optional internally, `args.load_and_merge()` would leave it unset and thus
-  the file’s `cmds.greet.punctuation` would merge in. The roadmap explicitly
-  mentions distinguishing values explicitly provided on CLI vs defaults to
-  avoid incorrect overrides([3](docs/roadmap.md#L72-L80)); implementing that
-  for subcommands would eliminate the need for manual fix-ups like
+  file([6](ortho_config/src/subcommand/mod.rs#L34-L42))(
+  [6](ortho_config/src/subcommand/mod.rs#L36-L44))). This should be leveraged
+  such that calling `args.load_and_merge()` on a subcommand *always* accounts
+  for any file or env values specific to that subcommand. If there are gaps
+  (like the `greet` punctuation default issue), the implementation should
+  address them. One approach is to treat **clap default values as “absent” if
+  the user didn’t override them** – e.g., the derive macro could internally
+  represent optional CLI inputs as `Option` fields so that if a flag isn’t
+  provided, the field stays `None` and doesn’t override file defaults. In the
+  `greet` example, if `punctuation` were optional internally,
+  `args.load_and_merge()` would leave it unset and thus the file’s
+  `cmds.greet.punctuation` would merge in. The roadmap explicitly mentions
+  distinguishing values explicitly provided on CLI vs defaults to avoid
+  incorrect overrides([3](docs/roadmap.md#L72-L80)); implementing that for
+  subcommands would eliminate the need for manual fix-ups like
   `apply_greet_overrides`.
 
 - **Custom Merge Hooks for Subcommands:** For advanced cases, allow developers
@@ -225,9 +229,9 @@ subcommand, for example). It also aligns with the library’s goal of *reducing
 friction* for common patterns: as noted in the subcommand refinements
 discussion, the aim is to eliminate workarounds like manually handling a
 required arg or override for a
-subcommand([7](docs/subcommand-refinements.md#L12-L20))([7](docs/subcommand-refinements.md#L24-L33)).
- By implementing these improvements, `ortho-config` would handle those patterns
-out-of-the-box.
+subcommand([7](docs/subcommand-refinements.md#L12-L20))(
+[7](docs/subcommand-refinements.md#L24-L33)). By implementing these
+improvements, `ortho-config` would handle those patterns out-of-the-box.
 
 By implementing these proposals – **config discovery abstraction, a generic
 merge mechanism, and enhanced subcommand config support** – the `ortho-config`
