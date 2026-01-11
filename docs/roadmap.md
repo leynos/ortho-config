@@ -296,6 +296,36 @@ references the relevant design guidance.
     Tokio bits, and update the behavioural documentation plus the CHANGELOG to
     describe the new workflow.
 
+- [ ] **Deliver `cargo-orthohelp` IR documentation tooling**
+
+  - [ ] Implement `OrthoConfigDocs` IR schema v1.1 in the derive macro,
+    including Windows metadata and auto-ID generation. Completion criteria:
+    the IR serialises to JSON and all required fields emit deterministic IDs.
+    [[OrthoConfig IR documentation design](cargo-orthohelp-design.md)]
+
+  - [ ] Build the `cargo-orthohelp` bridge pipeline (metadata discovery,
+    ephemeral bridge build, caching, and locale resolution). Completion
+    criteria: a fixture crate produces per-locale IR JSON in `--out-dir` when
+    run with `--cache` and `--no-build` modes.
+    [[OrthoConfig IR documentation design](cargo-orthohelp-design.md)]
+
+  - [ ] Ship a roff generator that produces NAME, SYNOPSIS, DESCRIPTION,
+    OPTIONS, ENVIRONMENT, FILES, PRECEDENCE, EXAMPLES, SEE ALSO, and EXIT
+    STATUS sections from the IR. Completion criteria: a golden test covers
+    section ordering, escaping, and enum rendering.
+    [[OrthoConfig IR documentation design](cargo-orthohelp-design.md)]
+
+  - [ ] Ship the PowerShell generator with wrapper module, MAML help, en-US
+    fallback, CommonParameters, and about topic output. Completion criteria:
+    `Get-Help <BinName> -Full` works in both PowerShell 5.1 and 7+ for a
+    fixture config.
+    [[OrthoConfig IR documentation design](cargo-orthohelp-design.md)]
+
+  - [ ] Add macro, roff, MAML, golden, and Windows integration tests.
+    Completion criteria: `make check-fmt`, `make lint`, and `make test`
+    succeed with the new fixtures and Windows test harness.
+    [[OrthoConfig IR documentation design](cargo-orthohelp-design.md)]
+
 - [ ] **Address future enhancements**
 
   - [ ] Explore asynchronous loading of configuration files and environment
