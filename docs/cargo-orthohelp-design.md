@@ -3,9 +3,9 @@
 This document defines the intermediate representation (IR) emitted by the
 `OrthoConfig` derive macro and consumed by `cargo-orthohelp` to generate
 localised UNIX man pages and PowerShell external help (Microsoft Assistance
-Markup Language (MAML)) plus a wrapper module. It focuses on a
-command-line interface (CLI) documentation pipeline that remains `clap`
-agnostic and keeps documentation code out of application binaries.
+Markup Language (MAML)) plus a wrapper module. It focuses on a command-line
+interface (CLI) documentation pipeline that remains `clap` agnostic and keeps
+documentation code out of application binaries.
 
 - Status: Revision 2 (Windows and PowerShell amendments integrated).
 - Audience: OrthoConfig maintainers and consumers.
@@ -17,6 +17,10 @@ agnostic and keeps documentation code out of application binaries.
   - Scraping `--help` output.
   - Depending on `clap_mangen`.
 
+Note: document revisions track narrative changes, while compatibility is
+governed by the IR schema version (`ir_version`). Generators must use the IR
+schema version to determine compatibility, regardless of document revision.
+
 ## 0. Changelog (v2 vs v1)
 
 PowerShell and Windows amendments (no change to the IR-first philosophy):
@@ -26,26 +30,26 @@ PowerShell and Windows amendments (no change to the IR-first philosophy):
    forwarding to the native executable, and the MAML `<command:name>` must
    match the exported function exactly.
 2. Dual module roots: install the same module into both
-   `%ProgramFiles%\WindowsPowerShell\Modules\<ModuleName>` (PowerShell 5.1)
-   and `%ProgramFiles%\PowerShell\Modules\<ModuleName>` (PowerShell 7+).
+   `%ProgramFiles%\WindowsPowerShell\Modules\<ModuleName>` (PowerShell 5.1) and
+   `%ProgramFiles%\PowerShell\Modules\<ModuleName>` (PowerShell 7+).
 3. Completions: register against the wrapper function. At import, detect
    `Register-ArgumentCompleter -Native` (PowerShell 7+) and fall back to the
    non-`-Native` form on PowerShell 5.1.
 4. Locale fallback: always generate `en-US/<ModuleName>-help.xml`. If a
-   target locale exists but `en-US` does not, copy the target into `en-US`
-   so `Get-Help` never returns empty help.
+   target locale exists but `en-US` does not, copy the target into `en-US` so
+   `Get-Help` never returns empty help.
 5. CommonParameters: wrappers use
    `[CmdletBinding(PositionalBinding = $false)]` so `Get-Help -Full` lists
    common parameters. The MAML writer includes `<CommonParameters/>` unless
    explicitly disabled.
 6. About topic: generate `about_<ModuleName>.help.txt` from the IR conceptual
    material (overview, discovery, precedence) per locale.
-7. HelpInfoUri: optional. Only set it when you publish Update-Help payloads;
+7. HelpInfoUri: optional. Only set when Update-Help payloads are published;
    otherwise omit it to avoid broken Update-Help user experience (UX).
 8. Microsoft Installer (MSI) layout guidance: place the executable under
-   `...\Program Files\<Vendor>\<Product>\bin\` and add it to the machine PATH,
-   drop the module into both module roots, and recommend code signing for the
-   executable and MSI.
+   `...\\Program Files\\<Vendor>\\<Product>\\bin\\` and add it to the machine
+   PATH, drop the module into both module roots, and recommend code signing for
+   the executable and MSI.
 9. Wrapper robustness: resolve the executable path relative to
    `$PSScriptRoot`, forward `@Args`, and propagate `$LASTEXITCODE`.
 10. IR additions (Windows-only, optional): `windows.module_name` and
@@ -270,6 +274,11 @@ pub struct WindowsMetadata {
 }
 ```
 
+Resolution order for Windows generator settings: CLI flags override
+`Cargo.toml` metadata, which overrides `windows` values from the IR. Defaults
+apply when no source provides a value. When multiple sources provide the same
+setting, the highest-precedence source wins.
+
 ### 2.6 Extras (examples, links, and notes)
 
 ```rust
@@ -292,10 +301,10 @@ pub struct Note {
 }
 ```
 
-Flattening rule: config file keys must be emitted as dotted `key_path`
-(e.g., `network.proxy.url`) regardless of internal nesting. Environment
-variable names must be unique per field (see section 5.3). The only nested
-structure is `subcommands`.
+Flattening rule: config file keys must be emitted as dotted `key_path` (e.g.,
+`network.proxy.url`) regardless of internal nesting. Environment variable names
+must be unique per field (see section 5.3). The only nested structure is
+`subcommands`.
 
 ## 3. Derive macro integration
 
@@ -308,8 +317,8 @@ pub trait OrthoConfigDocs {
 }
 ```
 
-The `#[derive(OrthoConfig)]` macro emits this implementation alongside
-runtime loaders, filling all IR fields from the same parsed metadata.
+The `#[derive(OrthoConfig)]` macro emits this implementation alongside runtime
+loaders, filling all IR fields from the same parsed metadata.
 
 ### 3.2 Attributes (doc-related)
 
@@ -326,13 +335,13 @@ Namespace: `#[ortho_config(...)]`. Selected keys:
   `link(uri = "...", text_id = "...")*`, `note(text_id = "...")*`.
 - App or subcommand:
   `headings(name = "...", ...)`,
-  `discovery(formats = [...], xdg = bool, override_flag = "...",
-  override_env = "...")`,
-  `precedence(order = ["defaults", "file", "env", "cli"],
-  rationale_id = "...")`.
+  `discovery(formats = [...], xdg = bool, override_flag = "...",`
+  `override_env = "...")`,
+  `precedence(order = ["defaults", "file", "env", "cli"],`
+  `rationale_id = "...")`.
 - Windows (optional, generator hints):
-  `windows(module_name = "...", include_common_parameters = true,
-  split_subcommands = false)`.
+  `windows(module_name = "...", include_common_parameters = true,`
+  `split_subcommands = false)`.
 
 ### 3.3 Diagnostics
 
@@ -365,8 +374,8 @@ Deterministic IDs when omitted:
 ### 4.1 Resolver
 
 `Localizer` (trait) with `FluentLocalizer` implementation layered (consumer
-bundle -> library defaults -> English). Generators pass a `&dyn Localizer`
-for the target locale.
+bundle -> library defaults -> English). Generators pass a `&dyn Localizer` for
+the target locale.
 
 ### 4.2 Catalogues
 
@@ -461,12 +470,11 @@ trusts the existing IR.
 
 ### 7.1 Man page (roff)
 
-Files: `man/man<section>/<name>.<section>` (or
-`.../<name>-<sub>.<section>` when split). Use classic `man` macros: `.TH`,
-`.SH`, `.SS`, `.TP`, `.B`, `.I`.
+Files: `man/man<section>/<name>.<section>` (or `.../<name>-<sub>.<section>`
+when split). Use classic `man` macros: `.TH`, `.SH`, `.SS`, `.TP`, `.B`, `.I`.
 
-Sections: NAME, SYNOPSIS, DESCRIPTION, OPTIONS, ENVIRONMENT, FILES,
-PRECEDENCE, EXAMPLES, SEE ALSO, EXIT STATUS.
+Sections: NAME, SYNOPSIS, DESCRIPTION, OPTIONS, ENVIRONMENT, FILES, PRECEDENCE,
+EXAMPLES, SEE ALSO, EXIT STATUS.
 
 Rules mirror v1: CLI fields in OPTIONS; environment variables in ENVIRONMENT;
 config keys and discovery in FILES; precedence explained; examples rendered
@@ -560,7 +568,7 @@ for maximum compatibility.
 - Default `value_name` when absent: `STRING`, `INT`, `FLOAT`, `PATH`,
   `DURATION`, `IP`, `URL`, `CHOICE`, `LIST`, `MAP`.
 - OPTIONS grouped by top-level `file.key_path` segment, then by flag name.
-- ENVIRONMENT sorted by variable name; FILE KEYS grouped by table.
+- ENVIRONMENT sorted by variable name; FILES grouped by table.
 - Headings use Fluent IDs; library defaults apply when missing.
 
 ## 9. Error handling and diagnostics
@@ -656,7 +664,7 @@ These are packaging recommendations; the generator writes only to `--out-dir`.
         "possible_values": [],
         "hide_in_help": false
       },
-      "env": {"var_name": "MYAPP_PORT"},
+      "env": {"var_name": "MY_APP_PORT"},
       "file": {"key_path": "port"}
     }
   ],
