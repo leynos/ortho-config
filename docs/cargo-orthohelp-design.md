@@ -5,7 +5,7 @@ This document defines the intermediate representation (IR) emitted by the
 localised UNIX man pages and PowerShell external help (Microsoft Assistance
 Markup Language (MAML)) plus a wrapper module. It focuses on a command-line
 interface (CLI) documentation pipeline that remains `clap` agnostic and keeps
-documentation code out of application binaries.
+IR-driven documentation code out of application binaries.
 
 - Status: Revision 2 (Windows and PowerShell amendments integrated).
 - Audience: OrthoConfig maintainers and consumers.
