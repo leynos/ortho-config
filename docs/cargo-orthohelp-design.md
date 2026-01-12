@@ -612,7 +612,7 @@ Exit non-zero on hard errors and list artefacts on success.
   - `C:\Program Files\PowerShell\Modules\<ModuleName>\`.
 - Place culture subfolders (`en-US`, `en-GB`, and so on) under the module
   directory.
-- Code sign the executable and MSI; module scripts are optional but recommended
+- Code-sign the executable and MSI; module scripts are optional but recommended
   in locked-down environments.
 
 These are packaging recommendations; the generator writes only to `--out-dir`.
