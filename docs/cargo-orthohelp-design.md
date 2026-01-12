@@ -47,7 +47,7 @@ PowerShell and Windows amendments (no change to the IR-first philosophy):
 7. HelpInfoUri: optional. Only set when Update-Help payloads are published;
    otherwise omit it to avoid broken Update-Help user experience (UX).
 8. Microsoft Installer (MSI) layout guidance: place the executable under
-   `...\\Program Files\\<Vendor>\\<Product>\\bin\\` and add it to the machine
+   `…\\Program Files\\<Vendor>\\<Product>\\bin\\` and add it to the machine
    PATH, drop the module into both module roots, and recommend code signing for
    the executable and MSI.
 9. Wrapper robustness: resolve the executable path relative to
@@ -64,7 +64,7 @@ The IR schema bumps to `1.1` to include optional Windows metadata.
 User crate (uses OrthoConfig)
 ┌───────────────────────────────────┐
 │ #[derive(OrthoConfig)]            │
-│ struct AppConfig { ... }          │
+│ struct AppConfig { … }          │
 │                                   │
 │ OrthoConfigDocs::get_doc_metadata │
 │   -> DocMetadata (IR)             │
@@ -322,25 +322,25 @@ loaders, filling all IR fields from the same parsed metadata.
 
 ### 3.2 Attributes (doc-related)
 
-Namespace: `#[ortho_config(...)]`. Selected keys:
+Namespace: `#[ortho_config(…)]`. Selected keys:
 
 - IDs and text: `help_id`, `long_help_id`, `about_id`, `synopsis_id`.
 - Exposure and naming:
-  `cli(long = "...", short = 'x', value_name = "...", hide_in_help)`,
-  `env(name = "...")`, `file(key_path = "...")`.
-- Semantics: `required`, `default = "..."`,
-  `deprecated(note_id = "...")`, `value(type = "duration|ipaddr|url|...")`.
+  `cli(long = "…", short = 'x', value_name = "…", hide_in_help)`,
+  `env(name = "…")`, `file(key_path = "…")`.
+- Semantics: `required`, `default = "…"`,
+  `deprecated(note_id = "…")`, `value(type = "duration|ipaddr|url|…")`.
 - Extras:
-  `example(code = "...", title_id = "...", body_id = "...")*`,
-  `link(uri = "...", text_id = "...")*`, `note(text_id = "...")*`.
+  `example(code = "…", title_id = "…", body_id = "…")*`,
+  `link(uri = "…", text_id = "…")*`, `note(text_id = "…")*`.
 - App or subcommand:
-  `headings(name = "...", ...)`,
-  `discovery(formats = [...], xdg = bool, override_flag = "...",`
-  `override_env = "...")`,
+  `headings(name = "…", …)`,
+  `discovery(formats = […], xdg = bool, override_flag = "…",`
+  `override_env = "…")`,
   `precedence(order = ["defaults", "file", "env", "cli"],`
-  `rationale_id = "...")`.
+  `rationale_id = "…")`.
 - Windows (optional, generator hints):
-  `windows(module_name = "...", include_common_parameters = true,`
+  `windows(module_name = "…", include_common_parameters = true,`
   `split_subcommands = false)`.
 
 ### 3.3 Diagnostics
@@ -351,7 +351,7 @@ Hard errors at macro time:
   with spans on both fields and a remediation hint.
 - Illegal characters in environment variable names or file key paths emit a
   hard error with suggested canonical forms.
-- Ambiguous value typing suggests `value(type = ...)`.
+- Ambiguous value typing suggests `value(type = …)`.
 
 Warnings:
 
@@ -383,7 +383,7 @@ the target locale.
 locales/
   en-GB/ortho_config.ftl         # default headings or boilerplate
   en-GB/<crate>.ftl              # consumer app translations (optional)
-  fr-FR/...                      # additional locales
+  fr-FR/…                      # additional locales
 ```
 
 PowerShell note: always emit `en-US` help XML. If generating another locale
@@ -395,7 +395,7 @@ PowerShell culture probing strongly prefers `en-US` presence.
 ### 5.1 File key paths (dotted)
 
 - Derived from nested field structure; segments default to snake_case.
-- Override via `#[ortho_config(file(key_path = "..."))]`.
+- Override via `#[ortho_config(file(key_path = "…"))]`.
 - Validate `[A-Za-z0-9_-]+` per segment (library default). Render quoting
   guidance in docs if users need non-ASCII values.
 
@@ -470,8 +470,8 @@ trusts the existing IR.
 
 ### 7.1 Man page (roff)
 
-Files: `man/man<section>/<name>.<section>` (or `.../<name>-<sub>.<section>`
-when split). Use classic `man` macros: `.TH`, `.SH`, `.SS`, `.TP`, `.B`, `.I`.
+Files: `man/man<section>/<name>.<section>` (or `…/<name>-<sub>.<section>` when
+split). Use classic `man` macros: `.TH`, `.SH`, `.SS`, `.TP`, `.B`, `.I`.
 
 Sections: NAME, SYNOPSIS, DESCRIPTION, OPTIONS, ENVIRONMENT, FILES, PRECEDENCE,
 EXAMPLES, SEE ALSO, EXIT STATUS.
@@ -581,7 +581,7 @@ Macro time:
 Generation time:
 
 - Missing Fluent messages emit warnings and fall back to English or
-  `[missing: ...]` in development mode.
+  `[missing: …]` in development mode.
 - MAML validation errors include line and column information.
 - Wrapper or function name mismatches with the MAML `<command:name>` emit an
   error.
@@ -692,7 +692,7 @@ function myapp {
   & $exe @Args
   $global:LASTEXITCODE = $LASTEXITCODE
 }
-$sb = { param($wordToComplete, $commandAst, $cursorPosition) # ... }
+$sb = { param($wordToComplete, $commandAst, $cursorPosition) # … }
 $hasNative = (Get-Command Register-ArgumentCompleter).Parameters.ContainsKey(
   'Native'
 )
