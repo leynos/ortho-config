@@ -550,7 +550,7 @@ MAML mapping:
   - Required or position heuristics: position only when unambiguous; otherwise
     named.
 - Field descriptions come from `help_id` or `long_help_id`.
-- Enum allowed values append to the description.
+- Enum allowed values are appended to the description.
 - Environment or file exposure is documented in Notes per parameter.
 - App examples or links map to `<command:examples>` or
   `<maml:relatedLinks>`.
