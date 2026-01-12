@@ -226,7 +226,7 @@ pub struct ConfigDiscoveryMeta {
     pub formats: Vec<ConfigFormat>,         // e.g., [Toml, Json, Yaml]
     pub search_paths: Vec<PathPattern>,     // ordered (lowest -> highest)
     pub override_flag_long: Option<String>, // e.g., "config"
-    pub override_env: Option<String>,       // e.g., "MYAPP_CONFIG"
+    pub override_env: Option<String>,       // e.g., "MY_APP_CONFIG"
     pub xdg_compliant: bool,
 }
 
@@ -631,9 +631,9 @@ These are packaging recommendations; the generator writes only to `--out-dir`.
 ```json
 {
   "ir_version": "1.1",
-  "app_name": "myapp",
-  "bin_name": "myapp",
-  "about_id": "myapp.about",
+  "app_name": "my-app",
+  "bin_name": "my-app",
+  "about_id": "my-app.about",
   "sections": {
     "headings_ids": {
       "name": "ortho.headings.name",
@@ -651,7 +651,7 @@ These are packaging recommendations; the generator writes only to `--out-dir`.
   "fields": [
     {
       "name": "port",
-      "help_id": "myapp.fields.port.help",
+      "help_id": "my-app.fields.port.help",
       "value": {"Integer": {"bits": 16, "signed": false}},
       "default": {"display": "8080"},
       "required": false,
@@ -664,7 +664,7 @@ These are packaging recommendations; the generator writes only to `--out-dir`.
         "possible_values": [],
         "hide_in_help": false
       },
-      "env": {"var_name": "MYAPP_PORT"},
+      "env": {"var_name": "MY_APP_PORT"},
       "file": {"key_path": "port"}
     }
   ],
@@ -684,10 +684,10 @@ These are packaging recommendations; the generator writes only to `--out-dir`.
 ```powershell
 [CmdletBinding(PositionalBinding = $false)]
 param()
-function myapp {
+function my-app {
   [CmdletBinding(PositionalBinding = $false)]
   param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Args)
-  $exe = Join-Path $PSScriptRoot '..' 'bin' 'myapp.exe'
+  $exe = Join-Path $PSScriptRoot '..' 'bin' 'my-app.exe'
   $exe = (Resolve-Path $exe).ProviderPath
   & $exe @Args
   $global:LASTEXITCODE = $LASTEXITCODE
@@ -697,9 +697,9 @@ $hasNative = (Get-Command Register-ArgumentCompleter).Parameters.ContainsKey(
   'Native'
 )
 if ($hasNative) {
-  Register-ArgumentCompleter -Native -CommandName 'myapp' -ScriptBlock $sb
+  Register-ArgumentCompleter -Native -CommandName 'my-app' -ScriptBlock $sb
 } else {
-  Register-ArgumentCompleter -CommandName 'myapp' -ScriptBlock $sb
+  Register-ArgumentCompleter -CommandName 'my-app' -ScriptBlock $sb
 }
 ```
 
@@ -710,7 +710,7 @@ if ($hasNative) {
   RootModule = 'MyApp.psm1'
   ModuleVersion = '0.1.0'
   CompatiblePSEditions = @('Desktop', 'Core')
-  FunctionsToExport = @('myapp')
+  FunctionsToExport = @('my-app')
   ExternalHelp = 'MyApp-help.xml'
 }
 ```
