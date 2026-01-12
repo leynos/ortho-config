@@ -2,14 +2,14 @@
 
 This document defines the intermediate representation (IR) emitted by the
 `OrthoConfig` derive macro and consumed by `cargo-orthohelp` to generate
-localised UNIX man pages and PowerShell external help (Microsoft Assistance
+localized UNIX man pages and PowerShell external help (Microsoft Assistance
 Markup Language (MAML)) plus a wrapper module. It focuses on a command-line
 interface (CLI) documentation pipeline that remains `clap` agnostic and keeps
 IR-driven documentation code out of application binaries.
 
 - Status: Revision 2 (Windows and PowerShell amendments integrated).
 - Audience: OrthoConfig maintainers and consumers.
-- Goal: Generate fully localised UNIX man pages and PowerShell external help
+- Goal: Generate fully localized UNIX man pages and PowerShell external help
   (MAML and wrapper module) from a robust, `clap`-agnostic IR.
 - Non-goals:
   - Shipping documentation code in application binaries.
@@ -91,7 +91,7 @@ Key choices:
 
 - IR over `clap` for complete coverage across CLI, environment variables, and
   files without dummy arguments.
-- Localisation at generation time: the IR stores message identifiers (IDs),
+- Localization at generation time: the IR stores message identifiers (IDs),
   and generators resolve per locale.
 - Out-of-band tooling: `cargo orthohelp` compiles and runs a tiny ephemeral
   bridge to fetch the IR, keeping application binaries clean.
@@ -369,7 +369,7 @@ Deterministic IDs when omitted:
 
 `command_path` is `sub1.sub2` for nested subcommands.
 
-## 4. Localisation model
+## 4. Localization model
 
 ### 4.1 Resolver
 
@@ -453,12 +453,12 @@ man_section = 1
 3. Build the ephemeral bridge under `target/orthohelp/<hash>/`:
    - Dependencies: `user_crate`, `ortho_config_docs`.
    - `main.rs` invokes
-     `<root_type as OrthoConfigDocs>::get_doc_metadata()` and serialises the
+     `<root_type as OrthoConfigDocs>::get_doc_metadata()` and serializes the
      IR JSON to stdout.
 4. Run the bridge and capture the IR.
 5. For each locale, instantiate `FluentLocalizer` and resolve IDs to strings.
 6. Emit the requested outputs into `--out-dir`.
-7. Summarise artefacts and exit non-zero on hard errors.
+7. Summarize artefacts and exit non-zero on hard errors.
 
 ### 6.3 Caching
 
@@ -664,7 +664,7 @@ These are packaging recommendations; the generator writes only to `--out-dir`.
         "possible_values": [],
         "hide_in_help": false
       },
-      "env": {"var_name": "MY_APP_PORT"},
+      "env": {"var_name": "MYAPP_PORT"},
       "file": {"key_path": "port"}
     }
   ],
