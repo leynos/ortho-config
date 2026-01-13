@@ -115,7 +115,7 @@ pub fn add(a: i32, b: i32) -> i32 {
 Where it adds clarity, include [Mermaid](https://mermaid.js.org/) diagrams.
 When embedding figures, use `![alt text](path/to/image)` and provide brief alt
 text describing the content. Add a short description before each Mermaid
-diagram so screen readers can understand it.
+diagram, so screen readers can understand it.
 
 For screen readers: The following flowchart outlines the documentation workflow.
 
@@ -145,9 +145,9 @@ roadmap. Development effort should be roughly consistent from task to task.
   migrated”).
 - Break into atomic increments: Ensure tasks can be completed in weeks, not
   quarters. Large goals should be decomposed into clear, deliverable units.
-- Tie to dependencies and sequencing: Document prerequisites so tasks can be
-  scheduled realistically (e.g. "Introduce central logging service" before "Add
-  error dashboards").
+- Tie to dependencies and sequencing: Document prerequisites, so tasks can be
+  scheduled realistically (e.g. “Introduce central logging service” before “Add
+  error dashboards”).
 - Bound scope explicitly: Note both in-scope and out-of-scope elements (e.g.
   “Build analytics dashboard (excluding churn prediction)”).
 
@@ -167,9 +167,9 @@ navigability:
 
 - **Dotted numbering:** Number phases, steps, and headline tasks using dotted
   notation:
-  - Phases: 1, 2, 3, …
-  - Steps: 1.1, 1.2, 1.3, …
-  - Headline tasks: 1.1.1, 1.1.2, 1.1.3, …
+  - Phases: 1, 2, 3, ...
+  - Steps: 1.1, 1.2, 1.3, ...
+  - Headline tasks: 1.1.1, 1.1.2, 1.1.3, ...
 - **Checkboxes:** Precede task and sub-task items with a GitHub-Flavoured
   Markdown (GFM) checkbox (`[ ]`) to track completion status.
 - **Dependencies:** Note non-linear dependencies explicitly. Where a task
@@ -237,7 +237,7 @@ Include these sections as appropriate to the decision's complexity:
 - **Options Considered:** Describe the alternatives evaluated. Use a comparison
   table when contrasting multiple options across several dimensions.
 - **Decision Outcome / Proposed Direction:** State the chosen approach and
-  summarize the rationale. For `Proposed` ADRs, describe the recommended
+  summarise the rationale. For `Proposed` ADRs, describe the recommended
   direction.
 - **Goals and Non-Goals:** Clarify what the decision aims to achieve and what
   is explicitly out of scope.
@@ -302,7 +302,7 @@ _Table 1: Comparison of options._
 
 ## Decision Outcome / Proposed Direction
 
-<State the chosen or recommended approach and summarize the rationale.>
+<State the chosen or recommended approach and summarise the rationale.>
 
 ## Known Risks and Limitations
 
