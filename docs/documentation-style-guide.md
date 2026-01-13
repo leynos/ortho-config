@@ -13,11 +13,11 @@ Apply these rules to keep the documentation clear and consistent for developers.
      such as _analyse_, _paralyse_ and _catalyse_,
   - suffix -our in words such as _colour_, _behaviour_ and _neighbour_,
   - suffix -re in words such as _calibre_, _centre_ and _fibre_,
-  - double "l" in words such as _cancelled_, _counsellor_ and _cruellest_,
-  - maintain the "e" in words such as _likeable_, _liveable_ and _rateable_,
+  - double “l” in words such as _cancelled_, _counsellor_ and _cruellest_,
+  - maintain the “e” in words such as _likeable_, _liveable_ and _rateable_,
   - suffix -ogue in words such as _analogue_ and _catalogue_,
   - and so forth.
-- The words **"outwith"** and **"caveat"** are acceptable.
+- The words **“outwith”** and **“caveat”** are acceptable.
 - Keep United States (US) spelling when used in an external API, command, or
   library, for example, `color`.
 - The name of the project licence file is spelled `LICENSE` for community
@@ -25,10 +25,10 @@ Apply these rules to keep the documentation clear and consistent for developers.
 
 ## Punctuation and grammar
 
-- Use the Oxford comma: "ships, planes, and hovercraft" where it aids
+- Use the Oxford comma: “ships, planes, and hovercraft” where it aids
   comprehension.
-- Company names are treated as collective nouns: "df12 Productions are
-  expanding".
+- Company names are treated as collective nouns: “df12 Productions are
+  expanding”.
 - Avoid first and second person personal pronouns outside the `README.md`
   file.
 
@@ -115,7 +115,7 @@ pub fn add(a: i32, b: i32) -> i32 {
 Where it adds clarity, include [Mermaid](https://mermaid.js.org/) diagrams.
 When embedding figures, use `![alt text](path/to/image)` and provide brief alt
 text describing the content. Add a short description before each Mermaid
-diagram so screen readers can understand it.
+diagram, so screen readers can understand it.
 
 For screen readers: The following flowchart outlines the documentation workflow.
 
@@ -146,8 +146,8 @@ roadmap. Development effort should be roughly consistent from task to task.
 - Break into atomic increments: Ensure tasks can be completed in weeks, not
   quarters. Large goals should be decomposed into clear, deliverable units.
 - Tie to dependencies and sequencing: Document prerequisites so tasks can be
-  scheduled realistically (e.g. "Introduce central logging service" before "Add
-  error dashboards").
+  scheduled realistically (e.g. “Introduce central logging service” before “Add
+  error dashboards”).
 - Bound scope explicitly: Note both in-scope and out-of-scope elements (e.g.
   “Build analytics dashboard (excluding churn prediction)”).
 
@@ -174,11 +174,11 @@ navigability:
   Markdown (GFM) checkbox (`[ ]`) to track completion status.
 - **Dependencies:** Note non-linear dependencies explicitly. Where a task
   depends on another task outside its immediate sequence, cite the dependency
-  using dotted notation (e.g. "Requires 2.3.1").
+  using dotted notation (e.g. “Requires 2.3.1”).
 - **Success criteria:** Include explicit success criteria only where not
   immediately obvious from the task description.
 - **Design document citations:** Where applicable, cite the relevant design
-  document section for each task (e.g. "See design-doc.md §3.2").
+  document section for each task (e.g. “See design-doc.md §3.2”).
 
 ### Roadmap example
 
@@ -255,7 +255,7 @@ Include these sections as appropriate to the decision's complexity:
 - Use second-level headings (`##`) for major sections.
 - Use third-level headings (`###`) for subsections (e.g. phases, option names).
 - Use tables to compare options when multiple dimensions are relevant. Include
-  a caption below the table (e.g. "_Table 1: Trade-offs between X and Y._").
+  a caption below the table (e.g. “_Table 1: Trade-offs between X and Y._”).
 - Include code snippets with language identifiers when illustrating technical
   approaches. Use `no_run` for illustrative Rust code that should not be
   executed.
@@ -275,7 +275,7 @@ Proposed.
 
 YYYY-MM-DD.
 
-## Context and Problem Statement
+## Context and problem statement
 
 <Describe the situation, constraints, and the question being addressed.>
 
@@ -284,7 +284,7 @@ YYYY-MM-DD.
 - <Driver 1>
 - <Driver 2>
 
-## Options Considered
+## Options considered
 
 ### Option A: <Name>
 
@@ -300,16 +300,16 @@ YYYY-MM-DD.
 
 _Table 1: Comparison of options._
 
-## Decision Outcome / Proposed Direction
+## Decision outcome / proposed direction
 
-<State the chosen or recommended approach and summarize the rationale.>
+<State the chosen or recommended approach and summarise the rationale.>
 
-## Known Risks and Limitations
+## Known risks and limitations
 
 - <Risk or limitation 1>
 - <Risk or limitation 2>
 
-## Outstanding Decisions
+## Outstanding decisions
 
 - <Open question 1>
 - <Open question 2>
