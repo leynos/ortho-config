@@ -1,11 +1,11 @@
-.PHONY: help all clean test build release lint fmt check-fmt markdownlint nixie check typecheck python-test-deps publish-check FORCE
+.PHONY: help all clean test build release lint fmt check-fmt markdownlint nixie typecheck python-test-deps publish-check FORCE
 
 CRATE ?= ortho_config
 CARGO ?= cargo
 PUBLISH_CHECK_CARGO_REAL ?= $(shell command -v $(CARGO))
 BUILD_JOBS ?=
 CLIPPY_FLAGS ?= --all-targets --all-features -- -D warnings
-MDLINT ?= markdownlint
+MDLINT ?= markdownlint-cli2
 NIXIE ?= nixie
 PUBLISH_CHECK_FLAGS ?=
 PYTHON_VENV ?= scripts/.venv
@@ -21,14 +21,12 @@ NULL_DEVICE ?= /dev/null
 endif
 UV_RUN := $(UV) run --python $(PYTHON_VERSION) --with-requirements $(PYTHON_DEPS_FILE)
 PYTEST ?= $(UV_RUN) --module pytest
-MDLINT ?= markdownlint-cli2
-NIXIE ?= nixie
 RUSTDOC_FLAGS ?= -D warnings
 
 build: target/debug/lib$(CRATE).rlib ## Build debug library
 release: target/release/lib$(CRATE).rlib ## Build release library
 
-all: release ## Default target builds release binary
+all: check-fmt typecheck lint test markdownlint nixie
 
 clean: ## Remove build artifacts
 	$(CARGO) clean
@@ -67,8 +65,6 @@ fmt: ## Format Rust and Markdown sources
 
 check-fmt: ## Verify formatting
 	$(CARGO) fmt --all -- --check
-
-check: check-fmt lint test markdownlint nixie
 
 markdownlint: ## Lint Markdown files
 	$(MDLINT) "**/*.md"
