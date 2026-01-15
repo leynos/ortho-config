@@ -317,6 +317,13 @@ impl ConfigDiscovery {
             reason = "Windows builds do not call `push_for_bases`, but Unix builds rely on runtime allocation"
         )
     )]
+    #[cfg_attr(
+        windows,
+        expect(
+            clippy::ptr_arg,
+            reason = "Windows builds do not use paths, but Unix builds push via `push_for_bases`"
+        )
+    )]
     fn push_default_xdg(&self, _paths: &mut Vec<PathBuf>, _seen: &mut HashSet<String>) {
         #[cfg(any(unix, target_os = "redox"))]
         self.push_for_bases(std::iter::once(PathBuf::from("/etc/xdg")), _paths, _seen);
