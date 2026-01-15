@@ -23,7 +23,7 @@ UV_RUN := $(UV) run --python $(PYTHON_VERSION) --with-requirements $(PYTHON_DEPS
 PYTEST ?= $(UV_RUN) --module pytest
 MDLINT ?= markdownlint-cli2
 NIXIE ?= nixie
-RUSTDOC_FLAGS ?= --cfg docsrs -D warnings
+RUSTDOC_FLAGS ?= -D warnings
 
 build: target/debug/lib$(CRATE).rlib ## Build debug library
 release: target/release/lib$(CRATE).rlib ## Build release library

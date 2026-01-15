@@ -2,6 +2,7 @@
 name = "ortho_config"
 version = "0.7.0"
 edition = "2024"
+rust-version.workspace = true
 readme = "README.md"
 description.workspace = true
 license.workspace = true
@@ -53,8 +54,8 @@ figment = { version = "0.10", features = ["toml", "env"] }
 serde = { version = "1", features = ["derive"] }
 trybuild = "1"
 rstest = "0.26.1"
-rstest-bdd = "0.1.0"
-rstest-bdd-macros = "0.1.0"
+rstest-bdd = "0.3.2"
+rstest-bdd-macros = "0.3.2"
 serial_test = "3"
 cap-std = "3"
 tempfile = "3"

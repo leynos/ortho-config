@@ -11,6 +11,7 @@ resolver = "2"
 version = "0.7.0"
 authors = ["Payton McIntosh <pmcintosh@df12.net>"]
 edition = "2024"
+rust-version = "1.88"
 license = "ISC"
 repository = "https://github.com/leynos/ortho-config"
 description = "A configuration management library for Rust, inspired by esbuild."
