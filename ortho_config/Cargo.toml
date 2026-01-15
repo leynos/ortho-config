@@ -54,8 +54,8 @@ figment = { version = "0.10", features = ["toml", "env"] }
 serde = { version = "1", features = ["derive"] }
 trybuild = "1"
 rstest = "0.26.1"
-rstest-bdd = "0.3.2"
-rstest-bdd-macros = "0.3.2"
+rstest-bdd.workspace = true
+rstest-bdd-macros.workspace = true
 serial_test = "3"
 cap-std = "3"
 tempfile = "3"

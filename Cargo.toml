@@ -19,6 +19,10 @@ readme = "README.md"
 keywords = ["config", "configuration", "cli", "env", "settings"]
 categories = ["config", "command-line-interface"]
 
+[workspace.dependencies]
+rstest-bdd = "0.3.2"
+rstest-bdd-macros = "0.3.2"
+
 # `cargo clippy` lints configuration
 [workspace.lints.clippy]
 pedantic = { level = "warn", priority = -1 }
