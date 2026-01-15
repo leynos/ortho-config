@@ -1,6 +1,6 @@
 # Roadmap
 
-This roadmap summarises completed and remaining work for OrthoConfig, distilled
+This roadmap summarizes completed and remaining work for OrthoConfig, distilled
 from design documents and a comparison with the current repository
 implementation. Work is grouped into phases, steps, and tasks using dotted
 numbering, and it avoids time-based commitments. The command-line interface
@@ -13,7 +13,7 @@ numbering, and it avoids time-based commitments. The command-line interface
 - [x] 1.1.1. Add a dedicated error for missing required values.
   - [x] Introduce a `MissingRequiredValues` variant to `OrthoError` and
     update the derive macro to check for missing required fields before
-    deserialisation. See
+    deserialization. See
     [Improved error message design](improved-error-message-design.md).
   - [x] Aggregate all missing fields, then generate a single user-friendly
     error message listing each missing path and showing how to supply it
@@ -23,8 +23,7 @@ numbering, and it avoids time-based commitments. The command-line interface
     correctly. See
     [Improved error message design](improved-error-message-design.md).
 
-- [x] 1.1.2. Reduce error payload size (completed in v0.4.0). See
-  <https://github.com/leynos/ortho-config/issues/>.
+- [x] 1.1.2. Reduce error payload size (completed in v0.4.0).
   - [x] Wrap expansive error variants in `Arc` to shrink `Result` sizes and
     remove the need for `#[expect(clippy::result_large_err)]`.
   - [x] Ensure public `Result<_, OrthoError>` signatures use `Arc` via the
@@ -77,7 +76,7 @@ numbering, and it avoids time-based commitments. The command-line interface
     incorrectly overridden. See
     [Clap dispatch](clap-dispatch-and-ortho-config-integration.md).
   - [x] Aggregate errors from `clap` parsing, file loading, and environment
-    deserialisation into a coherent `OrthoError` chain. See
+    deserialization into a coherent `OrthoError` chain. See
     [Clap dispatch](clap-dispatch-and-ortho-config-integration.md).
   - [x] Consider interactions with `#[clap(flatten)]` and nested argument
     structs to ensure predictable behaviour. See
@@ -112,7 +111,7 @@ numbering, and it avoids time-based commitments. The command-line interface
     in `hello_world`. See
     [hello_world feedback](feedback-from-hello-world-example.md).
 
-- [x] 1.3.5. Introduce Fluent localisation for `clap` integration.
+- [x] 1.3.5. Introduce Fluent localization for `clap` integration.
   - [x] Define a `Localizer` trait and `NoOpLocalizer` implementation that
     wrap message lookup and expose argument-aware helpers. See
     [Design](design.md).
@@ -125,20 +124,20 @@ numbering, and it avoids time-based commitments. The command-line interface
     English resources without runtime allocation failures. See
     [Design](design.md).
   - [x] Extend the derive macro builder so applications can pass a
-    `&dyn Localizer`, override help message identifiers, and surface localised
+    `&dyn Localizer`, override help message identifiers, and surface localized
     copy in generated `clap::Command` structures. Behavioural coverage should
-    confirm defaults remain functional when localisation is disabled. See
+    confirm defaults remain functional when localization is disabled. See
     [Design](design.md).
   - [x] Provide a custom `clap` error formatter that maps `ErrorKind` variants
     onto Fluent identifiers and forwards argument context, with unit tests
     that verify fallback to the stock `clap` message when no translation
     exists. See [Design](design.md).
   - [x] Emit a `MergeComposer` builder that discovers file layers and
-    serialises CLI and environment input into `MergeLayer` instances without
+    serializes CLI and environment input into `MergeLayer` instances without
     exposing Figment publicly.
   - [x] Replace `load_global_config` and related helpers in examples with the
     new API. Add regression coverage using the behavioural testing fixtures
-    [^1] and reuse the parameterised setups from the rstest fixture guide
+    [^1] and reuse the parameterized setups from the rstest fixture guide
     [^2].
 
 - [x] 1.3.6. Support custom option names for the configuration path.
@@ -154,7 +153,7 @@ numbering, and it avoids time-based commitments. The command-line interface
     configuration structs to support dynamic rule tables such as
     `[rules.consistent-casing]`. See
     [DDLint gap analysis](ddlint-gap-analysis.md).
-  - [x] Ensure these maps deserialise correctly from files, environment
+  - [x] Ensure these maps deserialize correctly from files, environment
     variables, and CLI.
 
 - [x] 1.4.2. Abstract configuration discovery.
@@ -164,13 +163,13 @@ numbering, and it avoids time-based commitments. The command-line interface
     locations, and project roots into a single call. See
     [hello_world feedback](feedback-from-hello-world-example.md).
   - [x] Integrate the helper with the derive macro so applications can opt in
-    via attributes to customise config file names and generated CLI flags
+    via attributes to customize config file names and generated CLI flags
     without duplicating boilerplate. See
     [hello_world feedback](feedback-from-hello-world-example.md).
 
 - [x] 1.4.3. Introduce declarative configuration merging.
   - [x] Define the `DeclarativeMerge`, `MergeLayer`, and `MergeComposer` design
-    that replaces hand-written Figment wiring in the `hello_world` example
+    that replaces handwritten Figment wiring in the `hello_world` example
     and future clients. See
     [hello_world feedback](feedback-from-hello-world-example.md).
   - [x] Document declarative merging with examples covering defaults, file
@@ -202,7 +201,7 @@ numbering, and it avoids time-based commitments. The command-line interface
 
 ## 2. Documentation and examples
 
-### 2.1. Documentation and examples
+### 2.1. User guides and example crates
 
 - [x] 2.1.1. Enhance documentation and examples.
   - [x] Expand user and developer documentation to cover new features such as
@@ -238,7 +237,7 @@ numbering, and it avoids time-based commitments. The command-line interface
     entries, and wire the YAML feature to these crates. See
     [ADR-001](adr-001-replace-serde-yaml-with-serde-saphyr.md).
   - [x] Implement the `SaphyrYaml` provider in `ortho_config/src/file.rs`
-    that reads YAML files, deserialises them with `serde-saphyr`, and
+    that reads YAML files, deserializes them with `serde-saphyr`, and
     converts the output into `figment::value::Dict`. See
     [ADR-001](adr-001-replace-serde-yaml-with-serde-saphyr.md).
   - [x] Switch `parse_config_by_format` to use the new provider for `.yaml`
@@ -279,7 +278,7 @@ numbering, and it avoids time-based commitments. The command-line interface
   [OrthoConfig IR documentation design](cargo-orthohelp-design.md).
   - [ ] Implement the `OrthoConfigDocs` IR schema v1.1 in the derive macro,
     including Windows metadata and auto-ID generation. Completion criteria:
-    the IR serialises to JSON and all required fields emit deterministic IDs.
+    the IR serializes to JSON and all required fields emit deterministic IDs.
   - [ ] Build the `cargo-orthohelp` bridge pipeline (metadata discovery,
     ephemeral bridge build, caching, and locale resolution). Completion
     criteria: a fixture crate produces per-locale IR JSON in `--out-dir` when
@@ -299,7 +298,7 @@ numbering, and it avoids time-based commitments. The command-line interface
 
 ## 5. Future enhancements
 
-### 5.1. Future enhancements
+### 5.1. Long-term roadmap items
 
 - [ ] 5.1.1. Explore asynchronous loading of configuration files and
   environment variables for applications that need non-blocking startup. See
