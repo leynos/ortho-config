@@ -11,7 +11,7 @@ use heck::{
     ToUpperCamelCase,
 };
 use syn::meta::ParseNestedMeta;
-use syn::{Attribute, Field, LitStr, Token};
+use syn::{Attribute, Expr, Field, LitStr, Token};
 
 /// Supported `#[serde(rename_all = "...")]` rules for struct fields.
 ///
@@ -141,4 +141,22 @@ pub(crate) fn serde_serialized_field_key(
     Ok(rename_all
         .map(|rule| rule.apply(&field_name))
         .unwrap_or(field_name))
+}
+
+/// Returns true if the field has `#[serde(default)]` or `#[serde(default = ...)]`.
+pub(crate) fn serde_has_default(attrs: &[Attribute]) -> syn::Result<bool> {
+    let mut has_default = false;
+    for attr in attrs.iter().filter(|attr| attr.path().is_ident("serde")) {
+        attr.parse_nested_meta(|meta| {
+            if meta.path.is_ident("default") {
+                has_default = true;
+                if meta.input.peek(Token![=]) {
+                    meta.value()?.parse::<syn::Expr>()?;
+                }
+                return Ok(());
+            }
+            super::discard_unknown(&meta)
+        })?;
+    }
+    Ok(has_default)
 }

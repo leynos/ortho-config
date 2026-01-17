@@ -22,6 +22,14 @@ pub(crate) struct CliStructTokens {
     pub field_names: HashSet<String>,
 }
 
+#[derive(Debug, Clone)]
+pub(crate) struct CliFieldMetadata {
+    pub field_name: String,
+    pub long: String,
+    pub short: char,
+    pub is_bool: bool,
+}
+
 pub(super) fn option_type_tokens(ty: &Type) -> proc_macro2::TokenStream {
     option_inner(ty).map_or_else(|| quote! { Option<#ty> }, |inner| quote! { Option<#inner> })
 }
@@ -227,6 +235,45 @@ fn process_cli_field(
     })
 }
 
+fn process_cli_metadata(
+    field: &syn::Field,
+    attrs: &FieldAttrs,
+    context: &mut CliFieldContext,
+) -> syn::Result<CliFieldMetadata> {
+    let Some(name) = field.ident.as_ref() else {
+        return Err(syn::Error::new_spanned(
+            field,
+            "unnamed (tuple) fields are not supported for CLI derive",
+        ));
+    };
+
+    let field_name = name.to_string();
+    context.field_names.insert(field_name.clone());
+
+    let long = attrs
+        .cli_long
+        .clone()
+        .unwrap_or_else(|| field_name.to_kebab_case());
+    validate_cli_long(name, &long)?;
+
+    if !context.used_longs.insert(long.clone()) {
+        return Err(syn::Error::new_spanned(
+            name,
+            format!("duplicate `cli_long` value '{long}'"),
+        ));
+    }
+
+    let short_ch = resolve_short_flag(name, attrs, &mut context.used_shorts)?;
+    let is_bool = is_bool_type(&field.ty);
+
+    Ok(CliFieldMetadata {
+        field_name,
+        long,
+        short: short_ch,
+        is_bool,
+    })
+}
+
 pub(crate) fn build_cli_struct_fields(
     fields: &[syn::Field],
     field_attrs: &[FieldAttrs],
@@ -265,4 +312,32 @@ pub(crate) fn build_cli_struct_fields(
         used_longs,
         field_names,
     })
+}
+
+pub(crate) fn build_cli_field_metadata(
+    fields: &[syn::Field],
+    field_attrs: &[FieldAttrs],
+) -> syn::Result<Vec<CliFieldMetadata>> {
+    if fields.len() != field_attrs.len() {
+        return Err(syn::Error::new(
+            proc_macro2::Span::call_site(),
+            format!(
+                "CLI field metadata mismatch: expected {} `FieldAttrs` entries but found {}; lengths must match to avoid silently dropping metadata",
+                fields.len(),
+                field_attrs.len()
+            ),
+        ));
+    }
+
+    let mut context = CliFieldContext::with_capacity(fields.len());
+    let mut result = Vec::new();
+
+    for (field, attrs) in fields.iter().zip(field_attrs) {
+        if attrs.skip_cli {
+            continue;
+        }
+        result.push(process_cli_metadata(field, attrs, &mut context)?);
+    }
+
+    Ok(result)
 }

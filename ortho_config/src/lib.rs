@@ -36,6 +36,7 @@ mod csv_env;
 #[cfg_attr(docsrs, doc(cfg(feature = "serde_json")))]
 pub mod declarative;
 pub mod discovery;
+pub mod docs;
 mod error;
 pub mod file;
 mod localizer;
@@ -50,6 +51,12 @@ pub use crate::subcommand::SubcmdConfigMerge;
 #[cfg_attr(docsrs, doc(cfg(feature = "serde_json")))]
 pub use result_ext::OrthoJsonMergeExt;
 pub use result_ext::{IntoFigmentError, OrthoMergeExt, OrthoResultExt, ResultIntoFigment};
+pub use docs::{
+    CliMetadata, ConfigDiscoveryMeta, ConfigFormat, DefaultValue, Deprecation, DocMetadata,
+    EnvMetadata, Example, FieldMetadata, FileMetadata, HeadingIds, Link, Note, OrthoConfigDocs,
+    PathPattern, PrecedenceMeta, SectionsMetadata, SourceKind, ValueType, WindowsMetadata,
+    ORTHO_DOCS_IR_VERSION,
+};
 #[cfg(feature = "serde_json")]
 #[cfg_attr(docsrs, doc(cfg(feature = "serde_json")))]
 pub use subcommand::{
