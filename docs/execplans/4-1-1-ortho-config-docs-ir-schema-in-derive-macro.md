@@ -121,9 +121,8 @@ completion. Compare the result against the original purpose. Note what would be
 done differently next time.
 
 - Outcome: IR v1.1 metadata is available via `OrthoConfigDocs`, with
-  deterministic
-  IDs, Windows metadata, and JSON serialization validated by unit and
-  behavioural tests.
+  deterministic IDs, Windows metadata, and JSON serialization validated by unit
+  and behavioural tests.
 
 ## Context and Orientation
 

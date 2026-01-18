@@ -48,7 +48,7 @@ struct DocsConfig {
 }
 
 #[rstest]
-fn emits_ir_metadata() -> Result<()> {
+fn test_basic_metadata() -> Result<()> {
     let metadata = DocsConfig::get_doc_metadata();
 
     ensure!(
@@ -81,6 +81,12 @@ fn emits_ir_metadata() -> Result<()> {
         "expected no subcommands, got {}",
         metadata.subcommands.len()
     );
+    Ok(())
+}
+
+#[rstest]
+fn test_sections_headings() -> Result<()> {
+    let metadata = DocsConfig::get_doc_metadata();
 
     let headings = &metadata.sections.headings_ids;
     ensure!(
@@ -93,6 +99,12 @@ fn emits_ir_metadata() -> Result<()> {
         "expected default name heading, got {}",
         headings.name
     );
+    Ok(())
+}
+
+#[rstest]
+fn test_sections_discovery() -> Result<()> {
+    let metadata = DocsConfig::get_doc_metadata();
 
     let discovery = metadata
         .sections
@@ -122,6 +134,12 @@ fn emits_ir_metadata() -> Result<()> {
         discovery.xdg_compliant == cfg!(any(unix, target_os = "redox")),
         "unexpected xdg_compliant value"
     );
+    Ok(())
+}
+
+#[rstest]
+fn test_windows_metadata() -> Result<()> {
+    let metadata = DocsConfig::get_doc_metadata();
 
     let windows = metadata
         .windows
@@ -150,6 +168,12 @@ fn emits_ir_metadata() -> Result<()> {
         "expected help_info_uri, got {:?}",
         windows.help_info_uri
     );
+    Ok(())
+}
+
+#[rstest]
+fn test_field_port() -> Result<()> {
+    let metadata = DocsConfig::get_doc_metadata();
 
     let port = field_by_name(&metadata, "port")?;
     ensure!(
@@ -202,6 +226,12 @@ fn emits_ir_metadata() -> Result<()> {
         port.file.as_ref().map(|value| value.key_path.as_str()) == Some("network.port"),
         "expected port file key"
     );
+    Ok(())
+}
+
+#[rstest]
+fn test_field_log_level() -> Result<()> {
+    let metadata = DocsConfig::get_doc_metadata();
 
     let log_level = field_by_name(&metadata, "log_level")?;
     ensure!(
@@ -225,6 +255,12 @@ fn emits_ir_metadata() -> Result<()> {
         log_level.file.as_ref().map(|value| value.key_path.as_str()) == Some("logLevel"),
         "expected log_level file key"
     );
+    Ok(())
+}
+
+#[rstest]
+fn test_field_retries() -> Result<()> {
+    let metadata = DocsConfig::get_doc_metadata();
 
     let retries = field_by_name(&metadata, "retries")?;
     ensure!(
@@ -239,6 +275,12 @@ fn emits_ir_metadata() -> Result<()> {
             }),
         "expected retries u8 type"
     );
+    Ok(())
+}
+
+#[rstest]
+fn test_field_verbose() -> Result<()> {
+    let metadata = DocsConfig::get_doc_metadata();
 
     let verbose = field_by_name(&metadata, "verbose")?;
     ensure!(
@@ -253,10 +295,15 @@ fn emits_ir_metadata() -> Result<()> {
         !verbose_cli.takes_value,
         "expected verbose to not take a value"
     );
+    Ok(())
+}
+
+#[rstest]
+fn test_json_serialization() -> Result<()> {
+    let metadata = DocsConfig::get_doc_metadata();
 
     let json = serde_json::to_string(&metadata)?;
     ensure!(!json.is_empty(), "expected JSON output");
-
     Ok(())
 }
 
