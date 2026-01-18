@@ -5,6 +5,7 @@
 //! keeping the implementation cohesive.
 
 pub(crate) mod declarative;
+pub(crate) mod docs;
 pub(crate) mod ortho_impl;
 pub(crate) mod structs;
 

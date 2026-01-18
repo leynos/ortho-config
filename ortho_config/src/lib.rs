@@ -47,16 +47,16 @@ pub mod subcommand;
 #[cfg(feature = "serde_json")]
 #[cfg_attr(docsrs, doc(cfg(feature = "serde_json")))]
 pub use crate::subcommand::SubcmdConfigMerge;
+pub use docs::{
+    CliMetadata, ConfigDiscoveryMeta, ConfigFormat, DefaultValue, Deprecation, DocMetadata,
+    EnvMetadata, Example, FieldMetadata, FileMetadata, HeadingIds, Link, Note,
+    ORTHO_DOCS_IR_VERSION, OrthoConfigDocs, PathPattern, PrecedenceMeta, SectionsMetadata,
+    SourceKind, ValueType, WindowsMetadata,
+};
 #[cfg(feature = "serde_json")]
 #[cfg_attr(docsrs, doc(cfg(feature = "serde_json")))]
 pub use result_ext::OrthoJsonMergeExt;
 pub use result_ext::{IntoFigmentError, OrthoMergeExt, OrthoResultExt, ResultIntoFigment};
-pub use docs::{
-    CliMetadata, ConfigDiscoveryMeta, ConfigFormat, DefaultValue, Deprecation, DocMetadata,
-    EnvMetadata, Example, FieldMetadata, FileMetadata, HeadingIds, Link, Note, OrthoConfigDocs,
-    PathPattern, PrecedenceMeta, SectionsMetadata, SourceKind, ValueType, WindowsMetadata,
-    ORTHO_DOCS_IR_VERSION,
-};
 #[cfg(feature = "serde_json")]
 #[cfg_attr(docsrs, doc(cfg(feature = "serde_json")))]
 pub use subcommand::{

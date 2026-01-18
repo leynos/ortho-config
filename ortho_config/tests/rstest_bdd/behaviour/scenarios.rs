@@ -7,6 +7,7 @@ scenarios!("tests/features/cli_precedence.feature");
 scenarios!("tests/features/collection_merge.feature");
 scenarios!("tests/features/config_path.feature");
 scenarios!("tests/features/csv_env.feature");
+scenarios!("tests/features/docs_ir.feature");
 scenarios!("tests/features/error_aggregation.feature");
 scenarios!("tests/features/extends.feature");
 scenarios!("tests/features/flatten.feature");

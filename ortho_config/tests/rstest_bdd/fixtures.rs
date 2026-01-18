@@ -81,6 +81,12 @@ pub struct LocalizerContext {
     pub argument_label: Slot<String>,
 }
 
+/// Scenario state for documentation IR scenarios.
+#[derive(Debug, Default, ScenarioState)]
+pub struct DocsContext {
+    pub metadata: Slot<ortho_config::docs::DocMetadata>,
+}
+
 /// Captures the optional reference inputs used by subcommand scenarios.
 #[derive(Debug, Default, Clone)]
 pub struct SubcommandSources {
@@ -182,6 +188,12 @@ pub fn localizer_context() -> LocalizerContext {
     }
 }
 
+/// Provides a clean documentation context for IR scenarios.
+#[fixture]
+pub fn docs_context() -> DocsContext {
+    DocsContext::default()
+}
+
 /// Minimal configuration struct used by the rstest-bdd canary scenario.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, OrthoConfig)]
 pub struct CanaryConfig {
@@ -214,6 +226,14 @@ pub fn binary_name() -> &'static str {
 pub struct PrArgs {
     #[arg(long, required = true)]
     pub reference: Option<String>,
+}
+
+/// Configuration struct used for documentation IR behavioural tests.
+#[derive(Debug, Deserialize, Serialize, OrthoConfig)]
+#[ortho_config(prefix = "APP", discovery(app_name = "demo-app"), windows(module_name = "Demo"))]
+pub struct DocsConfig {
+    pub log_level: Option<String>,
+    pub verbose: bool,
 }
 
 /// CLI struct used for flattened merging tests.

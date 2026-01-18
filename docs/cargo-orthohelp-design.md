@@ -369,6 +369,22 @@ Deterministic IDs when omitted:
 
 `command_path` is `sub1.sub2` for nested subcommands.
 
+### 3.5 Implementation notes (macro v1.1)
+
+- `bin_name` is emitted only when `bin_name = "..."` is supplied; generators
+  may fall back to `app_name` or Cargo metadata when it is `null`.
+- Precedence metadata is always emitted. When `precedence(...)` is absent, the
+  macro uses the default order `[defaults, file, env, cli]` with no rationale.
+- Discovery metadata is emitted only when `discovery(...)` is present. The
+  `search_paths` list is currently empty and should be populated by tooling
+  that applies the runtime discovery rules.
+- The config-path override flag is emitted only when
+  `discovery(config_cli_visible = true)` is set.
+- Value types are inferred for common Rust primitives; unknown types map to
+  `Custom` using the final path segment (for example, `MyType`).
+- Documentation-only `env(name = "...")` and `file(key_path = "...")` override
+  IR output but do not affect runtime naming or loading behaviour.
+
 ## 4. Localization model
 
 ### 4.1 Resolver

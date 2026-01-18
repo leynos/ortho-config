@@ -276,7 +276,7 @@ numbering, and it avoids time-based commitments. The command-line interface
 - [ ] 4.1.1. Deliver `cargo-orthohelp` intermediate representation (IR)
   documentation tooling. See
   [OrthoConfig IR documentation design](cargo-orthohelp-design.md).
-  - [ ] Implement the `OrthoConfigDocs` IR schema v1.1 in the derive macro,
+  - [x] Implement the `OrthoConfigDocs` IR schema v1.1 in the derive macro,
     including Windows metadata and auto-ID generation. Completion criteria:
     the IR serializes to JSON and all required fields emit deterministic IDs.
   - [ ] Build the `cargo-orthohelp` bridge pipeline (metadata discovery,

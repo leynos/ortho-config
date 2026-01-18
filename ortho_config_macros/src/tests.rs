@@ -25,6 +25,7 @@ fn build_components(
         prefix_fn: None,
         collection_strategies: CollectionStrategies::default(),
         cli_field_info: Vec::new(),
+        cli_field_metadata: Vec::new(),
         post_merge_hook: false,
     })
 }
@@ -134,6 +135,7 @@ fn build_components_with_hook(post_merge_hook: bool) -> Result<MacroComponents> 
         prefix_fn: Some(quote! { "TEST_" }),
         collection_strategies: CollectionStrategies::default(),
         cli_field_info: Vec::new(),
+        cli_field_metadata: Vec::new(),
         post_merge_hook,
     })
 }

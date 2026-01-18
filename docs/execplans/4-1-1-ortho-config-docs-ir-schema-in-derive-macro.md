@@ -1,11 +1,10 @@
 # Implement OrthoConfigDocs IR v1.1 in derive macro
 
-This ExecPlan is a living document. The sections `Constraints`,
-`Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`,
-`Decision Log`, and `Outcomes & Retrospective` must be kept up to date as
-work proceeds.
+This ExecPlan is a living document. The sections `Constraints`, `Tolerances`,
+`Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`, and
+`Outcomes & Retrospective` must be kept up to date as work proceeds.
 
-Status: DRAFT
+Status: DONE
 
 PLANS.md is not present in the repository root, so this ExecPlan follows the
 standard execplans format.
@@ -14,11 +13,11 @@ standard execplans format.
 
 Deliver the documentation intermediate representation (IR) described in
 `docs/cargo-orthohelp-design.md` by extending the `#[derive(OrthoConfig)]`
-macro to emit `OrthoConfigDocs` metadata (schema v1.1). Users should be able
-to call `<Config as OrthoConfigDocs>::get_doc_metadata()`, serialize the
-result to JSON, and observe deterministic IDs for every required field.
-Success is observable when new unit and behavioural tests pass and the
-example user-facing docs show the new API.
+macro to emit `OrthoConfigDocs` metadata (schema v1.1). Users should be able to
+call `<Config as OrthoConfigDocs>::get_doc_metadata()`, serialize the result to
+JSON, and observe deterministic IDs for every required field. Success is
+observable when new unit and behavioural tests pass and the example user-facing
+docs show the new API.
 
 ## Constraints
 
@@ -63,20 +62,17 @@ update as work proceeds. Each risk should note severity, likelihood, and
 mitigation or contingency.
 
 - Risk: Mapping Rust types to `ValueType` may be ambiguous for aliases or
-  custom types.
-  Severity: medium. Likelihood: medium.
-  Mitigation: follow the design doc's `value(type = ...)` override rules and
-  document any default heuristics in the design document.
+  custom types. Severity: medium. Likelihood: medium. Mitigation: follow the
+  design doc's `value(type = ...)` override rules and document any default
+  heuristics in the design document.
 - Risk: Subcommand metadata might not be derivable from existing `clap`
-  attributes.
-  Severity: medium. Likelihood: low.
-  Mitigation: inspect existing macro parsing; if subcommand discovery is not
-  possible without a breaking change, escalate.
+  attributes. Severity: medium. Likelihood: low. Mitigation: inspect existing
+  macro parsing; if subcommand discovery is not possible without a breaking
+  change, escalate.
 - Risk: Deterministic ID generation could diverge from runtime naming rules,
-  causing confusing docs.
-  Severity: medium. Likelihood: medium.
-  Mitigation: reuse existing naming helpers (CLI/env/file) where possible and
-  cover with unit tests.
+  causing confusing docs. Severity: medium. Likelihood: medium. Mitigation:
+  reuse existing naming helpers (CLI/env/file) where possible and cover with
+  unit tests.
 
 ## Progress
 
@@ -85,49 +81,60 @@ must be documented here, even if it requires splitting a partially completed
 task into two ("done" vs. "remaining"). This section must always reflect the
 actual current state of the work.
 
-- [ ] (2026-01-17 14:00Z) Draft ExecPlan created.
-- [ ] Implement IR types and `OrthoConfigDocs` trait in `ortho_config`.
-- [ ] Extend macro parsing and generation for IR metadata and auto-IDs.
-- [ ] Add rstest unit tests for IR JSON and ID determinism.
-- [ ] Add rstest-bdd scenario covering IR behaviour.
-- [ ] Update docs and hello_world example for new API usage.
-- [ ] Update roadmap entry 4.1.1 to done and run validation.
+- [x] (2026-01-17 14:00Z) Draft ExecPlan created.
+- [x] Implement IR types and `OrthoConfigDocs` trait in `ortho_config`.
+- [x] Extend macro parsing and generation for IR metadata and auto-IDs.
+- [x] Add rstest unit tests for IR JSON and ID determinism.
+- [x] Add rstest-bdd scenario covering IR behaviour.
+- [x] Update docs and hello_world example for new API usage.
+- [x] (2026-01-18 19:25Z) Update roadmap entry 4.1.1 and run validation.
 
 ## Surprises & Discoveries
 
 Unexpected findings during implementation that were not anticipated as risks.
 Document with evidence so future work benefits.
 
-- Observation: TBD.
-  Evidence: TBD.
-  Impact: TBD.
+- Observation: None noted so far.
+  Evidence: N/A. Impact: N/A.
 
 ## Decision Log
 
 Record every significant decision made while working on the plan. Include
-decisions to escalate, decisions on ambiguous requirements, and design
-choices.
+decisions to escalate, decisions on ambiguous requirements, and design choices.
 
-- Decision: TBD.
-  Rationale: TBD.
-  Date/Author: TBD.
+- Decision: Emit precedence metadata even when `precedence(...)` is omitted,
+  using the default order `[defaults, file, env, cli]`. Rationale: Precedence
+  is deterministic in the loader; emitting it by default keeps docs consistent
+  without extra attributes. Date/Author: 2026-01-18 (assistant).
+- Decision: Emit discovery metadata only when `discovery(...)` is present and
+  leave `search_paths` empty in the IR for now. Rationale: Discovery paths are
+  platform-specific; tooling can reuse runtime discovery to render them later.
+  Date/Author: 2026-01-18 (assistant).
+- Decision: `bin_name` is emitted only when explicitly provided.
+  Rationale: The derive macro cannot reliably infer the final binary name.
+  Date/Author: 2026-01-18 (assistant).
 
 ## Outcomes & Retrospective
 
 Summarise outcomes, gaps, and lessons learned at major milestones or at
-completion. Compare the result against the original purpose. Note what would
-be done differently next time.
+completion. Compare the result against the original purpose. Note what would be
+done differently next time.
+
+- Outcome: IR v1.1 metadata is available via `OrthoConfigDocs`, with
+  deterministic
+  IDs, Windows metadata, and JSON serialization validated by unit and
+  behavioural tests.
 
 ## Context and Orientation
 
 The derive macro lives in `ortho_config_macros/src/lib.rs` and its supporting
-modules under `ortho_config_macros/src/derive`. Attribute parsing is handled
-in `ortho_config_macros/src/derive/parse`, and code generation for runtime
-traits is under `ortho_config_macros/src/derive/generate`. The runtime crate
-is `ortho_config`, with public APIs defined in `ortho_config/src/lib.rs`.
-Tests for macros and runtime features are primarily under `ortho_config/tests`
-and behavioural tests using `rstest-bdd` live in
-`ortho_config/tests/rstest_bdd` and `examples/hello_world/tests/rstest_bdd`.
+modules under `ortho_config_macros/src/derive`. Attribute parsing is handled in
+`ortho_config_macros/src/derive/parse`, and code generation for runtime traits
+is under `ortho_config_macros/src/derive/generate`. The runtime crate is
+`ortho_config`, with public APIs defined in `ortho_config/src/lib.rs`. Tests
+for macros and runtime features are primarily under `ortho_config/tests` and
+behavioural tests using `rstest-bdd` live in `ortho_config/tests/rstest_bdd`
+and `examples/hello_world/tests/rstest_bdd`.
 
 The IR schema to implement is defined in `docs/cargo-orthohelp-design.md`
 (section 2). The plan must ensure the derive macro emits a new trait
@@ -141,8 +148,8 @@ aligned with `docs/users-guide.md` and the example crate at
 
 Stage A: Understand existing macro inputs and naming rules. Read
 `docs/cargo-orthohelp-design.md` (IR schema and auto-ID rules) plus relevant
-macro parsing modules. Identify where CLI/env/file naming helpers already
-exist so IR generation can reuse them.
+macro parsing modules. Identify where CLI/env/file naming helpers already exist
+so IR generation can reuse them.
 
 Stage B: Add runtime IR types and the `OrthoConfigDocs` trait. Introduce a new
 module in `ortho_config/src` (for example `docs.rs`) containing the IR structs
@@ -151,12 +158,11 @@ and enums from schema v1.1 with `serde::Serialize` derives and module-level
 `ortho_config/src/lib.rs` so downstream users can import them.
 
 Stage C: Extend macro parsing to capture doc-related attributes. Update
-`StructAttrs` and `FieldAttrs` to include fields for `about_id`,
-`synopsis_id`, `help_id`, `long_help_id`, `value(type = ...)`, `deprecated`,
-`example`, `link`, `note`, `headings`, `discovery`, `precedence`, and
-`windows` metadata. Keep existing keys backward compatible and decide how
-unknown keys are handled. Document any new parsing decisions in
-`docs/cargo-orthohelp-design.md`.
+`StructAttrs` and `FieldAttrs` to include fields for `about_id`, `synopsis_id`,
+`help_id`, `long_help_id`, `value(type = ...)`, `deprecated`, `example`,
+`link`, `note`, `headings`, `discovery`, `precedence`, and `windows` metadata.
+Keep existing keys backward compatible and decide how unknown keys are handled.
+Document any new parsing decisions in `docs/cargo-orthohelp-design.md`.
 
 Stage D: Generate IR metadata and auto-IDs. Implement a new generator module
 (e.g. `ortho_config_macros/src/derive/generate/docs.rs`) that builds
@@ -169,12 +175,11 @@ hard errors with spans when detected, as specified in the design document.
 Stage E: Tests. Add rstest unit tests (likely in
 `ortho_config/tests/attribute_handling.rs` or a new test module) to validate
 JSON serialization, default ID generation, Windows metadata emission, and
-collision errors. Add rstest-bdd scenarios in
-`ortho_config/tests/features` and step definitions in
-`ortho_config/tests/rstest_bdd/behaviour/steps` that exercise the new
-`OrthoConfigDocs` output and assert deterministic IDs. Use fixtures for sample
-config structs and call `serde_json::to_string_pretty` to validate JSON output
-without panics.
+collision errors. Add rstest-bdd scenarios in `ortho_config/tests/features` and
+step definitions in `ortho_config/tests/rstest_bdd/behaviour/steps` that
+exercise the new `OrthoConfigDocs` output and assert deterministic IDs. Use
+fixtures for sample config structs and call `serde_json::to_string_pretty` to
+validate JSON output without panics.
 
 Stage F: Documentation and examples. Update `docs/users-guide.md` to describe
 how consumers derive `OrthoConfigDocs` and serialize the IR for
@@ -274,11 +279,10 @@ The following public API should exist after the change:
 - `ortho_config::docs::OrthoConfigDocs` trait with
   `fn get_doc_metadata() -> DocMetadata`.
 - `#[derive(OrthoConfig)]` emits an `OrthoConfigDocs` implementation that
-  builds `DocMetadata` including subcommands, windows metadata, and default
-  IDs.
+  builds `DocMetadata` including subcommands, windows metadata, and default IDs.
 
-No new external dependencies are expected; if new crates are required,
-escalate per tolerances.
+No new external dependencies are expected; if new crates are required, escalate
+per tolerances.
 
 ## Revision note (required when editing an ExecPlan)
 
