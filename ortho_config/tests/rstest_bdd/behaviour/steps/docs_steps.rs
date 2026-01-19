@@ -1,4 +1,10 @@
 //! Steps for documentation IR scenarios.
+//!
+//! Note: This module has a high percentage of String parameters (50%) because
+//! rstest_bdd requires step functions to accept String parameters from Gherkin
+//! scenarios. The functions immediately convert these to semantic newtypes and
+//! delegate to type-safe helpers in the `helpers` module, ensuring type safety
+//! in the actual implementation layer.
 
 mod helpers;
 
