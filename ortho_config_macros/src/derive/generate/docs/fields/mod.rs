@@ -215,32 +215,44 @@ struct FieldContext<'a> {
     value_type: Option<&'a ValueTypeModel>,
 }
 
-fn default_tokens(attrs: &FieldAttrs) -> TokenStream {
-    attrs.default.as_ref().map_or_else(
+/// Helper to build optional metadata tokens with a single string field.
+fn build_optional_doc_metadata(
+    value: Option<&str>,
+    struct_path: &TokenStream,
+    field_name: &str,
+) -> TokenStream {
+    value.map_or_else(
         || quote! { None },
-        |expr| {
-            let display = expr.to_token_stream().to_string();
-            let lit = syn::LitStr::new(&display, proc_macro2::Span::call_site());
+        |s| {
+            let lit = syn::LitStr::new(s, proc_macro2::Span::call_site());
+            let field_ident = syn::Ident::new(field_name, proc_macro2::Span::call_site());
             quote! {
-                Some(ortho_config::docs::DefaultValue {
-                    display: String::from(#lit),
+                Some(#struct_path {
+                    #field_ident: String::from(#lit),
                 })
             }
         },
     )
 }
 
+fn default_tokens(attrs: &FieldAttrs) -> TokenStream {
+    let display_str = attrs
+        .default
+        .as_ref()
+        .map(|expr| expr.to_token_stream().to_string());
+
+    build_optional_doc_metadata(
+        display_str.as_deref(),
+        &quote! { ortho_config::docs::DefaultValue },
+        "display",
+    )
+}
+
 fn deprecated_tokens(attrs: &FieldAttrs) -> TokenStream {
-    attrs.doc.deprecated_note_id.as_ref().map_or_else(
-        || quote! { None },
-        |note_id| {
-            let lit = syn::LitStr::new(note_id, proc_macro2::Span::call_site());
-            quote! {
-                Some(ortho_config::docs::Deprecation {
-                    note_id: String::from(#lit),
-                })
-            }
-        },
+    build_optional_doc_metadata(
+        attrs.doc.deprecated_note_id.as_deref(),
+        &quote! { ortho_config::docs::Deprecation },
+        "note_id",
     )
 }
 

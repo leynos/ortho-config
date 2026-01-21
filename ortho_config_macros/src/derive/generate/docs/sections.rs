@@ -7,6 +7,7 @@ use syn::Ident;
 use crate::derive::build::{compute_config_env_var, default_app_name};
 use crate::derive::parse::{DocStructAttrs, HeadingOverrides, StructAttrs};
 
+use super::types::{AppName, ConfigFileName};
 use super::{example_tokens, link_tokens, note_tokens, option_string_tokens};
 
 fn default_headings() -> HeadingOverrides {
@@ -32,10 +33,10 @@ pub(super) fn resolve_app_name(struct_attrs: &StructAttrs, ident: &Ident) -> Str
         .unwrap_or_else(|| default_app_name(struct_attrs, ident))
 }
 
-pub(super) fn resolve_about_id(app_name: &str, doc: &DocStructAttrs) -> String {
+pub(super) fn resolve_about_id(app_name: &AppName, doc: &DocStructAttrs) -> String {
     doc.about_id
         .clone()
-        .unwrap_or_else(|| format!("{app_name}.about"))
+        .unwrap_or_else(|| format!("{}.about", app_name.as_str()))
 }
 
 #[expect(
@@ -43,7 +44,7 @@ pub(super) fn resolve_about_id(app_name: &str, doc: &DocStructAttrs) -> String {
     reason = "`quote!` expansion inflates the complexity score; keep this wrapper minimal."
 )]
 pub(super) fn build_sections_metadata(
-    app_name: &str,
+    app_name: &AppName,
     struct_attrs: &StructAttrs,
 ) -> syn::Result<TokenStream> {
     let headings = build_headings_ids(&struct_attrs.doc.headings);
@@ -96,47 +97,23 @@ pub(super) fn build_windows_metadata(struct_attrs: &StructAttrs) -> TokenStream 
 
 fn build_headings_ids(overrides: &HeadingOverrides) -> TokenStream {
     let headings = merge_headings(overrides);
-    let name = headings
-        .name
-        .unwrap_or_else(|| String::from("ortho.headings.name"));
-    let synopsis = headings
-        .synopsis
-        .unwrap_or_else(|| String::from("ortho.headings.synopsis"));
-    let description = headings
-        .description
-        .unwrap_or_else(|| String::from("ortho.headings.description"));
-    let options = headings
-        .options
-        .unwrap_or_else(|| String::from("ortho.headings.options"));
-    let environment = headings
-        .environment
-        .unwrap_or_else(|| String::from("ortho.headings.environment"));
-    let files = headings
-        .files
-        .unwrap_or_else(|| String::from("ortho.headings.files"));
-    let precedence = headings
-        .precedence
-        .unwrap_or_else(|| String::from("ortho.headings.precedence"));
-    let exit_status = headings
-        .exit_status
-        .unwrap_or_else(|| String::from("ortho.headings.exit_status"));
-    let examples = headings
-        .examples
-        .unwrap_or_else(|| String::from("ortho.headings.examples"));
-    let see_also = headings
-        .see_also
-        .unwrap_or_else(|| String::from("ortho.headings.see_also"));
 
-    let name_tokens = string_tokens(&name);
-    let synopsis_tokens = string_tokens(&synopsis);
-    let description_tokens = string_tokens(&description);
-    let options_tokens = string_tokens(&options);
-    let environment_tokens = string_tokens(&environment);
-    let files_tokens = string_tokens(&files);
-    let precedence_tokens = string_tokens(&precedence);
-    let exit_status_tokens = string_tokens(&exit_status);
-    let examples_tokens = string_tokens(&examples);
-    let see_also_tokens = string_tokens(&see_also);
+    // Helper closure to process each heading field: unwrap with default and tokenise
+    let process_heading = |field: Option<String>, default_id: &str| -> TokenStream {
+        let value = field.unwrap_or_else(|| String::from(default_id));
+        string_tokens(&value)
+    };
+
+    let name_tokens = process_heading(headings.name, "ortho.headings.name");
+    let synopsis_tokens = process_heading(headings.synopsis, "ortho.headings.synopsis");
+    let description_tokens = process_heading(headings.description, "ortho.headings.description");
+    let options_tokens = process_heading(headings.options, "ortho.headings.options");
+    let environment_tokens = process_heading(headings.environment, "ortho.headings.environment");
+    let files_tokens = process_heading(headings.files, "ortho.headings.files");
+    let precedence_tokens = process_heading(headings.precedence, "ortho.headings.precedence");
+    let exit_status_tokens = process_heading(headings.exit_status, "ortho.headings.exit_status");
+    let examples_tokens = process_heading(headings.examples, "ortho.headings.examples");
+    let see_also_tokens = process_heading(headings.see_also, "ortho.headings.see_also");
 
     quote! {
         ortho_config::docs::HeadingIds {
@@ -224,7 +201,7 @@ fn source_kind_tokens(value: &str) -> syn::Result<TokenStream> {
     }
 }
 
-fn build_discovery_metadata(app_name: &str, struct_attrs: &StructAttrs) -> TokenStream {
+fn build_discovery_metadata(app_name: &AppName, struct_attrs: &StructAttrs) -> TokenStream {
     let Some(discovery) = struct_attrs.discovery.as_ref() else {
         return quote! { None };
     };
@@ -233,10 +210,9 @@ fn build_discovery_metadata(app_name: &str, struct_attrs: &StructAttrs) -> Token
         .config_file_name
         .clone()
         .unwrap_or_else(|| String::from("config.toml"));
-    let dotfile_name = discovery
-        .dotfile_name
-        .clone()
-        .unwrap_or_else(|| default_dotfile_name(app_name, &config_file_name));
+    let dotfile_name = discovery.dotfile_name.clone().unwrap_or_else(|| {
+        default_dotfile_name(app_name, &ConfigFileName::new(config_file_name.clone()))
+    });
     let project_file_name = discovery
         .project_file_name
         .clone()
@@ -307,7 +283,7 @@ fn extension_from_name(name: &str) -> Option<String> {
         .map(str::to_ascii_lowercase)
 }
 
-fn default_dotfile_name(app_name: &str, config_file_name: &str) -> String {
+fn default_dotfile_name(app_name: &AppName, config_file_name: &ConfigFileName) -> String {
     let extension = config_file_name
         .rsplit_once('.')
         .map(|(_, ext)| ext)
