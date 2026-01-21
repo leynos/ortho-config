@@ -100,73 +100,71 @@ fn assert_field_value_equals<T: AsRef<str>>(
     Ok(())
 }
 
-pub(crate) fn assert_ir_version(
-    docs_context: &DocsContext,
-    expected: &ExpectedValue,
-) -> Result<()> {
-    assert_metadata_value(
-        docs_context,
-        |meta| meta.ir_version.clone(),
-        expected.as_str(),
-        "IR version",
-    )
+/// Macro to generate metadata-level assertion functions.
+macro_rules! metadata_assertion {
+    ($fn_name:ident, $param_type:ty, $field:ident, $label:expr) => {
+        pub(crate) fn $fn_name(
+            docs_context: &DocsContext,
+            expected: &$param_type,
+        ) -> Result<()> {
+            assert_metadata_value(
+                docs_context,
+                |meta| meta.$field.clone(),
+                expected.as_str(),
+                $label,
+            )
+        }
+    };
 }
 
-pub(crate) fn assert_about_id(docs_context: &DocsContext, expected: &ExpectedId) -> Result<()> {
-    assert_metadata_value(
-        docs_context,
-        |meta| meta.about_id.clone(),
-        expected.as_str(),
-        "about id",
-    )
+/// Macro to generate field-level assertion functions.
+macro_rules! field_assertion {
+    ($fn_name:ident, $param_type:ty, $extractor:expr, $label:expr) => {
+        pub(crate) fn $fn_name(
+            docs_context: &DocsContext,
+            field: &FieldName,
+            expected: &$param_type,
+        ) -> Result<()> {
+            assert_field_value_equals(
+                docs_context,
+                field,
+                $extractor,
+                expected.as_str(),
+                $label,
+            )
+        }
+    };
 }
 
-pub(crate) fn assert_field_help_id(
-    docs_context: &DocsContext,
-    field: &FieldName,
-    expected: &ExpectedId,
-) -> Result<()> {
-    assert_field_value_equals(
-        docs_context,
-        field,
-        |meta| meta.help_id.clone(),
-        expected.as_str(),
-        "help id",
-    )
-}
+metadata_assertion!(assert_ir_version, ExpectedValue, ir_version, "IR version");
 
-pub(crate) fn assert_field_long_help_id(
-    docs_context: &DocsContext,
-    field: &FieldName,
-    expected: &ExpectedId,
-) -> Result<()> {
-    assert_field_value_equals(
-        docs_context,
-        field,
-        |meta| meta.long_help_id.clone().unwrap_or_default(),
-        expected.as_str(),
-        "long help id",
-    )
-}
+metadata_assertion!(assert_about_id, ExpectedId, about_id, "about id");
 
-pub(crate) fn assert_field_env_var(
-    docs_context: &DocsContext,
-    field: &FieldName,
-    expected: &ExpectedValue,
-) -> Result<()> {
-    assert_field_value_equals(
-        docs_context,
-        field,
-        |meta| {
-            meta.env
-                .as_ref()
-                .map(|env| env.var_name.clone())
-                .unwrap_or_default()
-        },
-        expected.as_str(),
-        "env var",
-    )
-}
+field_assertion!(
+    assert_field_help_id,
+    ExpectedId,
+    |meta: &FieldMetadata| meta.help_id.clone(),
+    "help id"
+);
+
+field_assertion!(
+    assert_field_long_help_id,
+    ExpectedId,
+    |meta: &FieldMetadata| meta.long_help_id.clone().unwrap_or_default(),
+    "long help id"
+);
+
+field_assertion!(
+    assert_field_env_var,
+    ExpectedValue,
+    |meta: &FieldMetadata| {
+        meta.env
+            .as_ref()
+            .map(|env| env.var_name.clone())
+            .unwrap_or_default()
+    },
+    "env var"
+);
 
 pub(crate) fn assert_windows_module_name(
     docs_context: &DocsContext,
