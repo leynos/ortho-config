@@ -56,7 +56,7 @@ where
 ///     let s = ortho_config_macros::__doc_lit_str(&meta, "cli_long")?;
 ///     assert_eq!(s.value(), "name");
 ///     Ok(())
-/// }).unwrap();
+/// }).expect("attr parsing should succeed in this doctest");
 /// ```
 pub(crate) fn lit_str(meta: &syn::meta::ParseNestedMeta, key: &str) -> Result<LitStr, syn::Error> {
     parse_lit(meta, key, |lit| match lit {
@@ -84,6 +84,18 @@ pub(crate) fn lit_char(meta: &syn::meta::ParseNestedMeta, key: &str) -> Result<c
     })
 }
 
+/// Parses a boolean literal from a field attribute.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// # use syn::meta::ParseNestedMeta;
+/// # fn demo(meta: &ParseNestedMeta) -> syn::Result<()> {
+/// let b = lit_bool(meta, "enabled")?;
+/// assert!(b);
+/// # Ok(())
+/// # }
+/// ```
 pub(crate) fn lit_bool(meta: &syn::meta::ParseNestedMeta, key: &str) -> Result<bool, syn::Error> {
     parse_lit(meta, key, |lit| match lit {
         Lit::Bool(b) => Some(b.value),
@@ -91,9 +103,12 @@ pub(crate) fn lit_bool(meta: &syn::meta::ParseNestedMeta, key: &str) -> Result<b
     })
 }
 
-// Expose a thin wrapper for doctests without leaking internals into the public
-// API in normal builds. This allows examples to type-check while keeping
-// `lit_str` private outside of tests/doctests.
+/// Test-only wrapper for [`lit_str`] to enable doctests and unit tests.
+///
+/// This function exposes the private `lit_str` helper for doctests without
+/// leaking internals into the public API in normal builds. Examples can
+/// type-check while the underlying function remains private outside of
+/// tests/doctests.
 #[cfg(any(test, doctest))]
 #[doc(hidden)]
 pub fn __doc_lit_str(meta: &syn::meta::ParseNestedMeta, key: &str) -> Result<LitStr, syn::Error> {

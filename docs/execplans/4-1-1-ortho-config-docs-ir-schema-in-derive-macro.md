@@ -76,7 +76,7 @@ mitigation or contingency.
 
 ## Progress
 
-Use a list with checkboxes to summarise granular steps. Every stopping point
+Use a list with checkboxes to summarize granular steps. Every stopping point
 must be documented here, even if it requires splitting a partially completed
 task into two ("done" vs. "remaining"). This section must always reflect the
 actual current state of the work.
@@ -116,7 +116,7 @@ decisions to escalate, decisions on ambiguous requirements, and design choices.
 
 ## Outcomes & Retrospective
 
-Summarise outcomes, gaps, and lessons learned at major milestones or at
+Summarize outcomes, gaps, and lessons learned at major milestones or at
 completion. Compare the result against the original purpose. Note what would be
 done differently next time.
 
@@ -147,8 +147,8 @@ aligned with `docs/users-guide.md` and the example crate at
 
 Stage A: Understand existing macro inputs and naming rules. Read
 `docs/cargo-orthohelp-design.md` (IR schema and auto-ID rules) plus relevant
-macro parsing modules. Identify where CLI/env/file naming helpers already exist
-so IR generation can reuse them.
+macro parsing modules. Identify where CLI/env/file naming helpers already
+exist, so IR generation can reuse them.
 
 Stage B: Add runtime IR types and the `OrthoConfigDocs` trait. Introduce a new
 module in `ortho_config/src` (for example `docs.rs`) containing the IR structs

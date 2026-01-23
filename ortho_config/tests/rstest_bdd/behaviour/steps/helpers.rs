@@ -166,15 +166,24 @@ field_assertion!(
     "env var"
 );
 
+/// Extracts a value from Windows metadata.
+pub(crate) fn windows_value<T>(
+    docs_context: &DocsContext,
+    extractor: impl FnOnce(&ortho_config::docs::WindowsMetadata) -> T,
+) -> Result<T> {
+    docs_context
+        .metadata
+        .with_ref(|meta| meta.windows.as_ref().map(extractor))
+        .ok_or_else(|| anyhow!("docs metadata not captured"))?
+        .ok_or_else(|| anyhow!("windows metadata not present"))
+}
+
 pub(crate) fn assert_windows_module_name(
     docs_context: &DocsContext,
     expected: &ExpectedValue,
 ) -> Result<()> {
-    let actual = docs_context
-        .metadata
-        .with_ref(|meta| meta.windows.as_ref().and_then(|meta| meta.module_name.clone()))
-        .ok_or_else(|| anyhow!("docs metadata not captured"))?
-        .ok_or_else(|| anyhow!("windows metadata not present"))?;
+    let actual = windows_value(docs_context, |windows| windows.module_name.clone())?
+        .ok_or_else(|| anyhow!("module_name not present"))?;
     ensure!(
         actual == expected.as_str(),
         "expected module name {}, got {actual}",

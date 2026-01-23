@@ -16,6 +16,7 @@ use syn::{Attribute, Expr, Lit, LitStr, Token};
 
 mod clap_attrs;
 mod doc_attrs;
+mod doc_types;
 mod input;
 mod literals;
 mod serde_attrs;
@@ -24,10 +25,10 @@ mod tests;
 mod type_utils;
 
 pub(crate) use clap_attrs::{clap_arg_id, clap_arg_id_from_attribute};
-pub(crate) use doc_attrs::{
+use doc_attrs::{apply_field_doc_attr, apply_struct_doc_attr};
+pub(crate) use doc_types::{
     DocExampleAttr, DocFieldAttrs, DocLinkAttr, DocNoteAttr, DocStructAttrs, HeadingOverrides,
 };
-use doc_attrs::{apply_field_doc_attr, apply_struct_doc_attr};
 pub(crate) use input::parse_input;
 #[cfg(any(test, doctest))]
 pub(crate) use literals::__doc_lit_str;
@@ -36,7 +37,7 @@ pub(crate) use serde_attrs::{
     SerdeRenameAll, serde_field_rename, serde_has_default, serde_rename_all,
     serde_serialized_field_key,
 };
-pub(crate) use type_utils::{btree_map_inner, option_inner, vec_inner};
+pub(crate) use type_utils::{btree_map_inner, hash_map_inner, option_inner, vec_inner};
 
 const _: fn(&Attribute, &mut Option<LitStr>) -> syn::Result<()> = clap_arg_id_from_attribute;
 const _: fn(&[Attribute]) -> syn::Result<Option<String>> = serde_field_rename;

@@ -6,12 +6,12 @@ use std::ops::Deref;
 pub(crate) struct AppName(String);
 
 impl AppName {
-    pub(crate) const fn new(value: String) -> Self {
+    #[expect(
+        clippy::missing_const_for_fn,
+        reason = "Newtype constructor is not used in const context."
+    )]
+    pub(crate) fn new(value: String) -> Self {
         Self(value)
-    }
-
-    pub(crate) fn as_str(&self) -> &str {
-        &self.0
     }
 }
 
@@ -19,7 +19,7 @@ impl Deref for AppName {
     type Target = str;
 
     fn deref(&self) -> &Self::Target {
-        self.as_str()
+        &self.0
     }
 }
 
@@ -33,12 +33,12 @@ impl From<String> for AppName {
 pub(crate) struct ConfigFileName(String);
 
 impl ConfigFileName {
-    pub(crate) const fn new(value: String) -> Self {
+    #[expect(
+        clippy::missing_const_for_fn,
+        reason = "Newtype constructor is not used in const context."
+    )]
+    pub(crate) fn new(value: String) -> Self {
         Self(value)
-    }
-
-    pub(crate) fn as_str(&self) -> &str {
-        &self.0
     }
 }
 
@@ -46,7 +46,7 @@ impl Deref for ConfigFileName {
     type Target = str;
 
     fn deref(&self) -> &Self::Target {
-        self.as_str()
+        &self.0
     }
 }
 

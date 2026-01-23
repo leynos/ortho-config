@@ -45,6 +45,15 @@ struct DocsConfig {
     #[ortho_config(default = 3)]
     retries: u8,
     verbose: bool,
+    /// Uses `serde(default)` but no `ortho_config(default)`; `required` should resolve to `false`.
+    #[serde(default)]
+    serde_default_only: String,
+    /// Collection type without explicit `required`/`default`; collections default to non-required.
+    collection_values: Vec<String>,
+    /// Non-optional scalar where `resolve_required` would normally infer `required == true`,
+    /// but the explicit `required = false` override should win.
+    #[ortho_config(required = false)]
+    explicitly_not_required: String,
 }
 
 #[rstest]
@@ -304,6 +313,49 @@ fn test_json_serialization() -> Result<()> {
 
     let json = serde_json::to_string(&metadata)?;
     ensure!(!json.is_empty(), "expected JSON output");
+    Ok(())
+}
+
+/// Tests that `#[serde(default)]` without `#[ortho_config(default)]` resolves to non-required.
+#[rstest]
+fn test_field_serde_default_only() -> Result<()> {
+    let metadata = DocsConfig::get_doc_metadata();
+
+    let field = field_by_name(&metadata, "serde_default_only")?;
+    ensure!(
+        !field.required,
+        "expected serde_default_only to be non-required due to serde(default)"
+    );
+    ensure!(
+        field.default.is_none(),
+        "expected no explicit default from ortho_config for serde_default_only"
+    );
+    Ok(())
+}
+
+/// Tests that collection types without explicit `required`/`default` resolve to non-required.
+#[rstest]
+fn test_field_collection_values() -> Result<()> {
+    let metadata = DocsConfig::get_doc_metadata();
+
+    let field = field_by_name(&metadata, "collection_values")?;
+    ensure!(
+        !field.required,
+        "expected collection_values to be non-required as a Vec type"
+    );
+    Ok(())
+}
+
+/// Tests that explicit `required = false` overrides the inferred value.
+#[rstest]
+fn test_field_explicitly_not_required() -> Result<()> {
+    let metadata = DocsConfig::get_doc_metadata();
+
+    let field = field_by_name(&metadata, "explicitly_not_required")?;
+    ensure!(
+        !field.required,
+        "expected explicitly_not_required to be non-required due to explicit override"
+    );
     Ok(())
 }
 

@@ -10,9 +10,11 @@ use syn::Ident;
 
 use crate::derive::build::CliFieldMetadata;
 use crate::derive::parse::{
-    FieldAttrs, SerdeRenameAll, option_inner, serde_has_default, serde_serialized_field_key,
+    FieldAttrs, SerdeRenameAll, btree_map_inner, hash_map_inner, option_inner, serde_has_default,
+    serde_serialized_field_key, vec_inner,
 };
 
+use super::AppName;
 use super::{example_tokens, link_tokens, note_tokens, option_char_tokens, option_string_tokens};
 use value_types::{
     ValueTypeModel, enum_variants, infer_value_type, is_multi_value, parse_value_type_override,
@@ -20,7 +22,7 @@ use value_types::{
 };
 
 pub(super) struct FieldDocArgs<'a> {
-    pub app_name: &'a str,
+    pub app_name: &'a AppName,
     pub prefix: Option<&'a str>,
     pub fields: &'a [syn::Field],
     pub field_attrs: &'a [FieldAttrs],
@@ -64,7 +66,7 @@ pub(super) fn build_fields_metadata(args: &FieldDocArgs<'_>) -> syn::Result<Vec<
 }
 
 struct FieldMetaBuilder<'a> {
-    app_name: &'a str,
+    app_name: &'a AppName,
     prefix: Option<&'a str>,
     serde_rename_all: Option<SerdeRenameAll>,
     cli_lookup: HashMap<&'a str, &'a CliFieldMetadata>,
@@ -278,6 +280,10 @@ fn resolve_required(field: &syn::Field, attrs: &FieldAttrs) -> syn::Result<bool>
     if serde_has_default(&field.attrs)? {
         return Ok(false);
     }
+    // Collections (Vec, BTreeMap, HashMap) default to non-required since they can be empty.
+    if is_collection_type(&field.ty) {
+        return Ok(false);
+    }
     Ok(true)
 }
 
@@ -295,8 +301,8 @@ fn build_possible_values(value_type: Option<&ValueTypeModel>) -> Vec<TokenStream
         })
 }
 
-fn default_field_id(app_name: &str, field: &str, suffix: &str) -> String {
-    format!("{app_name}.fields.{field}.{suffix}")
+fn default_field_id(app_name: &AppName, field: &str, suffix: &str) -> String {
+    format!("{}.fields.{field}.{suffix}", &**app_name)
 }
 
 fn default_env_name(prefix: Option<&str>, field: &str) -> String {
@@ -380,4 +386,9 @@ fn ensure_unique(
     }
     seen.insert(key.to_owned(), field.span());
     Ok(())
+}
+
+/// Returns `true` if `ty` is a collection type (`Vec`, `BTreeMap`, `HashMap`).
+fn is_collection_type(ty: &syn::Type) -> bool {
+    vec_inner(ty).is_some() || btree_map_inner(ty).is_some() || hash_map_inner(ty).is_some()
 }

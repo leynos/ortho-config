@@ -12,9 +12,9 @@ use crate::fixtures::{DocsConfig, DocsContext};
 use self::helpers::{
     ExpectedId, ExpectedValue, FieldName, assert_about_id, assert_field_env_var,
     assert_field_help_id, assert_field_long_help_id, assert_ir_version,
-    assert_windows_module_name,
+    assert_windows_module_name, windows_value,
 };
-use anyhow::{Result, anyhow, ensure};
+use anyhow::{Result, ensure};
 use ortho_config::docs::OrthoConfigDocs;
 use rstest_bdd_macros::{then, when};
 
@@ -77,22 +77,14 @@ fn windows_module_name(docs_context: &DocsContext, expected: String) -> Result<(
 
 #[then("the windows metadata includes common parameters")]
 fn windows_common_parameters(docs_context: &DocsContext) -> Result<()> {
-    let include_common_parameters = docs_context
-        .metadata
-        .with_ref(|meta| meta.windows.as_ref().map(|meta| meta.include_common_parameters))
-        .ok_or_else(|| anyhow!("docs metadata not captured"))?
-        .ok_or_else(|| anyhow!("windows metadata not present"))?;
+    let include_common_parameters = windows_value(docs_context, |w| w.include_common_parameters)?;
     ensure!(include_common_parameters, "expected common parameters to be included");
     Ok(())
 }
 
 #[then("the windows metadata does not split subcommands")]
 fn windows_no_split(docs_context: &DocsContext) -> Result<()> {
-    let split = docs_context
-        .metadata
-        .with_ref(|meta| meta.windows.as_ref().map(|meta| meta.split_subcommands_into_functions))
-        .ok_or_else(|| anyhow!("docs metadata not captured"))?
-        .ok_or_else(|| anyhow!("windows metadata not present"))?;
+    let split = windows_value(docs_context, |w| w.split_subcommands_into_functions)?;
     ensure!(!split, "expected split_subcommands_into_functions to be false");
     Ok(())
 }

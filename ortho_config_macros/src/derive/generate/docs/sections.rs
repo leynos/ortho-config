@@ -36,7 +36,7 @@ pub(super) fn resolve_app_name(struct_attrs: &StructAttrs, ident: &Ident) -> Str
 pub(super) fn resolve_about_id(app_name: &AppName, doc: &DocStructAttrs) -> String {
     doc.about_id
         .clone()
-        .unwrap_or_else(|| format!("{}.about", app_name.as_str()))
+        .unwrap_or_else(|| format!("{}.about", &**app_name))
 }
 
 #[expect(
@@ -236,15 +236,13 @@ fn build_discovery_metadata(app_name: &AppName, struct_attrs: &StructAttrs) -> T
         .unwrap_or_else(|| compute_config_env_var(struct_attrs));
     let override_env_tokens = option_string_tokens(Some(override_env.as_str()));
 
-    let xdg_compliant = cfg!(any(unix, target_os = "redox"));
-
     quote! {
         Some(ortho_config::docs::ConfigDiscoveryMeta {
             formats: vec![ #( #formats ),* ],
             search_paths: Vec::new(),
             override_flag_long: #override_flag_long,
             override_env: #override_env_tokens,
-            xdg_compliant: #xdg_compliant,
+            xdg_compliant: cfg!(any(unix, target_os = "redox")),
         })
     }
 }

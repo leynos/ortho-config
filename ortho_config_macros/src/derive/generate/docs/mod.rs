@@ -7,7 +7,7 @@ mod fields;
 mod sections;
 mod types;
 
-pub(crate) use types::{AppName, ConfigFileName};
+pub(crate) use types::AppName;
 
 use proc_macro2::TokenStream;
 use quote::quote;
@@ -30,8 +30,6 @@ pub(crate) struct DocsArgs<'a> {
 pub(crate) fn generate_docs_impl(args: &DocsArgs<'_>) -> syn::Result<TokenStream> {
     let app_name = sections::resolve_app_name(args.struct_attrs, args.ident);
     let app_name_value = AppName::new(app_name);
-    let config_file_name_marker = ConfigFileName::new(String::new());
-    drop(config_file_name_marker);
     let about_id = sections::resolve_about_id(&app_name_value, &args.struct_attrs.doc);
     let headings = sections::build_sections_metadata(&app_name_value, args.struct_attrs)?;
     let windows = sections::build_windows_metadata(args.struct_attrs);
@@ -44,7 +42,7 @@ pub(crate) fn generate_docs_impl(args: &DocsArgs<'_>) -> syn::Result<TokenStream
         cli_fields: args.cli_fields,
     })?;
 
-    let app_name_lit = syn::LitStr::new(app_name_value.as_str(), proc_macro2::Span::call_site());
+    let app_name_lit = syn::LitStr::new(&app_name_value, proc_macro2::Span::call_site());
     let about_id_lit = syn::LitStr::new(&about_id, proc_macro2::Span::call_site());
     let bin_name_tokens = option_string_tokens(args.struct_attrs.doc.bin_name.as_deref());
     let synopsis_tokens = option_string_tokens(args.struct_attrs.doc.synopsis_id.as_deref());

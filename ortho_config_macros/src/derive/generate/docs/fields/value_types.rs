@@ -4,7 +4,7 @@ use proc_macro2::TokenStream;
 use quote::quote;
 use syn::Type;
 
-use crate::derive::parse::{btree_map_inner, option_inner, vec_inner};
+use crate::derive::parse::{btree_map_inner, hash_map_inner, option_inner, vec_inner};
 
 #[derive(Clone)]
 pub(super) enum ValueTypeModel {
@@ -120,13 +120,11 @@ pub(super) fn parse_value_type_override(raw: &str) -> ValueTypeModel {
         "enum" => ValueTypeModel::Enum {
             variants: Vec::new(),
         },
-        "usize" => ValueTypeModel::Integer {
-            bits: target_pointer_bits(),
-            signed: false,
+        "usize" => ValueTypeModel::Custom {
+            name: String::from("usize"),
         },
-        "isize" => ValueTypeModel::Integer {
-            bits: target_pointer_bits(),
-            signed: true,
+        "isize" => ValueTypeModel::Custom {
+            name: String::from("isize"),
         },
         _ => parse_numeric_override(trimmed).unwrap_or_else(|| ValueTypeModel::Custom {
             name: trimmed.to_owned(),
@@ -134,52 +132,43 @@ pub(super) fn parse_value_type_override(raw: &str) -> ValueTypeModel {
     }
 }
 
-fn parse_numeric_override(raw: &str) -> Option<ValueTypeModel> {
-    match raw {
-        "u8" => Some(ValueTypeModel::Integer {
-            bits: 8,
-            signed: false,
-        }),
-        "u16" => Some(ValueTypeModel::Integer {
-            bits: 16,
-            signed: false,
-        }),
-        "u32" => Some(ValueTypeModel::Integer {
-            bits: 32,
-            signed: false,
-        }),
-        "u64" => Some(ValueTypeModel::Integer {
-            bits: 64,
-            signed: false,
-        }),
-        "u128" => Some(ValueTypeModel::Integer {
-            bits: 128,
-            signed: false,
-        }),
-        "i8" => Some(ValueTypeModel::Integer {
-            bits: 8,
-            signed: true,
-        }),
-        "i16" => Some(ValueTypeModel::Integer {
-            bits: 16,
-            signed: true,
-        }),
-        "i32" => Some(ValueTypeModel::Integer {
-            bits: 32,
-            signed: true,
-        }),
-        "i64" => Some(ValueTypeModel::Integer {
-            bits: 64,
-            signed: true,
-        }),
-        "i128" => Some(ValueTypeModel::Integer {
-            bits: 128,
-            signed: true,
-        }),
-        "f32" => Some(ValueTypeModel::Float { bits: 32 }),
-        "f64" => Some(ValueTypeModel::Float { bits: 64 }),
-        _ => None,
+/// Mapping from numeric type names to their value type representations.
+///
+/// Each entry is `(type_name, bits, signed)` where `signed` is:
+/// - `Some(true)` for signed integers
+/// - `Some(false)` for unsigned integers
+/// - `None` for floats
+const NUMERIC_TYPE_MAP: &[(&str, u8, Option<bool>)] = &[
+    ("u8", 8, Some(false)),
+    ("u16", 16, Some(false)),
+    ("u32", 32, Some(false)),
+    ("u64", 64, Some(false)),
+    ("u128", 128, Some(false)),
+    ("i8", 8, Some(true)),
+    ("i16", 16, Some(true)),
+    ("i32", 32, Some(true)),
+    ("i64", 64, Some(true)),
+    ("i128", 128, Some(true)),
+    ("f32", 32, None),
+    ("f64", 64, None),
+];
+
+/// Converts a numeric type entry to a `ValueTypeModel`.
+const fn numeric_entry_to_model(bits: u8, signed: Option<bool>) -> ValueTypeModel {
+    match signed {
+        Some(is_signed) => ValueTypeModel::Integer {
+            bits,
+            signed: is_signed,
+        },
+        None => ValueTypeModel::Float { bits },
     }
+}
+
+fn parse_numeric_override(raw: &str) -> Option<ValueTypeModel> {
+    NUMERIC_TYPE_MAP
+        .iter()
+        .find(|(name, _, _)| *name == raw)
+        .map(|(_, bits, signed)| numeric_entry_to_model(*bits, *signed))
 }
 
 fn parse_wrapped<'a>(value: &'a str, prefix: &str) -> Option<&'a str> {
@@ -242,59 +231,16 @@ fn infer_scalar_type(ty: &Type) -> Option<ValueTypeModel> {
         return None;
     };
     let ident = type_path.path.segments.last()?.ident.to_string();
+
+    // Check numeric types first using the shared mapping
+    if let Some(model) = parse_numeric_override(&ident) {
+        return Some(model);
+    }
+
     match ident.as_str() {
         "String" | "str" => Some(ValueTypeModel::String),
         "bool" => Some(ValueTypeModel::Bool),
-        "u8" => Some(ValueTypeModel::Integer {
-            bits: 8,
-            signed: false,
-        }),
-        "u16" => Some(ValueTypeModel::Integer {
-            bits: 16,
-            signed: false,
-        }),
-        "u32" => Some(ValueTypeModel::Integer {
-            bits: 32,
-            signed: false,
-        }),
-        "u64" => Some(ValueTypeModel::Integer {
-            bits: 64,
-            signed: false,
-        }),
-        "u128" => Some(ValueTypeModel::Integer {
-            bits: 128,
-            signed: false,
-        }),
-        "usize" => Some(ValueTypeModel::Integer {
-            bits: target_pointer_bits(),
-            signed: false,
-        }),
-        "i8" => Some(ValueTypeModel::Integer {
-            bits: 8,
-            signed: true,
-        }),
-        "i16" => Some(ValueTypeModel::Integer {
-            bits: 16,
-            signed: true,
-        }),
-        "i32" => Some(ValueTypeModel::Integer {
-            bits: 32,
-            signed: true,
-        }),
-        "i64" => Some(ValueTypeModel::Integer {
-            bits: 64,
-            signed: true,
-        }),
-        "i128" => Some(ValueTypeModel::Integer {
-            bits: 128,
-            signed: true,
-        }),
-        "isize" => Some(ValueTypeModel::Integer {
-            bits: target_pointer_bits(),
-            signed: true,
-        }),
-        "f32" => Some(ValueTypeModel::Float { bits: 32 }),
-        "f64" => Some(ValueTypeModel::Float { bits: 64 }),
+        "usize" | "isize" => Some(ValueTypeModel::Custom { name: ident }),
         "Duration" => Some(ValueTypeModel::Duration),
         "Path" | "PathBuf" => Some(ValueTypeModel::Path),
         "IpAddr" | "Ipv4Addr" | "Ipv6Addr" => Some(ValueTypeModel::IpAddr),
@@ -327,36 +273,4 @@ fn unwrap_reference(ty: &Type) -> &Type {
     } else {
         ty
     }
-}
-
-fn hash_map_inner(ty: &Type) -> Option<(&Type, &Type)> {
-    let Type::Path(type_path) = ty else {
-        return None;
-    };
-    let mut segments = type_path.path.segments.iter().rev();
-    let last = segments.next()?;
-    if last.ident != "HashMap" {
-        return None;
-    }
-    let _ = segments.next();
-    let syn::PathArguments::AngleBracketed(args) = &last.arguments else {
-        return None;
-    };
-    let mut type_args = args.args.iter().filter_map(|arg| match arg {
-        syn::GenericArgument::Type(inner) => Some(inner),
-        _ => None,
-    });
-    Some((type_args.next()?, type_args.next()?))
-}
-
-const TARGET_POINTER_BITS: u8 = if cfg!(target_pointer_width = "64") {
-    64
-} else if cfg!(target_pointer_width = "32") {
-    32
-} else {
-    16
-};
-
-const fn target_pointer_bits() -> u8 {
-    TARGET_POINTER_BITS
 }
