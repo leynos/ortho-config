@@ -75,10 +75,6 @@ struct FieldMetaBuilder<'a> {
 }
 
 impl<'a> FieldMetaBuilder<'a> {
-    #[expect(
-        clippy::cognitive_complexity,
-        reason = "`quote!` expansion inflates the complexity score; keep this linear and readable."
-    )]
     fn build_field(
         &mut self,
         field: &'a syn::Field,
@@ -89,8 +85,6 @@ impl<'a> FieldMetaBuilder<'a> {
             .as_ref()
             .ok_or_else(|| syn::Error::new_spanned(field, "tuple fields are not supported"))?;
         let field_name = name.to_string();
-        let field_name_lit = syn::LitStr::new(&field_name, proc_macro2::Span::call_site());
-
         let help_id = attrs
             .doc
             .help_id
@@ -103,7 +97,10 @@ impl<'a> FieldMetaBuilder<'a> {
             .unwrap_or_else(|| default_field_id(self.app_name, &field_name, "long_help"));
         let value_type = resolve_value_type(attrs, field);
         let required = resolve_required(field, attrs)?;
-        let value_tokens = value_type_tokens(value_type.clone());
+        let value_context = ValueContext {
+            value_tokens: value_type_tokens(value_type.clone()),
+            required,
+        };
         let context = FieldContext {
             name,
             field_name: &field_name,
@@ -112,35 +109,28 @@ impl<'a> FieldMetaBuilder<'a> {
             value_type: value_type.as_ref(),
         };
 
-        let cli_tokens = self.build_cli_tokens(&context)?;
-        let env_tokens = self.build_env_tokens(&context)?;
-        let file_tokens = self.build_file_tokens(&context)?;
+        let io_tokens = self.render_io_tokens(&context)?;
+        let meta_parts = render_meta_parts(attrs);
+        let identity = FieldIdentity {
+            field_name: &field_name,
+            help_id: &help_id,
+            long_help_id: &long_help_id,
+        };
+        let components = FieldMetadataComponents {
+            identity: identity.into_tokens(),
+            value_context,
+            io_tokens,
+            meta_parts,
+        };
 
-        let default_tokens = default_tokens(attrs);
-        let deprecated_tokens = deprecated_tokens(attrs);
-        let examples = example_tokens(&attrs.doc.examples);
-        let links = link_tokens(&attrs.doc.links);
-        let notes = note_tokens(&attrs.doc.notes);
+        Ok(render_field_metadata(components))
+    }
 
-        let help_id_lit = syn::LitStr::new(&help_id, proc_macro2::Span::call_site());
-        let long_help_lit = syn::LitStr::new(&long_help_id, proc_macro2::Span::call_site());
-
-        Ok(quote! {
-            ortho_config::docs::FieldMetadata {
-                name: String::from(#field_name_lit),
-                help_id: String::from(#help_id_lit),
-                long_help_id: Some(String::from(#long_help_lit)),
-                value: #value_tokens,
-                default: #default_tokens,
-                required: #required,
-                deprecated: #deprecated_tokens,
-                cli: #cli_tokens,
-                env: Some(#env_tokens),
-                file: Some(#file_tokens),
-                examples: vec![ #( #examples ),* ],
-                links: vec![ #( #links ),* ],
-                notes: vec![ #( #notes ),* ],
-            }
+    fn render_io_tokens(&mut self, context: &FieldContext<'_>) -> syn::Result<IoTokens> {
+        Ok(IoTokens {
+            cli: self.build_cli_tokens(context)?,
+            env: self.build_env_tokens(context)?,
+            file: self.build_file_tokens(context)?,
         })
     }
 
@@ -215,6 +205,109 @@ struct FieldContext<'a> {
     field: &'a syn::Field,
     attrs: &'a FieldAttrs,
     value_type: Option<&'a ValueTypeModel>,
+}
+
+struct FieldIdentity<'a> {
+    field_name: &'a str,
+    help_id: &'a str,
+    long_help_id: &'a str,
+}
+
+struct ValueContext {
+    value_tokens: TokenStream,
+    required: bool,
+}
+
+struct IoTokens {
+    cli: TokenStream,
+    env: TokenStream,
+    file: TokenStream,
+}
+
+struct MetaParts {
+    default_tokens: TokenStream,
+    deprecated_tokens: TokenStream,
+    examples: Vec<TokenStream>,
+    links: Vec<TokenStream>,
+    notes: Vec<TokenStream>,
+}
+
+fn render_meta_parts(attrs: &FieldAttrs) -> MetaParts {
+    MetaParts {
+        default_tokens: default_tokens(attrs),
+        deprecated_tokens: deprecated_tokens(attrs),
+        examples: example_tokens(&attrs.doc.examples),
+        links: link_tokens(&attrs.doc.links),
+        notes: note_tokens(&attrs.doc.notes),
+    }
+}
+
+/// Bundles all components needed to render field metadata tokens.
+struct FieldMetadataComponents {
+    identity: FieldIdentityTokens,
+    value_context: ValueContext,
+    io_tokens: IoTokens,
+    meta_parts: MetaParts,
+}
+
+/// Pre-computed string literals for field identity.
+struct FieldIdentityTokens {
+    field_name: syn::LitStr,
+    help_id: syn::LitStr,
+    long_help: syn::LitStr,
+}
+
+impl FieldIdentity<'_> {
+    fn into_tokens(self) -> FieldIdentityTokens {
+        FieldIdentityTokens {
+            field_name: syn::LitStr::new(self.field_name, proc_macro2::Span::call_site()),
+            help_id: syn::LitStr::new(self.help_id, proc_macro2::Span::call_site()),
+            long_help: syn::LitStr::new(self.long_help_id, proc_macro2::Span::call_site()),
+        }
+    }
+}
+
+#[expect(
+    clippy::cognitive_complexity,
+    reason = "`quote!` expansion inflates the complexity score; keep this linear and readable."
+)]
+fn render_field_metadata(components: FieldMetadataComponents) -> TokenStream {
+    let identity = components.identity;
+    let value = components.value_context;
+    let io = components.io_tokens;
+    let meta = components.meta_parts;
+
+    let field_name = identity.field_name;
+    let help_id = identity.help_id;
+    let long_help = identity.long_help;
+    let value_tokens = value.value_tokens;
+    let required = value.required;
+    let cli = io.cli;
+    let env = io.env;
+    let file = io.file;
+    let default = meta.default_tokens;
+    let deprecated = meta.deprecated_tokens;
+    let examples = meta.examples;
+    let links = meta.links;
+    let notes = meta.notes;
+
+    quote! {
+        ortho_config::docs::FieldMetadata {
+            name: String::from(#field_name),
+            help_id: String::from(#help_id),
+            long_help_id: Some(String::from(#long_help)),
+            value: #value_tokens,
+            default: #default,
+            required: #required,
+            deprecated: #deprecated,
+            cli: #cli,
+            env: Some(#env),
+            file: Some(#file),
+            examples: vec![ #( #examples ),* ],
+            links: vec![ #( #links ),* ],
+            notes: vec![ #( #notes ),* ],
+        }
+    }
 }
 
 /// Helper to build optional metadata tokens with a single string field.

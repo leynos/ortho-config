@@ -2,8 +2,10 @@
 
 use anyhow::{Result, anyhow, ensure};
 use ortho_config::OrthoConfig;
-use ortho_config::docs::{ConfigFormat, OrthoConfigDocs, ValueType};
-use rstest::rstest;
+use ortho_config::docs::{
+    ConfigFormat, DocMetadata, ORTHO_DOCS_IR_VERSION, OrthoConfigDocs, ValueType,
+};
+use rstest::{fixture, rstest};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize, Serialize, OrthoConfig)]
@@ -56,13 +58,18 @@ struct DocsConfig {
     explicitly_not_required: String,
 }
 
+#[fixture]
+fn docs_metadata() -> DocMetadata {
+    DocsConfig::get_doc_metadata()
+}
+
 #[rstest]
-fn test_basic_metadata() -> Result<()> {
-    let metadata = DocsConfig::get_doc_metadata();
+fn test_basic_metadata(docs_metadata: DocMetadata) -> Result<()> {
+    let metadata = docs_metadata;
 
     ensure!(
-        metadata.ir_version == "1.1",
-        "expected IR version 1.1, got {}",
+        metadata.ir_version == ORTHO_DOCS_IR_VERSION,
+        "expected IR version {ORTHO_DOCS_IR_VERSION}, got {}",
         metadata.ir_version
     );
     ensure!(
@@ -94,10 +101,8 @@ fn test_basic_metadata() -> Result<()> {
 }
 
 #[rstest]
-fn test_sections_headings() -> Result<()> {
-    let metadata = DocsConfig::get_doc_metadata();
-
-    let headings = &metadata.sections.headings_ids;
+fn test_sections_headings(docs_metadata: DocMetadata) -> Result<()> {
+    let headings = &docs_metadata.sections.headings_ids;
     ensure!(
         headings.options == "demo.headings.options",
         "expected options heading override, got {}",
@@ -112,10 +117,8 @@ fn test_sections_headings() -> Result<()> {
 }
 
 #[rstest]
-fn test_sections_discovery() -> Result<()> {
-    let metadata = DocsConfig::get_doc_metadata();
-
-    let discovery = metadata
+fn test_sections_discovery(docs_metadata: DocMetadata) -> Result<()> {
+    let discovery = docs_metadata
         .sections
         .discovery
         .as_ref()
@@ -147,10 +150,8 @@ fn test_sections_discovery() -> Result<()> {
 }
 
 #[rstest]
-fn test_windows_metadata() -> Result<()> {
-    let metadata = DocsConfig::get_doc_metadata();
-
-    let windows = metadata
+fn test_windows_metadata(docs_metadata: DocMetadata) -> Result<()> {
+    let windows = docs_metadata
         .windows
         .as_ref()
         .ok_or_else(|| anyhow!("expected windows metadata"))?;
@@ -181,10 +182,8 @@ fn test_windows_metadata() -> Result<()> {
 }
 
 #[rstest]
-fn test_field_port() -> Result<()> {
-    let metadata = DocsConfig::get_doc_metadata();
-
-    let port = field_by_name(&metadata, "port")?;
+fn test_field_port(docs_metadata: DocMetadata) -> Result<()> {
+    let port = field_by_name(&docs_metadata, "port")?;
     ensure!(
         port.help_id == "demo.fields.port.help",
         "expected port help_id override"
@@ -239,10 +238,8 @@ fn test_field_port() -> Result<()> {
 }
 
 #[rstest]
-fn test_field_log_level() -> Result<()> {
-    let metadata = DocsConfig::get_doc_metadata();
-
-    let log_level = field_by_name(&metadata, "log_level")?;
+fn test_field_log_level(docs_metadata: DocMetadata) -> Result<()> {
+    let log_level = field_by_name(&docs_metadata, "log_level")?;
     ensure!(
         log_level.help_id == "demo-app.fields.log_level.help",
         "expected log_level help_id default"
@@ -268,10 +265,8 @@ fn test_field_log_level() -> Result<()> {
 }
 
 #[rstest]
-fn test_field_retries() -> Result<()> {
-    let metadata = DocsConfig::get_doc_metadata();
-
-    let retries = field_by_name(&metadata, "retries")?;
+fn test_field_retries(docs_metadata: DocMetadata) -> Result<()> {
+    let retries = field_by_name(&docs_metadata, "retries")?;
     ensure!(
         retries.default.as_ref().map(|value| value.display.as_str()) == Some("3"),
         "expected retries default display"
@@ -288,10 +283,8 @@ fn test_field_retries() -> Result<()> {
 }
 
 #[rstest]
-fn test_field_verbose() -> Result<()> {
-    let metadata = DocsConfig::get_doc_metadata();
-
-    let verbose = field_by_name(&metadata, "verbose")?;
+fn test_field_verbose(docs_metadata: DocMetadata) -> Result<()> {
+    let verbose = field_by_name(&docs_metadata, "verbose")?;
     ensure!(
         verbose.value == Some(ValueType::Bool),
         "expected verbose boolean type"
@@ -308,20 +301,16 @@ fn test_field_verbose() -> Result<()> {
 }
 
 #[rstest]
-fn test_json_serialization() -> Result<()> {
-    let metadata = DocsConfig::get_doc_metadata();
-
-    let json = serde_json::to_string(&metadata)?;
+fn test_json_serialization(docs_metadata: DocMetadata) -> Result<()> {
+    let json = serde_json::to_string(&docs_metadata)?;
     ensure!(!json.is_empty(), "expected JSON output");
     Ok(())
 }
 
 /// Tests that `#[serde(default)]` without `#[ortho_config(default)]` resolves to non-required.
 #[rstest]
-fn test_field_serde_default_only() -> Result<()> {
-    let metadata = DocsConfig::get_doc_metadata();
-
-    let field = field_by_name(&metadata, "serde_default_only")?;
+fn test_field_serde_default_only(docs_metadata: DocMetadata) -> Result<()> {
+    let field = field_by_name(&docs_metadata, "serde_default_only")?;
     ensure!(
         !field.required,
         "expected serde_default_only to be non-required due to serde(default)"
@@ -335,10 +324,8 @@ fn test_field_serde_default_only() -> Result<()> {
 
 /// Tests that collection types without explicit `required`/`default` resolve to non-required.
 #[rstest]
-fn test_field_collection_values() -> Result<()> {
-    let metadata = DocsConfig::get_doc_metadata();
-
-    let field = field_by_name(&metadata, "collection_values")?;
+fn test_field_collection_values(docs_metadata: DocMetadata) -> Result<()> {
+    let field = field_by_name(&docs_metadata, "collection_values")?;
     ensure!(
         !field.required,
         "expected collection_values to be non-required as a Vec type"
@@ -348,10 +335,8 @@ fn test_field_collection_values() -> Result<()> {
 
 /// Tests that explicit `required = false` overrides the inferred value.
 #[rstest]
-fn test_field_explicitly_not_required() -> Result<()> {
-    let metadata = DocsConfig::get_doc_metadata();
-
-    let field = field_by_name(&metadata, "explicitly_not_required")?;
+fn test_field_explicitly_not_required(docs_metadata: DocMetadata) -> Result<()> {
+    let field = field_by_name(&docs_metadata, "explicitly_not_required")?;
     ensure!(
         !field.required,
         "expected explicitly_not_required to be non-required due to explicit override"

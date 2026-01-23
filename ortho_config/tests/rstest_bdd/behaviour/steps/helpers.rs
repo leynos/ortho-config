@@ -26,6 +26,14 @@ impl From<String> for FieldName {
     fn from(value: String) -> Self { Self(value) }
 }
 
+impl From<&str> for FieldName {
+    fn from(value: &str) -> Self { Self(value.to_owned()) }
+}
+
+impl AsRef<str> for FieldName {
+    fn as_ref(&self) -> &str { self.as_str() }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ExpectedId(String);
 
@@ -45,6 +53,14 @@ impl From<String> for ExpectedId {
     fn from(value: String) -> Self { Self(value) }
 }
 
+impl From<&str> for ExpectedId {
+    fn from(value: &str) -> Self { Self(value.to_owned()) }
+}
+
+impl AsRef<str> for ExpectedId {
+    fn as_ref(&self) -> &str { self.as_str() }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ExpectedValue(String);
 
@@ -62,6 +78,14 @@ impl Deref for ExpectedValue {
 
 impl From<String> for ExpectedValue {
     fn from(value: String) -> Self { Self(value) }
+}
+
+impl From<&str> for ExpectedValue {
+    fn from(value: &str) -> Self { Self(value.to_owned()) }
+}
+
+impl AsRef<str> for ExpectedValue {
+    fn as_ref(&self) -> &str { self.as_str() }
 }
 
 /// Generic helper for asserting metadata-level values.

@@ -29,6 +29,18 @@ impl From<String> for AppName {
     }
 }
 
+impl From<&str> for AppName {
+    fn from(value: &str) -> Self {
+        Self(value.to_owned())
+    }
+}
+
+impl AsRef<str> for AppName {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ConfigFileName(String);
 
@@ -53,5 +65,17 @@ impl Deref for ConfigFileName {
 impl From<String> for ConfigFileName {
     fn from(value: String) -> Self {
         Self(value)
+    }
+}
+
+impl From<&str> for ConfigFileName {
+    fn from(value: &str) -> Self {
+        Self(value.to_owned())
+    }
+}
+
+impl AsRef<str> for ConfigFileName {
+    fn as_ref(&self) -> &str {
+        &self.0
     }
 }

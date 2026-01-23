@@ -127,18 +127,17 @@ fn parse_headings_meta(meta: &ParseNestedMeta, headings: &mut HeadingOverrides) 
             return discard_unknown(&nested);
         };
         let key = ident.to_string();
-        let value = lit_str(&nested, &key)?.value();
         match key.as_str() {
-            "name" => headings.name = Some(value),
-            "synopsis" => headings.synopsis = Some(value),
-            "description" => headings.description = Some(value),
-            "options" => headings.options = Some(value),
-            "environment" => headings.environment = Some(value),
-            "files" => headings.files = Some(value),
-            "precedence" => headings.precedence = Some(value),
-            "exit_status" => headings.exit_status = Some(value),
-            "examples" => headings.examples = Some(value),
-            "see_also" => headings.see_also = Some(value),
+            "name" => headings.name = Some(lit_str(&nested, "name")?.value()),
+            "synopsis" => headings.synopsis = Some(lit_str(&nested, "synopsis")?.value()),
+            "description" => headings.description = Some(lit_str(&nested, "description")?.value()),
+            "options" => headings.options = Some(lit_str(&nested, "options")?.value()),
+            "environment" => headings.environment = Some(lit_str(&nested, "environment")?.value()),
+            "files" => headings.files = Some(lit_str(&nested, "files")?.value()),
+            "precedence" => headings.precedence = Some(lit_str(&nested, "precedence")?.value()),
+            "exit_status" => headings.exit_status = Some(lit_str(&nested, "exit_status")?.value()),
+            "examples" => headings.examples = Some(lit_str(&nested, "examples")?.value()),
+            "see_also" => headings.see_also = Some(lit_str(&nested, "see_also")?.value()),
             _ => return discard_unknown(&nested),
         }
         Ok(())

@@ -126,7 +126,7 @@ pub(super) fn parse_value_type_override(raw: &str) -> ValueTypeModel {
         "isize" => ValueTypeModel::Custom {
             name: String::from("isize"),
         },
-        _ => parse_numeric_override(trimmed).unwrap_or_else(|| ValueTypeModel::Custom {
+        _ => parse_numeric_override(&lower).unwrap_or_else(|| ValueTypeModel::Custom {
             name: trimmed.to_owned(),
         }),
     }
