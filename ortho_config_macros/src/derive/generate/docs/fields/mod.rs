@@ -1,11 +1,14 @@
 //! Field-level documentation IR generation.
 
+mod defaults;
+mod tokens;
+mod validation;
 mod value_types;
 
 use std::collections::HashMap;
 
 use proc_macro2::TokenStream;
-use quote::{ToTokens, quote};
+use quote::quote;
 use syn::Ident;
 
 use crate::derive::build::CliFieldMetadata;
@@ -16,9 +19,11 @@ use crate::derive::parse::{
 
 use super::AppName;
 use super::{example_tokens, link_tokens, note_tokens, option_char_tokens, option_string_tokens};
+use defaults::{default_env_name, default_field_id};
+use tokens::{build_possible_values, default_tokens, deprecated_tokens};
+use validation::{ensure_unique, validate_env_name, validate_file_key};
 use value_types::{
-    ValueTypeModel, enum_variants, infer_value_type, is_multi_value, parse_value_type_override,
-    value_type_tokens,
+    ValueTypeModel, infer_value_type, is_multi_value, parse_value_type_override, value_type_tokens,
 };
 
 pub(super) struct FieldDocArgs<'a> {
@@ -310,47 +315,6 @@ fn render_field_metadata(components: FieldMetadataComponents) -> TokenStream {
     }
 }
 
-/// Helper to build optional metadata tokens with a single string field.
-fn build_optional_doc_metadata(
-    value: Option<&str>,
-    struct_path: &TokenStream,
-    field_name: &str,
-) -> TokenStream {
-    value.map_or_else(
-        || quote! { None },
-        |s| {
-            let lit = syn::LitStr::new(s, proc_macro2::Span::call_site());
-            let field_ident = syn::Ident::new(field_name, proc_macro2::Span::call_site());
-            quote! {
-                Some(#struct_path {
-                    #field_ident: String::from(#lit),
-                })
-            }
-        },
-    )
-}
-
-fn default_tokens(attrs: &FieldAttrs) -> TokenStream {
-    let display_str = attrs
-        .default
-        .as_ref()
-        .map(|expr| expr.to_token_stream().to_string());
-
-    build_optional_doc_metadata(
-        display_str.as_deref(),
-        &quote! { ortho_config::docs::DefaultValue },
-        "display",
-    )
-}
-
-fn deprecated_tokens(attrs: &FieldAttrs) -> TokenStream {
-    build_optional_doc_metadata(
-        attrs.doc.deprecated_note_id.as_deref(),
-        &quote! { ortho_config::docs::Deprecation },
-        "note_id",
-    )
-}
-
 fn resolve_value_type(attrs: &FieldAttrs, field: &syn::Field) -> Option<ValueTypeModel> {
     attrs
         .doc
@@ -378,107 +342,6 @@ fn resolve_required(field: &syn::Field, attrs: &FieldAttrs) -> syn::Result<bool>
         return Ok(false);
     }
     Ok(true)
-}
-
-fn build_possible_values(value_type: Option<&ValueTypeModel>) -> Vec<TokenStream> {
-    value_type
-        .and_then(enum_variants)
-        .map_or_else(Vec::new, |variants| {
-            variants
-                .iter()
-                .map(|value| {
-                    let lit = syn::LitStr::new(value, proc_macro2::Span::call_site());
-                    quote! { String::from(#lit) }
-                })
-                .collect::<Vec<_>>()
-        })
-}
-
-fn default_field_id(app_name: &AppName, field: &str, suffix: &str) -> String {
-    format!("{}.fields.{field}.{suffix}", &**app_name)
-}
-
-fn default_env_name(prefix: Option<&str>, field: &str) -> String {
-    let mut name = String::new();
-    if let Some(prefix_value) = prefix {
-        name.push_str(prefix_value);
-    }
-    name.push_str(field);
-    name.chars()
-        .map(|ch| {
-            if ch.is_ascii_alphanumeric() {
-                ch.to_ascii_uppercase()
-            } else {
-                '_'
-            }
-        })
-        .collect()
-}
-
-fn validate_env_name(field: &Ident, env_name: &str) -> syn::Result<()> {
-    if env_name.is_empty() {
-        return Err(syn::Error::new_spanned(
-            field,
-            "environment variable names must be non-empty",
-        ));
-    }
-    if env_name
-        .chars()
-        .all(|ch| ch.is_ascii_alphanumeric() || ch == '_')
-    {
-        return Ok(());
-    }
-    Err(syn::Error::new_spanned(
-        field,
-        format!(
-            "environment variable '{env_name}' must contain only ASCII alphanumeric characters or '_'",
-        ),
-    ))
-}
-
-fn validate_file_key(field: &Ident, key_path: &str) -> syn::Result<()> {
-    if key_path.is_empty() {
-        return Err(syn::Error::new_spanned(
-            field,
-            "file key paths must be non-empty",
-        ));
-    }
-    for segment in key_path.split('.') {
-        if segment.is_empty() {
-            return Err(syn::Error::new_spanned(
-                field,
-                format!("file key path '{key_path}' must not contain empty segments"),
-            ));
-        }
-        let valid = segment
-            .chars()
-            .all(|ch| ch.is_ascii_alphanumeric() || ch == '_' || ch == '-');
-        if !valid {
-            return Err(syn::Error::new_spanned(
-                field,
-                format!(
-                    "file key path '{key_path}' must contain only ASCII alphanumeric characters, '_' or '-'",
-                ),
-            ));
-        }
-    }
-    Ok(())
-}
-
-fn ensure_unique(
-    kind: &str,
-    field: &Ident,
-    key: &str,
-    seen: &mut HashMap<String, proc_macro2::Span>,
-) -> syn::Result<()> {
-    if let Some(existing) = seen.get(key) {
-        let mut err =
-            syn::Error::new_spanned(field, format!("duplicate {kind} identifier '{key}'"));
-        err.combine(syn::Error::new(*existing, "first defined here"));
-        return Err(err);
-    }
-    seen.insert(key.to_owned(), field.span());
-    Ok(())
 }
 
 /// Returns `true` if `ty` is a collection type (`Vec`, `BTreeMap`, `HashMap`).

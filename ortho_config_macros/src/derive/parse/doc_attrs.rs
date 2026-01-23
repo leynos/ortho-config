@@ -122,26 +122,30 @@ pub(crate) fn apply_field_doc_attr(
     }
 }
 fn parse_headings_meta(meta: &ParseNestedMeta, headings: &mut HeadingOverrides) -> syn::Result<()> {
-    meta.parse_nested_meta(|nested| {
-        let Some(ident) = nested.path.get_ident() else {
-            return discard_unknown(&nested);
-        };
-        let key = ident.to_string();
-        match key.as_str() {
-            "name" => headings.name = Some(lit_str(&nested, "name")?.value()),
-            "synopsis" => headings.synopsis = Some(lit_str(&nested, "synopsis")?.value()),
-            "description" => headings.description = Some(lit_str(&nested, "description")?.value()),
-            "options" => headings.options = Some(lit_str(&nested, "options")?.value()),
-            "environment" => headings.environment = Some(lit_str(&nested, "environment")?.value()),
-            "files" => headings.files = Some(lit_str(&nested, "files")?.value()),
-            "precedence" => headings.precedence = Some(lit_str(&nested, "precedence")?.value()),
-            "exit_status" => headings.exit_status = Some(lit_str(&nested, "exit_status")?.value()),
-            "examples" => headings.examples = Some(lit_str(&nested, "examples")?.value()),
-            "see_also" => headings.see_also = Some(lit_str(&nested, "see_also")?.value()),
-            _ => return discard_unknown(&nested),
-        }
-        Ok(())
-    })
+    meta.parse_nested_meta(|nested| set_heading_field(&nested, headings))
+}
+
+/// Sets the appropriate `HeadingOverrides` field based on the key.
+fn set_heading_field(nested: &ParseNestedMeta, headings: &mut HeadingOverrides) -> syn::Result<()> {
+    let Some(ident) = nested.path.get_ident() else {
+        return discard_unknown(nested);
+    };
+    let key = ident.to_string();
+    let field_ref = match key.as_str() {
+        "name" => &mut headings.name,
+        "synopsis" => &mut headings.synopsis,
+        "description" => &mut headings.description,
+        "options" => &mut headings.options,
+        "environment" => &mut headings.environment,
+        "files" => &mut headings.files,
+        "precedence" => &mut headings.precedence,
+        "exit_status" => &mut headings.exit_status,
+        "examples" => &mut headings.examples,
+        "see_also" => &mut headings.see_also,
+        _ => return discard_unknown(nested),
+    };
+    *field_ref = Some(lit_str(nested, &key)?.value());
+    Ok(())
 }
 fn parse_precedence_meta(
     meta: &ParseNestedMeta,
