@@ -272,47 +272,78 @@ impl FieldIdentity<'_> {
     }
 }
 
-#[expect(
-    clippy::cognitive_complexity,
-    reason = "`quote!` expansion inflates the complexity score; keep this linear and readable."
-)]
 fn render_field_metadata(components: FieldMetadataComponents) -> TokenStream {
-    let identity = components.identity;
-    let value = components.value_context;
-    let io = components.io_tokens;
-    let meta = components.meta_parts;
+    let FieldMetadataComponents {
+        identity,
+        value_context,
+        io_tokens,
+        meta_parts,
+    } = components;
 
-    let field_name = identity.field_name;
-    let help_id = identity.help_id;
-    let long_help = identity.long_help;
-    let value_tokens = value.value_tokens;
-    let required = value.required;
-    let cli = io.cli;
-    let env = io.env;
-    let file = io.file;
-    let default = meta.default_tokens;
-    let deprecated = meta.deprecated_tokens;
-    let examples = meta.examples;
-    let links = meta.links;
-    let notes = meta.notes;
+    let identity_tokens = render_identity_tokens(identity);
+    let value_tokens = render_value_tokens(value_context);
+    let io = render_io_block(io_tokens);
+    let meta = render_meta_block(meta_parts);
 
     quote! {
         ortho_config::docs::FieldMetadata {
-            name: String::from(#field_name),
-            help_id: String::from(#help_id),
-            long_help_id: Some(String::from(#long_help)),
-            value: #value_tokens,
-            default: #default,
-            required: #required,
-            deprecated: #deprecated,
-            cli: #cli,
-            env: Some(#env),
-            file: Some(#file),
-            examples: vec![ #( #examples ),* ],
-            links: vec![ #( #links ),* ],
-            notes: vec![ #( #notes ),* ],
+            #identity_tokens
+            #value_tokens
+            #io
+            #meta
         }
     }
+}
+
+fn render_identity_tokens(identity: FieldIdentityTokens) -> TokenStream {
+    let field_name = identity.field_name;
+    let help_id = identity.help_id;
+    let long_help = identity.long_help;
+    quote! {
+        name: String::from(#field_name),
+        help_id: String::from(#help_id),
+        long_help_id: Some(String::from(#long_help)),
+    }
+}
+
+fn render_value_tokens(value: ValueContext) -> TokenStream {
+    let value_tokens = value.value_tokens;
+    let required = value.required;
+    quote! {
+        value: #value_tokens,
+        required: #required,
+    }
+}
+
+fn render_io_block(io: IoTokens) -> TokenStream {
+    let cli = io.cli;
+    let env = io.env;
+    let file = io.file;
+    quote! {
+        cli: #cli,
+        env: Some(#env),
+        file: Some(#file),
+    }
+}
+
+fn render_meta_block(meta: MetaParts) -> TokenStream {
+    let default = meta.default_tokens;
+    let deprecated = meta.deprecated_tokens;
+    let examples = render_vec_field("examples", &meta.examples);
+    let links = render_vec_field("links", &meta.links);
+    let notes = render_vec_field("notes", &meta.notes);
+    quote! {
+        default: #default,
+        deprecated: #deprecated,
+        #examples
+        #links
+        #notes
+    }
+}
+
+fn render_vec_field(field_name: &str, items: &[TokenStream]) -> TokenStream {
+    let ident = syn::Ident::new(field_name, proc_macro2::Span::call_site());
+    quote! { #ident: vec![ #( #items ),* ], }
 }
 
 fn resolve_value_type(attrs: &FieldAttrs, field: &syn::Field) -> Option<ValueTypeModel> {
@@ -328,20 +359,31 @@ fn resolve_required(field: &syn::Field, attrs: &FieldAttrs) -> syn::Result<bool>
     if let Some(required) = attrs.doc.required {
         return Ok(required);
     }
+    Ok(!infers_non_required(field, attrs)?)
+}
+
+/// Returns `true` if the field should be inferred as non-required based on its type or attributes.
+///
+/// A field is inferred as non-required if any of the following are true:
+/// - The type is `Option<T>`
+/// - The field has an `#[ortho_config(default = ...)]` attribute
+/// - The field has a `#[serde(default)]` attribute
+/// - The type is a collection (`Vec`, `BTreeMap`, `HashMap`)
+fn infers_non_required(field: &syn::Field, attrs: &FieldAttrs) -> syn::Result<bool> {
     if option_inner(&field.ty).is_some() {
-        return Ok(false);
+        return Ok(true);
     }
     if attrs.default.is_some() {
-        return Ok(false);
+        return Ok(true);
     }
     if serde_has_default(&field.attrs)? {
-        return Ok(false);
+        return Ok(true);
     }
     // Collections (Vec, BTreeMap, HashMap) default to non-required since they can be empty.
     if is_collection_type(&field.ty) {
-        return Ok(false);
+        return Ok(true);
     }
-    Ok(true)
+    Ok(false)
 }
 
 /// Returns `true` if `ty` is a collection type (`Vec`, `BTreeMap`, `HashMap`).

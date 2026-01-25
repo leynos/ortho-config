@@ -17,12 +17,8 @@ macro_rules! impl_string_newtype {
         pub(crate) struct $name(String);
 
         impl $name {
-            #[expect(
-                clippy::missing_const_for_fn,
-                reason = "Newtype constructor is not used in const context."
-            )]
             pub(crate) fn new(value: String) -> Self {
-                Self(value)
+                Self::from(value)
             }
         }
 
