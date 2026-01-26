@@ -242,7 +242,7 @@ fn build_discovery_metadata(app_name: &AppName, struct_attrs: &StructAttrs) -> T
             search_paths: Vec::new(),
             override_flag_long: #override_flag_long,
             override_env: #override_env_tokens,
-            xdg_compliant: cfg!(any(unix, target_os = "redox")),
+            xdg_compliant: ::core::cfg!(any(unix, target_os = "redox")),
         })
     }
 }
