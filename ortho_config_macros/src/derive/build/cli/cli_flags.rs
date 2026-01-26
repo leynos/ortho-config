@@ -22,6 +22,14 @@ pub(crate) struct CliStructTokens {
     pub field_names: HashSet<String>,
 }
 
+#[derive(Debug, Clone)]
+pub(crate) struct CliFieldMetadata {
+    pub field_name: String,
+    pub long: String,
+    pub short: char,
+    pub is_bool: bool,
+}
+
 pub(super) fn option_type_tokens(ty: &Type) -> proc_macro2::TokenStream {
     option_inner(ty).map_or_else(|| quote! { Option<#ty> }, |inner| quote! { Option<#inner> })
 }
@@ -167,11 +175,21 @@ impl CliFieldContext {
     }
 }
 
-fn process_cli_field(
+/// Resolved CLI field information shared by both struct field and metadata generation.
+struct ResolvedCliField {
+    name: Ident,
+    field_name: String,
+    long: String,
+    short: char,
+    is_bool: bool,
+}
+
+/// Resolves and validates CLI field information, updating context with used flags.
+fn resolve_cli_field(
     field: &syn::Field,
     attrs: &FieldAttrs,
     context: &mut CliFieldContext,
-) -> syn::Result<proc_macro2::TokenStream> {
+) -> syn::Result<ResolvedCliField> {
     let Some(name) = field.ident.as_ref() else {
         return Err(syn::Error::new_spanned(
             field,
@@ -179,7 +197,6 @@ fn process_cli_field(
         ));
     };
 
-    let ty = option_type_tokens(&field.ty);
     let field_name = name.to_string();
     context.field_names.insert(field_name.clone());
 
@@ -196,13 +213,31 @@ fn process_cli_field(
         ));
     }
 
-    let short_ch = resolve_short_flag(name, attrs, &mut context.used_shorts)?;
-    let long_lit = syn::LitStr::new(&long, proc_macro2::Span::call_site());
-    let short_lit = syn::LitChar::new(short_ch, proc_macro2::Span::call_site());
+    let short = resolve_short_flag(name, attrs, &mut context.used_shorts)?;
     let is_bool = is_bool_type(&field.ty);
-    let span = name.span();
 
-    let arg_attr = if is_bool {
+    Ok(ResolvedCliField {
+        name: name.clone(),
+        field_name,
+        long,
+        short,
+        is_bool,
+    })
+}
+
+fn process_cli_field(
+    field: &syn::Field,
+    attrs: &FieldAttrs,
+    context: &mut CliFieldContext,
+) -> syn::Result<proc_macro2::TokenStream> {
+    let resolved = resolve_cli_field(field, attrs, context)?;
+
+    let ty = option_type_tokens(&field.ty);
+    let long_lit = syn::LitStr::new(&resolved.long, proc_macro2::Span::call_site());
+    let short_lit = syn::LitChar::new(resolved.short, proc_macro2::Span::call_site());
+    let span = resolved.name.span();
+
+    let arg_attr = if resolved.is_bool {
         quote_spanned! { span =>
             #[arg(long = #long_lit, short = #short_lit, action = clap::ArgAction::SetTrue)]
         }
@@ -212,7 +247,7 @@ fn process_cli_field(
         }
     };
 
-    let serde_attr = if is_bool {
+    let serde_attr = if resolved.is_bool {
         proc_macro2::TokenStream::new()
     } else {
         quote_spanned! { span =>
@@ -220,10 +255,26 @@ fn process_cli_field(
         }
     };
 
+    let name = &resolved.name;
     Ok(quote_spanned! { span =>
         #arg_attr
         #serde_attr
         pub #name: #ty
+    })
+}
+
+fn process_cli_metadata(
+    field: &syn::Field,
+    attrs: &FieldAttrs,
+    context: &mut CliFieldContext,
+) -> syn::Result<CliFieldMetadata> {
+    let resolved = resolve_cli_field(field, attrs, context)?;
+
+    Ok(CliFieldMetadata {
+        field_name: resolved.field_name,
+        long: resolved.long,
+        short: resolved.short,
+        is_bool: resolved.is_bool,
     })
 }
 
@@ -265,4 +316,32 @@ pub(crate) fn build_cli_struct_fields(
         used_longs,
         field_names,
     })
+}
+
+pub(crate) fn build_cli_field_metadata(
+    fields: &[syn::Field],
+    field_attrs: &[FieldAttrs],
+) -> syn::Result<Vec<CliFieldMetadata>> {
+    if fields.len() != field_attrs.len() {
+        return Err(syn::Error::new(
+            proc_macro2::Span::call_site(),
+            format!(
+                "CLI field metadata mismatch: expected {} `FieldAttrs` entries but found {}; lengths must match to avoid silently dropping metadata",
+                fields.len(),
+                field_attrs.len()
+            ),
+        ));
+    }
+
+    let mut context = CliFieldContext::with_capacity(fields.len());
+    let mut result = Vec::with_capacity(fields.len());
+
+    for (field, attrs) in fields.iter().zip(field_attrs) {
+        if attrs.skip_cli {
+            continue;
+        }
+        result.push(process_cli_metadata(field, attrs, &mut context)?);
+    }
+
+    Ok(result)
 }

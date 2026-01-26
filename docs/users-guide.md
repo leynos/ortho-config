@@ -1048,6 +1048,36 @@ fn interop(r: ortho_config::OrthoResult<MyCfg>) -> Result<MyCfg, figment::Error>
 }
 ```
 
+## Documentation metadata (OrthoConfigDocs)
+
+The derive macro now emits an `OrthoConfigDocs` implementation alongside the
+runtime loader. This lets tooling such as `cargo-orthohelp` serialize a stable,
+clap-agnostic intermediate representation (IR) for man pages and PowerShell
+help.
+
+```rust
+use ortho_config::docs::OrthoConfigDocs;
+
+#[derive(serde::Deserialize, serde::Serialize, ortho_config::OrthoConfig)]
+#[ortho_config(prefix = "APP")]
+struct AppConfig {
+    #[ortho_config(default = 8080)]
+    port: u16,
+}
+
+let ir = AppConfig::get_doc_metadata();
+let json = ortho_config::serde_json::to_string_pretty(&ir)?;
+println!("{json}");
+```
+
+When IDs are not supplied, the macro generates deterministic defaults such as
+`{app}.about` for the CLI overview and `{app}.fields.{field}.help` for field
+descriptions. Field-level metadata can be refined with `help_id`,
+`long_help_id`, `value(type = "...")`, `deprecated(note_id = "...")`,
+`env(name = "...")`, and `file(key_path = "...")`. These documentation
+attributes affect only the emitted IR; they do not change runtime naming or
+loading behaviour.
+
 ## Additional notes
 
 - **Vector merging** – For `Vec<T>` fields the default merge strategy is
@@ -1069,10 +1099,10 @@ fn interop(r: ortho_config::OrthoResult<MyCfg>) -> Result<MyCfg, figment::Error>
   while still requiring the CLI to provide a value when defaults are absent;
   see the `vk` example above.
 
-- **Changing naming conventions** – Currently, only the default
-  snake/hyphenated (underscores → hyphens)/upper snake mappings are supported.
-  Future versions may introduce attributes such as `file_key` or `env` to
-  customize names further.
+- **Changing naming conventions** – Runtime naming continues to use the
+  default snake/hyphenated (underscores → hyphens)/upper snake mappings. For
+  documentation output, use `env(name = "...")` and `file(key_path = "...")` to
+  override IR metadata without altering runtime behaviour.
 
 - **Testing** – Because the CLI and environment variables are merged at
   runtime, integration tests should set environment variables and construct CLI

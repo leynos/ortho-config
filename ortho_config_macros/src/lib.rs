@@ -20,11 +20,13 @@ mod derive {
 mod selected_subcommand_merge;
 
 use derive::build::{
-    CollectionStrategies, build_cli_struct_fields, build_config_env_var, build_config_flag_field,
-    build_default_struct_fields, build_default_struct_init, build_env_provider,
-    collect_collection_strategies, compute_config_env_var, compute_dotfile_name, default_app_name,
+    CollectionStrategies, build_cli_field_metadata, build_cli_struct_fields, build_config_env_var,
+    build_config_flag_field, build_default_struct_fields, build_default_struct_init,
+    build_env_provider, collect_collection_strategies, compute_config_env_var,
+    compute_dotfile_name, default_app_name,
 };
 use derive::generate::declarative::generate_declarative_impl;
+use derive::generate::docs::{DocsArgs, generate_docs_impl};
 use derive::generate::ortho_impl::generate_trait_implementation;
 use derive::load_impl::{
     DiscoveryTokens, LoadImplArgs, LoadImplIdents, LoadImplTokens, build_load_impl,
@@ -72,9 +74,21 @@ pub fn derive_ortho_config(input_tokens: TokenStream) -> TokenStream {
         &components.collection_strategies,
         components.post_merge_hook,
     );
+    let docs_impl = match generate_docs_impl(&DocsArgs {
+        ident: &ident,
+        fields: &fields,
+        field_attrs: &field_attrs,
+        struct_attrs: &struct_attrs,
+        serde_rename_all,
+        cli_fields: &components.cli_field_metadata,
+    }) {
+        Ok(tokens) => tokens,
+        Err(err) => return err.to_compile_error().into(),
+    };
     let expanded = quote! {
         #core_tokens
         #declarative_impl
+        #docs_impl
     };
 
     TokenStream::from(expanded)
@@ -130,6 +144,8 @@ struct MacroComponents {
     /// as the optional `config_path` flag), because those fields are not present
     /// in the configuration struct and therefore cannot be extracted.
     cli_field_info: Vec<CliFieldInfo>,
+    /// Field metadata for documentation IR generation.
+    cli_field_metadata: Vec<derive::build::CliFieldMetadata>,
     /// Whether the struct has `#[ortho_config(post_merge_hook)]`.
     ///
     /// When true, the generated `merge_from_layers` invokes
@@ -154,6 +170,8 @@ struct CliStructBuildResult {
     /// This is derived from the input configuration struct fields only (not any
     /// generated CLI-only fields).
     field_info: Vec<CliFieldInfo>,
+    /// Metadata for each field used in documentation generation.
+    metadata: Vec<derive::build::CliFieldMetadata>,
 }
 
 /// Build CLI struct field tokens, conditionally adding a generated
@@ -207,6 +225,8 @@ fn build_cli_struct_tokens(
         cli_struct.fields.push(config_field);
     }
 
+    let metadata = build_cli_field_metadata(fields, field_attrs)?;
+
     // Build field info for CliValueExtractor generation
     let field_info: Vec<CliFieldInfo> = fields
         .iter()
@@ -218,6 +238,7 @@ fn build_cli_struct_tokens(
     Ok(CliStructBuildResult {
         fields: cli_struct.fields,
         field_info,
+        metadata,
     })
 }
 
@@ -392,6 +413,7 @@ fn build_macro_components(args: &MacroComponentArgs<'_>) -> syn::Result<MacroCom
         prefix_fn,
         collection_strategies,
         cli_field_info: cli_build_result.field_info,
+        cli_field_metadata: cli_build_result.metadata,
         post_merge_hook: struct_attrs.post_merge_hook,
     })
 }

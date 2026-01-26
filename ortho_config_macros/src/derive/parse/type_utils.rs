@@ -65,12 +65,25 @@ pub(crate) fn vec_inner(ty: &Type) -> Option<&Type> {
 /// The helper mirrors [`vec_inner`], matching both plain and fully-qualified
 /// paths where the final segment is `BTreeMap`.
 pub(crate) fn btree_map_inner(ty: &Type) -> Option<(&Type, &Type)> {
+    map_inner(ty, "BTreeMap")
+}
+
+/// Extracts the key and value types if `ty` is `HashMap<K, V>`.
+///
+/// The helper mirrors [`btree_map_inner`], matching both plain and
+/// fully-qualified paths where the final segment is `HashMap`.
+pub(crate) fn hash_map_inner(ty: &Type) -> Option<(&Type, &Type)> {
+    map_inner(ty, "HashMap")
+}
+
+/// Shared helper to extract key/value types from map-like containers.
+fn map_inner<'a>(ty: &'a Type, wrapper: &str) -> Option<(&'a Type, &'a Type)> {
     let Type::Path(p) = ty else {
         return None;
     };
     let mut segs = p.path.segments.iter().rev();
     let last = segs.next()?;
-    if last.ident != "BTreeMap" {
+    if last.ident != wrapper {
         return None;
     }
     let _ = segs.next();

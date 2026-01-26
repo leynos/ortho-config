@@ -49,6 +49,10 @@ defaults, and thread it through `CommandLine::command().localize(&localizer)`
 plus `CommandLine::try_parse_localized_env`. Formatting errors are logged, and
 the default bundle is used as a fallback, illustrating how applications can
 adopt Fluent without sacrificing existing help copy.
+- **Documentation IR emission**: serialize documentation metadata using
+  `OrthoConfigDocs::get_doc_metadata` so `cargo-orthohelp` can generate man
+  pages and PowerShell help without scraping `--help` output. The `emit_docs`
+  helper binary prints the IR as JSON.
 - **Shell and Windows automation**: provide paired `.sh` and `.cmd` scripts
   highlighting how environment variables, configuration files, and command-line
   overrides interact. Include examples covering default configuration,
@@ -166,6 +170,8 @@ without mutating the working directory.
 - Validate Mermaid diagrams (if present): `make nixie`.
 - Run static analysis: `cargo clippy -D warnings` (or `make lint`).
 - Execute tests (unit and behavioural): `make test`.
+- Emit documentation metadata as JSON:
+  `cargo run -p hello_world --bin emit_docs`.
 
 ## Implementation checklist
 
