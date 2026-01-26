@@ -3,10 +3,10 @@
 //! These structures are emitted by the derive macro and consumed by external
 //! tooling such as `cargo-orthohelp` to generate user-facing documentation.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 /// Top-level documentation metadata for a configuration command.
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct DocMetadata {
     /// IR schema version string (for example, "1.1").
     pub ir_version: String,
@@ -29,7 +29,7 @@ pub struct DocMetadata {
 }
 
 /// Section-level metadata and supporting content.
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SectionsMetadata {
     /// Fluent IDs for standard documentation headings.
     pub headings_ids: HeadingIds,
@@ -46,7 +46,7 @@ pub struct SectionsMetadata {
 }
 
 /// Fluent IDs for standard documentation headings.
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct HeadingIds {
     /// Fluent ID for the NAME heading.
     pub name: String,
@@ -71,7 +71,7 @@ pub struct HeadingIds {
 }
 
 /// Metadata describing a single configuration field.
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct FieldMetadata {
     /// Rust field name for the setting.
     pub name: String,
@@ -102,7 +102,7 @@ pub struct FieldMetadata {
 }
 
 /// CLI documentation metadata for a field.
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CliMetadata {
     /// Long CLI flag name (without the leading dashes).
     pub long: Option<String>,
@@ -121,21 +121,21 @@ pub struct CliMetadata {
 }
 
 /// Environment variable documentation metadata.
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct EnvMetadata {
     /// Environment variable name.
     pub var_name: String,
 }
 
 /// File configuration metadata.
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct FileMetadata {
     /// Dotted configuration key path.
     pub key_path: String,
 }
 
 /// Strongly-typed value metadata for documentation rendering.
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum ValueType {
     /// String value.
     String,
@@ -186,21 +186,21 @@ pub enum ValueType {
 }
 
 /// Display value for a default.
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct DefaultValue {
     /// Human-readable default string.
     pub display: String,
 }
 
 /// Deprecation metadata for a field.
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Deprecation {
     /// Fluent ID for the deprecation note.
     pub note_id: String,
 }
 
 /// Configuration discovery metadata.
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ConfigDiscoveryMeta {
     /// Supported configuration file formats.
     pub formats: Vec<ConfigFormat>,
@@ -215,7 +215,7 @@ pub struct ConfigDiscoveryMeta {
 }
 
 /// Supported configuration file formats.
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum ConfigFormat {
     /// TOML configuration format.
     Toml,
@@ -226,7 +226,7 @@ pub enum ConfigFormat {
 }
 
 /// Ordered search path pattern.
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct PathPattern {
     /// Path pattern template.
     pub pattern: String,
@@ -235,7 +235,7 @@ pub struct PathPattern {
 }
 
 /// Configuration source precedence metadata.
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct PrecedenceMeta {
     /// Ordered list of source kinds, from lowest to highest precedence.
     pub order: Vec<SourceKind>,
@@ -244,7 +244,7 @@ pub struct PrecedenceMeta {
 }
 
 /// Kinds of configuration sources.
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum SourceKind {
     /// Defaults supplied by the application.
     Defaults,
@@ -257,7 +257,7 @@ pub enum SourceKind {
 }
 
 /// Optional Windows metadata for `PowerShell` help generation.
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct WindowsMetadata {
     /// Module name used for `PowerShell` help output.
     pub module_name: Option<String>,
@@ -272,7 +272,7 @@ pub struct WindowsMetadata {
 }
 
 /// Documentation example snippet.
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Example {
     /// Optional Fluent ID for the example title.
     pub title_id: Option<String>,
@@ -283,7 +283,7 @@ pub struct Example {
 }
 
 /// Related link metadata.
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Link {
     /// Optional Fluent ID for the link text.
     pub text_id: Option<String>,
@@ -292,7 +292,7 @@ pub struct Link {
 }
 
 /// Documentation note metadata.
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Note {
     /// Fluent ID for the note content.
     pub text_id: String,

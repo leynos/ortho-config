@@ -1,0 +1,29 @@
+[package]
+name = "cargo-orthohelp"
+version.workspace = true
+edition = "2024"
+rust-version.workspace = true
+description = "OrthoConfig documentation tooling for IR generation."
+license.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+camino = "1"
+cap-std = { version = "3", features = ["fs_utf8"] }
+clap = { version = "4", features = ["derive"] }
+cargo_metadata = "0.18"
+ortho_config = { path = "../ortho_config", version = "0.7.0" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+thiserror = "2"
+
+[dev-dependencies]
+rstest = "0.26.1"
+rstest-bdd.workspace = true
+rstest-bdd-macros.workspace = true
+test_helpers = { path = "../test_helpers" }
+tempfile = "3"

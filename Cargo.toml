@@ -1,9 +1,11 @@
 [workspace]
 members = [
+    "cargo-orthohelp",
     "examples/hello_world",
     "ortho_config",
     "ortho_config_macros",
-    "test_helpers"
+    "test_helpers",
+    "tests/fixtures/orthohelp_fixture"
 ]
 resolver = "2"
 
@@ -20,8 +22,8 @@ keywords = ["config", "configuration", "cli", "env", "settings"]
 categories = ["config", "command-line-interface"]
 
 [workspace.dependencies]
-rstest-bdd = "0.3.2"
-rstest-bdd-macros = "0.3.2"
+rstest-bdd = "0.4.0"
+rstest-bdd-macros = "0.4.0"
 
 # `cargo clippy` lints configuration
 [workspace.lints.clippy]

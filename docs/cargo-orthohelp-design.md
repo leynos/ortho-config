@@ -442,7 +442,7 @@ cargo orthohelp \
   [--package <pkg>] [--bin <name> | --lib] \
   [--root-type <path::to::Type>] \
   [--locale <lang>] [--all-locales] \
-  [--format man|ps|all] \
+  [--format ir|man|ps|all] \
   [--out-dir <path>] \
   [--man-section <N>] [--man-date <YYYY-MM-DD>] [--man-split-subcommands] \
   [--ps-module-name <Name>] [--ps-split-subcommands] \
@@ -460,6 +460,11 @@ module_name = "MyApp"
 locales = ["en-GB", "fr-FR"]
 man_section = 1
 ```
+
+Current scope note: until the roff and PowerShell generators are shipped,
+`cargo-orthohelp` supports only `--format ir` and always emits the localised IR
+JSON described below. Requests for other formats should fail with a clear error
+message.
 
 ### 6.2 Pipeline
 
@@ -481,6 +486,73 @@ man_section = 1
 Cache IR at `target/orthohelp/<hash>/ir.json` keyed by the crate fingerprint
 plus macro and tool versions. `--cache` reuses it when valid; `--no-build`
 trusts the existing IR.
+
+Crate fingerprints hash `Cargo.toml`, `build.rs` (when present), `src/`, and
+`locales/` so changes to configuration schemas or translations invalidate the
+cache.
+
+## 6.4 Localised IR JSON output
+
+`cargo-orthohelp` emits a localised IR JSON file per locale into
+`<out>/ir/<locale>.json`. The schema mirrors `DocMetadata` but resolves every
+Fluent identifier into a concrete string. The output includes the locale for
+traceability and preserves non-localised fields such as value types or Windows
+metadata.
+
+When a Fluent ID cannot be resolved, the output uses `[missing: <id>]` as a
+sentinel so generators can surface gaps during development.
+
+### 6.4.1 Localised IR schema
+
+```json
+{
+  "ir_version": "1.1",
+  "locale": "en-US",
+  "app_name": "my-app",
+  "bin_name": "my-app",
+  "about": "My App CLI",
+  "synopsis": "Run the app",
+  "sections": {
+    "headings": {
+      "name": "NAME",
+      "synopsis": "SYNOPSIS",
+      "description": "DESCRIPTION",
+      "options": "OPTIONS",
+      "environment": "ENVIRONMENT",
+      "files": "FILES",
+      "precedence": "PRECEDENCE",
+      "exit_status": "EXIT STATUS",
+      "examples": "EXAMPLES",
+      "see_also": "SEE ALSO"
+    }
+  },
+  "fields": [
+    {
+      "name": "port",
+      "help": "Port to bind",
+      "long_help": null
+    }
+  ],
+  "subcommands": []
+}
+```
+
+Fields that remain identifiers in the base IR are renamed to text in the
+localised IR:
+
+- `about_id` -> `about`
+- `synopsis_id` -> `synopsis`
+- `headings_ids` -> `headings`
+- `help_id`/`long_help_id` -> `help`/`long_help`
+- `note_id`/`title_id`/`text_id` -> `note`/`title`/`text`
+
+### 6.4.2 Locale resource discovery
+
+Consumer Fluent resources are loaded from `locales/<locale>/*.ftl` within the
+target package. Files are read in lexicographic order and layered over the
+embedded `ortho_config` defaults. If the requested locale does not have
+embedded defaults but consumer resources exist, the generator uses the consumer
+resources alone.
 
 ## 7. Output generators
 

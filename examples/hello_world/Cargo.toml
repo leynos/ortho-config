@@ -5,6 +5,10 @@ edition = "2024"
 rust-version.workspace = true
 publish = false
 
+[package.metadata.ortho_config]
+root_type = "hello_world::cli::HelloWorldCli"
+locales = ["en-US", "ja"]
+
 [lints]
 workspace = true
 

@@ -4,7 +4,7 @@ This ExecPlan is a living document. The sections `Constraints`, `Tolerances`,
 `Risks`, `Progress`, `Surprizes & Discoveries`, `Decision Log`, and
 `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
-Status: DRAFT
+Status: COMPLETED
 
 PLANS.md is not present in the repository root, so this ExecPlan follows the
 standard execplans format.
@@ -62,54 +62,67 @@ update as work proceeds. Each risk should note severity, likelihood, and
 mitigation or contingency.
 
 - Risk: The design doc does not define the exact schema for the localised IR
-  JSON output, which could lead to incompatible tooling later.
-  Severity: high. Likelihood: medium. Mitigation: define the output schema
-  and file naming in `docs/cargo-orthohelp-design.md` before coding.
+  JSON output, which could lead to incompatible tooling later. Severity: high.
+  Likelihood: medium. Mitigation: define the output schema and file naming in
+  `docs/cargo-orthohelp-design.md` before coding.
 - Risk: `cargo metadata` discovery may not uniquely identify a binary when
-  multiple bins are present.
-  Severity: medium. Likelihood: medium. Mitigation: enforce explicit
-  `--bin`/`--lib` selection and provide a clear error message.
+  multiple bins are present. Severity: medium. Likelihood: medium. Mitigation:
+  enforce explicit `--bin`/`--lib` selection and provide a clear error message.
 - Risk: Updating to `rstest-bdd` v0.4.0 could require adjustments in existing
-  tests or macros.
-  Severity: medium. Likelihood: medium. Mitigation: isolate the version bump
-  to workspace dev-dependencies first and fix any compilation failures.
+  tests or macros. Severity: medium. Likelihood: medium. Mitigation: isolate
+  the version bump to workspace dev-dependencies first and fix any compilation
+  failures.
 - Risk: Cache invalidation is underspecified and might reuse stale IR.
   Severity: medium. Likelihood: medium. Mitigation: document the cache key
-  inputs (crate fingerprint, tool version, macro version) and include tests
-  for invalidation behaviour.
+  inputs (crate fingerprint, tool version, macro version) and include tests for
+  invalidation behaviour.
 
 ## Progress
 
 Use a list with checkboxes to summarize granular steps. Every stopping point
-must be documented here, even if it requires splitting a partially
-completed task into two (“done” vs. “remaining”). This section must
-always reflect the actual current state of the work.
+must be documented here, even if it requires splitting a partially completed
+task into two (“done” vs. “remaining”). This section must always reflect the
+actual current state of the work.
 
 - [x] (2026-01-26 00:00Z) Draft ExecPlan created.
-- [ ] Survey existing crate layout, docs, and tests for cargo-orthohelp hooks.
-- [ ] Define the localised IR JSON schema and file naming in the design doc.
-- [ ] Implement cargo-orthohelp metadata discovery, bridge build, cache, and
-  locale resolution.
-- [ ] Add rstest unit tests and rstest-bdd behavioural coverage.
-- [ ] Update docs and examples, mark roadmap item 4.1.1 as done.
-- [ ] Run `make check-fmt`, `make lint`, and `make test` (plus doc checks) with
-  logged output.
+- [x] (2026-01-26 00:10Z) Plan approved; implementation started.
+- [x] (2026-01-26 00:30Z) Survey existing crate layout, docs, and tests for
+  cargo-orthohelp hooks.
+- [x] (2026-01-26 00:40Z) Define the localised IR JSON schema and file naming
+  in the design doc.
+- [x] (2026-01-26 02:05Z) Implement cargo-orthohelp metadata discovery, bridge
+  build, cache, and locale resolution.
+- [x] (2026-01-26 02:20Z) Add rstest unit tests and rstest-bdd behavioural
+  coverage.
+- [x] (2026-01-26 02:40Z) Update docs and examples, mark roadmap item 4.1.1 as
+  done.
+- [x] (2026-01-26 02:55Z) Run `make check-fmt`, `make lint`, and `make test`
+  (plus doc checks) with logged output.
 
 ## Surprizes & Discoveries
 
 Unexpected findings during implementation that were not anticipated as risks.
 Document with evidence so future work benefits.
 
-- Observation: None yet.
-  Evidence: N/A. Impact: N/A.
+- Observation: The first `make test` run timed out at the default 120s
+  command timeout; rerunning with a higher timeout completed successfully.
+  Evidence: `/tmp/orthohelp-test.log`. Impact: update timeouts for long-running
+  test runs.
 
 ## Decision log
 
 Record every significant decision made while working on the plan. Include
 decisions to escalate, decisions on ambiguous requirements, and design choices.
 
-- Decision: None yet.
-  Rationale: N/A. Date/Author: 2026-01-26 (assistant).
+- Decision: Localised IR output mirrors the base IR but resolves IDs to text,
+  includes `locale`, and emits JSON under `<out>/ir/<locale>.json`. Rationale:
+  Keeps generators simple and avoids mixing identifier resolution into later
+  stages. Date/Author: 2026-01-26 (assistant).
+- Decision: Consumer Fluent resources are loaded from
+  `locales/<locale>/*.ftl` in lexicographic order, falling back to
+  `ortho_config` defaults or consumer-only bundles when defaults are missing.
+  Rationale: Matches existing example layout while supporting future naming
+  conventions. Date/Author: 2026-01-26 (assistant).
 
 ## Outcomes & retrospective
 
@@ -117,7 +130,10 @@ Summarize outcomes, gaps, and lessons learned at major milestones or at
 completion. Compare the result against the original purpose. Note what would be
 done differently next time.
 
-- Outcome: Not started.
+- Outcome: The bridge pipeline now emits per-locale IR JSON for the fixture
+  crate, supports cache reuse and `--no-build`, and is covered by rstest unit
+  tests plus rstest-bdd behavioural scenarios. Documentation, examples, and the
+  roadmap entry were updated to match the new workflow.
 
 ## Context and orientation
 
@@ -142,8 +158,8 @@ need environment mutation, use the `test_helpers::env` lock/guards described in
 
 Stage A: Review the design doc pipeline sections, existing IR types, and the
 localiser API. Decide how the tool will emit per-locale IR JSON (schema and
-file naming) and record that decision in
-`docs/cargo-orthohelp-design.md` before writing code.
+file naming) and record that decision in `docs/cargo-orthohelp-design.md`
+before writing code.
 
 Stage B: Scaffold the new `cargo-orthohelp` crate and CLI parser. Add a new
 workspace member (package name `cargo-orthohelp`) with a `main.rs` that parses
@@ -163,8 +179,8 @@ Stage C: Implement the bridge pipeline.
   `target/orthohelp/<hash>/` that depends on the target crate and
   `ortho_config`. Its `main.rs` should call
   `<Root as OrthoConfigDocs>::get_doc_metadata()` and print JSON to stdout.
-  Build it with `cargo build` using the same target directory, then execute
-  the binary and capture the JSON.
+  Build it with `cargo build` using the same target directory, then execute the
+  binary and capture the JSON.
 - Caching: compute a cache key from the crate fingerprint, tool version, and
   macro version, then write `ir.json` under the bridge directory. When
   `--cache` is passed, reuse the cached IR if the key matches. When
@@ -172,8 +188,8 @@ Stage C: Implement the bridge pipeline.
   or invalid.
 - Locale resolution: for each requested locale (CLI `--locale` or
   `--all-locales`), build a `FluentLocalizer` and resolve IDs to strings,
-  emitting a per-locale IR JSON file in `--out-dir` using the schema defined
-  in Stage A.
+  emitting a per-locale IR JSON file in `--out-dir` using the schema defined in
+  Stage A.
 
 Stage D: Tests and documentation. Add rstest unit tests for metadata discovery,
 cache behaviour, and locale resolution. Add rstest-bdd behavioural tests that
@@ -284,3 +300,5 @@ impact architectural decisions.
 ## Revision note (required when editing an ExecPlan)
 
 Initial draft created for roadmap item 4.1.1 (bridge pipeline).
+
+Revision 1 (2026-01-26): marked plan as in progress after approval.
