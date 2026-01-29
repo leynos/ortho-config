@@ -472,10 +472,13 @@ message.
 2. Determine the root type from CLI or metadata. If missing, emit an error
    with remediation guidance.
 3. Build the ephemeral bridge under `target/orthohelp/<hash>/`:
-   - Dependencies: `user_crate`, `ortho_config_docs`.
+   - Dependencies: `user_crate`, `ortho_config`.
    - `main.rs` invokes
      `<root_type as OrthoConfigDocs>::get_doc_metadata()` and serializes the
      IR JSON to stdout.
+   - `cargo-orthohelp` keeps a local copy of the IR schema (mirroring
+     `ortho_config::docs`) so publish checks can build against the latest
+     crates.io release while the workspace evolves.
 4. Run the bridge and capture the IR.
 5. For each locale, instantiate `FluentLocalizer` and resolve IDs to strings.
 6. Emit the requested outputs into `--out-dir`.

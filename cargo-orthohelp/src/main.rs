@@ -8,16 +8,17 @@ mod ir;
 mod locale;
 mod metadata;
 mod output;
+mod schema;
 
 use camino::Utf8PathBuf;
 use clap::Parser;
-use ortho_config::docs::ORTHO_DOCS_IR_VERSION;
 
 use crate::bridge::BridgeConfig;
 use crate::cache::CacheKey;
 use crate::cli::{Args, OutputFormat};
 use crate::error::OrthohelpError;
 use crate::metadata::PackageSelection;
+use crate::schema::{DocMetadata, ORTHO_DOCS_IR_VERSION};
 
 fn main() -> Result<(), OrthohelpError> {
     run()
@@ -49,7 +50,7 @@ fn run() -> Result<(), OrthohelpError> {
     let config = build_bridge_config(&selection);
 
     let ir_json = bridge::load_or_build_ir(&config, &paths, args.cache.cache, args.cache.no_build)?;
-    let doc_metadata: ortho_config::docs::DocMetadata = serde_json::from_str(&ir_json)?;
+    let doc_metadata: DocMetadata = serde_json::from_str(&ir_json)?;
 
     for locale in locales {
         let resources = locale::load_consumer_resources(&selection.package_root, &locale)?;
