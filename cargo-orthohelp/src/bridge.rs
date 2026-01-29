@@ -200,7 +200,7 @@ fn write_bridge_manifest(config: &BridgeConfig, paths: &BridgePaths) -> Result<(
 
 fn write_bridge_main(config: &BridgeConfig, paths: &BridgePaths) -> Result<(), OrthohelpError> {
     let content = format!(
-        "use ortho_config::docs::OrthoConfigDocs;\n\nfn main() -> Result<(), Box<dyn std::error::Error>> {{\n    let metadata = <{} as OrthoConfigDocs>::get_doc_metadata();\n    serde_json::to_writer(std::io::stdout(), &metadata)?;\n    Ok(())\n}}\n",
+        "use ortho_config::OrthoConfigDocs;\n\nfn main() -> Result<(), Box<dyn std::error::Error>> {{\n    let metadata = <{} as OrthoConfigDocs>::get_doc_metadata();\n    serde_json::to_writer(std::io::stdout(), &metadata)?;\n    Ok(())\n}}\n",
         config.root_type
     );
 

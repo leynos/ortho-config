@@ -1,10 +1,13 @@
 //! Localised IR structures for `cargo-orthohelp`.
 
-use ortho_config::docs::{
+use ortho_config::{
     CliMetadata, ConfigDiscoveryMeta, DefaultValue, DocMetadata, EnvMetadata, FileMetadata,
     PrecedenceMeta, SourceKind, ValueType, WindowsMetadata,
 };
-use ortho_config::{LanguageIdentifier, Localizer};
+use ortho_config::{
+    ConfigFormat, Example, FieldMetadata, LanguageIdentifier, Link, Localizer, Note,
+    SectionsMetadata,
+};
 use serde::Serialize;
 
 /// Localised documentation metadata resolved for a single locale.
@@ -75,7 +78,7 @@ pub struct LocalizedDeprecation {
 /// Localised configuration discovery metadata.
 #[derive(Debug, Clone, Serialize)]
 pub struct LocalizedConfigDiscoveryMeta {
-    pub formats: Vec<ortho_config::docs::ConfigFormat>,
+    pub formats: Vec<ConfigFormat>,
     pub search_paths: Vec<LocalizedPathPattern>,
     pub override_flag_long: Option<String>,
     pub override_env: Option<String>,
@@ -146,7 +149,7 @@ pub fn localize_doc(
 }
 
 fn localize_sections(
-    sections: &ortho_config::docs::SectionsMetadata,
+    sections: &SectionsMetadata,
     localizer: &dyn Localizer,
 ) -> LocalizedSectionsMetadata {
     LocalizedSectionsMetadata {
@@ -188,10 +191,7 @@ fn localize_sections(
     }
 }
 
-fn localize_field(
-    field: &ortho_config::docs::FieldMetadata,
-    localizer: &dyn Localizer,
-) -> LocalizedFieldMetadata {
+fn localize_field(field: &FieldMetadata, localizer: &dyn Localizer) -> LocalizedFieldMetadata {
     LocalizedFieldMetadata {
         name: field.name.clone(),
         help: resolve_message(localizer, &field.help_id),
@@ -256,10 +256,7 @@ fn localize_precedence(
     }
 }
 
-fn localize_example(
-    example: &ortho_config::docs::Example,
-    localizer: &dyn Localizer,
-) -> LocalizedExample {
+fn localize_example(example: &Example, localizer: &dyn Localizer) -> LocalizedExample {
     LocalizedExample {
         title: resolve_optional(localizer, example.title_id.as_deref()),
         code: example.code.clone(),
@@ -267,14 +264,14 @@ fn localize_example(
     }
 }
 
-fn localize_link(link: &ortho_config::docs::Link, localizer: &dyn Localizer) -> LocalizedLink {
+fn localize_link(link: &Link, localizer: &dyn Localizer) -> LocalizedLink {
     LocalizedLink {
         text: resolve_optional(localizer, link.text_id.as_deref()),
         uri: link.uri.clone(),
     }
 }
 
-fn localize_note(note: &ortho_config::docs::Note, localizer: &dyn Localizer) -> LocalizedNote {
+fn localize_note(note: &Note, localizer: &dyn Localizer) -> LocalizedNote {
     LocalizedNote {
         text: resolve_message(localizer, &note.text_id),
     }
