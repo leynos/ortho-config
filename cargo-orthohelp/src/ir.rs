@@ -1,13 +1,11 @@
 //! Localised IR structures for `cargo-orthohelp`.
 
-use ortho_config::{
-    CliMetadata, ConfigDiscoveryMeta, DefaultValue, DocMetadata, EnvMetadata, FileMetadata,
-    PrecedenceMeta, SourceKind, ValueType, WindowsMetadata,
+use ortho_config::docs::{
+    CliMetadata, ConfigDiscoveryMeta, ConfigFormat, DefaultValue, DocMetadata, EnvMetadata,
+    Example, FieldMetadata, FileMetadata, Link, Note, PrecedenceMeta, SectionsMetadata, SourceKind,
+    ValueType, WindowsMetadata,
 };
-use ortho_config::{
-    ConfigFormat, Example, FieldMetadata, LanguageIdentifier, Link, Localizer, Note,
-    SectionsMetadata,
-};
+use ortho_config::{LanguageIdentifier, Localizer};
 use serde::Serialize;
 
 /// Localised documentation metadata resolved for a single locale.
