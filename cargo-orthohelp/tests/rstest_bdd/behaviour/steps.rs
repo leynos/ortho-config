@@ -5,7 +5,7 @@ use std::process::Command;
 
 use camino::Utf8PathBuf;
 use cap_std::ambient_authority;
-use cap_std::fs_utf8::Dir;
+use cap_std::fs_utf8::{Dir, DirEntry};
 use rstest::fixture;
 use rstest_bdd_macros::{given, then, when};
 use serde_json::Value;
@@ -228,25 +228,40 @@ fn find_cached_ir(harness: &Harness) -> Option<Utf8PathBuf> {
     let dir = Dir::open_ambient_dir(&cache_root, ambient_authority()).ok()?;
     let mut newest: Option<(SystemTime, Utf8PathBuf)> = None;
     for entry in dir.read_dir(".").ok()? {
-        let entry = entry.ok()?;
-        let file_name = entry.file_name().ok()?;
-        let file_type = entry.file_type().ok()?;
-        if !file_type.is_dir() {
-            continue;
-        }
-        let ir_path = cache_root.join(Utf8PathBuf::from(file_name)).join("ir.json");
-        if ir_path.exists() {
-            let metadata = std::fs::metadata(ir_path.as_std_path()).ok()?;
-            let modified = metadata.modified().ok()?;
-            let replace = newest
-                .as_ref()
-                .map_or(true, |(best_time, _)| modified > *best_time);
-            if replace {
-                newest = Some((modified, ir_path));
-            }
+        if let Some(candidate) = check_cache_entry(&cache_root, entry, &newest) {
+            newest = Some(candidate);
         }
     }
     newest.map(|(_, path)| path)
+}
+
+fn check_cache_entry(
+    cache_root: &Utf8PathBuf,
+    entry: Result<DirEntry, std::io::Error>,
+    newest: &Option<(SystemTime, Utf8PathBuf)>,
+) -> Option<(SystemTime, Utf8PathBuf)> {
+    let entry = entry.ok()?;
+    let file_type = entry.file_type().ok()?;
+    if !file_type.is_dir() {
+        return None;
+    }
+
+    let file_name = entry.file_name().ok()?;
+    let ir_path = cache_root.join(Utf8PathBuf::from(file_name)).join("ir.json");
+    if !ir_path.exists() {
+        return None;
+    }
+
+    let metadata = std::fs::metadata(ir_path.as_std_path()).ok()?;
+    let modified = metadata.modified().ok()?;
+    let replace = newest
+        .as_ref()
+        .map_or(true, |(best_time, _)| modified > *best_time);
+    if !replace {
+        return None;
+    }
+
+    Some((modified, ir_path))
 }
 
 fn expected_about(locale: &str) -> &'static str {
