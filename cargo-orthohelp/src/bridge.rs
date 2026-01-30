@@ -9,6 +9,7 @@ use std::process::Command;
 
 use crate::cache::CacheKey;
 use crate::error::OrthohelpError;
+use crate::fs_helpers::open_optional_dir;
 use crate::metadata::{OrthoConfigDependency, PackageSelection};
 
 /// Paths used when building the ephemeral bridge crate.
@@ -80,7 +81,7 @@ pub fn load_or_build_ir(
 }
 
 fn read_cached_ir(paths: &BridgePaths) -> Result<Option<String>, OrthohelpError> {
-    let Some(dir) = open_optional_dir(&paths.bridge_dir)? else {
+    let Some(dir) = open_optional_dir(paths.bridge_dir.as_path())? else {
         return Ok(None);
     };
     let mut file = match dir.open("ir.json") {
@@ -117,11 +118,16 @@ fn ensure_bridge_layout(paths: &BridgePaths) -> Result<(), OrthohelpError> {
 }
 
 fn write_bridge_manifest(config: &BridgeConfig, paths: &BridgePaths) -> Result<(), OrthohelpError> {
-    let mut manifest = String::from(
-        "[package]\nname = \"orthohelp_bridge\"\nversion = \"0.1.0\"\nedition = \"2024\"\npublish = false\n\n",
-    );
-    manifest.push_str("[dependencies]\n");
-    manifest.push_str("serde_json = \"1\"\n");
+    let mut manifest = String::from(concat!(
+        "[package]\n",
+        "name = \"orthohelp_bridge\"\n",
+        "version = \"0.1.0\"\n",
+        "edition = \"2024\"\n",
+        "publish = false\n",
+        "\n",
+        "[dependencies]\n",
+        "serde_json = \"1\"\n",
+    ));
 
     writeln!(
         manifest,
@@ -162,7 +168,15 @@ fn write_bridge_manifest(config: &BridgeConfig, paths: &BridgePaths) -> Result<(
 
 fn write_bridge_main(config: &BridgeConfig, paths: &BridgePaths) -> Result<(), OrthohelpError> {
     let content = format!(
-        "use ortho_config::docs::OrthoConfigDocs;\n\nfn main() -> Result<(), Box<dyn std::error::Error>> {{\n    let metadata = <{} as OrthoConfigDocs>::get_doc_metadata();\n    serde_json::to_writer(std::io::stdout(), &metadata)?;\n    Ok(())\n}}\n",
+        concat!(
+            "use ortho_config::docs::OrthoConfigDocs;\n",
+            "\n",
+            "fn main() -> Result<(), Box<dyn std::error::Error>> {{\n",
+            "    let metadata = <{} as OrthoConfigDocs>::get_doc_metadata();\n",
+            "    serde_json::to_writer(std::io::stdout(), &metadata)?;\n",
+            "    Ok(())\n",
+            "}}\n",
+        ),
         config.root_type
     );
 
@@ -283,15 +297,4 @@ fn open_bridge_file(
         path: path.clone(),
         source: io_err,
     })
-}
-
-fn open_optional_dir(path: &Utf8PathBuf) -> Result<Option<Dir>, OrthohelpError> {
-    match Dir::open_ambient_dir(path, ambient_authority()) {
-        Ok(dir) => Ok(Some(dir)),
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
-        Err(err) => Err(OrthohelpError::Io {
-            path: path.clone(),
-            source: err,
-        }),
-    }
 }

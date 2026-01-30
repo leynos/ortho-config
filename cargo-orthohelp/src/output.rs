@@ -33,7 +33,7 @@ pub fn write_localized_ir(
             OpenOptions::new().write(true).create(true).truncate(true),
         )
         .map_err(|io_err| OrthohelpError::Io {
-            path: ir_dir.clone(),
+            path: ir_dir.join(&filename),
             source: io_err,
         })?;
 

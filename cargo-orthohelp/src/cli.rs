@@ -17,6 +17,7 @@ pub enum OutputFormat {
 }
 
 impl OutputFormat {
+    /// Returns the CLI-friendly string for this output format.
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Ir => "ir",

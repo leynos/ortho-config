@@ -462,7 +462,7 @@ man_section = 1
 ```
 
 Current scope note: until the roff and PowerShell generators are shipped,
-`cargo-orthohelp` supports only `--format ir` and always emits the localised IR
+`cargo-orthohelp` supports only `--format ir` and always emits the localized IR
 JSON described below. Requests for other formats should fail with a clear error
 message.
 
@@ -482,7 +482,7 @@ message.
 4. Run the bridge and capture the IR.
 5. For each locale, instantiate `FluentLocalizer` and resolve IDs to strings.
 6. Emit the requested outputs into `--out-dir`.
-7. Summarise artefacts and exit non-zero on hard errors.
+7. Summarize artefacts and exit non-zero on hard errors.
 
 ### 6.3 Caching
 
@@ -496,10 +496,10 @@ cache.
 
 ## 6.4 Localised IR JSON output
 
-`cargo-orthohelp` emits a localised IR JSON file per locale into
+`cargo-orthohelp` emits a localized IR JSON file per locale into
 `<out>/ir/<locale>.json`. The schema mirrors `DocMetadata` but resolves every
 Fluent identifier into a concrete string. The output includes the locale for
-traceability and preserves non-localised fields such as value types or Windows
+traceability and preserves non-localized fields such as value types or Windows
 metadata.
 
 When a Fluent ID cannot be resolved, the output uses `[missing: <id>]` as a
@@ -541,7 +541,7 @@ sentinel so generators can surface gaps during development.
 ```
 
 Fields that remain identifiers in the base IR are renamed to text in the
-localised IR:
+localized IR:
 
 - `about_id` -> `about`
 - `synopsis_id` -> `synopsis`

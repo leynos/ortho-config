@@ -51,12 +51,12 @@ fn temp_output_dir(harness: &mut Harness) {
 
 #[given("the orthohelp cache is empty")]
 fn cache_is_empty(harness: &mut Harness) {
-    let cache_root = harness
-        .workspace_root
-        .join("target")
-        .join("orthohelp");
-    if cache_root.exists() {
-        std::fs::remove_dir_all(&cache_root).expect("remove orthohelp cache");
+    let root_dir = Dir::open_ambient_dir(harness.workspace_root.as_path(), ambient_authority())
+        .expect("open workspace root");
+    match root_dir.remove_dir_all("target/orthohelp") {
+        Ok(()) => {}
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+        Err(err) => panic!("remove orthohelp cache failed: {err}"),
     }
     harness.cache_ir_path = None;
     harness.cache_ir_mtime = None;
@@ -75,6 +75,7 @@ fn run_with_cache(harness: &mut Harness) {
 
 #[when("I rerun cargo-orthohelp with cache for the fixture")]
 fn rerun_with_cache(harness: &mut Harness) {
+    // Ensure filesystem timestamp granularity distinguishes the cache file mtime.
     std::thread::sleep(Duration::from_secs(1));
     let output = run_orthohelp(
         harness,
@@ -113,6 +114,20 @@ fn output_contains_locale(harness: &mut Harness, locale: String) {
         .expect("read IR JSON");
 
     let json: Value = serde_json::from_str(&buffer).expect("parse IR JSON");
+    let ir_version = json
+        .get("ir_version")
+        .and_then(Value::as_str)
+        .expect("ir_version field present");
+    assert_eq!(
+        ir_version,
+        ortho_config::docs::ORTHO_DOCS_IR_VERSION,
+        "IR version should match schema"
+    );
+    let json_locale = json
+        .get("locale")
+        .and_then(Value::as_str)
+        .expect("locale field present");
+    assert_eq!(json_locale, locale);
     let about = json
         .get("about")
         .and_then(Value::as_str)
@@ -211,7 +226,7 @@ fn find_cached_ir(harness: &Harness) -> Option<Utf8PathBuf> {
         .join("target")
         .join("orthohelp");
     let dir = Dir::open_ambient_dir(&cache_root, ambient_authority()).ok()?;
-    let mut candidates = Vec::new();
+    let mut newest: Option<(SystemTime, Utf8PathBuf)> = None;
     for entry in dir.read_dir(".").ok()? {
         let entry = entry.ok()?;
         let file_name = entry.file_name().ok()?;
@@ -221,11 +236,17 @@ fn find_cached_ir(harness: &Harness) -> Option<Utf8PathBuf> {
         }
         let ir_path = cache_root.join(Utf8PathBuf::from(file_name)).join("ir.json");
         if ir_path.exists() {
-            candidates.push(ir_path);
+            let metadata = std::fs::metadata(ir_path.as_std_path()).ok()?;
+            let modified = metadata.modified().ok()?;
+            let replace = newest
+                .as_ref()
+                .map_or(true, |(best_time, _)| modified > *best_time);
+            if replace {
+                newest = Some((modified, ir_path));
+            }
         }
     }
-    candidates.sort();
-    candidates.pop()
+    newest.map(|(_, path)| path)
 }
 
 fn expected_about(locale: &str) -> &'static str {

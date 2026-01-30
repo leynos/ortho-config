@@ -49,8 +49,8 @@ of autonomous action, not quality criteria.
 
 - Scope: stop if implementation requires changes to more than 18 files or
   more than 1,200 net lines of code.
-- Interface: stop if a public API in `ortho_config` or `ortho_config_macros`
-  must change in a breaking way.
+- Interface: stop if a public API in `ortho_config` or
+  `ortho_config_macros` must change in a breaking way.
 - Dependencies: stop if more than three new external crates are required.
 - Iterations: stop if tests still fail after two fix attempts.
 - Ambiguity: stop if multiple valid interpretations of “per-locale IR JSON”
@@ -127,7 +127,7 @@ decisions to escalate, decisions on ambiguous requirements, and design choices.
 
 ## Outcomes & retrospective
 
-Summarise outcomes, gaps, and lessons learned at major milestones or at
+Summarize outcomes, gaps, and lessons learned at major milestones or at
 completion. Compare the result against the original purpose. Note what would be
 done differently next time.
 

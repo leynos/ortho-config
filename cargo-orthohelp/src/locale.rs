@@ -4,12 +4,11 @@ use std::io::Read;
 use std::str::FromStr;
 
 use camino::{Utf8Path, Utf8PathBuf};
-use cap_std::ambient_authority;
-use cap_std::fs_utf8::Dir;
 use ortho_config::{FluentLocalizer, FluentLocalizerError, LanguageIdentifier};
 
 use crate::cli::Args;
 use crate::error::OrthohelpError;
+use crate::fs_helpers::open_optional_dir;
 use crate::metadata::PackageSelection;
 
 /// Resolves the locales to generate based on CLI flags and package metadata.
@@ -57,7 +56,7 @@ pub fn load_consumer_resources(
     locale: &LanguageIdentifier,
 ) -> Result<Vec<String>, OrthohelpError> {
     let locale_dir = package_root.join("locales").join(locale.to_string());
-    let Some(dir) = open_optional_dir(&locale_dir)? else {
+    let Some(dir) = open_optional_dir(locale_dir.as_path())? else {
         return Ok(Vec::new());
     };
 
@@ -121,7 +120,7 @@ fn parse_locales(values: &[String]) -> Result<Vec<LanguageIdentifier>, Orthohelp
 
 fn discover_locale_dirs(package_root: &Utf8Path) -> Result<Vec<String>, OrthohelpError> {
     let locales_root = package_root.join("locales");
-    let Some(dir) = open_optional_dir(&locales_root)? else {
+    let Some(dir) = open_optional_dir(locales_root.as_path())? else {
         return Ok(Vec::new());
     };
 
@@ -183,17 +182,6 @@ fn build_localizer_with_fallback(
         Err(err) => Err(OrthohelpError::Message(format!(
             "failed to build localizer for {locale}: {err}"
         ))),
-    }
-}
-
-fn open_optional_dir(path: &Utf8Path) -> Result<Option<Dir>, OrthohelpError> {
-    match Dir::open_ambient_dir(path, ambient_authority()) {
-        Ok(dir) => Ok(Some(dir)),
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
-        Err(err) => Err(OrthohelpError::Io {
-            path: path.to_path_buf(),
-            source: err,
-        }),
     }
 }
 
