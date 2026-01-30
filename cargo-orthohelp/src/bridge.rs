@@ -188,9 +188,10 @@ fn write_bridge_main(config: &BridgeConfig, paths: &BridgePaths) -> Result<(), O
         }
     })?;
     let main_rs = src_dir.join("main.rs");
+    let main_rs_rel = Utf8PathBuf::from("main.rs");
     let mut file = dir
         .open_with(
-            &main_rs,
+            &main_rs_rel,
             OpenOptions::new().write(true).create(true).truncate(true),
         )
         .map_err(|io_err| OrthohelpError::Io {
