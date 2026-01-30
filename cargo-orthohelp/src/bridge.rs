@@ -187,18 +187,19 @@ fn write_bridge_main(config: &BridgeConfig, paths: &BridgePaths) -> Result<(), O
             source: io_err,
         }
     })?;
+    let main_rs = src_dir.join("main.rs");
     let mut file = dir
         .open_with(
-            "main.rs",
+            &main_rs,
             OpenOptions::new().write(true).create(true).truncate(true),
         )
         .map_err(|io_err| OrthohelpError::Io {
-            path: src_dir.join("main.rs"),
+            path: main_rs.clone(),
             source: io_err,
         })?;
     file.write_all(content.as_bytes())
         .map_err(|io_err| OrthohelpError::Io {
-            path: src_dir.join("main.rs"),
+            path: main_rs,
             source: io_err,
         })?;
     Ok(())
