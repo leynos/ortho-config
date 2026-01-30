@@ -270,10 +270,10 @@ fn check_cache_entry(
     let dir = Dir::open_ambient_dir(cache_root.as_path(), ambient_authority()).ok()?;
     let metadata = dir.metadata(&relative).ok()?;
     let modified = metadata.modified().ok()?;
-    let replace = newest
+    let should_replace = newest
         .as_ref()
         .map_or(true, |(best_time, _)| modified > *best_time);
-    if !replace {
+    if !should_replace {
         return None;
     }
 
