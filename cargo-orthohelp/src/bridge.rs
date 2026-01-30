@@ -61,8 +61,8 @@ pub fn load_or_build_ir(
     no_build: bool,
 ) -> Result<String, OrthohelpError> {
     if cache || no_build {
-        if let Some(cached) = read_cached_ir(paths) {
-            return cached;
+        if let Some(cached) = read_cached_ir(paths)? {
+            return Ok(cached);
         }
         if no_build {
             return Err(OrthohelpError::MissingCache(paths.ir_path.clone()));
@@ -79,65 +79,41 @@ pub fn load_or_build_ir(
     Ok(ir_json)
 }
 
-fn read_cached_ir(paths: &BridgePaths) -> Option<Result<String, OrthohelpError>> {
-    let dir = Dir::open_ambient_dir(&paths.bridge_dir, ambient_authority()).ok()?;
+fn read_cached_ir(paths: &BridgePaths) -> Result<Option<String>, OrthohelpError> {
+    let Some(dir) = open_optional_dir(&paths.bridge_dir)? else {
+        return Ok(None);
+    };
     let mut file = match dir.open("ir.json") {
         Ok(file) => file,
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return None,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Err(err) => {
-            return Some(Err(OrthohelpError::Io {
+            return Err(OrthohelpError::Io {
                 path: paths.ir_path.clone(),
                 source: err,
-            }));
+            });
         }
     };
 
     let mut buffer = String::new();
-    if let Err(err) = file.read_to_string(&mut buffer) {
-        return Some(Err(OrthohelpError::Io {
+    file.read_to_string(&mut buffer)
+        .map_err(|err| OrthohelpError::Io {
             path: paths.ir_path.clone(),
             source: err,
-        }));
-    }
+        })?;
 
-    Some(Ok(buffer))
+    Ok(Some(buffer))
 }
 
 fn ensure_bridge_layout(paths: &BridgePaths) -> Result<(), OrthohelpError> {
-    match Dir::open_ambient_dir(&paths.bridge_dir, ambient_authority()) {
-        Ok(dir) => {
-            dir.create_dir_all("src")
-                .map_err(|io_err| OrthohelpError::Io {
-                    path: paths.bridge_dir.clone(),
-                    source: io_err,
-                })?;
-            Ok(())
-        }
-        Err(open_err) if open_err.kind() == std::io::ErrorKind::NotFound => {
-            Dir::create_ambient_dir_all(&paths.bridge_dir, ambient_authority()).map_err(
-                |io_err| OrthohelpError::Io {
-                    path: paths.bridge_dir.clone(),
-                    source: io_err,
-                },
-            )?;
-            let dir = Dir::open_ambient_dir(&paths.bridge_dir, ambient_authority()).map_err(
-                |io_err| OrthohelpError::Io {
-                    path: paths.bridge_dir.clone(),
-                    source: io_err,
-                },
-            )?;
-            dir.create_dir_all("src")
-                .map_err(|io_err| OrthohelpError::Io {
-                    path: paths.bridge_dir.clone(),
-                    source: io_err,
-                })?;
-            Ok(())
-        }
-        Err(open_err) => Err(OrthohelpError::Io {
+    Dir::create_ambient_dir_all(&paths.bridge_dir, ambient_authority()).map_err(|io_err| {
+        OrthohelpError::Io {
             path: paths.bridge_dir.clone(),
-            source: open_err,
-        }),
-    }
+            source: io_err,
+        }
+    })?;
+    let dir = open_bridge_dir(paths)?;
+    ensure_bridge_src(&dir, paths)?;
+    Ok(())
 }
 
 fn write_bridge_manifest(config: &BridgeConfig, paths: &BridgePaths) -> Result<(), OrthohelpError> {
@@ -175,21 +151,7 @@ fn write_bridge_manifest(config: &BridgeConfig, paths: &BridgePaths) -> Result<(
         }
     }
 
-    let dir = Dir::open_ambient_dir(&paths.bridge_dir, ambient_authority()).map_err(|io_err| {
-        OrthohelpError::Io {
-            path: paths.bridge_dir.clone(),
-            source: io_err,
-        }
-    })?;
-    let mut file = dir
-        .open_with(
-            "Cargo.toml",
-            OpenOptions::new().write(true).create(true).truncate(true),
-        )
-        .map_err(|io_err| OrthohelpError::Io {
-            path: paths.manifest_path.clone(),
-            source: io_err,
-        })?;
+    let mut file = open_bridge_file(paths, "Cargo.toml", &paths.manifest_path)?;
     file.write_all(manifest.as_bytes())
         .map_err(|io_err| OrthohelpError::Io {
             path: paths.manifest_path.clone(),
@@ -281,25 +243,55 @@ fn run_bridge(paths: &BridgePaths) -> Result<String, OrthohelpError> {
 }
 
 fn write_ir_cache(paths: &BridgePaths, json: &str) -> Result<(), OrthohelpError> {
-    let dir = Dir::open_ambient_dir(&paths.bridge_dir, ambient_authority()).map_err(|io_err| {
-        OrthohelpError::Io {
-            path: paths.bridge_dir.clone(),
-            source: io_err,
-        }
-    })?;
-    let mut file = dir
-        .open_with(
-            "ir.json",
-            OpenOptions::new().write(true).create(true).truncate(true),
-        )
-        .map_err(|io_err| OrthohelpError::Io {
-            path: paths.ir_path.clone(),
-            source: io_err,
-        })?;
+    let mut file = open_bridge_file(paths, "ir.json", &paths.ir_path)?;
     file.write_all(json.as_bytes())
         .map_err(|io_err| OrthohelpError::Io {
             path: paths.ir_path.clone(),
             source: io_err,
         })?;
     Ok(())
+}
+
+fn open_bridge_dir(paths: &BridgePaths) -> Result<Dir, OrthohelpError> {
+    Dir::open_ambient_dir(&paths.bridge_dir, ambient_authority()).map_err(|io_err| {
+        OrthohelpError::Io {
+            path: paths.bridge_dir.clone(),
+            source: io_err,
+        }
+    })
+}
+
+fn ensure_bridge_src(dir: &Dir, paths: &BridgePaths) -> Result<(), OrthohelpError> {
+    dir.create_dir_all("src")
+        .map_err(|io_err| OrthohelpError::Io {
+            path: paths.bridge_dir.clone(),
+            source: io_err,
+        })
+}
+
+fn open_bridge_file(
+    paths: &BridgePaths,
+    relative: &str,
+    path: &Utf8PathBuf,
+) -> Result<cap_std::fs_utf8::File, OrthohelpError> {
+    let dir = open_bridge_dir(paths)?;
+    dir.open_with(
+        relative,
+        OpenOptions::new().write(true).create(true).truncate(true),
+    )
+    .map_err(|io_err| OrthohelpError::Io {
+        path: path.clone(),
+        source: io_err,
+    })
+}
+
+fn open_optional_dir(path: &Utf8PathBuf) -> Result<Option<Dir>, OrthohelpError> {
+    match Dir::open_ambient_dir(path, ambient_authority()) {
+        Ok(dir) => Ok(Some(dir)),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(err) => Err(OrthohelpError::Io {
+            path: path.clone(),
+            source: err,
+        }),
+    }
 }

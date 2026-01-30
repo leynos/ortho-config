@@ -10,11 +10,14 @@ use rstest::fixture;
 use rstest_bdd_macros::{given, then, when};
 use serde_json::Value;
 use tempfile::TempDir;
+use std::time::{Duration, SystemTime};
 
 struct Harness {
     workspace_root: Utf8PathBuf,
     out_dir: TempDir,
     last_output: Option<std::process::Output>,
+    cache_ir_path: Option<Utf8PathBuf>,
+    cache_ir_mtime: Option<SystemTime>,
 }
 
 #[fixture]
@@ -31,6 +34,8 @@ fn harness() -> Harness {
         workspace_root,
         out_dir: tempfile::tempdir().expect("create temp output dir"),
         last_output: None,
+        cache_ir_path: None,
+        cache_ir_mtime: None,
     }
 }
 
@@ -44,8 +49,33 @@ fn temp_output_dir(harness: &mut Harness) {
     assert_eq!(entries.count(), 0, "output dir should start empty");
 }
 
+#[given("the orthohelp cache is empty")]
+fn cache_is_empty(harness: &mut Harness) {
+    let cache_root = harness
+        .workspace_root
+        .join("target")
+        .join("orthohelp");
+    if cache_root.exists() {
+        std::fs::remove_dir_all(&cache_root).expect("remove orthohelp cache");
+    }
+    harness.cache_ir_path = None;
+    harness.cache_ir_mtime = None;
+}
+
 #[when("I run cargo-orthohelp with cache for the fixture")]
 fn run_with_cache(harness: &mut Harness) {
+    let output = run_orthohelp(
+        harness,
+        &["--cache", "--package", "orthohelp_fixture", "--locale", "en-US", "--locale", "fr-FR"],
+    );
+    assert!(output.status.success(), "cargo-orthohelp should succeed");
+    harness.last_output = Some(output);
+    record_cache_state(harness);
+}
+
+#[when("I rerun cargo-orthohelp with cache for the fixture")]
+fn rerun_with_cache(harness: &mut Harness) {
+    std::thread::sleep(Duration::from_secs(1));
     let output = run_orthohelp(
         harness,
         &["--cache", "--package", "orthohelp_fixture", "--locale", "en-US", "--locale", "fr-FR"],
@@ -60,12 +90,16 @@ fn run_with_no_build(harness: &mut Harness) {
         harness,
         &["--no-build", "--package", "orthohelp_fixture", "--locale", "en-US"],
     );
-    assert!(output.status.success(), "cargo-orthohelp should succeed");
     harness.last_output = Some(output);
 }
 
-#[then("the output contains localised IR JSON for {locale}")]
+#[then("the output contains localized IR JSON for {locale}")]
 fn output_contains_locale(harness: &mut Harness, locale: String) {
+    let output = harness
+        .last_output
+        .as_ref()
+        .expect("command output should be captured");
+    assert!(output.status.success(), "cargo-orthohelp should succeed");
     let out_root = Utf8PathBuf::from_path_buf(harness.out_dir.path().to_path_buf())
         .expect("output dir is UTF-8");
     let dir = Dir::open_ambient_dir(&out_root, ambient_authority())
@@ -93,7 +127,52 @@ fn output_contains_locale(harness: &mut Harness, locale: String) {
         .and_then(Value::as_str)
         .expect("field help present");
     assert_eq!(help, expected_help(&locale));
+}
 
+#[then("the cached IR is reused")]
+fn cached_ir_reused(harness: &mut Harness) {
+    let cache_path = harness
+        .cache_ir_path
+        .as_ref()
+        .expect("cached IR path should be recorded");
+    let previous = harness
+        .cache_ir_mtime
+        .expect("cached IR timestamp should be recorded");
+    let metadata = std::fs::metadata(cache_path.as_std_path())
+        .expect("cached IR metadata should be available");
+    let current = metadata.modified().expect("cached IR mtime should exist");
+    assert_eq!(previous, current, "cached IR should not be rewritten");
+}
+
+#[then("the cached IR deserializes into the schema")]
+fn cached_ir_deserializes(harness: &mut Harness) {
+    let cache_path = harness
+        .cache_ir_path
+        .as_ref()
+        .expect("cached IR path should be recorded");
+    let json = std::fs::read_to_string(cache_path.as_std_path())
+        .expect("cached IR should be readable");
+    let metadata: ortho_config::docs::DocMetadata =
+        serde_json::from_str(&json).expect("cached IR should deserialize");
+    assert_eq!(
+        metadata.ir_version,
+        ortho_config::docs::ORTHO_DOCS_IR_VERSION,
+        "cached IR should match the current schema version"
+    );
+}
+
+#[then("the command fails due to missing cache")]
+fn command_fails_due_to_missing_cache(harness: &mut Harness) {
+    let output = harness
+        .last_output
+        .as_ref()
+        .expect("command output should be captured");
+    assert!(!output.status.success(), "cargo-orthohelp should fail");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("cached IR missing"),
+        "expected missing cache error, got: {stderr}"
+    );
 }
 
 fn run_orthohelp(harness: &Harness, args: &[&str]) -> std::process::Output {
@@ -115,6 +194,38 @@ fn cargo_orthohelp_exe() -> Utf8PathBuf {
         return Utf8PathBuf::from(path);
     }
     panic!("cargo-orthohelp binary path not found in environment");
+}
+
+fn record_cache_state(harness: &mut Harness) {
+    let cache_path = find_cached_ir(harness).expect("cached IR should exist");
+    let metadata = std::fs::metadata(cache_path.as_std_path())
+        .expect("cached IR metadata should be available");
+    let modified = metadata.modified().expect("cached IR mtime should exist");
+    harness.cache_ir_path = Some(cache_path);
+    harness.cache_ir_mtime = Some(modified);
+}
+
+fn find_cached_ir(harness: &Harness) -> Option<Utf8PathBuf> {
+    let cache_root = harness
+        .workspace_root
+        .join("target")
+        .join("orthohelp");
+    let dir = Dir::open_ambient_dir(&cache_root, ambient_authority()).ok()?;
+    let mut candidates = Vec::new();
+    for entry in dir.read_dir(".").ok()? {
+        let entry = entry.ok()?;
+        let file_name = entry.file_name().ok()?;
+        let file_type = entry.file_type().ok()?;
+        if !file_type.is_dir() {
+            continue;
+        }
+        let ir_path = cache_root.join(Utf8PathBuf::from(file_name)).join("ir.json");
+        if ir_path.exists() {
+            candidates.push(ir_path);
+        }
+    }
+    candidates.sort();
+    candidates.pop()
 }
 
 fn expected_about(locale: &str) -> &'static str {

@@ -12,6 +12,9 @@ pub enum OrthohelpError {
     #[error("failed to parse IR JSON: {0}")]
     IrJson(#[from] serde_json::Error),
 
+    #[error("failed to parse package metadata JSON: {0}")]
+    MetadataJson(serde_json::Error),
+
     #[error("failed to parse locale '{value}': {message}")]
     InvalidLocale { value: String, message: String },
 

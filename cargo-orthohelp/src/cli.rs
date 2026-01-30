@@ -6,7 +6,7 @@ use clap::{Args as ClapArgs, Parser, ValueEnum};
 /// Output formats supported by `cargo-orthohelp`.
 #[derive(Debug, Clone, Copy, ValueEnum)]
 pub enum OutputFormat {
-    /// Emit the localised IR JSON output.
+    /// Emit the localized IR JSON output.
     Ir,
     /// Emit Unix roff man pages (not yet implemented).
     Man,
@@ -30,7 +30,7 @@ impl OutputFormat {
 /// Parsed CLI arguments for `cargo-orthohelp`.
 #[derive(Debug, Parser)]
 #[command(name = "cargo-orthohelp")]
-#[command(about = "Generate localised OrthoConfig documentation IR")]
+#[command(about = "Generate localized OrthoConfig documentation IR")]
 #[command(version)]
 pub struct Args {
     /// Cargo package to document.
@@ -40,8 +40,8 @@ pub struct Args {
     #[arg(long)]
     pub bin: Option<String>,
     /// Select the package's library target.
-    #[arg(long)]
-    pub lib: bool,
+    #[arg(long = "lib")]
+    pub is_lib: bool,
     /// Root configuration type (for example, `my_crate::Config`).
     #[arg(long, value_name = "path::Type")]
     pub root_type: Option<String>,
@@ -49,8 +49,8 @@ pub struct Args {
     #[arg(long, value_name = "locale")]
     pub locale: Vec<String>,
     /// Generate for every locale declared in package metadata.
-    #[arg(long)]
-    pub all_locales: bool,
+    #[arg(long = "all-locales")]
+    pub should_use_all_locales: bool,
     /// Output directory for generated artefacts.
     #[arg(long, value_name = "path")]
     pub out_dir: Option<Utf8PathBuf>,
@@ -66,9 +66,9 @@ pub struct Args {
 #[derive(Debug, ClapArgs, Clone, Copy)]
 pub struct CacheArgs {
     /// Cache and reuse the bridge IR when possible.
-    #[arg(long)]
-    pub cache: bool,
+    #[arg(long = "cache")]
+    pub should_cache: bool,
     /// Skip building the bridge and rely on cached IR.
-    #[arg(long)]
-    pub no_build: bool,
+    #[arg(long = "no-build")]
+    pub should_skip_build: bool,
 }

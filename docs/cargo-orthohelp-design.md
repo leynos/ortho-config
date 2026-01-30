@@ -482,13 +482,13 @@ message.
 4. Run the bridge and capture the IR.
 5. For each locale, instantiate `FluentLocalizer` and resolve IDs to strings.
 6. Emit the requested outputs into `--out-dir`.
-7. Summarize artefacts and exit non-zero on hard errors.
+7. Summarise artefacts and exit non-zero on hard errors.
 
 ### 6.3 Caching
 
-Cache IR at `target/orthohelp/<hash>/ir.json` keyed by the crate fingerprint
-plus macro and tool versions. `--cache` reuses it when valid; `--no-build`
-trusts the existing IR.
+Cache IR at `target/orthohelp/<hash>/ir.json` keyed by the crate fingerprint,
+macro version, tool version, and the workspace `Cargo.lock` hash (when
+present). `--cache` reuses it when valid; `--no-build` trusts the existing IR.
 
 Crate fingerprints hash `Cargo.toml`, `build.rs` (when present), `src/`, and
 `locales/` so changes to configuration schemas or translations invalidate the

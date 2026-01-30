@@ -39,17 +39,24 @@ fn run() -> Result<(), OrthohelpError> {
     let out_dir = resolve_out_dir(args.out_dir.clone(), &selection);
 
     let fingerprint = cache::fingerprint_package(&selection.package_root)?;
-    let cache_key = CacheKey::new(
+    let lockfile_hash = cache::lockfile_fingerprint(&metadata.workspace_root)?;
+    let cache_key = CacheKey {
         fingerprint,
-        selection.root_type.clone(),
-        env!("CARGO_PKG_VERSION").to_owned(),
-        ORTHO_DOCS_IR_VERSION.to_owned(),
-    );
+        root_type: selection.root_type.clone(),
+        tool_version: env!("CARGO_PKG_VERSION").to_owned(),
+        ir_version: ORTHO_DOCS_IR_VERSION.to_owned(),
+        lockfile_hash,
+    };
 
     let paths = bridge::prepare_paths(&selection, &cache_key);
     let config = build_bridge_config(&selection);
 
-    let ir_json = bridge::load_or_build_ir(&config, &paths, args.cache.cache, args.cache.no_build)?;
+    let ir_json = bridge::load_or_build_ir(
+        &config,
+        &paths,
+        args.cache.should_cache,
+        args.cache.should_skip_build,
+    )?;
     let doc_metadata: DocMetadata = serde_json::from_str(&ir_json)?;
 
     for locale in locales {

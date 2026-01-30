@@ -1,4 +1,4 @@
-//! Localised IR structures for `cargo-orthohelp`.
+//! Localized IR structures for `cargo-orthohelp`.
 
 use ortho_config::{LanguageIdentifier, Localizer};
 use serde::Serialize;
@@ -9,7 +9,7 @@ use crate::schema::{
     ValueType, WindowsMetadata,
 };
 
-/// Localised documentation metadata resolved for a single locale.
+/// Localized documentation metadata resolved for a single locale.
 #[derive(Debug, Clone, Serialize)]
 pub struct LocalizedDocMetadata {
     pub ir_version: String,
@@ -35,7 +35,7 @@ pub struct LocalizedSectionsMetadata {
     pub notes: Vec<LocalizedNote>,
 }
 
-/// Localised heading labels for standard sections.
+/// Localized heading labels for standard sections.
 #[derive(Debug, Clone, Serialize)]
 pub struct LocalizedHeadings {
     pub name: String,
@@ -74,7 +74,7 @@ pub struct LocalizedDeprecation {
     pub note: String,
 }
 
-/// Localised configuration discovery metadata.
+/// Localized configuration discovery metadata.
 #[derive(Debug, Clone, Serialize)]
 pub struct LocalizedConfigDiscoveryMeta {
     pub formats: Vec<ConfigFormat>,
@@ -84,21 +84,21 @@ pub struct LocalizedConfigDiscoveryMeta {
     pub xdg_compliant: bool,
 }
 
-/// Localised path pattern metadata.
+/// Localized path pattern metadata.
 #[derive(Debug, Clone, Serialize)]
 pub struct LocalizedPathPattern {
     pub pattern: String,
     pub note: Option<String>,
 }
 
-/// Localised source precedence metadata.
+/// Localized source precedence metadata.
 #[derive(Debug, Clone, Serialize)]
 pub struct LocalizedPrecedenceMeta {
     pub order: Vec<SourceKind>,
     pub rationale: Option<String>,
 }
 
-/// Localised documentation example snippet.
+/// Localized documentation example snippet.
 #[derive(Debug, Clone, Serialize)]
 pub struct LocalizedExample {
     pub title: Option<String>,
@@ -106,20 +106,20 @@ pub struct LocalizedExample {
     pub body: Option<String>,
 }
 
-/// Localised link metadata.
+/// Localized link metadata.
 #[derive(Debug, Clone, Serialize)]
 pub struct LocalizedLink {
     pub text: Option<String>,
     pub uri: String,
 }
 
-/// Localised note metadata.
+/// Localized note metadata.
 #[derive(Debug, Clone, Serialize)]
 pub struct LocalizedNote {
     pub text: String,
 }
 
-/// Resolves Fluent IDs in `DocMetadata` into localised strings.
+/// Resolves Fluent IDs in `DocMetadata` into localized strings.
 pub fn localize_doc(
     metadata: &DocMetadata,
     locale: &LanguageIdentifier,

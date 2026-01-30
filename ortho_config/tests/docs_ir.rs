@@ -307,6 +307,17 @@ fn test_json_serialization(docs_metadata: DocMetadata) -> Result<()> {
     Ok(())
 }
 
+#[rstest]
+fn test_json_round_trip(docs_metadata: DocMetadata) -> Result<()> {
+    let json = serde_json::to_string_pretty(&docs_metadata)?;
+    let decoded: DocMetadata = serde_json::from_str(&json)?;
+    ensure!(
+        decoded == docs_metadata,
+        "expected IR JSON round-trip to preserve metadata"
+    );
+    Ok(())
+}
+
 /// Tests that `#[serde(default)]` without `#[ortho_config(default)]` resolves to non-required.
 #[rstest]
 fn test_field_serde_default_only(docs_metadata: DocMetadata) -> Result<()> {

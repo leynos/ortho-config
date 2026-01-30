@@ -21,7 +21,7 @@ pub fn resolve_locales(
         return parse_locales(&args.locale);
     }
 
-    if args.all_locales {
+    if args.should_use_all_locales {
         let configured = selection.locales.clone().unwrap_or_default();
         if !configured.is_empty() {
             return parse_locales(&configured);
@@ -48,24 +48,7 @@ pub fn build_localizer(
     } else {
         base_builder
     };
-
-    match builder.try_build() {
-        Ok(localizer) => Ok(localizer),
-        Err(FluentLocalizerError::UnsupportedLocale { .. }) if has_resources => {
-            FluentLocalizer::builder(locale.clone())
-                .disable_defaults()
-                .with_consumer_resources(leaked)
-                .try_build()
-                .map_err(|err| {
-                    OrthohelpError::Message(format!(
-                        "failed to build localizer for {locale}: {err}"
-                    ))
-                })
-        }
-        Err(err) => Err(OrthohelpError::Message(format!(
-            "failed to build localizer for {locale}: {err}"
-        ))),
-    }
+    build_localizer_with_fallback(locale, leaked, has_resources, builder)
 }
 
 /// Loads Fluent resources from `locales/<locale>` in the target package.
@@ -74,15 +57,8 @@ pub fn load_consumer_resources(
     locale: &LanguageIdentifier,
 ) -> Result<Vec<String>, OrthohelpError> {
     let locale_dir = package_root.join("locales").join(locale.to_string());
-    let dir = match Dir::open_ambient_dir(&locale_dir, ambient_authority()) {
-        Ok(dir) => dir,
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
-        Err(err) => {
-            return Err(OrthohelpError::Io {
-                path: locale_dir,
-                source: err,
-            });
-        }
+    let Some(dir) = open_optional_dir(&locale_dir)? else {
+        return Ok(Vec::new());
     };
 
     let mut files = Vec::new();
@@ -145,15 +121,8 @@ fn parse_locales(values: &[String]) -> Result<Vec<LanguageIdentifier>, Orthohelp
 
 fn discover_locale_dirs(package_root: &Utf8Path) -> Result<Vec<String>, OrthohelpError> {
     let locales_root = package_root.join("locales");
-    let dir = match Dir::open_ambient_dir(&locales_root, ambient_authority()) {
-        Ok(dir) => dir,
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
-        Err(err) => {
-            return Err(OrthohelpError::Io {
-                path: locales_root,
-                source: err,
-            });
-        }
+    let Some(dir) = open_optional_dir(&locales_root)? else {
+        return Ok(Vec::new());
     };
 
     let mut locales = Vec::new();
@@ -184,10 +153,48 @@ fn discover_locale_dirs(package_root: &Utf8Path) -> Result<Vec<String>, Orthohel
 }
 
 fn leak_resources(resources: Vec<String>) -> Vec<&'static str> {
+    // Fluent requires resource strings with a `'static` lifetime; `cargo-orthohelp`
+    // is a short-lived CLI, so leaking these allocations is acceptable here.
     resources
         .into_iter()
         .map(|resource| Box::leak(resource.into_boxed_str()) as &'static str)
         .collect()
+}
+
+fn build_localizer_with_fallback(
+    locale: &LanguageIdentifier,
+    leaked: Vec<&'static str>,
+    has_resources: bool,
+    builder: ortho_config::FluentLocalizerBuilder,
+) -> Result<FluentLocalizer, OrthohelpError> {
+    match builder.try_build() {
+        Ok(localizer) => Ok(localizer),
+        Err(FluentLocalizerError::UnsupportedLocale { .. }) if has_resources => {
+            FluentLocalizer::builder(locale.clone())
+                .disable_defaults()
+                .with_consumer_resources(leaked)
+                .try_build()
+                .map_err(|err| {
+                    OrthohelpError::Message(format!(
+                        "failed to build localizer for {locale}: {err}"
+                    ))
+                })
+        }
+        Err(err) => Err(OrthohelpError::Message(format!(
+            "failed to build localizer for {locale}: {err}"
+        ))),
+    }
+}
+
+fn open_optional_dir(path: &Utf8Path) -> Result<Option<Dir>, OrthohelpError> {
+    match Dir::open_ambient_dir(path, ambient_authority()) {
+        Ok(dir) => Ok(Some(dir)),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(err) => Err(OrthohelpError::Io {
+            path: path.to_path_buf(),
+            source: err,
+        }),
+    }
 }
 
 #[cfg(test)]
@@ -203,14 +210,14 @@ mod tests {
         let args = Args {
             package: None,
             bin: None,
-            lib: false,
+            is_lib: false,
             root_type: None,
             locale: Vec::new(),
-            all_locales: false,
+            should_use_all_locales: false,
             out_dir: None,
             cache: crate::cli::CacheArgs {
-                cache: false,
-                no_build: false,
+                should_cache: false,
+                should_skip_build: false,
             },
             format: crate::cli::OutputFormat::Ir,
         };
@@ -237,14 +244,14 @@ mod tests {
         let args = Args {
             package: None,
             bin: None,
-            lib: false,
+            is_lib: false,
             root_type: None,
             locale: Vec::new(),
-            all_locales: true,
+            should_use_all_locales: true,
             out_dir: None,
             cache: crate::cli::CacheArgs {
-                cache: false,
-                no_build: false,
+                should_cache: false,
+                should_skip_build: false,
             },
             format: crate::cli::OutputFormat::Ir,
         };

@@ -1,7 +1,7 @@
 # Build cargo-orthohelp bridge pipeline
 
 This ExecPlan is a living document. The sections `Constraints`, `Tolerances`,
-`Risks`, `Progress`, `Surprizes & Discoveries`, `Decision Log`, and
+`Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`, and
 `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
 Status: COMPLETED
@@ -12,10 +12,11 @@ standard execplans format.
 ## Purpose / big picture
 
 Deliver the `cargo-orthohelp` bridge pipeline described in
-`docs/cargo-orthohelp-design.md` so a consumer can generate per-locale IR JSON
-from a real crate without embedding tooling in the application binary. Success
-is observable when a fixture crate produces locale-specific IR JSON in
-`--out-dir` and the `--cache` and `--no-build` modes behave as documented.
+`docs/cargo-orthohelp-design.md` so a consumer can generate per-locale
+intermediate representation (IR) JSON from a real crate without embedding
+tooling in the application binary. Success is observable when a fixture crate
+produces locale-specific IR JSON in `--out-dir` and the `--cache` and
+`--no-build` modes behave as documented.
 
 ## Constraints
 
@@ -61,7 +62,7 @@ Known uncertainties that might affect the plan. Identify these upfront and
 update as work proceeds. Each risk should note severity, likelihood, and
 mitigation or contingency.
 
-- Risk: The design doc does not define the exact schema for the localised IR
+- Risk: The design doc does not define the exact schema for the localized IR
   JSON output, which could lead to incompatible tooling later. Severity: high.
   Likelihood: medium. Mitigation: define the output schema and file naming in
   `docs/cargo-orthohelp-design.md` before coding.
@@ -88,7 +89,7 @@ actual current state of the work.
 - [x] (2026-01-26 00:10Z) Plan approved; implementation started.
 - [x] (2026-01-26 00:30Z) Survey existing crate layout, docs, and tests for
   cargo-orthohelp hooks.
-- [x] (2026-01-26 00:40Z) Define the localised IR JSON schema and file naming
+- [x] (2026-01-26 00:40Z) Define the localized IR JSON schema and file naming
   in the design doc.
 - [x] (2026-01-26 02:05Z) Implement cargo-orthohelp metadata discovery, bridge
   build, cache, and locale resolution.
@@ -99,7 +100,7 @@ actual current state of the work.
 - [x] (2026-01-26 02:55Z) Run `make check-fmt`, `make lint`, and `make test`
   (plus doc checks) with logged output.
 
-## Surprizes & Discoveries
+## Surprises & Discoveries
 
 Unexpected findings during implementation that were not anticipated as risks.
 Document with evidence so future work benefits.
@@ -114,7 +115,7 @@ Document with evidence so future work benefits.
 Record every significant decision made while working on the plan. Include
 decisions to escalate, decisions on ambiguous requirements, and design choices.
 
-- Decision: Localised IR output mirrors the base IR but resolves IDs to text,
+- Decision: Localized IR output mirrors the base IR but resolves IDs to text,
   includes `locale`, and emits JSON under `<out>/ir/<locale>.json`. Rationale:
   Keeps generators simple and avoids mixing identifier resolution into later
   stages. Date/Author: 2026-01-26 (assistant).
@@ -126,7 +127,7 @@ decisions to escalate, decisions on ambiguous requirements, and design choices.
 
 ## Outcomes & retrospective
 
-Summarize outcomes, gaps, and lessons learned at major milestones or at
+Summarise outcomes, gaps, and lessons learned at major milestones or at
 completion. Compare the result against the original purpose. Note what would be
 done differently next time.
 
@@ -139,7 +140,7 @@ done differently next time.
 
 The IR schema and pipeline requirements live in
 `docs/cargo-orthohelp-design.md`. The IR types and `OrthoConfigDocs` trait are
-already implemented in `ortho_config/src/docs`, and localisation helpers live
+already implemented in `ortho_config/src/docs`, and localization helpers live
 in `ortho_config/src/localizer`. The roadmap entry for this work is in
 `docs/roadmap.md` under 4.1.1. There is currently no `cargo-orthohelp` crate in
 this workspace, so the pipeline must be introduced as a new binary crate and
@@ -157,17 +158,17 @@ need environment mutation, use the `test_helpers::env` lock/guards described in
 ## Plan of work
 
 Stage A: Review the design doc pipeline sections, existing IR types, and the
-localiser API. Decide how the tool will emit per-locale IR JSON (schema and
-file naming) and record that decision in `docs/cargo-orthohelp-design.md`
-before writing code.
+localizer application programming interface (API). Decide how the tool will
+emit per-locale IR JSON (schema and file naming) and record that decision in
+`docs/cargo-orthohelp-design.md` before writing code.
 
-Stage B: Scaffold the new `cargo-orthohelp` crate and CLI parser. Add a new
-workspace member (package name `cargo-orthohelp`) with a `main.rs` that parses
-the CLI flags described in section 6.1 of the design doc. Use a small internal
-module layout (for example `cli`, `metadata`, `bridge`, `cache`, `locale`,
-`output`) with module-level `//!` comments. Add or update workspace
-`[workspace.dependencies]` entries only as needed (likely `cargo_metadata`,
-`serde_json`, `camino`, `cap_std`, and a hashing crate).
+Stage B: Scaffold the new `cargo-orthohelp` crate and command-line interface
+(CLI) parser. Add a new workspace member (package name `cargo-orthohelp`) with
+a `main.rs` that parses the CLI flags described in section 6.1 of the design
+doc. Use a small internal module layout (for example `cli`, `metadata`,
+`bridge`, `cache`, `locale`, `output`) with module-level `//!` comments. Add or
+update workspace `[workspace.dependencies]` entries only as needed (likely
+`cargo_metadata`, `serde_json`, `camino`, `cap_std`, and a hashing crate).
 
 Stage C: Implement the bridge pipeline.
 
@@ -205,7 +206,7 @@ outputs align with the acceptance criteria.
 
 ## Concrete steps
 
-1. Inspect existing IR and localiser modules and identify reuse points:
+1. Inspect existing IR and localizer modules and identify reuse points:
 
    - `rg -n "OrthoConfigDocs" ortho_config/src`
    - `rg -n "FluentLocalizer" ortho_config/src`

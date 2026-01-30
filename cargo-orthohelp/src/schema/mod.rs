@@ -300,3 +300,6 @@ pub struct Note {
     /// Fluent ID for the note content.
     pub text_id: String,
 }
+
+#[cfg(test)]
+mod tests;

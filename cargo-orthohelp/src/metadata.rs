@@ -54,7 +54,7 @@ pub fn select_package(
     metadata: &Metadata,
     args: &Args,
 ) -> Result<PackageSelection, OrthohelpError> {
-    if args.lib && args.bin.is_some() {
+    if args.is_lib && args.bin.is_some() {
         return Err(OrthohelpError::Message(
             "cannot use --lib and --bin together".to_owned(),
         ));
@@ -114,7 +114,7 @@ fn parse_ortho_config_metadata(package: &Package) -> Result<OrthoConfigMetadata,
         return Ok(OrthoConfigMetadata::default());
     };
 
-    serde_json::from_value(value.clone()).map_err(OrthohelpError::IrJson)
+    serde_json::from_value(value.clone()).map_err(OrthohelpError::MetadataJson)
 }
 
 fn ensure_library_target(package: &Package) -> Result<(), OrthohelpError> {

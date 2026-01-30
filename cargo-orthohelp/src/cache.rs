@@ -11,28 +11,14 @@ use crate::error::OrthohelpError;
 /// Cache key inputs for the bridge IR.
 #[derive(Debug, Clone)]
 pub struct CacheKey {
-    fingerprint: String,
-    root_type: String,
-    tool_version: String,
-    ir_version: String,
+    pub(crate) fingerprint: String,
+    pub(crate) root_type: String,
+    pub(crate) tool_version: String,
+    pub(crate) ir_version: String,
+    pub(crate) lockfile_hash: Option<String>,
 }
 
 impl CacheKey {
-    /// Creates a new cache key input set.
-    pub const fn new(
-        fingerprint: String,
-        root_type: String,
-        tool_version: String,
-        ir_version: String,
-    ) -> Self {
-        Self {
-            fingerprint,
-            root_type,
-            tool_version,
-            ir_version,
-        }
-    }
-
     /// Hashes the cache inputs into a stable identifier.
     pub fn hash(&self) -> String {
         let mut hasher = Sha256::new();
@@ -40,8 +26,42 @@ impl CacheKey {
         hasher.update(self.root_type.as_bytes());
         hasher.update(self.tool_version.as_bytes());
         hasher.update(self.ir_version.as_bytes());
+        hasher.update(b"lockfile:");
+        match &self.lockfile_hash {
+            Some(hash) => hasher.update(hash.as_bytes()),
+            None => hasher.update(b"none"),
+        }
         format!("{:x}", hasher.finalize())
     }
+}
+
+/// Computes a hash of the workspace `Cargo.lock`, if present.
+pub fn lockfile_fingerprint(workspace_root: &Utf8Path) -> Result<Option<String>, OrthohelpError> {
+    let dir = Dir::open_ambient_dir(workspace_root, ambient_authority()).map_err(|err| {
+        OrthohelpError::Io {
+            path: workspace_root.to_path_buf(),
+            source: err,
+        }
+    })?;
+    let mut file = match dir.open("Cargo.lock") {
+        Ok(file) => file,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(err) => {
+            return Err(OrthohelpError::Io {
+                path: workspace_root.join("Cargo.lock"),
+                source: err,
+            });
+        }
+    };
+    let mut buffer = Vec::new();
+    file.read_to_end(&mut buffer)
+        .map_err(|err| OrthohelpError::Io {
+            path: workspace_root.join("Cargo.lock"),
+            source: err,
+        })?;
+    let mut hasher = Sha256::new();
+    hasher.update(&buffer);
+    Ok(Some(format!("{:x}", hasher.finalize())))
 }
 
 /// Computes a fingerprint over the package inputs that influence the IR.
@@ -106,18 +126,10 @@ fn hash_directory_if_present(
     path: &Utf8Path,
     hasher: &mut Sha256,
 ) -> Result<(), OrthohelpError> {
-    let subdir = match dir.open_dir(path) {
-        Ok(subdir) => subdir,
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(()),
-        Err(err) => {
-            return Err(OrthohelpError::Io {
-                path: path.to_path_buf(),
-                source: err,
-            });
-        }
-    };
-
-    hash_directory_recursive(&subdir, path, hasher)
+    if let Some(subdir) = try_open_dir(dir, path)? {
+        hash_directory_recursive(&subdir, path, hasher)?;
+    }
+    Ok(())
 }
 
 fn hash_directory_recursive(
@@ -164,6 +176,17 @@ fn hash_directory_recursive(
     Ok(())
 }
 
+fn try_open_dir(dir: &Dir, path: &Utf8Path) -> Result<Option<Dir>, OrthohelpError> {
+    match dir.open_dir(path) {
+        Ok(subdir) => Ok(Some(subdir)),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(err) => Err(OrthohelpError::Io {
+            path: path.to_path_buf(),
+            source: err,
+        }),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     //! Tests for cache fingerprinting.
@@ -181,11 +204,11 @@ mod tests {
         let dir = Dir::open_ambient_dir(&root, ambient_authority()).expect("open temp dir");
         dir.create_dir_all("src").expect("create src directory");
 
-        write_file(&dir, "Cargo.toml", "[package]\\nname = \"demo\"\\n");
-        write_file(&dir, "src/lib.rs", "pub fn demo() -> u32 { 1 }\\n");
+        write_file(&dir, "Cargo.toml", "[package]\nname = \"demo\"\n");
+        write_file(&dir, "src/lib.rs", "pub fn demo() -> u32 { 1 }\n");
 
         let first = fingerprint_package(&root).expect("fingerprint");
-        write_file(&dir, "src/lib.rs", "pub fn demo() -> u32 { 2 }\\n");
+        write_file(&dir, "src/lib.rs", "pub fn demo() -> u32 { 2 }\n");
         let second = fingerprint_package(&root).expect("fingerprint after update");
 
         assert_ne!(first, second, "fingerprint should change when files change");

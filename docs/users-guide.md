@@ -1082,8 +1082,8 @@ loading behaviour.
 
 `cargo-orthohelp` compiles a tiny bridge binary that calls
 `OrthoConfigDocs::get_doc_metadata()`, resolves Fluent messages per locale, and
-writes localised IR JSON into the chosen output directory. Add metadata to your
-`Cargo.toml` so the tool knows which config type to load:
+writes localized IR JSON into the chosen output directory. Add metadata to the
+package `Cargo.toml` so the tool knows which config type to load:
 
 ```toml
 [package.metadata.ortho_config]
@@ -1091,7 +1091,7 @@ root_type = "hello_world::cli::HelloWorldCli"
 locales = ["en-US", "ja"]
 ```
 
-Run the tool from your project root:
+Run the tool from the project root:
 
 ```bash
 cargo orthohelp --out-dir target/orthohelp --locale en-US

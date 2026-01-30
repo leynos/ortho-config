@@ -8,7 +8,7 @@ use std::io::Write;
 use crate::error::OrthohelpError;
 use crate::ir::LocalizedDocMetadata;
 
-/// Writes the localised IR JSON for a single locale.
+/// Writes the localized IR JSON for a single locale.
 pub fn write_localized_ir(
     out_dir: &Utf8Path,
     locale: &str,
