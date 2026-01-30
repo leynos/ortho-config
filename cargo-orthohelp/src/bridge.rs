@@ -58,10 +58,10 @@ pub fn prepare_paths(selection: &PackageSelection, cache_key: &CacheKey) -> Brid
 pub fn load_or_build_ir(
     config: &BridgeConfig,
     paths: &BridgePaths,
-    should_cache: bool,
+    should_use_cache: bool,
     should_skip_build: bool,
 ) -> Result<String, OrthohelpError> {
-    if should_cache || should_skip_build {
+    if should_use_cache || should_skip_build {
         if let Some(cached) = read_cached_ir(paths)? {
             return Ok(cached);
         }

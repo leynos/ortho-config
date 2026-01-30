@@ -50,13 +50,17 @@ fn temp_output_dir(harness: &mut Harness) {
 fn cache_is_empty(harness: &mut Harness) {
     let root_dir = Dir::open_ambient_dir(harness.workspace_root.as_path(), ambient_authority())
         .expect("open workspace root");
-    match root_dir.remove_dir_all("target/orthohelp") {
-        Ok(()) => {}
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
-        Err(err) => panic!("remove orthohelp cache failed: {err}"),
+    if let Err(err) = root_dir.remove_dir_all("target/orthohelp") {
+        if !is_not_found_kind(&err) {
+            panic!("remove orthohelp cache failed: {err}");
+        }
     }
     harness.cache_ir_path = None;
     harness.cache_ir_mtime = None;
+}
+
+fn is_not_found_kind(err: &std::io::Error) -> bool {
+    matches!(err.kind(), std::io::ErrorKind::NotFound)
 }
 
 #[when("I run cargo-orthohelp with cache for the fixture")]

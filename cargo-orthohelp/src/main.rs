@@ -52,12 +52,9 @@ fn run() -> Result<(), OrthohelpError> {
     let paths = bridge::prepare_paths(&selection, &cache_key);
     let config = build_bridge_config(&selection);
 
-    let ir_json = bridge::load_or_build_ir(
-        &config,
-        &paths,
-        args.cache.should_cache,
-        args.cache.should_skip_build,
-    )?;
+    let should_use_cache = args.cache.should_cache;
+    let should_skip_build = args.cache.should_skip_build;
+    let ir_json = bridge::load_or_build_ir(&config, &paths, should_use_cache, should_skip_build)?;
     let doc_metadata: DocMetadata = serde_json::from_str(&ir_json)?;
 
     for locale in locales {
