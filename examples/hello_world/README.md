@@ -133,6 +133,19 @@ The `LC_ALL` variable takes precedence over `LC_MESSAGES`, which in turn takes
 precedence over `LANG`. This allows fine-grained control when multiple locale
 variables are set.
 
+## Generating documentation IR
+
+`cargo-orthohelp` reads the `package.metadata.ortho_config` metadata declared
+in `Cargo.toml` to locate the root configuration type and supported locales.
+Run it from the repository root to emit per-locale JSON:
+
+```sh
+cargo orthohelp --package hello_world --out-dir target/orthohelp --locale en-US
+```
+
+Add `--cache` to reuse the cached IR, or `--no-build` to skip compiling the
+bridge when the cache is already populated.
+
 ## Configuration samples and scripts
 
 The `config/` directory contains `baseline.toml` and `overrides.toml`. The

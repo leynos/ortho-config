@@ -3,7 +3,7 @@
 use anyhow::{Result, anyhow, ensure};
 use ortho_config::OrthoConfig;
 use ortho_config::docs::{
-    ConfigFormat, DocMetadata, ORTHO_DOCS_IR_VERSION, OrthoConfigDocs, ValueType,
+    ConfigFormat, DocMetadata, ORTHO_DOCS_IR_VERSION, OrthoConfigDocs, SourceKind, ValueType,
 };
 use rstest::{fixture, rstest};
 use serde::{Deserialize, Serialize};
@@ -304,6 +304,43 @@ fn test_field_verbose(docs_metadata: DocMetadata) -> Result<()> {
 fn test_json_serialization(docs_metadata: DocMetadata) -> Result<()> {
     let json = serde_json::to_string(&docs_metadata)?;
     ensure!(!json.is_empty(), "expected JSON output");
+    Ok(())
+}
+
+#[rstest]
+fn test_json_round_trip(docs_metadata: DocMetadata) -> Result<()> {
+    let json = serde_json::to_string_pretty(&docs_metadata)?;
+    let decoded: DocMetadata = serde_json::from_str(&json)?;
+    ensure!(
+        decoded == docs_metadata,
+        "expected IR JSON round-trip to preserve metadata"
+    );
+    Ok(())
+}
+
+#[rstest]
+fn test_json_deserializes_enum_variants() -> Result<()> {
+    let string_value: ValueType = serde_json::from_str("\"String\"")?;
+    ensure!(
+        string_value == ValueType::String,
+        "expected String ValueType"
+    );
+
+    let enum_value: ValueType =
+        serde_json::from_str(r#"{"Enum":{"variants":["standard","debug"]}}"#)?;
+    ensure!(
+        enum_value
+            == ValueType::Enum {
+                variants: vec!["standard".to_owned(), "debug".to_owned()],
+            },
+        "expected Enum ValueType to deserialize"
+    );
+
+    let format: ConfigFormat = serde_json::from_str("\"Toml\"")?;
+    ensure!(format == ConfigFormat::Toml, "expected Toml format");
+
+    let source: SourceKind = serde_json::from_str("\"Env\"")?;
+    ensure!(source == SourceKind::Env, "expected Env source kind");
     Ok(())
 }
 

@@ -279,7 +279,7 @@ numbering, and it avoids time-based commitments. The command-line interface
   - [x] Implement the `OrthoConfigDocs` IR schema v1.1 in the derive macro,
     including Windows metadata and auto-ID generation. Completion criteria:
     the IR serializes to JSON and all required fields emit deterministic IDs.
-  - [ ] Build the `cargo-orthohelp` bridge pipeline (metadata discovery,
+  - [x] Build the `cargo-orthohelp` bridge pipeline (metadata discovery,
     ephemeral bridge build, caching, and locale resolution). Completion
     criteria: a fixture crate produces per-locale IR JSON in `--out-dir` when
     run with `--cache` and `--no-build` modes.

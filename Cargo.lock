@@ -203,6 +203,9 @@ name = "camino"
 version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "276a59bf2b2c967788139340c9f0c5b12d7fd6630315c15c217e559de85d2609"
+dependencies = [
+ "serde_core",
+]
 
 [[package]]
 name = "cap-primitives"
@@ -233,6 +236,49 @@ dependencies = [
  "io-extras",
  "io-lifetimes",
  "rustix",
+]
+
+[[package]]
+name = "cargo-orthohelp"
+version = "0.7.0"
+dependencies = [
+ "camino",
+ "cap-std",
+ "cargo_metadata",
+ "clap",
+ "ortho_config",
+ "rstest 0.26.1",
+ "rstest-bdd",
+ "rstest-bdd-macros",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "test_helpers",
+ "thiserror 2.0.17",
+]
+
+[[package]]
+name = "cargo-platform"
+version = "0.1.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e35af189006b9c0f00a064685c727031e3ed2d8020f7ba284d78cc2671bd36ea"
+dependencies = [
+ "serde",
+]
+
+[[package]]
+name = "cargo_metadata"
+version = "0.18.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2d886547e41f740c616ae73108f6eb70afe6d940c7bc697cb30f13daec073037"
+dependencies = [
+ "camino",
+ "cargo-platform",
+ "semver",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -1154,6 +1200,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "orthohelp_fixture"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "ortho_config",
+ "serde",
+]
+
+[[package]]
 name = "owo-colors"
 version = "4.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1481,9 +1536,9 @@ dependencies = [
 
 [[package]]
 name = "rstest-bdd"
-version = "0.3.2"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b7451d147800bd8b0b8621116a2c553b13408f2b7914a5b818eccaa37240ed9a"
+checksum = "5e741d97bce6ea0a7d0f074716041e0d0eebe6ab9edcd243e7d12f9fd2b5e8b6"
 dependencies = [
  "ctor",
  "derive_more",
@@ -1493,9 +1548,9 @@ dependencies = [
  "i18n-embed",
  "inventory",
  "log",
- "once_cell",
  "regex",
  "rstest-bdd-patterns",
+ "rstest-bdd-policy",
  "rust-embed",
  "serde",
  "serde_json",
@@ -1505,9 +1560,9 @@ dependencies = [
 
 [[package]]
 name = "rstest-bdd-macros"
-version = "0.3.2"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c58aca0e441b276f7e52a6fe1b9bb8c341004110f610e7dfda112578c0c18837"
+checksum = "a7e3b51c032a6174f82d87843a5e62cfd08ce4606005eafde07ed12561d73196"
 dependencies = [
  "camino",
  "cap-std",
@@ -1515,27 +1570,34 @@ dependencies = [
  "convert_case 0.6.0",
  "gherkin",
  "newt-hype",
- "once_cell",
  "proc-macro-crate",
  "proc-macro-error",
  "proc-macro2",
  "quote",
  "regex",
  "rstest-bdd-patterns",
+ "rstest-bdd-policy",
  "syn 2.0.108",
+ "thiserror 1.0.69",
  "walkdir",
 ]
 
 [[package]]
 name = "rstest-bdd-patterns"
-version = "0.3.2"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "59a52766aaee3793eec30ff351a5ebddba34dddab8500b18891cddece364a66d"
+checksum = "75d730afd8727e5b18bd276ebf5ea4c881760138762d0cd7d415dc6b6662c6c6"
 dependencies = [
  "gherkin",
  "regex",
  "thiserror 1.0.69",
 ]
+
+[[package]]
+name = "rstest-bdd-policy"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d256efeb01f08e281cef9cd1e54dab33d8778e871090f5fa49b7a9a70f0caf81"
 
 [[package]]
 name = "rstest_macros"
@@ -1714,6 +1776,10 @@ name = "semver"
 version = "1.0.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d767eb0aabc880b29956c35734170f26ed551a859dbd361d140cdbeca61ab1e2"
+dependencies = [
+ "serde",
+ "serde_core",
+]
 
 [[package]]
 name = "serde"

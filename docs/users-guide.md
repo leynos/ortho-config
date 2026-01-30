@@ -1078,6 +1078,30 @@ descriptions. Field-level metadata can be refined with `help_id`,
 attributes affect only the emitted IR; they do not change runtime naming or
 loading behaviour.
 
+### Generating IR with cargo-orthohelp
+
+`cargo-orthohelp` compiles a tiny bridge binary that calls
+`OrthoConfigDocs::get_doc_metadata()`, resolves Fluent messages per locale, and
+writes localized IR JSON into the chosen output directory. Add metadata to the
+package `Cargo.toml` so the tool knows which config type to load:
+
+```toml
+[package.metadata.ortho_config]
+root_type = "hello_world::cli::HelloWorldCli"
+locales = ["en-US", "ja"]
+```
+
+Run the tool from the project root:
+
+```bash
+cargo orthohelp --out-dir target/orthohelp --locale en-US
+```
+
+`--cache` reuses any previously generated IR cached under
+`target/orthohelp/<hash>/ir.json`, while `--no-build` skips the bridge build
+and fails if the cache is missing. The generated per-locale JSON lives under
+`<out>/ir/<locale>.json` and is ready for downstream generators.
+
 ## Additional notes
 
 - **Vector merging** – For `Vec<T>` fields the default merge strategy is

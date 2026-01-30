@@ -1,0 +1,18 @@
+[package]
+name = "orthohelp_fixture"
+version = "0.1.0"
+edition = "2024"
+rust-version.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+ortho_config = { path = "../../../ortho_config", version = "0.7.0" }
+serde = { version = "1", features = ["derive"] }
+clap = { version = "4", features = ["derive"] }
+
+[package.metadata.ortho_config]
+root_type = "orthohelp_fixture::FixtureConfig"
+locales = ["en-US", "fr-FR"]

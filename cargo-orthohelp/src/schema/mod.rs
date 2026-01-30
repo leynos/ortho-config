@@ -1,9 +1,12 @@
-//! Intermediate representation (IR) types for `OrthoConfig` documentation.
+//! Documentation IR schema used by `cargo-orthohelp`.
 //!
-//! These structures are emitted by the derive macro and consumed by external
-//! tooling such as `cargo-orthohelp` to generate user-facing documentation.
+//! Keep this in sync with `ortho_config::docs` so the tool can parse IR JSON
+//! without depending on unpublished crate internals.
 
 use serde::{Deserialize, Serialize};
+
+/// Current IR schema version.
+pub const ORTHO_DOCS_IR_VERSION: &str = "1.1";
 
 /// Top-level documentation metadata for a configuration command.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -297,3 +300,6 @@ pub struct Note {
     /// Fluent ID for the note content.
     pub text_id: String,
 }
+
+#[cfg(test)]
+mod tests;
