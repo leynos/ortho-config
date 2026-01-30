@@ -22,10 +22,7 @@ struct Harness {
 
 #[fixture]
 fn harness() -> Harness {
-    let manifest_dir = Utf8PathBuf::from_path_buf(std::path::PathBuf::from(
-        env!("CARGO_MANIFEST_DIR"),
-    ))
-    .expect("manifest dir is UTF-8");
+    let manifest_dir = Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let workspace_root = manifest_dir
         .parent()
         .expect("workspace root exists")
@@ -153,7 +150,14 @@ fn cached_ir_reused(harness: &mut Harness) {
     let previous = harness
         .cache_ir_mtime
         .expect("cached IR timestamp should be recorded");
-    let metadata = std::fs::metadata(cache_path.as_std_path())
+    let cache_dir = cache_path.parent().expect("cached IR parent exists");
+    let file_name = cache_path
+        .file_name()
+        .expect("cached IR filename should exist");
+    let dir = Dir::open_ambient_dir(cache_dir, ambient_authority())
+        .expect("open cache dir");
+    let metadata = dir
+        .metadata(file_name)
         .expect("cached IR metadata should be available");
     let current = metadata.modified().expect("cached IR mtime should exist");
     assert_eq!(previous, current, "cached IR should not be rewritten");
@@ -165,7 +169,15 @@ fn cached_ir_deserializes(harness: &mut Harness) {
         .cache_ir_path
         .as_ref()
         .expect("cached IR path should be recorded");
-    let json = std::fs::read_to_string(cache_path.as_std_path())
+    let cache_dir = cache_path.parent().expect("cached IR parent exists");
+    let file_name = cache_path
+        .file_name()
+        .expect("cached IR filename should exist");
+    let dir = Dir::open_ambient_dir(cache_dir, ambient_authority())
+        .expect("open cache dir");
+    let mut file = dir.open(file_name).expect("cached IR should be readable");
+    let mut json = String::new();
+    file.read_to_string(&mut json)
         .expect("cached IR should be readable");
     let metadata: ortho_config::docs::DocMetadata =
         serde_json::from_str(&json).expect("cached IR should deserialize");
@@ -213,7 +225,14 @@ fn cargo_orthohelp_exe() -> Utf8PathBuf {
 
 fn record_cache_state(harness: &mut Harness) {
     let cache_path = find_cached_ir(harness).expect("cached IR should exist");
-    let metadata = std::fs::metadata(cache_path.as_std_path())
+    let cache_dir = cache_path.parent().expect("cached IR parent exists");
+    let file_name = cache_path
+        .file_name()
+        .expect("cached IR filename should exist");
+    let dir = Dir::open_ambient_dir(cache_dir, ambient_authority())
+        .expect("open cache dir");
+    let metadata = dir
+        .metadata(file_name)
         .expect("cached IR metadata should be available");
     let modified = metadata.modified().expect("cached IR mtime should exist");
     harness.cache_ir_path = Some(cache_path);
@@ -247,12 +266,9 @@ fn check_cache_entry(
     }
 
     let file_name = entry.file_name().ok()?;
-    let ir_path = cache_root.join(Utf8PathBuf::from(file_name)).join("ir.json");
-    if !ir_path.exists() {
-        return None;
-    }
-
-    let metadata = std::fs::metadata(ir_path.as_std_path()).ok()?;
+    let relative = Utf8PathBuf::from(file_name).join("ir.json");
+    let dir = Dir::open_ambient_dir(cache_root.as_path(), ambient_authority()).ok()?;
+    let metadata = dir.metadata(&relative).ok()?;
     let modified = metadata.modified().ok()?;
     let replace = newest
         .as_ref()
@@ -261,7 +277,7 @@ fn check_cache_entry(
         return None;
     }
 
-    Some((modified, ir_path))
+    Some((modified, cache_root.join(relative)))
 }
 
 fn expected_about(locale: &str) -> &'static str {

@@ -142,15 +142,16 @@ The IR schema and pipeline requirements live in
 `docs/cargo-orthohelp-design.md`. The IR types and `OrthoConfigDocs` trait are
 already implemented in `ortho_config/src/docs`, and localization helpers live
 in `ortho_config/src/localizer`. The roadmap entry for this work is in
-`docs/roadmap.md` under 4.1.1. There is currently no `cargo-orthohelp` crate in
-this workspace, so the pipeline must be introduced as a new binary crate and
-added to the workspace in `Cargo.toml`.
+`docs/roadmap.md` under 4.1.1. The `cargo-orthohelp` crate now lives under
+`cargo-orthohelp/` as a workspace member with the bridge pipeline
+implementation.
 
-Behavioural tests live under `ortho_config/tests/rstest_bdd` and
-`examples/hello_world/tests/rstest_bdd`, using feature files under
-`*/tests/features`. Unit tests should use `rstest` fixtures and follow the
-fixtures guidance in `docs/rust-testing-with-rstest-fixtures.md`. When tests
-need environment mutation, use the `test_helpers::env` lock/guards described in
+Behavioural tests live under `cargo-orthohelp/tests/rstest_bdd`,
+`ortho_config/tests/rstest_bdd`, and `examples/hello_world/tests/rstest_bdd`,
+using feature files under `*/tests/features`. Unit tests should use `rstest`
+fixtures and follow the fixtures guidance in
+`docs/rust-testing-with-rstest-fixtures.md`. When tests need environment
+mutation, use the `test_helpers::env` lock/guards described in
 `docs/reliable-testing-in-rust-via-dependency-injection.md` rather than direct
 `std::env` calls. Documentation updates must follow
 `docs/documentation-style-guide.md` and `docs/rust-doctest-dry-guide.md`.

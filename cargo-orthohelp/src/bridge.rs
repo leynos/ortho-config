@@ -30,7 +30,7 @@ pub struct BridgeConfig {
     pub package_root: Utf8PathBuf,
     /// Cargo package name of the target crate.
     pub package_name: String,
-    /// Normalised root type path for the config.
+    /// Normalized root type path for the config.
     pub root_type: String,
     /// `ortho_config` dependency metadata for the bridge.
     pub ortho_config_dependency: OrthoConfigDependency,
