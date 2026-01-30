@@ -131,7 +131,7 @@ fn write_bridge_manifest(config: &BridgeConfig, paths: &BridgePaths) -> Result<(
 
     writeln!(
         manifest,
-        "{} = {{ path = \"{}\" }}",
+        "{} = {{ path = {:?} }}",
         config.package_name,
         config.package_root.as_str()
     )
@@ -141,7 +141,7 @@ fn write_bridge_manifest(config: &BridgeConfig, paths: &BridgePaths) -> Result<(
         Some(path) => {
             writeln!(
                 manifest,
-                "ortho_config = {{ path = \"{}\", version = \"{}\" }}",
+                "ortho_config = {{ path = {:?}, version = \"{}\" }}",
                 path.as_str(),
                 config.ortho_config_dependency.requirement,
             )
