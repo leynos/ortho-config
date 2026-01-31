@@ -283,7 +283,7 @@ numbering, and it avoids time-based commitments. The command-line interface
     ephemeral bridge build, caching, and locale resolution). Completion
     criteria: a fixture crate produces per-locale IR JSON in `--out-dir` when
     run with `--cache` and `--no-build` modes.
-  - [ ] Ship a roff generator that produces NAME, SYNOPSIS, DESCRIPTION,
+  - [x] Ship a roff generator that produces NAME, SYNOPSIS, DESCRIPTION,
     OPTIONS, ENVIRONMENT, FILES, PRECEDENCE, EXAMPLES, SEE ALSO, and EXIT
     STATUS sections from the IR. Completion criteria: a golden test covers
     section ordering, escaping, and enum rendering.

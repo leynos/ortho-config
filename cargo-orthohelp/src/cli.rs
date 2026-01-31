@@ -8,11 +8,11 @@ use clap::{Args as ClapArgs, Parser, ValueEnum};
 pub enum OutputFormat {
     /// Emit the localized IR JSON output.
     Ir,
-    /// Emit Unix roff man pages (not yet implemented).
+    /// Emit Unix roff man pages.
     Man,
     /// Emit `PowerShell` help (not yet implemented).
     Ps,
-    /// Emit all outputs (not yet implemented).
+    /// Emit all outputs (IR and man pages).
     All,
 }
 
@@ -58,9 +58,12 @@ pub struct Args {
     /// Bridge cache behaviour flags.
     #[command(flatten)]
     pub cache: CacheArgs,
-    /// Output format selection (IR is the only supported format for now).
+    /// Output format selection.
     #[arg(long, value_enum, default_value_t = OutputFormat::Ir)]
     pub format: OutputFormat,
+    /// Man page generation arguments.
+    #[command(flatten)]
+    pub man: ManArgs,
 }
 
 /// Bridge cache behaviour flags.
@@ -72,4 +75,18 @@ pub struct CacheArgs {
     /// Skip building the bridge and rely on cached IR.
     #[arg(long = "no-build")]
     pub should_skip_build: bool,
+}
+
+/// Man page generation arguments.
+#[derive(Debug, ClapArgs, Clone)]
+pub struct ManArgs {
+    /// Man page section number (1-8, default: 1 for user commands).
+    #[arg(long = "man-section", value_name = "N", default_value = "1")]
+    pub section: u8,
+    /// Date for man page header (format: YYYY-MM-DD or "January 2026").
+    #[arg(long = "man-date", value_name = "DATE")]
+    pub date: Option<String>,
+    /// Generate separate man pages for each subcommand.
+    #[arg(long = "man-split-subcommands")]
+    pub split_subcommands: bool,
 }

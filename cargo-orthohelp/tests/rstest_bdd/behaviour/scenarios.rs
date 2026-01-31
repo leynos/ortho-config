@@ -3,3 +3,4 @@
 use rstest_bdd_macros::scenarios;
 
 scenarios!("tests/features/orthohelp_ir.feature");
+scenarios!("tests/features/orthohelp_roff.feature");
