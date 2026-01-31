@@ -78,7 +78,6 @@ pub fn generate(
 fn generate_man_page(metadata: &LocalizedDocMetadata, config: &RoffConfig) -> String {
     let mut content = String::with_capacity(4096);
     let bin_name = metadata.bin_name.as_deref().unwrap_or(&metadata.app_name);
-    let headings = &metadata.sections.headings;
 
     // Title header
     content.push_str(&sections::title_header(
@@ -89,23 +88,19 @@ fn generate_man_page(metadata: &LocalizedDocMetadata, config: &RoffConfig) -> St
         config.manual.as_deref(),
     ));
 
-    append_standard_sections(&mut content, metadata, bin_name, headings, config);
+    append_standard_sections(&mut content, metadata, config);
     append_inline_subcommands(&mut content, metadata, config);
 
     content
 }
 
-#[expect(
-    clippy::too_many_arguments,
-    reason = "helper groups related section calls"
-)]
 fn append_standard_sections(
     content: &mut String,
     metadata: &LocalizedDocMetadata,
-    bin_name: &str,
-    headings: &crate::ir::LocalizedHeadings,
     config: &RoffConfig,
 ) {
+    let bin_name = metadata.bin_name.as_deref().unwrap_or(&metadata.app_name);
+    let headings = &metadata.sections.headings;
     // NAME section
     content.push_str(&sections::name_section(headings, bin_name, &metadata.about));
 
