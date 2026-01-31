@@ -95,7 +95,10 @@ fn generate_man_page(metadata: &LocalizedDocMetadata, config: &RoffConfig) -> St
     content
 }
 
-#[expect(clippy::too_many_arguments, reason = "helper groups related section calls")]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "helper groups related section calls"
+)]
 fn append_standard_sections(
     content: &mut String,
     metadata: &LocalizedDocMetadata,
