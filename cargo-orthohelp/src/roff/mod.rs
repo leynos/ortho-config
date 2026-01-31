@@ -54,7 +54,8 @@ pub fn generate(
     // Generate the main man page
     let content = generate_man_page(metadata, config);
     let bin_name = metadata.bin_name.as_deref().unwrap_or(&metadata.app_name);
-    let path = writer::write_man_page(&config.out_dir, bin_name, None, config.section, &content)?;
+    let info = writer::ManPageInfo::new(bin_name, config.section);
+    let path = writer::write_man_page(&config.out_dir, &info, &content)?;
     output.add_file(path);
 
     // Handle subcommands
@@ -65,13 +66,8 @@ pub fn generate(
                 .bin_name
                 .as_deref()
                 .unwrap_or(&subcommand.app_name);
-            let path = writer::write_man_page(
-                &config.out_dir,
-                bin_name,
-                Some(sub_name),
-                config.section,
-                &sub_content,
-            )?;
+            let sub_info = writer::ManPageInfo::with_subcommand(bin_name, sub_name, config.section);
+            let path = writer::write_man_page(&config.out_dir, &sub_info, &sub_content)?;
             output.add_file(path);
         }
     }
@@ -93,92 +89,103 @@ fn generate_man_page(metadata: &LocalizedDocMetadata, config: &RoffConfig) -> St
         config.manual.as_deref(),
     ));
 
+    append_standard_sections(&mut content, metadata, bin_name, headings, config);
+    append_inline_subcommands(&mut content, metadata, config);
+
+    content
+}
+
+#[expect(clippy::too_many_arguments, reason = "helper groups related section calls")]
+fn append_standard_sections(
+    content: &mut String,
+    metadata: &LocalizedDocMetadata,
+    bin_name: &str,
+    headings: &crate::ir::LocalizedHeadings,
+    config: &RoffConfig,
+) {
     // NAME section
-    content.push_str(&sections::name_section(
-        &headings.name,
-        bin_name,
-        &metadata.about,
-    ));
+    content.push_str(&sections::name_section(headings, bin_name, &metadata.about));
 
     // SYNOPSIS section
     content.push_str(&sections::synopsis_section(
-        &headings.synopsis,
+        headings,
         bin_name,
         metadata.synopsis.as_deref(),
         &metadata.fields,
     ));
 
     // DESCRIPTION section
-    content.push_str(&sections::description_section(
-        &headings.description,
-        &metadata.about,
-    ));
+    content.push_str(&sections::description_section(headings, &metadata.about));
 
     // OPTIONS section
-    content.push_str(&sections::options_section(
-        &headings.options,
-        &metadata.fields,
-    ));
+    content.push_str(&sections::options_section(headings, &metadata.fields));
 
     // ENVIRONMENT section
-    content.push_str(&sections::environment_section(
-        &headings.environment,
-        &metadata.fields,
-    ));
+    content.push_str(&sections::environment_section(headings, &metadata.fields));
 
     // FILES section
     content.push_str(&sections::files_section(
-        &headings.files,
+        headings,
         &metadata.fields,
         metadata.sections.discovery.as_ref(),
     ));
 
     // PRECEDENCE section
     content.push_str(&sections::precedence_section(
-        &headings.precedence,
+        headings,
         metadata.sections.precedence.as_ref(),
     ));
 
     // EXAMPLES section
     content.push_str(&sections::examples_section(
-        &headings.examples,
+        headings,
         &metadata.sections.examples,
     ));
 
     // SEE ALSO section
-    let related_commands: Vec<String> = if !config.split_subcommands {
-        Vec::new()
-    } else {
-        metadata
-            .subcommands
-            .iter()
-            .map(|s| {
-                let sub_name = s.bin_name.as_deref().unwrap_or(&s.app_name);
-                format!("{bin_name}-{sub_name}")
-            })
-            .collect()
-    };
+    let related_commands = collect_related_commands(metadata, bin_name, config);
     content.push_str(&sections::see_also_section(
-        &headings.see_also,
+        headings,
         &metadata.sections.links,
         &related_commands,
     ));
 
     // EXIT STATUS section
-    content.push_str(&sections::exit_status_section(
-        &headings.exit_status,
-        headings,
-    ));
+    content.push_str(&sections::exit_status_section(headings));
+}
 
-    // Inline subcommands if not splitting
-    if !config.split_subcommands && !metadata.subcommands.is_empty() {
-        content.push_str(".SH COMMANDS\n");
-        for subcommand in &metadata.subcommands {
-            content.push_str(&generate_subcommand_section(subcommand));
-        }
+fn collect_related_commands(
+    metadata: &LocalizedDocMetadata,
+    bin_name: &str,
+    config: &RoffConfig,
+) -> Vec<String> {
+    if !config.split_subcommands {
+        return Vec::new();
     }
 
-    content
+    metadata
+        .subcommands
+        .iter()
+        .map(|s| {
+            let sub_name = s.bin_name.as_deref().unwrap_or(&s.app_name);
+            format!("{bin_name}-{sub_name}")
+        })
+        .collect()
+}
+
+fn append_inline_subcommands(
+    content: &mut String,
+    metadata: &LocalizedDocMetadata,
+    config: &RoffConfig,
+) {
+    if config.split_subcommands || metadata.subcommands.is_empty() {
+        return;
+    }
+
+    content.push_str(".SH COMMANDS\n");
+    for subcommand in &metadata.subcommands {
+        content.push_str(&generate_subcommand_section(subcommand));
+    }
 }
 
 fn generate_subcommand_section(metadata: &LocalizedDocMetadata) -> String {

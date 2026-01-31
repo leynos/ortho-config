@@ -48,33 +48,43 @@ pub fn escape_text(text: &str) -> String {
 }
 
 fn escape_line(line: &str, result: &mut String) {
-    let mut chars = line.chars().peekable();
+    let mut chars = line.chars();
 
-    // Handle leading special characters
-    if let Some(&first) = chars.peek() {
-        match first {
-            '-' => {
-                result.push_str("\\-");
-                chars.next();
-            }
-            '.' => {
-                result.push_str("\\&.");
-                chars.next();
-            }
-            '\'' => {
-                result.push_str("\\&'");
-                chars.next();
-            }
-            _ => {}
+    // Handle leading special character
+    if let Some(first) = chars.next() {
+        if !push_escaped_leading_char(first, result) {
+            push_escaped_char(first, result);
         }
     }
 
     // Process remaining characters
     for ch in chars {
-        match ch {
-            '\\' => result.push_str("\\\\"),
-            _ => result.push(ch),
+        push_escaped_char(ch, result);
+    }
+}
+
+fn push_escaped_leading_char(ch: char, result: &mut String) -> bool {
+    match ch {
+        '-' => {
+            result.push_str("\\-");
+            true
         }
+        '.' => {
+            result.push_str("\\&.");
+            true
+        }
+        '\'' => {
+            result.push_str("\\&'");
+            true
+        }
+        _ => false,
+    }
+}
+
+fn push_escaped_char(ch: char, result: &mut String) {
+    match ch {
+        '\\' => result.push_str("\\\\"),
+        _ => result.push(ch),
     }
 }
 

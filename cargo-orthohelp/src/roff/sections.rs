@@ -47,19 +47,19 @@ pub fn title_header(
 }
 
 /// Generates the NAME section content.
-pub fn name_section(heading: &str, name: &str, about: &str) -> String {
+pub fn name_section(headings: &LocalizedHeadings, name: &str, about: &str) -> String {
     let escaped_about = escape_text(about);
-    format!(".SH {heading}\n{name} \\- {escaped_about}\n")
+    format!(".SH {}\n{name} \\- {escaped_about}\n", headings.name)
 }
 
 /// Generates the SYNOPSIS section content.
 pub fn synopsis_section(
-    heading: &str,
+    headings: &LocalizedHeadings,
     bin_name: &str,
     synopsis: Option<&str>,
     fields: &[LocalizedFieldMetadata],
 ) -> String {
-    let mut output = format!(".SH {heading}\n.B {bin_name}\n");
+    let mut output = format!(".SH {}\n.B {bin_name}\n", headings.synopsis);
 
     if let Some(syn) = synopsis {
         output.push_str(&escape_text(syn));
@@ -107,13 +107,13 @@ fn format_synopsis_option(
 }
 
 /// Generates the DESCRIPTION section content.
-pub fn description_section(heading: &str, about: &str) -> String {
+pub fn description_section(headings: &LocalizedHeadings, about: &str) -> String {
     let escaped = escape_text(about);
-    format!(".SH {heading}\n{escaped}\n")
+    format!(".SH {}\n{escaped}\n", headings.description)
 }
 
 /// Generates the OPTIONS section content.
-pub fn options_section(heading: &str, fields: &[LocalizedFieldMetadata]) -> String {
+pub fn options_section(headings: &LocalizedHeadings, fields: &[LocalizedFieldMetadata]) -> String {
     let cli_fields: Vec<_> = fields
         .iter()
         .filter(|f| f.cli.as_ref().is_some_and(|c| !c.hide_in_help))
@@ -123,7 +123,7 @@ pub fn options_section(heading: &str, fields: &[LocalizedFieldMetadata]) -> Stri
         return String::new();
     }
 
-    let mut output = format!(".SH {heading}\n");
+    let mut output = format!(".SH {}\n", headings.options);
 
     for field in cli_fields {
         output.push_str(&format_option_entry(field));
@@ -185,14 +185,17 @@ fn format_option_entry(field: &LocalizedFieldMetadata) -> String {
 }
 
 /// Generates the ENVIRONMENT section content.
-pub fn environment_section(heading: &str, fields: &[LocalizedFieldMetadata]) -> String {
+pub fn environment_section(
+    headings: &LocalizedHeadings,
+    fields: &[LocalizedFieldMetadata],
+) -> String {
     let env_fields: Vec<_> = fields.iter().filter(|f| f.env.is_some()).collect();
 
     if env_fields.is_empty() {
         return String::new();
     }
 
-    let mut output = format!(".SH {heading}\n");
+    let mut output = format!(".SH {}\n", headings.environment);
 
     // Sort by environment variable name for consistency
     let mut sorted = env_fields;
@@ -232,7 +235,7 @@ fn format_env_entry(field: &LocalizedFieldMetadata) -> String {
 
 /// Generates the FILES section content.
 pub fn files_section(
-    heading: &str,
+    headings: &LocalizedHeadings,
     fields: &[LocalizedFieldMetadata],
     discovery: Option<&LocalizedConfigDiscoveryMeta>,
 ) -> String {
@@ -243,50 +246,67 @@ pub fn files_section(
         return String::new();
     }
 
-    let mut output = format!(".SH {heading}\n");
+    let mut output = format!(".SH {}\n", headings.files);
 
-    // Discovery paths
     if let Some(disc) = discovery {
-        for path in &disc.search_paths {
-            output.push_str(".TP\n");
-            output.push_str(&italic(&path.pattern));
-            output.push('\n');
-            if let Some(note) = &path.note {
-                output.push_str(&escape_text(note));
-                output.push('\n');
-            }
-        }
-
-        // Supported formats
-        if !disc.formats.is_empty() {
-            let formats: Vec<_> = disc.formats.iter().map(format_config_format).collect();
-            output.push_str(".PP\n");
-            output.push_str(&format!("Supported formats: {}.\n", formats.join(", ")));
-        }
-
-        if disc.xdg_compliant {
-            output.push_str(".PP\n");
-            output.push_str(
-                "Configuration discovery follows the XDG Base Directory specification.\n",
-            );
-        }
+        render_discovery_section(&mut output, disc);
     }
 
-    // File key paths
-    if !file_fields.is_empty() {
-        output.push_str(".PP\n");
-        output.push_str("Configuration keys:\n");
-        for field in file_fields {
-            let file = field.file.as_ref().expect("filtered for file fields");
-            output.push_str(".TP\n");
-            output.push_str(&bold(&file.key_path));
-            output.push('\n');
-            output.push_str(&escape_text(&field.help));
-            output.push('\n');
-        }
-    }
+    render_file_fields(&mut output, &file_fields);
 
     output
+}
+
+fn render_discovery_section(output: &mut String, disc: &LocalizedConfigDiscoveryMeta) {
+    render_search_paths(output, disc);
+    render_supported_formats(output, disc);
+    render_xdg_compliance(output, disc);
+}
+
+fn render_search_paths(output: &mut String, disc: &LocalizedConfigDiscoveryMeta) {
+    for path in &disc.search_paths {
+        output.push_str(".TP\n");
+        output.push_str(&italic(&path.pattern));
+        output.push('\n');
+        if let Some(note) = &path.note {
+            output.push_str(&escape_text(note));
+            output.push('\n');
+        }
+    }
+}
+
+fn render_supported_formats(output: &mut String, disc: &LocalizedConfigDiscoveryMeta) {
+    if disc.formats.is_empty() {
+        return;
+    }
+
+    let formats: Vec<_> = disc.formats.iter().map(format_config_format).collect();
+    output.push_str(".PP\n");
+    output.push_str(&format!("Supported formats: {}.\n", formats.join(", ")));
+}
+
+fn render_xdg_compliance(output: &mut String, disc: &LocalizedConfigDiscoveryMeta) {
+    if disc.xdg_compliant {
+        output.push_str(".PP\n");
+        output.push_str("Configuration discovery follows the XDG Base Directory specification.\n");
+    }
+}
+
+fn render_file_fields(output: &mut String, file_fields: &[&LocalizedFieldMetadata]) {
+    if file_fields.is_empty() {
+        return;
+    }
+
+    output.push_str(".PP\n");
+    output.push_str("Configuration keys:\n");
+    for field in file_fields {
+        let file = field.file.as_ref().expect("filtered for file fields");
+        output.push_str(".TP\n");
+        output.push_str(&bold(&file.key_path));
+        output.push('\n');
+        output.push_str(&escape_text(&field.help));
+        output.push('\n');
+    }
 }
 
 fn format_config_format(format: &crate::schema::ConfigFormat) -> &'static str {
@@ -298,13 +318,16 @@ fn format_config_format(format: &crate::schema::ConfigFormat) -> &'static str {
 }
 
 /// Generates the PRECEDENCE section content.
-pub fn precedence_section(heading: &str, precedence: Option<&LocalizedPrecedenceMeta>) -> String {
+pub fn precedence_section(
+    headings: &LocalizedHeadings,
+    precedence: Option<&LocalizedPrecedenceMeta>,
+) -> String {
     let prec = match precedence {
         Some(p) if !p.order.is_empty() => p,
         _ => return String::new(),
     };
 
-    let mut output = format!(".SH {heading}\n");
+    let mut output = format!(".SH {}\n", headings.precedence);
     output.push_str(concat!(
         "Configuration values are resolved in the following order ",
         "(highest precedence last):\n"
@@ -338,12 +361,12 @@ fn format_source_kind(kind: &SourceKind) -> &'static str {
 }
 
 /// Generates the EXAMPLES section content.
-pub fn examples_section(heading: &str, examples: &[LocalizedExample]) -> String {
+pub fn examples_section(headings: &LocalizedHeadings, examples: &[LocalizedExample]) -> String {
     if examples.is_empty() {
         return String::new();
     }
 
-    let mut output = format!(".SH {heading}\n");
+    let mut output = format!(".SH {}\n", headings.examples);
 
     for example in examples {
         if let Some(title) = &example.title {
@@ -368,7 +391,7 @@ pub fn examples_section(heading: &str, examples: &[LocalizedExample]) -> String 
 
 /// Generates the SEE ALSO section content.
 pub fn see_also_section(
-    heading: &str,
+    headings: &LocalizedHeadings,
     links: &[LocalizedLink],
     related_commands: &[String],
 ) -> String {
@@ -376,7 +399,7 @@ pub fn see_also_section(
         return String::new();
     }
 
-    let mut output = format!(".SH {heading}\n");
+    let mut output = format!(".SH {}\n", headings.see_also);
 
     // Related commands first
     for cmd in related_commands {
@@ -396,13 +419,13 @@ pub fn see_also_section(
 }
 
 /// Generates the EXIT STATUS section content with standard values.
-pub fn exit_status_section(heading: &str, headings: &LocalizedHeadings) -> String {
+pub fn exit_status_section(headings: &LocalizedHeadings) -> String {
     // Only generate if the heading is present (non-empty)
     if headings.exit_status.is_empty() {
         return String::new();
     }
 
-    let mut output = format!(".SH {heading}\n");
+    let mut output = format!(".SH {}\n", headings.exit_status);
     output.push_str(".TP\n");
     output.push_str(&bold("0"));
     output.push_str("\nSuccessful execution.\n");
@@ -416,6 +439,21 @@ pub fn exit_status_section(heading: &str, headings: &LocalizedHeadings) -> Strin
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn test_headings() -> LocalizedHeadings {
+        LocalizedHeadings {
+            name: "NAME".to_owned(),
+            synopsis: "SYNOPSIS".to_owned(),
+            description: "DESCRIPTION".to_owned(),
+            options: "OPTIONS".to_owned(),
+            environment: "ENVIRONMENT".to_owned(),
+            files: "FILES".to_owned(),
+            precedence: "PRECEDENCE".to_owned(),
+            exit_status: "EXIT STATUS".to_owned(),
+            examples: "EXAMPLES".to_owned(),
+            see_also: "SEE ALSO".to_owned(),
+        }
+    }
 
     #[test]
     fn title_header_formats_correctly() {
@@ -434,18 +472,20 @@ mod tests {
 
     #[test]
     fn name_section_escapes_description() {
+        let headings = test_headings();
         // Only dashes at line start are escaped (to prevent option interpretation)
         // The dash in "A -test" is not at line start, so it stays as-is
-        let result = name_section("NAME", "my-app", "A -test application");
+        let result = name_section(&headings, "my-app", "A -test application");
         assert!(result.contains("my-app \\- A -test application"));
 
         // Test with a leading dash which SHOULD be escaped
-        let result = name_section("NAME", "my-app", "-starts with dash");
+        let result = name_section(&headings, "my-app", "-starts with dash");
         assert!(result.contains("my-app \\- \\-starts with dash"));
     }
 
     #[test]
     fn precedence_section_orders_sources() {
+        let headings = test_headings();
         let prec = LocalizedPrecedenceMeta {
             order: vec![
                 SourceKind::Defaults,
@@ -455,7 +495,7 @@ mod tests {
             ],
             rationale: None,
         };
-        let result = precedence_section("PRECEDENCE", Some(&prec));
+        let result = precedence_section(&headings, Some(&prec));
         assert!(result.contains(".IP 1. 4\nBuilt-in defaults"));
         assert!(result.contains(".IP 4. 4\nCommand-line arguments"));
     }

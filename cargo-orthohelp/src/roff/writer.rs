@@ -1,10 +1,6 @@
 //! Man page file writer using `cap_std` for filesystem operations.
 
 #![allow(
-    clippy::too_many_arguments,
-    reason = "writer needs path components for nesting"
-)]
-#![allow(
     clippy::option_if_let_else,
     reason = "match expression clearer for filename"
 )]
@@ -16,21 +12,51 @@ use std::io::Write;
 
 use crate::error::OrthohelpError;
 
+/// Metadata describing the man page to be written.
+pub struct ManPageInfo<'a> {
+    /// The name of the command (e.g. "my-app").
+    pub name: &'a str,
+    /// The subcommand name, if generating a split subcommand page.
+    pub subcommand: Option<&'a str>,
+    /// The man page section number (typically 1 for user commands).
+    pub section: u8,
+}
+
+impl<'a> ManPageInfo<'a> {
+    /// Creates a new `ManPageInfo` for a main command.
+    #[must_use]
+    pub const fn new(name: &'a str, section: u8) -> Self {
+        Self {
+            name,
+            subcommand: None,
+            section,
+        }
+    }
+
+    /// Creates a new `ManPageInfo` for a subcommand.
+    #[must_use]
+    pub const fn with_subcommand(name: &'a str, subcommand: &'a str, section: u8) -> Self {
+        Self {
+            name,
+            subcommand: Some(subcommand),
+            section,
+        }
+    }
+}
+
 /// Writes man page content to the appropriate file path.
 ///
 /// Creates the directory structure `man/man<section>/` and writes
 /// `<name>.<section>` or `<name>-<subcommand>.<section>` for split pages.
 pub fn write_man_page(
     out_dir: &Utf8Path,
-    name: &str,
-    subcommand: Option<&str>,
-    section: u8,
+    info: &ManPageInfo<'_>,
     content: &str,
 ) -> Result<Utf8PathBuf, OrthohelpError> {
     let dir = ensure_dir(out_dir)?;
 
     // Create man/man<section>/ directory
-    let section_dir = format!("man/man{section}");
+    let section_dir = format!("man/man{}", info.section);
     dir.create_dir_all(&section_dir)
         .map_err(|io_err| OrthohelpError::Io {
             path: out_dir.join(&section_dir),
@@ -45,9 +71,9 @@ pub fn write_man_page(
         })?;
 
     // Determine filename
-    let filename = match subcommand {
-        Some(sub) => format!("{name}-{sub}.{section}"),
-        None => format!("{name}.{section}"),
+    let filename = match info.subcommand {
+        Some(sub) => format!("{}-{sub}.{}", info.name, info.section),
+        None => format!("{}.{}", info.name, info.section),
     };
 
     let file_path = out_dir.join(&section_dir).join(&filename);
