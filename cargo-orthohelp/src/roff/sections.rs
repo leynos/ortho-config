@@ -1,0 +1,462 @@
+//! Section content generators for man pages.
+//!
+//! Provides functions to generate each standard man page section from
+//! localised documentation metadata.
+
+#![allow(
+    clippy::too_many_arguments,
+    reason = "section generators pass all metadata"
+)]
+#![allow(
+    clippy::excessive_nesting,
+    reason = "field iteration with CLI filtering"
+)]
+#![allow(
+    clippy::format_push_string,
+    reason = "roff templating uses format! for clarity"
+)]
+#![allow(
+    clippy::expect_used,
+    reason = "precondition filters guarantee presence"
+)]
+#![allow(clippy::missing_const_for_fn, reason = "match arms map runtime values")]
+
+use crate::ir::{
+    LocalizedConfigDiscoveryMeta, LocalizedExample, LocalizedFieldMetadata, LocalizedHeadings,
+    LocalizedLink, LocalizedPrecedenceMeta,
+};
+use crate::schema::SourceKind;
+
+use super::escape::{bold, escape_text, format_flag, format_flag_with_value, italic};
+
+/// Generates the `.TH` title header macro.
+///
+/// Format: `.TH NAME SECTION DATE SOURCE MANUAL`
+pub fn title_header(
+    name: &str,
+    section: u8,
+    date: Option<&str>,
+    source: Option<&str>,
+    manual: Option<&str>,
+) -> String {
+    let name_upper = name.to_uppercase();
+    let date_str = date.unwrap_or("");
+    let source_str = source.unwrap_or("");
+    let manual_str = manual.unwrap_or("");
+    format!(".TH \"{name_upper}\" \"{section}\" \"{date_str}\" \"{source_str}\" \"{manual_str}\"\n")
+}
+
+/// Generates the NAME section content.
+pub fn name_section(heading: &str, name: &str, about: &str) -> String {
+    let escaped_about = escape_text(about);
+    format!(".SH {heading}\n{name} \\- {escaped_about}\n")
+}
+
+/// Generates the SYNOPSIS section content.
+pub fn synopsis_section(
+    heading: &str,
+    bin_name: &str,
+    synopsis: Option<&str>,
+    fields: &[LocalizedFieldMetadata],
+) -> String {
+    let mut output = format!(".SH {heading}\n.B {bin_name}\n");
+
+    if let Some(syn) = synopsis {
+        output.push_str(&escape_text(syn));
+        output.push('\n');
+    } else {
+        // Generate synopsis from CLI fields
+        for field in fields {
+            if let Some(cli) = &field.cli {
+                if cli.hide_in_help {
+                    continue;
+                }
+                output.push_str(&format_synopsis_option(field, cli));
+            }
+        }
+    }
+
+    output
+}
+
+fn format_synopsis_option(
+    field: &LocalizedFieldMetadata,
+    cli: &crate::schema::CliMetadata,
+) -> String {
+    let flag = if cli.takes_value {
+        let value_name = cli
+            .value_name
+            .as_deref()
+            .or_else(|| {
+                field
+                    .value
+                    .as_ref()
+                    .map(super::escape::value_type_placeholder)
+            })
+            .unwrap_or("VALUE");
+        format_flag_with_value(cli.long.as_deref(), cli.short, value_name)
+    } else {
+        format_flag(cli.long.as_deref(), cli.short)
+    };
+
+    if field.required {
+        format!("{flag}\n")
+    } else {
+        format!("[{flag}]\n")
+    }
+}
+
+/// Generates the DESCRIPTION section content.
+pub fn description_section(heading: &str, about: &str) -> String {
+    let escaped = escape_text(about);
+    format!(".SH {heading}\n{escaped}\n")
+}
+
+/// Generates the OPTIONS section content.
+pub fn options_section(heading: &str, fields: &[LocalizedFieldMetadata]) -> String {
+    let cli_fields: Vec<_> = fields
+        .iter()
+        .filter(|f| f.cli.as_ref().is_some_and(|c| !c.hide_in_help))
+        .collect();
+
+    if cli_fields.is_empty() {
+        return String::new();
+    }
+
+    let mut output = format!(".SH {heading}\n");
+
+    for field in cli_fields {
+        output.push_str(&format_option_entry(field));
+    }
+
+    output
+}
+
+fn format_option_entry(field: &LocalizedFieldMetadata) -> String {
+    let cli = field.cli.as_ref().expect("filtered for CLI fields");
+    let mut output = String::new();
+
+    // Tag paragraph with flag
+    output.push_str(".TP\n");
+
+    let flag_line = if cli.takes_value {
+        let value_name = cli
+            .value_name
+            .as_deref()
+            .or_else(|| {
+                field
+                    .value
+                    .as_ref()
+                    .map(super::escape::value_type_placeholder)
+            })
+            .unwrap_or("VALUE");
+        format_flag_with_value(cli.long.as_deref(), cli.short, value_name)
+    } else {
+        format_flag(cli.long.as_deref(), cli.short)
+    };
+    output.push_str(&flag_line);
+    output.push('\n');
+
+    // Help text
+    let help = field.long_help.as_deref().unwrap_or(&field.help);
+    output.push_str(&escape_text(help));
+    output.push('\n');
+
+    // Default value
+    if let Some(default) = &field.default {
+        output.push_str(".br\n");
+        output.push_str(&format!("Default: {}\n", bold(&default.display)));
+    }
+
+    // Possible values for enums
+    if !cli.possible_values.is_empty() {
+        output.push_str(".br\n");
+        let values = cli.possible_values.join(", ");
+        output.push_str(&format!("Possible values: {}\n", italic(&values)));
+    }
+
+    // Deprecation notice
+    if let Some(deprecated) = &field.deprecated {
+        output.push_str(".br\n");
+        output.push_str(&format!("DEPRECATED: {}\n", escape_text(&deprecated.note)));
+    }
+
+    output
+}
+
+/// Generates the ENVIRONMENT section content.
+pub fn environment_section(heading: &str, fields: &[LocalizedFieldMetadata]) -> String {
+    let env_fields: Vec<_> = fields.iter().filter(|f| f.env.is_some()).collect();
+
+    if env_fields.is_empty() {
+        return String::new();
+    }
+
+    let mut output = format!(".SH {heading}\n");
+
+    // Sort by environment variable name for consistency
+    let mut sorted = env_fields;
+    sorted.sort_by(|a, b| {
+        a.env
+            .as_ref()
+            .map(|e| &e.var_name)
+            .cmp(&b.env.as_ref().map(|e| &e.var_name))
+    });
+
+    for field in sorted {
+        output.push_str(&format_env_entry(field));
+    }
+
+    output
+}
+
+fn format_env_entry(field: &LocalizedFieldMetadata) -> String {
+    let env = field.env.as_ref().expect("filtered for env fields");
+    let mut output = String::new();
+
+    output.push_str(".TP\n");
+    output.push_str(&bold(&env.var_name));
+    output.push('\n');
+    output.push_str(&escape_text(&field.help));
+
+    // Cross-reference CLI flag if available
+    if let Some(cli) = &field.cli {
+        if let Some(long) = &cli.long {
+            output.push_str(&format!(" Equivalent to {}.", bold(&format!("--{long}"))));
+        }
+    }
+    output.push('\n');
+
+    output
+}
+
+/// Generates the FILES section content.
+pub fn files_section(
+    heading: &str,
+    fields: &[LocalizedFieldMetadata],
+    discovery: Option<&LocalizedConfigDiscoveryMeta>,
+) -> String {
+    let file_fields: Vec<_> = fields.iter().filter(|f| f.file.is_some()).collect();
+    let has_discovery = discovery.is_some_and(|d| !d.search_paths.is_empty());
+
+    if file_fields.is_empty() && !has_discovery {
+        return String::new();
+    }
+
+    let mut output = format!(".SH {heading}\n");
+
+    // Discovery paths
+    if let Some(disc) = discovery {
+        for path in &disc.search_paths {
+            output.push_str(".TP\n");
+            output.push_str(&italic(&path.pattern));
+            output.push('\n');
+            if let Some(note) = &path.note {
+                output.push_str(&escape_text(note));
+                output.push('\n');
+            }
+        }
+
+        // Supported formats
+        if !disc.formats.is_empty() {
+            let formats: Vec<_> = disc.formats.iter().map(format_config_format).collect();
+            output.push_str(".PP\n");
+            output.push_str(&format!("Supported formats: {}.\n", formats.join(", ")));
+        }
+
+        if disc.xdg_compliant {
+            output.push_str(".PP\n");
+            output.push_str(
+                "Configuration discovery follows the XDG Base Directory specification.\n",
+            );
+        }
+    }
+
+    // File key paths
+    if !file_fields.is_empty() {
+        output.push_str(".PP\n");
+        output.push_str("Configuration keys:\n");
+        for field in file_fields {
+            let file = field.file.as_ref().expect("filtered for file fields");
+            output.push_str(".TP\n");
+            output.push_str(&bold(&file.key_path));
+            output.push('\n');
+            output.push_str(&escape_text(&field.help));
+            output.push('\n');
+        }
+    }
+
+    output
+}
+
+fn format_config_format(format: &crate::schema::ConfigFormat) -> &'static str {
+    match format {
+        crate::schema::ConfigFormat::Toml => "TOML",
+        crate::schema::ConfigFormat::Yaml => "YAML",
+        crate::schema::ConfigFormat::Json => "JSON",
+    }
+}
+
+/// Generates the PRECEDENCE section content.
+pub fn precedence_section(heading: &str, precedence: Option<&LocalizedPrecedenceMeta>) -> String {
+    let prec = match precedence {
+        Some(p) if !p.order.is_empty() => p,
+        _ => return String::new(),
+    };
+
+    let mut output = format!(".SH {heading}\n");
+    output.push_str(concat!(
+        "Configuration values are resolved in the following order ",
+        "(highest precedence last):\n"
+    ));
+    output.push_str(".RS\n");
+
+    for (i, source) in prec.order.iter().enumerate() {
+        let num = i + 1;
+        let name = format_source_kind(source);
+        output.push_str(&format!(".IP {num}. 4\n{name}\n"));
+    }
+
+    output.push_str(".RE\n");
+
+    if let Some(rationale) = &prec.rationale {
+        output.push_str(".PP\n");
+        output.push_str(&escape_text(rationale));
+        output.push('\n');
+    }
+
+    output
+}
+
+fn format_source_kind(kind: &SourceKind) -> &'static str {
+    match kind {
+        SourceKind::Defaults => "Built-in defaults",
+        SourceKind::File => "Configuration files",
+        SourceKind::Env => "Environment variables",
+        SourceKind::Cli => "Command-line arguments",
+    }
+}
+
+/// Generates the EXAMPLES section content.
+pub fn examples_section(heading: &str, examples: &[LocalizedExample]) -> String {
+    if examples.is_empty() {
+        return String::new();
+    }
+
+    let mut output = format!(".SH {heading}\n");
+
+    for example in examples {
+        if let Some(title) = &example.title {
+            output.push_str(".TP\n");
+            output.push_str(&bold(title));
+            output.push('\n');
+        }
+
+        // Render code in no-fill mode
+        output.push_str(".nf\n");
+        output.push_str(&escape_text(&example.code));
+        output.push_str("\n.fi\n");
+
+        if let Some(body) = &example.body {
+            output.push_str(&escape_text(body));
+            output.push('\n');
+        }
+    }
+
+    output
+}
+
+/// Generates the SEE ALSO section content.
+pub fn see_also_section(
+    heading: &str,
+    links: &[LocalizedLink],
+    related_commands: &[String],
+) -> String {
+    if links.is_empty() && related_commands.is_empty() {
+        return String::new();
+    }
+
+    let mut output = format!(".SH {heading}\n");
+
+    // Related commands first
+    for cmd in related_commands {
+        output.push_str(&format!(".BR {cmd} (1),\n"));
+    }
+
+    // Then links
+    for link in links {
+        if let Some(text) = &link.text {
+            output.push_str(&format!(".UR {}\n{}\n.UE ,\n", link.uri, escape_text(text)));
+        } else {
+            output.push_str(&format!(".UR {}\n.UE ,\n", link.uri));
+        }
+    }
+
+    output
+}
+
+/// Generates the EXIT STATUS section content with standard values.
+pub fn exit_status_section(heading: &str, headings: &LocalizedHeadings) -> String {
+    // Only generate if the heading is present (non-empty)
+    if headings.exit_status.is_empty() {
+        return String::new();
+    }
+
+    let mut output = format!(".SH {heading}\n");
+    output.push_str(".TP\n");
+    output.push_str(&bold("0"));
+    output.push_str("\nSuccessful execution.\n");
+    output.push_str(".TP\n");
+    output.push_str(&bold("1"));
+    output.push_str("\nGeneral errors.\n");
+
+    output
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn title_header_formats_correctly() {
+        let result = title_header(
+            "my-app",
+            1,
+            Some("2026-01-31"),
+            Some("v1.0"),
+            Some("User Commands"),
+        );
+        assert!(result.starts_with(".TH \"MY-APP\" \"1\""));
+        assert!(result.contains("2026-01-31"));
+        assert!(result.contains("v1.0"));
+        assert!(result.contains("User Commands"));
+    }
+
+    #[test]
+    fn name_section_escapes_description() {
+        // Only dashes at line start are escaped (to prevent option interpretation)
+        // The dash in "A -test" is not at line start, so it stays as-is
+        let result = name_section("NAME", "my-app", "A -test application");
+        assert!(result.contains("my-app \\- A -test application"));
+
+        // Test with a leading dash which SHOULD be escaped
+        let result = name_section("NAME", "my-app", "-starts with dash");
+        assert!(result.contains("my-app \\- \\-starts with dash"));
+    }
+
+    #[test]
+    fn precedence_section_orders_sources() {
+        let prec = LocalizedPrecedenceMeta {
+            order: vec![
+                SourceKind::Defaults,
+                SourceKind::File,
+                SourceKind::Env,
+                SourceKind::Cli,
+            ],
+            rationale: None,
+        };
+        let result = precedence_section("PRECEDENCE", Some(&prec));
+        assert!(result.contains(".IP 1. 4\nBuilt-in defaults"));
+        assert!(result.contains(".IP 4. 4\nCommand-line arguments"));
+    }
+}

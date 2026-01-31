@@ -9,7 +9,8 @@ mod ir;
 mod locale;
 mod metadata;
 mod output;
-mod schema;
+pub mod roff;
+pub mod schema;
 
 use camino::Utf8PathBuf;
 use clap::Parser;
@@ -27,7 +28,9 @@ fn main() -> Result<(), OrthohelpError> {
 
 fn run() -> Result<(), OrthohelpError> {
     let args = Args::parse();
-    if !matches!(args.format, OutputFormat::Ir) {
+
+    // PowerShell format is not yet implemented
+    if matches!(args.format, OutputFormat::Ps) {
         return Err(OrthohelpError::UnsupportedFormat(
             args.format.as_str().to_owned(),
         ));
@@ -57,11 +60,29 @@ fn run() -> Result<(), OrthohelpError> {
     let ir_json = bridge::load_or_build_ir(&config, &paths, should_use_cache, should_skip_build)?;
     let doc_metadata: DocMetadata = serde_json::from_str(&ir_json)?;
 
+    let should_generate_ir = matches!(args.format, OutputFormat::Ir | OutputFormat::All);
+    let should_generate_man = matches!(args.format, OutputFormat::Man | OutputFormat::All);
+
     for locale in locales {
         let resources = locale::load_consumer_resources(&selection.package_root, &locale)?;
         let localizer = locale::build_localizer(&locale, resources)?;
         let resolved_ir = ir::localize_doc(&doc_metadata, &locale, &localizer);
-        output::write_localized_ir(&out_dir, &locale.to_string(), &resolved_ir)?;
+
+        if should_generate_ir {
+            output::write_localized_ir(&out_dir, &locale.to_string(), &resolved_ir)?;
+        }
+
+        if should_generate_man {
+            let roff_config = roff::RoffConfig {
+                out_dir: out_dir.clone(),
+                section: args.man.section,
+                date: args.man.date.clone(),
+                split_subcommands: args.man.split_subcommands,
+                source: None,
+                manual: None,
+            };
+            roff::generate(&resolved_ir, &roff_config)?;
+        }
     }
 
     Ok(())
