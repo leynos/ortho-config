@@ -43,10 +43,6 @@ impl<'a> ManPageInfo<'a> {
 ///
 /// Creates the directory structure `man/man<section>/` and writes
 /// `<name>.<section>` or `<name>-<subcommand>.<section>` for split pages.
-#[expect(
-    clippy::option_if_let_else,
-    reason = "match expression clearer for filename"
-)]
 pub fn write_man_page(
     out_dir: &Utf8Path,
     info: &ManPageInfo<'_>,
@@ -70,10 +66,10 @@ pub fn write_man_page(
         })?;
 
     // Determine filename
-    let filename = match info.subcommand {
-        Some(sub) => format!("{}-{sub}.{}", info.name, info.section),
-        None => format!("{}.{}", info.name, info.section),
-    };
+    let filename = info.subcommand.map_or_else(
+        || format!("{}.{}", info.name, info.section),
+        |sub| format!("{}-{sub}.{}", info.name, info.section),
+    );
 
     let file_path = out_dir.join(&section_dir).join(&filename);
 

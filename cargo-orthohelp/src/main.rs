@@ -77,7 +77,7 @@ fn run() -> Result<(), OrthohelpError> {
                 out_dir: out_dir.clone(),
                 section: args.man.section,
                 date: args.man.date.clone(),
-                split_subcommands: args.man.split_subcommands,
+                should_split_subcommands: args.man.should_split_subcommands,
                 source: None,
                 manual: None,
             };

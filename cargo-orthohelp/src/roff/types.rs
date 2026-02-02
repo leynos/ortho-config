@@ -12,7 +12,7 @@ pub struct RoffConfig {
     /// Date string for `.TH` header (format: YYYY-MM-DD or "January 2026").
     pub date: Option<String>,
     /// Whether to split subcommands into separate man pages.
-    pub split_subcommands: bool,
+    pub should_split_subcommands: bool,
     /// Optional source/version string for `.TH` header.
     pub source: Option<String>,
     /// Optional manual name for `.TH` header (for example, "User Commands").
@@ -25,7 +25,7 @@ impl Default for RoffConfig {
             out_dir: Utf8PathBuf::from("man"),
             section: 1,
             date: None,
-            split_subcommands: false,
+            should_split_subcommands: false,
             source: None,
             manual: None,
         }

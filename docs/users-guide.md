@@ -1105,11 +1105,11 @@ and fails if the cache is missing. The generated per-locale JSON lives under
 ### Generating man pages
 
 `cargo-orthohelp` can generate roff-formatted man pages from the localized IR.
-Use the `man` subcommand to produce `man/man<N>/<name>.<N>` files suitable for
+Use `--format man` to produce `man/man<N>/<name>.<N>` files suitable for
 installation via `make install` or packaging:
 
 ```bash
-cargo orthohelp man --out-dir target/man --locale en-US
+cargo orthohelp --format man --out-dir target/man --locale en-US
 ```
 
 The generator produces standard man page sections in the canonical order:
@@ -1127,9 +1127,9 @@ The generator produces standard man page sections in the canonical order:
 
 Additional options:
 
-- `--section <N>` – man page section number (default: 1)
-- `--date <DATE>` – override the date shown in the footer
-- `--split-subcommands` – generate separate man pages for each subcommand
+- `--man-section <N>` – man page section number (default: 1)
+- `--man-date <DATE>` – override the date shown in the footer
+- `--man-split-subcommands` – generate separate man pages for each subcommand
 
 Text is automatically escaped for roff: backslashes are doubled, and leading
 dashes, periods, and single quotes are escaped to prevent macro interpretation.

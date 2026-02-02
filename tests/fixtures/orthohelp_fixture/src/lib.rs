@@ -47,7 +47,7 @@ pub struct FixtureConfig {
 
     /// Enable verbose output.
     #[ortho_config(default = false, cli_short = 'v')]
-    pub verbose: bool,
+    pub is_verbose: bool,
 
     /// Configuration file path.
     pub config_path: Option<String>,

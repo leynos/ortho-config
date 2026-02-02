@@ -3,6 +3,8 @@
 //! Provides functions for escaping text and formatting CLI options for safe
 //! inclusion in roff man page output.
 
+use std::borrow::Cow;
+
 use crate::schema::ValueType;
 
 /// Escapes text for safe inclusion in roff output.
@@ -23,13 +25,8 @@ use crate::schema::ValueType;
 /// assert_eq!(escape_text("-flag"), "\\-flag");
 /// ```
 #[must_use]
-#[expect(
-    clippy::integer_division,
-    reason = "capacity heuristic, precision loss acceptable"
-)]
-#[expect(clippy::integer_division_remainder_used, reason = "capacity heuristic")]
 pub fn escape_text(text: &str) -> String {
-    let mut result = String::with_capacity(text.len() + text.len() / 8);
+    let mut result = String::with_capacity(text.len() + text.len().div_ceil(8));
 
     for (i, line) in text.lines().enumerate() {
         if i > 0 {
@@ -95,13 +92,8 @@ fn push_escaped_char(ch: char, result: &mut String) {
 ///
 /// This function is designed for use in macro arguments like `.TH "NAME" "1" "DATE"`.
 #[must_use]
-#[expect(
-    clippy::integer_division,
-    reason = "capacity heuristic, precision loss acceptable"
-)]
-#[expect(clippy::integer_division_remainder_used, reason = "capacity heuristic")]
 pub fn escape_macro_arg(text: &str) -> String {
-    let mut result = String::with_capacity(text.len() + text.len() / 8);
+    let mut result = String::with_capacity(text.len() + text.len().div_ceil(8));
     for ch in text.chars() {
         match ch {
             '\\' => result.push_str("\\\\"),
@@ -197,6 +189,8 @@ pub fn format_flag_with_value(long: Option<&str>, short: Option<char>, value_nam
 
 /// Returns a human-readable placeholder for a `ValueType`.
 ///
+/// For `Custom` types, returns the uppercased type name.
+///
 /// # Examples
 ///
 /// ```
@@ -205,23 +199,27 @@ pub fn format_flag_with_value(long: Option<&str>, short: Option<char>, value_nam
 ///
 /// assert_eq!(value_type_placeholder(&ValueType::String), "STRING");
 /// assert_eq!(value_type_placeholder(&ValueType::Path), "PATH");
+/// assert_eq!(
+///     value_type_placeholder(&ValueType::Custom { name: "MyType".to_owned() }),
+///     "MYTYPE"
+/// );
 /// ```
 #[must_use]
-pub const fn value_type_placeholder(value_type: &ValueType) -> &'static str {
+pub fn value_type_placeholder(value_type: &ValueType) -> Cow<'static, str> {
     match value_type {
-        ValueType::String => "STRING",
-        ValueType::Integer { .. } => "INT",
-        ValueType::Float { .. } => "FLOAT",
-        ValueType::Bool => "",
-        ValueType::Duration => "DURATION",
-        ValueType::Path => "PATH",
-        ValueType::IpAddr => "IP",
-        ValueType::Hostname => "HOST",
-        ValueType::Url => "URL",
-        ValueType::Enum { .. } => "CHOICE",
-        ValueType::List { .. } => "LIST",
-        ValueType::Map { .. } => "MAP",
-        ValueType::Custom { .. } => "VALUE",
+        ValueType::String => Cow::Borrowed("STRING"),
+        ValueType::Integer { .. } => Cow::Borrowed("INT"),
+        ValueType::Float { .. } => Cow::Borrowed("FLOAT"),
+        ValueType::Bool => Cow::Borrowed(""),
+        ValueType::Duration => Cow::Borrowed("DURATION"),
+        ValueType::Path => Cow::Borrowed("PATH"),
+        ValueType::IpAddr => Cow::Borrowed("IP"),
+        ValueType::Hostname => Cow::Borrowed("HOST"),
+        ValueType::Url => Cow::Borrowed("URL"),
+        ValueType::Enum { .. } => Cow::Borrowed("CHOICE"),
+        ValueType::List { .. } => Cow::Borrowed("LIST"),
+        ValueType::Map { .. } => Cow::Borrowed("MAP"),
+        ValueType::Custom { name } => Cow::Owned(name.to_uppercase()),
     }
 }
 
@@ -302,8 +300,8 @@ mod tests {
     #[case(ValueType::Enum { variants: vec![] }, "CHOICE")]
     #[case(ValueType::List { of: Box::new(ValueType::String) }, "LIST")]
     #[case(ValueType::Map { of: Box::new(ValueType::String) }, "MAP")]
-    #[case(ValueType::Custom { name: "MyType".to_owned() }, "VALUE")]
+    #[case(ValueType::Custom { name: "MyType".to_owned() }, "MYTYPE")]
     fn value_type_placeholder_mapping(#[case] vt: ValueType, #[case] expected: &str) {
-        assert_eq!(value_type_placeholder(&vt), expected);
+        assert_eq!(value_type_placeholder(&vt).as_ref(), expected);
     }
 }

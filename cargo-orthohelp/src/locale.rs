@@ -283,7 +283,7 @@ mod tests {
             man: crate::cli::ManArgs {
                 section: 1,
                 date: None,
-                split_subcommands: false,
+                should_split_subcommands: false,
             },
         }
     }

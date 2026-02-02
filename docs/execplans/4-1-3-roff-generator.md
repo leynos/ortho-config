@@ -86,7 +86,7 @@ Known uncertainties that might affect the plan.
 - rstest-bdd v0.4.0 uses a `ScenarioState` pattern with `Slot<T>` for fixture
   injection, which differs from rstest's standard `#[fixture]` approach. The
   `scenarios!` macro cannot inject external rstest fixtures into step
-  functions. Golden tests provide equivalent coverage so BDD tests were
+  functions. Golden tests provide equivalent coverage, so BDD tests were
   deferred.
 
 - Clippy's `allow` attributes now require a `reason` parameter. All allow
@@ -106,9 +106,10 @@ Known uncertainties that might affect the plan.
   ordering, escaping, enum rendering) so BDD coverage can be added in a future
   iteration when fixture patterns are better understood.
 
-- **2026-01-31**: Used `#[allow(..., reason = "...")]` instead of
-  `#[expect(...)]` for clippy lints. The allow attributes needed reasons to
-  satisfy the `clippy::allow_attributes_without_reason` lint.
+- **2026-01-31**: Used `#[expect(..., reason = "...")]` for clippy lints.
+  The workspace config forbids `#[allow(...)]`; `#[expect(...)]` verifies that
+  the warning actually occurs and includes a reason to satisfy
+  `clippy::allow_attributes_without_reason`.
 
 ## Outcomes & retrospective
 

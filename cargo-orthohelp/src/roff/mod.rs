@@ -1,8 +1,9 @@
 //! Roff man page generator for `cargo-orthohelp`.
 //!
-//! Generates UNIX man pages from localised documentation metadata using
+//! Generates UNIX man pages from localized documentation metadata using
 //! classic man macros (`.TH`, `.SH`, `.SS`, `.TP`, `.B`, `.I`).
 
+mod entry;
 pub mod escape;
 mod sections;
 mod types;
@@ -13,11 +14,11 @@ pub use types::{RoffConfig, RoffOutput};
 use crate::error::OrthohelpError;
 use crate::ir::LocalizedDocMetadata;
 
-/// Generates roff man page(s) from localised documentation metadata.
+/// Generates roff man page(s) from localized documentation metadata.
 ///
 /// # Parameters
 ///
-/// - `metadata`: The localised documentation IR to render.
+/// - `metadata`: The localized documentation IR to render.
 /// - `config`: Generator configuration (section, date, output paths).
 ///
 /// # Returns
@@ -27,10 +28,6 @@ use crate::ir::LocalizedDocMetadata;
 /// # Errors
 ///
 /// Returns `OrthohelpError::Io` if file creation fails.
-#[expect(
-    clippy::shadow_unrelated,
-    reason = "loop iteration rebinds path naturally"
-)]
 pub fn generate(
     metadata: &LocalizedDocMetadata,
     config: &RoffConfig,
@@ -41,11 +38,11 @@ pub fn generate(
     let content = generate_man_page(metadata, config);
     let bin_name = metadata.bin_name.as_deref().unwrap_or(&metadata.app_name);
     let info = writer::ManPageInfo::new(bin_name, config.section);
-    let path = writer::write_man_page(&config.out_dir, &info, &content)?;
-    output.add_file(path);
+    let main_path = writer::write_man_page(&config.out_dir, &info, &content)?;
+    output.add_file(main_path);
 
     // Handle subcommands
-    if config.split_subcommands {
+    if config.should_split_subcommands {
         for subcommand in &metadata.subcommands {
             let sub_content = generate_man_page(subcommand, config);
             let sub_name = subcommand
@@ -53,8 +50,8 @@ pub fn generate(
                 .as_deref()
                 .unwrap_or(&subcommand.app_name);
             let sub_info = writer::ManPageInfo::with_subcommand(bin_name, sub_name, config.section);
-            let path = writer::write_man_page(&config.out_dir, &sub_info, &sub_content)?;
-            output.add_file(path);
+            let sub_path = writer::write_man_page(&config.out_dir, &sub_info, &sub_content)?;
+            output.add_file(sub_path);
         }
     }
 
@@ -147,7 +144,7 @@ fn collect_related_commands(
     bin_name: &str,
     config: &RoffConfig,
 ) -> Vec<String> {
-    if !config.split_subcommands {
+    if !config.should_split_subcommands {
         return Vec::new();
     }
 
@@ -166,7 +163,7 @@ fn append_inline_subcommands(
     metadata: &LocalizedDocMetadata,
     config: &RoffConfig,
 ) {
-    if config.split_subcommands || metadata.subcommands.is_empty() {
+    if config.should_split_subcommands || metadata.subcommands.is_empty() {
         return;
     }
 
@@ -176,19 +173,13 @@ fn append_inline_subcommands(
     }
 }
 
-#[expect(
-    clippy::expect_used,
-    reason = "precondition: field was filtered to have CLI metadata"
-)]
-#[expect(
-    clippy::format_push_string,
-    reason = "roff templating uses format! for clarity"
-)]
 fn generate_subcommand_section(metadata: &LocalizedDocMetadata) -> String {
     let mut content = String::new();
     let name = metadata.bin_name.as_deref().unwrap_or(&metadata.app_name);
 
-    content.push_str(&format!(".SS {name}\n"));
+    content.push_str(".SS ");
+    content.push_str(name);
+    content.push('\n');
     content.push_str(&escape::escape_text(&metadata.about));
     content.push('\n');
 
@@ -196,20 +187,20 @@ fn generate_subcommand_section(metadata: &LocalizedDocMetadata) -> String {
     let cli_fields: Vec<_> = metadata
         .fields
         .iter()
-        .filter(|f| f.cli.as_ref().is_some_and(|c| !c.hide_in_help))
+        .filter_map(|f| f.cli.as_ref().filter(|c| !c.hide_in_help).map(|c| (f, c)))
         .collect();
 
     if !cli_fields.is_empty() {
         content.push_str(".PP\nOptions:\n");
-        for field in cli_fields {
-            let cli = field.cli.as_ref().expect("filtered");
+        for (field, cli) in cli_fields {
             content.push_str(".TP\n");
 
+            let placeholder = field.value.as_ref().map(escape::value_type_placeholder);
             let flag_line = if cli.takes_value {
                 let value_name = cli
                     .value_name
                     .as_deref()
-                    .or_else(|| field.value.as_ref().map(escape::value_type_placeholder))
+                    .or(placeholder.as_deref())
                     .unwrap_or("VALUE");
                 escape::format_flag_with_value(cli.long.as_deref(), cli.short, value_name)
             } else {

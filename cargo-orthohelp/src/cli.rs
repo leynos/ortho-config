@@ -93,5 +93,5 @@ pub struct ManArgs {
     pub date: Option<String>,
     /// Generate separate man pages for each subcommand.
     #[arg(long = "man-split-subcommands")]
-    pub split_subcommands: bool,
+    pub should_split_subcommands: bool,
 }

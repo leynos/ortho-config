@@ -272,7 +272,7 @@ fn golden_subcommand_split_see_also() {
 
     // Enable subcommand splitting
     let config = RoffConfig {
-        split_subcommands: true,
+        should_split_subcommands: true,
         ..RoffConfig::default()
     };
 
