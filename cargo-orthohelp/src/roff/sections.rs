@@ -3,31 +3,15 @@
 //! Provides functions to generate each standard man page section from
 //! localised documentation metadata.
 
-#![allow(
-    clippy::too_many_arguments,
-    reason = "section generators pass all metadata"
-)]
-#![allow(
-    clippy::excessive_nesting,
-    reason = "field iteration with CLI filtering"
-)]
-#![allow(
-    clippy::format_push_string,
-    reason = "roff templating uses format! for clarity"
-)]
-#![allow(
-    clippy::expect_used,
-    reason = "precondition filters guarantee presence"
-)]
-#![allow(clippy::missing_const_for_fn, reason = "match arms map runtime values")]
-
 use crate::ir::{
     LocalizedConfigDiscoveryMeta, LocalizedExample, LocalizedFieldMetadata, LocalizedHeadings,
     LocalizedLink, LocalizedPrecedenceMeta,
 };
 use crate::schema::SourceKind;
 
-use super::escape::{bold, escape_text, format_flag, format_flag_with_value, italic};
+use super::escape::{
+    bold, escape_macro_arg, escape_text, format_flag, format_flag_with_value, italic,
+};
 
 /// Metadata for the man page title header.
 pub struct TitleMetadata<'a> {
@@ -42,7 +26,11 @@ pub struct TitleMetadata<'a> {
 impl<'a> TitleMetadata<'a> {
     /// Creates a new `TitleMetadata` with the given fields.
     #[must_use]
-    pub fn new(date: Option<&'a str>, source: Option<&'a str>, manual: Option<&'a str>) -> Self {
+    pub const fn new(
+        date: Option<&'a str>,
+        source: Option<&'a str>,
+        manual: Option<&'a str>,
+    ) -> Self {
         Self {
             date,
             source,
@@ -55,10 +43,10 @@ impl<'a> TitleMetadata<'a> {
 ///
 /// Format: `.TH NAME SECTION DATE SOURCE MANUAL`
 pub fn title_header(name: &str, section: u8, metadata: &TitleMetadata) -> String {
-    let name_upper = name.to_uppercase();
-    let date_str = metadata.date.unwrap_or("");
-    let source_str = metadata.source.unwrap_or("");
-    let manual_str = metadata.manual.unwrap_or("");
+    let name_upper = escape_macro_arg(&name.to_uppercase());
+    let date_str = metadata.date.map_or_else(String::new, escape_macro_arg);
+    let source_str = metadata.source.map_or_else(String::new, escape_macro_arg);
+    let manual_str = metadata.manual.map_or_else(String::new, escape_macro_arg);
     format!(".TH \"{name_upper}\" \"{section}\" \"{date_str}\" \"{source_str}\" \"{manual_str}\"\n")
 }
 
@@ -69,6 +57,10 @@ pub fn name_section(headings: &LocalizedHeadings, name: &str, about: &str) -> St
 }
 
 /// Generates the SYNOPSIS section content.
+#[expect(
+    clippy::excessive_nesting,
+    reason = "field iteration with CLI filtering requires nested conditionals"
+)]
 pub fn synopsis_section(
     headings: &LocalizedHeadings,
     bin_name: &str,
@@ -148,6 +140,14 @@ pub fn options_section(headings: &LocalizedHeadings, fields: &[LocalizedFieldMet
     output
 }
 
+#[expect(
+    clippy::expect_used,
+    reason = "precondition: field was filtered to have CLI metadata"
+)]
+#[expect(
+    clippy::format_push_string,
+    reason = "roff templating uses format! for clarity"
+)]
 fn format_option_entry(field: &LocalizedFieldMetadata) -> String {
     let cli = field.cli.as_ref().expect("filtered for CLI fields");
     let mut output = String::new();
@@ -229,6 +229,14 @@ pub fn environment_section(
     output
 }
 
+#[expect(
+    clippy::expect_used,
+    reason = "precondition: field was filtered to have env metadata"
+)]
+#[expect(
+    clippy::format_push_string,
+    reason = "roff templating uses format! for clarity"
+)]
 fn format_env_entry(field: &LocalizedFieldMetadata) -> String {
     let env = field.env.as_ref().expect("filtered for env fields");
     let mut output = String::new();
@@ -291,6 +299,10 @@ fn render_search_paths(output: &mut String, disc: &LocalizedConfigDiscoveryMeta)
     }
 }
 
+#[expect(
+    clippy::format_push_string,
+    reason = "roff templating uses format! for clarity"
+)]
 fn render_supported_formats(output: &mut String, disc: &LocalizedConfigDiscoveryMeta) {
     if disc.formats.is_empty() {
         return;
@@ -308,6 +320,10 @@ fn render_xdg_compliance(output: &mut String, disc: &LocalizedConfigDiscoveryMet
     }
 }
 
+#[expect(
+    clippy::expect_used,
+    reason = "precondition: field was filtered to have file metadata"
+)]
 fn render_file_fields(output: &mut String, file_fields: &[&LocalizedFieldMetadata]) {
     if file_fields.is_empty() {
         return;
@@ -325,7 +341,7 @@ fn render_file_fields(output: &mut String, file_fields: &[&LocalizedFieldMetadat
     }
 }
 
-fn format_config_format(format: &crate::schema::ConfigFormat) -> &'static str {
+const fn format_config_format(format: &crate::schema::ConfigFormat) -> &'static str {
     match format {
         crate::schema::ConfigFormat::Toml => "TOML",
         crate::schema::ConfigFormat::Yaml => "YAML",
@@ -334,6 +350,10 @@ fn format_config_format(format: &crate::schema::ConfigFormat) -> &'static str {
 }
 
 /// Generates the PRECEDENCE section content.
+#[expect(
+    clippy::format_push_string,
+    reason = "roff templating uses format! for clarity"
+)]
 pub fn precedence_section(
     headings: &LocalizedHeadings,
     precedence: Option<&LocalizedPrecedenceMeta>,
@@ -367,7 +387,7 @@ pub fn precedence_section(
     output
 }
 
-fn format_source_kind(kind: &SourceKind) -> &'static str {
+const fn format_source_kind(kind: &SourceKind) -> &'static str {
     match kind {
         SourceKind::Defaults => "Built-in defaults",
         SourceKind::File => "Configuration files",
@@ -406,6 +426,10 @@ pub fn examples_section(headings: &LocalizedHeadings, examples: &[LocalizedExamp
 }
 
 /// Generates the SEE ALSO section content.
+#[expect(
+    clippy::format_push_string,
+    reason = "roff templating uses format! for clarity"
+)]
 pub fn see_also_section(
     headings: &LocalizedHeadings,
     links: &[LocalizedLink],
@@ -419,7 +443,8 @@ pub fn see_also_section(
 
     // Related commands first
     for cmd in related_commands {
-        output.push_str(&format!(".BR {cmd} (1),\n"));
+        let escaped_cmd = escape_text(cmd);
+        output.push_str(&format!(".BR {escaped_cmd} (1),\n"));
     }
 
     // Then links
@@ -490,8 +515,8 @@ mod tests {
         assert!(result.contains("my-app \\- A -test application"));
 
         // Test with a leading dash which SHOULD be escaped
-        let result = name_section(&headings, "my-app", "-starts with dash");
-        assert!(result.contains("my-app \\- \\-starts with dash"));
+        let leading_dash_result = name_section(&headings, "my-app", "-starts with dash");
+        assert!(leading_dash_result.contains("my-app \\- \\-starts with dash"));
     }
 
     #[test]

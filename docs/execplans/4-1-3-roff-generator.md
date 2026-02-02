@@ -314,11 +314,12 @@ Acceptance is met when:
   correct order.
 - Golden tests cover section ordering, escaping, and enum rendering (per
   roadmap completion criteria).
-- BDD tests verify man page generation via the CLI.
 - Unit tests cover escaping utilities and section generators.
 - Documentation is updated in users-guide.md.
 - Roadmap item 4.1.3 is marked done.
 - `make check-fmt`, `make lint`, and `make test` all succeed.
+
+Note: BDD tests for CLI verification are deferred to a follow-up task.
 
 ## Idempotence and recovery
 

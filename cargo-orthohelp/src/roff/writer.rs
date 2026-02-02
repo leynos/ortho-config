@@ -1,10 +1,5 @@
 //! Man page file writer using `cap_std` for filesystem operations.
 
-#![allow(
-    clippy::option_if_let_else,
-    reason = "match expression clearer for filename"
-)]
-
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::ambient_authority;
 use cap_std::fs_utf8::{Dir, OpenOptions};
@@ -48,6 +43,10 @@ impl<'a> ManPageInfo<'a> {
 ///
 /// Creates the directory structure `man/man<section>/` and writes
 /// `<name>.<section>` or `<name>-<subcommand>.<section>` for split pages.
+#[expect(
+    clippy::option_if_let_else,
+    reason = "match expression clearer for filename"
+)]
 pub fn write_man_page(
     out_dir: &Utf8Path,
     info: &ManPageInfo<'_>,

@@ -3,24 +3,6 @@
 //! Generates UNIX man pages from localised documentation metadata using
 //! classic man macros (`.TH`, `.SH`, `.SS`, `.TP`, `.B`, `.I`).
 
-#![allow(
-    clippy::too_many_lines,
-    reason = "roff generator builds content incrementally"
-)]
-#![allow(clippy::if_not_else, reason = "explicit structure clarifies branching")]
-#![allow(
-    clippy::shadow_unrelated,
-    reason = "loop iteration rebinds path naturally"
-)]
-#![allow(
-    clippy::format_push_string,
-    reason = "roff templating uses format! for clarity"
-)]
-#![allow(
-    clippy::expect_used,
-    reason = "precondition filters guarantee presence"
-)]
-
 pub mod escape;
 mod sections;
 mod types;
@@ -45,6 +27,10 @@ use crate::ir::LocalizedDocMetadata;
 /// # Errors
 ///
 /// Returns `OrthohelpError::Io` if file creation fails.
+#[expect(
+    clippy::shadow_unrelated,
+    reason = "loop iteration rebinds path naturally"
+)]
 pub fn generate(
     metadata: &LocalizedDocMetadata,
     config: &RoffConfig,
@@ -189,6 +175,14 @@ fn append_inline_subcommands(
     }
 }
 
+#[expect(
+    clippy::expect_used,
+    reason = "precondition: field was filtered to have CLI metadata"
+)]
+#[expect(
+    clippy::format_push_string,
+    reason = "roff templating uses format! for clarity"
+)]
 fn generate_subcommand_section(metadata: &LocalizedDocMetadata) -> String {
     let mut content = String::new();
     let name = metadata.bin_name.as_deref().unwrap_or(&metadata.app_name);

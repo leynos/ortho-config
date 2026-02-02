@@ -81,7 +81,12 @@ pub struct CacheArgs {
 #[derive(Debug, ClapArgs, Clone)]
 pub struct ManArgs {
     /// Man page section number (1-8, default: 1 for user commands).
-    #[arg(long = "man-section", value_name = "N", default_value = "1")]
+    #[arg(
+        long = "man-section",
+        value_name = "N",
+        default_value = "1",
+        value_parser = clap::value_parser!(u8).range(1..=8)
+    )]
     pub section: u8,
     /// Date for man page header (format: YYYY-MM-DD or "January 2026").
     #[arg(long = "man-date", value_name = "DATE")]

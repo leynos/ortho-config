@@ -252,3 +252,43 @@ fn golden_precedence_section() {
         "should mention CLI"
     );
 }
+
+/// Test that subcommand-specific behaviour renders SEE ALSO cross-links.
+#[rstest]
+fn golden_subcommand_split_see_also() {
+    let mut metadata = minimal_metadata();
+    metadata.app_name = "app".to_owned();
+
+    // Add subcommands
+    let mut foo_subcommand = minimal_metadata();
+    foo_subcommand.app_name = "foo".to_owned();
+    foo_subcommand.about = "Do foo things.".to_owned();
+
+    let mut bar_subcommand = minimal_metadata();
+    bar_subcommand.app_name = "bar".to_owned();
+    bar_subcommand.about = "Do bar things.".to_owned();
+
+    metadata.subcommands = vec![foo_subcommand, bar_subcommand];
+
+    // Enable subcommand splitting
+    let config = RoffConfig {
+        split_subcommands: true,
+        ..RoffConfig::default()
+    };
+
+    let output = generate_to_string(&metadata, &config);
+
+    // Main page SEE ALSO section should reference subcommands
+    assert!(
+        output.contains(".SH SEE ALSO"),
+        "main page should contain a SEE ALSO section: {output}"
+    );
+    assert!(
+        output.contains("app-foo (1)"),
+        "SEE ALSO should reference the foo subcommand man page: {output}"
+    );
+    assert!(
+        output.contains("app-bar (1)"),
+        "SEE ALSO should reference the bar subcommand man page: {output}"
+    );
+}

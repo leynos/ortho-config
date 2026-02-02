@@ -3,12 +3,6 @@
 //! Provides functions for escaping text and formatting CLI options for safe
 //! inclusion in roff man page output.
 
-#![allow(
-    clippy::integer_division,
-    reason = "capacity heuristic, precision loss acceptable"
-)]
-#![allow(clippy::integer_division_remainder_used, reason = "capacity heuristic")]
-
 use crate::schema::ValueType;
 
 /// Escapes text for safe inclusion in roff output.
@@ -29,6 +23,11 @@ use crate::schema::ValueType;
 /// assert_eq!(escape_text("-flag"), "\\-flag");
 /// ```
 #[must_use]
+#[expect(
+    clippy::integer_division,
+    reason = "capacity heuristic, precision loss acceptable"
+)]
+#[expect(clippy::integer_division_remainder_used, reason = "capacity heuristic")]
 pub fn escape_text(text: &str) -> String {
     let mut result = String::with_capacity(text.len() + text.len() / 8);
 
@@ -86,6 +85,31 @@ fn push_escaped_char(ch: char, result: &mut String) {
         '\\' => result.push_str("\\\\"),
         _ => result.push(ch),
     }
+}
+
+/// Escapes text for inclusion in quoted roff macro arguments.
+///
+/// Handles:
+/// - Backslashes: `\` -> `\\`
+/// - Double quotes: `"` -> `\(dq`
+///
+/// This function is designed for use in macro arguments like `.TH "NAME" "1" "DATE"`.
+#[must_use]
+#[expect(
+    clippy::integer_division,
+    reason = "capacity heuristic, precision loss acceptable"
+)]
+#[expect(clippy::integer_division_remainder_used, reason = "capacity heuristic")]
+pub fn escape_macro_arg(text: &str) -> String {
+    let mut result = String::with_capacity(text.len() + text.len() / 8);
+    for ch in text.chars() {
+        match ch {
+            '\\' => result.push_str("\\\\"),
+            '"' => result.push_str("\\(dq"),
+            _ => result.push(ch),
+        }
+    }
+    result
 }
 
 /// Formats text as bold using inline font escapes.
@@ -221,6 +245,15 @@ mod tests {
     fn escape_text_preserves_trailing_newline() {
         assert_eq!(escape_text("hello\n"), "hello\n");
         assert_eq!(escape_text("hello"), "hello");
+    }
+
+    #[rstest]
+    #[case("hello", "hello")]
+    #[case("path\\to\\file", "path\\\\to\\\\file")]
+    #[case("with \"quotes\"", "with \\(dqquotes\\(dq")]
+    #[case("mixed\\and\"both", "mixed\\\\and\\(dqboth")]
+    fn escape_macro_arg_handles_special_chars(#[case] input: &str, #[case] expected: &str) {
+        assert_eq!(escape_macro_arg(input), expected);
     }
 
     #[rstest]
