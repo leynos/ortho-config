@@ -202,7 +202,7 @@ log capture. Fix any issues and re-run until all pass.
 1. Create `cargo-orthohelp/src/roff/types.rs`:
    - `RoffConfig` with fields: out_dir, section, date, split_subcommands,
      source, manual
-   - `RoffOutput` with fields: files (Vec<Utf8PathBuf>)
+   - `RoffOutput` with fields: files (`Vec<Utf8PathBuf>`)
 
 2. Create `cargo-orthohelp/src/roff/escape.rs`:
    - `escape_text(text: &str) -> String`
