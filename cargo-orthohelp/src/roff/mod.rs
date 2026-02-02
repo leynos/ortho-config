@@ -80,12 +80,15 @@ fn generate_man_page(metadata: &LocalizedDocMetadata, config: &RoffConfig) -> St
     let bin_name = metadata.bin_name.as_deref().unwrap_or(&metadata.app_name);
 
     // Title header
-    content.push_str(&sections::title_header(
-        bin_name,
-        config.section,
+    let title_meta = sections::TitleMetadata::new(
         config.date.as_deref(),
         config.source.as_deref(),
         config.manual.as_deref(),
+    );
+    content.push_str(&sections::title_header(
+        bin_name,
+        config.section,
+        &title_meta,
     ));
 
     append_standard_sections(&mut content, metadata, config);

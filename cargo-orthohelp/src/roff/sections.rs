@@ -29,20 +29,36 @@ use crate::schema::SourceKind;
 
 use super::escape::{bold, escape_text, format_flag, format_flag_with_value, italic};
 
+/// Metadata for the man page title header.
+pub struct TitleMetadata<'a> {
+    /// Optional date string (e.g., "2026-01-31").
+    pub date: Option<&'a str>,
+    /// Optional source string (e.g., "v1.0").
+    pub source: Option<&'a str>,
+    /// Optional manual name (e.g., "User Commands").
+    pub manual: Option<&'a str>,
+}
+
+impl<'a> TitleMetadata<'a> {
+    /// Creates a new `TitleMetadata` with the given fields.
+    #[must_use]
+    pub fn new(date: Option<&'a str>, source: Option<&'a str>, manual: Option<&'a str>) -> Self {
+        Self {
+            date,
+            source,
+            manual,
+        }
+    }
+}
+
 /// Generates the `.TH` title header macro.
 ///
 /// Format: `.TH NAME SECTION DATE SOURCE MANUAL`
-pub fn title_header(
-    name: &str,
-    section: u8,
-    date: Option<&str>,
-    source: Option<&str>,
-    manual: Option<&str>,
-) -> String {
+pub fn title_header(name: &str, section: u8, metadata: &TitleMetadata) -> String {
     let name_upper = name.to_uppercase();
-    let date_str = date.unwrap_or("");
-    let source_str = source.unwrap_or("");
-    let manual_str = manual.unwrap_or("");
+    let date_str = metadata.date.unwrap_or("");
+    let source_str = metadata.source.unwrap_or("");
+    let manual_str = metadata.manual.unwrap_or("");
     format!(".TH \"{name_upper}\" \"{section}\" \"{date_str}\" \"{source_str}\" \"{manual_str}\"\n")
 }
 
@@ -457,13 +473,8 @@ mod tests {
 
     #[test]
     fn title_header_formats_correctly() {
-        let result = title_header(
-            "my-app",
-            1,
-            Some("2026-01-31"),
-            Some("v1.0"),
-            Some("User Commands"),
-        );
+        let metadata = TitleMetadata::new(Some("2026-01-31"), Some("v1.0"), Some("User Commands"));
+        let result = title_header("my-app", 1, &metadata);
         assert!(result.starts_with(".TH \"MY-APP\" \"1\""));
         assert!(result.contains("2026-01-31"));
         assert!(result.contains("v1.0"));
