@@ -434,6 +434,7 @@ pub fn see_also_section(
     headings: &LocalizedHeadings,
     links: &[LocalizedLink],
     related_commands: &[String],
+    section: u8,
 ) -> String {
     if links.is_empty() && related_commands.is_empty() {
         return String::new();
@@ -444,7 +445,7 @@ pub fn see_also_section(
     // Related commands first
     for cmd in related_commands {
         let escaped_cmd = escape_text(cmd);
-        output.push_str(&format!(".BR {escaped_cmd} (1),\n"));
+        output.push_str(&format!(".BR {escaped_cmd} ({section}),\n"));
     }
 
     // Then links

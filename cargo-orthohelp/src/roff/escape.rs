@@ -114,19 +114,25 @@ pub fn escape_macro_arg(text: &str) -> String {
 
 /// Formats text as bold using inline font escapes.
 ///
+/// The text is escaped before formatting to prevent roff control character issues.
+///
 /// # Examples
 ///
 /// ```
 /// use cargo_orthohelp::roff::escape::bold;
 ///
 /// assert_eq!(bold("text"), "\\fBtext\\fR");
+/// assert_eq!(bold("path\\to"), "\\fBpath\\\\to\\fR");
 /// ```
 #[must_use]
 pub fn bold(text: &str) -> String {
-    format!("\\fB{text}\\fR")
+    let escaped = escape_text(text);
+    format!("\\fB{escaped}\\fR")
 }
 
 /// Formats text as italic using inline font escapes.
+///
+/// The text is escaped before formatting to prevent roff control character issues.
 ///
 /// # Examples
 ///
@@ -134,10 +140,12 @@ pub fn bold(text: &str) -> String {
 /// use cargo_orthohelp::roff::escape::italic;
 ///
 /// assert_eq!(italic("text"), "\\fItext\\fR");
+/// assert_eq!(italic("path\\to"), "\\fIpath\\\\to\\fR");
 /// ```
 #[must_use]
 pub fn italic(text: &str) -> String {
-    format!("\\fI{text}\\fR")
+    let escaped = escape_text(text);
+    format!("\\fI{escaped}\\fR")
 }
 
 /// Formats a CLI flag with proper roff markup.
@@ -257,13 +265,15 @@ mod tests {
     }
 
     #[rstest]
-    fn bold_wraps_text() {
+    fn bold_wraps_and_escapes_text() {
         assert_eq!(bold("text"), "\\fBtext\\fR");
+        assert_eq!(bold("path\\to"), "\\fBpath\\\\to\\fR");
     }
 
     #[rstest]
-    fn italic_wraps_text() {
+    fn italic_wraps_and_escapes_text() {
         assert_eq!(italic("text"), "\\fItext\\fR");
+        assert_eq!(italic("path\\to"), "\\fIpath\\\\to\\fR");
     }
 
     #[rstest]

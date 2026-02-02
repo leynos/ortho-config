@@ -135,6 +135,7 @@ fn append_standard_sections(
         headings,
         &metadata.sections.links,
         &related_commands,
+        config.section,
     ));
 
     // EXIT STATUS section

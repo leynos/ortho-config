@@ -75,7 +75,8 @@ Known uncertainties that might affect the plan.
 - [x] (2026-01-31) Integrate with main.rs and cli.rs.
 - [x] (2026-01-31) Enhance orthohelp_fixture with more fields.
 - [x] (2026-01-31) Create golden test files and golden test suite.
-- [x] (2026-01-31) BDD tests deferred (rstest-bdd v0.4.0 fixture injection).
+- [x] (2026-01-31) Behaviour-driven development (BDD) tests deferred
+  (rstest-bdd v0.4.0 fixture injection).
 - [x] (2026-01-31) Update docs/users-guide.md.
 - [x] (2026-01-31) Mark roadmap item 4.1.3 as done.
 - [x] (2026-01-31) Run validation: `make check-fmt`, `make lint`, `make test`.
@@ -126,7 +127,7 @@ quotes. Enum fields display their possible values in the OPTIONS section.
 
 ## Context and orientation
 
-The IR schema and pipeline requirements live in
+The intermediate representation (IR) schema and pipeline requirements live in
 `docs/cargo-orthohelp-design.md`. The `LocalizedDocMetadata` type is defined in
 `cargo-orthohelp/src/ir.rs` and represents already-localized documentation with
 resolved strings (no Fluent IDs). The existing output module in
