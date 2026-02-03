@@ -65,33 +65,61 @@ fn run() -> Result<(), OrthohelpError> {
     let has_multiple_locales = locales.len() > 1;
 
     for locale in locales {
-        let resources = locale::load_consumer_resources(&selection.package_root, &locale)?;
-        let localizer = locale::build_localizer(&locale, resources)?;
-        let resolved_ir = ir::localize_doc(&doc_metadata, &locale, &localizer);
+        generate_outputs_for_locale(
+            &selection.package_root,
+            &doc_metadata,
+            &locale,
+            &out_dir,
+            &args.man,
+            should_generate_ir,
+            should_generate_man,
+            has_multiple_locales,
+        )?;
+    }
 
-        if should_generate_ir {
-            output::write_localized_ir(&out_dir, &locale.to_string(), &resolved_ir)?;
-        }
+    Ok(())
+}
 
-        if should_generate_man {
-            let section = roff::ManSection::new(args.man.section)?;
-            // Use locale-specific subdirectory when generating for multiple locales
-            // to prevent overwrites (e.g., out/en-US/man/man1/ vs out/ja/man/man1/).
-            let man_out_dir = if has_multiple_locales {
-                out_dir.join(locale.to_string())
-            } else {
-                out_dir.clone()
-            };
-            let roff_config = roff::RoffConfig {
-                out_dir: man_out_dir,
-                section,
-                date: args.man.date.clone(),
-                should_split_subcommands: args.man.should_split_subcommands,
-                source: None,
-                manual: None,
-            };
-            roff::generate(&resolved_ir, &roff_config)?;
-        }
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Extracted helper keeps run() concise; grouping into a struct would over-complicate."
+)]
+fn generate_outputs_for_locale(
+    package_root: &Utf8PathBuf,
+    doc_metadata: &DocMetadata,
+    locale: &ortho_config::LanguageIdentifier,
+    out_dir: &Utf8PathBuf,
+    man_args: &cli::ManArgs,
+    should_generate_ir: bool,
+    should_generate_man: bool,
+    has_multiple_locales: bool,
+) -> Result<(), OrthohelpError> {
+    let resources = locale::load_consumer_resources(package_root, locale)?;
+    let localizer = locale::build_localizer(locale, resources)?;
+    let resolved_ir = ir::localize_doc(doc_metadata, locale, &localizer);
+
+    if should_generate_ir {
+        output::write_localized_ir(out_dir, &locale.to_string(), &resolved_ir)?;
+    }
+
+    if should_generate_man {
+        let section = roff::ManSection::new(man_args.section)?;
+        // Use locale-specific subdirectory when generating for multiple locales
+        // to prevent overwrites (e.g., out/en-US/man/man1/ vs out/ja/man/man1/).
+        let man_out_dir = if has_multiple_locales {
+            out_dir.join(locale.to_string())
+        } else {
+            out_dir.clone()
+        };
+        let roff_config = roff::RoffConfig {
+            out_dir: man_out_dir,
+            section,
+            date: man_args.date.clone(),
+            should_split_subcommands: man_args.should_split_subcommands,
+            source: None,
+            manual: None,
+        };
+        roff::generate(&resolved_ir, &roff_config)?;
     }
 
     Ok(())
