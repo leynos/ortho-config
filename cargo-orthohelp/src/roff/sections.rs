@@ -7,7 +7,7 @@ use crate::ir::{
     LocalizedConfigDiscoveryMeta, LocalizedExample, LocalizedFieldMetadata, LocalizedHeadings,
     LocalizedLink, LocalizedPrecedenceMeta,
 };
-use crate::schema::SourceKind;
+use crate::schema::{FileMetadata, SourceKind};
 
 use super::entry;
 use super::escape::{bold, escape_macro_arg, escape_text, format_flag, format_flag_with_value};
@@ -171,20 +171,26 @@ pub fn files_section(
 
     let mut output = format!(".SH {}\n", headings.files);
 
-    if has_discovery {
-        if let Some(disc) = discovery {
-            output.push_str(&entry::render_discovery_section(disc));
-        }
+    // Discovery section
+    if let Some(disc) = discovery.filter(|d| has_discovery_content(d)) {
+        output.push_str(&entry::render_discovery_section(disc));
     }
 
-    if !file_fields.is_empty() {
-        output.push_str(".PP\nConfiguration keys:\n");
-        for (field, file) in file_fields {
-            output.push_str(&entry::format_file_entry(field, file));
-        }
-    }
+    // File fields section
+    render_file_keys(&mut output, &file_fields);
 
     output
+}
+
+fn render_file_keys(output: &mut String, file_fields: &[(&LocalizedFieldMetadata, &FileMetadata)]) {
+    if file_fields.is_empty() {
+        return;
+    }
+
+    output.push_str(".PP\nConfiguration keys:\n");
+    for (field, file) in file_fields {
+        output.push_str(&entry::format_file_entry(field, file));
+    }
 }
 
 /// Checks whether discovery metadata has any renderable content.

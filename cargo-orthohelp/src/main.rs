@@ -64,13 +64,13 @@ fn run() -> Result<(), OrthohelpError> {
     let should_generate_man = matches!(args.format, OutputFormat::Man | OutputFormat::All);
     let has_multiple_locales = locales.len() > 1;
 
-    let output_config = OutputConfig::new(
-        &out_dir,
-        &args.man,
+    let output_config = OutputConfig {
+        out_dir: &out_dir,
+        man_args: &args.man,
         should_generate_ir,
         should_generate_man,
         has_multiple_locales,
-    );
+    };
 
     for locale in locales {
         generate_outputs_for_locale(
@@ -90,28 +90,6 @@ struct OutputConfig<'a> {
     should_generate_ir: bool,
     should_generate_man: bool,
     has_multiple_locales: bool,
-}
-
-impl<'a> OutputConfig<'a> {
-    #[expect(
-        clippy::too_many_arguments,
-        reason = "Constructor mirrors struct fields; further grouping adds unnecessary indirection."
-    )]
-    const fn new(
-        out_dir: &'a Utf8PathBuf,
-        man_args: &'a cli::ManArgs,
-        should_generate_ir: bool,
-        should_generate_man: bool,
-        has_multiple_locales: bool,
-    ) -> Self {
-        Self {
-            out_dir,
-            man_args,
-            should_generate_ir,
-            should_generate_man,
-            has_multiple_locales,
-        }
-    }
 }
 
 fn generate_outputs_for_locale(
