@@ -44,11 +44,12 @@ pub fn generate(
     // Handle subcommands
     if config.should_split_subcommands {
         for subcommand in &metadata.subcommands {
-            let sub_content = generate_man_page(subcommand, config);
             let sub_name = subcommand
                 .bin_name
                 .as_deref()
                 .unwrap_or(&subcommand.app_name);
+            let composite_name = format!("{bin_name}-{sub_name}");
+            let sub_content = generate_subcommand_page(subcommand, config, &composite_name);
             let sub_info = writer::ManPageInfo::with_subcommand(bin_name, sub_name, config.section);
             let sub_path = writer::write_man_page(&config.out_dir, &sub_info, &sub_content)?;
             output.add_file(sub_path);
@@ -59,8 +60,24 @@ pub fn generate(
 }
 
 fn generate_man_page(metadata: &LocalizedDocMetadata, config: &RoffConfig) -> String {
-    let mut content = String::with_capacity(4096);
     let bin_name = metadata.bin_name.as_deref().unwrap_or(&metadata.app_name);
+    generate_man_page_with_name(metadata, config, bin_name)
+}
+
+fn generate_subcommand_page(
+    metadata: &LocalizedDocMetadata,
+    config: &RoffConfig,
+    composite_name: &str,
+) -> String {
+    generate_man_page_with_name(metadata, config, composite_name)
+}
+
+fn generate_man_page_with_name(
+    metadata: &LocalizedDocMetadata,
+    config: &RoffConfig,
+    display_name: &str,
+) -> String {
+    let mut content = String::with_capacity(4096);
 
     // Title header
     let title_meta = sections::TitleMetadata::new(
@@ -69,12 +86,12 @@ fn generate_man_page(metadata: &LocalizedDocMetadata, config: &RoffConfig) -> St
         config.manual.as_deref(),
     );
     content.push_str(&sections::title_header(
-        bin_name,
+        display_name,
         config.section,
         &title_meta,
     ));
 
-    append_standard_sections(&mut content, metadata, config);
+    append_standard_sections(&mut content, metadata, config, display_name);
     append_inline_subcommands(&mut content, metadata, config);
 
     content
@@ -84,16 +101,20 @@ fn append_standard_sections(
     content: &mut String,
     metadata: &LocalizedDocMetadata,
     config: &RoffConfig,
+    display_name: &str,
 ) {
-    let bin_name = metadata.bin_name.as_deref().unwrap_or(&metadata.app_name);
     let headings = &metadata.sections.headings;
     // NAME section
-    content.push_str(&sections::name_section(headings, bin_name, &metadata.about));
+    content.push_str(&sections::name_section(
+        headings,
+        display_name,
+        &metadata.about,
+    ));
 
     // SYNOPSIS section
     content.push_str(&sections::synopsis_section(
         headings,
-        bin_name,
+        display_name,
         metadata.synopsis.as_deref(),
         &metadata.fields,
     ));
@@ -127,7 +148,7 @@ fn append_standard_sections(
     ));
 
     // SEE ALSO section
-    let related_commands = collect_related_commands(metadata, bin_name, config);
+    let related_commands = collect_related_commands(metadata, display_name, config);
     content.push_str(&sections::see_also_section(
         headings,
         &metadata.sections.links,
@@ -168,7 +189,9 @@ fn append_inline_subcommands(
     }
 
     content.push_str(".SH ");
-    content.push_str(&metadata.sections.headings.commands);
+    content.push_str(&escape::escape_macro_arg(
+        &metadata.sections.headings.commands,
+    ));
     content.push('\n');
     for subcommand in &metadata.subcommands {
         content.push_str(&generate_subcommand_section(subcommand));
@@ -180,7 +203,7 @@ fn generate_subcommand_section(metadata: &LocalizedDocMetadata) -> String {
     let name = metadata.bin_name.as_deref().unwrap_or(&metadata.app_name);
 
     content.push_str(".SS ");
-    content.push_str(name);
+    content.push_str(&escape::escape_macro_arg(name));
     content.push('\n');
     content.push_str(&escape::escape_text(&metadata.about));
     content.push('\n');

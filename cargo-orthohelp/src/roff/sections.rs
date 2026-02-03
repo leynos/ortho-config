@@ -53,7 +53,10 @@ pub fn title_header(name: &str, section: ManSection, metadata: &TitleMetadata) -
 /// Generates the NAME section content.
 pub fn name_section(headings: &LocalizedHeadings, name: &str, about: &str) -> String {
     let escaped_about = escape_text(about);
-    format!(".SH {}\n{name} \\- {escaped_about}\n", headings.name)
+    format!(
+        ".SH {}\n{name} \\- {escaped_about}\n",
+        escape_macro_arg(&headings.name)
+    )
 }
 
 /// Generates the SYNOPSIS section content.
@@ -63,7 +66,10 @@ pub fn synopsis_section(
     synopsis: Option<&str>,
     fields: &[LocalizedFieldMetadata],
 ) -> String {
-    let mut output = format!(".SH {}\n.B {bin_name}\n", headings.synopsis);
+    let mut output = format!(
+        ".SH {}\n.B {bin_name}\n",
+        escape_macro_arg(&headings.synopsis)
+    );
 
     if let Some(syn) = synopsis {
         output.push_str(&escape_text(syn));
@@ -109,7 +115,10 @@ fn format_synopsis_option(
 /// Generates the DESCRIPTION section content.
 pub fn description_section(headings: &LocalizedHeadings, about: &str) -> String {
     let escaped = escape_text(about);
-    format!(".SH {}\n{escaped}\n", headings.description)
+    format!(
+        ".SH {}\n{escaped}\n",
+        escape_macro_arg(&headings.description)
+    )
 }
 
 /// Generates the OPTIONS section content.
@@ -123,7 +132,7 @@ pub fn options_section(headings: &LocalizedHeadings, fields: &[LocalizedFieldMet
         return String::new();
     }
 
-    let mut output = format!(".SH {}\n", headings.options);
+    let mut output = format!(".SH {}\n", escape_macro_arg(&headings.options));
     for (field, cli) in cli_fields {
         output.push_str(&entry::format_option_entry(field, cli));
     }
@@ -146,7 +155,7 @@ pub fn environment_section(
 
     env_fields.sort_by(|(_, a), (_, b)| a.var_name.cmp(&b.var_name));
 
-    let mut output = format!(".SH {}\n", headings.environment);
+    let mut output = format!(".SH {}\n", escape_macro_arg(&headings.environment));
     for (field, env) in env_fields {
         output.push_str(&entry::format_env_entry(field, env));
     }
@@ -169,7 +178,7 @@ pub fn files_section(
         return String::new();
     }
 
-    let mut output = format!(".SH {}\n", headings.files);
+    let mut output = format!(".SH {}\n", escape_macro_arg(&headings.files));
 
     // Discovery section
     if let Some(disc) = discovery.filter(|d| has_discovery_content(d)) {
@@ -208,7 +217,7 @@ pub fn precedence_section(
         _ => return String::new(),
     };
 
-    let mut output = format!(".SH {}\n", headings.precedence);
+    let mut output = format!(".SH {}\n", escape_macro_arg(&headings.precedence));
     output.push_str(concat!(
         "Configuration values are resolved in the following order ",
         "(highest precedence last):\n"
@@ -251,7 +260,7 @@ pub fn examples_section(headings: &LocalizedHeadings, examples: &[LocalizedExamp
         return String::new();
     }
 
-    let mut output = format!(".SH {}\n", headings.examples);
+    let mut output = format!(".SH {}\n", escape_macro_arg(&headings.examples));
 
     for example in examples {
         if let Some(title) = &example.title {
@@ -284,10 +293,10 @@ pub fn see_also_section(
         return String::new();
     }
 
-    let mut output = format!(".SH {}\n", headings.see_also);
+    let mut output = format!(".SH {}\n", escape_macro_arg(&headings.see_also));
 
     for cmd in related_commands {
-        let escaped_cmd = escape_text(cmd);
+        let escaped_cmd = escape_macro_arg(cmd);
         output.push_str(".BR ");
         output.push_str(&escaped_cmd);
         output.push_str(" (");
@@ -297,7 +306,7 @@ pub fn see_also_section(
 
     for link in links {
         output.push_str(".UR ");
-        output.push_str(&link.uri);
+        output.push_str(&escape_macro_arg(&link.uri));
         output.push('\n');
         if let Some(text) = &link.text {
             output.push_str(&escape_text(text));
@@ -315,7 +324,7 @@ pub fn exit_status_section(headings: &LocalizedHeadings) -> String {
         return String::new();
     }
 
-    let mut output = format!(".SH {}\n", headings.exit_status);
+    let mut output = format!(".SH {}\n", escape_macro_arg(&headings.exit_status));
     output.push_str(".TP\n");
     output.push_str(&bold("0"));
     output.push_str("\nSuccessful execution.\n");
@@ -329,8 +338,10 @@ pub fn exit_status_section(headings: &LocalizedHeadings) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rstest::{fixture, rstest};
 
-    fn test_headings() -> LocalizedHeadings {
+    #[fixture]
+    fn headings() -> LocalizedHeadings {
         LocalizedHeadings {
             name: "NAME".to_owned(),
             synopsis: "SYNOPSIS".to_owned(),
@@ -357,9 +368,8 @@ mod tests {
         assert!(result.contains("User Commands"));
     }
 
-    #[test]
-    fn name_section_escapes_description() {
-        let headings = test_headings();
+    #[rstest]
+    fn name_section_escapes_description(headings: LocalizedHeadings) {
         let result = name_section(&headings, "my-app", "A -test application");
         assert!(result.contains("my-app \\- A -test application"));
 
@@ -367,9 +377,8 @@ mod tests {
         assert!(leading_dash_result.contains("my-app \\- \\-starts with dash"));
     }
 
-    #[test]
-    fn precedence_section_orders_sources() {
-        let headings = test_headings();
+    #[rstest]
+    fn precedence_section_orders_sources(headings: LocalizedHeadings) {
         let prec = LocalizedPrecedenceMeta {
             order: vec![
                 SourceKind::Defaults,
