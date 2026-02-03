@@ -68,6 +68,9 @@ pub struct HeadingIds {
     pub examples: String,
     /// Fluent ID for the SEE ALSO heading.
     pub see_also: String,
+    /// Fluent ID for the COMMANDS heading (inline subcommands).
+    #[serde(default)]
+    pub commands: Option<String>,
 }
 
 /// Metadata describing a single configuration field.

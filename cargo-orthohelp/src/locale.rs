@@ -280,6 +280,11 @@ mod tests {
                 should_skip_build: false,
             },
             format: crate::cli::OutputFormat::Ir,
+            man: crate::cli::ManArgs {
+                section: 1,
+                date: None,
+                should_split_subcommands: false,
+            },
         }
     }
 

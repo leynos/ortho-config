@@ -1102,6 +1102,39 @@ cargo orthohelp --out-dir target/orthohelp --locale en-US
 and fails if the cache is missing. The generated per-locale JSON lives under
 `<out>/ir/<locale>.json` and is ready for downstream generators.
 
+### Generating man pages
+
+`cargo-orthohelp` can generate roff-formatted man pages from the localized IR.
+Use `--format man` to produce `man/man<N>/<name>.<N>` files suitable for
+installation via `make install` or packaging:
+
+```bash
+cargo orthohelp --format man --out-dir target/man --locale en-US
+```
+
+The generator produces standard man page sections in the canonical order:
+
+1. **NAME** – binary name and one-line description
+2. **SYNOPSIS** – usage pattern with flags
+3. **DESCRIPTION** – expanded about text
+4. **OPTIONS** – CLI flags with types, defaults, and possible values
+5. **ENVIRONMENT** – environment variables mapped to fields
+6. **FILES** – configuration file paths and discovery locations
+7. **PRECEDENCE** – source priority order (defaults → file → env → CLI)
+8. **EXAMPLES** – usage examples from the IR
+9. **SEE ALSO** – related commands and documentation links
+10. **EXIT STATUS** – standard exit codes
+
+Additional options:
+
+- `--man-section <N>` – man page section number (default: 1)
+- `--man-date <DATE>` – override the date shown in the footer
+- `--man-split-subcommands` – generate separate man pages for each subcommand
+
+Text is automatically escaped for roff: backslashes are doubled, and leading
+dashes, periods, and single quotes are escaped to prevent macro interpretation.
+Enum fields list their possible values in the OPTIONS description.
+
 ## Additional notes
 
 - **Vector merging** – For `Vec<T>` fields the default merge strategy is

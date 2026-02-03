@@ -29,6 +29,7 @@ pub(crate) struct HeadingOverrides {
     pub exit_status: Option<String>,
     pub examples: Option<String>,
     pub see_also: Option<String>,
+    pub commands: Option<String>,
 }
 
 /// Precedence configuration attributes.

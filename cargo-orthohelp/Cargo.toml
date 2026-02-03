@@ -7,6 +7,14 @@ description = "OrthoConfig documentation tooling for IR generation."
 license.workspace = true
 repository.workspace = true
 
+[lib]
+name = "cargo_orthohelp"
+path = "src/lib.rs"
+
+[[bin]]
+name = "cargo-orthohelp"
+path = "src/main.rs"
+
 [lints]
 workspace = true
 

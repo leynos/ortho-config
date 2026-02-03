@@ -9,7 +9,8 @@ mod ir;
 mod locale;
 mod metadata;
 mod output;
-mod schema;
+pub mod roff;
+pub mod schema;
 
 use camino::Utf8PathBuf;
 use clap::Parser;
@@ -27,7 +28,9 @@ fn main() -> Result<(), OrthohelpError> {
 
 fn run() -> Result<(), OrthohelpError> {
     let args = Args::parse();
-    if !matches!(args.format, OutputFormat::Ir) {
+
+    // PowerShell format is not yet implemented
+    if matches!(args.format, OutputFormat::Ps) {
         return Err(OrthohelpError::UnsupportedFormat(
             args.format.as_str().to_owned(),
         ));
@@ -57,11 +60,70 @@ fn run() -> Result<(), OrthohelpError> {
     let ir_json = bridge::load_or_build_ir(&config, &paths, should_use_cache, should_skip_build)?;
     let doc_metadata: DocMetadata = serde_json::from_str(&ir_json)?;
 
+    let should_generate_ir = matches!(args.format, OutputFormat::Ir | OutputFormat::All);
+    let should_generate_man = matches!(args.format, OutputFormat::Man | OutputFormat::All);
+    let has_multiple_locales = locales.len() > 1;
+
+    let output_config = OutputConfig {
+        out_dir: &out_dir,
+        man_args: &args.man,
+        should_generate_ir,
+        should_generate_man,
+        has_multiple_locales,
+    };
+
     for locale in locales {
-        let resources = locale::load_consumer_resources(&selection.package_root, &locale)?;
-        let localizer = locale::build_localizer(&locale, resources)?;
-        let resolved_ir = ir::localize_doc(&doc_metadata, &locale, &localizer);
-        output::write_localized_ir(&out_dir, &locale.to_string(), &resolved_ir)?;
+        generate_outputs_for_locale(
+            &selection.package_root,
+            &doc_metadata,
+            &locale,
+            &output_config,
+        )?;
+    }
+
+    Ok(())
+}
+
+struct OutputConfig<'a> {
+    out_dir: &'a Utf8PathBuf,
+    man_args: &'a cli::ManArgs,
+    should_generate_ir: bool,
+    should_generate_man: bool,
+    has_multiple_locales: bool,
+}
+
+fn generate_outputs_for_locale(
+    package_root: &Utf8PathBuf,
+    doc_metadata: &DocMetadata,
+    locale: &ortho_config::LanguageIdentifier,
+    config: &OutputConfig,
+) -> Result<(), OrthohelpError> {
+    let resources = locale::load_consumer_resources(package_root, locale)?;
+    let localizer = locale::build_localizer(locale, resources)?;
+    let resolved_ir = ir::localize_doc(doc_metadata, locale, &localizer);
+
+    if config.should_generate_ir {
+        output::write_localized_ir(config.out_dir, &locale.to_string(), &resolved_ir)?;
+    }
+
+    if config.should_generate_man {
+        let section = roff::ManSection::new(config.man_args.section)?;
+        // Use locale-specific subdirectory when generating for multiple locales
+        // to prevent overwrites (e.g., out/en-US/man/man1/ vs out/ja/man/man1/).
+        let man_out_dir = if config.has_multiple_locales {
+            config.out_dir.join(locale.to_string())
+        } else {
+            config.out_dir.clone()
+        };
+        let roff_config = roff::RoffConfig {
+            out_dir: man_out_dir,
+            section,
+            date: config.man_args.date.clone(),
+            should_split_subcommands: config.man_args.should_split_subcommands,
+            source: None,
+            manual: None,
+        };
+        roff::generate(&resolved_ir, &roff_config)?;
     }
 
     Ok(())

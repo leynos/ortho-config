@@ -1,0 +1,297 @@
+//! Golden tests for roff man page generation.
+//!
+//! These tests verify that the roff generator produces output matching
+//! expected golden files, covering section ordering, escaping, and enum
+//! rendering as required by the roadmap.
+
+use cargo_orthohelp::ir::{
+    LocalizedDocMetadata, LocalizedFieldMetadata, LocalizedHeadings, LocalizedPrecedenceMeta,
+    LocalizedSectionsMetadata,
+};
+use cargo_orthohelp::roff::{RoffConfig, generate_to_string};
+use cargo_orthohelp::schema::{CliMetadata, DefaultValue, EnvMetadata, SourceKind, ValueType};
+use rstest::{fixture, rstest};
+
+#[fixture]
+fn default_headings() -> LocalizedHeadings {
+    LocalizedHeadings {
+        name: "NAME".to_owned(),
+        synopsis: "SYNOPSIS".to_owned(),
+        description: "DESCRIPTION".to_owned(),
+        options: "OPTIONS".to_owned(),
+        environment: "ENVIRONMENT".to_owned(),
+        files: "FILES".to_owned(),
+        precedence: "PRECEDENCE".to_owned(),
+        exit_status: "EXIT STATUS".to_owned(),
+        examples: "EXAMPLES".to_owned(),
+        see_also: "SEE ALSO".to_owned(),
+        commands: "COMMANDS".to_owned(),
+    }
+}
+
+#[fixture]
+fn minimal_metadata(default_headings: LocalizedHeadings) -> LocalizedDocMetadata {
+    make_test_metadata(default_headings, "test-app", "A test application.")
+}
+
+/// Creates test metadata with the given headings, name, and about text.
+fn make_test_metadata(
+    headings: LocalizedHeadings,
+    name: &str,
+    about: &str,
+) -> LocalizedDocMetadata {
+    LocalizedDocMetadata {
+        ir_version: "1.1".to_owned(),
+        locale: "en-US".to_owned(),
+        app_name: name.to_owned(),
+        bin_name: None,
+        about: about.to_owned(),
+        synopsis: None,
+        sections: LocalizedSectionsMetadata {
+            headings,
+            discovery: None,
+            precedence: None,
+            examples: vec![],
+            links: vec![],
+            notes: vec![],
+        },
+        fields: vec![],
+        subcommands: vec![],
+        windows: None,
+    }
+}
+
+/// Test that section ordering matches the specification.
+#[rstest]
+fn golden_section_ordering(minimal_metadata: LocalizedDocMetadata) {
+    let config = RoffConfig::default();
+    let output = generate_to_string(&minimal_metadata, &config);
+
+    // Find positions of each section
+    let name_pos = output.find(".SH NAME").expect("NAME section");
+    let synopsis_pos = output.find(".SH SYNOPSIS").expect("SYNOPSIS section");
+    let desc_pos = output.find(".SH DESCRIPTION").expect("DESCRIPTION section");
+
+    // Verify ordering: NAME < SYNOPSIS < DESCRIPTION
+    assert!(name_pos < synopsis_pos, "NAME should come before SYNOPSIS");
+    assert!(
+        synopsis_pos < desc_pos,
+        "SYNOPSIS should come before DESCRIPTION"
+    );
+}
+
+/// Test that special characters are properly escaped.
+#[rstest]
+fn golden_escaping(mut minimal_metadata: LocalizedDocMetadata) {
+    // Test backslash escaping in the about text
+    minimal_metadata.about = "A test with \\backslash.".to_owned();
+
+    let config = RoffConfig::default();
+    let output = generate_to_string(&minimal_metadata, &config);
+
+    // Backslash should be escaped to double backslash
+    assert!(
+        output.contains("\\\\backslash"),
+        "backslash should be escaped: {output}"
+    );
+
+    // Test leading dash escaping - use a multiline description
+    minimal_metadata.about = "-starts with dash".to_owned();
+
+    let output2 = generate_to_string(&minimal_metadata, &config);
+    assert!(
+        output2.contains("\\-starts with dash"),
+        "leading dash should be escaped: {output2}"
+    );
+}
+
+/// Test that enum fields render their possible values.
+#[rstest]
+fn golden_enum_rendering(mut minimal_metadata: LocalizedDocMetadata) {
+    minimal_metadata.fields.push(LocalizedFieldMetadata {
+        name: "log_level".to_owned(),
+        help: "Set the log level.".to_owned(),
+        long_help: None,
+        value: Some(ValueType::Enum {
+            variants: vec![
+                "debug".to_owned(),
+                "info".to_owned(),
+                "warn".to_owned(),
+                "error".to_owned(),
+            ],
+        }),
+        default: Some(DefaultValue {
+            display: "info".to_owned(),
+        }),
+        required: false,
+        deprecated: None,
+        cli: Some(CliMetadata {
+            long: Some("log-level".to_owned()),
+            short: Some('l'),
+            value_name: None,
+            multiple: false,
+            takes_value: true,
+            possible_values: vec![
+                "debug".to_owned(),
+                "info".to_owned(),
+                "warn".to_owned(),
+                "error".to_owned(),
+            ],
+            hide_in_help: false,
+        }),
+        env: None,
+        file: None,
+        examples: vec![],
+        links: vec![],
+        notes: vec![],
+    });
+
+    let config = RoffConfig::default();
+    let output = generate_to_string(&minimal_metadata, &config);
+
+    // Should contain OPTIONS section
+    assert!(
+        output.contains(".SH OPTIONS"),
+        "should have OPTIONS section"
+    );
+
+    // Should contain the flag (dashes are escaped in roff format)
+    assert!(
+        output.contains("\\-\\-log-level"),
+        "should contain --log-level flag: {output}"
+    );
+
+    // Should contain possible values
+    assert!(
+        output.contains("debug, info, warn, error"),
+        "should list enum variants: {output}"
+    );
+}
+
+/// Test that environment variables are rendered.
+#[rstest]
+fn golden_environment_section(mut minimal_metadata: LocalizedDocMetadata) {
+    minimal_metadata.fields.push(LocalizedFieldMetadata {
+        name: "port".to_owned(),
+        help: "Port to listen on.".to_owned(),
+        long_help: None,
+        value: Some(ValueType::Integer {
+            bits: 16,
+            signed: false,
+        }),
+        default: Some(DefaultValue {
+            display: "8080".to_owned(),
+        }),
+        required: false,
+        deprecated: None,
+        cli: Some(CliMetadata {
+            long: Some("port".to_owned()),
+            short: Some('p'),
+            value_name: None,
+            multiple: false,
+            takes_value: true,
+            possible_values: vec![],
+            hide_in_help: false,
+        }),
+        env: Some(EnvMetadata {
+            var_name: "TEST_APP_PORT".to_owned(),
+        }),
+        file: None,
+        examples: vec![],
+        links: vec![],
+        notes: vec![],
+    });
+
+    let config = RoffConfig::default();
+    let output = generate_to_string(&minimal_metadata, &config);
+
+    // Should contain ENVIRONMENT section
+    assert!(
+        output.contains(".SH ENVIRONMENT"),
+        "should have ENVIRONMENT section"
+    );
+
+    // Should contain the env var
+    assert!(
+        output.contains("TEST_APP_PORT"),
+        "should contain env var name"
+    );
+}
+
+/// Test that precedence section is rendered.
+#[rstest]
+fn golden_precedence_section(mut minimal_metadata: LocalizedDocMetadata) {
+    minimal_metadata.sections.precedence = Some(LocalizedPrecedenceMeta {
+        order: vec![
+            SourceKind::Defaults,
+            SourceKind::File,
+            SourceKind::Env,
+            SourceKind::Cli,
+        ],
+        rationale: None,
+    });
+
+    let config = RoffConfig::default();
+    let output = generate_to_string(&minimal_metadata, &config);
+
+    // Should contain PRECEDENCE section
+    assert!(
+        output.contains(".SH PRECEDENCE"),
+        "should have PRECEDENCE section"
+    );
+
+    // Should contain source kinds in order
+    assert!(
+        output.contains("Built-in defaults"),
+        "should mention defaults"
+    );
+    assert!(
+        output.contains("Configuration files"),
+        "should mention files"
+    );
+    assert!(
+        output.contains("Environment variables"),
+        "should mention env"
+    );
+    assert!(
+        output.contains("Command-line arguments"),
+        "should mention CLI"
+    );
+}
+
+/// Test that subcommand-specific behaviour renders SEE ALSO cross-links.
+#[rstest]
+fn golden_subcommand_split_see_also(
+    mut minimal_metadata: LocalizedDocMetadata,
+    default_headings: LocalizedHeadings,
+) {
+    minimal_metadata.app_name = "app".to_owned();
+
+    // Add subcommands
+    let foo_subcommand = make_test_metadata(default_headings.clone(), "foo", "Do foo things.");
+    let bar_subcommand = make_test_metadata(default_headings, "bar", "Do bar things.");
+
+    minimal_metadata.subcommands = vec![foo_subcommand, bar_subcommand];
+
+    // Enable subcommand splitting
+    let config = RoffConfig {
+        should_split_subcommands: true,
+        ..RoffConfig::default()
+    };
+
+    let output = generate_to_string(&minimal_metadata, &config);
+
+    // Main page SEE ALSO section should reference subcommands
+    assert!(
+        output.contains(".SH SEE ALSO"),
+        "main page should contain a SEE ALSO section: {output}"
+    );
+    assert!(
+        output.contains("app-foo (1)"),
+        "SEE ALSO should reference the foo subcommand man page: {output}"
+    );
+    assert!(
+        output.contains("app-bar (1)"),
+        "SEE ALSO should reference the bar subcommand man page: {output}"
+    );
+}
