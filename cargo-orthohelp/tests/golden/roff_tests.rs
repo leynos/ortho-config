@@ -30,15 +30,24 @@ fn default_headings() -> LocalizedHeadings {
 
 #[fixture]
 fn minimal_metadata(default_headings: LocalizedHeadings) -> LocalizedDocMetadata {
+    make_test_metadata(default_headings, "test-app", "A test application.")
+}
+
+/// Creates test metadata with the given headings, name, and about text.
+fn make_test_metadata(
+    headings: LocalizedHeadings,
+    name: &str,
+    about: &str,
+) -> LocalizedDocMetadata {
     LocalizedDocMetadata {
         ir_version: "1.1".to_owned(),
         locale: "en-US".to_owned(),
-        app_name: "test-app".to_owned(),
+        app_name: name.to_owned(),
         bin_name: None,
-        about: "A test application.".to_owned(),
+        about: about.to_owned(),
         synopsis: None,
         sections: LocalizedSectionsMetadata {
-            headings: default_headings,
+            headings,
             discovery: None,
             precedence: None,
             examples: vec![],
@@ -258,9 +267,8 @@ fn golden_subcommand_split_see_also(
     minimal_metadata.app_name = "app".to_owned();
 
     // Add subcommands
-    let foo_subcommand =
-        make_subcommand_metadata(default_headings.clone(), "foo", "Do foo things.");
-    let bar_subcommand = make_subcommand_metadata(default_headings, "bar", "Do bar things.");
+    let foo_subcommand = make_test_metadata(default_headings.clone(), "foo", "Do foo things.");
+    let bar_subcommand = make_test_metadata(default_headings, "bar", "Do bar things.");
 
     minimal_metadata.subcommands = vec![foo_subcommand, bar_subcommand];
 
@@ -285,31 +293,4 @@ fn golden_subcommand_split_see_also(
         output.contains("app-bar (1)"),
         "SEE ALSO should reference the bar subcommand man page: {output}"
     );
-}
-
-/// Creates a subcommand metadata for testing.
-fn make_subcommand_metadata(
-    headings: LocalizedHeadings,
-    name: &str,
-    about: &str,
-) -> LocalizedDocMetadata {
-    LocalizedDocMetadata {
-        ir_version: "1.1".to_owned(),
-        locale: "en-US".to_owned(),
-        app_name: name.to_owned(),
-        bin_name: None,
-        about: about.to_owned(),
-        synopsis: None,
-        sections: LocalizedSectionsMetadata {
-            headings,
-            discovery: None,
-            precedence: None,
-            examples: vec![],
-            links: vec![],
-            notes: vec![],
-        },
-        fields: vec![],
-        subcommands: vec![],
-        windows: None,
-    }
 }
