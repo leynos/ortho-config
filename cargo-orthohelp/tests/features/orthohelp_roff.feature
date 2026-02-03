@@ -5,10 +5,10 @@ Feature: cargo-orthohelp roff man page generation
     And the orthohelp cache is empty
     When I run cargo-orthohelp with format man for the fixture
     Then the output contains a man page for orthohelp_fixture
-    And the man page contains section NAME
-    And the man page contains section SYNOPSIS
-    And the man page contains section DESCRIPTION
-    And the man page contains section OPTIONS
+    And the man page for orthohelp_fixture contains section NAME
+    And the man page for orthohelp_fixture contains section SYNOPSIS
+    And the man page for orthohelp_fixture contains section DESCRIPTION
+    And the man page for orthohelp_fixture contains section OPTIONS
 
   Scenario: Man page uses correct section number
     Given a temporary output directory

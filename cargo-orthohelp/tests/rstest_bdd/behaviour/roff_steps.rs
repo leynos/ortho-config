@@ -70,12 +70,12 @@ fn run_with_format_all(orthohelp_context: &mut OrthoHelpContext) -> StepResult<(
 #[then("the output contains a man page for {name}")]
 fn output_contains_man_page(orthohelp_context: &mut OrthoHelpContext, name: String) -> StepResult<()> {
     let out_root = get_out_dir(orthohelp_context)?;
-    let man_path = out_root.join(format!("man/man1/{name}.1"));
+    let relative_path = Utf8PathBuf::from(format!("man/man1/{name}.1"));
     let dir = Dir::open_ambient_dir(&out_root, ambient_authority())?;
 
     let mut file = dir
-        .open(&Utf8PathBuf::from(format!("man/man1/{name}.1")))
-        .map_err(|e| format!("man page should exist at {man_path}: {e}"))?;
+        .open(&relative_path)
+        .map_err(|e| format!("man page should exist at {}: {e}", out_root.join(&relative_path)))?;
 
     let mut content = String::new();
     file.read_to_string(&mut content)?;
@@ -91,14 +91,12 @@ fn output_contains_man_page_section(
     name: String,
 ) -> StepResult<()> {
     let out_root = get_out_dir(orthohelp_context)?;
-    let man_path = out_root.join(format!("man/man{section}/{name}.{section}"));
+    let relative_path = Utf8PathBuf::from(format!("man/man{section}/{name}.{section}"));
     let dir = Dir::open_ambient_dir(&out_root, ambient_authority())?;
 
     let mut file = dir
-        .open(&Utf8PathBuf::from(format!(
-            "man/man{section}/{name}.{section}"
-        )))
-        .map_err(|e| format!("man page should exist at {man_path}: {e}"))?;
+        .open(&relative_path)
+        .map_err(|e| format!("man page should exist at {}: {e}", out_root.join(&relative_path)))?;
 
     let mut content = String::new();
     file.read_to_string(&mut content)?;
@@ -110,15 +108,17 @@ fn output_contains_man_page_section(
     Ok(())
 }
 
-#[then("the man page contains section {section_name}")]
+#[then("the man page for {name} contains section {section_name}")]
 fn man_page_contains_section(
     orthohelp_context: &mut OrthoHelpContext,
+    name: String,
     section_name: String,
 ) -> StepResult<()> {
     let out_root = get_out_dir(orthohelp_context)?;
+    let relative_path = Utf8PathBuf::from(format!("man/man1/{name}.1"));
     let dir = Dir::open_ambient_dir(&out_root, ambient_authority())?;
 
-    let mut file = dir.open(&Utf8PathBuf::from("man/man1/orthohelp_fixture.1"))?;
+    let mut file = dir.open(&relative_path)?;
 
     let mut content = String::new();
     file.read_to_string(&mut content)?;

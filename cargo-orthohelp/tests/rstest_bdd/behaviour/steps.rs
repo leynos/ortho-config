@@ -210,15 +210,19 @@ fn cached_ir_deserialises(orthohelp_context: &mut OrthoHelpContext) -> StepResul
 }
 
 #[then("the command fails due to missing cache")]
-fn command_fails_due_to_missing_cache(orthohelp_context: &mut OrthoHelpContext) {
-    orthohelp_context.last_output.with_ref(|output| {
-        assert!(!output.status.success(), "cargo-orthohelp should fail");
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        assert!(
-            stderr.contains("cached IR missing"),
-            "expected missing cache error, got: {stderr}"
-        );
-    });
+fn command_fails_due_to_missing_cache(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
+    orthohelp_context
+        .last_output
+        .with_ref(|output| {
+            assert!(!output.status.success(), "cargo-orthohelp should fail");
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            assert!(
+                stderr.contains("cached IR missing"),
+                "expected missing cache error, got: {stderr}"
+            );
+        })
+        .ok_or("last_output should be set")?;
+    Ok(())
 }
 
 /// Runs cargo-orthohelp with the given arguments.
