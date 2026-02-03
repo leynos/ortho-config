@@ -64,58 +64,84 @@ fn run() -> Result<(), OrthohelpError> {
     let should_generate_man = matches!(args.format, OutputFormat::Man | OutputFormat::All);
     let has_multiple_locales = locales.len() > 1;
 
+    let output_config = OutputConfig::new(
+        &out_dir,
+        &args.man,
+        should_generate_ir,
+        should_generate_man,
+        has_multiple_locales,
+    );
+
     for locale in locales {
         generate_outputs_for_locale(
             &selection.package_root,
             &doc_metadata,
             &locale,
-            &out_dir,
-            &args.man,
-            should_generate_ir,
-            should_generate_man,
-            has_multiple_locales,
+            &output_config,
         )?;
     }
 
     Ok(())
 }
 
-#[expect(
-    clippy::too_many_arguments,
-    reason = "Extracted helper keeps run() concise; grouping into a struct would over-complicate."
-)]
+struct OutputConfig<'a> {
+    out_dir: &'a Utf8PathBuf,
+    man_args: &'a cli::ManArgs,
+    should_generate_ir: bool,
+    should_generate_man: bool,
+    has_multiple_locales: bool,
+}
+
+impl<'a> OutputConfig<'a> {
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Constructor mirrors struct fields; further grouping adds unnecessary indirection."
+    )]
+    const fn new(
+        out_dir: &'a Utf8PathBuf,
+        man_args: &'a cli::ManArgs,
+        should_generate_ir: bool,
+        should_generate_man: bool,
+        has_multiple_locales: bool,
+    ) -> Self {
+        Self {
+            out_dir,
+            man_args,
+            should_generate_ir,
+            should_generate_man,
+            has_multiple_locales,
+        }
+    }
+}
+
 fn generate_outputs_for_locale(
     package_root: &Utf8PathBuf,
     doc_metadata: &DocMetadata,
     locale: &ortho_config::LanguageIdentifier,
-    out_dir: &Utf8PathBuf,
-    man_args: &cli::ManArgs,
-    should_generate_ir: bool,
-    should_generate_man: bool,
-    has_multiple_locales: bool,
+    config: &OutputConfig,
 ) -> Result<(), OrthohelpError> {
     let resources = locale::load_consumer_resources(package_root, locale)?;
     let localizer = locale::build_localizer(locale, resources)?;
     let resolved_ir = ir::localize_doc(doc_metadata, locale, &localizer);
 
-    if should_generate_ir {
-        output::write_localized_ir(out_dir, &locale.to_string(), &resolved_ir)?;
+    if config.should_generate_ir {
+        output::write_localized_ir(config.out_dir, &locale.to_string(), &resolved_ir)?;
     }
 
-    if should_generate_man {
-        let section = roff::ManSection::new(man_args.section)?;
+    if config.should_generate_man {
+        let section = roff::ManSection::new(config.man_args.section)?;
         // Use locale-specific subdirectory when generating for multiple locales
         // to prevent overwrites (e.g., out/en-US/man/man1/ vs out/ja/man/man1/).
-        let man_out_dir = if has_multiple_locales {
-            out_dir.join(locale.to_string())
+        let man_out_dir = if config.has_multiple_locales {
+            config.out_dir.join(locale.to_string())
         } else {
-            out_dir.clone()
+            config.out_dir.clone()
         };
         let roff_config = roff::RoffConfig {
             out_dir: man_out_dir,
             section,
-            date: man_args.date.clone(),
-            should_split_subcommands: man_args.should_split_subcommands,
+            date: config.man_args.date.clone(),
+            should_split_subcommands: config.man_args.should_split_subcommands,
             source: None,
             manual: None,
         };

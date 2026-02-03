@@ -193,7 +193,9 @@ fn generate_subcommand_section(metadata: &LocalizedDocMetadata) -> String {
         .collect();
 
     if !cli_fields.is_empty() {
-        content.push_str(".PP\nOptions:\n");
+        content.push_str(".PP\n");
+        content.push_str(&escape::escape_text(&metadata.sections.headings.options));
+        content.push_str(":\n");
         for (field, cli) in cli_fields {
             content.push_str(".TP\n");
 

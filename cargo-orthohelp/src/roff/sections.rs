@@ -171,8 +171,10 @@ pub fn files_section(
 
     let mut output = format!(".SH {}\n", headings.files);
 
-    if let Some(disc) = discovery {
-        output.push_str(&entry::render_discovery_section(disc));
+    if has_discovery {
+        if let Some(disc) = discovery {
+            output.push_str(&entry::render_discovery_section(disc));
+        }
     }
 
     if !file_fields.is_empty() {
