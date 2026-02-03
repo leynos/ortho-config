@@ -22,6 +22,7 @@ fn default_headings() -> HeadingOverrides {
         exit_status: Some(String::from("ortho.headings.exit_status")),
         examples: Some(String::from("ortho.headings.examples")),
         see_also: Some(String::from("ortho.headings.see_also")),
+        commands: Some(String::from("ortho.headings.commands")),
     }
 }
 
@@ -114,6 +115,7 @@ fn build_headings_ids(overrides: &HeadingOverrides) -> TokenStream {
     let exit_status_tokens = process_heading(headings.exit_status, "ortho.headings.exit_status");
     let examples_tokens = process_heading(headings.examples, "ortho.headings.examples");
     let see_also_tokens = process_heading(headings.see_also, "ortho.headings.see_also");
+    let commands_tokens = option_string_tokens(headings.commands.as_deref());
 
     quote! {
         ortho_config::docs::HeadingIds {
@@ -127,6 +129,7 @@ fn build_headings_ids(overrides: &HeadingOverrides) -> TokenStream {
             exit_status: #exit_status_tokens,
             examples: #examples_tokens,
             see_also: #see_also_tokens,
+            commands: #commands_tokens,
         }
     }
 }
@@ -149,6 +152,7 @@ fn merge_headings(overrides: &HeadingOverrides) -> HeadingOverrides {
         exit_status: overrides.exit_status.clone().or(defaults.exit_status),
         examples: overrides.examples.clone().or(defaults.examples),
         see_also: overrides.see_also.clone().or(defaults.see_also),
+        commands: overrides.commands.clone().or(defaults.commands),
     }
 }
 

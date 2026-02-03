@@ -25,6 +25,7 @@ fn default_headings() -> LocalizedHeadings {
         exit_status: "EXIT STATUS".to_owned(),
         examples: "EXAMPLES".to_owned(),
         see_also: "SEE ALSO".to_owned(),
+        commands: "COMMANDS".to_owned(),
     }
 }
 

@@ -62,6 +62,7 @@ fn run() -> Result<(), OrthohelpError> {
 
     let should_generate_ir = matches!(args.format, OutputFormat::Ir | OutputFormat::All);
     let should_generate_man = matches!(args.format, OutputFormat::Man | OutputFormat::All);
+    let has_multiple_locales = locales.len() > 1;
 
     for locale in locales {
         let resources = locale::load_consumer_resources(&selection.package_root, &locale)?;
@@ -73,9 +74,17 @@ fn run() -> Result<(), OrthohelpError> {
         }
 
         if should_generate_man {
+            let section = roff::ManSection::new(args.man.section)?;
+            // Use locale-specific subdirectory when generating for multiple locales
+            // to prevent overwrites (e.g., out/en-US/man/man1/ vs out/ja/man/man1/).
+            let man_out_dir = if has_multiple_locales {
+                out_dir.join(locale.to_string())
+            } else {
+                out_dir.clone()
+            };
             let roff_config = roff::RoffConfig {
-                out_dir: out_dir.clone(),
-                section: args.man.section,
+                out_dir: man_out_dir,
+                section,
                 date: args.man.date.clone(),
                 should_split_subcommands: args.man.should_split_subcommands,
                 source: None,

@@ -3,6 +3,8 @@
 use camino::Utf8PathBuf;
 use thiserror::Error;
 
+use crate::roff::InvalidManSection;
+
 /// Errors surfaced by the `cargo-orthohelp` pipeline.
 #[derive(Debug, Error)]
 pub enum OrthohelpError {
@@ -26,6 +28,10 @@ pub enum OrthohelpError {
         /// A description of why the locale is invalid.
         message: String,
     },
+
+    /// The man page section number is outside the valid range (1-8).
+    #[error("{0}")]
+    InvalidManSection(#[from] InvalidManSection),
 
     /// The specified package was not found in the workspace.
     #[error("package '{0}' not found in workspace")]

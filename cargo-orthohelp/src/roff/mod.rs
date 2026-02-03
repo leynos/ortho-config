@@ -9,7 +9,7 @@ mod sections;
 mod types;
 mod writer;
 
-pub use types::{RoffConfig, RoffOutput};
+pub use types::{InvalidManSection, ManSection, RoffConfig, RoffOutput};
 
 use crate::error::OrthohelpError;
 use crate::ir::LocalizedDocMetadata;
@@ -167,7 +167,9 @@ fn append_inline_subcommands(
         return;
     }
 
-    content.push_str(".SH COMMANDS\n");
+    content.push_str(".SH ");
+    content.push_str(&metadata.sections.headings.commands);
+    content.push('\n');
     for subcommand in &metadata.subcommands {
         content.push_str(&generate_subcommand_section(subcommand));
     }
@@ -249,6 +251,7 @@ mod tests {
                     exit_status: "EXIT STATUS".to_owned(),
                     examples: "EXAMPLES".to_owned(),
                     see_also: "SEE ALSO".to_owned(),
+                    commands: "COMMANDS".to_owned(),
                 },
                 discovery: None,
                 precedence: None,

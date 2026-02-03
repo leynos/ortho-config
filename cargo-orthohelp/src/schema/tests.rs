@@ -62,6 +62,7 @@ fn sample_headings_ids() -> ortho_docs::HeadingIds {
         exit_status: "demo.headings.exit_status".to_owned(),
         examples: "demo.headings.examples".to_owned(),
         see_also: "demo.headings.see_also".to_owned(),
+        commands: Some("demo.headings.commands".to_owned()),
     }
 }
 

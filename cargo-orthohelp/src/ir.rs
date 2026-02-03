@@ -74,6 +74,8 @@ pub struct LocalizedHeadings {
     pub examples: String,
     /// SEE ALSO section heading.
     pub see_also: String,
+    /// COMMANDS section heading (for inline subcommands).
+    pub commands: String,
 }
 
 /// Field metadata with resolved help text.
@@ -218,6 +220,10 @@ fn localize_sections(
             exit_status: resolve_message(localizer, &sections.headings_ids.exit_status),
             examples: resolve_message(localizer, &sections.headings_ids.examples),
             see_also: resolve_message(localizer, &sections.headings_ids.see_also),
+            commands: sections.headings_ids.commands.as_deref().map_or_else(
+                || "COMMANDS".to_owned(),
+                |id| resolve_message(localizer, id),
+            ),
         },
         discovery: sections
             .discovery

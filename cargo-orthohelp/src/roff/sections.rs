@@ -11,6 +11,7 @@ use crate::schema::SourceKind;
 
 use super::entry;
 use super::escape::{bold, escape_macro_arg, escape_text, format_flag, format_flag_with_value};
+use super::types::ManSection;
 
 /// Metadata for the man page title header.
 pub struct TitleMetadata<'a> {
@@ -41,7 +42,7 @@ impl<'a> TitleMetadata<'a> {
 /// Generates the `.TH` title header macro.
 ///
 /// Format: `.TH NAME SECTION DATE SOURCE MANUAL`
-pub fn title_header(name: &str, section: u8, metadata: &TitleMetadata) -> String {
+pub fn title_header(name: &str, section: ManSection, metadata: &TitleMetadata) -> String {
     let name_upper = escape_macro_arg(&name.to_uppercase());
     let date_str = metadata.date.map_or_else(String::new, escape_macro_arg);
     let source_str = metadata.source.map_or_else(String::new, escape_macro_arg);
@@ -269,7 +270,7 @@ pub fn see_also_section(
     headings: &LocalizedHeadings,
     links: &[LocalizedLink],
     related_commands: &[String],
-    section: u8,
+    section: ManSection,
 ) -> String {
     if links.is_empty() && related_commands.is_empty() {
         return String::new();
@@ -333,13 +334,15 @@ mod tests {
             exit_status: "EXIT STATUS".to_owned(),
             examples: "EXAMPLES".to_owned(),
             see_also: "SEE ALSO".to_owned(),
+            commands: "COMMANDS".to_owned(),
         }
     }
 
     #[test]
     fn title_header_formats_correctly() {
         let metadata = TitleMetadata::new(Some("2026-01-31"), Some("v1.0"), Some("User Commands"));
-        let result = title_header("my-app", 1, &metadata);
+        let section = ManSection::new(1).expect("valid section");
+        let result = title_header("my-app", section, &metadata);
         assert!(result.starts_with(".TH \"MY-APP\" \"1\""));
         assert!(result.contains("2026-01-31"));
         assert!(result.contains("v1.0"));

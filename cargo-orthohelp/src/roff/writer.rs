@@ -7,6 +7,8 @@ use std::io::Write;
 
 use crate::error::OrthohelpError;
 
+use super::types::ManSection;
+
 /// Metadata describing the man page to be written.
 pub struct ManPageInfo<'a> {
     /// The name of the command (e.g. "my-app").
@@ -14,13 +16,13 @@ pub struct ManPageInfo<'a> {
     /// The subcommand name, if generating a split subcommand page.
     pub subcommand: Option<&'a str>,
     /// The man page section number (typically 1 for user commands).
-    pub section: u8,
+    pub section: ManSection,
 }
 
 impl<'a> ManPageInfo<'a> {
     /// Creates a new `ManPageInfo` for a main command.
     #[must_use]
-    pub const fn new(name: &'a str, section: u8) -> Self {
+    pub const fn new(name: &'a str, section: ManSection) -> Self {
         Self {
             name,
             subcommand: None,
@@ -30,7 +32,7 @@ impl<'a> ManPageInfo<'a> {
 
     /// Creates a new `ManPageInfo` for a subcommand.
     #[must_use]
-    pub const fn with_subcommand(name: &'a str, subcommand: &'a str, section: u8) -> Self {
+    pub const fn with_subcommand(name: &'a str, subcommand: &'a str, section: ManSection) -> Self {
         Self {
             name,
             subcommand: Some(subcommand),
@@ -49,9 +51,10 @@ pub fn write_man_page(
     content: &str,
 ) -> Result<Utf8PathBuf, OrthohelpError> {
     let dir = ensure_dir(out_dir)?;
+    let section = info.section.as_u8();
 
     // Create man/man<section>/ directory
-    let section_dir = format!("man/man{}", info.section);
+    let section_dir = format!("man/man{section}");
     dir.create_dir_all(&section_dir)
         .map_err(|io_err| OrthohelpError::Io {
             path: out_dir.join(&section_dir),
@@ -67,8 +70,8 @@ pub fn write_man_page(
 
     // Determine filename
     let filename = info.subcommand.map_or_else(
-        || format!("{}.{}", info.name, info.section),
-        |sub| format!("{}-{sub}.{}", info.name, info.section),
+        || format!("{}.{section}", info.name),
+        |sub| format!("{}-{sub}.{section}", info.name),
     );
 
     let file_path = out_dir.join(&section_dir).join(&filename);
