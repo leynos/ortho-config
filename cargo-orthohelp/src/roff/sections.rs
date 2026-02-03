@@ -162,7 +162,7 @@ pub fn files_section(
         .iter()
         .filter_map(|f| f.file.as_ref().map(|file| (f, file)))
         .collect();
-    let has_discovery = discovery.is_some_and(|d| !d.search_paths.is_empty());
+    let has_discovery = discovery.is_some_and(has_discovery_content);
 
     if file_fields.is_empty() && !has_discovery {
         return String::new();
@@ -182,6 +182,11 @@ pub fn files_section(
     }
 
     output
+}
+
+/// Checks whether discovery metadata has any renderable content.
+const fn has_discovery_content(d: &LocalizedConfigDiscoveryMeta) -> bool {
+    !d.search_paths.is_empty() || !d.formats.is_empty() || d.xdg_compliant
 }
 
 /// Generates the PRECEDENCE section content.

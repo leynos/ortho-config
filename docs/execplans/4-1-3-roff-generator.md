@@ -89,8 +89,8 @@ Known uncertainties that might affect the plan.
   functions. Golden tests provide equivalent coverage, so BDD tests were
   deferred.
 
-- Clippy's `allow` attributes now require a `reason` parameter. All allow
-  attributes needed updating to include explanatory reasons.
+- Clippy's `expect` attributes require a `reason` parameter. All lint
+  suppressions now use `#[expect(..., reason = "...")]` per project guidelines.
 
 - The `str_to_string` lint flagged `.to_string()` on string literals; replaced
   with `.to_owned()` throughout for consistency.

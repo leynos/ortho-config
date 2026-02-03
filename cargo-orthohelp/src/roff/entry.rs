@@ -27,7 +27,7 @@ pub fn format_option_entry(field: &LocalizedFieldMetadata, cli: &CliMetadata) ->
     // Default value
     if let Some(default) = &field.default {
         output.push_str(".br\nDefault: ");
-        output.push_str(&bold(&escape_text(&default.display)));
+        output.push_str(&bold(&default.display));
         output.push('\n');
     }
 

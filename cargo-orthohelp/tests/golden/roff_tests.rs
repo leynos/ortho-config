@@ -10,8 +10,9 @@ use cargo_orthohelp::ir::{
 };
 use cargo_orthohelp::roff::{RoffConfig, generate_to_string};
 use cargo_orthohelp::schema::{CliMetadata, DefaultValue, EnvMetadata, SourceKind, ValueType};
-use rstest::rstest;
+use rstest::{fixture, rstest};
 
+#[fixture]
 fn default_headings() -> LocalizedHeadings {
     LocalizedHeadings {
         name: "NAME".to_owned(),
@@ -27,7 +28,8 @@ fn default_headings() -> LocalizedHeadings {
     }
 }
 
-fn minimal_metadata() -> LocalizedDocMetadata {
+#[fixture]
+fn minimal_metadata(default_headings: LocalizedHeadings) -> LocalizedDocMetadata {
     LocalizedDocMetadata {
         ir_version: "1.1".to_owned(),
         locale: "en-US".to_owned(),
@@ -36,7 +38,7 @@ fn minimal_metadata() -> LocalizedDocMetadata {
         about: "A test application.".to_owned(),
         synopsis: None,
         sections: LocalizedSectionsMetadata {
-            headings: default_headings(),
+            headings: default_headings,
             discovery: None,
             precedence: None,
             examples: vec![],
@@ -51,10 +53,9 @@ fn minimal_metadata() -> LocalizedDocMetadata {
 
 /// Test that section ordering matches the specification.
 #[rstest]
-fn golden_section_ordering() {
-    let metadata = minimal_metadata();
+fn golden_section_ordering(minimal_metadata: LocalizedDocMetadata) {
     let config = RoffConfig::default();
-    let output = generate_to_string(&metadata, &config);
+    let output = generate_to_string(&minimal_metadata, &config);
 
     // Find positions of each section
     let name_pos = output.find(".SH NAME").expect("NAME section");
@@ -71,13 +72,12 @@ fn golden_section_ordering() {
 
 /// Test that special characters are properly escaped.
 #[rstest]
-fn golden_escaping() {
-    let mut metadata = minimal_metadata();
+fn golden_escaping(mut minimal_metadata: LocalizedDocMetadata) {
     // Test backslash escaping in the about text
-    metadata.about = "A test with \\backslash.".to_owned();
+    minimal_metadata.about = "A test with \\backslash.".to_owned();
 
     let config = RoffConfig::default();
-    let output = generate_to_string(&metadata, &config);
+    let output = generate_to_string(&minimal_metadata, &config);
 
     // Backslash should be escaped to double backslash
     assert!(
@@ -86,10 +86,9 @@ fn golden_escaping() {
     );
 
     // Test leading dash escaping - use a multiline description
-    let mut metadata2 = minimal_metadata();
-    metadata2.about = "-starts with dash".to_owned();
+    minimal_metadata.about = "-starts with dash".to_owned();
 
-    let output2 = generate_to_string(&metadata2, &config);
+    let output2 = generate_to_string(&minimal_metadata, &config);
     assert!(
         output2.contains("\\-starts with dash"),
         "leading dash should be escaped: {output2}"
@@ -98,9 +97,8 @@ fn golden_escaping() {
 
 /// Test that enum fields render their possible values.
 #[rstest]
-fn golden_enum_rendering() {
-    let mut metadata = minimal_metadata();
-    metadata.fields.push(LocalizedFieldMetadata {
+fn golden_enum_rendering(mut minimal_metadata: LocalizedDocMetadata) {
+    minimal_metadata.fields.push(LocalizedFieldMetadata {
         name: "log_level".to_owned(),
         help: "Set the log level.".to_owned(),
         long_help: None,
@@ -139,7 +137,7 @@ fn golden_enum_rendering() {
     });
 
     let config = RoffConfig::default();
-    let output = generate_to_string(&metadata, &config);
+    let output = generate_to_string(&minimal_metadata, &config);
 
     // Should contain OPTIONS section
     assert!(
@@ -162,9 +160,8 @@ fn golden_enum_rendering() {
 
 /// Test that environment variables are rendered.
 #[rstest]
-fn golden_environment_section() {
-    let mut metadata = minimal_metadata();
-    metadata.fields.push(LocalizedFieldMetadata {
+fn golden_environment_section(mut minimal_metadata: LocalizedDocMetadata) {
+    minimal_metadata.fields.push(LocalizedFieldMetadata {
         name: "port".to_owned(),
         help: "Port to listen on.".to_owned(),
         long_help: None,
@@ -196,7 +193,7 @@ fn golden_environment_section() {
     });
 
     let config = RoffConfig::default();
-    let output = generate_to_string(&metadata, &config);
+    let output = generate_to_string(&minimal_metadata, &config);
 
     // Should contain ENVIRONMENT section
     assert!(
@@ -213,9 +210,8 @@ fn golden_environment_section() {
 
 /// Test that precedence section is rendered.
 #[rstest]
-fn golden_precedence_section() {
-    let mut metadata = minimal_metadata();
-    metadata.sections.precedence = Some(LocalizedPrecedenceMeta {
+fn golden_precedence_section(mut minimal_metadata: LocalizedDocMetadata) {
+    minimal_metadata.sections.precedence = Some(LocalizedPrecedenceMeta {
         order: vec![
             SourceKind::Defaults,
             SourceKind::File,
@@ -226,7 +222,7 @@ fn golden_precedence_section() {
     });
 
     let config = RoffConfig::default();
-    let output = generate_to_string(&metadata, &config);
+    let output = generate_to_string(&minimal_metadata, &config);
 
     // Should contain PRECEDENCE section
     assert!(
@@ -255,20 +251,18 @@ fn golden_precedence_section() {
 
 /// Test that subcommand-specific behaviour renders SEE ALSO cross-links.
 #[rstest]
-fn golden_subcommand_split_see_also() {
-    let mut metadata = minimal_metadata();
-    metadata.app_name = "app".to_owned();
+fn golden_subcommand_split_see_also(
+    mut minimal_metadata: LocalizedDocMetadata,
+    default_headings: LocalizedHeadings,
+) {
+    minimal_metadata.app_name = "app".to_owned();
 
     // Add subcommands
-    let mut foo_subcommand = minimal_metadata();
-    foo_subcommand.app_name = "foo".to_owned();
-    foo_subcommand.about = "Do foo things.".to_owned();
+    let foo_subcommand =
+        make_subcommand_metadata(default_headings.clone(), "foo", "Do foo things.");
+    let bar_subcommand = make_subcommand_metadata(default_headings, "bar", "Do bar things.");
 
-    let mut bar_subcommand = minimal_metadata();
-    bar_subcommand.app_name = "bar".to_owned();
-    bar_subcommand.about = "Do bar things.".to_owned();
-
-    metadata.subcommands = vec![foo_subcommand, bar_subcommand];
+    minimal_metadata.subcommands = vec![foo_subcommand, bar_subcommand];
 
     // Enable subcommand splitting
     let config = RoffConfig {
@@ -276,7 +270,7 @@ fn golden_subcommand_split_see_also() {
         ..RoffConfig::default()
     };
 
-    let output = generate_to_string(&metadata, &config);
+    let output = generate_to_string(&minimal_metadata, &config);
 
     // Main page SEE ALSO section should reference subcommands
     assert!(
@@ -291,4 +285,31 @@ fn golden_subcommand_split_see_also() {
         output.contains("app-bar (1)"),
         "SEE ALSO should reference the bar subcommand man page: {output}"
     );
+}
+
+/// Creates a subcommand metadata for testing.
+fn make_subcommand_metadata(
+    headings: LocalizedHeadings,
+    name: &str,
+    about: &str,
+) -> LocalizedDocMetadata {
+    LocalizedDocMetadata {
+        ir_version: "1.1".to_owned(),
+        locale: "en-US".to_owned(),
+        app_name: name.to_owned(),
+        bin_name: None,
+        about: about.to_owned(),
+        synopsis: None,
+        sections: LocalizedSectionsMetadata {
+            headings,
+            discovery: None,
+            precedence: None,
+            examples: vec![],
+            links: vec![],
+            notes: vec![],
+        },
+        fields: vec![],
+        subcommands: vec![],
+        windows: None,
+    }
 }
