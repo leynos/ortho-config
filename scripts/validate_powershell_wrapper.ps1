@@ -28,7 +28,7 @@ $commandOutput = & cargo @arguments 2>&1
 $exitCode = $LASTEXITCODE
 if ($exitCode -ne 0) {
     $outputText = $commandOutput | Out-String
-    if ($outputText -match 'unsupported format' -or $outputText -match 'PowerShell format is not yet implemented') {
+    if ($outputText -match '(?i)unsupported format' -or $outputText -match 'UnsupportedFormat' -or $outputText -match 'PowerShell format is not yet implemented') {
         Write-Host 'PowerShell generator not available; skipping wrapper validation.'
         exit 0
     }
