@@ -9,6 +9,9 @@ publish = false
 root_type = "hello_world::cli::HelloWorldCli"
 locales = ["en-US", "ja"]
 
+[package.metadata.ortho_config.windows]
+module_name = "HelloWorld"
+
 [lints]
 workspace = true
 

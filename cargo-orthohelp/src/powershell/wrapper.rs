@@ -1,0 +1,219 @@
+//! `PowerShell` wrapper module rendering.
+
+use crate::ir::LocalizedDocMetadata;
+
+const CRLF: &str = "\r\n";
+
+/// Renders the `PowerShell` wrapper module content.
+#[must_use]
+pub fn render_wrapper(
+    metadata: &LocalizedDocMetadata,
+    bin_name: &str,
+    export_aliases: &[String],
+    split_subcommands: bool,
+) -> String {
+    let mut output = String::new();
+
+    push_line(&mut output, "[CmdletBinding(PositionalBinding = $false)]");
+    push_line(&mut output, "param()");
+    push_line(&mut output, "");
+
+    output.push_str(&render_function(bin_name, bin_name, &[]));
+
+    if split_subcommands {
+        for subcommand in &metadata.subcommands {
+            let sub_name = subcommand
+                .bin_name
+                .as_deref()
+                .unwrap_or(&subcommand.app_name);
+            let function_name = format!("{bin_name}_{sub_name}");
+            output.push_str(CRLF);
+            output.push_str(&render_function(
+                &function_name,
+                bin_name,
+                &[sub_name.to_owned()],
+            ));
+        }
+    }
+
+    if !export_aliases.is_empty() {
+        output.push_str(CRLF);
+        for alias in export_aliases {
+            push_line(
+                &mut output,
+                &format!(
+                    "Set-Alias -Name {} -Value {}",
+                    quote_single(alias),
+                    quote_single(bin_name)
+                ),
+            );
+        }
+    }
+
+    output.push_str(CRLF);
+    output.push_str(&render_completion_block(bin_name));
+
+    output
+}
+
+fn render_function(function_name: &str, exe_name: &str, extra_args: &[String]) -> String {
+    let mut output = String::new();
+
+    push_line(&mut output, &format!("function {function_name} {{"));
+    push_line(&mut output, "  [CmdletBinding(PositionalBinding = $false)]");
+    push_line(
+        &mut output,
+        "  param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Args)",
+    );
+    push_line(
+        &mut output,
+        &format!(
+            "  $exe = Join-Path $PSScriptRoot '..' 'bin' {}",
+            quote_single(&format!("{exe_name}.exe"))
+        ),
+    );
+    push_line(&mut output, "  $exe = (Resolve-Path $exe).ProviderPath");
+
+    if extra_args.is_empty() {
+        push_line(&mut output, "  & $exe @Args");
+    } else {
+        let joined = extra_args
+            .iter()
+            .map(|arg| quote_single(arg))
+            .collect::<Vec<_>>()
+            .join(" ");
+        push_line(&mut output, &format!("  & $exe {joined} @Args"));
+    }
+
+    push_line(&mut output, "  $global:LASTEXITCODE = $LASTEXITCODE");
+    push_line(&mut output, "}");
+    output
+}
+
+fn render_completion_block(command_name: &str) -> String {
+    let mut output = String::new();
+    push_line(&mut output, "$sb = {");
+    push_line(
+        &mut output,
+        "  param($wordToComplete, $commandAst, $cursorPosition)",
+    );
+    push_line(&mut output, "  # TODO: generated completion logic");
+    push_line(&mut output, "}");
+    push_line(
+        &mut output,
+        "$hasNative = (Get-Command Register-ArgumentCompleter).Parameters.ContainsKey('Native')",
+    );
+    push_line(&mut output, "if ($hasNative) {");
+    push_line(
+        &mut output,
+        &format!(
+            "  Register-ArgumentCompleter -Native -CommandName {} -ScriptBlock $sb",
+            quote_single(command_name)
+        ),
+    );
+    push_line(&mut output, "} else {");
+    push_line(
+        &mut output,
+        &format!(
+            "  Register-ArgumentCompleter -CommandName {} -ScriptBlock $sb",
+            quote_single(command_name)
+        ),
+    );
+    push_line(&mut output, "}");
+    output
+}
+
+fn push_line(buffer: &mut String, line: &str) {
+    buffer.push_str(line);
+    buffer.push_str(CRLF);
+}
+
+fn quote_single(value: &str) -> String {
+    format!("'{}'", value.replace('\'', "''"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ir::{LocalizedHeadings, LocalizedSectionsMetadata};
+    use rstest::rstest;
+
+    fn minimal_metadata() -> LocalizedDocMetadata {
+        LocalizedDocMetadata {
+            ir_version: "1.1".to_owned(),
+            locale: "en-US".to_owned(),
+            app_name: "fixture".to_owned(),
+            bin_name: None,
+            about: "Fixture".to_owned(),
+            synopsis: None,
+            sections: LocalizedSectionsMetadata {
+                headings: LocalizedHeadings {
+                    name: "NAME".to_owned(),
+                    synopsis: "SYNOPSIS".to_owned(),
+                    description: "DESCRIPTION".to_owned(),
+                    options: "OPTIONS".to_owned(),
+                    environment: "ENVIRONMENT".to_owned(),
+                    files: "FILES".to_owned(),
+                    precedence: "PRECEDENCE".to_owned(),
+                    exit_status: "EXIT STATUS".to_owned(),
+                    examples: "EXAMPLES".to_owned(),
+                    see_also: "SEE ALSO".to_owned(),
+                    commands: "COMMANDS".to_owned(),
+                },
+                discovery: None,
+                precedence: None,
+                examples: vec![],
+                links: vec![],
+                notes: vec![],
+            },
+            fields: vec![],
+            subcommands: vec![LocalizedDocMetadata {
+                ir_version: "1.1".to_owned(),
+                locale: "en-US".to_owned(),
+                app_name: "greet".to_owned(),
+                bin_name: None,
+                about: "Greet".to_owned(),
+                synopsis: None,
+                sections: LocalizedSectionsMetadata {
+                    headings: LocalizedHeadings {
+                        name: "NAME".to_owned(),
+                        synopsis: "SYNOPSIS".to_owned(),
+                        description: "DESCRIPTION".to_owned(),
+                        options: "OPTIONS".to_owned(),
+                        environment: "ENVIRONMENT".to_owned(),
+                        files: "FILES".to_owned(),
+                        precedence: "PRECEDENCE".to_owned(),
+                        exit_status: "EXIT STATUS".to_owned(),
+                        examples: "EXAMPLES".to_owned(),
+                        see_also: "SEE ALSO".to_owned(),
+                        commands: "COMMANDS".to_owned(),
+                    },
+                    discovery: None,
+                    precedence: None,
+                    examples: vec![],
+                    links: vec![],
+                    notes: vec![],
+                },
+                fields: vec![],
+                subcommands: vec![],
+                windows: None,
+            }],
+            windows: None,
+        }
+    }
+
+    #[rstest]
+    fn wrapper_includes_completion_registration() {
+        let metadata = minimal_metadata();
+        let output = render_wrapper(&metadata, "fixture", &[], false);
+        assert!(output.contains("Register-ArgumentCompleter"));
+        assert!(output.contains("[CmdletBinding"));
+    }
+
+    #[rstest]
+    fn wrapper_renders_subcommand_functions() {
+        let metadata = minimal_metadata();
+        let output = render_wrapper(&metadata, "fixture", &[], true);
+        assert!(output.contains("function fixture_greet"));
+    }
+}

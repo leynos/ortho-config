@@ -31,14 +31,22 @@ pub enum LogLevel {
 /// - Default values
 /// - Required and optional fields
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, OrthoConfig)]
-#[ortho_config(prefix = "FIXTURE")]
+#[ortho_config(
+    prefix = "FIXTURE",
+    windows(
+        module_name = "FixtureHelp",
+        export_aliases = ["fixture-help"],
+        include_common_parameters = true,
+        split_subcommands = false
+    )
+)]
 pub struct FixtureConfig {
     /// Port used by the fixture service.
-    #[ortho_config(default = 8080, cli_short = 'p')]
+    #[ortho_config(default = 8080, cli_short = 'p', file(key_path = "server.port"))]
     pub port: u16,
 
     /// Hostname to bind the service to.
-    #[ortho_config(default = String::from("localhost"))]
+    #[ortho_config(default = String::from("localhost"), env(name = "FIXTURE_HOST"))]
     pub host: String,
 
     /// Log level for the service.
@@ -59,4 +67,11 @@ pub struct FixtureConfig {
     /// Request timeout in seconds.
     #[ortho_config(default = 30)]
     pub timeout: u64,
+
+    /// Enables the legacy processing mode.
+    #[ortho_config(
+        default = false,
+        deprecated(note_id = "orthohelp_fixture.fields.legacy_mode.deprecated")
+    )]
+    pub legacy_mode: bool,
 }

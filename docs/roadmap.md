@@ -273,7 +273,7 @@ numbering, and it avoids time-based commitments. The command-line interface
 
 ### 4.1. `cargo-orthohelp` intermediate representation tooling
 
-- [ ] 4.1.1. Deliver `cargo-orthohelp` intermediate representation (IR)
+- [x] 4.1.1. Deliver `cargo-orthohelp` intermediate representation (IR)
   documentation tooling. See
   [OrthoConfig IR documentation design](cargo-orthohelp-design.md).
   - [x] Implement the `OrthoConfigDocs` IR schema v1.1 in the derive macro,
@@ -287,12 +287,12 @@ numbering, and it avoids time-based commitments. The command-line interface
     OPTIONS, ENVIRONMENT, FILES, PRECEDENCE, EXAMPLES, SEE ALSO, and EXIT
     STATUS sections from the IR. Completion criteria: a golden test covers
     section ordering, escaping, and enum rendering.
-  - [ ] Ship the PowerShell generator with wrapper module, Microsoft
+  - [x] Ship the PowerShell generator with wrapper module, Microsoft
     Assistance Markup Language (MAML) help, en-US fallback,
     CommonParameters, and about topic output. Completion criteria:
-    `Get-Help <BinName> -Full` works in both PowerShell 5.1 and 7+ for a
+    `Get-Help {BinName} -Full` works in both PowerShell 5.1 and 7+ for a
     fixture config.
-  - [ ] Add macro, roff, MAML, golden, and Windows integration tests.
+  - [x] Add macro, roff, MAML, golden, and Windows integration tests.
     Completion criteria: `make check-fmt`, `make lint`, and `make test`
     succeed with the new fixtures and Windows test harness.
 

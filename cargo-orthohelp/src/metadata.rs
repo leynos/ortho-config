@@ -6,6 +6,7 @@ use serde::Deserialize;
 
 use crate::cli::Args;
 use crate::error::OrthohelpError;
+use crate::schema::WindowsMetadata;
 
 /// Deserialised `package.metadata.ortho_config` defaults.
 #[derive(Debug, Default, Deserialize)]
@@ -14,6 +15,9 @@ pub struct OrthoConfigMetadata {
     pub root_type: Option<String>,
     /// Supported locales for documentation output.
     pub locales: Option<Vec<String>>,
+    /// Optional Windows settings for `PowerShell` output.
+    #[serde(default)]
+    pub windows: Option<WindowsMetadataOverrides>,
 }
 
 /// Captures the `ortho_config` dependency requirements for the target crate.
@@ -34,12 +38,100 @@ pub struct PackageSelection {
     pub package_root: Utf8PathBuf,
     /// Cargo target directory for build artefacts.
     pub target_directory: Utf8PathBuf,
+    /// Package version string.
+    pub package_version: String,
     /// Normalised root type path used by the bridge.
     pub root_type: String,
     /// Locales declared in package metadata, if any.
     pub locales: Option<Vec<String>>,
+    /// Windows metadata overrides from Cargo.toml, if any.
+    pub windows: Option<WindowsMetadataOverrides>,
     /// Resolved `ortho_config` dependency metadata.
     pub ortho_config_dependency: OrthoConfigDependency,
+}
+
+/// Optional Windows metadata overrides from Cargo.toml.
+#[derive(Debug, Default, Clone, Deserialize)]
+#[serde(default)]
+pub struct WindowsMetadataOverrides {
+    /// Module name used for `PowerShell` output.
+    pub module_name: Option<String>,
+    /// Aliases exported by the wrapper module.
+    pub export_aliases: Option<Vec<String>>,
+    /// Whether `CommonParameters` are included in help output.
+    pub include_common_parameters: Option<bool>,
+    /// Whether subcommands are split into wrapper functions.
+    pub split_subcommands_into_functions: Option<bool>,
+    /// Optional `HelpInfoUri` for Update-Help.
+    pub help_info_uri: Option<String>,
+}
+
+impl WindowsMetadataOverrides {
+    /// Resolves overrides against IR-provided Windows metadata.
+    #[must_use]
+    pub fn resolve(&self, base: Option<&WindowsMetadata>) -> ResolvedWindowsMetadata {
+        let mut resolved = base
+            .cloned()
+            .map(ResolvedWindowsMetadata::from)
+            .unwrap_or_default();
+
+        if let Some(module_name) = self.module_name.clone() {
+            resolved.module_name = Some(module_name);
+        }
+        if let Some(aliases) = self.export_aliases.clone() {
+            resolved.export_aliases = aliases;
+        }
+        if let Some(include_common_parameters) = self.include_common_parameters {
+            resolved.include_common_parameters = include_common_parameters;
+        }
+        if let Some(split_subcommands_into_functions) = self.split_subcommands_into_functions {
+            resolved.split_subcommands_into_functions = split_subcommands_into_functions;
+        }
+        if let Some(help_info_uri) = self.help_info_uri.clone() {
+            resolved.help_info_uri = Some(help_info_uri);
+        }
+
+        resolved
+    }
+}
+
+/// Fully resolved Windows metadata used for `PowerShell` output.
+#[derive(Debug, Clone)]
+pub struct ResolvedWindowsMetadata {
+    /// Module name used for `PowerShell` output.
+    pub module_name: Option<String>,
+    /// Aliases exported by the wrapper module.
+    pub export_aliases: Vec<String>,
+    /// Whether `CommonParameters` are included in help output.
+    pub include_common_parameters: bool,
+    /// Whether subcommands are split into wrapper functions.
+    pub split_subcommands_into_functions: bool,
+    /// Optional `HelpInfoUri` for Update-Help.
+    pub help_info_uri: Option<String>,
+}
+
+impl Default for ResolvedWindowsMetadata {
+    fn default() -> Self {
+        Self {
+            module_name: None,
+            export_aliases: Vec::new(),
+            include_common_parameters: true,
+            split_subcommands_into_functions: false,
+            help_info_uri: None,
+        }
+    }
+}
+
+impl From<WindowsMetadata> for ResolvedWindowsMetadata {
+    fn from(metadata: WindowsMetadata) -> Self {
+        Self {
+            module_name: metadata.module_name,
+            export_aliases: metadata.export_aliases,
+            include_common_parameters: metadata.include_common_parameters,
+            split_subcommands_into_functions: metadata.split_subcommands_into_functions,
+            help_info_uri: metadata.help_info_uri,
+        }
+    }
 }
 
 /// Loads Cargo metadata for the current workspace.
@@ -74,6 +166,7 @@ pub fn select_package(
         .map(Utf8Path::to_path_buf)
         .ok_or_else(|| OrthohelpError::Message("package manifest has no parent".to_owned()))?;
     let target_directory = metadata.target_directory.clone();
+    let package_version = package.version.to_string();
     let crate_ident = package_name.replace('-', "_");
 
     let metadata_defaults = parse_ortho_config_metadata(package)?;
@@ -95,8 +188,10 @@ pub fn select_package(
         package_name,
         package_root,
         target_directory,
+        package_version,
         root_type,
         locales: metadata_defaults.locales,
+        windows: metadata_defaults.windows,
         ortho_config_dependency,
     })
 }

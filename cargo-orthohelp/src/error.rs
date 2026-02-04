@@ -65,7 +65,7 @@ pub enum OrthohelpError {
     MissingOrthoConfigDependency(String),
 
     /// The requested output format is not supported.
-    #[error("unsupported format '{0}'; supported formats are: ir, man, all")]
+    #[error("unsupported format '{0}'; supported formats are: ir, man, ps, all")]
     UnsupportedFormat(String),
 
     /// Cached IR was expected but not found.

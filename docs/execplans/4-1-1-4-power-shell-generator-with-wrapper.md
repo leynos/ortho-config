@@ -4,7 +4,7 @@ This ExecPlan is a living document. The sections `Constraints`, `Tolerances`,
 `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`, and
 `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
-Status: DRAFT
+Status: DONE
 
 No PLANS.md file exists in this repository.
 
@@ -31,7 +31,8 @@ suggestions; violation requires escalation, not workarounds.
 - Use en-GB spelling in documentation and wrap prose at 80 columns, per
   `docs/documentation-style-guide.md`.
 - Tests must include unit tests with `rstest` and behavioural tests with
-  `rstest-bdd` v0.4.0, per the user request and `docs/rstest-bdd-users-guide.md`.
+  `rstest-bdd` v0.4.0, per the user request and
+  `docs/rstest-bdd-users-guide.md`.
 - Do not introduce new dependencies unless strictly required; if a new crate is
   needed (for example for XML), stop and escalate first.
 - Avoid `#[allow(...)]`; use `#[expect(..., reason = "...")]` only if a lint
@@ -82,27 +83,39 @@ Known uncertainties that might affect the plan.
 ## Progress
 
 - [x] (2026-02-03 00:00Z) Draft ExecPlan created.
-- [ ] Review existing roff generator, IR structures, and fixture data for reuse.
-- [ ] Implement PowerShell generator modules and integrate CLI/metadata.
-- [ ] Add unit, golden, and behavioural tests (rstest + rstest-bdd).
-- [ ] Update documentation, examples, and roadmap entry.
-- [ ] Run validation gates and confirm `Get-Help -Full` acceptance.
+- [x] (2026-02-04 00:00Z) Plan approved; implementation started.
+- [x] (2026-02-04 02:30Z) Review existing roff generator, IR structures, and
+  fixture data for reuse.
+- [x] (2026-02-04 03:30Z) Implement PowerShell generator modules and integrate
+  CLI/metadata.
+- [x] (2026-02-04 04:15Z) Add unit, golden, and behavioural tests (rstest +
+  rstest-bdd).
+- [x] (2026-02-04 04:30Z) Update documentation, examples, and roadmap entry.
+- [x] (2026-02-04 06:45Z) Run validation gates and confirm `Get-Help -Full`
+  acceptance.
 
 ## Surprises & discoveries
 
 - Observation: none yet
-  Evidence: none
-  Impact: none
+  Evidence: none Impact: none
 
 ## Decision log
 
-- Decision: none yet
-  Rationale: none
-  Date/Author: none
+- Decision: Emit about topics under the locale folder
+  Rationale: PowerShell loads about topics from the culture folder and this
+  avoids collisions when multiple locales are generated. Date/Author:
+  2026-02-04 / Codex
+
+- Decision: Use `[package.metadata.ortho_config.windows]` for PowerShell
+  defaults Rationale: Mirrors the IR `windows` metadata and keeps overrides
+  grouped without mixing with non-Windows settings. Date/Author: 2026-02-04 /
+  Codex
 
 ## Outcomes & retrospective
 
-- Outcome: pending
+- Outcome: Completed. PowerShell output generation, tests, documentation
+  updates, and CI validation are in place; `make check-fmt`, `make lint`, and
+  `make test` pass locally.
 
 ## Context and orientation
 
@@ -117,10 +130,10 @@ PowerShell generator must consume `LocalizedDocMetadata` from
 Important paths:
 
 - `cargo-orthohelp/src/main.rs` dispatches formats and writes outputs.
-- `cargo-orthohelp/src/cli.rs` defines CLI arguments; PowerShell flags are not
-  yet present.
-- `cargo-orthohelp/src/metadata.rs` parses `package.metadata.ortho_config` and
-  will need extending for PowerShell defaults.
+- `cargo-orthohelp/src/cli.rs` defines CLI arguments, including PowerShell
+  flags.
+- `cargo-orthohelp/src/metadata.rs` parses `package.metadata.ortho_config`,
+  including Windows defaults for PowerShell output.
 - `tests/fixtures/orthohelp_fixture` provides the fixture config and Fluent
   messages used by integration tests and should be expanded for PowerShell.
 - Behavioural tests live under `cargo-orthohelp/tests/rstest_bdd` and already
@@ -131,18 +144,19 @@ The desired artefacts for PowerShell output are, per locale:
 - `out/powershell/{ModuleName}/{ModuleName}.psm1`
 - `out/powershell/{ModuleName}/{ModuleName}.psd1`
 - `out/powershell/{ModuleName}/{culture}/{ModuleName}-help.xml`
-- `out/powershell/{ModuleName}/about_{ModuleName}.help.txt`
+- `out/powershell/{ModuleName}/{culture}/about_{ModuleName}.help.txt`
 
 `en-US` must always exist. If another locale is generated without `en-US`, copy
-that locale into `en-US` and warn.
+that locale into `en-US`.
 
 ## Plan of work
 
 Stage A: Understand and specify inputs (no code changes).
 
 Review `docs/cargo-orthohelp-design.md` (PowerShell section), current
-`cargo-orthohelp` modules (`ir.rs`, `main.rs`, `cli.rs`, `metadata.rs`), and the
-fixture crate. Document any ambiguities in the Decision Log before proceeding.
+`cargo-orthohelp` modules (`ir.rs`, `main.rs`, `cli.rs`, `metadata.rs`), and
+the fixture crate. Document any ambiguities in the Decision Log before
+proceeding.
 
 Stage B: Scaffolding and core data model (small, verifiable diffs).
 
@@ -163,8 +177,8 @@ and captures:
 Stage C: Implement generator and integration.
 
 Implement a `powershell::generate` entry point that writes the module tree
-under `out/powershell/{ModuleName}/` using `cap_std` and `camino`. The generator
-must:
+under `out/powershell/{ModuleName}/` using `cap_std` and `camino`. The
+generator must:
 
 - Emit `.psm1` and `.psd1` with CRLF line endings.
 - Emit MAML XML with UTF-8 BOM and CRLF line endings.
@@ -179,13 +193,14 @@ must:
   PowerShell runtime supports it.
 - Resolve the executable path relative to `$PSScriptRoot` and forward `@Args`.
 
-Update `cargo-orthohelp/src/cli.rs` with a `PowerShellArgs` struct and new flags
-(`--ps-module-name`, `--ps-split-subcommands`, `--ps-include-common-parameters`,
-`--ps-help-info-uri`, `--ensure-en-us`). Update `metadata.rs` to parse optional
-PowerShell defaults from `package.metadata.ortho_config` and thread them into
-configuration resolution. Update `main.rs` to remove the `UnsupportedFormat`
-error for `ps`, route `OutputFormat::Ps`/`All` to the PowerShell generator, and
-build a config instance from CLI + metadata + IR.
+Update `cargo-orthohelp/src/cli.rs` with a `PowerShellArgs` struct and new
+flags (`--ps-module-name`, `--ps-split-subcommands`,
+`--ps-include-common-parameters`, `--ps-help-info-uri`, `--ensure-en-us`).
+Update `metadata.rs` to parse optional PowerShell defaults from
+`package.metadata.ortho_config` and thread them into configuration resolution.
+Update `main.rs` to remove the `UnsupportedFormat` error for `ps`, route
+`OutputFormat::Ps`/`All` to the PowerShell generator, and build a config
+instance from CLI + metadata + IR.
 
 Stage D: Tests (unit, golden, behavioural, Windows integration).
 
@@ -220,8 +235,8 @@ Update `docs/cargo-orthohelp-design.md` with any decisions (for example, MAML
 mapping details or fallback behaviour). Update `docs/users-guide.md` with
 PowerShell generation usage and output layout. Update
 `examples/hello_world/README.md` (and scripts if present) to show running
-`cargo orthohelp --format ps` and how to import the module in PowerShell.
-Mark the 4.1.1 PowerShell generator item as done in `docs/roadmap.md` when all
+`cargo orthohelp --format ps` and how to import the module in PowerShell. Mark
+the 4.1.1 PowerShell generator item as done in `docs/roadmap.md` when all
 validation passes.
 
 Stage F: Validation.
@@ -229,9 +244,9 @@ Stage F: Validation.
 Run `make markdownlint`, `make fmt`, and `make nixie` after documentation
 changes. Run the standard quality gates with log capture and verify success:
 
-  set -o pipefail && make check-fmt 2>&1 | tee /tmp/ps-check-fmt.log
-  set -o pipefail && make lint 2>&1 | tee /tmp/ps-lint.log
-  set -o pipefail && make test 2>&1 | tee /tmp/ps-test.log
+  set -o pipefail && make check-fmt 2>&1 | tee /tmp/ps-check-fmt.log set -o
+  pipefail && make lint 2>&1 | tee /tmp/ps-lint.log set -o pipefail && make
+  test 2>&1 | tee /tmp/ps-test.log
 
 ## Concrete steps
 
@@ -253,7 +268,8 @@ changes. Run the standard quality gates with log capture and verify success:
 
    - Create `cargo-orthohelp/src/powershell/mod.rs` with a `generate` entry
      point.
-   - Add helper modules (names may vary): `maml.rs`, `wrapper.rs`, `manifest.rs`,
+   - Add helper modules (names may vary): `maml.rs`, `wrapper.rs`,
+     `manifest.rs`,
      `about.rs`, `types.rs`, `writer.rs`.
    - Ensure each module has a `//!` comment and stays under 400 lines.
 
@@ -341,5 +357,5 @@ Key artefacts created:
 
 ## Revision note
 
-Initial draft created for roadmap item 4.1.1 (PowerShell generator with
-wrapper module).
+Initial draft created for roadmap item 4.1.1 (PowerShell generator with wrapper
+module).

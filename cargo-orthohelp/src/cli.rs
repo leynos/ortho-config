@@ -1,7 +1,7 @@
 //! Command-line interface definitions for `cargo-orthohelp`.
 
 use camino::Utf8PathBuf;
-use clap::{Args as ClapArgs, Parser, ValueEnum};
+use clap::{ArgAction, Args as ClapArgs, Parser, ValueEnum};
 
 /// Output formats supported by `cargo-orthohelp`.
 #[derive(Debug, Clone, Copy, ValueEnum)]
@@ -10,22 +10,10 @@ pub enum OutputFormat {
     Ir,
     /// Emit Unix roff man pages.
     Man,
-    /// Emit `PowerShell` help (not yet implemented).
+    /// Emit `PowerShell` help output.
     Ps,
-    /// Emit all outputs (IR and man pages).
+    /// Emit all outputs (IR, man pages, and `PowerShell` help).
     All,
-}
-
-impl OutputFormat {
-    /// Returns the CLI-friendly string for this output format.
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::Ir => "ir",
-            Self::Man => "man",
-            Self::Ps => "ps",
-            Self::All => "all",
-        }
-    }
 }
 
 /// Parsed CLI arguments for `cargo-orthohelp`.
@@ -64,6 +52,9 @@ pub struct Args {
     /// Man page generation arguments.
     #[command(flatten)]
     pub man: ManArgs,
+    /// `PowerShell` generation arguments.
+    #[command(flatten)]
+    pub powershell: PowerShellArgs,
 }
 
 /// Bridge cache behaviour flags.
@@ -94,4 +85,33 @@ pub struct ManArgs {
     /// Generate separate man pages for each subcommand.
     #[arg(long = "man-split-subcommands")]
     pub should_split_subcommands: bool,
+}
+
+/// `PowerShell` help generation arguments.
+#[derive(Debug, ClapArgs, Clone)]
+pub struct PowerShellArgs {
+    /// `PowerShell` module name override.
+    #[arg(long = "ps-module-name", value_name = "NAME")]
+    pub module_name: Option<String>,
+    /// Split subcommands into separate wrapper functions.
+    #[arg(long = "ps-split-subcommands", value_name = "BOOL", action = ArgAction::Set)]
+    pub split_subcommands: Option<bool>,
+    /// Include `CommonParameters` in help output.
+    #[arg(
+        long = "ps-include-common-parameters",
+        value_name = "BOOL",
+        action = ArgAction::Set
+    )]
+    pub include_common_parameters: Option<bool>,
+    /// `HelpInfoUri` for Update-Help payloads.
+    #[arg(long = "ps-help-info-uri", value_name = "URI")]
+    pub help_info_uri: Option<String>,
+    /// Ensure an en-US help file exists.
+    #[arg(
+        long = "ensure-en-us",
+        value_name = "BOOL",
+        default_value_t = true,
+        action = ArgAction::Set
+    )]
+    pub ensure_en_us: bool,
 }

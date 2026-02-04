@@ -445,9 +445,9 @@ cargo orthohelp \
   [--format ir|man|ps|all] \
   [--out-dir <path>] \
   [--man-section <N>] [--man-date <YYYY-MM-DD>] [--man-split-subcommands] \
-  [--ps-module-name <Name>] [--ps-split-subcommands] \
-  [--ps-include-common-parameters] [--ps-help-info-uri <URI>] \
-  [--ensure-en-us] \
+  [--ps-module-name <Name>] [--ps-split-subcommands <BOOL>] \
+  [--ps-include-common-parameters <BOOL>] [--ps-help-info-uri <URI>] \
+  [--ensure-en-us <BOOL>] \
   [--cache] [--no-build]
 ```
 
@@ -456,15 +456,15 @@ cargo orthohelp \
 ```toml
 [package.metadata.ortho_config]
 root_type = "my_crate::AppConfig"
-module_name = "MyApp"
 locales = ["en-GB", "fr-FR"]
 man_section = 1
-```
 
-Current scope note: until the roff and PowerShell generators are shipped,
-`cargo-orthohelp` supports only `--format ir` and always emits the localized IR
-JSON described below. Requests for other formats should fail with a clear error
-message.
+[package.metadata.ortho_config.windows]
+module_name = "MyApp"
+include_common_parameters = true
+split_subcommands_into_functions = false
+help_info_uri = "https://example.com/help/MyApp"
+```
 
 ### 6.2 Pipeline
 
@@ -580,7 +580,7 @@ Artefacts (per locale):
   <ModuleName>.psm1
   <ModuleName>.psd1
   <culture>/<ModuleName>-help.xml  # always include en-US
-  about_<ModuleName>.help.txt      # conceptual, optional but recommended
+  <culture>/about_<ModuleName>.help.txt  # conceptual, optional but recommended
   completions.ps1                  # optional separate script
 ```
 
@@ -690,7 +690,7 @@ Exit non-zero on hard errors and list artefacts on success.
   compare against goldens.
 - Windows integration tests:
   - `powershell.exe` (5.1) and `pwsh` (7+) import the generated module,
-    `Get-Help <BinName> -Full` works, and CommonParameters render.
+  `Get-Help {BinName} -Full` works, and CommonParameters render.
   - The argument completer registers with or without `-Native`.
   - Wrapper preserves `$LASTEXITCODE`.
 

@@ -53,7 +53,8 @@ fn run_with_env(locale_env: &[(&str, &str)], args: &[&str]) -> String {
     // Normalize for cross-platform consistency:
     // - CRLF to LF for line endings
     // - Backslashes to forward slashes for paths (Windows uses backslashes in error output)
-    combined.replace("\r\n", "\n").replace('\\', "/")
+    let normalised = combined.replace("\r\n", "\n").replace('\\', "/");
+    normalise_rust_src_paths(&normalised)
 }
 
 /// Runs the `hello_world` binary with the specified locale (via `LANG`) and arguments,
@@ -62,6 +63,28 @@ fn run_with_env(locale_env: &[(&str, &str)], args: &[&str]) -> String {
 /// This is a convenience wrapper around [`run_with_env`] that only sets `LANG`.
 fn run_with_locale(locale: &str, args: &[&str]) -> String {
     run_with_env(&[("LANG", locale)], args)
+}
+
+fn normalise_rust_src_paths(output: &str) -> String {
+    let marker = "/library/core/src/ops/function.rs";
+    output
+        .lines()
+        .map(|line| {
+            let trimmed = line.trim_start_matches(' ');
+            trimmed
+                .find(marker)
+                .and_then(|pos| trimmed.get(pos..))
+                .map_or_else(
+                    || line.to_owned(),
+                    |suffix| {
+                        let indent_len = line.len() - trimmed.len();
+                        let indent = " ".repeat(indent_len);
+                        format!("{indent}<rust-src>{suffix}")
+                    },
+                )
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 // =============================================================================
