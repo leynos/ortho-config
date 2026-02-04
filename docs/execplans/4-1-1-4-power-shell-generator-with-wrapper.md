@@ -11,7 +11,7 @@ No PLANS.md file exists in this repository.
 ## Purpose / big picture
 
 Deliver the PowerShell documentation output for `cargo-orthohelp` so a user can
-run `Get-Help <BinName> -Full` in both Windows PowerShell 5.1 and PowerShell 7+
+run `Get-Help {BinName} -Full` in both Windows PowerShell 5.1 and PowerShell 7+
 for the fixture config and see complete help. Success is observable when the
 PowerShell module, MAML XML, and about topic are generated with an `en-US`
 fallback, CommonParameters appear in `Get-Help -Full`, and all tests (unit and
@@ -90,19 +90,19 @@ Known uncertainties that might affect the plan.
 
 ## Surprises & discoveries
 
-- Observation: <none yet>
-  Evidence: <none>
-  Impact: <none>
+- Observation: none yet
+  Evidence: none
+  Impact: none
 
 ## Decision log
 
-- Decision: <none yet>
-  Rationale: <none>
-  Date/Author: <none>
+- Decision: none yet
+  Rationale: none
+  Date/Author: none
 
 ## Outcomes & retrospective
 
-- Outcome: <pending>
+- Outcome: pending
 
 ## Context and orientation
 
@@ -128,10 +128,10 @@ Important paths:
 
 The desired artefacts for PowerShell output are, per locale:
 
-- `<out>/powershell/<ModuleName>/<ModuleName>.psm1`
-- `<out>/powershell/<ModuleName>/<ModuleName>.psd1`
-- `<out>/powershell/<ModuleName>/<culture>/<ModuleName>-help.xml`
-- `<out>/powershell/<ModuleName>/about_<ModuleName>.help.txt`
+- `out/powershell/{ModuleName}/{ModuleName}.psm1`
+- `out/powershell/{ModuleName}/{ModuleName}.psd1`
+- `out/powershell/{ModuleName}/{culture}/{ModuleName}-help.xml`
+- `out/powershell/{ModuleName}/about_{ModuleName}.help.txt`
 
 `en-US` must always exist. If another locale is generated without `en-US`, copy
 that locale into `en-US` and warn.
@@ -163,12 +163,12 @@ and captures:
 Stage C: Implement generator and integration.
 
 Implement a `powershell::generate` entry point that writes the module tree
-under `out/powershell/<ModuleName>/` using `cap_std` and `camino`. The generator
+under `out/powershell/{ModuleName}/` using `cap_std` and `camino`. The generator
 must:
 
 - Emit `.psm1` and `.psd1` with CRLF line endings.
 - Emit MAML XML with UTF-8 BOM and CRLF line endings.
-- Emit `about_<ModuleName>.help.txt` per locale (use about/discovery/precedence
+- Emit `about_{ModuleName}.help.txt` per locale (use about/discovery/precedence
   text from the IR; if details are missing, emit a minimal about topic with the
   app name and description).
 - Always ensure `en-US` exists, copying from the first rendered locale if
@@ -211,7 +211,7 @@ Add behavioural tests with `rstest-bdd` that:
 Add Windows-only integration tests (guarded with `#[cfg(windows)]`) that:
 
 - Import the generated module under `powershell.exe` and `pwsh` if present.
-- Run `Get-Help <BinName> -Full` and assert it contains the about text and
+- Run `Get-Help {BinName} -Full` and assert it contains the about text and
   CommonParameters section.
 
 Stage E: Documentation and examples.
@@ -298,7 +298,7 @@ Acceptance is met when:
 - `cargo-orthohelp --format ps` generates a PowerShell module containing
   `.psm1`, `.psd1`, MAML XML, and about topic output per locale, and an `en-US`
   fallback is always present.
-- `Get-Help <BinName> -Full` works in Windows PowerShell 5.1 and PowerShell 7+
+- `Get-Help {BinName} -Full` works in Windows PowerShell 5.1 and PowerShell 7+
   for the fixture config, showing CommonParameters when enabled.
 - Unit tests (rstest), behavioural tests (rstest-bdd), and golden tests pass.
 - Documentation and examples reflect the new PowerShell output usage.
@@ -331,10 +331,10 @@ Key artefacts created:
   structured builders.
 - Ensure generator API mirrors `roff::generate` style:
 
-  pub fn generate(
-      metadata: &LocalizedDocMetadata,
-      config: &PowerShellConfig
-  ) -> Result<PowerShellOutput, OrthohelpError>
+    pub fn generate(
+        metadata: &LocalizedDocMetadata,
+        config: &PowerShellConfig
+    ) -> Result<PowerShellOutput, OrthohelpError>
 
 - Output types should return the list of generated files for testing and
   logging.

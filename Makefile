@@ -14,6 +14,7 @@ PYTHON_VERSION ?= 3.13
 PYTHON_DEPS_FILE ?= scripts/requirements-test.txt
 PYTEST_FLAGS ?= --doctest-modules scripts/bump_version.py scripts/tests -q
 LADING ?= uvx --from git+https://github.com/leynos/lading lading
+POWERSHELL ?= pwsh
 ifeq ($(OS),Windows_NT)
 NULL_DEVICE ?= NUL
 else
@@ -73,6 +74,13 @@ nixie:
 	# CI currently requires --no-sandbox; remove once nixie supports
 	# environment variable control for this option
 	$(NIXIE) --no-sandbox
+
+powershell-wrapper-validate: ## Validate PowerShell wrapper output (Windows only)
+ifeq ($(OS),Windows_NT)
+	$(POWERSHELL) -File scripts/validate_powershell_wrapper.ps1
+else
+	@echo "Skipping PowerShell wrapper validation (not Windows)."
+endif
 
 publish-check: ## Run Lading publish pre-flight checks
 	$(LADING) publish $(PUBLISH_CHECK_FLAGS) --workspace-root $(CURDIR)
