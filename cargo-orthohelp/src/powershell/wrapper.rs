@@ -19,39 +19,63 @@ pub fn render_wrapper(
     push_line(&mut output, "");
 
     output.push_str(&render_function(bin_name, bin_name, &[]));
-
-    if split_subcommands {
-        for subcommand in &metadata.subcommands {
-            let sub_name = subcommand
-                .bin_name
-                .as_deref()
-                .unwrap_or(&subcommand.app_name);
-            let function_name = format!("{bin_name}_{sub_name}");
-            output.push_str(CRLF);
-            output.push_str(&render_function(
-                &function_name,
-                bin_name,
-                &[sub_name.to_owned()],
-            ));
-        }
-    }
-
-    if !export_aliases.is_empty() {
-        output.push_str(CRLF);
-        for alias in export_aliases {
-            push_line(
-                &mut output,
-                &format!(
-                    "Set-Alias -Name {} -Value {}",
-                    quote_single(alias),
-                    quote_single(bin_name)
-                ),
-            );
-        }
-    }
+    output.push_str(&render_subcommand_functions(
+        metadata,
+        bin_name,
+        split_subcommands,
+    ));
+    output.push_str(&render_aliases(bin_name, export_aliases));
 
     output.push_str(CRLF);
     output.push_str(&render_completion_block(bin_name));
+
+    output
+}
+
+fn render_subcommand_functions(
+    metadata: &LocalizedDocMetadata,
+    bin_name: &str,
+    split_subcommands: bool,
+) -> String {
+    if !split_subcommands {
+        return String::new();
+    }
+
+    let mut output = String::new();
+    for subcommand in &metadata.subcommands {
+        let sub_name = subcommand
+            .bin_name
+            .as_deref()
+            .unwrap_or(&subcommand.app_name);
+        let function_name = format!("{bin_name}_{sub_name}");
+        output.push_str(CRLF);
+        output.push_str(&render_function(
+            &function_name,
+            bin_name,
+            &[sub_name.to_owned()],
+        ));
+    }
+
+    output
+}
+
+fn render_aliases(bin_name: &str, export_aliases: &[String]) -> String {
+    if export_aliases.is_empty() {
+        return String::new();
+    }
+
+    let mut output = String::new();
+    output.push_str(CRLF);
+    for alias in export_aliases {
+        push_line(
+            &mut output,
+            &format!(
+                "Set-Alias -Name {} -Value {}",
+                quote_single(alias),
+                quote_single(bin_name)
+            ),
+        );
+    }
 
     output
 }

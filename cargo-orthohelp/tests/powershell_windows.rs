@@ -85,31 +85,8 @@ mod tests {
         Err(format!("missing {label} in help output").into())
     }
 
-    #[test]
-    fn get_help_full_works_in_windows_powershell() -> Result<(), Box<dyn Error>> {
-        let temp_dir = tempfile::tempdir()?;
-        let out_dir = Utf8PathBuf::from_path_buf(temp_dir.path().to_path_buf())
-            .map_err(|path| format!("non-UTF-8 path: {}", path.display()))?;
-        generate_powershell_output(&out_dir)?;
-
-        let module_manifest = out_dir
-            .join("powershell")
-            .join("FixtureHelp")
-            .join("FixtureHelp.psd1");
-
-        let output = run_get_help("powershell.exe", &module_manifest)?;
-        ensure_contains(
-            &output,
-            "Orthohelp fixture configuration.",
-            "fixture description",
-        )?;
-        ensure_contains(&output, "CommonParameters", "CommonParameters")?;
-        Ok(())
-    }
-
-    #[test]
-    fn get_help_full_works_in_pwsh() -> Result<(), Box<dyn Error>> {
-        if !command_available("pwsh") {
+    fn test_get_help_full(shell: &str, skip_if_unavailable: bool) -> Result<(), Box<dyn Error>> {
+        if skip_if_unavailable && !command_available(shell) {
             return Ok(());
         }
         let temp_dir = tempfile::tempdir()?;
@@ -122,7 +99,7 @@ mod tests {
             .join("FixtureHelp")
             .join("FixtureHelp.psd1");
 
-        let output = run_get_help("pwsh", &module_manifest)?;
+        let output = run_get_help(shell, &module_manifest)?;
         ensure_contains(
             &output,
             "Orthohelp fixture configuration.",
@@ -130,5 +107,15 @@ mod tests {
         )?;
         ensure_contains(&output, "CommonParameters", "CommonParameters")?;
         Ok(())
+    }
+
+    #[test]
+    fn get_help_full_works_in_windows_powershell() -> Result<(), Box<dyn Error>> {
+        test_get_help_full("powershell.exe", false)
+    }
+
+    #[test]
+    fn get_help_full_works_in_pwsh() -> Result<(), Box<dyn Error>> {
+        test_get_help_full("pwsh", true)
     }
 }
