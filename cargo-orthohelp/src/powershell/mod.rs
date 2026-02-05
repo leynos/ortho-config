@@ -83,10 +83,18 @@ impl<'a> GenerationContext<'a> {
 
     fn write_core_files(&mut self, metadata: &LocalizedDocMetadata) -> Result<(), OrthohelpError> {
         let functions_to_export = build_functions_to_export(metadata, self.config);
+        let bin_name = wrapper::BinName::new(self.config.bin_name.clone());
+        let export_aliases = self
+            .config
+            .export_aliases
+            .iter()
+            .cloned()
+            .map(wrapper::Alias::new)
+            .collect::<Vec<_>>();
         let wrapper_content = wrapper::render_wrapper(
             metadata,
-            &self.config.bin_name,
-            &self.config.export_aliases,
+            &bin_name,
+            &export_aliases,
             self.config.split_subcommands,
         );
         let wrapper_path = self

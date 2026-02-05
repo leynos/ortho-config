@@ -240,11 +240,16 @@ pub fn run_orthohelp(ctx: &OrthoHelpContext, args: &[&str]) -> StepResult<std::p
 }
 
 fn cargo_orthohelp_exe() -> StepResult<Utf8PathBuf> {
-    if let Ok(path) = std::env::var("CARGO_BIN_EXE_cargo-orthohelp") {
-        return Ok(Utf8PathBuf::from(path));
-    }
-    if let Ok(path) = std::env::var("CARGO_BIN_EXE_cargo_orthohelp") {
-        return Ok(Utf8PathBuf::from(path));
+    let env_vars = [
+        "CARGO_BIN_EXE_cargo-orthohelp",
+        "CARGO_BIN_EXE_cargo_orthohelp",
+        "NEXTEST_BIN_EXE_cargo-orthohelp",
+        "NEXTEST_BIN_EXE_cargo_orthohelp",
+    ];
+    for var in env_vars {
+        if let Ok(path) = std::env::var(var) {
+            return Ok(Utf8PathBuf::from(path));
+        }
     }
     Err("cargo-orthohelp binary path not found in environment".into())
 }

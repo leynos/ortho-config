@@ -16,11 +16,16 @@ mod tests {
     }
 
     fn cargo_orthohelp_exe() -> Result<PathBuf, Box<dyn Error>> {
-        if let Ok(path) = std::env::var("CARGO_BIN_EXE_cargo-orthohelp") {
-            return Ok(PathBuf::from(path));
-        }
-        if let Ok(path) = std::env::var("CARGO_BIN_EXE_cargo_orthohelp") {
-            return Ok(PathBuf::from(path));
+        let env_vars = [
+            "CARGO_BIN_EXE_cargo-orthohelp",
+            "CARGO_BIN_EXE_cargo_orthohelp",
+            "NEXTEST_BIN_EXE_cargo-orthohelp",
+            "NEXTEST_BIN_EXE_cargo_orthohelp",
+        ];
+        for var in env_vars {
+            if let Ok(path) = std::env::var(var) {
+                return Ok(PathBuf::from(path));
+            }
         }
         Err("cargo-orthohelp binary path not found in environment".into())
     }

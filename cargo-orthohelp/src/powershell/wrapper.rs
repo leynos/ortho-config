@@ -4,12 +4,69 @@ use crate::ir::LocalizedDocMetadata;
 
 const CRLF: &str = "\r\n";
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct BinName(String);
+
+impl BinName {
+    pub fn new(value: impl Into<String>) -> Self {
+        Self(value.into())
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl AsRef<str> for BinName {
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct FunctionName(String);
+
+impl FunctionName {
+    pub fn new(value: impl Into<String>) -> Self {
+        Self(value.into())
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl AsRef<str> for FunctionName {
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Alias(String);
+
+impl Alias {
+    pub fn new(value: impl Into<String>) -> Self {
+        Self(value.into())
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl AsRef<str> for Alias {
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
+}
+
 /// Renders the `PowerShell` wrapper module content.
 #[must_use]
 pub fn render_wrapper(
     metadata: &LocalizedDocMetadata,
-    bin_name: &str,
-    export_aliases: &[String],
+    bin_name: &BinName,
+    export_aliases: &[Alias],
     split_subcommands: bool,
 ) -> String {
     let mut output = String::new();
@@ -18,7 +75,8 @@ pub fn render_wrapper(
     push_line(&mut output, "param()");
     push_line(&mut output, "");
 
-    output.push_str(&render_function(bin_name, bin_name, &[]));
+    let function_name = FunctionName::new(bin_name.as_str().to_owned());
+    output.push_str(&render_function(&function_name, bin_name, &[]));
     output.push_str(&render_subcommand_functions(
         metadata,
         bin_name,
@@ -34,7 +92,7 @@ pub fn render_wrapper(
 
 fn render_subcommand_functions(
     metadata: &LocalizedDocMetadata,
-    bin_name: &str,
+    bin_name: &BinName,
     split_subcommands: bool,
 ) -> String {
     if !split_subcommands {
@@ -47,7 +105,7 @@ fn render_subcommand_functions(
             .bin_name
             .as_deref()
             .unwrap_or(&subcommand.app_name);
-        let function_name = format!("{bin_name}_{sub_name}");
+        let function_name = FunctionName::new(format!("{}_{}", bin_name.as_str(), sub_name));
         output.push_str(CRLF);
         output.push_str(&render_function(
             &function_name,
@@ -59,7 +117,7 @@ fn render_subcommand_functions(
     output
 }
 
-fn render_aliases(bin_name: &str, export_aliases: &[String]) -> String {
+fn render_aliases(bin_name: &BinName, export_aliases: &[Alias]) -> String {
     if export_aliases.is_empty() {
         return String::new();
     }
@@ -71,8 +129,8 @@ fn render_aliases(bin_name: &str, export_aliases: &[String]) -> String {
             &mut output,
             &format!(
                 "Set-Alias -Name {} -Value {}",
-                quote_single(alias),
-                quote_single(bin_name)
+                quote_single(alias.as_str()),
+                quote_single(bin_name.as_str())
             ),
         );
     }
@@ -80,10 +138,17 @@ fn render_aliases(bin_name: &str, export_aliases: &[String]) -> String {
     output
 }
 
-fn render_function(function_name: &str, exe_name: &str, extra_args: &[String]) -> String {
+fn render_function(
+    function_name: &FunctionName,
+    exe_name: &BinName,
+    extra_args: &[String],
+) -> String {
     let mut output = String::new();
 
-    push_line(&mut output, &format!("function {function_name} {{"));
+    push_line(
+        &mut output,
+        &format!("function {} {{", function_name.as_str()),
+    );
     push_line(&mut output, "  [CmdletBinding(PositionalBinding = $false)]");
     push_line(
         &mut output,
@@ -93,7 +158,7 @@ fn render_function(function_name: &str, exe_name: &str, extra_args: &[String]) -
         &mut output,
         &format!(
             "  $exe = Join-Path $PSScriptRoot '..' 'bin' {}",
-            quote_single(&format!("{exe_name}.exe"))
+            quote_single(&format!("{}.exe", exe_name.as_str()))
         ),
     );
     push_line(&mut output, "  $exe = (Resolve-Path $exe).ProviderPath");
@@ -114,7 +179,7 @@ fn render_function(function_name: &str, exe_name: &str, extra_args: &[String]) -
     output
 }
 
-fn render_completion_block(command_name: &str) -> String {
+fn render_completion_block(command_name: &BinName) -> String {
     let mut output = String::new();
     push_line(&mut output, "$sb = {");
     push_line(
@@ -132,7 +197,7 @@ fn render_completion_block(command_name: &str) -> String {
         &mut output,
         &format!(
             "  Register-ArgumentCompleter -Native -CommandName {} -ScriptBlock $sb",
-            quote_single(command_name)
+            quote_single(command_name.as_str())
         ),
     );
     push_line(&mut output, "} else {");
@@ -140,7 +205,7 @@ fn render_completion_block(command_name: &str) -> String {
         &mut output,
         &format!(
             "  Register-ArgumentCompleter -CommandName {} -ScriptBlock $sb",
-            quote_single(command_name)
+            quote_single(command_name.as_str())
         ),
     );
     push_line(&mut output, "}");
@@ -229,7 +294,7 @@ mod tests {
     #[rstest]
     fn wrapper_includes_completion_registration() {
         let metadata = minimal_metadata();
-        let output = render_wrapper(&metadata, "fixture", &[], false);
+        let output = render_wrapper(&metadata, &BinName::new("fixture"), &[], false);
         assert!(output.contains("Register-ArgumentCompleter"));
         assert!(output.contains("[CmdletBinding"));
     }
@@ -237,7 +302,7 @@ mod tests {
     #[rstest]
     fn wrapper_renders_subcommand_functions() {
         let metadata = minimal_metadata();
-        let output = render_wrapper(&metadata, "fixture", &[], true);
+        let output = render_wrapper(&metadata, &BinName::new("fixture"), &[], true);
         assert!(output.contains("function fixture_greet"));
     }
 }
