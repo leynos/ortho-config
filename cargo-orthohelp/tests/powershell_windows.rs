@@ -59,8 +59,7 @@ mod tests {
 
     fn run_get_help(shell: &str, module_manifest: &Utf8PathBuf) -> Result<String, Box<dyn Error>> {
         let script = format!(
-            "Import-Module -Force '{module_path}'; $help = Get-Help fixture -Full | Out-String; Write-Output $help",
-            module_path = module_manifest
+            "Import-Module -Force '{module_manifest}'; $help = Get-Help fixture -Full | Out-String; Write-Output $help"
         );
         let output = Command::new(shell)
             .arg("-NoProfile")
@@ -79,6 +78,13 @@ mod tests {
         Ok(String::from_utf8_lossy(&output.stdout).to_string())
     }
 
+    fn ensure_contains(output: &str, needle: &str, label: &str) -> Result<(), Box<dyn Error>> {
+        if output.contains(needle) {
+            return Ok(());
+        }
+        Err(format!("missing {label} in help output").into())
+    }
+
     #[test]
     fn get_help_full_works_in_windows_powershell() -> Result<(), Box<dyn Error>> {
         let temp_dir = tempfile::tempdir()?;
@@ -92,8 +98,12 @@ mod tests {
             .join("FixtureHelp.psd1");
 
         let output = run_get_help("powershell.exe", &module_manifest)?;
-        assert!(output.contains("Orthohelp fixture configuration."));
-        assert!(output.contains("CommonParameters"));
+        ensure_contains(
+            &output,
+            "Orthohelp fixture configuration.",
+            "fixture description",
+        )?;
+        ensure_contains(&output, "CommonParameters", "CommonParameters")?;
         Ok(())
     }
 
@@ -113,8 +123,12 @@ mod tests {
             .join("FixtureHelp.psd1");
 
         let output = run_get_help("pwsh", &module_manifest)?;
-        assert!(output.contains("Orthohelp fixture configuration."));
-        assert!(output.contains("CommonParameters"));
+        ensure_contains(
+            &output,
+            "Orthohelp fixture configuration.",
+            "fixture description",
+        )?;
+        ensure_contains(&output, "CommonParameters", "CommonParameters")?;
         Ok(())
     }
 }
