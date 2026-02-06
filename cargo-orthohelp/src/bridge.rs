@@ -125,6 +125,8 @@ fn write_bridge_manifest(config: &BridgeConfig, paths: &BridgePaths) -> Result<(
         "edition = \"2024\"\n",
         "publish = false\n",
         "\n",
+        "[workspace]\n",
+        "\n",
         "[dependencies]\n",
         "serde_json = \"1\"\n",
     ));
