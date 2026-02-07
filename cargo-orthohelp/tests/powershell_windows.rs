@@ -22,7 +22,7 @@ mod tests {
 
     impl AsRef<str> for ShellCommand {
         fn as_ref(&self) -> &str {
-            self.as_str()
+            &self.0
         }
     }
 
@@ -86,7 +86,13 @@ mod tests {
         module_manifest: &Utf8PathBuf,
     ) -> Result<String, Box<dyn Error>> {
         let script = format!(
-            "Import-Module -Force '{module_manifest}'; $help = Get-Help fixture -Full | Out-String; Write-Output $help"
+            concat!(
+                "$ErrorActionPreference = 'Stop'; ",
+                "Import-Module -Force '{}'; ",
+                "$help = Get-Help 'FixtureHelp\\fixture' -Full -UICulture en-US | Out-String -Width 4096; ",
+                "Write-Output $help"
+            ),
+            module_manifest
         );
         let output = Command::new(shell.as_str())
             .arg("-NoProfile")
@@ -152,7 +158,38 @@ mod tests {
         if output.contains(needle) {
             return Ok(());
         }
-        Err(format!("missing {label} in help output").into())
+        let without_nuls = output.replace('\0', "");
+        if without_nuls.contains(needle) {
+            return Ok(());
+        }
+
+        let normalized_output = normalize_whitespace(&without_nuls);
+        let normalized_needle = normalize_whitespace(needle);
+        if normalized_output.contains(&normalized_needle) {
+            return Ok(());
+        }
+
+        Err(format!(
+            "missing {label} in help output.\n--- output preview ---\n{}",
+            preview_output(&without_nuls, 1_200)
+        )
+        .into())
+    }
+
+    fn normalize_whitespace(value: &str) -> String {
+        value.split_whitespace().collect::<Vec<_>>().join(" ")
+    }
+
+    fn preview_output(value: &str, max_chars: usize) -> &str {
+        if value.len() <= max_chars {
+            return value;
+        }
+
+        let mut cutoff = max_chars;
+        while !value.is_char_boundary(cutoff) {
+            cutoff -= 1;
+        }
+        value.get(..cutoff).unwrap_or(value)
     }
 
     fn test_get_help_full(
