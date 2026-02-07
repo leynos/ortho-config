@@ -84,29 +84,59 @@ mod tests {
     }
 
     fn decode_help_output(bytes: &[u8]) -> String {
-        if let Some(decoded) = decode_utf16(bytes, &[0xFF, 0xFE], u16::from_le_bytes) {
+        if let Some(decoded) = decode_utf16(bytes, [0xFF, 0xFE], Endianness::Little) {
             return decoded;
         }
-        if let Some(decoded) = decode_utf16(bytes, &[0xFE, 0xFF], u16::from_be_bytes) {
+        if let Some(decoded) = decode_utf16(bytes, [0xFE, 0xFF], Endianness::Big) {
             return decoded;
         }
-        if bytes.len() % 2 == 0 && bytes.iter().skip(1).step_by(2).all(|byte| *byte == 0) {
+        if bytes.len().is_multiple_of(2) && bytes.iter().skip(1).step_by(2).all(|byte| *byte == 0) {
             let decoded = bytes
                 .chunks_exact(2)
-                .map(|pair| u16::from_le_bytes([pair[0], pair[1]]))
+                .map(|pair| to_u16(pair, Endianness::Little))
                 .collect::<Vec<_>>();
             return String::from_utf16_lossy(&decoded);
         }
         String::from_utf8_lossy(bytes).to_string()
     }
 
-    fn decode_utf16(bytes: &[u8], bom: &[u8; 2], to_u16: fn([u8; 2]) -> u16) -> Option<String> {
-        let rest = bytes.strip_prefix(bom)?;
+    fn decode_utf16(bytes: &[u8], bom: [u8; 2], endian: Endianness) -> Option<String> {
+        let rest = bytes.strip_prefix(&bom)?;
         let decoded = rest
             .chunks_exact(2)
-            .map(|pair| to_u16([pair[0], pair[1]]))
+            .map(|pair| to_u16(pair, endian))
             .collect::<Vec<_>>();
         Some(String::from_utf16_lossy(&decoded))
+    }
+
+    #[derive(Clone, Copy)]
+    enum Endianness {
+        Little,
+        Big,
+    }
+
+    fn to_u16(pair: &[u8], endian: Endianness) -> u16 {
+        let bytes = match pair {
+            [first, second] => [*first, *second],
+            _ => return 0,
+        };
+        let value = u16::from_ne_bytes(bytes);
+        match endian {
+            Endianness::Little => {
+                if cfg!(target_endian = "little") {
+                    value
+                } else {
+                    value.swap_bytes()
+                }
+            }
+            Endianness::Big => {
+                if cfg!(target_endian = "big") {
+                    value
+                } else {
+                    value.swap_bytes()
+                }
+            }
+        }
     }
 
     fn ensure_contains(output: &str, needle: &str, label: &str) -> Result<(), Box<dyn Error>> {
