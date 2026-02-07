@@ -80,7 +80,33 @@ mod tests {
             return Err(format!("{shell} Get-Help failed: {stderr}").into());
         }
 
-        Ok(String::from_utf8_lossy(&output.stdout).to_string())
+        Ok(decode_help_output(&output.stdout))
+    }
+
+    fn decode_help_output(bytes: &[u8]) -> String {
+        if let Some(decoded) = decode_utf16(bytes, &[0xFF, 0xFE], u16::from_le_bytes) {
+            return decoded;
+        }
+        if let Some(decoded) = decode_utf16(bytes, &[0xFE, 0xFF], u16::from_be_bytes) {
+            return decoded;
+        }
+        if bytes.len() % 2 == 0 && bytes.iter().skip(1).step_by(2).all(|byte| *byte == 0) {
+            let decoded = bytes
+                .chunks_exact(2)
+                .map(|pair| u16::from_le_bytes([pair[0], pair[1]]))
+                .collect::<Vec<_>>();
+            return String::from_utf16_lossy(&decoded);
+        }
+        String::from_utf8_lossy(bytes).to_string()
+    }
+
+    fn decode_utf16(bytes: &[u8], bom: &[u8; 2], to_u16: fn([u8; 2]) -> u16) -> Option<String> {
+        let rest = bytes.strip_prefix(bom)?;
+        let decoded = rest
+            .chunks_exact(2)
+            .map(|pair| to_u16([pair[0], pair[1]]))
+            .collect::<Vec<_>>();
+        Some(String::from_utf16_lossy(&decoded))
     }
 
     fn ensure_contains(output: &str, needle: &str, label: &str) -> Result<(), Box<dyn Error>> {
