@@ -7,6 +7,25 @@ mod tests {
     use std::path::PathBuf;
     use std::process::Command;
 
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    struct ShellCommand(String);
+
+    impl ShellCommand {
+        fn new(name: impl Into<String>) -> Self {
+            Self(name.into())
+        }
+
+        fn as_str(&self) -> &str {
+            &self.0
+        }
+    }
+
+    impl AsRef<str> for ShellCommand {
+        fn as_ref(&self) -> &str {
+            self.as_str()
+        }
+    }
+
     fn workspace_root() -> Result<PathBuf, Box<dyn Error>> {
         let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         Ok(manifest_dir
@@ -53,8 +72,8 @@ mod tests {
         Ok(())
     }
 
-    fn command_available(name: &str) -> bool {
-        Command::new(name)
+    fn command_available(shell: &ShellCommand) -> bool {
+        Command::new(shell.as_str())
             .arg("-NoProfile")
             .arg("-Command")
             .arg("$PSVersionTable.PSVersion.Major")
@@ -62,11 +81,14 @@ mod tests {
             .is_ok()
     }
 
-    fn run_get_help(shell: &str, module_manifest: &Utf8PathBuf) -> Result<String, Box<dyn Error>> {
+    fn run_get_help(
+        shell: &ShellCommand,
+        module_manifest: &Utf8PathBuf,
+    ) -> Result<String, Box<dyn Error>> {
         let script = format!(
             "Import-Module -Force '{module_manifest}'; $help = Get-Help fixture -Full | Out-String; Write-Output $help"
         );
-        let output = Command::new(shell)
+        let output = Command::new(shell.as_str())
             .arg("-NoProfile")
             .arg("-NonInteractive")
             .arg("-ExecutionPolicy")
@@ -77,7 +99,7 @@ mod tests {
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(format!("{shell} Get-Help failed: {stderr}").into());
+            return Err(format!("{} Get-Help failed: {stderr}", shell.as_str()).into());
         }
 
         Ok(decode_help_output(&output.stdout))
@@ -133,7 +155,10 @@ mod tests {
         Err(format!("missing {label} in help output").into())
     }
 
-    fn test_get_help_full(shell: &str, skip_if_unavailable: bool) -> Result<(), Box<dyn Error>> {
+    fn test_get_help_full(
+        shell: &ShellCommand,
+        skip_if_unavailable: bool,
+    ) -> Result<(), Box<dyn Error>> {
         if skip_if_unavailable && !command_available(shell) {
             return Ok(());
         }
@@ -159,11 +184,11 @@ mod tests {
 
     #[test]
     fn get_help_full_works_in_windows_powershell() -> Result<(), Box<dyn Error>> {
-        test_get_help_full("powershell.exe", false)
+        test_get_help_full(&ShellCommand::new("powershell.exe"), false)
     }
 
     #[test]
     fn get_help_full_works_in_pwsh() -> Result<(), Box<dyn Error>> {
-        test_get_help_full("pwsh", true)
+        test_get_help_full(&ShellCommand::new("pwsh"), true)
     }
 }
