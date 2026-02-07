@@ -138,13 +138,13 @@ mod tests {
     }
 
     const fn to_u16(pair: &[u8], endian: Endianness) -> u16 {
-        let bytes = match pair {
-            [first, second] => [*first, *second],
+        let (first, second) = match pair {
+            [first, second] => (*first as u16, *second as u16),
             _ => return 0,
         };
         match endian {
-            Endianness::Little => u16::from_le_bytes(bytes),
-            Endianness::Big => u16::from_be_bytes(bytes),
+            Endianness::Little => first | (second << 8),
+            Endianness::Big => (first << 8) | second,
         }
     }
 
