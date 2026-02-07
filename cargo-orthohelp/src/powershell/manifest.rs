@@ -48,13 +48,6 @@ pub fn render_manifest(config: &ManifestConfig<'_>) -> String {
             format_array(config.aliases_to_export)
         ),
     );
-    push_line(
-        &mut output,
-        &format!(
-            "  ExternalHelp = {}",
-            quote_single(&format!("{}-help.xml", config.module_name))
-        ),
-    );
     if let Some(uri) = config.help_info_uri {
         push_line(
             &mut output,
@@ -86,4 +79,41 @@ fn push_line(buffer: &mut String, line: &str) {
 
 fn quote_single(value: &str) -> String {
     format!("'{}'", value.replace('\'', "''"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn manifest_omits_external_help_key() {
+        let functions = vec!["fixture".to_owned()];
+        let aliases = vec!["fixture-help".to_owned()];
+        let manifest = render_manifest(&ManifestConfig {
+            module_name: "FixtureHelp",
+            module_version: "0.1.0",
+            functions_to_export: &functions,
+            aliases_to_export: &aliases,
+            help_info_uri: None,
+        });
+
+        assert!(manifest.contains("RootModule = 'FixtureHelp.psm1'"));
+        assert!(manifest.contains("FunctionsToExport = @('fixture')"));
+        assert!(!manifest.contains("ExternalHelp"));
+    }
+
+    #[test]
+    fn manifest_includes_help_info_uri_when_provided() {
+        let functions = vec!["fixture".to_owned()];
+        let aliases = vec!["fixture-help".to_owned()];
+        let manifest = render_manifest(&ManifestConfig {
+            module_name: "FixtureHelp",
+            module_version: "0.1.0",
+            functions_to_export: &functions,
+            aliases_to_export: &aliases,
+            help_info_uri: Some("https://example.invalid/help"),
+        });
+
+        assert!(manifest.contains("HelpInfoUri = 'https://example.invalid/help'"));
+    }
 }
