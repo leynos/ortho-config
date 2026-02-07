@@ -115,27 +115,14 @@ mod tests {
         Big,
     }
 
-    fn to_u16(pair: &[u8], endian: Endianness) -> u16 {
+    const fn to_u16(pair: &[u8], endian: Endianness) -> u16 {
         let bytes = match pair {
             [first, second] => [*first, *second],
             _ => return 0,
         };
-        let value = u16::from_ne_bytes(bytes);
         match endian {
-            Endianness::Little => {
-                if cfg!(target_endian = "little") {
-                    value
-                } else {
-                    value.swap_bytes()
-                }
-            }
-            Endianness::Big => {
-                if cfg!(target_endian = "big") {
-                    value
-                } else {
-                    value.swap_bytes()
-                }
-            }
+            Endianness::Little => u16::from_le_bytes(bytes),
+            Endianness::Big => u16::from_be_bytes(bytes),
         }
     }
 
