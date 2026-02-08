@@ -89,7 +89,12 @@ mod tests {
             concat!(
                 "$ErrorActionPreference = 'Stop'; ",
                 "Import-Module -Force '{}'; ",
-                "$help = Get-Help 'FixtureHelp\\fixture' -Full -UICulture en-US | Out-String -Width 4096; ",
+                "$command = Get-Command Get-Help; ",
+                "$help = if ($command.Parameters.ContainsKey('UICulture')) {{ ",
+                "Get-Help 'FixtureHelp\\fixture' -Full -UICulture en-US | Out-String -Width 4096 ",
+                "}} else {{ ",
+                "Get-Help 'FixtureHelp\\fixture' -Full | Out-String -Width 4096 ",
+                "}}; ",
                 "Write-Output $help"
             ),
             module_manifest
