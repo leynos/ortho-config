@@ -94,7 +94,12 @@ pub struct PowerShellArgs {
     #[arg(long = "ps-module-name", value_name = "NAME")]
     pub module_name: Option<String>,
     /// Split subcommands into separate wrapper functions.
-    #[arg(long = "ps-split-subcommands", value_name = "BOOL", action = ArgAction::Set)]
+    #[arg(
+        id = "ps_should_split_subcommands",
+        long = "ps-split-subcommands",
+        value_name = "BOOL",
+        action = ArgAction::Set
+    )]
     pub should_split_subcommands: Option<bool>,
     /// Include `CommonParameters` in help output.
     #[arg(
