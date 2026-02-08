@@ -2,7 +2,6 @@ fixture.about = Orthohelp fixture configuration.
 fixture.fields.port.help = Port used by the fixture service.
 fixture.fields.host.help = Hostname to bind the service to.
 fixture.fields.log_level.help = Log level for the service.
-fixture.fields.verbose.help = Enable verbose output.
 fixture.fields.is_verbose.help = Enable verbose output.
 fixture.fields.config_path.help = Configuration file path.
 fixture.fields.workers.help = Number of worker threads.

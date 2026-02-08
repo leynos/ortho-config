@@ -20,7 +20,7 @@ fn render_help_includes_common_parameters(minimal_doc: LocalizedDocMetadata) {
     let xml = render_help(
         &[command],
         MamlOptions {
-            include_common_parameters: true,
+            should_include_common_parameters: true,
         },
     );
     assert!(xml.contains("<command:commonParameters"));
@@ -67,7 +67,7 @@ fn render_help_renders_enum_values(mut minimal_doc: LocalizedDocMetadata) {
     let xml = render_help(
         &[command],
         MamlOptions {
-            include_common_parameters: false,
+            should_include_common_parameters: false,
         },
     );
     assert!(xml.contains("Possible values: info, warn."));
@@ -85,7 +85,7 @@ fn xml_escapes_reserved_chars(mut minimal_doc: LocalizedDocMetadata) {
     let xml = render_help(
         &[command],
         MamlOptions {
-            include_common_parameters: false,
+            should_include_common_parameters: false,
         },
     );
     assert!(xml.contains("Use &lt;tag&gt; &amp; more"));

@@ -6,6 +6,8 @@ mod support;
 
 #[cfg(windows)]
 mod tests {
+    //! Windows integration tests that validate generated `PowerShell` help output.
+
     use camino::Utf8PathBuf;
     use rstest::rstest;
     use std::error::Error;
@@ -61,7 +63,7 @@ mod tests {
         Ok(())
     }
 
-    fn command_available(shell: &ShellCommand) -> bool {
+    fn is_shell_available(shell: &ShellCommand) -> bool {
         Command::new(shell.as_str())
             .arg("-NoProfile")
             .arg("-Command")
@@ -189,9 +191,9 @@ mod tests {
 
     fn test_get_help_full(
         shell: &ShellCommand,
-        skip_if_unavailable: bool,
+        should_skip_if_unavailable: bool,
     ) -> Result<(), Box<dyn Error>> {
-        if skip_if_unavailable && !command_available(shell) {
+        if should_skip_if_unavailable && !is_shell_available(shell) {
             return Ok(());
         }
         let temp_dir = tempfile::tempdir()?;
@@ -219,8 +221,8 @@ mod tests {
     #[case("pwsh", true)]
     fn get_help_full_works_in_supported_shells(
         #[case] shell_name: &str,
-        #[case] skip_if_unavailable: bool,
+        #[case] should_skip_if_unavailable: bool,
     ) -> Result<(), Box<dyn Error>> {
-        test_get_help_full(&ShellCommand::new(shell_name), skip_if_unavailable)
+        test_get_help_full(&ShellCommand::new(shell_name), should_skip_if_unavailable)
     }
 }

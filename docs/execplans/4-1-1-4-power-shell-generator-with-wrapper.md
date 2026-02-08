@@ -60,7 +60,8 @@ Thresholds that trigger escalation when breached.
 - Ambiguity: stop if MAML schema requirements or PowerShell command mapping are
   still unclear after reviewing the design doc and existing examples.
 - Platform: stop if PowerShell 5.1/7+ integration tests cannot be executed or
-  safely skipped in CI without breaking the requirement.
+  safely skipped in continuous integration (CI) without breaking the
+  requirement.
 
 ## Risks
 
@@ -109,7 +110,7 @@ Known uncertainties that might affect the plan.
   2026-02-04 / Codex.
 
 - Decision: Use `[package.metadata.ortho_config.windows]` for PowerShell
-  defaults Rationale: Mirrors the IR `windows` metadata and keeps overrides
+  defaults. Rationale: Mirrors the IR `windows` metadata and keeps overrides
   grouped without mixing with non-Windows settings. Date/Author: 2026-02-04 /
   Codex.
 
@@ -350,11 +351,12 @@ Key artefacts created:
 - Do not add new dependencies; implement XML output with manual escaping and
   structured builders.
 - Ensure generator API mirrors `roff::generate` style:
-
-    pub fn generate(
-        metadata: &LocalizedDocMetadata,
-        config: &PowerShellConfig
-    ) -> Result<PowerShellOutput, OrthohelpError>
+```rust
+pub fn generate(
+    metadata: &LocalizedDocMetadata,
+    config: &PowerShellConfig
+) -> Result<PowerShellOutput, OrthohelpError>
+```
 
 - Output types should return the list of generated files for testing and
   logging.

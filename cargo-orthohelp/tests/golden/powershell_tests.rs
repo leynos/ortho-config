@@ -3,77 +3,15 @@
 use camino::Utf8PathBuf;
 use cap_std::ambient_authority;
 use cap_std::fs_utf8::Dir;
-use cargo_orthohelp::ir::{LocalizedDocMetadata, LocalizedHeadings, LocalizedSectionsMetadata};
+use cargo_orthohelp::ir::LocalizedDocMetadata;
 use cargo_orthohelp::powershell::{PowerShellConfig, generate};
-use cargo_orthohelp::schema::{CliMetadata, DefaultValue, EnvMetadata, FileMetadata, ValueType};
 use rstest::{fixture, rstest};
 use std::error::Error;
 use std::io::Read;
 
 #[fixture]
 fn minimal_doc() -> LocalizedDocMetadata {
-    LocalizedDocMetadata {
-        ir_version: "1.1".to_owned(),
-        locale: "en-US".to_owned(),
-        app_name: "fixture".to_owned(),
-        bin_name: None,
-        about: "Fixture app".to_owned(),
-        synopsis: None,
-        sections: LocalizedSectionsMetadata {
-            headings: LocalizedHeadings {
-                name: "NAME".to_owned(),
-                synopsis: "SYNOPSIS".to_owned(),
-                description: "DESCRIPTION".to_owned(),
-                options: "OPTIONS".to_owned(),
-                environment: "ENVIRONMENT".to_owned(),
-                files: "FILES".to_owned(),
-                precedence: "PRECEDENCE".to_owned(),
-                exit_status: "EXIT STATUS".to_owned(),
-                examples: "EXAMPLES".to_owned(),
-                see_also: "SEE ALSO".to_owned(),
-                commands: "COMMANDS".to_owned(),
-            },
-            discovery: None,
-            precedence: None,
-            examples: vec![],
-            links: vec![],
-            notes: vec![],
-        },
-        fields: vec![cargo_orthohelp::ir::LocalizedFieldMetadata {
-            name: "port".to_owned(),
-            help: "Port used by the fixture service.".to_owned(),
-            long_help: None,
-            value: Some(ValueType::Integer {
-                bits: 16,
-                signed: false,
-            }),
-            default: Some(DefaultValue {
-                display: "8080".to_owned(),
-            }),
-            required: false,
-            deprecated: None,
-            cli: Some(CliMetadata {
-                long: Some("port".to_owned()),
-                short: Some('p'),
-                value_name: None,
-                multiple: false,
-                takes_value: true,
-                possible_values: vec![],
-                hide_in_help: false,
-            }),
-            env: Some(EnvMetadata {
-                var_name: "FIXTURE_PORT".to_owned(),
-            }),
-            file: Some(FileMetadata {
-                key_path: "server.port".to_owned(),
-            }),
-            examples: vec![],
-            links: vec![],
-            notes: vec![],
-        }],
-        subcommands: vec![],
-        windows: None,
-    }
+    powershell_fixture::minimal_doc()
 }
 
 fn doc_for_locale(locale: &str, template: &LocalizedDocMetadata) -> LocalizedDocMetadata {
@@ -82,16 +20,23 @@ fn doc_for_locale(locale: &str, template: &LocalizedDocMetadata) -> LocalizedDoc
     doc
 }
 
-#[rstest]
-fn powershell_outputs_match_goldens(
-    minimal_doc: LocalizedDocMetadata,
-) -> Result<(), Box<dyn Error>> {
-    let temp_dir = tempfile::tempdir().expect("create temp dir");
-    let out_dir = Utf8PathBuf::from_path_buf(temp_dir.path().to_path_buf())
-        .expect("temp dir path should be utf-8");
+#[path = "../common/powershell_fixture.rs"]
+mod powershell_fixture;
 
+#[fixture]
+fn ps_setup(
+    #[default(true)] should_ensure_en_us: bool,
+) -> (tempfile::TempDir, Utf8PathBuf, PowerShellConfig) {
+    let temp_dir = match tempfile::tempdir() {
+        Ok(dir) => dir,
+        Err(error) => panic!("create temp dir: {error}"),
+    };
+    let out_dir = match Utf8PathBuf::from_path_buf(temp_dir.path().to_path_buf()) {
+        Ok(path) => path,
+        Err(path) => panic!("temp dir path should be utf-8: {}", path.display()),
+    };
     let config = PowerShellConfig {
-        out_dir: out_dir.clone(),
+        out_dir,
         module_name: "FixtureHelp".to_owned(),
         module_version: "0.1.0".to_owned(),
         bin_name: "fixture".to_owned(),
@@ -99,13 +44,31 @@ fn powershell_outputs_match_goldens(
         should_include_common_parameters: true,
         should_split_subcommands: false,
         help_info_uri: None,
-        should_ensure_en_us: true,
+        should_ensure_en_us,
     };
+    let config_out_dir = config.out_dir.clone();
+    (temp_dir, config_out_dir, config)
+}
+
+fn open_module_root(out_dir: &Utf8PathBuf) -> Result<Dir, Box<dyn Error>> {
+    let module_root = out_dir.join("powershell").join("FixtureHelp");
+    Dir::open_ambient_dir(&module_root, ambient_authority()).map_err(|source| {
+        Box::new(std::io::Error::other(format!(
+            "failed to open module root at {module_root}: {source}"
+        ))) as Box<dyn Error>
+    })
+}
+
+#[rstest]
+fn powershell_outputs_match_goldens(
+    ps_setup: (tempfile::TempDir, Utf8PathBuf, PowerShellConfig),
+    minimal_doc: LocalizedDocMetadata,
+) -> Result<(), Box<dyn Error>> {
+    let (_temp_dir, out_dir, config) = ps_setup;
 
     generate(&[minimal_doc], &config).expect("generate powershell output");
 
-    let module_root = out_dir.join("powershell").join("FixtureHelp");
-    let dir = Dir::open_ambient_dir(&module_root, ambient_authority()).expect("open module root");
+    let dir = open_module_root(&out_dir)?;
 
     assert_text_matches(
         &dir,
@@ -133,29 +96,15 @@ fn powershell_outputs_match_goldens(
 
 #[rstest]
 fn powershell_generates_en_us_fallback_from_non_en_us_locale(
+    ps_setup: (tempfile::TempDir, Utf8PathBuf, PowerShellConfig),
     minimal_doc: LocalizedDocMetadata,
 ) -> Result<(), Box<dyn Error>> {
-    let temp_dir = tempfile::tempdir().expect("create temp dir");
-    let out_dir = Utf8PathBuf::from_path_buf(temp_dir.path().to_path_buf())
-        .expect("temp dir path should be utf-8");
-
-    let config = PowerShellConfig {
-        out_dir: out_dir.clone(),
-        module_name: "FixtureHelp".to_owned(),
-        module_version: "0.1.0".to_owned(),
-        bin_name: "fixture".to_owned(),
-        export_aliases: vec!["fixture-help".to_owned()],
-        should_include_common_parameters: true,
-        should_split_subcommands: false,
-        help_info_uri: None,
-        should_ensure_en_us: true,
-    };
+    let (_temp_dir, out_dir, config) = ps_setup;
 
     let fr_doc = doc_for_locale("fr-FR", &minimal_doc);
     generate(&[fr_doc], &config).expect("generate powershell output");
 
-    let module_root = out_dir.join("powershell").join("FixtureHelp");
-    let dir = Dir::open_ambient_dir(&module_root, ambient_authority()).expect("open module root");
+    let dir = open_module_root(&out_dir)?;
 
     assert_text_matches(
         &dir,
@@ -183,29 +132,15 @@ fn powershell_generates_en_us_fallback_from_non_en_us_locale(
 
 #[rstest]
 fn powershell_does_not_generate_en_us_fallback_when_disabled(
+    #[with(false)] ps_setup: (tempfile::TempDir, Utf8PathBuf, PowerShellConfig),
     minimal_doc: LocalizedDocMetadata,
 ) -> Result<(), Box<dyn Error>> {
-    let temp_dir = tempfile::tempdir().expect("create temp dir");
-    let out_dir = Utf8PathBuf::from_path_buf(temp_dir.path().to_path_buf())
-        .expect("temp dir path should be utf-8");
-
-    let config = PowerShellConfig {
-        out_dir: out_dir.clone(),
-        module_name: "FixtureHelp".to_owned(),
-        module_version: "0.1.0".to_owned(),
-        bin_name: "fixture".to_owned(),
-        export_aliases: vec!["fixture-help".to_owned()],
-        should_include_common_parameters: true,
-        should_split_subcommands: false,
-        help_info_uri: None,
-        should_ensure_en_us: false,
-    };
+    let (_temp_dir, out_dir, config) = ps_setup;
 
     let fr_doc = doc_for_locale("fr-FR", &minimal_doc);
     generate(&[fr_doc], &config).expect("generate powershell output");
 
-    let module_root = out_dir.join("powershell").join("FixtureHelp");
-    let dir = Dir::open_ambient_dir(&module_root, ambient_authority()).expect("open module root");
+    let dir = open_module_root(&out_dir)?;
 
     assert_text_matches(
         &dir,

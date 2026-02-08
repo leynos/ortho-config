@@ -50,7 +50,7 @@ fn run_with_env(locale_env: &[(&str, &str)], args: &[&str]) -> String {
         stdout.into_owned()
     };
 
-    // Normalize for cross-platform consistency:
+    // Normalise for cross-platform consistency:
     // - CRLF to LF for line endings
     // - Backslashes to forward slashes for paths (Windows uses backslashes in error output)
     let normalised = combined.replace("\r\n", "\n").replace('\\', "/");

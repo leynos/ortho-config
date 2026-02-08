@@ -112,7 +112,7 @@ fn render_parameters(writer: &mut XmlWriter, command: &CommandSpec<'_>, options:
     {
         render_parameter_detail(writer, field);
     }
-    if options.include_common_parameters {
+    if options.should_include_common_parameters {
         writer.line("<command:commonParameters />");
     }
     writer.outdent();
@@ -295,7 +295,7 @@ fn push_cli_paragraphs(field: &LocalizedFieldMetadata, paragraphs: &mut Vec<Stri
         paragraphs.push(format!("Long flag: --{long}."));
     }
     if cli.multiple {
-        paragraphs.push("Repeats may be supplied multiple times.".to_owned());
+        paragraphs.push("This option may be supplied multiple times.".to_owned());
     }
 }
 

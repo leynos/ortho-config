@@ -2,7 +2,6 @@ fixture.about = Configuration du fixture Orthohelp.
 fixture.fields.port.help = Port utilisé par le service de test.
 fixture.fields.host.help = Nom d'hôte pour lier le service.
 fixture.fields.log_level.help = Niveau de journalisation du service.
-fixture.fields.verbose.help = Activer la sortie détaillée.
 fixture.fields.is_verbose.help = Activer la sortie détaillée.
 fixture.fields.config_path.help = Chemin du fichier de configuration.
 fixture.fields.workers.help = Nombre de threads de travail.

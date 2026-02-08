@@ -59,9 +59,11 @@ pub struct WindowsMetadataOverrides {
     /// Aliases exported by the wrapper module.
     pub export_aliases: Option<Vec<String>>,
     /// Whether `CommonParameters` are included in help output.
-    pub include_common_parameters: Option<bool>,
+    #[serde(rename = "include_common_parameters")]
+    pub should_include_common_parameters: Option<bool>,
     /// Whether subcommands are split into wrapper functions.
-    pub split_subcommands_into_functions: Option<bool>,
+    #[serde(rename = "split_subcommands_into_functions")]
+    pub should_split_subcommands_into_functions: Option<bool>,
     /// Optional `HelpInfoUri` for Update-Help.
     pub help_info_uri: Option<String>,
 }
@@ -79,12 +81,12 @@ impl WindowsMetadataOverrides {
             .export_aliases
             .clone()
             .unwrap_or(resolved.export_aliases);
-        resolved.include_common_parameters = self
-            .include_common_parameters
-            .unwrap_or(resolved.include_common_parameters);
-        resolved.split_subcommands_into_functions = self
-            .split_subcommands_into_functions
-            .unwrap_or(resolved.split_subcommands_into_functions);
+        resolved.should_include_common_parameters = self
+            .should_include_common_parameters
+            .unwrap_or(resolved.should_include_common_parameters);
+        resolved.should_split_subcommands_into_functions = self
+            .should_split_subcommands_into_functions
+            .unwrap_or(resolved.should_split_subcommands_into_functions);
         resolved.help_info_uri = self.help_info_uri.clone().or(resolved.help_info_uri);
 
         resolved
@@ -99,9 +101,9 @@ pub struct ResolvedWindowsMetadata {
     /// Aliases exported by the wrapper module.
     pub export_aliases: Vec<String>,
     /// Whether `CommonParameters` are included in help output.
-    pub include_common_parameters: bool,
+    pub should_include_common_parameters: bool,
     /// Whether subcommands are split into wrapper functions.
-    pub split_subcommands_into_functions: bool,
+    pub should_split_subcommands_into_functions: bool,
     /// Optional `HelpInfoUri` for Update-Help.
     pub help_info_uri: Option<String>,
 }
@@ -111,8 +113,8 @@ impl Default for ResolvedWindowsMetadata {
         Self {
             module_name: None,
             export_aliases: Vec::new(),
-            include_common_parameters: true,
-            split_subcommands_into_functions: false,
+            should_include_common_parameters: true,
+            should_split_subcommands_into_functions: false,
             help_info_uri: None,
         }
     }
@@ -123,8 +125,8 @@ impl From<WindowsMetadata> for ResolvedWindowsMetadata {
         Self {
             module_name: metadata.module_name,
             export_aliases: metadata.export_aliases,
-            include_common_parameters: metadata.include_common_parameters,
-            split_subcommands_into_functions: metadata.split_subcommands_into_functions,
+            should_include_common_parameters: metadata.include_common_parameters,
+            should_split_subcommands_into_functions: metadata.split_subcommands_into_functions,
             help_info_uri: metadata.help_info_uri,
         }
     }

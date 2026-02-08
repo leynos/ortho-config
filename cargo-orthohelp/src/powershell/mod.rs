@@ -12,7 +12,7 @@ mod writer;
 
 pub use types::{PowerShellConfig, PowerShellOutput};
 
-use camino::Utf8PathBuf;
+use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::fs_utf8::Dir;
 
 use crate::error::OrthohelpError;
@@ -155,7 +155,7 @@ fn write_locale_files(
     let maml_content = maml::render_help(
         &commands,
         maml::MamlOptions {
-            include_common_parameters: config.should_include_common_parameters,
+            should_include_common_parameters: config.should_include_common_parameters,
         },
     );
     let help_relative = locale_dir_relative.join(format!("{}-help.xml", config.module_name));
@@ -180,7 +180,7 @@ fn write_locale_files(
 
 fn write_module_file(
     paths: &GenerationPaths<'_>,
-    relative_path: &Utf8PathBuf,
+    relative_path: &Utf8Path,
     content: &str,
     include_bom: bool,
 ) -> Result<Utf8PathBuf, OrthohelpError> {
@@ -197,7 +197,7 @@ fn write_module_file(
 
 fn ensure_module_subdir(
     paths: &GenerationPaths<'_>,
-    relative_path: &Utf8PathBuf,
+    relative_path: &Utf8Path,
 ) -> Result<(), OrthohelpError> {
     paths
         .root_dir
@@ -216,11 +216,7 @@ fn build_functions_to_export(
     let mut functions = Vec::new();
     functions.push(config.bin_name.clone());
     if config.should_split_subcommands {
-        for subcommand in &metadata.subcommands {
-            let sub_name = subcommand
-                .bin_name
-                .as_deref()
-                .unwrap_or(&subcommand.app_name);
+        for (sub_name, _) in iter_subcommands(metadata) {
             functions.push(format!("{}_{}", config.bin_name, sub_name));
         }
     }
@@ -237,11 +233,7 @@ fn build_command_specs<'a>(
         metadata,
     });
     if config.should_split_subcommands {
-        for subcommand in &metadata.subcommands {
-            let sub_name = subcommand
-                .bin_name
-                .as_deref()
-                .unwrap_or(&subcommand.app_name);
+        for (sub_name, subcommand) in iter_subcommands(metadata) {
             commands.push(maml::CommandSpec {
                 name: format!("{}_{}", config.bin_name, sub_name),
                 metadata: subcommand,
@@ -249,6 +241,20 @@ fn build_command_specs<'a>(
         }
     }
     commands
+}
+
+fn iter_subcommands(
+    metadata: &LocalizedDocMetadata,
+) -> impl Iterator<Item = (&str, &LocalizedDocMetadata)> {
+    metadata.subcommands.iter().map(|subcommand| {
+        (
+            subcommand
+                .bin_name
+                .as_deref()
+                .unwrap_or(&subcommand.app_name),
+            subcommand,
+        )
+    })
 }
 
 fn resolve_locales(
@@ -266,16 +272,26 @@ fn resolve_locales(
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for locale resolution in the `PowerShell` generator.
+
     use super::*;
     use crate::powershell::test_fixtures;
     use rstest::rstest;
 
     #[rstest]
-    fn resolve_locales_falls_back_to_en_us() {
-        let locale = test_fixtures::minimal_doc("fr-FR", "Fixture");
-        let locales = vec![locale];
-        let (resolved, fallback) = resolve_locales(&locales, true);
-        assert_eq!(resolved.len(), 1);
-        assert!(fallback.is_some());
+    #[case(&["fr-FR"], true, true)]
+    #[case(&["en-US"], true, false)]
+    fn resolve_locales_handles_en_us_fallback(
+        #[case] locale_names: &[&str],
+        #[case] should_ensure_en_us: bool,
+        #[case] should_have_fallback: bool,
+    ) {
+        let locales = locale_names
+            .iter()
+            .map(|locale| test_fixtures::minimal_doc(locale, "Fixture"))
+            .collect::<Vec<_>>();
+        let (resolved, fallback) = resolve_locales(&locales, should_ensure_en_us);
+        assert_eq!(resolved.len(), locales.len());
+        assert_eq!(fallback.is_some(), should_have_fallback);
     }
 }

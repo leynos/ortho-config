@@ -32,7 +32,7 @@ pub fn ensure_dir(path: &Utf8Path) -> Result<Dir, OrthohelpError> {
     }
 }
 
-/// Writes text content to a file with CRLF line endings.
+/// Identifies the destination file path for a write operation.
 pub struct WriteTarget<'a> {
     /// Root directory for error reporting.
     pub root: &'a Utf8Path,

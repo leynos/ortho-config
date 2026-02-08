@@ -8,7 +8,7 @@ use std::error::Error;
 ///
 /// # Errors
 ///
-/// Returns an error when none of the supported cargo/nextext binary
+/// Returns an error when none of the supported cargo/nextest binary
 /// environment variables are present.
 pub(crate) fn cargo_orthohelp_exe() -> Result<Utf8PathBuf, Box<dyn Error>> {
     let env_vars = [

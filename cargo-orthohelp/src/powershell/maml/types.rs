@@ -15,5 +15,5 @@ pub struct CommandSpec<'a> {
 #[derive(Debug, Clone, Copy)]
 pub struct MamlOptions {
     /// Include `CommonParameters` in the help output.
-    pub include_common_parameters: bool,
+    pub should_include_common_parameters: bool,
 }

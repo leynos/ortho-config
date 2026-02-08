@@ -1154,7 +1154,7 @@ The generator produces:
 - `powershell/<ModuleName>/<culture>/about_<ModuleName>.help.txt` – about topic.
 
 `en-US` help is always generated. If only other locales are rendered, the
-generator copies the first locale into `en-US` unless you disable it with
+generator copies the first locale into `en-US` unless fallback is disabled with
 `--ensure-en-us false`.
 
 PowerShell options:

@@ -15,6 +15,18 @@ macro_rules! string_newtype {
             }
         }
 
+        impl From<&str> for $name {
+            fn from(value: &str) -> Self {
+                Self(value.to_owned())
+            }
+        }
+
+        impl From<String> for $name {
+            fn from(value: String) -> Self {
+                Self(value)
+            }
+        }
+
         impl AsRef<str> for $name {
             fn as_ref(&self) -> &str {
                 &self.0
@@ -39,7 +51,7 @@ pub fn render_wrapper(
     metadata: &LocalizedDocMetadata,
     bin_name: &BinName,
     export_aliases: &[Alias],
-    split_subcommands: bool,
+    should_split_subcommands: bool,
 ) -> String {
     let mut output = String::new();
 
@@ -52,7 +64,7 @@ pub fn render_wrapper(
     output.push_str(&render_subcommand_functions(
         metadata,
         bin_name,
-        split_subcommands,
+        should_split_subcommands,
     ));
     output.push_str(&render_aliases(bin_name, export_aliases));
 
@@ -65,9 +77,9 @@ pub fn render_wrapper(
 fn render_subcommand_functions(
     metadata: &LocalizedDocMetadata,
     bin_name: &BinName,
-    split_subcommands: bool,
+    should_split_subcommands: bool,
 ) -> String {
-    if !split_subcommands {
+    if !should_split_subcommands {
         return String::new();
     }
 

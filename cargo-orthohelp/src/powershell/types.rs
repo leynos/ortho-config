@@ -43,7 +43,11 @@ pub struct PowerShellOutput {
 impl PowerShellOutput {
     /// Creates an empty output list.
     #[must_use]
-    pub const fn new() -> Self {
+    #[expect(
+        clippy::missing_const_for_fn,
+        reason = "avoid relying on const-stability details for allocation constructors"
+    )]
+    pub fn new() -> Self {
         Self { files: Vec::new() }
     }
 
