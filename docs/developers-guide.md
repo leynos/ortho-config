@@ -35,7 +35,7 @@ effectively read-only infrastructure.
 
 ## `rstest-bdd` v0.5.0 migration strategy
 
-Status: planned. See `docs/rstest-bdd-v0-5-0-migration-execplan.md` for the
+Status: planned. See `docs/execplans/adopt-rstest-bdd-v0-5-0.md` for the
 execution plan.
 
 Migration guidance for contributors:
@@ -49,6 +49,11 @@ Migration guidance for contributors:
   bindings to reduce hand-written wrapper boilerplate.
 - Prefer typed step inputs (`StepArgs`) for multi-placeholder patterns to
   improve readability and reduce stringly typed parsing.
+- Prefer underscore-prefixed fixture names when a fixture is injected for steps
+  but intentionally unused in a scenario body.
+- Remove file-wide lint suppressions used only for historical generated-fixture
+  warnings; retain only narrow, item-level `#[expect(...)]` annotations when
+  still required.
 - Keep scenario isolation as the default and reserve `#[once]` for shared
   infrastructure only.
 - If a sync step needs async bridging, use
