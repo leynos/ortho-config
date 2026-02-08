@@ -181,7 +181,7 @@ fn render_completion_block(command_name: &BinName) -> String {
     );
     push_line(
         &mut output,
-        "  # TODO: Replace this placeholder with native completions emitted by the executable.",
+        "  # Placeholder completion returns the current token verbatim.",
     );
     push_line(&mut output, "  if ($wordToComplete) {");
     push_line(

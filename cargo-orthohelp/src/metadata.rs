@@ -6,6 +6,7 @@ use serde::Deserialize;
 
 use crate::cli::Args;
 use crate::error::OrthohelpError;
+use crate::powershell::{ExportAlias, HelpInfoUri, ModuleName};
 use crate::schema::WindowsMetadata;
 
 /// Deserialized `package.metadata.ortho_config` defaults.
@@ -76,10 +77,15 @@ impl WindowsMetadataOverrides {
             .cloned()
             .map(ResolvedWindowsMetadata::from)
             .unwrap_or_default();
-        resolved.module_name = self.module_name.clone().or(resolved.module_name);
+        resolved.module_name = self
+            .module_name
+            .clone()
+            .map(Into::into)
+            .or(resolved.module_name);
         resolved.export_aliases = self
             .export_aliases
             .clone()
+            .map(|aliases| aliases.into_iter().map(Into::into).collect())
             .unwrap_or(resolved.export_aliases);
         resolved.should_include_common_parameters = self
             .should_include_common_parameters
@@ -87,7 +93,11 @@ impl WindowsMetadataOverrides {
         resolved.should_split_subcommands_into_functions = self
             .should_split_subcommands_into_functions
             .unwrap_or(resolved.should_split_subcommands_into_functions);
-        resolved.help_info_uri = self.help_info_uri.clone().or(resolved.help_info_uri);
+        resolved.help_info_uri = self
+            .help_info_uri
+            .clone()
+            .map(Into::into)
+            .or(resolved.help_info_uri);
 
         resolved
     }
@@ -97,15 +107,15 @@ impl WindowsMetadataOverrides {
 #[derive(Debug, Clone)]
 pub struct ResolvedWindowsMetadata {
     /// Module name used for `PowerShell` output.
-    pub module_name: Option<String>,
+    pub module_name: Option<ModuleName>,
     /// Aliases exported by the wrapper module.
-    pub export_aliases: Vec<String>,
+    pub export_aliases: Vec<ExportAlias>,
     /// Whether `CommonParameters` are included in help output.
     pub should_include_common_parameters: bool,
     /// Whether subcommands are split into wrapper functions.
     pub should_split_subcommands_into_functions: bool,
     /// Optional `HelpInfoUri` for Update-Help.
-    pub help_info_uri: Option<String>,
+    pub help_info_uri: Option<HelpInfoUri>,
 }
 
 impl Default for ResolvedWindowsMetadata {
@@ -123,11 +133,15 @@ impl Default for ResolvedWindowsMetadata {
 impl From<WindowsMetadata> for ResolvedWindowsMetadata {
     fn from(metadata: WindowsMetadata) -> Self {
         Self {
-            module_name: metadata.module_name,
-            export_aliases: metadata.export_aliases,
+            module_name: metadata.module_name.map(Into::into),
+            export_aliases: metadata
+                .export_aliases
+                .into_iter()
+                .map(Into::into)
+                .collect(),
             should_include_common_parameters: metadata.include_common_parameters,
             should_split_subcommands_into_functions: metadata.split_subcommands_into_functions,
-            help_info_uri: metadata.help_info_uri,
+            help_info_uri: metadata.help_info_uri.map(Into::into),
         }
     }
 }

@@ -110,6 +110,19 @@ fn normalise_rust_src_paths_rewrites_only_matching_lines() {
     assert_eq!(normalise_rust_src_paths(input), expected);
 }
 
+#[test]
+fn normalise_rust_src_paths_preserves_trailing_newline() {
+    let input = concat!(
+        "error: panic\n",
+        "  /Users/example/.rustup/toolchains/stable/library/core/src/ops/function.rs:10:9\n",
+    );
+    let expected = concat!(
+        "error: panic\n",
+        "  <rust-src>/library/core/src/ops/function.rs:10:9\n",
+    );
+    assert_eq!(normalise_rust_src_paths(input), expected);
+}
+
 // =============================================================================
 // English (en-US) help output tests
 // =============================================================================

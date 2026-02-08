@@ -130,7 +130,7 @@ mod tests {
             return None;
         }
 
-        let odd_byte_count = bytes.len() / 2;
+        let odd_byte_count = bytes.chunks_exact(2).len();
         let odd_zero_count = bytes
             .iter()
             .skip(1)

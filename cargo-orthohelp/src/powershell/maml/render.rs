@@ -231,7 +231,11 @@ fn parameter_display_name(field: &LocalizedFieldMetadata) -> String {
     field.name.clone()
 }
 
-const fn parameter_value_type(field: &LocalizedFieldMetadata) -> (&'static str, bool) {
+#[expect(
+    clippy::missing_const_for_fn,
+    reason = "runtime-only call sites intentionally keep this helper unconstrained"
+)]
+fn parameter_value_type(field: &LocalizedFieldMetadata) -> (&'static str, bool) {
     let Some(cli) = field.cli.as_ref() else {
         return ("String", false);
     };

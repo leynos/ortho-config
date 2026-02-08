@@ -7,7 +7,7 @@ use crate::ir::LocalizedDocMetadata;
 pub struct CommandSpec<'a> {
     /// Name of the `PowerShell` command.
     pub name: String,
-    /// Localised metadata for the command.
+    /// Localized metadata for the command.
     pub metadata: &'a LocalizedDocMetadata,
 }
 

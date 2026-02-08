@@ -117,8 +117,9 @@ fn build_powershell_config(
         .powershell
         .module_name
         .clone()
+        .map(Into::into)
         .or_else(|| windows.module_name.clone())
-        .unwrap_or_else(|| bin_name.clone());
+        .unwrap_or_else(|| bin_name.as_str().into());
 
     if let Some(split_subcommands) = args.powershell.should_split_subcommands {
         windows.should_split_subcommands_into_functions = split_subcommands;
@@ -127,23 +128,18 @@ fn build_powershell_config(
         windows.should_include_common_parameters = include_common_parameters;
     }
     if let Some(help_info_uri) = args.powershell.help_info_uri.clone() {
-        windows.help_info_uri = Some(help_info_uri);
+        windows.help_info_uri = Some(help_info_uri.into());
     }
 
     powershell::PowerShellConfig {
         out_dir: out_dir.clone(),
-        module_name: module_name.into(),
+        module_name,
         module_version: selection.package_version.clone().into(),
         bin_name: bin_name.into(),
-        export_aliases: windows
-            .export_aliases
-            .iter()
-            .cloned()
-            .map(Into::into)
-            .collect(),
+        export_aliases: windows.export_aliases.clone(),
         should_include_common_parameters: windows.should_include_common_parameters,
         should_split_subcommands: windows.should_split_subcommands_into_functions,
-        help_info_uri: windows.help_info_uri.clone().map(Into::into),
+        help_info_uri: windows.help_info_uri.clone(),
         should_ensure_en_us: args.powershell.should_ensure_en_us,
     }
 }

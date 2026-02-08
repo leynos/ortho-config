@@ -196,9 +196,15 @@ generator must:
   PowerShell runtime supports it.
 - Resolve the executable path relative to `$PSScriptRoot` and forward `@Args`.
 
-Update `cargo-orthohelp/src/cli.rs` with a `PowerShellArgs` struct and new
-flags (`--ps-module-name`, `--ps-split-subcommands`,
-`--ps-include-common-parameters`, `--ps-help-info-uri`, `--ensure-en-us`).
+Update `cargo-orthohelp/src/cli.rs` with a `PowerShellArgs` struct and the new
+flags:
+
+- `--ps-module-name`
+- `--ps-split-subcommands`
+- `--ps-include-common-parameters`
+- `--ps-help-info-uri`
+- `--ensure-en-us`
+
 Update `metadata.rs` to parse optional PowerShell defaults from
 `package.metadata.ortho_config` and thread them into configuration resolution.
 Update `main.rs` to remove the `UnsupportedFormat` error for `ps`, route
