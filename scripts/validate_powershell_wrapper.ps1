@@ -61,9 +61,10 @@ if ($moduleText -notmatch 'Register-ArgumentCompleter') {
     throw 'Wrapper module does not register argument completion.'
 }
 
-$manifestText = Get-Content -Path $psd1.FullName -Raw
-if ($manifestText -notmatch 'ExternalHelp') {
-    throw 'Module manifest does not define ExternalHelp.'
+$manifestData = Import-PowerShellDataFile -Path $psd1.FullName
+if ($manifestData.ContainsKey('ExternalHelp')) {
+    $manifestKeys = ($manifestData.Keys | Sort-Object) -join ', '
+    throw "Module manifest must not define ExternalHelp. Manifest keys: $manifestKeys"
 }
 
 Write-Host "PowerShell wrapper validation succeeded. Files located at $outDir"
