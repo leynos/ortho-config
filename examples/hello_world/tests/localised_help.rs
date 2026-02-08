@@ -6,6 +6,9 @@
 use assert_cmd::Command;
 use insta::assert_snapshot;
 
+const STABLE_RUSTC_CORE_PATH: &str =
+    "/rustc/6b00bc3880198600130e1cf62b8f8a93494488cc/library/core/src/ops/function.rs";
+
 /// Runs the `hello_world` binary with the specified locale environment variables
 /// and arguments, returning the combined output for snapshot comparison.
 ///
@@ -64,6 +67,23 @@ fn run_with_locale(locale: &str, args: &[&str]) -> String {
     run_with_env(&[("LANG", locale)], args)
 }
 
+fn assert_localised_snapshot(name: &str, output: &str) {
+    insta::with_settings!({
+        filters => vec![
+            (
+                r"/root/\.rustup/toolchains/[^/]+/lib/rustlib/src/rust/library/core/src/ops/function\.rs",
+                STABLE_RUSTC_CORE_PATH,
+            ),
+            (
+                r"/rustc/[0-9a-f]+/library/core/src/ops/function\.rs",
+                STABLE_RUSTC_CORE_PATH,
+            ),
+        ],
+    }, {
+        assert_snapshot!(name, output);
+    });
+}
+
 // =============================================================================
 // English (en-US) help output tests
 // =============================================================================
@@ -71,25 +91,25 @@ fn run_with_locale(locale: &str, args: &[&str]) -> String {
 #[test]
 fn help_en_us() {
     let output = run_with_locale("en_US.UTF-8", &["--help"]);
-    assert_snapshot!(output);
+    assert_localised_snapshot("help_en_us", &output);
 }
 
 #[test]
 fn greet_help_en_us() {
     let output = run_with_locale("en_US.UTF-8", &["greet", "--help"]);
-    assert_snapshot!(output);
+    assert_localised_snapshot("greet_help_en_us", &output);
 }
 
 #[test]
 fn take_leave_help_en_us() {
     let output = run_with_locale("en_US.UTF-8", &["take-leave", "--help"]);
-    assert_snapshot!(output);
+    assert_localised_snapshot("take_leave_help_en_us", &output);
 }
 
 #[test]
 fn missing_subcommand_error_en_us() {
     let output = run_with_locale("en_US.UTF-8", &[]);
-    assert_snapshot!(output);
+    assert_localised_snapshot("missing_subcommand_error_en_us", &output);
 }
 
 // =============================================================================
@@ -99,25 +119,25 @@ fn missing_subcommand_error_en_us() {
 #[test]
 fn help_ja() {
     let output = run_with_locale("ja_JP.UTF-8", &["--help"]);
-    assert_snapshot!(output);
+    assert_localised_snapshot("help_ja", &output);
 }
 
 #[test]
 fn greet_help_ja() {
     let output = run_with_locale("ja_JP.UTF-8", &["greet", "--help"]);
-    assert_snapshot!(output);
+    assert_localised_snapshot("greet_help_ja", &output);
 }
 
 #[test]
 fn take_leave_help_ja() {
     let output = run_with_locale("ja_JP.UTF-8", &["take-leave", "--help"]);
-    assert_snapshot!(output);
+    assert_localised_snapshot("take_leave_help_ja", &output);
 }
 
 #[test]
 fn missing_subcommand_error_ja() {
     let output = run_with_locale("ja_JP.UTF-8", &[]);
-    assert_snapshot!(output);
+    assert_localised_snapshot("missing_subcommand_error_ja", &output);
 }
 
 // =============================================================================
