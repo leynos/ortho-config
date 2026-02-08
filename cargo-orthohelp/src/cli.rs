@@ -95,14 +95,14 @@ pub struct PowerShellArgs {
     pub module_name: Option<String>,
     /// Split subcommands into separate wrapper functions.
     #[arg(long = "ps-split-subcommands", value_name = "BOOL", action = ArgAction::Set)]
-    pub split_subcommands: Option<bool>,
+    pub should_split_subcommands: Option<bool>,
     /// Include `CommonParameters` in help output.
     #[arg(
         long = "ps-include-common-parameters",
         value_name = "BOOL",
         action = ArgAction::Set
     )]
-    pub include_common_parameters: Option<bool>,
+    pub should_include_common_parameters: Option<bool>,
     /// `HelpInfoUri` for Update-Help payloads.
     #[arg(long = "ps-help-info-uri", value_name = "URI")]
     pub help_info_uri: Option<String>,
@@ -113,5 +113,5 @@ pub struct PowerShellArgs {
         default_value_t = true,
         action = ArgAction::Set
     )]
-    pub ensure_en_us: bool,
+    pub should_ensure_en_us: bool,
 }

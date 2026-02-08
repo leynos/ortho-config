@@ -287,10 +287,10 @@ mod tests {
             },
             powershell: crate::cli::PowerShellArgs {
                 module_name: None,
-                split_subcommands: None,
-                include_common_parameters: None,
+                should_split_subcommands: None,
+                should_include_common_parameters: None,
                 help_info_uri: None,
-                ensure_en_us: true,
+                should_ensure_en_us: true,
             },
         }
     }

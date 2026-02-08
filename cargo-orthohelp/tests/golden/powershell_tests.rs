@@ -76,6 +76,12 @@ fn minimal_doc() -> LocalizedDocMetadata {
     }
 }
 
+fn doc_for_locale(locale: &str, template: &LocalizedDocMetadata) -> LocalizedDocMetadata {
+    let mut doc = template.clone();
+    locale.clone_into(&mut doc.locale);
+    doc
+}
+
 #[rstest]
 fn powershell_outputs_match_goldens(
     minimal_doc: LocalizedDocMetadata,
@@ -90,10 +96,10 @@ fn powershell_outputs_match_goldens(
         module_version: "0.1.0".to_owned(),
         bin_name: "fixture".to_owned(),
         export_aliases: vec!["fixture-help".to_owned()],
-        include_common_parameters: true,
-        split_subcommands: false,
+        should_include_common_parameters: true,
+        should_split_subcommands: false,
         help_info_uri: None,
-        ensure_en_us: true,
+        should_ensure_en_us: true,
     };
 
     generate(&[minimal_doc], &config).expect("generate powershell output");
@@ -121,6 +127,97 @@ fn powershell_outputs_match_goldens(
         "en-US/about_FixtureHelp.help.txt",
         include_str!("powershell/fixture-about.help.txt.golden"),
     )?;
+
+    Ok(())
+}
+
+#[rstest]
+fn powershell_generates_en_us_fallback_from_non_en_us_locale(
+    minimal_doc: LocalizedDocMetadata,
+) -> Result<(), Box<dyn Error>> {
+    let temp_dir = tempfile::tempdir().expect("create temp dir");
+    let out_dir = Utf8PathBuf::from_path_buf(temp_dir.path().to_path_buf())
+        .expect("temp dir path should be utf-8");
+
+    let config = PowerShellConfig {
+        out_dir: out_dir.clone(),
+        module_name: "FixtureHelp".to_owned(),
+        module_version: "0.1.0".to_owned(),
+        bin_name: "fixture".to_owned(),
+        export_aliases: vec!["fixture-help".to_owned()],
+        should_include_common_parameters: true,
+        should_split_subcommands: false,
+        help_info_uri: None,
+        should_ensure_en_us: true,
+    };
+
+    let fr_doc = doc_for_locale("fr-FR", &minimal_doc);
+    generate(&[fr_doc], &config).expect("generate powershell output");
+
+    let module_root = out_dir.join("powershell").join("FixtureHelp");
+    let dir = Dir::open_ambient_dir(&module_root, ambient_authority()).expect("open module root");
+
+    assert_text_matches(
+        &dir,
+        "fr-FR/FixtureHelp-help.xml",
+        include_str!("powershell/fixture-help.xml.golden"),
+    )?;
+    assert_text_matches(
+        &dir,
+        "fr-FR/about_FixtureHelp.help.txt",
+        include_str!("powershell/fixture-about.help.txt.golden"),
+    )?;
+    assert_text_matches(
+        &dir,
+        "en-US/FixtureHelp-help.xml",
+        include_str!("powershell/fixture-help.xml.golden"),
+    )?;
+    assert_text_matches(
+        &dir,
+        "en-US/about_FixtureHelp.help.txt",
+        include_str!("powershell/fixture-about.help.txt.golden"),
+    )?;
+
+    Ok(())
+}
+
+#[rstest]
+fn powershell_does_not_generate_en_us_fallback_when_disabled(
+    minimal_doc: LocalizedDocMetadata,
+) -> Result<(), Box<dyn Error>> {
+    let temp_dir = tempfile::tempdir().expect("create temp dir");
+    let out_dir = Utf8PathBuf::from_path_buf(temp_dir.path().to_path_buf())
+        .expect("temp dir path should be utf-8");
+
+    let config = PowerShellConfig {
+        out_dir: out_dir.clone(),
+        module_name: "FixtureHelp".to_owned(),
+        module_version: "0.1.0".to_owned(),
+        bin_name: "fixture".to_owned(),
+        export_aliases: vec!["fixture-help".to_owned()],
+        should_include_common_parameters: true,
+        should_split_subcommands: false,
+        help_info_uri: None,
+        should_ensure_en_us: false,
+    };
+
+    let fr_doc = doc_for_locale("fr-FR", &minimal_doc);
+    generate(&[fr_doc], &config).expect("generate powershell output");
+
+    let module_root = out_dir.join("powershell").join("FixtureHelp");
+    let dir = Dir::open_ambient_dir(&module_root, ambient_authority()).expect("open module root");
+
+    assert_text_matches(
+        &dir,
+        "fr-FR/FixtureHelp-help.xml",
+        include_str!("powershell/fixture-help.xml.golden"),
+    )?;
+    if dir.open("en-US/FixtureHelp-help.xml").is_ok() {
+        return Err("unexpected en-US fallback help file generated".into());
+    }
+    if dir.open("en-US/about_FixtureHelp.help.txt").is_ok() {
+        return Err("unexpected en-US fallback about file generated".into());
+    }
 
     Ok(())
 }

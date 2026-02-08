@@ -120,10 +120,10 @@ fn build_powershell_config(
         .or_else(|| windows.module_name.clone())
         .unwrap_or_else(|| bin_name.clone());
 
-    if let Some(split_subcommands) = args.powershell.split_subcommands {
+    if let Some(split_subcommands) = args.powershell.should_split_subcommands {
         windows.split_subcommands_into_functions = split_subcommands;
     }
-    if let Some(include_common_parameters) = args.powershell.include_common_parameters {
+    if let Some(include_common_parameters) = args.powershell.should_include_common_parameters {
         windows.include_common_parameters = include_common_parameters;
     }
     if let Some(help_info_uri) = args.powershell.help_info_uri.clone() {
@@ -136,10 +136,10 @@ fn build_powershell_config(
         module_version: selection.package_version.clone(),
         bin_name,
         export_aliases: windows.export_aliases.clone(),
-        include_common_parameters: windows.include_common_parameters,
-        split_subcommands: windows.split_subcommands_into_functions,
+        should_include_common_parameters: windows.include_common_parameters,
+        should_split_subcommands: windows.split_subcommands_into_functions,
         help_info_uri: windows.help_info_uri.clone(),
-        ensure_en_us: args.powershell.ensure_en_us,
+        should_ensure_en_us: args.powershell.should_ensure_en_us,
     }
 }
 

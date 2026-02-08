@@ -71,7 +71,7 @@ pub struct FixtureConfig {
     /// Enables the legacy processing mode.
     #[ortho_config(
         default = false,
-        deprecated(note_id = "orthohelp_fixture.fields.legacy_mode.deprecated")
+        deprecated(note_id = "fixture.fields.is_legacy_mode.deprecated")
     )]
-    pub legacy_mode: bool,
+    pub is_legacy_mode: bool,
 }

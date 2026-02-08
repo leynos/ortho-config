@@ -14,6 +14,8 @@ use serde_json::Value;
 use std::time::Duration;
 use tempfile::TempDir;
 
+use crate::support;
+
 /// Error type for step definition failures.
 pub type StepError = Box<dyn std::error::Error + Send + Sync>;
 
@@ -227,7 +229,7 @@ fn command_fails_due_to_missing_cache(orthohelp_context: &mut OrthoHelpContext) 
 
 /// Runs cargo-orthohelp with the given arguments.
 pub fn run_orthohelp(ctx: &OrthoHelpContext, args: &[&str]) -> StepResult<std::process::Output> {
-    let exe = cargo_orthohelp_exe()?;
+    let exe = support::cargo_orthohelp_exe()?;
     let workspace_root = get_workspace_root(ctx)?;
     let out_dir = get_out_dir(ctx)?;
     let mut command = Command::new(exe.as_str());
@@ -237,21 +239,6 @@ pub fn run_orthohelp(ctx: &OrthoHelpContext, args: &[&str]) -> StepResult<std::p
         .arg(out_dir.as_str())
         .args(args);
     Ok(command.output()?)
-}
-
-fn cargo_orthohelp_exe() -> StepResult<Utf8PathBuf> {
-    let env_vars = [
-        "CARGO_BIN_EXE_cargo-orthohelp",
-        "CARGO_BIN_EXE_cargo_orthohelp",
-        "NEXTEST_BIN_EXE_cargo-orthohelp",
-        "NEXTEST_BIN_EXE_cargo_orthohelp",
-    ];
-    for var in env_vars {
-        if let Ok(path) = std::env::var(var) {
-            return Ok(Utf8PathBuf::from(path));
-        }
-    }
-    Err("cargo-orthohelp binary path not found in environment".into())
 }
 
 fn record_cache_state(ctx: &mut OrthoHelpContext) -> StepResult<()> {

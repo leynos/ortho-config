@@ -3,10 +3,10 @@ param()
 
 function fixture {
   [CmdletBinding(PositionalBinding = $false)]
-  param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Args)
+  param([Parameter(ValueFromRemainingArguments = $true)][string[]]$RemainingArgs)
   $exe = Join-Path $PSScriptRoot '..' 'bin' 'fixture.exe'
   $exe = (Resolve-Path $exe).ProviderPath
-  & $exe @Args
+  & $exe @RemainingArgs
   $global:LASTEXITCODE = $LASTEXITCODE
 }
 
@@ -14,7 +14,14 @@ Set-Alias -Name 'fixture-help' -Value 'fixture'
 
 $sb = {
   param($wordToComplete, $commandAst, $cursorPosition)
-  # TODO: generated completion logic
+  if ($wordToComplete) {
+    [System.Management.Automation.CompletionResult]::new(
+      $wordToComplete,
+      $wordToComplete,
+      'ParameterValue',
+      $wordToComplete
+    )
+  }
 }
 $hasNative = (Get-Command Register-ArgumentCompleter).Parameters.ContainsKey('Native')
 if ($hasNative) {

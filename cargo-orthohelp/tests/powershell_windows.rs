@@ -1,10 +1,14 @@
 //! Windows-only integration tests for `PowerShell` help output.
 
 #[cfg(windows)]
+#[path = "common/mod.rs"]
+mod support;
+
+#[cfg(windows)]
 mod tests {
     use camino::Utf8PathBuf;
+    use rstest::rstest;
     use std::error::Error;
-    use std::path::PathBuf;
     use std::process::Command;
 
     #[derive(Debug, Clone, PartialEq, Eq)]
@@ -26,34 +30,19 @@ mod tests {
         }
     }
 
-    fn workspace_root() -> Result<PathBuf, Box<dyn Error>> {
-        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    fn workspace_root() -> Result<Utf8PathBuf, Box<dyn Error>> {
+        let manifest_dir = Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         Ok(manifest_dir
             .parent()
             .ok_or("workspace root should exist")?
             .to_path_buf())
     }
 
-    fn cargo_orthohelp_exe() -> Result<PathBuf, Box<dyn Error>> {
-        let env_vars = [
-            "CARGO_BIN_EXE_cargo-orthohelp",
-            "CARGO_BIN_EXE_cargo_orthohelp",
-            "NEXTEST_BIN_EXE_cargo-orthohelp",
-            "NEXTEST_BIN_EXE_cargo_orthohelp",
-        ];
-        for var in env_vars {
-            if let Ok(path) = std::env::var(var) {
-                return Ok(PathBuf::from(path));
-            }
-        }
-        Err("cargo-orthohelp binary path not found in environment".into())
-    }
-
     fn generate_powershell_output(out_dir: &Utf8PathBuf) -> Result<(), Box<dyn Error>> {
-        let exe = cargo_orthohelp_exe()?;
+        let exe = super::support::cargo_orthohelp_exe()?;
         let root = workspace_root()?;
-        let output = Command::new(exe)
-            .current_dir(root)
+        let output = Command::new(exe.as_str())
+            .current_dir(root.as_std_path())
             .arg("--format")
             .arg("ps")
             .arg("--package")
@@ -78,7 +67,8 @@ mod tests {
             .arg("-Command")
             .arg("$PSVersionTable.PSVersion.Major")
             .output()
-            .is_ok()
+            .map(|output| output.status.success())
+            .unwrap_or(false)
     }
 
     fn run_get_help(
@@ -224,13 +214,13 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    fn get_help_full_works_in_windows_powershell() -> Result<(), Box<dyn Error>> {
-        test_get_help_full(&ShellCommand::new("powershell.exe"), false)
-    }
-
-    #[test]
-    fn get_help_full_works_in_pwsh() -> Result<(), Box<dyn Error>> {
-        test_get_help_full(&ShellCommand::new("pwsh"), true)
+    #[rstest]
+    #[case("powershell.exe", false)]
+    #[case("pwsh", true)]
+    fn get_help_full_works_in_supported_shells(
+        #[case] shell_name: &str,
+        #[case] skip_if_unavailable: bool,
+    ) -> Result<(), Box<dyn Error>> {
+        test_get_help_full(&ShellCommand::new(shell_name), skip_if_unavailable)
     }
 }

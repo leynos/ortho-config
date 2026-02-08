@@ -16,13 +16,13 @@ pub struct PowerShellConfig {
     /// Aliases exported by the module.
     pub export_aliases: Vec<String>,
     /// Whether to include `CommonParameters` in help output.
-    pub include_common_parameters: bool,
+    pub should_include_common_parameters: bool,
     /// Whether to split subcommands into wrapper functions.
-    pub split_subcommands: bool,
+    pub should_split_subcommands: bool,
     /// Optional `HelpInfoUri` for Update-Help.
     pub help_info_uri: Option<String>,
     /// Whether to ensure an en-US help file exists.
-    pub ensure_en_us: bool,
+    pub should_ensure_en_us: bool,
 }
 
 impl PowerShellConfig {

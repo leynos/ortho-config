@@ -7,5 +7,5 @@ fixture.fields.is_verbose.help = Activer la sortie détaillée.
 fixture.fields.config_path.help = Chemin du fichier de configuration.
 fixture.fields.workers.help = Nombre de threads de travail.
 fixture.fields.timeout.help = Délai d'expiration des requêtes en secondes.
-fixture.fields.legacy_mode.help = Active le mode de traitement hérité.
-fixture.fields.legacy_mode.deprecated = Le mode hérité sera supprimé lors de la prochaine version.
+fixture.fields.is_legacy_mode.help = Active le mode de traitement hérité.
+fixture.fields.is_legacy_mode.deprecated = Le mode hérité sera supprimé lors de la prochaine version.

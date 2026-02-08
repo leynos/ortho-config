@@ -65,6 +65,10 @@ fn run_with_locale(locale: &str, args: &[&str]) -> String {
     run_with_env(&[("LANG", locale)], args)
 }
 
+/// Rewrites rustup toolchain source paths to a stable `<rust-src>` prefix.
+///
+/// This keeps snapshots portable across environments where the absolute rustup
+/// installation path differs.
 fn normalise_rust_src_paths(output: &str) -> String {
     let marker = "/library/core/src/ops/function.rs";
     output
@@ -85,6 +89,21 @@ fn normalise_rust_src_paths(output: &str) -> String {
         })
         .collect::<Vec<_>>()
         .join("\n")
+}
+
+#[test]
+fn normalise_rust_src_paths_rewrites_only_matching_lines() {
+    let input = concat!(
+        "error: panic\n",
+        "  /Users/example/.rustup/toolchains/stable/library/core/src/ops/function.rs:10:9\n",
+        "no marker here"
+    );
+    let expected = concat!(
+        "error: panic\n",
+        "  <rust-src>/library/core/src/ops/function.rs:10:9\n",
+        "no marker here"
+    );
+    assert_eq!(normalise_rust_src_paths(input), expected);
 }
 
 // =============================================================================

@@ -32,46 +32,45 @@ pub fn ensure_dir(path: &Utf8Path) -> Result<Dir, OrthohelpError> {
     }
 }
 
-/// Request describing a text file write operation.
-pub struct TextWriteRequest<'a> {
+/// Writes text content to a file with CRLF line endings.
+pub struct WriteTarget<'a> {
     /// Root directory for error reporting.
     pub root: &'a Utf8Path,
     /// Target path relative to the root directory.
     pub relative_path: &'a Utf8Path,
-    /// Text content to write.
-    pub content: &'a str,
-    /// Whether to prepend a UTF-8 BOM.
-    pub include_bom: bool,
 }
 
 /// Writes text content to a file with CRLF line endings.
 pub fn write_crlf_text(
     dir: &Dir,
-    request: &TextWriteRequest<'_>,
+    target: &WriteTarget<'_>,
+    content: &str,
+    include_bom: bool,
 ) -> Result<Utf8PathBuf, OrthohelpError> {
+    let full_path = target.root.join(target.relative_path);
     let mut file = dir
         .open_with(
-            request.relative_path,
+            target.relative_path,
             OpenOptions::new().write(true).create(true).truncate(true),
         )
         .map_err(|io_err| OrthohelpError::Io {
-            path: request.root.join(request.relative_path),
+            path: full_path.clone(),
             source: io_err,
         })?;
 
-    if request.include_bom {
+    if include_bom {
         file.write_all(&UTF8_BOM)
             .map_err(|io_err| OrthohelpError::Io {
-                path: request.root.join(request.relative_path),
+                path: full_path.clone(),
                 source: io_err,
             })?;
     }
 
-    file.write_all(request.content.as_bytes())
+    file.write_all(content.as_bytes())
         .map_err(|io_err| OrthohelpError::Io {
-            path: request.root.join(request.relative_path),
+            path: full_path.clone(),
             source: io_err,
         })?;
 
-    Ok(request.root.join(request.relative_path))
+    Ok(full_path)
 }

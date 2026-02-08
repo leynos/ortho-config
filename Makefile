@@ -1,4 +1,4 @@
-.PHONY: help all clean test build release lint fmt check-fmt markdownlint nixie typecheck python-test-deps publish-check FORCE
+.PHONY: help all clean test build release lint fmt check-fmt markdownlint nixie typecheck python-test-deps publish-check powershell-wrapper-validate FORCE
 
 CRATE ?= ortho_config
 CARGO ?= cargo

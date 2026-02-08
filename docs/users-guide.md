@@ -1153,7 +1153,7 @@ The generator produces:
 - `powershell/<ModuleName>/<culture>/<ModuleName>-help.xml` – MAML help.
 - `powershell/<ModuleName>/<culture>/about_<ModuleName>.help.txt` – about topic.
 
-`en-US` help is always generated. If you only render other locales, the
+`en-US` help is always generated. If only other locales are rendered, the
 generator copies the first locale into `en-US` unless you disable it with
 `--ensure-en-us false`.
 

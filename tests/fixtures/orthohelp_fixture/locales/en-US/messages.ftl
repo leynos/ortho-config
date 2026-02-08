@@ -7,5 +7,5 @@ fixture.fields.is_verbose.help = Enable verbose output.
 fixture.fields.config_path.help = Configuration file path.
 fixture.fields.workers.help = Number of worker threads.
 fixture.fields.timeout.help = Request timeout in seconds.
-fixture.fields.legacy_mode.help = Enables the legacy processing mode.
-fixture.fields.legacy_mode.deprecated = Legacy mode will be removed in the next release.
+fixture.fields.is_legacy_mode.help = Enables the legacy processing mode.
+fixture.fields.is_legacy_mode.deprecated = Legacy mode will be removed in the next release.

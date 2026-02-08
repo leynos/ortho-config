@@ -74,22 +74,18 @@ impl WindowsMetadataOverrides {
             .cloned()
             .map(ResolvedWindowsMetadata::from)
             .unwrap_or_default();
-
-        if let Some(module_name) = self.module_name.clone() {
-            resolved.module_name = Some(module_name);
-        }
-        if let Some(aliases) = self.export_aliases.clone() {
-            resolved.export_aliases = aliases;
-        }
-        if let Some(include_common_parameters) = self.include_common_parameters {
-            resolved.include_common_parameters = include_common_parameters;
-        }
-        if let Some(split_subcommands_into_functions) = self.split_subcommands_into_functions {
-            resolved.split_subcommands_into_functions = split_subcommands_into_functions;
-        }
-        if let Some(help_info_uri) = self.help_info_uri.clone() {
-            resolved.help_info_uri = Some(help_info_uri);
-        }
+        resolved.module_name = self.module_name.clone().or(resolved.module_name);
+        resolved.export_aliases = self
+            .export_aliases
+            .clone()
+            .unwrap_or(resolved.export_aliases);
+        resolved.include_common_parameters = self
+            .include_common_parameters
+            .unwrap_or(resolved.include_common_parameters);
+        resolved.split_subcommands_into_functions = self
+            .split_subcommands_into_functions
+            .unwrap_or(resolved.split_subcommands_into_functions);
+        resolved.help_info_uri = self.help_info_uri.clone().or(resolved.help_info_uri);
 
         resolved
     }

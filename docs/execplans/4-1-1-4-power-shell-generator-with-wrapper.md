@@ -13,9 +13,10 @@ No PLANS.md file exists in this repository.
 Deliver the PowerShell documentation output for `cargo-orthohelp` so a user can
 run `Get-Help {BinName} -Full` in both Windows PowerShell 5.1 and PowerShell 7+
 for the fixture config and see complete help. Success is observable when the
-PowerShell module, MAML XML, and about topic are generated with an `en-US`
-fallback, CommonParameters appear in `Get-Help -Full`, and all tests (unit and
-behavioural) pass via the Makefile gates.
+PowerShell module, Microsoft Assistance Markup Language (MAML) XML, and about
+topic are generated with an `en-US` fallback, CommonParameters appear in
+`Get-Help -Full`, and all tests (unit and behavioural) pass via the Makefile
+gates.
 
 ## Constraints
 
@@ -24,7 +25,8 @@ suggestions; violation requires escalation, not workarounds.
 
 - Follow the PowerShell and Windows rules in
   `docs/cargo-orthohelp-design.md` section 7.2 (wrapper module, MAML, en-US
-  fallback, CommonParameters, about topic, CRLF and BOM expectations).
+  fallback, CommonParameters, about topic, carriage return/line feed (CRLF),
+  and byte order mark (BOM) expectations).
 - Use `cap_std`/`cap_std::fs_utf8` and `camino` for filesystem access.
 - Every new module must begin with a `//!` module comment and files must remain
   under 400 lines.
@@ -101,31 +103,31 @@ Known uncertainties that might affect the plan.
 
 ## Decision log
 
-- Decision: Emit about topics under the locale folder
+- Decision: Emit about topics under the locale folder.
   Rationale: PowerShell loads about topics from the culture folder and this
   avoids collisions when multiple locales are generated. Date/Author:
-  2026-02-04 / Codex
+  2026-02-04 / Codex.
 
 - Decision: Use `[package.metadata.ortho_config.windows]` for PowerShell
   defaults Rationale: Mirrors the IR `windows` metadata and keeps overrides
   grouped without mixing with non-Windows settings. Date/Author: 2026-02-04 /
-  Codex
+  Codex.
 
 ## Outcomes & retrospective
 
 - Outcome: Completed. PowerShell output generation, tests, documentation
-  updates, and CI validation are in place; `make check-fmt`, `make lint`, and
-  `make test` pass locally.
+  updates, and continuous integration (CI) validation are in place;
+  `make check-fmt`, `make lint`, and `make test` pass locally.
 
 ## Context and orientation
 
-`cargo-orthohelp` currently emits localised IR JSON and roff man pages. The IR
-schema and PowerShell requirements live in `docs/cargo-orthohelp-design.md`.
-The roff generator is implemented under `cargo-orthohelp/src/roff` and is a
-useful model for structuring output modules, error handling, and tests. The
-PowerShell generator must consume `LocalizedDocMetadata` from
-`cargo-orthohelp/src/ir.rs` and respect Windows metadata in the IR
-(`WindowsMetadata`).
+`cargo-orthohelp` currently emits localized intermediate representation (IR)
+JSON and roff man pages. The IR schema and PowerShell requirements live in
+`docs/cargo-orthohelp-design.md`. The roff generator is implemented under
+`cargo-orthohelp/src/roff` and is a useful model for structuring output
+modules, error handling, and tests. The PowerShell generator must consume
+`LocalizedDocMetadata` from `cargo-orthohelp/src/ir.rs` and respect Windows
+metadata in the IR (`WindowsMetadata`).
 
 Important paths:
 
@@ -162,7 +164,7 @@ Stage B: Scaffolding and core data model (small, verifiable diffs).
 
 Add a new `cargo-orthohelp/src/powershell` module with submodules for XML
 (MAML) generation, wrapper module writing, manifest writing, and about-topic
-rendering. Introduce a `PowerShellConfig` (name to be finalised) that resolves
+rendering. Introduce a `PowerShellConfig` (name to be finalized) that resolves
 settings from CLI flags, Cargo metadata, and IR `WindowsMetadata` in that order
 and captures:
 
@@ -244,9 +246,11 @@ Stage F: Validation.
 Run `make markdownlint`, `make fmt`, and `make nixie` after documentation
 changes. Run the standard quality gates with log capture and verify success:
 
-  set -o pipefail && make check-fmt 2>&1 | tee /tmp/ps-check-fmt.log set -o
-  pipefail && make lint 2>&1 | tee /tmp/ps-lint.log set -o pipefail && make
-  test 2>&1 | tee /tmp/ps-test.log
+```sh
+set -o pipefail && make check-fmt 2>&1 | tee /tmp/ps-check-fmt.log
+set -o pipefail && make lint 2>&1 | tee /tmp/ps-lint.log
+set -o pipefail && make test 2>&1 | tee /tmp/ps-test.log
+```
 
 ## Concrete steps
 

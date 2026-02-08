@@ -4,9 +4,8 @@ use crate::ir::{
     LocalizedConfigDiscoveryMeta, LocalizedDocMetadata, LocalizedPathPattern,
     LocalizedPrecedenceMeta,
 };
+use crate::powershell::text::push_line;
 use crate::schema::SourceKind;
-
-const CRLF: &str = "\r\n";
 
 /// Renders the about topic content for a module.
 #[must_use]
@@ -78,11 +77,6 @@ fn format_discovery_path(path: &LocalizedPathPattern) -> String {
             || format!("      - {}", path.pattern),
             |note| format!("      - {} ({})", path.pattern, note),
         )
-}
-
-fn push_line(buffer: &mut String, line: &str) {
-    buffer.push_str(line);
-    buffer.push_str(CRLF);
 }
 
 const fn source_label(source: &SourceKind) -> &'static str {
