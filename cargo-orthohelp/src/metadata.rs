@@ -8,7 +8,7 @@ use crate::cli::Args;
 use crate::error::OrthohelpError;
 use crate::schema::WindowsMetadata;
 
-/// Deserialised `package.metadata.ortho_config` defaults.
+/// Deserialized `package.metadata.ortho_config` defaults.
 #[derive(Debug, Default, Deserialize)]
 pub struct OrthoConfigMetadata {
     /// Default root type path for the configuration schema.
@@ -40,7 +40,7 @@ pub struct PackageSelection {
     pub target_directory: Utf8PathBuf,
     /// Package version string.
     pub package_version: String,
-    /// Normalised root type path used by the bridge.
+    /// Normalized root type path used by the bridge.
     pub root_type: String,
     /// Locales declared in package metadata, if any.
     pub locales: Option<Vec<String>>,

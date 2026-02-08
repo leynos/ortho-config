@@ -45,7 +45,7 @@ pub fn write_crlf_text(
     dir: &Dir,
     target: &WriteTarget<'_>,
     content: &str,
-    include_bom: bool,
+    should_include_bom: bool,
 ) -> Result<Utf8PathBuf, OrthohelpError> {
     let full_path = target.root.join(target.relative_path);
     let mut file = dir
@@ -58,7 +58,7 @@ pub fn write_crlf_text(
             source: io_err,
         })?;
 
-    if include_bom {
+    if should_include_bom {
         file.write_all(&UTF8_BOM)
             .map_err(|io_err| OrthohelpError::Io {
                 path: full_path.clone(),
@@ -66,11 +66,33 @@ pub fn write_crlf_text(
             })?;
     }
 
-    file.write_all(content.as_bytes())
+    let normalised_content = normalise_to_crlf(content);
+    file.write_all(normalised_content.as_bytes())
         .map_err(|io_err| OrthohelpError::Io {
             path: full_path.clone(),
             source: io_err,
         })?;
 
     Ok(full_path)
+}
+
+fn normalise_to_crlf(content: &str) -> String {
+    content
+        .replace("\r\n", "\n")
+        .replace('\r', "\n")
+        .replace('\n', "\r\n")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rstest::rstest;
+
+    #[rstest]
+    #[case("line1\nline2", "line1\r\nline2")]
+    #[case("line1\rline2", "line1\r\nline2")]
+    #[case("line1\r\nline2", "line1\r\nline2")]
+    fn normalise_to_crlf_rewrites_mixed_line_endings(#[case] input: &str, #[case] expected: &str) {
+        assert_eq!(normalise_to_crlf(input), expected);
+    }
 }

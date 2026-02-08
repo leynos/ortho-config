@@ -1,5 +1,6 @@
 //! `PowerShell` module manifest rendering.
 
+use crate::powershell::ExportAlias;
 use crate::powershell::text::{push_line, quote_single};
 
 /// Input data required to build a module manifest.
@@ -11,7 +12,7 @@ pub struct ManifestConfig<'a> {
     /// Functions exported by the module.
     pub functions_to_export: &'a [String],
     /// Aliases exported by the module.
-    pub aliases_to_export: &'a [String],
+    pub aliases_to_export: &'a [ExportAlias],
     /// Optional Update-Help URI.
     pub help_info_uri: Option<&'a str>,
 }
@@ -38,14 +39,14 @@ pub fn render_manifest(config: &ManifestConfig<'_>) -> String {
         &mut output,
         &format!(
             "  FunctionsToExport = {}",
-            format_array(config.functions_to_export)
+            format_string_array(config.functions_to_export)
         ),
     );
     push_line(
         &mut output,
         &format!(
             "  AliasesToExport = {}",
-            format_array(config.aliases_to_export)
+            format_alias_array(config.aliases_to_export)
         ),
     );
     if let Some(uri) = config.help_info_uri {
@@ -59,17 +60,21 @@ pub fn render_manifest(config: &ManifestConfig<'_>) -> String {
     output
 }
 
-fn format_array(values: &[String]) -> String {
-    if values.is_empty() {
+fn format_string_array(values: &[String]) -> String {
+    format_array(values.iter().map(String::as_str))
+}
+
+fn format_alias_array(values: &[ExportAlias]) -> String {
+    format_array(values.iter().map(AsRef::as_ref))
+}
+
+fn format_array<'a>(values: impl Iterator<Item = &'a str>) -> String {
+    let quoted = values.map(quote_single).collect::<Vec<_>>();
+    if quoted.is_empty() {
         return "@()".to_owned();
     }
 
-    let joined = values
-        .iter()
-        .map(|value| quote_single(value))
-        .collect::<Vec<_>>()
-        .join(", ");
-    format!("@({joined})")
+    format!("@({})", quoted.join(", "))
 }
 
 #[cfg(test)]
@@ -85,7 +90,7 @@ mod tests {
         #[case] expects_help_info: bool,
     ) {
         let functions = vec!["fixture".to_owned()];
-        let aliases = vec!["fixture-help".to_owned()];
+        let aliases = vec![ExportAlias::from("fixture-help")];
         let manifest = render_manifest(&ManifestConfig {
             module_name: "FixtureHelp",
             module_version: "0.1.0",

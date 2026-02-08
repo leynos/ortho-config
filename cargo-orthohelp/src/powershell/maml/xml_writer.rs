@@ -28,11 +28,7 @@ pub(super) struct XmlWriter {
 }
 
 impl XmlWriter {
-    #[expect(
-        clippy::missing_const_for_fn,
-        reason = "avoid relying on const-stability details for allocation constructors"
-    )]
-    pub(super) fn new() -> Self {
+    pub(super) const fn new() -> Self {
         Self {
             buffer: String::new(),
             indent: 0,

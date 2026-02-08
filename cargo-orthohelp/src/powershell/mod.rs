@@ -10,7 +10,10 @@ mod types;
 mod wrapper;
 mod writer;
 
-pub use types::{PowerShellConfig, PowerShellOutput};
+pub use types::{
+    BinaryName, ExportAlias, HelpInfoUri, ModuleName, ModuleVersion, PowerShellConfig,
+    PowerShellOutput,
+};
 
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::fs_utf8::Dir;
@@ -45,9 +48,9 @@ struct LocaleWriteRequest<'a> {
 /// let doc = build_doc();
 /// let config = PowerShellConfig {
 ///     out_dir: Utf8PathBuf::from("target/orthohelp"),
-///     module_name: "Demo".to_owned(),
-///     module_version: "0.1.0".to_owned(),
-///     bin_name: "demo".to_owned(),
+///     module_name: "Demo".into(),
+///     module_version: "0.1.0".into(),
+///     bin_name: "demo".into(),
 ///     export_aliases: Vec::new(),
 ///     should_include_common_parameters: true,
 ///     should_split_subcommands: false,
@@ -103,12 +106,11 @@ fn write_core_files(
     output: &mut PowerShellOutput,
 ) -> Result<(), OrthohelpError> {
     let functions_to_export = build_functions_to_export(metadata, config);
-    let bin_name = wrapper::BinName::new(config.bin_name.clone());
+    let bin_name = wrapper::BinName::new(config.bin_name.as_ref());
     let export_aliases = config
         .export_aliases
         .iter()
-        .cloned()
-        .map(wrapper::Alias::new)
+        .map(|alias| wrapper::Alias::new(alias.as_ref()))
         .collect::<Vec<_>>();
     let wrapper_content = wrapper::render_wrapper(
         metadata,
@@ -116,7 +118,7 @@ fn write_core_files(
         &export_aliases,
         config.should_split_subcommands,
     );
-    let wrapper_relative = Utf8PathBuf::from(format!("{}.psm1", config.module_name));
+    let wrapper_relative = Utf8PathBuf::from(format!("{}.psm1", config.module_name.as_ref()));
     output.add_file(write_module_file(
         paths,
         &wrapper_relative,
@@ -125,13 +127,13 @@ fn write_core_files(
     )?);
 
     let manifest_content = manifest::render_manifest(&manifest::ManifestConfig {
-        module_name: &config.module_name,
-        module_version: &config.module_version,
+        module_name: config.module_name.as_ref(),
+        module_version: config.module_version.as_ref(),
         functions_to_export: &functions_to_export,
         aliases_to_export: &config.export_aliases,
-        help_info_uri: config.help_info_uri.as_deref(),
+        help_info_uri: config.help_info_uri.as_ref().map(AsRef::as_ref),
     });
-    let manifest_relative = Utf8PathBuf::from(format!("{}.psd1", config.module_name));
+    let manifest_relative = Utf8PathBuf::from(format!("{}.psd1", config.module_name.as_ref()));
     output.add_file(write_module_file(
         paths,
         &manifest_relative,
@@ -158,7 +160,8 @@ fn write_locale_files(
             should_include_common_parameters: config.should_include_common_parameters,
         },
     );
-    let help_relative = locale_dir_relative.join(format!("{}-help.xml", config.module_name));
+    let help_relative =
+        locale_dir_relative.join(format!("{}-help.xml", config.module_name.as_ref()));
     output.add_file(write_module_file(
         paths,
         &help_relative,
@@ -166,8 +169,9 @@ fn write_locale_files(
         true,
     )?);
 
-    let about_content = about::render_about(request.metadata, &config.module_name);
-    let about_relative = locale_dir_relative.join(format!("about_{}.help.txt", config.module_name));
+    let about_content = about::render_about(request.metadata, config.module_name.as_ref());
+    let about_relative =
+        locale_dir_relative.join(format!("about_{}.help.txt", config.module_name.as_ref()));
     output.add_file(write_module_file(
         paths,
         &about_relative,
@@ -182,7 +186,7 @@ fn write_module_file(
     paths: &GenerationPaths<'_>,
     relative_path: &Utf8Path,
     content: &str,
-    include_bom: bool,
+    should_include_bom: bool,
 ) -> Result<Utf8PathBuf, OrthohelpError> {
     writer::write_crlf_text(
         paths.root_dir,
@@ -191,7 +195,7 @@ fn write_module_file(
             relative_path,
         },
         content,
-        include_bom,
+        should_include_bom,
     )
 }
 
@@ -214,7 +218,7 @@ fn build_functions_to_export(
     config: &PowerShellConfig,
 ) -> Vec<String> {
     let mut functions = Vec::new();
-    functions.push(config.bin_name.clone());
+    functions.push(config.bin_name.as_ref().to_owned());
     if config.should_split_subcommands {
         for (sub_name, _) in iter_subcommands(metadata) {
             functions.push(format!("{}_{}", config.bin_name, sub_name));
@@ -229,7 +233,7 @@ fn build_command_specs<'a>(
 ) -> Vec<maml::CommandSpec<'a>> {
     let mut commands = Vec::new();
     commands.push(maml::CommandSpec {
-        name: config.bin_name.clone(),
+        name: config.bin_name.as_ref().to_owned(),
         metadata,
     });
     if config.should_split_subcommands {

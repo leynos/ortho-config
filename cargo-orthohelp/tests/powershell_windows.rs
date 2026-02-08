@@ -115,14 +115,37 @@ mod tests {
         if let Some(decoded) = decode_utf16(bytes, [0xFE, 0xFF], Endianness::Big) {
             return decoded;
         }
-        if bytes.len().is_multiple_of(2) && bytes.iter().skip(1).step_by(2).all(|byte| *byte == 0) {
-            let decoded = bytes
-                .chunks_exact(2)
-                .map(|pair| to_u16(pair, Endianness::Little))
-                .collect::<Vec<_>>();
-            return String::from_utf16_lossy(&decoded);
+        if let Some(decoded) = decode_probable_utf16le_without_bom(bytes) {
+            return decoded;
         }
         String::from_utf8_lossy(bytes).to_string()
+    }
+
+    fn decode_probable_utf16le_without_bom(bytes: &[u8]) -> Option<String> {
+        // Windows PowerShell 5.1 can emit UTF-16LE output without a BOM when
+        // piping `Get-Help ... | Out-String` through `-Command`. This fallback
+        // only activates for ASCII-heavy output (many zero high-bytes) and
+        // still validates the resulting UTF-16 sequence before accepting it.
+        if bytes.is_empty() || !bytes.len().is_multiple_of(2) {
+            return None;
+        }
+
+        let odd_byte_count = bytes.len() / 2;
+        let odd_zero_count = bytes
+            .iter()
+            .skip(1)
+            .step_by(2)
+            .filter(|byte| **byte == 0)
+            .count();
+        if odd_zero_count * 2 < odd_byte_count {
+            return None;
+        }
+
+        let decoded = bytes
+            .chunks_exact(2)
+            .map(|pair| to_u16(pair, Endianness::Little))
+            .collect::<Vec<_>>();
+        String::from_utf16(&decoded).ok()
     }
 
     fn decode_utf16(bytes: &[u8], bom: [u8; 2], endian: Endianness) -> Option<String> {

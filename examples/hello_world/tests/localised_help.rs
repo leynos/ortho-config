@@ -71,7 +71,7 @@ fn run_with_locale(locale: &str, args: &[&str]) -> String {
 /// installation path differs.
 fn normalise_rust_src_paths(output: &str) -> String {
     let marker = "/library/core/src/ops/function.rs";
-    output
+    let mut normalised = output
         .lines()
         .map(|line| {
             let trimmed = line.trim_start_matches(' ');
@@ -88,7 +88,11 @@ fn normalise_rust_src_paths(output: &str) -> String {
                 )
         })
         .collect::<Vec<_>>()
-        .join("\n")
+        .join("\n");
+    if output.ends_with('\n') {
+        normalised.push('\n');
+    }
+    normalised
 }
 
 #[test]

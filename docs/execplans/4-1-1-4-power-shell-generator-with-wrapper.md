@@ -351,6 +351,7 @@ Key artefacts created:
 - Do not add new dependencies; implement XML output with manual escaping and
   structured builders.
 - Ensure generator API mirrors `roff::generate` style:
+
 ```rust
 pub fn generate(
     metadata: &LocalizedDocMetadata,

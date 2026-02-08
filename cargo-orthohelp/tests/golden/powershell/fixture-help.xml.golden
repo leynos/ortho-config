@@ -10,14 +10,14 @@
     <command:syntax>
       <command:syntaxItem>
         <maml:name>fixture</maml:name>
-        <command:parameter required="false" position="named">
+        <command:parameter required="false" position="named" variableLength="false">
           <maml:name>--port</maml:name>
           <command:parameterValue required="false">UInt32</command:parameterValue>
         </command:parameter>
       </command:syntaxItem>
     </command:syntax>
     <command:parameters>
-      <command:parameter required="false" position="named">
+      <command:parameter required="false" position="named" variableLength="false">
         <maml:name>--port</maml:name>
         <maml:description>
           <maml:para>Port used by the fixture service.</maml:para>

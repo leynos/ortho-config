@@ -2,6 +2,7 @@
 
 use crate::ir::{LocalizedFieldMetadata, LocalizedLink};
 use crate::schema::ValueType;
+use std::borrow::Cow;
 
 use super::types::{CommandSpec, MamlOptions};
 use super::xml_writer::{HELP_ITEMS_OPEN, XML_DECLARATION, XmlWriter, bool_attr, escape_xml};
@@ -64,7 +65,7 @@ fn render_syntax(writer: &mut XmlWriter, command: &CommandSpec<'_>) {
         .metadata
         .fields
         .iter()
-        .filter(|field| field.cli.as_ref().is_some_and(|cli| !cli.hide_in_help))
+        .filter(|field| should_render_parameter(field))
     {
         render_syntax_parameter(writer, field);
     }
@@ -82,8 +83,9 @@ fn render_syntax_parameter(writer: &mut XmlWriter, field: &LocalizedFieldMetadat
     let (value_type, is_switch) = parameter_value_type(field);
 
     writer.line(&format!(
-        "<command:parameter required=\"{}\" position=\"named\">",
-        bool_attr(field.required)
+        "<command:parameter required=\"{}\" position=\"named\" variableLength=\"{}\">",
+        bool_attr(field.required),
+        bool_attr(cli.multiple)
     ));
     writer.indent();
     writer.line(&format!("<maml:name>{}</maml:name>", escape_xml(&name)));
@@ -93,9 +95,6 @@ fn render_syntax_parameter(writer: &mut XmlWriter, field: &LocalizedFieldMetadat
             bool_attr(field.required),
             escape_xml(value_type)
         ));
-    }
-    if cli.multiple {
-        writer.line("<command:parameterAttribute variableLength=\"true\" />");
     }
     writer.outdent();
     writer.line("</command:parameter>");
@@ -108,7 +107,7 @@ fn render_parameters(writer: &mut XmlWriter, command: &CommandSpec<'_>, options:
         .metadata
         .fields
         .iter()
-        .filter(|field| field.cli.as_ref().is_some_and(|cli| !cli.hide_in_help))
+        .filter(|field| should_render_parameter(field))
     {
         render_parameter_detail(writer, field);
     }
@@ -122,10 +121,12 @@ fn render_parameters(writer: &mut XmlWriter, command: &CommandSpec<'_>, options:
 fn render_parameter_detail(writer: &mut XmlWriter, field: &LocalizedFieldMetadata) {
     let name = parameter_display_name(field);
     let (value_type, is_switch) = parameter_value_type(field);
+    let is_variable_length = field.cli.as_ref().is_some_and(|cli| cli.multiple);
 
     writer.line(&format!(
-        "<command:parameter required=\"{}\" position=\"named\">",
-        bool_attr(field.required)
+        "<command:parameter required=\"{}\" position=\"named\" variableLength=\"{}\">",
+        bool_attr(field.required),
+        bool_attr(is_variable_length)
     ));
     writer.indent();
     writer.line(&format!("<maml:name>{}</maml:name>", escape_xml(&name)));
@@ -164,10 +165,13 @@ fn render_examples(writer: &mut XmlWriter, command: &CommandSpec<'_>) {
     for (index, example) in command.metadata.sections.examples.iter().enumerate() {
         writer.line("<command:example>");
         writer.indent();
-        let title = example.title.as_deref().unwrap_or("Example").to_owned();
+        let title = example.title.as_deref().map_or_else(
+            || Cow::Owned(format!("Example {}", index + 1)),
+            Cow::Borrowed,
+        );
         writer.line(&format!(
             "<maml:title>{}</maml:title>",
-            escape_xml(&format!("{} {}", title, index + 1))
+            escape_xml(title.as_ref())
         ));
         writer.line("<maml:code>");
         writer.indent();
@@ -209,6 +213,10 @@ fn render_related_links(writer: &mut XmlWriter, links: &[LocalizedLink]) {
     }
     writer.outdent();
     writer.line("</maml:relatedLinks>");
+}
+
+fn should_render_parameter(field: &LocalizedFieldMetadata) -> bool {
+    field.cli.as_ref().is_some_and(|cli| !cli.hide_in_help)
 }
 
 fn parameter_display_name(field: &LocalizedFieldMetadata) -> String {

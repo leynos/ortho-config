@@ -594,7 +594,12 @@ param()
 function <BinName> {
   [CmdletBinding(PositionalBinding = $false)]
   param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Args)
-  $exe = Join-Path $PSScriptRoot '..' 'bin' '<bin>.exe'
+  $binRoot = if ($env:ORTHOHELP_BIN_DIR) {
+    $env:ORTHOHELP_BIN_DIR
+  } else {
+    Join-Path $PSScriptRoot '..' 'bin'
+  }
+  $exe = Join-Path $binRoot '<bin>.exe'
   $exe = (Resolve-Path $exe).ProviderPath
   & $exe @Args
   $global:LASTEXITCODE = $LASTEXITCODE
@@ -707,6 +712,9 @@ Exit non-zero on hard errors and list artefacts on success.
   in locked-down environments.
 
 These are packaging recommendations; the generator writes only to `--out-dir`.
+By default, generated wrappers assume the executable is in a sibling `bin`
+directory relative to the module root. Set `ORTHOHELP_BIN_DIR` when packaging
+installs the executable in a different location.
 
 ## 12. Versioning and compatibility
 

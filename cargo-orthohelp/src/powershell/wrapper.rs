@@ -137,8 +137,20 @@ fn render_function(
     );
     push_line(
         &mut output,
+        "  # Default layout expects module and executable to share a parent; set",
+    );
+    push_line(
+        &mut output,
+        "  # ORTHOHELP_BIN_DIR to override when packaging installs them separately.",
+    );
+    push_line(
+        &mut output,
+        "  $binRoot = if ($env:ORTHOHELP_BIN_DIR) { $env:ORTHOHELP_BIN_DIR } else { Join-Path $PSScriptRoot '..' 'bin' }",
+    );
+    push_line(
+        &mut output,
         &format!(
-            "  $exe = Join-Path $PSScriptRoot '..' 'bin' {}",
+            "  $exe = Join-Path $binRoot {}",
             quote_single(&format!("{exe_name}.exe"))
         ),
     );
@@ -166,6 +178,10 @@ fn render_completion_block(command_name: &BinName) -> String {
     push_line(
         &mut output,
         "  param($wordToComplete, $commandAst, $cursorPosition)",
+    );
+    push_line(
+        &mut output,
+        "  # TODO: Replace this placeholder with native completions emitted by the executable.",
     );
     push_line(&mut output, "  if ($wordToComplete) {");
     push_line(

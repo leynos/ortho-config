@@ -132,13 +132,18 @@ fn build_powershell_config(
 
     powershell::PowerShellConfig {
         out_dir: out_dir.clone(),
-        module_name,
-        module_version: selection.package_version.clone(),
-        bin_name,
-        export_aliases: windows.export_aliases.clone(),
+        module_name: module_name.into(),
+        module_version: selection.package_version.clone().into(),
+        bin_name: bin_name.into(),
+        export_aliases: windows
+            .export_aliases
+            .iter()
+            .cloned()
+            .map(Into::into)
+            .collect(),
         should_include_common_parameters: windows.should_include_common_parameters,
         should_split_subcommands: windows.should_split_subcommands_into_functions,
-        help_info_uri: windows.help_info_uri.clone(),
+        help_info_uri: windows.help_info_uri.clone().map(Into::into),
         should_ensure_en_us: args.powershell.should_ensure_en_us,
     }
 }
@@ -185,7 +190,9 @@ fn generate_powershell(
     localized_docs: &[ir::LocalizedDocMetadata],
     ps_config: &powershell::PowerShellConfig,
 ) -> Result<(), OrthohelpError> {
-    powershell::generate(localized_docs, ps_config)?;
+    // Keep the generated artefact list available for future CLI reporting while
+    // the command currently only signals success/failure via exit status.
+    let _generated_output = powershell::generate(localized_docs, ps_config)?;
     Ok(())
 }
 
