@@ -48,6 +48,13 @@ pub fn render_manifest(config: &ManifestConfig<'_>) -> String {
             format_array(config.aliases_to_export)
         ),
     );
+    push_line(
+        &mut output,
+        &format!(
+            "  ExternalHelp = {}",
+            quote_single(&format!("{}-help.xml", config.module_name))
+        ),
+    );
     if let Some(uri) = config.help_info_uri {
         push_line(
             &mut output,
@@ -86,7 +93,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn manifest_omits_external_help_key() {
+    fn manifest_includes_external_help_key() {
         let functions = vec!["fixture".to_owned()];
         let aliases = vec!["fixture-help".to_owned()];
         let manifest = render_manifest(&ManifestConfig {
@@ -99,7 +106,7 @@ mod tests {
 
         assert!(manifest.contains("RootModule = 'FixtureHelp.psm1'"));
         assert!(manifest.contains("FunctionsToExport = @('fixture')"));
-        assert!(!manifest.contains("ExternalHelp"));
+        assert!(manifest.contains("ExternalHelp = 'FixtureHelp-help.xml'"));
     }
 
     #[test]
