@@ -5,6 +5,7 @@
 
 use assert_cmd::Command;
 use insta::assert_snapshot;
+use rstest::rstest;
 
 /// Runs the `hello_world` binary with the specified locale environment variables
 /// and arguments, returning the combined output for snapshot comparison.
@@ -95,37 +96,41 @@ fn normalise_rust_src_paths(output: &str) -> String {
     normalised
 }
 
-/// Helper to test `normalise_rust_src_paths` with the given input and expected output.
-fn test_normalise(input: &str, expected: &str) {
+#[rstest]
+#[case(
+    "rewrites_only_matching_lines",
+    concat!(
+        "error: panic\n",
+        "  /Users/example/.rustup/toolchains/stable/library/core/src/ops/function.rs:10:9\n",
+        "no marker here"
+    ),
+    concat!(
+        "error: panic\n",
+        "  <rust-src>/library/core/src/ops/function.rs:10:9\n",
+        "no marker here"
+    )
+)]
+#[case(
+    "preserves_trailing_newline",
+    concat!(
+        "error: panic\n",
+        "  /Users/example/.rustup/toolchains/stable/library/core/src/ops/function.rs:10:9\n",
+    ),
+    concat!(
+        "error: panic\n",
+        "  <rust-src>/library/core/src/ops/function.rs:10:9\n",
+    )
+)]
+#[expect(
+    clippy::used_underscore_binding,
+    reason = "The test case label parameter is intentionally named `_desc`."
+)]
+fn normalise_rust_src_paths_works_correctly(
+    #[case] _desc: &str,
+    #[case] input: &str,
+    #[case] expected: &str,
+) {
     assert_eq!(normalise_rust_src_paths(input), expected);
-}
-
-#[test]
-fn normalise_rust_src_paths_rewrites_only_matching_lines() {
-    let input = concat!(
-        "error: panic\n",
-        "  /Users/example/.rustup/toolchains/stable/library/core/src/ops/function.rs:10:9\n",
-        "no marker here"
-    );
-    let expected = concat!(
-        "error: panic\n",
-        "  <rust-src>/library/core/src/ops/function.rs:10:9\n",
-        "no marker here"
-    );
-    test_normalise(input, expected);
-}
-
-#[test]
-fn normalise_rust_src_paths_preserves_trailing_newline() {
-    let input = concat!(
-        "error: panic\n",
-        "  /Users/example/.rustup/toolchains/stable/library/core/src/ops/function.rs:10:9\n",
-    );
-    let expected = concat!(
-        "error: panic\n",
-        "  <rust-src>/library/core/src/ops/function.rs:10:9\n",
-    );
-    test_normalise(input, expected);
 }
 
 // =============================================================================
