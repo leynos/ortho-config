@@ -95,6 +95,11 @@ fn normalise_rust_src_paths(output: &str) -> String {
     normalised
 }
 
+/// Helper to test `normalise_rust_src_paths` with the given input and expected output.
+fn test_normalise(input: &str, expected: &str) {
+    assert_eq!(normalise_rust_src_paths(input), expected);
+}
+
 #[test]
 fn normalise_rust_src_paths_rewrites_only_matching_lines() {
     let input = concat!(
@@ -107,7 +112,7 @@ fn normalise_rust_src_paths_rewrites_only_matching_lines() {
         "  <rust-src>/library/core/src/ops/function.rs:10:9\n",
         "no marker here"
     );
-    assert_eq!(normalise_rust_src_paths(input), expected);
+    test_normalise(input, expected);
 }
 
 #[test]
@@ -120,7 +125,7 @@ fn normalise_rust_src_paths_preserves_trailing_newline() {
         "error: panic\n",
         "  <rust-src>/library/core/src/ops/function.rs:10:9\n",
     );
-    assert_eq!(normalise_rust_src_paths(input), expected);
+    test_normalise(input, expected);
 }
 
 // =============================================================================
