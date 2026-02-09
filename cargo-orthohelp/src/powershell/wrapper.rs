@@ -150,11 +150,25 @@ fn render_function(
     push_line(
         &mut output,
         &format!(
-            "  $exe = Join-Path $binRoot {}",
+            "  $exePath = Join-Path $binRoot {}",
             quote_single(&format!("{exe_name}.exe"))
         ),
     );
-    push_line(&mut output, "  $exe = (Resolve-Path $exe).ProviderPath");
+    push_line(
+        &mut output,
+        "  if (-not (Test-Path -Path $exePath -PathType Leaf)) {",
+    );
+    push_line(
+        &mut output,
+        &format!(
+            "    throw \"Could not find executable at $exePath. Set ORTHOHELP_BIN_DIR to the directory containing {exe_name}.exe.\"",
+        ),
+    );
+    push_line(&mut output, "  }");
+    push_line(
+        &mut output,
+        "  $exe = (Resolve-Path -Path $exePath -ErrorAction Stop).ProviderPath",
+    );
 
     if extra_args.is_empty() {
         push_line(&mut output, "  & $exe @RemainingArgs");
@@ -239,5 +253,16 @@ mod tests {
         let metadata = minimal_doc_with_subcommand();
         let output = render_wrapper(&metadata, &BinName::new("fixture"), &[], true);
         assert!(output.contains("function fixture_greet"));
+    }
+
+    #[rstest]
+    #[case("fixture-help")]
+    fn wrapper_renders_aliases(#[case] alias_name: &str) {
+        let metadata = minimal_doc_with_subcommand();
+        let aliases = [Alias::new(alias_name)];
+        let output = render_wrapper(&metadata, &BinName::new("fixture"), &aliases, true);
+        assert!(output.contains("Set-Alias"));
+        assert!(output.contains(alias_name));
+        assert!(output.contains("'fixture'"));
     }
 }

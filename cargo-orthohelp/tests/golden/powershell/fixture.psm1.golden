@@ -7,8 +7,11 @@ function fixture {
   # Default layout expects module and executable to share a parent; set
   # ORTHOHELP_BIN_DIR to override when packaging installs them separately.
   $binRoot = if ($env:ORTHOHELP_BIN_DIR) { $env:ORTHOHELP_BIN_DIR } else { Join-Path $PSScriptRoot '..' 'bin' }
-  $exe = Join-Path $binRoot 'fixture.exe'
-  $exe = (Resolve-Path $exe).ProviderPath
+  $exePath = Join-Path $binRoot 'fixture.exe'
+  if (-not (Test-Path -Path $exePath -PathType Leaf)) {
+    throw "Could not find executable at $exePath. Set ORTHOHELP_BIN_DIR to the directory containing fixture.exe."
+  }
+  $exe = (Resolve-Path -Path $exePath -ErrorAction Stop).ProviderPath
   & $exe @RemainingArgs
   $global:LASTEXITCODE = $LASTEXITCODE
 }

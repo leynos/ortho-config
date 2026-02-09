@@ -77,6 +77,7 @@ mod tests {
         shell: &ShellCommand,
         module_manifest: &Utf8PathBuf,
     ) -> Result<String, Box<dyn Error>> {
+        let escaped_manifest = module_manifest.as_str().replace('\'', "''");
         let script = format!(
             concat!(
                 "$ErrorActionPreference = 'Stop'; ",
@@ -89,7 +90,7 @@ mod tests {
                 "}}; ",
                 "Write-Output $help"
             ),
-            module_manifest
+            escaped_manifest
         );
         let output = Command::new(shell.as_str())
             .arg("-NoProfile")
