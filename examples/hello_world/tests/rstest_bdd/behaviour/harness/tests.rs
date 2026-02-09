@@ -1,4 +1,3 @@
-#![cfg(test)]
 //! Unit tests covering sample configuration helpers within the behavioural harness.
 use super::Harness;
 use anyhow::{Result, anyhow, ensure};
@@ -120,11 +119,10 @@ fn copy_sample_config_deduplicates_repeated_extends() -> Result<()> {
     };
     world.copy_sample_config(params, &mut visited)?;
 
-    let visited: Vec<_> = visited.into_iter().collect();
+    let visited_entries: Vec<_> = visited.into_iter().collect();
     ensure!(
-        visited == vec!["baseline.toml".to_owned(), "overrides.toml".to_owned()],
-        "unexpected visited list: {:?}",
-        visited
+        visited_entries == vec!["baseline.toml".to_owned(), "overrides.toml".to_owned()],
+        "unexpected visited list: {visited_entries:?}"
     );
     Ok(())
 }

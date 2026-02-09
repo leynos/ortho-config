@@ -3,19 +3,13 @@
 //! This module verifies the precedence of CLI, environment, and configuration
 //! file sources when loading subcommand inputs.
 
+use super::value_parsing::normalize_scalar;
 use crate::fixtures::{PrArgs, SubcommandContext, SubcommandSources};
 use anyhow::{Result, anyhow, ensure};
 use clap::Parser;
 use ortho_config::SubcmdConfigMerge;
 use rstest_bdd_macros::{given, then, when};
 use test_helpers::figment as figment_helpers;
-
-fn has_no_config_sources(subcommand_context: &SubcommandContext) -> bool {
-    subcommand_context
-        .sources
-        .with_ref(SubcommandSources::is_empty)
-        .unwrap_or(true)
-}
 
 fn take_sources(subcommand_context: &SubcommandContext) -> SubcommandSources {
     subcommand_context.sources.take().unwrap_or_default()
@@ -58,6 +52,7 @@ fn set_reference(
     reference: String,
     field: ReferenceField,
 ) -> Result<()> {
+    let reference = normalize_scalar(&reference);
     ensure!(
         !reference.trim().is_empty(),
         "{} must not be empty",
@@ -137,6 +132,7 @@ fn setup_test_environment(
 
 #[then("the merged reference is {expected}")]
 fn check_ref(subcommand_context: &SubcommandContext, expected: String) -> Result<()> {
+    let expected = normalize_scalar(&expected);
     let result = subcommand_context
         .result
         .take()

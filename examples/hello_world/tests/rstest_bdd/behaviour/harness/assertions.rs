@@ -3,6 +3,12 @@ use super::{Expect, Harness};
 use anyhow::{Result, anyhow, ensure};
 use hello_world::cli::GlobalArgs;
 
+fn strip_isolates(text: &str) -> String {
+    text.chars()
+        .filter(|ch| !matches!(*ch, '\u{2068}' | '\u{2069}'))
+        .collect()
+}
+
 impl Harness {
     pub(crate) fn set_declarative_globals(&mut self, globals: GlobalArgs) {
         self.declarative_globals = Some(globals);
@@ -51,16 +57,24 @@ impl Harness {
                 "expected failure; {context}; stdout: {}",
                 result.stdout
             ),
-            Expect::StdoutContains(expected) => ensure!(
-                result.stdout.contains(expected),
-                "stdout did not contain {expected:?}; {context}; stdout was: {:?}",
-                result.stdout
-            ),
-            Expect::StderrContains(expected) => ensure!(
-                result.stderr.contains(expected),
-                "stderr did not contain {expected:?}; {context}; stderr was: {:?}",
-                result.stderr
-            ),
+            Expect::StdoutContains(expected) => {
+                let stdout = strip_isolates(&result.stdout);
+                let expected_text = strip_isolates(expected);
+                ensure!(
+                    stdout.contains(&expected_text),
+                    "stdout did not contain {expected_text:?}; {context}; stdout was: {:?}",
+                    result.stdout
+                );
+            }
+            Expect::StderrContains(expected) => {
+                let stderr = strip_isolates(&result.stderr);
+                let expected_text = strip_isolates(expected);
+                ensure!(
+                    stderr.contains(&expected_text),
+                    "stderr did not contain {expected_text:?}; {context}; stderr was: {:?}",
+                    result.stderr
+                );
+            }
         }
         Ok(())
     }

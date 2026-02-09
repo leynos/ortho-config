@@ -16,8 +16,8 @@ mod samples;
 mod tests;
 
 pub(crate) use super::config;
-pub(crate) use super::SampleConfigError;
-pub(crate) use super::{binary_path, COMMAND_TIMEOUT, CONFIG_FILE, ENV_PREFIX};
+pub(crate) use super::config::SampleConfigError;
+pub(crate) use super::{CONFIG_FILE, ENV_PREFIX};
 
 use anyhow::{Context, Result};
 use camino::Utf8PathBuf;
@@ -94,7 +94,7 @@ impl Harness {
     }
 
     #[cfg(test)]
-    pub(crate) fn set_timeout_override(&mut self, duration: Duration) {
+    pub(crate) const fn set_timeout_override(&mut self, duration: Duration) {
         self.timeout_override = Some(duration);
     }
 }
@@ -151,10 +151,10 @@ fn normalise_newlines(text: Cow<'_, str>) -> String {
     if !text.contains('\r') {
         return text.into_owned();
     }
-    let mut text = text.into_owned();
-    text = text.replace("\r\n", "\n");
-    if text.contains('\r') {
-        text = text.replace('\r', "\n");
+    let mut normalised = text.into_owned();
+    normalised = normalised.replace("\r\n", "\n");
+    if normalised.contains('\r') {
+        normalised = normalised.replace('\r', "\n");
     }
-    text
+    normalised
 }

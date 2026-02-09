@@ -4,7 +4,7 @@ This ExecPlan is a living document. The sections `Constraints`, `Tolerances`,
 `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`, and
 `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
-Status: DRAFT
+Status: COMPLETE
 
 No `PLANS.md` file exists in this repository, so this document follows the
 default ExecPlan workflow from the `execplans` skill.
@@ -87,18 +87,25 @@ If satisfying the objective requires violating a constraint, stop and escalate.
 
 ## Progress
 
-- [x] (2026-02-08 17:48Z) Baseline captured: workspace currently pins
-  `rstest-bdd` and `rstest-bdd-macros` to `0.3.2`.
-- [x] (2026-02-08 17:48Z) Baseline behavioural inventory captured:
-  24 feature files and 104 step definitions across both suites.
-- [x] (2026-02-08 17:48Z) Migration hotspots identified from docs and code
-  (alias return types, scenario boilerplate, fixture injection opportunities).
-- [ ] Approval gate pending: receive explicit user approval for this plan
-  before implementation.
-- [ ] Upgrade dependencies and resolve compile-time migration errors.
-- [ ] Refactor scenario bindings and step signatures to use v0.5.0 features.
-- [ ] Expand behavioural coverage where v0.5.0 features reduce friction.
-- [ ] Run and record full quality gates.
+- [x] (2026-02-09 00:20Z) User approved implementation and requested execution
+  of the migration plan.
+- [x] (2026-02-09 00:35Z) Upgraded workspace dependencies to
+  `rstest-bdd = "0.5.0"` and `rstest-bdd-macros = "0.5.0"`; lockfile updated.
+- [x] (2026-02-09 01:05Z) Migrated `ortho_config` behavioural bindings to
+  explicit `scenarios!(..., fixtures = [...])` usage.
+- [x] (2026-02-09 01:20Z) Removed duplicate step registry collisions and fixed
+  v0.5.0 fixture-resolution failures in `ortho_config`.
+- [x] (2026-02-09 01:45Z) Normalized quoted placeholder capture handling across
+  behavioural steps with shared parsing helpers.
+- [x] (2026-02-09 02:10Z) Migrated `hello_world` behavioural step placeholders
+  away from generic `{string}` captures to explicit named captures.
+- [x] (2026-02-09 02:20Z) Updated `hello_world` scenario tag filters and tag
+  names to v0.5.0-compatible expressions.
+- [x] (2026-02-09 02:30Z) Verified targeted behavioural suites:
+  `cargo test -p ortho_config --tests` and
+  `cargo test -p hello_world --tests --all-features`.
+- [x] (2026-02-09 03:20Z) Ran repository quality gates:
+  `make check-fmt`, `make lint`, and `make test`.
 
 ## Surprises & discoveries
 
@@ -107,15 +114,23 @@ If satisfying the objective requires violating a constraint, stop and escalate.
   Evidence: shell output from `qdrant-find "project overview architecture"`.
   Impact: migration work must rely on repository docs and current code only.
 
-- Observation: `docs/developers-guide.md` does not yet exist.
-  Evidence: `rg --files | rg 'developers-guide\\.md$'` returned no matches.
-  Impact: migration guidance must be authored from scratch and linked to
-  existing testing docs.
+- Observation: `scenarios!` does not provide required fixtures implicitly in
+  v0.5.0; missing fixtures cause runtime failures for every step using state
+  fixtures. Evidence: `requires fixtures <name>, but the following are missing`
+  panics in `ortho_config/tests/rstest_bdd/behaviour/scenarios.rs` before
+  fixture mapping. Impact: all behavioural bindings now define fixture
+  injection explicitly.
 
-- Observation: `examples/hello_world` behavioural scenario functions currently
-  return `anyhow::Result<()>` aliases. Evidence:
-  `examples/hello_world/tests/rstest_bdd/behaviour/scenarios.rs`. Impact: these
-  signatures will fail v0.5.0 classification and need explicit return types.
+- Observation: leading-underscore fixture bindings are safe only when no step
+  resolves that fixture by name. Evidence: renaming `rules_context` to
+  `_rules_context` caused immediate `requires fixtures rules_context` failures
+  in config-path scenarios. Impact: documentation now clarifies the
+  name-alignment rule for step lookups.
+
+- Observation: tag expressions reject dots in tag identifiers.
+  Evidence: `invalid tag expression ... unexpected character '.'` when using
+  `@requires.yaml`. Impact: feature tags and filters were migrated to
+  `@requires_yaml`.
 
 ## Decision log
 
@@ -134,16 +149,44 @@ If satisfying the objective requires violating a constraint, stop and escalate.
   `#[once]` as infrastructure-only. Rationale: aligns with the v0.5.0 migration
   guide and current suite design. Date/Author: 2026-02-08 / Codex
 
+- Decision: Introduce a shared step parsing helper module in
+  `ortho_config/tests/rstest_bdd/behaviour/steps/value_parsing.rs`. Rationale:
+  v0.5.0 placeholder capture behaviour made ad hoc quote parsing error-prone
+  across many step modules; central helpers reduce regressions. Date/Author:
+  2026-02-09 / Codex
+
+- Decision: Convert `config_path.feature` from a one-row scenario outline to a
+  plain scenario. Rationale: preserve behaviour while avoiding generated
+  unused-variable noise in macro glue without reintroducing file-wide lint
+  suppressions. Date/Author: 2026-02-09 / Codex
+
+- Decision: Wrap `hello_world` non-yaml and yaml `scenarios!` invocations in
+  separate modules. Rationale: v0.5.0 generates the same module name per
+  feature path; separate wrapper modules prevent duplicate-definition
+  collisions when using tag splits. Date/Author: 2026-02-09 / Codex
+
 ## Outcomes & retrospective
 
-Pending implementation. Expected outcomes:
+Migration implementation is functionally complete at the crate-target level.
+Targeted behavioural suites pass under v0.5.0 for both migrated crates.
 
-- Smaller, clearer scenario binding modules.
-- Explicit, type-safe scenario and step signatures under v0.5.0.
-- Behavioural coverage maintained or expanded without introducing shared mutable
+Current outcomes:
+
+- Smaller scenario binding modules with explicit fixture injection.
+- Explicit, type-safe placeholder names in behavioural steps.
+- Behavioural coverage maintained without introducing shared mutable
   cross-scenario state.
+- Migration docs now include explicit guidance for underscore fixture names,
+  tag-expression constraints, and lint-suppression removal.
 
-Retrospective will be completed after implementation and validation.
+Retrospective:
+
+- v0.5.0 migration value was highest where fixture injection and placeholder
+  naming were made explicit.
+- Underscore fixture names are valuable, but only when step lookups do not
+  depend on the original fixture identifier.
+- Keeping migration guidance in sync with concrete failures (fixture lookup
+  names and tag-expression parsing) prevented repeated regressions.
 
 ## Context and orientation
 
@@ -232,8 +275,8 @@ Expected signal:
 
 1. Targeted behavioural verification while fixing migration errors.
 
-    cargo test -p ortho_config --test rstest_bdd
-    cargo test -p hello_world --test rstest_bdd --all-features
+    cargo test -p ortho_config --tests
+    cargo test -p hello_world --tests --all-features
 
 Expected signal:
 
@@ -291,15 +334,15 @@ Quality method:
 
 ## Artifacts and notes
 
-Baseline evidence captured during planning:
+Migration evidence captured during implementation:
 
-    Cargo.toml currently pins:
-    rstest-bdd = "0.3.2"
-    rstest-bdd-macros = "0.3.2"
+    Cargo.toml pins:
+    rstest-bdd = "0.5.0"
+    rstest-bdd-macros = "0.5.0"
 
-    Behavioural inventory:
-    - 24 feature files
-    - 104 step definitions
+    Targeted behavioural verification:
+    cargo test -p ortho_config --tests
+    cargo test -p hello_world --tests --all-features
 
 Notable file hotspots for migration edits:
 
@@ -331,7 +374,7 @@ Required interface usage after migration:
     scenarios!(
         "tests/features",
         fixtures = [hello_world_harness: Harness],
-        tags = "not @requires.yaml"
+        tags = "not @requires_yaml"
     );
 
 - Step argument typing for multi-placeholder steps:
@@ -348,3 +391,11 @@ Required interface usage after migration:
 2026-02-08: Initial draft created from repository baseline, migration docs, and
 current behavioural suite structure. No implementation has started; approval
 gate remains open.
+
+2026-02-09: Updated to IN PROGRESS after implementation. Document now records
+completed dependency upgrades, fixture-binding migration, step-signature
+updates, tag-expression fixes, and targeted behavioural verification outcomes.
+Remaining work is full repository quality-gate validation.
+
+2026-02-09: Marked COMPLETE after `make check-fmt`, `make lint`, and
+`make test` all succeeded.

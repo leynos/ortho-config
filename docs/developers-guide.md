@@ -35,8 +35,8 @@ effectively read-only infrastructure.
 
 ## `rstest-bdd` v0.5.0 migration strategy
 
-Status: planned. See `docs/execplans/adopt-rstest-bdd-v0-5-0.md` for the
-execution plan.
+Status: adopted. See `docs/execplans/adopt-rstest-bdd-v0-5-0.md` for execution
+history and rationale.
 
 Migration guidance for contributors:
 
@@ -47,10 +47,10 @@ Migration guidance for contributors:
   aliases in scenario signatures.
 - Prefer `scenarios!(..., fixtures = [...], tags = ...)` for large feature
   bindings to reduce hand-written wrapper boilerplate.
-- Prefer typed step inputs (`StepArgs`) for multi-placeholder patterns to
-  improve readability and reduce stringly typed parsing.
-- Prefer underscore-prefixed fixture names when a fixture is injected for steps
-  but intentionally unused in a scenario body.
+- Prefer descriptive placeholder names over generic `{string}` placeholders so
+  step signatures remain explicit and compile-time checked.
+- Prefer underscore-prefixed fixture names only when no step resolves that
+  fixture by name.
 - Remove file-wide lint suppressions used only for historical generated-fixture
   warnings; retain only narrow, item-level `#[expect(...)]` annotations when
   still required.
@@ -58,6 +58,8 @@ Migration guidance for contributors:
   infrastructure only.
 - If a sync step needs async bridging, use
   `rstest_bdd::async_step::sync_to_async`.
+- Keep tag names filter-friendly (`@name_part` style). Avoid dots in tag names
+  used with `tags = "..."` expressions.
 
 ## Adding or changing behavioural tests
 
@@ -82,5 +84,5 @@ Run from repository root:
 
 For targeted behavioural debugging:
 
-    cargo test -p ortho_config --test rstest_bdd
-    cargo test -p hello_world --test rstest_bdd --all-features
+    cargo test -p ortho_config --tests
+    cargo test -p hello_world --tests --all-features

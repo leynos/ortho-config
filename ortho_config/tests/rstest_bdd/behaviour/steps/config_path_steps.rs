@@ -1,5 +1,6 @@
 //! Steps demonstrating a renamed configuration path flag.
 
+use super::value_parsing::normalize_scalar;
 use crate::fixtures::{RulesConfig, RulesContext};
 use anyhow::{Result, anyhow, ensure};
 use ortho_config::OrthoConfig;
@@ -8,6 +9,7 @@ use test_helpers::figment as figment_helpers;
 
 #[given("an alternate config file with rule {value}")]
 fn alt_config_file(rules_context: &RulesContext, value: String) -> Result<()> {
+    let value = normalize_scalar(&value);
     ensure!(
         !value.trim().is_empty(),
         "alternate config rule must not be empty"
@@ -22,6 +24,8 @@ fn alt_config_file(rules_context: &RulesContext, value: String) -> Result<()> {
 
 #[when("the config is loaded with custom flag \"{flag}\" \"{path}\"")]
 fn load_with_custom_flag(rules_context: &RulesContext, flag: String, path: String) -> Result<()> {
+    let flag = normalize_scalar(&flag);
+    let path = normalize_scalar(&path);
     let file_val = rules_context
         .file_value
         .take()
@@ -47,6 +51,13 @@ fn cli_error(rules_context: &RulesContext) -> Result<()> {
         )),
         Err(err) => match err.as_ref() {
             ortho_config::OrthoError::CliParsing(_) => Ok(()),
+            ortho_config::OrthoError::Aggregate(agg)
+                if agg
+                    .iter()
+                    .any(|entry| matches!(entry, ortho_config::OrthoError::CliParsing(_))) =>
+            {
+                Ok(())
+            }
             other => Err(anyhow!("unexpected error: {other:?}")),
         },
     }

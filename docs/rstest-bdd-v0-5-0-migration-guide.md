@@ -239,6 +239,11 @@ scenarios!("tests/features", fixtures = [_harness: Harness]);
 Use this style for fixtures that are intentionally injected for steps but not
 directly consumed in the scenario body.
 
+Important: fixture names inserted into `StepContext` must still match what
+steps request. If a step uses `fn step(world: &World)`, keep the fixture
+binding as `world` (or use `#[from(...)]` on the step parameter to map names
+explicitly). Prefix with `_` only when no step depends on that fixture name.
+
 ### 8) Remove file-wide lint suppressions used by legacy scenario glue
 
 If a module previously relied on file-level allowances only to silence
@@ -284,10 +289,17 @@ Prefer:
   that were intentionally underscore-prefixed
   - **Fix:** Use v0.5.0 macros and remove compatibility workarounds; underscore
     fixture handles are supported in generated scenario glue.
+- **Error:** `requires fixtures <name>, but the following are missing: <name>`
+  after renaming fixture bindings with leading underscores
+  - **Fix:** Keep names aligned with step parameter lookups, or map explicitly
+    with `#[from(...)]` on step parameters.
 - **Error:** legacy `#![allow(unused_variables)]` or similar file-level lint
   suppressions remain in BDD scenario modules after migration
   - **Fix:** Remove file-wide suppressions and keep only narrowly scoped
     `#[expect(...)]` annotations where still justified.
+- **Error:** `invalid tag expression ... unexpected character '.'`
+  - **Fix:** Rename tags used in tag expressions to valid identifiers such as
+    `@requires_yaml` and update scenario filters accordingly.
 
 For migration issues not covered here, see the
 [`rstest-bdd` user's guide](rstest-bdd-users-guide.md).

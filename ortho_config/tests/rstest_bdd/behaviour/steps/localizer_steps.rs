@@ -1,5 +1,6 @@
 //! Steps covering the localisation helper surfaces.
 
+use super::value_parsing::{normalize_scalar, strip_isolates};
 use crate::fixtures::LocalizerContext;
 use anyhow::{Result, anyhow, ensure};
 use fluent_bundle::FluentValue;
@@ -13,84 +14,9 @@ use std::sync::Arc;
 
 mod support_localizers {
     use ortho_config as crate_root;
-    include!("../../support/localizers.rs");
+    include!("../../../support/localizers.rs");
 }
 use support_localizers::ArgumentEchoLocalizer;
-
-#[derive(Debug, Clone)]
-struct MessageId(String);
-
-impl From<String> for MessageId {
-    fn from(value: String) -> Self {
-        Self(value)
-    }
-}
-
-impl AsRef<str> for MessageId {
-    fn as_ref(&self) -> &str {
-        &self.0
-    }
-}
-
-#[derive(Debug, Clone)]
-struct FallbackText(String);
-
-impl From<String> for FallbackText {
-    fn from(value: String) -> Self {
-        Self(value)
-    }
-}
-
-impl AsRef<str> for FallbackText {
-    fn as_ref(&self) -> &str {
-        &self.0
-    }
-}
-
-#[derive(Debug, Clone)]
-struct SubjectName(String);
-
-impl From<String> for SubjectName {
-    fn from(value: String) -> Self {
-        Self(value)
-    }
-}
-
-impl AsRef<str> for SubjectName {
-    fn as_ref(&self) -> &str {
-        &self.0
-    }
-}
-
-#[derive(Debug, Clone)]
-struct ExpectedText(String);
-
-impl From<String> for ExpectedText {
-    fn from(value: String) -> Self {
-        Self(value)
-    }
-}
-
-impl AsRef<str> for ExpectedText {
-    fn as_ref(&self) -> &str {
-        &self.0
-    }
-}
-
-#[derive(Debug, Clone)]
-struct BinaryName(String);
-
-impl From<String> for BinaryName {
-    fn from(value: String) -> Self {
-        Self(value)
-    }
-}
-
-impl AsRef<str> for BinaryName {
-    fn as_ref(&self) -> &str {
-        &self.0
-    }
-}
 
 #[derive(Debug)]
 struct SubjectLocalizer;
@@ -145,14 +71,10 @@ fn fluent_localizer_with_error(context: &LocalizerContext) {
 }
 
 #[when("I request id {id} with fallback {fallback}")]
-fn request_without_args(
-    context: &LocalizerContext,
-    id: MessageId,
-    fallback: FallbackText,
-) -> Result<()> {
+fn request_without_args(context: &LocalizerContext, id: String, fallback: String) -> Result<()> {
     let resolved = context
         .localizer
-        .with_ref(|localizer| localizer.message(id.as_ref(), None, fallback.as_ref()))
+        .with_ref(|localizer| localizer.message(&id, None, &fallback))
         .ok_or_else(|| anyhow!("localizer must be initialised"))?;
     context.resolved.set(resolved);
     Ok(())
@@ -161,7 +83,7 @@ fn request_without_args(
 /// Requests a localised message using a single Fluent argument key/value pair.
 fn request_with_arg<T>(
     context: &LocalizerContext,
-    id: MessageId,
+    id: String,
     arg_name: &str,
     arg_value: T,
 ) -> Result<()>
@@ -173,8 +95,8 @@ where
         .with_ref(|localizer| {
             let mut args: LocalizationArgs<'_> = HashMap::new();
             args.insert(arg_name, FluentValue::from(arg_value.as_ref()));
-            let fallback_text = format!("missing:{}", id.as_ref());
-            localizer.message(id.as_ref(), Some(&args), fallback_text.as_str())
+            let fallback_text = format!("missing:{id}");
+            localizer.message(&id, Some(&args), &fallback_text)
         })
         .ok_or_else(|| anyhow!("localizer must be initialised"))?;
     context.resolved.set(resolved);
@@ -182,26 +104,19 @@ where
 }
 
 #[when("I request id {id} for subject {subject}")]
-fn request_with_subject(
-    context: &LocalizerContext,
-    id: MessageId,
-    subject: SubjectName,
-) -> Result<()> {
+fn request_with_subject(context: &LocalizerContext, id: String, subject: String) -> Result<()> {
     request_with_arg(context, id, "subject", subject)
 }
 
 #[when("I request id {id} for binary {binary}")]
-fn request_with_binary(
-    context: &LocalizerContext,
-    id: MessageId,
-    binary: BinaryName,
-) -> Result<()> {
+fn request_with_binary(context: &LocalizerContext, id: String, binary: String) -> Result<()> {
     request_with_arg(context, id, "binary", binary)
 }
 
 #[when("I parse a demo command without a subcommand")]
 fn parse_demo_command_without_subcommand(context: &LocalizerContext) -> Result<()> {
     let mut command = clap::Command::new("demo")
+        .subcommand_required(true)
         .subcommand(clap::Command::new("greet"))
         .subcommand(clap::Command::new("take-leave"));
 
@@ -283,12 +198,13 @@ where
 }
 
 #[then("the localized text is {expected}")]
-fn assert_localised(context: &LocalizerContext, expected: ExpectedText) -> Result<()> {
+fn assert_localised(context: &LocalizerContext, expected: String) -> Result<()> {
+    let expected = normalize_scalar(&expected);
     with_resolved(context, false, |actual| {
+        let actual = strip_isolates(actual);
         ensure!(
-            actual == expected.as_ref(),
-            "resolved {actual:?}; expected {:?}",
-            expected.as_ref()
+            actual == expected,
+            "resolved {actual:?}; expected {expected:?}",
         );
         Ok(())
     })
@@ -305,10 +221,10 @@ fn assert_formatting_issue_logged(context: &LocalizerContext) -> Result<()> {
 }
 
 #[then("the localized text contains {expected}")]
-fn localized_text_contains(context: &LocalizerContext, expected: ExpectedText) -> Result<()> {
+fn localized_text_contains(context: &LocalizerContext, expected: String) -> Result<()> {
     with_resolved(context, true, |actual| {
         ensure!(
-            actual.contains(expected.as_ref()),
+            actual.contains(&expected),
             "expected '{expected:?}' to appear in {actual:?}"
         );
         Ok(())
@@ -354,9 +270,14 @@ fn install_fluent_localizer(
         .with_consumer_resources(resources.iter().copied());
 
     if capture_errors {
-        let ctx = context.clone();
+        let issues = context
+            .issues
+            .with_ref(Arc::clone)
+            .unwrap_or_else(|| Arc::new(std::sync::Mutex::new(Vec::new())));
         builder = builder.with_error_reporter(Arc::new(move |issue: &FormattingIssue| {
-            ctx.record_issue(issue.id.clone());
+            if let Ok(mut guard) = issues.lock() {
+                guard.push(issue.id.clone());
+            }
         }));
     }
 

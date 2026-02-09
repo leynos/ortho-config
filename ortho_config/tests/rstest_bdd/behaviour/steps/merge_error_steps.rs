@@ -2,15 +2,15 @@
 
 use crate::fixtures::{MergeErrorContext, MergeErrorSample};
 use anyhow::{Result, anyhow, ensure};
-use ortho_config::{MergeComposer, OrthoConfig, OrthoError};
+use ortho_config::{MergeComposer, OrthoError};
 use rstest_bdd_macros::{given, then, when};
 use serde_json::json;
 
 #[given("a merge layer with port set to {value}")]
 fn layer_with_port(merge_error_context: &MergeErrorContext, value: String) -> Result<()> {
-    let layer_value = if value.starts_with('"') && value.ends_with('"') {
+    let layer_value = if let Some(inner) = value.strip_prefix('"').and_then(|s| s.strip_suffix('"'))
+    {
         // String value like "not_a_number"
-        let inner = &value[1..value.len() - 1];
         json!({ "port": inner })
     } else {
         // Numeric value

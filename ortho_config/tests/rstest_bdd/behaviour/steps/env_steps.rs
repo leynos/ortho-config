@@ -3,6 +3,7 @@
 //! Provides BDD steps for setting environment variables, loading configuration
 //! using [`CsvEnv`], and verifying parsed results.
 
+use super::value_parsing::{normalize_scalar, parse_csv_values};
 use crate::fixtures::{RulesConfig, RulesContext};
 use anyhow::{Context, Result, anyhow, ensure};
 use ortho_config::OrthoConfig;
@@ -12,6 +13,7 @@ use test_helpers::figment as figment_helpers;
 /// Sets `DDLINT_RULES` in the test environment.
 #[given("the environment variable DDLINT_RULES is {value}")]
 fn set_env(rules_context: &RulesContext, value: String) -> Result<()> {
+    let value = normalize_scalar(&value);
     ensure!(
         !value.trim().is_empty(),
         "environment rule value must not be empty"
@@ -48,7 +50,7 @@ fn check_rules(rules_context: &RulesContext, rules: String) -> Result<()> {
         .take()
         .ok_or_else(|| anyhow!("configuration result unavailable"))?;
     let cfg = result.context("failed to parse rules configuration")?;
-    let want: Vec<String> = rules.split(',').map(|s| s.trim().to_owned()).collect();
+    let want = parse_csv_values(&rules);
     ensure!(
         cfg.rules == want,
         "unexpected rules {:?}; expected {:?}",

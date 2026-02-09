@@ -132,14 +132,8 @@ impl ExtendsScenario {
             }
             Self::MultiLevel => {
                 let grandparent = concat!("rules = [\"grandparent\"]\n");
-                let parent = concat!(
-                    "extends = \"grandparent.toml\"\n",
-                    "rules = [\"parent\"]\n",
-                );
-                let child = concat!(
-                    "extends = \"parent.toml\"\n",
-                    "rules = [\"child\"]\n",
-                );
+                let parent = concat!("extends = \"grandparent.toml\"\n", "rules = [\"parent\"]\n",);
+                let child = concat!("extends = \"parent.toml\"\n", "rules = [\"child\"]\n",);
                 j.create_file("grandparent.toml", grandparent)?;
                 j.create_file("parent.toml", parent)?;
                 j.create_file(".ddlint.toml", child)?;
@@ -200,10 +194,16 @@ fn error_occurs(extends_context: &ExtendsContext) -> Result<()> {
 
 fn strip_rule_quotes(value: &str) -> &str {
     let trimmed = value.trim();
-    if let Some(stripped) = trimmed.strip_prefix('"').and_then(|val| val.strip_suffix('"')) {
+    if let Some(stripped) = trimmed
+        .strip_prefix('"')
+        .and_then(|val| val.strip_suffix('"'))
+    {
         return stripped;
     }
-    if let Some(stripped) = trimmed.strip_prefix('\'').and_then(|val| val.strip_suffix('\'')) {
+    if let Some(stripped) = trimmed
+        .strip_prefix('\'')
+        .and_then(|val| val.strip_suffix('\''))
+    {
         return stripped;
     }
     trimmed
@@ -222,9 +222,12 @@ fn parse_rules_list(rules: &str) -> Vec<String> {
 fn inherited_rules(extends_context: &ExtendsContext, rules: String) -> Result<()> {
     let actual = extends_context
         .result
-        .with_ref(|result| result.as_ref().map(|cfg| cfg.rules.clone()))
+        .with_ref(|result| match result {
+            Ok(cfg) => Ok(cfg.rules.clone()),
+            Err(err) => Err(err.to_string()),
+        })
         .ok_or_else(|| anyhow!("configuration result unavailable"))?
-        .map_err(|err| anyhow!(err))?;
+        .map_err(anyhow::Error::msg)?;
     let expected = parse_rules_list(&rules);
     ensure!(
         actual == expected,
@@ -235,15 +238,18 @@ fn inherited_rules(extends_context: &ExtendsContext, rules: String) -> Result<()
     Ok(())
 }
 
-#[then("the rules are {rules}")]
+#[then("the effective rules are {rules}")]
 fn rules_are(extends_context: &ExtendsContext, rules: String) -> Result<()> {
     // Check replace_result first if available, otherwise fall back to result
     if let Some(replace_result) = extends_context
         .replace_result
-        .with_ref(|r| r.as_ref().map(|cfg| cfg.rules.clone()))
+        .with_ref(|result| match result {
+            Ok(cfg) => Ok(cfg.rules.clone()),
+            Err(err) => Err(err.to_string()),
+        })
     {
         let expected = parse_rules_list(&rules);
-        let actual = replace_result.map_err(|err| anyhow!(err))?;
+        let actual = replace_result.map_err(anyhow::Error::msg)?;
         ensure!(
             actual == expected,
             "unexpected rules {:?}; expected {:?}",

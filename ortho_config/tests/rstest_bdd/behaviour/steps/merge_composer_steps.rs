@@ -1,8 +1,9 @@
 //! Steps that validate the merge composer builder output.
 
+use super::value_parsing::{normalize_scalar, parse_csv_values};
 use crate::fixtures::{ComposerContext, RulesConfig, RulesContext};
 use anyhow::{Result, anyhow, ensure};
-use ortho_config::{MergeProvenance, OrthoConfig, OrthoError};
+use ortho_config::{MergeProvenance, OrthoError};
 use rstest_bdd_macros::{then, when};
 use test_helpers::figment as figment_helpers;
 
@@ -13,6 +14,7 @@ fn compose_rule_layers(
     binary_name: &str,
     cli_rules: String,
 ) -> Result<()> {
+    let cli_rules = normalize_scalar(&cli_rules);
     let file_val = rules_context.file_value.get();
     let env_val = rules_context.env_value.get();
     let composition = figment_helpers::with_jail(|j| {
@@ -39,7 +41,7 @@ fn compose_rule_layers(
         .layers
         .with_ref(|ls| ls.clone())
         .ok_or_else(|| anyhow!("layers should be available for merge"))?;
-    let config = RulesConfig::merge_from_layers(layers_for_merge).map_err(|err| anyhow!(err))?;
+    let config = RulesConfig::merge_from_layers(layers_for_merge).map_err(anyhow::Error::from)?;
     composer_context.config.set(config);
     Ok(())
 }
@@ -67,18 +69,15 @@ fn composed_order_is_stable(composer_context: &ComposerContext) -> Result<()> {
 
 #[then("the merged rules resolve to {expected}")]
 fn merged_rules_match(composer_context: &ComposerContext, expected: String) -> Result<()> {
-    let config = composer_context
+    let rules = composer_context
         .config
-        .with_ref(|cfg| cfg.clone())
+        .with_ref(|cfg| cfg.rules.clone())
         .ok_or_else(|| anyhow!("expected configuration to be composed"))?;
-    let expected_rules: Vec<String> = expected
-        .split(',')
-        .map(|value| value.trim().to_owned())
-        .collect();
+    let expected_rules = parse_csv_values(&expected);
     ensure!(
-        config.rules == expected_rules,
+        rules == expected_rules,
         "unexpected rules {:?}; expected {:?}",
-        config.rules,
+        rules,
         expected_rules
     );
     Ok(())

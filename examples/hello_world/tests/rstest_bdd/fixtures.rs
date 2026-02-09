@@ -3,7 +3,6 @@
 //! Exposes the behavioural fixtures consumed by rstest-bdd scenarios.
 
 use crate::behaviour::harness::Harness;
-use anyhow::Result;
 use hello_world::cli::HelloWorldCli;
 use rstest::fixture;
 use rstest_bdd::Slot;
@@ -28,6 +27,9 @@ pub fn hello_world_binary() -> &'static str {
 
 /// Creates the full hello_world behavioural harness per scenario.
 #[fixture]
-pub fn hello_world_harness() -> Result<Harness> {
-    Harness::new()
+pub fn hello_world_harness() -> Harness {
+    match Harness::new() {
+        Ok(harness) => harness,
+        Err(err) => panic!("create hello_world behavioural harness: {err}"),
+    }
 }

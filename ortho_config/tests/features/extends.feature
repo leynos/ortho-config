@@ -2,7 +2,7 @@ Feature: Configuration inheritance
   Scenario: load config from base file
     Given a configuration file extending a base file
     When the extended configuration is loaded
-    Then the rules are "base","child"
+    Then the effective rules are "base","child"
 
   Scenario: cyclic inheritance error
     Given a configuration file with cyclic inheritance
@@ -22,4 +22,4 @@ Feature: Configuration inheritance
   Scenario: replacement strategy on annotated fields
     Given a configuration file extending a base file with replace strategy on rules
     When the replace-strategy configuration is loaded
-    Then the rules are "child"
+    Then the effective rules are "child"

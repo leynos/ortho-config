@@ -4,11 +4,12 @@
 //! as absent when the user did not override them on the CLI, allowing file and
 //! environment configuration to take precedence.
 
+use super::value_parsing::normalize_scalar;
 use crate::fixtures::{CliDefaultArgs, CliDefaultContext, CliDefaultSources};
 use anyhow::{Result, anyhow, ensure};
 use clap::{CommandFactory, FromArgMatches};
-use ortho_config::{CliValueExtractor, load_and_merge_subcommand_with_matches};
 use ortho_config::subcommand::Prefix;
+use ortho_config::{CliValueExtractor, load_and_merge_subcommand_with_matches};
 use rstest_bdd_macros::{given, then, when};
 use test_helpers::figment as figment_helpers;
 
@@ -26,6 +27,7 @@ where
 
 #[given("a clap default punctuation {value}")]
 fn set_clap_default(cli_default_context: &CliDefaultContext, value: String) -> Result<()> {
+    let value = normalize_scalar(&value);
     update_sources(cli_default_context, |s| {
         s.clap_default = Some(value);
     });
@@ -34,6 +36,7 @@ fn set_clap_default(cli_default_context: &CliDefaultContext, value: String) -> R
 
 #[given("a file punctuation {value}")]
 fn set_file_punctuation(cli_default_context: &CliDefaultContext, value: String) -> Result<()> {
+    let value = normalize_scalar(&value);
     update_sources(cli_default_context, |s| {
         s.file = Some(value);
     });
@@ -42,6 +45,7 @@ fn set_file_punctuation(cli_default_context: &CliDefaultContext, value: String) 
 
 #[given("an environment punctuation {value}")]
 fn set_env_punctuation(cli_default_context: &CliDefaultContext, value: String) -> Result<()> {
+    let value = normalize_scalar(&value);
     update_sources(cli_default_context, |s| {
         s.env = Some(value);
     });
@@ -53,6 +57,7 @@ fn set_explicit_cli_punctuation(
     cli_default_context: &CliDefaultContext,
     value: String,
 ) -> Result<()> {
+    let value = normalize_scalar(&value);
     update_sources(cli_default_context, |s| {
         s.explicit_cli = Some(value);
     });
@@ -85,9 +90,11 @@ fn merge_subcommand(cli_default_context: &CliDefaultContext) -> Result<()> {
         };
 
         let matches = CliDefaultArgs::command().get_matches_from(cli_args);
-        let args = CliDefaultArgs::from_arg_matches(&matches)?;
+        let args = CliDefaultArgs::from_arg_matches(&matches)
+            .map_err(|err| figment::Error::from(err.to_string()))?;
         let prefix = Prefix::new("APP_");
-        let merged = load_and_merge_subcommand_with_matches(&prefix, &args, &matches)?;
+        let merged = load_and_merge_subcommand_with_matches(&prefix, &args, &matches)
+            .map_err(|err| figment::Error::from(err.to_string()))?;
         Ok(merged)
     });
 
@@ -116,6 +123,7 @@ fn extract_cli_values(cli_default_context: &CliDefaultContext) -> Result<()> {
 
 #[then("the resolved punctuation is {expected}")]
 fn check_punctuation(cli_default_context: &CliDefaultContext, expected: String) -> Result<()> {
+    let expected = normalize_scalar(&expected);
     let result = cli_default_context
         .merge_result
         .take()

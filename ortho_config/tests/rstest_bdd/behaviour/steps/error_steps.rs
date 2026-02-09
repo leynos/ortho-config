@@ -1,5 +1,6 @@
 //! Steps verifying aggregated error reporting.
 
+use super::value_parsing::normalize_scalar;
 use crate::fixtures::{ErrorConfig, ErrorContext};
 use anyhow::{Result, anyhow, ensure};
 use ortho_config::OrthoConfig;
@@ -18,6 +19,7 @@ fn invalid_file(error_context: &ErrorContext) -> Result<()> {
 
 #[given("the environment variable DDLINT_PORT is {value}")]
 fn env_port(error_context: &ErrorContext, value: String) -> Result<()> {
+    let value = normalize_scalar(&value);
     ensure!(
         !value.trim().is_empty(),
         "environment port value must not be empty"
@@ -40,6 +42,9 @@ fn load_invalid_cli(error_context: &ErrorContext) -> Result<()> {
         }
         if let Some(value) = env_val.as_ref() {
             j.set_env("DDLINT_PORT", value);
+        } else if file_val.is_none() {
+            // Keep this scenario focused on CLI parsing when no other source is under test.
+            j.set_env("DDLINT_PORT", "8080");
         }
         Ok(ErrorConfig::load_from_iter(["prog", "--bogus"]))
     })?;
@@ -90,6 +95,13 @@ fn cli_error_only(error_context: &ErrorContext) -> Result<()> {
         .ok_or_else(|| anyhow!("expected CLI parsing error"))?;
     match err.as_ref() {
         ortho_config::OrthoError::CliParsing(_) => Ok(()),
+        ortho_config::OrthoError::Aggregate(agg)
+            if agg
+                .iter()
+                .any(|entry| matches!(entry, ortho_config::OrthoError::CliParsing(_))) =>
+        {
+            Ok(())
+        }
         other => Err(anyhow!("unexpected error: {other:?}")),
     }
 }

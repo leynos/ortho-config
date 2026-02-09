@@ -11,81 +11,105 @@ use crate::fixtures::DocsContext;
 pub(crate) struct FieldName(String);
 
 impl FieldName {
-    pub(crate) fn new(value: String) -> Self { Self(value) }
-
-    pub(crate) fn as_str(&self) -> &str { &self.0 }
+    pub(crate) fn as_str(&self) -> &str {
+        &self.0
+    }
 }
 
 impl Deref for FieldName {
     type Target = str;
 
-    fn deref(&self) -> &Self::Target { self.as_str() }
+    fn deref(&self) -> &Self::Target {
+        self.as_str()
+    }
 }
 
 impl From<String> for FieldName {
-    fn from(value: String) -> Self { Self(value) }
+    fn from(value: String) -> Self {
+        Self(value)
+    }
 }
 
 impl From<&str> for FieldName {
-    fn from(value: &str) -> Self { Self(value.to_owned()) }
+    fn from(value: &str) -> Self {
+        Self(value.to_owned())
+    }
 }
 
 impl AsRef<str> for FieldName {
-    fn as_ref(&self) -> &str { self.as_str() }
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ExpectedId(String);
 
 impl ExpectedId {
-    pub(crate) fn new(value: String) -> Self { Self(value) }
-
-    pub(crate) fn as_str(&self) -> &str { &self.0 }
+    pub(crate) fn as_str(&self) -> &str {
+        &self.0
+    }
 }
 
 impl Deref for ExpectedId {
     type Target = str;
 
-    fn deref(&self) -> &Self::Target { self.as_str() }
+    fn deref(&self) -> &Self::Target {
+        self.as_str()
+    }
 }
 
 impl From<String> for ExpectedId {
-    fn from(value: String) -> Self { Self(value) }
+    fn from(value: String) -> Self {
+        Self(value)
+    }
 }
 
 impl From<&str> for ExpectedId {
-    fn from(value: &str) -> Self { Self(value.to_owned()) }
+    fn from(value: &str) -> Self {
+        Self(value.to_owned())
+    }
 }
 
 impl AsRef<str> for ExpectedId {
-    fn as_ref(&self) -> &str { self.as_str() }
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ExpectedValue(String);
 
 impl ExpectedValue {
-    pub(crate) fn new(value: String) -> Self { Self(value) }
-
-    pub(crate) fn as_str(&self) -> &str { &self.0 }
+    pub(crate) fn as_str(&self) -> &str {
+        &self.0
+    }
 }
 
 impl Deref for ExpectedValue {
     type Target = str;
 
-    fn deref(&self) -> &Self::Target { self.as_str() }
+    fn deref(&self) -> &Self::Target {
+        self.as_str()
+    }
 }
 
 impl From<String> for ExpectedValue {
-    fn from(value: String) -> Self { Self(value) }
+    fn from(value: String) -> Self {
+        Self(value)
+    }
 }
 
 impl From<&str> for ExpectedValue {
-    fn from(value: &str) -> Self { Self(value.to_owned()) }
+    fn from(value: &str) -> Self {
+        Self(value.to_owned())
+    }
 }
 
 impl AsRef<str> for ExpectedValue {
-    fn as_ref(&self) -> &str { self.as_str() }
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
 }
 
 /// Generic helper for asserting metadata-level values.
@@ -127,10 +151,7 @@ fn assert_field_value_equals<T: AsRef<str>>(
 /// Macro to generate metadata-level assertion functions.
 macro_rules! metadata_assertion {
     ($fn_name:ident, $param_type:ty, $field:ident, $label:expr) => {
-        pub(crate) fn $fn_name(
-            docs_context: &DocsContext,
-            expected: &$param_type,
-        ) -> Result<()> {
+        pub(crate) fn $fn_name(docs_context: &DocsContext, expected: &$param_type) -> Result<()> {
             assert_metadata_value(
                 docs_context,
                 |meta| meta.$field.clone(),
@@ -149,13 +170,7 @@ macro_rules! field_assertion {
             field: &FieldName,
             expected: &$param_type,
         ) -> Result<()> {
-            assert_field_value_equals(
-                docs_context,
-                field,
-                $extractor,
-                expected.as_str(),
-                $label,
-            )
+            assert_field_value_equals(docs_context, field, $extractor, expected.as_str(), $label)
         }
     };
 }
@@ -223,7 +238,12 @@ pub(crate) fn field_value<T>(
 ) -> Result<T> {
     let value = docs_context
         .metadata
-        .with_ref(|meta| meta.fields.iter().find(|item| item.name == field.as_str()).map(f))
+        .with_ref(|meta| {
+            meta.fields
+                .iter()
+                .find(|item| item.name == field.as_str())
+                .map(f)
+        })
         .ok_or_else(|| anyhow!("docs metadata not captured"))?;
     value.ok_or_else(|| anyhow!("field {} not found", field.as_str()))
 }
