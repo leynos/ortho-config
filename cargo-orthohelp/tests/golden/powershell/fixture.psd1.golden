@@ -1,0 +1,7 @@
+@{
+  RootModule = 'FixtureHelp.psm1'
+  ModuleVersion = '0.1.0'
+  CompatiblePSEditions = @('Desktop', 'Core')
+  FunctionsToExport = @('fixture')
+  AliasesToExport = @('fixture-help')
+}

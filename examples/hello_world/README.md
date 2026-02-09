@@ -146,6 +146,23 @@ cargo orthohelp --package hello_world --out-dir target/orthohelp --locale en-US
 Add `--cache` to reuse the cached IR, or `--no-build` to skip compiling the
 bridge when the cache is already populated.
 
+## Generating PowerShell help
+
+`cargo-orthohelp` can also generate PowerShell help files and a wrapper module
+from the same IR. The output is written under `powershell/<ModuleName>` in the
+chosen output directory:
+
+```sh
+cargo orthohelp --package hello_world --format ps --out-dir target/orthohelp --locale en-US
+```
+
+To try the generated module in PowerShell:
+
+```powershell
+Import-Module target/orthohelp/powershell/HelloWorld/HelloWorld.psd1 -Force
+Get-Help hello-world -Full
+```
+
 ## Configuration samples and scripts
 
 The `config/` directory contains `baseline.toml` and `overrides.toml`. The

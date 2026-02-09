@@ -1,0 +1,38 @@
+[CmdletBinding(PositionalBinding = $false)]
+param()
+
+function fixture {
+  [CmdletBinding(PositionalBinding = $false)]
+  param([Parameter(ValueFromRemainingArguments = $true)][string[]]$RemainingArgs)
+  # Default layout expects module and executable to share a parent; set
+  # ORTHOHELP_BIN_DIR to override when packaging installs them separately.
+  $binRoot = if ($env:ORTHOHELP_BIN_DIR) { $env:ORTHOHELP_BIN_DIR } else { Join-Path $PSScriptRoot '..' 'bin' }
+  $exePath = Join-Path $binRoot 'fixture.exe'
+  if (-not (Test-Path -Path $exePath -PathType Leaf)) {
+    throw "Could not find executable at $exePath. Set ORTHOHELP_BIN_DIR to the directory containing fixture.exe."
+  }
+  $exe = (Resolve-Path -Path $exePath -ErrorAction Stop).ProviderPath
+  & $exe @RemainingArgs
+  $global:LASTEXITCODE = $LASTEXITCODE
+}
+
+Set-Alias -Name 'fixture-help' -Value 'fixture'
+
+$sb = {
+  param($wordToComplete, $commandAst, $cursorPosition)
+  # Placeholder completion returns the current token verbatim.
+  if ($wordToComplete) {
+    [System.Management.Automation.CompletionResult]::new(
+      $wordToComplete,
+      $wordToComplete,
+      'ParameterValue',
+      $wordToComplete
+    )
+  }
+}
+$hasNative = (Get-Command Register-ArgumentCompleter).Parameters.ContainsKey('Native')
+if ($hasNative) {
+  Register-ArgumentCompleter -Native -CommandName 'fixture' -ScriptBlock $sb
+} else {
+  Register-ArgumentCompleter -CommandName 'fixture' -ScriptBlock $sb
+}

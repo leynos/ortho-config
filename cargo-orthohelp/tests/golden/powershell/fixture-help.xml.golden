@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<helpItems schema="maml" xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10">
+  <command:command>
+    <command:details>
+      <command:name>fixture</command:name>
+      <maml:description>
+        <maml:para>Fixture app</maml:para>
+      </maml:description>
+    </command:details>
+    <command:syntax>
+      <command:syntaxItem>
+        <maml:name>fixture</maml:name>
+        <command:parameter required="false" position="named" variableLength="false">
+          <maml:name>--port</maml:name>
+          <command:parameterValue required="false">UInt32</command:parameterValue>
+        </command:parameter>
+      </command:syntaxItem>
+    </command:syntax>
+    <command:parameters>
+      <command:parameter required="false" position="named" variableLength="false">
+        <maml:name>--port</maml:name>
+        <maml:description>
+          <maml:para>Port used by the fixture service.</maml:para>
+          <maml:para>Short flag: -p.</maml:para>
+          <maml:para>Long flag: --port.</maml:para>
+          <maml:para>Default: 8080.</maml:para>
+          <maml:para>Environment variable: FIXTURE_PORT.</maml:para>
+          <maml:para>Config key: server.port.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false">UInt32</command:parameterValue>
+      </command:parameter>
+      <command:commonParameters />
+    </command:parameters>
+  </command:command>
+</helpItems>

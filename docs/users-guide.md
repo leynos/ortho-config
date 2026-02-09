@@ -1135,6 +1135,47 @@ Text is automatically escaped for roff: backslashes are doubled, and leading
 dashes, periods, and single quotes are escaped to prevent macro interpretation.
 Enum fields list their possible values in the OPTIONS description.
 
+### Generating PowerShell help
+
+`cargo-orthohelp` can generate PowerShell external help in Microsoft Assistance
+Markup Language (MAML) alongside a wrapper module so `Get-Help {BinName} -Full`
+surfaces the same configuration metadata as the man page generator. Use the
+`ps` format to emit the module layout under `powershell/<ModuleName>`:
+
+```bash
+cargo orthohelp --format ps --out-dir target/orthohelp --locale en-US
+```
+
+The generator produces:
+
+- `powershell/<ModuleName>/<ModuleName>.psm1` – wrapper module.
+- `powershell/<ModuleName>/<ModuleName>.psd1` – module manifest.
+- `powershell/<ModuleName>/<culture>/<ModuleName>-help.xml` – MAML help.
+- `powershell/<ModuleName>/<culture>/about_<ModuleName>.help.txt` – about topic.
+
+`en-US` help is always generated. If only other locales are rendered, the
+generator copies the first locale into `en-US` unless fallback generation is
+disabled with `--ensure-en-us false`.
+
+PowerShell options:
+
+- `--ps-module-name <NAME>` – override the module name (defaults to the binary
+  name).
+- `--ps-split-subcommands <BOOL>` – emit wrapper functions for subcommands.
+- `--ps-include-common-parameters <BOOL>` – include CommonParameters in MAML.
+- `--ps-help-info-uri <URI>` – set `HelpInfoUri` for Update-Help payloads.
+- `--ensure-en-us <BOOL>` – control the `en-US` fallback behaviour.
+
+To set defaults in `Cargo.toml`, use the Windows metadata table:
+
+```toml
+[package.metadata.ortho_config.windows]
+module_name = "MyModule"
+include_common_parameters = true
+split_subcommands_into_functions = false
+help_info_uri = "https://example.com/help/MyModule"
+```
+
 ## Additional notes
 
 - **Vector merging** – For `Vec<T>` fields the default merge strategy is

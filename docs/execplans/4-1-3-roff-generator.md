@@ -140,8 +140,8 @@ ENVIRONMENT, FILES, PRECEDENCE, EXAMPLES, SEE ALSO, and EXIT STATUS sections
 from the IR."
 
 Behavioural tests live under `cargo-orthohelp/tests/rstest_bdd` with feature
-files under `cargo-orthohelp/tests/features`. The existing `orthohelp_ir.feature`
-and `steps.rs` demonstrate the testing pattern to follow.
+files under `cargo-orthohelp/tests/features`. The existing
+`orthohelp_ir.feature` and `steps.rs` demonstrate the testing pattern to follow.
 
 ## Critical files
 
@@ -174,9 +174,10 @@ Stage A: Foundation modules. Create the roff module structure with types.rs
 value_type_placeholder). Add inline unit tests for escaping.
 
 Stage B: Section generators. Implement sections.rs with functions for each man
-page section (title_header, name_section, synopsis_section, description_section,
-options_section, environment_section, files_section, precedence_section,
-examples_section, see_also_section, exit_status_section). Add unit tests.
+page section (title_header, name_section, synopsis_section,
+description_section, options_section, environment_section, files_section,
+precedence_section, examples_section, see_also_section, exit_status_section).
+Add unit tests.
 
 Stage C: Writer and integration. Implement writer.rs to write man page files
 using cap_std. Create mod.rs with the public `generate()` function. Update

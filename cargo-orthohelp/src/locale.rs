@@ -285,6 +285,13 @@ mod tests {
                 date: None,
                 should_split_subcommands: false,
             },
+            powershell: crate::cli::PowerShellArgs {
+                module_name: None,
+                should_split_subcommands: None,
+                should_include_common_parameters: None,
+                help_info_uri: None,
+                should_ensure_en_us: true,
+            },
         }
     }
 
@@ -296,8 +303,10 @@ mod tests {
             package_name: "demo".to_owned(),
             package_root: package_root.clone(),
             target_directory: package_root,
+            package_version: "0.1.0".to_owned(),
             root_type: "demo::Config".to_owned(),
             locales,
+            windows: None,
             ortho_config_dependency: crate::metadata::OrthoConfigDependency {
                 requirement: "^0.7.0".to_owned(),
                 path: None,

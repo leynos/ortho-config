@@ -5,6 +5,7 @@
 
 use assert_cmd::Command;
 use insta::assert_snapshot;
+use rstest::rstest;
 
 /// Runs the `hello_world` binary with the specified locale environment variables
 /// and arguments, returning the combined output for snapshot comparison.
@@ -50,10 +51,11 @@ fn run_with_env(locale_env: &[(&str, &str)], args: &[&str]) -> String {
         stdout.into_owned()
     };
 
-    // Normalize for cross-platform consistency:
+    // Normalise for cross-platform consistency:
     // - CRLF to LF for line endings
     // - Backslashes to forward slashes for paths (Windows uses backslashes in error output)
-    combined.replace("\r\n", "\n").replace('\\', "/")
+    let normalised = combined.replace("\r\n", "\n").replace('\\', "/");
+    normalise_rust_src_paths(&normalised)
 }
 
 /// Runs the `hello_world` binary with the specified locale (via `LANG`) and arguments,
@@ -62,6 +64,73 @@ fn run_with_env(locale_env: &[(&str, &str)], args: &[&str]) -> String {
 /// This is a convenience wrapper around [`run_with_env`] that only sets `LANG`.
 fn run_with_locale(locale: &str, args: &[&str]) -> String {
     run_with_env(&[("LANG", locale)], args)
+}
+
+/// Rewrites rustup toolchain source paths to a stable `<rust-src>` prefix.
+///
+/// This keeps snapshots portable across environments where the absolute rustup
+/// installation path differs.
+fn normalise_rust_src_paths(output: &str) -> String {
+    let marker = "/library/core/src/ops/function.rs";
+    let mut normalised = output
+        .lines()
+        .map(|line| {
+            let trimmed = line.trim_start_matches(' ');
+            trimmed
+                .find(marker)
+                .and_then(|pos| trimmed.get(pos..))
+                .map_or_else(
+                    || line.to_owned(),
+                    |suffix| {
+                        let indent_len = line.len() - trimmed.len();
+                        let indent = " ".repeat(indent_len);
+                        format!("{indent}<rust-src>{suffix}")
+                    },
+                )
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    if output.ends_with('\n') {
+        normalised.push('\n');
+    }
+    normalised
+}
+
+#[rstest]
+#[case(
+    "rewrites_only_matching_lines",
+    concat!(
+        "error: panic\n",
+        "  /Users/example/.rustup/toolchains/stable/library/core/src/ops/function.rs:10:9\n",
+        "no marker here"
+    ),
+    concat!(
+        "error: panic\n",
+        "  <rust-src>/library/core/src/ops/function.rs:10:9\n",
+        "no marker here"
+    )
+)]
+#[case(
+    "preserves_trailing_newline",
+    concat!(
+        "error: panic\n",
+        "  /Users/example/.rustup/toolchains/stable/library/core/src/ops/function.rs:10:9\n",
+    ),
+    concat!(
+        "error: panic\n",
+        "  <rust-src>/library/core/src/ops/function.rs:10:9\n",
+    )
+)]
+#[expect(
+    clippy::used_underscore_binding,
+    reason = "The test case label parameter is intentionally named `_desc`."
+)]
+fn normalise_rust_src_paths_works_correctly(
+    #[case] _desc: &str,
+    #[case] input: &str,
+    #[case] expected: &str,
+) {
+    assert_eq!(normalise_rust_src_paths(input), expected);
 }
 
 // =============================================================================

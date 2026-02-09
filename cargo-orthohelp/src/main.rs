@@ -9,6 +9,7 @@ mod ir;
 mod locale;
 mod metadata;
 mod output;
+pub mod powershell;
 pub mod roff;
 pub mod schema;
 
@@ -28,13 +29,6 @@ fn main() -> Result<(), OrthohelpError> {
 
 fn run() -> Result<(), OrthohelpError> {
     let args = Args::parse();
-
-    // PowerShell format is not yet implemented
-    if matches!(args.format, OutputFormat::Ps) {
-        return Err(OrthohelpError::UnsupportedFormat(
-            args.format.as_str().to_owned(),
-        ));
-    }
 
     let metadata = metadata::load_metadata()?;
     let selection = metadata::select_package(&metadata, &args)?;
@@ -62,70 +56,139 @@ fn run() -> Result<(), OrthohelpError> {
 
     let should_generate_ir = matches!(args.format, OutputFormat::Ir | OutputFormat::All);
     let should_generate_man = matches!(args.format, OutputFormat::Man | OutputFormat::All);
-    let has_multiple_locales = locales.len() > 1;
+    let should_generate_ps = matches!(args.format, OutputFormat::Ps | OutputFormat::All);
 
-    let output_config = OutputConfig {
-        out_dir: &out_dir,
-        man_args: &args.man,
-        should_generate_ir,
-        should_generate_man,
-        has_multiple_locales,
-    };
+    let localized_docs = localize_docs(&selection.package_root, &doc_metadata, &locales)?;
 
-    for locale in locales {
-        generate_outputs_for_locale(
-            &selection.package_root,
-            &doc_metadata,
-            &locale,
-            &output_config,
-        )?;
+    if should_generate_ir {
+        generate_ir(&localized_docs, &out_dir)?;
+    }
+
+    if should_generate_man {
+        generate_man(&localized_docs, &out_dir, &args.man)?;
+    }
+
+    if should_generate_ps {
+        let ps_config = build_powershell_config(&args, &selection, &doc_metadata, &out_dir);
+        generate_powershell(&localized_docs, &ps_config)?;
     }
 
     Ok(())
 }
 
-struct OutputConfig<'a> {
-    out_dir: &'a Utf8PathBuf,
-    man_args: &'a cli::ManArgs,
-    should_generate_ir: bool,
-    should_generate_man: bool,
-    has_multiple_locales: bool,
-}
-
-fn generate_outputs_for_locale(
+fn localize_docs(
     package_root: &Utf8PathBuf,
     doc_metadata: &DocMetadata,
-    locale: &ortho_config::LanguageIdentifier,
-    config: &OutputConfig,
-) -> Result<(), OrthohelpError> {
-    let resources = locale::load_consumer_resources(package_root, locale)?;
-    let localizer = locale::build_localizer(locale, resources)?;
-    let resolved_ir = ir::localize_doc(doc_metadata, locale, &localizer);
+    locales: &[ortho_config::LanguageIdentifier],
+) -> Result<Vec<ir::LocalizedDocMetadata>, OrthohelpError> {
+    let mut localized_docs = Vec::new();
+    for locale in locales {
+        let resources = locale::load_consumer_resources(package_root, locale)?;
+        let doc_localizer = locale::build_localizer(locale, resources)?;
+        localized_docs.push(ir::localize_doc(doc_metadata, locale, &doc_localizer));
+    }
+    Ok(localized_docs)
+}
 
-    if config.should_generate_ir {
-        output::write_localized_ir(config.out_dir, &locale.to_string(), &resolved_ir)?;
+fn build_powershell_config(
+    args: &Args,
+    selection: &PackageSelection,
+    doc_metadata: &DocMetadata,
+    out_dir: &Utf8PathBuf,
+) -> powershell::PowerShellConfig {
+    let base_windows = selection.windows.as_ref().map_or_else(
+        || {
+            doc_metadata
+                .windows
+                .clone()
+                .map(metadata::ResolvedWindowsMetadata::from)
+                .unwrap_or_default()
+        },
+        |metadata| metadata.resolve(doc_metadata.windows.as_ref()),
+    );
+    let mut windows = base_windows;
+
+    let bin_name = doc_metadata
+        .bin_name
+        .as_ref()
+        .unwrap_or(&doc_metadata.app_name)
+        .clone();
+    let module_name = args
+        .powershell
+        .module_name
+        .clone()
+        .map(Into::into)
+        .or_else(|| windows.module_name.clone())
+        .unwrap_or_else(|| bin_name.as_str().into());
+
+    if let Some(split_subcommands) = args.powershell.should_split_subcommands {
+        windows.should_split_subcommands_into_functions = split_subcommands;
+    }
+    if let Some(include_common_parameters) = args.powershell.should_include_common_parameters {
+        windows.should_include_common_parameters = include_common_parameters;
+    }
+    if let Some(help_info_uri) = args.powershell.help_info_uri.clone() {
+        windows.help_info_uri = Some(help_info_uri.into());
     }
 
-    if config.should_generate_man {
-        let section = roff::ManSection::new(config.man_args.section)?;
+    powershell::PowerShellConfig {
+        out_dir: out_dir.clone(),
+        module_name,
+        module_version: selection.package_version.clone().into(),
+        bin_name: bin_name.into(),
+        export_aliases: windows.export_aliases.clone(),
+        should_include_common_parameters: windows.should_include_common_parameters,
+        should_split_subcommands: windows.should_split_subcommands_into_functions,
+        help_info_uri: windows.help_info_uri.clone(),
+        should_ensure_en_us: args.powershell.should_ensure_en_us,
+    }
+}
+
+fn generate_ir(
+    localized_docs: &[ir::LocalizedDocMetadata],
+    out_dir: &Utf8PathBuf,
+) -> Result<(), OrthohelpError> {
+    for doc in localized_docs {
+        output::write_localized_ir(out_dir.as_path(), &doc.locale, doc)?;
+    }
+    Ok(())
+}
+
+fn generate_man(
+    localized_docs: &[ir::LocalizedDocMetadata],
+    out_dir: &Utf8PathBuf,
+    man_args: &cli::ManArgs,
+) -> Result<(), OrthohelpError> {
+    let has_multiple_locales = localized_docs.len() > 1;
+    for doc in localized_docs {
+        let section = roff::ManSection::new(man_args.section)?;
         // Use locale-specific subdirectory when generating for multiple locales
         // to prevent overwrites (e.g., out/en-US/man/man1/ vs out/ja/man/man1/).
-        let man_out_dir = if config.has_multiple_locales {
-            config.out_dir.join(locale.to_string())
+        let man_out_dir = if has_multiple_locales {
+            out_dir.join(&doc.locale)
         } else {
-            config.out_dir.clone()
+            out_dir.clone()
         };
         let roff_config = roff::RoffConfig {
             out_dir: man_out_dir,
             section,
-            date: config.man_args.date.clone(),
-            should_split_subcommands: config.man_args.should_split_subcommands,
+            date: man_args.date.clone(),
+            should_split_subcommands: man_args.should_split_subcommands,
             source: None,
             manual: None,
         };
-        roff::generate(&resolved_ir, &roff_config)?;
+        roff::generate(doc, &roff_config)?;
     }
+    Ok(())
+}
 
+fn generate_powershell(
+    localized_docs: &[ir::LocalizedDocMetadata],
+    ps_config: &powershell::PowerShellConfig,
+) -> Result<(), OrthohelpError> {
+    // Keep the generated artefact list available for future CLI reporting while
+    // the command currently only signals success/failure via exit status.
+    let _generated_output = powershell::generate(localized_docs, ps_config)?;
     Ok(())
 }
 

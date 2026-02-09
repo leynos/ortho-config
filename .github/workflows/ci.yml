@@ -80,6 +80,10 @@ jobs:
           features: serde_json toml json5
           artefact-name-suffix: no-serde-saphyr
 
+      - name: Validate PowerShell wrapper
+        if: ${{ matrix.os == 'windows-latest' }}
+        run: make powershell-wrapper-validate
+
       - name: Publish dry run
         run: make publish-check
 
