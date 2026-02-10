@@ -1,5 +1,6 @@
 //! Steps verifying merge error routing to `OrthoError::Merge`.
 
+use super::value_parsing::unquote;
 use crate::fixtures::{MergeErrorContext, MergeErrorSample};
 use anyhow::{Result, anyhow, ensure};
 use ortho_config::{MergeComposer, OrthoError};
@@ -8,13 +9,14 @@ use serde_json::json;
 
 #[given("a merge layer with port set to {value}")]
 fn layer_with_port(merge_error_context: &MergeErrorContext, value: String) -> Result<()> {
-    let layer_value = if let Some(inner) = value.strip_prefix('"').and_then(|s| s.strip_suffix('"'))
-    {
+    let trimmed = value.trim();
+    let unquoted = unquote(trimmed);
+    let layer_value = if unquoted != trimmed {
         // String value like "not_a_number"
-        json!({ "port": inner })
+        json!({ "port": unquoted })
     } else {
         // Numeric value
-        let num: u16 = value.parse().map_err(|e| anyhow!("invalid port: {e}"))?;
+        let num: u16 = trimmed.parse().map_err(|e| anyhow!("invalid port: {e}"))?;
         json!({ "port": num })
     };
 

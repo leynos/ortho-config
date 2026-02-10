@@ -203,7 +203,7 @@ Current binding patterns:
 
 - `ortho_config` primarily uses `scenarios!` per feature file in
   `ortho_config/tests/rstest_bdd/behaviour/scenarios.rs`.
-- `hello_world` currently uses many hand-written `#[scenario]` wrappers in
+- `hello_world` currently uses many handwritten `#[scenario]` wrappers in
   `examples/hello_world/tests/rstest_bdd/behaviour/scenarios.rs`, including
   YAML-tag-gated variants.
 
@@ -227,7 +227,7 @@ targets compile and run.
 Stage B: Boilerplate reduction and clarity improvements.
 
 Refactor scenario binding modules to leverage v0.5.0 macro features. Replace
-repetitive hand-written wrappers in
+repetitive handwritten wrappers in
 `examples/hello_world/tests/rstest_bdd/behaviour/scenarios.rs` with
 `scenarios!` invocations that apply tag filters and shared fixtures explicitly.
 Keep generated tests readable and deterministic by grouping invocations by
@@ -249,9 +249,9 @@ signatures are more explicit than baseline.
 
 Stage D: Coverage expansion and documentation alignment.
 
-Add or refine behavioural cases that were previously awkward due boilerplate,
-prioritizing scenario outlines and tag-filtered coverage in existing feature
-files. Record final conventions and migration rationale in
+Add or refine behavioural cases that were previously awkward due to
+boilerplate, prioritizing scenario outlines and tag-filtered coverage in
+existing feature files. Record final conventions and migration rationale in
 `docs/developers-guide.md`, keeping guidance consistent with the two rstest-bdd
 reference docs.
 

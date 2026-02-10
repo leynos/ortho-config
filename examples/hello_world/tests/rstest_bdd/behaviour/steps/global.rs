@@ -9,6 +9,7 @@ use ortho_config::MergeComposer;
 use ortho_config::serde_json::{self, Value};
 use rstest_bdd_macros::{given, then, when};
 use serde::Deserialize;
+use test_helpers::text::normalize_scalar as normalize_test_scalar;
 
 fn validate_env_key(key: &str) -> Result<()> {
     anyhow::ensure!(
@@ -19,17 +20,7 @@ fn validate_env_key(key: &str) -> Result<()> {
 }
 
 fn normalize_step_scalar(value: &str) -> String {
-    let trimmed = value.trim();
-    if let Some(stripped) = trimmed.strip_prefix('"').and_then(|v| v.strip_suffix('"')) {
-        return stripped.to_owned();
-    }
-    if let Some(stripped) = trimmed
-        .strip_prefix('\'')
-        .and_then(|v| v.strip_suffix('\''))
-    {
-        return stripped.to_owned();
-    }
-    trimmed.to_owned()
+    normalize_test_scalar(value)
 }
 
 #[derive(Debug, Deserialize)]
@@ -151,7 +142,7 @@ pub fn xdg_config_home_contains(
     harness.write_xdg_config_home(&docstring)
 }
 
-/// Initialises the scenario using a repository sample configuration.
+/// Initializes the scenario using a repository sample configuration.
 #[given("I start from the sample hello world config {sample}")]
 pub fn start_from_sample_config(
     #[from(hello_world_harness)] harness: &Harness,

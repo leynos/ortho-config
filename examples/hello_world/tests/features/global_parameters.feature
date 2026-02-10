@@ -85,7 +85,7 @@ Feature: Global parameters govern greetings
       """
     When I run the hello world example with arguments "greet"
     Then the command succeeds
-    And stdout contains "Hello, World!"
+    And stdout contains "Hello, World??"
 
   Scenario: Explicit config path overrides discovery order
     Given the file "custom.toml" contains:

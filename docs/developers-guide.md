@@ -46,7 +46,7 @@ Migration guidance for contributors:
   (`Result<(), E>` / `rstest_bdd::StepResult<(), E>`). Avoid return type
   aliases in scenario signatures.
 - Prefer `scenarios!(..., fixtures = [...], tags = ...)` for large feature
-  bindings to reduce hand-written wrapper boilerplate.
+  bindings to reduce handwritten wrapper boilerplate.
 - Prefer descriptive placeholder names over generic `{string}` placeholders so
   step signatures remain explicit and compile-time checked.
 - Prefer underscore-prefixed fixture names only when no step resolves that

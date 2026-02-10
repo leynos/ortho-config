@@ -2,12 +2,7 @@
 use super::{Expect, Harness};
 use anyhow::{Result, anyhow, ensure};
 use hello_world::cli::GlobalArgs;
-
-fn strip_isolates(text: &str) -> String {
-    text.chars()
-        .filter(|ch| !matches!(*ch, '\u{2068}' | '\u{2069}'))
-        .collect()
-}
+use test_helpers::text::strip_isolates;
 
 impl Harness {
     pub(crate) fn set_declarative_globals(&mut self, globals: GlobalArgs) {

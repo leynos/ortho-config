@@ -1,6 +1,6 @@
 //! Steps demonstrating a renamed configuration path flag.
 
-use super::value_parsing::normalize_scalar;
+use super::value_parsing::{is_cli_parsing_error, normalize_scalar};
 use crate::fixtures::{RulesConfig, RulesContext};
 use anyhow::{Result, anyhow, ensure};
 use ortho_config::OrthoConfig;
@@ -49,16 +49,12 @@ fn cli_error(rules_context: &RulesContext) -> Result<()> {
         Ok(_) => Err(anyhow!(
             "expected CLI parsing error but configuration succeeded"
         )),
-        Err(err) => match err.as_ref() {
-            ortho_config::OrthoError::CliParsing(_) => Ok(()),
-            ortho_config::OrthoError::Aggregate(agg)
-                if agg
-                    .iter()
-                    .any(|entry| matches!(entry, ortho_config::OrthoError::CliParsing(_))) =>
-            {
+        Err(err) => {
+            if is_cli_parsing_error(err.as_ref()) {
                 Ok(())
+            } else {
+                Err(anyhow!("unexpected error: {err:?}"))
             }
-            other => Err(anyhow!("unexpected error: {other:?}")),
-        },
+        }
     }
 }

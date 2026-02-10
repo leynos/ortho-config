@@ -1,6 +1,6 @@
 //! Steps verifying aggregated error reporting.
 
-use super::value_parsing::normalize_scalar;
+use super::value_parsing::{is_cli_parsing_error, normalize_scalar};
 use crate::fixtures::{ErrorConfig, ErrorContext};
 use anyhow::{Result, anyhow, ensure};
 use ortho_config::OrthoConfig;
@@ -93,15 +93,9 @@ fn cli_error_only(error_context: &ErrorContext) -> Result<()> {
     let err = result
         .err()
         .ok_or_else(|| anyhow!("expected CLI parsing error"))?;
-    match err.as_ref() {
-        ortho_config::OrthoError::CliParsing(_) => Ok(()),
-        ortho_config::OrthoError::Aggregate(agg)
-            if agg
-                .iter()
-                .any(|entry| matches!(entry, ortho_config::OrthoError::CliParsing(_))) =>
-        {
-            Ok(())
-        }
-        other => Err(anyhow!("unexpected error: {other:?}")),
+    if is_cli_parsing_error(err.as_ref()) {
+        Ok(())
+    } else {
+        Err(anyhow!("unexpected error: {err:?}"))
     }
 }
