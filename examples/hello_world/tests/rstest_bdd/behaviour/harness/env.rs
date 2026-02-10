@@ -1,5 +1,5 @@
 //! Environment management helpers for the behavioural harness.
-use super::{Harness, ENV_PREFIX};
+use super::{ENV_PREFIX, Harness};
 use anyhow::{Context, Result};
 use cap_std::fs::OpenOptions;
 use cap_std::{ambient_authority, fs::Dir};

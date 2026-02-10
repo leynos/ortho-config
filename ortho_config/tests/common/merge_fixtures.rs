@@ -14,6 +14,7 @@ use serde::Deserialize;
 #[derive(Debug, Deserialize, OrthoConfig)]
 #[ortho_config(prefix = "TEST")]
 pub struct MergeErrorSample {
+    /// Port value used to trigger merge-time deserialization mismatches.
     #[ortho_config(default = 8080)]
     pub port: u16,
 }
@@ -25,6 +26,7 @@ pub struct MergeErrorSample {
 #[derive(Debug, Deserialize, OrthoConfig)]
 #[ortho_config(prefix = "TEST")]
 pub struct VecAppendSample {
+    /// Collection field used to validate append-strategy merge error routing.
     #[ortho_config(merge_strategy = "append")]
     pub items: Vec<u32>,
 }

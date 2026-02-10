@@ -1,5 +1,6 @@
 //! Steps for scenarios involving flattened CLI structures.
 
+use super::value_parsing::normalize_scalar;
 use crate::fixtures::{FlatArgs, FlattenContext};
 use anyhow::{Result, anyhow, ensure};
 use clap::Parser;
@@ -40,6 +41,7 @@ fn set_flat_file(flatten_context: &FlattenContext, content: impl Into<String>) -
 
 #[given("the flattened configuration file has value {value}")]
 fn flattened_file(flatten_context: &FlattenContext, value: String) -> Result<()> {
+    let value = normalize_scalar(&value);
     set_flat_file(
         flatten_context,
         format!("nested = {{ value = \"{value}\" }}"),
@@ -66,6 +68,7 @@ fn load_without_cli(flatten_context: &FlattenContext) -> Result<()> {
 
 #[when("the flattened config is loaded with CLI value {value}")]
 fn load_with_cli(flatten_context: &FlattenContext, value: String) -> Result<()> {
+    let value = normalize_scalar(&value);
     let file = flatten_context.flat_file.get();
     let result = load_flat(file, &["prog", "--value", &value])?;
     flatten_context.flat_result.set(result);
@@ -74,6 +77,7 @@ fn load_with_cli(flatten_context: &FlattenContext, value: String) -> Result<()> 
 
 #[then("the flattened value is {expected}")]
 fn check_flattened(flatten_context: &FlattenContext, expected: String) -> Result<()> {
+    let expected = normalize_scalar(&expected);
     let result = flatten_context
         .flat_result
         .take()

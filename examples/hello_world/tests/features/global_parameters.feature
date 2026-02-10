@@ -9,7 +9,7 @@ Feature: Global parameters govern greetings
   Scenario: CLI help exits successfully
     When I run the hello world example with arguments "--help"
     Then the command succeeds
-    And stdout contains "Friendly greeting demo showcasing localized help"
+    And stdout contains "Use hello-world to explore layered greetings across config, env, and CLI"
 
   Scenario: CLI version exits successfully
     When I run the hello world example with arguments "--version"
@@ -106,7 +106,7 @@ Feature: Global parameters govern greetings
     Then the command succeeds
     And stdout contains "CLI config"
 
-  @requires.yaml
+  @requires_yaml
   Scenario: YAML 1.2 scalars remain strings
     Given the file "semantic.yaml" contains:
       """
@@ -116,7 +116,7 @@ Feature: Global parameters govern greetings
     Then the command succeeds
     And stdout contains "Hello, yes!"
 
-  @requires.yaml
+  @requires_yaml
   Scenario: Duplicate YAML keys are rejected
     Given the file "duplicate.yaml" contains:
       """
@@ -127,7 +127,7 @@ Feature: Global parameters govern greetings
     Then the command fails
     And stderr contains "duplicate mapping key"
 
-  @requires.yaml
+  @requires_yaml
   Scenario: Canonical YAML booleans remain booleans
     Given the file "canonical_bools.yaml" contains:
       """
@@ -152,8 +152,8 @@ Feature: Global parameters govern greetings
     Given I start from the sample hello world config "overrides.toml"
     When I run the hello world example with arguments "greet"
     Then the command succeeds
-    And stdout contains "Layered hello"
-    And stdout contains "HEY CONFIG FRIENDS, EXCITED CREW!!!"
+    And stdout contains "HELLO FROM CONFIG"
+    And stdout contains "HEY CONFIG FRIENDS, EXCITED CREW!"
 
   Scenario: Missing sample configuration falls back to defaults
     Given I start from a missing or invalid sample config "nonexistent.toml"

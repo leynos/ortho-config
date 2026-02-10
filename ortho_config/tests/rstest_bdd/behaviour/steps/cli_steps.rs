@@ -1,5 +1,6 @@
 //! Steps verifying CLI precedence over environment variables and files.
 
+use super::value_parsing::normalize_scalar;
 use crate::fixtures::{RulesConfig, RulesContext};
 use anyhow::{Result, anyhow, ensure};
 use ortho_config::OrthoConfig;
@@ -17,6 +18,7 @@ where
 
 #[given("the configuration file has rules {value}")]
 fn file_rules(rules_context: &RulesContext, value: String) -> Result<()> {
+    let value = normalize_scalar(&value);
     ensure!(
         !value.trim().is_empty(),
         "configuration rule value must not be empty"
@@ -31,6 +33,7 @@ fn file_rules(rules_context: &RulesContext, value: String) -> Result<()> {
 
 #[when("the config is loaded with CLI rules {cli_rules}")]
 fn load_with_cli(rules_context: &RulesContext, cli_rules: String) -> Result<()> {
+    let cli_rules = normalize_scalar(&cli_rules);
     let file_val = rules_context.file_value.get();
     let env_val = rules_context.env_value.get();
     with_jail_loader(rules_context, move |j| {
@@ -50,11 +53,12 @@ fn load_with_cli(rules_context: &RulesContext, cli_rules: String) -> Result<()> 
 
 #[then("the loaded rules are {expected}")]
 fn loaded_rules(rules_context: &RulesContext, expected: String) -> Result<()> {
+    let expected = normalize_scalar(&expected);
     let result = rules_context
         .result
         .take()
         .ok_or_else(|| anyhow!("configuration result unavailable"))?;
-    let cfg = result.map_err(|err| anyhow!(err))?;
+    let cfg = result.map_err(anyhow::Error::from)?;
     let rule = cfg
         .rules
         .last()

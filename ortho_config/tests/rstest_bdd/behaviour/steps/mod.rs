@@ -19,3 +19,4 @@ pub mod merge_composer_steps;
 pub mod merge_error_steps;
 #[cfg(feature = "serde_json")]
 pub mod subcommand_steps;
+mod value_parsing;

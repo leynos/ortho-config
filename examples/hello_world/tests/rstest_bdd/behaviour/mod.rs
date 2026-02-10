@@ -8,8 +8,8 @@ use std::time::Duration;
 
 pub(crate) mod config;
 pub(crate) mod harness;
-pub(crate) mod steps;
 mod scenarios;
+pub(crate) mod steps;
 
 pub(crate) const COMMAND_TIMEOUT: Duration = Duration::from_secs(10);
 pub(crate) const CONFIG_FILE: &str = ".hello_world.toml";

@@ -71,7 +71,7 @@ pub struct SubcommandContext {
 }
 
 /// Scenario state for localisation helper scenarios.
-#[derive(Debug, Default, ScenarioState, Clone)]
+#[derive(Default, ScenarioState)]
 pub struct LocalizerContext {
     pub localizer: Slot<Box<dyn Localizer + 'static>>,
     pub resolved: Slot<String>,
@@ -108,18 +108,6 @@ impl LocalizerContext {
         let slot = Slot::default();
         slot.set(Arc::new(Mutex::new(Vec::new())));
         slot
-    }
-
-    fn issues_arc(&self) -> Option<Arc<Mutex<Vec<String>>>> {
-        self.issues.with_ref(|issues| Arc::clone(issues))
-    }
-
-    pub fn record_issue(&self, id: String) {
-        if let Some(issues) = self.issues_arc() {
-            if let Ok(mut guard) = issues.lock() {
-                guard.push(id);
-            }
-        }
     }
 
     #[must_use]
@@ -188,6 +176,12 @@ pub fn localizer_context() -> LocalizerContext {
     }
 }
 
+/// Provides the localizer scenario context under the generic name used by steps.
+#[fixture]
+pub fn context(localizer_context: LocalizerContext) -> LocalizerContext {
+    localizer_context
+}
+
 /// Provides a clean documentation context for IR scenarios.
 #[fixture]
 pub fn docs_context() -> DocsContext {
@@ -230,7 +224,11 @@ pub struct PrArgs {
 
 /// Configuration struct used for documentation IR behavioural tests.
 #[derive(Debug, Deserialize, Serialize, OrthoConfig)]
-#[ortho_config(prefix = "APP", discovery(app_name = "demo-app"), windows(module_name = "Demo"))]
+#[ortho_config(
+    prefix = "APP",
+    discovery(app_name = "demo-app"),
+    windows(module_name = "Demo")
+)]
 pub struct DocsConfig {
     pub log_level: Option<String>,
     pub verbose: bool,
@@ -335,11 +333,15 @@ pub struct CliDefaultArgs {
 
 /// Provides a clean merge error context for error routing scenarios.
 #[fixture]
-pub fn merge_error_context() -> MergeErrorContext { MergeErrorContext::default() }
+pub fn merge_error_context() -> MergeErrorContext {
+    MergeErrorContext::default()
+}
 
 /// Provides a clean CLI default-as-absent context for precedence scenarios.
 #[fixture]
-pub fn cli_default_context() -> CliDefaultContext { CliDefaultContext::default() }
+pub fn cli_default_context() -> CliDefaultContext {
+    CliDefaultContext::default()
+}
 
 /// Configuration used to verify aggregated error reporting.
 ///

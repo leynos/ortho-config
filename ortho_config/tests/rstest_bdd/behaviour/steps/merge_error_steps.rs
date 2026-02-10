@@ -1,20 +1,24 @@
 //! Steps verifying merge error routing to `OrthoError::Merge`.
 
+use super::value_parsing::unquote;
 use crate::fixtures::{MergeErrorContext, MergeErrorSample};
-use anyhow::{Result, anyhow, ensure};
-use ortho_config::{MergeComposer, OrthoConfig, OrthoError};
+use anyhow::{Context, Result, anyhow, ensure};
+use ortho_config::{MergeComposer, OrthoError};
 use rstest_bdd_macros::{given, then, when};
 use serde_json::json;
 
 #[given("a merge layer with port set to {value}")]
 fn layer_with_port(merge_error_context: &MergeErrorContext, value: String) -> Result<()> {
-    let layer_value = if value.starts_with('"') && value.ends_with('"') {
+    let trimmed = value.trim();
+    let unquoted = unquote(trimmed);
+    let layer_value = if unquoted != trimmed {
         // String value like "not_a_number"
-        let inner = &value[1..value.len() - 1];
-        json!({ "port": inner })
+        json!({ "port": unquoted })
     } else {
         // Numeric value
-        let num: u16 = value.parse().map_err(|e| anyhow!("invalid port: {e}"))?;
+        let num: u16 = trimmed
+            .parse()
+            .with_context(|| format!("invalid port value: {trimmed}"))?;
         json!({ "port": num })
     };
 
@@ -56,7 +60,7 @@ fn expect_port(merge_error_context: &MergeErrorContext, expected: u16) -> Result
         .result
         .take()
         .ok_or_else(|| anyhow!("merge result unavailable"))?;
-    let config = result.map_err(|e| anyhow!("merge failed: {e}"))?;
+    let config = result.context("merge failed")?;
 
     ensure!(
         config.port == expected,

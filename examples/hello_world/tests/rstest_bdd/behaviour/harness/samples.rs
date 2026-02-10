@@ -1,6 +1,6 @@
 //! Sample configuration and file helpers for the behavioural harness.
-use super::config::{ensure_simple_filename, parse_extends, ConfigCopyParams, SampleConfigError};
-use super::{Harness, CONFIG_FILE};
+use super::config::{ConfigCopyParams, SampleConfigError, ensure_simple_filename, parse_extends};
+use super::{CONFIG_FILE, Harness};
 use anyhow::{Context, Result};
 use camino::Utf8PathBuf;
 use cap_std::fs::Dir;

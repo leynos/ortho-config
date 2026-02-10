@@ -1,6 +1,6 @@
 //! Process execution helpers for running the `hello_world` binary in scenarios.
 use super::{CommandResult, Harness};
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use shlex::split;
 use std::io::Read;
 use std::process::{Child, Command, ExitStatus, Output, Stdio};
@@ -43,10 +43,7 @@ impl Harness {
         let status = match wait_with_timeout(&mut child, self.command_timeout()) {
             Ok(status) => status,
             Err(err) => {
-                let _ = child.kill();
-                let _ = child.wait();
-                let _ = join_reader(stdout_reader, "hello_world stdout");
-                let _ = join_reader(stderr_reader, "hello_world stderr");
+                cleanup_child_and_readers(&mut child, stdout_reader, stderr_reader);
                 return Err(err);
             }
         };
@@ -104,13 +101,21 @@ fn join_reader(
         .map_err(|_| anyhow!("{label} reader thread panicked"))?
 }
 
+fn cleanup_child_and_readers(
+    child: &mut Child,
+    stdout_reader: thread::JoinHandle<Result<Vec<u8>>>,
+    stderr_reader: thread::JoinHandle<Result<Vec<u8>>>,
+) {
+    let _ = child.kill();
+    let _ = child.wait();
+    let _ = join_reader(stdout_reader, "hello_world stdout");
+    let _ = join_reader(stderr_reader, "hello_world stderr");
+}
+
 fn wait_with_timeout(child: &mut Child, timeout: Duration) -> Result<ExitStatus> {
     let start = Instant::now();
     loop {
-        if let Some(status) = child
-            .try_wait()
-            .context("poll hello_world binary status")?
-        {
+        if let Some(status) = child.try_wait().context("poll hello_world binary status")? {
             return Ok(status);
         }
 
@@ -129,12 +134,8 @@ fn handle_timeout(child: &mut Child) -> Result<ExitStatus> {
     {
         return Ok(status);
     }
-    child
-        .kill()
-        .context("kill stalled hello_world binary")?;
-    child
-        .wait()
-        .context("wait for killed hello_world binary")?;
+    child.kill().context("kill stalled hello_world binary")?;
+    child.wait().context("wait for killed hello_world binary")?;
     Err(anyhow!("hello_world binary timed out"))
 }
 
@@ -187,26 +188,19 @@ mod tests {
             .unwrap_or(false)
     }
 
-    fn ensure_rustc_available() -> Result<bool> {
-        if rustc_available() {
-            Ok(true)
-        } else {
-            eprintln!("skipping hello_world harness process tests: rustc not available");
-            Ok(false)
-        }
-    }
+    fn ensure_rustc_available() -> bool { rustc_available() }
 
     #[test]
     fn run_example_times_out() -> Result<()> {
-        if !ensure_rustc_available()? {
+        if !ensure_rustc_available() {
             return Ok(());
         }
         let binary = CompiledBinary::new(
-            r#"
+            r"
             fn main() {
                 std::thread::sleep(std::time::Duration::from_secs(2));
             }
-            "#,
+            ",
         );
         let mut harness = Harness::for_tests()?;
         harness.set_binary_override(binary.path());
@@ -214,13 +208,16 @@ mod tests {
         let err = harness
             .run_example(Vec::new())
             .expect_err("long-running binary should time out");
-        assert!(err.to_string().contains("timed out"));
+        anyhow::ensure!(
+            err.to_string().contains("timed out"),
+            "expected timeout error, got: {err}"
+        );
         Ok(())
     }
 
     #[test]
     fn run_example_reports_spawn_errors() -> Result<()> {
-        if !ensure_rustc_available()? {
+        if !ensure_rustc_available() {
             return Ok(());
         }
         let mut harness = Harness::for_tests()?;
@@ -228,13 +225,16 @@ mod tests {
         let err = harness
             .run_example(Vec::new())
             .expect_err("missing binary must error");
-        assert!(err.to_string().contains("spawn"));
+        anyhow::ensure!(
+            err.to_string().contains("spawn"),
+            "expected spawn error, got: {err}"
+        );
         Ok(())
     }
 
     #[test]
     fn run_example_captures_failure_status() -> Result<()> {
-        if !ensure_rustc_available()? {
+        if !ensure_rustc_available() {
             return Ok(());
         }
         let binary = CompiledBinary::new(
