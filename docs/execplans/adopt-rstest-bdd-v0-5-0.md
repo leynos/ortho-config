@@ -345,7 +345,7 @@ Quality method:
 - If a migration edit introduces failures, recover by reverting only the
   current file-level change and rerunning targeted
   `cargo test -p <crate> --test rstest_bdd` before continuing.
-- Keep commits small by stage so rollback is limited to one concern.
+- Keep commits small by stage, so rollback is limited to one concern.
 
 ## Artifacts and notes
 
