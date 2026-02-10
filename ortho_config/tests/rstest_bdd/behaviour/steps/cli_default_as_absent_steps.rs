@@ -25,31 +25,31 @@ where
     f(&mut sources);
 }
 
-#[given("a clap default punctuation {value}")]
-fn set_clap_default(cli_default_context: &CliDefaultContext, value: String) -> Result<()> {
+/// Helper to set a source value after normalization
+fn set_source_value<F>(cli_default_context: &CliDefaultContext, value: String, setter: F) -> Result<()>
+where
+    F: FnOnce(&mut CliDefaultSources, String),
+{
     let value = normalize_scalar(&value);
     update_sources(cli_default_context, |s| {
-        s.clap_default = Some(value);
+        setter(s, value);
     });
     Ok(())
+}
+
+#[given("a clap default punctuation {value}")]
+fn set_clap_default(cli_default_context: &CliDefaultContext, value: String) -> Result<()> {
+    set_source_value(cli_default_context, value, |s, v| s.clap_default = Some(v))
 }
 
 #[given("a file punctuation {value}")]
 fn set_file_punctuation(cli_default_context: &CliDefaultContext, value: String) -> Result<()> {
-    let value = normalize_scalar(&value);
-    update_sources(cli_default_context, |s| {
-        s.file = Some(value);
-    });
-    Ok(())
+    set_source_value(cli_default_context, value, |s, v| s.file = Some(v))
 }
 
 #[given("an environment punctuation {value}")]
 fn set_env_punctuation(cli_default_context: &CliDefaultContext, value: String) -> Result<()> {
-    let value = normalize_scalar(&value);
-    update_sources(cli_default_context, |s| {
-        s.env = Some(value);
-    });
-    Ok(())
+    set_source_value(cli_default_context, value, |s, v| s.env = Some(v))
 }
 
 #[given("an explicit CLI punctuation {value}")]
@@ -57,11 +57,7 @@ fn set_explicit_cli_punctuation(
     cli_default_context: &CliDefaultContext,
     value: String,
 ) -> Result<()> {
-    let value = normalize_scalar(&value);
-    update_sources(cli_default_context, |s| {
-        s.explicit_cli = Some(value);
-    });
-    Ok(())
+    set_source_value(cli_default_context, value, |s, v| s.explicit_cli = Some(v))
 }
 
 #[when("the subcommand configuration is merged")]

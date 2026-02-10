@@ -43,10 +43,7 @@ impl Harness {
         let status = match wait_with_timeout(&mut child, self.command_timeout()) {
             Ok(status) => status,
             Err(err) => {
-                if let Err(_kill_error) = child.kill() {}
-                if let Err(_wait_error) = child.wait() {}
-                if let Err(_stdout_error) = join_reader(stdout_reader, "hello_world stdout") {}
-                if let Err(_stderr_error) = join_reader(stderr_reader, "hello_world stderr") {}
+                cleanup_child_and_readers(&mut child, stdout_reader, stderr_reader);
                 return Err(err);
             }
         };
@@ -102,6 +99,17 @@ fn join_reader(
     handle
         .join()
         .map_err(|_| anyhow!("{label} reader thread panicked"))?
+}
+
+fn cleanup_child_and_readers(
+    child: &mut Child,
+    stdout_reader: thread::JoinHandle<Result<Vec<u8>>>,
+    stderr_reader: thread::JoinHandle<Result<Vec<u8>>>,
+) {
+    let _ = child.kill();
+    let _ = child.wait();
+    let _ = join_reader(stdout_reader, "hello_world stdout");
+    let _ = join_reader(stderr_reader, "hello_world stderr");
 }
 
 fn wait_with_timeout(child: &mut Child, timeout: Duration) -> Result<ExitStatus> {
