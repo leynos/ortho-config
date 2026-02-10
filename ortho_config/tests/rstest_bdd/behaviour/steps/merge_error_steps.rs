@@ -2,7 +2,7 @@
 
 use super::value_parsing::unquote;
 use crate::fixtures::{MergeErrorContext, MergeErrorSample};
-use anyhow::{Result, anyhow, ensure};
+use anyhow::{Context, Result, anyhow, ensure};
 use ortho_config::{MergeComposer, OrthoError};
 use rstest_bdd_macros::{given, then, when};
 use serde_json::json;
@@ -16,7 +16,9 @@ fn layer_with_port(merge_error_context: &MergeErrorContext, value: String) -> Re
         json!({ "port": unquoted })
     } else {
         // Numeric value
-        let num: u16 = trimmed.parse().map_err(|e| anyhow!("invalid port: {e}"))?;
+        let num: u16 = trimmed
+            .parse()
+            .with_context(|| format!("invalid port value: {trimmed}"))?;
         json!({ "port": num })
     };
 
@@ -58,7 +60,7 @@ fn expect_port(merge_error_context: &MergeErrorContext, expected: u16) -> Result
         .result
         .take()
         .ok_or_else(|| anyhow!("merge result unavailable"))?;
-    let config = result.map_err(|e| anyhow!("merge failed: {e}"))?;
+    let config = result.context("merge failed")?;
 
     ensure!(
         config.port == expected,

@@ -58,7 +58,7 @@ If satisfying the objective requires violating a constraint, stop and escalate.
 - Time: if any milestone exceeds 4 hours elapsed work, stop and escalate with
   a reduced-scope option.
 - Ambiguity: if tag filtering semantics or fixture injection behaviour in
-  v0.5.0 produce multiple valid interpretations with different outcomes, stop
+  v0.5.0 produce multiple valid interpretations with different outcomes, stop,
   and request direction.
 
 ## Risks
@@ -95,7 +95,7 @@ If satisfying the objective requires violating a constraint, stop and escalate.
   explicit `scenarios!(..., fixtures = [...])` usage.
 - [x] (2026-02-09 01:20Z) Removed duplicate step registry collisions and fixed
   v0.5.0 fixture-resolution failures in `ortho_config`.
-- [x] (2026-02-09 01:45Z) Normalized quoted placeholder capture handling across
+- [x] (2026-02-09 01:45Z) Normalised quoted placeholder capture handling across
   behavioural steps with shared parsing helpers.
 - [x] (2026-02-09 02:10Z) Migrated `hello_world` behavioural step placeholders
   away from generic `{string}` captures to explicit named captures.
@@ -209,7 +209,7 @@ Current binding patterns:
 
 Current scale baseline:
 
-- 104 step definitions (`#[given]`/`#[when]`/`#[then]`).
+- 104-step definitions (`#[given]`/`#[when]`/`#[then]`).
 - 24 feature files across both crates.
 
 ## Plan of work
@@ -239,7 +239,7 @@ generated test names remain easy to filter by feature.
 Stage C: Type-safety improvements in step contracts.
 
 Introduce `StepArgs` for steps with multiple placeholder captures where this
-improves readability and eliminates ad hoc parsing. Normalize fallible step and
+improves readability and eliminates ad hoc parsing. Normalise fallible step and
 scenario signatures to explicit `Result<(), E>` or
 `rstest_bdd::StepResult<(), E>`. Use step return-value injection where it
 reduces mutable fixture plumbing without obscuring behaviour.
@@ -263,43 +263,58 @@ All commands run from repository root (`/home/user/project`).
 
 1. Baseline and dependency update.
 
-    rg -n "rstest-bdd" Cargo.toml
+```bash
+rg -n "rstest-bdd" Cargo.toml
+cargo update -p rstest-bdd -p rstest-bdd-macros
+```
 
-    update `Cargo.toml` workspace dependencies to `0.5.0`
-
-    cargo update -p rstest-bdd -p rstest-bdd-macros
+Update `Cargo.toml` workspace dependencies to `0.5.0`.
 
 Expected signal:
 
-    Cargo.lock updates include rstest-bdd 0.5.0 packages.
+```text
+Cargo.lock updates include rstest-bdd 0.5.0 packages.
+```
 
 1. Targeted behavioural verification while fixing migration errors.
 
-    cargo test -p ortho_config --tests
-    cargo test -p hello_world --tests --all-features
+```bash
+cargo test -p ortho_config --tests
+cargo test -p hello_world --tests --all-features
+```
 
 Expected signal:
 
-    test result: ok. <N> passed; 0 failed
+```text
+test result: ok. <N> passed; 0 failed
+```
 
 1. Full repository quality gates with logs.
 
-    set -o pipefail; make check-fmt 2>&1 | tee /tmp/make-check-fmt.log
-    set -o pipefail; make lint 2>&1 | tee /tmp/make-lint.log
-    set -o pipefail; make test 2>&1 | tee /tmp/make-test.log
+```bash
+set -o pipefail; make check-fmt 2>&1 | tee /tmp/make-check-fmt.log
+set -o pipefail; make lint 2>&1 | tee /tmp/make-lint.log
+set -o pipefail; make test 2>&1 | tee /tmp/make-test.log
+```
 
 Expected signal:
 
-    all three commands exit 0, with no lint warnings promoted to errors.
+```text
+all three commands exit 0, with no lint warnings promoted to errors.
+```
 
 1. Documentation verification (when markdown changes are made).
 
-    set -o pipefail; make markdownlint 2>&1 | tee /tmp/make-markdownlint.log
-    set -o pipefail; make nixie 2>&1 | tee /tmp/make-nixie.log
+```bash
+set -o pipefail; make markdownlint 2>&1 | tee /tmp/make-markdownlint.log
+set -o pipefail; make nixie 2>&1 | tee /tmp/make-nixie.log
+```
 
 Expected signal:
 
-    markdown lint and Mermaid checks exit 0.
+```text
+markdown lint and Mermaid checks exit 0.
+```
 
 ## Validation and acceptance
 
@@ -336,13 +351,16 @@ Quality method:
 
 Migration evidence captured during implementation:
 
-    Cargo.toml pins:
-    rstest-bdd = "0.5.0"
-    rstest-bdd-macros = "0.5.0"
+```text
+Cargo.toml pins:
+rstest-bdd = "0.5.0"
+rstest-bdd-macros = "0.5.0"
+```
 
-    Targeted behavioural verification:
-    cargo test -p ortho_config --tests
-    cargo test -p hello_world --tests --all-features
+```bash
+cargo test -p ortho_config --tests
+cargo test -p hello_world --tests --all-features
+```
 
 Notable file hotspots for migration edits:
 
@@ -363,28 +381,38 @@ Required interface usage after migration:
 
 - Scenario signatures:
 
-    fn scenario_name(…) -> Result<(), E>
+  ```rust
+  fn scenario_name(…) -> Result<(), E>
+  ```
 
   or:
 
-    fn scenario_name(…) -> rstest_bdd::StepResult<(), E>
+  ```rust
+  fn scenario_name(…) -> rstest_bdd::StepResult<(), E>
+  ```
 
 - Scenario auto-discovery with fixtures/tags:
 
-    scenarios!(
-        "tests/features",
-        fixtures = [hello_world_harness: Harness],
-        tags = "not @requires_yaml"
-    );
+  ```rust
+  scenarios!(
+      "tests/features",
+      fixtures = [hello_world_harness: Harness],
+      tags = "not @requires_yaml"
+  );
+  ```
 
 - Step argument typing for multi-placeholder steps:
 
-    #[derive(StepArgs)]
-    struct Args { … }
+  ```rust
+  #[derive(StepArgs)]
+  struct Args { … }
+  ```
 
 - Sync-to-async wrapper path (only if wrappers remain):
 
-    use rstest_bdd::async_step::sync_to_async;
+  ```rust
+  use rstest_bdd::async_step::sync_to_async;
+  ```
 
 ## Revision note
 

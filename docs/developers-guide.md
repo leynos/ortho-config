@@ -72,17 +72,21 @@ When adding scenarios or steps:
    only when a feature needs bespoke fixtures or per-scenario control.
 4. Keep assertions user-observable (`Then` steps) and avoid asserting private
    internals unless the behaviour cannot be observed externally.
-5. Run the full required quality gates before finalizing.
+5. Run the full required quality gates before finalising.
 
 ## Command checklist
 
 Run from repository root:
 
-    set -o pipefail; make check-fmt 2>&1 | tee /tmp/make-check-fmt.log
-    set -o pipefail; make lint 2>&1 | tee /tmp/make-lint.log
-    set -o pipefail; make test 2>&1 | tee /tmp/make-test.log
+```bash
+set -o pipefail; make check-fmt 2>&1 | tee /tmp/make-check-fmt.log
+set -o pipefail; make lint 2>&1 | tee /tmp/make-lint.log
+set -o pipefail; make test 2>&1 | tee /tmp/make-test.log
+```
 
 For targeted behavioural debugging:
 
-    cargo test -p ortho_config --tests
-    cargo test -p hello_world --tests --all-features
+```bash
+cargo test -p ortho_config --tests
+cargo test -p hello_world --tests --all-features
+```

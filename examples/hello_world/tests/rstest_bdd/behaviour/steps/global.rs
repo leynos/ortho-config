@@ -227,6 +227,8 @@ pub fn assert_declarative_salutations(
     harness.assert_declarative_salutations(&expected)
 }
 
+/// Test-only wrapper exposing declarative merge composition for integration
+/// tests in sibling modules.
 #[cfg(test)]
 pub(crate) fn compose_declarative_globals_from_contents_for_tests(
     harness: &mut Harness,
