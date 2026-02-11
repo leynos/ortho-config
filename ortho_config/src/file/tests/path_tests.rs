@@ -1,6 +1,6 @@
 //! Tests covering base path resolution and graph merging.
 
-use super::super::resolve_base_path;
+use super::super::path::resolve_base_path;
 use super::{canonical_root_and_current, with_jail};
 use crate::result_ext::ResultIntoFigment;
 use anyhow::{Result, anyhow, ensure};

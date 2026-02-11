@@ -1,6 +1,7 @@
 //! Shared helpers for file module tests along with focused submodules.
 
-use super::{canonicalise, normalise_cycle_key};
+use super::canonicalise;
+use super::path::normalise_cycle_key;
 use anyhow::{Context, Result};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};

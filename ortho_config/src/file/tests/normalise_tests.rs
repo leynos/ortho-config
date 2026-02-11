@@ -1,6 +1,6 @@
 //! Tests validating `normalise_cycle_key` behaviour across platforms.
 
-use super::super::*;
+use super::super::path::normalise_cycle_key;
 use super::assert_normalise_cycle_key;
 use anyhow::{Result, ensure};
 use rstest::rstest;
