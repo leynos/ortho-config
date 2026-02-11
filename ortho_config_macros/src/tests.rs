@@ -8,7 +8,7 @@ use crate::derive::generate::structs::{
 use crate::derive::load_impl::{LoadImplArgs, LoadImplIdents, LoadImplTokens, build_load_impl};
 use crate::derive::parse::parse_input;
 use anyhow::{Context, Result, anyhow, ensure};
-use proc_macro2::TokenStream as TokenStream2;
+use proc_macro2::{TokenStream as TokenStream2, TokenTree};
 use quote::quote;
 use rstest::rstest;
 use syn::{DeriveInput, parse_quote, parse_str};
@@ -215,6 +215,78 @@ fn parsing_pipeline_propagates_post_merge_hook(
     Ok(())
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum FlatToken {
+    Ident(String),
+    Punct(char),
+    Other,
+}
+
+fn flatten_tokens(stream: TokenStream2) -> Vec<FlatToken> {
+    fn recurse(stream: TokenStream2, output: &mut Vec<FlatToken>) {
+        for token in stream {
+            match token {
+                TokenTree::Ident(ident) => output.push(FlatToken::Ident(ident.to_string())),
+                TokenTree::Punct(punct) => output.push(FlatToken::Punct(punct.as_char())),
+                TokenTree::Literal(_) => output.push(FlatToken::Other),
+                TokenTree::Group(group) => {
+                    output.push(FlatToken::Other);
+                    recurse(group.stream(), output);
+                    output.push(FlatToken::Other);
+                }
+            }
+        }
+    }
+
+    let mut output = Vec::new();
+    recurse(stream, &mut output);
+    output
+}
+
+fn path_pattern(segments: &[&str]) -> Vec<FlatToken> {
+    let mut pattern = Vec::new();
+    for (index, segment) in segments.iter().enumerate() {
+        if index > 0 {
+            pattern.push(FlatToken::Punct(':'));
+            pattern.push(FlatToken::Punct(':'));
+        }
+        pattern.push(FlatToken::Ident((*segment).to_owned()));
+    }
+    pattern
+}
+
+fn contains_path(flat_tokens: &[FlatToken], segments: &[&str]) -> bool {
+    let pattern = path_pattern(segments);
+    flat_tokens
+        .windows(pattern.len())
+        .any(|window| window == pattern)
+}
+
+fn contains_unanchored_path(
+    flat_tokens: &[FlatToken],
+    anchor_crate: &str,
+    segments: &[&str],
+) -> bool {
+    let pattern = path_pattern(segments);
+    for (start, window) in flat_tokens.windows(pattern.len()).enumerate() {
+        if window != pattern {
+            continue;
+        }
+        let anchored = matches!(
+            flat_tokens.get(start.saturating_sub(3)..start),
+            Some([
+                FlatToken::Ident(name),
+                FlatToken::Punct(':'),
+                FlatToken::Punct(':'),
+            ]) if name == anchor_crate
+        );
+        if !anchored {
+            return true;
+        }
+    }
+    false
+}
+
 #[rstest]
 fn load_impl_uses_ortho_config_reexport_paths() -> Result<()> {
     let cli_ident = parse_str("CliStruct").context("parse CliStruct ident")?;
@@ -243,16 +315,24 @@ fn load_impl_uses_ortho_config_reexport_paths() -> Result<()> {
         idents,
         tokens,
         has_config_path: false,
-    })
-    .to_string();
+    });
+    let flat_tokens = flatten_tokens(generated.clone());
 
     ensure!(
-        generated.contains("ortho_config :: uncased :: Uncased"),
+        contains_path(&flat_tokens, &["ortho_config", "uncased", "Uncased"]),
         "expected uncased usage through ortho_config re-export: {generated}"
     );
     ensure!(
-        generated.contains("ortho_config :: figment :: Figment"),
+        contains_path(&flat_tokens, &["ortho_config", "figment", "Figment"]),
         "expected figment usage through ortho_config re-export: {generated}"
+    );
+    ensure!(
+        !contains_unanchored_path(&flat_tokens, "ortho_config", &["uncased", "Uncased"]),
+        "unexpected direct uncased path (without ortho_config re-export): {generated}"
+    );
+    ensure!(
+        !contains_unanchored_path(&flat_tokens, "ortho_config", &["figment", "Figment"]),
+        "unexpected direct figment path (without ortho_config re-export): {generated}"
     );
     Ok(())
 }

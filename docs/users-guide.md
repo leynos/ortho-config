@@ -348,7 +348,7 @@ clap = { version = "4", features = ["derive"] }
 
 ### FAQ: should `figment`, `uncased`, or `xdg` be direct dependencies?
 
-No for derive-generated code. Yes only when application code directly imports
+No for derive-generated code. Yes, only when application code directly imports
 those crates without going through the `ortho_config::` re-exports.
 
 YAML parsing is handled by the pure-Rust `serde-saphyr` crate. It adheres to
