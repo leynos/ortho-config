@@ -5,8 +5,8 @@
 //! `rstest-bdd` macros execute under `cargo test` without needing to disable
 //! the harness.
 
-#[path = "../common/mod.rs"]
-pub mod common;
+#[path = "../fixtures/mod.rs"]
+pub mod test_fixtures;
 
 #[path = "../support/default_punct.rs"]
 mod default_punct;

@@ -11,7 +11,7 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-pub use super::common::merge_fixtures::MergeErrorSample;
+pub use super::test_fixtures::merge_fixtures::MergeErrorSample;
 
 /// Scenario state for rules-oriented precedence scenarios (CLI, env, config path, ignore).
 #[derive(Debug, Default, ScenarioState)]

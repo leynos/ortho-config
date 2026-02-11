@@ -3,10 +3,10 @@
 //! Ensures deserialization errors during the merge phase (not gathering phase)
 //! produce the correct error variant, establishing a clear semantic distinction.
 
-mod common;
+mod fixtures;
 
 use anyhow::{Result, ensure};
-use common::merge_fixtures::{MergeErrorSample, VecAppendSample};
+use fixtures::merge_fixtures::{MergeErrorSample, VecAppendSample};
 use ortho_config::{MergeComposer, OrthoError};
 use rstest::rstest;
 use serde_json::json;

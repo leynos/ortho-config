@@ -1,7 +1,7 @@
 //! Windows-only integration tests for `PowerShell` help output.
 
 #[cfg(windows)]
-#[path = "common/mod.rs"]
+#[path = "fixtures/mod.rs"]
 mod support;
 
 #[cfg(windows)]

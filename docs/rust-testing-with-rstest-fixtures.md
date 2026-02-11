@@ -1157,8 +1157,8 @@ for maintainability and scalability.
   - For fixtures used within a single module, they can be defined within that
     module's `tests` submodule (annotated with `#[cfg(test)]`).
   - For fixtures intended to be shared across multiple integration test files
-    (in the `tests/` directory), consider creating a common module within the
-    `tests/` directory (e.g., `tests/common/fixtures.rs`) and re-exporting
+    (in the `tests/` directory), consider creating a fixtures module within
+    the `tests/` directory (e.g., `tests/fixtures/`) and re-exporting
     public fixtures.
   - Alternatively, define shared fixtures in the library crate itself (e.g., in
     `src/lib.rs` or `src/fixtures.rs` under `#[cfg(test)]`) and `use` them in
