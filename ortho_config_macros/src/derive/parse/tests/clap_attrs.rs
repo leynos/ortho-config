@@ -9,6 +9,18 @@ fn expr_tokens(expr: &syn::Expr) -> String {
     expr.to_token_stream().to_string()
 }
 
+/// Helper to parse input and extract the inferred default from the first field.
+fn parse_and_extract_default(input: &DeriveInput) -> Result<syn::Expr> {
+    let (_, _, _, attrs_vec) = parse_input(input).map_err(|err| anyhow!(err))?;
+    let attrs = attrs_vec
+        .first()
+        .ok_or_else(|| anyhow!("missing field attributes"))?;
+    attrs
+        .default
+        .clone()
+        .ok_or_else(|| anyhow!("missing inferred default"))
+}
+
 #[test]
 fn infers_default_from_clap_default_value_t_when_requested() -> Result<()> {
     let input: DeriveInput = parse_quote! {
@@ -19,23 +31,16 @@ fn infers_default_from_clap_default_value_t_when_requested() -> Result<()> {
         }
     };
 
-    let (_, _, _, attrs_vec) = parse_input(&input).map_err(|err| anyhow!(err))?;
-    let attrs = attrs_vec
-        .first()
-        .ok_or_else(|| anyhow!("missing field attributes"))?;
-    let inferred = attrs
-        .default
-        .as_ref()
-        .ok_or_else(|| anyhow!("missing inferred default"))?;
+    let inferred = parse_and_extract_default(&input)?;
 
     let expected: syn::Expr = parse_quote! {
         ::core::convert::Into::into(String::from("!"))
     };
     ensure!(
-        expr_tokens(inferred) == expr_tokens(&expected),
+        expr_tokens(&inferred) == expr_tokens(&expected),
         "expected inferred default {}, got {}",
         expr_tokens(&expected),
-        expr_tokens(inferred),
+        expr_tokens(&inferred),
     );
     Ok(())
 }
@@ -50,15 +55,8 @@ fn infers_default_from_clap_default_values_t_when_requested() -> Result<()> {
         }
     };
 
-    let (_, _, _, attrs_vec) = parse_input(&input).map_err(|err| anyhow!(err))?;
-    let attrs = attrs_vec
-        .first()
-        .ok_or_else(|| anyhow!("missing field attributes"))?;
-    let inferred = attrs
-        .default
-        .as_ref()
-        .ok_or_else(|| anyhow!("missing inferred default"))?;
-    let inferred_tokens = expr_tokens(inferred);
+    let inferred = parse_and_extract_default(&input)?;
+    let inferred_tokens = expr_tokens(&inferred);
     ensure!(
         inferred_tokens.contains("IntoIterator :: into_iter"),
         "expected inferred default_values_t expression to use IntoIterator, got {inferred_tokens}",
@@ -80,15 +78,8 @@ fn infers_default_from_clap_default_value_when_requested() -> Result<()> {
         }
     };
 
-    let (_, _, _, attrs_vec) = parse_input(&input).map_err(|err| anyhow!(err))?;
-    let attrs = attrs_vec
-        .first()
-        .ok_or_else(|| anyhow!("missing field attributes"))?;
-    let inferred = attrs
-        .default
-        .as_ref()
-        .ok_or_else(|| anyhow!("missing inferred default"))?;
-    let inferred_tokens = expr_tokens(inferred);
+    let inferred = parse_and_extract_default(&input)?;
+    let inferred_tokens = expr_tokens(&inferred);
 
     ensure!(
         inferred_tokens.contains("FromStr"),
