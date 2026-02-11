@@ -195,6 +195,8 @@ pub(crate) fn build_env_section(tokens: &LoadImplTokens<'_>) -> proc_macro2::Tok
     quote! {
         let env_provider = {
             #env_provider
+                // Use runtime re-exports so generated code only requires
+                // `ortho_config` in downstream crates.
                 .map(|k| ortho_config::uncased::Uncased::new(
                     k.as_str().to_ascii_uppercase(),
                 ))
@@ -216,6 +218,8 @@ fn build_compose_layers_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStrea
 
     quote! {
         use clap::Parser as _;
+        // Keep this path anchored under `ortho_config` so derive users do not
+        // need a direct `figment` dependency for macro-generated code.
         use ortho_config::figment::Figment;
         use ortho_config::OrthoMergeExt as _;
 

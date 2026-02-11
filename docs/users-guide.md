@@ -301,6 +301,56 @@ Redox targets), and the optional parsers (`figment_json5`, `json5`,
 is enabled by default because the crate relies on it internally; disable
 default features only when explicitly opting back into `serde_json`.
 
+### Dependency architecture for derive macro users
+
+The `#[derive(OrthoConfig)]` macro emits fully qualified paths rooted at
+`ortho_config`. For example, generated code references
+`ortho_config::figment::Figment` and `ortho_config::uncased::Uncased` rather
+than `figment::...` or `uncased::...`. Those paths resolve because
+`ortho_config` re-exports these crates.
+
+For screen readers: The following diagram shows that generated code references
+re-exported crates through `ortho_config`, so consumer crates can rely on the
+runtime crate dependency.
+
+```mermaid
+flowchart TD
+    A[Consumer crate] -->|depends on| B[ortho_config]
+    C[derive OrthoConfig] -->|generates| D[ortho_config::figment::...]
+    C -->|generates| E[ortho_config::uncased::...]
+    B -->|re-exports| F[figment]
+    B -->|re-exports| G[uncased]
+    B -->|re-exports on Unix/Redox| H[xdg]
+```
+
+_Figure 1: Derive output resolves parser crates through `ortho_config`._
+
+In the common case, `Cargo.toml` does not need direct `figment`, `uncased`, or
+`xdg` dependencies:
+
+```toml
+[dependencies]
+ortho_config = "0.7.0"
+serde = { version = "1.0", features = ["derive"] }
+clap = { version = "4", features = ["derive"] }
+```
+
+### Troubleshooting dependency errors
+
+- If source code imports `figment`, `uncased`, or `xdg` directly, either switch
+  imports to `ortho_config::figment` / `ortho_config::uncased` /
+  `ortho_config::xdg`, or keep explicit dependencies for that direct usage.
+- If derive output fails with unresolved `ortho_config::...` paths, ensure the
+  dependency key is named `ortho_config` in `Cargo.toml`.
+- If dependency resolution reports conflicts, inspect duplicates with
+  `cargo tree -d` and prefer the versions selected through `ortho_config`
+  unless direct usage requires something else.
+
+### FAQ: should `figment`, `uncased`, or `xdg` be direct dependencies?
+
+No for derive-generated code. Yes only when application code directly imports
+those crates without going through the `ortho_config::` re-exports.
+
 YAML parsing is handled by the pure-Rust `serde-saphyr` crate. It adheres to
 the YAML 1.2 specification, so unquoted scalars such as `yes`, `on`, and `off`
 remain strings. The provider enables `Options::strict_booleans`, ensuring only

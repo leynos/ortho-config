@@ -11,6 +11,10 @@ compile_error!("The `serde_json` feature must be enabled when `yaml` support is 
 
 pub use ortho_config_macros::OrthoConfig;
 
+/// Re-export used by derive-generated code (`ortho_config::figment::...`).
+///
+/// This keeps downstream `#[derive(OrthoConfig)]` users from needing a direct
+/// `figment` dependency unless their own source imports `figment` APIs.
 pub use figment;
 #[cfg(feature = "json5")]
 #[cfg_attr(docsrs, doc(cfg(feature = "json5")))]
@@ -26,9 +30,15 @@ pub use serde_saphyr;
 #[cfg(feature = "toml")]
 #[cfg_attr(docsrs, doc(cfg(feature = "toml")))]
 pub use toml;
+/// Re-export used by derive-generated environment-key normalization via
+/// `ortho_config::uncased::Uncased`.
 pub use uncased;
 #[cfg(any(unix, target_os = "redox"))]
 #[cfg_attr(docsrs, doc(cfg(any(unix, target_os = "redox"))))]
+/// Re-export for XDG discovery helpers used by Unix-like and Redox targets.
+///
+/// Consumers can use `ortho_config::xdg` directly instead of adding a separate
+/// `xdg` dependency when interacting with XDG paths.
 pub use xdg;
 
 mod csv_env;
