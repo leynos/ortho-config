@@ -7,7 +7,9 @@ use crate::{OrthoError, OrthoMergeExt, OrthoResult};
 
 use figment::Figment;
 
+use std::cell::RefCell;
 use std::collections::HashSet;
+use std::ops::DerefMut;
 use std::path::{Path, PathBuf};
 
 use super::error::{file_error, invalid_input};
@@ -78,32 +80,60 @@ pub fn load_config_file(path: &Path) -> OrthoResult<Option<Figment>> {
     load_config_file_inner(path, &mut visited, &mut stack)
 }
 
-pub(super) fn load_config_file_inner(
+fn with_cycle_detection<T, F>(
     path: &Path,
-    visited: &mut HashSet<PathBuf>,
-    stack: &mut Vec<PathBuf>,
-) -> OrthoResult<Option<Figment>> {
+    visited: &RefCell<HashSet<PathBuf>>,
+    stack: &RefCell<Vec<PathBuf>>,
+    operation: F,
+) -> OrthoResult<Option<T>>
+where
+    F: FnOnce(&Path) -> OrthoResult<T>,
+{
     if !path.is_file() {
         return Ok(None);
     }
     let canonical = canonicalise(path)?;
     let normalised = normalise_cycle_key(&canonical);
-    if !visited.insert(normalised.clone()) {
-        let mut cycle: Vec<String> = stack.iter().map(|p| p.display().to_string()).collect();
+    if !visited.borrow_mut().insert(normalised.clone()) {
+        let mut cycle: Vec<String> = stack
+            .borrow()
+            .iter()
+            .map(|p| p.display().to_string())
+            .collect();
         cycle.push(canonical.display().to_string());
         return Err(std::sync::Arc::new(OrthoError::CyclicExtends {
             cycle: cycle.join(" -> "),
         }));
     }
-    stack.push(canonical.clone());
-    let result = (|| {
+    stack.borrow_mut().push(canonical.clone());
+    let result = operation(&canonical);
+    visited.borrow_mut().remove(&normalised);
+    stack.borrow_mut().pop();
+    result.map(Some)
+}
+
+pub(super) fn load_config_file_inner(
+    path: &Path,
+    visited: &mut HashSet<PathBuf>,
+    stack: &mut Vec<PathBuf>,
+) -> OrthoResult<Option<Figment>> {
+    let visited_state = RefCell::new(std::mem::take(visited));
+    let stack_state = RefCell::new(std::mem::take(stack));
+    let result = with_cycle_detection(path, &visited_state, &stack_state, |canonical| {
         let data = std::fs::read_to_string(&canonical).map_err(|e| file_error(&canonical, e))?;
         let figment = parse_config_by_format(&canonical, &data)?;
-        process_extends(figment, &canonical, visited, stack)
-    })();
-    visited.remove(&normalised);
-    stack.pop();
-    result.map(Some)
+        let mut visited_mut = visited_state.borrow_mut();
+        let mut stack_mut = stack_state.borrow_mut();
+        process_extends(
+            figment,
+            &canonical,
+            visited_mut.deref_mut(),
+            stack_mut.deref_mut(),
+        )
+    });
+    *visited = visited_state.into_inner();
+    *stack = stack_state.into_inner();
+    result
 }
 
 /// Load configuration from a file as a chain of layers for declarative merging.
@@ -146,23 +176,16 @@ fn load_config_file_chain_inner(
     visited: &mut HashSet<PathBuf>,
     stack: &mut Vec<PathBuf>,
 ) -> OrthoResult<Option<FileLayerChain>> {
-    if !path.is_file() {
-        return Ok(None);
-    }
-    let canonical = canonicalise(path)?;
-    let normalised = normalise_cycle_key(&canonical);
-    if !visited.insert(normalised.clone()) {
-        let mut cycle: Vec<String> = stack.iter().map(|p| p.display().to_string()).collect();
-        cycle.push(canonical.display().to_string());
-        return Err(std::sync::Arc::new(OrthoError::CyclicExtends {
-            cycle: cycle.join(" -> "),
-        }));
-    }
-    stack.push(canonical.clone());
-    let result = load_chain_for_file(&canonical, visited, stack);
-    visited.remove(&normalised);
-    stack.pop();
-    result.map(Some)
+    let visited_state = RefCell::new(std::mem::take(visited));
+    let stack_state = RefCell::new(std::mem::take(stack));
+    let result = with_cycle_detection(path, &visited_state, &stack_state, |canonical| {
+        let mut visited_mut = visited_state.borrow_mut();
+        let mut stack_mut = stack_state.borrow_mut();
+        load_chain_for_file(canonical, visited_mut.deref_mut(), stack_mut.deref_mut())
+    });
+    *visited = visited_state.into_inner();
+    *stack = stack_state.into_inner();
+    result
 }
 
 fn load_chain_for_file(
