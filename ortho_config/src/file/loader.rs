@@ -9,7 +9,6 @@ use figment::Figment;
 
 use std::cell::RefCell;
 use std::collections::HashSet;
-use std::ops::DerefMut;
 use std::path::{Path, PathBuf};
 
 use super::error::{file_error, invalid_input};
@@ -120,16 +119,11 @@ pub(super) fn load_config_file_inner(
     let visited_state = RefCell::new(std::mem::take(visited));
     let stack_state = RefCell::new(std::mem::take(stack));
     let result = with_cycle_detection(path, &visited_state, &stack_state, |canonical| {
-        let data = std::fs::read_to_string(&canonical).map_err(|e| file_error(&canonical, e))?;
-        let figment = parse_config_by_format(&canonical, &data)?;
+        let data = std::fs::read_to_string(canonical).map_err(|e| file_error(canonical, e))?;
+        let figment = parse_config_by_format(canonical, &data)?;
         let mut visited_mut = visited_state.borrow_mut();
         let mut stack_mut = stack_state.borrow_mut();
-        process_extends(
-            figment,
-            &canonical,
-            visited_mut.deref_mut(),
-            stack_mut.deref_mut(),
-        )
+        process_extends(figment, canonical, &mut visited_mut, &mut stack_mut)
     });
     *visited = visited_state.into_inner();
     *stack = stack_state.into_inner();
@@ -181,7 +175,7 @@ fn load_config_file_chain_inner(
     let result = with_cycle_detection(path, &visited_state, &stack_state, |canonical| {
         let mut visited_mut = visited_state.borrow_mut();
         let mut stack_mut = stack_state.borrow_mut();
-        load_chain_for_file(canonical, visited_mut.deref_mut(), stack_mut.deref_mut())
+        load_chain_for_file(canonical, &mut visited_mut, &mut stack_mut)
     });
     *visited = visited_state.into_inner();
     *stack = stack_state.into_inner();
