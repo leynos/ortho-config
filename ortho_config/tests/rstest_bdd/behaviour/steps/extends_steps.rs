@@ -47,6 +47,16 @@ fn create_multi_level(extends_context: &ExtendsContext) -> Result<()> {
     Ok(())
 }
 
+#[given("a configuration file with a non-string extends value")]
+fn create_non_string(extends_context: &ExtendsContext) -> Result<()> {
+    ensure!(
+        extends_context.non_string_flag.is_empty(),
+        "non-string configuration already initialised"
+    );
+    extends_context.non_string_flag.set(());
+    Ok(())
+}
+
 #[given("a configuration file extending a base file with replace strategy on rules")]
 fn create_replace_strategy(extends_context: &ExtendsContext) -> Result<()> {
     ensure!(
@@ -89,6 +99,7 @@ enum ExtendsScenario {
     Cyclic,
     MissingBase,
     MultiLevel,
+    NonString,
 }
 
 impl ExtendsScenario {
@@ -98,6 +109,7 @@ impl ExtendsScenario {
             Self::Cyclic => &context.cyclic_flag,
             Self::MissingBase => &context.missing_base_flag,
             Self::MultiLevel => &context.multi_level_flag,
+            Self::NonString => &context.non_string_flag,
         }
     }
 
@@ -107,6 +119,7 @@ impl ExtendsScenario {
             Self::Cyclic => "cyclic configuration",
             Self::MissingBase => "missing-base configuration",
             Self::MultiLevel => "multi-level configuration",
+            Self::NonString => "non-string extends configuration",
         }
     }
 
@@ -137,6 +150,9 @@ impl ExtendsScenario {
                 j.create_file("grandparent.toml", grandparent)?;
                 j.create_file("parent.toml", parent)?;
                 j.create_file(".ddlint.toml", child)?;
+            }
+            Self::NonString => {
+                j.create_file(".ddlint.toml", "extends = 1")?;
             }
         }
         Ok(())
@@ -180,6 +196,11 @@ fn load_missing_base(extends_context: &ExtendsContext) -> Result<()> {
 #[when("the multi-level configuration is loaded")]
 fn load_multi_level(extends_context: &ExtendsContext) -> Result<()> {
     load_scenario(ExtendsScenario::MultiLevel, extends_context)
+}
+
+#[when("the non-string extends configuration is loaded")]
+fn load_non_string(extends_context: &ExtendsContext) -> Result<()> {
+    load_scenario(ExtendsScenario::NonString, extends_context)
 }
 
 #[then("an error occurs")]

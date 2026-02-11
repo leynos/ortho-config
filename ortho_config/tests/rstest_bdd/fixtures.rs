@@ -37,6 +37,7 @@ pub struct ExtendsContext {
     pub missing_base_flag: Slot<()>,
     pub multi_level_flag: Slot<()>,
     pub replace_strategy_flag: Slot<()>,
+    pub non_string_flag: Slot<()>,
     pub result: Slot<ortho_config::OrthoResult<RulesConfig>>,
     pub replace_result: Slot<ortho_config::OrthoResult<ReplaceRulesConfig>>,
 }

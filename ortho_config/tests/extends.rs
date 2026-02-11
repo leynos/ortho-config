@@ -249,9 +249,16 @@ fn missing_base_file_errors(#[case] is_abs: bool) -> Result<()> {
 }
 
 #[rstest]
-fn non_string_extends_errors() -> Result<()> {
+#[case::integer("extends = 1", "number")]
+#[case::boolean("extends = true", "bool")]
+#[case::array("extends = [1, 2]", "array")]
+#[case::inline_table("extends = { a = 1 }", "object")]
+fn non_string_extends_errors(
+    #[case] toml_content: &str,
+    #[case] expected_type: &str,
+) -> Result<()> {
     with_jail(|j| {
-        j.create_file(".config.toml", "extends = 1")?;
+        j.create_file(".config.toml", toml_content)?;
         let err = match ExtendsCfg::load_from_iter(["prog"]) {
             Ok(cfg) => return Err(anyhow!("expected non-string extends error, got {cfg:?}")),
             Err(err) => err,
@@ -260,6 +267,10 @@ fn non_string_extends_errors() -> Result<()> {
         ensure!(
             msg.contains("must be a string"),
             "error missing string message: {msg}"
+        );
+        ensure!(
+            msg.contains(expected_type),
+            "error missing type '{expected_type}': {msg}"
         );
         ensure!(
             msg.contains(".config.toml"),
