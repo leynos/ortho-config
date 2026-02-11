@@ -142,9 +142,12 @@ pass argument-aware values into lookups when needed.[^localizer][^localize-clap]
 
 Non-`Option` fields backed by `default_value_t` always appear in parsed CLI
 structs, which previously forced the CLI to override file and environment
-values. Add `#[ortho_config(cli_default_as_absent)]` alongside the matching
-`default` attribute to treat clap defaults as absent unless the user provides a
-value explicitly.
+values. Add `#[ortho_config(cli_default_as_absent)]` to treat clap defaults as
+absent unless the user provides a value explicitly.
+
+The derive macro infers struct defaults from clap defaults (`default_value`,
+`default_value_t`, or `default_values_t`) when `cli_default_as_absent` is
+enabled, so a duplicate `#[ortho_config(default = ...)]` is no longer required.
 
 When you use this attribute, pass `ArgMatches` so `value_source()` can detect
 which fields were truly provided:

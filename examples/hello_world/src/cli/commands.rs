@@ -30,7 +30,7 @@ pub struct GreetCommand {
         id = "punctuation",
         default_value_t = default_punctuation()
     )]
-    #[ortho_config(default = default_punctuation(), cli_default_as_absent)]
+    #[ortho_config(cli_default_as_absent)]
     pub punctuation: String,
 }
 

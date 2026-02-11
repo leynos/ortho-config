@@ -39,7 +39,7 @@ struct GreetArgs {
         id = "punctuation",
         default_value_t = default_punct::default_punct()
     )]
-    #[ortho_config(default = default_punct::default_punct(), cli_default_as_absent)]
+    #[ortho_config(cli_default_as_absent)]
     punctuation: String,
 
     /// Regular Option field for comparison.
@@ -212,7 +212,7 @@ struct CustomIdArgs {
         id = "custom_punctuation",
         default_value_t = default_punct::default_punct()
     )]
-    #[ortho_config(default = default_punct::default_punct(), cli_default_as_absent)]
+    #[ortho_config(cli_default_as_absent)]
     punctuation: String,
 }
 
@@ -272,7 +272,7 @@ fn test_extract_user_provided_respects_custom_arg_id() -> Result<()> {
 #[serde(rename_all = "kebab-case")]
 struct RenameAllArgs {
     #[arg(long, default_value_t = default_punct::default_punct())]
-    #[ortho_config(default = default_punct::default_punct(), cli_default_as_absent)]
+    #[ortho_config(cli_default_as_absent)]
     verbose_mode: String,
 }
 

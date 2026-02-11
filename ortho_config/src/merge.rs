@@ -153,7 +153,7 @@ pub fn sanitized_provider<T: Serialize>(value: &T) -> OrthoResult<Serialized<ser
 /// #[ortho_config(prefix = "APP_")]
 /// struct MyCommand {
 ///     #[arg(long, default_value_t = String::from("!"))]
-///     #[ortho_config(default = String::from("!"), cli_default_as_absent)]
+///     #[ortho_config(cli_default_as_absent)]
 ///     punctuation: String,
 /// }
 ///

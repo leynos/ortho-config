@@ -24,6 +24,7 @@ mod serde_attrs;
 mod tests;
 mod type_utils;
 
+use clap_attrs::clap_default_value;
 pub(crate) use clap_attrs::{clap_arg_id, clap_arg_id_from_attribute};
 use doc_attrs::{apply_field_doc_attr, apply_struct_doc_attr};
 pub(crate) use doc_types::{
@@ -314,9 +315,9 @@ fn apply_field_attr(
 ///
 /// Used internally by the derive macro to extract configuration metadata
 /// from field-level attributes.
-pub(crate) fn parse_field_attrs(attrs: &[Attribute]) -> Result<FieldAttrs, syn::Error> {
+pub(crate) fn parse_field_attrs(field: &syn::Field) -> Result<FieldAttrs, syn::Error> {
     let mut out = FieldAttrs::default();
-    parse_ortho_config(attrs, |meta| {
+    parse_ortho_config(&field.attrs, |meta| {
         if !apply_field_attr(meta, &mut out)? {
             // Unknown attributes are intentionally discarded to preserve
             // forwards compatibility while still allowing callers to add
@@ -325,5 +326,8 @@ pub(crate) fn parse_field_attrs(attrs: &[Attribute]) -> Result<FieldAttrs, syn::
         }
         Ok(())
     })?;
+    if out.cli_default_as_absent && out.default.is_none() {
+        out.default = clap_default_value(field)?;
+    }
     Ok(out)
 }

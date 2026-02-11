@@ -36,7 +36,7 @@ struct RunArgs {
 #[ortho_config(prefix = "APP_")]
 struct GreetArgs {
     #[arg(long, default_value_t = default_punctuation())]
-    #[ortho_config(default = default_punctuation(), cli_default_as_absent)]
+    #[ortho_config(cli_default_as_absent)]
     punctuation: String,
 }
 
