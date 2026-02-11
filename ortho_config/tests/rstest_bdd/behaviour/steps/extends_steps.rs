@@ -51,7 +51,7 @@ fn create_multi_level(extends_context: &ExtendsContext) -> Result<()> {
 fn create_non_string(extends_context: &ExtendsContext) -> Result<()> {
     ensure!(
         extends_context.non_string_flag.is_empty(),
-        "non-string configuration already initialised"
+        "non-string configuration already initialized"
     );
     extends_context.non_string_flag.set(());
     Ok(())
