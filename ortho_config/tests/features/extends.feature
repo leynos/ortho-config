@@ -14,6 +14,11 @@ Feature: Configuration inheritance
     When the configuration with missing base is loaded
     Then an error occurs
 
+  Scenario: non-string extends value error
+    Given a configuration file with a non-string extends value
+    When the non-string extends configuration is loaded
+    Then an error occurs
+
   Scenario: multi-level inheritance
     Given a configuration file extending a parent file that extends a grandparent file
     When the multi-level configuration is loaded
