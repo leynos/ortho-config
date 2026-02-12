@@ -64,7 +64,7 @@ pub(crate) fn clap_arg_id(field: &syn::Field) -> syn::Result<Option<String>> {
     Ok(arg_id.map(|lit| lit.value()))
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone)]
 pub(crate) enum ClapInferredDefault {
     Value(Expr),
     ValueT(Expr),
