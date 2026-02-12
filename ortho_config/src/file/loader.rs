@@ -1,6 +1,7 @@
 //! Runtime loading entrypoints for configuration files and extends chains.
 
 use camino::Utf8PathBuf;
+use cap_std::{ambient_authority, fs_utf8::Dir};
 use serde_json::Value as JsonValue;
 
 use crate::{OrthoError, OrthoMergeExt, OrthoResult};
@@ -13,7 +14,7 @@ use std::path::{Path, PathBuf};
 use super::error::{file_error, invalid_input};
 use super::extends::{get_extends, process_extends};
 use super::parser::parse_config_by_format;
-use super::path::{canonicalise, normalise_cycle_key, resolve_base_path};
+use super::path::{canonicalise, normalize_cycle_key, resolve_base_path};
 
 /// Values from a file inheritance chain, ordered ancestor-first.
 ///
@@ -40,6 +41,38 @@ fn strip_extends_key(value: &mut JsonValue) {
 fn to_utf8_path(canonical: &Path) -> Utf8PathBuf {
     Utf8PathBuf::from_path_buf(canonical.to_path_buf())
         .unwrap_or_else(|p| Utf8PathBuf::from(p.to_string_lossy().into_owned()))
+}
+
+fn file_exists_and_is_regular(path: &Path) -> OrthoResult<Option<()>> {
+    match std::fs::metadata(path) {
+        Ok(metadata) if metadata.is_file() => Ok(Some(())),
+        Ok(_) => Err(invalid_input(
+            path,
+            "configuration path is not a regular file",
+        )),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(file_error(path, error)),
+    }
+}
+
+fn read_file_to_string(path: &Path) -> OrthoResult<String> {
+    let utf8_path = to_utf8_path(path);
+    let parent = utf8_path.parent().ok_or_else(|| {
+        invalid_input(
+            path,
+            "cannot determine parent directory for configuration file path",
+        )
+    })?;
+    let file_name = utf8_path.file_name().ok_or_else(|| {
+        invalid_input(
+            path,
+            "cannot determine file name for configuration file path",
+        )
+    })?;
+    let dir =
+        Dir::open_ambient_dir(parent, ambient_authority()).map_err(|e| file_error(path, e))?;
+    dir.read_to_string(file_name)
+        .map_err(|e| file_error(path, e))
 }
 
 /// Load configuration from a file, selecting the parser based on extension.
@@ -87,12 +120,12 @@ fn with_cycle_detection<T, F>(
 where
     F: FnOnce(&Path, &mut HashSet<PathBuf>, &mut Vec<PathBuf>) -> OrthoResult<T>,
 {
-    if !path.is_file() {
+    if file_exists_and_is_regular(path)?.is_none() {
         return Ok(None);
     }
     let canonical = canonicalise(path)?;
-    let normalised = normalise_cycle_key(&canonical);
-    if !visited.insert(normalised.clone()) {
+    let normalized = normalize_cycle_key(&canonical);
+    if !visited.insert(normalized.clone()) {
         let mut cycle: Vec<String> = stack.iter().map(|p| p.display().to_string()).collect();
         cycle.push(canonical.display().to_string());
         return Err(std::sync::Arc::new(OrthoError::CyclicExtends {
@@ -101,7 +134,7 @@ where
     }
     stack.push(canonical.clone());
     let result = operation(&canonical, visited, stack);
-    visited.remove(&normalised);
+    visited.remove(&normalized);
     stack.pop();
     result.map(Some)
 }
@@ -116,7 +149,7 @@ pub(super) fn load_config_file_inner(
         visited,
         stack,
         |canonical, visited_paths, stack_paths| {
-            let data = std::fs::read_to_string(canonical).map_err(|e| file_error(canonical, e))?;
+            let data = read_file_to_string(canonical)?;
             let figment = parse_config_by_format(canonical, &data)?;
             process_extends(figment, canonical, visited_paths, stack_paths)
         },
@@ -163,7 +196,7 @@ fn load_chain_for_file(
     visited: &mut HashSet<PathBuf>,
     stack: &mut Vec<PathBuf>,
 ) -> OrthoResult<FileLayerChain> {
-    let data = std::fs::read_to_string(canonical).map_err(|e| file_error(canonical, e))?;
+    let data = read_file_to_string(canonical)?;
     let figment = parse_config_by_format(canonical, &data)?;
 
     // Extract this file's JSON value.
@@ -174,11 +207,15 @@ fn load_chain_for_file(
     // Get parent chain if extends is present.
     let parent_chain = if let Some(base) = get_extends(&figment, canonical)? {
         let base_canonical = resolve_base_path(canonical, base)?;
-        if !base_canonical.is_file() {
-            return Err(invalid_input(
-                &base_canonical,
-                "extended path is not a regular file",
-            ));
+        match std::fs::metadata(&base_canonical) {
+            Ok(metadata) if metadata.is_file() => {}
+            Ok(_) => {
+                return Err(invalid_input(
+                    &base_canonical,
+                    "extended path is not a regular file",
+                ));
+            }
+            Err(error) => return Err(file_error(&base_canonical, error)),
         }
         with_cycle_detection(&base_canonical, visited, stack, load_chain_for_file)?
     } else {

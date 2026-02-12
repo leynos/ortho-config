@@ -14,7 +14,7 @@ struct RequiredCli {
     ref_id: Option<String>,
 }
 
-#[rstest::rstest]
+#[test]
 fn cli_only_values_are_accepted() -> Result<()> {
     let cli = RequiredCli {
         ref_id: Some("cli".into()),

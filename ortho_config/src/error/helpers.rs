@@ -5,7 +5,7 @@ use clap::{Error as ClapError, error::ErrorKind};
 /// Returns `true` when a [`clap::Error`] corresponds to `--help` or
 /// `--version`.
 ///
-/// Clap surfaces these requests via specialised [`ErrorKind`] variants so
+/// Clap surfaces these requests via specialized [`ErrorKind`] variants so
 /// entry points can delegate to [`clap::Error::exit`] and preserve the
 /// expected zero exit status. Applications frequently need this inspection
 /// when they prefer `Cli::try_parse()` over `Cli::parse()` to keep full

@@ -8,14 +8,14 @@ use super::error::{file_error, invalid_input, not_found};
 
 /// Canonicalise `p` using platform-specific rules.
 ///
-/// Returns an absolute, normalised path with symlinks resolved.
+/// Returns an absolute, normalized path with symlinks resolved.
 ///
 /// On Windows the [`dunce`](https://docs.rs/dunce/latest/dunce/) crate is used to avoid introducing UNC prefixes
 /// in diagnostic messages.
 ///
 /// # Errors
 ///
-/// Returns an [`OrthoError`] if canonicalisation fails.
+/// Returns an [`OrthoError`] if canonicalization fails.
 ///
 /// # Examples
 ///
@@ -40,9 +40,9 @@ pub fn canonicalise(p: &Path) -> OrthoResult<PathBuf> {
     }
 }
 
-/// Normalise a canonical path for case-insensitive cycle detection.
+/// Normalize a canonical path for case-insensitive cycle detection.
 ///
-/// The loader stores normalised keys in its visited set to ensure that files
+/// The loader stores normalized keys in its visited set to ensure that files
 /// referenced with different casing are treated as the same node when the
 /// filesystem ignores case differences. On strictly case-sensitive platforms
 /// the path is returned unchanged.
@@ -53,18 +53,18 @@ pub fn canonicalise(p: &Path) -> OrthoResult<PathBuf> {
 /// use std::path::Path;
 ///
 /// let canonical = Path::new("/configs/Config.toml");
-/// let key = ortho_config::file::normalise_cycle_key(canonical);
+/// let key = ortho_config::file::normalize_cycle_key(canonical);
 /// // On Windows and macOS the key is lower-cased so variants like
 /// // "/configs/config.toml" do not bypass cycle detection.
 /// ```
-pub(super) fn normalise_cycle_key(path: &Path) -> PathBuf {
+pub(super) fn normalize_cycle_key(path: &Path) -> PathBuf {
     #[cfg(windows)]
     {
         use std::ffi::OsString;
         use std::os::windows::ffi::{OsStrExt, OsStringExt};
 
         // Windows performs ASCII-only case folding when comparing paths. Apply the
-        // same transformation so canonicalised cycle keys match the filesystem's
+        // same transformation so canonicalized cycle keys match the filesystem's
         // semantics without mutating non-ASCII characters.
         let lowered: Vec<u16> = path
             .as_os_str()
@@ -100,10 +100,10 @@ pub(super) fn normalise_cycle_key(path: &Path) -> PathBuf {
 /// Resolve an `extends` path relative to the current file.
 ///
 /// If `base` is relative it is joined with the parent directory of
-/// `current_path` and canonicalised. Absolute paths are canonicalised
+/// `current_path` and canonicalized. Absolute paths are canonicalized
 /// directly.
 ///
-/// Canonicalisation ensures consistent absolute paths for robust cycle
+/// Canonicalization ensures consistent absolute paths for robust cycle
 /// detection and de-duplication across symlinks. On Windows this uses
 /// [`dunce::canonicalize`] to avoid introducing UNC prefixes in diagnostic
 /// messages.
@@ -115,7 +115,7 @@ pub(super) fn normalise_cycle_key(path: &Path) -> PathBuf {
 /// # Errors
 ///
 /// Returns an [`OrthoError`] if the parent directory cannot be determined
-/// or if canonicalisation fails.
+/// or if canonicalization fails.
 ///
 /// # Examples
 ///

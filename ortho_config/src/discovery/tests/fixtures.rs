@@ -54,6 +54,6 @@ pub(super) fn sample_config_file() -> Result<(TempDir, PathBuf)> {
     let file_dir = temp_dir.path().join("hello_world");
     std::fs::create_dir_all(&file_dir).context("create hello_world directory")?;
     let file = file_dir.join("config.toml");
-    std::fs::write(&file, "value = true").context("write config file")?;
+    std::fs::write(&file, "is_enabled = true").context("write config file")?;
     Ok((temp_dir, file))
 }

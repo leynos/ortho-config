@@ -22,10 +22,10 @@ fn windows_candidates_are_case_insensitive(env_guards: EnvScope) -> Result<()> {
     use std::path::PathBuf;
 
     let _guards = env_guards;
-    let mut builder = ConfigDiscovery::builder("hello_world");
-    builder = builder.add_explicit_path(PathBuf::from("C:/Config/FILE.TOML"));
-    builder = builder.add_explicit_path(PathBuf::from("c:/config/file.toml"));
-    let discovery = builder.build();
+    let discovery = ConfigDiscovery::builder("hello_world")
+        .add_explicit_path(PathBuf::from("C:/Config/FILE.TOML"))
+        .add_explicit_path(PathBuf::from("c:/config/file.toml"))
+        .build();
     let candidates = discovery.candidates();
     let canonical = ConfigDiscovery::normalised_key(Path::new("C:/Config/FILE.TOML"));
     let duplicates = candidates

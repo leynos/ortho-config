@@ -16,7 +16,6 @@ struct MergeArgs {
     bar: Option<bool>,
 }
 
-#[test]
 /// Tests that merging CLI arguments with configuration file values prioritises CLI values and preserves unset fields.
 ///
 /// This test creates a configuration file with a default value for `foo`, then merges it with CLI arguments that override `foo` and leave `bar` unset. It asserts that the merged configuration uses the CLI value for `foo` and retains `None` for `bar`.
@@ -26,6 +25,7 @@ struct MergeArgs {
 /// ```
 /// merge_helper_combines_defaults_and_cli();
 /// ```
+#[test]
 fn merge_helper_combines_defaults_and_cli() -> Result<()> {
     let cli = MergeArgs {
         foo: Some("cli".into()),

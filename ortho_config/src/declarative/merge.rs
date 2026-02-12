@@ -81,7 +81,7 @@ pub trait DeclarativeMerge: Sized {
 /// Overlay `layer` onto `target`, updating `target` in place.
 ///
 /// Behaviour:
-/// - When merging an object into a non-object target, target is initialised to
+/// - When merging an object into a non-object target, target is initialized to
 ///   `{}` first.
 /// - Objects are merged recursively (keys are added or overwritten, and nested
 ///   objects are overlaid).
@@ -136,7 +136,7 @@ pub fn merge_value(target: &mut Value, layer: Value) {
 fn merge_object(target: &mut Value, map: Map<String, Value>) {
     #[expect(
         clippy::option_if_let_else,
-        reason = "initialising target object when absent requires mutable borrow"
+        reason = "initializing target object when absent requires mutable borrow"
     )]
     let target_map = if let Some(map_ref) = target.as_object_mut() {
         map_ref
@@ -144,7 +144,7 @@ fn merge_object(target: &mut Value, map: Map<String, Value>) {
         *target = Value::Object(Map::new());
         #[expect(
             clippy::expect_used,
-            reason = "target was just initialised to an object"
+            reason = "target was just initialized to an object"
         )]
         target.as_object_mut().expect("target is now an object")
     };

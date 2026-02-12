@@ -1,8 +1,11 @@
 //! Loading behaviour tests for discovery.
 
+use std::io::Write as _;
 use std::path::PathBuf;
 
 use anyhow::{Context, Result, anyhow, ensure};
+use camino::Utf8Path;
+use cap_std::{ambient_authority, fs_utf8::Dir as Utf8Dir};
 use rstest::rstest;
 use serde::Deserialize;
 use tempfile::TempDir;
@@ -13,7 +16,14 @@ use super::fixtures::{config_temp_dir, env_guards, sample_config_file};
 
 #[derive(Debug, Deserialize)]
 struct SampleConfig {
-    value: bool,
+    is_enabled: bool,
+}
+
+fn open_cap_utf8_dir(path: &std::path::Path) -> Result<Utf8Dir> {
+    let utf8_path = Utf8Path::from_path(path)
+        .ok_or_else(|| anyhow!("temporary directory path is not valid UTF-8: {path:?}"))?;
+    Utf8Dir::open_ambient_dir(utf8_path, ambient_authority())
+        .context("open temporary directory with cap-std")
 }
 
 #[rstest]
@@ -34,7 +44,10 @@ fn load_first_reads_first_existing_file(
     let config: SampleConfig = figment
         .extract()
         .context("extract sample config from figment")?;
-    ensure!(config.value, "expected loaded config to set value=true");
+    ensure!(
+        config.is_enabled,
+        "expected loaded config to set is_enabled=true"
+    );
     Ok(())
 }
 
@@ -48,8 +61,19 @@ fn load_first_skips_invalid_candidates(
     let dir_path = temp_dir.path();
     let invalid = dir_path.join("broken.toml");
     let valid = dir_path.join("valid.toml");
-    std::fs::write(&invalid, "value = ???").context("write invalid config")?;
-    std::fs::write(&valid, "value = false").context("write valid config")?;
+    let dir = open_cap_utf8_dir(dir_path)?;
+    {
+        let mut invalid_file = dir.create("broken.toml").context("create invalid config")?;
+        invalid_file
+            .write_all(b"is_enabled = ???")
+            .context("write invalid config")?;
+    }
+    {
+        let mut valid_file = dir.create("valid.toml").context("create valid config")?;
+        valid_file
+            .write_all(b"is_enabled = false")
+            .context("write valid config")?;
+    }
     let _env = test_env::set_var("HELLO_WORLD_CONFIG_PATH", &invalid);
 
     let discovery = ConfigDiscovery::builder("hello_world")
@@ -66,11 +90,11 @@ fn load_first_skips_invalid_candidates(
         .extract()
         .context("extract sample config from figment")?;
     ensure!(
-        !config.value,
+        !config.is_enabled,
         "expected valid candidate to override invalid env file"
     );
     ensure!(
-        std::fs::metadata(&invalid).is_ok(),
+        dir.metadata("broken.toml").is_ok(),
         "expected invalid file retained for later diagnostics"
     );
     Ok(())
@@ -86,7 +110,7 @@ fn load_first_with_errors_reports_preceding_failures(
     let dir_path = temp_dir.path();
     let missing = dir_path.join("absent.toml");
     let valid = dir_path.join("valid.toml");
-    std::fs::write(&valid, "value = true").context("write valid config")?;
+    std::fs::write(&valid, "is_enabled = true").context("write valid config")?;
 
     let discovery = ConfigDiscovery::builder("hello_world")
         .add_required_path(&missing)
@@ -119,7 +143,7 @@ fn partitioned_errors_surface_required_failures(
     let dir_path = temp_dir.path();
     let missing = dir_path.join("absent.toml");
     let valid = dir_path.join("valid.toml");
-    std::fs::write(&valid, "value = true").context("write valid config")?;
+    std::fs::write(&valid, "is_enabled = true").context("write valid config")?;
 
     let discovery = ConfigDiscovery::builder("hello_world")
         .add_required_path(&missing)

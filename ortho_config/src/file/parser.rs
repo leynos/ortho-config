@@ -54,11 +54,15 @@ pub(super) fn parse_config_by_format(path: &Path, data: &str) -> OrthoResult<Fig
             {
                 return Err(file_error(
                     path,
-                    std::io::Error::other("yaml feature disabled"),
+                    std::io::Error::other(
+                        "yaml feature disabled: enable the 'yaml' feature to support this file format",
+                    ),
                 ));
             }
         }
         _ => {
+            // Validate TOML first so parse failures are reported with this file context
+            // before Figment performs its own parse pass via `Toml::string`.
             toml::from_str::<toml::Value>(data).map_err(|e| file_error(path, e))?;
             Figment::from(Toml::string(data))
         }

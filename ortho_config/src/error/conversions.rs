@@ -9,12 +9,8 @@ use super::OrthoError;
 #[cfg(feature = "serde_json")]
 impl From<serde_json::Error> for OrthoError {
     fn from(e: serde_json::Error) -> Self {
-        Self::Gathering(Box::new(figment::Error::from(format!(
-            "JSON error: {} at line {}, column {}",
-            e,
-            e.line(),
-            e.column()
-        ))))
+        let figment_err = <figment::Error as serde::de::Error>::custom(&e);
+        Self::Gathering(Box::new(figment_err))
     }
 }
 

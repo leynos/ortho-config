@@ -8,10 +8,10 @@ use dirs::home_dir;
 use super::ConfigDiscovery;
 
 #[cfg(windows)]
-/// Normalises a path according to Windows' case-insensitive comparison rules by
+/// Normalizes a path according to Windows' case-insensitive comparison rules by
 /// lowercasing ASCII code points on the original wide path representation and
 /// replacing forward slashes with backslashes.
-fn windows_normalised_key(path: &Path) -> String {
+fn windows_normalized_key(path: &Path) -> String {
     use std::os::windows::ffi::OsStrExt;
 
     let normalised: Vec<u16> = path
@@ -30,7 +30,7 @@ impl ConfigDiscovery {
     fn dedup_key(path: &Path) -> String {
         #[cfg(windows)]
         {
-            windows_normalised_key(path)
+            windows_normalized_key(path)
         }
 
         #[cfg(not(windows))]

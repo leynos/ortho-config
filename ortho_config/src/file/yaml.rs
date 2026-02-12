@@ -15,8 +15,8 @@ enum YamlInput {
     Inline(String),
 }
 
-#[derive(Debug, Clone)]
 /// Figment provider that reads YAML using `serde-saphyr`.
+#[derive(Debug, Clone)]
 pub struct SaphyrYaml {
     path: PathBuf,
     input: YamlInput,
