@@ -1,6 +1,7 @@
 //! Tests for clap attribute parsing helpers.
 
 use super::super::parse_input;
+use crate::derive::parse::ClapInferredDefault;
 use anyhow::{Result, anyhow, ensure};
 use quote::ToTokens;
 use syn::{DeriveInput, parse_quote};
@@ -15,10 +16,15 @@ fn parse_and_extract_default(input: &DeriveInput) -> Result<syn::Expr> {
     let attrs = attrs_vec
         .first()
         .ok_or_else(|| anyhow!("missing field attributes"))?;
-    attrs
-        .default
-        .clone()
-        .ok_or_else(|| anyhow!("missing inferred default"))
+    let Some(inferred) = attrs.inferred_clap_default.as_ref() else {
+        return Err(anyhow!("missing inferred default"));
+    };
+    let expr = match inferred {
+        ClapInferredDefault::Value(expr)
+        | ClapInferredDefault::ValueT(expr)
+        | ClapInferredDefault::ValuesT(expr) => expr,
+    };
+    Ok(expr.clone())
 }
 
 #[test]
@@ -34,7 +40,7 @@ fn infers_default_from_clap_default_value_t_when_requested() -> Result<()> {
     let inferred = parse_and_extract_default(&input)?;
 
     let expected: syn::Expr = parse_quote! {
-        ::core::convert::Into::into(String::from("!"))
+        String::from("!")
     };
     ensure!(
         expr_tokens(&inferred) == expr_tokens(&expected),
@@ -58,12 +64,12 @@ fn infers_default_from_clap_default_values_t_when_requested() -> Result<()> {
     let inferred = parse_and_extract_default(&input)?;
     let inferred_tokens = expr_tokens(&inferred);
     ensure!(
-        inferred_tokens.contains("IntoIterator :: into_iter"),
-        "expected inferred default_values_t expression to use IntoIterator, got {inferred_tokens}",
+        inferred_tokens.contains("\"a\""),
+        "expected inferred default_values_t expression to preserve values, got {inferred_tokens}",
     );
     ensure!(
-        inferred_tokens.contains("collect :: < :: std :: vec :: Vec < _ > >"),
-        "expected inferred default_values_t expression to collect into Vec, got {inferred_tokens}",
+        inferred_tokens.contains("\"b\""),
+        "expected inferred default_values_t expression to preserve values, got {inferred_tokens}",
     );
     Ok(())
 }
@@ -78,16 +84,17 @@ fn infers_default_from_clap_default_value_when_requested() -> Result<()> {
         }
     };
 
-    let inferred = parse_and_extract_default(&input)?;
-    let inferred_tokens = expr_tokens(&inferred);
-
+    let err = parse_input(&input)
+        .err()
+        .ok_or_else(|| anyhow!("expected unsupported default_value error"))?;
+    let err_text = err.to_string();
     ensure!(
-        inferred_tokens.contains("FromStr"),
-        "expected inferred default_value expression to use FromStr, got {inferred_tokens}",
+        err_text.contains("default_value"),
+        "expected default_value diagnostic, got {err_text}",
     );
     ensure!(
-        inferred_tokens.contains("42"),
-        "expected inferred default_value expression to retain the literal value, got {inferred_tokens}",
+        err_text.contains("day-2"),
+        "expected day-2 follow-up note in diagnostic, got {err_text}",
     );
     Ok(())
 }

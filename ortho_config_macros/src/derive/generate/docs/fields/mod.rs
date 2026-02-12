@@ -376,6 +376,9 @@ fn infers_non_required(field: &syn::Field, attrs: &FieldAttrs) -> syn::Result<bo
     if attrs.default.is_some() {
         return Ok(true);
     }
+    if attrs.inferred_clap_default.is_some() {
+        return Ok(true);
+    }
     if serde_has_default(&field.attrs)? {
         return Ok(true);
     }

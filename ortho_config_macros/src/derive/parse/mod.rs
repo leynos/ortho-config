@@ -25,7 +25,7 @@ mod tests;
 mod type_utils;
 
 use clap_attrs::clap_default_value;
-pub(crate) use clap_attrs::{clap_arg_id, clap_arg_id_from_attribute};
+pub(crate) use clap_attrs::{ClapInferredDefault, clap_arg_id, clap_arg_id_from_attribute};
 use doc_attrs::{apply_field_doc_attr, apply_struct_doc_attr};
 pub(crate) use doc_types::{
     DocExampleAttr, DocFieldAttrs, DocLinkAttr, DocNoteAttr, DocStructAttrs, HeadingOverrides,
@@ -67,6 +67,7 @@ pub(crate) struct FieldAttrs {
     pub cli_long: Option<String>,
     pub cli_short: Option<char>,
     pub default: Option<Expr>,
+    pub inferred_clap_default: Option<ClapInferredDefault>,
     pub merge_strategy: Option<MergeStrategy>,
     pub skip_cli: bool,
     pub cli_default_as_absent: bool,
@@ -327,7 +328,18 @@ pub(crate) fn parse_field_attrs(field: &syn::Field) -> Result<FieldAttrs, syn::E
         Ok(())
     })?;
     if out.cli_default_as_absent && out.default.is_none() {
-        out.default = clap_default_value(field)?;
+        out.inferred_clap_default = clap_default_value(field)?;
+        if let Some(ClapInferredDefault::Value(_)) = out.inferred_clap_default {
+            return Err(syn::Error::new_spanned(
+                field,
+                concat!(
+                    "inferring defaults from clap `default_value` is not yet supported for ",
+                    "`cli_default_as_absent`; use `default_value_t`/`default_values_t` or ",
+                    "add `#[ortho_config(default = ...)]`. Parser-faithful `default_value` ",
+                    "inference is planned as a day-2 follow-up."
+                ),
+            ));
+        }
     }
     Ok(out)
 }
