@@ -27,6 +27,19 @@ fn parse_and_extract_default(input: &DeriveInput) -> Result<syn::Expr> {
     Ok(expr.clone())
 }
 
+/// Helper to assert that generated expression tokens contain expected
+/// substrings.
+fn assert_tokens_contain(expr: &syn::Expr, expected_substrings: &[&str]) -> Result<()> {
+    let tokens = expr_tokens(expr);
+    for expected in expected_substrings {
+        ensure!(
+            tokens.contains(expected),
+            "expected token substring '{expected}' in generated expression: {tokens}",
+        );
+    }
+    Ok(())
+}
+
 #[test]
 fn infers_default_from_clap_default_value_t_when_requested() -> Result<()> {
     let input: DeriveInput = parse_quote! {
@@ -62,15 +75,7 @@ fn infers_default_from_clap_default_values_t_when_requested() -> Result<()> {
     };
 
     let inferred = parse_and_extract_default(&input)?;
-    let inferred_tokens = expr_tokens(&inferred);
-    ensure!(
-        inferred_tokens.contains("\"a\""),
-        "expected inferred default_values_t expression to preserve values, got {inferred_tokens}",
-    );
-    ensure!(
-        inferred_tokens.contains("\"b\""),
-        "expected inferred default_values_t expression to preserve values, got {inferred_tokens}",
-    );
+    assert_tokens_contain(&inferred, &["\"a\"", "\"b\""])?;
     Ok(())
 }
 
