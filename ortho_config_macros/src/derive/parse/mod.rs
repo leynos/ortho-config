@@ -62,6 +62,9 @@ pub(crate) struct StructAttrs {
 ///   merging untouched.
 /// - `cli_default_as_absent` treats clap's default value as absent during
 ///   merge, allowing file/env values to take precedence over CLI defaults.
+/// - `inferred_clap_default` stores the default inferred from clap's
+///   `default_value_t`/`default_values_t` when `cli_default_as_absent` is
+///   active and no explicit `#[ortho_config(default = ...)]` is provided.
 #[derive(Default, Clone)]
 pub(crate) struct FieldAttrs {
     pub cli_long: Option<String>,
@@ -309,10 +312,15 @@ fn apply_field_attr(
 /// Parses field-level `#[ortho_config(...)]` attributes.
 ///
 /// Recognised keys include `cli_long`, `cli_short`, `default`,
-/// `merge_strategy`, and `skip_cli`. Unknown keys are ignored, matching
-/// [`parse_struct_attrs`] for forwards compatibility. This lenience may
-/// permit misspelt attribute names; users wanting stricter validation can
-/// insert a manual `compile_error!` guard.
+/// `merge_strategy`, `skip_cli`, and `cli_default_as_absent`. Unknown keys are
+/// ignored, matching [`parse_struct_attrs`] for forwards compatibility. This
+/// lenience may permit misspelt attribute names; users wanting stricter
+/// validation can insert a manual `compile_error!` guard.
+///
+/// When `cli_default_as_absent` is active and no explicit `default` is
+/// provided, this function attempts to infer a default from clap's
+/// `default_value_t` or `default_values_t`. Inference from the untyped
+/// `default_value` is rejected with a compile-time error.
 ///
 /// Used internally by the derive macro to extract configuration metadata
 /// from field-level attributes.

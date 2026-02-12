@@ -65,12 +65,9 @@ fn inferred_default_expr(
             // This variant is rejected in parsing for `cli_default_as_absent`.
             quote! { #expr }
         }
-        ClapInferredDefault::ValueT(expr) => quote! {
-            ::core::convert::Into::into(#expr)
-        },
+        ClapInferredDefault::ValueT(expr) => quote! { #expr },
         ClapInferredDefault::ValuesT(expr) => quote! {
             ::std::iter::IntoIterator::into_iter(#expr)
-                .map(::core::convert::Into::into)
                 .collect::<::std::vec::Vec<_>>()
         },
     })

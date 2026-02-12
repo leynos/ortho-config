@@ -873,8 +873,8 @@ field is excluded from the CLI layer so that file and environment values take
 precedence.
 
 Add `cli_default_as_absent` and define the default in clap. The derive macro
-now infers the struct default from clap's default metadata, so you only need to
-declare it once:
+now infers the struct default from clap's default metadata, so the default only
+needs to be declared once:
 
 ```rust
 #[derive(Parser, Deserialize, Serialize, OrthoConfig)]
@@ -892,7 +892,7 @@ struct GreetArgs {
 string-parser mismatches. Parser-faithful `default_value` inference is planned
 as a day-2 follow-up.
 
-If you still provide `#[ortho_config(default = ...)]`, that explicit value
+If `#[ortho_config(default = ...)]` is still provided, that explicit value
 remains available for generated defaults/documentation metadata.
 
 **Precedence with the attribute (lowest to highest):**

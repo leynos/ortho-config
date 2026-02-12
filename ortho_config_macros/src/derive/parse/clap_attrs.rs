@@ -71,6 +71,14 @@ pub(crate) enum ClapInferredDefault {
     ValuesT(Expr),
 }
 
+#[derive(Clone, Copy)]
+enum ClapDefaultKind {
+    Value,
+    ValueT,
+    ValuesT,
+    Other,
+}
+
 fn assign_default_expr(
     meta: &syn::meta::ParseNestedMeta<'_>,
     default_slot: &mut Option<ClapInferredDefault>,
@@ -86,6 +94,32 @@ fn assign_default_expr(
     Ok(())
 }
 
+fn classify_default_kind(meta: &syn::meta::ParseNestedMeta<'_>) -> ClapDefaultKind {
+    if meta.path.is_ident("default_value") {
+        return ClapDefaultKind::Value;
+    }
+    if meta.path.is_ident("default_value_t") {
+        return ClapDefaultKind::ValueT;
+    }
+    if meta.path.is_ident("default_values_t") {
+        return ClapDefaultKind::ValuesT;
+    }
+    ClapDefaultKind::Other
+}
+
+fn parse_default_expr(
+    meta: &syn::meta::ParseNestedMeta<'_>,
+    kind: ClapDefaultKind,
+) -> syn::Result<Option<ClapInferredDefault>> {
+    let parsed = match kind {
+        ClapDefaultKind::Value => ClapInferredDefault::Value(meta.value()?.parse::<Expr>()?),
+        ClapDefaultKind::ValueT => ClapInferredDefault::ValueT(meta.value()?.parse::<Expr>()?),
+        ClapDefaultKind::ValuesT => ClapInferredDefault::ValuesT(meta.value()?.parse::<Expr>()?),
+        ClapDefaultKind::Other => return Ok(None),
+    };
+    Ok(Some(parsed))
+}
+
 /// Parses clap default-related keys from a nested meta item.
 ///
 /// Recognised keys:
@@ -99,24 +133,7 @@ pub(crate) fn parse_default_from_meta(
     meta: &syn::meta::ParseNestedMeta<'_>,
     existing_default: &mut Option<ClapInferredDefault>,
 ) -> syn::Result<()> {
-    if meta.path.is_ident("default_value") {
-        let value = meta.value()?;
-        let raw_expr = value.parse::<Expr>()?;
-        let parsed = ClapInferredDefault::Value(raw_expr);
-        return assign_default_expr(meta, existing_default, parsed);
-    }
-
-    if meta.path.is_ident("default_value_t") {
-        let value = meta.value()?;
-        let raw_expr = value.parse::<Expr>()?;
-        let parsed = ClapInferredDefault::ValueT(raw_expr);
-        return assign_default_expr(meta, existing_default, parsed);
-    }
-
-    if meta.path.is_ident("default_values_t") {
-        let value = meta.value()?;
-        let raw_expr = value.parse::<Expr>()?;
-        let parsed = ClapInferredDefault::ValuesT(raw_expr);
+    if let Some(parsed) = parse_default_expr(meta, classify_default_kind(meta))? {
         return assign_default_expr(meta, existing_default, parsed);
     }
 
@@ -140,7 +157,8 @@ pub(crate) fn clap_default_value_from_attribute(
 
 /// Returns the typed default expression inferred from clap attributes, if any.
 ///
-/// The default target type matches the generated defaults struct:
+/// The generated defaults struct consumes these inferred values and
+/// materializes field-level defaults during code generation.
 pub(crate) fn clap_default_value(field: &syn::Field) -> syn::Result<Option<ClapInferredDefault>> {
     let mut default_expr: Option<ClapInferredDefault> = None;
     for attr in field.attrs.iter().filter(|attr| is_clap_attribute(attr)) {
