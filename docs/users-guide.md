@@ -342,6 +342,10 @@ clap = { version = "4", features = ["derive"] }
   `ortho_config::xdg`, or keep explicit dependencies for that direct usage.
 - If derive output fails with unresolved `ortho_config::...` paths, ensure the
   dependency key is named `ortho_config` in `Cargo.toml`.
+- Dependency aliasing for `ortho_config` (for example,
+  `my_cfg = { package = "ortho_config", ... }`) is currently unsupported for
+  derive-generated paths. This is an intentional design choice for the current
+  release line, not an accidental regression.
 - If dependency resolution reports conflicts, inspect duplicates with
   `cargo tree -d` and prefer the versions selected through `ortho_config`
   unless direct usage requires something else.
