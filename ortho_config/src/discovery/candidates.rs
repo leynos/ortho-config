@@ -9,35 +9,25 @@ use super::ConfigDiscovery;
 
 #[cfg(windows)]
 /// Normalises a path according to Windows' case-insensitive comparison rules by
-/// lowercasing Unicode scalar values and replacing forward slashes with
-/// backslashes, mirroring the filesystem's treatment of separators.
+/// lowercasing ASCII code points on the original wide path representation and
+/// replacing forward slashes with backslashes.
 fn windows_normalised_key(path: &Path) -> String {
-    let mut lowercased = path.to_string_lossy().to_lowercase();
-    if lowercased.contains('/') {
-        lowercased = lowercased.replace('/', "\\");
-    }
-    lowercased
+    use std::os::windows::ffi::OsStrExt;
+
+    let normalised: Vec<u16> = path
+        .as_os_str()
+        .encode_wide()
+        .map(|unit| match unit {
+            65..=90 => unit + 32,
+            47 => 92,
+            _ => unit,
+        })
+        .collect();
+    String::from_utf16_lossy(&normalised)
 }
 
 impl ConfigDiscovery {
-    fn push_unique(
-        paths: &mut Vec<PathBuf>,
-        seen: &mut HashSet<String>,
-        candidate: PathBuf,
-    ) -> bool {
-        if candidate.as_os_str().is_empty() {
-            return false;
-        }
-        let key = Self::normalised_key(&candidate);
-        if seen.insert(key) {
-            paths.push(candidate);
-            true
-        } else {
-            false
-        }
-    }
-
-    pub(super) fn normalised_key(path: &Path) -> String {
+    fn dedup_key(path: &Path) -> String {
         #[cfg(windows)]
         {
             windows_normalised_key(path)
@@ -49,6 +39,60 @@ impl ConfigDiscovery {
         }
     }
 
+    fn push_unique(
+        paths: &mut Vec<PathBuf>,
+        seen: &mut HashSet<String>,
+        candidate: PathBuf,
+    ) -> bool {
+        if candidate.as_os_str().is_empty() {
+            return false;
+        }
+        let key = Self::dedup_key(&candidate);
+        if seen.insert(key) {
+            paths.push(candidate);
+            true
+        } else {
+            false
+        }
+    }
+
+    #[cfg(all(test, windows))]
+    pub(super) fn normalised_key(path: &Path) -> String {
+        Self::dedup_key(path)
+    }
+
+    fn candidates_for_base(&self, base_path: &Path) -> Vec<PathBuf> {
+        let nested = if self.app_name.is_empty() {
+            base_path.to_path_buf()
+        } else {
+            base_path.join(&self.app_name)
+        };
+
+        #[cfg(any(feature = "json5", feature = "yaml"))]
+        let mut candidates = vec![
+            nested.join(&self.config_file_name),
+            base_path.join(&self.dotfile_name),
+        ];
+        #[cfg(not(any(feature = "json5", feature = "yaml")))]
+        let candidates = vec![
+            nested.join(&self.config_file_name),
+            base_path.join(&self.dotfile_name),
+        ];
+
+        #[cfg(any(feature = "json5", feature = "yaml"))]
+        if let Some(stem) = Path::new(&self.config_file_name)
+            .file_stem()
+            .and_then(|stem| stem.to_str())
+        {
+            #[cfg(feature = "json5")]
+            Self::push_json_variant_candidates(&mut candidates, nested.as_path(), stem);
+            #[cfg(feature = "yaml")]
+            Self::push_yaml_variant_candidates(&mut candidates, nested.as_path(), stem);
+        }
+
+        candidates
+    }
+
     fn push_for_bases<I>(&self, bases: I, paths: &mut Vec<PathBuf>, seen: &mut HashSet<String>)
     where
         I: IntoIterator,
@@ -56,22 +100,8 @@ impl ConfigDiscovery {
     {
         for base in bases {
             let base_path: PathBuf = base.into();
-            let nested = if self.app_name.is_empty() {
-                base_path.clone()
-            } else {
-                base_path.join(&self.app_name)
-            };
-            Self::push_unique(paths, seen, nested.join(&self.config_file_name));
-            Self::push_unique(paths, seen, base_path.join(&self.dotfile_name));
-            #[cfg(any(feature = "json5", feature = "yaml"))]
-            if let Some(stem) = Path::new(&self.config_file_name)
-                .file_stem()
-                .and_then(|stem| stem.to_str())
-            {
-                #[cfg(feature = "json5")]
-                Self::push_json_variants(paths, seen, nested.as_path(), stem);
-                #[cfg(feature = "yaml")]
-                Self::push_yaml_variants(paths, seen, nested.as_path(), stem);
+            for candidate in self.candidates_for_base(base_path.as_path()) {
+                let _ = Self::push_unique(paths, seen, candidate);
             }
         }
     }
@@ -123,69 +153,38 @@ impl ConfigDiscovery {
 
     #[cfg(any(feature = "json5", feature = "yaml"))]
     fn push_variants_for_extensions(
-        (paths, seen): (&mut Vec<PathBuf>, &mut HashSet<String>),
+        candidates: &mut Vec<PathBuf>,
         nested: &Path,
         stem: &str,
         extensions: &[&str],
     ) {
         for ext in extensions {
             let filename = format!("{stem}.{ext}");
-            Self::push_unique(paths, seen, nested.join(&filename));
+            candidates.push(nested.join(&filename));
         }
     }
 
     #[cfg(feature = "json5")]
-    fn push_json_variants(
-        paths: &mut Vec<PathBuf>,
-        seen: &mut HashSet<String>,
-        nested: &Path,
-        stem: &str,
-    ) {
-        Self::push_variants_for_extensions((paths, seen), nested, stem, &["json", "json5"]);
+    fn push_json_variant_candidates(candidates: &mut Vec<PathBuf>, nested: &Path, stem: &str) {
+        Self::push_variants_for_extensions(candidates, nested, stem, &["json", "json5"]);
     }
 
     #[cfg(feature = "yaml")]
-    fn push_yaml_variants(
-        paths: &mut Vec<PathBuf>,
-        seen: &mut HashSet<String>,
-        nested: &Path,
-        stem: &str,
-    ) {
-        Self::push_variants_for_extensions((paths, seen), nested, stem, &["yaml", "yml"]);
+    fn push_yaml_variant_candidates(candidates: &mut Vec<PathBuf>, nested: &Path, stem: &str) {
+        Self::push_variants_for_extensions(candidates, nested, stem, &["yaml", "yml"]);
     }
 
-    #[cfg_attr(
-        not(any(unix, target_os = "redox")),
-        expect(
-            clippy::unused_self,
-            reason = "self is used on Unix/Redox platforms via push_for_bases"
-        )
-    )]
-    #[cfg_attr(
-        any(unix, target_os = "redox"),
-        expect(
-            clippy::used_underscore_binding,
-            reason = "underscore-prefixed parameters avoid unused warnings on other platforms"
-        )
-    )]
-    #[cfg_attr(
-        windows,
-        expect(
-            clippy::missing_const_for_fn,
-            reason = "Windows builds do not call `push_for_bases`, but Unix builds rely on runtime allocation"
-        )
-    )]
-    #[cfg_attr(
-        windows,
-        expect(
-            clippy::ptr_arg,
-            reason = "Windows builds do not use paths, but Unix builds push via `push_for_bases`"
-        )
-    )]
-    fn push_default_xdg(&self, _paths: &mut Vec<PathBuf>, _seen: &mut HashSet<String>) {
-        #[cfg(any(unix, target_os = "redox"))]
-        self.push_for_bases(std::iter::once(PathBuf::from("/etc/xdg")), _paths, _seen);
+    #[cfg(any(unix, target_os = "redox"))]
+    fn push_default_xdg(&self, paths: &mut Vec<PathBuf>, seen: &mut HashSet<String>) {
+        self.push_for_bases(std::iter::once(PathBuf::from("/etc/xdg")), paths, seen);
     }
+
+    #[cfg(not(any(unix, target_os = "redox")))]
+    #[expect(
+        clippy::unused_self,
+        reason = "default XDG fallback does not apply on non-Unix/Redox targets"
+    )]
+    fn push_default_xdg(&self, _paths: &mut Vec<PathBuf>, _seen: &mut HashSet<String>) {}
 
     /// Returns the ordered configuration candidates.
     #[must_use]

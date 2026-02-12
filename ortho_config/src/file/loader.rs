@@ -7,7 +7,6 @@ use crate::{OrthoError, OrthoMergeExt, OrthoResult};
 
 use figment::Figment;
 
-use std::cell::RefCell;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
@@ -81,33 +80,29 @@ pub fn load_config_file(path: &Path) -> OrthoResult<Option<Figment>> {
 
 fn with_cycle_detection<T, F>(
     path: &Path,
-    visited: &RefCell<HashSet<PathBuf>>,
-    stack: &RefCell<Vec<PathBuf>>,
+    visited: &mut HashSet<PathBuf>,
+    stack: &mut Vec<PathBuf>,
     operation: F,
 ) -> OrthoResult<Option<T>>
 where
-    F: FnOnce(&Path) -> OrthoResult<T>,
+    F: FnOnce(&Path, &mut HashSet<PathBuf>, &mut Vec<PathBuf>) -> OrthoResult<T>,
 {
     if !path.is_file() {
         return Ok(None);
     }
     let canonical = canonicalise(path)?;
     let normalised = normalise_cycle_key(&canonical);
-    if !visited.borrow_mut().insert(normalised.clone()) {
-        let mut cycle: Vec<String> = stack
-            .borrow()
-            .iter()
-            .map(|p| p.display().to_string())
-            .collect();
+    if !visited.insert(normalised.clone()) {
+        let mut cycle: Vec<String> = stack.iter().map(|p| p.display().to_string()).collect();
         cycle.push(canonical.display().to_string());
         return Err(std::sync::Arc::new(OrthoError::CyclicExtends {
             cycle: cycle.join(" -> "),
         }));
     }
-    stack.borrow_mut().push(canonical.clone());
-    let result = operation(&canonical);
-    visited.borrow_mut().remove(&normalised);
-    stack.borrow_mut().pop();
+    stack.push(canonical.clone());
+    let result = operation(&canonical, visited, stack);
+    visited.remove(&normalised);
+    stack.pop();
     result.map(Some)
 }
 
@@ -116,18 +111,16 @@ pub(super) fn load_config_file_inner(
     visited: &mut HashSet<PathBuf>,
     stack: &mut Vec<PathBuf>,
 ) -> OrthoResult<Option<Figment>> {
-    let visited_state = RefCell::new(std::mem::take(visited));
-    let stack_state = RefCell::new(std::mem::take(stack));
-    let result = with_cycle_detection(path, &visited_state, &stack_state, |canonical| {
-        let data = std::fs::read_to_string(canonical).map_err(|e| file_error(canonical, e))?;
-        let figment = parse_config_by_format(canonical, &data)?;
-        let mut visited_mut = visited_state.borrow_mut();
-        let mut stack_mut = stack_state.borrow_mut();
-        process_extends(figment, canonical, &mut visited_mut, &mut stack_mut)
-    });
-    *visited = visited_state.into_inner();
-    *stack = stack_state.into_inner();
-    result
+    with_cycle_detection(
+        path,
+        visited,
+        stack,
+        |canonical, visited_paths, stack_paths| {
+            let data = std::fs::read_to_string(canonical).map_err(|e| file_error(canonical, e))?;
+            let figment = parse_config_by_format(canonical, &data)?;
+            process_extends(figment, canonical, visited_paths, stack_paths)
+        },
+    )
 }
 
 /// Load configuration from a file as a chain of layers for declarative merging.
@@ -162,24 +155,7 @@ pub(super) fn load_config_file_inner(
 pub fn load_config_file_as_chain(path: &Path) -> OrthoResult<Option<FileLayerChain>> {
     let mut visited = HashSet::new();
     let mut stack = Vec::new();
-    load_config_file_chain_inner(path, &mut visited, &mut stack)
-}
-
-fn load_config_file_chain_inner(
-    path: &Path,
-    visited: &mut HashSet<PathBuf>,
-    stack: &mut Vec<PathBuf>,
-) -> OrthoResult<Option<FileLayerChain>> {
-    let visited_state = RefCell::new(std::mem::take(visited));
-    let stack_state = RefCell::new(std::mem::take(stack));
-    let result = with_cycle_detection(path, &visited_state, &stack_state, |canonical| {
-        let mut visited_mut = visited_state.borrow_mut();
-        let mut stack_mut = stack_state.borrow_mut();
-        load_chain_for_file(canonical, &mut visited_mut, &mut stack_mut)
-    });
-    *visited = visited_state.into_inner();
-    *stack = stack_state.into_inner();
-    result
+    with_cycle_detection(path, &mut visited, &mut stack, load_chain_for_file)
 }
 
 fn load_chain_for_file(
@@ -204,7 +180,7 @@ fn load_chain_for_file(
                 "extended path is not a regular file",
             ));
         }
-        load_config_file_chain_inner(&base_canonical, visited, stack)?
+        with_cycle_detection(&base_canonical, visited, stack, load_chain_for_file)?
     } else {
         None
     };

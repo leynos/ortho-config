@@ -63,7 +63,7 @@ fn normalised_key_lowercases_ascii_and_backslashes() {
 
 #[cfg(windows)]
 #[test]
-fn normalised_key_handles_unicode_case() {
+fn normalised_key_preserves_non_ascii_case() {
     let key = ConfigDiscovery::normalised_key(Path::new("C:/Temp/CAFÉ.toml"));
-    assert_eq!(key, "c:\\temp\\café.toml");
+    assert_eq!(key, "c:\\temp\\cafÉ.toml");
 }
