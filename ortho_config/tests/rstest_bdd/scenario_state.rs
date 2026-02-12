@@ -1,4 +1,4 @@
-//! Shared fixtures for the `rstest-bdd` behavioural scaffolding.
+//! Scenario state structs and `rstest` fixture providers for the BDD scaffolding.
 
 use anyhow::Error;
 use clap::{Args, Parser};
@@ -11,7 +11,9 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-pub use super::test_fixtures::merge_fixtures::MergeErrorSample;
+/// Re-exported so BDD merge-error steps can reference the sample config
+/// struct without reaching into the shared fixtures module directly.
+pub use super::fixtures::merge_fixtures::MergeErrorSample;
 
 /// Scenario state for rules-oriented precedence scenarios (CLI, env, config path, ignore).
 #[derive(Debug, Default, ScenarioState)]

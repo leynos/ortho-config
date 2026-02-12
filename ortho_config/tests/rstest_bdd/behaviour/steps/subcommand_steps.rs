@@ -4,7 +4,7 @@
 //! file sources when loading subcommand inputs.
 
 use super::value_parsing::normalize_scalar;
-use crate::fixtures::{PrArgs, SubcommandContext, SubcommandSources};
+use crate::scenario_state::{PrArgs, SubcommandContext, SubcommandSources};
 use anyhow::{Result, anyhow, ensure};
 use clap::Parser;
 use ortho_config::SubcmdConfigMerge;

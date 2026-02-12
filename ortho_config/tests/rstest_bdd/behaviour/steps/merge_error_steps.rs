@@ -1,7 +1,7 @@
 //! Steps verifying merge error routing to `OrthoError::Merge`.
 
 use super::value_parsing::unquote;
-use crate::fixtures::{MergeErrorContext, MergeErrorSample};
+use crate::scenario_state::{MergeErrorContext, MergeErrorSample};
 use anyhow::{Context, Result, anyhow, ensure};
 use ortho_config::{MergeComposer, OrthoError};
 use rstest_bdd_macros::{given, then, when};

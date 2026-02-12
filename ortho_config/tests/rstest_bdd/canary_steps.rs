@@ -1,6 +1,6 @@
 //! Step definitions backing the canary `rstest-bdd` scenario.
 
-use super::fixtures::{CanaryConfig, CanaryState};
+use super::scenario_state::{CanaryConfig, CanaryState};
 use ortho_config::OrthoConfig;
 use rstest_bdd::ScenarioState as _;
 use rstest_bdd_macros::{given, then, when};

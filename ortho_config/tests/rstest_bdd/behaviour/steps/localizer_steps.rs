@@ -1,7 +1,7 @@
 //! Steps covering the localisation helper surfaces.
 
 use super::value_parsing::{normalize_scalar, strip_isolates};
-use crate::fixtures::LocalizerContext;
+use crate::scenario_state::LocalizerContext;
 use anyhow::{Result, anyhow, ensure};
 use fluent_bundle::FluentValue;
 use ortho_config::{

@@ -5,7 +5,7 @@
 //! environment configuration to take precedence.
 
 use super::value_parsing::normalize_scalar;
-use crate::fixtures::{CliDefaultArgs, CliDefaultContext, CliDefaultSources};
+use crate::scenario_state::{CliDefaultArgs, CliDefaultContext, CliDefaultSources};
 use anyhow::{Result, anyhow, ensure};
 use clap::{CommandFactory, FromArgMatches};
 use ortho_config::subcommand::Prefix;

@@ -1,6 +1,6 @@
 //! Steps for testing configuration inheritance.
 
-use crate::fixtures::{ExtendsContext, ReplaceRulesConfig, RulesConfig};
+use crate::scenario_state::{ExtendsContext, ReplaceRulesConfig, RulesConfig};
 use anyhow::{Result, anyhow, ensure};
 use ortho_config::{OrthoConfig, OrthoResult};
 use rstest_bdd::Slot;

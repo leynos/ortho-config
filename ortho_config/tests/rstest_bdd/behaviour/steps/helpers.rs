@@ -5,7 +5,7 @@ use std::ops::Deref;
 use anyhow::{Result, anyhow, ensure};
 use ortho_config::docs::FieldMetadata;
 
-use crate::fixtures::DocsContext;
+use crate::scenario_state::DocsContext;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct FieldName(String);

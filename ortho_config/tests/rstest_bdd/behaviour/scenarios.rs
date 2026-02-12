@@ -1,6 +1,6 @@
 //! Binds the `ortho_config` behavioural feature files to the step registry.
 
-use crate::fixtures::{
+use crate::scenario_state::{
     CliDefaultContext, CollectionContext, ComposerContext, DocsContext, ErrorContext,
     ExtendsContext, FlattenContext, LocalizerContext, MergeErrorContext, RulesContext,
     SubcommandContext, binary_name, cli_default_context, collection_context, composer_context,

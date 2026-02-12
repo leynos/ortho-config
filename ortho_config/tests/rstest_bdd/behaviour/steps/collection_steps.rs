@@ -1,6 +1,6 @@
 //! Steps covering collection merge strategy scenarios.
 
-use crate::fixtures::{CollectionContext, RulesConfig};
+use crate::scenario_state::{CollectionContext, RulesConfig};
 use anyhow::{Result, anyhow, ensure};
 use ortho_config::OrthoConfig;
 use rstest_bdd_macros::{given, then, when};
