@@ -1,6 +1,6 @@
 //! Runtime loading entrypoints for configuration files and extends chains.
 
-use camino::Utf8PathBuf;
+use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use serde_json::Value as JsonValue;
 
@@ -43,8 +43,41 @@ fn to_utf8_path(canonical: &Path) -> Utf8PathBuf {
         .unwrap_or_else(|p| Utf8PathBuf::from(p.to_string_lossy().into_owned()))
 }
 
+fn parent_or_dot(path: &Utf8Path) -> &Utf8Path {
+    path.parent()
+        .filter(|parent| !parent.as_str().is_empty())
+        .unwrap_or_else(|| Utf8Path::new("."))
+}
+
+fn open_parent_dir_and_name(path: &Path) -> OrthoResult<(Dir, String)> {
+    let utf8_path = to_utf8_path(path);
+    let parent = parent_or_dot(&utf8_path);
+    let file_name = utf8_path.file_name().ok_or_else(|| {
+        invalid_input(
+            path,
+            "cannot determine file name for configuration file path",
+        )
+    })?;
+    let dir =
+        Dir::open_ambient_dir(parent, ambient_authority()).map_err(|e| file_error(path, e))?;
+    Ok((dir, file_name.to_owned()))
+}
+
 fn file_exists_and_is_regular(path: &Path) -> OrthoResult<Option<()>> {
-    match std::fs::metadata(path) {
+    let utf8_path = to_utf8_path(path);
+    let parent = parent_or_dot(&utf8_path);
+    let file_name = utf8_path.file_name().ok_or_else(|| {
+        invalid_input(
+            path,
+            "cannot determine file name for configuration file path",
+        )
+    })?;
+    let dir = match Dir::open_ambient_dir(parent, ambient_authority()) {
+        Ok(dir) => dir,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(file_error(path, error)),
+    };
+    match dir.metadata(file_name) {
         Ok(metadata) if metadata.is_file() => Ok(Some(())),
         Ok(_) => Err(invalid_input(
             path,
@@ -56,21 +89,7 @@ fn file_exists_and_is_regular(path: &Path) -> OrthoResult<Option<()>> {
 }
 
 fn read_file_to_string(path: &Path) -> OrthoResult<String> {
-    let utf8_path = to_utf8_path(path);
-    let parent = utf8_path.parent().ok_or_else(|| {
-        invalid_input(
-            path,
-            "cannot determine parent directory for configuration file path",
-        )
-    })?;
-    let file_name = utf8_path.file_name().ok_or_else(|| {
-        invalid_input(
-            path,
-            "cannot determine file name for configuration file path",
-        )
-    })?;
-    let dir =
-        Dir::open_ambient_dir(parent, ambient_authority()).map_err(|e| file_error(path, e))?;
+    let (dir, file_name) = open_parent_dir_and_name(path)?;
     dir.read_to_string(file_name)
         .map_err(|e| file_error(path, e))
 }
@@ -207,15 +226,11 @@ fn load_chain_for_file(
     // Get parent chain if extends is present.
     let parent_chain = if let Some(base) = get_extends(&figment, canonical)? {
         let base_canonical = resolve_base_path(canonical, base)?;
-        match std::fs::metadata(&base_canonical) {
-            Ok(metadata) if metadata.is_file() => {}
-            Ok(_) => {
-                return Err(invalid_input(
-                    &base_canonical,
-                    "extended path is not a regular file",
-                ));
-            }
-            Err(error) => return Err(file_error(&base_canonical, error)),
+        if file_exists_and_is_regular(&base_canonical)?.is_none() {
+            return Err(file_error(
+                &base_canonical,
+                std::io::Error::new(std::io::ErrorKind::NotFound, "extended path does not exist"),
+            ));
         }
         with_cycle_detection(&base_canonical, visited, stack, load_chain_for_file)?
     } else {

@@ -4,6 +4,7 @@
 
 use super::to_anyhow;
 use anyhow::{Result, ensure};
+use camino::Utf8PathBuf;
 use figment::Figment;
 use rstest::rstest;
 use std::path::PathBuf;
@@ -24,7 +25,7 @@ use crate::file::{SaphyrYaml, load_config_file};
 #[case("Off")]
 #[case("OFF")]
 fn yaml_legacy_boolean_literals_remain_strings(#[case] literal: &str) -> Result<()> {
-    let path = PathBuf::from("config.yaml");
+    let path = Utf8PathBuf::from("config.yaml");
     let figment = Figment::from(SaphyrYaml::string(&path, format!("recipient: {literal}")));
     let recipient = figment
         .extract_inner::<String>("recipient")
@@ -37,7 +38,7 @@ fn yaml_legacy_boolean_literals_remain_strings(#[case] literal: &str) -> Result<
 #[case("true", true)]
 #[case("false", false)]
 fn yaml_respects_boolean_scalars(#[case] literal: &str, #[case] expected: bool) -> Result<()> {
-    let path = PathBuf::from("config.yaml");
+    let path = Utf8PathBuf::from("config.yaml");
     let figment = Figment::from(SaphyrYaml::string(&path, format!("recipient: {literal}")));
     let recipient = figment
         .extract_inner::<bool>("recipient")

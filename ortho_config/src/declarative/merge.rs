@@ -134,20 +134,14 @@ pub fn merge_value(target: &mut Value, layer: Value) {
 /// assert_eq!(target["nested"], json!({"emphasis": "wave"}));
 /// ```
 fn merge_object(target: &mut Value, map: Map<String, Value>) {
-    #[expect(
-        clippy::option_if_let_else,
-        reason = "initializing target object when absent requires mutable borrow"
-    )]
-    let target_map = if let Some(map_ref) = target.as_object_mut() {
-        map_ref
-    } else {
+    if !target.is_object() {
         *target = Value::Object(Map::new());
-        #[expect(
-            clippy::expect_used,
-            reason = "target was just initialized to an object"
-        )]
-        target.as_object_mut().expect("target is now an object")
+    }
+
+    let Some(target_map) = target.as_object_mut() else {
+        return;
     };
+
     for (key, value) in map {
         match target_map.get_mut(&key) {
             Some(existing) => merge_value(existing, value),

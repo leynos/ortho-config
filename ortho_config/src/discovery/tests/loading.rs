@@ -26,6 +26,13 @@ fn open_cap_utf8_dir(path: &std::path::Path) -> Result<Utf8Dir> {
         .context("open temporary directory with cap-std")
 }
 
+fn write_cap_file(dir: &Utf8Dir, name: &str, contents: &str) -> Result<()> {
+    let mut file = dir.create(name).with_context(|| format!("create {name}"))?;
+    file.write_all(contents.as_bytes())
+        .with_context(|| format!("write {name}"))?;
+    Ok(())
+}
+
 #[rstest]
 fn load_first_reads_first_existing_file(
     env_guards: EnvScope,
@@ -110,7 +117,8 @@ fn load_first_with_errors_reports_preceding_failures(
     let dir_path = temp_dir.path();
     let missing = dir_path.join("absent.toml");
     let valid = dir_path.join("valid.toml");
-    std::fs::write(&valid, "is_enabled = true").context("write valid config")?;
+    let dir = open_cap_utf8_dir(dir_path)?;
+    write_cap_file(&dir, "valid.toml", "is_enabled = true")?;
 
     let discovery = ConfigDiscovery::builder("hello_world")
         .add_required_path(&missing)
@@ -143,7 +151,8 @@ fn partitioned_errors_surface_required_failures(
     let dir_path = temp_dir.path();
     let missing = dir_path.join("absent.toml");
     let valid = dir_path.join("valid.toml");
-    std::fs::write(&valid, "is_enabled = true").context("write valid config")?;
+    let dir = open_cap_utf8_dir(dir_path)?;
+    write_cap_file(&dir, "valid.toml", "is_enabled = true")?;
 
     let discovery = ConfigDiscovery::builder("hello_world")
         .add_required_path(&missing)

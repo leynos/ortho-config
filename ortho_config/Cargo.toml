@@ -25,7 +25,7 @@ fluent-syntax = "0.12"
 uncased = "0.9"
 camino = "1"
 dirs = "5"
-cap-std = { version = "3", features = ["fs_utf8"] }
+cap-std = { version = "3.4.1", features = ["fs_utf8"] }
 tracing = "0.1"
 unic-langid = { version = "0.9", features = ["macros"] }
 toml = { version = "0.9", optional = true }

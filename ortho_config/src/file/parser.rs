@@ -48,7 +48,11 @@ pub(super) fn parse_config_by_format(path: &Path, data: &str) -> OrthoResult<Fig
         Some("yaml" | "yml") => {
             #[cfg(feature = "yaml")]
             {
-                Figment::from(SaphyrYaml::string(path.to_path_buf(), data.to_owned()))
+                let utf8_path = camino::Utf8PathBuf::from_path_buf(path.to_path_buf())
+                    .unwrap_or_else(|pathbuf| {
+                        camino::Utf8PathBuf::from(pathbuf.to_string_lossy().into_owned())
+                    });
+                Figment::from(SaphyrYaml::string(utf8_path, data.to_owned()))
             }
             #[cfg(not(feature = "yaml"))]
             {

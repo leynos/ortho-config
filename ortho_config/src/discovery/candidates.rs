@@ -14,7 +14,7 @@ use super::ConfigDiscovery;
 fn windows_normalized_key(path: &Path) -> String {
     use std::os::windows::ffi::OsStrExt;
 
-    let normalised: Vec<u16> = path
+    let normalized: Vec<u16> = path
         .as_os_str()
         .encode_wide()
         .map(|unit| match unit {
@@ -23,7 +23,7 @@ fn windows_normalized_key(path: &Path) -> String {
             _ => unit,
         })
         .collect();
-    String::from_utf16_lossy(&normalised)
+    String::from_utf16_lossy(&normalized)
 }
 
 impl ConfigDiscovery {

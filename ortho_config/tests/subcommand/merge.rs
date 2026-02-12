@@ -16,7 +16,7 @@ struct MergeArgs {
     bar: Option<bool>,
 }
 
-/// Tests that merging CLI arguments with configuration file values prioritises CLI values and preserves unset fields.
+/// Tests that merging CLI arguments with configuration file values prioritizes CLI values and preserves unset fields.
 ///
 /// This test creates a configuration file with a default value for `foo`, then merges it with CLI arguments that override `foo` and leave `bar` unset. It asserts that the merged configuration uses the CLI value for `foo` and retains `None` for `bar`.
 ///
