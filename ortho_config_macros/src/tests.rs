@@ -5,11 +5,13 @@ use crate::derive::build::CollectionStrategies;
 use crate::derive::generate::structs::{
     generate_cli_struct, generate_defaults_struct, generate_struct,
 };
+use crate::derive::load_impl::{LoadImplArgs, LoadImplIdents, LoadImplTokens, build_load_impl};
 use crate::derive::parse::parse_input;
 use anyhow::{Context, Result, anyhow, ensure};
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
 use rstest::rstest;
+use syn::visit::Visit;
 use syn::{DeriveInput, parse_quote, parse_str};
 
 fn build_components(
@@ -211,5 +213,90 @@ fn parsing_pipeline_propagates_post_merge_hook(
 ) -> Result<()> {
     let components = build_components_from_input(&input)?;
     ensure!(components.post_merge_hook == expected, "{error_msg}");
+    Ok(())
+}
+
+#[derive(Default)]
+struct PathCollector {
+    paths: Vec<Vec<String>>,
+}
+
+impl<'ast> Visit<'ast> for PathCollector {
+    fn visit_path(&mut self, path: &'ast syn::Path) {
+        self.paths.push(
+            path.segments
+                .iter()
+                .map(|segment| segment.ident.to_string())
+                .collect(),
+        );
+        syn::visit::visit_path(self, path);
+    }
+}
+
+fn collect_paths(tokens: TokenStream2) -> Result<Vec<Vec<String>>> {
+    let parsed =
+        syn::parse2::<syn::File>(tokens).context("parse generated tokens as a Rust file")?;
+    let mut collector = PathCollector::default();
+    collector.visit_file(&parsed);
+    Ok(collector.paths)
+}
+
+fn has_path_prefix(paths: &[Vec<String>], segments: &[&str]) -> bool {
+    paths.iter().any(|path| {
+        let is_long_enough = path.len() >= segments.len();
+        is_long_enough
+            && path
+                .iter()
+                .take(segments.len())
+                .map(String::as_str)
+                .eq(segments.iter().copied())
+    })
+}
+
+#[rstest]
+fn load_impl_uses_ortho_config_reexport_paths() -> Result<()> {
+    let cli_ident = parse_str("CliStruct").context("parse CliStruct ident")?;
+    let config_ident = parse_str("Config").context("parse Config ident")?;
+    let defaults_ident = parse_str("Defaults").context("parse Defaults ident")?;
+    let env_provider = quote! {
+        ortho_config::figment::providers::Env::prefixed("APP_")
+    };
+    let default_struct_init = vec![quote! { value: 7 }];
+    let config_env_var = quote! { "APP_CONFIG_PATH" };
+    let dotfile_name = syn::LitStr::new(".app.toml", proc_macro2::Span::call_site());
+    let idents = LoadImplIdents {
+        cli_ident: &cli_ident,
+        config_ident: &config_ident,
+        defaults_ident: &defaults_ident,
+    };
+    let tokens = LoadImplTokens {
+        env_provider: &env_provider,
+        default_struct_init: &default_struct_init,
+        config_env_var: &config_env_var,
+        dotfile_name: &dotfile_name,
+        legacy_app_name: String::from("app"),
+        discovery: None,
+    };
+    let generated = build_load_impl(&LoadImplArgs {
+        idents,
+        tokens,
+        has_config_path: false,
+    });
+    let paths = collect_paths(generated.clone())?;
+    let is_anchored = has_path_prefix(&paths, &["ortho_config", "uncased"])
+        && has_path_prefix(&paths, &["ortho_config", "figment"]);
+
+    ensure!(
+        is_anchored,
+        "expected anchored figment and uncased crate paths via ortho_config re-export: {generated}"
+    );
+    ensure!(
+        !has_path_prefix(&paths, &["uncased"]),
+        "unexpected direct uncased path (without ortho_config re-export): {generated}"
+    );
+    ensure!(
+        !has_path_prefix(&paths, &["figment"]),
+        "unexpected direct figment path (without ortho_config re-export): {generated}"
+    );
     Ok(())
 }

@@ -16,6 +16,7 @@ module_name = "HelloWorld"
 workspace = true
 
 [dependencies]
+# `figment`, `uncased`, and `xdg` are available via `ortho_config` re-exports.
 ortho_config = { path = "../../ortho_config", version = "0.7.0" }
 ortho_config_macros = { path = "../../ortho_config_macros", version = "0.7.0" }
 serde = { version = "1", features = ["derive"] }

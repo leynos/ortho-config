@@ -52,7 +52,9 @@ serde = { version = "1.0", features = ["derive"] }
 `ortho_config` re-exports its parsing dependencies, so applications can import
 `figment`, `uncased`, `xdg` (on Unix-like and Redox targets), and the optional
 format parsers (`figment_json5`, `json5`, `serde_saphyr`, `toml`) without
-declaring them directly.
+declaring them directly. The `OrthoConfig` derive macro emits paths like
+`ortho_config::figment::Figment`, so direct dependencies are only needed when
+application code imports those crates independently.
 
 1. **Define the configuration struct:**
 
