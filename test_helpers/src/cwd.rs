@@ -1,6 +1,6 @@
 //! Helpers for safely mutating the process working directory in tests.
 //!
-//! The current working directory is process-global state requiring serialised
+//! The current working directory is process-global state requiring serialized
 //! access across all test files.  This module provides an RAII guard that
 //! acquires a global mutex, captures the original directory, and restores it
 //! on drop — following the same pattern as [`crate::env`].
@@ -28,14 +28,26 @@ pub struct CwdGuard {
     _lock: parking_lot::MutexGuard<'static, ()>,
 }
 
+impl CwdGuard {
+    /// Explicitly restores the original working directory.
+    ///
+    /// Prefer calling this over relying on [`Drop`] when the caller can
+    /// handle the error — for example at the end of a test that returns
+    /// `Result`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if `set_current_dir` fails.
+    pub fn restore(&self) -> std::io::Result<()> {
+        std::env::set_current_dir(&self.original)
+    }
+}
+
 impl Drop for CwdGuard {
     fn drop(&mut self) {
-        // PANIC: Drop cannot return Result; failing to restore the cwd would
-        // leave the test environment in a broken state, so we panic to fail
-        // fast.
-        if let Err(err) = std::env::set_current_dir(&self.original) {
-            panic!("restore current dir: {err}");
-        }
+        // Best-effort restoration.  Callers that need to observe failures
+        // should call `restore()` explicitly before the guard is dropped.
+        let _unused = std::env::set_current_dir(&self.original);
     }
 }
 
@@ -45,6 +57,10 @@ impl Drop for CwdGuard {
 /// The global `CWD_MUTEX` is held for the lifetime of the returned guard,
 /// ensuring no other test can mutate the working directory concurrently.
 ///
+/// The original directory is captured and validated as UTF-8 *before* the
+/// working directory is changed, so a UTF-8 conversion failure never leaves
+/// the process in a different directory.
+///
 /// # Errors
 ///
 /// Returns an error if the current directory cannot be read, is not valid
@@ -52,9 +68,9 @@ impl Drop for CwdGuard {
 pub fn set_dir(path: impl AsRef<std::path::Path>) -> Result<CwdGuard> {
     let lock = CWD_MUTEX.lock();
     let old = std::env::current_dir().context("read current dir")?;
-    std::env::set_current_dir(path.as_ref()).context("set current dir")?;
     let old_utf8 = Utf8PathBuf::from_path_buf(old)
         .map_err(|non_utf8| anyhow!("cwd is not valid UTF-8: {}", non_utf8.display()))?;
+    std::env::set_current_dir(path.as_ref()).context("set current dir")?;
     Ok(CwdGuard {
         original: old_utf8,
         _lock: lock,

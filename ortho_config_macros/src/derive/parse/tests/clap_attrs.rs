@@ -1,7 +1,7 @@
 //! Tests for clap attribute parsing helpers.
 
 use super::super::parse_input;
-use crate::derive::parse::ClapInferredDefault;
+use crate::derive::parse::{ClapInferredDefault, FieldAttrs};
 use anyhow::{Result, anyhow, ensure};
 use quote::ToTokens;
 use syn::{DeriveInput, parse_quote};
@@ -10,12 +10,18 @@ fn expr_tokens(expr: &syn::Expr) -> String {
     expr.to_token_stream().to_string()
 }
 
+/// Parses a `DeriveInput` and returns the [`FieldAttrs`] for the first field.
+fn parse_first_field_attrs(input: &DeriveInput) -> Result<FieldAttrs> {
+    let (_, _, _, attrs_vec) = parse_input(input).map_err(|err| anyhow!(err))?;
+    attrs_vec
+        .into_iter()
+        .next()
+        .ok_or_else(|| anyhow!("missing field attributes"))
+}
+
 /// Helper to parse input and extract the inferred default from the first field.
 fn parse_and_extract_default(input: &DeriveInput) -> Result<syn::Expr> {
-    let (_, _, _, attrs_vec) = parse_input(input).map_err(|err| anyhow!(err))?;
-    let attrs = attrs_vec
-        .first()
-        .ok_or_else(|| anyhow!("missing field attributes"))?;
+    let attrs = parse_first_field_attrs(input)?;
     let Some(inferred) = attrs.inferred_clap_default.as_ref() else {
         return Err(anyhow!("missing inferred default"));
     };
@@ -113,10 +119,7 @@ fn does_not_infer_default_without_cli_default_as_absent() -> Result<()> {
         }
     };
 
-    let (_, _, _, attrs_vec) = parse_input(&input).map_err(|err| anyhow!(err))?;
-    let attrs = attrs_vec
-        .first()
-        .ok_or_else(|| anyhow!("missing field attributes"))?;
+    let attrs = parse_first_field_attrs(&input)?;
     ensure!(
         attrs.default.is_none(),
         "default should not be inferred unless cli_default_as_absent is set",
@@ -134,10 +137,7 @@ fn explicit_ortho_default_takes_precedence_over_inferred_clap_default() -> Resul
         }
     };
 
-    let (_, _, _, attrs_vec) = parse_input(&input).map_err(|err| anyhow!(err))?;
-    let attrs = attrs_vec
-        .first()
-        .ok_or_else(|| anyhow!("missing field attributes"))?;
+    let attrs = parse_first_field_attrs(&input)?;
     let default_expr = attrs
         .default
         .as_ref()

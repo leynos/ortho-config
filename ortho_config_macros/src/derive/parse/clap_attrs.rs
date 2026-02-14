@@ -122,7 +122,7 @@ fn parse_default_expr(
 
 /// Parses clap default-related keys from a nested meta item.
 ///
-/// Recognised keys:
+/// Recognized keys:
 ///
 /// - `default_value = "..."`
 /// - `default_value_t = <expr>`
