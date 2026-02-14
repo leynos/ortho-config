@@ -20,7 +20,7 @@ fn doc_for_locale(locale: &str, template: &LocalizedDocMetadata) -> LocalizedDoc
     doc
 }
 
-#[path = "../common/powershell_fixture.rs"]
+#[path = "../fixtures/powershell_fixture.rs"]
 mod powershell_fixture;
 
 #[fixture]

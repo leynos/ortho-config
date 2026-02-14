@@ -1,7 +1,7 @@
 //! Steps for scenarios involving flattened CLI structures.
 
 use super::value_parsing::normalize_scalar;
-use crate::fixtures::{FlatArgs, FlattenContext};
+use crate::scenario_state::{FlatArgs, FlattenContext};
 use anyhow::{Result, anyhow, ensure};
 use clap::Parser;
 use figment::{Figment, providers::Serialized};

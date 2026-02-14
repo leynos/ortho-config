@@ -1,8 +1,7 @@
 //! Windows-only integration tests for `PowerShell` help output.
 
 #[cfg(windows)]
-#[path = "common/mod.rs"]
-mod support;
+mod fixtures;
 
 #[cfg(windows)]
 mod tests {
@@ -41,7 +40,7 @@ mod tests {
     }
 
     fn generate_powershell_output(out_dir: &Utf8PathBuf) -> Result<(), Box<dyn Error>> {
-        let exe = super::support::cargo_orthohelp_exe()?;
+        let exe = super::fixtures::cargo_orthohelp_exe()?;
         let root = workspace_root()?;
         let output = Command::new(exe.as_str())
             .current_dir(root.as_std_path())

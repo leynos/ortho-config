@@ -5,8 +5,9 @@
 //! `rstest-bdd` macros execute under `cargo test` without needing to disable
 //! the harness.
 
-#[path = "../common/mod.rs"]
-pub mod common;
+/// Shared test fixtures for integration tests.
+#[path = "../fixtures/mod.rs"]
+pub mod fixtures;
 
 #[path = "../support/default_punct.rs"]
 mod default_punct;
@@ -14,4 +15,4 @@ mod default_punct;
 mod behaviour;
 mod canary;
 mod canary_steps;
-mod fixtures;
+mod scenario_state;

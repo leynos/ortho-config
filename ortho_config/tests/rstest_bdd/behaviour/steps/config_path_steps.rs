@@ -1,7 +1,7 @@
 //! Steps demonstrating a renamed configuration path flag.
 
 use super::value_parsing::{is_cli_parsing_error, normalize_scalar};
-use crate::fixtures::{RulesConfig, RulesContext};
+use crate::scenario_state::{RulesConfig, RulesContext};
 use anyhow::{Result, anyhow, ensure};
 use ortho_config::OrthoConfig;
 use rstest_bdd_macros::{given, then, when};

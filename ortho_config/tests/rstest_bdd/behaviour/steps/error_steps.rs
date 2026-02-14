@@ -1,7 +1,7 @@
 //! Steps verifying aggregated error reporting.
 
 use super::value_parsing::{is_cli_parsing_error, normalize_scalar};
-use crate::fixtures::{ErrorConfig, ErrorContext};
+use crate::scenario_state::{ErrorConfig, ErrorContext};
 use anyhow::{Result, anyhow, ensure};
 use ortho_config::OrthoConfig;
 use rstest_bdd_macros::{given, then, when};

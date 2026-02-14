@@ -4,7 +4,7 @@
 //! using [`CsvEnv`], and verifying parsed results.
 
 use super::value_parsing::{normalize_scalar, parse_csv_values};
-use crate::fixtures::{RulesConfig, RulesContext};
+use crate::scenario_state::{RulesConfig, RulesContext};
 use anyhow::{Context, Result, anyhow, ensure};
 use ortho_config::OrthoConfig;
 use rstest_bdd_macros::{given, then, when};

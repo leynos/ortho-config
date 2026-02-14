@@ -14,7 +14,7 @@ use serde_json::Value;
 use std::time::Duration;
 use tempfile::TempDir;
 
-use crate::support;
+use crate::fixtures;
 
 /// Error type for step definition failures.
 pub type StepError = Box<dyn std::error::Error + Send + Sync>;
@@ -229,7 +229,7 @@ fn command_fails_due_to_missing_cache(orthohelp_context: &mut OrthoHelpContext) 
 
 /// Runs cargo-orthohelp with the given arguments.
 pub fn run_orthohelp(ctx: &OrthoHelpContext, args: &[&str]) -> StepResult<std::process::Output> {
-    let exe = support::cargo_orthohelp_exe()?;
+    let exe = fixtures::cargo_orthohelp_exe()?;
     let workspace_root = get_workspace_root(ctx)?;
     let out_dir = get_out_dir(ctx)?;
     let mut command = Command::new(exe.as_str());

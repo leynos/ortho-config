@@ -1,6 +1,6 @@
 //! `rstest-bdd` scaffolding for `cargo-orthohelp`.
 
-#[path = "../common/mod.rs"]
-mod support;
+#[path = "../fixtures/mod.rs"]
+mod fixtures;
 
 mod behaviour;
