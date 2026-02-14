@@ -1,9 +1,11 @@
 //! Tests covering discovery candidate deduplication behaviour.
 
-use std::fs;
+use std::io::Write as _;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use camino::Utf8Path;
+use cap_std::{ambient_authority, fs_utf8::Dir as Utf8Dir};
 use tempfile::tempdir;
 
 use super::*;
@@ -13,7 +15,7 @@ fn canonicalish(path: &Path) -> PathBuf {
     match dunce::canonicalize(path) {
         Ok(p) => p,
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => path.to_path_buf(),
-        Err(err) => panic!("failed to canonicalise {path:?}: {err}"),
+        Err(err) => panic!("failed to canonicalize {path:?}: {err}"),
     }
 }
 
@@ -38,7 +40,18 @@ fn load_first_partitioned_dedups_required_paths() {
     let dir = tempdir().expect("create tempdir");
     let required = dir.path().join("missing.toml");
     let optional = dir.path().join("optional.toml");
-    fs::write(&optional, "invalid = {").expect("write invalid optional config");
+
+    let utf8_dir_path =
+        Utf8Path::from_path(dir.path()).expect("temporary directory path is not valid UTF-8");
+    let cap_dir = Utf8Dir::open_ambient_dir(utf8_dir_path, ambient_authority())
+        .expect("open temporary directory with cap-std");
+    let mut file = cap_dir
+        .create("optional.toml")
+        .expect("create optional.toml");
+    file.write_all(b"invalid = {")
+        .expect("write invalid optional config");
+    drop(file);
+
     let discovery = ConfigDiscovery::builder("app")
         .add_required_path(&required)
         .add_required_path(&required)
