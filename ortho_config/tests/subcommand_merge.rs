@@ -1,15 +1,13 @@
 //! Tests subcommand configuration precedence (defaults < file < env < CLI) for pr and issue.
-use anyhow::{Context, Result, anyhow, ensure};
-use camino::Utf8PathBuf;
+use anyhow::{Context, Result, ensure};
 use cap_std::{ambient_authority, fs::Dir};
 use clap::Parser;
 use ortho_config::{OrthoConfig, load_and_merge_subcommand_for};
 use rstest::{fixture, rstest};
 use serde::{Deserialize, Serialize};
 use serial_test::serial;
-use std::sync::{LazyLock, Mutex, MutexGuard};
 use tempfile::TempDir;
-use test_helpers::env;
+use test_helpers::{cwd, env};
 
 #[derive(Debug, Parser, Serialize, Deserialize, OrthoConfig, Default, PartialEq)]
 #[command(name = "pr")]
@@ -30,44 +28,13 @@ struct IssueArgs {
     reference: Option<String>,
 }
 
-static CWD_MUTEX: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
-
-struct DirGuard {
-    old: Utf8PathBuf,
-    _lock: MutexGuard<'static, ()>,
-}
-
-fn set_dir(dir: &TempDir) -> Result<DirGuard> {
-    let lock = CWD_MUTEX
-        .lock()
-        .map_err(|err| anyhow!("lock current dir mutex: {err}"))?;
-    let old = std::env::current_dir().context("read current dir")?;
-    // SAFETY: Process CWD is mutated while holding CWD_MUTEX to prevent races with other tests.
-    std::env::set_current_dir(dir.path()).context("set current dir")?;
-    let old_utf8 = Utf8PathBuf::from_path_buf(old)
-        .map_err(|path| anyhow!("cwd is not valid UTF-8: {}", path.display()))?;
-    Ok(DirGuard {
-        old: old_utf8,
-        _lock: lock,
-    })
-}
-
-impl Drop for DirGuard {
-    fn drop(&mut self) {
-        // SAFETY: Lock is still held via `_lock`, so restoration is atomic w.r.t. other tests.
-        if let Err(err) = std::env::set_current_dir(&self.old) {
-            panic!("restore current dir: {err}");
-        }
-    }
-}
-
 #[fixture]
-fn config_dir(#[default("")] cfg: &str) -> Result<(TempDir, DirGuard)> {
+fn config_dir(#[default("")] cfg: &str) -> Result<(TempDir, cwd::CwdGuard)> {
     let dir = tempfile::tempdir().context("create temp dir")?;
     let cap = Dir::open_ambient_dir(dir.path(), ambient_authority()).context("open temp dir")?;
     cap.write(".vk.toml", cfg.as_bytes())
         .context("write config")?;
-    let guard = set_dir(&dir)?;
+    let guard = cwd::set_dir(dir.path())?;
     Ok((dir, guard))
 }
 

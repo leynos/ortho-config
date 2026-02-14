@@ -378,13 +378,13 @@ environment variables like `APP_PORT` and file names such as `.app.toml`.
 
 Field attributes modify how a field is sourced or merged:
 
-| Attribute                   | Behaviour                                                                                                                                                                                    |
-| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `default = expr`            | Supplies a default value when no source provides one. The expression can be a literal or a function path.                                                                                    |
-| `cli_long = "name"`         | Overrides the automatically generated long CLI flag (kebab-case).                                                                                                                            |
-| `cli_short = 'c'`           | Adds a single-letter short flag for the field.                                                                                                                                               |
-| `merge_strategy = "append"` | For `Vec<T>` fields, specifies that values from different sources should be concatenated. This is currently the only supported strategy and is the default for vector fields.                |
-| `cli_default_as_absent`     | Treats typed clap defaults (`default_value_t`, `default_values_t`) as absent during subcommand merging. File and environment values take precedence, while explicit CLI overrides still win. |
+| Attribute                   | Behaviour                                                                                                                                                                                       |
+| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `default = expr`            | Supplies a default value when no source provides one. The expression can be a literal or a function path.                                                                                       |
+| `cli_long = "name"`         | Overrides the automatically generated long CLI flag (kebab-case).                                                                                                                               |
+| `cli_short = 'c'`           | Adds a single-letter short flag for the field.                                                                                                                                                  |
+| `merge_strategy = "append"` | For `Vec<T>` fields, specifies that values from different sources should be concatenated. This is currently the only supported strategy and is the default for vector fields.                   |
+| `cli_default_as_absent`     | Treats typed clap defaults (`default_value_t`, `default_values_t`) as absent during configuration merging. File and environment values take precedence, while explicit CLI overrides still win. |
 
 Unrecognized keys are ignored by the derive macro for forwards compatibility.
 Unknown keys will therefore silently do nothing. Developers who require

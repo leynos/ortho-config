@@ -151,6 +151,25 @@ fn explicit_ortho_default_takes_precedence_over_inferred_clap_default() -> Resul
 }
 
 #[test]
+fn parenthesised_clap_attributes_are_consumed_without_error() -> Result<()> {
+    let input: DeriveInput = parse_quote! {
+        struct Demo {
+            #[arg(long, num_args(2), default_value_t = 5)]
+            #[ortho_config(cli_default_as_absent)]
+            count: u32,
+        }
+    };
+
+    let inferred = parse_and_extract_default(&input)?;
+    ensure!(
+        expr_tokens(&inferred) == "5",
+        "expected inferred default 5, got {}",
+        expr_tokens(&inferred),
+    );
+    Ok(())
+}
+
+#[test]
 fn duplicate_clap_defaults_are_rejected() -> Result<()> {
     let input: DeriveInput = parse_quote! {
         struct Demo {

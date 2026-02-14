@@ -65,6 +65,10 @@ fn inferred_default_expr(
             // This variant is rejected in parsing for `cli_default_as_absent`.
             quote! { #expr }
         }
+        // The expression is emitted verbatim because clap requires
+        // `default_value_t` to evaluate to the field type.  Wrapping in
+        // `Into::into` would break unsuffixed integer literals (e.g. `8`)
+        // whose type is otherwise inferred from the surrounding context.
         ClapInferredDefault::ValueT(expr) => quote! { #expr },
         ClapInferredDefault::ValuesT(expr) => quote! {
             ::std::iter::IntoIterator::into_iter(#expr)

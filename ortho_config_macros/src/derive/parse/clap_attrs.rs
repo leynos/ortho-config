@@ -140,6 +140,10 @@ pub(crate) fn parse_default_from_meta(
     if meta.input.peek(syn::Token![=]) {
         let value = meta.value()?;
         let _: Expr = value.parse()?;
+    } else if meta.input.peek(syn::token::Paren) {
+        let content;
+        syn::parenthesized!(content in meta.input);
+        content.parse::<proc_macro2::TokenStream>()?;
     }
     Ok(())
 }

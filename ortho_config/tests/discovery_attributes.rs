@@ -10,11 +10,9 @@ use anyhow::{Context, Result, anyhow, ensure};
 use ortho_config::{OrthoConfig, OrthoError, OrthoResult};
 use rstest::{fixture, rstest};
 use serde::{Deserialize, Serialize};
-use std::env;
 use std::fs;
-use std::path::PathBuf;
-use std::sync::{Mutex, MutexGuard, OnceLock};
 use tempfile::TempDir;
+use test_helpers::cwd;
 use test_helpers::env as test_env;
 
 #[derive(Debug, Deserialize, Serialize, OrthoConfig)]
@@ -78,42 +76,6 @@ fn validation_error(message: impl Into<String>) -> OrthoResult<()> {
         message: message.into(),
     }
     .into())
-}
-
-static CWD_MUTEX: OnceLock<Mutex<()>> = OnceLock::new();
-
-struct CwdGuard {
-    original: PathBuf,
-    _lock: MutexGuard<'static, ()>,
-}
-
-impl CwdGuard {
-    fn new() -> Result<Self> {
-        #[expect(
-            clippy::expect_used,
-            reason = "Tests must fail fast if the CWD mutex is poisoned"
-        )]
-        let lock = CWD_MUTEX
-            .get_or_init(|| Mutex::new(()))
-            .lock()
-            .expect("CwdGuard mutex poisoned while acquiring lock");
-        let original = env::current_dir().context("capture current directory")?;
-        Ok(Self {
-            original,
-            _lock: lock,
-        })
-    }
-}
-
-impl Drop for CwdGuard {
-    fn drop(&mut self) {
-        #[expect(
-            clippy::expect_used,
-            reason = "Restoring the original CWD must not fail in tests"
-        )]
-        env::set_current_dir(&self.original)
-            .expect("restore original working directory in CwdGuard::drop");
-    }
 }
 
 struct CliFlagCase {
@@ -290,8 +252,7 @@ fn dotfile_fallback_uses_custom_name(_env_lock: test_env::EnvVarLock) -> Result<
     let dir = TempDir::new().context("create temp dir")?;
     let _ = create_test_config(dir.path(), ".demo.toml", 23)?;
 
-    let _cwd_guard = CwdGuard::new()?;
-    env::set_current_dir(dir.path()).context("set current dir")?;
+    let _cwd_guard = cwd::set_dir(dir.path())?;
     let cfg = DiscoveryConfig::load_from_iter(["prog"]).map_err(|err| anyhow!(err))?;
 
     ensure!(cfg.value == 23, "expected 23, got {}", cfg.value);
