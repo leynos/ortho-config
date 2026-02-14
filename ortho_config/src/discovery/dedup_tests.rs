@@ -56,14 +56,14 @@ fn load_first_partitioned_dedups_required_paths() {
 
 #[cfg(windows)]
 #[test]
-fn normalised_key_lowercases_ascii_and_backslashes() {
-    let key = ConfigDiscovery::normalised_key(Path::new("C:/Config/FILE.TOML"));
+fn normalized_key_lowercases_ascii_and_backslashes() {
+    let key = ConfigDiscovery::normalized_key(Path::new("C:/Config/FILE.TOML"));
     assert_eq!(key, "c:\\config\\file.toml");
 }
 
 #[cfg(windows)]
 #[test]
-fn normalised_key_preserves_non_ascii_case() {
-    let key = ConfigDiscovery::normalised_key(Path::new("C:/Temp/CAFÉ.toml"));
+fn normalized_key_preserves_non_ascii_case() {
+    let key = ConfigDiscovery::normalized_key(Path::new("C:/Temp/CAFÉ.toml"));
     assert_eq!(key, "c:\\temp\\cafÉ.toml");
 }

@@ -1,13 +1,14 @@
 //! YAML provider support backed by `serde-saphyr`.
 
-use camino::{Utf8Path, Utf8PathBuf};
-use cap_std::{ambient_authority, fs_utf8::Dir};
+use camino::Utf8PathBuf;
 use figment::{
     Metadata, Profile, Provider,
     error::Kind,
     value::{Dict, Value as FigmentValue},
 };
 use serde_saphyr::Options;
+
+use super::helpers::open_parent_dir_and_name;
 
 #[derive(Debug, Clone)]
 enum YamlInput {
@@ -24,21 +25,6 @@ pub struct SaphyrYaml {
 }
 
 impl SaphyrYaml {
-    fn parent_or_dot(path: &Utf8Path) -> &Utf8Path {
-        path.parent()
-            .filter(|parent| !parent.as_str().is_empty())
-            .unwrap_or_else(|| Utf8Path::new("."))
-    }
-
-    fn open_parent_dir_and_name(&self) -> std::io::Result<(Dir, String)> {
-        let parent = Self::parent_or_dot(&self.path);
-        let file_name = self.path.file_name().ok_or_else(|| {
-            std::io::Error::other("cannot determine file name for YAML configuration path")
-        })?;
-        let dir = Dir::open_ambient_dir(parent, ambient_authority())?;
-        Ok((dir, file_name.to_owned()))
-    }
-
     /// Construct a provider that reads configuration from `path` when queried.
     #[must_use]
     pub fn file<P: Into<Utf8PathBuf>>(path: P) -> Self {
@@ -74,7 +60,7 @@ impl SaphyrYaml {
     fn read_contents(&self) -> std::io::Result<String> {
         match &self.input {
             YamlInput::File => {
-                let (dir, file_name) = self.open_parent_dir_and_name()?;
+                let (dir, file_name) = open_parent_dir_and_name(&self.path)?;
                 dir.read_to_string(file_name)
             }
             YamlInput::Inline(contents) => Ok(contents.clone()),

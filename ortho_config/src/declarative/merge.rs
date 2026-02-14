@@ -66,10 +66,10 @@ pub trait DeclarativeMerge: Sized {
     /// # Errors
     ///
     /// Implementations may return an [`crate::OrthoError`] when a layer cannot be
-    /// deserialised or validated.
+    /// deserialized or validated.
     fn merge_layer(&mut self, layer: MergeLayer<'_>) -> OrthoResult<()>;
 
-    /// Finalise the merge, returning the built configuration.
+    /// Finalize the merge, returning the built configuration.
     ///
     /// # Errors
     ///

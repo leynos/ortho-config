@@ -79,7 +79,8 @@ fn yaml_loader_reports_parse_errors_with_paths() -> Result<()> {
 #[case("recipient: first\nrecipient: second", "duplicate mapping key")]
 #[case("recipient: [", "while parsing")]
 fn yaml_provider_surfaces_errors(#[case] contents: &str, #[case] expected: &str) -> Result<()> {
-    let figment = Figment::from(SaphyrYaml::string("config.yaml", contents));
+    let path = Utf8PathBuf::from("config.yaml");
+    let figment = Figment::from(SaphyrYaml::string(&path, contents));
     let err = figment
         .extract::<crate::serde_json::Value>()
         .expect_err("expected YAML parsing failure");

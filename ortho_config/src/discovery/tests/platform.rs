@@ -27,10 +27,10 @@ fn windows_candidates_are_case_insensitive(env_guards: EnvScope) -> Result<()> {
         .add_explicit_path(PathBuf::from("c:/config/file.toml"))
         .build();
     let candidates = discovery.candidates();
-    let canonical = ConfigDiscovery::normalised_key(Path::new("C:/Config/FILE.TOML"));
+    let canonical = ConfigDiscovery::normalized_key(Path::new("C:/Config/FILE.TOML"));
     let duplicates = candidates
         .iter()
-        .filter(|candidate| ConfigDiscovery::normalised_key(candidate.as_path()) == canonical)
+        .filter(|candidate| ConfigDiscovery::normalized_key(candidate.as_path()) == canonical)
         .count();
     ensure!(
         duplicates == 1,

@@ -57,7 +57,7 @@ impl ConfigDiscovery {
     }
 
     #[cfg(all(test, windows))]
-    pub(super) fn normalised_key(path: &Path) -> String {
+    pub(super) fn normalized_key(path: &Path) -> String {
         Self::dedup_key(path)
     }
 

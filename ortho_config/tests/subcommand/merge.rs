@@ -3,11 +3,11 @@
 use anyhow::{Result, anyhow, ensure};
 use clap::Parser;
 use ortho_config::OrthoConfig;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use super::util::{with_merged_subcommand_cli, with_merged_subcommand_cli_for};
 
-#[derive(Debug, Deserialize, serde::Serialize, Default, PartialEq, Parser)]
+#[derive(Debug, Deserialize, Serialize, Default, PartialEq, Parser)]
 #[command(name = "test")]
 struct MergeArgs {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -48,7 +48,7 @@ fn merge_helper_combines_defaults_and_cli() -> Result<()> {
     Ok(())
 }
 
-#[derive(Debug, Deserialize, serde::Serialize, OrthoConfig, Default, PartialEq, Parser)]
+#[derive(Debug, Deserialize, Serialize, OrthoConfig, Default, PartialEq, Parser)]
 #[command(name = "test")]
 #[ortho_config(prefix = "APP_")]
 struct MergePrefixed {
@@ -56,6 +56,8 @@ struct MergePrefixed {
     foo: Option<String>,
 }
 
+/// Verifies that `MergePrefixed` respects the configuration prefix and
+/// prefers file values when the CLI field is unset.
 #[test]
 fn merge_wrapper_respects_prefix() -> Result<()> {
     let cli = MergePrefixed { foo: None };

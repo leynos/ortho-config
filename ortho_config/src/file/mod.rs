@@ -2,6 +2,7 @@
 
 mod error;
 mod extends;
+mod helpers;
 mod loader;
 mod parser;
 mod path;
