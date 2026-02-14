@@ -70,6 +70,17 @@ fn create_test_config(
     Ok(path)
 }
 
+/// Helper to load config from CLI args and verify the expected value.
+fn load_and_verify_value(expected: u32) -> Result<()> {
+    let cfg = DiscoveryConfig::load_from_iter(["prog"]).map_err(|err| anyhow!(err))?;
+    ensure!(
+        cfg.value == expected,
+        "expected {expected}, got {}",
+        cfg.value
+    );
+    Ok(())
+}
+
 fn validation_error(message: impl Into<String>) -> OrthoResult<()> {
     Err(OrthoError::Validation {
         key: "discovery_attributes".to_owned(),
@@ -173,12 +184,8 @@ fn env_var_overrides_default_locations(_env_lock: test_env::EnvVarLock) -> Resul
     let dir = TempDir::new().context("create temp dir")?;
     let config_path = create_test_config(dir.path(), "env.toml", 99)?;
 
-    let guard = test_env::set_var("APP_CONFIG_PATH", &config_path);
-    let cfg = DiscoveryConfig::load_from_iter(["prog"]).map_err(|err| anyhow!(err))?;
-    drop(guard);
-
-    ensure!(cfg.value == 99, "expected 99, got {}", cfg.value);
-    Ok(())
+    let _guard = test_env::set_var("APP_CONFIG_PATH", &config_path);
+    load_and_verify_value(99)
 }
 
 fn load_xdg_config<F>(setup: F) -> OrthoResult<DiscoveryConfig>
@@ -253,10 +260,7 @@ fn dotfile_fallback_uses_custom_name(_env_lock: test_env::EnvVarLock) -> Result<
     let _ = create_test_config(dir.path(), ".demo.toml", 23)?;
 
     let _cwd_guard = cwd::set_dir(dir.path())?;
-    let cfg = DiscoveryConfig::load_from_iter(["prog"]).map_err(|err| anyhow!(err))?;
-
-    ensure!(cfg.value == 23, "expected 23, got {}", cfg.value);
-    Ok(())
+    load_and_verify_value(23)
 }
 
 #[rstest]
