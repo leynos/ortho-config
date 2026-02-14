@@ -184,6 +184,14 @@ impl ConfigDiscovery {
         clippy::unused_self,
         reason = "default XDG fallback does not apply on non-Unix/Redox targets"
     )]
+    #[expect(
+        clippy::missing_const_for_fn,
+        reason = "signature must match the Unix variant which is not const"
+    )]
+    #[expect(
+        clippy::ptr_arg,
+        reason = "signature must match the Unix variant which requires Vec for push"
+    )]
     fn push_default_xdg(&self, _paths: &mut Vec<PathBuf>, _seen: &mut HashSet<String>) {}
 
     /// Returns the ordered configuration candidates.
