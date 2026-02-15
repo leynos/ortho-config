@@ -44,7 +44,7 @@ pub(crate) fn parse_input(
 
     let mut field_attrs = Vec::new();
     for f in &fields {
-        field_attrs.push(parse_field_attrs(&f.attrs)?);
+        field_attrs.push(parse_field_attrs(f)?);
     }
     Ok((ident, fields, struct_attrs, field_attrs))
 }

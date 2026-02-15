@@ -2014,6 +2014,7 @@ name = "test_helpers"
 version = "0.7.0"
 dependencies = [
  "anyhow",
+ "camino",
  "figment",
  "parking_lot",
 ]

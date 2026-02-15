@@ -194,7 +194,7 @@ where
 /// #[ortho_config(prefix = "APP_")]
 /// struct MyCmd {
 ///     #[arg(long, default_value_t = String::from("default"))]
-///     #[ortho_config(default = String::from("default"), cli_default_as_absent)]
+///     #[ortho_config(cli_default_as_absent)]
 ///     value: String,
 /// }
 ///

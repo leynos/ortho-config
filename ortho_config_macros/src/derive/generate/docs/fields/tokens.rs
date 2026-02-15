@@ -29,10 +29,21 @@ pub(super) fn build_optional_doc_metadata(
 
 /// Generates tokens for the default value metadata.
 pub(super) fn default_tokens(attrs: &FieldAttrs) -> TokenStream {
-    let display_str = attrs
-        .default
-        .as_ref()
-        .map(|expr| expr.to_token_stream().to_string());
+    let display_str = attrs.default.as_ref().map_or_else(
+        || {
+            attrs
+                .inferred_clap_default
+                .as_ref()
+                .map(|inferred| match inferred {
+                    crate::derive::parse::ClapInferredDefault::Value(expr)
+                    | crate::derive::parse::ClapInferredDefault::ValueT(expr)
+                    | crate::derive::parse::ClapInferredDefault::ValuesT(expr) => {
+                        expr.to_token_stream().to_string()
+                    }
+                })
+        },
+        |expr| Some(expr.to_token_stream().to_string()),
+    );
 
     build_optional_doc_metadata(
         display_str.as_deref(),

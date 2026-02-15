@@ -24,7 +24,8 @@ mod serde_attrs;
 mod tests;
 mod type_utils;
 
-pub(crate) use clap_attrs::{clap_arg_id, clap_arg_id_from_attribute};
+use clap_attrs::clap_default_value;
+pub(crate) use clap_attrs::{ClapInferredDefault, clap_arg_id, clap_arg_id_from_attribute};
 use doc_attrs::{apply_field_doc_attr, apply_struct_doc_attr};
 pub(crate) use doc_types::{
     DocExampleAttr, DocFieldAttrs, DocLinkAttr, DocNoteAttr, DocStructAttrs, HeadingOverrides,
@@ -61,11 +62,15 @@ pub(crate) struct StructAttrs {
 ///   merging untouched.
 /// - `cli_default_as_absent` treats clap's default value as absent during
 ///   merge, allowing file/env values to take precedence over CLI defaults.
+/// - `inferred_clap_default` stores the default inferred from clap's
+///   `default_value_t`/`default_values_t` when `cli_default_as_absent` is
+///   active and no explicit `#[ortho_config(default = ...)]` is provided.
 #[derive(Default, Clone)]
 pub(crate) struct FieldAttrs {
     pub cli_long: Option<String>,
     pub cli_short: Option<char>,
     pub default: Option<Expr>,
+    pub inferred_clap_default: Option<ClapInferredDefault>,
     pub merge_strategy: Option<MergeStrategy>,
     pub skip_cli: bool,
     pub cli_default_as_absent: bool,
@@ -307,16 +312,21 @@ fn apply_field_attr(
 /// Parses field-level `#[ortho_config(...)]` attributes.
 ///
 /// Recognised keys include `cli_long`, `cli_short`, `default`,
-/// `merge_strategy`, and `skip_cli`. Unknown keys are ignored, matching
-/// [`parse_struct_attrs`] for forwards compatibility. This lenience may
-/// permit misspelt attribute names; users wanting stricter validation can
-/// insert a manual `compile_error!` guard.
+/// `merge_strategy`, `skip_cli`, and `cli_default_as_absent`. Unknown keys are
+/// ignored, matching [`parse_struct_attrs`] for forwards compatibility. This
+/// lenience may permit misspelt attribute names; users wanting stricter
+/// validation can insert a manual `compile_error!` guard.
+///
+/// When `cli_default_as_absent` is active and no explicit `default` is
+/// provided, this function attempts to infer a default from clap's
+/// `default_value_t` or `default_values_t`. Inference from the untyped
+/// `default_value` is rejected with a compile-time error.
 ///
 /// Used internally by the derive macro to extract configuration metadata
 /// from field-level attributes.
-pub(crate) fn parse_field_attrs(attrs: &[Attribute]) -> Result<FieldAttrs, syn::Error> {
+pub(crate) fn parse_field_attrs(field: &syn::Field) -> Result<FieldAttrs, syn::Error> {
     let mut out = FieldAttrs::default();
-    parse_ortho_config(attrs, |meta| {
+    parse_ortho_config(&field.attrs, |meta| {
         if !apply_field_attr(meta, &mut out)? {
             // Unknown attributes are intentionally discarded to preserve
             // forwards compatibility while still allowing callers to add
@@ -325,5 +335,19 @@ pub(crate) fn parse_field_attrs(attrs: &[Attribute]) -> Result<FieldAttrs, syn::
         }
         Ok(())
     })?;
+    if out.cli_default_as_absent && out.default.is_none() {
+        out.inferred_clap_default = clap_default_value(field)?;
+        if let Some(ClapInferredDefault::Value(_)) = out.inferred_clap_default {
+            return Err(syn::Error::new_spanned(
+                field,
+                concat!(
+                    "inferring defaults from clap `default_value` is not yet supported for ",
+                    "`cli_default_as_absent`; use `default_value_t`/`default_values_t` or ",
+                    "add `#[ortho_config(default = ...)]`. Parser-faithful `default_value` ",
+                    "inference is planned as a day-2 follow-up."
+                ),
+            ));
+        }
+    }
     Ok(out)
 }

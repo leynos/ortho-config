@@ -1,0 +1,7 @@
+error: inferring defaults from clap `default_value` is not yet supported for `cli_default_as_absent`; use `default_value_t`/`default_values_t` or add `#[ortho_config(default = ...)]`. Parser-faithful `default_value` inference is planned as a day-2 follow-up.
+  --> tests/ui/unsupported_clap_default_value_inference.rs:10:5
+   |
+10 | /     #[arg(long, default_value = "42")]
+11 | |     #[ortho_config(cli_default_as_absent)]
+12 | |     answer: u32,
+   | |_______________^
