@@ -116,6 +116,31 @@ fn assert_post_merge_hook(input: &DeriveInput, expected: bool, error_msg: &str) 
     Ok(())
 }
 
+/// Verify that `#[ortho_config(crate = "...")]` is correctly parsed.
+fn assert_crate_path(
+    input: &DeriveInput,
+    expected_crate_path: &str,
+    expected_prefix: Option<&str>,
+    error_msg: &str,
+) -> Result<()> {
+    let (_, _, struct_attrs, _) = parse_input(input).map_err(|err| anyhow!(err))?;
+    if let Some(prefix) = expected_prefix {
+        ensure!(
+            struct_attrs.prefix.as_deref() == Some(prefix),
+            "expected prefix {prefix}"
+        );
+    }
+    let crate_path = struct_attrs
+        .crate_path
+        .ok_or_else(|| anyhow!("expected crate_path to be Some"))?;
+    ensure!(
+        quote!(#crate_path).to_string() == expected_crate_path,
+        "{error_msg}: got {}",
+        quote!(#crate_path)
+    );
+    Ok(())
+}
+
 #[test]
 fn parses_skip_cli_flag() -> Result<()> {
     assert_field_flag(
@@ -372,38 +397,28 @@ fn post_merge_hook_defaults_to_false() -> Result<()> {
 
 #[test]
 fn parses_crate_path_simple() -> Result<()> {
-    let input: DeriveInput = parse_quote! {
-        #[ortho_config(crate = "my_config")]
-        struct Config { field: String }
-    };
-    let (_, _, struct_attrs, _) = parse_input(&input).map_err(|err| anyhow!(err))?;
-    let crate_path = struct_attrs
-        .crate_path
-        .ok_or_else(|| anyhow!("expected crate_path to be Some"))?;
-    ensure!(
-        quote!(#crate_path).to_string() == "my_config",
-        "expected my_config, got {}",
-        quote!(#crate_path)
-    );
-    Ok(())
+    assert_crate_path(
+        &parse_quote! {
+            #[ortho_config(crate = "my_config")]
+            struct Config { field: String }
+        },
+        "my_config",
+        None,
+        "simple crate path should parse as my_config",
+    )
 }
 
 #[test]
 fn parses_crate_path_nested() -> Result<()> {
-    let input: DeriveInput = parse_quote! {
-        #[ortho_config(crate = "my_ns::ortho_config")]
-        struct Config { field: String }
-    };
-    let (_, _, struct_attrs, _) = parse_input(&input).map_err(|err| anyhow!(err))?;
-    let crate_path = struct_attrs
-        .crate_path
-        .ok_or_else(|| anyhow!("expected crate_path to be Some"))?;
-    ensure!(
-        quote!(#crate_path).to_string() == "my_ns :: ortho_config",
-        "expected my_ns :: ortho_config, got {}",
-        quote!(#crate_path)
-    );
-    Ok(())
+    assert_crate_path(
+        &parse_quote! {
+            #[ortho_config(crate = "my_ns::ortho_config")]
+            struct Config { field: String }
+        },
+        "my_ns :: ortho_config",
+        None,
+        "nested crate path should parse as my_ns :: ortho_config",
+    )
 }
 
 #[test]
@@ -421,21 +436,13 @@ fn crate_path_defaults_to_none() -> Result<()> {
 
 #[test]
 fn parses_crate_path_with_prefix() -> Result<()> {
-    let input: DeriveInput = parse_quote! {
-        #[ortho_config(prefix = "APP_", crate = "my_config")]
-        struct Config { field: String }
-    };
-    let (_, _, struct_attrs, _) = parse_input(&input).map_err(|err| anyhow!(err))?;
-    ensure!(
-        struct_attrs.prefix.as_deref() == Some("APP_"),
-        "expected prefix APP_"
-    );
-    let crate_path = struct_attrs
-        .crate_path
-        .ok_or_else(|| anyhow!("expected crate_path to be Some"))?;
-    ensure!(
-        quote!(#crate_path).to_string() == "my_config",
-        "expected my_config"
-    );
-    Ok(())
+    assert_crate_path(
+        &parse_quote! {
+            #[ortho_config(prefix = "APP_", crate = "my_config")]
+            struct Config { field: String }
+        },
+        "my_config",
+        Some("APP_"),
+        "crate path should parse alongside prefix",
+    )
 }

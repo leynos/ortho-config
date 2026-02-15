@@ -47,26 +47,29 @@ pub(super) fn append_strategies(fields: Vec<(syn::Ident, syn::Type)>) -> Collect
 
 pub(super) type TokenGenerator = fn(&CollectionStrategies) -> Result<TokenStream2>;
 
-pub(super) fn state_struct_tokens(strategies: &CollectionStrategies) -> Result<TokenStream2> {
+/// Generic helper that reduces duplication in token generator test utilities.
+fn token_generator_helper<F>(
+    config_name: &str,
+    strategies: &CollectionStrategies,
+    generator: F,
+) -> Result<TokenStream2>
+where
+    F: FnOnce(&syn::Ident, &syn::Ident, &CollectionStrategies, &TokenStream2) -> TokenStream2,
+{
     let krate = default_krate();
     let state_ident = parse_ident("__SampleDeclarativeMergeState")?;
-    let config_ident = parse_ident("SampleConfig")?;
-    Ok(generate_declarative_state_struct(
-        &state_ident,
-        &config_ident,
+    let config_ident = parse_ident(config_name)?;
+    Ok(generator(&state_ident, &config_ident, strategies, &krate))
+}
+
+pub(super) fn state_struct_tokens(strategies: &CollectionStrategies) -> Result<TokenStream2> {
+    token_generator_helper(
+        "SampleConfig",
         strategies,
-        &krate,
-    ))
+        generate_declarative_state_struct,
+    )
 }
 
 pub(super) fn merge_impl_tokens(strategies: &CollectionStrategies) -> Result<TokenStream2> {
-    let krate = default_krate();
-    let state_ident = parse_ident("__SampleDeclarativeMergeState")?;
-    let config_ident = parse_ident("Sample")?;
-    Ok(generate_declarative_merge_impl(
-        &state_ident,
-        &config_ident,
-        strategies,
-        &krate,
-    ))
+    token_generator_helper("Sample", strategies, generate_declarative_merge_impl)
 }
