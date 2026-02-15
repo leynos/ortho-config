@@ -1,6 +1,7 @@
 //! Shared helpers for file module tests along with focused submodules.
 
-use super::{canonicalise, normalise_cycle_key};
+use super::canonicalise;
+use super::path::normalize_cycle_key;
 use anyhow::{Context, Result};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -58,7 +59,7 @@ pub(super) fn to_anyhow<T>(result: crate::OrthoResult<T>) -> Result<T> {
     result.map_err(anyhow::Error::new)
 }
 
-pub(super) fn assert_normalise_cycle_key(
+pub(super) fn assert_normalize_cycle_key(
     windows_input: &str,
     windows_expected: &str,
     unix_input: &str,
@@ -73,7 +74,7 @@ pub(super) fn assert_normalise_cycle_key(
         (PathBuf::from(unix_input), PathBuf::from(unix_expected))
     };
     anyhow::ensure!(
-        normalise_cycle_key(&input) == expected,
+        normalize_cycle_key(&input) == expected,
         "normalised path mismatch for input {input:?}"
     );
     Ok(())

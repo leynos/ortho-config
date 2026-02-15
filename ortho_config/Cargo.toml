@@ -25,6 +25,7 @@ fluent-syntax = "0.12"
 uncased = "0.9"
 camino = "1"
 dirs = "5"
+cap-std = { version = "3.4.1", features = ["fs_utf8"] }
 tracing = "0.1"
 unic-langid = { version = "0.9", features = ["macros"] }
 toml = { version = "0.9", optional = true }
@@ -57,7 +58,6 @@ rstest = "0.26.1"
 rstest-bdd.workspace = true
 rstest-bdd-macros.workspace = true
 serial_test = "3"
-cap-std = "3"
 tempfile = "3"
 test_helpers = { path = "../test_helpers" }
 anyhow = "1"
