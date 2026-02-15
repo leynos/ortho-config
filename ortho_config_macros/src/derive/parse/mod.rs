@@ -49,6 +49,11 @@ pub(crate) struct StructAttrs {
     pub discovery: Option<DiscoveryAttrs>,
     pub post_merge_hook: bool,
     pub doc: DocStructAttrs,
+    /// Overrides the generated crate path for dependency aliasing.
+    ///
+    /// When set via `#[ortho_config(crate = "my_alias")]`, generated code
+    /// references types through `my_alias::` instead of `ortho_config::`.
+    pub crate_path: Option<syn::Path>,
 }
 
 /// Field-level attributes recognised by `#[derive(OrthoConfig)]`.
@@ -237,6 +242,13 @@ pub(crate) fn parse_struct_attrs(attrs: &[Attribute]) -> Result<StructAttrs, syn
                     true
                 };
                 out.post_merge_hook = v;
+                Ok(())
+            }
+            Some("crate") => {
+                let s = lit_str(meta, "crate")?;
+                let path: syn::Path =
+                    syn::parse_str(&s.value()).map_err(|e| syn::Error::new(s.span(), e))?;
+                out.crate_path = Some(path);
                 Ok(())
             }
             _ => {

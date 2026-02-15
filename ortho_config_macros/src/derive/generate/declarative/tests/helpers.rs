@@ -4,6 +4,7 @@ use std::str::FromStr;
 
 use anyhow::{Result, anyhow};
 use proc_macro2::TokenStream as TokenStream2;
+use quote::quote;
 use syn::parse_str;
 
 use crate::derive::build::CollectionStrategies;
@@ -17,6 +18,10 @@ pub(super) fn parse_ident(src: &str) -> Result<syn::Ident> {
 
 pub(super) fn parse_type(src: &str) -> Result<syn::Type> {
     parse_str(src).map_err(|err| anyhow!(err))
+}
+
+pub(super) fn default_krate() -> TokenStream2 {
+    quote! { ortho_config }
 }
 
 /// Returns the expected `DeclarativeMerge` impl for an empty `append_fields`
@@ -43,21 +48,25 @@ pub(super) fn append_strategies(fields: Vec<(syn::Ident, syn::Type)>) -> Collect
 pub(super) type TokenGenerator = fn(&CollectionStrategies) -> Result<TokenStream2>;
 
 pub(super) fn state_struct_tokens(strategies: &CollectionStrategies) -> Result<TokenStream2> {
+    let krate = default_krate();
     let state_ident = parse_ident("__SampleDeclarativeMergeState")?;
     let config_ident = parse_ident("SampleConfig")?;
     Ok(generate_declarative_state_struct(
         &state_ident,
         &config_ident,
         strategies,
+        &krate,
     ))
 }
 
 pub(super) fn merge_impl_tokens(strategies: &CollectionStrategies) -> Result<TokenStream2> {
+    let krate = default_krate();
     let state_ident = parse_ident("__SampleDeclarativeMergeState")?;
     let config_ident = parse_ident("Sample")?;
     Ok(generate_declarative_merge_impl(
         &state_ident,
         &config_ident,
         strategies,
+        &krate,
     ))
 }

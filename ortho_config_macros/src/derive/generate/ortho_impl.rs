@@ -16,6 +16,7 @@ use super::structs::{generate_cli_struct, generate_defaults_struct};
 pub(crate) fn generate_ortho_impl(
     config_ident: &Ident,
     components: &MacroComponents,
+    krate: &TokenStream,
 ) -> TokenStream {
     let MacroComponents {
         cli_ident,
@@ -27,8 +28,8 @@ pub(crate) fn generate_ortho_impl(
     quote! {
         #load_impl
 
-        impl ortho_config::OrthoConfig for #config_ident {
-            fn load_from_iter<I, T>(iter: I) -> ortho_config::OrthoResult<Self>
+        impl #krate::OrthoConfig for #config_ident {
+            fn load_from_iter<I, T>(iter: I) -> #krate::OrthoResult<Self>
             where
                 I: IntoIterator<Item = T>,
                 T: Into<std::ffi::OsString> + Clone,
@@ -122,17 +123,14 @@ fn generate_prune_nulls_helpers() -> TokenStream {
 fn generate_cli_value_extractor_impl(
     config_ident: &Ident,
     cli_field_info: &[CliFieldInfo],
+    krate: &TokenStream,
 ) -> TokenStream {
-    // Check if any field has cli_default_as_absent
     let has_default_as_absent = cli_field_info.iter().any(|f| f.is_default_as_absent);
 
     if !has_default_as_absent {
-        // No fields with cli_default_as_absent; the blanket impl in ortho_config
-        // handles this case. No specialized impl needed.
         return quote! {};
     }
 
-    // Generate field extraction logic
     let field_extractions: Vec<TokenStream> = cli_field_info
         .iter()
         .map(generate_field_extraction)
@@ -142,13 +140,13 @@ fn generate_cli_value_extractor_impl(
 
     quote! {
         #[cfg(feature = "serde_json")]
-        impl ortho_config::CliValueExtractor for #config_ident {
+        impl #krate::CliValueExtractor for #config_ident {
             fn extract_user_provided(
                 &self,
                 matches: &clap::ArgMatches,
-            ) -> ortho_config::OrthoResult<ortho_config::serde_json::Value> {
-                use ortho_config::OrthoResultExt;
-                use ortho_config::serde_json;
+            ) -> #krate::OrthoResult<#krate::serde_json::Value> {
+                use #krate::OrthoResultExt;
+                use #krate::serde_json;
 
                 #prune_nulls_helpers
 
@@ -160,7 +158,7 @@ fn generate_cli_value_extractor_impl(
                 let mut base_map = match base {
                     serde_json::Value::Object(m) => m,
                     other => {
-                        return Err(std::sync::Arc::new(ortho_config::OrthoError::Validation {
+                        return Err(std::sync::Arc::new(#krate::OrthoError::Validation {
                             key: String::from("cli"),
                             message: format!(
                                 "expected parsed CLI values to serialize to an object, got {other:?}",
@@ -193,12 +191,13 @@ fn generate_cli_value_extractor_impl(
 pub(crate) fn generate_trait_implementation(
     config_ident: &Ident,
     components: &MacroComponents,
+    krate: &TokenStream,
 ) -> TokenStream {
     let cli_struct = generate_cli_struct(config_ident, components);
     let defaults_struct = generate_defaults_struct(config_ident, components);
-    let ortho_impl = generate_ortho_impl(config_ident, components);
+    let ortho_impl = generate_ortho_impl(config_ident, components, krate);
     let cli_extractor_impl =
-        generate_cli_value_extractor_impl(config_ident, &components.cli_field_info);
+        generate_cli_value_extractor_impl(config_ident, &components.cli_field_info, krate);
     quote! {
         #cli_struct
         #defaults_struct

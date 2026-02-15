@@ -9,10 +9,13 @@ use syn::Ident;
 
 use crate::derive::parse::StructAttrs;
 
-pub(crate) fn build_env_provider(struct_attrs: &StructAttrs) -> proc_macro2::TokenStream {
+pub(crate) fn build_env_provider(
+    struct_attrs: &StructAttrs,
+    krate: &proc_macro2::TokenStream,
+) -> proc_macro2::TokenStream {
     struct_attrs.prefix.as_ref().map_or_else(
-        || quote! { ortho_config::CsvEnv::raw() },
-        |prefix| quote! { ortho_config::CsvEnv::prefixed(#prefix) },
+        || quote! { #krate::CsvEnv::raw() },
+        |prefix| quote! { #krate::CsvEnv::prefixed(#prefix) },
     )
 }
 
@@ -75,7 +78,8 @@ mod tests {
     #[test]
     fn env_provider_tokens() -> Result<()> {
         let (_, _, struct_attrs) = demo_input()?;
-        let ts = build_env_provider(&struct_attrs);
+        let krate = quote! { ortho_config };
+        let ts = build_env_provider(&struct_attrs, &krate);
         ensure!(
             ts.to_string() == "ortho_config :: CsvEnv :: prefixed (\"CFG_\")",
             "unexpected env provider tokens"

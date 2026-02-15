@@ -47,16 +47,17 @@ pub(super) fn resolve_about_id(app_name: &AppName, doc: &DocStructAttrs) -> Stri
 pub(super) fn build_sections_metadata(
     app_name: &AppName,
     struct_attrs: &StructAttrs,
+    krate: &TokenStream,
 ) -> syn::Result<TokenStream> {
-    let headings = build_headings_ids(&struct_attrs.doc.headings);
-    let discovery = build_discovery_metadata(app_name, struct_attrs);
-    let precedence = build_precedence_metadata(&struct_attrs.doc)?;
-    let examples = example_tokens(&struct_attrs.doc.examples);
-    let links = link_tokens(&struct_attrs.doc.links);
-    let notes = note_tokens(&struct_attrs.doc.notes);
+    let headings = build_headings_ids(&struct_attrs.doc.headings, krate);
+    let discovery = build_discovery_metadata(app_name, struct_attrs, krate);
+    let precedence = build_precedence_metadata(&struct_attrs.doc, krate)?;
+    let examples = example_tokens(&struct_attrs.doc.examples, krate);
+    let links = link_tokens(&struct_attrs.doc.links, krate);
+    let notes = note_tokens(&struct_attrs.doc.notes, krate);
 
     Ok(quote! {
-        ortho_config::docs::SectionsMetadata {
+        #krate::docs::SectionsMetadata {
             headings_ids: #headings,
             discovery: #discovery,
             precedence: #precedence,
@@ -67,7 +68,10 @@ pub(super) fn build_sections_metadata(
     })
 }
 
-pub(super) fn build_windows_metadata(struct_attrs: &StructAttrs) -> TokenStream {
+pub(super) fn build_windows_metadata(
+    struct_attrs: &StructAttrs,
+    krate: &TokenStream,
+) -> TokenStream {
     let Some(windows) = struct_attrs.doc.windows.as_ref() else {
         return quote! { None };
     };
@@ -86,7 +90,7 @@ pub(super) fn build_windows_metadata(struct_attrs: &StructAttrs) -> TokenStream 
     let help_info_uri = option_string_tokens(windows.help_info_uri.as_deref());
 
     quote! {
-        Some(ortho_config::docs::WindowsMetadata {
+        Some(#krate::docs::WindowsMetadata {
             module_name: #module_name,
             export_aliases: vec![ #( #export_aliases ),* ],
             include_common_parameters: #include_common_parameters,
@@ -96,7 +100,7 @@ pub(super) fn build_windows_metadata(struct_attrs: &StructAttrs) -> TokenStream 
     }
 }
 
-fn build_headings_ids(overrides: &HeadingOverrides) -> TokenStream {
+fn build_headings_ids(overrides: &HeadingOverrides, krate: &TokenStream) -> TokenStream {
     let headings = merge_headings(overrides);
 
     // Helper closure to process each heading field: unwrap with default and tokenise
@@ -118,7 +122,7 @@ fn build_headings_ids(overrides: &HeadingOverrides) -> TokenStream {
     let commands_tokens = option_string_tokens(headings.commands.as_deref());
 
     quote! {
-        ortho_config::docs::HeadingIds {
+        #krate::docs::HeadingIds {
             name: #name_tokens,
             synopsis: #synopsis_tokens,
             description: #description_tokens,
@@ -156,7 +160,10 @@ fn merge_headings(overrides: &HeadingOverrides) -> HeadingOverrides {
     }
 }
 
-fn build_precedence_metadata(doc: &DocStructAttrs) -> syn::Result<TokenStream> {
+fn build_precedence_metadata(
+    doc: &DocStructAttrs,
+    krate: &TokenStream,
+) -> syn::Result<TokenStream> {
     let order_values = doc
         .precedence
         .as_ref()
@@ -164,15 +171,15 @@ fn build_precedence_metadata(doc: &DocStructAttrs) -> syn::Result<TokenStream> {
 
     let order = if order_values.is_empty() {
         vec![
-            quote! { ortho_config::docs::SourceKind::Defaults },
-            quote! { ortho_config::docs::SourceKind::File },
-            quote! { ortho_config::docs::SourceKind::Env },
-            quote! { ortho_config::docs::SourceKind::Cli },
+            quote! { #krate::docs::SourceKind::Defaults },
+            quote! { #krate::docs::SourceKind::File },
+            quote! { #krate::docs::SourceKind::Env },
+            quote! { #krate::docs::SourceKind::Cli },
         ]
     } else {
         order_values
             .iter()
-            .map(|value| source_kind_tokens(value))
+            .map(|value| source_kind_tokens(value, krate))
             .collect::<Result<Vec<_>, _>>()?
     };
 
@@ -183,21 +190,19 @@ fn build_precedence_metadata(doc: &DocStructAttrs) -> syn::Result<TokenStream> {
     let rationale_tokens = option_string_tokens(rationale_id);
 
     Ok(quote! {
-        Some(ortho_config::docs::PrecedenceMeta {
+        Some(#krate::docs::PrecedenceMeta {
             order: vec![ #( #order ),* ],
             rationale_id: #rationale_tokens,
         })
     })
 }
 
-fn source_kind_tokens(value: &str) -> syn::Result<TokenStream> {
+fn source_kind_tokens(value: &str, krate: &TokenStream) -> syn::Result<TokenStream> {
     match value.trim().to_ascii_lowercase().as_str() {
-        "default" | "defaults" => Ok(quote! { ortho_config::docs::SourceKind::Defaults }),
-        "file" | "files" => Ok(quote! { ortho_config::docs::SourceKind::File }),
-        "env" | "environment" => Ok(quote! { ortho_config::docs::SourceKind::Env }),
-        "cli" | "commandline" | "command-line" => {
-            Ok(quote! { ortho_config::docs::SourceKind::Cli })
-        }
+        "default" | "defaults" => Ok(quote! { #krate::docs::SourceKind::Defaults }),
+        "file" | "files" => Ok(quote! { #krate::docs::SourceKind::File }),
+        "env" | "environment" => Ok(quote! { #krate::docs::SourceKind::Env }),
+        "cli" | "commandline" | "command-line" => Ok(quote! { #krate::docs::SourceKind::Cli }),
         other => Err(syn::Error::new(
             proc_macro2::Span::call_site(),
             format!("unknown precedence source '{other}'; expected defaults, file, env, or cli",),
@@ -205,7 +210,11 @@ fn source_kind_tokens(value: &str) -> syn::Result<TokenStream> {
     }
 }
 
-fn build_discovery_metadata(app_name: &AppName, struct_attrs: &StructAttrs) -> TokenStream {
+fn build_discovery_metadata(
+    app_name: &AppName,
+    struct_attrs: &StructAttrs,
+    krate: &TokenStream,
+) -> TokenStream {
     let Some(discovery) = struct_attrs.discovery.as_ref() else {
         return quote! { None };
     };
@@ -222,7 +231,10 @@ fn build_discovery_metadata(app_name: &AppName, struct_attrs: &StructAttrs) -> T
         .clone()
         .unwrap_or_else(|| dotfile_name.clone());
 
-    let formats = collect_formats(&[&config_file_name, &dotfile_name, &project_file_name]);
+    let formats = collect_formats(
+        &[&config_file_name, &dotfile_name, &project_file_name],
+        krate,
+    );
 
     let override_flag_long = if discovery.config_cli_visible.unwrap_or(false) {
         let value = discovery
@@ -241,7 +253,7 @@ fn build_discovery_metadata(app_name: &AppName, struct_attrs: &StructAttrs) -> T
     let override_env_tokens = option_string_tokens(Some(override_env.as_str()));
 
     quote! {
-        Some(ortho_config::docs::ConfigDiscoveryMeta {
+        Some(#krate::docs::ConfigDiscoveryMeta {
             formats: vec![ #( #formats ),* ],
             search_paths: Vec::new(),
             override_flag_long: #override_flag_long,
@@ -251,7 +263,7 @@ fn build_discovery_metadata(app_name: &AppName, struct_attrs: &StructAttrs) -> T
     }
 }
 
-fn collect_formats(names: &[&str]) -> Vec<TokenStream> {
+fn collect_formats(names: &[&str], krate: &TokenStream) -> Vec<TokenStream> {
     let mut has_toml = false;
     let mut has_yaml = false;
     let mut has_json = false;
@@ -267,13 +279,13 @@ fn collect_formats(names: &[&str]) -> Vec<TokenStream> {
 
     let mut formats = Vec::new();
     if has_toml {
-        formats.push(quote! { ortho_config::docs::ConfigFormat::Toml });
+        formats.push(quote! { #krate::docs::ConfigFormat::Toml });
     }
     if has_yaml {
-        formats.push(quote! { ortho_config::docs::ConfigFormat::Yaml });
+        formats.push(quote! { #krate::docs::ConfigFormat::Yaml });
     }
     if has_json {
-        formats.push(quote! { ortho_config::docs::ConfigFormat::Json });
+        formats.push(quote! { #krate::docs::ConfigFormat::Json });
     }
     formats
 }

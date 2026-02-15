@@ -3,6 +3,7 @@
 //! This module powers the derive macro by validating the input enum and
 //! emitting the per-variant merge logic.
 
+use proc_macro2::TokenStream;
 use quote::quote;
 use syn::DeriveInput;
 
@@ -61,7 +62,33 @@ fn validate_tuple_variant(variant_ident: &syn::Ident, fields: &syn::Fields) -> s
     }
 }
 
-fn merge_expr(uses_matches: bool, selected_label: &syn::LitStr) -> proc_macro2::TokenStream {
+/// Extract `crate = "..."` from `#[ortho_config(...)]` attributes.
+fn parse_crate_path(attrs: &[syn::Attribute]) -> syn::Result<Option<syn::Path>> {
+    let mut crate_path = None;
+    for attr in attrs {
+        if !attr.path().is_ident("ortho_config") {
+            continue;
+        }
+        attr.parse_nested_meta(|meta| {
+            if meta.path.is_ident("crate") {
+                let value = meta.value()?;
+                let lit: syn::LitStr = value.parse()?;
+                let path: syn::Path =
+                    syn::parse_str(&lit.value()).map_err(|e| syn::Error::new(lit.span(), e))?;
+                crate_path = Some(path);
+                return Ok(());
+            }
+            Err(meta.error("unsupported ortho_config option on enum"))
+        })?;
+    }
+    Ok(crate_path)
+}
+
+fn merge_expr(
+    uses_matches: bool,
+    selected_label: &syn::LitStr,
+    krate: &TokenStream,
+) -> TokenStream {
     if uses_matches {
         quote! {
             {
@@ -69,26 +96,23 @@ fn merge_expr(uses_matches: bool, selected_label: &syn::LitStr) -> proc_macro2::
                     .subcommand()
                     .map(|(_, subcommand_matches)| subcommand_matches)
                     .ok_or_else(|| {
-                        ortho_config::SelectedSubcommandMergeError::MissingSubcommandMatches {
+                        #krate::SelectedSubcommandMergeError::MissingSubcommandMatches {
                             selected: #selected_label,
                         }
                     })?;
-                ortho_config::SubcmdConfigMerge::load_and_merge_with_matches(&args, subcommand_matches)
-                    .map_err(ortho_config::SelectedSubcommandMergeError::from)?
+                #krate::SubcmdConfigMerge::load_and_merge_with_matches(&args, subcommand_matches)
+                    .map_err(#krate::SelectedSubcommandMergeError::from)?
             }
         }
     } else {
         quote! {
-            ortho_config::SubcmdConfigMerge::load_and_merge(&args)
-                .map_err(ortho_config::SelectedSubcommandMergeError::from)?
+            #krate::SubcmdConfigMerge::load_and_merge(&args)
+                .map_err(#krate::SelectedSubcommandMergeError::from)?
         }
     }
 }
 
-fn build_arm(
-    variant_ident: &syn::Ident,
-    merge_expr: &proc_macro2::TokenStream,
-) -> proc_macro2::TokenStream {
+fn build_arm(variant_ident: &syn::Ident, merge_expr: &TokenStream) -> TokenStream {
     quote! {
         Self::#variant_ident(args) => {
             let merged = #merge_expr;
@@ -98,9 +122,10 @@ fn build_arm(
 }
 
 /// Build the `SelectedSubcommandMerge` implementation for the input enum.
-pub(crate) fn derive_selected_subcommand_merge(
-    input: DeriveInput,
-) -> syn::Result<proc_macro2::TokenStream> {
+pub(crate) fn derive_selected_subcommand_merge(input: DeriveInput) -> syn::Result<TokenStream> {
+    let crate_path = parse_crate_path(&input.attrs)?;
+    let krate = crate::derive::crate_path::resolve(crate_path.as_ref());
+
     let ident = input.ident;
     let generics = input.generics;
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
@@ -120,16 +145,16 @@ pub(crate) fn derive_selected_subcommand_merge(
 
         let variant_ident = variant.ident;
         validate_tuple_variant(&variant_ident, &variant.fields)?;
-        let merge_tokens = merge_expr(uses_matches, &selected_label);
+        let merge_tokens = merge_expr(uses_matches, &selected_label, &krate);
         arms.push(build_arm(&variant_ident, &merge_tokens));
     }
 
     Ok(quote! {
-        impl #impl_generics ortho_config::SelectedSubcommandMerge for #ident #ty_generics #where_clause {
+        impl #impl_generics #krate::SelectedSubcommandMerge for #ident #ty_generics #where_clause {
             fn load_and_merge_selected(
                 self,
                 matches: &clap::ArgMatches,
-            ) -> std::result::Result<Self, ortho_config::SelectedSubcommandMergeError> {
+            ) -> std::result::Result<Self, #krate::SelectedSubcommandMergeError> {
                 match self {
                     #(#arms)*
                 }

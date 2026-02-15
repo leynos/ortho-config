@@ -369,3 +369,73 @@ fn post_merge_hook_defaults_to_false() -> Result<()> {
         "post_merge_hook should default to false when not specified",
     )
 }
+
+#[test]
+fn parses_crate_path_simple() -> Result<()> {
+    let input: DeriveInput = parse_quote! {
+        #[ortho_config(crate = "my_config")]
+        struct Config { field: String }
+    };
+    let (_, _, struct_attrs, _) = parse_input(&input).map_err(|err| anyhow!(err))?;
+    let crate_path = struct_attrs
+        .crate_path
+        .ok_or_else(|| anyhow!("expected crate_path to be Some"))?;
+    ensure!(
+        quote!(#crate_path).to_string() == "my_config",
+        "expected my_config, got {}",
+        quote!(#crate_path)
+    );
+    Ok(())
+}
+
+#[test]
+fn parses_crate_path_nested() -> Result<()> {
+    let input: DeriveInput = parse_quote! {
+        #[ortho_config(crate = "my_ns::ortho_config")]
+        struct Config { field: String }
+    };
+    let (_, _, struct_attrs, _) = parse_input(&input).map_err(|err| anyhow!(err))?;
+    let crate_path = struct_attrs
+        .crate_path
+        .ok_or_else(|| anyhow!("expected crate_path to be Some"))?;
+    ensure!(
+        quote!(#crate_path).to_string() == "my_ns :: ortho_config",
+        "expected my_ns :: ortho_config, got {}",
+        quote!(#crate_path)
+    );
+    Ok(())
+}
+
+#[test]
+fn crate_path_defaults_to_none() -> Result<()> {
+    let input: DeriveInput = parse_quote! {
+        struct Config { field: String }
+    };
+    let (_, _, struct_attrs, _) = parse_input(&input).map_err(|err| anyhow!(err))?;
+    ensure!(
+        struct_attrs.crate_path.is_none(),
+        "expected crate_path to be None when omitted"
+    );
+    Ok(())
+}
+
+#[test]
+fn parses_crate_path_with_prefix() -> Result<()> {
+    let input: DeriveInput = parse_quote! {
+        #[ortho_config(prefix = "APP_", crate = "my_config")]
+        struct Config { field: String }
+    };
+    let (_, _, struct_attrs, _) = parse_input(&input).map_err(|err| anyhow!(err))?;
+    ensure!(
+        struct_attrs.prefix.as_deref() == Some("APP_"),
+        "expected prefix APP_"
+    );
+    let crate_path = struct_attrs
+        .crate_path
+        .ok_or_else(|| anyhow!("expected crate_path to be Some"))?;
+    ensure!(
+        quote!(#crate_path).to_string() == "my_config",
+        "expected my_config"
+    );
+    Ok(())
+}

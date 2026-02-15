@@ -23,6 +23,10 @@ use helpers::{
     state_struct_tokens,
 };
 
+fn default_krate() -> proc_macro2::TokenStream {
+    quote! { ortho_config }
+}
+
 #[rstest]
 fn unique_append_fields_filters_duplicates() -> Result<()> {
     let append_fields = vec![
@@ -66,13 +70,17 @@ fn collection_generators_deduplicate_append_fields(generator: TokenGenerator) ->
 
 #[rstest]
 fn generate_declarative_impl_composes_helpers() -> Result<()> {
+    let krate = default_krate();
     let config_ident = parse_ident("Sample")?;
     let strategies = CollectionStrategies::default();
-    let tokens = generate_declarative_impl(&config_ident, &strategies, false);
+    let tokens = generate_declarative_impl(&config_ident, &strategies, false, &krate);
     let state_ident = parse_ident("__SampleDeclarativeMergeState")?;
-    let state_struct = generate_declarative_state_struct(&state_ident, &config_ident, &strategies);
-    let merge_impl = generate_declarative_merge_impl(&state_ident, &config_ident, &strategies);
-    let merge_fn = generate_declarative_merge_from_layers_fn(&state_ident, &config_ident, false);
+    let state_struct =
+        generate_declarative_state_struct(&state_ident, &config_ident, &strategies, &krate);
+    let merge_impl =
+        generate_declarative_merge_impl(&state_ident, &config_ident, &strategies, &krate);
+    let merge_fn =
+        generate_declarative_merge_from_layers_fn(&state_ident, &config_ident, false, &krate);
     let expected = quote! {
         #state_struct
         #merge_impl

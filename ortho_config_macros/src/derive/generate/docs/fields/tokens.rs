@@ -28,7 +28,7 @@ pub(super) fn build_optional_doc_metadata(
 }
 
 /// Generates tokens for the default value metadata.
-pub(super) fn default_tokens(attrs: &FieldAttrs) -> TokenStream {
+pub(super) fn default_tokens(attrs: &FieldAttrs, krate: &TokenStream) -> TokenStream {
     let display_str = attrs.default.as_ref().map_or_else(
         || {
             attrs
@@ -47,16 +47,16 @@ pub(super) fn default_tokens(attrs: &FieldAttrs) -> TokenStream {
 
     build_optional_doc_metadata(
         display_str.as_deref(),
-        &quote! { ortho_config::docs::DefaultValue },
+        &quote! { #krate::docs::DefaultValue },
         "display",
     )
 }
 
 /// Generates tokens for the deprecation metadata.
-pub(super) fn deprecated_tokens(attrs: &FieldAttrs) -> TokenStream {
+pub(super) fn deprecated_tokens(attrs: &FieldAttrs, krate: &TokenStream) -> TokenStream {
     build_optional_doc_metadata(
         attrs.doc.deprecated_note_id.as_deref(),
-        &quote! { ortho_config::docs::Deprecation },
+        &quote! { #krate::docs::Deprecation },
         "note_id",
     )
 }
