@@ -33,6 +33,8 @@ pub(super) struct FieldDocArgs<'a> {
     pub field_attrs: &'a [FieldAttrs],
     pub serde_rename_all: Option<SerdeRenameAll>,
     pub cli_fields: &'a [CliFieldMetadata],
+    /// Resolved crate path for generated code references.
+    pub krate: &'a proc_macro2::TokenStream,
 }
 
 pub(super) fn build_fields_metadata(args: &FieldDocArgs<'_>) -> syn::Result<Vec<TokenStream>> {
@@ -60,6 +62,7 @@ pub(super) fn build_fields_metadata(args: &FieldDocArgs<'_>) -> syn::Result<Vec<
         cli_lookup,
         env_seen: HashMap::new(),
         file_seen: HashMap::new(),
+        krate: args.krate,
     };
 
     let mut output = Vec::with_capacity(args.fields.len());
@@ -77,6 +80,7 @@ struct FieldMetaBuilder<'a> {
     cli_lookup: HashMap<&'a str, &'a CliFieldMetadata>,
     env_seen: HashMap<String, proc_macro2::Span>,
     file_seen: HashMap<String, proc_macro2::Span>,
+    krate: &'a proc_macro2::TokenStream,
 }
 
 impl<'a> FieldMetaBuilder<'a> {
@@ -103,7 +107,7 @@ impl<'a> FieldMetaBuilder<'a> {
         let value_type = resolve_value_type(attrs, field);
         let required = resolve_required(field, attrs)?;
         let value_context = ValueContext {
-            value_tokens: value_type_tokens(value_type.clone()),
+            value_tokens: value_type_tokens(value_type.clone(), self.krate),
             required,
         };
         let context = FieldContext {
@@ -115,7 +119,7 @@ impl<'a> FieldMetaBuilder<'a> {
         };
 
         let io_tokens = self.render_io_tokens(&context)?;
-        let meta_parts = render_meta_parts(attrs);
+        let meta_parts = render_meta_parts(attrs, self.krate);
         let identity = FieldIdentity {
             field_name: &field_name,
             help_id: &help_id,
@@ -128,7 +132,7 @@ impl<'a> FieldMetaBuilder<'a> {
             meta_parts,
         };
 
-        Ok(render_field_metadata(components))
+        Ok(render_field_metadata(components, self.krate))
     }
 
     fn render_io_tokens(&mut self, context: &FieldContext<'_>) -> syn::Result<IoTokens> {
@@ -157,8 +161,9 @@ impl<'a> FieldMetaBuilder<'a> {
         let possible_values = build_possible_values(context.value_type);
         let hide_in_help = context.attrs.doc.cli_hide_in_help;
 
+        let krate = self.krate;
         Ok(quote! {
-            Some(ortho_config::docs::CliMetadata {
+            Some(#krate::docs::CliMetadata {
                 long: #long,
                 short: #short,
                 value_name: #value_name,
@@ -180,8 +185,9 @@ impl<'a> FieldMetaBuilder<'a> {
         validate_env_name(context.name, &env_name)?;
         ensure_unique("env", context.name, &env_name, &mut self.env_seen)?;
         let lit = syn::LitStr::new(&env_name, proc_macro2::Span::call_site());
+        let krate = self.krate;
         Ok(quote! {
-            ortho_config::docs::EnvMetadata {
+            #krate::docs::EnvMetadata {
                 var_name: String::from(#lit),
             }
         })
@@ -196,8 +202,9 @@ impl<'a> FieldMetaBuilder<'a> {
         validate_file_key(context.name, &key_path)?;
         ensure_unique("file", context.name, &key_path, &mut self.file_seen)?;
         let lit = syn::LitStr::new(&key_path, proc_macro2::Span::call_site());
+        let krate = self.krate;
         Ok(quote! {
-            ortho_config::docs::FileMetadata {
+            #krate::docs::FileMetadata {
                 key_path: String::from(#lit),
             }
         })
@@ -237,13 +244,13 @@ struct MetaParts {
     notes: Vec<TokenStream>,
 }
 
-fn render_meta_parts(attrs: &FieldAttrs) -> MetaParts {
+fn render_meta_parts(attrs: &FieldAttrs, krate: &proc_macro2::TokenStream) -> MetaParts {
     MetaParts {
-        default_tokens: default_tokens(attrs),
-        deprecated_tokens: deprecated_tokens(attrs),
-        examples: example_tokens(&attrs.doc.examples),
-        links: link_tokens(&attrs.doc.links),
-        notes: note_tokens(&attrs.doc.notes),
+        default_tokens: default_tokens(attrs, krate),
+        deprecated_tokens: deprecated_tokens(attrs, krate),
+        examples: example_tokens(&attrs.doc.examples, krate),
+        links: link_tokens(&attrs.doc.links, krate),
+        notes: note_tokens(&attrs.doc.notes, krate),
     }
 }
 
@@ -272,7 +279,10 @@ impl FieldIdentity<'_> {
     }
 }
 
-fn render_field_metadata(components: FieldMetadataComponents) -> TokenStream {
+fn render_field_metadata(
+    components: FieldMetadataComponents,
+    krate: &proc_macro2::TokenStream,
+) -> TokenStream {
     let FieldMetadataComponents {
         identity,
         value_context,
@@ -286,7 +296,7 @@ fn render_field_metadata(components: FieldMetadataComponents) -> TokenStream {
     let meta = render_meta_block(meta_parts);
 
     quote! {
-        ortho_config::docs::FieldMetadata {
+        #krate::docs::FieldMetadata {
             #identity_tokens
             #value_tokens
             #io
@@ -362,13 +372,8 @@ fn resolve_required(field: &syn::Field, attrs: &FieldAttrs) -> syn::Result<bool>
     Ok(!infers_non_required(field, attrs)?)
 }
 
-/// Returns `true` if the field should be inferred as non-required based on its type or attributes.
-///
-/// A field is inferred as non-required if any of the following are true:
-/// - The type is `Option<T>`
-/// - The field has an `#[ortho_config(default = ...)]` attribute
-/// - The field has a `#[serde(default)]` attribute
-/// - The type is a collection (`Vec`, `BTreeMap`, `HashMap`)
+/// Returns `true` when the field can be inferred as non-required (`Option<T>`,
+/// `#[ortho_config(default = ...)]`, `#[serde(default)]`, or a collection type).
 fn infers_non_required(field: &syn::Field, attrs: &FieldAttrs) -> syn::Result<bool> {
     if option_inner(&field.ty).is_some() {
         return Ok(true);

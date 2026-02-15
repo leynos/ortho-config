@@ -45,7 +45,10 @@ where
     }
 }
 
-pub(super) fn append_collection_tokens(strategies: &CollectionStrategies) -> CollectionTokens {
+pub(super) fn append_collection_tokens(
+    strategies: &CollectionStrategies,
+    krate: &TokenStream,
+) -> CollectionTokens {
     build_collection_tokens(
         unique_append_fields(&strategies.append),
         "append_",
@@ -56,11 +59,11 @@ pub(super) fn append_collection_tokens(strategies: &CollectionStrategies) -> Col
                         self.#state_field_ident = Some(Vec::new());
                     } else {
                         let normalised = match value {
-                            ortho_config::serde_json::Value::Array(_) => value,
-                            other => ortho_config::serde_json::Value::Array(vec![other]),
+                            #krate::serde_json::Value::Array(_) => value,
+                            other => #krate::serde_json::Value::Array(vec![other]),
                         };
                         let incoming: Vec<_> =
-                            ortho_config::declarative::from_value_merge(normalised)?;
+                            #krate::declarative::from_value_merge(normalised)?;
                         let acc = self
                             .#state_field_ident
                             .get_or_insert_with(Default::default);
@@ -74,7 +77,7 @@ pub(super) fn append_collection_tokens(strategies: &CollectionStrategies) -> Col
                 if let Some(values) = #state_field_ident {
                     overlay.insert(
                         #field_name.to_owned(),
-                        ortho_config::serde_json::Value::Array(values),
+                        #krate::serde_json::Value::Array(values),
                     );
                 }
             }

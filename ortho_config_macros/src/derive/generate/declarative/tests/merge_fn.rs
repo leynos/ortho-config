@@ -6,13 +6,15 @@ use rstest::rstest;
 
 use crate::derive::generate::declarative::generate_declarative_merge_from_layers_fn;
 
-use super::helpers::parse_ident;
+use super::helpers::{default_krate, parse_ident};
 
 #[rstest]
 fn generate_declarative_merge_from_layers_fn_emits_post_merge_hook() -> Result<()> {
+    let krate = default_krate();
     let state_ident = parse_ident("__SampleDeclarativeMergeState")?;
     let config_ident = parse_ident("Sample")?;
-    let tokens = generate_declarative_merge_from_layers_fn(&state_ident, &config_ident, true);
+    let tokens =
+        generate_declarative_merge_from_layers_fn(&state_ident, &config_ident, true, &krate);
     let norm = tokens.to_string().replace(" :: ", "::").replace(' ', "");
 
     // Check for PostMergeContext::new(Self::prefix()).
@@ -48,9 +50,11 @@ fn generate_declarative_merge_from_layers_fn_emits_post_merge_hook() -> Result<(
 
 #[rstest]
 fn generate_declarative_merge_from_layers_fn_emits_constructor() -> Result<()> {
+    let krate = default_krate();
     let state_ident = parse_ident("__SampleDeclarativeMergeState")?;
     let config_ident = parse_ident("Sample")?;
-    let tokens = generate_declarative_merge_from_layers_fn(&state_ident, &config_ident, false);
+    let tokens =
+        generate_declarative_merge_from_layers_fn(&state_ident, &config_ident, false, &krate);
     let expected = quote! {
         impl Sample {
             /// Merge the configuration struct from declarative layers.

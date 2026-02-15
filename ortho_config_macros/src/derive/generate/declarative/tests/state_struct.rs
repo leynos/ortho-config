@@ -6,16 +6,18 @@ use rstest::rstest;
 use crate::derive::build::CollectionStrategies;
 use crate::derive::generate::declarative::generate_declarative_state_struct;
 
-use super::helpers::{append_strategies, parse_ident, parse_type};
+use super::helpers::{append_strategies, default_krate, parse_ident, parse_type};
 
 #[rstest]
 fn generate_declarative_state_struct_emits_storage() -> Result<()> {
+    let krate = default_krate();
     let state_ident = parse_ident("__SampleDeclarativeMergeState")?;
     let config_ident = parse_ident("SampleConfig")?;
     let tokens = generate_declarative_state_struct(
         &state_ident,
         &config_ident,
         &CollectionStrategies::default(),
+        &krate,
     );
     let rendered = tokens.to_string();
     ensure!(
@@ -66,9 +68,11 @@ fn generate_declarative_state_struct_includes_collection_fields(
     #[case] strategies: CollectionStrategies,
     #[case] expected_fields: Vec<&'static str>,
 ) -> Result<()> {
+    let krate = default_krate();
     let state_ident = parse_ident("__SampleDeclarativeMergeState")?;
     let config_ident = parse_ident("SampleConfig")?;
-    let tokens = generate_declarative_state_struct(&state_ident, &config_ident, &strategies);
+    let tokens =
+        generate_declarative_state_struct(&state_ident, &config_ident, &strategies, &krate);
     let norm = tokens.to_string().replace(' ', "");
     for field in expected_fields {
         ensure!(

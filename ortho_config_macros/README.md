@@ -233,6 +233,29 @@ configurable via:
 
 You can customize these mappings using `#[ortho_config(…)]` attributes.
 
+## Dependency Aliasing
+
+When `ortho_config` is imported under a different name via Cargo dependency
+aliasing, add `#[ortho_config(crate = "...")]` to tell the derive macro which
+path to use in generated code:
+
+```toml
+[dependencies]
+my_cfg = { package = "ortho_config", version = "0.7.0" }
+```
+
+```rust
+use my_cfg::OrthoConfig;
+
+#[derive(Debug, serde::Deserialize, OrthoConfig)]
+#[ortho_config(prefix = "APP_", crate = "my_cfg")]
+struct AppConfig {
+    port: u16,
+}
+```
+
+The same attribute works on `SelectedSubcommandMerge` derives.
+
 ## Field Attributes `#[ortho_config(…)]`
 
 Customize behaviour for each field:

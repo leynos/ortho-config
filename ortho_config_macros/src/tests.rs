@@ -163,12 +163,14 @@ fn macro_components_propagates_post_merge_hook(
 fn build_components_from_input(input: &DeriveInput) -> Result<MacroComponents> {
     let (ident, fields, struct_attrs, field_attrs) =
         parse_input(input).map_err(|err| anyhow!(err))?;
+    let krate = crate::derive::crate_path::resolve(struct_attrs.crate_path.as_ref());
     let args = MacroComponentArgs {
         ident: &ident,
         fields: &fields,
         struct_attrs: &struct_attrs,
         field_attrs: &field_attrs,
         serde_rename_all: None,
+        krate: &krate,
     };
     build_macro_components(&args).map_err(|err| anyhow!(err))
 }
@@ -258,6 +260,7 @@ fn load_impl_uses_ortho_config_reexport_paths() -> Result<()> {
     let cli_ident = parse_str("CliStruct").context("parse CliStruct ident")?;
     let config_ident = parse_str("Config").context("parse Config ident")?;
     let defaults_ident = parse_str("Defaults").context("parse Defaults ident")?;
+    let krate = quote! { ortho_config };
     let env_provider = quote! {
         ortho_config::figment::providers::Env::prefixed("APP_")
     };
@@ -276,6 +279,7 @@ fn load_impl_uses_ortho_config_reexport_paths() -> Result<()> {
         dotfile_name: &dotfile_name,
         legacy_app_name: String::from("app"),
         discovery: None,
+        krate: &krate,
     };
     let generated = build_load_impl(&LoadImplArgs {
         idents,
