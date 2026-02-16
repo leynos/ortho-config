@@ -226,6 +226,10 @@ fn missing_base_file_errors(#[case] is_abs: bool) -> Result<()> {
             Ok(cfg) => return Err(anyhow!("expected missing base error, got {cfg:?}")),
             Err(err) => err,
         };
+        ensure!(
+            matches!(&*err, OrthoError::File { .. }),
+            "expected File error, got {err:?}"
+        );
         let msg = err.to_string();
         ensure!(
             msg.contains("missing.toml"),
