@@ -198,7 +198,6 @@ fn resolve_cli_field(
     };
 
     let field_name = name.to_string();
-    context.field_names.insert(field_name.clone());
 
     let long = attrs
         .cli_long
