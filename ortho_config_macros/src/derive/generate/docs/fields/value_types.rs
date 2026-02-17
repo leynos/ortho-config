@@ -24,21 +24,21 @@ pub(super) enum ValueTypeModel {
 }
 
 impl ValueTypeModel {
-    fn tokens(&self) -> TokenStream {
+    fn tokens(&self, krate: &TokenStream) -> TokenStream {
         match self {
-            Self::String => quote! { ortho_config::docs::ValueType::String },
+            Self::String => quote! { #krate::docs::ValueType::String },
             Self::Integer { bits, signed } => quote! {
-                ortho_config::docs::ValueType::Integer { bits: #bits, signed: #signed }
+                #krate::docs::ValueType::Integer { bits: #bits, signed: #signed }
             },
             Self::Float { bits } => quote! {
-                ortho_config::docs::ValueType::Float { bits: #bits }
+                #krate::docs::ValueType::Float { bits: #bits }
             },
-            Self::Bool => quote! { ortho_config::docs::ValueType::Bool },
-            Self::Duration => quote! { ortho_config::docs::ValueType::Duration },
-            Self::Path => quote! { ortho_config::docs::ValueType::Path },
-            Self::IpAddr => quote! { ortho_config::docs::ValueType::IpAddr },
-            Self::Hostname => quote! { ortho_config::docs::ValueType::Hostname },
-            Self::Url => quote! { ortho_config::docs::ValueType::Url },
+            Self::Bool => quote! { #krate::docs::ValueType::Bool },
+            Self::Duration => quote! { #krate::docs::ValueType::Duration },
+            Self::Path => quote! { #krate::docs::ValueType::Path },
+            Self::IpAddr => quote! { #krate::docs::ValueType::IpAddr },
+            Self::Hostname => quote! { #krate::docs::ValueType::Hostname },
+            Self::Url => quote! { #krate::docs::ValueType::Url },
             Self::Enum { variants } => {
                 let values = variants
                     .iter()
@@ -48,36 +48,36 @@ impl ValueTypeModel {
                     })
                     .collect::<Vec<_>>();
                 quote! {
-                    ortho_config::docs::ValueType::Enum { variants: vec![ #( #values ),* ] }
+                    #krate::docs::ValueType::Enum { variants: vec![ #( #values ),* ] }
                 }
             }
             Self::List { of } => {
-                let inner = of.tokens();
+                let inner = of.tokens(krate);
                 quote! {
-                    ortho_config::docs::ValueType::List { of: Box::new(#inner) }
+                    #krate::docs::ValueType::List { of: Box::new(#inner) }
                 }
             }
             Self::Map { of } => {
-                let inner = of.tokens();
+                let inner = of.tokens(krate);
                 quote! {
-                    ortho_config::docs::ValueType::Map { of: Box::new(#inner) }
+                    #krate::docs::ValueType::Map { of: Box::new(#inner) }
                 }
             }
             Self::Custom { name } => {
                 let lit = syn::LitStr::new(name, proc_macro2::Span::call_site());
                 quote! {
-                    ortho_config::docs::ValueType::Custom { name: String::from(#lit) }
+                    #krate::docs::ValueType::Custom { name: String::from(#lit) }
                 }
             }
         }
     }
 }
 
-pub(super) fn value_type_tokens(value: Option<ValueTypeModel>) -> TokenStream {
+pub(super) fn value_type_tokens(value: Option<ValueTypeModel>, krate: &TokenStream) -> TokenStream {
     value.map_or_else(
         || quote! { None },
         |model| {
-            let inner = model.tokens();
+            let inner = model.tokens(krate);
             quote! { Some(#inner) }
         },
     )

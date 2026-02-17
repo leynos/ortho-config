@@ -6,6 +6,9 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- Support dependency aliasing via `#[ortho_config(crate = "...")]`
+  attribute on `OrthoConfig` and `SelectedSubcommandMerge` derive macros
+  (closes #291).
 - Re-export `figment`, `uncased`, `xdg`, and optional format parsers to
   simplify dependency graphs for consumers.
 - Forward `json5`, `yaml`, and `toml` feature flags to

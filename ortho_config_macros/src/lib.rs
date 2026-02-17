@@ -13,17 +13,18 @@ use syn::{DeriveInput, parse_macro_input};
 
 mod derive {
     pub(crate) mod build;
+    pub(crate) mod crate_path;
     pub(crate) mod generate;
     pub(crate) mod load_impl;
     pub(crate) mod parse;
 }
 mod selected_subcommand_merge;
 
+use derive::build::cli_tokens::build_cli_struct_tokens;
 use derive::build::{
-    CollectionStrategies, build_cli_field_metadata, build_cli_struct_fields, build_config_env_var,
-    build_config_flag_field, build_default_struct_fields, build_default_struct_init,
-    build_env_provider, collect_collection_strategies, compute_config_env_var,
-    compute_dotfile_name, default_app_name,
+    CollectionStrategies, build_config_env_var, build_default_struct_fields,
+    build_default_struct_init, build_env_provider, collect_collection_strategies,
+    compute_config_env_var, compute_dotfile_name, default_app_name,
 };
 use derive::generate::declarative::generate_declarative_impl;
 use derive::generate::docs::{DocsArgs, generate_docs_impl};
@@ -31,9 +32,7 @@ use derive::generate::ortho_impl::generate_trait_implementation;
 use derive::load_impl::{
     DiscoveryTokens, LoadImplArgs, LoadImplIdents, LoadImplTokens, build_load_impl,
 };
-use derive::parse::{
-    SerdeRenameAll, clap_arg_id, parse_input, serde_rename_all, serde_serialized_field_key,
-};
+use derive::parse::{SerdeRenameAll, parse_input, serde_rename_all};
 
 /// Derive macro for the
 /// [`OrthoConfig`](https://docs.rs/ortho_config/latest/ortho_config/trait.OrthoConfig.html)
@@ -55,12 +54,15 @@ pub fn derive_ortho_config(input_tokens: TokenStream) -> TokenStream {
         Err(e) => return e.to_compile_error().into(),
     };
 
+    let krate = derive::crate_path::resolve(struct_attrs.crate_path.as_ref());
+
     let component_args = MacroComponentArgs {
         ident: &ident,
         fields: &fields,
         struct_attrs: &struct_attrs,
         field_attrs: &field_attrs,
         serde_rename_all,
+        krate: &krate,
     };
 
     let components = match build_macro_components(&component_args) {
@@ -68,11 +70,12 @@ pub fn derive_ortho_config(input_tokens: TokenStream) -> TokenStream {
         Err(e) => return e.to_compile_error().into(),
     };
 
-    let core_tokens = generate_trait_implementation(&ident, &components);
+    let core_tokens = generate_trait_implementation(&ident, &components, &krate);
     let declarative_impl = generate_declarative_impl(
         &ident,
         &components.collection_strategies,
         components.post_merge_hook,
+        &krate,
     );
     let docs_impl = match generate_docs_impl(&DocsArgs {
         ident: &ident,
@@ -81,6 +84,7 @@ pub fn derive_ortho_config(input_tokens: TokenStream) -> TokenStream {
         struct_attrs: &struct_attrs,
         serde_rename_all,
         cli_fields: &components.cli_field_metadata,
+        krate: &krate,
     }) {
         Ok(tokens) => tokens,
         Err(err) => return err.to_compile_error().into(),
@@ -102,7 +106,7 @@ pub fn derive_ortho_config(input_tokens: TokenStream) -> TokenStream {
 ///
 /// Variants can opt into `ArgMatches`-aware merging (required for
 /// `cli_default_as_absent` support) using `#[ortho_subcommand(with_matches)]`.
-#[proc_macro_derive(SelectedSubcommandMerge, attributes(ortho_subcommand))]
+#[proc_macro_derive(SelectedSubcommandMerge, attributes(ortho_subcommand, ortho_config))]
 pub fn derive_selected_subcommand_merge(input_tokens: TokenStream) -> TokenStream {
     let derive_input = parse_macro_input!(input_tokens as DeriveInput);
     match selected_subcommand_merge::derive_selected_subcommand_merge(derive_input) {
@@ -161,87 +165,6 @@ struct LoadTokenRefs<'a> {
     dotfile_name: &'a syn::LitStr,
 }
 
-/// Result of building CLI struct tokens.
-struct CliStructBuildResult {
-    /// The generated CLI struct fields.
-    fields: Vec<proc_macro2::TokenStream>,
-    /// Metadata for each field used in `CliValueExtractor` generation.
-    ///
-    /// This is derived from the input configuration struct fields only (not any
-    /// generated CLI-only fields).
-    field_info: Vec<CliFieldInfo>,
-    /// Metadata for each field used in documentation generation.
-    metadata: Vec<derive::build::CliFieldMetadata>,
-}
-
-/// Build CLI struct field tokens, conditionally adding a generated
-/// `config_path` field.
-///
-/// If no user-defined `config_path` field exists, generates a config flag field
-/// based on discovery attributes from `struct_attrs`.
-///
-/// # Arguments
-///
-/// - `fields`: Struct fields used to generate CLI tokens.
-/// - `field_attrs`: Per-field attributes controlling CLI generation.
-/// - `struct_attrs`: Struct-level attributes including discovery settings.
-///
-/// # Errors
-///
-/// Returns an error if CLI flag collisions are detected.
-fn build_cli_field_info(
-    field: &syn::Field,
-    attrs: &derive::parse::FieldAttrs,
-    serde_rename_all: Option<SerdeRenameAll>,
-) -> syn::Result<CliFieldInfo> {
-    let name = field
-        .ident
-        .clone()
-        .ok_or_else(|| syn::Error::new_spanned(field, "unnamed fields are not supported"))?;
-    let field_name = name.to_string();
-    let arg_id = clap_arg_id(field)?.unwrap_or_else(|| field_name.clone());
-    let serialized_key = serde_serialized_field_key(field, serde_rename_all)?;
-    Ok(CliFieldInfo {
-        serialized_key,
-        arg_id,
-        is_default_as_absent: attrs.cli_default_as_absent,
-    })
-}
-
-fn build_cli_struct_tokens(
-    fields: &[syn::Field],
-    field_attrs: &[derive::parse::FieldAttrs],
-    struct_attrs: &derive::parse::StructAttrs,
-    serde_rename_all: Option<SerdeRenameAll>,
-) -> syn::Result<CliStructBuildResult> {
-    let mut cli_struct = build_cli_struct_fields(fields, field_attrs)?;
-    if !cli_struct.field_names.contains("config_path") {
-        let config_field = build_config_flag_field(
-            struct_attrs,
-            &cli_struct.used_shorts,
-            &cli_struct.used_longs,
-            &cli_struct.field_names,
-        )?;
-        cli_struct.fields.push(config_field);
-    }
-
-    let metadata = build_cli_field_metadata(fields, field_attrs)?;
-
-    // Build field info for CliValueExtractor generation
-    let field_info: Vec<CliFieldInfo> = fields
-        .iter()
-        .zip(field_attrs)
-        .filter(|(_, attrs)| !attrs.skip_cli)
-        .map(|(field, attrs)| build_cli_field_info(field, attrs, serde_rename_all))
-        .collect::<syn::Result<Vec<_>>>()?;
-
-    Ok(CliStructBuildResult {
-        fields: cli_struct.fields,
-        field_info,
-        metadata,
-    })
-}
-
 /// Build discovery tokens from struct-level `discovery(...)` attributes.
 ///
 /// Populates discovery settings with defaults derived from
@@ -296,6 +219,7 @@ struct MacroComponentArgs<'a> {
     struct_attrs: &'a derive::parse::StructAttrs,
     field_attrs: &'a [derive::parse::FieldAttrs],
     serde_rename_all: Option<SerdeRenameAll>,
+    krate: &'a proc_macro2::TokenStream,
 }
 
 /// Construct `LoadImplArgs` from identifiers, token references, and discovery
@@ -317,6 +241,7 @@ fn build_load_impl_args<'a>(
     idents: LoadImplIdents<'a>,
     token_refs: LoadTokenRefs<'a>,
     config: LoadImplConfig<'a>,
+    krate: &'a proc_macro2::TokenStream,
 ) -> LoadImplResult<'a> {
     let legacy_app_name_storage = config
         .struct_attrs
@@ -338,6 +263,7 @@ fn build_load_impl_args<'a>(
         dotfile_name,
         legacy_app_name: legacy_app_name_storage.clone(),
         discovery: config.discovery_tokens,
+        krate,
     };
     let args = LoadImplArgs {
         idents,
@@ -358,6 +284,7 @@ fn build_macro_components(args: &MacroComponentArgs<'_>) -> syn::Result<MacroCom
         struct_attrs,
         field_attrs,
         serde_rename_all,
+        krate,
     } = args;
 
     let defaults_ident = format_ident!("__{}Defaults", ident);
@@ -366,7 +293,7 @@ fn build_macro_components(args: &MacroComponentArgs<'_>) -> syn::Result<MacroCom
     let cli_build_result =
         build_cli_struct_tokens(fields, field_attrs, struct_attrs, *serde_rename_all)?;
     let default_struct_init = build_default_struct_init(fields, field_attrs);
-    let env_provider = build_env_provider(struct_attrs);
+    let env_provider = build_env_provider(struct_attrs, krate);
     let config_env_var = build_config_env_var(struct_attrs);
     let dotfile_name_string = compute_dotfile_name(struct_attrs);
     let dotfile_name = syn::LitStr::new(&dotfile_name_string, proc_macro2::Span::call_site());
@@ -394,7 +321,7 @@ fn build_macro_components(args: &MacroComponentArgs<'_>) -> syn::Result<MacroCom
     let LoadImplResult {
         args: load_impl_args,
         legacy_app_name_storage: _legacy_app_name_storage,
-    } = build_load_impl_args(load_impl_idents, load_token_refs, load_impl_config);
+    } = build_load_impl_args(load_impl_idents, load_token_refs, load_impl_config, krate);
     let load_impl = build_load_impl(&load_impl_args);
     let prefix_fn = struct_attrs.prefix.as_ref().map(|prefix| {
         quote! {

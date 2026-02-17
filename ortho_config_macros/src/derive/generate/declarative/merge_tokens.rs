@@ -21,24 +21,25 @@ pub(super) struct FinishCollectionTokens<'a> {
 /// append collection strategies, and merge remaining fields into the state.
 pub(super) fn merge_layer_tokens(
     config_ident: &syn::Ident,
+    krate: &TokenStream,
     map_merge_logic: &[TokenStream],
     append_merge_logic: &[TokenStream],
 ) -> TokenStream {
-    let non_object_guard = generate_non_object_guard(config_ident);
+    let non_object_guard = generate_non_object_guard(config_ident, krate);
     quote! {
         let provenance = layer.provenance();
         let path = layer.path().map(|p| p.to_owned());
         let value = layer.into_value();
         let mut map = match value {
-            ortho_config::serde_json::Value::Object(map) => map,
+            #krate::serde_json::Value::Object(map) => map,
             other => { #non_object_guard }
         };
         #( #map_merge_logic )*
         #( #append_merge_logic )*
         if !map.is_empty() {
-            ortho_config::declarative::merge_value(
+            #krate::declarative::merge_value(
                 &mut self.value,
-                ortho_config::serde_json::Value::Object(map),
+                #krate::serde_json::Value::Object(map),
             );
         }
 
@@ -52,6 +53,7 @@ pub(super) fn merge_layer_tokens(
 /// append and map values, merge it into the final value, and deserialize.
 pub(super) fn finish_tokens(
     state_ident: &syn::Ident,
+    krate: &TokenStream,
     collections: &FinishCollectionTokens<'_>,
 ) -> TokenStream {
     let append_destructured = collections.append_destructured;
@@ -64,15 +66,15 @@ pub(super) fn finish_tokens(
             #( #append_destructured, )*
             #( #map_destructured, )*
         } = self;
-        let mut overlay = ortho_config::serde_json::Map::new();
+        let mut overlay = #krate::serde_json::Map::new();
         #( #append_inserts )*
         #( #map_inserts )*
         if !overlay.is_empty() {
-            ortho_config::declarative::merge_value(
+            #krate::declarative::merge_value(
                 &mut value,
-                ortho_config::serde_json::Value::Object(overlay),
+                #krate::serde_json::Value::Object(overlay),
             );
         }
-        ortho_config::declarative::from_value_merge(value)
+        #krate::declarative::from_value_merge(value)
     }
 }

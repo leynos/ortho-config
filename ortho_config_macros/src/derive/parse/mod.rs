@@ -33,6 +33,7 @@ pub(crate) use doc_types::{
 pub(crate) use input::parse_input;
 #[cfg(any(test, doctest))]
 pub(crate) use literals::__doc_lit_str;
+pub(crate) use literals::lit_crate_path;
 use literals::{lit_bool, lit_char, lit_str};
 pub(crate) use serde_attrs::{
     SerdeRenameAll, serde_field_rename, serde_has_default, serde_rename_all,
@@ -49,6 +50,11 @@ pub(crate) struct StructAttrs {
     pub discovery: Option<DiscoveryAttrs>,
     pub post_merge_hook: bool,
     pub doc: DocStructAttrs,
+    /// Overrides the generated crate path for dependency aliasing.
+    ///
+    /// When set via `#[ortho_config(crate = "my_alias")]`, generated code
+    /// references types through `my_alias::` instead of `ortho_config::`.
+    pub crate_path: Option<syn::Path>,
 }
 
 /// Field-level attributes recognised by `#[derive(OrthoConfig)]`.
@@ -237,6 +243,16 @@ pub(crate) fn parse_struct_attrs(attrs: &[Attribute]) -> Result<StructAttrs, syn
                     true
                 };
                 out.post_merge_hook = v;
+                Ok(())
+            }
+            Some("crate") => {
+                if out.crate_path.is_some() {
+                    return Err(syn::Error::new_spanned(
+                        &meta.path,
+                        "duplicate `crate` attribute",
+                    ));
+                }
+                out.crate_path = Some(lit_crate_path(meta)?);
                 Ok(())
             }
             _ => {

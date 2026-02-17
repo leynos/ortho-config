@@ -25,14 +25,17 @@ pub(crate) struct DocsArgs<'a> {
     pub struct_attrs: &'a StructAttrs,
     pub serde_rename_all: Option<SerdeRenameAll>,
     pub cli_fields: &'a [CliFieldMetadata],
+    /// Resolved crate path for generated code references.
+    pub krate: &'a TokenStream,
 }
 
 pub(crate) fn generate_docs_impl(args: &DocsArgs<'_>) -> syn::Result<TokenStream> {
+    let krate = args.krate;
     let app_name = sections::resolve_app_name(args.struct_attrs, args.ident);
     let app_name_value = AppName::new(app_name);
     let about_id = sections::resolve_about_id(&app_name_value, &args.struct_attrs.doc);
-    let headings = sections::build_sections_metadata(&app_name_value, args.struct_attrs)?;
-    let windows = sections::build_windows_metadata(args.struct_attrs);
+    let headings = sections::build_sections_metadata(&app_name_value, args.struct_attrs, krate)?;
+    let windows = sections::build_windows_metadata(args.struct_attrs, krate);
     let fields = fields::build_fields_metadata(&fields::FieldDocArgs {
         app_name: &app_name_value,
         prefix: args.struct_attrs.prefix.as_deref(),
@@ -40,6 +43,7 @@ pub(crate) fn generate_docs_impl(args: &DocsArgs<'_>) -> syn::Result<TokenStream
         field_attrs: args.field_attrs,
         serde_rename_all: args.serde_rename_all,
         cli_fields: args.cli_fields,
+        krate,
     })?;
 
     let app_name_lit = syn::LitStr::new(&app_name_value, proc_macro2::Span::call_site());
@@ -50,10 +54,10 @@ pub(crate) fn generate_docs_impl(args: &DocsArgs<'_>) -> syn::Result<TokenStream
     let ident = args.ident;
 
     Ok(quote! {
-        impl ortho_config::docs::OrthoConfigDocs for #ident {
-            fn get_doc_metadata() -> ortho_config::docs::DocMetadata {
-                ortho_config::docs::DocMetadata {
-                    ir_version: ortho_config::docs::ORTHO_DOCS_IR_VERSION.to_string(),
+        impl #krate::docs::OrthoConfigDocs for #ident {
+            fn get_doc_metadata() -> #krate::docs::DocMetadata {
+                #krate::docs::DocMetadata {
+                    ir_version: #krate::docs::ORTHO_DOCS_IR_VERSION.to_string(),
                     app_name: #app_name_lit.to_string(),
                     bin_name: #bin_name_tokens,
                     about_id: #about_id_lit.to_string(),
@@ -88,7 +92,7 @@ pub(super) fn option_char_tokens(value: Option<char>) -> TokenStream {
     )
 }
 
-pub(super) fn example_tokens(examples: &[DocExampleAttr]) -> Vec<TokenStream> {
+pub(super) fn example_tokens(examples: &[DocExampleAttr], krate: &TokenStream) -> Vec<TokenStream> {
     examples
         .iter()
         .map(|example| {
@@ -96,7 +100,7 @@ pub(super) fn example_tokens(examples: &[DocExampleAttr]) -> Vec<TokenStream> {
             let body_id = option_string_tokens(example.body_id.as_deref());
             let code = syn::LitStr::new(&example.code, proc_macro2::Span::call_site());
             quote! {
-                ortho_config::docs::Example {
+                #krate::docs::Example {
                     title_id: #title_id,
                     code: String::from(#code),
                     body_id: #body_id,
@@ -106,14 +110,14 @@ pub(super) fn example_tokens(examples: &[DocExampleAttr]) -> Vec<TokenStream> {
         .collect()
 }
 
-pub(super) fn link_tokens(links: &[DocLinkAttr]) -> Vec<TokenStream> {
+pub(super) fn link_tokens(links: &[DocLinkAttr], krate: &TokenStream) -> Vec<TokenStream> {
     links
         .iter()
         .map(|link| {
             let text_id = option_string_tokens(link.text_id.as_deref());
             let uri = syn::LitStr::new(&link.uri, proc_macro2::Span::call_site());
             quote! {
-                ortho_config::docs::Link {
+                #krate::docs::Link {
                     text_id: #text_id,
                     uri: String::from(#uri),
                 }
@@ -122,13 +126,13 @@ pub(super) fn link_tokens(links: &[DocLinkAttr]) -> Vec<TokenStream> {
         .collect()
 }
 
-pub(super) fn note_tokens(notes: &[DocNoteAttr]) -> Vec<TokenStream> {
+pub(super) fn note_tokens(notes: &[DocNoteAttr], krate: &TokenStream) -> Vec<TokenStream> {
     notes
         .iter()
         .map(|note| {
             let text_id = syn::LitStr::new(&note.text_id, proc_macro2::Span::call_site());
             quote! {
-                ortho_config::docs::Note {
+                #krate::docs::Note {
                     text_id: String::from(#text_id),
                 }
             }

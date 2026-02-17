@@ -7,17 +7,20 @@ use crate::derive::build::CollectionStrategies;
 use crate::derive::generate::declarative::generate_declarative_merge_impl;
 
 use super::helpers::{
-    append_strategies, expected_declarative_merge_impl_empty, parse_ident, parse_type,
+    append_strategies, default_krate, expected_declarative_merge_impl_empty, parse_ident,
+    parse_type,
 };
 
 #[rstest]
 fn generate_declarative_merge_impl_emits_trait_impl() -> Result<()> {
+    let krate = default_krate();
     let state_ident = parse_ident("__SampleDeclarativeMergeState")?;
     let config_ident = parse_ident("Sample")?;
     let tokens = generate_declarative_merge_impl(
         &state_ident,
         &config_ident,
         &CollectionStrategies::default(),
+        &krate,
     );
     let expected = expected_declarative_merge_impl_empty()?;
     let actual = tokens.to_string();
@@ -31,10 +34,11 @@ fn generate_declarative_merge_impl_emits_trait_impl() -> Result<()> {
 
 #[rstest]
 fn generate_declarative_merge_impl_handles_append_fields() -> Result<()> {
+    let krate = default_krate();
     let state_ident = parse_ident("__SampleDeclarativeMergeState")?;
     let config_ident = parse_ident("Sample")?;
     let strategies = append_strategies(vec![(parse_ident("items")?, parse_type("String")?)]);
-    let tokens = generate_declarative_merge_impl(&state_ident, &config_ident, &strategies);
+    let tokens = generate_declarative_merge_impl(&state_ident, &config_ident, &strategies, &krate);
     let norm = tokens.to_string().replace(" :: ", "::").replace(' ', "");
     ensure!(
         norm.contains("append_items"),
@@ -95,10 +99,11 @@ fn generate_declarative_merge_impl_handles_map_fields(
     #[case] expected_tokens: Vec<&'static str>,
     #[case] ordering: Option<(&'static str, &'static str)>,
 ) -> Result<()> {
+    let krate = default_krate();
     let state_ident = parse_ident("__SampleDeclarativeMergeState")?;
     let config_ident = parse_ident("Sample")?;
     let strategies = strategies_fn()?;
-    let norm = generate_declarative_merge_impl(&state_ident, &config_ident, &strategies)
+    let norm = generate_declarative_merge_impl(&state_ident, &config_ident, &strategies, &krate)
         .to_string()
         .replace(" :: ", "::")
         .replace(' ', "");
@@ -118,12 +123,14 @@ fn generate_declarative_merge_impl_handles_map_fields(
 
 #[rstest]
 fn generate_declarative_merge_impl_emits_non_object_error_context() -> Result<()> {
+    let krate = default_krate();
     let state_ident = parse_ident("__SampleDeclarativeMergeState")?;
     let config_ident = parse_ident("Sample")?;
     let norm = generate_declarative_merge_impl(
         &state_ident,
         &config_ident,
         &CollectionStrategies::default(),
+        &krate,
     )
     .to_string()
     .replace(" :: ", "::")

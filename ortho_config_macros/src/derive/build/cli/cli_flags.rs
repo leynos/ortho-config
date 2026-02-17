@@ -198,7 +198,6 @@ fn resolve_cli_field(
     };
 
     let field_name = name.to_string();
-    context.field_names.insert(field_name.clone());
 
     let long = attrs
         .cli_long
@@ -297,6 +296,11 @@ pub(crate) fn build_cli_struct_fields(
     let mut result = Vec::with_capacity(fields.len());
 
     for (field, attrs) in fields.iter().zip(field_attrs) {
+        // Register all field names (including skip_cli) so the config_path
+        // reservation check in `build_config_flag_field` detects conflicts.
+        if let Some(ident) = &field.ident {
+            context.field_names.insert(ident.to_string());
+        }
         if attrs.skip_cli {
             continue;
         }
