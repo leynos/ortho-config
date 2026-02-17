@@ -246,6 +246,12 @@ pub(crate) fn parse_struct_attrs(attrs: &[Attribute]) -> Result<StructAttrs, syn
                 Ok(())
             }
             Some("crate") => {
+                if out.crate_path.is_some() {
+                    return Err(syn::Error::new_spanned(
+                        &meta.path,
+                        "duplicate `crate` attribute",
+                    ));
+                }
                 out.crate_path = Some(lit_crate_path(meta)?);
                 Ok(())
             }

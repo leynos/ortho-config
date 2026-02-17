@@ -197,17 +197,28 @@ fn build_precedence_metadata(
     })
 }
 
-fn source_kind_tokens(value: &str, krate: &TokenStream) -> syn::Result<TokenStream> {
+fn is_source_kind(value: &str) -> Option<&'static str> {
     match value.trim().to_ascii_lowercase().as_str() {
-        "default" | "defaults" => Ok(quote! { #krate::docs::SourceKind::Defaults }),
-        "file" | "files" => Ok(quote! { #krate::docs::SourceKind::File }),
-        "env" | "environment" => Ok(quote! { #krate::docs::SourceKind::Env }),
-        "cli" | "commandline" | "command-line" => Ok(quote! { #krate::docs::SourceKind::Cli }),
-        other => Err(syn::Error::new(
-            proc_macro2::Span::call_site(),
-            format!("unknown precedence source '{other}'; expected defaults, file, env, or cli",),
-        )),
+        "default" | "defaults" => Some("Defaults"),
+        "file" | "files" => Some("File"),
+        "env" | "environment" => Some("Env"),
+        "cli" | "commandline" | "command-line" => Some("Cli"),
+        _ => None,
     }
+}
+
+fn source_kind_tokens(value: &str, krate: &TokenStream) -> syn::Result<TokenStream> {
+    let variant: syn::Ident = is_source_kind(value)
+        .map(|v| syn::Ident::new(v, proc_macro2::Span::call_site()))
+        .ok_or_else(|| {
+            syn::Error::new(
+                proc_macro2::Span::call_site(),
+                format!(
+                    "unknown precedence source '{value}'; expected defaults, file, env, or cli",
+                ),
+            )
+        })?;
+    Ok(quote! { #krate::docs::SourceKind::#variant })
 }
 
 fn build_discovery_metadata(

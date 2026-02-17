@@ -7,21 +7,21 @@ use proc_macro2::TokenStream;
 use quote::quote;
 use syn::DeriveInput;
 
-fn variant_uses_matches(variant: &syn::Variant) -> syn::Result<bool> {
-    let mut uses = false;
+fn variant_has_matches(variant: &syn::Variant) -> syn::Result<bool> {
+    let mut has = false;
     for attr in &variant.attrs {
         if !attr.path().is_ident("ortho_subcommand") {
             continue;
         }
         attr.parse_nested_meta(|meta| {
             if meta.path.is_ident("with_matches") {
-                uses = true;
+                has = true;
                 return Ok(());
             }
             Err(meta.error("unsupported ortho_subcommand option"))
         })?;
     }
-    Ok(uses)
+    Ok(has)
 }
 
 fn clap_variant_name(variant: &syn::Variant) -> syn::Result<Option<syn::LitStr>> {
@@ -70,22 +70,21 @@ fn parse_crate_path(attrs: &[syn::Attribute]) -> syn::Result<Option<syn::Path>> 
             continue;
         }
         attr.parse_nested_meta(|meta| {
-            if meta.path.is_ident("crate") {
-                crate_path = Some(crate::derive::parse::lit_crate_path(&meta)?);
-                return Ok(());
+            if !meta.path.is_ident("crate") {
+                return Err(meta.error("unsupported ortho_config option on enum"));
             }
-            Err(meta.error("unsupported ortho_config option on enum"))
+            if crate_path.is_some() {
+                return Err(meta.error("duplicate `crate` attribute"));
+            }
+            crate_path = Some(crate::derive::parse::lit_crate_path(&meta)?);
+            Ok(())
         })?;
     }
     Ok(crate_path)
 }
 
-fn merge_expr(
-    uses_matches: bool,
-    selected_label: &syn::LitStr,
-    krate: &TokenStream,
-) -> TokenStream {
-    if uses_matches {
+fn merge_expr(has_matches: bool, selected_label: &syn::LitStr, krate: &TokenStream) -> TokenStream {
+    if has_matches {
         quote! {
             {
                 let subcommand_matches = matches
@@ -135,13 +134,13 @@ pub(crate) fn derive_selected_subcommand_merge(input: DeriveInput) -> syn::Resul
 
     let mut arms = Vec::new();
     for variant in enum_data.variants {
-        let uses_matches = variant_uses_matches(&variant)?;
+        let has_matches = variant_has_matches(&variant)?;
         let selected_label = clap_variant_name(&variant)?
             .unwrap_or_else(|| syn::LitStr::new(&variant.ident.to_string(), variant.ident.span()));
 
         let variant_ident = variant.ident;
         validate_tuple_variant(&variant_ident, &variant.fields)?;
-        let merge_tokens = merge_expr(uses_matches, &selected_label, &krate);
+        let merge_tokens = merge_expr(has_matches, &selected_label, &krate);
         arms.push(build_arm(&variant_ident, &merge_tokens));
     }
 
