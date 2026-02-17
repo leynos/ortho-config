@@ -263,17 +263,32 @@ fn build_discovery_metadata(
     }
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum FormatKind {
+    Toml,
+    Yaml,
+    Json,
+}
+
+fn format_kind_from_extension(name: &str) -> Option<FormatKind> {
+    match extension_from_name(name).as_deref() {
+        Some("toml") => Some(FormatKind::Toml),
+        Some("yaml" | "yml") => Some(FormatKind::Yaml),
+        Some("json" | "json5") => Some(FormatKind::Json),
+        _ => None,
+    }
+}
+
 fn collect_formats(names: &[&str], krate: &TokenStream) -> Vec<TokenStream> {
     let mut has_toml = false;
     let mut has_yaml = false;
     let mut has_json = false;
 
     for name in names {
-        match extension_from_name(name).as_deref() {
-            Some("toml") => has_toml = true,
-            Some("yaml" | "yml") => has_yaml = true,
-            Some("json" | "json5") => has_json = true,
-            _ => {}
+        if let Some(kind) = format_kind_from_extension(name) {
+            has_toml |= kind == FormatKind::Toml;
+            has_yaml |= kind == FormatKind::Yaml;
+            has_json |= kind == FormatKind::Json;
         }
     }
 
