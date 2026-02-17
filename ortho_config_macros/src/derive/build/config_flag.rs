@@ -191,6 +191,39 @@ mod tests {
     }
 
     #[test]
+    fn skip_cli_config_path_still_blocks_generated_flag() -> Result<()> {
+        let input: syn::DeriveInput = syn::parse_quote! {
+            struct Demo {
+                #[ortho_config(skip_cli)]
+                config_path: String,
+            }
+        };
+        let (_, fields, struct_attrs, field_attrs) =
+            crate::derive::parse::parse_input(&input).map_err(|err| anyhow!(err))?;
+        let cli = build_cli_struct_fields(&fields, &field_attrs).map_err(|err| anyhow!(err))?;
+        ensure!(
+            cli.field_names.contains("config_path"),
+            "skip_cli field should still appear in field_names"
+        );
+        let Err(err) = build_config_flag_field(
+            &struct_attrs,
+            &cli.used_shorts,
+            &cli.used_longs,
+            &cli.field_names,
+        ) else {
+            return Err(anyhow!(
+                "expected generated config flag to conflict with skip_cli config_path field"
+            ));
+        };
+        ensure!(
+            err.to_string()
+                .contains("generated config flag field conflicts with user-defined field"),
+            "unexpected error: {err}"
+        );
+        Ok(())
+    }
+
+    #[test]
     fn config_flag_field_name_conflict_errors() -> Result<()> {
         let used_shorts = HashSet::new();
         let used_longs = HashSet::new();

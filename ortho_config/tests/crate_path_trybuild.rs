@@ -7,4 +7,5 @@
 fn crate_path_alias_compiles() {
     let t = trybuild::TestCases::new();
     t.pass("tests/trybuild/crate_path_alias.rs");
+    t.pass("tests/trybuild/crate_path_alias_renamed.rs");
 }

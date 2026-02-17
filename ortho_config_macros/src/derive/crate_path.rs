@@ -9,8 +9,9 @@ use quote::quote;
 
 /// Resolve the crate path from the parsed struct attribute.
 ///
-/// Returns `ortho_config` when no override is present, allowing the
-/// generated code to reference types through an aliased dependency name.
+/// Defaults to `ortho_config` when no override is present. When the user
+/// specifies `#[ortho_config(crate = "...")]`, the returned tokens
+/// reference types through the aliased dependency name instead.
 ///
 /// # Examples
 ///
@@ -28,25 +29,18 @@ pub(crate) fn resolve(crate_path: Option<&syn::Path>) -> TokenStream {
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for crate path resolution with default and custom paths.
+
     use super::*;
+    use rstest::rstest;
 
-    #[test]
-    fn defaults_to_ortho_config() {
-        let tokens = resolve(None);
-        assert_eq!(tokens.to_string(), "ortho_config");
-    }
-
-    #[test]
-    fn uses_custom_path() {
-        let path: syn::Path = syn::parse_str("my_alias").expect("valid path");
-        let tokens = resolve(Some(&path));
-        assert_eq!(tokens.to_string(), "my_alias");
-    }
-
-    #[test]
-    fn supports_nested_path() {
-        let path: syn::Path = syn::parse_str("my_ns::ortho_config").expect("valid path");
-        let tokens = resolve(Some(&path));
-        assert_eq!(tokens.to_string(), "my_ns :: ortho_config");
+    #[rstest]
+    #[case::default(None, "ortho_config")]
+    #[case::custom(Some("my_alias"), "my_alias")]
+    #[case::nested(Some("my_ns::ortho_config"), "my_ns :: ortho_config")]
+    fn resolve_produces_expected_tokens(#[case] input: Option<&str>, #[case] expected: &str) {
+        let parsed = input.map(|s| syn::parse_str::<syn::Path>(s).expect("valid path"));
+        let tokens = resolve(parsed.as_ref());
+        assert_eq!(tokens.to_string(), expected);
     }
 }

@@ -69,6 +69,28 @@ fn collection_generators_deduplicate_append_fields(generator: TokenGenerator) ->
 }
 
 #[rstest]
+fn generate_declarative_impl_uses_custom_krate_alias() -> Result<()> {
+    let krate = quote! { my_alias };
+    let config_ident = parse_ident("Sample")?;
+    let strategies = CollectionStrategies::default();
+    let tokens = generate_declarative_impl(&config_ident, &strategies, false, &krate);
+    let output = tokens.to_string();
+    ensure!(
+        output.contains("my_alias :: DeclarativeMerge"),
+        "expected custom krate alias in DeclarativeMerge impl, got: {output}"
+    );
+    ensure!(
+        output.contains("my_alias :: serde_json :: Value"),
+        "expected custom krate alias in serde_json usage, got: {output}"
+    );
+    ensure!(
+        !output.contains("ortho_config ::"),
+        "generated code should not contain hardcoded ortho_config:: paths: {output}"
+    );
+    Ok(())
+}
+
+#[rstest]
 fn generate_declarative_impl_composes_helpers() -> Result<()> {
     let krate = default_krate();
     let config_ident = parse_ident("Sample")?;

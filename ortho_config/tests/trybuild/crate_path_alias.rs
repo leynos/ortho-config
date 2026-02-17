@@ -1,3 +1,5 @@
+//! Trybuild fixture verifying `#[ortho_config(crate = "...")]` compiles.
+
 use ortho_config::{MergeComposer, OrthoConfig};
 use serde::Deserialize;
 use serde_json::json;
