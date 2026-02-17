@@ -8,20 +8,20 @@ use quote::quote;
 use syn::DeriveInput;
 
 fn variant_has_matches(variant: &syn::Variant) -> syn::Result<bool> {
-    let mut has = false;
+    let mut has_matches = false;
     for attr in &variant.attrs {
         if !attr.path().is_ident("ortho_subcommand") {
             continue;
         }
         attr.parse_nested_meta(|meta| {
             if meta.path.is_ident("with_matches") {
-                has = true;
+                has_matches = true;
                 return Ok(());
             }
             Err(meta.error("unsupported ortho_subcommand option"))
         })?;
     }
-    Ok(has)
+    Ok(has_matches)
 }
 
 fn clap_variant_name(variant: &syn::Variant) -> syn::Result<Option<syn::LitStr>> {
