@@ -95,7 +95,7 @@ fn build_cli_chain_tokens(has_config_path: bool) -> proc_macro2::TokenStream {
 ///
 /// # Parameters
 /// - `krate`: Resolved crate path token stream.
-/// - `builder_init`: Tokens initialising the `ConfigDiscovery::builder`.
+/// - `builder_init`: Tokens initializing the `ConfigDiscovery::builder`.
 /// - `builder_steps`: Sequence of builder method calls (for example
 ///   `env_var`, `dotfile_name`).
 /// - `cli_chain`: Tokens adding CLI-provided required paths to the builder.

@@ -19,13 +19,9 @@ mod merge_impl;
 mod state_struct;
 
 use helpers::{
-    TokenGenerator, append_strategies, merge_impl_tokens, parse_ident, parse_type,
+    TokenGenerator, append_strategies, default_krate, merge_impl_tokens, parse_ident, parse_type,
     state_struct_tokens,
 };
-
-fn default_krate() -> proc_macro2::TokenStream {
-    quote! { ortho_config }
-}
 
 #[rstest]
 fn unique_append_fields_filters_duplicates() -> Result<()> {

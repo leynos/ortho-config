@@ -103,7 +103,7 @@ pub(super) fn build_windows_metadata(
 fn build_headings_ids(overrides: &HeadingOverrides, krate: &TokenStream) -> TokenStream {
     let headings = merge_headings(overrides);
 
-    // Helper closure to process each heading field: unwrap with default and tokenise
+    // Helper closure to process each heading field: unwrap with default and tokenize
     let process_heading = |field: Option<String>, default_id: &str| -> TokenStream {
         let value = field.unwrap_or_else(|| String::from(default_id));
         string_tokens(&value)

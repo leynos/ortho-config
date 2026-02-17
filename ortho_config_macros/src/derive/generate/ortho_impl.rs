@@ -150,7 +150,7 @@ fn generate_cli_value_extractor_impl(
 
                 #prune_nulls_helpers
 
-                // Serialise self (the parsed CLI struct) and strip null values so
+                // Serialize self (the parsed CLI struct) and strip null values so
                 // absent options do not clobber file/environment defaults.
                 let mut base = serde_json::to_value(self).into_ortho()?;
                 prune_nulls(&mut base);
