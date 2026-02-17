@@ -71,11 +71,7 @@ fn parse_crate_path(attrs: &[syn::Attribute]) -> syn::Result<Option<syn::Path>> 
         }
         attr.parse_nested_meta(|meta| {
             if meta.path.is_ident("crate") {
-                let value = meta.value()?;
-                let lit: syn::LitStr = value.parse()?;
-                let path: syn::Path =
-                    syn::parse_str(&lit.value()).map_err(|e| syn::Error::new(lit.span(), e))?;
-                crate_path = Some(path);
+                crate_path = Some(crate::derive::parse::lit_crate_path(&meta)?);
                 return Ok(());
             }
             Err(meta.error("unsupported ortho_config option on enum"))

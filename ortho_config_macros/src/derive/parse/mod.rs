@@ -33,6 +33,7 @@ pub(crate) use doc_types::{
 pub(crate) use input::parse_input;
 #[cfg(any(test, doctest))]
 pub(crate) use literals::__doc_lit_str;
+pub(crate) use literals::lit_crate_path;
 use literals::{lit_bool, lit_char, lit_str};
 pub(crate) use serde_attrs::{
     SerdeRenameAll, serde_field_rename, serde_has_default, serde_rename_all,
@@ -245,10 +246,7 @@ pub(crate) fn parse_struct_attrs(attrs: &[Attribute]) -> Result<StructAttrs, syn
                 Ok(())
             }
             Some("crate") => {
-                let s = lit_str(meta, "crate")?;
-                let path: syn::Path =
-                    syn::parse_str(&s.value()).map_err(|e| syn::Error::new(s.span(), e))?;
-                out.crate_path = Some(path);
+                out.crate_path = Some(lit_crate_path(meta)?);
                 Ok(())
             }
             _ => {

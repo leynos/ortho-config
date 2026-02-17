@@ -103,6 +103,15 @@ pub(crate) fn lit_bool(meta: &syn::meta::ParseNestedMeta, key: &str) -> Result<b
     })
 }
 
+/// Parses a `crate = "..."` attribute into a [`syn::Path`].
+///
+/// Combines string literal extraction with path parsing so that every
+/// call site that accepts a crate-path override shares one implementation.
+pub(crate) fn lit_crate_path(meta: &syn::meta::ParseNestedMeta) -> Result<syn::Path, syn::Error> {
+    let s = lit_str(meta, "crate")?;
+    syn::parse_str(&s.value()).map_err(|e| syn::Error::new(s.span(), e))
+}
+
 /// Test-only wrapper for [`lit_str`] to enable doctests and unit tests.
 ///
 /// This function exposes the private `lit_str` helper for doctests without
