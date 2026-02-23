@@ -6,9 +6,10 @@ adding documentation-generation code to your application binary.
 
 ## The problem this solves
 
-Documenting configuration-heavy CLIs is easy to drift out of sync. Teams often
-maintain help text in multiple places (CLI help, man pages, PowerShell help,
-environment variable docs, file-key docs), and each source can diverge.
+Documentation for configuration-heavy command-line interfaces (CLIs) can easily
+drift out of sync. Teams often maintain help text in multiple places (CLI help,
+man pages, PowerShell help, environment variable docs, file-key docs), and each
+source can diverge.
 
 `cargo-orthohelp` solves this by generating all documentation outputs from one
 intermediate representation (IR) produced by `#[derive(OrthoConfig)]`.
@@ -36,14 +37,10 @@ intermediate representation (IR) produced by `#[derive(OrthoConfig)]`.
 ## Quick Start
 
 1. **Declare metadata in your application crate `Cargo.toml`:**
+   Use the canonical example in
+   [Cargo metadata defaults](#cargo-metadata-defaults).
 
-```toml
-[package.metadata.ortho_config]
-root_type = "my_app::AppConfig"
-locales = ["en-US", "fr-FR"]
-```
-
-1. **Generate localized IR JSON:**
+2. **Generate localized IR JSON:**
 
 ```bash
 cargo orthohelp --package my_app --locale en-US --out-dir target/orthohelp
@@ -81,6 +78,10 @@ Common format-specific options:
   `--ps-include-common-parameters <BOOL> --ps-help-info-uri <URI>`
   `--ensure-en-us <BOOL>`
 
+Boolean PowerShell options take explicit values and are not bare switches. Use
+`--ps-split-subcommands true`, `--ps-include-common-parameters false`, or
+`--ensure-en-us false`.
+
 ## Examples
 
 Generate IR for two locales and reuse bridge cache:
@@ -115,6 +116,7 @@ cargo orthohelp \
   --format ps \
   --ps-module-name MyApp \
   --ps-split-subcommands true \
+  --ps-include-common-parameters true \
   --out-dir target/orthohelp
 ```
 
@@ -129,7 +131,10 @@ cargo orthohelp --package my_app --all-locales --format all --out-dir target/doc
 For `--out-dir target/docs`:
 
 - IR JSON: `target/docs/ir/<locale>.json`
-- Man pages: `target/docs/man/man<section>/<name>.<section>`
+- Man pages (single locale):
+  `target/docs/man/man<section>/<name>.<section>`
+- Man pages (multiple locales via `--all-locales` or repeated `--locale`):
+  `target/docs/<locale>/man/man<section>/<name>.<section>`
 - PowerShell:
   - `target/docs/powershell/<ModuleName>/<ModuleName>.psm1`
   - `target/docs/powershell/<ModuleName>/<ModuleName>.psd1`
