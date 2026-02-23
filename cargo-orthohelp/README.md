@@ -42,20 +42,18 @@ intermediate representation (IR) produced by `#[derive(OrthoConfig)]`.
 
 2. **Generate localized IR JSON:**
 
-```bash
-cargo orthohelp --package my_app --locale en-US --out-dir target/orthohelp
-```
+   ```bash
+   cargo orthohelp --package my_app --locale en-US --out-dir target/orthohelp
+   ```
 
-This writes localized IR to:
+   This writes localized IR to `target/orthohelp/ir/en-US.json`.
 
-- `target/orthohelp/ir/en-US.json`
+3. **Generate man pages or PowerShell help when needed:**
 
-1. **Generate man pages or PowerShell help when needed:**
-
-```bash
-cargo orthohelp --package my_app --locale en-US --format man --out-dir target/docs
-cargo orthohelp --package my_app --locale en-US --format ps --out-dir target/docs
-```
+   ```bash
+   cargo orthohelp --package my_app --locale en-US --format man --out-dir target/docs
+   cargo orthohelp --package my_app --locale en-US --format ps --out-dir target/docs
+   ```
 
 ## Usage
 
@@ -84,7 +82,7 @@ Boolean PowerShell options take explicit values and are not bare switches. Use
 
 ## Examples
 
-Generate IR for two locales and reuse bridge cache:
+Generate IR for two locales and reuse the bridge cache:
 
 ```bash
 cargo orthohelp \
