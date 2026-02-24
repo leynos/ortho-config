@@ -1,7 +1,7 @@
 [package]
 name = "cargo-orthohelp"
 edition = "2024"
-version = "0.8.0"
+version.workspace = true
 rust-version.workspace = true
 description = "OrthoConfig documentation tooling for IR generation."
 license.workspace = true
