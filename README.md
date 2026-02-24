@@ -416,8 +416,8 @@ background, see the [v0.7.0 migration guide](docs/v0-7-0-migration-guide.md).
 - Adopt `compose_layers()` / `compose_layers_from_iter(..)` when you need to
   inspect, amend, or aggregate layers before merging.
 - Add `#[ortho_config(post_merge_hook)]` plus `PostMergeHook` only when
-  cross-field normalisation or validation must run after merge resolution.
-- For localised CLI copy and errors, use `FluentLocalizer` and
+  cross-field normalization or validation must run after merge resolution.
+- For localized CLI copy and errors, use `FluentLocalizer` and
   `localize_clap_error_with_command`.
 - For `cli_default_as_absent`, pass `ArgMatches` into merge flows (and annotate
   subcommand variants with `#[ortho_subcommand(with_matches)]` when needed) so
