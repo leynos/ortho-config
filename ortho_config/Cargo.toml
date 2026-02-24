@@ -1,6 +1,6 @@
 [package]
 name = "ortho_config"
-version = "0.7.0"
+version = "0.8.0"
 edition = "2024"
 rust-version.workspace = true
 readme = "README.md"
@@ -14,7 +14,7 @@ repository.workspace = true
 workspace = true
 
 [dependencies]
-ortho_config_macros = { path = "../ortho_config_macros", version = "0.7.0" }
+ortho_config_macros = { path = "../ortho_config_macros", version = "0.8.0" }
 serde = { version = "1", features = ["derive"] }
 thiserror = "2"
 clap = { version = "4", features = ["derive"] }
@@ -61,7 +61,7 @@ serial_test = "3"
 tempfile = "3"
 test_helpers = { path = "../test_helpers" }
 anyhow = "1"
-ortho_config_macros = { path = "../ortho_config_macros", version = "0.7.0" }
+ortho_config_macros = { path = "../ortho_config_macros", version = "0.8.0" }
 
 [[example]]
 name = "registry_ctl"

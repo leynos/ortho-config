@@ -273,7 +273,7 @@ Add `ortho_config` as a dependency in `Cargo.toml` along with `serde`:
 
 ```toml
 [dependencies]
-ortho_config = "0.7.0"            # replace with the latest version
+ortho_config = "0.8.0"            # replace with the latest version
 serde = { version = "1.0", features = ["derive"] }
 clap = { version = "4", features = ["derive"] }    # required for CLI support
 ```
@@ -284,7 +284,7 @@ corresponding cargo features:
 
 ```toml
 [dependencies]
-ortho_config = { version = "0.7.0", features = ["json5", "yaml"] }
+ortho_config = { version = "0.8.0", features = ["json5", "yaml"] }
 # Enabling these features expands file formats; precedence stays: defaults < file < env < CLI.
 ```
 
@@ -330,7 +330,7 @@ In the common case, `Cargo.toml` does not need direct `figment`, `uncased`, or
 
 ```toml
 [dependencies]
-ortho_config = "0.7.0"
+ortho_config = "0.8.0"
 serde = { version = "1.0", features = ["derive"] }
 clap = { version = "4", features = ["derive"] }
 ```
@@ -1153,6 +1153,9 @@ writes localized IR JSON into the chosen output directory. Add metadata to the
 package `Cargo.toml` so the tool knows which config type to load:
 
 ```toml
+[package]
+version = "0.8.0"
+
 [package.metadata.ortho_config]
 root_type = "hello_world::cli::HelloWorldCli"
 locales = ["en-US", "ja"]
@@ -1236,6 +1239,9 @@ PowerShell options:
 To set defaults in `Cargo.toml`, use the Windows metadata table:
 
 ```toml
+[package]
+version = "0.8.0"
+
 [package.metadata.ortho_config.windows]
 module_name = "MyModule"
 include_common_parameters = true

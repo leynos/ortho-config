@@ -1,6 +1,6 @@
 [package]
 name = "hello_world"
-version = "0.7.0"
+version = "0.8.0"
 edition = "2024"
 rust-version.workspace = true
 publish = false
@@ -17,8 +17,8 @@ workspace = true
 
 [dependencies]
 # `figment`, `uncased`, and `xdg` are available via `ortho_config` re-exports.
-ortho_config = { path = "../../ortho_config", version = "0.7.0" }
-ortho_config_macros = { path = "../../ortho_config_macros", version = "0.7.0" }
+ortho_config = { path = "../../ortho_config", version = "0.8.0" }
+ortho_config_macros = { path = "../../ortho_config_macros", version = "0.8.0" }
 serde = { version = "1", features = ["derive"] }
 thiserror = "2"
 clap = { version = "4", features = ["derive"] }
@@ -37,7 +37,7 @@ shlex = "1.3.0"
 tempfile = "3"
 cap-std = "3"
 toml = "0.8"
-test_helpers = { path = "../../test_helpers", version = "0.7.0" }
+test_helpers = { path = "../../test_helpers", version = "0.8.0" }
 
 [features]
 default = ["serde_json"]

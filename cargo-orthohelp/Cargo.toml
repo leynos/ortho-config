@@ -1,7 +1,7 @@
 [package]
 name = "cargo-orthohelp"
-version.workspace = true
 edition = "2024"
+version = "0.8.0"
 rust-version.workspace = true
 description = "OrthoConfig documentation tooling for IR generation."
 license.workspace = true
@@ -23,7 +23,7 @@ camino = "1"
 cap-std = { version = "3", features = ["fs_utf8"] }
 clap = { version = "4", features = ["derive"] }
 cargo_metadata = "0.18"
-ortho_config = { path = "../ortho_config", version = "0.7.0", features = ["serde_json"] }
+ortho_config = { path = "../ortho_config", version = "0.8.0", features = ["serde_json"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.10"
