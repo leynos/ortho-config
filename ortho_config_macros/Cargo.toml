@@ -33,4 +33,4 @@ toml = []
 anyhow = "1"
 rstest = "0.26.1"
 serde = { version = "1", features = ["derive"] }
-ortho_config = { path = "../ortho_config" }
+ortho_config = { path = "../ortho_config", version = "0.8.0" }

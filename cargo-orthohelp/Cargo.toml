@@ -33,5 +33,5 @@ thiserror = "2"
 rstest = "0.26.1"
 rstest-bdd.workspace = true
 rstest-bdd-macros.workspace = true
-test_helpers = { path = "../test_helpers" }
+test_helpers = { path = "../test_helpers", version = "0.8.0" }
 tempfile = "3"
