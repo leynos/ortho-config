@@ -1153,9 +1153,6 @@ writes localized IR JSON into the chosen output directory. Add metadata to the
 package `Cargo.toml` so the tool knows which config type to load:
 
 ```toml
-[package]
-version = "0.8.0"
-
 [package.metadata.ortho_config]
 root_type = "hello_world::cli::HelloWorldCli"
 locales = ["en-US", "ja"]
@@ -1239,9 +1236,6 @@ PowerShell options:
 To set defaults in `Cargo.toml`, use the Windows metadata table:
 
 ```toml
-[package]
-version = "0.8.0"
-
 [package.metadata.ortho_config.windows]
 module_name = "MyModule"
 include_common_parameters = true
