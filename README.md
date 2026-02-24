@@ -45,7 +45,7 @@ manual aliasing.
 
 ```toml
 [dependencies]
-ortho_config = "0.7.0" # Replace with the latest version
+ortho_config = "0.8.0" # Replace with the latest version
 serde = { version = "1.0", features = ["derive"] }
 ```
 
@@ -172,7 +172,7 @@ support additional formats:
 
 ```toml
 [dependencies]
-ortho_config = { version = "0.7.0", features = ["json5", "yaml"] }
+ortho_config = { version = "0.8.0", features = ["json5", "yaml"] }
 ```
 
 When the `yaml` feature is enabled, configuration files are parsed with
@@ -379,6 +379,50 @@ fn main() -> Result<(), String> {
   files for persistent settings).
 - **Clear Precedence:** Predictable configuration resolution.
 
+## Migration notes for v0.8.0
+
+Use these notes when upgrading from v0.7.x to v0.8.0:
+
+- Update every `ortho_config` and `ortho_config_macros` dependency to `0.8.0`,
+  and ensure your toolchain is Rust `1.88` or newer.
+- If you alias the runtime crate in `Cargo.toml` (for example,
+  `my_cfg = { package = "ortho_config", ... }`), add
+  `#[ortho_config(crate = "my_cfg")]` so derive-generated paths resolve. The
+  same attribute also applies to `SelectedSubcommandMerge`.
+- If you use `cli_default_as_absent`, prefer typed clap defaults
+  (`default_value_t` / `default_values_t`). Inference from `default_value` is
+  rejected, and mixed clap default overrides on the same field now fail fast.
+- YAML parsing now uses `serde-saphyr` with YAML 1.2 behaviour. Quote legacy
+  literals like `yes`, `on`, and `off` when they should remain strings, and
+  remove duplicate mapping keys that older parsers may have tolerated.
+- For derive-generated code, use dependency re-exports from
+  `ortho_config::figment`, `ortho_config::uncased`, and `ortho_config::xdg`
+  unless your own application source imports those crates directly.
+- If you generate documentation artifacts, wire in
+  `[package.metadata.ortho_config]` (`root_type`, `locales`) and optional
+  `[package.metadata.ortho_config.windows]` overrides, then run
+  `cargo orthohelp` (`--format man` / `--format ps`) against the emitted
+  `OrthoConfigDocs` metadata.
+
+## Migration notes for v0.7.0
+
+Use these notes when upgrading from v0.6.x to v0.7.0. For full examples and
+background, see the [v0.7.0 migration guide](docs/v0-7-0-migration-guide.md).
+
+- Update every `ortho_config` and `ortho_config_macros` dependency to `0.7.0`
+  and keep feature flags (`toml`, `json5`, `yaml`) on `ortho_config`.
+- If you disable default features, enable `serde_json` explicitly before using
+  selected-subcommand merge helpers or `cli_default_as_absent`.
+- Adopt `compose_layers()` / `compose_layers_from_iter(..)` when you need to
+  inspect, amend, or aggregate layers before merging.
+- Add `#[ortho_config(post_merge_hook)]` plus `PostMergeHook` only when
+  cross-field normalization or validation must run after merge resolution.
+- For localized CLI copy and errors, use `FluentLocalizer` and
+  `localize_clap_error_with_command`.
+- For `cli_default_as_absent`, pass `ArgMatches` into merge flows (and annotate
+  subcommand variants with `#[ortho_subcommand(with_matches)]` when needed) so
+  clap defaults do not override file/env values unless explicitly provided.
+
 ## Migrating from 0.5 to 0.6
 
 Version v0.6.0 streamlines dependency management, discovery, and YAML parsing.
@@ -434,8 +478,8 @@ the previous convenience may opt in explicitly:
 PUBLISH_CHECK_FLAGS="--allow-dirty" make publish-check
 ```
 
-Continuous integration should keep the strict default and call
-`make publish-check` without additional flags.
+Run `make publish-check` in release validation workflows (for example,
+`workflow_dispatch`) where the target versions are already published.
 
 ## Contributing
 
