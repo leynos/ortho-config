@@ -478,8 +478,8 @@ the previous convenience may opt in explicitly:
 PUBLISH_CHECK_FLAGS="--allow-dirty" make publish-check
 ```
 
-Continuous integration should keep the strict default and call
-`make publish-check` without additional flags.
+Run `make publish-check` in release validation workflows (for example,
+`workflow_dispatch`) where the target versions are already published.
 
 ## Contributing
 

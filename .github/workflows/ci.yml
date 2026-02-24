@@ -85,6 +85,7 @@ jobs:
         run: make powershell-wrapper-validate
 
       - name: Publish dry run
+        if: ${{ github.event_name == 'workflow_dispatch' }}
         run: make publish-check
 
       - name: Upload coverage data to CodeScene
