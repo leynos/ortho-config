@@ -379,7 +379,7 @@ fn main() -> Result<(), String> {
   files for persistent settings).
 - **Clear Precedence:** Predictable configuration resolution.
 
-## Migration Notes for v0.8.0
+## Migration notes for v0.8.0
 
 Use these notes when upgrading from v0.7.x to v0.8.0:
 
@@ -404,7 +404,7 @@ Use these notes when upgrading from v0.7.x to v0.8.0:
   `cargo orthohelp` (`--format man` / `--format ps`) against the emitted
   `OrthoConfigDocs` metadata.
 
-## Migration Notes for v0.7.0
+## Migration notes for v0.7.0
 
 Use these notes when upgrading from v0.6.x to v0.7.0. For full examples and
 background, see the [v0.7.0 migration guide](docs/v0-7-0-migration-guide.md).
