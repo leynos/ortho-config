@@ -180,9 +180,7 @@ mod tests {
         );
 
         let cli = __Cli { excited: None };
-        let figment = ortho_config::figment::Figment::from(
-            ortho_config::figment::providers::Serialized::defaults(&cli),
-        );
+        let figment = figment::Figment::from(figment::providers::Serialized::defaults(&cli));
         ensure!(
             figment.extract_inner::<bool>("excited").is_err(),
             "absent boolean flags should not appear in Figment"

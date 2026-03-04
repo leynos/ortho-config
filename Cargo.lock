@@ -1190,8 +1190,8 @@ name = "ortho_config_macros"
 version = "0.8.0"
 dependencies = [
  "anyhow",
+ "figment",
  "heck 0.5.0",
- "ortho_config",
  "proc-macro2",
  "quote",
  "rstest 0.26.1",
