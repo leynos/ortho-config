@@ -47,10 +47,10 @@ fn escape_line(line: &str, result: &mut String) {
     let mut chars = line.chars();
 
     // Handle leading special character
-    if let Some(first) = chars.next() {
-        if !push_escaped_leading_char(first, result) {
-            push_escaped_char(first, result);
-        }
+    if let Some(first) = chars.next()
+        && !push_escaped_leading_char(first, result)
+    {
+        push_escaped_char(first, result);
     }
 
     // Process remaining characters
