@@ -4,7 +4,7 @@ use crate::scenario_state::{CollectionContext, RulesConfig};
 use anyhow::{Result, anyhow, ensure};
 use ortho_config::OrthoConfig;
 use rstest_bdd_macros::{given, then, when};
-use test_helpers::figment as figment_helpers;
+use crate::test_helpers::figment as figment_helpers;
 
 #[given("the dynamic rules config enables {rule_name} via the configuration file")]
 fn dynamic_rules_file(collection_context: &CollectionContext, rule_name: String) -> Result<()> {

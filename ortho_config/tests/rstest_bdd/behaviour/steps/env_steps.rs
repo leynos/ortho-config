@@ -8,7 +8,7 @@ use crate::scenario_state::{RulesConfig, RulesContext};
 use anyhow::{Context, Result, anyhow, ensure};
 use ortho_config::OrthoConfig;
 use rstest_bdd_macros::{given, then, when};
-use test_helpers::figment as figment_helpers;
+use crate::test_helpers::figment as figment_helpers;
 
 /// Sets `DDLINT_RULES` in the test environment.
 #[given("the environment variable DDLINT_RULES is {value}")]

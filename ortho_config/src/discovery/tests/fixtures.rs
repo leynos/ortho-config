@@ -2,10 +2,10 @@
 
 use std::path::PathBuf;
 
+use crate::test_helpers::env::{self as test_env, EnvScope};
 use anyhow::{Context, Result};
 use rstest::fixture;
 use tempfile::TempDir;
-use test_helpers::env::{self as test_env, EnvScope};
 
 use super::super::ConfigDiscovery;
 

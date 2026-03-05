@@ -3,13 +3,13 @@
 use std::io::Write as _;
 use std::path::PathBuf;
 
+use crate::test_helpers::env::{self as test_env, EnvScope};
 use anyhow::{Context, Result, anyhow, ensure};
 use camino::Utf8Path;
 use cap_std::{ambient_authority, fs_utf8::Dir as Utf8Dir};
 use rstest::rstest;
 use serde::Deserialize;
 use tempfile::TempDir;
-use test_helpers::env::{self as test_env, EnvScope};
 
 use super::super::*;
 use super::fixtures::{config_temp_dir, env_guards, sample_config_file};

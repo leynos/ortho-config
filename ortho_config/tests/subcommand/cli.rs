@@ -4,7 +4,7 @@ use anyhow::{Result, anyhow, ensure};
 use clap::Parser;
 use rstest::{fixture, rstest};
 use serde::Deserialize;
-use test_helpers::env;
+use crate::test_helpers::env;
 
 use super::util::with_merged_subcommand_cli;
 

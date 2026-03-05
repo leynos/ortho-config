@@ -9,7 +9,7 @@ use anyhow::{Result, anyhow, ensure};
 use clap::Parser;
 use ortho_config::SubcmdConfigMerge;
 use rstest_bdd_macros::{given, then, when};
-use test_helpers::figment as figment_helpers;
+use crate::test_helpers::figment as figment_helpers;
 
 fn take_sources(subcommand_context: &SubcommandContext) -> SubcommandSources {
     subcommand_context.sources.take().unwrap_or_default()

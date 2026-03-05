@@ -2,11 +2,11 @@
 
 use super::canonicalise;
 use super::path::normalize_cycle_key;
+use crate::test_helpers::figment as figment_helpers;
 use anyhow::{Context, Result};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use test_helpers::figment as figment_helpers;
 
 pub(super) mod extends_tests;
 pub(super) mod normalise_tests;

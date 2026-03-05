@@ -11,7 +11,7 @@ use clap::{CommandFactory, FromArgMatches};
 use ortho_config::subcommand::Prefix;
 use ortho_config::{CliValueExtractor, load_and_merge_subcommand_with_matches};
 use rstest_bdd_macros::{given, then, when};
-use test_helpers::figment as figment_helpers;
+use crate::test_helpers::figment as figment_helpers;
 
 fn take_sources(ctx: &CliDefaultContext) -> CliDefaultSources {
     ctx.sources.take().unwrap_or_default()

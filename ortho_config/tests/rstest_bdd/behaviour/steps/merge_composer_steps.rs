@@ -5,7 +5,7 @@ use crate::scenario_state::{ComposerContext, RulesConfig, RulesContext};
 use anyhow::{Result, anyhow, ensure};
 use ortho_config::{MergeProvenance, OrthoError};
 use rstest_bdd_macros::{then, when};
-use test_helpers::figment as figment_helpers;
+use crate::test_helpers::figment as figment_helpers;
 
 #[when("the rule layers are composed with CLI rules {cli_rules}")]
 fn compose_rule_layers(

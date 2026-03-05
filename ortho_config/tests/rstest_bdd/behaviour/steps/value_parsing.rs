@@ -1,7 +1,7 @@
 //! Shared value parsing helpers for BDD step placeholders.
 
 use ortho_config::OrthoError;
-use test_helpers::text;
+use crate::test_helpers::text;
 
 /// Strips one layer of matching single or double quotes from a value.
 pub(crate) fn unquote(value: &str) -> &str { text::unquote(value) }
