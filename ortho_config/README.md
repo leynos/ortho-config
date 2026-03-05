@@ -413,7 +413,7 @@ background, see the [v0.7.0 migration guide](docs/v0-7-0-migration-guide.md).
   and keep feature flags (`toml`, `json5`, `yaml`) on `ortho_config`.
 - If you disable default features, enable `serde_json` explicitly before using
   selected-subcommand merge helpers or `cli_default_as_absent`.
-- Adopt `compose_layers()` / `compose_layers_from_iter(..)` when you need to
+- Adopt `compose_layers()` / `compose_layers_from_iter(...)` when you need to
   inspect, amend, or aggregate layers before merging.
 - Add `#[ortho_config(post_merge_hook)]` plus `PostMergeHook` only when
   cross-field normalization or validation must run after merge resolution.
