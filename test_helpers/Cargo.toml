@@ -1,9 +1,14 @@
 [package]
 name = "test_helpers"
-version = "0.8.0"
-edition = "2024"
+version.workspace = true
+edition.workspace = true
 rust-version.workspace = true
-publish = false
+authors.workspace = true
+description = "Shared test helpers for crates in the ortho-config workspace."
+license.workspace = true
+repository.workspace = true
+readme = "README.md"
+publish = ["crates-io"]
 
 [lints]
 workspace = true
