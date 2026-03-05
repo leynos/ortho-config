@@ -247,6 +247,7 @@ dependencies = [
  "cargo_metadata",
  "clap",
  "ortho_config",
+ "ortho_config_test_helpers",
  "rstest 0.26.1",
  "rstest-bdd",
  "rstest-bdd-macros",
@@ -254,7 +255,6 @@ dependencies = [
  "serde_json",
  "sha2",
  "tempfile",
- "test_helpers",
  "thiserror 2.0.17",
 ]
 
@@ -870,13 +870,13 @@ dependencies = [
  "insta",
  "ortho_config",
  "ortho_config_macros",
+ "ortho_config_test_helpers",
  "rstest 0.23.0",
  "rstest-bdd",
  "rstest-bdd-macros",
  "serde",
  "shlex",
  "tempfile",
- "test_helpers",
  "thiserror 2.0.17",
  "toml 0.9.8",
  "tracing",
@@ -1167,6 +1167,7 @@ dependencies = [
  "fluent-syntax",
  "json5",
  "ortho_config_macros",
+ "ortho_config_test_helpers",
  "rstest 0.26.1",
  "rstest-bdd",
  "rstest-bdd-macros",
@@ -1175,7 +1176,6 @@ dependencies = [
  "serde_json",
  "serial_test",
  "tempfile",
- "test_helpers",
  "thiserror 2.0.17",
  "toml 0.9.8",
  "tracing",
@@ -1197,6 +1197,16 @@ dependencies = [
  "rstest 0.26.1",
  "serde",
  "syn 2.0.108",
+]
+
+[[package]]
+name = "ortho_config_test_helpers"
+version = "0.8.0"
+dependencies = [
+ "anyhow",
+ "camino",
+ "figment",
+ "parking_lot",
 ]
 
 [[package]]
@@ -2008,16 +2018,6 @@ name = "termtree"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8f50febec83f5ee1df3015341d8bd429f2d1cc62bcba7ea2076759d315084683"
-
-[[package]]
-name = "test_helpers"
-version = "0.8.0"
-dependencies = [
- "anyhow",
- "camino",
- "figment",
- "parking_lot",
-]
 
 [[package]]
 name = "textwrap"

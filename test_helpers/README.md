@@ -3,6 +3,8 @@
 Shared test-only helper utilities used by crates in the `ortho-config`
 workspace.
 
+Published package name: `ortho_config_test_helpers`.
+
 This crate provides:
 
 - RAII guards for process-global environment variable mutation.
@@ -19,4 +21,4 @@ intended as a runtime dependency for production binaries or libraries.
 
 `ortho_config` and other workspace crates depend on this crate as a
 versioned dependency during `cargo publish` verification. Publish
-`test_helpers` before publishing crates that rely on it.
+`ortho_config_test_helpers` before publishing crates that rely on it.
