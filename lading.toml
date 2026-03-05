@@ -1,5 +1,5 @@
 [publish]
-order = ["ortho_config_macros", "ortho_config", "cargo-orthohelp"]
+order = ["ortho_config_macros", "test_helpers", "ortho_config", "cargo-orthohelp"]
 strip_patches = "all"
 
 [preflight]
