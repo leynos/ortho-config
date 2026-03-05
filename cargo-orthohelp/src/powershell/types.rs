@@ -49,8 +49,8 @@ macro_rules! string_newtype {
     };
 }
 
-string_newtype!(ModuleName, "PowerShell module name.");
-string_newtype!(ModuleVersion, "PowerShell module version.");
+string_newtype!(ModuleName, "`PowerShell` module name.");
+string_newtype!(ModuleVersion, "`PowerShell` module version.");
 string_newtype!(BinaryName, "Executable name exposed by the wrapper.");
 string_newtype!(ExportAlias, "Alias exported by the wrapper module.");
 string_newtype!(

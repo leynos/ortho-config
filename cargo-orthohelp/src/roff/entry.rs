@@ -80,12 +80,12 @@ pub fn format_env_entry(
     output.push_str(&escape_text(&field.help));
 
     // Cross-reference CLI flag if available
-    if let Some(cli) = &field.cli {
-        if let Some(long) = &cli.long {
-            output.push_str(" Equivalent to ");
-            output.push_str(&bold(&format!("--{long}")));
-            output.push('.');
-        }
+    if let Some(cli) = &field.cli
+        && let Some(long) = &cli.long
+    {
+        output.push_str(" Equivalent to ");
+        output.push_str(&bold(&format!("--{long}")));
+        output.push('.');
     }
     output.push('\n');
 
