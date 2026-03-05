@@ -56,7 +56,7 @@ ortho_config_macros = "0.7.0"
 ## 2. Compose layers separately from merging
 
 Derived configurations now expose `compose_layers()` and
-`compose_layers_from_iter(..)` helpers that return a `LayerComposition`. This
+`compose_layers_from_iter(...)` helpers that return a `LayerComposition`. This
 separates discovery and capture from the actual merge step, making it easier to
 add custom layers or aggregate errors before producing the final config.
 
@@ -187,7 +187,7 @@ step. Variants that depend on `cli_default_as_absent` should be annotated with
 existing feature flags in the runtime crate and macro crate metadata.
 【F:ortho_config/Cargo.toml†L1-L49】 【F:ortho_config_macros/Cargo.toml†L1-L29】
 [^compose-layers]: Derived configuration structs now expose `compose_layers()`
-and `compose_layers_from_iter(..)` and return `LayerComposition` for staged
+and `compose_layers_from_iter(...)` and return `LayerComposition` for staged
 merging and error aggregation.
 【F:ortho_config_macros/src/derive/load_impl.rs†L281-L339】
 【F:ortho_config/src/declarative.rs†L236-L305】

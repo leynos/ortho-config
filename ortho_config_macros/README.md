@@ -398,7 +398,7 @@ Use these notes when upgrading from v0.7.x to v0.8.0:
 - For derive-generated code, use dependency re-exports from
   `ortho_config::figment`, `ortho_config::uncased`, and `ortho_config::xdg`
   unless your own application source imports those crates directly.
-- If you generate documentation artifacts, wire in
+- If you generate documentation artefacts, wire in
   `[package.metadata.ortho_config]` (`root_type`, `locales`) and optional
   `[package.metadata.ortho_config.windows]` overrides, then run
   `cargo orthohelp` (`--format man` / `--format ps`) against the emitted
@@ -413,7 +413,7 @@ background, see the [v0.7.0 migration guide](docs/v0-7-0-migration-guide.md).
   and keep feature flags (`toml`, `json5`, `yaml`) on `ortho_config`.
 - If you disable default features, enable `serde_json` explicitly before using
   selected-subcommand merge helpers or `cli_default_as_absent`.
-- Adopt `compose_layers()` / `compose_layers_from_iter(..)` when you need to
+- Adopt `compose_layers()` / `compose_layers_from_iter(...)` when you need to
   inspect, amend, or aggregate layers before merging.
 - Add `#[ortho_config(post_merge_hook)]` plus `PostMergeHook` only when
   cross-field normalization or validation must run after merge resolution.

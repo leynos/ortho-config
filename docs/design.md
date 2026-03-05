@@ -208,7 +208,7 @@ static TOML blobs in doctests following the guidance in
 production loader unchanged.
 
 Generated configuration structs now include `compose_layers()` and
-`compose_layers_from_iter(..)` helpers that assemble the default, discovered
+`compose_layers_from_iter(...)` helpers that assemble the default, discovered
 file, environment, and CLI layers into a `LayerComposition` without exposing
 Figment. The public `load()` path delegates to this builder before invoking
 `merge_from_layers`, keeping discovery concerns separate from merge semantics
