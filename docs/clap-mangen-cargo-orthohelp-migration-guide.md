@@ -58,7 +58,7 @@ remove it from `build-dependencies` as well.
 
 ```toml
 [package.metadata.ortho_config]
-root_type = "your_crate::cli::YourConfigType"
+root_type = "example_app::cli::AppConfig"
 locales = ["en-US"]
 ```
 
@@ -125,7 +125,7 @@ cargo orthohelp \
   --man-date "$MAN_DATE"
 ```
 
-If your environment does not support `date -d`, compute the date using the
+If the environment does not support `date -d`, compute the date using the
 platform-equivalent command and pass the same `YYYY-MM-DD` value via
 `--man-date`.
 
@@ -150,7 +150,7 @@ For example, with `--out-dir target/generated-docs --man-section 1`, expect:
 target/generated-docs/man/man1/netsuke.1
 ```
 
-If your packaging job expects the old flat path, update the packaging script to
+If the packaging job expects the old flat path, update the packaging script to
 read from the new path, or copy the generated file into the legacy location as
 a compatibility shim.
 
@@ -179,4 +179,5 @@ primarily means:
 - generating man pages in CI or packaging using `cargo orthohelp`.
 
 This keeps runtime builds focused, reduces documentation drift risk, and aligns
-with the IR-driven documentation model introduced for `ortho-config` tooling.
+with the intermediate representation (IR)-driven documentation model introduced
+for `ortho-config` tooling.
