@@ -4,11 +4,11 @@
 use std::path::Path;
 
 #[cfg(windows)]
-use crate::test_helpers::env::EnvScope;
-#[cfg(windows)]
 use anyhow::{Result, ensure};
 #[cfg(windows)]
 use rstest::rstest;
+#[cfg(windows)]
+use test_helpers::env::EnvScope;
 
 #[cfg(windows)]
 use super::super::*;

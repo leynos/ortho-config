@@ -205,7 +205,7 @@ mod tests {
     use tempfile::TempDir;
 
     #[cfg(any(unix, target_os = "redox"))]
-    use crate::test_helpers::env::{self as test_env, EnvVarGuard};
+    use test_helpers::env::{self as test_env, EnvVarGuard};
 
     #[cfg(any(unix, target_os = "redox"))]
     /// Creates a temporary XDG config directory and sets `XDG_CONFIG_HOME` for the test.

@@ -11,8 +11,6 @@ pub mod fixtures;
 
 #[path = "../support/default_punct.rs"]
 mod default_punct;
-#[path = "../test_helpers/mod.rs"]
-mod test_helpers;
 
 mod behaviour;
 mod canary;

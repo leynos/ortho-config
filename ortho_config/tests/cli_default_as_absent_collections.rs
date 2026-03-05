@@ -3,14 +3,13 @@
 use anyhow::{Context, Result, ensure};
 use cap_std::{ambient_authority, fs::Dir};
 use clap::{CommandFactory, FromArgMatches, Parser};
-mod test_helpers;
-use crate::test_helpers::cwd;
 use ortho_config::subcommand::Prefix;
 use ortho_config::{OrthoConfig, load_and_merge_subcommand_with_matches};
 use rstest::{fixture, rstest};
 use serde::{Deserialize, Serialize};
 use serial_test::serial;
 use tempfile::TempDir;
+use test_helpers::cwd;
 
 #[fixture]
 fn prefix() -> Prefix {

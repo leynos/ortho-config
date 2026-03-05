@@ -54,9 +54,6 @@ mod merge;
 mod post_merge;
 mod result_ext;
 pub mod subcommand;
-#[cfg(test)]
-#[path = "../tests/test_helpers/mod.rs"]
-pub(crate) mod test_helpers;
 #[cfg(feature = "serde_json")]
 #[cfg_attr(docsrs, doc(cfg(feature = "serde_json")))]
 pub use crate::subcommand::SubcmdConfigMerge;

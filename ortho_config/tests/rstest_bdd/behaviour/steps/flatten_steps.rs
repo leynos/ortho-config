@@ -10,7 +10,7 @@ use ortho_config::{
 };
 use rstest_bdd_macros::{given, then, when};
 use std::path::Path;
-use crate::test_helpers::figment as figment_helpers;
+use test_helpers::figment as figment_helpers;
 
 fn load_flat(file: Option<String>, args: &[&str]) -> Result<OrthoResult<FlatArgs>> {
     figment_helpers::with_jail(|j| {

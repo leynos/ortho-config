@@ -5,7 +5,7 @@ use crate::scenario_state::{RulesConfig, RulesContext};
 use anyhow::{Result, anyhow, ensure};
 use ortho_config::OrthoConfig;
 use rstest_bdd_macros::{given, then, when};
-use crate::test_helpers::figment as figment_helpers;
+use test_helpers::figment as figment_helpers;
 
 fn with_jail_loader<F>(rules_context: &RulesContext, setup: F) -> Result<()>
 where

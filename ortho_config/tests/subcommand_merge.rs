@@ -2,13 +2,12 @@
 use anyhow::{Context, Result, ensure};
 use cap_std::{ambient_authority, fs::Dir};
 use clap::Parser;
-mod test_helpers;
-use crate::test_helpers::{cwd, env};
 use ortho_config::{OrthoConfig, load_and_merge_subcommand_for};
 use rstest::{fixture, rstest};
 use serde::{Deserialize, Serialize};
 use serial_test::serial;
 use tempfile::TempDir;
+use test_helpers::{cwd, env};
 
 #[derive(Debug, Parser, Serialize, Deserialize, OrthoConfig, Default, PartialEq)]
 #[command(name = "pr")]

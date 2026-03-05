@@ -5,7 +5,7 @@ use crate::scenario_state::{ErrorConfig, ErrorContext};
 use anyhow::{Result, anyhow, ensure};
 use ortho_config::OrthoConfig;
 use rstest_bdd_macros::{given, then, when};
-use crate::test_helpers::figment as figment_helpers;
+use test_helpers::figment as figment_helpers;
 
 #[given("an invalid configuration file")]
 fn invalid_file(error_context: &ErrorContext) -> Result<()> {

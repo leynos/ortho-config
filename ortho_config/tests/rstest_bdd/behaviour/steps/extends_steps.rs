@@ -5,7 +5,7 @@ use anyhow::{Result, anyhow, ensure};
 use ortho_config::{OrthoConfig, OrthoResult};
 use rstest_bdd::Slot;
 use rstest_bdd_macros::{given, then, when};
-use crate::test_helpers::figment as figment_helpers;
+use test_helpers::figment as figment_helpers;
 
 #[given("a configuration file extending a base file")]
 fn create_files(extends_context: &ExtendsContext) -> Result<()> {

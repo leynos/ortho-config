@@ -5,7 +5,7 @@ use crate::scenario_state::{RulesConfig, RulesContext};
 use anyhow::{Result, anyhow, ensure};
 use ortho_config::OrthoConfig;
 use rstest_bdd_macros::{given, then, when};
-use crate::test_helpers::figment as figment_helpers;
+use test_helpers::figment as figment_helpers;
 
 #[given("an alternate config file with rule {value}")]
 fn alt_config_file(rules_context: &RulesContext, value: String) -> Result<()> {

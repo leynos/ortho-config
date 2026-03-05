@@ -2,10 +2,10 @@
 
 use std::path::PathBuf;
 
-use crate::test_helpers::env::{self as test_env, EnvScope};
 use anyhow::{Result, anyhow, ensure};
 use camino::Utf8PathBuf;
 use rstest::rstest;
+use test_helpers::env::{self as test_env, EnvScope};
 
 use super::super::*;
 use super::fixtures::{config_temp_dir, env_guards, env_override_discovery};

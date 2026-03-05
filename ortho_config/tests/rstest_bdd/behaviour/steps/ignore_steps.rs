@@ -4,7 +4,7 @@ use super::value_parsing::{normalize_scalar, parse_csv_values};
 use crate::scenario_state::{RulesConfig, RulesContext};
 use anyhow::{Result, anyhow, ensure};
 use rstest_bdd_macros::{given, then, when};
-use crate::test_helpers::figment as figment_helpers;
+use test_helpers::figment as figment_helpers;
 
 #[given("the environment variable DDLINT_IGNORE_PATTERNS is {value}")]
 fn set_ignore_env(rules_context: &RulesContext, value: String) -> Result<()> {

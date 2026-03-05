@@ -11,9 +11,7 @@
 
 #[path = "support/default_punct.rs"]
 mod default_punct;
-mod test_helpers;
 
-use crate::test_helpers::{cwd, env};
 use anyhow::{Context, Result, ensure};
 use cap_std::{ambient_authority, fs::Dir};
 use clap::{CommandFactory, FromArgMatches, Parser};
@@ -26,6 +24,7 @@ use rstest::{fixture, rstest};
 use serde::{Deserialize, Serialize};
 use serial_test::serial;
 use tempfile::TempDir;
+use test_helpers::{cwd, env};
 
 /// Subcommand with `cli_default_as_absent` attribute on a non-Option field.
 #[derive(Debug, Parser, Serialize, Deserialize, OrthoConfig, PartialEq)]
