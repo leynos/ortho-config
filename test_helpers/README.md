@@ -12,13 +12,13 @@ This crate provides:
 - Helpers for `figment::Jail` setup and error conversion.
 - Shared text normalization functions for behavioural tests.
 
-## Intended Usage
+## Intended usage
 
 This crate is intended for test targets (`[dev-dependencies]`). It is not
 intended as a runtime dependency for production binaries or libraries.
 
 ## Publishing
 
-`ortho_config` and other workspace crates depend on this crate as a
-versioned dependency during `cargo publish` verification. Publish
+`ortho_config` and other workspace crates depend on this crate as a versioned
+dependency during `cargo publish` verification. Publish
 `ortho_config_test_helpers` before publishing crates that rely on it.

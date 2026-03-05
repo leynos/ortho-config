@@ -86,7 +86,7 @@ write_man_page(&buf, &out_dir, &page_name)?;
 ```
 
 After migration, remove this man-page path from `build.rs` and keep only logic
-that must run at compile time (for example, localisation audits).
+that must run at compile time (for example, localization audits).
 
 ```rust
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -150,7 +150,7 @@ For example, with `--out-dir target/generated-docs --man-section 1`, expect:
 target/generated-docs/man/man1/netsuke.1
 ```
 
-If the packaging job expects the old flat path, update the packaging script to
+If a packaging job expects the old flat path, update the packaging script to
 read from the new path, or copy the generated file into the legacy location as
 a compatibility shim.
 
