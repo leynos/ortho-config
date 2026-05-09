@@ -15,6 +15,14 @@ The source documents for this roadmap are:
 - [ADR-001: Replace `serde_yaml` with `serde-saphyr`](adr-001-replace-serde-yaml-with-serde-saphyr.md);
 - [ADR-002: Replace `cucumber-rs` with `rstest-bdd`](adr-002-replace-cucumber-with-rstest-bdd.md).
 
+The first downstream consumers for the expanded agent-native contract are
+Weaver and Netsuke. Their plans make several generic requirements explicit:
+dual human/machine renderers, canonical global flags, strict JSON mode,
+exit-code metadata, skill manifest validation, context command naming,
+capability provenance, profile redaction, delivery and feedback parsers, and
+configurable execution ledgers. OrthoConfig should absorb those reusable
+contracts before the applications fossilize divergent local schemas.
+
 ## 1. Reconcile the design baseline
 
 This phase makes the documentation set trustworthy before new agent-native
@@ -70,6 +78,17 @@ responsibilities and downstream application responsibilities.
   - [ ] Add compatibility notes for downstream crates that only consume
     human-facing documentation output.
 
+- [ ] 1.2.3. Record consumer dependency boundaries for Weaver and Netsuke.
+  - [ ] Document that OrthoConfig owns reusable command-contract machinery,
+    while Weaver owns semantic code-edit execution and Netsuke owns build and
+    package execution.
+  - [ ] Mark whole-CLI introspection, strict vocabulary policy, agent-context
+    IR, and localized help generation as hard dependencies for Weaver's
+    generated command surface.
+  - [ ] Mark profiles, delivery, feedback, skill manifests, and execution
+    ledgers as soft dependencies where consuming applications may temporarily
+    adapt locally if OrthoConfig support is not available in time.
+
 ## 2. Deliver whole-CLI introspection
 
 This phase makes the command tree visible. Agent-context output and vocabulary
@@ -110,6 +129,26 @@ fields.
   - [ ] Document the schema and compatibility policy in
     `docs/agent-native-cli-design.md`.
 
+- [ ] 2.2.3. Define downstream `context --json` command naming.
+  - [ ] Prefer `<tool> context --json` for application command surfaces while
+    keeping `cargo orthohelp --format agent-context` as the generator format.
+  - [ ] Include a payload `kind` such as `<tool>.agent_context`.
+  - [ ] Avoid public `agent-context` aliases before first release unless a
+    migration explicitly requires them.
+
+### 2.3. Validate skill manifests against real commands
+
+- [ ] 2.3.1. Add skill manifest metadata.
+  - [ ] Model skill manifest path, schema version, and command index metadata.
+  - [ ] Link skill manifest locations from agent context.
+  - [ ] Keep downstream skill prose application-owned.
+
+- [ ] 2.3.2. Add skill manifest validation.
+  - [ ] Validate that skills mention real command paths and flags.
+  - [ ] Validate that examples honour canonical vocabulary and global options.
+  - [ ] Add fixtures for Weaver-style operation skills and Netsuke-style build
+    workflow skills without embedding either application's domain semantics.
+
 ## 3. Enforce agent-native policy
 
 This phase turns design rules into checks. The target is mechanical assistance:
@@ -121,8 +160,9 @@ unsafe mutation surfaces before release.
 - [ ] 3.1.1. Add an opt-in agent-native policy configuration.
   - [ ] Support `off`, `warn`, and `deny` modes.
   - [ ] Provide canonical defaults for verbs and flags: `get`, `list`,
-    `create`, `update`, `delete`, `--json`, `--force`, `--dry-run`,
-    `--limit`, `--cursor`, `--wait`, `--profile`, and `--deliver`.
+    `create`, `update`, `delete`, `--json`, `--no-input`, `--force`,
+    `--dry-run`, `--limit`, `--cursor`, `--wait`, `--profile`, and
+    `--deliver`.
   - [ ] Allow explicit project exceptions that are visible in policy output.
 
 - [ ] 3.1.2. Lint off-policy verbs and flags.
@@ -130,6 +170,16 @@ unsafe mutation surfaces before release.
     `--skip-confirmations` under strict policy.
   - [ ] Report the canonical replacement in every diagnostic.
   - [ ] Add tests for warning mode, deny mode, and configured exceptions.
+
+- [ ] 3.1.3. Add the canonical human-facing global option glossary.
+  - [ ] Standardize names for colour, emoji, progress, accessibility, plain
+    output, pager control, width, locale, quiet, and verbose options when those
+    concepts are present.
+  - [ ] Lint near-miss names such as `--output-format`, `--colour-policy`,
+    `--diag-json`, boolean `--progress`, `--no-emoji`, and boolean
+    `--accessible`.
+  - [ ] Permit projects to omit unsupported concepts without forcing every CLI
+    to implement every global flag.
 
 ### 3.2. Model behavioural semantics
 
@@ -141,17 +191,44 @@ unsafe mutation surfaces before release.
   - [ ] Lint destructive commands that lack `--force` or equivalent approved
     metadata.
 
-- [ ] 3.2.2. Add metadata for structured output and exit classes.
+- [ ] 3.2.2. Add dual-renderer metadata.
+  - [ ] Model human renderer support and machine renderer support separately.
+  - [ ] Model TTY sensitivity, closed-stdin behaviour, colour, emoji,
+    progress, pager, width, accessibility, and plain-output policy.
+  - [ ] Model localized versus non-localized fields so protocol identifiers do
+    not drift with human language.
+
+- [ ] 3.2.3. Add metadata for structured output and exit classes.
   - [ ] Model `--json` support, stdout contracts, stderr diagnostics, and exit
     classifications.
   - [ ] Lint data-returning commands that cannot emit structured output.
   - [ ] Document stable exit classes for `cargo-orthohelp`.
 
-- [ ] 3.2.3. Add metadata for bounded list output.
+- [ ] 3.2.4. Add a JSON mode stream contract.
+  - [ ] Model success stdout as one JSON document, JSONL stream, or artefact
+    path.
+  - [ ] Model failure stderr as one JSON diagnostic or JSONL diagnostics.
+  - [ ] Model subprocess output policy so child process output cannot leak
+    beside machine-readable result documents.
+
+- [ ] 3.2.5. Add exit-code taxonomy metadata.
+  - [ ] Model code-to-class mappings in documentation IR and agent context.
+  - [ ] Lint that every documented error class has an exit code.
+  - [ ] Lint that JSON diagnostics report the same class and code.
+
+- [ ] 3.2.6. Add metadata for bounded list output.
   - [ ] Model `--limit`, `--cursor`, default limits, maximum limits, and
     truncation hints.
   - [ ] Lint list-shaped commands that lack bounded defaults.
   - [ ] Keep generated agent descriptions within an explicit size budget.
+
+- [ ] 3.2.7. Add generic capability and provenance metadata.
+  - [ ] Model capability identifiers, command mapping, provider visibility,
+    provider override policy, and whether provider provenance appears in JSON.
+  - [ ] Lint that ordinary public commands do not require backend provider
+    names when a stable capability command would suffice.
+  - [ ] Keep provider registries, selection, execution, and safety harnesses
+    application-owned.
 
 ### 3.3. Rebuild improved required-value diagnostics
 
@@ -194,7 +271,8 @@ downstream users to adopt them.
 
 - [ ] 4.2.2. Document the reference CLI contract.
   - [ ] Update `cargo-orthohelp/README.md` with stdout/stderr behaviour,
-    `--json`, exit classes, and agent-native lint usage.
+    `--json`, JSON mode stream contracts, exit classes, and agent-native lint
+    usage.
   - [ ] Include examples for human documentation output and agent-context
     output.
   - [ ] Explain which behaviours are already implemented and which require
@@ -211,11 +289,19 @@ helpers, while downstream applications own domain behaviour.
 - [ ] 5.1.1. Design and implement optional profile metadata.
   - [ ] Standardize `--profile <name>` as the root selection flag.
   - [ ] Document the precedence
-    `explicit CLI > environment > selected profile > config file > default`.
+    `built-in defaults < config files < selected profile < environment <
+    flags`.
   - [ ] Expose profile support, profile listing commands, and selected-profile
     semantics in agent context.
 
-- [ ] 5.1.2. Decide whether OrthoConfig ships a profile store helper.
+- [ ] 5.1.2. Add profile redaction metadata.
+  - [ ] Mark secret and reference-only profile fields.
+  - [ ] Redact sensitive profile values from context output and generated
+    documentation examples.
+  - [ ] Validate that profile names can be exposed without leaking profile
+    contents.
+
+- [ ] 5.1.3. Decide whether OrthoConfig ships a profile store helper.
   - [ ] Evaluate a JSON-backed helper against applications that already manage
     their own profile storage.
   - [ ] If implemented, provide list, show, save, and delete helpers without
@@ -227,15 +313,17 @@ helpers, while downstream applications own domain behaviour.
   - [ ] Support `stdout`, `file:<path>`, and `webhook:<url>` schemes.
   - [ ] Enumerate supported schemes when parsing fails.
   - [ ] Require atomic file writes and visible webhook HTTP status reporting.
+  - [ ] Keep application-specific webhook payload semantics outside
+    OrthoConfig.
 
 - [ ] 5.2.2. Design reusable feedback storage.
   - [ ] Store local feedback as JSONL by default.
   - [ ] Optionally send feedback upstream when an endpoint is configured.
   - [ ] Expose local and upstream feedback capability in agent context.
 
-### 5.3. Async job contracts
+### 5.3. Execution ledger contracts
 
-- [ ] 5.3.1. Model application-level async jobs.
+- [ ] 5.3.1. Model application-level execution ledgers.
   - [ ] Represent `--wait`, job identifier fields, status commands, and job
     ledger support in metadata.
   - [ ] Lint async submit commands that force agents to write their own polling
@@ -243,11 +331,18 @@ helpers, while downstream applications own domain behaviour.
   - [ ] Keep this separate from asynchronous configuration loading in
     `OrthoConfig::load`.
 
-- [ ] 5.3.2. Evaluate a reusable job ledger helper.
+- [ ] 5.3.2. Support configurable public ledger nouns.
+  - [ ] Allow applications to expose `jobs`, `runs`, `tasks`, or `operations`
+    while sharing one metadata model.
+  - [ ] Include record identifiers, status enums, timestamps, command paths,
+    input hashes, idempotency keys, log references, result references, prune
+    commands, and bounded list behaviour.
+
+- [ ] 5.3.3. Evaluate a reusable execution ledger helper.
   - [ ] Decide whether a local JSONL ledger belongs in OrthoConfig or should
     remain application-owned.
   - [ ] If implemented, provide list, get, and prune primitives that downstream
-    CLIs can expose under a `jobs` command.
+    CLIs can expose under their configured ledger noun.
 
 ## 6. Deferred extensions
 
@@ -261,8 +356,8 @@ are working.
   agent-context output.
 - [ ] 6.1.2. Explore OpenAPI-shaped runtime explorer endpoints for downstream
   applications.
-- [ ] 6.1.3. Generate long-form skill manifests from documentation IR and
-  agent context.
+- [ ] 6.1.3. Generate optional long-form skill prose from documentation IR and
+  agent context after validation exists.
 
 ### 6.2. Configuration extensions
 

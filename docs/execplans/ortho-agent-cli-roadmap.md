@@ -149,6 +149,12 @@ current state of the work.
 - [x] (2026-05-09T12:36Z) Ran `make fmt`, `make markdownlint`, and
   `make nixie`; all documentation gates passed.
 - [x] (2026-05-09T12:36Z) Rewrite the design document set and roadmap.
+- [x] (2026-05-09T13:05Z) Extended the agent-native design and roadmap for
+  Weaver and Netsuke consumer dependencies, including renderer metadata,
+  canonical global flags, JSON mode stream contracts, exit-code metadata, skill
+  manifest validation, context command naming, capability provenance, profile
+  redaction, delivery and feedback parser contracts, and configurable execution
+  ledgers.
 
 ## Surprises & Discoveries
 
@@ -188,6 +194,14 @@ Document with evidence so future work benefits.
   could not retrieve the context pack, read no files, and made no edits.
   Impact: this plan proceeds from the local audit and records no external
   changes from the agent team pass.
+- Observation: Weaver and Netsuke are already converging on command-contract
+  ideas that are generic enough to belong in OrthoConfig. Evidence: the user
+  supplied dependency guidance covering dual renderers, canonical global
+  options, JSON stream contracts, exit-code classes, skill manifests, context
+  naming, capability provenance, profile redaction, delivery/feedback parsers,
+  and execution ledgers. Impact: the roadmap now pushes these reusable
+  contracts left into OrthoConfig before downstream tools invent incompatible
+  schemas.
 
 ## Decision Log
 
@@ -225,6 +239,13 @@ decisions to escalate, decisions on ambiguous requirements, and design choices.
   cargo-orthohelp, lints, and optional runtime helpers; keeping it in one
   document avoids duplicating a policy matrix across older docs. Date/Author:
   2026-05-09 (assistant).
+- Decision: Treat Weaver and Netsuke as consumer forcing functions for generic
+  command-contract metadata, not as reasons to move semantic execution into
+  OrthoConfig. Rationale: OrthoConfig should own schemas, metadata, generated
+  documentation, agent context, policy, and optional parsers/helpers; Weaver
+  and Netsuke should keep provider execution, sandboxing, edits, build
+  execution, refusal logic, and domain payload semantics. Date/Author:
+  2026-05-09 (assistant).
 
 ## Outcomes & Retrospective
 
@@ -237,6 +258,9 @@ done differently next time.
   future-facing delivery plan, corrected stale missing-required-values and
   DDLint status claims, and updated the `cargo-orthohelp` design and README to
   describe planned reference-CLI behaviour. Documentation validation passed.
+- Outcome: The follow-up consumer alignment pass extended the design and
+  roadmap so Weaver and Netsuke can depend on OrthoConfig for generic
+  command-contract machinery instead of building parallel schema engines.
 
 ## Context and Orientation
 

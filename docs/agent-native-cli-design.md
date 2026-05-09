@@ -41,6 +41,32 @@ validate, and optionally provide reusable helpers for common surfaces such as
 profiles, delivery targets, feedback stores, and job ledgers. Downstream
 applications still own their domain side effects.
 
+## 2.1 Consumer application boundary
+
+Weaver and Netsuke are the first planned consumers that make the boundary
+concrete. OrthoConfig owns the reusable command-contract machinery:
+
+- schemas and command metadata;
+- documentation IR and compact agent-context IR;
+- vocabulary and global-option policy;
+- renderer metadata for human and machine output;
+- generated help, man pages, completions, and reference artefacts;
+- policy linting and drift checks;
+- optional primitives for profiles, delivery targets, feedback stores, skill
+  manifests, and execution ledgers.
+
+Weaver owns semantic execution: capability routing, Rope, rust-analyzer,
+Language Server Protocol (LSP), Tree-sitter, and Sempai providers, sandboxing,
+Double-Lock safety, actual edits, job execution, semantic refusal logic, and
+provider-specific idempotency.
+
+Netsuke owns build and package semantics: manifest interpretation, subprocess
+execution, build graph logic, package-specific run records, and any domain
+payloads it sends to delivery or feedback sinks.
+
+This split lets Weaver and Netsuke depend on OrthoConfig for consistent command
+contracts without pushing their execution engines into a configuration crate.
+
 ## 3. Contract surfaces
 
 Agent-native support is split across four surfaces. Each surface has a
@@ -63,7 +89,7 @@ The new agent-context contract is a compact, machine-oriented JSON document
 that describes how to invoke the CLI. It is not localized prose and should be
 kept small enough for agents to load cheaply.
 
-The planned `cargo-orthohelp` interface is:
+The planned `cargo-orthohelp` generator interface is:
 
 ```console
 cargo orthohelp --format agent-context
@@ -71,6 +97,24 @@ cargo orthohelp --format agent-context
 
 Equivalent command forms are acceptable if implementation work finds a cleaner
 fit, but the output must remain a first-class format, not a scraped help page.
+For downstream application command surfaces, OrthoConfig should prefer the
+public command name `context`:
+
+```console
+example-cli context --json
+```
+
+The payload should identify itself precisely, for example:
+
+```json
+{
+  "kind": "example-cli.agent_context"
+}
+```
+
+This keeps the public command approachable while preserving an explicit machine
+schema. Hidden aliases such as `agent-context` should be avoided before the
+first public release unless a migration requires them.
 
 The top-level shape should include:
 
@@ -120,6 +164,12 @@ but they are downstream of the compact contracts. They should be generated or
 validated against the documentation IR and agent context rather than maintained
 as an independent source of truth.
 
+Skill manifests are still first-class contracts. OrthoConfig should model the
+manifest path, schema version, command index, and validation rules that prove a
+manifest mentions real commands and flags. It must not own a downstream skill's
+domain prose, such as Weaver's safe Rust rename workflow or Netsuke's build
+workflow.
+
 ## 4. Whole-CLI introspection
 
 Whole-CLI introspection is the first implementation dependency. The current
@@ -162,6 +212,7 @@ The canonical command verbs are:
 The canonical flags are:
 
 - `--json` for structured output;
+- `--no-input` for non-interactive operation;
 - `--force` for destructive prompt bypass;
 - `--dry-run` for previewing consequential operations;
 - `--limit` and `--cursor` for bounded list output;
@@ -169,10 +220,25 @@ The canonical flags are:
 - `--profile` for selecting a named persistent identity;
 - `--deliver` for routing generated artefacts.
 
+The canonical human-facing global option glossary is:
+
+- `--color auto|always|never` for colour policy;
+- `--emoji auto|always|never` for emoji policy when a project supports emoji;
+- `--progress auto|always|never` for progress and spinner policy;
+- `--accessibility auto|on|off` for accessibility-oriented rendering;
+- `--plain` for plain text fallback;
+- `--no-pager` for pager suppression;
+- `--width <columns>` for terminal-width-sensitive rendering;
+- `--locale <locale>` for localized human output;
+- `--quiet` and `--verbose` for diagnostic verbosity.
+
 The policy should flag or reject off-convention aliases such as `info`, `ls`,
 `--format=json`, `--output json`, and `--skip-confirmations` when strict mode
 is enabled. Projects may still opt out or configure exceptions, but exceptions
-must be explicit and visible in generated context.
+must be explicit and visible in generated context. It should also flag
+near-miss global options when a project uses legacy names for a concept in the
+glossary, such as `--output-format`, `--colour-policy`, `--diag-json`, boolean
+`--progress`, `--no-emoji`, or boolean `--accessible`.
 
 ## 6. Required command semantics
 
@@ -188,9 +254,9 @@ flag. A command that may prompt without declaring `--force`, `--yes`,
 `--no-input`, or an equivalent project-approved bypass should fail strict
 agent-native lint.
 
-The preferred destructive bypass flag is `--force`. If a project chooses a
-different convention, it must configure that convention once and expose it in
-agent context.
+The preferred non-interactive flag is `--no-input`. The preferred destructive
+bypass flag is `--force`. If a project chooses a different convention, it must
+configure that convention once and expose it in agent context.
 
 ### 6.2 Structured output
 
@@ -208,6 +274,61 @@ Agent-context output metadata should describe:
 
 `cargo-orthohelp` should dogfood this by returning structured success summaries
 for generated artefacts when `--json` is provided.
+
+JSON mode must be stricter than "mostly JSON". The default contract is:
+
+- success writes exactly one JSON result document to stdout and nothing to
+  stderr;
+- failure writes no stdout unless an explicit artefact has already been
+  delivered, and exactly one JSON diagnostic document to stderr;
+- subprocess output never leaks beside the result document on stdout;
+- protocol identifiers and error classes are not localized.
+
+Some commands legitimately need streams. OrthoConfig should therefore model a
+`JsonModeContract`-style shape with these choices:
+
+- `success_stdout`: `one_json_document`, `jsonl_stream`, or `artifact_path`;
+- `failure_stderr`: `one_json_diagnostic` or `jsonl_diagnostics`;
+- `subprocess_output_policy`: `capture_preview_and_log`,
+  `inherit_only_in_human_mode`, or `forbidden`.
+
+The lint policy should reject commands that claim JSON mode but cannot state
+where every byte of stdout and stderr goes.
+
+### 6.2.1 Renderer metadata
+
+OrthoConfig should model renderer metadata without becoming every downstream
+renderer. The reusable contract should describe:
+
+- human renderer support and machine renderer support;
+- TTY sensitivity and closed-stdin behaviour;
+- colour, emoji, progress, pager, width, accessibility, and plain-output
+  policy;
+- stdout and stderr contracts per renderer;
+- localized versus non-localized fields;
+- whether progress or subprocess output may be inherited in human mode only.
+
+This supports Weaver's dual human/machine output and Netsuke's human-first,
+agent-consistent presentation from the same metadata vocabulary.
+
+### 6.2.2 Exit-code taxonomy metadata
+
+OrthoConfig should model exit codes in documentation IR and agent context, but
+it should not impose a universal taxonomy. A command contract should be able to
+describe:
+
+```json
+{
+  "exit_codes": {
+    "0": { "class": "success" },
+    "2": { "class": "usage" },
+    "5": { "class": "external_tool_failure" }
+  }
+}
+```
+
+Strict policy should lint that every documented error class has an exit code,
+and that JSON diagnostics report the class and code consistently.
 
 ### 6.3 Errors that enumerate choices
 
@@ -252,13 +373,19 @@ Async submit commands should declare:
 
 - a `--wait` flag;
 - the response field that contains the job identifier;
-- status commands, usually under `jobs`;
-- whether a durable job ledger exists;
+- status commands, using the public noun configured by the project;
+- whether a durable execution ledger exists;
 - whether retries can recover an in-flight job.
 
-OrthoConfig may later provide reusable helper types for job ledger metadata or
-storage, but the initial design requirement is to model and lint the command
-contract.
+The generic concept is an execution ledger. The public noun is configurable, so
+Weaver can expose `jobs` while Netsuke can expose `runs` without forking the
+metadata model. Ledger metadata should cover record identifiers, status enums,
+timestamps, command paths, input hashes, idempotency keys, log references,
+result references, prune commands, and bounded list behaviour.
+
+OrthoConfig may later provide reusable helper types for execution-ledger
+metadata or storage, but the initial design requirement is to model and lint
+the command contract.
 
 ### 6.7 Persistent profiles
 
@@ -273,7 +400,7 @@ example-cli render --profile weekly-recap --json
 The recommended precedence is:
 
 ```text
-explicit CLI > environment > selected profile > config file > default
+built-in defaults < config files < selected profile < environment < flags
 ```
 
 If implementation work decides that profiles are named config overlays, the
@@ -281,7 +408,9 @@ roadmap must document the exact merge order and migration impact before code is
 changed.
 
 Agent context should expose whether profiles are supported, how to list them,
-and which flag selects one.
+which flag selects one, and which profile fields are redacted or
+reference-only. Profile metadata should support secret redaction, profile names
+in context output, and generated profile documentation.
 
 ### 6.8 Delivery and feedback
 
@@ -299,6 +428,32 @@ should surface HTTP status and retryability.
 Feedback should write a local JSONL record by default. If an upstream endpoint
 is configured, the command should report whether the local record was also sent
 successfully.
+
+OrthoConfig owns parsing, validation, schema metadata, and enumerating errors.
+It does not own the domain payload sent by Weaver or Netsuke.
+
+### 6.9 Capability and provenance metadata
+
+Capability-hidden providers are a reusable command-contract shape. OrthoConfig
+should model generic capability and provenance metadata such as:
+
+```json
+{
+  "capability_id": "symbol.rename",
+  "command": "symbols rename",
+  "kind": "actuator",
+  "provider_visibility": "provenance",
+  "provider_override": "advanced",
+  "provenance_in_json": true
+}
+```
+
+The generic metadata belongs in OrthoConfig because many CLIs hide backend
+providers behind stable user intent. Provider registries, provider selection,
+semantic execution, and safety harnesses remain application-owned. Strict
+policy should be able to warn when provider names are required in ordinary
+public commands instead of being exposed as provenance or advanced override
+metadata.
 
 ## 7. `cargo-orthohelp` as reference CLI
 
@@ -344,7 +499,9 @@ The design and roadmap updates must address these known gaps:
 - `cargo-orthohelp` has no structured `--json` result mode;
 - `cargo-orthohelp` does not yet enumerate all valid choices in errors;
 - generated file writes are not specified as atomic;
-- profile, delivery, feedback, async job, mutation, and pagination metadata are
+- renderer metadata, JSON-mode stream contracts, exit-code taxonomy metadata,
+  skill manifest validation, capability/provenance metadata, profile redaction,
+  delivery, feedback, execution ledger, mutation, and pagination metadata are
   not yet modelled as first-class contracts.
 
 ## 10. Deferred extensions
@@ -353,10 +510,9 @@ The following ideas are useful but must not block the core agent-native work:
 
 - MCP server generation from agent context;
 - OpenAPI-shaped runtime explorer endpoints for downstream applications;
-- full skill manifest generation;
 - remote configuration providers;
 - live reload of configuration;
-- managed application job ledgers;
+- managed application execution ledgers;
 - asynchronous configuration file loading.
 
 These extensions should be revisited only after whole-CLI introspection,

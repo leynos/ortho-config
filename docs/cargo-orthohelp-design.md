@@ -43,6 +43,10 @@ roadmap boundary:
 4. Agent-native linting is added as a future `cargo-orthohelp` responsibility,
    with strict policy defined in
    [agent-native-cli-design.md](agent-native-cli-design.md).
+5. Consumer applications such as Weaver and Netsuke depend on the same generic
+   metadata for renderer policy, JSON mode contracts, exit-code classes, skill
+   manifests, context naming, capability provenance, profile redaction,
+   delivery and feedback parsers, and configurable execution ledgers.
 
 ### 0.2 Revision 2
 
@@ -540,6 +544,10 @@ the documentation-oriented metadata into the compact contract described in
 - include command semantics such as interaction mode, mutation boundaries,
   pagination, async job metadata, profile support, delivery support, feedback
   support, and output contracts when declared;
+- include renderer metadata, JSON mode stream contracts, exit-code taxonomy
+  metadata, skill manifest links, capability/provenance metadata, profile
+  redaction metadata, delivery/feedback parser contracts, and execution-ledger
+  nouns when declared;
 - emit policy warnings or failures through the same validation path used by
   `--check-agent-native`.
 

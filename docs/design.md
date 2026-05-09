@@ -53,6 +53,12 @@ The implementation must adhere to the following principles:
   enforce canonical verbs, canonical flags, structured output, bounded list
   responses, explicit mutation boundaries, and discoverable command trees
   without relying on manual review.
+- **Reusable consumer contracts:** Downstream applications such as Weaver and
+  Netsuke should depend on OrthoConfig for reusable command-contract machinery,
+  including command metadata, documentation and agent-context IR, renderer
+  metadata, vocabulary policy, skill manifest validation, profile metadata,
+  delivery and feedback parsers, and execution-ledger metadata. They continue
+  to own their domain execution engines.
 - **Performance:** The configuration process happens once at startup, so raw
   performance is secondary to correctness and developer experience. However,
   the implementation should be reasonably efficient and avoid unnecessary
@@ -835,6 +841,12 @@ explicit.
   `cargo-orthohelp` dogfooding are the next product focus. See
   [agent-native-cli-design.md](agent-native-cli-design.md) and
   [roadmap.md](roadmap.md).
+- **Consumer application alignment:** Weaver and Netsuke requirements should be
+  pushed left into OrthoConfig when they describe reusable command contracts,
+  not when they describe semantic execution. Examples include renderer
+  metadata, JSON mode stream contracts, exit-code taxonomy metadata, skill
+  manifest validation, capability provenance metadata, profile redaction,
+  delivery and feedback parser contracts, and configurable execution ledgers.
 - **Async configuration loading:** A version of `load` that uses non-blocking
   IO remains useful, but it is distinct from application-level async job
   metadata such as `--wait`, `jobs get`, or durable job ledgers.
