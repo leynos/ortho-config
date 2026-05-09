@@ -4,7 +4,7 @@ This ExecPlan is a living document. The sections `Constraints`, `Tolerances`,
 `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`, and
 `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
-Status: DRAFT
+Status: IN PROGRESS
 
 ## Purpose / Big Picture
 
@@ -131,6 +131,24 @@ current state of the work.
   reported no completed findings, so no delegated findings were merged.
 - [x] (2026-05-09T11:07Z) Validated the ExecPlan with `make fmt`,
   `make markdownlint`, and `make nixie`.
+- [x] (2026-05-09T12:04Z) User approved implementation of the planned
+  documentation revisions.
+- [x] (2026-05-09T12:08Z) Confirmed a clean working tree on
+  `feat/ortho-agent-cli-roadmap` before starting the documentation
+  implementation pass.
+- [x] (2026-05-09T12:15Z) Added
+  `docs/agent-native-cli-design.md` as the central product and technical design
+  for agent-native CLI assistance.
+- [x] (2026-05-09T12:20Z) Updated `docs/design.md` and
+  `docs/cargo-orthohelp-design.md` to point at the agent-native design,
+  distinguish historical baselines from future roadmap work, and reserve
+  agent-context as a sibling output to localized documentation IR.
+- [x] (2026-05-09T12:31Z) Replaced `docs/roadmap.md` with a future-facing,
+  GIST-aligned roadmap and corrected stale status notes in user-facing and
+  historical design documents.
+- [x] (2026-05-09T12:36Z) Ran `make fmt`, `make markdownlint`, and
+  `make nixie`; all documentation gates passed.
+- [x] (2026-05-09T12:36Z) Rewrite the design document set and roadmap.
 
 ## Surprises & Discoveries
 
@@ -201,6 +219,12 @@ decisions to escalate, decisions on ambiguous requirements, and design choices.
   errors, non-interactive defaults, and atomic artefact writes before
   downstream applications adopt new metadata. Date/Author: 2026-05-09
   (assistant).
+- Decision: Add `docs/agent-native-cli-design.md` as the authoritative
+  agent-native product and technical design, then link existing design
+  documents to it. Rationale: the agent-native policy spans documentation IR,
+  cargo-orthohelp, lints, and optional runtime helpers; keeping it in one
+  document avoids duplicating a policy matrix across older docs. Date/Author:
+  2026-05-09 (assistant).
 
 ## Outcomes & Retrospective
 
@@ -208,9 +232,11 @@ Summarize outcomes, gaps, and lessons learned at major milestones or at
 completion. Compare the result against the original purpose. Note what would be
 done differently next time.
 
-- Outcome: Not yet complete. This draft records the source audit and proposed
-  document-overhaul strategy. It has passed documentation validation and is
-  ready for user review.
+- Outcome: The documentation implementation pass is complete pending commit.
+  It added the agent-native CLI assistance design, rewrote the roadmap as a
+  future-facing delivery plan, corrected stale missing-required-values and
+  DDLint status claims, and updated the `cargo-orthohelp` design and README to
+  describe planned reference-CLI behaviour. Documentation validation passed.
 
 ## Context and Orientation
 

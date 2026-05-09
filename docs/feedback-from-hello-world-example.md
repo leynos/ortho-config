@@ -1,4 +1,10 @@
-# Mitigating Boilerplate in OrthoConfig: Detailed Improvement Proposals
+# Mitigating boilerplate in OrthoConfig: detailed improvement proposals
+
+Status: historical proposal. Most of this document informed later
+configuration-discovery, declarative-merge, and subcommand-merge work. The
+active product direction now builds on those lessons through the agent-native
+CLI assistance design in
+[agent-native-cli-design.md](agent-native-cli-design.md).
 
 Based on the `hello_world` example in the attached `ortho-config` repository,
 here are detailed proposals to make the library more expressive and flexible.

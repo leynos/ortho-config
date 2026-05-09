@@ -1,6 +1,13 @@
 # Subcommand refinements
 
-## Current Design and Developer Experience
+Status: historical proposal. The core subcommand merge refinements described
+here have been folded into the current design baseline. The next subcommand
+work is whole-CLI introspection: generated documentation and agent context must
+include real recursive subcommand metadata instead of an empty list. See
+[agent-native-cli-design.md](agent-native-cli-design.md) and
+[roadmap.md](roadmap.md).
+
+## Current design and developer experience
 
 The existing implementation of subcommand configuration in `ortho-config` is
 powerful, providing a layered approach to configuration from files, environment

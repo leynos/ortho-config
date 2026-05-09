@@ -34,7 +34,17 @@ intermediate representation (IR) produced by `#[derive(OrthoConfig)]`.
   cache-only execution.
 - **Cargo-native workflow:** Run as `cargo orthohelp` from your workspace.
 
-## Quick Start
+## Agent-native roadmap status
+
+`cargo-orthohelp` is the planned reference CLI for OrthoConfig's agent-native
+work. The current released surface generates human documentation artefacts. The
+roadmap adds compact `agent-context` output, `--json` command summaries,
+agent-native lint checks, enumerating errors, stable exit classes, and atomic
+artefact writes. See
+[Agent-native CLI assistance design](../docs/agent-native-cli-design.md) and
+[OrthoConfig roadmap](../docs/roadmap.md).
+
+## Quick start
 
 1. **Declare metadata in your application crate `Cargo.toml`:**
    Use the canonical example in

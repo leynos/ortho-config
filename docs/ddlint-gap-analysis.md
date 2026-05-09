@@ -1,10 +1,16 @@
-# Gap Analysis: OrthoConfig vs ddlint Configuration Requirements
+# Gap analysis: OrthoConfig vs ddlint configuration requirements
 
 This document compares OrthoConfig's current capabilities with the command-line
 and configuration interface described in the [ddlint design
 document][ddlint-design].
 
-## Relevant ddlint Requirements
+Status: historical analysis. The original gap list has largely been addressed
+by later OrthoConfig work and is no longer the active roadmap. The remaining
+relevance is as source material for agent-native policy design, especially the
+distinction between a domain-specific `--format <compact|json|rich>` option and
+the cross-CLI `--json` structured-output convention.
+
+## Relevant ddlint requirements
 
 The design describes a `clap` based CLI and a `ddlint.toml` configuration file:
 
@@ -34,7 +40,7 @@ The configuration schema includes:
 | [rules].`<rule-name>`     | String           | (rule default)                                     | Sets the severity for a rule (`allow`, `warn`, or `error`).                                                        |
 | [rules.consistent-casing] | Table            | { level = "allow", relation_style = "PascalCase" } | Example of a rule with options.                                                                                    |
 
-## Current OrthoConfig Features
+## Current OrthoConfig features
 
 OrthoConfig layers configuration sources in this order. Later sources override
 earlier ones:
@@ -88,40 +94,40 @@ Vectors support an `append` merge strategy:
 features: Vec<String>
 ```
 
-## Observed Gaps
+## Observed gaps
 
-- [ ] **Array Environment Variables** – support comma-separated lists such as
+- [x] **Array Environment Variables** – support comma-separated lists such as
   `DDLINT_RULES=A,B,C`.
-- [ ] **Extends Support** – implement an `extends` mechanism for configuration
+- [x] **Extends Support** – implement an `extends` mechanism for configuration
   inheritance.
 - [x] **Custom Option Names** – document renaming `--config-path` to
   `--config` using the `discovery(...)` attribute.
-- [ ] **Dynamic Rule Tables** – use a map type to accept arbitrary rule entries.
-- [ ] **Ignore Patterns** – allow comma-separated lists for environment
+- [x] **Dynamic Rule Tables** – use a map type to accept arbitrary rule entries.
+- [x] **Ignore Patterns** – allow comma-separated lists for environment
   variables.
 
-Overall, OrthoConfig covers layered loading and CLI integration. It would need
-enhancements for string list parsing and configuration extension to fully
-satisfy ddlint's design.
+Overall, OrthoConfig now covers the configuration-loading gaps this analysis
+identified. The active future work is no longer ddlint-specific loading
+support; it is the broader agent-native command policy described in
+[agent-native-cli-design.md](agent-native-cli-design.md).
 
-## Next Steps
+## Next steps
 
-The following steps are ordered by impact on ddlint's user experience:
+The following steps supersede the original loading-focused checklist:
 
-1. **Comma-Separated Lists** – add support for parsing comma-separated
-   environment variables as string lists. This allows `DDLINT_RULES=A,B,C`
-   without JSON syntax.
-2. **Configuration Inheritance** – design an `extends` mechanism so one file can
-   pull defaults from another. Leverage the existing layering logic described
-   in `docs/design.md`.
-3. **Dynamic Tables** – explore using a map type (e.g., `BTreeMap`) to handle
-   arbitrary rule names under `[rules]`.
-4. **Ignore Pattern Lists** – after implementing comma-separated parsing,
-   document usage for `ignore_patterns` to keep CLI and environment
-   configuration consistent.
+1. **Vocabulary policy** – decide how strict agent-native mode treats
+   domain-specific format flags such as ddlint's `--format <compact|json|rich>`
+   when the cross-CLI structured-output convention is `--json`.
+2. **Agent context** – ensure command trees such as `rules` and `explain` can
+   be represented compactly for agents.
+3. **Bounded output** – require list-like commands such as `rules` to expose
+   `--limit`, `--cursor`, or a documented bounded default when strict policy is
+   enabled.
+4. **Enumerating errors** – ensure invalid severities, rule names, and output
+   modes list the valid set so agents can self-correct.
 
-These improvements will align OrthoConfig with ddlint's planned interface while
-maintaining compatibility with the crate's existing architecture.
+These improvements align OrthoConfig with ddlint-style CLIs while preserving
+the crate's existing architecture.
 
 <!-- markdownlint-disable-next-line MD013 -->
 
