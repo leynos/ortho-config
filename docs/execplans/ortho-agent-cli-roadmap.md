@@ -155,6 +155,9 @@ current state of the work.
   manifest validation, context command naming, capability provenance, profile
   redaction, delivery and feedback parser contracts, and configurable execution
   ledgers.
+- [x] (2026-05-10T08:42Z) Archived the completed v0.8.0-era roadmap phases in
+  `docs/archive/v0-8-0-roadmap.md` and renumbered the active roadmap so the
+  agent-native phases continue at phase 5.
 
 ## Surprises & Discoveries
 
@@ -261,6 +264,9 @@ done differently next time.
 - Outcome: The follow-up consumer alignment pass extended the design and
   roadmap so Weaver and Netsuke can depend on OrthoConfig for generic
   command-contract machinery instead of building parallel schema engines.
+- Outcome: The roadmap now preserves completed historical phases separately
+  from future work. Active agent-native delivery starts at phase 5, following
+  the archived v0.8.0 roadmap's completed phases 1 through 4.
 
 ## Context and Orientation
 
@@ -375,11 +381,12 @@ The implementation may create one new focused design document, tentatively
 documents harder to use. If created, it must be the authoritative design for
 agent-native contracts and the existing documents must link to it.
 
-## Future Roadmap Shape to Produce
+## Future Roadmap Shape Produced
 
-The rewritten `docs/roadmap.md` should follow this phase order.
+The rewritten `docs/roadmap.md` follows this phase order after archiving the
+completed v0.8.0 roadmap as `docs/archive/v0-8-0-roadmap.md`.
 
-## 1. Foundation: truthful documents and agent-native contracts
+## 5. Foundation: truthful documents and agent-native contracts
 
 Idea: if OrthoConfig first reconciles its documentation with implementation
 truth and records the agent-native contract boundary, later work can extend the
@@ -390,7 +397,7 @@ agent-native design, decide the schema split between documentation IR and
 agent-context IR, and add an architectural decision record if the maintainers
 want a durable decision record.
 
-## 2. Vertical slice: whole-CLI introspection for real command trees
+## 6. Vertical slice: whole-CLI introspection for real command trees
 
 Idea: if the existing IR can describe complete command trees, OrthoConfig can
 deliver immediate agent value through accurate `agent-context` output before
@@ -401,7 +408,7 @@ This phase should include tasks to populate subcommand metadata from
 agent-context schema, add `cargo orthohelp --format agent-context` or an
 equivalent command, and validate token-bounded output against fixtures.
 
-## 3. Vertical slice: mechanically enforced vocabulary and invocation policy
+## 7. Vertical slice: mechanically enforced vocabulary and invocation policy
 
 Idea: if developers can opt into a strict policy and receive compile-time or
 tool-time failures for off-convention verbs, flags, output modes, and mutation
@@ -413,7 +420,7 @@ canonical flag checks, structured output metadata, enum value coverage,
 pagination metadata, destructive-operation metadata, non-interactive metadata,
 and a `cargo orthohelp` lint/check command.
 
-## 4. Vertical slice: `cargo-orthohelp` as the reference agent-native CLI
+## 8. Vertical slice: `cargo-orthohelp` as the reference agent-native CLI
 
 Idea: if OrthoConfig's own generator satisfies the table-stakes agent-native
 rules, downstream projects get both tooling and a working example of the
@@ -424,7 +431,7 @@ JSON error rendering or stable exit classification, better enumerating errors,
 stdout/stderr separation, generated artefact reporting, and atomic output
 writes.
 
-## 5. Vertical slice: compounding primitives for repeated agent workflows
+## 9. Vertical slice: compounding primitives for repeated agent workflows
 
 Idea: if the core introspection and policy model is already trustworthy,
 optional primitives for profiles, delivery, feedback, and async job metadata
@@ -437,7 +444,7 @@ runtime helper crates or feature flags. Each task must state whether
 OrthoConfig implements the helper or only models and lints the downstream
 contract.
 
-## 6. Deferred extensions after the core agent-native promise
+## 10. Deferred extensions after the core agent-native promise
 
 Idea: if the core agent-native promise is already useful and boring to operate,
 the project can evaluate broader extensions on product value instead of letting
