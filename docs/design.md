@@ -15,7 +15,12 @@ configuration solution inspired by the developer experience of tools like
 `esbuild`. By using a single `derive` macro, developers will define their
 configuration *once* in a plain Rust struct. The crate will then handle the
 entire lifecycle of parsing, layering, merging, and deserializing from
-command-line arguments, environment variables, and configuration files.
+command-line arguments, environment variables, and configuration files. The
+same metadata spine will also support agent-native CLI assistance: projects
+should be able to generate compact invocation context, lint command vocabulary,
+and prove non-interactive, structured, bounded behaviour from the same source
+that drives their human documentation. The detailed agent-native contract lives
+in [agent-native-cli-design.md](agent-native-cli-design.md).
 
 **1.3. Foreseen Benefits:**
 
@@ -43,6 +48,17 @@ The implementation must adhere to the following principles:
   box. Error messages must be rich, informative, and clearly attribute issues
   to their original source (e.g., "Error in `config.toml` at line 5: invalid
   type for `port`").
+- **Mechanical agent assistance:** Agent-native CLI behaviour must be generated
+  or linted from metadata wherever possible. OrthoConfig should help developers
+  enforce canonical verbs, canonical flags, structured output, bounded list
+  responses, explicit mutation boundaries, and discoverable command trees
+  without relying on manual review.
+- **Reusable consumer contracts:** Downstream applications such as Weaver and
+  Netsuke should depend on OrthoConfig for reusable command-contract machinery,
+  including command metadata, documentation and agent-context IR, renderer
+  metadata, vocabulary policy, skill manifest validation, profile metadata,
+  delivery and feedback parsers, and execution-ledger metadata. They continue
+  to own their domain execution engines.
 - **Performance:** The configuration process happens once at startup, so raw
   performance is secondary to correctness and developer experience. However,
   the implementation should be reasonably efficient and avoid unnecessary
@@ -745,7 +761,13 @@ escape hatch for wholesale replacements.
   `serde_saphyr`, `toml`), so downstream libraries can import them via
   `ortho_config::` without declaring separate dependencies.
 
-## 6. Implementation Roadmap
+## 6. Historical implementation baseline
+
+The following milestones describe the original bootstrap path for the crate.
+They are retained as historical context, not as the current future roadmap.
+Current product planning lives in [roadmap.md](roadmap.md) and is anchored by
+the agent-native design in
+[agent-native-cli-design.md](agent-native-cli-design.md).
 
 1. **V0.1 (Scaffolding):**
 
@@ -814,15 +836,28 @@ explicit.
 
 ## 8. Future Work
 
-- **Async Support:** A version of `load` that uses non-blocking IO.
+- **Agent-native CLI contracts:** Whole-CLI introspection, compact
+  agent-context output, strict vocabulary and behavioural linting, and
+  `cargo-orthohelp` dogfooding are the next product focus. See
+  [agent-native-cli-design.md](agent-native-cli-design.md) and
+  [roadmap.md](roadmap.md).
+- **Consumer application alignment:** Weaver and Netsuke requirements should be
+  pushed left into OrthoConfig when they describe reusable command contracts,
+  not when they describe semantic execution. Examples include renderer
+  metadata, JSON mode stream contracts, exit-code taxonomy metadata, skill
+  manifest validation, capability provenance metadata, profile redaction,
+  delivery and feedback parser contracts, and configurable execution ledgers.
+- **Async configuration loading:** A version of `load` that uses non-blocking
+  IO remains useful, but it is distinct from application-level async job
+  metadata such as `--wait`, `jobs get`, or durable job ledgers.
 - **Custom Sources:** An API for users to add their own `figment` providers
   (e.g., from a database or a remote service like Vault).
 - **Live Reloading:** A mechanism to watch configuration files for changes and
   reload the configuration at runtime.
 
-This design provides a clear path forward for implementing `OrthoConfig`. By
-building on a solid foundation of existing crates and focusing on the developer
-experience, we can create a highly valuable addition to the Rust ecosystem.
+This design provides the baseline architecture for `OrthoConfig`. Future work
+should preserve the single-source metadata model while extending it into
+generated documentation, generated agent context, and enforceable CLI policy.
 
 ## 9. Decision log
 

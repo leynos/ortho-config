@@ -995,10 +995,15 @@ configuration sources surface as the `Merge` variant, providing clearer
 diagnostics when the combined data is invalid. When multiple sources fail, the
 errors are collected into the `Aggregate` variant so callers can inspect each
 individual failure. Consumers should handle these errors appropriately, for
-example by printing them to stderr and exiting. If required fields are missing
-after merging, the crate returns `OrthoError::MissingRequiredValues` with a
-user‑friendly list of missing paths and hints on how to provide them. For
-example:
+example by printing them to stderr and exiting. A richer
+missing-required-values diagnostic is planned in
+[Improved error message design](improved-error-message-design.md), but the
+current public error enum does not expose an
+`OrthoError::MissingRequiredValues` variant. Until that work lands, missing
+required fields surface through the existing merge, gathering, or
+deserialization errors.
+
+The planned diagnostic shape is:
 
 ```plaintext
 Missing required values:
@@ -1144,6 +1149,13 @@ descriptions. Field-level metadata can be refined with `help_id`,
 `env(name = "...")`, and `file(key_path = "...")`. These documentation
 attributes affect only the emitted IR; they do not change runtime naming or
 loading behaviour.
+
+The documentation IR is the human documentation contract. The future
+agent-native work will add a compact sibling agent-context output for command
+invocation, vocabulary checks, structured output policy, bounded list metadata,
+and mutation boundaries. See
+[Agent-native CLI assistance design](agent-native-cli-design.md) for the
+product direction and [Roadmap](roadmap.md) for the implementation sequence.
 
 ### Generating IR with cargo-orthohelp
 

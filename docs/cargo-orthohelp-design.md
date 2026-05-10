@@ -1,13 +1,17 @@
-# OrthoConfig IR documentation design for cargo-orthohelp (v2)
+# OrthoConfig IR documentation design for cargo-orthohelp (v3)
 
 This document defines the intermediate representation (IR) emitted by the
 `OrthoConfig` derive macro and consumed by `cargo-orthohelp` to generate
 localized UNIX man pages and PowerShell external help (Microsoft Assistance
 Markup Language (MAML)) plus a wrapper module. It focuses on a command-line
 interface (CLI) documentation pipeline that remains `clap` agnostic and keeps
-IR-driven documentation code out of application binaries.
+IR-driven documentation code out of application binaries. The related
+agent-facing invocation contract is defined in
+[agent-native-cli-design.md](agent-native-cli-design.md) and should be emitted
+as a sibling output, not as localized documentation prose.
 
-- Status: Revision 2 (Windows and PowerShell amendments integrated).
+- Status: Revision 3 (agent-native relationship and reference CLI amendments
+  integrated).
 - Audience: OrthoConfig maintainers and consumers.
 - Goal: Generate fully localized UNIX man pages and PowerShell external help
   (MAML and wrapper module) from a robust, `clap`-agnostic IR.
@@ -21,7 +25,30 @@ Note: document revisions track narrative changes, while compatibility is
 governed by the IR schema version (`ir_version`). Generators must use the IR
 schema version to determine compatibility, regardless of document revision.
 
-## 0. Changelog (v2 vs v1)
+## 0. Changelog
+
+### 0.1 Revision 3
+
+Revision 3 keeps the human documentation IR intact and adds the agent-native
+roadmap boundary:
+
+1. Agent context is a compact sibling output generated from the same metadata
+   spine, not a replacement for localized documentation IR.
+2. Whole-CLI subcommand metadata is now an explicit dependency for future
+   agent-context output. The schema already models recursive subcommands, but
+   implementation must populate them before the context is complete.
+3. `cargo-orthohelp` becomes the reference CLI for table-stakes agent-native
+   behaviour: `--json`, stdout/stderr separation, enumerating errors, stable
+   result summaries, and atomic artefact writes.
+4. Agent-native linting is added as a future `cargo-orthohelp` responsibility,
+   with strict policy defined in
+   [agent-native-cli-design.md](agent-native-cli-design.md).
+5. Consumer applications such as Weaver and Netsuke depend on the same generic
+   metadata for renderer policy, JSON mode contracts, exit-code classes, skill
+   manifests, context naming, capability provenance, profile redaction,
+   delivery and feedback parsers, and configurable execution ledgers.
+
+### 0.2 Revision 2
 
 PowerShell and Windows amendments (no change to the IR-first philosophy):
 
@@ -95,6 +122,9 @@ Key choices:
   and generators resolve per locale.
 - Out-of-band tooling: `cargo orthohelp` compiles and runs a tiny ephemeral
   bridge to fetch the IR, keeping application binaries clean.
+- Sibling agent outputs: compact agent context and policy reports are generated
+  from the same metadata spine but versioned independently from localized
+  documentation IR.
 
 ## 2. Documentation IR (schema v1.1)
 
@@ -442,14 +472,21 @@ cargo orthohelp \
   [--package <pkg>] [--bin <name> | --lib] \
   [--root-type <path::to::Type>] \
   [--locale <lang>] [--all-locales] \
-  [--format ir|man|ps|all] \
+  [--format ir|man|ps|agent-context|all] [--json] \
   [--out-dir <path>] \
   [--man-section <N>] [--man-date <YYYY-MM-DD>] [--man-split-subcommands] \
   [--ps-module-name <Name>] [--ps-split-subcommands <BOOL>] \
   [--ps-include-common-parameters <BOOL>] [--ps-help-info-uri <URI>] \
-  [--ensure-en-us <BOOL>] \
+  [--ensure-en-us <BOOL>] [--check-agent-native] \
   [--cache] [--no-build]
 ```
+
+`--format agent-context`, `--json`, and `--check-agent-native` are planned
+agent-native additions. Until they are implemented, the existing formats remain
+the only generated artefacts. When `--json` is provided, success must emit
+exactly one JSON result document to stdout and nothing to stderr. Failure must
+emit no stdout, unless a non-JSON artefact was explicitly delivered earlier,
+and exactly one JSON diagnostic document to stderr.
 
 `Cargo.toml` defaults:
 
@@ -493,6 +530,31 @@ present). `--cache` reuses it when valid; `--no-build` trusts the existing IR.
 Crate fingerprints hash `Cargo.toml`, `build.rs` (when present), `src/`, and
 `locales/` so changes to configuration schemas or translations invalidate the
 cache.
+
+### 6.3.1 Agent-context pipeline additions
+
+Agent-context generation should reuse the same bridge output, then transform
+the documentation-oriented metadata into the compact contract described in
+[agent-native-cli-design.md](agent-native-cli-design.md). The transform must:
+
+- preserve schema versioning separately from `DocMetadata.ir_version`;
+- include populated command trees rather than only top-level fields;
+- drop localized long prose unless a concise command summary is required;
+- include canonical flags, value types, enum values, defaults, and required
+  inputs;
+- include command semantics such as interaction mode, mutation boundaries,
+  pagination, async job metadata, profile support, delivery support, feedback
+  support, and output contracts when declared;
+- include renderer metadata, JSON mode stream contracts, exit-code taxonomy
+  metadata, skill manifest links, capability/provenance metadata, profile
+  redaction metadata, delivery/feedback parser contracts, and execution-ledger
+  nouns when declared;
+- emit policy warnings or failures through the same validation path used by
+  `--check-agent-native`.
+
+The agent-context output must not be scraped from rendered man pages or
+PowerShell help. Rendering surfaces may consume agent metadata for examples or
+warnings, but they are not the source of truth for agents.
 
 ## 6.4 Localised IR JSON output
 
