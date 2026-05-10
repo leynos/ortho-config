@@ -207,11 +207,10 @@ unsafe mutation surfaces before release.
   - [ ] Document stable exit classes for `cargo-orthohelp`.
 
 - [ ] 7.2.4. Add a JSON mode stream contract.
-  - [ ] Model success stdout as one JSON document, JSONL stream, or artefact
-    path.
-  - [ ] Model failure stderr as one JSON diagnostic or JSONL diagnostics.
-  - [ ] Model subprocess output policy so child process output cannot leak
-    beside machine-readable result documents.
+  - [ ] Model success stdout as a single JSON result document.
+  - [ ] Model failure stderr as a single JSON diagnostic document.
+  - [ ] Model subprocess output policy so child process output never leaks to
+    stdout in JSON mode except via an agreed artefact path.
 
 - [ ] 7.2.5. Add exit-code taxonomy metadata.
   - [ ] Model code-to-class mappings in documentation IR and agent context.

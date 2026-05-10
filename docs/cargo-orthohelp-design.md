@@ -483,9 +483,10 @@ cargo orthohelp \
 
 `--format agent-context`, `--json`, and `--check-agent-native` are planned
 agent-native additions. Until they are implemented, the existing formats remain
-the only generated artefacts. When `--json` is provided, command results should
-write a structured success or error summary to stdout while diagnostics remain
-on stderr.
+the only generated artefacts. When `--json` is provided, success must emit
+exactly one JSON result document to stdout and nothing to stderr. Failure must
+emit no stdout, unless a non-JSON artefact was explicitly delivered earlier,
+and exactly one JSON diagnostic document to stderr.
 
 `Cargo.toml` defaults:
 

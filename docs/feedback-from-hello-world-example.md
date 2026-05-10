@@ -11,21 +11,18 @@ here are detailed proposals to make the library more expressive and flexible.
 Each proposal addresses a specific area of boilerplate identified in the
 example and suggests changes aimed at **implementing developers** of
 `ortho-config`. Code references are provided from the repository to illustrate
-current behavior and guide the proposed enhancements.
+current behaviour and guide the proposed enhancements.
 
-## 1. Abstracted Configuration File Discovery
+## 1. Abstracted configuration file discovery
 
 **Issue:** The example contains a lot of repetitive, platform-specific code to
 find configuration files. In `examples/hello_world/src/cli/discovery.rs`,
 functions like `add_xdg_config_paths`, `add_windows_config_paths`, and others
-are manually invoked to build a list of candidate
-paths([1](examples/hello_world/src/cli/discovery.rs#L14-L23)). This includes
+are manually invoked to build a list of candidate paths[^1]. This includes
 checking an explicit environment variable (`HELLO_WORLD_CONFIG_PATH`) for a
 config file and searching standard locations (XDG directories, `%APPDATA%`,
-home directory, working
-directory)([1](examples/hello_world/src/cli/discovery.rs#L29-L37))(
-[1](examples/hello_world/src/cli/discovery.rs#L68-L76)). Writing and
-maintaining this logic is tedious and error-prone.
+home directory, working directory)[^2][^3]. Writing and maintaining this logic
+is tedious and error-prone.
 
 **Proposal:** Integrate a **cross-platform configuration discovery utility**
 into `ortho-config` itself, so applications can locate config files in one
@@ -49,16 +46,14 @@ call. Specifically:
 - **Reduce boilerplate for developers:** With this in place, the example’s
   discovery module could be replaced by a single call, e.g.
   `let figment = ortho_config::discover_config("hello_world")?;`, eliminating
-  the need to manually push candidate paths and iterate through
-  them([1](examples/hello_world/src/cli/discovery.rs#L14-L23))(
-  [1](examples/hello_world/src/cli/discovery.rs#L106-L115)). The library would
-  ensure the search order is correct (explicit path first, then XDG/standard
-  locations, then local file) and handle OS differences internally. This
-  follows the “convention over configuration” goal from the design docs by
-  providing sensible default behavior for config file lookup.
+  the need to manually push candidate paths and iterate through them[^1][^4].
+  The library would ensure the search order is correct (explicit path first,
+  then XDG/standard locations, then local file) and handle OS differences
+  internally. This follows the “convention over configuration” goal from the
+  design docs by providing sensible default behaviour for config file lookup.
 
-- **Customization via attributes:** For flexibility, the derive macro could
-  allow an attribute on the root config struct to customize the config file
+- **Customisation via attributes:** For flexibility, the derive macro could
+  allow an attribute on the root config struct to customise the config file
   name or the env var name. For example,
   `#[ortho_config(config = "hello_world", config_flag = "config")]` might
   generate a `--config` CLI flag and use `HELLO_WORLD_CONFIG_PATH` internally
@@ -70,9 +65,9 @@ call. Specifically:
 **Outcome:** By abstracting file discovery, an application like `hello_world`
 can load configuration with one line, instead of maintaining dozens of lines of
 OS-specific code. This not only reduces boilerplate but also ensures all
-`ortho-config` users get a consistent discovery behavior out-of-the-box.
+`ortho-config` users get a consistent discovery behaviour out-of-the-box.
 
-## 2. Generic and Composable Merging Mechanism
+## 2. Generic and composable merging mechanism
 
 **Issue:** The example’s global configuration loading shows that merging
 multiple sources still requires manual work. In `hello_world`, the
@@ -99,12 +94,11 @@ a type-safe, declarative way:
   be derived automatically. In practice, this would allow something like:
 
 ```rust
-rustCopy code`let mut cfg = AppConfig::default();
+let mut cfg = AppConfig::default();
 if let Some(file_cfg) = AppConfig::from_file()? {
     cfg.merge(file_cfg);
 }
 cfg.merge(cli_cfg);
-`
 ```
 
 Under the hood, `merge` would know how to handle each field (e.g., simple
@@ -152,7 +146,7 @@ since the logic lives in the library. The explicit merging code in the example
 layer([4](examples/hello_world/src/cli/mod.rs#L293-L301))) would be replaced by
 library calls, making the application code cleaner and easier to follow.
 
-## 3. Streamlined Subcommand Configuration and Overrides
+## 3. Streamlined subcommand configuration and overrides
 
 **Issue:** Handling configuration for subcommands currently requires extra
 boilerplate. In the example, the `greet` subcommand needed a custom step to
@@ -213,10 +207,9 @@ transparently:
   like:
 
 ```rust
-rustCopy code`let cli = CommandLine::parse();  
-let cfg = OrthoConfig::load_for_subcommand(&cli)?;  
+let cli = CommandLine::parse();
+let cfg = OrthoConfig::load_for_subcommand(&cli)?;
 // where cfg would contain both global and selected subcommand settings merged.
-`
 ```
 
 Internally, this would call the appropriate subcommand’s `load_and_merge`. This
@@ -252,3 +245,8 @@ use-cases without extra code. This aligns with the project’s vision of
 **“dramatic reduction in boilerplate and cognitive load”** for configuration
 management([5](docs/design.md#L24-L31)), moving closer to a truly
 *batteries-included* experience.
+
+[^1]: [Discovery path setup](examples/hello_world/src/cli/discovery.rs#L14-L23).
+[^2]: [Explicit environment path lookup](examples/hello_world/src/cli/discovery.rs#L29-L37).
+[^3]: [Standard directory discovery](examples/hello_world/src/cli/discovery.rs#L68-L76).
+[^4]: [Candidate path iteration](examples/hello_world/src/cli/discovery.rs#L106-L115).

@@ -13,7 +13,7 @@ enforceable through derive metadata, generated context, and `cargo-orthohelp`
 checks. Maintainers should not have to rely on code review to catch a command
 that uses `info` where the rest of the CLI uses `get`, accepts
 `--skip-confirmations` instead of `--force`, or emits a broad table where an
-agent needs bounded JSON.
+agent needs JSON to be bounded.
 
 This document covers the product shape and the future implementation contract.
 It does not claim that all features are already implemented. The implementation
@@ -156,6 +156,57 @@ cargo orthohelp --check-agent-native
 The policy should support `off`, `warn`, and `deny` modes. Early adoption
 should default to warnings so existing users can see the work required before
 turning on hard failures.
+
+`cargo orthohelp --check-agent-native` must emit a machine-stable policy report
+when JSON output is requested. Tests and CI should parse `rule_id` and `code`
+for deterministic handling; prose in `message` is explanatory and may improve
+without changing the machine contract.
+
+```json
+{
+  "version": "1",
+  "tool": "cargo-orthohelp",
+  "mode": "warn",
+  "results": [
+    {
+      "rule_id": "agent-native.vocabulary.canonical-flag",
+      "severity": "warn",
+      "code": "canonical_flag_missing",
+      "message": "Use --json for structured output instead of --format=json.",
+      "file": "Cargo.toml",
+      "range": {
+        "start": {
+          "line": 12,
+          "column": 1
+        },
+        "end": {
+          "line": 12,
+          "column": 20
+        }
+      }
+    }
+  ],
+  "summary": {
+    "off": 0,
+    "warn": 1,
+    "deny": 0,
+    "total": 1
+  }
+}
+```
+
+Each result must contain:
+
+- `rule_id`: stable policy rule identifier;
+- `severity`: one of `off`, `warn`, or `deny`;
+- `code`: stable machine-readable finding code;
+- `message`: human-readable diagnostic text;
+- `file`: source file path when available;
+- `range` or `span`: optional source location metadata.
+
+Mode handling is direct: `off` suppresses checks, `warn` emits findings without
+failing the command, and `deny` exits with a validation-class failure when any
+deny-level finding is present.
 
 ### 3.4 Long-form workflow material
 
@@ -479,6 +530,40 @@ The documentation IR and agent-context schema must version independently. A
 change that affects man-page generation may not affect agents, and a compact
 agent-context addition should not force a documentation IR migration unless the
 same data is genuinely needed by human documentation.
+
+### 8.1 Defaulting for legacy derives
+
+Older derives will not emit every new metadata field immediately. The
+agent-context schema, documentation IR, and man-page generation must therefore
+apply explicit defaults instead of guessing from absent data.
+
+| Field                  | Default                  | Rationale                                                                  |
+| ---------------------- | ------------------------ | -------------------------------------------------------------------------- |
+| `canonical_verb`       | `null`                   | Legacy command metadata did not classify verbs.                            |
+| `supports_json`        | `false`                  | Structured output must be declared before tools rely on it.                |
+| `json_stdout_contract` | `null`                   | No JSON stream invariant exists until the command opts in.                 |
+| `json_stderr_contract` | `null`                   | Diagnostics remain unspecified for legacy commands.                        |
+| `exit_classes`         | `[]`                     | Exit-code semantics are unavailable unless documented.                     |
+| `interaction_mode`     | `"unknown"`              | Legacy derives cannot prove whether a command prompts.                     |
+| `mutation_effect`      | `"unknown"`              | Read/write/delete boundaries must not be inferred from names.              |
+| `pagination`           | `null`                   | List bounds and cursors require explicit command metadata.                 |
+| `profile_support`      | `{ "supported": false }` | Profiles are opt-in persistent state.                                      |
+| `delivery_support`     | `{ "supported": false }` | Delivery sinks change artefact routing and must be explicit.               |
+| `feedback_support`     | `{ "supported": false }` | Feedback storage or upload must be explicitly available.                   |
+| `execution_ledger`     | `{ "supported": false }` | Jobs, runs, or tasks require application-owned execution state.            |
+| `skill_manifest_paths` | `[]`                     | Skills are absent until declared and validated.                            |
+| `capability_id`        | `null`                   | Capability routing is optional downstream metadata.                        |
+| `provider_provenance`  | `{ "reported": false }`  | Provider names are not emitted unless the application declares provenance. |
+| `renderer.human`       | `{ "supported": true }`  | Existing documentation IR already supports human help material.            |
+| `renderer.machine`     | `{ "supported": false }` | Machine renderer support must be declared before agents depend on it.      |
+
+Lint behaviour for omitted metadata follows the selected mode. In `off` mode,
+the check is not run. In `warn` mode, omitted fields that block an agent-native
+guarantee emit warnings but do not fail the command. In `deny` mode, the same
+omitted fields fail CI with validation-class diagnostics. Projects should opt
+into warning mode first, fix emitted findings, then move to deny mode once the
+documentation IR, agent-context schema, and man-page generation are complete
+enough for their command surface.
 
 The first implementation phase should introduce agent-native support behind
 explicit formats, commands, or metadata attributes. Existing generated
