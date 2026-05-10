@@ -4,11 +4,20 @@ This archive preserves the completed OrthoConfig roadmap phases, steps, and
 tasks that led up to the v0.8.0 planning boundary. The active roadmap continues
 numbering from this archive in [roadmap.md](../roadmap.md).
 
+Archive note: this file preserves the roadmap's historical completion state,
+not a re-audited statement of the current codebase. Later agent-native planning
+found that some archived items were incomplete in implementation. In
+particular, `OrthoError::MissingRequiredValues` is now treated as planned work,
+despite the completed v0.8.0 checklist entry below.
+
 ## 1. Configuration core
 
 ### 1.1. Required values and error handling
 
 - [x] 1.1.1. Add a dedicated error for missing required values.
+  - Archive correction: later review found that
+    `OrthoError::MissingRequiredValues` was not present in the current code, so
+    the active roadmap treats this item as unimplemented follow-up work.
   - [x] Introduce a `MissingRequiredValues` variant to `OrthoError` and
     update the derive macro to check for missing required fields before
     deserialization. See
