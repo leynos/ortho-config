@@ -4,10 +4,10 @@ This ExecPlan is a living document. The sections `Constraints`, `Tolerances`,
 `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`, and
 `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
-Status: IN PROGRESS
+Status: COMPLETE
 
-This plan covers roadmap item 5.1.1 only. It was approved for implementation
-on 2026-05-17.
+This plan covers roadmap item 5.1.1 only. It was approved for implementation on
+2026-05-17.
 
 ## Purpose / big picture
 
@@ -141,8 +141,13 @@ two.
   behaviour is documented and the implementation remains phase 7 work.
 - [x] (2026-05-17) Ran `coderabbit review --agent` after the documentation
   milestone; it completed with zero findings.
-- [ ] Run validation gates.
-- [ ] Commit the approved implementation.
+- [x] (2026-05-17) Ran validation gates. `make check-fmt`, `make lint`,
+  `make test`, and `make nixie` passed. `make fmt` still fails on existing
+  repository-wide Markdown line-length violations outside this task's edited
+  sections.
+- [x] (2026-05-17) Committed the documentation reconciliation as
+  `81062f8 Reconcile missing required error docs`.
+- [ ] Commit the final ExecPlan status update.
 - [ ] Push the implementation commits.
 
 ## Surprises & discoveries
@@ -173,14 +178,18 @@ Document with evidence so future work benefits.
   clap's adapter-level missing argument surface from OrthoConfig's planned
   configuration-field diagnostic.
 - Observation: Targeted `markdownlint` still reports existing long lines in
-  `docs/users-guide.md` outside the edited error-handling section.
-  Evidence: lines such as the aggregate example remain over 80 columns. Impact:
+  `docs/users-guide.md` outside the edited error-handling section. Evidence:
+  lines such as the aggregate example remain over 80 columns. Impact:
   validation should report this as pre-existing repository debt unless later
   scope explicitly includes reflowing unrelated guide sections.
 - Observation: `coderabbit review --agent` reported no findings for the
-  documentation milestone.
-  Evidence: the review completed with `findings: 0`. Impact: no follow-up
-  edits were needed before validation.
+  documentation milestone. Evidence: the review completed with `findings: 0`.
+  Impact: no follow-up edits were needed before validation.
+- Observation: The required Rust validation gates pass after the documentation
+  reconciliation. Evidence: `make check-fmt`, `make lint`, and `make test`
+  completed successfully. `make nixie` also validated all Mermaid diagrams.
+  Impact: the documentation-only implementation did not regress formatting,
+  linting, tests, or diagram validation.
 
 ## Decision log
 
@@ -210,7 +219,15 @@ decisions to escalate, decisions on ambiguous requirements, and design choices.
 Summarize outcomes, gaps, and lessons learned at major milestones or at
 completion. Compare the result against the original purpose.
 
-- Outcome: Pending approval and implementation.
+- Outcome: The phase 5.1.1 documentation reconciliation is complete. The
+  design note and users guide now state that `OrthoError::MissingRequiredValues`
+  is absent from the current public error surface, the changelog records the
+  clarification, and the roadmap marks item 5.1.1 done while leaving the actual
+  diagnostic implementation in phase 7.3.1.
+- Gap: Repository-wide `make fmt` still fails on pre-existing Markdown
+  line-length violations in unrelated documents. The edited ExecPlan, design
+  note, roadmap, and changelog pass direct Markdown linting; the edited users
+  guide section is wrapped, but the file contains older long lines elsewhere.
 
 ## Context and orientation
 
