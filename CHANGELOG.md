@@ -19,6 +19,9 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
+- Clarify that `OrthoError::MissingRequiredValues` is proposed future work, not
+  part of the current public error surface, and keep the implementation tracked
+  in the phase 7 roadmap.
 - Report missing `extends` targets with a clear not-found error that names the
   resolved absolute path and the referencing file (closes #110).
 - Clarify `ConfigDiscovery::load_first` semantics: the helper now returns

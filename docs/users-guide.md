@@ -995,13 +995,21 @@ configuration sources surface as the `Merge` variant, providing clearer
 diagnostics when the combined data is invalid. When multiple sources fail, the
 errors are collected into the `Aggregate` variant so callers can inspect each
 individual failure. Consumers should handle these errors appropriately, for
-example by printing them to stderr and exiting. A richer
-missing-required-values diagnostic is planned in
-[Improved error message design](improved-error-message-design.md), but the
-current public error enum does not expose an
-`OrthoError::MissingRequiredValues` variant. Until that work lands, missing
-required fields surface through the existing merge, gathering, or
-deserialization errors.
+example by printing them to stderr and exiting.
+
+There is not currently an `OrthoError::MissingRequiredValues` variant. Missing
+required values therefore use the existing error surface:
+
+- required command-line arguments rejected by `clap` become
+  `OrthoError::CliParsing`;
+- required fields missing after layer merging generally become
+  `OrthoError::Merge` or another deserialization/gathering error; and
+- multiple source failures may be wrapped in `OrthoError::Aggregate`.
+
+A richer missing-required-values diagnostic is planned in
+[Improved error message design](improved-error-message-design.md). Until that
+phase 7 work lands, consumers should not match on
+`OrthoError::MissingRequiredValues`.
 
 The planned diagnostic shape is:
 

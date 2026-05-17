@@ -4,10 +4,10 @@ This ExecPlan is a living document. The sections `Constraints`, `Tolerances`,
 `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`, and
 `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
-Status: DRAFT
+Status: IN PROGRESS
 
-This plan covers roadmap item 5.1.1 only. It must be approved before any
-implementation work starts.
+This plan covers roadmap item 5.1.1 only. It was approved for implementation
+on 2026-05-17.
 
 ## Purpose / big picture
 
@@ -54,7 +54,8 @@ suggestions; violation requires escalation, not workarounds.
   split the work or escalate.
 - Run required gates sequentially, not in parallel, and capture output with
   `tee` into `/tmp` log files.
-- Do not start implementation until this DRAFT plan is explicitly approved.
+- Do not expand beyond the approved documentation reconciliation unless a later
+  finding is recorded in this plan and explicitly approved.
 
 If satisfying the objective requires violating a constraint, stop, document the
 conflict in `Decision Log`, and ask for direction.
@@ -125,14 +126,24 @@ two.
   preflighting all missing required fields.
 - [x] (2026-05-16) Verified from the active roadmap that absent implementation
   work should move to phase 7.
-- [ ] Obtain explicit plan approval.
-- [ ] Rename the branch to
+- [x] (2026-05-17) Obtained explicit plan approval.
+- [x] (2026-05-17) Renamed the branch to
   `5-1-1-reconcile-design-with-actual-error-surface` and set upstream tracking
   to `origin/5-1-1-reconcile-design-with-actual-error-surface`.
-- [ ] Reconcile documentation and release notes.
+- [x] (2026-05-17) Opened draft pull request
+  `https://github.com/leynos/ortho-config/pull/322`.
+- [x] (2026-05-17) Reconfirmed the error surface before editing:
+  `OrthoError::MissingRequiredValues` remains absent, generated loading still
+  delegates to `merge_from_layers`, and deserialization failures in merge
+  contexts still route to `OrthoError::Merge`.
+- [x] (2026-05-17) Reconciled `docs/improved-error-message-design.md`,
+  `docs/users-guide.md`, `CHANGELOG.md`, and `docs/roadmap.md` so the current
+  behaviour is documented and the implementation remains phase 7 work.
+- [x] (2026-05-17) Ran `coderabbit review --agent` after the documentation
+  milestone; it completed with zero findings.
 - [ ] Run validation gates.
 - [ ] Commit the approved implementation.
-- [ ] Push the branch and open a draft pull request.
+- [ ] Push the implementation commits.
 
 ## Surprises & discoveries
 
@@ -161,6 +172,15 @@ Document with evidence so future work benefits.
   `DisplayHelpOnMissingArgumentOrSubcommand`. Impact: The plan distinguishes
   clap's adapter-level missing argument surface from OrthoConfig's planned
   configuration-field diagnostic.
+- Observation: Targeted `markdownlint` still reports existing long lines in
+  `docs/users-guide.md` outside the edited error-handling section.
+  Evidence: lines such as the aggregate example remain over 80 columns. Impact:
+  validation should report this as pre-existing repository debt unless later
+  scope explicitly includes reflowing unrelated guide sections.
+- Observation: `coderabbit review --agent` reported no findings for the
+  documentation milestone.
+  Evidence: the review completed with `findings: 0`. Impact: no follow-up
+  edits were needed before validation.
 
 ## Decision log
 
