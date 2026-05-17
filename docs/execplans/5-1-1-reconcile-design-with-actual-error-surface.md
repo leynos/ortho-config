@@ -1,8 +1,9 @@
 # Reconcile missing required value errors
 
-This ExecPlan is a living document. The sections `Constraints`, `Tolerances`,
-`Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`, and
-`Outcomes & Retrospective` must be kept up to date as work proceeds.
+This execution plan (ExecPlan) is a living document. The sections
+`Constraints`, `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`,
+`Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
+proceeds.
 
 Status: COMPLETE
 
@@ -50,8 +51,9 @@ suggestions; violation requires escalation, not workarounds.
   the domain/runtime error and merge-loading surface, while command-line,
   environment, and file providers remain adapters feeding structured layers.
 - Do not add new dependencies without explicit approval.
-- Keep files under 400 lines. If a changed code file would exceed that limit,
-  split the work or escalate.
+- Keep source code files under 400 lines. Documentation plans may exceed that
+  only while required context cannot be split without losing the self-contained
+  execution record.
 - Run required gates sequentially, not in parallel, and capture output with
   `tee` into `/tmp` log files.
 - Do not expand beyond the approved documentation reconciliation unless a later
@@ -75,8 +77,9 @@ of autonomous action, not quality criteria.
 - Documentation: stop if the current behaviour cannot be described consistently
   without also changing code.
 - Ambiguity: stop if "missing required value" could validly mean both a
-  required CLI argument rejected by `clap` and a required configuration field
-  rejected during merge in a way that changes the phase 5 scope.
+  required command-line interface (CLI) argument rejected by `clap` and a
+  required configuration field rejected during merge in a way that changes the
+  phase 5 scope.
 - Process: stop if branch rename, upstream tracking, push, or draft pull
   request creation fails because the remote branch already exists or a pull
   request already targets the same branch.
@@ -147,8 +150,12 @@ two.
   sections.
 - [x] (2026-05-17) Committed the documentation reconciliation as
   `81062f8 Reconcile missing required error docs`.
-- [ ] Commit the final ExecPlan status update.
-- [ ] Push the implementation commits.
+- [x] (2026-05-17) Committed the final ExecPlan status update as
+  `42f6398 Finalize missing required error ExecPlan` and pushed the
+  implementation commits.
+- [x] (2026-05-17) Addressed review comments about acronym definitions,
+  completed progress state, future-tense execution steps, and the 400-line
+  constraint.
 
 ## Surprises & discoveries
 
@@ -170,7 +177,7 @@ Document with evidence so future work benefits.
   start for this workspace. Evidence: The command reported that the Rust
   language server connection closed and suggested installing or restarting
   `rust-analyzer`. Impact: Planning used text search and direct inspection
-  rather than semantic LSP references.
+  rather than semantic Language Server Protocol (LSP) references.
 - Observation: Firecrawl was used to confirm clap prior art for required
   command-line argument errors. Evidence: docs.rs for `clap::error::ErrorKind`
   documents `MissingRequiredArgument`, `MissingSubcommand`, and
@@ -329,79 +336,6 @@ request title should include `(5.1.1)`, and the summary should mention this
 ExecPlan file. Run `echo ${LODY_SESSION_ID}` and include
 `https://lody.ai/leynos/sessions/${LODY_SESSION_ID}` in a final `## References`
 section of the pull request body.
-
-## Concrete steps
-
-1. Confirm the current branch:
-
-   ```sh
-   git branch --show-current
-   ```
-
-2. After approval, rename the branch and establish upstream tracking:
-
-   ```sh
-   git branch -m 5-1-1-reconcile-design-with-actual-error-surface
-   git fetch origin
-   git push -u origin 5-1-1-reconcile-design-with-actual-error-surface
-   ```
-
-   If the remote branch already exists, inspect it before pushing and stop if
-   it contains work not present locally.
-
-3. Search for stale claims:
-
-   ```sh
-   rg -n \
-     "MissingRequiredValues|MissingRequired|missing required|MissingField" \
-     docs CHANGELOG.md ortho_config ortho_config_macros
-   rg -n "phase 7|7\\.3\\.1|complete|done" docs CHANGELOG.md
-   ```
-
-4. Inspect the current public error enum and generated merge path:
-
-   ```sh
-   sed -n '1,120p' ortho_config/src/error/types.rs
-   sed -n '200,285p' ortho_config_macros/src/derive/load_impl.rs
-   sed -n '1,100p' ortho_config/src/declarative/convert.rs
-   ```
-
-5. Edit `docs/improved-error-message-design.md`,
-   `docs/users-guide.md`, `CHANGELOG.md`, and `docs/roadmap.md`. Edit adjacent
-   documentation only when search shows contradiction with the current truth.
-
-6. Review the changed docs for wrapping and stale language:
-
-   ```sh
-   git diff -- docs/improved-error-message-design.md docs/users-guide.md \
-     CHANGELOG.md docs/roadmap.md
-   ```
-
-7. Run the validation commands listed in Stage F sequentially. Inspect the
-   `/tmp` logs if output is truncated.
-
-8. Commit with a file-based commit message after gates pass. The subject should
-   be similar to:
-
-   ```plaintext
-   Reconcile missing required error docs
-   ```
-
-9. Push the branch and create a draft pull request. The PR title should be:
-
-   ```plaintext
-   (5.1.1) Reconcile missing required error surface
-   ```
-
-   The PR summary should mention
-   `docs/execplans/5-1-1-reconcile-design-with-actual-error-surface.md` and end
-   with:
-
-   ```markdown
-   ## References
-
-   - Lody session: https://lody.ai/leynos/sessions/${LODY_SESSION_ID}
-   ```
 
 ## Acceptance criteria
 
