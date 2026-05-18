@@ -34,14 +34,14 @@ responsibilities and downstream application responsibilities.
 
 ### 5.1. Repair current truth
 
-- [ ] 5.1.1. Reconcile the missing-required-values design with the actual
+- [x] 5.1.1. Reconcile the missing-required-values design with the actual
   error surface.
-  - [ ] Verify whether `OrthoError::MissingRequiredValues` exists, whether it
+  - [x] Verify whether `OrthoError::MissingRequiredValues` exists, whether it
     was renamed, or whether the feature was never implemented.
-  - [ ] Update `docs/improved-error-message-design.md`,
+  - [x] Update `docs/improved-error-message-design.md`,
     `docs/users-guide.md`, and release notes so they describe the current
     behaviour accurately.
-  - [ ] If the implementation is absent, keep the design as proposed work and
+  - [x] If the implementation is absent, keep the design as proposed work and
     move the build into phase 7.
 
 - [ ] 5.1.2. Retire stale retrospective roadmap items.

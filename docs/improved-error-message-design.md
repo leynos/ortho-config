@@ -1,10 +1,20 @@
 # Proposed design for improved missing value error messages
 
 Status: proposed. This document describes the desired diagnostic shape, not the
-current implementation state. The active public `OrthoError` enum does not
-currently expose an `OrthoError::MissingRequiredValues` variant. The
-implementation work is tracked in [roadmap.md](roadmap.md), especially the
-baseline reconciliation and agent-native error-diagnostics tasks.
+current implementation state. The active public `OrthoError` enum in
+`ortho_config/src/error/types.rs` does not expose an
+`OrthoError::MissingRequiredValues` variant.
+
+The current implementation routes missing required configuration values through
+existing error channels. Required command-line arguments rejected by `clap`
+surface as `OrthoError::CliParsing`; missing or invalid values discovered while
+deserializing merged configuration layers surface as `OrthoError::Merge` or
+related gathering/deserialization errors; and multiple source failures may be
+reported through `OrthoError::Aggregate`.
+
+The implementation work is tracked in [roadmap.md](roadmap.md), especially the
+phase 7.3.1 agent-native error-diagnostics task. Roadmap item 5.1.1 confirmed
+that this feature was not implemented under the proposed enum variant.
 
 This design focuses on replacing the generic `figment::Error` for missing
 fields with a custom, helpful error message that guides the user on how to fix
@@ -54,11 +64,12 @@ This format addresses all the requirements:
 ## 2. Proposed changes to `OrthoError`
 
 To support this new error message, a new variant should be added to the
-`OrthoError` enum in `ortho_config/src/error.rs`. This separates the "missing
-value" case from other gathering errors, allowing for custom formatting.
+`OrthoError` enum in `ortho_config/src/error/types.rs`. This separates the
+"missing value" case from other gathering errors, allowing for custom
+formatting.
 
 ```rust
-// in ortho_config/src/error.rs
+// in ortho_config/src/error/types.rs
 
 use thiserror::Error;
 
@@ -121,16 +132,16 @@ complete picture to the user.
 
 ## 4. Historical implementation outline
 
-This outline is retained as design rationale. The active roadmap is
-[roadmap.md](roadmap.md), which first verifies the current error surface and
-then schedules implementation or restoration work.
+This outline is retained as design rationale. It is not a completed task list.
+The active roadmap is [roadmap.md](roadmap.md), which records the phase 5 truth
+audit and schedules implementation or restoration work in phase 7.3.1.
 
 ### Task 1: Introduce the New `OrthoError` Variant
 
 - **Objective**: Add the `MissingRequiredValues(String)` variant to the
   `OrthoError` enum.
 
-- **File to Modify**: `ortho_config/src/error.rs`.
+- **File to Modify**: `ortho_config/src/error/types.rs`.
 
 - **Acceptance Criteria**: The new variant exists, and the crate compiles.
 

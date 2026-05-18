@@ -388,10 +388,12 @@ should name the valid set. This applies to enum values, output formats,
 delivery schemes, locale identifiers, package names, binary targets, profile
 names, and policy modes.
 
-The documentation set currently contains stale claims that
-`OrthoError::MissingRequiredValues` is implemented. Future work must reconcile
-the missing-required-values design with the actual error enum before treating
-that feature as complete.
+Roadmap item 5.1.1 reconciled the missing-required-values design with the
+actual error enum. The current public surface does not expose
+`OrthoError::MissingRequiredValues`; missing required values still route through
+the existing command-line parsing, merge, gathering/deserialization, or
+aggregate error channels. The improved aggregate diagnostic remains phase 7.3.1
+implementation work.
 
 ### 6.4 Mutation boundaries and retries
 
@@ -580,7 +582,8 @@ The design and roadmap updates must address these known gaps:
 - generated `OrthoConfigDocs` subcommand metadata is currently empty;
 - no compact agent-context format exists;
 - no agent-native lint command exists;
-- stale documentation claims that `MissingRequiredValues` is complete;
+- the improved `MissingRequiredValues` diagnostic is reconciled as proposed
+  phase 7 work, but is not yet implemented;
 - `cargo-orthohelp` has no structured `--json` result mode;
 - `cargo-orthohelp` does not yet enumerate all valid choices in errors;
 - generated file writes are not specified as atomic;
