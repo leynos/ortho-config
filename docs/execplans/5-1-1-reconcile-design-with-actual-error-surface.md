@@ -156,6 +156,11 @@ two.
 - [x] (2026-05-17) Addressed review comments about acronym definitions,
   completed progress state, future-tense execution steps, and the 400-line
   constraint.
+- [x] (2026-05-18) Updated the remaining stale reconciliation note in
+  `docs/agent-native-cli-design.md` so it treats roadmap item 5.1.1 as
+  complete and leaves only the phase 7 diagnostic implementation open.
+- [x] (2026-05-18) Ran `coderabbit review --agent` for the agent-native design
+  follow-up; it completed with zero findings.
 
 ## Surprises & discoveries
 
@@ -197,6 +202,14 @@ Document with evidence so future work benefits.
   completed successfully. `make nixie` also validated all Mermaid diagrams.
   Impact: the documentation-only implementation did not regress formatting,
   linting, tests, or diagram validation.
+- Observation: `docs/agent-native-cli-design.md` still described
+  `MissingRequiredValues` reconciliation as future work after item 5.1.1 was
+  marked complete. Evidence: section 6.3 and the current gaps list used stale
+  wording. Impact: the design document now records the reconciliation as done
+  and keeps only the improved diagnostic implementation open.
+- Observation: `coderabbit review --agent` reported no findings for the
+  agent-native design follow-up. Evidence: the review completed with
+  `findings: 0`. Impact: no further edits were needed for this review comment.
 
 ## Decision log
 
