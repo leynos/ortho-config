@@ -102,3 +102,5 @@
     the behavioural testing migration.
   - [Ortho agent CLI roadmap](execplans/ortho-agent-cli-roadmap.md): plan for
     the agent-native documentation and roadmap overhaul.
+  - [Schema ownership ExecPlan](execplans/5-2-1-define-ownership-models.md):
+    plan for roadmap item 5.2.1 and its approval gate.
