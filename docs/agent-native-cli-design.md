@@ -41,6 +41,10 @@ validate, and optionally provide reusable helpers for common surfaces such as
 profiles, delivery targets, feedback stores, and job ledgers. Downstream
 applications still own their domain side effects.
 
+This document is the canonical agent-native contract and boundary reference
+for OrthoConfig. Other project documents should link here when they need to
+describe agent-native scope instead of duplicating the full contract.
+
 ## 2.1 Consumer application boundary
 
 Weaver and Netsuke are the first planned consumers that make the boundary
@@ -66,6 +70,9 @@ payloads it sends to delivery or feedback sinks.
 
 This split lets Weaver and Netsuke depend on OrthoConfig for consistent command
 contracts without pushing their execution engines into a configuration crate.
+OrthoConfig models, generates, serializes, and lints reusable command
+contracts. Downstream applications own command execution, side effects,
+domain-specific safety policy, and long-running job semantics.
 
 ## 3. Contract surfaces
 
@@ -88,6 +95,13 @@ It must not become the compact agent context by accident.
 The new agent-context contract is a compact, machine-oriented JSON document
 that describes how to invoke the CLI. It is not localized prose and should be
 kept small enough for agents to load cheaply.
+
+The documentation IR and agent-context schema are sibling outputs from the same
+metadata spine, not nested versions of one another. The documentation IR stays
+localized and human-documentation-oriented. The agent-context schema stays
+compact, machine-oriented, and independently versioned so agent-facing changes
+do not force documentation IR migrations unless the same data is genuinely
+needed by both outputs.
 
 The planned `cargo-orthohelp` generator interface is:
 

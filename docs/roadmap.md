@@ -52,13 +52,13 @@ responsibilities and downstream application responsibilities.
   - [ ] Update historical design notes so maintainers can tell whether a note
     is active guidance or preserved rationale.
 
-- [ ] 5.1.3. Add an agent-native documentation index.
-  - [ ] Link `docs/design.md`,
+- [x] 5.1.3. Add an agent-native documentation index.
+  - [x] Link `docs/design.md`,
     `docs/cargo-orthohelp-design.md`, and the user guide to
     `docs/agent-native-cli-design.md`.
-  - [ ] State that the documentation IR and agent-context schema are sibling
+  - [x] State that the documentation IR and agent-context schema are sibling
     outputs with independent versioning.
-  - [ ] Document that OrthoConfig models, generates, and lints contracts; it
+  - [x] Document that OrthoConfig models, generates, and lints contracts; it
     does not become every downstream application's command runner.
 
 ### 5.2. Establish schema ownership

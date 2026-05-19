@@ -1159,11 +1159,13 @@ attributes affect only the emitted IR; they do not change runtime naming or
 loading behaviour.
 
 The documentation IR is the human documentation contract. The future
-agent-native work will add a compact sibling agent-context output for command
-invocation, vocabulary checks, structured output policy, bounded list metadata,
-and mutation boundaries. See
+agent-native work will add a compact, independently versioned sibling
+agent-context output for command invocation, vocabulary checks, structured
+output policy, bounded list metadata, and mutation boundaries. Consumers can
+rely on OrthoConfig to model, generate, serialize, and lint reusable command
+contracts; application crates still own command execution and side effects. See
 [Agent-native CLI assistance design](agent-native-cli-design.md) for the
-product direction and [Roadmap](roadmap.md) for the implementation sequence.
+canonical boundary and [Roadmap](roadmap.md) for the implementation sequence.
 
 ### Generating IR with cargo-orthohelp
 

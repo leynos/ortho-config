@@ -5,10 +5,10 @@ This execution plan (ExecPlan) is a living document. The sections
 `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
 proceeds.
 
-Status: DRAFT
+Status: COMPLETE
 
-This plan covers roadmap item 5.1.3 only. It must be explicitly approved before
-implementation begins.
+This plan covers roadmap item 5.1.3 only. It was explicitly approved on
+2026-05-20 before implementation began.
 
 ## Purpose / big picture
 
@@ -152,6 +152,24 @@ two.
 - [x] (2026-05-18) Ran repository validation for the plan commit:
   `make check-fmt`, `make lint`, `make test`, `make markdownlint`, and
   `make nixie` passed.
+- [x] (2026-05-20) Reconfirmed current truth before implementation:
+  `docs/roadmap.md` still listed item 5.1.3 as open, `docs/contents.md`
+  remained the documentation index, and `docs/agent-native-cli-design.md`
+  remained the canonical boundary document.
+- [x] (2026-05-20) Updated the documentation index, design documents, user
+  guide, and roadmap to make the agent-native boundary, sibling-output
+  versioning, and command-runner boundary explicit.
+- [x] (2026-05-20) Ran `coderabbit review --agent` after the documentation
+  milestone; it completed with zero findings.
+- [x] (2026-05-20) Ran `make fmt`; it failed on existing repository-wide
+  Markdown line-length debt after reflowing many unrelated Markdown files.
+  Restored unrelated formatter churn and kept only scoped documentation
+  changes.
+- [x] (2026-05-20) Ran validation gates for the implementation:
+  `make markdownlint`, `make nixie`, `make check-fmt`, `make lint`, and
+  `make test` all passed.
+- [x] (2026-05-20) Re-ran `coderabbit review --agent` after removing
+  formatter-only churn from touched files; it completed with zero findings.
 
 ## Surprises & discoveries
 
@@ -198,6 +216,29 @@ Document with evidence so future work benefits.
   repository. Impact: the plan commit is validated with the required Rust
   gates, repository Markdown lint, and diagram validation, but the formatter
   debt remains outside this task.
+- Observation: The first implementation CodeRabbit review returned zero
+  findings for the documentation milestone. Evidence:
+  `/tmp/coderabbit-ortho-config-5-1-3-agent-native-documentation-index-milestone1.out`
+  ends with `{"type":"complete","status":"review_completed","findings":0}`.
+  Impact: no review concerns needed remediation before validation.
+- Observation: `make fmt` still fails in the approved implementation for the
+  same repository-wide Markdown line-length debt discovered during planning,
+  plus one long command line in this ExecPlan that has now been split.
+  Evidence: `/tmp/fmt-ortho-config-5-1-3-agent-native-documentation-index.out`
+  contains unrelated MD013 reports in files such as `cargo-orthohelp/README.md`
+  and historical guides. Impact: the implementation keeps unrelated formatter
+  churn out of the commit and relies on `make markdownlint` plus targeted
+  Markdown linting for documentation validation.
+- Observation: The implementation validation gates passed after unrelated
+  formatter churn was removed. Evidence: branch-scoped logs under `/tmp` for
+  `markdownlint`, `nixie`, `check-fmt`, `lint`, and `test` all end
+  successfully. Impact: the documentation-only implementation is ready to
+  commit, with the `make fmt` exception explicitly recorded.
+- Observation: The final CodeRabbit review returned zero findings after the
+  diff was narrowed back to the intended documentation changes. Evidence:
+  `/tmp/coderabbit-ortho-config-5-1-3-agent-native-documentation-index-final.out`
+  ends with `{"type":"complete","status":"review_completed","findings":0}`.
+  Impact: there are no outstanding review concerns before commit.
 
 ## Decision log
 
@@ -225,6 +266,11 @@ decisions to escalate, decisions on ambiguous requirements, and design choices.
   introduces an invariant over generated index ordering, canonicalization,
   schema compatibility, or reachability. Rationale: formal tooling should prove
   substantive invariants, not restate documentation assertions.
+- Decision: Keep this implementation documentation-only and do not add Rust,
+  behavioural, property, Kani, or Verus tests. Rationale: the approved change
+  updates prose and roadmap status only; it does not change code, generated
+  output, command-line behaviour, schemas, persistence, network boundaries, or
+  user-interface flows.
 
 ## Prior art notes
 
@@ -255,7 +301,10 @@ Inspect the current documents before editing:
 
 ```bash
 rg -n \
-  "agent-native|agent context|documentation IR|OrthoConfig models|command runner|sibling" \
+  "agent-native|agent context|documentation IR|OrthoConfig models" \
+  docs
+rg -n \
+  "command runner|sibling" \
   docs
 ```
 
@@ -392,6 +441,22 @@ The implementation is complete when all of the following are true:
 
 ## Outcomes & retrospective
 
-This section is intentionally empty while the plan is in `DRAFT`. During
-approved implementation, record what changed, which validation commands passed,
-which commits were created, and whether any follow-up work remains.
+The approved implementation completed roadmap item 5.1.3 as a
+documentation-only change. `docs/contents.md` now identifies
+`docs/agent-native-cli-design.md` as the canonical agent-native
+command-contract and boundary document. `docs/design.md`,
+`docs/cargo-orthohelp-design.md`, and `docs/users-guide.md` now link to that
+boundary in the right audience context. `docs/agent-native-cli-design.md` now
+states the sibling-output relationship and command-runner boundary directly,
+and `docs/cargo-orthohelp-design.md` ties compatibility to
+`DocMetadata.ir_version` for human documentation IR and the future
+agent-context schema version for agent-facing output.
+
+No Rust, behavioural, property, Kani, or Verus tests were added because no
+code, schema, generated output, command-line behaviour, persistence, network
+boundary, or user-interface flow changed. Validation passed for
+`make markdownlint`, `make nixie`, `make check-fmt`, `make lint`, and
+`make test`. `make fmt` still fails on pre-existing repository-wide Markdown
+line-length debt after attempting to reflow unrelated files; unrelated
+formatter churn was removed from the final diff. CodeRabbit reviewed the
+documentation milestone and final cleaned diff with zero findings.

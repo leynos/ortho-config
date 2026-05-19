@@ -58,7 +58,9 @@ The implementation must adhere to the following principles:
   including command metadata, documentation and agent-context IR, renderer
   metadata, vocabulary policy, skill manifest validation, profile metadata,
   delivery and feedback parsers, and execution-ledger metadata. They continue
-  to own their domain execution engines.
+  to own command execution, side effects, safety policy, and domain execution
+  engines. The canonical boundary is documented in
+  [agent-native-cli-design.md](agent-native-cli-design.md).
 - **Performance:** The configuration process happens once at startup, so raw
   performance is secondary to correctness and developer experience. However,
   the implementation should be reasonably efficient and avoid unnecessary
