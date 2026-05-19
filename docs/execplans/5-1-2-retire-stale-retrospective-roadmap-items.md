@@ -5,10 +5,10 @@ This execution plan (ExecPlan) is a living document. The sections
 `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
 proceeds.
 
-Status: DRAFT
+Status: COMPLETE
 
-This plan covers roadmap item 5.1.2 only. It must be approved before any
-implementation work begins.
+This plan covers roadmap item 5.1.2 only. It was approved for implementation
+on 2026-05-20.
 
 ## Purpose / big picture
 
@@ -397,10 +397,23 @@ For the later implementation pull request, validation proves that:
   fails in `mdformat-all` because the wrapper invokes `markdownlint --fix`
   against pre-existing long lines in unrelated documentation. This plan and its
   contents entry pass direct Markdown validation.
-- [ ] Obtain explicit plan approval before implementation.
-- [ ] Implement the approved documentation repair.
-- [ ] Run validation gates for the implementation.
-- [ ] Mark roadmap item 5.1.2 done after validation passes.
+- [x] (2026-05-20) Received explicit approval to implement this plan.
+- [x] (2026-05-20) Re-ran the current-truth audit. The active roadmap,
+  archive, DDLint gap analysis, and historical proposal documents still match
+  the planned baseline.
+- [x] (2026-05-20) Implemented the documentation repair in the active roadmap,
+  archived v0.8.0 roadmap, DDLint gap analysis, and historical Cucumber guide.
+- [x] (2026-05-20) Ran `coderabbit review --agent` after the main
+  documentation milestone. It completed with zero findings; log:
+  `/tmp/coderabbit-ortho-config-5-1-2-retire-stale-retrospective-roadmap-items-milestone1.out`.
+- [x] (2026-05-20) Ran implementation validation. `make check-fmt`,
+  `make lint`, `make test`, `make markdownlint`, and `make nixie` passed.
+- [x] (2026-05-20) Marked roadmap item 5.1.2 and its subitems done after the
+  validation gates passed.
+- [x] (2026-05-20) Re-ran changed-file Markdown validation and a final
+  `coderabbit review --agent` pass after completion bookkeeping. Both passed;
+  the final CodeRabbit log is
+  `/tmp/coderabbit-ortho-config-5-1-2-retire-stale-retrospective-roadmap-items-final.out`.
 
 ## Surprises & discoveries
 
@@ -432,6 +445,14 @@ For the later implementation pull request, validation proves that:
   Impact: the branch records the failure log, keeps unrelated formatter rewrites
   out of the commit, and validates the changed Markdown through
   `markdownlint-cli2` and the repository `make markdownlint` target.
+- Observation: The implementation audit found that
+  `docs/behavioural-testing-in-rust-with-cucumber.md` lacks a document-level
+  status marker, while `docs/rstest-bdd-users-guide.md` is now the current
+  behavioural-testing guide. Impact: classify the cucumber document as
+  historical reference rather than changing active testing guidance.
+- Observation: The implementation stayed within the documentation-only scope.
+  Impact: no Rust tests, `rstest-bdd` scenarios, Kani harnesses, Verus proofs,
+  users-guide changes, developers-guide changes, or ADRs were needed.
 
 ## Decision log
 
@@ -458,16 +479,40 @@ For the later implementation pull request, validation proves that:
 - Decision: Do not add Rust tests for a documentation-only implementation.
   Rationale: the repository requires `rstest` and `rstest-bdd` where behaviour
   changes; adding tests that assert no runtime behaviour would be misleading.
+- Decision: Treat the user's 2026-05-20 instruction to proceed with
+  implementation as the approval gate for this plan. Rationale: the request
+  explicitly names the plan and asks to implement the planned functionality.
+- Decision: Do not update `docs/users-guide.md`, `docs/developers-guide.md`,
+  `CHANGELOG.md`, or create an ADR. Rationale: this change updates maintainer
+  roadmap and historical-document truth only; it does not change user-facing
+  behaviour, internal maintainer conventions, release promises, or a
+  substantive architecture decision.
 
 ## Outcomes & Retrospective
 
-This plan is still in draft. No implementation outcome exists yet.
+The implementation completed roadmap item 5.1.2 as a documentation truth
+repair. `docs/roadmap.md` now marks the item done and keeps active phase 5.1
+focused on the boundary between historical context and future work.
+`docs/archive/v0-8-0-roadmap.md` now explains how to read archived checkmarks
+and calls out the missing-required-values entry as corrected and deferred
+active work. `docs/ddlint-gap-analysis.md` now classifies loading gaps as
+implemented, treats `--no-ignore` as DDLint prior art, and routes command-policy
+ideas to the relevant agent-native roadmap phases. The only historical note
+that needed a new status marker was
+`docs/behavioural-testing-in-rust-with-cucumber.md`, which is now labelled as a
+historical reference superseded in current practice by `rstest-bdd`.
 
-After implementation, summarize:
+Validation passed:
 
-- which files changed;
-- how the roadmap/archive boundary now reads;
-- how DDLint items were classified;
-- whether any historical notes needed new status markers;
-- which validation gates passed and where their logs are stored;
-- whether any follow-up roadmap items or ADRs were created.
+- `make check-fmt`:
+  `/tmp/check-fmt-ortho-config-5-1-2-retire-stale-retrospective-roadmap-items.out`
+- `make lint`:
+  `/tmp/lint-ortho-config-5-1-2-retire-stale-retrospective-roadmap-items.out`
+- `make test`:
+  `/tmp/test-ortho-config-5-1-2-retire-stale-retrospective-roadmap-items.out`
+- `make markdownlint`:
+  `/tmp/markdownlint-ortho-config-5-1-2-retire-stale-retrospective-roadmap-items.out`
+- `make nixie`:
+  `/tmp/nixie-ortho-config-5-1-2-retire-stale-retrospective-roadmap-items.out`
+
+No follow-up roadmap items or ADRs were created.

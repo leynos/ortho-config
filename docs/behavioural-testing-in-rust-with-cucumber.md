@@ -1,5 +1,11 @@
 # A Developer's Guide to Behavioural Testing in Rust with Cucumber
 
+Status: historical reference. This document preserves the earlier Cucumber
+guidance and BDD rationale. Current OrthoConfig behavioural testing practice
+uses `rstest-bdd`; see
+[rstest-bdd-users-guide.md](rstest-bdd-users-guide.md) and
+[ADR-002](adr-002-replace-cucumber-with-rstest-bdd.md).
+
 ## Part 1: The Philosophy and Practice of Behaviour-Driven Development (BDD)
 
 Behaviour-Driven Development (BDD) is a software development process that

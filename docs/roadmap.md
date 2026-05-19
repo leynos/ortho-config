@@ -44,13 +44,21 @@ responsibilities and downstream application responsibilities.
   - [x] If the implementation is absent, keep the design as proposed work and
     move the build into phase 7.
 
-- [ ] 5.1.2. Retire stale retrospective roadmap items.
-  - [ ] Move completed historical milestones out of the active roadmap path or
-    reference them as background only.
-  - [ ] Confirm DDLint gap-analysis items are either implemented, deliberately
-    deferred, or replaced by agent-native policy work.
-  - [ ] Update historical design notes so maintainers can tell whether a note
-    is active guidance or preserved rationale.
+- [x] 5.1.2. Retire stale retrospective roadmap items.
+  - [x] Move completed historical milestones out of the active roadmap path or
+    reference them as background only. The active roadmap should keep the v0.8.0
+    completion detail in `docs/archive/v0-8-0-roadmap.md` and use explicit
+    archive-status notes where a historical completion claim is corrected,
+    superseded, or deferred into active work.
+  - [x] Confirm DDLint gap-analysis items are either implemented, deliberately
+    deferred, or replaced by agent-native policy work. Loading gaps belong to
+    the historical analysis once implemented; command-shape ideas such as
+    `rules`, `explain`, `--format <compact|json|rich>`, and `--no-ignore` are
+    prior art unless a later agent-native roadmap item names reusable
+    OrthoConfig policy.
+  - [x] Update historical design notes so maintainers can tell whether a note
+    is active guidance or preserved rationale. Prefer document-level `Status:`
+    markers over scattered caveats.
 
 - [ ] 5.1.3. Add an agent-native documentation index.
   - [ ] Link `docs/design.md`,
