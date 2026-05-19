@@ -49,16 +49,22 @@ responsibilities and downstream application responsibilities.
     reference them as background only. The active roadmap should keep the v0.8.0
     completion detail in `docs/archive/v0-8-0-roadmap.md` and use explicit
     archive-status notes where a historical completion claim is corrected,
-    superseded, or deferred into active work.
+    superseded, or deferred into active work. See
+    `docs/archive/v0-8-0-roadmap.md` §Archived v0.8.0 roadmap and
+    `docs/design.md` §6.
   - [x] Confirm DDLint gap-analysis items are either implemented, deliberately
     deferred, or replaced by agent-native policy work. Loading gaps belong to
     the historical analysis once implemented; command-shape ideas such as
     `rules`, `explain`, `--format <compact|json|rich>`, and `--no-ignore` are
     prior art unless a later agent-native roadmap item names reusable
-    OrthoConfig policy.
+    OrthoConfig policy. See `docs/ddlint-gap-analysis.md` §Observed gaps and
+    current status and §Next steps; see also `docs/agent-native-cli-design.md`
+    §5 and §9.
   - [x] Update historical design notes so maintainers can tell whether a note
     is active guidance or preserved rationale. Prefer document-level `Status:`
-    markers over scattered caveats.
+    markers over scattered caveats. See `docs/documentation-style-guide.md`
+    §Design document, ADR, and RFC and §Architectural decision records; see
+    also `docs/agent-native-cli-design.md` §1.
 
 - [ ] 5.1.3. Add an agent-native documentation index.
   - [ ] Link `docs/design.md`,

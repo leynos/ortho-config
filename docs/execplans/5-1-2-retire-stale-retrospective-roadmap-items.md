@@ -8,7 +8,7 @@ proceeds.
 Status: COMPLETE
 
 This plan covers roadmap item 5.1.2 only. It was approved for implementation
-on 2026-05-20.
+on 2026-05-19.
 
 ## Purpose / big picture
 
@@ -397,20 +397,20 @@ For the later implementation pull request, validation proves that:
   fails in `mdformat-all` because the wrapper invokes `markdownlint --fix`
   against pre-existing long lines in unrelated documentation. This plan and its
   contents entry pass direct Markdown validation.
-- [x] (2026-05-20) Received explicit approval to implement this plan.
-- [x] (2026-05-20) Re-ran the current-truth audit. The active roadmap,
+- [x] (2026-05-19) Received explicit approval to implement this plan.
+- [x] (2026-05-19) Re-ran the current-truth audit. The active roadmap,
   archive, DDLint gap analysis, and historical proposal documents still match
   the planned baseline.
-- [x] (2026-05-20) Implemented the documentation repair in the active roadmap,
+- [x] (2026-05-19) Implemented the documentation repair in the active roadmap,
   archived v0.8.0 roadmap, DDLint gap analysis, and historical Cucumber guide.
-- [x] (2026-05-20) Ran `coderabbit review --agent` after the main
+- [x] (2026-05-19) Ran `coderabbit review --agent` after the main
   documentation milestone. It completed with zero findings; log:
   `/tmp/coderabbit-ortho-config-5-1-2-retire-stale-retrospective-roadmap-items-milestone1.out`.
-- [x] (2026-05-20) Ran implementation validation. `make check-fmt`,
+- [x] (2026-05-19) Ran implementation validation. `make check-fmt`,
   `make lint`, `make test`, `make markdownlint`, and `make nixie` passed.
-- [x] (2026-05-20) Marked roadmap item 5.1.2 and its subitems done after the
+- [x] (2026-05-19) Marked roadmap item 5.1.2 and its subitems done after the
   validation gates passed.
-- [x] (2026-05-20) Re-ran changed-file Markdown validation and a final
+- [x] (2026-05-19) Re-ran changed-file Markdown validation and a final
   `coderabbit review --agent` pass after completion bookkeeping. Both passed;
   the final CodeRabbit log is
   `/tmp/coderabbit-ortho-config-5-1-2-retire-stale-retrospective-roadmap-items-final.out`.
@@ -479,7 +479,7 @@ For the later implementation pull request, validation proves that:
 - Decision: Do not add Rust tests for a documentation-only implementation.
   Rationale: the repository requires `rstest` and `rstest-bdd` where behaviour
   changes; adding tests that assert no runtime behaviour would be misleading.
-- Decision: Treat the user's 2026-05-20 instruction to proceed with
+- Decision: Treat the user's 2026-05-19 instruction to proceed with
   implementation as the approval gate for this plan. Rationale: the request
   explicitly names the plan and asks to implement the planned functionality.
 - Decision: Do not update `docs/users-guide.md`, `docs/developers-guide.md`,
