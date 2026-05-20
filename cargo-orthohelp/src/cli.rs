@@ -28,7 +28,7 @@ pub enum OutputFormat {
 /// Parsed Cargo external-subcommand entrypoint for `cargo-orthohelp`.
 #[derive(Debug, Parser)]
 #[command(name = "cargo")]
-#[command(bin_name = "cargo-orthohelp")]
+#[command(bin_name = "cargo")]
 #[command(version)]
 pub struct Cli {
     /// Cargo subcommand dispatched to this binary.
@@ -144,4 +144,84 @@ pub struct PowerShellArgs {
         action = ArgAction::Set
     )]
     pub should_ensure_en_us: bool,
+}
+
+#[cfg(test)]
+mod tests {
+    //! Parser tests for Cargo external-subcommand dispatch.
+
+    use clap::{CommandFactory, Parser, error::ErrorKind};
+
+    use super::{CargoSubcommand, Cli, OutputFormat};
+
+    #[test]
+    fn parses_cargo_injected_subcommand_arguments() {
+        let cli = Cli::parse_from([
+            "cargo-orthohelp",
+            "orthohelp",
+            "--package",
+            "fixture",
+            "--locale",
+            "en-US",
+            "--format",
+            "man",
+        ]);
+
+        let CargoSubcommand::Orthohelp(args) = cli.command;
+        assert_eq!(args.package.as_deref(), Some("fixture"));
+        assert_eq!(args.locale, [String::from("en-US")]);
+        assert!(matches!(args.format, OutputFormat::Man));
+    }
+
+    #[test]
+    fn rejects_options_without_injected_subcommand() {
+        let error = Cli::try_parse_from(["cargo-orthohelp", "--format", "ir"])
+            .expect_err("top-level options should require the Cargo subcommand");
+
+        assert_eq!(error.kind(), ErrorKind::UnknownArgument);
+    }
+
+    #[test]
+    fn rejects_unknown_output_format() {
+        let error = Cli::try_parse_from(["cargo-orthohelp", "orthohelp", "--format", "foo"])
+            .expect_err("unknown output formats should be rejected");
+
+        assert_eq!(error.kind(), ErrorKind::InvalidValue);
+    }
+
+    #[test]
+    fn rejects_invalid_powershell_bool() {
+        let error = Cli::try_parse_from([
+            "cargo-orthohelp",
+            "orthohelp",
+            "--ps-split-subcommands",
+            "notabool",
+        ])
+        .expect_err("invalid bool values should be rejected");
+
+        assert_eq!(error.kind(), ErrorKind::InvalidValue);
+    }
+
+    #[test]
+    fn top_level_help_uses_cargo_dispatch_name() {
+        let help = Cli::command().render_help().to_string();
+
+        assert!(
+            help.contains("Usage: cargo <COMMAND>"),
+            "unexpected top-level help:\n{help}"
+        );
+    }
+
+    #[test]
+    fn subcommand_help_uses_cargo_dispatch_name() {
+        let help = Cli::command()
+            .try_get_matches_from(["cargo-orthohelp", "orthohelp", "--help"])
+            .expect_err("help should short-circuit parsing")
+            .to_string();
+
+        assert!(
+            help.contains("Usage: cargo orthohelp [OPTIONS]"),
+            "unexpected subcommand help:\n{help}"
+        );
+    }
 }
