@@ -293,6 +293,63 @@ downstream users to adopt them.
   - [ ] Explain which behaviours are already implemented and which require
     future phases.
 
+
+### 8.3. Standardize Cargo external-subcommand entry points
+
+This step answers whether OrthoConfig can make Cargo subcommand binaries
+straightforward without moving entry-point shape into the core configuration
+trait. The outcome informs future `cargo-*` tools and keeps `cargo-orthohelp`
+from carrying a bespoke pattern that other crates copy by hand. See
+`docs/design.md` §4.17.
+
+- [ ] 8.3.1. Add a small `ortho_config::cargo` helper for hand-built clap
+  commands.
+  - [ ] Provide an `external_subcommand` helper that accepts the installed
+    binary name, injected Cargo subcommand name, and an existing
+    `clap::Command`.
+  - [ ] Return the standard `Command::new("cargo")` shape with
+    `bin_name("cargo-<name>")` and a `<name>` subcommand.
+  - [ ] Preserve the existing options on the inner command rather than
+    introducing another configuration-loading pathway.
+  - [ ] Success: a hand-built `clap::Command` can support both
+    `cargo <name> [OPTIONS]` and `cargo-<name> <name> [OPTIONS]` without
+    duplicating parser setup.
+
+- [ ] 8.3.2. Document the derive-friendly Cargo subcommand template.
+  - [ ] Add user-guide and README examples showing a `Cli` wrapper with
+    `#[command(name = "cargo", bin_name = "cargo-<name>")]`, a
+    `#[command(subcommand)]` field, and an enum variant wrapping the existing
+    `#[derive(clap::Args)]` option struct.
+  - [ ] Explain that Cargo intentionally injects the subcommand name as the
+    first positional argument when dispatching `cargo <name>`.
+  - [ ] State that the wrapper is entry-point structure, not a change to
+    OrthoConfig's merge precedence or `OrthoConfig::load`.
+  - [ ] Success: users can adapt the documented template without reading
+    Cargo's external-subcommand reference or `cargo-orthohelp` internals.
+
+- [ ] 8.3.3. Evaluate an optional macro attribute for Cargo subcommand
+  wrappers.
+  - [ ] Prototype the candidate `cargo_subcommand` and `cargo_bin` attribute
+    syntax from `docs/design.md` §4.17.
+  - [ ] Decide whether the macro should generate a companion wrapper parser,
+    a helper function, or only metadata consumed by documentation tooling.
+  - [ ] Reject the attribute unless it removes real repeated boilerplate
+    across multiple OrthoConfig-powered Cargo tools without hiding the Cargo
+    dispatch contract.
+  - [ ] Success: the design records either a narrow accepted macro surface or
+    a clear reason to keep the helper and documentation as the only supported
+    abstraction.
+
+- [ ] 8.3.4. Add regression fixtures for Cargo-dispatched binaries.
+  - [ ] Add a small workspace fixture or shared test helper that runs
+    `cargo-<name> <name> --help`.
+  - [ ] Add a companion assertion for `cargo <name> --help` with the fixture
+    binary on `PATH`.
+  - [ ] Reuse the fixture for `cargo-orthohelp` and any future `cargo-*`
+    tools.
+  - [ ] Success: tests fail if a Cargo subcommand binary accepts direct flat
+    invocation but rejects Cargo's injected subcommand argument.
+
 ## 9. Add compounding primitives
 
 This phase adds optional helpers and metadata for repeated agent workflows. It

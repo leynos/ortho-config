@@ -609,6 +609,7 @@ sequenceDiagram
     Err-->>SC: OrthoError::Gathering
     SC-->>CLI: Err(OrthoError::Gathering)
   end
+```
 
 ### 4.12. Localization architecture
 
@@ -735,6 +736,88 @@ last observed map as typed data and reapplies it after processing all layers.
 This keeps keyed defaults available by default while providing a deterministic
 escape hatch for wholesale replacements.
 
+
+### 4.17. Cargo external-subcommand entry points
+
+Cargo invokes external subcommands through an intentional argument-shape
+contract: `cargo <name> [OPTIONS]` resolves `cargo-<name>` on `PATH` and then
+executes `cargo-<name> <name> [OPTIONS]`. A clap parser whose top level is
+only `cargo-<name> [OPTIONS]` rejects that injected `<name>` token before any
+application logic can run.
+
+OrthoConfig should make this pattern easy to adopt for Cargo subcommand
+binaries, but it should not move Cargo dispatch semantics into the
+`OrthoConfig` trait or the configuration merge pipeline. The entry-point shape
+belongs at the command boundary; configuration precedence remains
+defaults → files → environment → explicit command-line arguments.
+
+The near-term API should be a small `ortho_config::cargo` helper for callers
+that build clap commands by hand. A function such as
+`external_subcommand("cargo-orthohelp", "orthohelp", args_command)` should
+produce the standard wrapper:
+
+```rust
+clap::Command::new("cargo")
+    .bin_name("cargo-orthohelp")
+    .subcommand(
+        clap::Command::new("orthohelp")
+            // existing options live here
+    )
+```
+
+The helper must preserve the inner command's existing options rather than
+introducing a second source of configuration semantics. Its success criterion
+is narrow: a binary should accept both `cargo <name> [OPTIONS]` through Cargo
+dispatch and `cargo-<name> <name> [OPTIONS]` when invoked directly with the
+same injected token.
+
+Derive-based users need a documented template because `clap` already models
+the required shape cleanly:
+
+```rust
+#[derive(clap::Parser)]
+#[command(name = "cargo", bin_name = "cargo-mytool")]
+struct Cli {
+    #[command(subcommand)]
+    command: CargoSubcommand,
+}
+
+#[derive(clap::Subcommand)]
+enum CargoSubcommand {
+    Mytool(MyToolArgs),
+}
+
+#[derive(clap::Args)]
+struct MyToolArgs {
+    // Existing options.
+}
+```
+
+The user guide and README should explain why Cargo injects the subcommand name
+and should state that the wrapper is CLI entry-point structure, not
+configuration loading. This avoids implying that `OrthoConfig::load` or
+subcommand merging can erase the injected argument after clap has already
+rejected it.
+
+A macro extension may be useful later if several OrthoConfig-powered Cargo
+tools repeat the wrapper. Candidate syntax is:
+
+```rust
+#[ortho_config(cargo_subcommand = "orthohelp", cargo_bin = "cargo-orthohelp")]
+```
+
+That extension should be accepted only if it removes repeated boilerplate
+without hiding Cargo's dispatch contract. The macro design must decide whether
+to generate a companion wrapper parser, expose a helper function, or emit
+metadata consumed by documentation tooling. If the evidence is weak, the
+project should keep the helper plus documentation as the supported abstraction.
+
+Regression coverage should exercise both invocation forms. A shared fixture or
+test helper should run `cargo-<name> <name> --help`, then run
+`cargo <name> --help` with the fixture binary on `PATH`. Future `cargo-*`
+tools should reuse that coverage so a flat direct invocation cannot pass while
+Cargo dispatch fails.
+
 ## 5. Dependency Strategy
 
 - **`ortho_config_macros`:**
@@ -843,6 +926,11 @@ explicit.
   `cargo-orthohelp` dogfooding are the next product focus. See
   [agent-native-cli-design.md](agent-native-cli-design.md) and
   [roadmap.md](roadmap.md).
+- **Cargo external-subcommand ergonomics:** OrthoConfig should provide a small
+  clap helper, documented derive template, optional macro investigation, and
+  regression fixture for Cargo-dispatched binaries. This work belongs at the
+  CLI entry-point boundary rather than in `OrthoConfig::load`; see
+  [roadmap.md](roadmap.md) §8.3.
 - **Consumer application alignment:** Weaver and Netsuke requirements should be
   pushed left into OrthoConfig when they describe reusable command contracts,
   not when they describe semantic execution. Examples include renderer
