@@ -170,6 +170,12 @@ two.
   `make test` all passed.
 - [x] (2026-05-20) Re-ran `coderabbit review --agent` after removing
   formatter-only churn from touched files; it completed with zero findings.
+- [x] (2026-05-20) Addressed the Developer Documentation PR warning by adding
+  a contributor-facing agent-native architecture boundary section to
+  `docs/developers-guide.md`.
+- [x] (2026-05-20) Ran targeted Markdown linting, `make markdownlint`,
+  `make nixie`, and `coderabbit review --agent` for the developer-doc
+  follow-up; all passed and CodeRabbit returned zero findings.
 
 ## Surprises & discoveries
 
@@ -239,6 +245,16 @@ Document with evidence so future work benefits.
   `/tmp/coderabbit-ortho-config-5-1-3-agent-native-documentation-index-final.out`
   ends with `{"type":"complete","status":"review_completed","findings":0}`.
   Impact: there are no outstanding review concerns before commit.
+- Observation: The custom Developer Documentation check warned that the
+  architectural boundary was present in design documents but not in
+  `docs/developers-guide.md`. Impact: the implementation now includes a
+  contributor-facing boundary section so future internal changes preserve the
+  same OrthoConfig-versus-downstream execution split.
+- Observation: The developer-doc follow-up passed CodeRabbit review with zero
+  findings. Evidence:
+  `/tmp/coderabbit-ortho-config-5-1-3-agent-native-documentation-index-devdocs.out`
+  ends with `{"type":"complete","status":"review_completed","findings":0}`.
+  Impact: no review concerns remain for the custom-check remediation.
 
 ## Decision log
 
@@ -460,3 +476,10 @@ boundary, or user-interface flow changed. Validation passed for
 line-length debt after attempting to reflow unrelated files; unrelated
 formatter churn was removed from the final diff. CodeRabbit reviewed the
 documentation milestone and final cleaned diff with zero findings.
+
+A post-commit PR check found that `docs/developers-guide.md` also needed to
+document the internal agent-native architecture boundary. The follow-up update
+adds that contributor-facing section and keeps the canonical design reference
+in `docs/agent-native-cli-design.md`. Targeted Markdown linting,
+`make markdownlint`, `make nixie`, and `coderabbit review --agent` passed for
+that follow-up.
