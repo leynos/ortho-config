@@ -15,7 +15,8 @@ The source documents for this roadmap are:
 - [Improved error message design](improved-error-message-design.md);
 - [DDLint gap analysis](ddlint-gap-analysis.md);
 - [ADR-001: Replace `serde_yaml` with `serde-saphyr`](adr-001-replace-serde-yaml-with-serde-saphyr.md);
-- [ADR-002: Replace `cucumber-rs` with `rstest-bdd`](adr-002-replace-cucumber-with-rstest-bdd.md).
+- [ADR-002: Replace `cucumber-rs` with `rstest-bdd`](adr-002-replace-cucumber-with-rstest-bdd.md);
+- [ADR-004: Cargo external-subcommand entry-point architecture](adr-004-cargo-external-subcommand-entry-point.md).
 
 The first downstream consumers for the expanded agent-native contract are
 Weaver and Netsuke. Their plans make several generic requirements explicit:
