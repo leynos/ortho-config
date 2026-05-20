@@ -34,6 +34,9 @@
   review the accepted YAML parser replacement and migration consequences.
 - [ADR-002: Replace `cucumber-rs` with `rstest-bdd`](adr-002-replace-cucumber-with-rstest-bdd.md):
   review the accepted behavioural testing migration and expected workflow.
+- [ADR-003: Define schema ownership for agent-native contracts](adr-003-define-schema-ownership-for-agent-native-contracts.md):
+  review the accepted ownership split for documentation IR, agent context, and
+  policy reports.
 - [Archived v0.8.0 roadmap](archive/v0-8-0-roadmap.md): review completed
   phases, steps, and tasks from the roadmap that preceded the active
   agent-native plan.

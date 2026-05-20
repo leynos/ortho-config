@@ -41,6 +41,7 @@ pub use uncased;
 /// `xdg` dependency when interacting with XDG paths.
 pub use xdg;
 
+pub mod agent_context;
 mod csv_env;
 #[cfg(feature = "serde_json")]
 #[cfg_attr(docsrs, doc(cfg(feature = "serde_json")))]
@@ -57,6 +58,11 @@ pub mod subcommand;
 #[cfg(feature = "serde_json")]
 #[cfg_attr(docsrs, doc(cfg(feature = "serde_json")))]
 pub use crate::subcommand::SubcmdConfigMerge;
+pub use agent_context::{
+    AgentCommand, AgentContext, AgentExample, AgentInput, AgentPolicy, InteractionMode,
+    MutationEffect, ORTHO_AGENT_CONTEXT_SCHEMA_VERSION, PaginationContract, PolicyMode,
+    SupportDeclaration,
+};
 pub use docs::{
     CliMetadata, ConfigDiscoveryMeta, ConfigFormat, DefaultValue, Deprecation, DocMetadata,
     EnvMetadata, Example, FieldMetadata, FileMetadata, HeadingIds, Link, Note,

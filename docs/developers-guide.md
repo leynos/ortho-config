@@ -15,6 +15,42 @@ The workspace runs one unified test workflow via Make targets:
 These are required quality gates for code changes. Behavioural coverage runs
 inside the standard Rust test harness, not a bespoke test runner.
 
+
+## Schema ownership
+
+Documentation IR, agent context, and policy reports have separate owners. See
+[ADR-003](adr-003-define-schema-ownership-for-agent-native-contracts.md) for
+the accepted decision.
+
+Add localized human-documentation fields to `ortho_config::docs` only when
+they are required by generated documentation, localization, roff, PowerShell
+help, or other human-facing reference material. Those fields are versioned by
+`ORTHO_DOCS_IR_VERSION` and exposed through `OrthoConfigDocs`.
+
+Add compact agent invocation fields to `ortho_config::agent_context` when
+downstream applications need a reusable machine-readable command contract. Use
+`ORTHO_AGENT_CONTEXT_SCHEMA_VERSION` for compatibility. Do not add Fluent
+message identifiers, localized long prose, or renderer-specific output
+structures to the agent-context schema.
+
+Add agent-native warning and hard-failure report fields to
+`cargo_orthohelp::policy` while `cargo-orthohelp` is the only emitter. Use
+`ORTHO_POLICY_REPORT_SCHEMA_VERSION` for compatibility and keep rule
+identifiers, finding codes, severities, and source locations machine-stable.
+Extract the report model into `ortho_config` only after a new ADR approves
+shared ownership.
+
+Use `rstest` for schema unit tests. Add `rstest-bdd` behavioural scenarios and
+end-to-end tests when a change affects observable CLI behaviour, generated
+artefacts, persisted output, integration contracts, stdout, stderr, or exit
+codes. Do not add Kani, Verus, or property-test tooling unless the change
+introduces a substantive invariant across a range of inputs, states, orderings,
+or transitions.
+
+Run `coderabbit review --agent` after major milestones that change schemas,
+documentation contracts, or externally visible behaviour. Clear its concerns
+before moving to the next milestone.
+
 ## Agent-native architecture boundary
 
 Agent-native CLI assistance is contract modelling work inside OrthoConfig, not

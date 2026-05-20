@@ -128,6 +128,10 @@ Key choices:
   documentation IR. `DocMetadata.ir_version` governs compatibility for human
   documentation IR, while the future agent-context schema version governs
   compact agent-facing output.
+- Ownership boundary: [ADR-003](adr-003-define-schema-ownership-for-agent-native-contracts.md)
+  keeps documentation IR in `ortho_config::docs`, reusable agent context in
+  `ortho_config::agent_context`, and policy reports in
+  `cargo_orthohelp::policy` until a later extraction is approved.
 
 ## 2. Documentation IR (schema v1.1)
 
@@ -555,6 +559,11 @@ the documentation-oriented metadata into the compact contract described in
   nouns when declared;
 - emit policy warnings or failures through the same validation path used by
   `--check-agent-native`.
+
+The reusable schema types and `ORTHO_AGENT_CONTEXT_SCHEMA_VERSION` live in
+`ortho_config::agent_context`. `cargo-orthohelp` owns the adapter work:
+loading the bridge IR, applying defaults, transforming structured metadata,
+writing artefacts, and reporting diagnostics.
 
 The agent-context output must not be scraped from rendered man pages or
 PowerShell help. Rendering surfaces may consume agent metadata for examples or

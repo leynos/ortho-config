@@ -5,10 +5,11 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
 proceeds.
 
-Status: DRAFT
+Status: BLOCKED
 
-This plan covers roadmap item 5.2.1 only. It is not approved for implementation
-until a maintainer explicitly approves it.
+This plan covers roadmap item 5.2.1 only. It was approved for implementation
+on 2026-05-20 when the maintainer asked Codex to proceed with the planned
+functionality.
 
 ## Purpose / big picture
 
@@ -510,16 +511,40 @@ two.
   `make lint`, `make test`, and `make nixie` all passed.
 - [x] (2026-05-18) Ran `coderabbit review --agent`, addressed two minor
   documentation findings, and reran it with zero findings.
-- [ ] Obtain explicit approval to implement this ExecPlan.
-- [ ] After approval, freeze ownership decisions in design documentation and
+- [x] (2026-05-20) Received explicit maintainer approval to implement this
+  ExecPlan.
+- [x] (2026-05-20) Reloaded `leta`, `rust-router`, `execplans`,
+  `arch-crate-design`, `rust-types-and-apis`, `rust-errors`,
+  `domain-cli-and-daemons`, `hexagonal-architecture`, and `commit-message`
+  guidance for implementation.
+- [ ] Freeze ownership decisions in design documentation and
   any required ADR.
-- [ ] After approval, implement schema types and version constants within the
+- [x] (2026-05-20) Added passive `ortho_config::agent_context` schema types
+  and `ORTHO_AGENT_CONTEXT_SCHEMA_VERSION` without adding generator flags or
+  command output.
+- [x] (2026-05-20) Added passive `cargo_orthohelp::policy` report schema
+  types and `ORTHO_POLICY_REPORT_SCHEMA_VERSION` for tool-owned warnings and
+  hard failures.
+- [x] (2026-05-20) Added ADR-003 and updated agent-native design,
+  `cargo-orthohelp` design, users guide, developers guide, and contents
+  documentation with the accepted ownership split.
+- [x] (2026-05-20) Ran targeted schema validation:
+  `cargo test -p ortho_config agent_context` passed with 7 tests, and
+  `cargo test -p cargo-orthohelp policy` passed with 9 library tests.
+- [x] (2026-05-20) Ran implementation CodeRabbit review; fixed its one
+  trivial ADR wording finding.
+- [ ] Rerun CodeRabbit after the service rate limit clears and confirm zero
+  findings before moving to the next milestone.
+- [ ] Validate schema types and version constants within the
   approved boundaries.
-- [ ] After approval, add `rstest`, `rstest-bdd`, and end-to-end coverage where
+- [x] (2026-05-20) Re-ran commit gates after lint-driven test fixes:
+  `make check-fmt`, `make lint`, `make test`, `make markdownlint`, and
+  `make nixie` all passed.
+- [ ] Add `rstest`, `rstest-bdd`, and end-to-end coverage where
   applicable.
-- [ ] After approval, update user, developer, and roadmap documentation.
-- [ ] After approval, run all required gates, CodeRabbit review, commit, push,
-  and update the pull request.
+- [ ] Update user, developer, and roadmap documentation.
+- [ ] Run all required gates, CodeRabbit review, commit, push, and update the
+  pull request.
 
 ## Surprises & discoveries
 
@@ -545,6 +570,30 @@ Document with evidence so future work benefits.
   line-length failures in unrelated documents after its formatting steps.
   Impact: this branch validated the edited Markdown files directly and left
   unrelated repository-wide Markdown debt untouched.
+- Observation: `leta` still registers the workspace, but `rust-analyzer` closes
+  the LSP connection during Rust symbol searches on 2026-05-20. Impact:
+  implementation uses targeted file reads and `rg` after recording the tool
+  limitation.
+- Observation: registering `cargo-orthohelp/src/policy` in both the library
+  and binary targets made the passive schema functions dead code in the binary
+  target. Impact: policy remains a library module until a future CLI milestone
+  wires it into command execution.
+- Observation: the first implementation CodeRabbit review returned one
+  trivial ADR wording finding, which was fixed. Two follow-up attempts then
+  returned recoverable rate-limit responses with multi-minute waits. Impact:
+  implementation is paused at the review gate until CodeRabbit can confirm the
+  concern is cleared.
+- Observation: a third follow-up CodeRabbit attempt returned another
+  recoverable rate-limit response after waiting the requested interval. Impact:
+  this plan is marked `BLOCKED` at the review gate rather than moving to the
+  next milestone without confirmation.
+- Observation: `make lint` caught that `SupportDeclaration` could derive
+  `Default` instead of using a manual implementation. Impact: the type now
+  derives `Default`, preserving the documented `supported: false` behaviour
+  while satisfying Clippy.
+- Observation: `make lint` also enforces `indexing_slicing` in tests. Impact:
+  JSON assertion helpers now use `.get(...)` and `.first()` with explicit
+  failure diagnostics instead of indexing serialized values directly.
 
 ## Decision Log
 
@@ -570,6 +619,17 @@ decisions to escalate, decisions on ambiguous requirements, and design choices.
 - Decision: Do not mark roadmap item 5.2.1 done in this pre-implementation
   branch. Rationale: the plan still requires explicit approval before the
   implementation can complete the roadmap item.
+- Decision: Treat the 2026-05-20 request to proceed as explicit approval for
+  implementation. Rationale: the maintainer named this ExecPlan and instructed
+  Codex to implement the planned functionality while keeping the plan current.
+- Decision: Keep this item to passive schemas and documentation, with no new
+  `cargo-orthohelp` flags or generated outputs. Rationale: the approved plan
+  keeps agent-context generation in phase 6 and policy lint execution in phase
+  7 unless explicitly expanded.
+- Decision: Stop at the CodeRabbit milestone gate after repeated recoverable
+  rate-limit failures. Rationale: the plan and maintainer instructions require
+  CodeRabbit concerns to be cleared before moving to the next milestone, and
+  repeated rate limits can hide fresh review feedback.
 
 ## Outcomes & Retrospective
 
