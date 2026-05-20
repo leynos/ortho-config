@@ -44,6 +44,7 @@ mod tests {
         let root = workspace_root()?;
         let output = Command::new(exe.as_str())
             .current_dir(root.as_std_path())
+            .arg("orthohelp")
             .arg("--format")
             .arg("ps")
             .arg("--package")

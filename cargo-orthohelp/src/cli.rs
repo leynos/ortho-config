@@ -1,7 +1,7 @@
 //! Command-line interface definitions for `cargo-orthohelp`.
 
 use camino::Utf8PathBuf;
-use clap::{ArgAction, Args as ClapArgs, Parser, ValueEnum};
+use clap::{ArgAction, Args as ClapArgs, Parser, Subcommand, ValueEnum};
 
 /// Output formats supported by `cargo-orthohelp`.
 #[derive(Debug, Clone, Copy, ValueEnum)]
@@ -16,11 +16,27 @@ pub enum OutputFormat {
     All,
 }
 
-/// Parsed CLI arguments for `cargo-orthohelp`.
+/// Parsed Cargo external-subcommand entrypoint for `cargo-orthohelp`.
 #[derive(Debug, Parser)]
-#[command(name = "cargo-orthohelp")]
-#[command(about = "Generate localized OrthoConfig documentation IR")]
+#[command(name = "cargo")]
+#[command(bin_name = "cargo-orthohelp")]
 #[command(version)]
+pub struct Cli {
+    /// Cargo subcommand dispatched to this binary.
+    #[command(subcommand)]
+    pub command: CargoSubcommand,
+}
+
+/// Cargo external subcommands implemented by `cargo-orthohelp`.
+#[derive(Debug, Subcommand)]
+pub enum CargoSubcommand {
+    /// Generate localized `OrthoConfig` documentation IR.
+    #[command(version)]
+    Orthohelp(Args),
+}
+
+/// Parsed CLI arguments for the `orthohelp` Cargo subcommand.
+#[derive(Debug, ClapArgs, Clone)]
 pub struct Args {
     /// Cargo package to document.
     #[arg(long)]

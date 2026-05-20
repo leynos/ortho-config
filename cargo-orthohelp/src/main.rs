@@ -18,7 +18,7 @@ use clap::Parser;
 
 use crate::bridge::BridgeConfig;
 use crate::cache::CacheKey;
-use crate::cli::{Args, OutputFormat};
+use crate::cli::{Args, CargoSubcommand, Cli, OutputFormat};
 use crate::error::OrthohelpError;
 use crate::metadata::PackageSelection;
 use crate::schema::{DocMetadata, ORTHO_DOCS_IR_VERSION};
@@ -28,7 +28,9 @@ fn main() -> Result<(), OrthohelpError> {
 }
 
 fn run() -> Result<(), OrthohelpError> {
-    let args = Args::parse();
+    let Cli {
+        command: CargoSubcommand::Orthohelp(args),
+    } = Cli::parse();
 
     let metadata = metadata::load_metadata()?;
     let selection = metadata::select_package(&metadata, &args)?;
