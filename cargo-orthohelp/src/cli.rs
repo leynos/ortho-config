@@ -1,4 +1,13 @@
 //! Command-line interface definitions for `cargo-orthohelp`.
+//!
+//! Cargo treats binaries named `cargo-*` as external subcommands, so this
+//! module models the wrapper shape that `cargo orthohelp` expects while still
+//! supporting direct execution of `cargo-orthohelp`. `Cli` is the top-level
+//! parser, `CargoSubcommand` names the external subcommand entrypoint, and
+//! `Args` carries the `orthohelp` options that drive documentation
+//! generation. `main.rs` calls `Cli::parse()`, matches
+//! `CargoSubcommand::Orthohelp(args)`, and passes those arguments through the
+//! metadata, localisation, and output pipeline.
 
 use camino::Utf8PathBuf;
 use clap::{ArgAction, Args as ClapArgs, Parser, Subcommand, ValueEnum};
