@@ -34,10 +34,9 @@ Contributors should keep reusable command-contract policy in OrthoConfig:
 Downstream applications own the execution side of those contracts. Weaver,
 Netsuke, or another consumer remains responsible for command execution, domain
 side effects, sandboxing, safety policy, long-running job semantics, provider
-routing, build graph behaviour, and application-specific persistence. If a
-change would make OrthoConfig execute downstream commands or own downstream
-side effects, stop and revisit the boundary in the agent-native design before
-implementing it.
+routing, build graph behaviour, and application-specific persistence. If
+OrthoConfig executes downstream commands or owns downstream side effects, stop
+and revisit the boundary in the agent-native design before implementing it.
 
 ## Behavioural test layout
 
