@@ -95,6 +95,9 @@
     plan for the `cargo-orthohelp` bridge pipeline.
   - [Roff generator](execplans/4-1-3-roff-generator.md): plan for generated
     roff man pages.
+  - [Retire stale retrospective roadmap items](execplans/5-1-2-retire-stale-retrospective-roadmap-items.md):
+    plan for roadmap item 5.1.2, which separates active guidance from
+    historical roadmap and design context.
   - [Adopt rstest-bdd v0.5.0](execplans/adopt-rstest-bdd-v0-5-0.md): plan for
     the behavioural testing migration.
   - [Ortho agent CLI roadmap](execplans/ortho-agent-cli-roadmap.md): plan for
