@@ -82,6 +82,7 @@ fn summary_counts_severity_without_parsing_messages(
 #[case(json!({"version": "1", "mode": "warn", "results": []}))]
 #[case(json!({"version": "1", "tool": "cargo-orthohelp", "results": []}))]
 #[case(json!({"version": "1", "tool": "cargo-orthohelp", "mode": "warn"}))]
+#[case(json!({"version": "1", "tool": "cargo-orthohelp", "mode": "warn", "results": []}))]
 fn missing_required_report_fields_fail_deserialization(#[case] payload: Value) {
     let error = serde_json::from_value::<PolicyReport>(payload)
         .expect_err("missing required report fields should fail");

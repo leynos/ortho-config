@@ -21,7 +21,6 @@ pub struct PolicyReport {
     /// Individual policy findings.
     pub results: Vec<PolicyResult>,
     /// Count summary grouped by severity.
-    #[serde(default)]
     pub summary: PolicySummary,
 }
 

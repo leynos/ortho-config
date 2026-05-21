@@ -9,11 +9,16 @@ use serde::{Deserialize, Serialize};
 /// Current agent-context schema version.
 pub const ORTHO_AGENT_CONTEXT_SCHEMA_VERSION: &str = "1";
 
+/// Canonical suffix used for agent-context document kinds.
+pub const AGENT_CONTEXT_KIND_SUFFIX: &str = "agent_context";
+
 /// Top-level agent-context document.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct AgentContext {
     /// Agent-context schema version string.
     pub schema_version: String,
+    /// Stable machine-readable document kind.
+    pub kind: String,
     /// Package or command surface name.
     pub package: String,
     /// Commands exposed by this package.
@@ -44,9 +49,11 @@ impl AgentContext {
     /// ```
     #[must_use]
     pub fn new(package: impl Into<String>) -> Self {
+        let package_name = package.into();
         Self {
             schema_version: ORTHO_AGENT_CONTEXT_SCHEMA_VERSION.to_owned(),
-            package: package.into(),
+            kind: format!("{package_name}.{AGENT_CONTEXT_KIND_SUFFIX}"),
+            package: package_name,
             commands: Vec::new(),
             profiles: SupportDeclaration::default(),
             feedback: SupportDeclaration::default(),
@@ -75,12 +82,48 @@ pub struct AgentCommand {
     /// Mutation boundary declared for the command.
     #[serde(default)]
     pub mutation_effect: MutationEffect,
+    /// Asynchronous submission contract for commands that enqueue work.
+    #[serde(default)]
+    pub async_submission: Option<AsyncSubmission>,
+    /// Delivery route contract for commands that send artefacts elsewhere.
+    #[serde(default)]
+    pub delivery_route: Option<DeliveryRoute>,
     /// Pagination contract when the command lists bounded resources.
     #[serde(default)]
     pub pagination: Option<PaginationContract>,
     /// Short examples suitable for agent prompt context.
     #[serde(default)]
     pub examples: Vec<AgentExample>,
+}
+
+/// Asynchronous submission metadata for a command.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AsyncSubmission {
+    /// Submission style, such as inline execution or queued work.
+    pub mode: AsyncSubmissionMode,
+    /// Optional noun used for submitted work, for example `job` or `run`.
+    #[serde(default)]
+    pub noun: Option<String>,
+}
+
+/// Supported asynchronous submission styles.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum AsyncSubmissionMode {
+    /// Command completes before returning to the caller.
+    Inline,
+    /// Command submits work and returns a handle.
+    Submit,
+}
+
+/// Delivery metadata for generated or submitted artefacts.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct DeliveryRoute {
+    /// Whether delivery is supported for this command.
+    pub supported: bool,
+    /// Optional delivery target name, such as `stdout`, `file`, or `remote`.
+    #[serde(default)]
+    pub target: Option<String>,
 }
 
 /// Metadata for one command input.
@@ -169,16 +212,22 @@ impl Default for InteractionMode {
 
 /// Mutation boundary for a command.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
 pub enum MutationEffect {
     /// Legacy or undeclared mutation behaviour.
+    #[serde(rename = "unknown")]
     Unknown,
     /// Read-only command.
+    #[serde(rename = "read-only")]
     ReadOnly,
     /// Command may write local or remote state.
-    Mutates,
+    #[serde(rename = "write")]
+    Write,
     /// Command may delete local or remote state.
-    Deletes,
+    #[serde(rename = "delete")]
+    Delete,
+    /// Command submits asynchronous work.
+    #[serde(rename = "submit")]
+    Submit,
 }
 
 impl Default for MutationEffect {

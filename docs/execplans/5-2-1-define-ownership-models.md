@@ -5,7 +5,7 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
 proceeds.
 
-Status: BLOCKED
+Status: IN PROGRESS
 
 This plan covers roadmap item 5.2.1 only. It was approved for implementation
 on 2026-05-20 when the maintainer asked Codex to proceed with the planned
@@ -66,7 +66,7 @@ suggestions; violation requires escalation, not workarounds.
   PowerShell help structures become the agent-context source of truth.
 - Give documentation IR, agent context, and policy reports independent schema
   versions. A compatible change in one schema must not force a version bump in
-  the others unless the same machine contract changes.
+  the others, unless the same machine contract changes.
 - Use en-GB-oxendict spelling and grammar in documentation, except for external
   API names such as `color`, `JSON Schema`, and source code identifiers.
 - Follow `docs/documentation-style-guide.md`, including ADR structure,
@@ -240,10 +240,10 @@ Third, `cargo-orthohelp` owns policy report emission because it is the
 reference CLI and the planned `--check-agent-native` command surface. The
 policy report schema should have its own version constant, such as
 `ORTHO_POLICY_REPORT_SCHEMA_VERSION`, and must include stable fields for the
-tool, mode, results, rule identifier, machine code, severity, message, and
-optional source location. If later work needs downstream libraries to create
-the same report values, extract only the reusable report model into
-`ortho_config` or a lower shared crate by explicit approval.
+tool, mode, results, rule identifier, machine code, severity level, message,
+and optional source location. If later work needs downstream libraries to
+create the same report values, extract only the reusable report model into
+`ortho_config` or a lower shared crate with explicit approval.
 
 Fourth, all transforms should point inward. Domain-like contract mapping should
 operate on structured `DocMetadata` and schema types. Adapters should handle
@@ -526,7 +526,7 @@ two.
   types and `ORTHO_POLICY_REPORT_SCHEMA_VERSION` for tool-owned warnings and
   hard failures.
 - [x] (2026-05-20) Added ADR-003 and updated agent-native design,
-  `cargo-orthohelp` design, users guide, developers guide, and contents
+  `cargo-orthohelp` design, user's guide, developer's guide, and contents
   documentation with the accepted ownership split.
 - [x] (2026-05-20) Ran targeted schema validation:
   `cargo test -p ortho_config agent_context` passed with 7 tests, and
@@ -540,6 +540,11 @@ two.
 - [x] (2026-05-20) Re-ran commit gates after lint-driven test fixes:
   `make check-fmt`, `make lint`, `make test`, `make markdownlint`, and
   `make nixie` all passed.
+- [x] (2026-05-21) Used Wyvern agents to verify current schema findings and a
+  scribe agent to verify documentation findings before applying minimal fixes.
+- [x] (2026-05-21) Removed optional deserialization for
+  `PolicyReport.summary`, added agent-context `kind`, async submission,
+  delivery route, and canonical mutation-effect wire values.
 - [ ] Add `rstest`, `rstest-bdd`, and end-to-end coverage where
   applicable.
 - [ ] Update user, developer, and roadmap documentation.
@@ -594,6 +599,11 @@ Document with evidence so future work benefits.
 - Observation: `make lint` also enforces `indexing_slicing` in tests. Impact:
   JSON assertion helpers now use `.get(...)` and `.first()` with explicit
   failure diagnostics instead of indexing serialized values directly.
+- Observation: the 2026-05-21 verification pass found four still-valid schema
+  issues: optional policy-summary deserialization, missing agent-context
+  `kind`, missing async and delivery command metadata, and non-canonical
+  mutation-effect wire values. Impact: these are fixed as schema contract
+  corrections without adding CLI output surfaces.
 
 ## Decision Log
 
@@ -630,6 +640,10 @@ decisions to escalate, decisions on ambiguous requirements, and design choices.
   rate-limit failures. Rationale: the plan and maintainer instructions require
   CodeRabbit concerns to be cleared before moving to the next milestone, and
   repeated rate limits can hide fresh review feedback.
+- Decision: Skip new behavioural or end-to-end tests for the 2026-05-21
+  comment pass. Rationale: no `cargo-orthohelp` agent-context or policy-report
+  command output exists in this phase, so there is no externally observable
+  workflow to exercise yet.
 
 ## Outcomes & Retrospective
 
