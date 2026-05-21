@@ -1,10 +1,6 @@
 # ADR-004: Cargo external-subcommand entry-point architecture
 
-Date: 2026-05-21
-
-Status: Accepted
-
-## Context and problem statement
+## Context and Problem Statement
 
 Cargo dispatches external subcommands by injecting the subcommand name as the
 first positional argument. A `clap` parser that only models
@@ -34,3 +30,28 @@ Cargo external-subcommand support remains CLI entry-point structure:
 - Future subcommand-dispatch changes need matching updates to the design
   documents and user-facing invocation examples.
 - Regression coverage should continue to exercise both invocation forms.
+
+# ADR-004: Cargo external-subcommand entry-point architecture
+
+
+## Context and Problem Statement
+
+Cargo dispatches external subcommands by injecting the subcommand name as the
+first positional argument. A `clap` parser that only models
+`cargo-<name> [OPTIONS]` rejects that injected token before application logic
+can run.
+
+OrthoConfig needs a documented entry-point shape for Cargo-facing binaries,
+such as `cargo-orthohelp`, but that dispatch contract belongs at the command
+boundary. It must not be folded into `OrthoConfig::load` or the configuration
+merge pipeline.
+
+
+## Status
+
+Accepted
+
+
+## Date
+
+2026-05-21

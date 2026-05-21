@@ -19,9 +19,9 @@ inside the standard Rust test harness, not a bespoke test runner.
 ## Subcommand dispatch changes
 
 Cargo's external-subcommand contract is an entry-point concern, not a
-configuration-loading concern. If you change how a `cargo-*` binary accepts or
-forwards the injected subcommand token, update all of the following in the same
-change:
+configuration-loading concern. When the way a `cargo-*` binary accepts or
+forwards the injected subcommand token is changed, update all of the following
+in the same change:
 
 - `docs/design.md` §4.17 and [ADR-004](adr-004-cargo-external-subcommand-entry-point.md).
 - `docs/roadmap.md` if the work remains tracked there.
