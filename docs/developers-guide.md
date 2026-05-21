@@ -36,7 +36,7 @@ Netsuke, or another consumer remains responsible for command execution, domain
 side effects, sandboxing, safety policy, long-running job semantics, provider
 routing, build graph behaviour, and application-specific persistence. If
 OrthoConfig executes downstream commands or owns downstream side effects, stop
-and revisit the boundary in the agent-native design before implementing it.
+and revisit the boundary in the agent-native design.
 
 ## Behavioural test layout
 
