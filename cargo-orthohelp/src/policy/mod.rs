@@ -10,6 +10,12 @@ use serde::{Deserialize, Serialize};
 pub const ORTHO_POLICY_REPORT_SCHEMA_VERSION: &str = "1";
 
 /// Machine-readable policy report for one `cargo-orthohelp` run.
+///
+/// The `summary` field must reflect the severity counts in `results`. Both
+/// fields are public and this type is cloneable, so directly mutating
+/// `results` can break that invariant. Prefer [`PolicyReport::empty`] and
+/// [`PolicyReport::with_results`] when constructing reports so the summary
+/// stays synchronized with the result set.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct PolicyReport {
     /// Policy-report schema version string.

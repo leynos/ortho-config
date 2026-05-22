@@ -193,7 +193,6 @@ standard merge pipeline combined with field-level attributes like
 The Hello World example demonstrates this pattern with `GreetCommand`, which
 uses a post-merge hook to clean up whitespace-only preambles.
 
-
 ### Documentation and agent contracts
 
 `OrthoConfigDocs` remains the public contract for human documentation metadata.

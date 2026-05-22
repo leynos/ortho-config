@@ -77,12 +77,12 @@ responsibilities and downstream application responsibilities.
 
 ### 5.2. Establish schema ownership
 
-- [x] 5.2.1. Define ownership for documentation IR, agent context, and policy
+- [ ] 5.2.1. Define ownership for documentation IR, agent context, and policy
   reports.
-  - [x] Keep localized documentation IR in the existing `OrthoConfigDocs`
+  - [ ] Keep localized documentation IR in the existing `OrthoConfigDocs`
     contract.
-  - [x] Specify a compact agent-context schema with its own schema version.
-  - [x] Specify a policy report schema for warnings and hard failures emitted
+  - [ ] Specify a compact agent-context schema with its own schema version.
+  - [ ] Specify a policy report schema for warnings and hard failures emitted
     by `cargo-orthohelp`.
 
 - [ ] 5.2.2. Record migration rules for existing consumers.

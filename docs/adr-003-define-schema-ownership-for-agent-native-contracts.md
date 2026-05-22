@@ -1,8 +1,8 @@
 # ADR-003: Define schema ownership for agent-native contracts
 
-Date: 2026-05-20
-
 Status: Accepted
+
+Date: 2026-05-20
 
 ## Context and problem statement
 
