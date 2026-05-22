@@ -1,6 +1,7 @@
 //! Tests for the `cargo-orthohelp` policy report contract.
 
 use super::*;
+use insta::assert_snapshot;
 use rstest::rstest;
 use serde_json::{Value, json};
 
@@ -17,26 +18,7 @@ fn empty_report_uses_tool_owned_schema_version() {
 
 #[rstest]
 fn report_serializes_stable_machine_fields() {
-    let result = PolicyResult {
-        rule_id: "agent-native.vocabulary.canonical-flag".to_owned(),
-        code: "canonical_flag_missing".to_owned(),
-        severity: PolicySeverity::Warn,
-        message: "Use --json for structured output.".to_owned(),
-        location: Some(SourceLocation {
-            file: "Cargo.toml".to_owned(),
-            range: Some(SourceRange {
-                start: SourcePosition {
-                    line: 12,
-                    column: 1,
-                },
-                end: SourcePosition {
-                    line: 12,
-                    column: 20,
-                },
-            }),
-        }),
-    };
-    let report = PolicyReport::with_results(PolicyMode::Warn, vec![result]);
+    let report = sample_policy_report();
 
     let value = serde_json::to_value(report).expect("serialize policy report");
     assert_eq!(field(&value, "version"), "1");
@@ -52,6 +34,47 @@ fn report_serializes_stable_machine_fields() {
     let summary = field(&value, "summary");
     assert_eq!(field(summary, "warn"), 1);
     assert_eq!(field(summary, "total"), 1);
+}
+
+#[rstest]
+fn policy_report_json_snapshot_covers_wire_contract() {
+    let json = serde_json::to_string_pretty(&sample_policy_report())
+        .expect("serialize policy report snapshot");
+
+    assert_snapshot!(json, @r###"
+    {
+      "version": "1",
+      "tool": "cargo-orthohelp",
+      "mode": "warn",
+      "results": [
+        {
+          "rule_id": "agent-native.vocabulary.canonical-flag",
+          "code": "canonical_flag_missing",
+          "severity": "warn",
+          "message": "Use --json for structured output.",
+          "location": {
+            "file": "Cargo.toml",
+            "range": {
+              "start": {
+                "line": 12,
+                "column": 1
+              },
+              "end": {
+                "line": 12,
+                "column": 20
+              }
+            }
+          }
+        }
+      ],
+      "summary": {
+        "off": 0,
+        "warn": 1,
+        "deny": 0,
+        "total": 1
+      }
+    }
+    "###);
 }
 
 #[rstest]
@@ -104,4 +127,28 @@ fn first_array_item(value: &Value) -> &Value {
         .as_array()
         .and_then(|items| items.first())
         .expect("JSON value should be a non-empty array")
+}
+
+fn sample_policy_report() -> PolicyReport {
+    let result = PolicyResult {
+        rule_id: "agent-native.vocabulary.canonical-flag".to_owned(),
+        code: "canonical_flag_missing".to_owned(),
+        severity: PolicySeverity::Warn,
+        message: "Use --json for structured output.".to_owned(),
+        location: Some(SourceLocation {
+            file: "Cargo.toml".to_owned(),
+            range: Some(SourceRange {
+                start: SourcePosition {
+                    line: 12,
+                    column: 1,
+                },
+                end: SourcePosition {
+                    line: 12,
+                    column: 20,
+                },
+            }),
+        }),
+    };
+
+    PolicyReport::with_results(PolicyMode::Warn, vec![result])
 }

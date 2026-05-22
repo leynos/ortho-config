@@ -2,6 +2,7 @@
 
 use super::*;
 use crate::docs::ORTHO_DOCS_IR_VERSION;
+use insta::assert_snapshot;
 use rstest::rstest;
 use serde_json::{Value, json};
 
@@ -29,44 +30,7 @@ fn new_context_uses_legacy_defaults() {
 
 #[rstest]
 fn compact_context_serialization_excludes_localization_fields() {
-    let context = AgentContext {
-        schema_version: ORTHO_AGENT_CONTEXT_SCHEMA_VERSION.to_owned(),
-        kind: "example-cli.agent_context".to_owned(),
-        package: "example-cli".to_owned(),
-        commands: vec![AgentCommand {
-            path: vec!["example-cli".to_owned(), "list".to_owned()],
-            canonical_verb: Some("list".to_owned()),
-            inputs: vec![AgentInput {
-                name: "format".to_owned(),
-                long: Some("format".to_owned()),
-                value_type: Some("string".to_owned()),
-                required: false,
-                default: Some("json".to_owned()),
-                enum_values: vec!["json".to_owned()],
-            }],
-            output_modes: vec!["json".to_owned()],
-            interaction_mode: InteractionMode::NonInteractive,
-            mutation_effect: MutationEffect::ReadOnly,
-            async_submission: Some(AsyncSubmission {
-                mode: AsyncSubmissionMode::Submit,
-                noun: Some("job".to_owned()),
-            }),
-            delivery_route: Some(DeliveryRoute {
-                supported: true,
-                target: Some("file".to_owned()),
-            }),
-            pagination: None,
-            examples: vec![AgentExample {
-                command: "example-cli list --format json".to_owned(),
-                output_mode: Some("json".to_owned()),
-            }],
-        }],
-        profiles: SupportDeclaration { supported: false },
-        feedback: SupportDeclaration { supported: false },
-        policy: AgentPolicy {
-            agent_native: PolicyMode::Warn,
-        },
-    };
+    let context = sample_agent_context();
 
     let value = serde_json::to_value(context).expect("serialize agent context");
     assert_eq!(field(&value, "schema_version"), "1");
@@ -79,6 +43,70 @@ fn compact_context_serialization_excludes_localization_fields() {
     assert!(value.get("about_id").is_none());
     assert!(value.get("headings_ids").is_none());
     assert!(command.get("help_id").is_none());
+}
+
+#[rstest]
+fn agent_context_json_snapshot_covers_wire_contract() {
+    let json = serde_json::to_string_pretty(&sample_agent_context())
+        .expect("serialize agent context snapshot");
+
+    assert_snapshot!(json, @r###"
+    {
+      "schema_version": "1",
+      "kind": "example-cli.agent_context",
+      "package": "example-cli",
+      "commands": [
+        {
+          "path": [
+            "example-cli",
+            "list"
+          ],
+          "canonical_verb": "list",
+          "inputs": [
+            {
+              "name": "format",
+              "long": "format",
+              "value_type": "string",
+              "required": false,
+              "default": "json",
+              "enum_values": [
+                "json"
+              ]
+            }
+          ],
+          "output_modes": [
+            "json"
+          ],
+          "interaction_mode": "non_interactive",
+          "mutation_effect": "read-only",
+          "async_submission": {
+            "mode": "submit",
+            "noun": "job"
+          },
+          "delivery_route": {
+            "supported": true,
+            "target": "file"
+          },
+          "pagination": null,
+          "examples": [
+            {
+              "command": "example-cli list --format json",
+              "output_mode": "json"
+            }
+          ]
+        }
+      ],
+      "profiles": {
+        "supported": false
+      },
+      "feedback": {
+        "supported": false
+      },
+      "policy": {
+        "agent_native": "warn"
+      }
+    }
+    "###);
 }
 
 #[rstest]
@@ -149,4 +177,45 @@ fn first_array_item(value: &Value) -> &Value {
         .as_array()
         .and_then(|items| items.first())
         .expect("JSON value should be a non-empty array")
+}
+
+fn sample_agent_context() -> AgentContext {
+    AgentContext {
+        schema_version: ORTHO_AGENT_CONTEXT_SCHEMA_VERSION.to_owned(),
+        kind: "example-cli.agent_context".to_owned(),
+        package: "example-cli".to_owned(),
+        commands: vec![AgentCommand {
+            path: vec!["example-cli".to_owned(), "list".to_owned()],
+            canonical_verb: Some("list".to_owned()),
+            inputs: vec![AgentInput {
+                name: "format".to_owned(),
+                long: Some("format".to_owned()),
+                value_type: Some("string".to_owned()),
+                required: false,
+                default: Some("json".to_owned()),
+                enum_values: vec!["json".to_owned()],
+            }],
+            output_modes: vec!["json".to_owned()],
+            interaction_mode: InteractionMode::NonInteractive,
+            mutation_effect: MutationEffect::ReadOnly,
+            async_submission: Some(AsyncSubmission {
+                mode: AsyncSubmissionMode::Submit,
+                noun: Some("job".to_owned()),
+            }),
+            delivery_route: Some(DeliveryRoute {
+                supported: true,
+                target: Some("file".to_owned()),
+            }),
+            pagination: None,
+            examples: vec![AgentExample {
+                command: "example-cli list --format json".to_owned(),
+                output_mode: Some("json".to_owned()),
+            }],
+        }],
+        profiles: SupportDeclaration { supported: false },
+        feedback: SupportDeclaration { supported: false },
+        policy: AgentPolicy {
+            agent_native: PolicyMode::Warn,
+        },
+    }
 }

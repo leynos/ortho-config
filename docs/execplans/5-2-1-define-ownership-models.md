@@ -517,8 +517,8 @@ two.
   `arch-crate-design`, `rust-types-and-apis`, `rust-errors`,
   `domain-cli-and-daemons`, `hexagonal-architecture`, and `commit-message`
   guidance for implementation.
-- [ ] Freeze ownership decisions in design documentation and
-  any required ADR.
+- [x] (2026-05-20) Froze ownership decisions in design documentation and
+  ADR-003.
 - [x] (2026-05-20) Added passive `ortho_config::agent_context` schema types
   and `ORTHO_AGENT_CONTEXT_SCHEMA_VERSION` without adding generator flags or
   command output.
@@ -545,6 +545,8 @@ two.
 - [x] (2026-05-21) Removed optional deserialization for
   `PolicyReport.summary`, added agent-context `kind`, async submission,
   delivery route, and canonical mutation-effect wire values.
+- [x] (2026-05-22) Added inline `insta` snapshot assertions for complete
+  serialized `PolicyReport` and `AgentContext` JSON wire contracts.
 - [ ] Add `rstest`, `rstest-bdd`, and end-to-end coverage where
   applicable.
 - [ ] Update user, developer, and roadmap documentation.
