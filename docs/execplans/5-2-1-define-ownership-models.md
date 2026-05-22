@@ -549,7 +549,7 @@ two.
   serialized `PolicyReport` and `AgentContext` JSON wire contracts.
 - [ ] Add `rstest`, `rstest-bdd`, and end-to-end coverage where
   applicable.
-- [ ] Update user, developer, and roadmap documentation.
+- [x] (2026-05-22) Updated user, developer, and roadmap documentation.
 - [ ] Run all required gates, CodeRabbit review, commit, push, and update the
   pull request.
 
