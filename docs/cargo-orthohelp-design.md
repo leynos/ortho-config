@@ -7,8 +7,9 @@ Markup Language (MAML)) plus a wrapper module. It focuses on a command-line
 interface (CLI) documentation pipeline that remains `clap` agnostic and keeps
 IR-driven documentation code out of application binaries. The related
 agent-facing invocation contract is defined in
-[agent-native-cli-design.md](agent-native-cli-design.md) and should be emitted
-as a sibling output, not as localized documentation prose.
+[agent-native-cli-design.md](agent-native-cli-design.md), the canonical
+agent-native command-contract and boundary document. It should be emitted as a
+sibling output, not as localized documentation prose.
 
 - Status: Revision 3 (agent-native relationship and reference CLI amendments
   integrated).
@@ -124,7 +125,9 @@ Key choices:
   bridge to fetch the IR, keeping application binaries clean.
 - Sibling agent outputs: compact agent context and policy reports are generated
   from the same metadata spine but versioned independently from localized
-  documentation IR.
+  documentation IR. `DocMetadata.ir_version` governs compatibility for human
+  documentation IR, while the future agent-context schema version governs
+  compact agent-facing output.
 
 ## 2. Documentation IR (schema v1.1)
 
@@ -537,7 +540,8 @@ Agent-context generation should reuse the same bridge output, then transform
 the documentation-oriented metadata into the compact contract described in
 [agent-native-cli-design.md](agent-native-cli-design.md). The transform must:
 
-- preserve schema versioning separately from `DocMetadata.ir_version`;
+- preserve schema versioning separately from `DocMetadata.ir_version`, which
+  remains the compatibility marker for human documentation IR;
 - include populated command trees rather than only top-level fields;
 - drop localized long prose unless a concise command summary is required;
 - include canonical flags, value types, enum values, defaults, and required

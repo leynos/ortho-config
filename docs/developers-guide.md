@@ -15,6 +15,29 @@ The workspace runs one unified test workflow via Make targets:
 These are required quality gates for code changes. Behavioural coverage runs
 inside the standard Rust test harness, not a bespoke test runner.
 
+## Agent-native architecture boundary
+
+Agent-native CLI assistance is contract modelling work inside OrthoConfig, not
+a transfer of downstream application execution into this repository. The
+canonical contract and boundary document is
+[Agent-native CLI assistance design](agent-native-cli-design.md).
+
+Contributors should keep reusable command-contract policy in OrthoConfig:
+
+- command, option, output, and workflow metadata;
+- documentation IR, agent-context schema, and related versioning policy;
+- generated human documentation and compact agent-facing context;
+- vocabulary, structured-output, and bounded-list lint policy; and
+- optional shared primitives for profiles, delivery targets, feedback stores,
+  skill manifests, and execution-ledger metadata.
+
+Downstream applications own the execution side of those contracts. Weaver,
+Netsuke, or another consumer remains responsible for command execution, domain
+side effects, sandboxing, safety policy, long-running job semantics, provider
+routing, build graph behaviour, and application-specific persistence. If
+OrthoConfig executes downstream commands or owns downstream side effects, stop
+and revisit the boundary in the agent-native design.
+
 ## Behavioural test layout
 
 Behavioural suites live in crate-local integration test targets:

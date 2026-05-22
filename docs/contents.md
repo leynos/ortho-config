@@ -18,9 +18,9 @@
 - [Design Document: The `OrthoConfig` Crate](design.md): understand the core
   crate architecture, configuration model, merge pipeline, localization
   strategy, and future extension points.
-- [Agent-native CLI assistance design](agent-native-cli-design.md): understand
-  the agent-native command-contract model, metadata boundary, policy surface,
-  and consumer application responsibilities.
+- [Agent-native CLI assistance design](agent-native-cli-design.md): use the
+  canonical agent-native command-contract and boundary document for the
+  metadata surfaces, policy model, and consumer application responsibilities.
 - [OrthoConfig IR documentation design for cargo-orthohelp](cargo-orthohelp-design.md):
   understand the documentation intermediate representation (IR), bridge
   pipeline, localized reference generation, PowerShell help, and future
