@@ -1,4 +1,9 @@
 //! Shared helpers for `cargo-orthohelp` integration tests.
+//!
+//! These helpers hide process-launch plumbing from dispatch tests such as
+//! `cli_dispatch.rs`: `cargo_orthohelp_exe` resolves the compiled binary across
+//! Cargo and nextest environments, while `workspace_root` gives spawned
+//! commands a stable repository working directory.
 
 use camino::Utf8PathBuf;
 use std::error::Error;

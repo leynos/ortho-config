@@ -1,5 +1,11 @@
-//! CLI entrypoint for `cargo-orthohelp`, coordinating argument parsing,
-//! metadata loading, and document generation.
+//! CLI entrypoint for `cargo-orthohelp`.
+//!
+//! The binary accepts Cargo's external-subcommand dispatch shape through
+//! [`cli::Cli`], then delegates to the metadata, locale, cache, bridge, and
+//! output modules to build localized documentation artefacts. `main` keeps the
+//! process boundary thin by forwarding all fallible work through `run`, where
+//! parsed `orthohelp` arguments are converted into package selection, bridge
+//! configuration, localized IR, and renderer-specific outputs.
 
 mod bridge;
 mod cache;
