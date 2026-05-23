@@ -93,10 +93,9 @@ if let Some(figment) = discovery.load_first()? {
 # }
 ```
 
-The repository ships `config/overrides.toml`, which extends
-`config/baseline.toml` to set `is_excited = true`, provide a `Layered hello`
-preamble, and swap the greet punctuation for `!!!`. Behavioural tests and demo
-scripts assert the uppercase output to guard this layering.
+After parsing the relevant subcommand struct, call `load_and_merge()?` on that
+value (for example, `pr_args.load_and_merge()?`) to obtain the merged
+configuration for that subcommand.
 
 ### Declarative merging
 
@@ -193,6 +192,32 @@ standard merge pipeline combined with field-level attributes like
 
 The Hello World example demonstrates this pattern with `GreetCommand`, which
 uses a post-merge hook to clean up whitespace-only preambles.
+
+### Documentation and agent contracts
+
+`OrthoConfigDocs` remains the public contract for human documentation metadata.
+It emits localized documentation IR through `DocMetadata` and
+`ORTHO_DOCS_IR_VERSION`; `cargo-orthohelp` consumes that IR to produce
+localized JSON, roff man pages, and PowerShell help.
+
+Agent invocation context is a separate compact schema. Its reusable Rust types
+live under `ortho_config::agent_context` and use
+`ORTHO_AGENT_CONTEXT_SCHEMA_VERSION`, so agent-facing compatibility can change
+without forcing a documentation IR version bump. The schema deliberately keeps
+out Fluent identifiers, localized long prose, roff details, and PowerShell help
+structures.
+
+Policy reports for agent-native warnings and hard failures are owned by
+`cargo-orthohelp`. The `cargo_orthohelp::policy` module defines
+`ORTHO_POLICY_REPORT_SCHEMA_VERSION` and machine-stable fields such as
+`rule_id`, `code`, `severity`, and `message`. Future `cargo-orthohelp`
+commands that emit those reports should keep machine-readable output separate
+from human diagnostics.
+
+Existing `cargo-orthohelp --format ir`, `--format man`, `--format ps`, and
+`--format all` behaviour remains compatible. Agent-context generation and
+agent-native policy checking are future command surfaces unless a later
+roadmap item explicitly enables them.
 
 ### Localizing CLI copy
 

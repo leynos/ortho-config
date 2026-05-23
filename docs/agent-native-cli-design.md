@@ -103,6 +103,16 @@ compact, machine-oriented, and independently versioned so agent-facing changes
 do not force documentation IR migrations unless the same data is genuinely
 needed by both outputs.
 
+Schema ownership is defined in
+[ADR-003](adr-003-define-schema-ownership-for-agent-native-contracts.md).
+Reusable agent-context types and
+`ORTHO_AGENT_CONTEXT_SCHEMA_VERSION` live in
+`ortho_config::agent_context`. `cargo-orthohelp` may generate or transform the
+context in later roadmap work, but it does not own the reusable context
+contract. The documentation IR remains owned by `ortho_config::docs`, so
+Fluent identifiers, localized long prose, roff details, and PowerShell help
+structures are not agent-context source fields.
+
 The planned `cargo-orthohelp` generator interface is:
 
 ```console
@@ -160,6 +170,13 @@ directly.
 The lint policy is the enforcement layer. It should be exposed through
 `cargo-orthohelp` and should also be reusable by tests or continuous
 integration.
+
+The policy-report schema is initially owned by `cargo_orthohelp::policy`,
+including `ORTHO_POLICY_REPORT_SCHEMA_VERSION`. This keeps warnings, hard
+failures, source locations, rule identifiers, machine-readable codes, and mode
+handling close to the reference CLI that emits them. A later ADR can extract a
+shared report model if downstream libraries need to construct identical
+reports.
 
 The planned command shape is:
 

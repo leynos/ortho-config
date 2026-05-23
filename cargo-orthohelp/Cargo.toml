@@ -30,6 +30,7 @@ sha2 = "0.10"
 thiserror = "2"
 
 [dev-dependencies]
+insta = "1"
 rstest = "0.26.1"
 rstest-bdd.workspace = true
 rstest-bdd-macros.workspace = true

@@ -1,0 +1,5 @@
+# These trybuild binaries spawn child cargo processes in a separate target
+# directory, so they do not share cargo-llvm-cov's warmed llvm-cov target cache.
+[[profile.default.overrides]]
+filter = 'binary(crate_path_trybuild) | binary(declarative_merge_trybuild)'
+slow-timeout = { period = "120s", terminate-after = 5 }
