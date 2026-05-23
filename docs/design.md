@@ -736,7 +736,6 @@ last observed map as typed data and reapplies it after processing all layers.
 This keeps keyed defaults available by default while providing a deterministic
 escape hatch for wholesale replacements.
 
-
 ### 4.17. Cargo external-subcommand entry points
 
 Cargo invokes external subcommands through an intentional argument-shape

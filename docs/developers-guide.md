@@ -15,7 +15,6 @@ The workspace runs one unified test workflow via Make targets:
 These are required quality gates for code changes. Behavioural coverage runs
 inside the standard Rust test harness, not a bespoke test runner.
 
-
 ## Subcommand dispatch changes
 
 Cargo's external-subcommand contract is an entry-point concern, not a

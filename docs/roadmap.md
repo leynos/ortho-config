@@ -294,7 +294,6 @@ downstream users to adopt them.
   - [ ] Explain which behaviours are already implemented and which require
     future phases.
 
-
 ### 8.3. Standardize Cargo external-subcommand entry points
 
 This step answers whether OrthoConfig can make Cargo subcommand binaries
