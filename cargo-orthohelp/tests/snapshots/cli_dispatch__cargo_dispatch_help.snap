@@ -1,0 +1,85 @@
+---
+source: cargo-orthohelp/tests/cli_dispatch.rs
+expression: stdout(&output)
+---
+Generate localized `OrthoConfig` documentation IR
+
+Usage: cargo orthohelp [OPTIONS]
+
+Options:
+      --package <PACKAGE>
+          Cargo package to document
+
+      --bin <BIN>
+          Binary target name (used for metadata validation)
+
+      --lib
+          Select the package's library target
+
+      --root-type <path::Type>
+          Root configuration type (for example, `my_crate::Config`)
+
+      --locale <locale>
+          Locale to render (repeat for multiple locales)
+
+      --all-locales
+          Generate for every locale declared in package metadata
+
+      --out-dir <path>
+          Output directory for generated artefacts
+
+      --cache
+          Cache and reuse the bridge IR when possible
+
+      --no-build
+          Skip building the bridge and rely on cached IR
+
+      --format <FORMAT>
+          Output format selection
+
+          Possible values:
+          - ir:  Emit the localized IR JSON output
+          - man: Emit Unix roff man pages
+          - ps:  Emit `PowerShell` help output
+          - all: Emit all outputs (IR, man pages, and `PowerShell` help)
+          
+          [default: ir]
+
+      --man-section <N>
+          Man page section number (1-8, default: 1 for user commands)
+          
+          [default: 1]
+
+      --man-date <DATE>
+          Date for man page header (format: YYYY-MM-DD or "January 2026")
+
+      --man-split-subcommands
+          Generate separate man pages for each subcommand
+
+      --ps-module-name <NAME>
+          `PowerShell` module name override
+
+      --ps-split-subcommands <BOOL>
+          Split subcommands into separate wrapper functions
+          
+          [possible values: true, false]
+
+      --ps-include-common-parameters <BOOL>
+          Include `CommonParameters` in help output
+          
+          [possible values: true, false]
+
+      --ps-help-info-uri <URI>
+          `HelpInfoUri` for Update-Help payloads
+
+      --ensure-en-us <BOOL>
+          Ensure an en-US help file exists
+          
+          [default: true]
+          [possible values: true, false]
+
+  -h, --help
+          Print help (see a summary with '-h')
+
+  -V, --version
+          Print version

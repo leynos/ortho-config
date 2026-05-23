@@ -2,6 +2,7 @@
 
 mod fixtures;
 
+use insta::assert_snapshot;
 use rstest::rstest;
 use std::error::Error;
 use std::process::{Command, Output};
@@ -42,9 +43,26 @@ fn stderr(output: &Output) -> String {
 }
 
 #[rstest]
-#[case::direct(&["orthohelp", "--help"], false, "help should succeed")]
-#[case::cargo_dispatch(&["--help"], true, "Cargo-dispatched help should succeed")]
-fn help_output_uses_cargo_usage(
+#[case::direct_top_level_help(
+    "direct_top_level_help",
+    &["--help"],
+    false,
+    "top-level direct help should succeed"
+)]
+#[case::direct_subcommand_help(
+    "direct_subcommand_help",
+    &["orthohelp", "--help"],
+    false,
+    "direct subcommand help should succeed"
+)]
+#[case::cargo_dispatch_help(
+    "cargo_dispatch_help",
+    &["--help"],
+    true,
+    "Cargo-dispatched help should succeed"
+)]
+fn help_output_matches_snapshots(
+    #[case] snapshot_name: &str,
     #[case] args: &[&str],
     #[case] is_cargo_dispatch: bool,
     #[case] success_message: &str,
@@ -60,11 +78,7 @@ fn help_output_uses_cargo_usage(
         "{success_message}: {}",
         stderr(&output)
     );
-    assert!(
-        stdout(&output).contains("Usage: cargo orthohelp [OPTIONS]"),
-        "unexpected help output:\n{}",
-        stdout(&output)
-    );
+    assert_snapshot!(snapshot_name, stdout(&output));
 }
 
 #[rstest]
