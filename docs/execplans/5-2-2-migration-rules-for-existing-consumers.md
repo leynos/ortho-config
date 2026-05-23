@@ -125,6 +125,10 @@ this plan until the user approves it.
   `make test`, and `make markdownlint` for the plan branch.
 - [x] (2026-05-20T23:26:00Z) Ran `coderabbit review --agent` and addressed
   all minor documentation-style findings in this ExecPlan.
+- [x] (2026-05-23T02:40:00Z) Rebasing onto `origin/main` completed without
+  conflicts after commit `2b992b67bc5d5e4e763a8ee814bc0314b34cd99b` landed.
+- [x] (2026-05-23T02:45:00Z) Updated this ExecPlan to build on the completed
+  roadmap item 5.2.1 schema ownership baseline.
 - [ ] Obtain explicit user approval before implementation begins.
 - [ ] Implement the approved plan milestone by milestone.
 - [ ] Mark roadmap item 5.2.2 done only after the approved implementation and
@@ -152,6 +156,22 @@ this plan until the user approves it.
   OrthoConfig generators and readers must implement their own legacy defaults
   rather than assuming schema validation supplies them.
 
+- Observation: commit `2b992b67bc5d5e4e763a8ee814bc0314b34cd99b` completed
+  roadmap item 5.2.1 and introduced the concrete schema ownership split.
+  Evidence: `ortho_config::agent_context` owns
+  `ORTHO_AGENT_CONTEXT_SCHEMA_VERSION`, `cargo_orthohelp::policy` owns
+  `ORTHO_POLICY_REPORT_SCHEMA_VERSION`, and
+  `docs/adr-003-define-schema-ownership-for-agent-native-contracts.md` records
+  the ownership decision. Impact: item 5.2.2 should document migration rules on
+  top of that accepted boundary, not re-decide ownership.
+
+- Observation: commit `2b992b67bc5d5e4e763a8ee814bc0314b34cd99b` added a
+  `.config/nextest.toml` timeout override for trybuild integration tests.
+  Evidence: the commit message calls out longer timeouts for child Cargo builds
+  in separate target directories. Impact: future validation may keep using the
+  repository Make targets, and any optional nextest runs should respect the
+  checked-in profile rather than introducing ad hoc timeout workarounds.
+
 ## Decision log
 
 - Decision: Treat this branch as a pre-implementation plan branch and leave
@@ -177,6 +197,13 @@ this plan until the user approves it.
   editing implementation code. Rationale: the policy must be backed by
   executable evidence that current behaviour remains stable. Date/Author:
   2026-05-20T23:06:46Z / Codex.
+
+- Decision: Keep the conflict-free rebase result and update this plan as a
+  follow-up commit rather than amending the original plan commit. Rationale:
+  `origin/main` introduced a substantive 5.2.1 schema baseline after the draft
+  plan was opened, and the branch history should show the rebase-driven plan
+  adjustment separately from the initial draft. Date/Author:
+  2026-05-23T02:45:00Z / Codex.
 
 ## Outcomes & retrospective
 
@@ -208,6 +235,15 @@ recursive `subcommands`, and optional `windows` metadata. This is the human
 documentation contract. The future agent-context schema is a sibling machine
 contract and must be versioned separately.
 
+After roadmap item 5.2.1, the sibling machine contracts are no longer only
+future design notes. Reusable agent context types live in
+`ortho_config/src/agent_context/mod.rs` with
+`ORTHO_AGENT_CONTEXT_SCHEMA_VERSION`. Policy-report types live in
+`cargo-orthohelp/src/policy/mod.rs` with
+`ORTHO_POLICY_REPORT_SCHEMA_VERSION`. The implementation for this plan should
+preserve that ownership split and add migration rules around compatibility,
+defaulting, and downstream documentation consumers.
+
 The `cargo-orthohelp` schema mirror lives in `cargo-orthohelp/src/schema/`. The
 localized IR writer lives in `cargo-orthohelp/src/output.rs`. Roff man-page
 generation lives under `cargo-orthohelp/src/roff/`. PowerShell wrapper and MAML
@@ -222,6 +258,8 @@ Relevant documentation sources are:
 
 - `docs/roadmap.md` for item 5.2.2 and completion state.
 - `docs/design.md` for high-level architecture and decision history.
+- `docs/adr-003-define-schema-ownership-for-agent-native-contracts.md` for the
+  accepted schema ownership decision from roadmap item 5.2.1.
 - `docs/agent-native-cli-design.md` for agent-native versioning and legacy
   defaulting.
 - `docs/cargo-orthohelp-design.md` for the documentation IR, generator, and
@@ -237,6 +275,8 @@ Relevant documentation sources are:
   `docs/localizable-rust-libraries-with-fluent.md`, and
   `docs/complexity-antipatterns-and-refactoring-strategies.md` for supporting
   design and testing practice.
+- `docs/execplans/5-2-1-define-ownership-models.md` for the completed
+  predecessor plan that established the ownership model this plan depends on.
 
 External prior art used while drafting this plan:
 
@@ -272,27 +312,30 @@ paths; PowerShell file layout; and explicit failure for an unsupported format
 through Clap's `ValueEnum` parsing.
 
 Stage C: document migration rules. Update
-`docs/agent-native-cli-design.md` to make the defaulting policy normative for
-legacy derives and explicitly say defaults are applied by OrthoConfig readers
-or generators, not by JSON Schema validation. Update
-`docs/cargo-orthohelp-design.md` to list the stable legacy format behaviours
-and to state that `agent-context`, `--json`, and policy output cannot break
-`ir`, `man`, `ps`, or `all` without an approved migration. Update
-`docs/design.md` with the architectural boundary: OrthoConfig owns reusable
+`docs/agent-native-cli-design.md` to extend the now-accepted schema ownership
+policy with normative legacy-defaulting rules. Explicitly say defaults are
+applied by OrthoConfig readers or generators, not by JSON Schema validation.
+Update `docs/cargo-orthohelp-design.md` to list the stable legacy format
+behaviours and to state that `agent-context`, `--json`, and policy output
+cannot break `ir`, `man`, `ps`, or `all` without an approved migration. Update
+`docs/design.md` with the compatibility boundary: OrthoConfig owns reusable
 metadata contracts and generated documentation compatibility; downstream
-applications own semantic execution. Update `docs/users-guide.md` with
+applications own semantic execution. Reference ADR-003 where ownership matters
+instead of re-litigating the decision. Update `docs/users-guide.md` with
 consumer-facing compatibility notes for crates that only consume generated
 human documentation. Update `docs/developers-guide.md` with internal practice
-for adding metadata fields: define defaults, test legacy derives, and avoid
-format drift. Update `CHANGELOG.md` only if the implementation changes
-user-visible wording or behaviour. Do not add a new ADR unless implementation
-uncovers a substantive decision that cannot be captured cleanly in the design
-documents.
+for adding metadata fields: define defaults, test legacy derives, keep policy
+reports in `cargo_orthohelp::policy`, keep compact agent context in
+`ortho_config::agent_context`, and avoid format drift. Update `CHANGELOG.md`
+only if the implementation changes user-visible wording or behaviour. Do not
+add a new ADR unless implementation uncovers a substantive migration decision
+that cannot be captured cleanly in the design documents or ADR-003.
 
 Stage D: review and harden. Run `make fmt` if Markdown formatting changes are
 needed. Then run `make check-fmt`, `make lint`, and `make test` sequentially
-with `tee`. Also run `make markdownlint` because Markdown files change. Run
-`make nixie` if Mermaid diagrams are added or edited. Run
+with `tee`. Run `make typecheck` when the Makefile exposes that target. Also
+run `make markdownlint` because Markdown files change. Run `make nixie` if
+Mermaid diagrams are added or edited. Run
 `coderabbit review --agent`, address every concern that fits within this
 plan's constraints, and rerun affected gates. If CodeRabbit asks for work
 outside tolerance, record it in this plan and escalate.
@@ -371,6 +414,7 @@ sed -n '470,490p' docs/cargo-orthohelp-design.md
 sed -n '781,789p' docs/cargo-orthohelp-design.md
 sed -n '1128,1265p' docs/users-guide.md
 sed -n '1,110p' docs/developers-guide.md
+sed -n '1,180p' docs/adr-003-define-schema-ownership-for-agent-native-contracts.md
 ```
 
 Run review and gates:
@@ -378,8 +422,9 @@ Run review and gates:
 ```sh
 make fmt 2>&1 | tee "/tmp/fmt-ortho-config-$(git branch --show-current).out"
 make check-fmt 2>&1 | tee "/tmp/check-fmt-ortho-config-$(git branch --show-current).out"
-make lint 2>&1 | tee "/tmp/lint-ortho-config-$(git branch --show-current).out"
 make test 2>&1 | tee "/tmp/test-ortho-config-$(git branch --show-current).out"
+make typecheck 2>&1 | tee "/tmp/typecheck-ortho-config-$(git branch --show-current).out"
+make lint 2>&1 | tee "/tmp/lint-ortho-config-$(git branch --show-current).out"
 make markdownlint 2>&1 | tee "/tmp/markdownlint-ortho-config-$(git branch --show-current).out"
 coderabbit review --agent 2>&1 |
   tee "/tmp/coderabbit-ortho-config-$(git branch --show-current).out"
@@ -455,10 +500,12 @@ The implementation is accepted when all of the following are true:
   themselves justify a proof harness.
 - `docs/agent-native-cli-design.md`,
   `docs/cargo-orthohelp-design.md`, `docs/design.md`, `docs/users-guide.md`,
-  and `docs/developers-guide.md` describe the same migration policy without
-  contradiction.
+  `docs/developers-guide.md`, and
+  `docs/adr-003-define-schema-ownership-for-agent-native-contracts.md`
+  describe the same migration policy without contradiction.
 - `docs/roadmap.md` marks 5.2.2 done only after implementation is complete.
-- `make check-fmt`, `make lint`, `make test`, and `make markdownlint` pass.
+- `make check-fmt`, `make test`, `make typecheck`, `make lint`, and
+  `make markdownlint` pass when those targets exist.
 - `coderabbit review --agent` has no unresolved concerns within this plan's
   scope.
 
@@ -497,6 +544,24 @@ Wyvern reconnaissance produced these planning facts:
 - `cargo-orthohelp/tests/golden/roff_tests.rs` and
   `cargo-orthohelp/tests/golden/powershell_tests.rs` are the primary golden
   output entry points.
+
+Main-branch schema ownership work from
+`2b992b67bc5d5e4e763a8ee814bc0314b34cd99b` added these facts:
+
+- `ortho_config/src/agent_context/mod.rs` defines reusable compact
+  agent-context contracts, including `AgentContext`, `AgentCommand`,
+  `InteractionMode`, `MutationEffect`, and
+  `ORTHO_AGENT_CONTEXT_SCHEMA_VERSION`.
+- `cargo-orthohelp/src/policy/mod.rs` defines the `cargo-orthohelp` policy
+  report contract, including `PolicyReport`, `PolicySummary`, machine-stable
+  finding fields, and `ORTHO_POLICY_REPORT_SCHEMA_VERSION`.
+- `docs/adr-003-define-schema-ownership-for-agent-native-contracts.md` is the
+  accepted ownership record. This 5.2.2 plan should add migration rules that
+  respect it rather than introducing a competing ownership model.
+- `docs/users-guide.md` already states that existing `cargo-orthohelp
+  --format ir`, `--format man`, `--format ps`, and `--format all` behaviour
+  remains compatible while agent-context generation and policy checking remain
+  future surfaces.
 
 Context-pack exchange for the agent team was recorded in finalised context pack
 `5-2-2-migration-rules-planning`.
