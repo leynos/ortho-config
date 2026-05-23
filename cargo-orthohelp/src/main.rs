@@ -1,4 +1,5 @@
-//! CLI entrypoint for `cargo-orthohelp`.
+//! CLI entrypoint for `cargo-orthohelp`, coordinating argument parsing,
+//! metadata loading, and document generation.
 
 mod bridge;
 mod cache;
