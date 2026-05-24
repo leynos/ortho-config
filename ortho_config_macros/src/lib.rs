@@ -19,6 +19,7 @@ mod derive {
     pub(crate) mod parse;
 }
 mod selected_subcommand_merge;
+mod subcommand_docs;
 
 use derive::build::cli_tokens::build_cli_struct_tokens;
 use derive::build::{
@@ -110,6 +111,19 @@ pub fn derive_ortho_config(input_tokens: TokenStream) -> TokenStream {
 pub fn derive_selected_subcommand_merge(input_tokens: TokenStream) -> TokenStream {
     let derive_input = parse_macro_input!(input_tokens as DeriveInput);
     match selected_subcommand_merge::derive_selected_subcommand_merge(derive_input) {
+        Ok(tokens) => tokens.into(),
+        Err(err) => err.to_compile_error().into(),
+    }
+}
+
+/// Derive macro for the `ortho_config::docs::OrthoConfigSubcommandDocs` trait.
+///
+/// Apply this derive to a `clap::Subcommand` enum whose variants each wrap a
+/// single argument struct that implements `OrthoConfigDocs`.
+#[proc_macro_derive(OrthoConfigSubcommandDocs, attributes(ortho_config))]
+pub fn derive_subcommand_docs(input_tokens: TokenStream) -> TokenStream {
+    let derive_input = parse_macro_input!(input_tokens as DeriveInput);
+    match subcommand_docs::derive_subcommand_docs(derive_input) {
         Ok(tokens) => tokens.into(),
         Err(err) => err.to_compile_error().into(),
     }

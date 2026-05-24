@@ -1263,7 +1263,8 @@ actual current state of the work.
 - [x] (2026-05-24 13:16Z) Milestone 1 complete (trait published,
   shared parsing helper lifted,
   helper unit-tested).
-- [ ] Milestone 2 complete (enum derive emits populated `Vec<DocMetadata>`,
+- [x] (2026-05-24 13:40Z) Milestone 2 complete (enum derive emits
+  populated `Vec<DocMetadata>`,
   trybuild cases cover rejected shapes).
 - [ ] Milestone 3 complete (struct derive recurses; existing tests still
   green; new `docs_ir.rs` cases pass).
@@ -1299,6 +1300,13 @@ Document with evidence so future work benefits.
   before the parser fix. Impact: the shared clap parser now consumes unknown
   `= value` and parenthesised meta items, matching the existing default
   parser behaviour.
+- Observation: Milestone 2 lint and CodeRabbit both pushed the derive and
+  tests away from defensive indexing. Evidence:
+  `/tmp/lint-ortho-config-6-1-1-recursive-doc-metadata-subcommands-values.out`
+  and
+  `/tmp/coderabbit-ortho-config-6-1-1-recursive-doc-metadata-subcommands-values.out`.
+  Impact: tuple-variant field extraction now uses iterator validation, and
+  tests assert nested variant construction without no-effect bindings.
 
 ## Decision log
 

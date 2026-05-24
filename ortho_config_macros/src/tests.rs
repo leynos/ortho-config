@@ -304,3 +304,34 @@ fn load_impl_uses_ortho_config_reexport_paths() -> Result<()> {
     );
     Ok(())
 }
+
+#[rstest]
+fn subcommand_docs_derives_metadata_calls_in_order() -> Result<()> {
+    let input: DeriveInput = parse_quote! {
+        enum Commands {
+            Zebra(ZebraArgs),
+            #[command(name = "take-leave")]
+            Leave(TakeLeaveArgs),
+        }
+    };
+
+    let tokens = crate::subcommand_docs::derive_subcommand_docs(input)
+        .map_err(|err| anyhow!(err))?
+        .to_string();
+    let zebra = tokens
+        .find("ZebraArgs as ortho_config :: docs :: OrthoConfigDocs")
+        .ok_or_else(|| anyhow!("missing ZebraArgs metadata call: {tokens}"))?;
+    let leave = tokens
+        .find("TakeLeaveArgs as ortho_config :: docs :: OrthoConfigDocs")
+        .ok_or_else(|| anyhow!("missing TakeLeaveArgs metadata call: {tokens}"))?;
+
+    ensure!(
+        zebra < leave,
+        "metadata calls should preserve variant order"
+    );
+    ensure!(
+        tokens.contains("\"zebra\"") && tokens.contains("\"take-leave\""),
+        "metadata labels should include default and override names: {tokens}",
+    );
+    Ok(())
+}
