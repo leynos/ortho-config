@@ -31,6 +31,7 @@ thiserror = "2"
 
 [dev-dependencies]
 insta = "1"
+proptest = "1"
 rstest = "0.26.1"
 rstest-bdd.workspace = true
 rstest-bdd-macros.workspace = true

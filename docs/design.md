@@ -504,7 +504,7 @@ possible. `Gathering` covers failures while sourcing defaults from files or the
 environment. When CLI values are overlaid onto those defaults, any merge or
 deserialization failures map to `Merge`.
 
-Some applications prefer `Cli::try_parse()` over `Cli::parse()` so they retain
+Some applications prefer `Cli::try_parse()` over `Cli::parse()`, so they retain
 full control of diagnostics and error reporting. `clap` reports `--help` and
 `--version` via `ErrorKind::DisplayHelp` / `DisplayVersion`. To preserve the
 expected zero exit code without relinquishing control to `clap`, the runtime

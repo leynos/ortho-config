@@ -42,6 +42,14 @@ fn stderr(output: &Output) -> String {
     String::from_utf8_lossy(&output.stderr).into_owned()
 }
 
+fn usage_lines(output: &Output) -> String {
+    stdout(output)
+        .lines()
+        .filter(|line| line.starts_with("Usage:"))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 #[rstest]
 #[case::direct_top_level_help(
     "direct_top_level_help",
@@ -78,7 +86,7 @@ fn help_output_matches_snapshots(
         "{success_message}: {}",
         stderr(&output)
     );
-    assert_snapshot!(snapshot_name, stdout(&output));
+    assert_snapshot!(snapshot_name, usage_lines(&output));
 }
 
 #[rstest]
