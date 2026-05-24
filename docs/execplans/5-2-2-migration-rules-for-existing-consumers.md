@@ -144,8 +144,17 @@ this plan until the user approves it.
   characterization milestone, addressed its two trivial harness-entry findings,
   and reran `make check-fmt`, `make test`, `make typecheck`, `make lint`, and
   `make markdownlint` successfully.
-- [ ] Implement the approved plan milestone by milestone.
-- [ ] Mark roadmap item 5.2.2 done only after the approved implementation and
+- [x] (2026-05-24T13:35:00Z) Documented migration rules in
+  `docs/agent-native-cli-design.md`, `docs/cargo-orthohelp-design.md`,
+  `docs/design.md`, `docs/users-guide.md`, `docs/developers-guide.md`, and
+  ADR-003, then marked roadmap item 5.2.2 done.
+- [x] (2026-05-24T13:44:00Z) Ran the documentation milestone gates:
+  `make check-fmt`, `make test`, `make typecheck`, `make lint`, and
+  `make markdownlint` all passed.
+- [x] (2026-05-24T13:55:00Z) Ran `coderabbit review --agent` for the
+  documentation milestone; it completed with zero findings.
+- [x] Implement the approved plan milestone by milestone.
+- [x] Mark roadmap item 5.2.2 done only after the approved implementation and
   validation are complete.
 
 ## Surprises & discoveries
@@ -245,6 +254,12 @@ this plan until the user approves it.
   not run cannot validate the migration contract. Date/Author:
   2026-05-24T12:51:00Z / Codex.
 
+- Decision: Record 5.2.2 migration rules in the existing design, user, and
+  developer documents rather than creating a new ADR. Rationale: ADR-003
+  already records the schema ownership decision; this work applies that
+  accepted boundary to compatibility and defaulting rules. Date/Author:
+  2026-05-24T13:35:00Z / Codex.
+
 ## Outcomes & retrospective
 
 This section is intentionally empty while the plan is in draft. During
@@ -253,6 +268,12 @@ were added or strengthened, which review concerns were cleared, and whether any
 follow-up roadmap items were created.
 
 Implementation began on 2026-05-24 after explicit user approval.
+The first milestone added executable compatibility coverage for legacy
+`cargo-orthohelp` formats and wired the dormant `rstest-bdd` feature files into
+Cargo. The second milestone documented migration rules for existing consumers
+and marked roadmap item 5.2.2 done. CodeRabbit review found two trivial harness
+entry-point issues in the first milestone, both addressed, and no findings in
+the documentation milestone.
 
 ## Context and orientation
 

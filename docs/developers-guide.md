@@ -61,6 +61,27 @@ codes. Do not add Kani, Verus, or property-test tooling unless the change
 introduces a substantive invariant across a range of inputs, states, orderings,
 or transitions.
 
+When adding metadata fields, record the legacy default beside the field
+definition and cover the absent-field case in tests. Defaults must be explicit:
+do not infer JSON support, mutation effect, interaction mode, exit classes,
+pagination, profile support, capability provenance, delivery support, feedback
+support, or execution-ledger support from command names or missing data. Apply
+defaults in OrthoConfig readers, generators, or transforms; do not rely on JSON
+Schema validation to mutate payloads.
+
+Keep generated human documentation compatible unless a roadmap item approves a
+versioned migration. The `cargo-orthohelp` `ir`, `man`, `ps`, and `all`
+formats, their accepted spellings, generated paths, and process success/failure
+contract are externally visible behaviours. Add agent-context, policy, and JSON
+status surfaces beside those formats rather than changing them.
+
+Keep schema ownership aligned with ADR-003. Localized human-documentation data
+belongs in `ortho_config::docs`, compact reusable agent context belongs in
+`ortho_config::agent_context`, and policy reports stay in
+`cargo_orthohelp::policy` until a later ADR extracts a shared report model.
+Do not introduce crate dependency cycles to share convenience helpers; move
+shared contracts downward instead.
+
 Run `coderabbit review --agent` after major milestones that change schemas,
 documentation contracts, or externally visible behaviour. Clear its concerns
 before moving to the next milestone.
@@ -93,11 +114,13 @@ and revisit the boundary in the agent-native design.
 Behavioural suites live in crate-local integration test targets:
 
 - `ortho_config/tests/rstest_bdd/`
+- `cargo-orthohelp/tests/rstest_bdd/`
 - `examples/hello_world/tests/rstest_bdd/`
 
 Feature files are in:
 
 - `ortho_config/tests/features/`
+- `cargo-orthohelp/tests/features/`
 - `examples/hello_world/tests/features/`
 
 Step definitions use `rstest-bdd` macros (`#[given]`, `#[when]`, `#[then]`) and

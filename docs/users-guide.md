@@ -1192,6 +1192,21 @@ contracts; application crates still own command execution and side effects. See
 [Agent-native CLI assistance design](agent-native-cli-design.md) for the
 canonical boundary and [Roadmap](roadmap.md) for the implementation sequence.
 
+Existing `cargo-orthohelp` documentation outputs are compatibility surfaces.
+Until a versioned migration is approved, `--format ir`, `--format man`,
+`--format ps`, and `--format all` keep their accepted spellings, defaulting,
+output paths, and success/failure behaviour. New agent-context metadata,
+policy reports, or JSON status output are added beside those formats rather
+than changing them.
+
+Crates that only consume human-facing documentation do not need to adopt
+agent-context metadata. A package that installs generated man pages or
+PowerShell help can keep treating those files as the public documentation
+artefacts. A crate that parses localized IR directly should tolerate additive
+optional fields and should apply documented defaults for fields omitted by
+older derives, but it should not depend on agent-context or policy-report
+fields unless it opts into those newer formats.
+
 ### Generating IR with cargo-orthohelp
 
 `cargo-orthohelp` compiles a tiny bridge binary for the Cargo

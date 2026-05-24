@@ -603,6 +603,27 @@ explicit formats, commands, or metadata attributes. Existing generated
 documentation output should remain compatible unless the roadmap names a
 migration step.
 
+Legacy defaulting is an OrthoConfig reader or generator responsibility. JSON
+Schema `default` annotations may document the intended value, but validation
+does not mutate older payloads or fill missing fields. A consumer that reads
+older documentation IR or agent-context JSON must therefore apply the defaults
+above in its deserialization or transform layer before it relies on the
+metadata.
+
+New metadata fields must not be inferred from command names, option spelling,
+or absent values. In particular, OrthoConfig does not guess mutation effects,
+JSON output support, interaction mode, exit classes, pagination, profile
+support, capability provenance, delivery support, feedback support, or
+execution-ledger support. The default is always the least capable compatible
+state until a derive attribute, application adapter, or later schema version
+declares a stronger contract.
+
+The existing `cargo-orthohelp --format ir`, `--format man`, `--format ps`, and
+`--format all` outputs are legacy-compatible surfaces. Agent-context output,
+JSON result streams, and policy reports may be added beside them, but they must
+not alter those existing formats, output paths, stdout and stderr contracts, or
+exit-status behaviour without an approved versioned migration.
+
 Strict policy should begin as opt-in. Projects should be able to run the check
 in warning mode before enforcing it in CI.
 

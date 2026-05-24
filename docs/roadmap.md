@@ -86,13 +86,13 @@ responsibilities and downstream application responsibilities.
   - [ ] Specify a policy report schema for warnings and hard failures emitted
     by `cargo-orthohelp`.
 
-- [ ] 5.2.2. Record migration rules for existing consumers.
-  - [ ] Ensure existing `--format ir`, `--format man`, `--format ps`, and
+- [x] 5.2.2. Record migration rules for existing consumers.
+  - [x] Ensure existing `--format ir`, `--format man`, `--format ps`, and
     `--format all` behaviours remain compatible until a versioned migration is
     explicitly approved.
-  - [ ] Document how new metadata fields default when older derives do not
+  - [x] Document how new metadata fields default when older derives do not
     provide them.
-  - [ ] Add compatibility notes for downstream crates that only consume
+  - [x] Add compatibility notes for downstream crates that only consume
     human-facing documentation output.
 
 - [ ] 5.2.3. Record consumer dependency boundaries for Weaver and Netsuke.

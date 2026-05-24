@@ -61,6 +61,12 @@ The implementation must adhere to the following principles:
   to own command execution, side effects, safety policy, and domain execution
   engines. The canonical boundary is documented in
   [agent-native-cli-design.md](agent-native-cli-design.md).
+- **Stable migration boundary:** OrthoConfig owns compatibility for reusable
+  metadata contracts and generated documentation outputs. Existing
+  `cargo-orthohelp` `ir`, `man`, `ps`, and `all` formats stay compatible until
+  a versioned migration is approved. Downstream applications own semantic
+  execution and may ignore future agent-context or policy-report metadata when
+  they only consume human-facing documentation.
 - **Performance:** The configuration process happens once at startup, so raw
   performance is secondary to correctness and developer experience. However,
   the implementation should be reasonably efficient and avoid unnecessary
