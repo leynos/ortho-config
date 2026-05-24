@@ -130,6 +130,20 @@ fn command_failure_cases(
     }
 }
 
+#[test]
+fn direct_invocation_without_subcommand_includes_cargo_hint() {
+    let output = run_direct(&["--format", "ir"]).expect("direct orthohelp invocation should run");
+
+    assert!(!output.status.success(), "direct invocation should fail");
+    let stderr = stderr(&output);
+    assert!(
+        stderr.contains(
+            "note: invoke this tool via `cargo orthohelp` or as `cargo-orthohelp orthohelp [OPTIONS]`"
+        ),
+        "unexpected error output:\n{stderr}"
+    );
+}
+
 #[rstest]
 #[case::unknown_extra_argument(
     &["unknown"],

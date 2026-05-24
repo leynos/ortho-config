@@ -21,7 +21,9 @@ pub mod roff;
 pub mod schema;
 
 use camino::Utf8PathBuf;
-use clap::Parser;
+use clap::{Error as ClapError, Parser, error::ErrorKind};
+use std::io::Write;
+use tracing_subscriber::EnvFilter;
 
 use crate::bridge::BridgeConfig;
 use crate::cache::CacheKey;
@@ -31,13 +33,51 @@ use crate::metadata::PackageSelection;
 use crate::schema::{DocMetadata, ORTHO_DOCS_IR_VERSION};
 
 fn main() -> Result<(), OrthohelpError> {
-    run()
+    init_tracing();
+    let cli = parse_cli_or_exit();
+    run(cli)
 }
 
-fn run() -> Result<(), OrthohelpError> {
+fn init_tracing() {
+    let _result = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
+}
+
+fn parse_cli_or_exit() -> Cli {
+    match Cli::try_parse() {
+        Ok(cli) => cli,
+        Err(error) => {
+            let kind = error.kind();
+            let exit_code = error.exit_code();
+            if matches!(
+                kind,
+                ErrorKind::UnknownArgument | ErrorKind::MissingSubcommand
+            ) {
+                drop(write_augmented_clap_error(&error));
+                std::process::exit(exit_code);
+            }
+            error.exit();
+        }
+    }
+}
+
+fn write_augmented_clap_error(error: &ClapError) -> std::io::Result<()> {
+    let mut stderr = std::io::stderr().lock();
+    write!(stderr, "{error}")?;
+    writeln!(
+        stderr,
+        "note: invoke this tool via `cargo orthohelp` or as `cargo-orthohelp orthohelp [OPTIONS]`"
+    )
+}
+
+fn run(cli: Cli) -> Result<(), OrthohelpError> {
     let Cli {
         command: CargoSubcommand::Orthohelp(args),
-    } = Cli::parse();
+    } = cli;
+    tracing::debug!(
+        "cargo-orthohelp dispatched via Cargo external-subcommand (orthohelp token present)"
+    );
 
     let metadata = metadata::load_metadata()?;
     let selection = metadata::select_package(&metadata, &args)?;
