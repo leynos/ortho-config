@@ -7,7 +7,7 @@
 //! `Args` carries the `orthohelp` options that drive documentation
 //! generation. `main.rs` calls `Cli::parse()`, matches
 //! `CargoSubcommand::Orthohelp(args)`, and passes those arguments through the
-//! metadata, localisation, and output pipeline.
+//! metadata, localization, and output pipeline.
 
 use camino::Utf8PathBuf;
 use clap::{ArgAction, Args as ClapArgs, Parser, Subcommand, ValueEnum};

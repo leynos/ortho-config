@@ -814,8 +814,10 @@ project should keep the helper plus documentation as the supported abstraction.
 Regression coverage should exercise both invocation forms. A shared fixture or
 test helper should run `cargo-<name> <name> --help`, then run
 `cargo <name> --help` with the fixture binary on `PATH`. Future `cargo-*`
-tools should reuse that coverage so a flat direct invocation cannot pass while
-Cargo dispatch fails.
+tools should reuse that coverage, so a flat direct invocation cannot pass
+while Cargo dispatch fails.
+
+Triage: [type:grammar] [type:docstyle]
 
 ## 5. Dependency Strategy
 
