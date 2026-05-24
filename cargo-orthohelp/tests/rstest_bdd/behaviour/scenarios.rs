@@ -2,6 +2,17 @@
 
 use rstest_bdd_macros::scenarios;
 
-scenarios!("tests/features/orthohelp_ir.feature");
-scenarios!("tests/features/orthohelp_roff.feature");
-scenarios!("tests/features/orthohelp_powershell.feature");
+use super::steps::{OrthoHelpContext, orthohelp_context};
+
+scenarios!(
+    "tests/features/orthohelp_ir.feature",
+    fixtures = [orthohelp_context: OrthoHelpContext]
+);
+scenarios!(
+    "tests/features/orthohelp_roff.feature",
+    fixtures = [orthohelp_context: OrthoHelpContext]
+);
+scenarios!(
+    "tests/features/orthohelp_powershell.feature",
+    fixtures = [orthohelp_context: OrthoHelpContext]
+);

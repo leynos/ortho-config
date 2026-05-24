@@ -1,11 +1,10 @@
 # Record migration rules for existing consumers
 
-This ExecPlan (execution plan) is a living document. The sections
-`Constraints`, `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`,
-`Decision Log`, and `Outcomes & Retrospective` must be kept up to date as
-work proceeds.
+This ExecPlan (execution plan) is a living document. The sections `Constraints`,
+ `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
+and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
-Status: DRAFT
+Status: IN PROGRESS
 
 ## Purpose / big picture
 
@@ -36,8 +35,8 @@ this plan until the user approves it.
   `<out>/<locale>/man/man<section>/<name>.<section>` for multiple locales.
 - Preserve the PowerShell output path contract under
   `<out>/powershell/<ModuleName>/`, including module files, localized MAML
-  help, about topics, and default `en-US` support unless
-  `--ensure-en-us false` is supplied.
+  help, about topics, and default `en-US` support unless `--ensure-en-us false`
+  is supplied.
 - Keep documentation IR and future agent-context schemas independently
   versioned. Do not make an agent-context addition silently require a
   documentation IR migration.
@@ -129,7 +128,22 @@ this plan until the user approves it.
   conflicts after commit `2b992b67bc5d5e4e763a8ee814bc0314b34cd99b` landed.
 - [x] (2026-05-23T02:45:00Z) Updated this ExecPlan to build on the completed
   roadmap item 5.2.1 schema ownership baseline.
-- [ ] Obtain explicit user approval before implementation begins.
+- [x] (2026-05-24T12:32:40Z) Received explicit user approval to proceed with
+  implementation of this ExecPlan.
+- [x] (2026-05-24T12:36:00Z) Established the implementation baseline:
+  `make check-fmt`, `make lint`, `make test`, and `make typecheck` all passed
+  sequentially with logs under `/tmp`.
+- [x] (2026-05-24T12:51:00Z) Added characterization coverage for legacy
+  `--format` parsing and observable `cargo-orthohelp` output paths, then ran
+  `cargo test -p cargo-orthohelp --test rstest_bdd --all-features` successfully
+  after wiring the dormant BDD harness into Cargo.
+- [x] (2026-05-24T13:12:00Z) Ran the characterization milestone gates:
+  `make check-fmt`, `make test`, `make typecheck`, `make lint`, and
+  `make markdownlint` all passed after fixing dormant BDD harness lint issues.
+- [x] (2026-05-24T13:22:00Z) Ran `coderabbit review --agent` for the
+  characterization milestone, addressed its two trivial harness-entry findings,
+  and reran `make check-fmt`, `make test`, `make typecheck`, `make lint`, and
+  `make markdownlint` successfully.
 - [ ] Implement the approved plan milestone by milestone.
 - [ ] Mark roadmap item 5.2.2 done only after the approved implementation and
   validation are complete.
@@ -172,6 +186,20 @@ this plan until the user approves it.
   repository Make targets, and any optional nextest runs should respect the
   checked-in profile rather than introducing ad hoc timeout workarounds.
 
+- Observation: the `cargo-orthohelp/tests/rstest_bdd/` feature and step files
+  were present but were not compiled by Cargo because no
+  `cargo-orthohelp/tests/rstest_bdd.rs` integration-test entry point existed.
+  Evidence: `cargo test -p cargo-orthohelp --test rstest_bdd --all-features`
+  initially reported no such test target. Impact: implementation added the
+  missing harness entry point and corrected stale step wiring so the planned
+  behavioural coverage actually runs.
+
+- Observation: the fixture binary's generated command name is `fixture`, while
+  the Cargo package remains `orthohelp_fixture`. Evidence: a retained manual
+  `--format all` run wrote `man/man1/fixture.1` and locale-specific
+  `<locale>/man/man1/fixture.1` files. Impact: BDD assertions now check the
+  generated command name rather than the package name.
+
 ## Decision log
 
 - Decision: Treat this branch as a pre-implementation plan branch and leave
@@ -205,6 +233,18 @@ this plan until the user approves it.
   adjustment separately from the initial draft. Date/Author:
   2026-05-23T02:45:00Z / Codex.
 
+- Decision: Serialize `cargo-orthohelp` BDD scenarios with a shared test
+  fixture lock. Rationale: the scenarios intentionally remove and rebuild the
+  shared `target/orthohelp` bridge cache, so parallel scenario execution can
+  invalidate another scenario's cache assertion. Date/Author:
+  2026-05-24T12:51:00Z / Codex.
+
+- Decision: Treat the missing `rstest_bdd` integration-test target as part of
+  the characterization milestone. Rationale: the roadmap requires behavioural
+  tests using `rstest-bdd` where applicable, and feature files that Cargo does
+  not run cannot validate the migration contract. Date/Author:
+  2026-05-24T12:51:00Z / Codex.
+
 ## Outcomes & retrospective
 
 This section is intentionally empty while the plan is in draft. During
@@ -212,21 +252,23 @@ implementation, record which compatibility rules were documented, which tests
 were added or strengthened, which review concerns were cleared, and whether any
 follow-up roadmap items were created.
 
+Implementation began on 2026-05-24 after explicit user approval.
+
 ## Context and orientation
 
 OrthoConfig is a Rust workspace. The `ortho_config` crate owns runtime
 configuration loading, merge behaviour, localization, and documentation IR
-types. The `ortho_config_macros` crate derives metadata and loading code.
-The `cargo-orthohelp` binary consumes documentation IR and generates
-user-facing documentation artefacts.
+types. The `ortho_config_macros` crate derives metadata and loading code. The
+`cargo-orthohelp` binary consumes documentation IR and generates user-facing
+documentation artefacts.
 
 The current output format enum lives in `cargo-orthohelp/src/cli.rs` as
 `OutputFormat::{Ir, Man, Ps, All}`. The parsed `--format` option defaults to
 `OutputFormat::Ir`.
 
 The format dispatch lives in `cargo-orthohelp/src/main.rs`. It currently maps
-`Ir` and `All` to `generate_ir`, `Man` and `All` to `generate_man`, and `Ps`
-and `All` to `generate_powershell`. In one `all` run the order is IR, man, then
+`Ir` and `All` to `generate_ir`, `Man` and `All` to `generate_man`, and `Ps` and
+ `All` to `generate_powershell`. In one `all` run the order is IR, man, then
 PowerShell.
 
 The base documentation IR type lives in `ortho_config/src/docs/ir.rs`.
@@ -239,10 +281,10 @@ After roadmap item 5.2.1, the sibling machine contracts are no longer only
 future design notes. Reusable agent context types live in
 `ortho_config/src/agent_context/mod.rs` with
 `ORTHO_AGENT_CONTEXT_SCHEMA_VERSION`. Policy-report types live in
-`cargo-orthohelp/src/policy/mod.rs` with
-`ORTHO_POLICY_REPORT_SCHEMA_VERSION`. The implementation for this plan should
-preserve that ownership split and add migration rules around compatibility,
-defaulting, and downstream documentation consumers.
+`cargo-orthohelp/src/policy/mod.rs` with `ORTHO_POLICY_REPORT_SCHEMA_VERSION`.
+The implementation for this plan should preserve that ownership split and add
+migration rules around compatibility, defaulting, and downstream documentation
+consumers.
 
 The `cargo-orthohelp` schema mirror lives in `cargo-orthohelp/src/schema/`. The
 localized IR writer lives in `cargo-orthohelp/src/output.rs`. Roff man-page
@@ -250,9 +292,9 @@ generation lives under `cargo-orthohelp/src/roff/`. PowerShell wrapper and MAML
 generation live under `cargo-orthohelp/src/powershell/`.
 
 Existing behavioural tests live under `cargo-orthohelp/tests/features/` and
-`cargo-orthohelp/tests/rstest_bdd/behaviour/`. Existing golden tests live
-under `cargo-orthohelp/tests/golden/`. Windows-specific PowerShell validation
-lives in `cargo-orthohelp/tests/powershell_windows.rs`.
+`cargo-orthohelp/tests/rstest_bdd/behaviour/`. Existing golden tests live under
+`cargo-orthohelp/tests/golden/`. Windows-specific PowerShell validation lives in
+ `cargo-orthohelp/tests/powershell_windows.rs`.
 
 Relevant documentation sources are:
 
@@ -311,13 +353,13 @@ generator coverage; localized IR file paths; single-locale and multi-locale man
 paths; PowerShell file layout; and explicit failure for an unsupported format
 through Clap's `ValueEnum` parsing.
 
-Stage C: document migration rules. Update
-`docs/agent-native-cli-design.md` to extend the now-accepted schema ownership
-policy with normative legacy-defaulting rules. Explicitly say defaults are
-applied by OrthoConfig readers or generators, not by JSON Schema validation.
-Update `docs/cargo-orthohelp-design.md` to list the stable legacy format
-behaviours and to state that `agent-context`, `--json`, and policy output
-cannot break `ir`, `man`, `ps`, or `all` without an approved migration. Update
+Stage C: document migration rules. Update `docs/agent-native-cli-design.md` to
+extend the now-accepted schema ownership policy with normative
+legacy-defaulting rules. Explicitly say defaults are applied by OrthoConfig
+readers or generators, not by JSON Schema validation. Update
+`docs/cargo-orthohelp-design.md` to list the stable legacy format behaviours
+and to state that `agent-context`, `--json`, and policy output cannot break
+`ir`, `man`, `ps`, or `all` without an approved migration. Update
 `docs/design.md` with the compatibility boundary: OrthoConfig owns reusable
 metadata contracts and generated documentation compatibility; downstream
 applications own semantic execution. Reference ADR-003 where ownership matters
@@ -333,12 +375,11 @@ that cannot be captured cleanly in the design documents or ADR-003.
 
 Stage D: review and harden. Run `make fmt` if Markdown formatting changes are
 needed. Then run `make check-fmt`, `make lint`, and `make test` sequentially
-with `tee`. Run `make typecheck` when the Makefile exposes that target. Also
-run `make markdownlint` because Markdown files change. Run `make nixie` if
-Mermaid diagrams are added or edited. Run
-`coderabbit review --agent`, address every concern that fits within this
-plan's constraints, and rerun affected gates. If CodeRabbit asks for work
-outside tolerance, record it in this plan and escalate.
+with `tee`. Run `make typecheck` when the Makefile exposes that target. Also run
+ `make markdownlint` because Markdown files change. Run `make nixie` if Mermaid
+diagrams are added or edited. Run `coderabbit review --agent`, address every
+concern that fits within this plan's constraints, and rerun affected gates. If
+CodeRabbit asks for work outside tolerance, record it in this plan and escalate.
 
 Stage E: commit and completion. Commit the implementation only after gates and
 review pass. Mark item 5.2.2 in `docs/roadmap.md` done only after the approved
@@ -501,8 +542,8 @@ The implementation is accepted when all of the following are true:
 - `docs/agent-native-cli-design.md`,
   `docs/cargo-orthohelp-design.md`, `docs/design.md`, `docs/users-guide.md`,
   `docs/developers-guide.md`, and
-  `docs/adr-003-define-schema-ownership-for-agent-native-contracts.md`
-  describe the same migration policy without contradiction.
+  `docs/adr-003-define-schema-ownership-for-agent-native-contracts.md` describe
+  the same migration policy without contradiction.
 - `docs/roadmap.md` marks 5.2.2 done only after implementation is complete.
 - `make check-fmt`, `make test`, `make typecheck`, `make lint`, and
   `make markdownlint` pass when those targets exist.
@@ -513,8 +554,8 @@ The implementation is accepted when all of the following are true:
 
 The characterization tests and documentation edits are additive and safe to
 rerun. If a targeted test command is wrong, discover the correct test target
-with `cargo test -p cargo-orthohelp --all-targets --all-features -- --list`
-and update this plan before continuing.
+with `cargo test -p cargo-orthohelp --all-targets --all-features -- --list` and
+update this plan before continuing.
 
 If `make fmt` changes unrelated Markdown or Rust files, inspect the diff before
 staging. Do not commit unrelated user changes. If unrelated files are already
@@ -526,8 +567,8 @@ If the same gate fails twice, stop and escalate under the tolerances above.
 
 If the branch push fails because the remote branch already exists, inspect the
 remote state with
-`git ls-remote --heads origin 5-2-2-migration-rules-for-existing-consumers`
-and escalate before overwriting anything.
+`git ls-remote --heads origin 5-2-2-migration-rules-for-existing-consumers` and
+escalate before overwriting anything.
 
 ## Artefacts and notes
 
@@ -539,8 +580,8 @@ Wyvern reconnaissance produced these planning facts:
   the current order.
 - `cargo-orthohelp/tests/features/orthohelp_ir.feature`,
   `cargo-orthohelp/tests/features/orthohelp_roff.feature`, and
-  `cargo-orthohelp/tests/features/orthohelp_powershell.feature` are the
-  primary BDD feature entry points.
+  `cargo-orthohelp/tests/features/orthohelp_powershell.feature` are the primary
+  BDD feature entry points.
 - `cargo-orthohelp/tests/golden/roff_tests.rs` and
   `cargo-orthohelp/tests/golden/powershell_tests.rs` are the primary golden
   output entry points.
@@ -550,8 +591,7 @@ Main-branch schema ownership work from
 
 - `ortho_config/src/agent_context/mod.rs` defines reusable compact
   agent-context contracts, including `AgentContext`, `AgentCommand`,
-  `InteractionMode`, `MutationEffect`, and
-  `ORTHO_AGENT_CONTEXT_SCHEMA_VERSION`.
+  `InteractionMode`, `MutationEffect`, and `ORTHO_AGENT_CONTEXT_SCHEMA_VERSION`.
 - `cargo-orthohelp/src/policy/mod.rs` defines the `cargo-orthohelp` policy
   report contract, including `PolicyReport`, `PolicySummary`, machine-stable
   finding fields, and `ORTHO_POLICY_REPORT_SCHEMA_VERSION`.
@@ -559,9 +599,9 @@ Main-branch schema ownership work from
   accepted ownership record. This 5.2.2 plan should add migration rules that
   respect it rather than introducing a competing ownership model.
 - `docs/users-guide.md` already states that existing `cargo-orthohelp
-  --format ir`, `--format man`, `--format ps`, and `--format all` behaviour
-  remains compatible while agent-context generation and policy checking remain
-  future surfaces.
+  --format ir`, `--format man`, `--format ps`, and `--format all`
+  behaviour remains compatible while agent-context generation and policy
+  checking remain future surfaces.
 
 Context-pack exchange for the agent team was recorded in finalised context pack
 `5-2-2-migration-rules-planning`.
@@ -620,8 +660,8 @@ PowerShell output contracts unless a separate versioned migration is approved.
 
 2026-05-20: Initial draft created from roadmap item 5.2.2, repository
 reconnaissance, Wyvern agent findings, context-pack exchange, and Firecrawl
-prior-art research. The plan is pre-implementation and requires explicit
-user approval before any feature implementation begins.
+prior-art research. The plan is pre-implementation and requires explicit user
+approval before any feature implementation begins.
 
 2026-05-20: Updated the draft after CodeRabbit review to use sentence-case
 heading text throughout and wrap prose lines. This does not change the

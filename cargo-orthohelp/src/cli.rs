@@ -152,8 +152,32 @@ mod tests {
 
     use clap::{CommandFactory, Parser, error::ErrorKind};
     use proptest::prelude::*;
+    use rstest::rstest;
 
     use super::{CargoSubcommand, Cli, OutputFormat};
+
+    #[test]
+    fn format_defaults_to_ir() {
+        let cli = Cli::parse_from(["cargo-orthohelp", "orthohelp"]);
+        let CargoSubcommand::Orthohelp(args) = cli.command;
+
+        assert!(matches!(args.format, OutputFormat::Ir));
+    }
+
+    #[rstest]
+    #[case("ir", OutputFormat::Ir)]
+    #[case("man", OutputFormat::Man)]
+    #[case("ps", OutputFormat::Ps)]
+    #[case("all", OutputFormat::All)]
+    fn format_accepts_legacy_values(#[case] value: &str, #[case] expected: OutputFormat) {
+        let cli = Cli::parse_from(["cargo-orthohelp", "orthohelp", "--format", value]);
+        let CargoSubcommand::Orthohelp(args) = cli.command;
+
+        assert_eq!(
+            std::mem::discriminant(&args.format),
+            std::mem::discriminant(&expected)
+        );
+    }
 
     #[test]
     fn parses_cargo_injected_subcommand_arguments() {
@@ -186,6 +210,19 @@ mod tests {
     fn rejects_unknown_output_format() {
         let error = Cli::try_parse_from(["cargo-orthohelp", "orthohelp", "--format", "foo"])
             .expect_err("unknown output formats should be rejected");
+
+        assert_eq!(error.kind(), ErrorKind::InvalidValue);
+    }
+
+    #[test]
+    fn format_rejects_unsupported_values() {
+        let error = Cli::try_parse_from([
+            "cargo-orthohelp",
+            "orthohelp",
+            "--format",
+            "agent-context",
+        ])
+        .expect_err("unsupported formats should fail before generation");
 
         assert_eq!(error.kind(), ErrorKind::InvalidValue);
     }

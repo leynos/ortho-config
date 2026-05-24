@@ -2,6 +2,7 @@
 
 use std::io::Read;
 use std::process::Command;
+use std::sync::{Mutex, MutexGuard};
 
 use camino::Utf8PathBuf;
 use cap_std::ambient_authority;
@@ -9,7 +10,7 @@ use cap_std::fs_utf8::{Dir, DirEntry};
 use cap_std::time::SystemTime;
 use rstest::fixture;
 use rstest_bdd::Slot;
-use rstest_bdd_macros::{given, then, when, ScenarioState};
+use rstest_bdd_macros::{given, then, when};
 use serde_json::Value;
 use std::time::Duration;
 use tempfile::TempDir;
@@ -23,43 +24,58 @@ pub type StepError = Box<dyn std::error::Error + Send + Sync>;
 pub type StepResult<T> = Result<T, StepError>;
 
 /// Scenario state for cargo-orthohelp scenarios.
-#[derive(Debug, Default, ScenarioState)]
+#[derive(Debug)]
 pub struct OrthoHelpContext {
+    _scenario_lock: MutexGuard<'static, ()>,
     pub workspace_root: Slot<Utf8PathBuf>,
     pub out_dir: Slot<TempDir>,
     pub last_output: Slot<std::process::Output>,
     pub cache_ir_path: Slot<Utf8PathBuf>,
     pub cache_ir_mtime: Slot<SystemTime>,
 }
-
-/// Provides a clean context for orthohelp scenarios.
-#[fixture]
-pub fn orthohelp_context() -> StepResult<OrthoHelpContext> {
+static SCENARIO_LOCK: Mutex<()> = Mutex::new(());
+pub fn orthohelp_context() -> OrthoHelpContext {
+    let scenario_lock = match SCENARIO_LOCK.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => poisoned.into_inner(),
+    };
     let manifest_dir = Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let workspace_root = manifest_dir
-        .parent()
-        .ok_or("workspace root should exist")?
-        .to_path_buf();
-    let ctx = OrthoHelpContext::default();
-    ctx.workspace_root.set(workspace_root);
-    ctx.out_dir.set(tempfile::tempdir()?);
-    Ok(ctx)
+    let Some(workspace_root) = manifest_dir.parent() else {
+        panic!("workspace root should exist");
+    };
+    let ctx = OrthoHelpContext {
+        _scenario_lock: scenario_lock,
+        workspace_root: Slot::new(),
+        out_dir: Slot::new(),
+        last_output: Slot::new(),
+        cache_ir_path: Slot::new(),
+        cache_ir_mtime: Slot::new(),
+    };
+    ctx.workspace_root.set(workspace_root.to_path_buf());
+    let out_dir = match tempfile::tempdir() {
+        Ok(dir) => dir,
+        Err(err) => panic!("temporary output directory should be created: {err}"),
+    };
+    ctx.out_dir.set(out_dir);
+    ctx
 }
 
 /// Gets the output directory path from the context.
 pub fn get_out_dir(ctx: &OrthoHelpContext) -> StepResult<Utf8PathBuf> {
-    ctx.out_dir
+    let out_dir = ctx
+        .out_dir
         .with_ref(|dir| {
             Utf8PathBuf::from_path_buf(dir.path().to_path_buf())
                 .map_err(|p| format!("non-UTF-8 path: {}", p.display()))
         })
-        .ok_or_else(|| "out_dir should be set".to_owned())?
+        .ok_or_else(|| "out_dir should be set".to_owned())??;
+    Ok(out_dir)
 }
 
 /// Gets the workspace root path from the context.
 fn get_workspace_root(ctx: &OrthoHelpContext) -> StepResult<Utf8PathBuf> {
     ctx.workspace_root
-        .with_ref(|root| root.clone())
+        .with_ref(Clone::clone)
         .ok_or_else(|| "workspace_root should be set".into())
 }
 
@@ -76,10 +92,10 @@ fn temp_output_dir(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
 fn cache_is_empty(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
     let workspace_root = get_workspace_root(orthohelp_context)?;
     let root_dir = Dir::open_ambient_dir(workspace_root.as_path(), ambient_authority())?;
-    if let Err(err) = root_dir.remove_dir_all("target/orthohelp") {
-        if !is_not_found_kind(&err) {
-            return Err(format!("remove orthohelp cache failed: {err}").into());
-        }
+    if let Err(err) = root_dir.remove_dir_all("target/orthohelp")
+        && !is_not_found_kind(&err)
+    {
+        return Err(format!("remove orthohelp cache failed: {err}").into());
     }
     orthohelp_context.cache_ir_path.clear();
     orthohelp_context.cache_ir_mtime.clear();
@@ -94,7 +110,15 @@ fn is_not_found_kind(err: &std::io::Error) -> bool {
 fn run_with_cache(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
     let output = run_orthohelp(
         orthohelp_context,
-        &["--cache", "--package", "orthohelp_fixture", "--locale", "en-US", "--locale", "fr-FR"],
+        &[
+            "--cache",
+            "--package",
+            "orthohelp_fixture",
+            "--locale",
+            "en-US",
+            "--locale",
+            "fr-FR",
+        ],
     )?;
     assert!(output.status.success(), "cargo-orthohelp should succeed");
     orthohelp_context.last_output.set(output);
@@ -108,7 +132,15 @@ fn rerun_with_cache(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> 
     std::thread::sleep(Duration::from_secs(1));
     let output = run_orthohelp(
         orthohelp_context,
-        &["--cache", "--package", "orthohelp_fixture", "--locale", "en-US", "--locale", "fr-FR"],
+        &[
+            "--cache",
+            "--package",
+            "orthohelp_fixture",
+            "--locale",
+            "en-US",
+            "--locale",
+            "fr-FR",
+        ],
     )?;
     assert!(output.status.success(), "cargo-orthohelp should succeed");
     orthohelp_context.last_output.set(output);
@@ -119,21 +151,53 @@ fn rerun_with_cache(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> 
 fn run_with_no_build(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
     let output = run_orthohelp(
         orthohelp_context,
-        &["--no-build", "--package", "orthohelp_fixture", "--locale", "en-US"],
+        &[
+            "--no-build",
+            "--package",
+            "orthohelp_fixture",
+            "--locale",
+            "en-US",
+        ],
     )?;
     orthohelp_context.last_output.set(output);
     Ok(())
 }
 
-#[then("the output contains localised IR JSON for {locale}")]
-fn output_contains_locale(orthohelp_context: &mut OrthoHelpContext, locale: String) -> StepResult<()> {
-    orthohelp_context.last_output.with_ref(|output| {
-        assert!(output.status.success(), "cargo-orthohelp should succeed");
-    });
+fn run_with_format_ir(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
+    let output = run_orthohelp(
+        orthohelp_context,
+        &[
+            "--format",
+            "ir",
+            "--package",
+            "orthohelp_fixture",
+            "--locale",
+            "en-US",
+        ],
+    )?;
+    assert!(
+        output.status.success(),
+        "cargo-orthohelp should succeed: {:?}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    orthohelp_context.last_output.set(output);
+    Ok(())
+}
+fn output_contains_locale(
+    orthohelp_context: &mut OrthoHelpContext,
+    locale: String,
+) -> StepResult<()> {
+    let succeeded = orthohelp_context
+        .last_output
+        .with_ref(|output| output.status.success())
+        .ok_or("last_output should be set")?;
+    if !succeeded {
+        return Err("cargo-orthohelp should succeed".into());
+    }
 
     let out_root = get_out_dir(orthohelp_context)?;
     let dir = Dir::open_ambient_dir(&out_root, ambient_authority())?;
-    let mut file = dir.open(&Utf8PathBuf::from(format!("ir/{locale}.json")))?;
+    let mut file = dir.open(Utf8PathBuf::from(format!("ir/{locale}.json")))?;
 
     let mut buffer = String::new();
     file.read_to_string(&mut buffer)?;
@@ -172,16 +236,16 @@ fn output_contains_locale(orthohelp_context: &mut OrthoHelpContext, locale: Stri
 
 #[then("the cached IR is reused")]
 fn cached_ir_reused(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
-    let cache_path = orthohelp_context.cache_ir_path
-        .with_ref(|p| p.clone())
+    let cache_path = orthohelp_context
+        .cache_ir_path
+        .with_ref(Clone::clone)
         .ok_or("cached IR path should be recorded")?;
-    let previous = orthohelp_context.cache_ir_mtime
+    let previous = orthohelp_context
+        .cache_ir_mtime
         .with_ref(|m| *m)
         .ok_or("cached IR timestamp should be recorded")?;
     let cache_dir = cache_path.parent().ok_or("cached IR parent missing")?;
-    let file_name = cache_path
-        .file_name()
-        .ok_or("cached IR filename missing")?;
+    let file_name = cache_path.file_name().ok_or("cached IR filename missing")?;
     let dir = Dir::open_ambient_dir(cache_dir, ambient_authority())?;
     let metadata = dir.metadata(file_name)?;
     let current = metadata.modified()?;
@@ -191,13 +255,12 @@ fn cached_ir_reused(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> 
 
 #[then("the cached IR deserialises into the schema")]
 fn cached_ir_deserialises(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
-    let cache_path = orthohelp_context.cache_ir_path
-        .with_ref(|p| p.clone())
+    let cache_path = orthohelp_context
+        .cache_ir_path
+        .with_ref(Clone::clone)
         .ok_or("cached IR path should be recorded")?;
     let cache_dir = cache_path.parent().ok_or("cached IR parent missing")?;
-    let file_name = cache_path
-        .file_name()
-        .ok_or("cached IR filename missing")?;
+    let file_name = cache_path.file_name().ok_or("cached IR filename missing")?;
     let dir = Dir::open_ambient_dir(cache_dir, ambient_authority())?;
     let mut file = dir.open(file_name)?;
     let mut json = String::new();
@@ -213,17 +276,16 @@ fn cached_ir_deserialises(orthohelp_context: &mut OrthoHelpContext) -> StepResul
 
 #[then("the command fails due to missing cache")]
 fn command_fails_due_to_missing_cache(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
-    orthohelp_context
+    let failed_with_missing_cache = orthohelp_context
         .last_output
         .with_ref(|output| {
-            assert!(!output.status.success(), "cargo-orthohelp should fail");
             let stderr = String::from_utf8_lossy(&output.stderr);
-            assert!(
-                stderr.contains("cached IR missing"),
-                "expected missing cache error, got: {stderr}"
-            );
+            !output.status.success() && stderr.contains("MissingCache")
         })
         .ok_or("last_output should be set")?;
+    if !failed_with_missing_cache {
+        return Err("expected command failure due to missing cache".into());
+    }
     Ok(())
 }
 
@@ -245,9 +307,7 @@ pub fn run_orthohelp(ctx: &OrthoHelpContext, args: &[&str]) -> StepResult<std::p
 fn record_cache_state(ctx: &mut OrthoHelpContext) -> StepResult<()> {
     let cache_path = find_cached_ir(ctx)?.ok_or("cached IR should exist")?;
     let cache_dir = cache_path.parent().ok_or("cached IR parent missing")?;
-    let file_name = cache_path
-        .file_name()
-        .ok_or("cached IR filename missing")?;
+    let file_name = cache_path.file_name().ok_or("cached IR filename missing")?;
     let dir = Dir::open_ambient_dir(cache_dir, ambient_authority())?;
     let metadata = dir.metadata(file_name)?;
     let modified = metadata.modified()?;
@@ -258,9 +318,7 @@ fn record_cache_state(ctx: &mut OrthoHelpContext) -> StepResult<()> {
 
 fn find_cached_ir(ctx: &OrthoHelpContext) -> StepResult<Option<Utf8PathBuf>> {
     let workspace_root = get_workspace_root(ctx)?;
-    let cache_root = workspace_root
-        .join("target")
-        .join("orthohelp");
+    let cache_root = workspace_root.join("target").join("orthohelp");
     let dir = match Dir::open_ambient_dir(&cache_root, ambient_authority()) {
         Ok(d) => d,
         Err(e) if is_not_found_kind(&e) => return Ok(None),
@@ -268,7 +326,7 @@ fn find_cached_ir(ctx: &OrthoHelpContext) -> StepResult<Option<Utf8PathBuf>> {
     };
     let mut newest: Option<(SystemTime, Utf8PathBuf)> = None;
     for entry in dir.read_dir(".")? {
-        if let Some(candidate) = check_cache_entry(&cache_root, entry, &newest) {
+        if let Some(candidate) = check_cache_entry(&cache_root, entry, newest.as_ref()) {
             newest = Some(candidate);
         }
     }
@@ -277,10 +335,10 @@ fn find_cached_ir(ctx: &OrthoHelpContext) -> StepResult<Option<Utf8PathBuf>> {
 
 fn check_cache_entry(
     cache_root: &Utf8PathBuf,
-    entry: Result<DirEntry, std::io::Error>,
-    newest: &Option<(SystemTime, Utf8PathBuf)>,
+    entry_result: Result<DirEntry, std::io::Error>,
+    newest: Option<&(SystemTime, Utf8PathBuf)>,
 ) -> Option<(SystemTime, Utf8PathBuf)> {
-    let entry = entry.ok()?;
+    let entry = entry_result.ok()?;
     let file_type = entry.file_type().ok()?;
     if !file_type.is_dir() {
         return None;
@@ -291,9 +349,7 @@ fn check_cache_entry(
     let dir = Dir::open_ambient_dir(cache_root.as_path(), ambient_authority()).ok()?;
     let metadata = dir.metadata(&relative).ok()?;
     let modified = metadata.modified().ok()?;
-    let should_replace = newest
-        .as_ref()
-        .map_or(true, |(best_time, _)| modified > *best_time);
+    let should_replace = newest.is_none_or(|(best_time, _)| modified > *best_time);
     if !should_replace {
         return None;
     }

@@ -12,6 +12,12 @@ Feature: cargo-orthohelp bridge pipeline
     When I run cargo-orthohelp with no-build for the fixture
     Then the output contains localised IR JSON for en-US
 
+  Scenario: Generate IR JSON with explicit legacy format
+    Given a temporary output directory
+    And the orthohelp cache is empty
+    When I run cargo-orthohelp with format ir for the fixture
+    Then the output contains localised IR JSON for en-US
+
   Scenario: No-build fails without cache
     Given a temporary output directory
     And the orthohelp cache is empty
