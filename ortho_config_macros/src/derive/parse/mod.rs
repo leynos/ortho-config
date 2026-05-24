@@ -25,7 +25,10 @@ mod tests;
 mod type_utils;
 
 use clap_attrs::clap_default_value;
-pub(crate) use clap_attrs::{ClapInferredDefault, clap_arg_id, clap_arg_id_from_attribute};
+pub(crate) use clap_attrs::{
+    ClapInferredDefault, clap_arg_id, clap_arg_id_from_attribute, clap_field_is_subcommand,
+    clap_variant_name,
+};
 use doc_attrs::{apply_field_doc_attr, apply_struct_doc_attr};
 pub(crate) use doc_types::{
     DocExampleAttr, DocFieldAttrs, DocLinkAttr, DocNoteAttr, DocStructAttrs, HeadingOverrides,
@@ -42,6 +45,8 @@ pub(crate) use serde_attrs::{
 pub(crate) use type_utils::{btree_map_inner, hash_map_inner, option_inner, vec_inner};
 
 const _: fn(&Attribute, &mut Option<LitStr>) -> syn::Result<()> = clap_arg_id_from_attribute;
+const _: fn(&syn::Field) -> syn::Result<bool> = clap_field_is_subcommand;
+const _: fn(&syn::Variant) -> syn::Result<Option<LitStr>> = clap_variant_name;
 const _: fn(&[Attribute]) -> syn::Result<Option<String>> = serde_field_rename;
 
 #[derive(Default, Clone)]

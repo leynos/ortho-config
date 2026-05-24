@@ -1,7 +1,9 @@
 //! Tests for clap attribute parsing helpers.
 
 use super::super::parse_input;
-use crate::derive::parse::{ClapInferredDefault, FieldAttrs};
+use crate::derive::parse::{
+    ClapInferredDefault, FieldAttrs, clap_field_is_subcommand, clap_variant_name,
+};
 use anyhow::{Result, anyhow, ensure};
 use quote::ToTokens;
 use syn::{DeriveInput, parse_quote};
@@ -44,6 +46,25 @@ fn assert_tokens_contain(expr: &syn::Expr, expected_substrings: &[&str]) -> Resu
         );
     }
     Ok(())
+}
+
+fn first_variant(input: &DeriveInput) -> Result<&syn::Variant> {
+    let syn::Data::Enum(data) = &input.data else {
+        return Err(anyhow!("expected enum"));
+    };
+    data.variants
+        .first()
+        .ok_or_else(|| anyhow!("missing first variant"))
+}
+
+fn first_field(input: &DeriveInput) -> Result<&syn::Field> {
+    let syn::Data::Struct(data) = &input.data else {
+        return Err(anyhow!("expected struct"));
+    };
+    data.fields
+        .iter()
+        .next()
+        .ok_or_else(|| anyhow!("missing first field"))
 }
 
 #[test]
@@ -186,6 +207,100 @@ fn duplicate_clap_defaults_are_rejected() -> Result<()> {
     ensure!(
         err_text.contains("duplicate clap default override"),
         "unexpected duplicate default error: {err_text}",
+    );
+    Ok(())
+}
+
+#[test]
+fn reads_command_variant_name_override() -> Result<()> {
+    let input: DeriveInput = parse_quote! {
+        enum Commands {
+            #[command(name = "take-leave")]
+            TakeLeave(TakeLeaveArgs),
+        }
+    };
+
+    let name = clap_variant_name(first_variant(&input)?)?
+        .ok_or_else(|| anyhow!("missing command name"))?;
+    ensure!(name.value() == "take-leave", "unexpected name value");
+    Ok(())
+}
+
+#[test]
+fn reads_clap_variant_name_override() -> Result<()> {
+    let input: DeriveInput = parse_quote! {
+        enum Commands {
+            #[clap(name = "take-leave")]
+            TakeLeave(TakeLeaveArgs),
+        }
+    };
+
+    let name =
+        clap_variant_name(first_variant(&input)?)?.ok_or_else(|| anyhow!("missing clap name"))?;
+    ensure!(name.value() == "take-leave", "unexpected name value");
+    Ok(())
+}
+
+#[test]
+fn detects_command_subcommand_field() -> Result<()> {
+    let input: DeriveInput = parse_quote! {
+        struct Cli {
+            #[command(subcommand)]
+            command: Commands,
+        }
+    };
+
+    ensure!(
+        clap_field_is_subcommand(first_field(&input)?)?,
+        "expected command field to be recognised as a subcommand selector",
+    );
+    Ok(())
+}
+
+#[test]
+fn detects_clap_subcommand_field() -> Result<()> {
+    let input: DeriveInput = parse_quote! {
+        struct Cli {
+            #[clap(subcommand)]
+            command: Commands,
+        }
+    };
+
+    ensure!(
+        clap_field_is_subcommand(first_field(&input)?)?,
+        "expected clap field to be recognised as a subcommand selector",
+    );
+    Ok(())
+}
+
+#[test]
+fn ignores_non_subcommand_fields() -> Result<()> {
+    let input: DeriveInput = parse_quote! {
+        struct Cli {
+            #[arg(long)]
+            name: String,
+        }
+    };
+
+    ensure!(
+        !clap_field_is_subcommand(first_field(&input)?)?,
+        "ordinary arg fields must not be subcommand selectors",
+    );
+    Ok(())
+}
+
+#[test]
+fn detects_subcommand_field_with_other_clap_options() -> Result<()> {
+    let input: DeriveInput = parse_quote! {
+        struct Cli {
+            #[command(subcommand, long = "cmd")]
+            command: Commands,
+        }
+    };
+
+    ensure!(
+        clap_field_is_subcommand(first_field(&input)?)?,
+        "the helper only detects subcommand markers; clap validates conflicts",
     );
     Ok(())
 }
