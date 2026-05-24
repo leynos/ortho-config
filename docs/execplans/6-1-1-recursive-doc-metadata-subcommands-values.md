@@ -1272,7 +1272,8 @@ actual current state of the work.
 - [x] (2026-05-24 14:19Z) Milestone 4 complete (behavioural scenarios pass;
   renderer smoke
   tests pass; examples updated).
-- [ ] Milestone 5 complete (documentation, changelog, README updates,
+- [x] (2026-05-24 14:28Z) Milestone 5 complete (documentation, changelog,
+  README updates,
   roadmap entry marked done).
 - [ ] Draft pull request moved to ready-for-review.
 - [ ] Pull request merged into `main`.
@@ -1330,6 +1331,13 @@ Document with evidence so future work benefits.
   test-target registration was removed to keep this milestone scoped. A
   follow-up should register the BDD target and clean the existing BDD lint
   debt before relying on those scenarios in the default gate.
+- Observation: `make fmt` still fails during Milestone 5 because
+  `markdownlint --fix` reports pre-existing line-length issues in unrelated
+  Markdown files. Evidence:
+  `/tmp/fmt-ortho-config-6-1-1-recursive-doc-metadata-subcommands-values.out`.
+  Impact: unrelated formatter rewrites were reverted again, and the
+  milestone used the explicit `make markdownlint` and `make nixie` gates for
+  documentation validation.
 
 ## Decision log
 
@@ -1436,3 +1444,5 @@ must state what changed, why it changed, and how it affects remaining work.
 - 2026-05-24 (Codex): recorded Milestone 4 completion after renderer/schema
   smoke tests, example docs output validation, all required gates, and
   CodeRabbit passed.
+- 2026-05-24 (Codex): recorded Milestone 5 documentation close-out after
+  updating the design docs, user docs, README files, changelog, and roadmap.

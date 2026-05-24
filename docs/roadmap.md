@@ -113,12 +113,12 @@ fields.
 
 ### 6.1. Populate subcommand metadata
 
-- [ ] 6.1.1. Generate recursive `DocMetadata.subcommands` values.
-  - [ ] Reuse information already parsed by `SelectedSubcommandMerge` where it
+- [x] 6.1.1. Generate recursive `DocMetadata.subcommands` values.
+  - [x] Reuse information already parsed by `SelectedSubcommandMerge` where it
     describes selected subcommand enum variants.
-  - [ ] Introduce a small companion trait if enum-level documentation cannot be
+  - [x] Introduce a small companion trait if enum-level documentation cannot be
     represented cleanly through the existing `OrthoConfigDocs` trait.
-  - [ ] Preserve deterministic command ordering so generated documentation and
+  - [x] Preserve deterministic command ordering so generated documentation and
     agent context are stable.
 
 - [ ] 6.1.2. Cover nested command trees with behavioural fixtures.
