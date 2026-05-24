@@ -34,7 +34,10 @@ use crate::schema::{DocMetadata, ORTHO_DOCS_IR_VERSION};
 
 fn main() -> Result<(), OrthohelpError> {
     init_tracing();
-    let cli = parse_cli_or_exit();
+    let cli = match parse_cli() {
+        Ok(cli) => cli,
+        Err(error) => exit_for_clap_error(&error),
+    };
     run(cli)
 }
 
@@ -44,22 +47,21 @@ fn init_tracing() {
         .try_init();
 }
 
-fn parse_cli_or_exit() -> Cli {
-    match Cli::try_parse() {
-        Ok(cli) => cli,
-        Err(error) => {
-            let kind = error.kind();
-            let exit_code = error.exit_code();
-            if matches!(
-                kind,
-                ErrorKind::UnknownArgument | ErrorKind::MissingSubcommand
-            ) {
-                drop(write_augmented_clap_error(&error));
-                std::process::exit(exit_code);
-            }
-            error.exit();
-        }
+fn parse_cli() -> Result<Cli, ClapError> {
+    Cli::try_parse()
+}
+
+fn exit_for_clap_error(error: &ClapError) -> ! {
+    let kind = error.kind();
+    let exit_code = error.exit_code();
+    if matches!(
+        kind,
+        ErrorKind::UnknownArgument | ErrorKind::MissingSubcommand
+    ) {
+        drop(write_augmented_clap_error(error));
+        std::process::exit(exit_code);
     }
+    error.exit();
 }
 
 fn write_augmented_clap_error(error: &ClapError) -> std::io::Result<()> {
