@@ -29,7 +29,7 @@ Cargo external-subcommand support remains CLI entry-point structure:
 - Hand-built callers should use a small wrapper around `clap::Command`.
 - Derive-based callers should wrap their `Args` struct in a
   `#[command(subcommand)]` enum variant.
-- Cargo-facing binaries should initialise a tracing or logging subscriber
+- Cargo-facing binaries should initialize a tracing or logging subscriber
   before parsing and emit a debug event at the dispatch boundary once the
   injected subcommand token has been accepted.
 - Configuration precedence remains defaults → files → environment → explicit
