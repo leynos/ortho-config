@@ -15,7 +15,7 @@ use self::helpers::{
     windows_value,
 };
 use crate::scenario_state::{DocsConfig, DocsContext};
-use anyhow::{Result, ensure};
+use anyhow::{Result, anyhow, ensure};
 use ortho_config::docs::OrthoConfigDocs;
 use rstest_bdd_macros::{then, when};
 
@@ -84,6 +84,70 @@ fn windows_no_split(docs_context: &DocsContext) -> Result<()> {
     ensure!(
         !split,
         "expected split_subcommands_into_functions to be false"
+    );
+    Ok(())
+}
+
+#[then("the subcommands are {expected}")]
+fn subcommands_are(docs_context: &DocsContext, expected: String) -> Result<()> {
+    let expected = expected
+        .split(',')
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_owned)
+        .collect::<Vec<_>>();
+    let actual = docs_context
+        .metadata
+        .with_ref(|meta| {
+            meta.subcommands
+                .iter()
+                .map(|subcommand| subcommand.app_name.clone())
+                .collect::<Vec<_>>()
+        })
+        .ok_or_else(|| anyhow!("docs metadata not captured"))?;
+
+    ensure!(
+        actual == expected,
+        "expected subcommands {expected:?}, got {actual:?}"
+    );
+    Ok(())
+}
+
+#[then("subcommand {name} has app name {expected}")]
+fn subcommand_has_app_name(
+    docs_context: &DocsContext,
+    name: String,
+    expected: String,
+) -> Result<()> {
+    let actual = docs_context
+        .metadata
+        .with_ref(|meta| {
+            meta.subcommands
+                .iter()
+                .find(|subcommand| subcommand.app_name == name)
+                .map(|subcommand| subcommand.app_name.clone())
+        })
+        .ok_or_else(|| anyhow!("docs metadata not captured"))?
+        .ok_or_else(|| anyhow!("subcommand {name} not found"))?;
+
+    ensure!(
+        actual == expected,
+        "expected app name {expected}, got {actual}"
+    );
+    Ok(())
+}
+
+#[then("the commands heading id is {expected}")]
+fn commands_heading_id(docs_context: &DocsContext, expected: String) -> Result<()> {
+    let actual = docs_context
+        .metadata
+        .with_ref(|meta| meta.sections.headings_ids.commands.clone())
+        .ok_or_else(|| anyhow!("docs metadata not captured"))?
+        .ok_or_else(|| anyhow!("commands heading id not present"))?;
+
+    ensure!(
+        actual == expected,
+        "expected commands heading id {expected}, got {actual}"
     );
     Ok(())
 }

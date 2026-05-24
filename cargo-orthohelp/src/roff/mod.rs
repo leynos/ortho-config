@@ -302,4 +302,29 @@ mod tests {
         assert!(result.contains(".SH SYNOPSIS"));
         assert!(result.contains(".SH DESCRIPTION"));
     }
+
+    #[test]
+    fn generate_to_string_includes_inline_subcommands() {
+        let mut metadata = minimal_metadata();
+        metadata.subcommands = vec![
+            LocalizedDocMetadata {
+                app_name: "run".to_owned(),
+                about: "Run the task.".to_owned(),
+                ..minimal_metadata()
+            },
+            LocalizedDocMetadata {
+                app_name: "audit".to_owned(),
+                about: "Audit the task.".to_owned(),
+                ..minimal_metadata()
+            },
+        ];
+        let config = RoffConfig::default();
+        let result = generate_to_string(&metadata, &config);
+
+        assert!(result.contains(".SH COMMANDS"));
+        assert!(result.contains(".SS run"));
+        assert!(result.contains("Run the task."));
+        assert!(result.contains(".SS audit"));
+        assert!(result.contains("Audit the task."));
+    }
 }

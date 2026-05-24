@@ -280,6 +280,7 @@ mod tests {
 
     use super::*;
     use crate::powershell::test_fixtures;
+    use camino::Utf8PathBuf;
     use rstest::rstest;
 
     #[rstest]
@@ -297,5 +298,35 @@ mod tests {
         let (resolved, fallback) = resolve_locales(&locales, should_ensure_en_us);
         assert_eq!(resolved.len(), locales.len());
         assert_eq!(fallback.is_some(), should_have_fallback);
+    }
+
+    #[rstest]
+    fn split_subcommands_adds_wrapper_and_help_entries() {
+        let mut metadata = test_fixtures::minimal_doc_with_subcommand();
+        metadata.subcommands.push(LocalizedDocMetadata {
+            app_name: "audit".to_owned(),
+            about: "Audit".to_owned(),
+            ..test_fixtures::minimal_doc("en-US", "Audit")
+        });
+        let config = PowerShellConfig {
+            out_dir: Utf8PathBuf::from("target/orthohelp-test"),
+            module_name: ModuleName::new("Fixture"),
+            module_version: ModuleVersion::new("0.1.0"),
+            bin_name: BinaryName::new("fixture"),
+            export_aliases: Vec::new(),
+            should_include_common_parameters: true,
+            should_split_subcommands: true,
+            help_info_uri: None,
+            should_ensure_en_us: true,
+        };
+
+        let exported = build_functions_to_export(&metadata, &config);
+        let commands = build_command_specs(&metadata, &config)
+            .into_iter()
+            .map(|command| command.name)
+            .collect::<Vec<_>>();
+
+        assert_eq!(exported, ["fixture", "fixture_greet", "fixture_audit"]);
+        assert_eq!(commands, ["fixture", "fixture_greet", "fixture_audit"]);
     }
 }

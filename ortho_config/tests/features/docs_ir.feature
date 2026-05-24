@@ -12,3 +12,12 @@ Feature: OrthoConfigDocs IR
     And the windows module name is Demo
     And the windows metadata includes common parameters
     And the windows metadata does not split subcommands
+
+  Scenario: Subcommand metadata is recursively populated
+    When I request the docs metadata
+    Then the subcommands are greet
+    And subcommand greet has app name greet
+
+  Scenario: Commands heading id is emitted when subcommands exist
+    When I request the docs metadata
+    Then the commands heading id is ortho.headings.commands

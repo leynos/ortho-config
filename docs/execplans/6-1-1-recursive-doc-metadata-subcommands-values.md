@@ -1269,7 +1269,8 @@ actual current state of the work.
 - [x] (2026-05-24 14:01Z) Milestone 3 complete (struct derive recurses;
   existing tests still
   green; new `docs_ir.rs` cases pass).
-- [ ] Milestone 4 complete (behavioural scenarios pass; renderer smoke
+- [x] (2026-05-24 14:19Z) Milestone 4 complete (behavioural scenarios pass;
+  renderer smoke
   tests pass; examples updated).
 - [ ] Milestone 5 complete (documentation, changelog, README updates,
   roadmap entry marked done).
@@ -1317,6 +1318,18 @@ Document with evidence so future work benefits.
   default, override, and docs-field code, while the root config type still
   satisfies the existing `DeserializeOwned` assertion through serde's skip
   handling.
+- Observation: Milestone 4 exposed that the `ortho_config/tests/rstest_bdd/`
+  directory is not registered as an integration test target. Adding a
+  temporary root target made the new docs scenarios pass, but also surfaced
+  71 pre-existing Clippy failures across unrelated dormant BDD step modules.
+  Evidence:
+  `/tmp/targeted-rstest-bdd-ortho-config-6-1-1-recursive-doc-metadata-subcommands-values.out`
+  and
+  `/tmp/lint-ortho-config-6-1-1-recursive-doc-metadata-subcommands-values.out`.
+  Impact: the feature and step definitions were added, and the temporary
+  test-target registration was removed to keep this milestone scoped. A
+  follow-up should register the BDD target and clean the existing BDD lint
+  debt before relying on those scenarios in the default gate.
 
 ## Decision log
 
@@ -1377,6 +1390,11 @@ choices.
   its serde derive. Serde's skip plus `Default` is the narrowest working
   contract and avoids weakening the existing whole-type deserialization
   assertion for ordinary configs. Date/Author: 2026-05-24 (Codex).
+- Decision: do not expand Milestone 4 into a full `rstest_bdd` harness
+  registration and lint cleanup. Rationale: registering the dormant BDD
+  directory is valuable but out of scope for roadmap item 6.1.1, and fixing
+  the unrelated Clippy failures would swamp the renderer/schema/example
+  validation work. Date/Author: 2026-05-24 (Codex).
 
 ## Outcomes & retrospective
 
@@ -1415,3 +1433,6 @@ must state what changed, why it changed, and how it affects remaining work.
 - 2026-05-24 (Codex): recorded Milestone 3 completion after
   `make check-fmt`, `make lint`, `make test`, and CodeRabbit all passed for
   the struct-side recursive metadata implementation.
+- 2026-05-24 (Codex): recorded Milestone 4 completion after renderer/schema
+  smoke tests, example docs output validation, all required gates, and
+  CodeRabbit passed.

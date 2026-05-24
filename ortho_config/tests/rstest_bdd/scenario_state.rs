@@ -1,8 +1,8 @@
 //! Scenario state structs and `rstest` fixture providers for the BDD scaffolding.
 
 use anyhow::Error;
-use clap::{Args, Parser};
-use ortho_config::{Localizer, MergeLayer, OrthoConfig};
+use clap::{Args, Parser, Subcommand};
+use ortho_config::{Localizer, MergeLayer, OrthoConfig, OrthoConfigSubcommandDocs};
 use rstest::fixture;
 use rstest_bdd::Slot;
 use rstest_bdd_macros::ScenarioState;
@@ -226,7 +226,7 @@ pub struct PrArgs {
 }
 
 /// Configuration struct used for documentation IR behavioural tests.
-#[derive(Debug, Deserialize, Serialize, OrthoConfig)]
+#[derive(Debug, Parser, Deserialize, Serialize, OrthoConfig)]
 #[ortho_config(
     prefix = "APP",
     discovery(app_name = "demo-app"),
@@ -235,6 +235,26 @@ pub struct PrArgs {
 pub struct DocsConfig {
     pub log_level: Option<String>,
     pub verbose: bool,
+    #[serde(skip)]
+    #[command(subcommand)]
+    pub command: DocsCommand,
+}
+
+#[derive(Debug, Subcommand, OrthoConfigSubcommandDocs)]
+pub enum DocsCommand {
+    Greet(DocsGreetArgs),
+}
+
+impl Default for DocsCommand {
+    fn default() -> Self {
+        Self::Greet(DocsGreetArgs::default())
+    }
+}
+
+#[derive(Debug, Args, Default, Deserialize, Serialize, OrthoConfig)]
+#[ortho_config(prefix = "APP")]
+pub struct DocsGreetArgs {
+    pub recipient: Option<String>,
 }
 
 /// CLI struct used for flattened merging tests.
