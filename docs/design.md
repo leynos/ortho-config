@@ -817,8 +817,6 @@ test helper should run `cargo-<name> <name> --help`, then run
 tools should reuse that coverage, so a flat direct invocation cannot pass
 while Cargo dispatch fails.
 
-Triage: [type:grammar] [type:docstyle]
-
 ## 5. Dependency Strategy
 
 - **`ortho_config_macros`:**
