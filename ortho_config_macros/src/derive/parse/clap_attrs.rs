@@ -1,4 +1,4 @@
-//! Parsing helpers for clap field attributes.
+//! Parsing helpers for clap field and variant attributes.
 //!
 //! These helpers extract metadata from `#[arg(...)]` and `#[clap(...)]`
 //! attributes without taking a dependency on clap itself.
@@ -8,6 +8,11 @@ use syn::Expr;
 /// Returns `true` when the attribute is `#[arg(...)]` or `#[clap(...)]`.
 pub(crate) fn is_clap_attribute(attr: &syn::Attribute) -> bool {
     attr.path().is_ident("arg") || attr.path().is_ident("clap")
+}
+
+/// Returns `true` when the attribute is `#[command(...)]` or `#[clap(...)]`.
+pub(crate) fn is_clap_command_attribute(attr: &syn::Attribute) -> bool {
+    attr.path().is_ident("command") || attr.path().is_ident("clap")
 }
 
 /// Parse a clap argument `id = "..."` override from a nested meta item.
@@ -62,6 +67,58 @@ pub(crate) fn clap_arg_id(field: &syn::Field) -> syn::Result<Option<String>> {
         clap_arg_id_from_attribute(attr, &mut arg_id)?;
     }
     Ok(arg_id.map(|lit| lit.value()))
+}
+
+fn consume_unknown_meta(meta: &syn::meta::ParseNestedMeta<'_>) -> syn::Result<()> {
+    if meta.input.peek(syn::Token![=]) {
+        let value = meta.value()?;
+        let _: syn::Expr = value.parse()?;
+    } else if meta.input.peek(syn::token::Paren) {
+        let content;
+        syn::parenthesized!(content in meta.input);
+        content.parse::<proc_macro2::TokenStream>()?;
+    }
+    Ok(())
+}
+
+/// Parse a clap command `name = "..."` override from an enum variant.
+pub(crate) fn clap_variant_name(variant: &syn::Variant) -> syn::Result<Option<syn::LitStr>> {
+    let mut name = None;
+    for attr in variant
+        .attrs
+        .iter()
+        .filter(|attr| is_clap_command_attribute(attr))
+    {
+        attr.parse_nested_meta(|meta| {
+            if meta.path.is_ident("name") {
+                let value = meta.value()?;
+                let lit: syn::LitStr = value.parse()?;
+                name = Some(lit);
+                return Ok(());
+            }
+            consume_unknown_meta(&meta)
+        })?;
+    }
+    Ok(name)
+}
+
+/// Detect whether a struct field is a clap subcommand selector.
+pub(crate) fn clap_field_is_subcommand(field: &syn::Field) -> syn::Result<bool> {
+    let mut is_subcommand = false;
+    for attr in field
+        .attrs
+        .iter()
+        .filter(|attr| is_clap_command_attribute(attr))
+    {
+        attr.parse_nested_meta(|meta| {
+            if meta.path.is_ident("subcommand") {
+                is_subcommand = true;
+                return Ok(());
+            }
+            consume_unknown_meta(&meta)
+        })?;
+    }
+    Ok(is_subcommand)
 }
 
 #[derive(Clone)]

@@ -1260,7 +1260,8 @@ actual current state of the work.
   contents index updated,
   developers guide note added, markdownlint and nixie clean, CodeRabbit
   clear).
-- [ ] Milestone 1 complete (trait published, shared parsing helper lifted,
+- [x] (2026-05-24 13:16Z) Milestone 1 complete (trait published,
+  shared parsing helper lifted,
   helper unit-tested).
 - [ ] Milestone 2 complete (enum derive emits populated `Vec<DocMetadata>`,
   trybuild cases cover rejected shapes).
@@ -1290,6 +1291,14 @@ Document with evidence so future work benefits.
   Impact: the failed formatter run was reverted for unrelated files; the
   milestone validation will still run the planned gates and record exact
   failures if they persist.
+- Observation: the first Milestone 1 `make test` run exposed that
+  `clap_field_is_subcommand` detected `#[command(subcommand)]` but did not
+  consume unrelated nested `= value` options, so mixed clap attributes failed
+  with `expected ','`. Evidence:
+  `/tmp/test-ortho-config-6-1-1-recursive-doc-metadata-subcommands-values.out`
+  before the parser fix. Impact: the shared clap parser now consumes unknown
+  `= value` and parenthesised meta items, matching the existing default
+  parser behaviour.
 
 ## Decision log
 
