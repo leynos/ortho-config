@@ -73,6 +73,8 @@ pub(crate) struct StructAttrs {
 ///   merging untouched.
 /// - `cli_default_as_absent` treats clap's default value as absent during
 ///   merge, allowing file/env values to take precedence over CLI defaults.
+/// - `is_subcommand` marks a clap subcommand selector, which is excluded from
+///   configuration-field generation.
 /// - `inferred_clap_default` stores the default inferred from clap's
 ///   `default_value_t`/`default_values_t` when `cli_default_as_absent` is
 ///   active and no explicit `#[ortho_config(default = ...)]` is provided.
@@ -85,6 +87,7 @@ pub(crate) struct FieldAttrs {
     pub merge_strategy: Option<MergeStrategy>,
     pub skip_cli: bool,
     pub cli_default_as_absent: bool,
+    pub is_subcommand: bool,
     pub doc: DocFieldAttrs,
 }
 
@@ -346,7 +349,14 @@ fn apply_field_attr(
 /// Used internally by the derive macro to extract configuration metadata
 /// from field-level attributes.
 pub(crate) fn parse_field_attrs(field: &syn::Field) -> Result<FieldAttrs, syn::Error> {
-    let mut out = FieldAttrs::default();
+    let mut out = FieldAttrs {
+        is_subcommand: clap_field_is_subcommand(field)?,
+        ..FieldAttrs::default()
+    };
+    if out.is_subcommand {
+        reject_subcommand_ortho_config_attrs(field)?;
+        return Ok(out);
+    }
     parse_ortho_config(&field.attrs, |meta| {
         if !apply_field_attr(meta, &mut out)? {
             // Unknown attributes are intentionally discarded to preserve
@@ -371,4 +381,24 @@ pub(crate) fn parse_field_attrs(field: &syn::Field) -> Result<FieldAttrs, syn::E
         }
     }
     Ok(out)
+}
+
+fn reject_subcommand_ortho_config_attrs(field: &syn::Field) -> Result<(), syn::Error> {
+    for attr in field
+        .attrs
+        .iter()
+        .filter(|attr| attr.path().is_ident("ortho_config"))
+    {
+        attr.parse_nested_meta(|meta| {
+            let option = meta
+                .path
+                .get_ident()
+                .map_or_else(|| "this option".to_owned(), ToString::to_string);
+            Err(meta.error(format!(
+                "#[command(subcommand)] fields cannot be combined with \
+                 #[ortho_config({option})]; remove the conflicting attribute"
+            )))
+        })?;
+    }
+    Ok(())
 }

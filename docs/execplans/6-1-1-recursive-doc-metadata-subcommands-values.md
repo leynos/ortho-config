@@ -1266,7 +1266,8 @@ actual current state of the work.
 - [x] (2026-05-24 13:40Z) Milestone 2 complete (enum derive emits
   populated `Vec<DocMetadata>`,
   trybuild cases cover rejected shapes).
-- [ ] Milestone 3 complete (struct derive recurses; existing tests still
+- [x] (2026-05-24 14:01Z) Milestone 3 complete (struct derive recurses;
+  existing tests still
   green; new `docs_ir.rs` cases pass).
 - [ ] Milestone 4 complete (behavioural scenarios pass; renderer smoke
   tests pass; examples updated).
@@ -1307,6 +1308,15 @@ Document with evidence so future work benefits.
   `/tmp/coderabbit-ortho-config-6-1-1-recursive-doc-metadata-subcommands-values.out`.
   Impact: tuple-variant field extraction now uses iterator validation, and
   tests assert nested variant construction without no-effect bindings.
+- Observation: Milestone 3 proves the generated docs path can avoid a
+  subcommand enum `Deserialize` bound when the consumer marks the clap
+  selector with `#[serde(skip)]` and provides a `Default` command value.
+  Evidence:
+  `/tmp/test-ortho-config-6-1-1-recursive-doc-metadata-subcommands-values.out`.
+  Impact: the struct derive now omits the selector from generated CLI,
+  default, override, and docs-field code, while the root config type still
+  satisfies the existing `DeserializeOwned` assertion through serde's skip
+  handling.
 
 ## Decision log
 
@@ -1360,6 +1370,13 @@ choices.
   the requested implementation names this exact plan and asks that it be kept
   up to date, which supersedes the restored draft status without changing the
   technical scope. Date/Author: 2026-05-24 (Codex).
+- Decision: keep `_assert_deser` unchanged for Milestone 3 and document the
+  consumer-side `#[serde(skip)]` requirement for subcommand selector fields.
+  Rationale: generated `OrthoConfig` code can omit the selector from all
+  derived configuration-field paths, but the consumer's root type still owns
+  its serde derive. Serde's skip plus `Default` is the narrowest working
+  contract and avoids weakening the existing whole-type deserialization
+  assertion for ordinary configs. Date/Author: 2026-05-24 (Codex).
 
 ## Outcomes & retrospective
 
@@ -1395,3 +1412,6 @@ must state what changed, why it changed, and how it affects remaining work.
 - 2026-05-24 (Codex): restored the plan from repository history into this
   worktree, recorded implementation approval from the maintainer's latest
   instruction, and set status to `APPROVED`.
+- 2026-05-24 (Codex): recorded Milestone 3 completion after
+  `make check-fmt`, `make lint`, `make test`, and CodeRabbit all passed for
+  the struct-side recursive metadata implementation.

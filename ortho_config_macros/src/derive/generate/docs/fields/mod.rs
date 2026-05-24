@@ -67,6 +67,9 @@ pub(super) fn build_fields_metadata(args: &FieldDocArgs<'_>) -> syn::Result<Vec<
 
     let mut output = Vec::with_capacity(args.fields.len());
     for (field, attrs) in args.fields.iter().zip(args.field_attrs) {
+        if attrs.is_subcommand {
+            continue;
+        }
         output.push(builder.build_field(field, attrs)?);
     }
 
