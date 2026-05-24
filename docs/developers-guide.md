@@ -21,10 +21,12 @@ Documentation IR, agent context, and policy reports have separate owners. See
 [ADR-003](adr-003-define-schema-ownership-for-agent-native-contracts.md) for
 the accepted decision.
 
-Add localized human-documentation fields to `ortho_config::docs` only when
-they are required by generated documentation, localization, roff, PowerShell
-help, or other human-facing reference material. Those fields are versioned by
+Add localized human-documentation fields to `ortho_config::docs` only when they
+are required by generated documentation, localization, roff, PowerShell help,
+or other human-facing reference material. Those fields are versioned by
 `ORTHO_DOCS_IR_VERSION` and exposed through `OrthoConfigDocs`.
+`OrthoConfigSubcommandDocs` is part of the same human-documentation IR contract
+and uses the same versioning boundary for recursive subcommand metadata.
 
 Add compact agent invocation fields to `ortho_config::agent_context` when
 downstream applications need a reusable machine-readable command contract. Use

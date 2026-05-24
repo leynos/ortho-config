@@ -37,6 +37,9 @@
 - [ADR-003: Define schema ownership for agent-native contracts](adr-003-define-schema-ownership-for-agent-native-contracts.md):
   review the accepted ownership split for documentation IR, agent context, and
   policy reports.
+- [ADR-004: Subcommand docs companion trait](adr-004-subcommand-docs-companion-trait.md):
+  review the accepted companion trait for recursive subcommand documentation
+  metadata.
 - [Archived v0.8.0 roadmap](archive/v0-8-0-roadmap.md): review completed
   phases, steps, and tasks from the roadmap that preceded the active
   agent-native plan.
