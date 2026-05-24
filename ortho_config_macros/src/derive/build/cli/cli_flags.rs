@@ -296,6 +296,9 @@ pub(crate) fn build_cli_struct_fields(
     let mut result = Vec::with_capacity(fields.len());
 
     for (field, attrs) in fields.iter().zip(field_attrs) {
+        if attrs.is_subcommand {
+            continue;
+        }
         // Register all field names (including skip_cli) so the config_path
         // reservation check in `build_config_flag_field` detects conflicts.
         if let Some(ident) = &field.ident {
@@ -341,7 +344,7 @@ pub(crate) fn build_cli_field_metadata(
     let mut result = Vec::with_capacity(fields.len());
 
     for (field, attrs) in fields.iter().zip(field_attrs) {
-        if attrs.skip_cli {
+        if attrs.is_subcommand || attrs.skip_cli {
             continue;
         }
         result.push(process_cli_metadata(field, attrs, &mut context)?);

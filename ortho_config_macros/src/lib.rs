@@ -302,7 +302,7 @@ fn build_macro_components(args: &MacroComponentArgs<'_>) -> syn::Result<MacroCom
     } = args;
 
     let defaults_ident = format_ident!("__{}Defaults", ident);
-    let default_struct_fields = build_default_struct_fields(fields);
+    let default_struct_fields = build_default_struct_fields(fields, field_attrs);
     let cli_ident = format_ident!("__{}Cli", ident);
     let cli_build_result =
         build_cli_struct_tokens(fields, field_attrs, struct_attrs, *serde_rename_all)?;

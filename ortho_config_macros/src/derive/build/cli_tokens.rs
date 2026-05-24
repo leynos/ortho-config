@@ -80,7 +80,7 @@ pub(crate) fn build_cli_struct_tokens(
     let field_info: Vec<CliFieldInfo> = fields
         .iter()
         .zip(field_attrs)
-        .filter(|(_, attrs)| !attrs.skip_cli)
+        .filter(|(_, attrs)| !attrs.is_subcommand && !attrs.skip_cli)
         .map(|(field, attrs)| build_cli_field_info(field, attrs, serde_rename_all))
         .collect::<syn::Result<Vec<_>>>()?;
 
