@@ -2,8 +2,7 @@
 
 use clap::Parser;
 use clap_dispatch::clap_dispatch;
-use ortho_config::OrthoConfig;
-use ortho_config::SubcmdConfigMerge;
+use ortho_config::{OrthoConfig, OrthoConfigSubcommandDocs, SubcmdConfigMerge};
 use serde::{Deserialize, Serialize};
 use std::io::{self, Write};
 
@@ -71,7 +70,7 @@ impl Run for ListItemsArgs {
     }
 }
 
-#[derive(Parser)]
+#[derive(Parser, OrthoConfigSubcommandDocs)]
 #[command(name = "registry-ctl", version = "0.3.0", about = "Manages a registry")]
 #[clap_dispatch(fn run(self, db_url: &str) -> Result<(), String>)]
 enum Commands {

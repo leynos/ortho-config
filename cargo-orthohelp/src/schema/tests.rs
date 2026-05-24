@@ -34,8 +34,22 @@ fn sample_metadata() -> ortho_docs::DocMetadata {
         synopsis_id: Some("demo.synopsis".to_owned()),
         sections: sample_sections(),
         fields: vec![sample_field()],
-        subcommands: Vec::new(),
+        subcommands: vec![sample_subcommand()],
         windows: Some(sample_windows()),
+    }
+}
+
+fn sample_subcommand() -> ortho_docs::DocMetadata {
+    ortho_docs::DocMetadata {
+        ir_version: ORTHO_DOCS_IR_VERSION.to_owned(),
+        app_name: "run".to_owned(),
+        bin_name: None,
+        about_id: "run.about".to_owned(),
+        synopsis_id: None,
+        sections: sample_sections(),
+        fields: vec![sample_field()],
+        subcommands: Vec::new(),
+        windows: None,
     }
 }
 
