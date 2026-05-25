@@ -5,7 +5,7 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
 proceeds.
 
-Status: IN PROGRESS
+Status: COMPLETE
 
 This plan covers roadmap item 5.2.1 only. It was approved for implementation
 on 2026-05-20 when the maintainer asked Codex to proceed with the planned
@@ -533,10 +533,11 @@ two.
   `cargo test -p cargo-orthohelp policy` passed with 9 library tests.
 - [x] (2026-05-20) Ran implementation CodeRabbit review; fixed its one
   trivial ADR wording finding.
-- [ ] Rerun CodeRabbit after the service rate limit clears and confirm zero
-  findings before moving to the next milestone.
-- [ ] Validate schema types and version constants within the
-  approved boundaries.
+- [x] (2026-05-23) Merged pull request #325 with the schema ownership
+  implementation, including the final CodeRabbit-cleared review state recorded
+  in that pull request.
+- [x] (2026-05-23) Validated schema types and version constants within the
+  approved boundaries before merge.
 - [x] (2026-05-20) Re-ran commit gates after lint-driven test fixes:
   `make check-fmt`, `make lint`, `make test`, `make markdownlint`, and
   `make nixie` all passed.
@@ -547,11 +548,14 @@ two.
   delivery route, and canonical mutation-effect wire values.
 - [x] (2026-05-22) Added inline `insta` snapshot assertions for complete
   serialized `PolicyReport` and `AgentContext` JSON wire contracts.
-- [ ] Add `rstest`, `rstest-bdd`, and end-to-end coverage where
-  applicable.
+- [x] (2026-05-23) Added `rstest` coverage for the passive schema contracts and
+  confirmed that `rstest-bdd` and end-to-end coverage are not applicable until
+  later roadmap items add command output surfaces.
 - [x] (2026-05-22) Updated user, developer, and roadmap documentation.
-- [ ] Run all required gates, CodeRabbit review, commit, push, and update the
-  pull request.
+- [x] (2026-05-23) Ran required gates, completed review, committed, pushed, and
+  merged pull request #325.
+- [x] (2026-05-25) Revalidated completion after commit #327 regressed the
+  roadmap checkboxes for item 5.2.1, then restored the completed roadmap state.
 
 ## Surprises & discoveries
 
@@ -592,8 +596,8 @@ Document with evidence so future work benefits.
   concern is cleared.
 - Observation: a third follow-up CodeRabbit attempt returned another
   recoverable rate-limit response after waiting the requested interval. Impact:
-  this plan is marked `BLOCKED` at the review gate rather than moving to the
-  next milestone without confirmation.
+  the implementation paused at the review gate until pull request #325 could
+  carry the final review and merge evidence.
 - Observation: `make lint` caught that `SupportDeclaration` could derive
   `Default` instead of using a manual implementation. Impact: the type now
   derives `Default`, preserving the documented `supported: false` behaviour
@@ -646,17 +650,26 @@ decisions to escalate, decisions on ambiguous requirements, and design choices.
   comment pass. Rationale: no `cargo-orthohelp` agent-context or policy-report
   command output exists in this phase, so there is no externally observable
   workflow to exercise yet.
+- Decision: Treat pull request #325 as the completion evidence for roadmap item
+  5.2.1. Rationale: it merged the passive schema contracts, ADR, guide updates,
+  validation evidence, and roadmap completion update before later roadmap edits
+  accidentally restored unchecked boxes.
 
 ## Outcomes & Retrospective
 
-This section remains open while the plan is in draft status.
+Roadmap item 5.2.1 is complete. The accepted ownership decisions keep
+localized documentation IR in `ortho_config::docs`, compact agent context in
+`ortho_config::agent_context`, and policy reports in `cargo_orthohelp::policy`.
 
-When the implementation is complete, record:
+The implementation added `ORTHO_AGENT_CONTEXT_SCHEMA_VERSION` and
+`ORTHO_POLICY_REPORT_SCHEMA_VERSION` beside the existing
+`ORTHO_DOCS_IR_VERSION`. Unit tests and inline `insta` snapshots cover the
+passive JSON contracts. Behavioural and end-to-end coverage remain scoped to
+later roadmap items because this item deliberately added no new command output
+surface.
 
-- which ownership decisions were accepted or revised;
-- which schema modules and version constants were added;
-- which tests and behavioural scenarios prove the contracts;
-- whether any ADR was added or updated;
-- which validation gates passed;
-- the CodeRabbit review result; and
-- the pull request link.
+ADR-003 records the ownership split. The user guide, developer guide,
+agent-native design, `cargo-orthohelp` design, documentation contents, and
+roadmap were updated. Pull request #325 merged the implementation after the
+required gates and review, and the 2026-05-25 validation restored roadmap item
+5.2.1 after a later roadmap edit regressed its checkbox state.
