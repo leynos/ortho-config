@@ -9,6 +9,43 @@ use rstest_bdd_macros::{then, when};
 
 use super::steps::{OrthoHelpContext, StepResult, get_out_dir, run_orthohelp};
 
+/// A section heading recognised by the roff formatter.
+#[derive(Debug, Clone)]
+enum ManSection {
+    Name,
+    Synopsis,
+    Description,
+    Options,
+    Other(String),
+}
+
+impl std::str::FromStr for ManSection {
+    type Err = std::convert::Infallible;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s {
+            "NAME" => Self::Name,
+            "SYNOPSIS" => Self::Synopsis,
+            "DESCRIPTION" => Self::Description,
+            "OPTIONS" => Self::Options,
+            other => Self::Other(other.to_owned()),
+        })
+    }
+}
+
+impl ManSection {
+    /// Returns the heading string as it will appear in the generated roff output.
+    fn expected_heading(&self) -> String {
+        match self {
+            Self::Name => "[missing: ortho.headings.name]".to_owned(),
+            Self::Synopsis => "[missing: ortho.headings.synopsis]".to_owned(),
+            Self::Description => "[missing: ortho.headings.description]".to_owned(),
+            Self::Options => "[missing: ortho.headings.options]".to_owned(),
+            Self::Other(s) => s.clone(),
+        }
+    }
+}
+
 #[when("I run cargo-orthohelp with format man for the fixture")]
 fn run_with_format_man(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
     let output = run_orthohelp(
@@ -191,7 +228,7 @@ fn output_contains_man_page_section(
 fn man_page_contains_section(
     orthohelp_context: &mut OrthoHelpContext,
     name: String,
-    section_name: String,
+    section_name: ManSection,
 ) -> StepResult<()> {
     let out_root = get_out_dir(orthohelp_context)?;
     let relative_path = Utf8PathBuf::from(format!("man/man1/{name}.1"));
@@ -202,25 +239,10 @@ fn man_page_contains_section(
     let mut content = String::new();
     file.read_to_string(&mut content)?;
 
-    let expected_heading = expected_section_heading(&section_name);
+    let expected_heading = section_name.expected_heading();
     assert!(
         content.contains(&format!(".SH {expected_heading}")),
         "man page should contain .SH {expected_heading} section"
     );
     Ok(())
-}
-
-fn expected_section_heading(section_name: &str) -> String {
-    let key = match section_name {
-        "NAME" => Some("ortho.headings.name"),
-        "SYNOPSIS" => Some("ortho.headings.synopsis"),
-        "DESCRIPTION" => Some("ortho.headings.description"),
-        "OPTIONS" => Some("ortho.headings.options"),
-        _ => None,
-    };
-
-    key.map_or_else(
-        || section_name.to_owned(),
-        |heading_key| format!("[missing: {heading_key}]"),
-    )
 }
