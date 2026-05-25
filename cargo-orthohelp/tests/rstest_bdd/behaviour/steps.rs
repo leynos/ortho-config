@@ -10,7 +10,7 @@ use cap_std::fs_utf8::{Dir, DirEntry};
 use cap_std::time::SystemTime;
 use rstest::fixture;
 use rstest_bdd::Slot;
-use rstest_bdd_macros::{given, then, when};
+use rstest_bdd_macros::{ScenarioState, given, then, when};
 use serde_json::Value;
 use std::time::Duration;
 use tempfile::TempDir;
@@ -24,34 +24,46 @@ pub type StepError = Box<dyn std::error::Error + Send + Sync>;
 pub type StepResult<T> = Result<T, StepError>;
 
 /// Scenario state for cargo-orthohelp scenarios.
-#[derive(Debug)]
+#[derive(Debug, ScenarioState)]
 pub struct OrthoHelpContext {
-    _scenario_lock: MutexGuard<'static, ()>,
+    scenario_lock: Slot<MutexGuard<'static, ()>>,
     pub workspace_root: Slot<Utf8PathBuf>,
     pub out_dir: Slot<TempDir>,
     pub last_output: Slot<std::process::Output>,
     pub cache_ir_path: Slot<Utf8PathBuf>,
     pub cache_ir_mtime: Slot<SystemTime>,
 }
+
+impl Default for OrthoHelpContext {
+    fn default() -> Self {
+        let scenario_lock = match SCENARIO_LOCK.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        let ctx = Self {
+            scenario_lock: Slot::new(),
+            workspace_root: Slot::new(),
+            out_dir: Slot::new(),
+            last_output: Slot::new(),
+            cache_ir_path: Slot::new(),
+            cache_ir_mtime: Slot::new(),
+        };
+        ctx.scenario_lock.set(scenario_lock);
+        ctx
+    }
+}
+
 static SCENARIO_LOCK: Mutex<()> = Mutex::new(());
+
+/// Provides a clean context for orthohelp scenarios.
+#[fixture]
 pub fn orthohelp_context() -> OrthoHelpContext {
-    let scenario_lock = match SCENARIO_LOCK.lock() {
-        Ok(guard) => guard,
-        Err(poisoned) => poisoned.into_inner(),
+    let workspace_root = match fixtures::workspace_root() {
+        Ok(root) => root,
+        Err(err) => panic!("workspace root should exist: {err}"),
     };
-    let manifest_dir = Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let Some(workspace_root) = manifest_dir.parent() else {
-        panic!("workspace root should exist");
-    };
-    let ctx = OrthoHelpContext {
-        _scenario_lock: scenario_lock,
-        workspace_root: Slot::new(),
-        out_dir: Slot::new(),
-        last_output: Slot::new(),
-        cache_ir_path: Slot::new(),
-        cache_ir_mtime: Slot::new(),
-    };
-    ctx.workspace_root.set(workspace_root.to_path_buf());
+    let ctx = OrthoHelpContext::default();
+    ctx.workspace_root.set(workspace_root);
     let out_dir = match tempfile::tempdir() {
         Ok(dir) => dir,
         Err(err) => panic!("temporary output directory should be created: {err}"),
@@ -126,6 +138,8 @@ fn run_orthohelp_with_cache_args(ctx: &mut OrthoHelpContext) -> StepResult<()> {
 fn assert_cache_run_succeeded(output: &std::process::Output) {
     assert!(output.status.success(), "cargo-orthohelp should succeed");
 }
+
+#[when("I run cargo-orthohelp with cache for the fixture")]
 fn run_with_cache(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
     run_orthohelp_with_cache_args(orthohelp_context)?;
     record_cache_state(orthohelp_context)?;
@@ -155,6 +169,7 @@ fn run_with_no_build(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()>
     Ok(())
 }
 
+#[when("I run cargo-orthohelp with format ir for the fixture")]
 fn run_with_format_ir(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
     let output = run_orthohelp(
         orthohelp_context,
@@ -175,6 +190,8 @@ fn run_with_format_ir(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()
     orthohelp_context.last_output.set(output);
     Ok(())
 }
+
+#[then("the output contains localised IR JSON for {locale}")]
 fn output_contains_locale(
     orthohelp_context: &mut OrthoHelpContext,
     locale: String,

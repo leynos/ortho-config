@@ -48,7 +48,7 @@ pub(crate) fn cargo_orthohelp_exe() -> Result<Utf8PathBuf, Box<dyn Error + Send 
 /// # Errors
 ///
 /// Returns an error when `CARGO_MANIFEST_DIR` has no parent directory.
-pub(crate) fn workspace_root() -> Result<Utf8PathBuf, Box<dyn Error>> {
+pub(crate) fn workspace_root() -> Result<Utf8PathBuf, Box<dyn Error + Send + Sync>> {
     let manifest_dir = Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     Ok(manifest_dir
         .parent()

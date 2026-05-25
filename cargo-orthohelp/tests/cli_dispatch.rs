@@ -7,7 +7,7 @@ use rstest::rstest;
 use std::error::Error;
 use std::process::{Command, Output};
 
-fn run_direct(args: &[&str]) -> Result<Output, Box<dyn Error>> {
+fn run_direct(args: &[&str]) -> Result<Output, Box<dyn Error + Send + Sync>> {
     let exe = fixtures::cargo_orthohelp_exe()?;
     Ok(Command::new(exe.as_str())
         .current_dir(fixtures::workspace_root()?.as_std_path())
@@ -15,7 +15,7 @@ fn run_direct(args: &[&str]) -> Result<Output, Box<dyn Error>> {
         .output()?)
 }
 
-fn run_cargo_dispatch(args: &[&str]) -> Result<Output, Box<dyn Error>> {
+fn run_cargo_dispatch(args: &[&str]) -> Result<Output, Box<dyn Error + Send + Sync>> {
     let exe = fixtures::cargo_orthohelp_exe()?;
     let bin_dir = exe
         .parent()

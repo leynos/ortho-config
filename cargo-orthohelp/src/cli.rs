@@ -216,13 +216,9 @@ mod tests {
 
     #[test]
     fn format_rejects_unsupported_values() {
-        let error = Cli::try_parse_from([
-            "cargo-orthohelp",
-            "orthohelp",
-            "--format",
-            "agent-context",
-        ])
-        .expect_err("unsupported formats should fail before generation");
+        let error =
+            Cli::try_parse_from(["cargo-orthohelp", "orthohelp", "--format", "agent-context"])
+                .expect_err("unsupported formats should fail before generation");
 
         assert_eq!(error.kind(), ErrorKind::InvalidValue);
     }
