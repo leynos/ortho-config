@@ -46,9 +46,24 @@ impl ManSection {
     }
 }
 
+fn run_format_step(orthohelp_context: &mut OrthoHelpContext, args: &[&str]) -> StepResult<()> {
+    let output = run_orthohelp(orthohelp_context, args)?;
+    assert_orthohelp_succeeded(&output);
+    orthohelp_context.last_output.set(output);
+    Ok(())
+}
+
+fn assert_orthohelp_succeeded(output: &std::process::Output) {
+    assert!(
+        output.status.success(),
+        "cargo-orthohelp should succeed: {:?}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
 #[when("I run cargo-orthohelp with format man for the fixture")]
 fn run_with_format_man(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
-    let output = run_orthohelp(
+    run_format_step(
         orthohelp_context,
         &[
             "--format",
@@ -58,14 +73,7 @@ fn run_with_format_man(orthohelp_context: &mut OrthoHelpContext) -> StepResult<(
             "--locale",
             "en-US",
         ],
-    )?;
-    assert!(
-        output.status.success(),
-        "cargo-orthohelp should succeed: {:?}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    orthohelp_context.last_output.set(output);
-    Ok(())
+    )
 }
 
 #[when("I run cargo-orthohelp with format man and section {section} for the fixture")]
@@ -74,7 +82,7 @@ fn run_with_format_man_section(
     section: u8,
 ) -> StepResult<()> {
     let section_str = section.to_string();
-    let output = run_orthohelp(
+    run_format_step(
         orthohelp_context,
         &[
             "--format",
@@ -86,21 +94,14 @@ fn run_with_format_man_section(
             "--locale",
             "en-US",
         ],
-    )?;
-    assert!(
-        output.status.success(),
-        "cargo-orthohelp should succeed: {:?}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    orthohelp_context.last_output.set(output);
-    Ok(())
+    )
 }
 
 #[when("I run cargo-orthohelp with format man for en-US and fr-FR")]
 fn run_with_format_man_multiple_locales(
     orthohelp_context: &mut OrthoHelpContext,
 ) -> StepResult<()> {
-    let output = run_orthohelp(
+    run_format_step(
         orthohelp_context,
         &[
             "--format",
@@ -112,19 +113,12 @@ fn run_with_format_man_multiple_locales(
             "--locale",
             "fr-FR",
         ],
-    )?;
-    assert!(
-        output.status.success(),
-        "cargo-orthohelp should succeed: {:?}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    orthohelp_context.last_output.set(output);
-    Ok(())
+    )
 }
 
 #[when("I run cargo-orthohelp with format all for the fixture")]
 fn run_with_format_all(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
-    let output = run_orthohelp(
+    run_format_step(
         orthohelp_context,
         &[
             "--format",
@@ -134,14 +128,24 @@ fn run_with_format_all(orthohelp_context: &mut OrthoHelpContext) -> StepResult<(
             "--locale",
             "en-US",
         ],
-    )?;
-    assert!(
-        output.status.success(),
-        "cargo-orthohelp should succeed: {:?}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    orthohelp_context.last_output.set(output);
-    Ok(())
+    )
+}
+
+fn read_man_page_content(
+    orthohelp_context: &mut OrthoHelpContext,
+    relative_path: &Utf8PathBuf,
+) -> StepResult<String> {
+    let out_root = get_out_dir(orthohelp_context)?;
+    let dir = Dir::open_ambient_dir(&out_root, ambient_authority())?;
+    let mut file = dir.open(relative_path).map_err(|e| {
+        format!(
+            "man page should exist at {}: {e}",
+            out_root.join(relative_path)
+        )
+    })?;
+    let mut content = String::new();
+    file.read_to_string(&mut content)?;
+    Ok(content)
 }
 
 #[then("the output contains a man page for {name}")]
@@ -149,19 +153,8 @@ fn output_contains_man_page(
     orthohelp_context: &mut OrthoHelpContext,
     name: String,
 ) -> StepResult<()> {
-    let out_root = get_out_dir(orthohelp_context)?;
     let relative_path = Utf8PathBuf::from(format!("man/man1/{name}.1"));
-    let dir = Dir::open_ambient_dir(&out_root, ambient_authority())?;
-
-    let mut file = dir.open(&relative_path).map_err(|e| {
-        format!(
-            "man page should exist at {}: {e}",
-            out_root.join(&relative_path)
-        )
-    })?;
-
-    let mut content = String::new();
-    file.read_to_string(&mut content)?;
+    let content = read_man_page_content(orthohelp_context, &relative_path)?;
 
     assert!(
         content.contains(".TH"),
@@ -176,19 +169,8 @@ fn output_contains_localised_man_page(
     locale: String,
     name: String,
 ) -> StepResult<()> {
-    let out_root = get_out_dir(orthohelp_context)?;
     let relative_path = Utf8PathBuf::from(format!("{locale}/man/man1/{name}.1"));
-    let dir = Dir::open_ambient_dir(&out_root, ambient_authority())?;
-
-    let mut file = dir.open(&relative_path).map_err(|e| {
-        format!(
-            "man page should exist at {}: {e}",
-            out_root.join(&relative_path)
-        )
-    })?;
-
-    let mut content = String::new();
-    file.read_to_string(&mut content)?;
+    let content = read_man_page_content(orthohelp_context, &relative_path)?;
 
     assert!(
         content.contains(&format!(".TH \"{}\" \"1\"", name.to_uppercase())),
@@ -203,19 +185,8 @@ fn output_contains_man_page_section(
     section: u8,
     name: String,
 ) -> StepResult<()> {
-    let out_root = get_out_dir(orthohelp_context)?;
     let relative_path = Utf8PathBuf::from(format!("man/man{section}/{name}.{section}"));
-    let dir = Dir::open_ambient_dir(&out_root, ambient_authority())?;
-
-    let mut file = dir.open(&relative_path).map_err(|e| {
-        format!(
-            "man page should exist at {}: {e}",
-            out_root.join(&relative_path)
-        )
-    })?;
-
-    let mut content = String::new();
-    file.read_to_string(&mut content)?;
+    let content = read_man_page_content(orthohelp_context, &relative_path)?;
 
     assert!(
         content.contains(&format!(".TH \"{}\" \"{section}\"", name.to_uppercase())),
@@ -230,14 +201,8 @@ fn man_page_contains_section(
     name: String,
     section_name: ManSection,
 ) -> StepResult<()> {
-    let out_root = get_out_dir(orthohelp_context)?;
     let relative_path = Utf8PathBuf::from(format!("man/man1/{name}.1"));
-    let dir = Dir::open_ambient_dir(&out_root, ambient_authority())?;
-
-    let mut file = dir.open(&relative_path)?;
-
-    let mut content = String::new();
-    file.read_to_string(&mut content)?;
+    let content = read_man_page_content(orthohelp_context, &relative_path)?;
 
     let expected_heading = section_name.expected_heading();
     assert!(
