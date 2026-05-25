@@ -18,6 +18,7 @@ $arguments = @(
     'run',
     '-p', 'cargo-orthohelp',
     '--',
+    'orthohelp',
     '--format', 'ps',
     '--package', 'orthohelp_fixture',
     '--locale', 'en-US',

@@ -31,19 +31,12 @@ mod tests {
         }
     }
 
-    fn workspace_root() -> Result<Utf8PathBuf, Box<dyn Error>> {
-        let manifest_dir = Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        Ok(manifest_dir
-            .parent()
-            .ok_or("workspace root should exist")?
-            .to_path_buf())
-    }
-
     fn generate_powershell_output(out_dir: &Utf8PathBuf) -> Result<(), Box<dyn Error>> {
         let exe = super::fixtures::cargo_orthohelp_exe()?;
-        let root = workspace_root()?;
+        let root = super::fixtures::workspace_root()?;
         let output = Command::new(exe.as_str())
             .current_dir(root.as_std_path())
+            .arg("orthohelp")
             .arg("--format")
             .arg("ps")
             .arg("--package")

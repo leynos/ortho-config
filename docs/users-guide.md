@@ -1194,10 +1194,15 @@ canonical boundary and [Roadmap](roadmap.md) for the implementation sequence.
 
 ### Generating IR with cargo-orthohelp
 
-`cargo-orthohelp` compiles a tiny bridge binary that calls
+`cargo-orthohelp` compiles a tiny bridge binary for the Cargo
+external-subcommand entry point. Cargo injects the subcommand token for
+`cargo orthohelp [OPTIONS]`, while direct `cargo-orthohelp [OPTIONS]` and
+`cargo-orthohelp orthohelp [OPTIONS]` invocations reach the same CLI parser.
+The wrapper calls
 `OrthoConfigDocs::get_doc_metadata()`, resolves Fluent messages per locale, and
 writes localized IR JSON into the chosen output directory. Add metadata to the
-package `Cargo.toml` so the tool knows which config type to load:
+package `Cargo.toml` so the tool knows which root type to inspect. This wrapper
+defines the CLI entry-point structure, not configuration loading.
 
 ```toml
 [package.metadata.ortho_config]

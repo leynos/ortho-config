@@ -235,6 +235,7 @@ pub fn run_orthohelp(ctx: &OrthoHelpContext, args: &[&str]) -> StepResult<std::p
     let mut command = Command::new(exe.as_str());
     command
         .current_dir(workspace_root.as_str())
+        .arg("orthohelp")
         .arg("--out-dir")
         .arg(out_dir.as_str())
         .args(args);

@@ -1,0 +1,5 @@
+---
+source: cargo-orthohelp/tests/cli_dispatch.rs
+expression: usage_lines(&output)
+---
+Usage: cargo <COMMAND>

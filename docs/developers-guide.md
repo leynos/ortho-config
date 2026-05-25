@@ -15,6 +15,21 @@ The workspace runs one unified test workflow via Make targets:
 These are required quality gates for code changes. Behavioural coverage runs
 inside the standard Rust test harness, not a bespoke test runner.
 
+## Subcommand dispatch changes
+
+Cargo's external-subcommand contract is an entry-point concern, not a
+configuration-loading concern. When the way a `cargo-*` binary accepts or
+forwards the injected subcommand token is changed, update all of the following
+in the same change:
+
+- `docs/design.md` §4.17 and [ADR-004](adr-004-cargo-external-subcommand-entry-point.md).
+- `docs/roadmap.md` if the work remains tracked there.
+- Any user-facing guide or README that shows `cargo <name>` or
+  `cargo-<name> <name>` invocation.
+- Regression coverage for both `cargo <name> [OPTIONS]` and
+  `cargo-<name> <name> [OPTIONS]` once the repository adds or revises those
+  tests.
+
 ## Schema ownership
 
 Documentation IR, agent context, and policy reports have separate owners. See
