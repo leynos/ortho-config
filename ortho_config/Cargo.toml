@@ -24,7 +24,7 @@ fluent-bundle = "0.16.0"
 fluent-syntax = "0.12"
 uncased = "0.9"
 camino = "1"
-dirs = "5"
+dirs = "6"
 cap-std = { version = "4.0.2", features = ["fs_utf8"] }
 tracing = "0.1"
 unic-langid = { version = "0.9", features = ["macros"] }
