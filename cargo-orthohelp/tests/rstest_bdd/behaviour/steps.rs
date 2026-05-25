@@ -106,22 +106,28 @@ fn is_not_found_kind(err: &std::io::Error) -> bool {
     matches!(err.kind(), std::io::ErrorKind::NotFound)
 }
 
-#[when("I run cargo-orthohelp with cache for the fixture")]
-fn run_with_cache(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
-    let output = run_orthohelp(
-        orthohelp_context,
-        &[
-            "--cache",
-            "--package",
-            "orthohelp_fixture",
-            "--locale",
-            "en-US",
-            "--locale",
-            "fr-FR",
-        ],
-    )?;
+const CACHE_ARGS: &[&str] = &[
+    "--cache",
+    "--package",
+    "orthohelp_fixture",
+    "--locale",
+    "en-US",
+    "--locale",
+    "fr-FR",
+];
+
+fn run_orthohelp_with_cache_args(ctx: &mut OrthoHelpContext) -> StepResult<()> {
+    let output = run_orthohelp(ctx, CACHE_ARGS)?;
+    assert_cache_run_succeeded(&output);
+    ctx.last_output.set(output);
+    Ok(())
+}
+
+fn assert_cache_run_succeeded(output: &std::process::Output) {
     assert!(output.status.success(), "cargo-orthohelp should succeed");
-    orthohelp_context.last_output.set(output);
+}
+fn run_with_cache(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
+    run_orthohelp_with_cache_args(orthohelp_context)?;
     record_cache_state(orthohelp_context)?;
     Ok(())
 }
@@ -130,21 +136,7 @@ fn run_with_cache(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
 fn rerun_with_cache(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
     // Ensure filesystem timestamp granularity distinguishes the cache file mtime.
     std::thread::sleep(Duration::from_secs(1));
-    let output = run_orthohelp(
-        orthohelp_context,
-        &[
-            "--cache",
-            "--package",
-            "orthohelp_fixture",
-            "--locale",
-            "en-US",
-            "--locale",
-            "fr-FR",
-        ],
-    )?;
-    assert!(output.status.success(), "cargo-orthohelp should succeed");
-    orthohelp_context.last_output.set(output);
-    Ok(())
+    run_orthohelp_with_cache_args(orthohelp_context)
 }
 
 #[when("I run cargo-orthohelp with no-build for the fixture")]
