@@ -3,3 +3,7 @@
 [[profile.default.overrides]]
 filter = 'binary(crate_path_trybuild) | binary(declarative_merge_trybuild)'
 slow-timeout = { period = "120s", terminate-after = 5 }
+
+[[profile.default.overrides]]
+filter = 'binary(rstest_bdd)'
+threads-required = "num-test-threads"

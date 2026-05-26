@@ -103,8 +103,19 @@ fn temp_output_dir(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
 #[given("the orthohelp cache is empty")]
 fn cache_is_empty(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
     let workspace_root = get_workspace_root(orthohelp_context)?;
-    let root_dir = Dir::open_ambient_dir(workspace_root.as_path(), ambient_authority())?;
-    if let Err(err) = root_dir.remove_dir_all("target/orthohelp")
+    let target_dir = std::env::var("CARGO_TARGET_DIR").map_or_else(
+        |_| workspace_root.join("target"),
+        |v| {
+            let p = Utf8PathBuf::from(&v);
+            if p.is_absolute() {
+                p
+            } else {
+                workspace_root.join(p)
+            }
+        },
+    );
+    let root_dir = Dir::open_ambient_dir(target_dir.as_path(), ambient_authority())?;
+    if let Err(err) = root_dir.remove_dir_all("orthohelp")
         && !is_not_found_kind(&err)
     {
         return Err(format!("remove orthohelp cache failed: {err}").into());
@@ -327,7 +338,21 @@ fn record_cache_state(ctx: &mut OrthoHelpContext) -> StepResult<()> {
 
 fn find_cached_ir(ctx: &OrthoHelpContext) -> StepResult<Option<Utf8PathBuf>> {
     let workspace_root = get_workspace_root(ctx)?;
-    let cache_root = workspace_root.join("target").join("orthohelp");
+    // Respect CARGO_TARGET_DIR when set (e.g., by cargo-llvm-cov), because
+    // cargo-orthohelp inherits the variable and writes its cache relative to
+    // the effective target directory rather than the default `target/`.
+    let target_dir = std::env::var("CARGO_TARGET_DIR").map_or_else(
+        |_| workspace_root.join("target"),
+        |v| {
+            let p = Utf8PathBuf::from(&v);
+            if p.is_absolute() {
+                p
+            } else {
+                workspace_root.join(p)
+            }
+        },
+    );
+    let cache_root = target_dir.join("orthohelp");
     let dir = match Dir::open_ambient_dir(&cache_root, ambient_authority()) {
         Ok(d) => d,
         Err(e) if is_not_found_kind(&e) => return Ok(None),
