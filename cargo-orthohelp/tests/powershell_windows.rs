@@ -31,7 +31,9 @@ mod tests {
         }
     }
 
-    fn generate_powershell_output(out_dir: &Utf8PathBuf) -> Result<(), Box<dyn Error + Send + Sync>> {
+    fn generate_powershell_output(
+        out_dir: &Utf8PathBuf,
+    ) -> Result<(), Box<dyn Error + Send + Sync>> {
         let exe = super::fixtures::cargo_orthohelp_exe()?;
         let root = super::fixtures::workspace_root()?;
         let output = Command::new(exe.as_str())
@@ -167,7 +169,11 @@ mod tests {
         }
     }
 
-    fn ensure_contains(output: &str, needle: &str, label: &str) -> Result<(), Box<dyn Error + Send + Sync>> {
+    fn ensure_contains(
+        output: &str,
+        needle: &str,
+        label: &str,
+    ) -> Result<(), Box<dyn Error + Send + Sync>> {
         if output.contains(needle) {
             return Ok(());
         }
