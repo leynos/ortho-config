@@ -128,15 +128,15 @@ const CACHE_ARGS: &[&str] = &[
     "fr-FR",
 ];
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "BDD step helpers use assertions for scenario failure diagnostics."
+)]
 fn run_orthohelp_with_cache_args(ctx: &mut OrthoHelpContext) -> StepResult<()> {
     let output = run_orthohelp(ctx, CACHE_ARGS)?;
-    assert_cache_run_succeeded(&output);
+    assert!(output.status.success(), "cargo-orthohelp should succeed");
     ctx.last_output.set(output);
     Ok(())
-}
-
-fn assert_cache_run_succeeded(output: &std::process::Output) {
-    assert!(output.status.success(), "cargo-orthohelp should succeed");
 }
 
 #[when("I run cargo-orthohelp with cache for the fixture")]
