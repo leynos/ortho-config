@@ -289,8 +289,8 @@ risks emerge.
   Fluent ID lookups, command-name resolution, or nesting depth assumptions).
   Severity: medium. Likelihood: medium. Mitigation: add a renderer smoke
   test in Milestone 4 that drives the existing public renderer entry points
-  with a `DocMetadata` containing two subcommands and asserts the runs
-  succeed and emit the expected section headers. Defer richer rendering
+  with a `DocMetadata` containing two subcommands and asserts the run
+  succeeds and emits the expected section headers. Defer richer rendering
   assertions to roadmap item 6.1.2.
 - Risk: `markdownlint` or `nixie` may report pre-existing line-length or
   diagram issues unrelated to this work. Severity: low. Likelihood: medium.
@@ -1248,7 +1248,7 @@ The new trait depends on no other module; the new derive depends only on
 
 ## Progress
 
-Use a list with checkboxes to summarise granular steps. Every stopping point
+Use a list with checkboxes to summarize granular steps. Every stopping point
 must be documented here, even if it requires splitting a partially completed
 task into two ("done" vs. "remaining"). This section must always reflect the
 actual current state of the work.
@@ -1406,7 +1406,7 @@ choices.
 
 ## Outcomes & retrospective
 
-Summarise outcomes, gaps, and lessons learned at major milestones or at
+Summarize outcomes, gaps, and lessons learned at major milestones or at
 completion. Compare the result against the original purpose. Note what
 would be done differently next time.
 
