@@ -4,6 +4,11 @@
 filter = 'binary(crate_path_trybuild) | binary(declarative_merge_trybuild)'
 slow-timeout = { period = "120s", terminate-after = 5 }
 
+# Serialise orthohelp BDD scenarios: each runs in its own process under nextest,
+# so the in-process SCENARIO_LOCK mutex cannot guard the shared orthohelp cache.
+[test-groups]
+rstest_bdd = { max-threads = 1 }
+
 [[profile.default.overrides]]
 filter = 'binary(rstest_bdd)'
-threads-required = "num-test-threads"
+test-group = 'rstest_bdd'
