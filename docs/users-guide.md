@@ -1183,7 +1183,6 @@ descriptions. Field-level metadata can be refined with `help_id`,
 attributes affect only the emitted IR; they do not change runtime naming or
 loading behaviour.
 
-
 ### Documenting subcommands
 
 For a root config with a clap subcommand selector, derive

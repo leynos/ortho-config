@@ -212,95 +212,62 @@ fn duplicate_clap_defaults_are_rejected() -> Result<()> {
 }
 
 #[test]
-fn reads_command_variant_name_override() -> Result<()> {
-    let input: DeriveInput = parse_quote! {
-        enum Commands {
-            #[command(name = "take-leave")]
-            TakeLeave(TakeLeaveArgs),
-        }
-    };
+fn clap_variant_name_cases() -> Result<()> {
+    use proc_macro2::TokenStream;
+    use quote::quote;
 
-    let name = clap_variant_name(first_variant(&input)?)?
-        .ok_or_else(|| anyhow!("missing command name"))?;
-    ensure!(name.value() == "take-leave", "unexpected name value");
+    let cases: &[(TokenStream, &str)] = &[
+        (
+            quote! { enum Commands { #[command(name = "take-leave")] TakeLeave(TakeLeaveArgs), } },
+            "take-leave",
+        ),
+        (
+            quote! { enum Commands { #[clap(name = "take-leave")] TakeLeave(TakeLeaveArgs), } },
+            "take-leave",
+        ),
+    ];
+
+    for (tokens, expected_name) in cases {
+        let input: DeriveInput = syn::parse2(tokens.clone())?;
+        let name = clap_variant_name(first_variant(&input)?)?
+            .ok_or_else(|| anyhow!("missing variant name"))?;
+        ensure!(
+            name.value() == *expected_name,
+            "expected name `{expected_name}`, got `{}`",
+            name.value(),
+        );
+    }
     Ok(())
 }
 
 #[test]
-fn reads_clap_variant_name_override() -> Result<()> {
-    let input: DeriveInput = parse_quote! {
-        enum Commands {
-            #[clap(name = "take-leave")]
-            TakeLeave(TakeLeaveArgs),
-        }
-    };
+fn clap_field_is_subcommand_cases() -> Result<()> {
+    use proc_macro2::TokenStream;
+    use quote::quote;
 
-    let name =
-        clap_variant_name(first_variant(&input)?)?.ok_or_else(|| anyhow!("missing clap name"))?;
-    ensure!(name.value() == "take-leave", "unexpected name value");
-    Ok(())
-}
+    let cases: &[(TokenStream, bool)] = &[
+        (
+            quote! { struct Cli { #[command(subcommand)] command: Commands, } },
+            true,
+        ),
+        (
+            quote! { struct Cli { #[clap(subcommand)] command: Commands, } },
+            true,
+        ),
+        (
+            quote! { struct Cli { #[command(subcommand, long = "cmd")] command: Commands, } },
+            true,
+        ),
+        (quote! { struct Cli { #[arg(long)] name: String, } }, false),
+    ];
 
-#[test]
-fn detects_command_subcommand_field() -> Result<()> {
-    let input: DeriveInput = parse_quote! {
-        struct Cli {
-            #[command(subcommand)]
-            command: Commands,
-        }
-    };
-
-    ensure!(
-        clap_field_is_subcommand(first_field(&input)?)?,
-        "expected command field to be recognised as a subcommand selector",
-    );
-    Ok(())
-}
-
-#[test]
-fn detects_clap_subcommand_field() -> Result<()> {
-    let input: DeriveInput = parse_quote! {
-        struct Cli {
-            #[clap(subcommand)]
-            command: Commands,
-        }
-    };
-
-    ensure!(
-        clap_field_is_subcommand(first_field(&input)?)?,
-        "expected clap field to be recognised as a subcommand selector",
-    );
-    Ok(())
-}
-
-#[test]
-fn ignores_non_subcommand_fields() -> Result<()> {
-    let input: DeriveInput = parse_quote! {
-        struct Cli {
-            #[arg(long)]
-            name: String,
-        }
-    };
-
-    ensure!(
-        !clap_field_is_subcommand(first_field(&input)?)?,
-        "ordinary arg fields must not be subcommand selectors",
-    );
-    Ok(())
-}
-
-#[test]
-fn detects_subcommand_field_with_other_clap_options() -> Result<()> {
-    let input: DeriveInput = parse_quote! {
-        struct Cli {
-            #[command(subcommand, long = "cmd")]
-            command: Commands,
-        }
-    };
-
-    ensure!(
-        clap_field_is_subcommand(first_field(&input)?)?,
-        "the helper only detects subcommand markers; clap validates conflicts",
-    );
+    for (tokens, expected) in cases {
+        let input: DeriveInput = syn::parse2(tokens.clone())?;
+        let actual = clap_field_is_subcommand(first_field(&input)?)?;
+        ensure!(
+            actual == *expected,
+            "input `{tokens}`: expected subcommand={expected}, got {actual}",
+        );
+    }
     Ok(())
 }
