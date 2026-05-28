@@ -82,14 +82,17 @@ fn empty_metadata(app_name: &str) -> DocMetadata {
     }
 }
 
+fn field_values<'a>(
+    metadata: &'a [DocMetadata],
+    extract: impl Fn(&'a DocMetadata) -> &'a str,
+) -> Vec<&'a str> {
+    metadata.iter().map(extract).collect()
+}
+
 #[rstest]
 fn subcommand_docs_preserve_declaration_order() -> Result<()> {
     let metadata = Commands::get_subcommand_doc_metadata();
-    let names = metadata
-        .iter()
-        .map(|entry| entry.app_name.as_str())
-        .collect::<Vec<_>>();
-
+    let names = field_values(&metadata, |e| e.app_name.as_str());
     ensure!(
         names == ["zebra", "run", "take-leave"],
         "expected declaration order and clap labels, got {names:?}",
@@ -100,11 +103,7 @@ fn subcommand_docs_preserve_declaration_order() -> Result<()> {
 #[rstest]
 fn subcommand_docs_regenerate_about_ids() -> Result<()> {
     let metadata = Commands::get_subcommand_doc_metadata();
-    let about_ids = metadata
-        .iter()
-        .map(|entry| entry.about_id.as_str())
-        .collect::<Vec<_>>();
-
+    let about_ids = field_values(&metadata, |e| e.about_id.as_str());
     ensure!(
         about_ids == ["zebra.about", "run.about", "take-leave.about"],
         "expected about IDs to follow command labels, got {about_ids:?}",
