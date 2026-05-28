@@ -227,3 +227,28 @@ pub(crate) fn clap_default_value(field: &syn::Field) -> syn::Result<Option<ClapI
     }
     Ok(default_expr)
 }
+
+/// Reject `#[ortho_config(...)]` attributes on subcommand-selector fields.
+///
+/// The `#[command(subcommand)]` selector is a clap concern; combining it with
+/// `#[ortho_config]` annotations is meaningless because the field does not
+/// participate in config merging or default generation.
+pub(crate) fn reject_subcommand_ortho_config_attrs(field: &syn::Field) -> syn::Result<()> {
+    for attr in field
+        .attrs
+        .iter()
+        .filter(|attr| attr.path().is_ident("ortho_config"))
+    {
+        attr.parse_nested_meta(|meta| {
+            let option = meta
+                .path
+                .get_ident()
+                .map_or_else(|| "this option".to_owned(), ToString::to_string);
+            Err(meta.error(format!(
+                "#[command(subcommand)] fields cannot be combined with \
+                 #[ortho_config({option})]; remove the conflicting attribute"
+            )))
+        })?;
+    }
+    Ok(())
+}

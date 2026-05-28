@@ -24,10 +24,9 @@ mod serde_attrs;
 mod tests;
 mod type_utils;
 
-use clap_attrs::clap_default_value;
 pub(crate) use clap_attrs::{
-    ClapInferredDefault, clap_arg_id, clap_arg_id_from_attribute, clap_field_is_subcommand,
-    clap_variant_name,
+    ClapInferredDefault, clap_arg_id, clap_arg_id_from_attribute, clap_default_value,
+    clap_field_is_subcommand, clap_variant_name, reject_subcommand_ortho_config_attrs,
 };
 use doc_attrs::{apply_field_doc_attr, apply_struct_doc_attr};
 pub(crate) use doc_types::{
@@ -381,24 +380,4 @@ pub(crate) fn parse_field_attrs(field: &syn::Field) -> Result<FieldAttrs, syn::E
         }
     }
     Ok(out)
-}
-
-fn reject_subcommand_ortho_config_attrs(field: &syn::Field) -> Result<(), syn::Error> {
-    for attr in field
-        .attrs
-        .iter()
-        .filter(|attr| attr.path().is_ident("ortho_config"))
-    {
-        attr.parse_nested_meta(|meta| {
-            let option = meta
-                .path
-                .get_ident()
-                .map_or_else(|| "this option".to_owned(), ToString::to_string);
-            Err(meta.error(format!(
-                "#[command(subcommand)] fields cannot be combined with \
-                 #[ortho_config({option})]; remove the conflicting attribute"
-            )))
-        })?;
-    }
-    Ok(())
 }

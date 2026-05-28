@@ -439,7 +439,7 @@ Deterministic IDs when omitted:
   `Custom` using the final path segment (for example, `MyType`).
 - Documentation-only `env(name = "...")` and `file(key_path = "...")` override
   IR output but do not affect runtime naming or loading behaviour.
-- `OrthoConfig` recognises `#[command(subcommand)]` selector fields and uses
+- `OrthoConfig` recognizes `#[command(subcommand)]` selector fields and uses
   the field type's `OrthoConfigSubcommandDocs` implementation to populate
   recursive `subcommands`.
 - Subcommand names default to kebab-cased enum variant names and honour

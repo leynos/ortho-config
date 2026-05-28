@@ -1411,8 +1411,15 @@ Summarize outcomes, gaps, and lessons learned at major milestones or at
 completion. Compare the result against the original purpose. Note what
 would be done differently next time.
 
-- Outcome: not yet recorded; this plan has not been approved or
-  implemented.
+- Outcome: all five milestones (0–5) completed and gated. The
+  `OrthoConfigSubcommandDocs` trait, its derive macro, struct-side
+  recursion, BDD scenarios, renderer smoke tests, and documentation
+  artefacts were delivered. The plan's original purpose — populating the
+  `DocMetadata.subcommands` array for CLI structs that carry a
+  `#[command(subcommand)]` selector field — is fully satisfied. The
+  remaining actions are to move the draft PR to ready-for-review and
+  merge into `main`; no further code changes are required for 6.1.1.
+  Deeper rendering assertions are deferred to roadmap item 6.1.2.
 
 ## Notes for the accompanying draft pull request
 

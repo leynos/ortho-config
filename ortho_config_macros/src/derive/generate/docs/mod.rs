@@ -85,10 +85,10 @@ fn build_subcommands_metadata(args: &DocsArgs<'_>) -> syn::Result<TokenStream> {
     match subcommand_fields.as_slice() {
         [] => Ok(quote! { Vec::new() }),
         [field] => {
-            let ty = &field.ty;
+            let inner_ty = unwrap_known_wrapper(&field.ty);
             let krate = args.krate;
             Ok(quote! {
-                <#ty as #krate::docs::OrthoConfigSubcommandDocs>
+                <#inner_ty as #krate::docs::OrthoConfigSubcommandDocs>
                     ::get_subcommand_doc_metadata()
             })
         }
@@ -97,6 +97,28 @@ fn build_subcommands_metadata(args: &DocsArgs<'_>) -> syn::Result<TokenStream> {
             "multiple #[command(subcommand)] fields are not supported; clap also rejects multiple subcommand selectors on one struct",
         )),
     }
+}
+
+/// Unwrap `Option<T>` and `Vec<T>` to the inner type `T`, falling back to
+/// the original type for unrecognized wrappers.
+fn unwrap_known_wrapper(ty: &syn::Type) -> &syn::Type {
+    let syn::Type::Path(type_path) = ty else {
+        return ty;
+    };
+    let Some(last_segment) = type_path.path.segments.last() else {
+        return ty;
+    };
+    let ident = last_segment.ident.to_string();
+    if ident != "Option" && ident != "Vec" {
+        return ty;
+    }
+    let syn::PathArguments::AngleBracketed(args) = &last_segment.arguments else {
+        return ty;
+    };
+    let Some(syn::GenericArgument::Type(inner)) = args.args.first() else {
+        return ty;
+    };
+    inner
 }
 
 pub(super) fn option_string_tokens(value: Option<&str>) -> TokenStream {
