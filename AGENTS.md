@@ -49,11 +49,11 @@
   document. When a decision is substantive, capture it in an Architectural
   Decision Record (ADR) following the documentation style guide, and reference
   that ADR from the design document.
-- **User-facing behaviour:** Update [users' guide](docs/users-guide.md) for
+- **User-facing behaviour:** Update [user's guide](docs/users-guide.md) for
   behaviour or user-interface changes that users should know about.
 - **Internal interfaces:** Document internally facing interfaces in the
   relevant component architecture document. Document internally facing
-  conventions and practices in [developers' guide](docs/developers-guide.md).
+  conventions and practices in [developer's guide](docs/developers-guide.md).
 - **Style:** All documentation must adhere to the
   [documentation style guide](docs/documentation-style-guide.md).
 

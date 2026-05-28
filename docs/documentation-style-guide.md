@@ -212,7 +212,7 @@ user's guide or developer's guide.
   implemented system. If the code or the governing decision changes, update the
   design or mark the divergence explicitly.
 
-### Request for Comments (RFC)
+### Request for Comments (RFCs)
 
 Use RFCs for proposed changes that need technical review before they become
 binding. Store them under `docs/rfcs/`.
