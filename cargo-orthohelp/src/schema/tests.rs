@@ -25,32 +25,44 @@ fn schema_round_trips_against_ortho_config() {
     );
 }
 
-fn sample_metadata() -> ortho_docs::DocMetadata {
+#[expect(
+    clippy::too_many_arguments,
+    reason = "private test helper; a dedicated struct would be disproportionate"
+)]
+fn make_doc_metadata(
+    app_name: &str,
+    bin_name: Option<&str>,
+    about_id: &str,
+    synopsis_id: Option<&str>,
+    subcommands: Vec<ortho_docs::DocMetadata>,
+    windows: Option<ortho_docs::WindowsMetadata>,
+) -> ortho_docs::DocMetadata {
     ortho_docs::DocMetadata {
         ir_version: ORTHO_DOCS_IR_VERSION.to_owned(),
-        app_name: "demo-app".to_owned(),
-        bin_name: Some("demo-app".to_owned()),
-        about_id: "demo.about".to_owned(),
-        synopsis_id: Some("demo.synopsis".to_owned()),
+        app_name: app_name.to_owned(),
+        bin_name: bin_name.map(str::to_owned),
+        about_id: about_id.to_owned(),
+        synopsis_id: synopsis_id.map(str::to_owned),
         sections: sample_sections(),
         fields: vec![sample_field()],
-        subcommands: vec![sample_subcommand()],
-        windows: Some(sample_windows()),
+        subcommands,
+        windows,
     }
 }
 
+fn sample_metadata() -> ortho_docs::DocMetadata {
+    make_doc_metadata(
+        "demo-app",
+        Some("demo-app"),
+        "demo.about",
+        Some("demo.synopsis"),
+        vec![sample_subcommand()],
+        Some(sample_windows()),
+    )
+}
+
 fn sample_subcommand() -> ortho_docs::DocMetadata {
-    ortho_docs::DocMetadata {
-        ir_version: ORTHO_DOCS_IR_VERSION.to_owned(),
-        app_name: "run".to_owned(),
-        bin_name: None,
-        about_id: "run.about".to_owned(),
-        synopsis_id: None,
-        sections: sample_sections(),
-        fields: vec![sample_field()],
-        subcommands: Vec::new(),
-        windows: None,
-    }
+    make_doc_metadata("run", None, "run.about", None, Vec::new(), None)
 }
 
 fn sample_sections() -> ortho_docs::SectionsMetadata {
