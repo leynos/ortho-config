@@ -239,7 +239,7 @@ risks emerge.
   a small companion trait if enum-level documentation cannot be represented
   cleanly through the existing `OrthoConfigDocs` trait." The recommended
   design (below) introduces a new trait. Severity: medium. Likelihood: medium.
-  Mitigation: capture the choice in ADR-004 (see Milestone 0); the ADR is the
+  Mitigation: capture the choice in ADR-005 (see Milestone 0); the ADR is the
   approval gate. If review prefers to extend `OrthoConfigDocs` instead, stop
   and revise the plan.
 - Risk: divergence between the variant-name convention used by clap and the
@@ -619,7 +619,7 @@ Steps:
 
 1. Submit this ExecPlan for review and wait for explicit maintainer approval.
    Record the approval date in `Progress`. Update `Status:` to `APPROVED`.
-2. Draft `docs/adr-004-subcommand-docs-companion-trait.md` following the ADR
+2. Draft `docs/adr-005-subcommand-docs-companion-trait.md` following the ADR
    template in `docs/documentation-style-guide.md:411-489`. Cover at minimum:
    - context (the gap named by
      `docs/agent-native-cli-design.md` §4 and §9);
@@ -649,7 +649,7 @@ must be recorded in `Surprises & Discoveries` before continuing.
 
 Run `coderabbit review --agent` and clear concerns.
 
-Acceptance: ADR-004 exists, the plan is `APPROVED`, the documentation index
+Acceptance: ADR-005 exists, the plan is `APPROVED`, the documentation index
 links to the ADR, and the developers guide mentions the new trait.
 
 ### Milestone 1: introduce the trait and the shared parsing helper
@@ -951,7 +951,7 @@ Steps:
      describing the new subcommand-field detection;
    - add a dated entry to §9 "Decision log" in the same style as the
      2025-12-19 "Merge selected subcommand enums" entry at
-     `docs/design.md:933-944`, citing ADR-004.
+     `docs/design.md:933-944`, citing ADR-005.
 2. Update `docs/cargo-orthohelp-design.md`:
    - §2.1 (top-level metadata): explain that `subcommands` is now populated
      by `OrthoConfigSubcommandDocs`;
@@ -1183,7 +1183,7 @@ output before and after a change, etc.).
 
 - ADR-003
   (`docs/adr-003-define-schema-ownership-for-agent-native-contracts.md`)
-  governs the ownership boundary; ADR-004 will sit alongside it and inherit
+  governs the ownership boundary; ADR-005 will sit alongside it and inherit
   its versioning rules.
 
 ## Interfaces and dependencies
@@ -1257,7 +1257,7 @@ actual current state of the work.
 - [x] (2026-05-23 ??:??Z) Draft ExecPlan created.
 - [x] (2026-05-24 12:40Z) Plan approved by maintainer instruction to
   proceed with implementation; status set to `APPROVED`.
-- [x] (2026-05-24 12:58Z) Milestone 0 complete (ADR-004 drafted,
+- [x] (2026-05-24 12:58Z) Milestone 0 complete (ADR-005 drafted,
   contents index updated,
   developers guide note added, markdownlint and nixie clean, CodeRabbit
   clear).

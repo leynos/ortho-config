@@ -1035,7 +1035,7 @@ generated documentation, generated agent context, and enforceable CLI policy.
   `CliValueExtractor`.
 - **Generate recursive subcommand documentation metadata (2026-05-24):**
   Introduce the `OrthoConfigSubcommandDocs` companion trait and derive for
-  `clap::Subcommand` enums, as accepted in ADR-004. `OrthoConfig` now
+  `clap::Subcommand` enums, as accepted in ADR-005. `OrthoConfig` now
   recognizes a `#[command(subcommand)]` selector field, skips it as a
   configuration field, and fills `DocMetadata.subcommands` from the enum's
   per-variant metadata in declaration order.

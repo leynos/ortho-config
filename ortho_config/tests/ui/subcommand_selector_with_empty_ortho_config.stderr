@@ -1,0 +1,5 @@
+error: #[command(subcommand)] fields cannot be combined with #[ortho_config()]; remove the conflicting attribute
+  --> tests/ui/subcommand_selector_with_empty_ortho_config.rs:11:5
+   |
+11 |     #[ortho_config()]
+   |     ^^^^^^^^^^^^^^^^^

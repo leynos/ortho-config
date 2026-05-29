@@ -239,6 +239,14 @@ pub(crate) fn reject_subcommand_ortho_config_attrs(field: &syn::Field) -> syn::R
         .iter()
         .filter(|attr| attr.path().is_ident("ortho_config"))
     {
+        if let syn::Meta::List(list) = &attr.meta
+            && list.tokens.is_empty()
+        {
+            return Err(syn::Error::new_spanned(
+                attr,
+                "#[command(subcommand)] fields cannot be combined with #[ortho_config()]; remove the conflicting attribute",
+            ));
+        }
         attr.parse_nested_meta(|meta| {
             let option = meta
                 .path

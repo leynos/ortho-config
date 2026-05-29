@@ -1,4 +1,4 @@
-# Architectural decision record (ADR) 004: Subcommand docs companion trait
+# Architectural decision record (ADR) 005: Subcommand docs companion trait
 
 ## Status
 
@@ -12,8 +12,8 @@ Accepted.
 
 `#[derive(OrthoConfig)]` already emits documentation intermediate
 representation (IR) through `OrthoConfigDocs`, and the IR schema already has
-`DocMetadata.subcommands: Vec<DocMetadata>`. The generated value is currently
-empty for every command, even when the `clap::Parser` root has a
+`DocMetadata.subcommands: Vec<DocMetadata>`. The generated value is
+currently empty for every command, even when the `clap::Parser` root has a
 `#[command(subcommand)]` selector.
 
 This blocks whole-CLI introspection. Human documentation renderers and future
@@ -21,9 +21,9 @@ agent-facing summaries need the same recursive command tree: a top-level
 configuration node with one child metadata node per subcommand, preserving the
 order and command labels that clap exposes to users.
 
-The question is where enum-level subcommand metadata belongs without changing
-the IR schema, moving bridge logic into `cargo-orthohelp`, or making downstream
-applications stitch trees by hand.
+The question is where enum-level subcommand metadata belongs without
+changing the IR schema, moving bridge logic into `cargo-orthohelp`, or
+making downstream applications stitch trees by hand.
 
 ## Decision drivers
 
@@ -42,8 +42,9 @@ applications stitch trees by hand.
   emit populated recursive `DocMetadata.subcommands` values.
 - Each subcommand enum variant contributes one child `DocMetadata` value in
   declaration order.
-- Default command labels use clap-compatible kebab-case variant names, with
-  `#[command(name = "...")]` and `#[clap(name = "...")]` overrides honoured.
+- Default command labels use clap-compatible kebab-case variant names,
+  with `#[command(name = "...")]` and `#[clap(name = "...")]`
+  overrides honoured.
 
 ### Technical requirements
 
@@ -69,6 +70,8 @@ change or a less obvious return shape.
 
 Add a companion trait in `ortho_config::docs`:
 
+Trait definition for providing subcommand documentation metadata.
+
 ```rust
 pub trait OrthoConfigSubcommandDocs {
     fn get_subcommand_doc_metadata() -> Vec<DocMetadata>;
@@ -85,28 +88,30 @@ This keeps each trait's contract narrow. Structs still implement
 ### Option C: Require manual stitching
 
 Consumers could manually call each subcommand argument type's
-`OrthoConfigDocs::get_doc_metadata()` implementation and append child nodes to
-the root metadata.
+`OrthoConfigDocs::get_doc_metadata()` implementation and append child nodes
+to the root metadata.
 
 This avoids a new trait, but it makes recursive IR easy to omit, duplicates
 clap naming logic in applications, and defeats the goal of generated
 documentation metadata.
 
-The companion trait is the only option that is additive, keeps the trait
-contract narrow, gives consumers a generated pattern, leaves the bridge
-unchanged, and keeps command naming generated rather than application-owned.
+The companion trait is the only option that is additive, keeps the
+trait contract narrow, gives consumers a generated pattern, leaves the
+bridge unchanged, and keeps command naming generated rather than
+application-owned.
 
 ## Decision outcome / proposed direction
 
-Use Option B. `OrthoConfigSubcommandDocs` is the accepted companion trait for
-enum-level subcommand documentation metadata. It is part of the
+Use Option B. `OrthoConfigSubcommandDocs` is the accepted companion trait
+for enum-level subcommand documentation metadata. It is part of the
 human-documentation IR contract owned by `ortho_config::docs`.
 
-The derive macro for subcommand enums belongs in `ortho_config_macros`. The
-existing struct derive remains responsible for root metadata generation and
-uses the companion trait only when it finds a clap subcommand selector field.
-`cargo-orthohelp` continues to serialize the root `DocMetadata` value without
-knowing how the recursive tree was generated.
+The derive macro for subcommand enums belongs in
+`ortho_config_macros`. The existing struct derive remains responsible for
+root metadata generation and uses the companion trait only when it finds a
+clap subcommand selector field. `cargo-orthohelp` continues to serialize
+the root `DocMetadata` value without knowing how the recursive tree was
+generated.
 
 ## Goals and non-goals
 
@@ -134,13 +139,13 @@ knowing how the recursive tree was generated.
 
 ## Known risks and limitations
 
-- Unit variants are deferred because they have no inner argument type from
-  which to source field metadata, headings, and examples.
-- Hidden commands, aliases, and deprecation metadata are deferred because the
-  current IR schema has no fields for those concepts.
-- The struct derive must skip the subcommand selector everywhere configuration
-  fields are generated, otherwise clap or serde bounds can fail in unrelated
-  generated code.
+- Unit variants are deferred because they have no inner argument type
+  from which to source field metadata, headings, and examples.
+- Hidden commands, aliases, and deprecation metadata are deferred
+  because the current IR schema has no fields for those concepts.
+- The struct derive must skip the subcommand selector everywhere
+  configuration fields are generated, otherwise clap or serde bounds can
+  fail in unrelated generated code.
 
 ## Outstanding decisions
 

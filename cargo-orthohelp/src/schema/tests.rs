@@ -25,44 +25,50 @@ fn schema_round_trips_against_ortho_config() {
     );
 }
 
-#[expect(
-    clippy::too_many_arguments,
-    reason = "private test helper; a dedicated struct would be disproportionate"
-)]
-fn make_doc_metadata(
-    app_name: &str,
-    bin_name: Option<&str>,
-    about_id: &str,
-    synopsis_id: Option<&str>,
+#[derive(Clone)]
+struct MakeDocMetadataFixture {
+    app_name: String,
+    bin_name: Option<String>,
+    about_id: String,
+    synopsis_id: Option<String>,
     subcommands: Vec<ortho_docs::DocMetadata>,
     windows: Option<ortho_docs::WindowsMetadata>,
-) -> ortho_docs::DocMetadata {
+}
+
+fn make_doc_metadata(fixture: MakeDocMetadataFixture) -> ortho_docs::DocMetadata {
     ortho_docs::DocMetadata {
         ir_version: ORTHO_DOCS_IR_VERSION.to_owned(),
-        app_name: app_name.to_owned(),
-        bin_name: bin_name.map(str::to_owned),
-        about_id: about_id.to_owned(),
-        synopsis_id: synopsis_id.map(str::to_owned),
+        app_name: fixture.app_name,
+        bin_name: fixture.bin_name,
+        about_id: fixture.about_id,
+        synopsis_id: fixture.synopsis_id,
         sections: sample_sections(),
         fields: vec![sample_field()],
-        subcommands,
-        windows,
+        subcommands: fixture.subcommands,
+        windows: fixture.windows,
     }
 }
 
 fn sample_metadata() -> ortho_docs::DocMetadata {
-    make_doc_metadata(
-        "demo-app",
-        Some("demo-app"),
-        "demo.about",
-        Some("demo.synopsis"),
-        vec![sample_subcommand()],
-        Some(sample_windows()),
-    )
+    make_doc_metadata(MakeDocMetadataFixture {
+        app_name: "demo-app".to_owned(),
+        bin_name: Some("demo-app".to_owned()),
+        about_id: "demo.about".to_owned(),
+        synopsis_id: Some("demo.synopsis".to_owned()),
+        subcommands: vec![sample_subcommand()],
+        windows: Some(sample_windows()),
+    })
 }
 
 fn sample_subcommand() -> ortho_docs::DocMetadata {
-    make_doc_metadata("run", None, "run.about", None, Vec::new(), None)
+    make_doc_metadata(MakeDocMetadataFixture {
+        app_name: "run".to_owned(),
+        bin_name: None,
+        about_id: "run.about".to_owned(),
+        synopsis_id: None,
+        subcommands: Vec::new(),
+        windows: None,
+    })
 }
 
 fn sample_sections() -> ortho_docs::SectionsMetadata {
