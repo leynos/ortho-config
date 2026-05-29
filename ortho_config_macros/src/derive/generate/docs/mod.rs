@@ -45,6 +45,7 @@ pub(crate) fn generate_docs_impl(args: &DocsArgs<'_>) -> syn::Result<TokenStream
         cli_fields: args.cli_fields,
         krate,
     })?;
+    let subcommands = build_subcommands_metadata(args)?;
 
     let app_name_lit = syn::LitStr::new(&app_name_value, proc_macro2::Span::call_site());
     let about_id_lit = syn::LitStr::new(&about_id, proc_macro2::Span::call_site());
@@ -64,12 +65,60 @@ pub(crate) fn generate_docs_impl(args: &DocsArgs<'_>) -> syn::Result<TokenStream
                     synopsis_id: #synopsis_tokens,
                     sections: #headings,
                     fields: vec![ #( #fields ),* ],
-                    subcommands: Vec::new(),
+                    subcommands: #subcommands,
                     windows: #windows,
                 }
             }
         }
     })
+}
+
+fn build_subcommands_metadata(args: &DocsArgs<'_>) -> syn::Result<TokenStream> {
+    let subcommand_fields = args
+        .fields
+        .iter()
+        .zip(args.field_attrs)
+        .filter(|(_, attrs)| attrs.is_subcommand)
+        .map(|(field, _)| field)
+        .collect::<Vec<_>>();
+
+    match subcommand_fields.as_slice() {
+        [] => Ok(quote! { Vec::new() }),
+        [field] => {
+            let inner_ty = unwrap_known_wrapper(&field.ty);
+            let krate = args.krate;
+            Ok(quote! {
+                <#inner_ty as #krate::docs::OrthoConfigSubcommandDocs>
+                    ::get_subcommand_doc_metadata()
+            })
+        }
+        [first, ..] => Err(syn::Error::new_spanned(
+            first,
+            "multiple #[command(subcommand)] fields are not supported; clap also rejects multiple subcommand selectors on one struct",
+        )),
+    }
+}
+
+/// Unwrap `Option<T>` and `Vec<T>` to the inner type `T`, falling back to
+/// the original type for unrecognized wrappers.
+fn unwrap_known_wrapper(ty: &syn::Type) -> &syn::Type {
+    let syn::Type::Path(type_path) = ty else {
+        return ty;
+    };
+    let Some(last_segment) = type_path.path.segments.last() else {
+        return ty;
+    };
+    let ident = last_segment.ident.to_string();
+    if ident != "Option" && ident != "Vec" {
+        return ty;
+    }
+    let syn::PathArguments::AngleBracketed(args) = &last_segment.arguments else {
+        return ty;
+    };
+    let Some(syn::GenericArgument::Type(inner)) = args.args.first() else {
+        return ty;
+    };
+    inner
 }
 
 pub(super) fn option_string_tokens(value: Option<&str>) -> TokenStream {

@@ -1,0 +1,5 @@
+error: tuple variants must contain exactly one field
+ --> tests/ui/subcommand_docs_tuple_variant.rs:9:5
+  |
+9 |     Run(Args, Args),
+  |     ^^^

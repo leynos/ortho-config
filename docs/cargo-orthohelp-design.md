@@ -152,6 +152,10 @@ pub struct DocMetadata {
 }
 ```
 
+`subcommands` is populated by `OrthoConfigSubcommandDocs` when the root config
+contains a clap subcommand selector. Configs without subcommands still emit an
+empty vector, preserving the schema shape and version.
+
 ```rust
 #[derive(Debug, Serialize)]
 pub struct SectionsMetadata {
@@ -357,6 +361,20 @@ pub trait OrthoConfigDocs {
 The `#[derive(OrthoConfig)]` macro emits this implementation alongside runtime
 loaders, filling all IR fields from the same parsed metadata.
 
+Subcommand enums use a companion trait:
+
+```rust
+pub trait OrthoConfigSubcommandDocs {
+    /// Returns one documentation metadata node per subcommand variant.
+    fn get_subcommand_doc_metadata() -> Vec<DocMetadata>;
+}
+```
+
+The `OrthoConfigSubcommandDocs` derive is applied to `clap::Subcommand` enums.
+Each single-field tuple variant delegates to its inner argument struct's
+`OrthoConfigDocs` implementation, overrides `app_name` with the clap command
+label, regenerates `about_id`, and preserves enum declaration order.
+
 ### 3.2 Attributes (doc-related)
 
 Namespace: `#[ortho_config(…)]`. Selected keys:
@@ -421,6 +439,11 @@ Deterministic IDs when omitted:
   `Custom` using the final path segment (for example, `MyType`).
 - Documentation-only `env(name = "...")` and `file(key_path = "...")` override
   IR output but do not affect runtime naming or loading behaviour.
+- `OrthoConfig` recognizes `#[command(subcommand)]` selector fields and uses
+  the field type's `OrthoConfigSubcommandDocs` implementation to populate
+  recursive `subcommands`.
+- Subcommand names default to kebab-cased enum variant names and honour
+  `#[command(name = "...")]` / `#[clap(name = "...")]` overrides.
 
 ## 4. Localization model
 
@@ -611,7 +634,13 @@ sentinel so generators can surface gaps during development.
       "long_help": null
     }
   ],
-  "subcommands": []
+  "subcommands": [
+    {
+      "app_name": "run",
+      "about": "Run the app",
+      "fields": []
+    }
+  ]
 }
 ```
 
@@ -849,7 +878,15 @@ installs the executable in a different location.
     "split_subcommands_into_functions": false,
     "help_info_uri": null
   },
-  "subcommands": []
+  "subcommands": [
+    {
+      "ir_version": "1.1",
+      "app_name": "run",
+      "about_id": "run.about",
+      "fields": [],
+      "subcommands": []
+    }
+  ]
 }
 ```
 

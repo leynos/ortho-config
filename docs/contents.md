@@ -39,6 +39,9 @@
   policy reports.
 - [ADR-004: Cargo external-subcommand entry-point architecture](adr-004-cargo-external-subcommand-entry-point.md):
   review the accepted Cargo dispatch boundary and wrapper shape.
+- [ADR-005: Subcommand docs companion trait](adr-005-subcommand-docs-companion-trait.md):
+  review the accepted companion trait for recursive subcommand documentation
+  metadata.
 - [Archived v0.8.0 roadmap](archive/v0-8-0-roadmap.md): review completed
   phases, steps, and tasks from the roadmap that preceded the active
   agent-native plan.

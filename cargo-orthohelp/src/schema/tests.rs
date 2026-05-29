@@ -25,18 +25,49 @@ fn schema_round_trips_against_ortho_config() {
     );
 }
 
-fn sample_metadata() -> ortho_docs::DocMetadata {
+struct DocMetadataSpec<'a> {
+    app_name: &'a str,
+    bin_name: Option<&'a str>,
+    about_id: &'a str,
+    synopsis_id: Option<&'a str>,
+    subcommands: Vec<ortho_docs::DocMetadata>,
+    windows: Option<ortho_docs::WindowsMetadata>,
+}
+
+fn make_doc_metadata(spec: DocMetadataSpec<'_>) -> ortho_docs::DocMetadata {
     ortho_docs::DocMetadata {
         ir_version: ORTHO_DOCS_IR_VERSION.to_owned(),
-        app_name: "demo-app".to_owned(),
-        bin_name: Some("demo-app".to_owned()),
-        about_id: "demo.about".to_owned(),
-        synopsis_id: Some("demo.synopsis".to_owned()),
+        app_name: spec.app_name.to_owned(),
+        bin_name: spec.bin_name.map(str::to_owned),
+        about_id: spec.about_id.to_owned(),
+        synopsis_id: spec.synopsis_id.map(str::to_owned),
         sections: sample_sections(),
         fields: vec![sample_field()],
-        subcommands: Vec::new(),
-        windows: Some(sample_windows()),
+        subcommands: spec.subcommands,
+        windows: spec.windows,
     }
+}
+
+fn sample_metadata() -> ortho_docs::DocMetadata {
+    make_doc_metadata(DocMetadataSpec {
+        app_name: "demo-app",
+        bin_name: Some("demo-app"),
+        about_id: "demo.about",
+        synopsis_id: Some("demo.synopsis"),
+        subcommands: vec![sample_subcommand()],
+        windows: Some(sample_windows()),
+    })
+}
+
+fn sample_subcommand() -> ortho_docs::DocMetadata {
+    make_doc_metadata(DocMetadataSpec {
+        app_name: "run",
+        bin_name: None,
+        about_id: "run.about",
+        synopsis_id: None,
+        subcommands: Vec::new(),
+        windows: None,
+    })
 }
 
 fn sample_sections() -> ortho_docs::SectionsMetadata {

@@ -254,10 +254,12 @@ workflow.
 
 ## 4. Whole-CLI introspection
 
-Whole-CLI introspection is the first implementation dependency. The current
-documentation IR already has recursive `subcommands`, but generated
-`OrthoConfigDocs` implementations currently emit an empty subcommand list. The
-future design must close that gap before agent-context can be complete.
+Whole-CLI introspection is the first implementation dependency. The
+documentation IR already has recursive `subcommands`, and
+`OrthoConfigSubcommandDocs` now lets generated `OrthoConfigDocs`
+implementations populate that tree from `clap::Subcommand` enums. This closes
+the human-documentation IR gap needed before compact agent-context output can
+reuse the same command tree.
 
 The target is a command tree where each command node can describe:
 
@@ -269,10 +271,9 @@ The target is a command tree where each command node can describe:
 - output contracts and stable exit classes;
 - pagination, async, delivery, profile, and feedback support.
 
-`SelectedSubcommandMerge` already parses subcommand enum information. Future
-implementation should reuse that knowledge or introduce a small companion trait
-so command trees are generated from Rust types rather than manually copied into
-documentation.
+`SelectedSubcommandMerge` and `OrthoConfigSubcommandDocs` share clap command
+name parsing, so command trees are generated from Rust types rather than
+manually copied into documentation.
 
 ## 5. Vocabulary and flag policy
 
@@ -610,7 +611,8 @@ in warning mode before enforcing it in CI.
 
 The design and roadmap updates must address these known gaps:
 
-- generated `OrthoConfigDocs` subcommand metadata is currently empty;
+- compact agent-context output does not yet consume generated
+  `DocMetadata.subcommands`;
 - no compact agent-context format exists;
 - no agent-native lint command exists;
 - the improved `MissingRequiredValues` diagnostic is reconciled as proposed

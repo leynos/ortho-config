@@ -16,10 +16,15 @@ fn require_named_field(field: &syn::Field) -> Result<&syn::Ident, proc_macro2::T
     })
 }
 
-pub(crate) fn build_default_struct_fields(fields: &[syn::Field]) -> Vec<proc_macro2::TokenStream> {
+pub(crate) fn build_default_struct_fields(
+    fields: &[syn::Field],
+    field_attrs: &[FieldAttrs],
+) -> Vec<proc_macro2::TokenStream> {
     fields
         .iter()
-        .map(|f| {
+        .zip(field_attrs.iter())
+        .filter(|(_, attrs)| !attrs.is_subcommand)
+        .map(|(f, _)| {
             let name = match require_named_field(f) {
                 Ok(ident) => ident,
                 Err(err) => return err,
@@ -40,6 +45,7 @@ pub(crate) fn build_default_struct_init(
     fields
         .iter()
         .zip(field_attrs.iter())
+        .filter(|(_, attr)| !attr.is_subcommand)
         .map(|(f, attr)| {
             let name = match require_named_field(f) {
                 Ok(ident) => ident,

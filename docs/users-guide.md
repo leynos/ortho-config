@@ -1183,6 +1183,63 @@ descriptions. Field-level metadata can be refined with `help_id`,
 attributes affect only the emitted IR; they do not change runtime naming or
 loading behaviour.
 
+### Documenting subcommands
+
+For a root config with a clap subcommand selector, derive
+`OrthoConfigSubcommandDocs` on the command enum and mark the selector field
+with `#[command(subcommand)]`. The selector is not emitted as a normal config
+field; instead, each enum variant contributes a child `DocMetadata` node.
+
+```rust
+use clap::{Args, Parser, Subcommand};
+use ortho_config::{OrthoConfig, OrthoConfigSubcommandDocs};
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Parser, Deserialize, Serialize, OrthoConfig)]
+#[ortho_config(prefix = "APP")]
+struct Cli {
+    #[arg(long)]
+    verbose: bool,
+    #[serde(skip)]
+    #[command(subcommand)]
+    command: Commands,
+}
+
+#[derive(Debug, Subcommand, OrthoConfigSubcommandDocs)]
+enum Commands {
+    Run(RunArgs),
+    #[command(name = "take-leave")]
+    TakeLeave(TakeLeaveArgs),
+}
+
+impl Default for Commands {
+    fn default() -> Self {
+        Self::Run(RunArgs::default())
+    }
+}
+
+#[derive(Debug, Args, Default, Deserialize, Serialize, OrthoConfig)]
+#[ortho_config(prefix = "APP")]
+struct RunArgs {
+    #[arg(long)]
+    dry_run: bool,
+}
+
+#[derive(Debug, Args, Default, Deserialize, Serialize, OrthoConfig)]
+#[ortho_config(prefix = "APP")]
+struct TakeLeaveArgs {
+    #[arg(long)]
+    message: Option<String>,
+}
+```
+
+The derived enum implementation preserves declaration order and uses clap's
+command label: the `Run` variant becomes `run`, and the explicit
+`#[command(name = "take-leave")]` override becomes `take-leave`. If the root
+struct also derives `Deserialize`, mark the selector with `#[serde(skip)]` and
+provide a default command value so serde does not require the command enum to
+deserialize from configuration files.
+
 The documentation IR is the human documentation contract. The future
 agent-native work will add a compact, independently versioned sibling
 agent-context output for command invocation, vocabulary checks, structured

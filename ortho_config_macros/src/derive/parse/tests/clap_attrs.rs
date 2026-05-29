@@ -1,7 +1,9 @@
 //! Tests for clap attribute parsing helpers.
 
 use super::super::parse_input;
-use crate::derive::parse::{ClapInferredDefault, FieldAttrs};
+use crate::derive::parse::{
+    ClapInferredDefault, FieldAttrs, clap_field_is_subcommand, clap_variant_name,
+};
 use anyhow::{Result, anyhow, ensure};
 use quote::ToTokens;
 use syn::{DeriveInput, parse_quote};
@@ -44,6 +46,25 @@ fn assert_tokens_contain(expr: &syn::Expr, expected_substrings: &[&str]) -> Resu
         );
     }
     Ok(())
+}
+
+fn first_variant(input: &DeriveInput) -> Result<&syn::Variant> {
+    let syn::Data::Enum(data) = &input.data else {
+        return Err(anyhow!("expected enum"));
+    };
+    data.variants
+        .first()
+        .ok_or_else(|| anyhow!("missing first variant"))
+}
+
+fn first_field(input: &DeriveInput) -> Result<&syn::Field> {
+    let syn::Data::Struct(data) = &input.data else {
+        return Err(anyhow!("expected struct"));
+    };
+    data.fields
+        .iter()
+        .next()
+        .ok_or_else(|| anyhow!("missing first field"))
 }
 
 #[test]
@@ -187,5 +208,66 @@ fn duplicate_clap_defaults_are_rejected() -> Result<()> {
         err_text.contains("duplicate clap default override"),
         "unexpected duplicate default error: {err_text}",
     );
+    Ok(())
+}
+
+#[test]
+fn clap_variant_name_cases() -> Result<()> {
+    use proc_macro2::TokenStream;
+    use quote::quote;
+
+    let cases: &[(TokenStream, &str)] = &[
+        (
+            quote! { enum Commands { #[command(name = "take-leave")] TakeLeave(TakeLeaveArgs), } },
+            "take-leave",
+        ),
+        (
+            quote! { enum Commands { #[clap(name = "take-leave")] TakeLeave(TakeLeaveArgs), } },
+            "take-leave",
+        ),
+    ];
+
+    for (tokens, expected_name) in cases {
+        let input: DeriveInput = syn::parse2(tokens.clone())?;
+        let name = clap_variant_name(first_variant(&input)?)?
+            .ok_or_else(|| anyhow!("missing variant name"))?;
+        ensure!(
+            name.value() == *expected_name,
+            "expected name `{expected_name}`, got `{}`",
+            name.value(),
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn clap_field_is_subcommand_cases() -> Result<()> {
+    use proc_macro2::TokenStream;
+    use quote::quote;
+
+    let cases: &[(TokenStream, bool)] = &[
+        (
+            quote! { struct Cli { #[command(subcommand)] command: Commands, } },
+            true,
+        ),
+        (
+            quote! { struct Cli { #[clap(subcommand)] command: Commands, } },
+            true,
+        ),
+        (
+            quote! { struct Cli { #[command(subcommand, long = "cmd")] command: Commands, } },
+            true,
+        ),
+        (quote! { struct Cli { #[arg(long)] name: String, } }, false),
+    ];
+
+    for (tokens, expected) in cases {
+        let input: DeriveInput = syn::parse2(tokens.clone())?;
+        let actual = clap_field_is_subcommand(first_field(&input)?)?;
+        ensure!(
+            actual == *expected,
+            "input `{tokens}`: expected subcommand={expected}, got {actual}",
+        );
+    }
     Ok(())
 }

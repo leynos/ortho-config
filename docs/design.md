@@ -397,7 +397,11 @@ This is the most complex component. It needs to perform the following using
    be ASCII alphanumeric and cannot reuse clap's `-h` or `-V`. Generated long
    flags use only ASCII alphanumeric characters plus `-`, and overrides
    provided via `cli_long` must obey the same constraint. Long names may not be
-   `help` or `version`.
+   `help` or `version`. Fields marked `#[command(subcommand)]` or
+   `#[clap(subcommand)]` are treated as command selectors rather than
+   configuration fields. The derive omits them from generated CLI/default/merge
+   field paths and uses the field type's `OrthoConfigSubcommandDocs`
+   implementation to populate recursive `DocMetadata.subcommands` values.
 3. **Generate `impl OrthoConfig for UserStruct`:**
    - This block contains the `load_from_iter` method used by the `load`
      convenience function.
@@ -1029,6 +1033,12 @@ generated documentation, generated agent context, and enforceable CLI policy.
   chosen over implicit detection to keep generated bounds predictable and to
   avoid surprising compile errors when a subcommand type does not implement
   `CliValueExtractor`.
+- **Generate recursive subcommand documentation metadata (2026-05-24):**
+  Introduce the `OrthoConfigSubcommandDocs` companion trait and derive for
+  `clap::Subcommand` enums, as accepted in ADR-005. `OrthoConfig` now
+  recognizes a `#[command(subcommand)]` selector field, skips it as a
+  configuration field, and fills `DocMetadata.subcommands` from the enum's
+  per-variant metadata in declaration order.
 
 [^hello-world-feedback]: `docs/feedback-from-hello-world-example.md`.
 [^behavioural-testing]: `docs/behavioural-testing-in-rust-with-cucumber.md`.

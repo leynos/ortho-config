@@ -16,6 +16,10 @@ All notable changes to this project will be documented in this file.
 - Introduce the `#[ortho_config(discovery(...))]` attribute to customise config
   discovery (filenames, environment overrides, and the generated CLI flag) and
   expose the new flag in the `hello_world` example.
+- Add the `OrthoConfigSubcommandDocs` trait and derive so subcommand enums can
+  emit per-variant documentation metadata.
+- Populate recursive `DocMetadata.subcommands` values from `OrthoConfig`
+  structs that hold a `#[command(subcommand)]` field.
 
 ### Changed
 

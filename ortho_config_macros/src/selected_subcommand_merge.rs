@@ -7,6 +7,8 @@ use proc_macro2::TokenStream;
 use quote::quote;
 use syn::DeriveInput;
 
+use crate::derive::parse::clap_variant_name;
+
 fn variant_has_matches(variant: &syn::Variant) -> syn::Result<bool> {
     let mut has_matches = false;
     for attr in &variant.attrs {
@@ -22,26 +24,6 @@ fn variant_has_matches(variant: &syn::Variant) -> syn::Result<bool> {
         })?;
     }
     Ok(has_matches)
-}
-
-fn clap_variant_name(variant: &syn::Variant) -> syn::Result<Option<syn::LitStr>> {
-    let mut name = None;
-    for attr in &variant.attrs {
-        let is_command = attr.path().is_ident("command") || attr.path().is_ident("clap");
-        if !is_command {
-            continue;
-        }
-        attr.parse_nested_meta(|meta| {
-            if meta.path.is_ident("name") {
-                let value = meta.value()?;
-                let lit: syn::LitStr = value.parse()?;
-                name = Some(lit);
-                return Ok(());
-            }
-            Ok(())
-        })?;
-    }
-    Ok(name)
 }
 
 fn validate_tuple_variant(variant_ident: &syn::Ident, fields: &syn::Fields) -> syn::Result<()> {

@@ -1,0 +1,5 @@
+error: unit variants are not supported; use Variant(Args)
+ --> tests/ui/subcommand_docs_unit_variant.rs:7:5
+  |
+7 |     Run,
+  |     ^^^

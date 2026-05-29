@@ -1,0 +1,5 @@
+error: named-field variants are not supported; use tuple variants like Variant(Args)
+ --> tests/ui/subcommand_docs_named_variant.rs:9:5
+  |
+9 |     Run { args: Args },
+  |     ^^^

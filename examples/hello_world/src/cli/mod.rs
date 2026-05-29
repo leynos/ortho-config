@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use clap::{ArgAction, Args, CommandFactory, FromArgMatches, Parser, Subcommand};
-use ortho_config::{Localizer, OrthoConfig};
+use ortho_config::{Localizer, OrthoConfig, OrthoConfigSubcommandDocs};
 use serde::{Deserialize, Serialize};
 
 use crate::error::ValidationError;
@@ -182,7 +182,15 @@ impl GlobalArgs {
 }
 
 /// Subcommands implemented by the example.
-#[derive(Debug, Clone, PartialEq, Eq, Subcommand, ortho_config_macros::SelectedSubcommandMerge)]
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    Subcommand,
+    ortho_config_macros::SelectedSubcommandMerge,
+    OrthoConfigSubcommandDocs,
+)]
 pub enum Commands {
     /// Prints a greeting using the configured style.
     #[command(name = "greet")]
@@ -193,12 +201,18 @@ pub enum Commands {
     TakeLeave(TakeLeaveCommand),
 }
 
+impl Default for Commands {
+    fn default() -> Self {
+        Self::Greet(GreetCommand::default())
+    }
+}
+
 /// Top-level configuration for the hello world demo.
 ///
 /// The struct collects the global options exposed by the example, keeping
 /// fields public so the command dispatcher can inspect the resolved values
 /// without extra accessor boilerplate.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, OrthoConfig)]
+#[derive(Debug, Clone, PartialEq, Eq, Parser, Deserialize, Serialize, OrthoConfig)]
 #[ortho_config(
     prefix = "HELLO_WORLD",
     discovery(
@@ -224,6 +238,10 @@ pub struct HelloWorldCli {
     /// Selects a quiet delivery mode.
     #[ortho_config(default = false)]
     pub is_quiet: bool,
+    /// Selected command metadata emitted for documentation tooling.
+    #[serde(skip)]
+    #[command(subcommand)]
+    pub command: Commands,
 }
 
 impl Default for HelloWorldCli {
@@ -233,6 +251,7 @@ impl Default for HelloWorldCli {
             salutations: default_salutations(),
             is_excited: false,
             is_quiet: false,
+            command: Commands::default(),
         }
     }
 }

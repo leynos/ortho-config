@@ -24,8 +24,10 @@ mod serde_attrs;
 mod tests;
 mod type_utils;
 
-use clap_attrs::clap_default_value;
-pub(crate) use clap_attrs::{ClapInferredDefault, clap_arg_id, clap_arg_id_from_attribute};
+pub(crate) use clap_attrs::{
+    ClapInferredDefault, clap_arg_id, clap_arg_id_from_attribute, clap_default_value,
+    clap_field_is_subcommand, clap_variant_name, reject_subcommand_ortho_config_attrs,
+};
 use doc_attrs::{apply_field_doc_attr, apply_struct_doc_attr};
 pub(crate) use doc_types::{
     DocExampleAttr, DocFieldAttrs, DocLinkAttr, DocNoteAttr, DocStructAttrs, HeadingOverrides,
@@ -42,6 +44,8 @@ pub(crate) use serde_attrs::{
 pub(crate) use type_utils::{btree_map_inner, hash_map_inner, option_inner, vec_inner};
 
 const _: fn(&Attribute, &mut Option<LitStr>) -> syn::Result<()> = clap_arg_id_from_attribute;
+const _: fn(&syn::Field) -> syn::Result<bool> = clap_field_is_subcommand;
+const _: fn(&syn::Variant) -> syn::Result<Option<LitStr>> = clap_variant_name;
 const _: fn(&[Attribute]) -> syn::Result<Option<String>> = serde_field_rename;
 
 #[derive(Default, Clone)]
@@ -68,6 +72,8 @@ pub(crate) struct StructAttrs {
 ///   merging untouched.
 /// - `cli_default_as_absent` treats clap's default value as absent during
 ///   merge, allowing file/env values to take precedence over CLI defaults.
+/// - `is_subcommand` marks a clap subcommand selector, which is excluded from
+///   configuration-field generation.
 /// - `inferred_clap_default` stores the default inferred from clap's
 ///   `default_value_t`/`default_values_t` when `cli_default_as_absent` is
 ///   active and no explicit `#[ortho_config(default = ...)]` is provided.
@@ -80,6 +86,7 @@ pub(crate) struct FieldAttrs {
     pub merge_strategy: Option<MergeStrategy>,
     pub skip_cli: bool,
     pub cli_default_as_absent: bool,
+    pub is_subcommand: bool,
     pub doc: DocFieldAttrs,
 }
 
@@ -341,7 +348,14 @@ fn apply_field_attr(
 /// Used internally by the derive macro to extract configuration metadata
 /// from field-level attributes.
 pub(crate) fn parse_field_attrs(field: &syn::Field) -> Result<FieldAttrs, syn::Error> {
-    let mut out = FieldAttrs::default();
+    let mut out = FieldAttrs {
+        is_subcommand: clap_field_is_subcommand(field)?,
+        ..FieldAttrs::default()
+    };
+    if out.is_subcommand {
+        reject_subcommand_ortho_config_attrs(field)?;
+        return Ok(out);
+    }
     parse_ortho_config(&field.attrs, |meta| {
         if !apply_field_attr(meta, &mut out)? {
             // Unknown attributes are intentionally discarded to preserve

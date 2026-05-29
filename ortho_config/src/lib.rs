@@ -9,7 +9,7 @@
 #[cfg(all(feature = "yaml", not(feature = "serde_json")))]
 compile_error!("The `serde_json` feature must be enabled when `yaml` support is active.");
 
-pub use ortho_config_macros::OrthoConfig;
+pub use ortho_config_macros::{OrthoConfig, OrthoConfigSubcommandDocs};
 
 /// Re-export used by derive-generated code (`ortho_config::figment::...`).
 ///
@@ -66,8 +66,8 @@ pub use agent_context::{
 pub use docs::{
     CliMetadata, ConfigDiscoveryMeta, ConfigFormat, DefaultValue, Deprecation, DocMetadata,
     EnvMetadata, Example, FieldMetadata, FileMetadata, HeadingIds, Link, Note,
-    ORTHO_DOCS_IR_VERSION, OrthoConfigDocs, PathPattern, PrecedenceMeta, SectionsMetadata,
-    SourceKind, ValueType, WindowsMetadata,
+    ORTHO_DOCS_IR_VERSION, OrthoConfigDocs, OrthoConfigSubcommandDocs, PathPattern, PrecedenceMeta,
+    SectionsMetadata, SourceKind, ValueType, WindowsMetadata,
 };
 #[cfg(feature = "serde_json")]
 #[cfg_attr(docsrs, doc(cfg(feature = "serde_json")))]

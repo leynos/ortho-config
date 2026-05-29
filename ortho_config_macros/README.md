@@ -311,6 +311,45 @@ APP_CMDS_ADD_USER_USERNAME=env_user
 APP_CMDS_ADD_USER_ADMIN=false
 ```
 
+### Documenting Subcommands
+
+Derive `OrthoConfigSubcommandDocs` on the subcommand enum when the top-level
+`OrthoConfig` struct contains a `#[command(subcommand)]` selector. The parent
+metadata then receives one recursive `DocMetadata` entry per variant, in enum
+declaration order.
+
+```rust
+use clap::{Args, Parser, Subcommand};
+use ortho_config::{OrthoConfig, OrthoConfigSubcommandDocs};
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Parser, Deserialize, Serialize, OrthoConfig)]
+#[ortho_config(prefix = "APP")]
+struct Cli {
+    #[serde(skip)]
+    #[command(subcommand)]
+    command: Commands,
+}
+
+#[derive(Debug, Subcommand, OrthoConfigSubcommandDocs)]
+enum Commands {
+    Run(RunArgs),
+}
+
+impl Default for Commands {
+    fn default() -> Self {
+        Self::Run(RunArgs::default())
+    }
+}
+
+#[derive(Debug, Args, Default, Deserialize, Serialize, OrthoConfig)]
+#[ortho_config(prefix = "APP")]
+struct RunArgs {
+    #[arg(long)]
+    dry_run: bool,
+}
+```
+
 ### Dispatching Subcommands
 
 Subcommands can be executed with defaults applied using
@@ -403,6 +442,9 @@ Use these notes when upgrading from v0.7.x to v0.8.0:
   `[package.metadata.ortho_config.windows]` overrides, then run
   `cargo orthohelp` (`--format man` / `--format ps`) against the emitted
   `OrthoConfigDocs` metadata.
+- To document command trees, add `OrthoConfigSubcommandDocs` to subcommand
+  enums and keep selector fields marked with `#[serde(skip)]` plus a default
+  command value. This is additive and does not change existing config loading.
 
 ## Migration notes for v0.7.0
 
