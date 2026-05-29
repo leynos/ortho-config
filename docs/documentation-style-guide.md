@@ -15,22 +15,20 @@ consistent, and easy to maintain across projects.
      such as _analyse_, _paralyse_ and _catalyse_,
   - suffix -our in words such as _colour_, _behaviour_ and _neighbour_,
   - suffix -re in words such as _calibre_, _centre_ and _fibre_,
-  - double “l” in words such as _cancelled_, _counsellor_ and _cruellest_,
-  - maintain the “e” in words such as _likeable_, _liveable_ and _rateable_,
+  - double "l" in words such as _cancelled_, _counsellor_ and _cruellest_,
+  - maintain the "e" in words such as _likeable_, _liveable_ and _rateable_,
   - suffix -ogue in words such as _analogue_ and _catalogue_,
   - and so forth.
-- The words **“outwith”** and **“caveat”** are acceptable.
-- Keep United States (US) spelling when used in an external API, command, or
-  library, for example, `color`.
-- The name of the project licence file is spelled `LICENSE` for community
-  consistency.
+- The words **"outwith"** and **"caveat"** are acceptable.
+- Keep United States (US) spelling when used in an API, for example, `color`.
+- The project uses the filename `LICENSE` for community consistency.
 
 ## Punctuation and grammar
 
-- Use the Oxford comma: “ships, planes, and hovercraft” where it aids
+- Use the Oxford comma: "ships, planes, and hovercraft" where it aids
   comprehension.
-- Company names are treated as collective nouns: “df12 Productions are
-  releasing an update”.
+- Company names are treated as collective nouns: "df12 Productions are
+  releasing an update".
 - Avoid first and second person personal pronouns outside the `README.md`
   file.
 
@@ -71,13 +69,14 @@ consistent, and easy to maintain across projects.
 Repositories that adopt this documentation style should keep a small set of
 high-value documents with clearly separated audiences and responsibilities.
 These document types are complementary: the contents file helps readers find
-material, the users guide explains how to use the project, the developers guide
-explains how to work on the project, the design document explains why the
+material, the user's guide explains how to use the project, the developer's
+guide explains how to work on the project, the design document explains why the
 system is shaped the way it is, and the repository layout document explains
 where important things live. For discoverability, use canonical filenames
-unless a stronger repository-specific constraint applies: `docs/contents.md`,
-`docs/users-guide.md`, `docs/developers-guide.md`, `docs/repository-layout.md`,
-and a primary design document with an explicit product or topic name such as
+unless a stronger repository-specific constraint applies. A minimal canonical
+set looks like
+`docs/{contents,users-guide,developers-guide,repository-layout}.md` plus a
+primary design document under `docs/*-design.md`, for example
 `docs/theoremc-design.md` or `docs/query-planner-design.md`.
 
 ### Contents file
@@ -101,10 +100,10 @@ the documentation set.
   `execplans/` entry.
 - Update the contents file whenever a document is added, renamed, or removed.
 
-### Users guide
+### User's guide
 
-Use the users guide, canonically `docs/users-guide.md`, for readers who need to
-apply the project rather than modify its internals. In a library, this means
+Use the user's guide, canonically `docs/users-guide.md`, for readers who need
+to apply the project rather than modify its internals. In a library, this means
 consumers of the application programming interface (API). In an application,
 this means operators, end users, or integrators.
 
@@ -122,23 +121,24 @@ this means operators, end users, or integrators.
   matrices.
 - Include concrete examples in code or data form when describing formats,
   schemas, or command usage.
-- Higher-level user workflows belong here, for example “load a document”,
-  “configure the service”, or “interpret diagnostics”.
+- Higher-level user workflows belong here, for example "load a document",
+  "configure the service", or "interpret diagnostics".
 - Link to design documents or maintainer references when deeper rationale would
   otherwise overload the guide.
 - Exclude maintainer-only concerns such as internal layering debates, future
   refactor plans, or enforcement tooling unless they directly affect users.
 
-### Developers guide
+### Developer's guide
 
-Use the developers guide, canonically `docs/developers-guide.md`, for
+Use the developer's guide, canonically `docs/developers-guide.md`, for
 maintainers and contributors. Treat this as the operating manual for working on
 the existing system, not as the place for the project's primary design document.
 
 - Open with one short paragraph that states the audience and the operational
   scope of the guide.
-- Link early to the design document, accepted decision records, and other
-  normative references that explain architecture or rationale in depth.
+- Link early to the design document, repository layout document, accepted
+  decision records, and other normative references that explain architecture or
+  rationale in depth.
 - Put maintainer-facing implementation guidance here, for example build, test,
   lint, release, debugging, extension, and contribution workflows.
 - Use numbered sections for long-form technical documents to improve
@@ -150,13 +150,16 @@ the existing system, not as the place for the project's primary design document.
 - Keep subsystem descriptions focused on current responsibilities,
   integration points, and operational expectations. Put design rationale, major
   trade-offs, and proposed architecture in design documents instead.
+- Do not embed repository-layout guidance here. The canonical location for
+  file-tree and path-responsibility documentation is
+  `docs/repository-layout.md`.
 - Keep the document synchronized with decision records, roadmap items, and the
-  codebase. A stale developers guide is worse than a shorter one.
+  codebase. A stale developer's guide is worse than a shorter one.
 
 ### Design document, ADR, and RFC
 
 Use these document types for different jobs. Do not collapse them into one
-catch-all “design note”.
+catch-all "design note".
 
 - A **design document** explains the shape of a system or subsystem: its
   architecture, constraints, data flow, rationale, and intended evolution. It
@@ -166,7 +169,7 @@ catch-all “design note”.
   should be narrow, stable, and explicit about context, decision, consequences,
   and status. Use an ADR when the important thing to preserve is the outcome,
   not the full exploratory discussion that led to it.
-- A **Request for comments (RFC)** proposes a change before acceptance. It is
+- A **Request for Comments (RFC)** proposes a change before acceptance. It is
   the right format for changes that need reviewing, alternatives analysis,
   migration planning, or cross-team discussion. An RFC may later be accepted,
   rejected, superseded, or distilled into one or more ADRs.
@@ -180,7 +183,7 @@ Use a dedicated design document, conventionally named
 `docs/<product-or-topic>-design.md`, to explain the architecture, constraints,
 rationale, and intended evolution of a system or subsystem. This document is
 the correct location for design intent; that material must not be buried in the
-users guide or developers guide.
+user's guide or developer's guide.
 
 - Start with a concise front matter section that states status, scope, primary
   audience, and the decision records or other documents that take precedence.
@@ -209,7 +212,7 @@ users guide or developers guide.
   implemented system. If the code or the governing decision changes, update the
   design or mark the divergence explicitly.
 
-### Request for comments (RFCs)
+### Request for Comments (RFCs)
 
 Use RFCs for proposed changes that need technical review before they become
 binding. Store them under `docs/rfcs/`.
@@ -376,24 +379,24 @@ Every ADR must include the following sections in order:
 
 Include these sections as appropriate to the decision's complexity:
 
-- **Decision drivers:** Key factors, requirements, or constraints that
+- **Decision Drivers:** Key factors, requirements, or constraints that
   influenced the decision. Use bullet points.
 - **Requirements:** For complex decisions, separate functional and technical
   requirements into subsections.
-- **Options considered:** Describe the alternatives evaluated. Use a comparison
+- **Options Considered:** Describe the alternatives evaluated. Use a comparison
   table when contrasting multiple options across several dimensions.
-- **Decision outcome / proposed direction:** State the chosen approach and
+- **Decision Outcome / Proposed Direction:** State the chosen approach and
   summarize the rationale. For `Proposed` ADRs, describe the recommended
   direction.
-- **Goals and non-goals:** Clarify what the decision aims to achieve and what
+- **Goals and Non-Goals:** Clarify what the decision aims to achieve and what
   is explicitly out of scope.
-- **Migration plan:** For decisions requiring phased implementation, break the
+- **Migration Plan:** For decisions requiring phased implementation, break the
   work into numbered phases with clear goals and deliverables.
-- **Known risks and limitations:** Document trade-offs, potential issues, and
+- **Known Risks and Limitations:** Document trade-offs, potential issues, and
   constraints of the chosen approach.
-- **Outstanding decisions:** For `Proposed` ADRs, list open questions that must
+- **Outstanding Decisions:** For `Proposed` ADRs, list open questions that must
   be resolved before acceptance.
-- **Architectural rationale:** Explain how the decision aligns with broader
+- **Architectural Rationale:** Explain how the decision aligns with broader
   architectural principles and project goals.
 
 ### Formatting guidance
@@ -410,7 +413,7 @@ Include these sections as appropriate to the decision's complexity:
 
 ### ADR template
 
-```markdown
+```plaintext
 # Architectural decision record (ADR) NNN: <title>
 
 ## Status
@@ -425,7 +428,7 @@ YYYY-MM-DD.
 
 <Describe the situation, constraints, and the question being addressed.>
 
-## Decision drivers
+## Decision Drivers
 
 - <Driver 1>
 - <Driver 2>
@@ -490,9 +493,9 @@ implementation is required.>
 ### Repository layout document
 
 Use a repository layout document, canonically `docs/repository-layout.md`, to
-explain the shape of the tree and the responsibilities of its major paths. This
-may be a standalone document or a clearly labelled section within the
-developers guide, provided readers can find it easily from the contents file.
+explain the shape of the tree and the responsibilities of its major paths. Use
+this standalone document as the canonical location for repository-layout
+guidance rather than embedding that material in the developer's guide.
 
 - Document the top-level directories and any critical subdirectories that a new
   contributor must understand quickly.
@@ -506,6 +509,8 @@ developers guide, provided readers can find it easily from the contents file.
   long-lived reference documents belong.
 - Call out any directories with unusual constraints, such as generated output,
   fixtures, snapshots, or capability-restricted paths.
+- Ensure the contents file links directly to `docs/repository-layout.md` so
+  readers can find it without scanning the developer's guide.
 - Update the layout document when the repository structure changes enough that
   a contributor could otherwise follow outdated guidance.
 
@@ -624,7 +629,7 @@ This hierarchy should align with the GIST framework:
   - Phases: 1, 2, 3, …
   - Steps: 1.1, 1.2, 1.3, …
   - Headline tasks: 1.1.1, 1.1.2, 1.1.3, …
-- **Checkboxes:** Precede task and sub-task items with a GitHub-Flavoured
+- **Checkboxes:** Precede task and sub-task items with a GitHub Flavoured
   Markdown (GFM) checkbox (`[ ]`) to track completion status.
 - **Dependencies:** Note non-linear dependencies explicitly. Where a task
   depends on another task outside its immediate sequence, cite the dependency
@@ -636,7 +641,7 @@ This hierarchy should align with the GIST framework:
 
 ### Roadmap example
 
-```markdown
+```plaintext
 ## 1. Core infrastructure
 
 ### 1.1. Logging subsystem
