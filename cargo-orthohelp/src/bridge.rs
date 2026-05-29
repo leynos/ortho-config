@@ -214,6 +214,12 @@ fn build_bridge(paths: &BridgePaths) -> Result<(), OrthohelpError> {
         .arg(paths.manifest_path.as_str())
         .arg("--target-dir")
         .arg(paths.target_dir.as_str())
+        .env_remove("RUSTC_WORKSPACE_WRAPPER")
+        .env_remove("RUSTC_WRAPPER")
+        .env_remove("RUSTFLAGS")
+        .env_remove("CARGO_ENCODED_RUSTFLAGS")
+        .env_remove("LLVM_PROFILE_FILE")
+        .env_remove("CARGO_LLVM_COV_TARGET_DIR")
         .output()
         .map_err(|io_err| OrthohelpError::Io {
             path: paths.manifest_path.clone(),

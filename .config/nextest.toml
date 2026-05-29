@@ -6,9 +6,17 @@ slow-timeout = { period = "120s", terminate-after = 5 }
 
 # Serialise orthohelp BDD scenarios: each runs in its own process under nextest,
 # so the in-process SCENARIO_LOCK mutex cannot guard the shared orthohelp cache.
+# Serialise powershell_windows cases: both cases write to the same bridge
+# directory under target/orthohelp/<hash>/ and Windows file-sharing semantics
+# prevent concurrent truncate+write while cargo holds a read lock on the manifest.
 [test-groups]
 rstest_bdd = { max-threads = 1 }
+powershell_windows = { max-threads = 1 }
 
 [[profile.default.overrides]]
 filter = 'binary(rstest_bdd)'
 test-group = 'rstest_bdd'
+
+[[profile.default.overrides]]
+filter = 'binary(powershell_windows)'
+test-group = 'powershell_windows'
