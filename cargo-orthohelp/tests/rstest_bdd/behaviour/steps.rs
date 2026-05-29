@@ -31,7 +31,7 @@ pub struct OrthoHelpContext {
     pub out_dir: Slot<TempDir>,
     pub last_output: Slot<std::process::Output>,
     pub cache_ir_path: Slot<Utf8PathBuf>,
-    pub cache_ir_mtime: Slot<SystemTime>,
+    pub cache_ir_content: Slot<String>,
 }
 
 impl Default for OrthoHelpContext {
@@ -46,7 +46,7 @@ impl Default for OrthoHelpContext {
             out_dir: Slot::new(),
             last_output: Slot::new(),
             cache_ir_path: Slot::new(),
-            cache_ir_mtime: Slot::new(),
+            cache_ir_content: Slot::new(),
         };
         ctx.scenario_lock.set(scenario_lock);
         ctx
@@ -121,7 +121,7 @@ fn cache_is_empty(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
         return Err(format!("remove orthohelp cache failed: {err}").into());
     }
     orthohelp_context.cache_ir_path.clear();
-    orthohelp_context.cache_ir_mtime.clear();
+    orthohelp_context.cache_ir_content.clear();
     Ok(())
 }
 
@@ -260,16 +260,20 @@ fn cached_ir_reused(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> 
         .cache_ir_path
         .with_ref(Clone::clone)
         .ok_or("cached IR path should be recorded")?;
-    let previous = orthohelp_context
-        .cache_ir_mtime
-        .with_ref(|m| *m)
-        .ok_or("cached IR timestamp should be recorded")?;
+    let previous_content = orthohelp_context
+        .cache_ir_content
+        .with_ref(Clone::clone)
+        .ok_or("cached IR content should be recorded")?;
     let cache_dir = cache_path.parent().ok_or("cached IR parent missing")?;
     let file_name = cache_path.file_name().ok_or("cached IR filename missing")?;
     let dir = Dir::open_ambient_dir(cache_dir, ambient_authority())?;
-    let metadata = dir.metadata(file_name)?;
-    let current = metadata.modified()?;
-    assert_eq!(previous, current, "cached IR should not be rewritten");
+    let mut file = dir.open(file_name)?;
+    let mut current_content = String::new();
+    file.read_to_string(&mut current_content)?;
+    assert_eq!(
+        previous_content, current_content,
+        "cached IR should not be rewritten"
+    );
     Ok(())
 }
 
@@ -329,10 +333,13 @@ fn record_cache_state(ctx: &mut OrthoHelpContext) -> StepResult<()> {
     let cache_dir = cache_path.parent().ok_or("cached IR parent missing")?;
     let file_name = cache_path.file_name().ok_or("cached IR filename missing")?;
     let dir = Dir::open_ambient_dir(cache_dir, ambient_authority())?;
-    let metadata = dir.metadata(file_name)?;
-    let modified = metadata.modified()?;
+    // Read the full content: gives a stable reference for comparison and forces
+    // Windows NTFS to commit the final mtime before any subsequent metadata read.
+    let mut file = dir.open(file_name)?;
+    let mut content = String::new();
+    file.read_to_string(&mut content)?;
     ctx.cache_ir_path.set(cache_path);
-    ctx.cache_ir_mtime.set(modified);
+    ctx.cache_ir_content.set(content);
     Ok(())
 }
 
