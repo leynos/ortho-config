@@ -25,46 +25,45 @@ fn schema_round_trips_against_ortho_config() {
     );
 }
 
-#[derive(Clone)]
-struct MakeDocMetadataFixture {
-    app_name: String,
-    bin_name: Option<String>,
-    about_id: String,
-    synopsis_id: Option<String>,
+struct DocMetadataSpec<'a> {
+    app_name: &'a str,
+    bin_name: Option<&'a str>,
+    about_id: &'a str,
+    synopsis_id: Option<&'a str>,
     subcommands: Vec<ortho_docs::DocMetadata>,
     windows: Option<ortho_docs::WindowsMetadata>,
 }
 
-fn make_doc_metadata(fixture: MakeDocMetadataFixture) -> ortho_docs::DocMetadata {
+fn make_doc_metadata(spec: DocMetadataSpec<'_>) -> ortho_docs::DocMetadata {
     ortho_docs::DocMetadata {
         ir_version: ORTHO_DOCS_IR_VERSION.to_owned(),
-        app_name: fixture.app_name,
-        bin_name: fixture.bin_name,
-        about_id: fixture.about_id,
-        synopsis_id: fixture.synopsis_id,
+        app_name: spec.app_name.to_owned(),
+        bin_name: spec.bin_name.map(str::to_owned),
+        about_id: spec.about_id.to_owned(),
+        synopsis_id: spec.synopsis_id.map(str::to_owned),
         sections: sample_sections(),
         fields: vec![sample_field()],
-        subcommands: fixture.subcommands,
-        windows: fixture.windows,
+        subcommands: spec.subcommands,
+        windows: spec.windows,
     }
 }
 
 fn sample_metadata() -> ortho_docs::DocMetadata {
-    make_doc_metadata(MakeDocMetadataFixture {
-        app_name: "demo-app".to_owned(),
-        bin_name: Some("demo-app".to_owned()),
-        about_id: "demo.about".to_owned(),
-        synopsis_id: Some("demo.synopsis".to_owned()),
+    make_doc_metadata(DocMetadataSpec {
+        app_name: "demo-app",
+        bin_name: Some("demo-app"),
+        about_id: "demo.about",
+        synopsis_id: Some("demo.synopsis"),
         subcommands: vec![sample_subcommand()],
         windows: Some(sample_windows()),
     })
 }
 
 fn sample_subcommand() -> ortho_docs::DocMetadata {
-    make_doc_metadata(MakeDocMetadataFixture {
-        app_name: "run".to_owned(),
+    make_doc_metadata(DocMetadataSpec {
+        app_name: "run",
         bin_name: None,
-        about_id: "run.about".to_owned(),
+        about_id: "run.about",
         synopsis_id: None,
         subcommands: Vec::new(),
         windows: None,
