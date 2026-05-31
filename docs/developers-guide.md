@@ -174,14 +174,14 @@ prefer without contending with this workspace for global state.
 - Respect the library and application boundary. Libraries in this workspace,
   including `ortho_config` and `cargo-orthohelp`'s reusable modules, may emit
   `tracing` events and `metrics` instrumentation, but must not install global
-  subscribers or recorders. Applications and binaries should initialise their
+  subscribers or recorders. Applications and binaries should initialize their
   chosen exporters and subscribers once, as early as practical in startup.
 
 Use `tracing` and `metrics` together where it aids diagnosis: spans give the
 contextual envelope, events describe what happened inside, and metrics
 aggregate the same activity for monitoring. New observability primitives, such
 as additional metric families or span fields used across crates, should be
-mentioned in the relevant design or component architecture document so the
+mentioned in the relevant design or component architecture document, so the
 contract stays discoverable.
 
 ## Dependency management
@@ -191,7 +191,7 @@ that builds remain stable and reproducible across contributors and continuous
 integration (CI) environments.
 
 - Use SemVer-compatible caret requirements for every dependency declared in
-  `Cargo.toml`, for example `some-crate = "1.2.3"`. This is Cargo's default
+  `Cargo.toml`, for example, `some-crate = "1.2.3"`. This is Cargo's default
   and accepts non-breaking minor and patch updates while rejecting breaking
   changes from a new major version.
 - Do not use wildcard (`*`) or open-ended inequality (`>=`) version
@@ -200,7 +200,7 @@ integration (CI) environments.
 - Reserve tilde (`~`) requirements for the narrow case where a dependency must
   be locked to patch-level updates for a specific, documented reason. Record
   the rationale alongside the dependency entry or in the related design
-  document so a later reader can re-evaluate the constraint.
+  document, so a later reader can re-evaluate the constraint.
 - Keep dependencies current. When upgrading a crate, run the full quality
   gates (`make check-fmt`, `make lint`, `make test`) and, where the upgrade
   changes behaviour or public API, update the relevant design document, ADR,
