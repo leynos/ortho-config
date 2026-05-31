@@ -11,6 +11,7 @@ use crate::cache::CacheKey;
 use crate::error::OrthohelpError;
 use crate::fs_helpers::open_optional_dir;
 use crate::metadata::{OrthoConfigDependency, PackageSelection};
+use crate::rustflags::apply_sanitized_rustflags;
 
 /// Paths used when building the ephemeral bridge crate.
 pub struct BridgePaths {
@@ -208,7 +209,8 @@ fn write_bridge_main(config: &BridgeConfig, paths: &BridgePaths) -> Result<(), O
 }
 
 fn build_bridge(paths: &BridgePaths) -> Result<(), OrthohelpError> {
-    let output = Command::new("cargo")
+    let mut command = Command::new("cargo");
+    command
         .arg("build")
         .arg("--manifest-path")
         .arg(paths.manifest_path.as_str())
@@ -216,16 +218,15 @@ fn build_bridge(paths: &BridgePaths) -> Result<(), OrthohelpError> {
         .arg(paths.target_dir.as_str())
         .env_remove("RUSTC_WORKSPACE_WRAPPER")
         .env_remove("RUSTC_WRAPPER")
-        .env_remove("RUSTFLAGS")
-        .env_remove("CARGO_ENCODED_RUSTFLAGS")
         .env_remove("LLVM_PROFILE_FILE")
         .env_remove("CARGO_LLVM_COV_TARGET_DIR")
-        .env_remove("CARGO_TARGET_DIR")
-        .output()
-        .map_err(|io_err| OrthohelpError::Io {
-            path: paths.manifest_path.clone(),
-            source: io_err,
-        })?;
+        .env_remove("CARGO_TARGET_DIR");
+    apply_sanitized_rustflags(&mut command);
+
+    let output = command.output().map_err(|io_err| OrthohelpError::Io {
+        path: paths.manifest_path.clone(),
+        source: io_err,
+    })?;
 
     if output.status.success() {
         return Ok(());
