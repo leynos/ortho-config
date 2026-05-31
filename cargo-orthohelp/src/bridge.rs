@@ -270,7 +270,7 @@ fn run_bridge(paths: &BridgePaths) -> Result<String, OrthohelpError> {
 fn write_ir_cache(paths: &BridgePaths, json: &str) -> Result<(), OrthohelpError> {
     // Skip writing if the existing cache file already holds identical content.
     // This preserves the file's mtime, making cache-validity checks robust
-    // against spurious cache misses (e.g. Windows path-normalisation
+    // against spurious cache misses (e.g. Windows path-normalization
     // differences that cause read_cached_ir to return Ok(None) even when the
     // file exists) and prevents unnecessary I/O on repeated invocations.
     if let Ok(Some(existing)) = read_cached_ir(paths)
