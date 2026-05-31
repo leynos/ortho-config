@@ -9,7 +9,7 @@ use cap_std::time::SystemTime;
 use rstest_bdd_macros::then;
 
 use super::steps::{OrthoHelpContext, StepResult};
-use super::steps_cmd::get_workspace_root;
+use super::steps_cmd::{get_workspace_root, resolve_target_dir};
 
 pub(super) const CACHE_ARGS: &[&str] = &[
     "--cache",
@@ -100,17 +100,7 @@ fn find_cached_ir(ctx: &OrthoHelpContext) -> StepResult<Option<Utf8PathBuf>> {
     // Respect CARGO_TARGET_DIR when set (e.g., by cargo-llvm-cov), because
     // cargo-orthohelp inherits the variable and writes its cache relative to
     // the effective target directory rather than the default `target/`.
-    let target_dir = std::env::var("CARGO_TARGET_DIR").map_or_else(
-        |_| workspace_root.join("target"),
-        |v| {
-            let p = Utf8PathBuf::from(&v);
-            if p.is_absolute() {
-                p
-            } else {
-                workspace_root.join(p)
-            }
-        },
-    );
+    let target_dir = resolve_target_dir(&workspace_root);
     let cache_root = target_dir.join("orthohelp");
     let dir = match Dir::open_ambient_dir(&cache_root, ambient_authority()) {
         Ok(d) => d,

@@ -55,12 +55,16 @@ static SCENARIO_LOCK: Mutex<()> = Mutex::new(());
 pub fn orthohelp_context() -> OrthoHelpContext {
     let workspace_root = match fixtures::workspace_root() {
         Ok(root) => root,
+        // `rstest-bdd` requires this fixture to return the exact scenario
+        // state type, so setup failures cannot be propagated as StepResult.
         Err(err) => panic!("workspace root should exist: {err}"),
     };
     let ctx = OrthoHelpContext::default();
     ctx.workspace_root.set(workspace_root);
     let out_dir = match tempfile::tempdir() {
         Ok(dir) => dir,
+        // `rstest-bdd` requires this fixture to return the exact scenario
+        // state type, so setup failures cannot be propagated as StepResult.
         Err(err) => panic!("temporary output directory should be created: {err}"),
     };
     ctx.out_dir.set(out_dir);

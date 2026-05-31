@@ -3,7 +3,7 @@
 use std::process::Command;
 use std::time::Duration;
 
-use camino::Utf8PathBuf;
+use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::ambient_authority;
 use cap_std::fs_utf8::Dir;
 use rstest_bdd_macros::{given, when};
@@ -31,6 +31,20 @@ pub fn get_workspace_root(ctx: &OrthoHelpContext) -> StepResult<Utf8PathBuf> {
         .ok_or_else(|| "workspace_root should be set".into())
 }
 
+pub(super) fn resolve_target_dir(workspace_root: &Utf8Path) -> Utf8PathBuf {
+    std::env::var("CARGO_TARGET_DIR").map_or_else(
+        |_| workspace_root.join("target"),
+        |v| {
+            let p = Utf8PathBuf::from(&v);
+            if p.is_absolute() {
+                p
+            } else {
+                workspace_root.join(p)
+            }
+        },
+    )
+}
+
 #[given("a temporary output directory")]
 fn temp_output_dir(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
     let path = get_out_dir(orthohelp_context)?;
@@ -43,17 +57,7 @@ fn temp_output_dir(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
 #[given("the orthohelp cache is empty")]
 fn cache_is_empty(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
     let workspace_root = get_workspace_root(orthohelp_context)?;
-    let target_dir = std::env::var("CARGO_TARGET_DIR").map_or_else(
-        |_| workspace_root.join("target"),
-        |v| {
-            let p = Utf8PathBuf::from(&v);
-            if p.is_absolute() {
-                p
-            } else {
-                workspace_root.join(p)
-            }
-        },
-    );
+    let target_dir = resolve_target_dir(&workspace_root);
     match Dir::open_ambient_dir(target_dir.as_path(), ambient_authority()) {
         Ok(root_dir) => {
             if let Err(err) = root_dir.remove_dir_all("orthohelp")
