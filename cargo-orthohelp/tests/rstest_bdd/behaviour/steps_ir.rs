@@ -10,7 +10,7 @@ use serde_json::Value;
 
 use super::steps::{OrthoHelpContext, StepResult, get_out_dir};
 
-#[then("the output contains localised IR JSON for {locale}")]
+#[then("the output contains localized IR JSON for {locale}")]
 fn output_contains_locale(
     orthohelp_context: &mut OrthoHelpContext,
     locale: String,

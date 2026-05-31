@@ -27,6 +27,6 @@ Feature: cargo-orthohelp roff man page generation
     Given a temporary output directory
     And the orthohelp cache is empty
     When I run cargo-orthohelp with format all for the fixture
-    Then the output contains localised IR JSON for en-US
+    Then the output contains localized IR JSON for en-US
     And the output contains a man page for fixture
     And the output contains a PowerShell module named FixtureHelp
