@@ -6,7 +6,7 @@ Feature: cargo-orthohelp bridge pipeline
     When I run cargo-orthohelp with cache for the fixture
     Then the output contains localised IR JSON for en-US
     And the output contains localised IR JSON for fr-FR
-    And the cached IR deserialises into the schema
+    And the cached IR deserializes into the schema
     When I rerun cargo-orthohelp with cache for the fixture
     Then the cached IR is reused
     When I run cargo-orthohelp with no-build for the fixture

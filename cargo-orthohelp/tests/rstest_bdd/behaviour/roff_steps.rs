@@ -37,10 +37,10 @@ impl ManSection {
     /// Returns the heading string as it will appear in the generated roff output.
     fn expected_heading(&self) -> String {
         match self {
-            Self::Name => "[missing: ortho.headings.name]".to_owned(),
-            Self::Synopsis => "[missing: ortho.headings.synopsis]".to_owned(),
-            Self::Description => "[missing: ortho.headings.description]".to_owned(),
-            Self::Options => "[missing: ortho.headings.options]".to_owned(),
+            Self::Name => "NAME".to_owned(),
+            Self::Synopsis => "SYNOPSIS".to_owned(),
+            Self::Description => "DESCRIPTION".to_owned(),
+            Self::Options => "OPTIONS".to_owned(),
             Self::Other(s) => s.clone(),
         }
     }

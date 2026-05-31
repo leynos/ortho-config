@@ -2,7 +2,7 @@
 
 use std::io::Read;
 
-use camino::Utf8PathBuf;
+use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::ambient_authority;
 use cap_std::fs_utf8::{Dir, DirEntry};
 use cap_std::time::SystemTime;
@@ -31,12 +31,7 @@ fn cached_ir_reused(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> 
         .cache_ir_content
         .with_ref(Clone::clone)
         .ok_or("cached IR content should be recorded")?;
-    let cache_dir = cache_path.parent().ok_or("cached IR parent missing")?;
-    let file_name = cache_path.file_name().ok_or("cached IR filename missing")?;
-    let dir = Dir::open_ambient_dir(cache_dir, ambient_authority())?;
-    let mut file = dir.open(file_name)?;
-    let mut current_content = String::new();
-    file.read_to_string(&mut current_content)?;
+    let current_content = read_cache_file(&cache_path)?;
     assert_eq!(
         previous_content, current_content,
         "cached IR should not be rewritten"
@@ -44,18 +39,13 @@ fn cached_ir_reused(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> 
     Ok(())
 }
 
-#[then("the cached IR deserialises into the schema")]
-fn cached_ir_deserialises(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
+#[then("the cached IR deserializes into the schema")]
+fn cached_ir_deserializes(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
     let cache_path = orthohelp_context
         .cache_ir_path
         .with_ref(Clone::clone)
         .ok_or("cached IR path should be recorded")?;
-    let cache_dir = cache_path.parent().ok_or("cached IR parent missing")?;
-    let file_name = cache_path.file_name().ok_or("cached IR filename missing")?;
-    let dir = Dir::open_ambient_dir(cache_dir, ambient_authority())?;
-    let mut file = dir.open(file_name)?;
-    let mut json = String::new();
-    file.read_to_string(&mut json)?;
+    let json = read_cache_file(&cache_path)?;
     let metadata: ortho_config::docs::DocMetadata = serde_json::from_str(&json)?;
     assert_eq!(
         metadata.ir_version,
@@ -82,17 +72,22 @@ fn command_fails_due_to_missing_cache(orthohelp_context: &mut OrthoHelpContext) 
 
 pub(super) fn record_cache_state(ctx: &mut OrthoHelpContext) -> StepResult<()> {
     let cache_path = find_cached_ir(ctx)?.ok_or("cached IR should exist")?;
-    let cache_dir = cache_path.parent().ok_or("cached IR parent missing")?;
-    let file_name = cache_path.file_name().ok_or("cached IR filename missing")?;
-    let dir = Dir::open_ambient_dir(cache_dir, ambient_authority())?;
     // Read the full content: gives a stable reference for comparison and forces
     // Windows NTFS to commit the final mtime before any subsequent metadata read.
-    let mut file = dir.open(file_name)?;
-    let mut content = String::new();
-    file.read_to_string(&mut content)?;
+    let content = read_cache_file(&cache_path)?;
     ctx.cache_ir_path.set(cache_path);
     ctx.cache_ir_content.set(content);
     Ok(())
+}
+
+fn read_cache_file(path: &Utf8Path) -> StepResult<String> {
+    let cache_dir = path.parent().ok_or("cached IR parent missing")?;
+    let file_name = path.file_name().ok_or("cached IR filename missing")?;
+    let dir = Dir::open_ambient_dir(cache_dir, ambient_authority())?;
+    let mut file = dir.open(file_name)?;
+    let mut content = String::new();
+    file.read_to_string(&mut content)?;
+    Ok(content)
 }
 
 fn find_cached_ir(ctx: &OrthoHelpContext) -> StepResult<Option<Utf8PathBuf>> {
