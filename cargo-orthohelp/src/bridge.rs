@@ -220,6 +220,7 @@ fn build_bridge(paths: &BridgePaths) -> Result<(), OrthohelpError> {
         .env_remove("CARGO_ENCODED_RUSTFLAGS")
         .env_remove("LLVM_PROFILE_FILE")
         .env_remove("CARGO_LLVM_COV_TARGET_DIR")
+        .env_remove("CARGO_TARGET_DIR")
         .output()
         .map_err(|io_err| OrthohelpError::Io {
             path: paths.manifest_path.clone(),
@@ -266,6 +267,16 @@ fn run_bridge(paths: &BridgePaths) -> Result<String, OrthohelpError> {
 }
 
 fn write_ir_cache(paths: &BridgePaths, json: &str) -> Result<(), OrthohelpError> {
+    // Skip writing if the existing cache file already holds identical content.
+    // This preserves the file's mtime, making cache-validity checks robust
+    // against spurious cache misses (e.g. Windows path-normalisation
+    // differences that cause read_cached_ir to return Ok(None) even when the
+    // file exists) and prevents unnecessary I/O on repeated invocations.
+    if let Ok(Some(existing)) = read_cached_ir(paths)
+        && existing == json
+    {
+        return Ok(());
+    }
     let mut file = open_bridge_file(paths, "ir.json", &paths.ir_path)?;
     file.write_all(json.as_bytes())
         .map_err(|io_err| OrthohelpError::Io {
