@@ -8,8 +8,7 @@ use cap_std::fs_utf8::{Dir, DirEntry};
 use cap_std::time::SystemTime;
 use rstest_bdd_macros::then;
 
-use super::steps::{OrthoHelpContext, StepResult};
-use super::steps_cmd::scenario_target_dir;
+use super::steps::{OrthoHelpContext, StepResult, scenario_target_dir};
 
 /// CLI arguments for cache-mode invocations of `cargo-orthohelp` under the
 /// fixture package and the `en-US` / `fr-FR` locales.
@@ -106,7 +105,7 @@ fn find_cached_ir(ctx: &OrthoHelpContext) -> StepResult<Option<Utf8PathBuf>> {
     };
     let mut newest: Option<(SystemTime, Utf8PathBuf)> = None;
     for entry in dir.read_dir(".")? {
-        if let Some(candidate) = check_cache_entry(&cache_root, entry, newest.as_ref()) {
+        if let Some(candidate) = check_cache_entry(&dir, &cache_root, entry, newest.as_ref()) {
             newest = Some(candidate);
         }
     }
@@ -114,6 +113,7 @@ fn find_cached_ir(ctx: &OrthoHelpContext) -> StepResult<Option<Utf8PathBuf>> {
 }
 
 fn check_cache_entry(
+    dir: &Dir,
     cache_root: &Utf8PathBuf,
     entry_result: Result<DirEntry, std::io::Error>,
     newest: Option<&(SystemTime, Utf8PathBuf)>,
@@ -126,7 +126,6 @@ fn check_cache_entry(
 
     let file_name = entry.file_name().ok()?;
     let relative = Utf8PathBuf::from(file_name).join("ir.json");
-    let dir = Dir::open_ambient_dir(cache_root.as_path(), ambient_authority()).ok()?;
     let metadata = dir.metadata(&relative).ok()?;
     let modified = metadata.modified().ok()?;
     let should_replace = newest.is_none_or(|(best_time, _)| modified > *best_time);

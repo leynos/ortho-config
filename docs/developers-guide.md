@@ -15,6 +15,24 @@ The workspace runs one unified test workflow via Make targets:
 These are required quality gates for code changes. Behavioural coverage runs
 inside the standard Rust test harness, not a bespoke test runner.
 
+### Nextest test-group serialisation
+
+`.config/nextest.toml` assigns two test binaries to single-threaded groups:
+
+- **`rstest_bdd`** — each BDD scenario runs in its own OS process under nextest,
+  so a process-local `Mutex` cannot protect the shared `target/orthohelp` cache
+  directory. Setting `max-threads = 1` for this binary ensures scenarios run
+  sequentially and do not race on cache reads or `remove_dir_all` calls.
+- **`powershell_windows`** — both test cases invoke
+  `cargo-orthohelp --format ps` for the same package, which writes to the same
+  ephemeral bridge directory (`target/orthohelp/<hash>/`). On Windows,
+  `cargo build` holds a read lock on `Cargo.toml`; a concurrent
+  truncate-and-rewrite from the second invocation violates that lock.
+  Serialising the binary prevents the race.
+
+Do not remove the `max-threads = 1` constraint from either group without first
+verifying that the underlying shared-state access has been eliminated.
+
 ## Subcommand dispatch changes
 
 Cargo's external-subcommand contract is an entry-point concern, not a

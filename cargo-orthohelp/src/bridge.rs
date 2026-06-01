@@ -223,9 +223,20 @@ fn build_bridge(paths: &BridgePaths) -> Result<(), OrthohelpError> {
         })?;
 
     if output.status.success() {
+        tracing::debug!(
+            manifest = %paths.manifest_path,
+            status = %output.status,
+            "bridge build succeeded"
+        );
         return Ok(());
     }
 
+    tracing::debug!(
+        manifest = %paths.manifest_path,
+        status = %output.status,
+        stderr = %String::from_utf8_lossy(&output.stderr),
+        "bridge build failed"
+    );
     let status = output.status.code().unwrap_or(-1);
     let message = format!(
         "{}{}",
@@ -304,6 +315,11 @@ fn write_ir_cache(paths: &BridgePaths, json: &str) -> Result<(), OrthohelpError>
         return Ok(());
     }
     let mut file = open_bridge_file(paths, "ir.json", &paths.ir_path)?;
+    tracing::debug!(
+        path = %paths.ir_path,
+        bytes = json.len(),
+        "writing ir.json cache"
+    );
     file.write_all(json.as_bytes())
         .map_err(|io_err| OrthohelpError::Io {
             path: paths.ir_path.clone(),
@@ -352,8 +368,10 @@ fn open_bridge_file(
 #[cfg(test)]
 mod tests {
     use std::ffi::OsStr;
+    use std::time::Duration;
 
     use camino::Utf8PathBuf;
+    use tempfile::tempdir;
 
     use super::*;
 
@@ -388,5 +406,69 @@ mod tests {
                 "build_bridge_command should remove {var} from the child environment"
             );
         }
+    }
+
+    #[test]
+    fn build_bridge_command_does_not_set_coverage_env_vars() {
+        let vars = [
+            "RUSTC_WORKSPACE_WRAPPER",
+            "RUSTC_WRAPPER",
+            "LLVM_PROFILE_FILE",
+            "CARGO_LLVM_COV_TARGET_DIR",
+            "CARGO_TARGET_DIR",
+        ];
+
+        let cmd = build_bridge_command(&dummy_paths());
+        let set: Vec<&OsStr> = cmd
+            .get_envs()
+            .filter_map(|(key, value)| value.map(|_| key))
+            .collect();
+
+        for var in vars {
+            assert!(
+                !set.iter().any(|key| *key == OsStr::new(var)),
+                "build_bridge_command should not set {var} in the child environment"
+            );
+        }
+    }
+
+    #[test]
+    fn write_ir_cache_is_idempotent() {
+        const CONTENT: &str = r#"{"ir_version":"1.0.0"}"#;
+        const OTHER: &str = r#"{"ir_version":"2.0.0"}"#;
+
+        let tmp = tempdir().expect("temp dir");
+        let bridge_dir = Utf8PathBuf::from_path_buf(tmp.path().to_path_buf()).expect("UTF-8 path");
+        std::fs::create_dir_all(bridge_dir.join("src")).expect("create src");
+        let paths = BridgePaths {
+            bridge_dir: bridge_dir.clone(),
+            manifest_path: bridge_dir.join("Cargo.toml"),
+            target_dir: bridge_dir.join("target"),
+            ir_path: bridge_dir.join("ir.json"),
+        };
+
+        write_ir_cache(&paths, CONTENT).expect("first write");
+        let mtime1 = std::fs::metadata(paths.ir_path.as_std_path())
+            .and_then(|metadata| metadata.modified())
+            .expect("mtime after first write");
+
+        std::thread::sleep(Duration::from_millis(20));
+        write_ir_cache(&paths, CONTENT).expect("idempotent write");
+        let mtime2 = std::fs::metadata(paths.ir_path.as_std_path())
+            .and_then(|metadata| metadata.modified())
+            .expect("mtime after idempotent write");
+
+        assert_eq!(
+            mtime1, mtime2,
+            "mtime should not change when content is identical"
+        );
+
+        std::thread::sleep(Duration::from_millis(20));
+        write_ir_cache(&paths, OTHER).expect("write new content");
+        let mtime3 = std::fs::metadata(paths.ir_path.as_std_path())
+            .and_then(|metadata| metadata.modified())
+            .expect("mtime after new content write");
+
+        assert!(mtime3 > mtime2, "mtime should advance when content changes");
     }
 }

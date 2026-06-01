@@ -3,58 +3,15 @@
 use std::process::Command;
 use std::time::Duration;
 
-use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::ambient_authority;
 use cap_std::fs_utf8::Dir;
 use rstest_bdd_macros::{given, when};
 
-use super::steps::{OrthoHelpContext, StepResult};
+use super::steps::{
+    OrthoHelpContext, StepResult, get_out_dir, get_workspace_root, scenario_target_dir,
+};
 use super::steps_cache::{CACHE_ARGS, is_not_found_kind, record_cache_state};
 use crate::fixtures;
-
-/// Gets the output directory path from the context.
-pub fn get_out_dir(ctx: &OrthoHelpContext) -> StepResult<Utf8PathBuf> {
-    let out_dir = ctx
-        .out_dir
-        .with_ref(|dir| {
-            Utf8PathBuf::from_path_buf(dir.path().to_path_buf())
-                .map_err(|p| format!("non-UTF-8 path: {}", p.display()))
-        })
-        .ok_or_else(|| "out_dir should be set".to_owned())??;
-    Ok(out_dir)
-}
-
-/// Gets the workspace root path from the context.
-pub fn get_workspace_root(ctx: &OrthoHelpContext) -> StepResult<Utf8PathBuf> {
-    ctx.workspace_root
-        .with_ref(Clone::clone)
-        .ok_or_else(|| "workspace_root should be set".into())
-}
-
-pub(super) fn resolve_target_dir(workspace_root: &Utf8Path) -> Utf8PathBuf {
-    std::env::var("CARGO_TARGET_DIR").map_or_else(
-        |_| workspace_root.join("target"),
-        |v| {
-            let p = Utf8PathBuf::from(&v);
-            if p.is_absolute() {
-                p
-            } else {
-                workspace_root.join(p)
-            }
-        },
-    )
-}
-
-pub(super) fn scenario_target_dir(ctx: &OrthoHelpContext) -> StepResult<Utf8PathBuf> {
-    let workspace_root = get_workspace_root(ctx)?;
-    let out_dir = get_out_dir(ctx)?;
-    let scenario_id = out_dir
-        .file_name()
-        .ok_or("temporary output directory should have a final path component")?;
-    Ok(resolve_target_dir(&workspace_root)
-        .join("orthohelp-bdd")
-        .join(scenario_id))
-}
 
 #[given("a temporary output directory")]
 fn temp_output_dir(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
