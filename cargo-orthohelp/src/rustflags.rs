@@ -51,8 +51,6 @@ fn apply_sanitized_rustflags_var(
         Some(sanitized) => {
             tracing::debug!(
                 var = name,
-                original = value,
-                sanitized = sanitized,
                 "stripped coverage flags from rustflags variable"
             );
             command.env(name, sanitized);
@@ -60,7 +58,6 @@ fn apply_sanitized_rustflags_var(
         None => {
             tracing::debug!(
                 var = name,
-                original = value,
                 "removed rustflags variable entirely after coverage flag stripping"
             );
             command.env_remove(name);
