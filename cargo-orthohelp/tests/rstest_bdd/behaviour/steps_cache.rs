@@ -58,6 +58,8 @@ fn cached_ir_deserializes(orthohelp_context: &mut OrthoHelpContext) -> StepResul
 }
 
 #[then("the command fails due to missing cache")]
+// `main` returns `OrthohelpError` directly, so Rust prints the Debug variant.
+// Keep this coupled to `MissingCache` to verify the intended failure path.
 fn command_fails_due_to_missing_cache(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
     let failed_with_missing_cache = orthohelp_context
         .last_output
