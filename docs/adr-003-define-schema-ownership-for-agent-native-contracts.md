@@ -88,6 +88,17 @@ Documentation IR, agent context, and policy reports can evolve independently.
 A human-documentation compatibility change does not force an agent-context
 version bump unless the same machine contract changes.
 
+Existing human-documentation outputs remain compatible until a separate
+versioned migration is approved. Adding agent-context metadata, JSON result
+streams, or policy reports does not change the accepted `cargo-orthohelp`
+`ir`, `man`, `ps`, or `all` formats, generated file paths, or process
+success/failure contract.
+
+New optional metadata fields require explicit defaults for older derives. Those
+defaults are applied by OrthoConfig readers, generators, or transforms; schema
+annotations may document defaults but do not populate missing values during
+validation.
+
 Future roadmap work that adds `--format agent-context`,
 `--check-agent-native`, JSON result streams, or policy evaluation must build on
 these contracts instead of scraping rendered help output.

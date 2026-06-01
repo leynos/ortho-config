@@ -1,4 +1,19 @@
-//! PowerShell help generation step definitions.
+//! `PowerShell` help generation step definitions for `cargo-orthohelp` behavioural tests.
+//!
+//! Implements the `when`/`then` steps that exercise the `--format ps` output
+//! contract:
+//!
+//! - **`I run cargo-orthohelp with format ps for the fixture`** — runs the
+//!   command and asserts success.
+//! - **`the output contains a PowerShell module named {name}`** — asserts the
+//!   generated `.psm1` file exists and contains the expected module scaffold.
+//! - **`the output contains a PowerShell command named {name}`** — asserts the
+//!   `.psm1` exports a function with the given name.
+//! - **`the output contains an about topic for {name}`** — asserts the
+//!   `about_{name}.help.txt` file exists in the output.
+//!
+//! All file-system access uses `cap-std` ambient-authority APIs, consistent
+//! with the rest of the behavioural step modules.
 
 use std::io::Read;
 
@@ -7,7 +22,7 @@ use cap_std::ambient_authority;
 use cap_std::fs_utf8::Dir;
 use rstest_bdd_macros::{then, when};
 
-use super::steps::{get_out_dir, run_orthohelp, OrthoHelpContext, StepResult};
+use super::steps::{OrthoHelpContext, StepResult, get_out_dir, run_orthohelp};
 
 #[when("I run cargo-orthohelp with format ps for the fixture")]
 fn run_with_format_ps(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
@@ -74,12 +89,19 @@ fn help_includes_command(
 }
 
 #[then("the PowerShell about topic for {module_name} exists")]
-fn about_topic_exists(orthohelp_context: &mut OrthoHelpContext, module_name: String) -> StepResult<()> {
+fn about_topic_exists(
+    orthohelp_context: &mut OrthoHelpContext,
+    module_name: String,
+) -> StepResult<()> {
     let out_root = get_out_dir(orthohelp_context)?;
     let module_root = out_root.join("powershell").join(&module_name);
     let dir = Dir::open_ambient_dir(&module_root, ambient_authority())?;
     let about_path = Utf8PathBuf::from(format!("en-US/about_{module_name}.help.txt"));
-    dir.open(&about_path)
-        .map_err(|e| format!("expected about topic at {}: {e}", module_root.join(&about_path)))?;
+    dir.open(&about_path).map_err(|e| {
+        format!(
+            "expected about topic at {}: {e}",
+            module_root.join(&about_path)
+        )
+    })?;
     Ok(())
 }

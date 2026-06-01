@@ -18,6 +18,7 @@ mod metadata;
 mod output;
 pub mod powershell;
 pub mod roff;
+mod rustflags;
 pub mod schema;
 
 use camino::Utf8PathBuf;

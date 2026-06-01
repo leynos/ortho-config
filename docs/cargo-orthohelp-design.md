@@ -511,12 +511,36 @@ cargo orthohelp \
   [--cache] [--no-build]
 ```
 
-`--format agent-context`, `--json`, and `--check-agent-native` are planned
-agent-native additions. Until they are implemented, the existing formats remain
-the only generated artefacts. When `--json` is provided, success must emit
-exactly one JSON result document to stdout and nothing to stderr. Failure must
-emit no stdout, unless a non-JSON artefact was explicitly delivered earlier,
-and exactly one JSON diagnostic document to stderr.
+`ir`, `man`, `ps`, and `all` are the currently implemented legacy-compatible
+formats. The current default is `ir`; unsupported format values fail during
+Clap parsing before generation begins. `--format agent-context`, `--json`, and
+`--check-agent-native` are planned agent-native additions. Until they are
+implemented, the existing formats remain the only generated artefacts. When
+`--json` is provided in a future migration, success must emit exactly one JSON
+result document to stdout and nothing to stderr. Failure must emit no stdout,
+unless a non-JSON artefact was explicitly delivered earlier, and exactly one
+JSON diagnostic document to stderr.
+
+The existing format behaviours are compatibility contracts until a versioned
+migration is explicitly approved:
+
+- `--format ir` writes one localized JSON file per resolved locale under
+  `<out>/ir/<locale>.json`.
+- `--format man` writes roff pages under
+  `<out>/man/man<section>/<name>.<section>` for one locale and under
+  `<out>/<locale>/man/man<section>/<name>.<section>` for multiple locales.
+- `--format ps` writes a PowerShell module under
+  `<out>/powershell/<ModuleName>/`, including module files, localized MAML
+  help, about topics, and default `en-US` support unless
+  `--ensure-en-us false` is supplied.
+- `--format all` generates IR, then man pages, then PowerShell artefacts in a
+  single invocation. It reports success or failure through process exit status
+  and does not introduce structured stdout.
+
+Agent-context output, policy output, and JSON status output must be added beside
+these contracts. They may not change the accepted `ir`, `man`, `ps`, or `all`
+spellings, the default format, the generated file paths, or the process
+success/failure contract without a separate approved migration.
 
 `Cargo.toml` defaults:
 
@@ -826,6 +850,20 @@ installs the executable in a different location.
   changes bump the major version.
 - Tooling: `cargo-orthohelp` tracks the IR major.
 - Runtime: `clap` v4.x unchanged; PowerShell targets 5.1+ and 7+.
+
+Documentation IR and agent-context schemas are independently versioned sibling
+contracts. Adding compact agent metadata does not require a documentation IR
+major-version bump unless the existing human-documentation JSON changes in a
+breaking way. New optional metadata fields must define explicit defaults for
+older derives. Those defaults are applied by OrthoConfig readers, generators,
+or transforms; JSON Schema annotations document the value but do not populate
+it during validation.
+
+Human-facing documentation consumers may keep reading generated roff and
+PowerShell artefacts without adopting agent-context metadata. Consumers that
+parse localized IR directly should tolerate additive optional fields and should
+not require future agent-context or policy-report fields unless they opt into
+those formats.
 
 ## 13. Worked example (abridged)
 

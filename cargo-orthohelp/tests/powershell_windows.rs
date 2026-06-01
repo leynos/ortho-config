@@ -31,7 +31,9 @@ mod tests {
         }
     }
 
-    fn generate_powershell_output(out_dir: &Utf8PathBuf) -> Result<(), Box<dyn Error>> {
+    fn generate_powershell_output(
+        out_dir: &Utf8PathBuf,
+    ) -> Result<(), Box<dyn Error + Send + Sync>> {
         let exe = super::fixtures::cargo_orthohelp_exe()?;
         let root = super::fixtures::workspace_root()?;
         let output = Command::new(exe.as_str())
@@ -68,7 +70,7 @@ mod tests {
     fn run_get_help(
         shell: &ShellCommand,
         module_manifest: &Utf8PathBuf,
-    ) -> Result<String, Box<dyn Error>> {
+    ) -> Result<String, Box<dyn Error + Send + Sync>> {
         let escaped_manifest = module_manifest.as_str().replace('\'', "''");
         let script = format!(
             concat!(
@@ -167,7 +169,11 @@ mod tests {
         }
     }
 
-    fn ensure_contains(output: &str, needle: &str, label: &str) -> Result<(), Box<dyn Error>> {
+    fn ensure_contains(
+        output: &str,
+        needle: &str,
+        label: &str,
+    ) -> Result<(), Box<dyn Error + Send + Sync>> {
         if output.contains(needle) {
             return Ok(());
         }
@@ -208,7 +214,7 @@ mod tests {
     fn test_get_help_full(
         shell: &ShellCommand,
         should_skip_if_unavailable: bool,
-    ) -> Result<(), Box<dyn Error>> {
+    ) -> Result<(), Box<dyn Error + Send + Sync>> {
         if should_skip_if_unavailable && !is_shell_available(shell) {
             return Ok(());
         }
@@ -238,7 +244,7 @@ mod tests {
     fn get_help_full_works_in_supported_shells(
         #[case] shell_name: &str,
         #[case] should_skip_if_unavailable: bool,
-    ) -> Result<(), Box<dyn Error>> {
+    ) -> Result<(), Box<dyn Error + Send + Sync>> {
         test_get_help_full(&ShellCommand::new(shell_name), should_skip_if_unavailable)
     }
 }

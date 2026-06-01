@@ -210,19 +210,19 @@ fn localize_sections(
 ) -> LocalizedSectionsMetadata {
     LocalizedSectionsMetadata {
         headings: LocalizedHeadings {
-            name: resolve_message(localizer, &sections.headings_ids.name),
-            synopsis: resolve_message(localizer, &sections.headings_ids.synopsis),
-            description: resolve_message(localizer, &sections.headings_ids.description),
-            options: resolve_message(localizer, &sections.headings_ids.options),
-            environment: resolve_message(localizer, &sections.headings_ids.environment),
-            files: resolve_message(localizer, &sections.headings_ids.files),
-            precedence: resolve_message(localizer, &sections.headings_ids.precedence),
-            exit_status: resolve_message(localizer, &sections.headings_ids.exit_status),
-            examples: resolve_message(localizer, &sections.headings_ids.examples),
-            see_also: resolve_message(localizer, &sections.headings_ids.see_also),
+            name: resolve_heading(localizer, &sections.headings_ids.name),
+            synopsis: resolve_heading(localizer, &sections.headings_ids.synopsis),
+            description: resolve_heading(localizer, &sections.headings_ids.description),
+            options: resolve_heading(localizer, &sections.headings_ids.options),
+            environment: resolve_heading(localizer, &sections.headings_ids.environment),
+            files: resolve_heading(localizer, &sections.headings_ids.files),
+            precedence: resolve_heading(localizer, &sections.headings_ids.precedence),
+            exit_status: resolve_heading(localizer, &sections.headings_ids.exit_status),
+            examples: resolve_heading(localizer, &sections.headings_ids.examples),
+            see_also: resolve_heading(localizer, &sections.headings_ids.see_also),
             commands: sections.headings_ids.commands.as_deref().map_or_else(
                 || "COMMANDS".to_owned(),
-                |id| resolve_message(localizer, id),
+                |id| resolve_heading(localizer, id),
             ),
         },
         discovery: sections
@@ -341,6 +341,29 @@ fn resolve_message(localizer: &dyn Localizer, id: &str) -> String {
     localizer
         .lookup(id, None)
         .unwrap_or_else(|| format!("[missing: {id}]"))
+}
+
+fn resolve_heading(localizer: &dyn Localizer, id: &str) -> String {
+    localizer.lookup(id, None).unwrap_or_else(|| {
+        standard_heading_fallback(id).map_or_else(|| format!("[missing: {id}]"), str::to_owned)
+    })
+}
+
+fn standard_heading_fallback(id: &str) -> Option<&'static str> {
+    match id {
+        "ortho.headings.name" => Some("NAME"),
+        "ortho.headings.synopsis" => Some("SYNOPSIS"),
+        "ortho.headings.description" => Some("DESCRIPTION"),
+        "ortho.headings.options" => Some("OPTIONS"),
+        "ortho.headings.environment" => Some("ENVIRONMENT"),
+        "ortho.headings.files" => Some("FILES"),
+        "ortho.headings.precedence" => Some("PRECEDENCE"),
+        "ortho.headings.exit_status" => Some("EXIT STATUS"),
+        "ortho.headings.examples" => Some("EXAMPLES"),
+        "ortho.headings.see_also" => Some("SEE ALSO"),
+        "ortho.headings.commands" => Some("COMMANDS"),
+        _ => None,
+    }
 }
 
 fn resolve_optional(localizer: &dyn Localizer, id: Option<&str>) -> Option<String> {
