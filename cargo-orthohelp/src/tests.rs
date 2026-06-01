@@ -52,50 +52,27 @@ fn poll_clock_after(reference: SystemTime, timeout: Duration) {
     }
 }
 
-#[test]
-fn build_bridge_command_strips_coverage_env_vars() {
-    let vars = [
-        "RUSTC_WORKSPACE_WRAPPER",
-        "RUSTC_WRAPPER",
-        "LLVM_PROFILE_FILE",
-        "CARGO_LLVM_COV_TARGET_DIR",
-        "CARGO_TARGET_DIR",
-    ];
-
-    let cmd = build_bridge_command(&dummy_paths());
-    let removed: Vec<&OsStr> = cmd
-        .get_envs()
-        .filter_map(|(key, value)| if value.is_none() { Some(key) } else { None })
-        .collect();
-
-    for var in vars {
-        assert!(
-            removed.iter().any(|key| *key == OsStr::new(var)),
-            "build_bridge_command should remove {var} from the child environment"
-        );
-    }
-}
+const COVERAGE_VARS: &[&str] = &[
+    "RUSTC_WORKSPACE_WRAPPER",
+    "RUSTC_WRAPPER",
+    "LLVM_PROFILE_FILE",
+    "CARGO_LLVM_COV_TARGET_DIR",
+    "CARGO_TARGET_DIR",
+];
 
 #[test]
-fn build_bridge_command_does_not_set_coverage_env_vars() {
-    let vars = [
-        "RUSTC_WORKSPACE_WRAPPER",
-        "RUSTC_WRAPPER",
-        "LLVM_PROFILE_FILE",
-        "CARGO_LLVM_COV_TARGET_DIR",
-        "CARGO_TARGET_DIR",
-    ];
-
+fn build_bridge_command_removes_coverage_env_vars() {
     let cmd = build_bridge_command(&dummy_paths());
-    let set: Vec<&OsStr> = cmd
-        .get_envs()
-        .filter_map(|(key, value)| value.map(|_| key))
-        .collect();
+    let env_overrides: Vec<(&OsStr, Option<&OsStr>)> = cmd.get_envs().collect();
 
-    for var in vars {
+    for var in COVERAGE_VARS {
+        let entry = env_overrides
+            .iter()
+            .find(|(key, _)| *key == OsStr::new(var));
         assert!(
-            !set.iter().any(|key| *key == OsStr::new(var)),
-            "build_bridge_command should not set {var} in the child environment"
+            matches!(entry, Some((_, None))),
+            "build_bridge_command should mark {var} for removal \
+             (must appear in get_envs() with value None, not absent or set)"
         );
     }
 }
