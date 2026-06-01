@@ -23,7 +23,7 @@ use rstest_bdd_macros::{then, when};
 
 use super::steps::{OrthoHelpContext, StepResult, get_out_dir, run_orthohelp};
 
-/// A section heading recognised by the roff formatter.
+/// A section heading recognized by the roff formatter.
 #[derive(Debug, Clone)]
 enum ManSection {
     Name,
