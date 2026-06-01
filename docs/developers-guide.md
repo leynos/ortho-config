@@ -190,6 +190,69 @@ When adding scenarios or steps:
    internals unless the behaviour cannot be observed externally.
 5. Run the full required quality gates before finalising.
 
+## Observability
+
+OrthoConfig and `cargo-orthohelp` follow a single observability convention so
+that downstream applications can attach the subscribers and exporters they
+prefer without contending with this workspace for global state.
+
+- Use the `tracing` crate for all diagnostic output. Prefer structured
+  `tracing::{trace, debug, info, warn, error}` events and spans over
+  `println!`, `eprintln!`, or direct `log` macros. Attach fields for
+  identifiers, state, and error context so subscribers can filter and
+  correlate events without parsing message text.
+- Wrap meaningful units of work in spans. Use `#[tracing::instrument]` or
+  explicit spans around request handling, command execution, retries, and
+  background jobs. Do not hold a `Span::enter()` guard across `.await`; use
+  `Instrument::instrument` or scoped synchronous spans instead.
+- Use the `metrics` crate where usage, uptake, failure, or mitigation metrics
+  are required. Choose `counter!` for cumulative events, `gauge!` for values
+  that rise and fall, and `histogram!` for distributions such as latency or
+  payload size.
+- Describe emitted metrics with `describe_counter!`, `describe_gauge!`, or
+  `describe_histogram!` whenever the unit or purpose is not obvious from the
+  metric name. Keep metric names stable and labels low-cardinality. Do not put
+  user input, request identifiers, unbounded path parameters, or raw error
+  strings into labels.
+- Respect the library and application boundary. Libraries in this workspace,
+  including `ortho_config` and `cargo-orthohelp`'s reusable modules, may emit
+  `tracing` events and `metrics` instrumentation, but must not install global
+  subscribers or recorders. Applications and binaries should initialize their
+  chosen exporters and subscribers once, as early as practical in startup.
+
+Use `tracing` and `metrics` together where it aids diagnosis: spans give the
+contextual envelope, events describe what happened inside, and metrics
+aggregate the same activity for monitoring. New observability primitives, such
+as additional metric families or span fields used across crates, should be
+mentioned in the relevant design or component architecture document, so the
+contract stays discoverable.
+
+## Dependency management
+
+Cargo dependencies in this workspace follow strict version pinning rules so
+that builds remain stable and reproducible across contributors and continuous
+integration (CI) environments.
+
+- Use SemVer-compatible caret requirements for every dependency declared in
+  `Cargo.toml`, for example, `some-crate = "1.2.3"`. This is Cargo's default
+  and accepts non-breaking minor and patch updates while rejecting breaking
+  changes from a new major version.
+- Do not use wildcard (`*`) or open-ended inequality (`>=`) version
+  requirements. They admit unpredictable upstream changes into the build and
+  are forbidden in this workspace.
+- Reserve tilde (`~`) requirements for the narrow case where a dependency must
+  be locked to patch-level updates for a specific, documented reason. Record
+  the rationale alongside the dependency entry or in the related design
+  document, so a later reader can re-evaluate the constraint.
+- Keep dependencies current. When upgrading a crate, run the full quality
+  gates (`make check-fmt`, `make lint`, `make test`) and, where the upgrade
+  changes behaviour or public API, update the relevant design document, ADR,
+  or migration guide.
+- Capture substantive dependency choices, such as adopting or replacing a
+  crate, in an ADR following the documentation style guide. Reference the ADR
+  from the design document and from this guide where future contributors
+  should be aware of the decision.
+
 ## Command checklist
 
 Run from repository root:
