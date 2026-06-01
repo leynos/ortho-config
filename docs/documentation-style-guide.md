@@ -212,7 +212,7 @@ user's guide or developer's guide.
   implemented system. If the code or the governing decision changes, update the
   design or mark the divergence explicitly.
 
-### Request for Comments (RFCs)
+### Request for Comments (RFC)
 
 Use RFCs for proposed changes that need technical review before they become
 binding. Store them under `docs/rfcs/`.
@@ -629,7 +629,7 @@ This hierarchy should align with the GIST framework:
   - Phases: 1, 2, 3, …
   - Steps: 1.1, 1.2, 1.3, …
   - Headline tasks: 1.1.1, 1.1.2, 1.1.3, …
-- **Checkboxes:** Precede task and sub-task items with a GitHub Flavoured
+- **Checkboxes:** Precede task and sub-task items with a GitHub Flavored
   Markdown (GFM) checkbox (`[ ]`) to track completion status.
 - **Dependencies:** Note non-linear dependencies explicitly. Where a task
   depends on another task outside its immediate sequence, cite the dependency

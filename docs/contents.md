@@ -5,11 +5,11 @@
 
 ## Primary guides
 
-- [Users guide](users-guide.md): use OrthoConfig in application and library
+- [User's guide](users-guide.md): use OrthoConfig in application and library
   code, including configuration loading, merge behaviour, generated
   documentation metadata, and error handling.
-- [Developers guide](developers-guide.md): maintain and extend this repository,
-  including build, test, lint, release, and contribution workflows.
+- [Developer's guide](developers-guide.md): maintain and extend this
+  repository, including build, test, lint, release, and contribution workflows.
 - [Repository layout](repository-layout.md): understand where source code,
   tests, fixtures, generated artefacts, plans, and long-lived references live.
 
