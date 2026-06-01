@@ -339,20 +339,10 @@ fn open_bridge_file(
 #[cfg(test)]
 mod tests {
     use std::ffi::OsStr;
-    use std::sync::{Mutex, MutexGuard};
 
     use camino::Utf8PathBuf;
 
     use super::*;
-
-    static ENV_LOCK: Mutex<()> = Mutex::new(());
-
-    fn env_lock() -> MutexGuard<'static, ()> {
-        match ENV_LOCK.lock() {
-            Ok(guard) => guard,
-            Err(poisoned) => poisoned.into_inner(),
-        }
-    }
 
     fn dummy_paths() -> BridgePaths {
         BridgePaths {
@@ -365,7 +355,6 @@ mod tests {
 
     #[test]
     fn build_bridge_command_strips_coverage_env_vars() {
-        let _guard = env_lock();
         let vars = [
             "RUSTC_WORKSPACE_WRAPPER",
             "RUSTC_WRAPPER",
@@ -373,11 +362,6 @@ mod tests {
             "CARGO_LLVM_COV_TARGET_DIR",
             "CARGO_TARGET_DIR",
         ];
-        for var in vars {
-            // SAFETY: this test serializes its environment mutations with
-            // `ENV_LOCK`, and restores each variable before returning.
-            unsafe { std::env::set_var(var, "sentinel_value") };
-        }
 
         let cmd = build_bridge_command(&dummy_paths());
         let removed: Vec<&OsStr> = cmd
@@ -390,12 +374,6 @@ mod tests {
                 removed.iter().any(|key| *key == OsStr::new(var)),
                 "build_bridge_command should remove {var} from the child environment"
             );
-        }
-
-        for var in vars {
-            // SAFETY: this test serializes its environment mutations with
-            // `ENV_LOCK`, and restores each variable before returning.
-            unsafe { std::env::remove_var(var) };
         }
     }
 }
