@@ -164,7 +164,7 @@ fn output_contains_man_page(
 }
 
 #[then("the output contains a localized man page for {locale} and {name}")]
-fn output_contains_localised_man_page(
+fn output_contains_localized_man_page(
     orthohelp_context: &mut OrthoHelpContext,
     locale: String,
     name: String,
