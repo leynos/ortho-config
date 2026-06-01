@@ -11,6 +11,8 @@ use rstest_bdd_macros::then;
 use super::steps::{OrthoHelpContext, StepResult};
 use super::steps_cmd::scenario_target_dir;
 
+/// CLI arguments for cache-mode invocations of `cargo-orthohelp` under the
+/// fixture package and the `en-US` / `fr-FR` locales.
 pub(super) const CACHE_ARGS: &[&str] = &[
     "--cache",
     "--package",
@@ -70,6 +72,8 @@ fn command_fails_due_to_missing_cache(orthohelp_context: &mut OrthoHelpContext) 
     Ok(())
 }
 
+/// Records the current state of the cached `ir.json` file into `ctx` so that
+/// [`cached_ir_reused`] can later verify no rewrite occurred.
 pub(super) fn record_cache_state(ctx: &mut OrthoHelpContext) -> StepResult<()> {
     let cache_path = find_cached_ir(ctx)?.ok_or("cached IR should exist")?;
     // Read the full content: gives a stable reference for comparison and forces
@@ -131,6 +135,8 @@ fn check_cache_entry(
     Some((modified, cache_root.join(relative)))
 }
 
+/// Returns `true` when `err` represents a "not found" I/O error, used to
+/// treat a missing cache root as `Ok(None)` rather than a hard failure.
 pub(super) fn is_not_found_kind(err: &std::io::Error) -> bool {
     matches!(err.kind(), std::io::ErrorKind::NotFound)
 }

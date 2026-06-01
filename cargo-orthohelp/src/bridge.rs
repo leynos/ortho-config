@@ -81,6 +81,8 @@ pub fn load_or_build_ir(
     Ok(ir_json)
 }
 
+/// Reads the cached IR JSON from the bridge directory, returning `None` when
+/// no cache file exists.
 fn read_cached_ir(paths: &BridgePaths) -> Result<Option<String>, OrthohelpError> {
     let Some(dir) = open_optional_dir(paths.bridge_dir.as_path())? else {
         return Ok(None);
@@ -106,6 +108,7 @@ fn read_cached_ir(paths: &BridgePaths) -> Result<Option<String>, OrthohelpError>
     Ok(Some(buffer))
 }
 
+/// Creates the bridge crate directory tree (bridge root and `src/`) if absent.
 fn ensure_bridge_layout(paths: &BridgePaths) -> Result<(), OrthohelpError> {
     Dir::create_ambient_dir_all(&paths.bridge_dir, ambient_authority()).map_err(|io_err| {
         OrthohelpError::Io {
@@ -118,6 +121,7 @@ fn ensure_bridge_layout(paths: &BridgePaths) -> Result<(), OrthohelpError> {
     Ok(())
 }
 
+/// Generates and writes the ephemeral bridge `Cargo.toml`.
 fn write_bridge_manifest(config: &BridgeConfig, paths: &BridgePaths) -> Result<(), OrthohelpError> {
     let mut manifest = String::from(concat!(
         "[package]\n",
@@ -169,6 +173,7 @@ fn write_bridge_manifest(config: &BridgeConfig, paths: &BridgePaths) -> Result<(
     Ok(())
 }
 
+/// Generates and writes `src/main.rs` for the ephemeral bridge crate.
 fn write_bridge_main(config: &BridgeConfig, paths: &BridgePaths) -> Result<(), OrthohelpError> {
     let content = format!(
         concat!(
@@ -208,6 +213,7 @@ fn write_bridge_main(config: &BridgeConfig, paths: &BridgePaths) -> Result<(), O
     Ok(())
 }
 
+/// Invokes `cargo build` for the ephemeral bridge crate.
 fn build_bridge(paths: &BridgePaths) -> Result<(), OrthohelpError> {
     let output = build_bridge_command(paths)
         .output()
@@ -229,6 +235,8 @@ fn build_bridge(paths: &BridgePaths) -> Result<(), OrthohelpError> {
     Err(OrthohelpError::BridgeBuildFailure { status, message })
 }
 
+/// Constructs the `cargo build` `Command` for the bridge crate, stripping
+/// coverage-related environment variables from the child process.
 fn build_bridge_command(paths: &BridgePaths) -> Command {
     let mut command = Command::new("cargo");
     command
@@ -246,6 +254,7 @@ fn build_bridge_command(paths: &BridgePaths) -> Command {
     command
 }
 
+/// Executes the compiled bridge binary and returns its stdout as a JSON string.
 fn run_bridge(paths: &BridgePaths) -> Result<String, OrthohelpError> {
     let exe_name = format!("orthohelp_bridge{}", std::env::consts::EXE_SUFFIX);
     let exe_path = paths.target_dir.join("debug").join(exe_name);
@@ -303,6 +312,7 @@ fn write_ir_cache(paths: &BridgePaths, json: &str) -> Result<(), OrthohelpError>
     Ok(())
 }
 
+/// Opens the bridge root directory using cap-std ambient authority.
 fn open_bridge_dir(paths: &BridgePaths) -> Result<Dir, OrthohelpError> {
     Dir::open_ambient_dir(&paths.bridge_dir, ambient_authority()).map_err(|io_err| {
         OrthohelpError::Io {
@@ -312,6 +322,8 @@ fn open_bridge_dir(paths: &BridgePaths) -> Result<Dir, OrthohelpError> {
     })
 }
 
+/// Creates the `src/` subdirectory inside the bridge root if it does not
+/// already exist.
 fn ensure_bridge_src(dir: &Dir, paths: &BridgePaths) -> Result<(), OrthohelpError> {
     dir.create_dir_all("src")
         .map_err(|io_err| OrthohelpError::Io {
@@ -320,6 +332,7 @@ fn ensure_bridge_src(dir: &Dir, paths: &BridgePaths) -> Result<(), OrthohelpErro
         })
 }
 
+/// Opens a file inside the bridge root for writing, creating or truncating it.
 fn open_bridge_file(
     paths: &BridgePaths,
     relative: &str,
