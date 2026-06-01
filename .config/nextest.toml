@@ -4,8 +4,9 @@
 filter = 'binary(crate_path_trybuild) | binary(declarative_merge_trybuild)'
 slow-timeout = { period = "120s", terminate-after = 5 }
 
-# Serialise orthohelp BDD scenarios: each runs in its own process under nextest,
-# so the in-process SCENARIO_LOCK mutex cannot guard the shared orthohelp cache.
+# Serialise orthohelp BDD scenarios: each runs in its own nextest process,
+# so inter-process races on the shared orthohelp cache must be prevented
+# at the nextest level rather than with a process-local mutex.
 # Serialise powershell_windows cases: both cases write to the same bridge
 # directory under target/orthohelp/<hash>/ and Windows file-sharing semantics
 # prevent concurrent truncate+write while cargo holds a read lock on the manifest.
