@@ -60,11 +60,13 @@ impl ManSection {
     }
 }
 
-fn run_format_step(orthohelp_context: &mut OrthoHelpContext, args: &[&str]) -> StepResult<()> {
+fn run_format_step(
+    orthohelp_context: &mut OrthoHelpContext,
+    args: &[&str],
+) -> StepResult<std::process::Output> {
     let output = run_orthohelp(orthohelp_context, args)?;
     assert_orthohelp_succeeded(&output);
-    orthohelp_context.last_output.set(output);
-    Ok(())
+    Ok(output)
 }
 
 fn assert_orthohelp_succeeded(output: &std::process::Output) {
@@ -77,7 +79,7 @@ fn assert_orthohelp_succeeded(output: &std::process::Output) {
 
 #[when("I run cargo-orthohelp with format man for the fixture")]
 fn run_with_format_man(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
-    run_format_step(
+    let output = run_format_step(
         orthohelp_context,
         &[
             "--format",
@@ -87,7 +89,9 @@ fn run_with_format_man(orthohelp_context: &mut OrthoHelpContext) -> StepResult<(
             "--locale",
             "en-US",
         ],
-    )
+    )?;
+    orthohelp_context.last_output.set(output);
+    Ok(())
 }
 
 #[when("I run cargo-orthohelp with format man and section {section} for the fixture")]
@@ -96,7 +100,7 @@ fn run_with_format_man_section(
     section: u8,
 ) -> StepResult<()> {
     let section_str = section.to_string();
-    run_format_step(
+    let output = run_format_step(
         orthohelp_context,
         &[
             "--format",
@@ -108,14 +112,16 @@ fn run_with_format_man_section(
             "--locale",
             "en-US",
         ],
-    )
+    )?;
+    orthohelp_context.last_output.set(output);
+    Ok(())
 }
 
 #[when("I run cargo-orthohelp with format man for en-US and fr-FR")]
 fn run_with_format_man_multiple_locales(
     orthohelp_context: &mut OrthoHelpContext,
 ) -> StepResult<()> {
-    run_format_step(
+    let output = run_format_step(
         orthohelp_context,
         &[
             "--format",
@@ -127,12 +133,14 @@ fn run_with_format_man_multiple_locales(
             "--locale",
             "fr-FR",
         ],
-    )
+    )?;
+    orthohelp_context.last_output.set(output);
+    Ok(())
 }
 
 #[when("I run cargo-orthohelp with format all for the fixture")]
 fn run_with_format_all(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
-    run_format_step(
+    let output = run_format_step(
         orthohelp_context,
         &[
             "--format",
@@ -142,7 +150,9 @@ fn run_with_format_all(orthohelp_context: &mut OrthoHelpContext) -> StepResult<(
             "--locale",
             "en-US",
         ],
-    )
+    )?;
+    orthohelp_context.last_output.set(output);
+    Ok(())
 }
 
 fn read_man_page_content(

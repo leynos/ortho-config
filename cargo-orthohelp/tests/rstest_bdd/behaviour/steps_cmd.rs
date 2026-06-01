@@ -9,8 +9,8 @@
 //!   under the scenario target dir.
 //! - **`I run cargo-orthohelp with cache for the fixture`** — runs with
 //!   [`CACHE_ARGS`] and records cache state.
-//! - **`I rerun cargo-orthohelp with cache for the fixture`** — sleeps 1 s
-//!   then reruns with cache args (no cache-state recording).
+//! - **`I rerun cargo-orthohelp with cache for the fixture`** — reruns with
+//!   cache args (no cache-state recording).
 //! - **`I run cargo-orthohelp with --no-build`** — verifies the no-build path.
 //! - **`I run cargo-orthohelp with format ir`** — asserts the `ir` format
 //!   succeeds.
@@ -18,12 +18,10 @@
 //! Exposes [`run_orthohelp`], the public helper that builds and executes the
 //! `cargo-orthohelp` command for a given scenario context and argument slice.
 
-use std::process::Command;
-use std::time::Duration;
-
 use cap_std::ambient_authority;
 use cap_std::fs_utf8::Dir;
 use rstest_bdd_macros::{given, when};
+use std::process::Command;
 
 use super::steps::{
     OrthoHelpContext, StepResult, get_out_dir, get_workspace_root, scenario_target_dir,
@@ -73,14 +71,14 @@ fn run_orthohelp_with_cache_args(ctx: &mut OrthoHelpContext) -> StepResult<()> {
 #[when("I run cargo-orthohelp with cache for the fixture")]
 fn run_with_cache(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
     run_orthohelp_with_cache_args(orthohelp_context)?;
-    record_cache_state(orthohelp_context)?;
+    let (cache_path, content) = record_cache_state(orthohelp_context)?;
+    orthohelp_context.cache_ir_path.set(cache_path);
+    orthohelp_context.cache_ir_content.set(content);
     Ok(())
 }
 
 #[when("I rerun cargo-orthohelp with cache for the fixture")]
 fn rerun_with_cache(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
-    // Ensure filesystem timestamp granularity distinguishes the cache file mtime.
-    std::thread::sleep(Duration::from_secs(1));
     run_orthohelp_with_cache_args(orthohelp_context)
 }
 

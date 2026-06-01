@@ -12,7 +12,7 @@
 //!   stderr when no cache exists.
 //!
 //! Also exposes [`CACHE_ARGS`] (the standard `--cache` argument slice) and
-//! [`record_cache_state`] (reads and stores the current `ir.json` content for
+//! [`record_cache_state`] (reads the current `ir.json` path and content for
 //! later comparison). Both are used by [`super::steps_cmd`].
 
 use std::io::Read;
@@ -88,16 +88,14 @@ fn command_fails_due_to_missing_cache(orthohelp_context: &mut OrthoHelpContext) 
     Ok(())
 }
 
-/// Records the current state of the cached `ir.json` file into `ctx` so that
+/// Reads the current cached `ir.json` path and content so that
 /// [`cached_ir_reused`] can later verify no rewrite occurred.
-pub(super) fn record_cache_state(ctx: &mut OrthoHelpContext) -> StepResult<()> {
+pub(super) fn record_cache_state(ctx: &OrthoHelpContext) -> StepResult<(Utf8PathBuf, String)> {
     let cache_path = find_cached_ir(ctx)?.ok_or("cached IR should exist")?;
     // Read the full content: gives a stable reference for comparison and forces
     // Windows NTFS to commit the final mtime before any subsequent metadata read.
     let content = read_cache_file(&cache_path)?;
-    ctx.cache_ir_path.set(cache_path);
-    ctx.cache_ir_content.set(content);
-    Ok(())
+    Ok((cache_path, content))
 }
 
 fn read_cache_file(path: &Utf8Path) -> StepResult<String> {

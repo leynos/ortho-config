@@ -64,6 +64,11 @@ pub fn load_or_build_ir(
 ) -> Result<String, OrthohelpError> {
     if should_use_cache || should_skip_build {
         if let Some(cached) = read_cached_ir(paths)? {
+            tracing::debug!(
+                bridge_dir = %paths.bridge_dir,
+                ir_path = %paths.ir_path,
+                "reusing cached bridge IR"
+            );
             return Ok(cached);
         }
         if should_skip_build {
