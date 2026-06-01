@@ -15,7 +15,7 @@ The workspace runs one unified test workflow via Make targets:
 These are required quality gates for code changes. Behavioural coverage runs
 inside the standard Rust test harness, not a bespoke test runner.
 
-### Nextest test-group serialisation
+### Nextest test-group serialization
 
 `.config/nextest.toml` assigns two test binaries to single-threaded groups:
 
@@ -28,7 +28,7 @@ inside the standard Rust test harness, not a bespoke test runner.
   ephemeral bridge directory (`target/orthohelp/<hash>/`). On Windows,
   `cargo build` holds a read lock on `Cargo.toml`; a concurrent
   truncate-and-rewrite from the second invocation violates that lock.
-  Serialising the binary prevents the race.
+  Serializing the binary prevents the race.
 
 Do not remove the `max-threads = 1` constraint from either group without first
 verifying that the underlying shared-state access has been eliminated.
