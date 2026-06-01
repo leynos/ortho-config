@@ -163,7 +163,7 @@ fn output_contains_man_page(
     Ok(())
 }
 
-#[then("the output contains a localised man page for {locale} and {name}")]
+#[then("the output contains a localized man page for {locale} and {name}")]
 fn output_contains_localised_man_page(
     orthohelp_context: &mut OrthoHelpContext,
     locale: String,

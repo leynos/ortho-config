@@ -20,8 +20,8 @@ Feature: cargo-orthohelp roff man page generation
     Given a temporary output directory
     And the orthohelp cache is empty
     When I run cargo-orthohelp with format man for en-US and fr-FR
-    Then the output contains a localised man page for en-US and fixture
-    And the output contains a localised man page for fr-FR and fixture
+    Then the output contains a localized man page for en-US and fixture
+    And the output contains a localized man page for fr-FR and fixture
 
   Scenario: Generate all formats
     Given a temporary output directory
