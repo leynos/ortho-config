@@ -1,4 +1,16 @@
-//! Rust flag filtering for bridge builds.
+//! Rust flag sanitization for ephemeral bridge builds.
+//!
+//! When `cargo-orthohelp` spawns `cargo build` to compile the bridge crate, the
+//! child process inherits the parent's environment. Under `cargo-llvm-cov` this
+//! includes `-Cinstrument-coverage` tokens in `RUSTFLAGS` and
+//! `CARGO_ENCODED_RUSTFLAGS`, which cause the bridge binary to embed coverage
+//! instrumentation and write profiling data that can interfere with the test run.
+//!
+//! This module provides [`apply_sanitized_rustflags`], which reads those
+//! variables from the current environment, strips any coverage-related tokens,
+//! and re-applies the cleaned values to the provided [`Command`]. Variables
+//! that become empty after sanitization are removed entirely. It is called
+//! exclusively from [`crate::bridge::build_bridge_command`].
 
 use std::process::Command;
 

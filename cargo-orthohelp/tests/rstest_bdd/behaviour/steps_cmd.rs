@@ -1,4 +1,22 @@
 //! Command execution step definitions for `cargo-orthohelp` behavioural tests.
+//!
+//! Implements `given`/`when` steps that run `cargo-orthohelp` as a subprocess
+//! and manage per-scenario filesystem state:
+//!
+//! - **`the output directory is empty`** — verifies the scenario's temporary
+//!   output directory exists and contains no files.
+//! - **`the orthohelp cache is empty`** — removes the on-disk cache directory
+//!   under the scenario target dir.
+//! - **`I run cargo-orthohelp with cache for the fixture`** — runs with
+//!   [`CACHE_ARGS`] and records cache state.
+//! - **`I rerun cargo-orthohelp with cache for the fixture`** — sleeps 1 s
+//!   then reruns with cache args (no cache-state recording).
+//! - **`I run cargo-orthohelp with --no-build`** — verifies the no-build path.
+//! - **`I run cargo-orthohelp with format ir`** — asserts the `ir` format
+//!   succeeds.
+//!
+//! Exposes [`run_orthohelp`], the public helper that builds and executes the
+//! `cargo-orthohelp` command for a given scenario context and argument slice.
 
 use std::process::Command;
 use std::time::Duration;

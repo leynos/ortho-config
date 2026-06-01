@@ -1,4 +1,19 @@
-//! `PowerShell` help generation step definitions.
+//! `PowerShell` help generation step definitions for `cargo-orthohelp` behavioural tests.
+//!
+//! Implements the `when`/`then` steps that exercise the `--format ps` output
+//! contract:
+//!
+//! - **`I run cargo-orthohelp with format ps for the fixture`** — runs the
+//!   command and asserts success.
+//! - **`the output contains a PowerShell module named {name}`** — asserts the
+//!   generated `.psm1` file exists and contains the expected module scaffold.
+//! - **`the output contains a PowerShell command named {name}`** — asserts the
+//!   `.psm1` exports a function with the given name.
+//! - **`the output contains an about topic for {name}`** — asserts the
+//!   `about_{name}.help.txt` file exists in the output.
+//!
+//! All file-system access uses `cap-std` ambient-authority APIs, consistent
+//! with the rest of the behavioural step modules.
 
 use std::io::Read;
 

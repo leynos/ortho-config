@@ -1,4 +1,18 @@
-//! Roff man page generation step definitions.
+//! Roff man-page generation step definitions for `cargo-orthohelp` behavioural tests.
+//!
+//! Implements the `when`/`then` steps that exercise the `--format man` and
+//! `--format all` output contracts:
+//!
+//! - **`when`** steps run `cargo-orthohelp` with the appropriate `--format`,
+//!   `--package`, `--locale`, and optional `--man-section` arguments via the
+//!   shared `run_format_step` helper.
+//! - **`then`** steps read the generated man-page files from the output
+//!   directory via `read_man_page_content` and assert on `.TH` headers and
+//!   `.SH` section headings.
+//!
+//! Section names in step text are parsed into the [`ManSection`] enum, whose
+//! [`ManSection::expected_heading`] method provides the exact `.SH` heading
+//! string the roff formatter writes, avoiding fragile string comparisons.
 
 use std::io::Read;
 

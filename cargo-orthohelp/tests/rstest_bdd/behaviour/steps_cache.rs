@@ -1,4 +1,19 @@
-//! Cache assertion helpers and step definitions for `cargo-orthohelp`.
+//! Cache assertion step definitions for `cargo-orthohelp` behavioural tests.
+//!
+//! Implements the `then` steps that verify IR cache behaviour:
+//! - **`the cached IR is reused`** — confirms the `ir.json` content is
+//!   byte-identical between the first and second runs, proving the cache was
+//!   not rewritten.
+//! - **`the cached IR deserializes into the schema`** — deserializes the
+//!   cached file into [`ortho_config::docs::DocMetadata`] and asserts the
+//!   `ir_version` field matches [`ORTHO_DOCS_IR_VERSION`].
+//! - **`the command fails due to missing cache`** — asserts that
+//!   `cargo-orthohelp --no-build` exits non-zero and writes `MissingCache` to
+//!   stderr when no cache exists.
+//!
+//! Also exposes [`CACHE_ARGS`] (the standard `--cache` argument slice) and
+//! [`record_cache_state`] (reads and stores the current `ir.json` content for
+//! later comparison). Both are used by [`super::steps_cmd`].
 
 use std::io::Read;
 

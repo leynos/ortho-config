@@ -1,4 +1,16 @@
-//! IR assertion step definitions for `cargo-orthohelp` behavioural tests.
+//! IR JSON assertion step definitions for `cargo-orthohelp` behavioural tests.
+//!
+//! Implements the `then` step **`the output contains localized IR JSON for
+//! {locale}`** which:
+//! 1. Asserts the last command succeeded.
+//! 2. Reads `ir/{locale}.json` from the scenario output directory.
+//! 3. Parses the file as JSON and asserts `ir_version` equals
+//!    [`ORTHO_DOCS_IR_VERSION`], `locale` matches the step parameter, and the
+//!    `about` and first field's `help` text match locale-specific expectations.
+//!
+//! The expected strings for each locale are provided by the private helpers
+//! `expected_about` and `expected_help`, which special-case `fr-FR` and
+//! default to English for all other locales.
 
 use std::io::Read;
 

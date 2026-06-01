@@ -1,4 +1,14 @@
-//! Shared state and re-exports for `cargo-orthohelp` behavioural steps.
+//! Shared scenario state and re-exports for `cargo-orthohelp` behavioural steps.
+//!
+//! Defines [`OrthoHelpContext`], the rstest-bdd [`ScenarioState`] struct that
+//! accumulates per-scenario data (workspace root, temporary output directory,
+//! last command output, and cached IR path/content). Also exposes the
+//! [`orthohelp_context`] rstest fixture that initialises this state, and
+//! target-directory helpers ([`resolve_target_dir`], [`scenario_target_dir`])
+//! shared by [`super::steps_cmd`] and [`super::steps_cache`].
+//!
+//! All other step modules import [`OrthoHelpContext`] and [`StepResult`] from
+//! here; none of them import from each other directly.
 
 use camino::{Utf8Path, Utf8PathBuf};
 use rstest::fixture;
