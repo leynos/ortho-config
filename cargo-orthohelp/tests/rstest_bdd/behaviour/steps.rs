@@ -1,7 +1,5 @@
 //! Shared state and re-exports for `cargo-orthohelp` behavioural steps.
 
-use std::sync::{Mutex, MutexGuard};
-
 use camino::Utf8PathBuf;
 use rstest::fixture;
 use rstest_bdd::Slot;
@@ -21,7 +19,6 @@ pub type StepResult<T> = Result<T, StepError>;
 /// Scenario state for cargo-orthohelp scenarios.
 #[derive(Debug, ScenarioState)]
 pub struct OrthoHelpContext {
-    scenario_lock: Slot<MutexGuard<'static, ()>>,
     pub workspace_root: Slot<Utf8PathBuf>,
     pub out_dir: Slot<TempDir>,
     pub last_output: Slot<std::process::Output>,
@@ -31,24 +28,19 @@ pub struct OrthoHelpContext {
 
 impl Default for OrthoHelpContext {
     fn default() -> Self {
-        let scenario_lock = match SCENARIO_LOCK.lock() {
-            Ok(guard) => guard,
-            Err(poisoned) => poisoned.into_inner(),
-        };
-        let ctx = Self {
-            scenario_lock: Slot::new(),
+        // Serialization of BDD scenarios is enforced at the nextest level via
+        // `max-threads = 1` in `.config/nextest.toml`. A process-local Mutex
+        // cannot guard against concurrent access from separate nextest
+        // processes, so none is used here.
+        Self {
             workspace_root: Slot::new(),
             out_dir: Slot::new(),
             last_output: Slot::new(),
             cache_ir_path: Slot::new(),
             cache_ir_content: Slot::new(),
-        };
-        ctx.scenario_lock.set(scenario_lock);
-        ctx
+        }
     }
 }
-
-static SCENARIO_LOCK: Mutex<()> = Mutex::new(());
 
 /// Provides a clean context for orthohelp scenarios.
 #[fixture]

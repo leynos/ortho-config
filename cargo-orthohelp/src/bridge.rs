@@ -209,6 +209,27 @@ fn write_bridge_main(config: &BridgeConfig, paths: &BridgePaths) -> Result<(), O
 }
 
 fn build_bridge(paths: &BridgePaths) -> Result<(), OrthohelpError> {
+    let output = build_bridge_command(paths)
+        .output()
+        .map_err(|io_err| OrthohelpError::Io {
+            path: paths.manifest_path.clone(),
+            source: io_err,
+        })?;
+
+    if output.status.success() {
+        return Ok(());
+    }
+
+    let status = output.status.code().unwrap_or(-1);
+    let message = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    Err(OrthohelpError::BridgeBuildFailure { status, message })
+}
+
+fn build_bridge_command(paths: &BridgePaths) -> Command {
     let mut command = Command::new("cargo");
     command
         .arg("build")
@@ -222,23 +243,7 @@ fn build_bridge(paths: &BridgePaths) -> Result<(), OrthohelpError> {
         .env_remove("CARGO_LLVM_COV_TARGET_DIR")
         .env_remove("CARGO_TARGET_DIR");
     apply_sanitized_rustflags(&mut command);
-
-    let output = command.output().map_err(|io_err| OrthohelpError::Io {
-        path: paths.manifest_path.clone(),
-        source: io_err,
-    })?;
-
-    if output.status.success() {
-        return Ok(());
-    }
-
-    let status = output.status.code().unwrap_or(-1);
-    let message = format!(
-        "{}{}",
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr)
-    );
-    Err(OrthohelpError::BridgeBuildFailure { status, message })
+    command
 }
 
 fn run_bridge(paths: &BridgePaths) -> Result<String, OrthohelpError> {
@@ -267,6 +272,13 @@ fn run_bridge(paths: &BridgePaths) -> Result<String, OrthohelpError> {
     serde_json::to_string_pretty(&value).map_err(OrthohelpError::IrJson)
 }
 
+/// Writes `json` to the cached IR file, skipping the write when the file
+/// already contains identical content.
+///
+/// Idempotent writes preserve the file's modification time, keeping
+/// mtime-based or content-based cache-validity checks stable across repeated
+/// invocations even when path-normalization differences cause `read_cached_ir`
+/// to return `None` spuriously.
 fn write_ir_cache(paths: &BridgePaths, json: &str) -> Result<(), OrthohelpError> {
     // Skip writing if the existing cache file already holds identical content.
     // This preserves the file's mtime, making cache-validity checks robust
@@ -276,6 +288,10 @@ fn write_ir_cache(paths: &BridgePaths, json: &str) -> Result<(), OrthohelpError>
     if let Ok(Some(existing)) = read_cached_ir(paths)
         && existing == json
     {
+        tracing::debug!(
+            path = %paths.ir_path,
+            "skipping ir.json write: cached content is identical"
+        );
         return Ok(());
     }
     let mut file = open_bridge_file(paths, "ir.json", &paths.ir_path)?;
@@ -318,4 +334,68 @@ fn open_bridge_file(
         path: path.clone(),
         source: io_err,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use std::ffi::OsStr;
+    use std::sync::{Mutex, MutexGuard};
+
+    use camino::Utf8PathBuf;
+
+    use super::*;
+
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    fn env_lock() -> MutexGuard<'static, ()> {
+        match ENV_LOCK.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => poisoned.into_inner(),
+        }
+    }
+
+    fn dummy_paths() -> BridgePaths {
+        BridgePaths {
+            bridge_dir: Utf8PathBuf::from("/tmp/bridge"),
+            manifest_path: Utf8PathBuf::from("/tmp/bridge/Cargo.toml"),
+            target_dir: Utf8PathBuf::from("/tmp/bridge/target"),
+            ir_path: Utf8PathBuf::from("/tmp/bridge/ir.json"),
+        }
+    }
+
+    #[test]
+    fn build_bridge_command_strips_coverage_env_vars() {
+        let _guard = env_lock();
+        let vars = [
+            "RUSTC_WORKSPACE_WRAPPER",
+            "RUSTC_WRAPPER",
+            "LLVM_PROFILE_FILE",
+            "CARGO_LLVM_COV_TARGET_DIR",
+            "CARGO_TARGET_DIR",
+        ];
+        for var in vars {
+            // SAFETY: this test serializes its environment mutations with
+            // `ENV_LOCK`, and restores each variable before returning.
+            unsafe { std::env::set_var(var, "sentinel_value") };
+        }
+
+        let cmd = build_bridge_command(&dummy_paths());
+        let removed: Vec<&OsStr> = cmd
+            .get_envs()
+            .filter_map(|(key, value)| if value.is_none() { Some(key) } else { None })
+            .collect();
+
+        for var in vars {
+            assert!(
+                removed.iter().any(|key| *key == OsStr::new(var)),
+                "build_bridge_command should remove {var} from the child environment"
+            );
+        }
+
+        for var in vars {
+            // SAFETY: this test serializes its environment mutations with
+            // `ENV_LOCK`, and restores each variable before returning.
+            unsafe { std::env::remove_var(var) };
+        }
+    }
 }

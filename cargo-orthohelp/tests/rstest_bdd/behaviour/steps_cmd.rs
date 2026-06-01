@@ -45,6 +45,17 @@ pub(super) fn resolve_target_dir(workspace_root: &Utf8Path) -> Utf8PathBuf {
     )
 }
 
+pub(super) fn scenario_target_dir(ctx: &OrthoHelpContext) -> StepResult<Utf8PathBuf> {
+    let workspace_root = get_workspace_root(ctx)?;
+    let out_dir = get_out_dir(ctx)?;
+    let scenario_id = out_dir
+        .file_name()
+        .ok_or("temporary output directory should have a final path component")?;
+    Ok(resolve_target_dir(&workspace_root)
+        .join("orthohelp-bdd")
+        .join(scenario_id))
+}
+
 #[given("a temporary output directory")]
 fn temp_output_dir(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
     let path = get_out_dir(orthohelp_context)?;
@@ -56,8 +67,7 @@ fn temp_output_dir(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
 
 #[given("the orthohelp cache is empty")]
 fn cache_is_empty(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
-    let workspace_root = get_workspace_root(orthohelp_context)?;
-    let target_dir = resolve_target_dir(&workspace_root);
+    let target_dir = scenario_target_dir(orthohelp_context)?;
     match Dir::open_ambient_dir(target_dir.as_path(), ambient_authority()) {
         Ok(root_dir) => {
             if let Err(err) = root_dir.remove_dir_all("orthohelp")
@@ -142,9 +152,11 @@ pub fn run_orthohelp(ctx: &OrthoHelpContext, args: &[&str]) -> StepResult<std::p
     let exe = fixtures::cargo_orthohelp_exe()?;
     let workspace_root = get_workspace_root(ctx)?;
     let out_dir = get_out_dir(ctx)?;
+    let target_dir = scenario_target_dir(ctx)?;
     let mut command = Command::new(exe.as_str());
     command
         .current_dir(workspace_root.as_str())
+        .env("CARGO_TARGET_DIR", target_dir.as_str())
         .arg("orthohelp")
         .arg("--out-dir")
         .arg(out_dir.as_str())

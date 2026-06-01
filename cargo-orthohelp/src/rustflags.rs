@@ -4,6 +4,13 @@ use std::process::Command;
 
 const ENCODED_RUSTFLAGS_SEPARATOR: char = '\x1f';
 
+/// Applies sanitized Rust compiler flags to `command`.
+///
+/// Reads `RUSTFLAGS` and `CARGO_ENCODED_RUSTFLAGS` from the current process
+/// environment, strips any `-Cinstrument-coverage` tokens injected by
+/// `cargo-llvm-cov`, and re-applies the sanitized values to `command`.
+/// Variables that become empty after sanitization are removed entirely so the
+/// child process inherits a clean flag set rather than an empty string.
 pub(crate) fn apply_sanitized_rustflags(command: &mut Command) {
     apply_sanitized_rustflags_var(command, "RUSTFLAGS", sanitize_plain_rustflags);
     apply_sanitized_rustflags_var(
@@ -13,6 +20,9 @@ pub(crate) fn apply_sanitized_rustflags(command: &mut Command) {
     );
 }
 
+/// Reads the named environment variable, sanitizes it with `sanitize`, and
+/// either sets the sanitized value on `command` or removes the variable when
+/// sanitization produces no tokens.
 fn apply_sanitized_rustflags_var(
     command: &mut Command,
     name: &str,
@@ -22,15 +32,34 @@ fn apply_sanitized_rustflags_var(
         return;
     };
     match sanitize(&value) {
+        Some(sanitized) if sanitized == value => {
+            // No coverage tokens found; pass through unchanged.
+            command.env(name, sanitized);
+        }
         Some(sanitized) => {
+            tracing::debug!(
+                var = name,
+                original = value,
+                sanitized = sanitized,
+                "stripped coverage flags from rustflags variable"
+            );
             command.env(name, sanitized);
         }
         None => {
+            tracing::debug!(
+                var = name,
+                original = value,
+                "removed rustflags variable entirely after coverage flag stripping"
+            );
             command.env_remove(name);
         }
     }
 }
 
+/// Sanitizes whitespace-delimited `RUSTFLAGS` by removing coverage tokens.
+///
+/// Returns `None` when all tokens are stripped, preserving the original string
+/// unchanged when no coverage tokens are present to avoid needless allocation.
 fn sanitize_plain_rustflags(flags: &str) -> Option<String> {
     let (tokens, was_changed) = filtered_rustflag_tokens(flags.split_whitespace());
     if was_changed {
@@ -40,6 +69,10 @@ fn sanitize_plain_rustflags(flags: &str) -> Option<String> {
     }
 }
 
+/// Sanitizes unit-separator-delimited `CARGO_ENCODED_RUSTFLAGS` by removing
+/// coverage tokens.
+///
+/// Returns `None` when all tokens are stripped.
 fn sanitize_encoded_rustflags(flags: &str) -> Option<String> {
     let (tokens, was_changed) = filtered_rustflag_tokens(flags.split(ENCODED_RUSTFLAGS_SEPARATOR));
     if was_changed {
@@ -49,6 +82,11 @@ fn sanitize_encoded_rustflags(flags: &str) -> Option<String> {
     }
 }
 
+/// Iterates over `tokens`, discarding any that match the
+/// `-Cinstrument-coverage` codegen flag in compact and split forms.
+///
+/// Returns the retained tokens and a boolean indicating whether any token was
+/// removed.
 fn filtered_rustflag_tokens<'a>(tokens: impl IntoIterator<Item = &'a str>) -> (Vec<&'a str>, bool) {
     let mut filtered = Vec::new();
     let mut was_changed = false;
@@ -72,16 +110,22 @@ fn filtered_rustflag_tokens<'a>(tokens: impl IntoIterator<Item = &'a str>) -> (V
     (filtered, was_changed)
 }
 
+/// Joins `tokens` with `separator` if the slice is non-empty; returns `None`
+/// otherwise.
 fn non_empty_join(tokens: &[&str], separator: &str) -> Option<String> {
     (!tokens.is_empty()).then(|| tokens.join(separator))
 }
 
+/// Returns `true` if `token` is a compact codegen flag
+/// (`-Cinstrument-coverage` or `-Cinstrument-coverage=...`).
 fn is_instrument_coverage_codegen_flag(token: &str) -> bool {
     token
         .strip_prefix("-C")
         .is_some_and(is_instrument_coverage_option)
 }
 
+/// Returns `true` if `token` is the `instrument-coverage` option name used
+/// after a split `-C` flag.
 fn is_instrument_coverage_option(token: &str) -> bool {
     token == "instrument-coverage" || token.starts_with("instrument-coverage=")
 }
