@@ -103,12 +103,21 @@
     plan for the `cargo-orthohelp` bridge pipeline.
   - [Roff generator](execplans/4-1-3-roff-generator.md): plan for generated
     roff man pages.
+  - [Reconcile design with actual error surface](execplans/5-1-1-reconcile-design-with-actual-error-surface.md):
+    plan for roadmap item 5.1.1 and the documentation alignment required after
+    the implemented error model changed.
   - [Retire stale retrospective roadmap items](execplans/5-1-2-retire-stale-retrospective-roadmap-items.md):
     plan for roadmap item 5.1.2, which separates active guidance from
     historical roadmap and design context.
+  - [Agent-native documentation index](execplans/5-1-3-agent-native-documentation-index.md):
+    plan for roadmap item 5.1.3 and the canonical documentation index and
+    repository layout.
+  - [Schema ownership ExecPlan](execplans/5-2-1-define-ownership-models.md):
+    plan for roadmap item 5.2.1 and its approval gate.
+  - [Recursive documentation metadata](execplans/6-1-1-recursive-doc-metadata-subcommands-values.md):
+    plan for recursive subcommand and value metadata in generated command
+    documentation.
   - [Adopt rstest-bdd v0.5.0](execplans/adopt-rstest-bdd-v0-5-0.md): plan for
     the behavioural testing migration.
   - [Ortho agent CLI roadmap](execplans/ortho-agent-cli-roadmap.md): plan for
     the agent-native documentation and roadmap overhaul.
-  - [Schema ownership ExecPlan](execplans/5-2-1-define-ownership-models.md):
-    plan for roadmap item 5.2.1 and its approval gate.
