@@ -127,6 +127,9 @@
   - [Recursive documentation metadata](execplans/6-1-1-recursive-doc-metadata-subcommands-values.md):
     plan for recursive subcommand and value metadata in generated command
     documentation.
+  - [Skill manifest metadata](execplans/6-3-1-skill-manifest-metadata.md):
+    plan for roadmap item 6.3.1 and the additive agent-context types that
+    model downstream skill manifests.
   - [Adopt rstest-bdd v0.5.0](execplans/adopt-rstest-bdd-v0-5-0.md): plan for
     the behavioural testing migration.
   - [Ortho agent CLI roadmap](execplans/ortho-agent-cli-roadmap.md): plan for
