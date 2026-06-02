@@ -96,6 +96,8 @@ responsibilities and downstream application responsibilities.
     human-facing documentation output.
 
 - [ ] 5.2.3. Record consumer dependency boundaries for Weaver and Netsuke.
+  - Requires 5.2.1 and 5.2.2.
+  - See agent-native-cli-design.md §2.1 and adr-003-define-schema-ownership-for-agent-native-contracts.md.
   - [ ] Document that OrthoConfig owns reusable command-contract machinery,
     while Weaver owns semantic code-edit execution and Netsuke owns build and
     package execution.
@@ -123,6 +125,8 @@ fields.
     agent context are stable.
 
 - [ ] 6.1.2. Cover nested command trees with behavioural fixtures.
+  - Requires 6.1.1.
+  - See cargo-orthohelp-design.md §§6-7 and agent-native-cli-design.md §4.
   - [ ] Add a fixture CLI with at least one nested subcommand and one command
     with no subcommands.
   - [ ] Assert that generated IR includes the recursive tree, field metadata,
@@ -133,6 +137,8 @@ fields.
 ### 6.2. Add compact agent-context output
 
 - [ ] 6.2.1. Add `--format agent-context` to `cargo-orthohelp`.
+  - Requires 6.1.1.
+  - See agent-native-cli-design.md §3.2 and §4; cargo-orthohelp-design.md §6.3.1.
   - [ ] Generate JSON from the same bridge output used by documentation IR.
   - [ ] Include command paths, verbs, flags, positional arguments, value types,
     required inputs, defaults, and enum values.
@@ -140,6 +146,8 @@ fields.
     command selection.
 
 - [ ] 6.2.2. Version and validate the agent-context schema.
+  - Requires 6.2.1.
+  - See agent-native-cli-design.md §3.2 and §8; adr-003-define-schema-ownership-for-agent-native-contracts.md.
   - [ ] Add schema-version tests that fail on accidental shape changes.
   - [ ] Add golden fixtures for a simple CLI, a nested CLI, and a CLI with enum
     values.
@@ -147,6 +155,8 @@ fields.
     `docs/agent-native-cli-design.md`.
 
 - [ ] 6.2.3. Define downstream `context --json` command naming.
+  - Requires 6.2.1.
+  - See agent-native-cli-design.md §3.2 and §5.
   - [ ] Prefer `<tool> context --json` for application command surfaces while
     keeping `cargo orthohelp --format agent-context` as the generator format.
   - [ ] Include a payload `kind` such as `<tool>.agent_context`.
@@ -156,11 +166,15 @@ fields.
 ### 6.3. Validate skill manifests against real commands
 
 - [ ] 6.3.1. Add skill manifest metadata.
+  - Requires 6.2.1.
+  - See agent-native-cli-design.md §3.4.
   - [ ] Model skill manifest path, schema version, and command index metadata.
   - [ ] Link skill manifest locations from agent context.
   - [ ] Keep downstream skill prose application-owned.
 
 - [ ] 6.3.2. Add skill manifest validation.
+  - Requires 6.3.1 and step 7.1.
+  - See agent-native-cli-design.md §3.4 and §5.
   - [ ] Validate that skills mention real command paths and flags.
   - [ ] Validate that examples honour canonical vocabulary and global options.
   - [ ] Add fixtures for Weaver-style operation skills and Netsuke-style build
@@ -175,6 +189,8 @@ unsafe mutation surfaces before release.
 ### 7.1. Implement vocabulary policy
 
 - [ ] 7.1.1. Add an opt-in agent-native policy configuration.
+  - Requires step 6.2.
+  - See agent-native-cli-design.md §3.3 and §5.
   - [ ] Support `off`, `warn`, and `deny` modes.
   - [ ] Provide canonical defaults for verbs and flags: `get`, `list`,
     `create`, `update`, `delete`, `--json`, `--no-input`, `--force`,
@@ -183,12 +199,16 @@ unsafe mutation surfaces before release.
   - [ ] Allow explicit project exceptions that are visible in policy output.
 
 - [ ] 7.1.2. Lint off-policy verbs and flags.
+  - Requires 7.1.1.
+  - See agent-native-cli-design.md §5; ddlint-gap-analysis.md §Next steps.
   - [ ] Flag `info`, `ls`, `--format=json`, `--output json`, and
     `--skip-confirmations` under strict policy.
   - [ ] Report the canonical replacement in every diagnostic.
   - [ ] Add tests for warning mode, deny mode, and configured exceptions.
 
 - [ ] 7.1.3. Add the canonical human-facing global option glossary.
+  - Requires 7.1.1.
+  - See agent-native-cli-design.md §5 and §6.2.1.
   - [ ] Standardize names for colour, emoji, progress, accessibility, plain
     output, pager control, width, locale, quiet, and verbose options when those
     concepts are present.
@@ -202,6 +222,8 @@ unsafe mutation surfaces before release.
 
 - [ ] 7.2.1. Add metadata for non-interactive execution and mutation
   boundaries.
+  - Requires step 6.2.
+  - See agent-native-cli-design.md §6.1 and §6.4.
   - [ ] Represent whether a command is non-interactive, may prompt, or needs a
     bypass flag.
   - [ ] Represent whether a command reads, writes, deletes, or submits work.
@@ -209,6 +231,8 @@ unsafe mutation surfaces before release.
     metadata.
 
 - [ ] 7.2.2. Add dual-renderer metadata.
+  - Requires 7.2.1.
+  - See agent-native-cli-design.md §6.2 and §6.2.1.
   - [ ] Model human renderer support and machine renderer support separately.
   - [ ] Model TTY sensitivity, closed-stdin behaviour, colour, emoji,
     progress, pager, width, accessibility, and plain-output policy.
@@ -216,29 +240,39 @@ unsafe mutation surfaces before release.
     not drift with human language.
 
 - [ ] 7.2.3. Add metadata for structured output and exit classes.
+  - Requires 7.2.1.
+  - See agent-native-cli-design.md §6.2 and §6.2.2.
   - [ ] Model `--json` support, stdout contracts, stderr diagnostics, and exit
     classifications.
   - [ ] Lint data-returning commands that cannot emit structured output.
   - [ ] Document stable exit classes for `cargo-orthohelp`.
 
 - [ ] 7.2.4. Add a JSON mode stream contract.
+  - Requires 7.2.3.
+  - See agent-native-cli-design.md §6.2.
   - [ ] Model success stdout as a single JSON result document.
   - [ ] Model failure stderr as a single JSON diagnostic document.
   - [ ] Model subprocess output policy so child process output never leaks to
     stdout in JSON mode except via an agreed artefact path.
 
 - [ ] 7.2.5. Add exit-code taxonomy metadata.
+  - Requires 7.2.3.
+  - See agent-native-cli-design.md §6.2.2.
   - [ ] Model code-to-class mappings in documentation IR and agent context.
   - [ ] Lint that every documented error class has an exit code.
   - [ ] Lint that JSON diagnostics report the same class and code.
 
 - [ ] 7.2.6. Add metadata for bounded list output.
+  - Requires 7.2.1.
+  - See agent-native-cli-design.md §6.5.
   - [ ] Model `--limit`, `--cursor`, default limits, maximum limits, and
     truncation hints.
   - [ ] Lint list-shaped commands that lack bounded defaults.
   - [ ] Keep generated agent descriptions within an explicit size budget.
 
 - [ ] 7.2.7. Add generic capability and provenance metadata.
+  - Requires 7.2.1.
+  - See agent-native-cli-design.md §6.9.
   - [ ] Model capability identifiers, command mapping, provider visibility,
     provider override policy, and whether provider provenance appears in JSON.
   - [ ] Lint that ordinary public commands do not require backend provider
@@ -250,6 +284,8 @@ unsafe mutation surfaces before release.
 
 - [ ] 7.3.1. Implement or restore enumerating missing-required-values errors
   after the phase 5 truth audit.
+  - Requires 5.1.1.
+  - See improved-error-message-design.md §§1-3 and agent-native-cli-design.md §6.3.
   - [ ] Aggregate all missing required values before returning an error.
   - [ ] Show valid supply paths through CLI flags, environment variables, and
     file keys.
@@ -264,6 +300,8 @@ downstream users to adopt them.
 ### 8.1. Add structured command results
 
 - [ ] 8.1.1. Add `--json` to `cargo-orthohelp`.
+  - Requires 7.2.3 and 7.2.4.
+  - See agent-native-cli-design.md §7 and cargo-orthohelp-design.md §6.
   - [ ] Emit a structured success summary containing generated artefact kind,
     locale, and path.
   - [ ] Emit structured errors when JSON mode is requested.
@@ -271,6 +309,8 @@ downstream users to adopt them.
     on stdout.
 
 - [ ] 8.1.2. Enumerate valid choices in errors.
+  - Requires 8.1.1.
+  - See agent-native-cli-design.md §6.3 and §7.
   - [ ] Invalid formats should list every supported format.
   - [ ] Unknown packages should list candidate packages from Cargo metadata.
   - [ ] Unknown binaries should list candidate binary targets.
@@ -280,12 +320,15 @@ downstream users to adopt them.
 ### 8.2. Make generated artefacts robust
 
 - [ ] 8.2.1. Write generated files atomically.
+  - See cargo-orthohelp-design.md §6.2 and §10.
   - [ ] Write to a sibling temporary file, flush it, and rename into place.
   - [ ] Preserve existing output paths and cache semantics.
   - [ ] Add failure-path tests that prevent partial generated artefacts from
     replacing valid files.
 
 - [ ] 8.2.2. Document the reference CLI contract.
+  - Requires 8.1.1, 8.1.2, and 8.2.1.
+  - See cargo-orthohelp-design.md §§6 and 12; agent-native-cli-design.md §7.
   - [ ] Update `cargo-orthohelp/README.md` with stdout/stderr behaviour,
     `--json`, JSON mode stream contracts, exit classes, and agent-native lint
     usage.
@@ -304,6 +347,7 @@ from carrying a bespoke pattern that other crates copy by hand. See
 
 - [ ] 8.3.1. Add a small `ortho_config::cargo` helper for hand-built clap
   commands.
+  - See design.md §4.17 and adr-004-cargo-external-subcommand-entry-point.md.
   - [ ] Provide an `external_subcommand` helper that accepts the installed
     binary name, injected Cargo subcommand name, and an existing
     `clap::Command`.
@@ -316,6 +360,8 @@ from carrying a bespoke pattern that other crates copy by hand. See
     duplicating parser setup.
 
 - [ ] 8.3.2. Document the derive-friendly Cargo subcommand template.
+  - Requires 8.3.1.
+  - See design.md §4.17 and adr-004-cargo-external-subcommand-entry-point.md.
   - [ ] Add user-guide and README examples showing a `Cli` wrapper with
     `#[command(name = "cargo", bin_name = "cargo-<name>")]`, a
     `#[command(subcommand)]` field, and an enum variant wrapping the existing
@@ -329,6 +375,8 @@ from carrying a bespoke pattern that other crates copy by hand. See
 
 - [ ] 8.3.3. Evaluate an optional macro attribute for Cargo subcommand
   wrappers.
+  - Requires 8.3.2.
+  - See design.md §4.17 and adr-004-cargo-external-subcommand-entry-point.md.
   - [ ] Prototype the candidate `cargo_subcommand` and `cargo_bin` attribute
     syntax from `docs/design.md` §4.17.
   - [ ] Decide whether the macro should generate a companion wrapper parser,
@@ -341,6 +389,8 @@ from carrying a bespoke pattern that other crates copy by hand. See
     abstraction.
 
 - [ ] 8.3.4. Add regression fixtures for Cargo-dispatched binaries.
+  - Requires 8.3.1.
+  - See design.md §4.17 and adr-004-cargo-external-subcommand-entry-point.md.
   - [ ] Add a small workspace fixture or shared test helper that runs
     `cargo-<name> <name> --help`.
   - [ ] Add a companion assertion for `cargo <name> --help` with the fixture
@@ -359,6 +409,8 @@ helpers, while downstream applications own domain behaviour.
 ### 9.1. Profile contracts
 
 - [ ] 9.1.1. Design and implement optional profile metadata.
+  - Requires step 6.2.
+  - See agent-native-cli-design.md §6.7.
   - [ ] Standardize `--profile <name>` as the root selection flag.
   - [ ] Document the precedence
     `built-in defaults < config files < selected profile < environment <
@@ -367,6 +419,8 @@ helpers, while downstream applications own domain behaviour.
     semantics in agent context.
 
 - [ ] 9.1.2. Add profile redaction metadata.
+  - Requires 9.1.1.
+  - See agent-native-cli-design.md §6.7.
   - [ ] Mark secret and reference-only profile fields.
   - [ ] Redact sensitive profile values from context output and generated
     documentation examples.
@@ -374,6 +428,8 @@ helpers, while downstream applications own domain behaviour.
     contents.
 
 - [ ] 9.1.3. Decide whether OrthoConfig ships a profile store helper.
+  - Requires 9.1.1.
+  - See agent-native-cli-design.md §6.7.
   - [ ] Evaluate a JSON-backed helper against applications that already manage
     their own profile storage.
   - [ ] If implemented, provide list, show, save, and delete helpers without
@@ -382,6 +438,8 @@ helpers, while downstream applications own domain behaviour.
 ### 9.2. Delivery and feedback contracts
 
 - [ ] 9.2.1. Design reusable delivery target parsing.
+  - Requires step 6.2.
+  - See agent-native-cli-design.md §6.8.
   - [ ] Support `stdout`, `file:<path>`, and `webhook:<url>` schemes.
   - [ ] Enumerate supported schemes when parsing fails.
   - [ ] Require atomic file writes and visible webhook HTTP status reporting.
@@ -389,6 +447,8 @@ helpers, while downstream applications own domain behaviour.
     OrthoConfig.
 
 - [ ] 9.2.2. Design reusable feedback storage.
+  - Requires 9.2.1.
+  - See agent-native-cli-design.md §6.8.
   - [ ] Store local feedback as JSONL by default.
   - [ ] Optionally send feedback upstream when an endpoint is configured.
   - [ ] Expose local and upstream feedback capability in agent context.
@@ -396,6 +456,8 @@ helpers, while downstream applications own domain behaviour.
 ### 9.3. Execution ledger contracts
 
 - [ ] 9.3.1. Model application-level execution ledgers.
+  - Requires step 6.2 and 7.2.1.
+  - See agent-native-cli-design.md §6.6.
   - [ ] Represent `--wait`, job identifier fields, status commands, and job
     ledger support in metadata.
   - [ ] Lint async submit commands that force agents to write their own polling
@@ -404,6 +466,8 @@ helpers, while downstream applications own domain behaviour.
     `OrthoConfig::load`.
 
 - [ ] 9.3.2. Support configurable public ledger nouns.
+  - Requires 9.3.1.
+  - See agent-native-cli-design.md §6.6.
   - [ ] Allow applications to expose `jobs`, `runs`, `tasks`, or `operations`
     while sharing one metadata model.
   - [ ] Include record identifiers, status enums, timestamps, command paths,
@@ -411,6 +475,8 @@ helpers, while downstream applications own domain behaviour.
     commands, and bounded list behaviour.
 
 - [ ] 9.3.3. Evaluate a reusable execution ledger helper.
+  - Requires 9.3.1.
+  - See agent-native-cli-design.md §6.6.
   - [ ] Decide whether a local JSONL ledger belongs in OrthoConfig or should
     remain application-owned.
   - [ ] If implemented, provide list, get, and prune primitives that downstream
@@ -426,15 +492,24 @@ are working.
 
 - [ ] 10.1.1. Generate Model Context Protocol (MCP) descriptions from
   agent-context output.
+  - Requires phase 6.
+  - See agent-native-cli-design.md §10.
 - [ ] 10.1.2. Explore OpenAPI-shaped runtime explorer endpoints for downstream
   applications.
+  - Requires phase 6.
+  - See agent-native-cli-design.md §10.
 - [ ] 10.1.3. Generate optional long-form skill prose from documentation IR and
   agent context after validation exists.
+  - Requires phases 6 and 7.
+  - See agent-native-cli-design.md §3.4 and §10.
 
 ### 10.2. Configuration extensions
 
 - [ ] 10.2.1. Explore asynchronous loading of configuration files and
   environment variables.
+  - See design.md §4.1 and §8.
 - [ ] 10.2.2. Provide an API for registering custom `figment` providers, such as
   secrets managers or remote key-value stores.
+  - See design.md §5 and §8.
 - [ ] 10.2.3. Investigate live reloading of configuration when files change.
+  - See design.md §8.
