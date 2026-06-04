@@ -600,7 +600,8 @@ the documentation-oriented metadata into the compact contract described in
 - preserve schema versioning separately from `DocMetadata.ir_version`, which
   remains the compatibility marker for human documentation IR;
 - include populated command trees rather than only top-level fields;
-- drop localized long prose unless a concise command summary is required;
+- drop localized long prose while allowing a concise en-US command summary
+  for command selection;
 - include canonical flags, value types, enum values, defaults, and required
   inputs;
 - include command semantics such as interaction mode, mutation boundaries,
@@ -617,6 +618,13 @@ The reusable schema types and `ORTHO_AGENT_CONTEXT_SCHEMA_VERSION` live in
 `ortho_config::agent_context`. `cargo-orthohelp` owns the adapter work:
 loading the bridge IR, applying defaults, transforming structured metadata,
 writing artefacts, and reporting diagnostics.
+
+For the first `--format agent-context` implementation, the adapter emits an
+optional `AgentCommand.summary` from the short en-US command description. It
+does not emit Fluent identifiers, long help text, roff fragments, or
+PowerShell help structures. Positional inputs are detected from existing CLI
+metadata when an input has no `long` or `short` flag and still takes a value;
+the v1 schema represents those inputs by leaving `AgentInput.long` absent.
 
 The agent-context output must not be scraped from rendered man pages or
 PowerShell help. Rendering surfaces may consume agent metadata for examples or

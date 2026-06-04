@@ -6,7 +6,7 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
 proceeds.
 
-Status: DRAFT
+Status: IN PROGRESS
 
 This plan covers roadmap item 6.2.1 only (`docs/roadmap.md` §6.2.1). It does
 not implement schema versioning or golden fixtures for nested or enum-bearing
@@ -202,13 +202,13 @@ Use a list with checkboxes to summarise granular steps. Every stopping point
 must be documented here, even if it requires splitting a partially completed
 task into two. This section must always reflect the actual state of the work.
 
-- [ ] Milestone 0: ExecPlan approved by maintainer.
-- [ ] Milestone 1: Add `AgentCommand.summary: Option<String>` to
+- [x] Milestone 0: ExecPlan approved by maintainer. (2026-06-04 00:59Z)
+- [x] Milestone 1: Add `AgentCommand.summary: Option<String>` to
   `ortho_config/src/agent_context/mod.rs` under `#[serde(default,
   skip_serializing_if = "Option::is_none")]`. Update existing
   `ortho_config/src/agent_context/tests.rs` cases. Update
   `docs/cargo-orthohelp-design.md` §6.3.1 to record the inclusion of a short
-  command summary in the transform.
+  command summary in the transform. (2026-06-04 01:06Z)
 - [ ] Milestone 2: Add `OutputFormat::AgentContext` to
   `cargo-orthohelp/src/cli.rs`. Update existing parser unit tests: keep the
   `--format` `value_enum` rejection coverage by switching the rejected token
@@ -248,7 +248,11 @@ Use timestamps (`(YYYY-MM-DD HH:MMZ)`) on each `[x]` line as work completes.
 Unexpected findings during implementation. Document with evidence so future
 work benefits.
 
-- (none yet)
+- Clippy denied direct indexing in the new summary serialisation test under
+  `clippy::indexing_slicing`. The test now uses `first_mut().expect(...)`
+  so failures report intent rather than panic at an implicit index.
+- `coderabbit review --agent` completed with zero findings after Milestone 1
+  validation.
 
 ## Decision log
 
@@ -297,6 +301,13 @@ Record every significant decision made while working on this plan.
   explicitly that these fields are placeholders pending later roadmap work
   (6.2.2 and 7.1.x).
   Date/Author: 2026-06-02 / planning agent.
+
+- Decision: move this ExecPlan from `DRAFT` to `IN PROGRESS` and begin
+  implementation.
+  Rationale: the maintainer explicitly requested implementation of the
+  planned functionality on 2026-06-04, satisfying the approval gate in the
+  plan and repository instructions.
+  Date/Author: 2026-06-04 / implementation agent.
 
 ## Outcomes & retrospective
 
