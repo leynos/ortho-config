@@ -60,7 +60,9 @@ The implementation must adhere to the following principles:
   delivery and feedback parsers, and execution-ledger metadata. They continue
   to own command execution, side effects, safety policy, and domain execution
   engines. The canonical boundary is documented in
-  [agent-native-cli-design.md](agent-native-cli-design.md).
+  [agent-native-cli-design.md](agent-native-cli-design.md), and the
+  authoritative hard and soft ship-time dependency tiers are recorded in
+  [agent-native-cli-design.md](agent-native-cli-design.md) §2.2.
 - **Stable migration boundary:** OrthoConfig owns compatibility for reusable
   metadata contracts and generated documentation outputs. Existing
   `cargo-orthohelp` `ir`, `man`, `ps`, and `all` formats stay compatible until
@@ -946,6 +948,8 @@ explicit.
   metadata, JSON mode stream contracts, exit-code taxonomy metadata, skill
   manifest validation, capability provenance metadata, profile redaction,
   delivery and feedback parser contracts, and configurable execution ledgers.
+  The authoritative consumer dependency tier for those reusable capabilities is
+  [agent-native-cli-design.md](agent-native-cli-design.md) §2.2.
 - **Async configuration loading:** A version of `load` that uses non-blocking
   IO remains useful, but it is distinct from application-level async job
   metadata such as `--wait`, `jobs get`, or durable job ledgers.

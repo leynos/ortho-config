@@ -5,7 +5,7 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
 proceeds.
 
-Status: DRAFT
+Status: IN PROGRESS
 
 This plan covers roadmap item 5.2.3 only. It must not be implemented until the
 maintainer approves it.
@@ -263,17 +263,27 @@ the work.
   soft-dependency conflict-resolution rule, separated contract dependency
   from delivery state, added the considered options to the Decision Log,
   and switched the §2.2 representation from prose to a single matrix.
-- [ ] Receive explicit user approval to proceed with implementation.
-- [ ] Establish the implementation baseline by running
-  `make check-fmt`, `make lint`, `make test`, `make typecheck`,
-  `make markdownlint` sequentially with `tee` logs under `/tmp`.
-- [ ] Land the dependency-tier paragraphs in
-  `docs/agent-native-cli-design.md` §2.1.
-- [ ] Cross-link the dependency tiers from `docs/design.md`,
+- [x] (2026-06-04T00:00:00Z) Received explicit user approval to proceed with
+  implementation.
+- [x] (2026-06-04T00:00:00Z) Confirmed the current branch is
+  `5-2-3-record-consumer-dependency-boundaries` and the worktree was clean
+  before implementation edits began.
+- [x] (2026-06-04T00:00:00Z) Established the implementation baseline by
+  running `make check-fmt`, `make lint`, `make test`, `make typecheck`, and
+  `make markdownlint` sequentially with `tee` logs under `/tmp`; all passed.
+- [x] (2026-06-04T00:00:00Z) Landed the dependency-tier pointer in
+  `docs/agent-native-cli-design.md` §2.1 and the authoritative dependency
+  matrix in §2.2.
+- [x] (2026-06-04T00:00:00Z) Cross-linked the dependency tiers from
+  `docs/design.md`,
   `docs/cargo-orthohelp-design.md`, `docs/users-guide.md`,
-  `docs/developers-guide.md`, and amend ADR-003 with a brief consequence note.
-- [ ] Run the documentation milestone gates and `coderabbit review --agent`,
-  address concerns, and rerun affected gates.
+  `docs/developers-guide.md`, and amended ADR-003 with a brief consequence
+  note.
+- [x] (2026-06-04T00:00:00Z) Ran the documentation milestone gates before
+  CodeRabbit review: `make check-fmt`, `make lint`, `make test`,
+  `make typecheck`, and `make markdownlint` all passed with `/tmp` logs.
+- [x] (2026-06-04T00:00:00Z) Ran `coderabbit review --agent`; it completed
+  with `findings: 0`, so no follow-up fixes were required.
 - [ ] Commit, push to
   `origin/5-2-3-record-consumer-dependency-boundaries`, and open or update the
   draft pull request whose title contains `(5.2.3)`.
@@ -305,6 +315,29 @@ implementation.
   "Add compounding primitives". Impact: the soft-dependency classification can
   cite those phase 9 items as the future OrthoConfig surface rather than
   inventing new ones.
+
+- Observation: implementation approval arrived on 2026-06-04 while the plan
+  still carried `DRAFT` status from 2026-06-02. Impact: the plan status was
+  moved directly to `IN PROGRESS` before any implementation edits, preserving
+  the approval gate while avoiding a stale status during delivery.
+
+- Observation: the baseline quality gates passed before the dependency-tier
+  documentation was edited. Evidence: `make check-fmt`, `make lint`,
+  `make test`, `make typecheck`, and `make markdownlint` all exited with
+  status 0 with logs written under `/tmp`. Impact: later failures can be
+  attributed to the implementation rather than pre-existing repository state.
+
+- Observation: `make fmt` applied repository-wide Markdown reflow beyond the
+  planned document surface and then failed on one line-length issue. Impact:
+  unrelated formatter churn was reverted, and non-mutating gates proved the
+  kept documentation changes are formatted and lint-clean.
+
+- Observation: CodeRabbit reviewed both the initial documentation milestone and
+  the cleaned final diff and reported zero findings each time. Evidence:
+  `coderabbit review --agent` completed with
+  `{"status":"review_completed","findings":0}` after the final deterministic
+  gate run. Impact: there are no review concerns to clear before committing
+  the milestone.
 
 ## Decision log
 
@@ -357,6 +390,11 @@ choices.
   Rationale: a dependency tier without an implementation reference would be a
   documentation claim with no enforcement. The roadmap citations make
   drift visible. Date/Author: 2026-06-02 / Codex.
+
+- Decision: Treat the user's 2026-06-04 instruction to proceed as explicit
+  implementation approval for this ExecPlan. Rationale: the message names the
+  exact plan path and asks for implementation according to it. Date/Author:
+  2026-06-04 / Codex.
 
 ## Outcomes & retrospective
 
