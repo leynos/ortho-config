@@ -6,7 +6,7 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
 proceeds.
 
-Status: IN PROGRESS
+Status: COMPLETE
 
 This plan covers roadmap item 6.2.1 only (`docs/roadmap.md` §6.2.1). It does
 not implement schema versioning or golden fixtures for nested or enum-bearing
@@ -241,10 +241,11 @@ task into two. This section must always reflect the actual state of the work.
   `docs/developers-guide.md` with the positional-detection rule and the
   fact that the agent-context output is not localized.
   (2026-06-04 06:25Z)
-- [ ] Milestone 7: Run `make check-fmt`, `make typecheck`, `make lint`,
+- [x] Milestone 7: Run `make check-fmt`, `make typecheck`, `make lint`,
   `make test`, `make markdownlint`, `make nixie`, then `coderabbit review
   --agent` and resolve all findings. Mark roadmap §6.2.1 as done in
   `docs/roadmap.md`.
+  (2026-06-04 06:56Z)
 
 Use timestamps (`(YYYY-MM-DD HH:MMZ)`) on each `[x]` line as work completes.
 
@@ -313,6 +314,10 @@ work benefits.
   agent-context output or missing subcommand consumption as current gaps.
 - `coderabbit review --agent` completed with zero findings after Milestone 6
   documentation validation.
+- Final Milestone 7 validation passed sequentially: `make check-fmt`,
+  `make typecheck`, `make lint`, `make test`, `make markdownlint`, and
+  `make nixie`. The final `coderabbit review --agent` completed with zero
+  findings after the roadmap and retrospective updates.
 
 ## Decision log
 
@@ -375,7 +380,24 @@ Summarize outcomes, gaps, and lessons learned at major milestones or at
 completion. Compare the result against the original purpose. Note what would
 be done differently next time.
 
-- (to be completed when the plan reaches `COMPLETE`)
+- `cargo-orthohelp --format agent-context` now writes
+  `<out_dir>/agent-context.json` from the same bridge `DocMetadata` used by
+  the human documentation generators.
+- The reusable agent-context schema gained only the planned optional
+  `AgentCommand.summary` field. Broader schema versioning, validation, JSON
+  status output, policy reporting, and agent-native linting remain deferred to
+  later roadmap items.
+- The adapter emits flat command paths, canonical verbs, sorted inputs, value
+  types, defaults, required markers, enum values, positional inputs without a
+  `long` flag, and placeholder unknown interaction/mutation metadata.
+- Behavioural, unit, property, and golden snapshot coverage now guard the
+  implemented surface. CodeRabbit review was useful for tightening test helper
+  style and keeping new file I/O aligned with the repository's `cap_std`
+  convention.
+- The main implementation lesson was to keep the agent-context transform
+  projective and narrow. Avoiding new `AgentInput` schema fields and keeping
+  `--format all` unchanged preserved the compatibility boundary for existing
+  documentation consumers.
 
 ## Context and orientation
 
