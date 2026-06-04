@@ -237,6 +237,7 @@ fn render_completion_block(command_name: &BinName) -> String {
 mod tests {
     use super::*;
     use crate::powershell::test_fixtures::minimal_doc_with_subcommand;
+    use crate::test_support::nested_fixture::nested_doc;
     use rstest::rstest;
 
     #[rstest]
@@ -253,6 +254,17 @@ mod tests {
         let metadata = minimal_doc_with_subcommand();
         let output = render_wrapper(&metadata, &BinName::new("fixture"), &[], true);
         assert!(output.contains("function fixture_greet"));
+    }
+
+    #[rstest]
+    fn wrapper_renders_nested_subcommands_when_splitting() {
+        let metadata = nested_doc();
+        let output = render_wrapper(&metadata, &BinName::new("fixture"), &[], true);
+
+        assert!(output.contains("function fixture_greet"));
+        assert!(output.contains("function fixture_version"));
+        assert!(output.contains("function fixture_admin"));
+        assert!(!output.contains("function fixture_admin_audit"));
     }
 
     #[rstest]

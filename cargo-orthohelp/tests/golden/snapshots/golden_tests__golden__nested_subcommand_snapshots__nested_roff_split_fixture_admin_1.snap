@@ -1,0 +1,44 @@
+---
+source: cargo-orthohelp/tests/golden/nested_subcommand_snapshots.rs
+expression: content
+---
+.TH "FIXTURE-ADMIN" "1" "2026-06-04" "cargo-orthohelp 0.8.0" "Fixture Manual"
+.SH NAME
+fixture-admin \- Administers fixture state.
+.SH SYNOPSIS
+.B fixture-admin
+[\fB\-\-scope\fR \fISCOPE\fR]
+.SH DESCRIPTION
+Administers fixture state.
+.SH OPTIONS
+.TP
+\fB\-\-scope\fR \fISCOPE\fR
+Scope to administer.
+.br
+Default: \fBlocal\fR
+.SH ENVIRONMENT
+.TP
+\fBNESTED_APP_SCOPE\fR
+Scope to administer. Equivalent to \fB\--scope\fR.
+.SH EXIT STATUS
+.TP
+\fB0\fR
+Successful execution.
+.TP
+\fB1\fR
+General errors.
+.SH COMMANDS
+.SS audit
+Audits fixture state.
+.PP
+OPTIONS:
+.TP
+\fB\-\-dry-run\fR
+Reports intended audit actions.
+.SS grant-access
+Grants access to a principal.
+.PP
+OPTIONS:
+.TP
+\fB\-\-principal\fR \fIPRINCIPAL\fR
+Principal receiving access.

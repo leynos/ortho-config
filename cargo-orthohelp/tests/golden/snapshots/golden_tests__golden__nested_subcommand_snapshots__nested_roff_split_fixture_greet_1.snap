@@ -1,0 +1,40 @@
+---
+source: cargo-orthohelp/tests/golden/nested_subcommand_snapshots.rs
+expression: content
+---
+.TH "FIXTURE-GREET" "1" "2026-06-04" "cargo-orthohelp 0.8.0" "Fixture Manual"
+.SH NAME
+fixture-greet \- Greets a named recipient.
+.SH SYNOPSIS
+.B fixture-greet
+[\fB\-\-excited\fR]
+[\fB\-\-recipient\fR \fIRECIPIENT\fR]
+.SH DESCRIPTION
+Greets a named recipient.
+.SH OPTIONS
+.TP
+\fB\-\-excited\fR
+Adds an exclamation mark to the greeting.
+.TP
+\fB\-\-recipient\fR \fIRECIPIENT\fR
+Recipient to greet.
+.br
+Default: \fBWorld\fR
+.SH ENVIRONMENT
+.TP
+\fBNESTED_APP_RECIPIENT\fR
+Recipient to greet. Equivalent to \fB\--recipient\fR.
+.SH EXAMPLES
+.TP
+\fBGreet Ada\fR
+.nf
+fixture greet --recipient Ada
+.fi
+Prints a greeting for Ada.
+.SH EXIT STATUS
+.TP
+\fB0\fR
+Successful execution.
+.TP
+\fB1\fR
+General errors.

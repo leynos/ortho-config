@@ -1,0 +1,11 @@
+---
+source: cargo-orthohelp/tests/golden/nested_subcommand_snapshots.rs
+expression: "read_text(&module_root, \"NestedFixture.psd1\")"
+---
+@{
+  RootModule = 'NestedFixture.psm1'
+  ModuleVersion = '0.1.0'
+  CompatiblePSEditions = @('Desktop', 'Core')
+  FunctionsToExport = @('fixture', 'fixture_greet', 'fixture_version', 'fixture_admin')
+  AliasesToExport = @('fixture-help')
+}

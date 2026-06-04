@@ -1248,8 +1248,8 @@ section must always reflect the actual current state of the work.
 - [x] (2026-06-04) Milestone 2 complete (rstest-bdd scenarios bind and
   pass; `make check-fmt`, `make lint`, `make test`, `make
   markdownlint`, and CodeRabbit clear).
-- [ ] Milestone 3 complete (renderer compatibility tests and `insta`
-  snapshots pass; baselines committed).
+- [x] (2026-06-04) Milestone 3 complete (renderer unit tests, nested
+  snapshots, full gates, and CodeRabbit clear).
 - [ ] Milestone 4 complete (end-to-end bridge smoke test passes;
   example crate wired).
 - [ ] Milestone 5 complete (documentation, changelog, schema round-trip
@@ -1297,6 +1297,25 @@ risks. Document with evidence so future work benefits.
   integration-test entry point now carries a scoped crate-level lint
   allowance with an explanatory reason. A future cleanup can remove the
   allowance after normalising the existing BDD steps.
+- 2026-06-04: The nested roff split-page test exposed that split
+  subcommand pages suppressed their own nested `COMMANDS` section. The
+  renderer now splits the root command into separate pages but renders
+  each subcommand page's children inline so pages such as
+  `fixture-admin.1` expose `audit` and `grant-access`.
+- 2026-06-04: The installed `cargo insta review` command is interactive
+  only and does not support `--accept`. Snapshot baselines were written
+  with `INSTA_UPDATE=always`, and the follow-up validation checks that no
+  `.pending-snap` or `.snap.new` files remain.
+- 2026-06-04: CodeRabbit rejected the first Milestone 3 fixture shape
+  because it duplicated the nested fixture between unit and integration
+  tests. The implementation now uses one shared fixture macro module
+  expanded by the private `src/test_support` wrapper and the
+  integration-test wrapper, avoiding public test-support API expansion.
+- 2026-06-04: After the fixture was reshaped, Clippy surfaced the
+  pre-existing `cargo-orthohelp/src/schema/tests.rs` module layout under
+  the workspace `self_named_module_files = "deny"` lint. The schema tests
+  moved to `cargo-orthohelp/src/schema/tests/mod.rs` with no behavioural
+  change.
 
 ## Decision log
 
@@ -1373,6 +1392,14 @@ design choices.
   docs mappings. The empty braced form is the smallest fixture shape
   that proves a no-options command without changing macro behaviour.
   Date/Author: 2026-06-04 (implementer).
+- Decision: keep the nested renderer fixture private by sharing an
+  implementation macro module between `cargo-orthohelp/src/test_support/`
+  and `cargo-orthohelp/tests/fixtures/` instead of exposing
+  `test_support` from the crate root. Rationale: integration tests cannot
+  import a `#[cfg(test)]` module, but making test support public would
+  violate this plan's "no new public API" constraint. The macro module
+  removes duplicate fixture logic while keeping the public crate surface
+  unchanged. Date/Author: 2026-06-04 (implementer).
 
 ## Outcomes & retrospective
 
@@ -1397,6 +1424,14 @@ what would be done differently next time.
   nested command ordering, and Windows metadata. The targeted BDD suite
   passed with 54 scenarios, `make check-fmt`, `make lint`, `make test`,
   and `make markdownlint` passed, and CodeRabbit reported zero findings.
+- 2026-06-04: Milestone 3 completed. `cargo-orthohelp` now has nested
+  renderer unit coverage for roff, PowerShell wrapper output, and MAML
+  help XML, plus `insta` snapshots for inline roff, split roff pages,
+  PowerShell wrapper, manifest, MAML help, and about help outputs. The
+  roff split renderer now emits a subcommand page's own children inline.
+  `make check-fmt`, `make lint`, `make test`, `make markdownlint`, and
+  `make nixie` passed before `coderabbit review --agent`, which reported
+  zero findings after earlier fixture-sharing concerns were resolved.
 
 ## Notes for the accompanying draft pull request
 
@@ -1431,3 +1466,6 @@ remaining work.
   validation, discoveries, and CodeRabbit review outcome.
 - 2026-06-04 (implementer): recorded Milestone 2 BDD harness binding,
   validation, discoveries, and CodeRabbit review outcome.
+- 2026-06-04 (implementer): recorded Milestone 3 renderer coverage,
+  snapshot baselines, validation, discoveries, and CodeRabbit review
+  outcome.

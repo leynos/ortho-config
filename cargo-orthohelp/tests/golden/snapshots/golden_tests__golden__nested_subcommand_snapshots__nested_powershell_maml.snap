@@ -1,0 +1,133 @@
+---
+source: cargo-orthohelp/tests/golden/nested_subcommand_snapshots.rs
+expression: "read_text(&module_root, \"en-US/NestedFixture-help.xml\")"
+---
+<?xml version="1.0" encoding="utf-8"?>
+<helpItems schema="maml" xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10">
+  <command:command>
+    <command:details>
+      <command:name>fixture</command:name>
+      <maml:description>
+        <maml:para>Nested fixture command tree.</maml:para>
+      </maml:description>
+    </command:details>
+    <command:syntax>
+      <command:syntaxItem>
+        <maml:name>fixture</maml:name>
+        <command:parameter required="true" position="named" variableLength="false">
+          <maml:name>--global</maml:name>
+          <command:parameterValue required="true">String</command:parameterValue>
+        </command:parameter>
+      </command:syntaxItem>
+    </command:syntax>
+    <command:parameters>
+      <command:parameter required="true" position="named" variableLength="false">
+        <maml:name>--global</maml:name>
+        <maml:description>
+          <maml:para>Global configuration value.</maml:para>
+          <maml:para>Long flag: --global.</maml:para>
+          <maml:para>Environment variable: NESTED_APP_GLOBAL.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true">String</command:parameterValue>
+      </command:parameter>
+      <command:commonParameters />
+    </command:parameters>
+  </command:command>
+  <command:command>
+    <command:details>
+      <command:name>fixture_greet</command:name>
+      <maml:description>
+        <maml:para>Greets a named recipient.</maml:para>
+      </maml:description>
+    </command:details>
+    <command:syntax>
+      <command:syntaxItem>
+        <maml:name>fixture_greet</maml:name>
+        <command:parameter required="false" position="named" variableLength="false">
+          <maml:name>--excited</maml:name>
+        </command:parameter>
+        <command:parameter required="false" position="named" variableLength="false">
+          <maml:name>--recipient</maml:name>
+          <command:parameterValue required="false">String</command:parameterValue>
+        </command:parameter>
+      </command:syntaxItem>
+    </command:syntax>
+    <command:parameters>
+      <command:parameter required="false" position="named" variableLength="false">
+        <maml:name>--excited</maml:name>
+        <maml:description>
+          <maml:para>Adds an exclamation mark to the greeting.</maml:para>
+          <maml:para>Long flag: --excited.</maml:para>
+        </maml:description>
+      </command:parameter>
+      <command:parameter required="false" position="named" variableLength="false">
+        <maml:name>--recipient</maml:name>
+        <maml:description>
+          <maml:para>Recipient to greet.</maml:para>
+          <maml:para>Long flag: --recipient.</maml:para>
+          <maml:para>Default: World.</maml:para>
+          <maml:para>Environment variable: NESTED_APP_RECIPIENT.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false">String</command:parameterValue>
+      </command:parameter>
+      <command:commonParameters />
+    </command:parameters>
+    <command:examples>
+      <command:example>
+        <maml:title>Greet Ada</maml:title>
+        <maml:code>
+          fixture greet --recipient Ada
+        </maml:code>
+        <maml:remarks>
+          <maml:para>Prints a greeting for Ada.</maml:para>
+        </maml:remarks>
+      </command:example>
+    </command:examples>
+  </command:command>
+  <command:command>
+    <command:details>
+      <command:name>fixture_version</command:name>
+      <maml:description>
+        <maml:para>Prints version information.</maml:para>
+      </maml:description>
+    </command:details>
+    <command:syntax>
+      <command:syntaxItem>
+        <maml:name>fixture_version</maml:name>
+      </command:syntaxItem>
+    </command:syntax>
+    <command:parameters>
+      <command:commonParameters />
+    </command:parameters>
+  </command:command>
+  <command:command>
+    <command:details>
+      <command:name>fixture_admin</command:name>
+      <maml:description>
+        <maml:para>Administers fixture state.</maml:para>
+      </maml:description>
+    </command:details>
+    <command:syntax>
+      <command:syntaxItem>
+        <maml:name>fixture_admin</maml:name>
+        <command:parameter required="false" position="named" variableLength="false">
+          <maml:name>--scope</maml:name>
+          <command:parameterValue required="false">String</command:parameterValue>
+        </command:parameter>
+      </command:syntaxItem>
+    </command:syntax>
+    <command:parameters>
+      <command:parameter required="false" position="named" variableLength="false">
+        <maml:name>--scope</maml:name>
+        <maml:description>
+          <maml:para>Scope to administer.</maml:para>
+          <maml:para>Long flag: --scope.</maml:para>
+          <maml:para>Default: local.</maml:para>
+          <maml:para>Environment variable: NESTED_APP_SCOPE.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false">String</command:parameterValue>
+      </command:parameter>
+      <command:commonParameters />
+    </command:parameters>
+  </command:command>
+</helpItems>

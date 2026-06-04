@@ -1,0 +1,18 @@
+---
+source: cargo-orthohelp/tests/golden/nested_subcommand_snapshots.rs
+expression: content
+---
+.TH "FIXTURE-VERSION" "1" "2026-06-04" "cargo-orthohelp 0.8.0" "Fixture Manual"
+.SH NAME
+fixture-version \- Prints version information.
+.SH SYNOPSIS
+.B fixture-version
+.SH DESCRIPTION
+Prints version information.
+.SH EXIT STATUS
+.TP
+\fB0\fR
+Successful execution.
+.TP
+\fB1\fR
+General errors.

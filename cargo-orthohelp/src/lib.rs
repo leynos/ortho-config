@@ -11,3 +11,4 @@ pub mod policy;
 pub mod powershell;
 pub mod roff;
 pub mod schema;
+mod test_support;
