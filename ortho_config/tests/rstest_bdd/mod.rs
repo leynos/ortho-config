@@ -15,4 +15,5 @@ mod default_punct;
 mod behaviour;
 mod canary;
 mod canary_steps;
+mod nested_docs_fixture;
 mod scenario_state;

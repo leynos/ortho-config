@@ -1243,8 +1243,8 @@ section must always reflect the actual current state of the work.
   `IN PROGRESS` because implementation has begun.
 - [x] (2026-06-04) Milestone 0 complete (plan approved,
   markdownlint and nixie clean, CodeRabbit clear).
-- [ ] Milestone 1 complete (fixture types added; recursive `rstest`
-  assertions pass).
+- [x] (2026-06-04) Milestone 1 complete (fixture types added; recursive
+  `rstest` assertions pass; CodeRabbit clear).
 - [ ] Milestone 2 complete (rstest-bdd scenarios bind and pass).
 - [ ] Milestone 3 complete (renderer compatibility tests and `insta`
   snapshots pass; baselines committed).
@@ -1267,6 +1267,22 @@ risks. Document with evidence so future work benefits.
   relevant path (`ortho_config/tests`, `cargo-orthohelp/src`, and
   `cargo-orthohelp/tests`). This affects only navigation, not the
   implementation design.
+- 2026-06-04: The docs derive stores non-literal `String` defaults as
+  their Rust token expression. For
+  `#[ortho_config(default = String::from("World"))]`, the IR default
+  display is `String :: from("World")`, not the evaluated value
+  `World`. Milestone 1 assertions therefore check that the declared
+  default is present using the actual display convention.
+- 2026-06-04: Nested command field help IDs follow the inner struct's
+  documentation identity. To assert the desired
+  `audit.fields.dry_run.help` pattern without changing macro behaviour,
+  the fixture declares `discovery(app_name = "audit")` on
+  `NestedAuditArgs`.
+- 2026-06-04: CodeRabbit suggested changing the no-options
+  `NestedVersionArgs` fixture to a unit struct. Validation showed this
+  is incompatible with `OrthoConfig`, whose derive parser requires
+  named-field structs. The fixture now keeps the empty braced struct
+  and documents the derive constraint in place.
 
 ## Decision log
 
@@ -1328,6 +1344,12 @@ design choices.
   this plan and supplies milestone validation requirements, so a
   separate approval pause would contradict the current task. Date/Author:
   2026-06-04 (implementer).
+- Decision: keep `NestedVersionArgs` as an empty named-field struct
+  rather than a unit struct. Rationale: `OrthoConfig` rejects unit
+  structs because it needs named fields for generated config, serde, and
+  docs mappings. The empty braced form is the smallest fixture shape
+  that proves a no-options command without changing macro behaviour.
+  Date/Author: 2026-06-04 (implementer).
 
 ## Outcomes & retrospective
 
@@ -1339,6 +1361,13 @@ what would be done differently next time.
 - 2026-06-04: Milestone 0 completed. `make markdownlint` and
   `make nixie` passed, and `coderabbit review --agent` reported
   zero findings for the approval/status update.
+- 2026-06-04: Milestone 1 deterministic gates passed. `make check-fmt`,
+  `make lint`, `make test`, and `make markdownlint` all completed
+  successfully. The new targeted test
+  `cargo test -p ortho_config --test nested_docs_ir` passed eight
+  recursive tree assertions.
+- 2026-06-04: Milestone 1 completed after resolving CodeRabbit review.
+  The final `coderabbit review --agent` pass reported zero findings.
 
 ## Notes for the accompanying draft pull request
 
@@ -1369,3 +1398,5 @@ remaining work.
   implementation edits.
 - 2026-06-04 (implementer): recorded successful Milestone 0 validation
   and CodeRabbit review outcome.
+- 2026-06-04 (implementer): recorded Milestone 1 fixture implementation,
+  validation, discoveries, and CodeRabbit review outcome.
