@@ -521,7 +521,7 @@ This phase promotes the load-bearing localization helpers from the
 `hello_world` example to first-class crate surface, widens clap-error
 translation coverage, names a locale-resolution lifecycle that survives the
 locale-flag chicken-and-egg, bridges OrthoConfig with `i18n-embed`, and
-extends the derive so localization identifiers are generated rather than
+extends the derive, so localization identifiers are generated rather than
 hand-authored. The design lives in
 [cli-localization-design.md](cli-localization-design.md). Sequencing is
 quality-of-life-first: §11.1 and §11.2 carry no policy risk, while §11.3
@@ -585,7 +585,7 @@ and later progressively add opinion.
     &[(clap::error::ErrorKind, ClapErrorTranslation)]`. The matrix is
     **exhaustive** over `ErrorKind`: display-only variants
     (`DisplayHelp`, `DisplayHelpOnMissingArgumentOrSubcommand`,
-    `DisplayVersion`) appear with the `DisplayOnly` sentinel so the gate
+    `DisplayVersion`) appear with the `DisplayOnly` sentinel, so the gate
     reduces to a simple length comparison.
   - [ ] Implement the mechanical coverage gate (build script plus
     `const_assert_eq!`) as specified in
@@ -621,7 +621,7 @@ and later progressively add opinion.
     clap-error pipeline.
   - [ ] Add a `ClapErrorCoverage` builder that walks `CLAP_ERROR_IDS`,
     filters to `ClapErrorTranslation::Translated(id)` entries (skipping
-    the display-only sentinels), and reports identifiers the supplied
+    the display-only sentinels), and reports identifiers that the supplied
     `Localizer` fails to resolve.
 
 - [ ] 11.2.4. Document and ship the monomorphised `LocalizedFormatter`
@@ -767,7 +767,7 @@ and later progressively add opinion.
   - [ ] Note that `localize_clap_error_with_command` is deprecated in 0.9
     and removed in 0.10; consumers move to `LocalizedParse` for parse-time
     localization.
-  - [ ] Spell out the `BootHandle` two-phase flow with a worked example so
+  - [ ] Spell out the `BootHandle` two-phase flow with a worked example, so
     consumers cannot accidentally skip finalization.
 
 - [ ] 11.7.3. Add a migration note for `spycatcher-harness`.
