@@ -739,8 +739,9 @@ pub enum TranslationOrigin {
 Wired into `FluentLocalizer`, `FluentEmbedLocalizer`, and the clap-error
 path. The default reporter is a no-op so production builds pay nothing.
 `cargo-orthohelp` ships a built-in reporter that aggregates events into a
-JavaScript Object Notation (JSON) report under `target/orthohelp/missing-
-translations/<locale>.json`, suitable for translator workflows.
+JavaScript Object Notation (JSON) report suitable for translator
+workflows, written under
+`target/orthohelp/missing-translations/<locale>.json`.
 
 ## 10. Compatibility
 
