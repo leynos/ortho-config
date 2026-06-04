@@ -542,7 +542,7 @@ impl FluentEmbedLocalizer {
 
 impl Localizer for FluentEmbedLocalizer {
     fn lookup(&self, id: &str, args: Option<&LocalizationArgs<'_>>) -> Option<String> {
-        if !self.loader.has_message(id) {
+        if !self.loader.has(id) {
             return None;
         }
         let rendered = match args {
@@ -554,14 +554,20 @@ impl Localizer for FluentEmbedLocalizer {
 }
 ```
 
-Presence is queried via `FluentLanguageLoader::has_message` (or its
-documented equivalent in the resolved `i18n-embed` version), not via the
-`loader.get(id) == id` heuristic. The heuristic is unsound on three Fluent
-shapes: a message with only attributes and no value, a message whose value
-transforms to the identifier string, and a message with an empty-string
-value. `has_message` returns `true` in the first two cases and the second
-returns `false` for the third, all matching the
+Presence is queried via `FluentLanguageLoader::has(message_id)`. As of
+`i18n-embed` 0.16, `has` is the documented public API; it delegates to the
+underlying Fluent bundle's `has_message` but is the only stable entry
+point the adapter is allowed to call. The `loader.get(id) == id` heuristic
+is rejected because it is unsound on three Fluent shapes: a message with
+only attributes and no value, a message whose value transforms to the
+identifier string, and a message with an empty-string value. `has`
+returns `true` for the first two cases (correctly marking the identifier
+as present) and `false` for nothing-defined, which matches the
 `Localizer::lookup -> Option<String>` contract honestly.
+
+If a future `i18n-embed` release renames `has`, the adapter's build
+script asserts the method exists and fails fast with a clear migration
+pointer rather than silently degrading; see §12.
 
 Trade-offs the documentation must record:
 
@@ -755,10 +761,11 @@ Both commands honour the agent-context output contracts already defined in
   IR for help text. The scope is held to identifier generation, optional
   default embedding, and artefact emission. Anything beyond that belongs in
   the documentation IR pipeline.
-- **Fluent edge cases for `has_message`.** If the resolved `i18n-embed`
-  version does not expose `has_message`, the adapter must vendor a small
-  presence check against the loader's bundles. The build script asserts
-  the helper is available and fails fast otherwise.
+- **Fluent presence-method drift.** The adapter calls
+  `FluentLanguageLoader::has` (the public API in `i18n-embed` 0.16). If a
+  future release renames or removes the method, a build script in the
+  `i18n-embed-bridge` feature asserts the symbol resolves at compile time
+  and fails with a migration pointer rather than silently degrading.
 - **`LocalizedFormatter` escape hatch (§6.4.1) used incorrectly.** The
   monomorphised formatter is opt-in for advanced cases. Misusing it with a
   process-wide `OnceLock<Arc<dyn Localizer>>` that is never initialised

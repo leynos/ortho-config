@@ -672,10 +672,14 @@ and later progressively add opinion.
   - [ ] Add the `i18n-embed-bridge` cargo feature and gate the optional
     `i18n-embed` dependency behind it.
   - [ ] Implement `FluentEmbedLocalizer::new(Arc<FluentLanguageLoader>)`.
-  - [ ] Use `FluentLanguageLoader::has_message` for presence detection,
-    not the `loader.get(id) == id` heuristic; document the three Fluent
-    edge cases (attributes-only messages, self-transform values, empty
-    string values) the heuristic would have got wrong.
+  - [ ] Use `FluentLanguageLoader::has` (the public `i18n-embed` 0.16
+    presence API; it wraps the underlying bundle's `has_message`) for
+    presence detection, not the `loader.get(id) == id` heuristic.
+    Document the three Fluent edge cases (attributes-only messages,
+    self-transform values, empty string values) the heuristic would have
+    got wrong. Add a build-time symbol check so a rename in a future
+    `i18n-embed` release fails compilation rather than degrading
+    silently.
   - [ ] Wire `MissingTranslationReporter` so the adapter participates in
     the §11.2.3 reporting pipeline.
 
