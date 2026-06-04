@@ -284,11 +284,13 @@ the work.
   `make typecheck`, and `make markdownlint` all passed with `/tmp` logs.
 - [x] (2026-06-04T00:00:00Z) Ran `coderabbit review --agent`; it completed
   with `findings: 0`, so no follow-up fixes were required.
-- [ ] Commit, push to
+- [x] (2026-06-04T00:00:00Z) Committed the dependency-tier documentation as
+  `a5d4474` (`Record consumer dependency tiers`).
+- [x] (2026-06-04T00:00:00Z) Marked roadmap item 5.2.3 and its three
+  acceptance bullets done in `docs/roadmap.md`.
+- [ ] Push to
   `origin/5-2-3-record-consumer-dependency-boundaries`, and open or update the
   draft pull request whose title contains `(5.2.3)`.
-- [ ] Mark roadmap item 5.2.3 done after the approved implementation is
-  complete.
 
 ## Surprises & discoveries
 
@@ -398,10 +400,14 @@ choices.
 
 ## Outcomes & retrospective
 
-This section is intentionally empty while the plan is in draft. During
-implementation, record which documents were updated, whether ADR-003 needed an
-amendment, which review concerns were cleared, and whether the
-dependency-tier wording remained stable.
+The implementation recorded the consumer dependency tier in
+`docs/agent-native-cli-design.md` §2.2 as the single authoritative matrix and
+kept every other affected document to a back-reference. ADR-003 needed only a
+brief consequence note, not a new decision record. CodeRabbit reported zero
+findings on both the initial documentation milestone and the cleaned final
+diff. The final wording preserved the planned hard/soft tier split and the
+replacement rule that the published OrthoConfig contract wins over temporary
+consumer adapters.
 
 ## Context and orientation
 
