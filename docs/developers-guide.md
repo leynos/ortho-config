@@ -109,7 +109,7 @@ authoritative source for the hard and soft ship-time dependency tiers that
 apply to Weaver, Netsuke, and other downstream consumers. When changing a
 hard-dependency capability, update §2.2 and the cited roadmap item in the same
 change. When changing a soft-dependency capability, also record which roadmap
-item any temporary local consumer adapter shadows so its eventual replacement
+item any temporary local consumer adapter shadows, so its eventual replacement
 can be tracked.
 
 Run `coderabbit review --agent` after major milestones that change schemas,
