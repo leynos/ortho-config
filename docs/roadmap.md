@@ -575,17 +575,26 @@ and later progressively add opinion.
 - [ ] 11.2.1. Ship en-US translations for the complete clap stable error
   matrix.
   - Requires 11.1.1.
-  - See cli-localization-design.md §6.1.
+  - See cli-localization-design.md §6.1 and §6.2.
   - [ ] Add Fluent strings for `NoEquals`, `ValueValidation`, `TooManyValues`,
     `TooFewValues`, `WrongNumberOfValues`, `ArgumentConflict`,
     `InvalidUtf8`, `Io`, and `Format` (alongside the four existing
     identifiers).
-  - [ ] Expose `pub const CLAP_ERROR_IDS: &[(clap::error::ErrorKind,
-    &str)]` so consumers can iterate, validate, and write coverage tests.
+  - [ ] Define `pub enum ClapErrorTranslation { Translated(&'static str),
+    DisplayOnly }` and expose `pub const CLAP_ERROR_IDS:
+    &[(clap::error::ErrorKind, ClapErrorTranslation)]`. The matrix is
+    **exhaustive** over `ErrorKind`: display-only variants
+    (`DisplayHelp`, `DisplayHelpOnMissingArgumentOrSubcommand`,
+    `DisplayVersion`) appear with the `DisplayOnly` sentinel so the gate
+    reduces to a simple length comparison.
   - [ ] Implement the mechanical coverage gate (build script plus
     `const_assert_eq!`) as specified in
-    [cli-localization-design.md §6.1](cli-localization-design.md). The
-    design document owns the mechanism; this task implements it.
+    [cli-localization-design.md §6.1.1](cli-localization-design.md). The
+    design document owns the mechanism; this task implements it. The
+    build script emits the **total** `ErrorKind` variant count without
+    classifying display-only variants, because the exhaustive matrix
+    pairs each variant with either a translated identifier or the
+    sentinel.
 
 - [ ] 11.2.2. Switch error localization to clap's mutation surface.
   - Requires 11.2.1.
@@ -610,8 +619,10 @@ and later progressively add opinion.
   - [ ] Introduce the `MissingTranslationReporter` trait and wire it into
     `FluentLocalizer`, `FluentEmbedLocalizer` (deferred to 11.4.1), and the
     clap-error pipeline.
-  - [ ] Add a `ClapErrorCoverage` builder that walks `CLAP_ERROR_IDS` and
-    reports identifiers the supplied `Localizer` fails to resolve.
+  - [ ] Add a `ClapErrorCoverage` builder that walks `CLAP_ERROR_IDS`,
+    filters to `ClapErrorTranslation::Translated(id)` entries (skipping
+    the display-only sentinels), and reports identifiers the supplied
+    `Localizer` fails to resolve.
 
 - [ ] 11.2.4. Document and ship the monomorphised `LocalizedFormatter`
   escape hatch.

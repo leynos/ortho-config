@@ -397,11 +397,23 @@ The crate ships en-US translations for every raisable variant in stable
 clap 4.x: `InvalidValue`, `UnknownArgument`, `InvalidSubcommand`, `NoEquals`,
 `ValueValidation`, `TooManyValues`, `TooFewValues`, `WrongNumberOfValues`,
 `ArgumentConflict`, `MissingRequiredArgument`, `MissingSubcommand`,
-`InvalidUtf8`, `Io`, and `Format`. The display-only variants (`DisplayHelp`,
-`DisplayHelpOnMissingArgumentOrSubcommand`, `DisplayVersion`) are not
-translated — clap renders the help or version text itself.
+`InvalidUtf8`, `Io`, and `Format`. The three display-only variants
+(`DisplayHelp`, `DisplayHelpOnMissingArgumentOrSubcommand`, `DisplayVersion`)
+are recorded but **not** translated — clap renders the help or version text
+itself, and the matrix marks them with a `DisplayOnly` sentinel so the
+mechanical gate (§6.1.1) can prove exhaustive coverage of `ErrorKind`
+without tying the assertion to a hand-maintained subset count.
 
-The matrix is **mechanically gated**, not version-pinned by ceremony.
+The matrix is **exhaustive** over `ErrorKind`. Every declared variant
+appears exactly once, either with a translated Fluent identifier or with
+the `DisplayOnly` sentinel. In clap 4.5.60 (the version currently locked
+in `Cargo.lock`) that is 14 translated entries plus 3 sentinel entries,
+totalling 17. The matrix shape lets the gate reduce to a single
+`len() == ORTHO_CONFIG_CLAP_ERROR_KIND_COUNT` comparison without filtering
+or subtraction, which is the property the mechanical gate requires.
+
+#### 6.1.1 Mechanical coverage gate
+
 `clap::error::ErrorKind` is `#[non_exhaustive]`; the crate must therefore
 detect coverage gaps automatically rather than relying on a release-time
 audit. The gate is a single mechanism, described once here and referenced
@@ -410,11 +422,13 @@ from the roadmap:
 1. A build script (`build.rs` in the `ortho_config` crate) inspects the
    `clap::error::ErrorKind` enum exposed by the resolved clap dependency
    and emits `cargo:rustc-env=ORTHO_CONFIG_CLAP_ERROR_KIND_COUNT=<n>`,
-   where `<n>` is the count of declared variants. Cargo's resolver picks
-   the clap version from the workspace's `Cargo.lock`, so the build script
-   sees the same clap minor or patch the test will run against.
+   where `<n>` is the count of declared variants (all of them — the
+   build script does **not** classify variants as raisable or
+   display-only). Cargo's resolver picks the clap version from the
+   workspace's `Cargo.lock`, so the build script sees the same clap minor
+   or patch the test will run against.
 2. A const-evaluated test reads that constant and compares it to the
-   length of `CLAP_ERROR_IDS`:
+   length of the exhaustive `CLAP_ERROR_IDS`:
 
    ```rust
    // In ortho_config's test suite.
@@ -423,26 +437,54 @@ from the roadmap:
    const_assert_eq!(CLAP_ERROR_IDS.len(), CLAP_ERROR_KIND_COUNT);
    ```
 
-When clap adds a variant in a minor or patch release, the count diverges
-and CI fails before publish. This replaces a maintenance ritual with a
-mechanical contract. Roadmap §11.2.1 references this section rather than
-restating the mechanism.
+When clap adds a variant in a minor or patch release, the lengths diverge
+and CI fails before publish. The fix is mechanical: add a new
+`CLAP_ERROR_IDS` entry that either points at a new Fluent identifier (for
+a raisable variant) or marks the variant `DisplayOnly` (for a new display
+shape). This replaces a maintenance ritual with a mechanical contract.
+Roadmap §11.2.1 references this section rather than restating the
+mechanism.
 
 ### 6.2 Canonical mapping constant
 
+The matrix is an exhaustive mapping from `ErrorKind` to a small enum that
+distinguishes translated entries from display-only ones:
+
 ```rust
-pub const CLAP_ERROR_IDS: &[(clap::error::ErrorKind, &str)] = &[ /* ... */ ];
+/// Outcome the crate has registered for a clap `ErrorKind`.
+#[non_exhaustive]
+pub enum ClapErrorTranslation {
+    /// The crate ships an en-US translation under this Fluent identifier
+    /// and consumer overrides should target it.
+    Translated(&'static str),
+    /// clap renders the surface itself (help text, version text). The
+    /// localization pipeline must not substitute a translated body.
+    DisplayOnly,
+}
+
+pub const CLAP_ERROR_IDS: &[(clap::error::ErrorKind, ClapErrorTranslation)] = &[
+    // 14 translated entries: InvalidValue → "clap-error-invalid-value", ...
+    // 3 display-only entries:
+    //   (ErrorKind::DisplayHelp, ClapErrorTranslation::DisplayOnly),
+    //   (ErrorKind::DisplayHelpOnMissingArgumentOrSubcommand,
+    //       ClapErrorTranslation::DisplayOnly),
+    //   (ErrorKind::DisplayVersion, ClapErrorTranslation::DisplayOnly),
+];
 ```
 
 The constant lets consumers:
 
-- iterate the matrix and produce coverage tests against their own catalogues;
-- validate that overrides cover every shipped identifier before release;
-- generate translator briefs that list every identifier and its English
-  source string.
+- iterate the matrix and produce coverage tests against their own
+  catalogues, filtering with `matches!(translation, Translated(_))` to
+  ignore display-only variants;
+- validate that overrides cover every shipped translated identifier before
+  release;
+- generate translator briefs that list every translated identifier and its
+  English source string.
 
-A `ClapErrorCoverage` builder consumes the constant and returns a report
-listing identifiers the consumer's `Localizer` fails to resolve.
+A `ClapErrorCoverage` builder consumes the constant, filters to
+`Translated` entries, and returns a report listing identifiers the
+consumer's `Localizer` fails to resolve.
 
 ### 6.3 Observable fallback
 
