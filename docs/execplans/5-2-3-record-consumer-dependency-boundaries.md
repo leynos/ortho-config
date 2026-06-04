@@ -288,9 +288,11 @@ the work.
   `a5d4474` (`Record consumer dependency tiers`).
 - [x] (2026-06-04T00:00:00Z) Marked roadmap item 5.2.3 and its three
   acceptance bullets done in `docs/roadmap.md`.
-- [ ] Push to
-  `origin/5-2-3-record-consumer-dependency-boundaries`, and open or update the
-  draft pull request whose title contains `(5.2.3)`.
+- [x] (2026-06-04T00:00:00Z) Pushed branch
+  `5-2-3-record-consumer-dependency-boundaries` to origin and updated draft
+  PR #343, "Record consumer dependency boundaries (5.2.3)".
+- [x] (2026-06-04T00:00:00Z) Prepared this final ExecPlan bookkeeping entry
+  for the follow-up commit and push.
 
 ## Surprises & discoveries
 
@@ -408,6 +410,10 @@ findings on both the initial documentation milestone and the cleaned final
 diff. The final wording preserved the planned hard/soft tier split and the
 replacement rule that the published OrthoConfig contract wins over temporary
 consumer adapters.
+
+Roadmap item 5.2.3 is marked complete in `docs/roadmap.md`. Draft PR #343 was
+updated after the implementation commits were pushed so reviewers see the
+implemented state rather than the pre-implementation plan-only state.
 
 ## Context and orientation
 
