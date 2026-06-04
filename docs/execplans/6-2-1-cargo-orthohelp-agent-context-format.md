@@ -215,12 +215,13 @@ task into two. This section must always reflect the actual state of the work.
   in `format_rejects_unsupported_values` (for example, to `xml`) and add a
   positive test that accepts `agent-context`.
   (2026-06-04 01:19Z)
-- [ ] Milestone 3: Create `cargo-orthohelp/src/agent_context/mod.rs` with
+- [x] Milestone 3: Create `cargo-orthohelp/src/agent_context/mod.rs` with
   `bridge_ir_to_agent_context`, the deterministic verb-mapping table, and the
   helper that flattens a `DocMetadata` tree into `Vec<AgentCommand>`. Wire
   the transform from `cargo-orthohelp/src/main.rs::run` through
   `cargo-orthohelp/src/output.rs::write_agent_context`. Update the
   `mod` declaration in `cargo-orthohelp/src/lib.rs` and `main.rs`.
+  (2026-06-04 01:37Z)
 - [ ] Milestone 4: Add unit tests at
   `cargo-orthohelp/src/agent_context/tests.rs` (table-driven `rstest`
   cases) and the property test at
@@ -249,13 +250,28 @@ Use timestamps (`(YYYY-MM-DD HH:MMZ)`) on each `[x]` line as work completes.
 Unexpected findings during implementation. Document with evidence so future
 work benefits.
 
-- Clippy denied direct indexing in the new summary serialisation test under
+- Clippy denied direct indexing in the new summary serialization test under
   `clippy::indexing_slicing`. The test now uses `first_mut().expect(...)`
   so failures report intent rather than panic at an implicit index.
 - `coderabbit review --agent` completed with zero findings after Milestone 1
   validation.
 - `coderabbit review --agent` completed with zero findings after Milestone 2
   validation.
+- Adding the agent-context branch pushed `cargo-orthohelp/src/main.rs::run`
+  over the `clippy::cognitive_complexity` limit. Extracting
+  `generate_agent_context_if_requested` and `localize_docs_if_requested` kept
+  `run` focused on orchestration and cleared the lint.
+- A manual fixture run wrote `/tmp/orthohelp-agent-context-m3/agent-context.json`
+  with `schema_version = "1"`, `kind = "orthohelp_fixture.agent_context"`,
+  a populated command summary, sorted inputs, and default unknown interaction
+  and mutation fields.
+- CodeRabbit's first Milestone 3 review pass requested concise helper
+  doc comments, simpler `None`/`Vec::new()` field defaults, and Oxford
+  spelling in a transformer comment. After the fixes, the deterministic gates
+  passed again.
+- CodeRabbit rate-limited three follow-up Milestone 3 review attempts. Each
+  retry used the requested randomized `vsleep` backoff. The fourth follow-up
+  attempt completed with zero findings.
 
 ## Decision log
 
@@ -847,7 +863,7 @@ pub fn write_agent_context(
 Dependencies used:
 
 - `ortho_config` (already declared) for the schema types and `Localizer`.
-- `serde_json` (already declared) for serialisation.
+- `serde_json` (already declared) for serialization.
 - `cap_std` + `camino` (already declared) for filesystem I/O.
 - `insta` (dev-dep, already declared) for the golden snapshot.
 - `proptest` (dev-dep, already declared) for the single uniqueness

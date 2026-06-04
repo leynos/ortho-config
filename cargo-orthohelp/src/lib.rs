@@ -4,6 +4,7 @@
 //! intermediate representation (IR), including localized JSON output, roff man
 //! pages, and `PowerShell` help artefacts.
 
+pub mod agent_context;
 pub mod error;
 pub mod ir;
 pub mod policy;

@@ -7,6 +7,7 @@ use std::io::Write;
 
 use crate::error::OrthohelpError;
 use crate::ir::LocalizedDocMetadata;
+use ortho_config::AgentContext;
 
 /// Writes the localized IR JSON for a single locale.
 pub fn write_localized_ir(
@@ -45,6 +46,33 @@ pub fn write_localized_ir(
         })?;
 
     Ok(ir_dir.join(filename))
+}
+
+/// Writes the compact agent-context JSON document.
+pub fn write_agent_context(
+    out_dir: &Utf8Path,
+    payload: &AgentContext,
+) -> Result<Utf8PathBuf, OrthohelpError> {
+    let dir = ensure_dir(out_dir)?;
+    let filename = "agent-context.json";
+    let mut file = dir
+        .open_with(
+            filename,
+            OpenOptions::new().write(true).create(true).truncate(true),
+        )
+        .map_err(|io_err| OrthohelpError::Io {
+            path: out_dir.join(filename),
+            source: io_err,
+        })?;
+
+    let content = serde_json::to_string_pretty(payload)?;
+    file.write_all(content.as_bytes())
+        .map_err(|io_err| OrthohelpError::Io {
+            path: out_dir.join(filename),
+            source: io_err,
+        })?;
+
+    Ok(out_dir.join(filename))
 }
 
 fn ensure_dir(path: &Utf8Path) -> Result<Dir, OrthohelpError> {
