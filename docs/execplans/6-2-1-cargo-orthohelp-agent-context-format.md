@@ -222,11 +222,11 @@ task into two. This section must always reflect the actual state of the work.
   `cargo-orthohelp/src/output.rs::write_agent_context`. Update the
   `mod` declaration in `cargo-orthohelp/src/lib.rs` and `main.rs`.
   (2026-06-04 01:37Z)
-- [ ] Milestone 4: Add unit tests at
+- [x] Milestone 4: Add unit tests at
   `cargo-orthohelp/src/agent_context/tests.rs` (table-driven `rstest`
   cases) and the property test at
   `cargo-orthohelp/src/agent_context/proptests.rs` (single uniqueness
-  invariant).
+  invariant). (2026-06-04 03:12Z)
 - [ ] Milestone 5: Add the behavioural scenario at
   `cargo-orthohelp/tests/features/orthohelp_agent_context.feature` plus step
   definitions at
@@ -271,6 +271,19 @@ work benefits.
   passed again.
 - CodeRabbit rate-limited three follow-up Milestone 3 review attempts. Each
   retry used the requested randomized `vsleep` backoff. The fourth follow-up
+  attempt completed with zero findings.
+- Milestone 4 adds 8 scoped `agent_context::` tests across lib and binary
+  unit-test builds. The proptest constructs only unique sibling names with
+  `btree_set`, avoiding rejection filtering while checking command path
+  uniqueness.
+- Clippy found Milestone 4 test helper issues before CodeRabbit review:
+  cognitive complexity, direct indexing, too many helper parameters, and
+  `Option` style. Refactoring the tests to use fixture spec structs and tuple
+  projections cleared those lints.
+- CodeRabbit's first Milestone 4 review requested a comment clarifying why
+  the `alpha` field with no long or short flag remains visible: it is a
+  positional argument because `takes_value` is true. Two follow-up review
+  attempts were rate-limited and used randomized `vsleep` backoff; the next
   attempt completed with zero findings.
 
 ## Decision log

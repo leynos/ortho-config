@@ -208,3 +208,9 @@ fn enum_values(field: &FieldMetadata) -> Vec<String> {
         _ => Vec::new(),
     }
 }
+
+#[cfg(test)]
+mod proptests;
+
+#[cfg(test)]
+mod tests;
