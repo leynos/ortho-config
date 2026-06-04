@@ -22,8 +22,18 @@ pub mod roff;
 mod rustflags;
 pub mod schema;
 mod test_support;
+use camino::Utf8PathBuf;
+use clap::{Error as ClapError, Parser, error::ErrorKind};
+use crate::bridge::BridgeConfig;
+use crate::cache::CacheKey;
+use crate::cli::{Args, CargoSubcommand, Cli, OutputFormat};
+use crate::error::OrthohelpError;
+use crate::metadata::PackageSelection;
+use crate::schema::{DocMetadata, ORTHO_DOCS_IR_VERSION};
 use ortho_config::{FluentLocalizer, LanguageIdentifier, Localizer};
+use std::io::Write;
 use std::str::FromStr;
+use tracing_subscriber::EnvFilter;
 
 fn main() -> Result<(), OrthohelpError> {
     init_tracing();

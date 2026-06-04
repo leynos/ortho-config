@@ -18,6 +18,8 @@ use std::io::Read;
 use std::process::Command;
 use tempfile::TempDir;
 
+type TestError = Box<dyn Error + Send + Sync>;
+
 const FIXTURE_PACKAGE: &str = "orthohelp_fixture";
 const FIXTURE_ROOT_TYPE: &str = "orthohelp_fixture::NestedFixtureConfig";
 
@@ -53,8 +55,8 @@ const FIXTURE_ROOT_TYPE: &str = "orthohelp_fixture::NestedFixtureConfig";
 fn nested_subcommand_tree_survives_bridge_outputs(
     #[case] name: &str,
     #[case] args: &[&str],
-    #[case] assertion: fn(&Utf8PathBuf) -> Result<(), Box<dyn Error>>,
-) -> Result<(), Box<dyn Error>> {
+    #[case] assertion: fn(&Utf8PathBuf) -> Result<(), TestError>,
+) -> Result<(), TestError> {
     let (_temp, out_dir) = temp_out_dir()?;
     run_orthohelp(&out_dir, args)?;
     assertion(&out_dir).map_err(|err| assertion_failed(name, err))?;
@@ -64,7 +66,7 @@ fn nested_subcommand_tree_survives_bridge_outputs(
 #[derive(Debug)]
 struct AssertionFailure {
     name: String,
-    source: Box<dyn Error>,
+    source: TestError,
 }
 
 impl Display for AssertionFailure {
@@ -79,7 +81,7 @@ impl Error for AssertionFailure {
     }
 }
 
-fn assertion_failed(name: &str, source: Box<dyn Error>) -> Box<dyn Error> {
+fn assertion_failed(name: &str, source: TestError) -> TestError {
     Box::new(AssertionFailure {
         name: name.to_owned(),
         source,
@@ -90,7 +92,7 @@ fn assertion_failed(name: &str, source: Box<dyn Error>) -> Box<dyn Error> {
 ///
 /// The returned path must be UTF-8 because `cargo-orthohelp` and the
 /// capability filesystem helpers use `Utf8PathBuf` throughout these tests.
-fn temp_out_dir() -> Result<(TempDir, Utf8PathBuf), Box<dyn Error>> {
+fn temp_out_dir() -> Result<(TempDir, Utf8PathBuf), TestError> {
     let temp_dir = tempfile::tempdir()?;
     let out_dir = Utf8PathBuf::from_path_buf(temp_dir.path().to_path_buf())
         .map_err(|path| format!("temporary path is not UTF-8: {}", path.display()))?;
@@ -101,7 +103,7 @@ fn temp_out_dir() -> Result<(TempDir, Utf8PathBuf), Box<dyn Error>> {
 ///
 /// A non-zero process exit is returned as an error containing captured stderr
 /// so bridge build and renderer failures stay visible in test diagnostics.
-fn run_orthohelp(out_dir: &Utf8PathBuf, format_args: &[&str]) -> Result<(), Box<dyn Error>> {
+fn run_orthohelp(out_dir: &Utf8PathBuf, format_args: &[&str]) -> Result<(), TestError> {
     let exe = fixtures::cargo_orthohelp_exe()?;
     let workspace_root = fixtures::workspace_root()?;
     let output = Command::new(exe.as_str())
@@ -127,7 +129,7 @@ fn run_orthohelp(out_dir: &Utf8PathBuf, format_args: &[&str]) -> Result<(), Box<
 }
 
 /// Asserts that localized IR preserves top-level and nested command ordering.
-fn assert_ir_contains_nested_tree(out_dir: &Utf8PathBuf) -> Result<(), Box<dyn Error>> {
+fn assert_ir_contains_nested_tree(out_dir: &Utf8PathBuf) -> Result<(), TestError> {
     let ir = read_output(out_dir, "ir/en-US.json")?;
     let value: Value = serde_json::from_str(&ir)?;
     let subcommands = array_field(&value, "subcommands")?;
@@ -145,7 +147,7 @@ fn assert_ir_contains_nested_tree(out_dir: &Utf8PathBuf) -> Result<(), Box<dyn E
 }
 
 /// Asserts that split man pages include the nested admin command sections.
-fn assert_man_contains_nested_pages(out_dir: &Utf8PathBuf) -> Result<(), Box<dyn Error>> {
+fn assert_man_contains_nested_pages(out_dir: &Utf8PathBuf) -> Result<(), TestError> {
     read_output(out_dir, "man/man1/nested_fixture.1")?;
 
     read_output(out_dir, "man/man1/nested_fixture-greet.1")?;
@@ -161,9 +163,7 @@ fn assert_man_contains_nested_pages(out_dir: &Utf8PathBuf) -> Result<(), Box<dyn
 ///
 /// `out_dir` is the directory containing generated files; returning `Result`
 /// lets the test report file and assertion failures without panicking.
-fn assert_powershell_contains_subcommand_functions(
-    out_dir: &Utf8PathBuf,
-) -> Result<(), Box<dyn Error>> {
+fn assert_powershell_contains_subcommand_functions(out_dir: &Utf8PathBuf) -> Result<(), TestError> {
     let module = read_output(out_dir, "powershell/NestedFixture/NestedFixture.psm1")?;
     ensure_contains(
         &module,
@@ -200,7 +200,7 @@ fn assert_powershell_contains_subcommand_functions(
 ///
 /// The ambient authority is scoped to the temporary output root produced by
 /// this test; I/O errors or invalid UTF-8 are reported to the caller.
-fn read_output(out_dir: &Utf8PathBuf, relative_path: &str) -> Result<String, Box<dyn Error>> {
+fn read_output(out_dir: &Utf8PathBuf, relative_path: &str) -> Result<String, TestError> {
     let dir = Dir::open_ambient_dir(out_dir, ambient_authority())?;
     let mut file = dir.open(relative_path)?;
     let mut content = String::new();
@@ -212,7 +212,7 @@ fn read_output(out_dir: &Utf8PathBuf, relative_path: &str) -> Result<String, Box
 ///
 /// The error text names the missing or incorrectly typed field to make IR
 /// shape regressions easier to diagnose.
-fn array_field<'a>(value: &'a Value, field: &str) -> Result<&'a Vec<Value>, Box<dyn Error>> {
+fn array_field<'a>(value: &'a Value, field: &str) -> Result<&'a Vec<Value>, TestError> {
     value
         .get(field)
         .and_then(Value::as_array)
@@ -223,7 +223,7 @@ fn array_field<'a>(value: &'a Value, field: &str) -> Result<&'a Vec<Value>, Box<
 ///
 /// Ordering is part of the bridge contract because downstream renderers use
 /// the emitted sequence directly when presenting command lists.
-fn assert_app_names(commands: &[Value], expected: &[&str]) -> Result<(), Box<dyn Error>> {
+fn assert_app_names(commands: &[Value], expected: &[&str]) -> Result<(), TestError> {
     let actual = commands
         .iter()
         .filter_map(|command| command.get("app_name").and_then(Value::as_str))
@@ -236,17 +236,19 @@ fn assert_app_names(commands: &[Value], expected: &[&str]) -> Result<(), Box<dyn
 }
 
 /// Requires generated text to contain a marker and names the artefact on error.
-fn ensure_contains(haystack: &str, needle: &str, description: &str) -> Result<(), Box<dyn Error>> {
+fn ensure_contains(haystack: &str, needle: &str, description: &str) -> Result<(), TestError> {
     if haystack.contains(needle) {
-        return Ok(());
+        Ok(())
+    } else {
+        Err(format!("{description} should contain {needle:?}").into())
     }
-    Err(format!("{description} should contain {needle:?}").into())
 }
 
 /// Requires generated text to omit a marker and names the artefact on error.
-fn ensure_excludes(haystack: &str, needle: &str, description: &str) -> Result<(), Box<dyn Error>> {
-    if !haystack.contains(needle) {
-        return Ok(());
+fn ensure_excludes(haystack: &str, needle: &str, description: &str) -> Result<(), TestError> {
+    if haystack.contains(needle) {
+        Err(format!("{description} should not contain {needle:?}").into())
+    } else {
+        Ok(())
     }
-    Err(format!("{description} should not contain {needle:?}").into())
 }
