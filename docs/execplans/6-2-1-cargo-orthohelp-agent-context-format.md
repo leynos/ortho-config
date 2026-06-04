@@ -227,13 +227,15 @@ task into two. This section must always reflect the actual state of the work.
   cases) and the property test at
   `cargo-orthohelp/src/agent_context/proptests.rs` (single uniqueness
   invariant). (2026-06-04 03:12Z)
-- [ ] Milestone 5: Add the behavioural scenario at
+- [x] Milestone 5: Add the behavioural scenario at
   `cargo-orthohelp/tests/features/orthohelp_agent_context.feature` plus step
   definitions at
   `cargo-orthohelp/tests/rstest_bdd/behaviour/steps_agent_context.rs`. Add
   the matching insta snapshot at
-  `cargo-orthohelp/tests/golden/agent_context__fixture.json.snap` after
-  running `cargo insta review`.
+  `cargo-orthohelp/tests/golden/agent_context__fixture.json.snap` through a
+  focused golden test after running `cargo insta review`. Full gates and
+  CodeRabbit review passed after the BDD and snapshot work.
+  (2026-06-04 06:20Z)
 - [ ] Milestone 6: Update `docs/users-guide.md` with a "Agent-context output"
   subsection under the existing `cargo-orthohelp` material. Update
   `docs/developers-guide.md` with the positional-detection rule and the
@@ -285,6 +287,24 @@ work benefits.
   positional argument because `takes_value` is true. Two follow-up review
   attempts were rate-limited and used randomized `vsleep` backoff; the next
   attempt completed with zero findings.
+- Milestone 5 stores its insta snapshot directly at
+  `cargo-orthohelp/tests/golden/agent_context__fixture.json.snap` by setting
+  `snapshot_path => "."` and `prepend_module_to_snapshot => false` in the
+  golden test. `cargo insta review` reported no snapshots to review after the
+  update run.
+- Milestone 5 keeps the BDD scenario focused on externally observable
+  behaviour and uses a separate golden test for byte-for-byte snapshot
+  stability. This matches the existing test layout better than embedding the
+  snapshot assertion inside the BDD step module.
+- Clippy caught `panic_in_result_fn` in the Milestone 5 golden test before
+  CodeRabbit review. Returning an error for failed command status kept the
+  test diagnostics explicit and cleared the deterministic gate.
+- CodeRabbit's first Milestone 5 review requested a single-expression
+  `string_field` helper and `cap_std::fs_utf8::Dir` for reading the golden
+  fixture output. After those fixes, `make check-fmt`, `make typecheck`,
+  `make lint`, `make test`, `make markdownlint`, and the follow-up
+  `coderabbit review --agent` all passed; the final CodeRabbit review
+  reported zero findings.
 
 ## Decision log
 

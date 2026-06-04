@@ -1,0 +1,100 @@
+---
+source: cargo-orthohelp/tests/golden/agent_context_tests.rs
+expression: snapshot
+---
+{
+  "schema_version": "1",
+  "kind": "orthohelp_fixture.agent_context",
+  "package": "orthohelp_fixture",
+  "commands": [
+    {
+      "path": [
+        "fixture"
+      ],
+      "summary": "Orthohelp fixture configuration.",
+      "canonical_verb": null,
+      "inputs": [
+        {
+          "name": "config_path",
+          "long": "config-path",
+          "value_type": "string",
+          "required": false,
+          "default": null,
+          "enum_values": []
+        },
+        {
+          "name": "host",
+          "long": "host",
+          "value_type": "string",
+          "required": false,
+          "default": "String :: from(\"localhost\")",
+          "enum_values": []
+        },
+        {
+          "name": "is_legacy_mode",
+          "long": "is-legacy-mode",
+          "value_type": "bool",
+          "required": false,
+          "default": "false",
+          "enum_values": []
+        },
+        {
+          "name": "is_verbose",
+          "long": "is-verbose",
+          "value_type": "bool",
+          "required": false,
+          "default": "false",
+          "enum_values": []
+        },
+        {
+          "name": "log_level",
+          "long": "log-level",
+          "value_type": "LogLevel",
+          "required": false,
+          "default": "LogLevel :: Info",
+          "enum_values": []
+        },
+        {
+          "name": "port",
+          "long": "port",
+          "value_type": "integer",
+          "required": false,
+          "default": "8080",
+          "enum_values": []
+        },
+        {
+          "name": "timeout",
+          "long": "timeout",
+          "value_type": "integer",
+          "required": false,
+          "default": "30",
+          "enum_values": []
+        },
+        {
+          "name": "workers",
+          "long": "workers",
+          "value_type": "integer",
+          "required": false,
+          "default": "4",
+          "enum_values": []
+        }
+      ],
+      "output_modes": [],
+      "interaction_mode": "unknown",
+      "mutation_effect": "unknown",
+      "async_submission": null,
+      "delivery_route": null,
+      "pagination": null,
+      "examples": []
+    }
+  ],
+  "profiles": {
+    "supported": false
+  },
+  "feedback": {
+    "supported": false
+  },
+  "policy": {
+    "agent_native": "warn"
+  }
+}
