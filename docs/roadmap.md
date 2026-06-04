@@ -126,14 +126,14 @@ fields.
   - [x] Preserve deterministic command ordering so generated documentation and
     agent context are stable.
 
-- [ ] 6.1.2. Cover nested command trees with behavioural fixtures.
+- [x] 6.1.2. Cover nested command trees with behavioural fixtures.
   - Requires 6.1.1.
   - See cargo-orthohelp-design.md §§6-7 and agent-native-cli-design.md §4.
-  - [ ] Add a fixture CLI with at least one nested subcommand and one command
+  - [x] Add a fixture CLI with at least one nested subcommand and one command
     with no subcommands.
-  - [ ] Assert that generated IR includes the recursive tree, field metadata,
+  - [x] Assert that generated IR includes the recursive tree, field metadata,
     command names, examples, and Windows wrapper metadata where applicable.
-  - [ ] Ensure existing man-page and PowerShell output remains compatible when
+  - [x] Ensure existing man-page and PowerShell output remains compatible when
     subcommands are present.
 
 ### 6.2. Add compact agent-context output

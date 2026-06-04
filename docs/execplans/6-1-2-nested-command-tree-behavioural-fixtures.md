@@ -1253,8 +1253,9 @@ section must always reflect the actual current state of the work.
 - [x] (2026-06-04) Milestone 4 complete (nested
   `orthohelp_fixture` root type, end-to-end bridge smoke test, full
   gates, and CodeRabbit clear).
-- [ ] Milestone 5 complete (documentation, changelog, schema round-trip
-  fixture, roadmap entry marked done).
+- [x] (2026-06-04) Milestone 5 complete (documentation, changelog,
+  schema round-trip fixture, roadmap entry, full gates, and CodeRabbit
+  clear).
 - [ ] Draft pull request moved to ready-for-review.
 - [ ] Pull request merged into `main`.
 
@@ -1478,6 +1479,13 @@ what would be done differently next time.
   `make test`. `coderabbit review --agent` reported zero findings after
   documentation, implicit-return, and error-source concerns were
   resolved.
+- 2026-06-04: Milestone 5 completed. The schema round-trip sample now
+  includes a two-level nested command tree with child Windows metadata;
+  the cargo-orthohelp design, agent-native design, users guide,
+  developers guide, changelog, and roadmap now reference the completed
+  nested-fixture coverage. The focused schema test passed, followed by
+  `make check-fmt`, `make lint`, `make test`, `make markdownlint`, and
+  `make nixie`. `coderabbit review --agent` reported zero findings.
 
 ## Notes for the accompanying draft pull request
 
@@ -1517,3 +1525,6 @@ remaining work.
   outcome.
 - 2026-06-04 (implementer): recorded Milestone 4 end-to-end bridge
   fixture, validation, discoveries, and CodeRabbit review outcome.
+- 2026-06-04 (implementer): recorded Milestone 5 documentation,
+  schema round-trip, roadmap close-out, validation, and CodeRabbit
+  review outcome.

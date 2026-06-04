@@ -20,6 +20,11 @@ All notable changes to this project will be documented in this file.
   emit per-variant documentation metadata.
 - Populate recursive `DocMetadata.subcommands` values from `OrthoConfig`
   structs that hold a `#[command(subcommand)]` field.
+- Add behavioural fixtures and step definitions covering nested subcommand
+  trees (`ortho_config/tests/features/docs_ir_nested.feature`).
+- Add renderer compatibility tests and `insta` golden snapshots for populated
+  nested-subcommand `DocMetadata`
+  (`cargo-orthohelp/tests/golden/nested_subcommand_snapshots.rs`).
 
 ### Changed
 

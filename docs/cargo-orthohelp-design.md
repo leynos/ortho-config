@@ -450,6 +450,9 @@ Deterministic IDs when omitted:
   recursive `subcommands`.
 - Subcommand names default to kebab-cased enum variant names and honour
   `#[command(name = "...")]` / `#[clap(name = "...")]` overrides.
+- Renderer regressions on populated nested trees are gated by targeted tests
+  and `insta` snapshots in
+  `cargo-orthohelp/tests/golden/nested_subcommand_snapshots.rs`.
 
 ## 4. Localization model
 
@@ -942,7 +945,23 @@ those formats.
       "app_name": "run",
       "about_id": "run.about",
       "fields": [],
-      "subcommands": []
+      "windows": null,
+      "subcommands": [
+        {
+          "ir_version": "1.1",
+          "app_name": "audit",
+          "about_id": "audit.about",
+          "fields": [],
+          "windows": {
+            "module_name": "MyAppAdmin",
+            "export_aliases": ["my-app-audit"],
+            "include_common_parameters": false,
+            "split_subcommands_into_functions": true,
+            "help_info_uri": null
+          },
+          "subcommands": []
+        }
+      ]
     }
   ]
 }
