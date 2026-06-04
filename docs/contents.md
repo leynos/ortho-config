@@ -80,8 +80,8 @@
   requirements.
 - [Localizable Rust libraries with Fluent](localizable-rust-libraries-with-fluent.md):
   understand the Fluent localization approach used by OrthoConfig.
-- [CLI localisation surface design](cli-localization-design.md): proposed
-  promotion of the load-bearing localisation helpers (`LocalizeCmd`,
+- [CLI localization surface design](cli-localization-design.md): proposed
+  promotion of the load-bearing localization helpers (`LocalizeCmd`,
   `BootLocalizer`, widened clap-error coverage, `i18n-embed` bridge,
   derive-emitted identifiers) from the `hello_world` example to crate API.
 - [Reliable testing in Rust via dependency injection](reliable-testing-in-rust-via-dependency-injection.md):

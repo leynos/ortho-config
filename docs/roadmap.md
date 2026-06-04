@@ -13,7 +13,7 @@ The source documents for this roadmap are:
 - [Agent-native CLI assistance design](agent-native-cli-design.md);
 - [OrthoConfig IR documentation design for cargo-orthohelp](cargo-orthohelp-design.md);
 - [Improved error message design](improved-error-message-design.md);
-- [CLI localisation surface design](cli-localization-design.md);
+- [CLI localization surface design](cli-localization-design.md);
 - [DDLint gap analysis](ddlint-gap-analysis.md);
 - [ADR-001: Replace `serde_yaml` with `serde-saphyr`](adr-001-replace-serde-yaml-with-serde-saphyr.md);
 - [ADR-002: Replace `cucumber-rs` with `rstest-bdd`](adr-002-replace-cucumber-with-rstest-bdd.md);
@@ -515,13 +515,13 @@ are working.
 - [ ] 10.2.3. Investigate live reloading of configuration when files change.
   - See design.md §8.
 
-## 11. Promote and widen the CLI localisation surface
+## 11. Promote and widen the CLI localization surface
 
-This phase promotes the load-bearing localisation helpers from the
+This phase promotes the load-bearing localization helpers from the
 `hello_world` example to first-class crate surface, widens clap-error
 translation coverage, names a locale-resolution lifecycle that survives the
 locale-flag chicken-and-egg, bridges OrthoConfig with `i18n-embed`, and
-extends the derive so localisation identifiers are generated rather than
+extends the derive so localization identifiers are generated rather than
 hand-authored. The design lives in
 [cli-localization-design.md](cli-localization-design.md). Sequencing is
 quality-of-life-first: §11.1 and §11.2 carry no policy risk, while §11.3
@@ -539,7 +539,7 @@ and later progressively add opinion.
   - [ ] Expose `LocalizeCmd::with_base("…")` for applications that share a
     catalogue across multiple binaries.
   - [ ] Add the public `ortho_config::message_id_for(&command_path, suffix)`
-    function with documented identifier shape, ASCII normalisation rules,
+    function with documented identifier shape, ASCII normalization rules,
     and panic-on-collision behaviour.
   - [ ] Success: the `hello_world` example deletes its local
     `LocalizeCmd` impl and re-exports the crate one for one release.
@@ -567,7 +567,7 @@ and later progressively add opinion.
     `OrthoConfigLocalization` so the docs IR picks up the same identifiers.
   - [ ] Emit `${OUT_DIR}/ortho-config/cli-identifiers.json` with a 1 MiB
     cap and split-file behaviour for larger trees.
-  - [ ] Add a compile-time `compile_error!` for fields whose normalised
+  - [ ] Add a compile-time `compile_error!` for fields whose normalized
     identifiers collide.
 
 ### 11.2. Widen clap-error coverage and preserve clap's rich context
@@ -582,21 +582,22 @@ and later progressively add opinion.
     identifiers).
   - [ ] Expose `pub const CLAP_ERROR_IDS: &[(clap::error::ErrorKind,
     &str)]` so consumers can iterate, validate, and write coverage tests.
-  - [ ] Add a `const_assert_eq!` test that fails when clap adds an
-    `ErrorKind` variant via a patch release. The test reads the pinned clap
-    version from `Cargo.lock`.
+  - [ ] Implement the mechanical coverage gate (build script plus
+    `const_assert_eq!`) as specified in
+    [cli-localization-design.md §6.1](cli-localization-design.md). The
+    design document owns the mechanism; this task implements it.
 
-- [ ] 11.2.2. Switch error localisation to clap's mutation surface.
+- [ ] 11.2.2. Switch error localization to clap's mutation surface.
   - Requires 11.2.1.
   - See cli-localization-design.md §6.4.
   - [ ] Rewrite `localize_clap_error_with_command` to call
     `clap::error::Error::insert(ContextKind::Custom, ...)` plus
     `Error::format(cmd)` rather than `Error::raw`, so the usage tail,
     suggestion list, and styling survive.
-  - [ ] Run the localisation eagerly inside `try_parse_localized*` so the
+  - [ ] Run the localization eagerly inside `try_parse_localized*` so the
     error is fully rendered before it escapes the helper's stack frame.
   - [ ] Add behavioural tests that prove the suggestion list survives
-    localisation on at least `UnknownArgument` and `InvalidSubcommand`.
+    localization on at least `UnknownArgument` and `InvalidSubcommand`.
   - [ ] Deprecate the old `Error::raw` path with a removal note for the
     next minor release.
 
@@ -630,7 +631,7 @@ and later progressively add opinion.
   - [ ] Define `LocaleResolver` with `boot_locale()` and
     `merged_locale(explicit)`.
   - [ ] Ship `EnvLocaleResolver` (LC_ALL → LC_MESSAGES → LANG, with POSIX
-    normalisation and `C`/`POSIX` special-cases), `FixedLocaleResolver`,
+    normalization and `C`/`POSIX` special-cases), `FixedLocaleResolver`,
     and `ConfigLocaleResolver`.
   - [ ] Document `EnvLocaleResolver` as opt-in: daemons and embedded
     interfaces are entitled to write their own resolver.
@@ -644,9 +645,12 @@ and later progressively add opinion.
     so the merge-phase locale, and optionally a fresh resolver, can be
     applied without rebuilding the factory.
   - [ ] Implement `Drop` for `BootHandle<Boot>` that emits a `warn`-level
-    tracing event when finalisation was missed.
-  - [ ] Implement `BootHandle::build_failed()` for degraded-mode banners
-    and exponential-backoff re-emission of the build-failure event.
+    tracing event when finalization was missed.
+  - [ ] Implement `BootHandle::build_failed()` on both `BootHandle<Boot>`
+    and `BootHandle<Final>` (see cli-localization-design.md §5.2) so
+    degraded-mode banners can be surfaced before parsing and again after
+    merge. Re-emit the build-failure event from `finalize` with
+    exponential backoff.
 
 - [ ] 11.3.3. Document the snapshot-per-parse contract.
   - Requires 11.3.2.
@@ -747,9 +751,9 @@ and later progressively add opinion.
     `LayeredLocalizer` wrappers to the promoted crate surface.
   - [ ] Note that `localize_clap_error_with_command` is deprecated in 0.9
     and removed in 0.10; consumers move to `LocalizedParse` for parse-time
-    localisation.
+    localization.
   - [ ] Spell out the `BootHandle` two-phase flow with a worked example so
-    consumers cannot accidentally skip finalisation.
+    consumers cannot accidentally skip finalization.
 
 - [ ] 11.7.3. Add a migration note for `spycatcher-harness`.
   - Requires 11.4.1.
