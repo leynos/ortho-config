@@ -209,11 +209,12 @@ task into two. This section must always reflect the actual state of the work.
   `ortho_config/src/agent_context/tests.rs` cases. Update
   `docs/cargo-orthohelp-design.md` §6.3.1 to record the inclusion of a short
   command summary in the transform. (2026-06-04 01:06Z)
-- [ ] Milestone 2: Add `OutputFormat::AgentContext` to
+- [x] Milestone 2: Add `OutputFormat::AgentContext` to
   `cargo-orthohelp/src/cli.rs`. Update existing parser unit tests: keep the
   `--format` `value_enum` rejection coverage by switching the rejected token
   in `format_rejects_unsupported_values` (for example, to `xml`) and add a
   positive test that accepts `agent-context`.
+  (2026-06-04 01:19Z)
 - [ ] Milestone 3: Create `cargo-orthohelp/src/agent_context/mod.rs` with
   `bridge_ir_to_agent_context`, the deterministic verb-mapping table, and the
   helper that flattens a `DocMetadata` tree into `Vec<AgentCommand>`. Wire
@@ -252,6 +253,8 @@ work benefits.
   `clippy::indexing_slicing`. The test now uses `first_mut().expect(...)`
   so failures report intent rather than panic at an implicit index.
 - `coderabbit review --agent` completed with zero findings after Milestone 1
+  validation.
+- `coderabbit review --agent` completed with zero findings after Milestone 2
   validation.
 
 ## Decision log

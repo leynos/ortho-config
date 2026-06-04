@@ -23,6 +23,8 @@ pub enum OutputFormat {
     Ps,
     /// Emit all outputs (IR, man pages, and `PowerShell` help).
     All,
+    /// Emit compact agent-context JSON output.
+    AgentContext,
 }
 
 /// Parsed Cargo external-subcommand entrypoint for `cargo-orthohelp`.
@@ -180,6 +182,14 @@ mod tests {
     }
 
     #[test]
+    fn format_accepts_agent_context() {
+        let cli = Cli::parse_from(["cargo-orthohelp", "orthohelp", "--format", "agent-context"]);
+        let CargoSubcommand::Orthohelp(args) = cli.command;
+
+        assert!(matches!(args.format, OutputFormat::AgentContext));
+    }
+
+    #[test]
     fn parses_cargo_injected_subcommand_arguments() {
         let cli = Cli::parse_from([
             "cargo-orthohelp",
@@ -216,9 +226,8 @@ mod tests {
 
     #[test]
     fn format_rejects_unsupported_values() {
-        let error =
-            Cli::try_parse_from(["cargo-orthohelp", "orthohelp", "--format", "agent-context"])
-                .expect_err("unsupported formats should fail before generation");
+        let error = Cli::try_parse_from(["cargo-orthohelp", "orthohelp", "--format", "xml"])
+            .expect_err("unsupported formats should fail before generation");
 
         assert_eq!(error.kind(), ErrorKind::InvalidValue);
     }
@@ -271,7 +280,7 @@ mod tests {
             should_cache in any::<bool>(),
             should_skip_build in any::<bool>(),
             should_split_man_subcommands in any::<bool>(),
-            format in prop::sample::select(vec!["ir", "man", "ps", "all"]),
+            format in prop::sample::select(vec!["ir", "man", "ps", "all", "agent-context"]),
             man_section in 1_u8..=8,
             should_split_ps_subcommands in prop::option::of(any::<bool>()),
             should_include_common_parameters in prop::option::of(any::<bool>()),
@@ -342,6 +351,7 @@ mod tests {
                     | ("man", OutputFormat::Man)
                     | ("ps", OutputFormat::Ps)
                     | ("all", OutputFormat::All)
+                    | ("agent-context", OutputFormat::AgentContext)
             ));
         }
     }
