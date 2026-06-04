@@ -684,9 +684,6 @@ in warning mode before enforcing it in CI.
 
 The design and roadmap updates must address these known gaps:
 
-- compact agent-context output does not yet consume generated
-  `DocMetadata.subcommands`;
-- no compact agent-context format exists;
 - no agent-native lint command exists;
 - the improved `MissingRequiredValues` diagnostic is reconciled as proposed
   phase 7 work, but is not yet implemented;

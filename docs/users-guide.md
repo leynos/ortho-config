@@ -1240,21 +1240,21 @@ struct also derives `Deserialize`, mark the selector with `#[serde(skip)]` and
 provide a default command value so serde does not require the command enum to
 deserialize from configuration files.
 
-The documentation IR is the human documentation contract. The future
-agent-native work will add a compact, independently versioned sibling
-agent-context output for command invocation, vocabulary checks, structured
-output policy, bounded list metadata, and mutation boundaries. Consumers can
-rely on OrthoConfig to model, generate, serialize, and lint reusable command
-contracts; application crates still own command execution and side effects. See
+The documentation IR is the human documentation contract. Agent-native work
+adds a compact, independently versioned sibling agent-context output for
+command invocation, vocabulary checks, structured output policy, bounded list
+metadata, and mutation boundaries. Consumers can rely on OrthoConfig to model,
+generate, serialize, and lint reusable command contracts; application crates
+still own command execution and side effects. See
 [Agent-native CLI assistance design](agent-native-cli-design.md) for the
 canonical boundary and [Roadmap](roadmap.md) for the implementation sequence.
 
 Existing `cargo-orthohelp` documentation outputs are compatibility surfaces.
 Until a versioned migration is approved, `--format ir`, `--format man`,
 `--format ps`, and `--format all` keep their accepted spellings, defaulting,
-output paths, and success/failure behaviour. New agent-context metadata,
-policy reports, or JSON status output are added beside those formats rather
-than changing them.
+output paths, and success/failure behaviour. Agent-context output, policy
+reports, or JSON status output are added beside those formats rather than
+changing them.
 
 Crates that only consume human-facing documentation do not need to adopt
 agent-context metadata. A package that installs generated man pages or
@@ -1262,7 +1262,7 @@ PowerShell help can keep treating those files as the public documentation
 artefacts. A crate that parses localized IR directly should tolerate additive
 optional fields and should apply documented defaults for fields omitted by
 older derives, but it should not depend on agent-context or policy-report
-fields unless it opts into those newer formats.
+fields unless it opts into those formats.
 The consumer dependency tiers for downstream applications are defined in
 [Agent-native CLI assistance design](agent-native-cli-design.md) §2.2. Human
 documentation consumers may continue to use the existing roff and PowerShell
@@ -1296,6 +1296,32 @@ cargo orthohelp --out-dir target/orthohelp --locale en-US
 `target/orthohelp/<hash>/ir.json`, while `--no-build` skips the bridge build
 and fails if the cache is missing. The generated per-locale JSON lives under
 `<out>/ir/<locale>.json` and is ready for downstream generators.
+
+### Generating agent-context output
+
+`cargo-orthohelp` can generate compact agent-context JSON from the same bridge
+metadata as the human documentation outputs. Use `--format agent-context` to
+write one machine-oriented manifest for the selected package:
+
+```bash
+cargo orthohelp --format agent-context --out-dir target/orthohelp
+```
+
+The output file is `<out>/agent-context.json`. It contains
+`schema_version`, `kind`, `package`, and a flat `commands` array. Each command
+entry carries the full command path, an optional concise summary, a canonical
+verb when the command name matches the supported vocabulary, and one input
+entry per generated flag or positional argument.
+
+Agent-context output is not localized. It deliberately omits long prose,
+Fluent message identifiers, roff fragments, and PowerShell wrapper/help
+structures. For the current schema, positional arguments are represented as
+inputs without `long` or `short` flag names.
+
+`interaction_mode`, `mutation_effect`, and `policy.agent_native` currently use
+unknown or missing defaults unless richer agent-native metadata is declared by
+later roadmap work. Treat those fields as placeholders, not as proof that a
+command is non-interactive, read-only, or policy-checked.
 
 ### Generating man pages
 

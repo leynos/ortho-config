@@ -236,10 +236,11 @@ task into two. This section must always reflect the actual state of the work.
   focused golden test after running `cargo insta review`. Full gates and
   CodeRabbit review passed after the BDD and snapshot work.
   (2026-06-04 06:20Z)
-- [ ] Milestone 6: Update `docs/users-guide.md` with a "Agent-context output"
+- [x] Milestone 6: Update `docs/users-guide.md` with a "Agent-context output"
   subsection under the existing `cargo-orthohelp` material. Update
   `docs/developers-guide.md` with the positional-detection rule and the
   fact that the agent-context output is not localized.
+  (2026-06-04 06:25Z)
 - [ ] Milestone 7: Run `make check-fmt`, `make typecheck`, `make lint`,
   `make test`, `make markdownlint`, `make nixie`, then `coderabbit review
   --agent` and resolve all findings. Mark roadmap §6.2.1 as done in
@@ -305,6 +306,13 @@ work benefits.
   `make lint`, `make test`, `make markdownlint`, and the follow-up
   `coderabbit review --agent` all passed; the final CodeRabbit review
   reported zero findings.
+- Milestone 6 updates the user and developer docs to treat `--format
+  agent-context` as an implemented output while keeping `--json`,
+  `--check-agent-native`, and policy-report generation as future work.
+  `docs/agent-native-cli-design.md` no longer lists missing compact
+  agent-context output or missing subcommand consumption as current gaps.
+- `coderabbit review --agent` completed with zero findings after Milestone 6
+  documentation validation.
 
 ## Decision log
 

@@ -517,15 +517,15 @@ cargo orthohelp \
   [--cache] [--no-build]
 ```
 
-`ir`, `man`, `ps`, and `all` are the currently implemented legacy-compatible
+`ir`, `man`, `ps`, `agent-context`, and `all` are the currently implemented
 formats. The current default is `ir`; unsupported format values fail during
-Clap parsing before generation begins. `--format agent-context`, `--json`, and
-`--check-agent-native` are planned agent-native additions. Until they are
-implemented, the existing formats remain the only generated artefacts. When
-`--json` is provided in a future migration, success must emit exactly one JSON
-result document to stdout and nothing to stderr. Failure must emit no stdout,
-unless a non-JSON artefact was explicitly delivered earlier, and exactly one
-JSON diagnostic document to stderr.
+Clap parsing before generation begins. `--json` and `--check-agent-native` are
+planned agent-native additions. Until they are implemented, generated
+artefacts continue to report success or failure through process exit status.
+When `--json` is provided in a future migration, success must emit exactly one
+JSON result document to stdout and nothing to stderr. Failure must emit no
+stdout, unless a non-JSON artefact was explicitly delivered earlier, and
+exactly one JSON diagnostic document to stderr.
 
 The existing format behaviours are compatibility contracts until a versioned
 migration is explicitly approved:
@@ -539,14 +539,18 @@ migration is explicitly approved:
   `<out>/powershell/<ModuleName>/`, including module files, localized MAML
   help, about topics, and default `en-US` support unless
   `--ensure-en-us false` is supplied.
+- `--format agent-context` writes one compact JSON document at
+  `<out>/agent-context.json`.
 - `--format all` generates IR, then man pages, then PowerShell artefacts in a
   single invocation. It reports success or failure through process exit status
-  and does not introduce structured stdout.
+  and does not include `agent-context`.
 
-Agent-context output, policy output, and JSON status output must be added beside
-these contracts. They may not change the accepted `ir`, `man`, `ps`, or `all`
-spellings, the default format, the generated file paths, or the process
-success/failure contract without a separate approved migration.
+Agent-context output is added beside the human documentation formats. Policy
+output and JSON status output must also be added beside these contracts when
+implemented. They may not change the accepted `ir`, `man`, `ps`,
+`agent-context`, or `all` spellings, the default format, the generated file
+paths, or the process success/failure contract without a separate approved
+migration.
 
 `Cargo.toml` defaults:
 
@@ -593,7 +597,7 @@ cache.
 
 ### 6.3.1 Agent-context pipeline additions
 
-Agent-context generation should reuse the same bridge output, then transform
+Agent-context generation reuses the same bridge output, then transforms
 the documentation-oriented metadata into the compact contract described in
 [agent-native-cli-design.md](agent-native-cli-design.md). The transform must:
 
@@ -625,6 +629,8 @@ does not emit Fluent identifiers, long help text, roff fragments, or
 PowerShell help structures. Positional inputs are detected from existing CLI
 metadata when an input has no `long` or `short` flag and still takes a value;
 the v1 schema represents those inputs by leaving `AgentInput.long` absent.
+The output is written as exactly one file at `<out>/agent-context.json`.
+`--format all` continues to mean `ir + man + ps`.
 
 The agent-context output must not be scraped from rendered man pages or
 PowerShell help. Rendering surfaces may consume agent metadata for examples or
