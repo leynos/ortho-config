@@ -1250,8 +1250,9 @@ section must always reflect the actual current state of the work.
   markdownlint`, and CodeRabbit clear).
 - [x] (2026-06-04) Milestone 3 complete (renderer unit tests, nested
   snapshots, full gates, and CodeRabbit clear).
-- [ ] Milestone 4 complete (end-to-end bridge smoke test passes;
-  example crate wired).
+- [x] (2026-06-04) Milestone 4 complete (nested
+  `orthohelp_fixture` root type, end-to-end bridge smoke test, full
+  gates, and CodeRabbit clear).
 - [ ] Milestone 5 complete (documentation, changelog, schema round-trip
   fixture, roadmap entry marked done).
 - [ ] Draft pull request moved to ready-for-review.
@@ -1316,6 +1317,24 @@ risks. Document with evidence so future work benefits.
   the workspace `self_named_module_files = "deny"` lint. The schema tests
   moved to `cargo-orthohelp/src/schema/tests/mod.rs` with no behavioural
   change.
+- 2026-06-04: The existing `cargo-orthohelp` bridge module is private to
+  the binary crate. Calling it from an integration test would require a
+  public or test-only library API expansion, so Milestone 4 drives the
+  same bridge through the established `cargo-orthohelp` binary harness.
+- 2026-06-04: The `orthohelp_fixture` locale catalogue previously
+  covered only the flat fixture root. The nested end-to-end roff
+  assertion initially saw `[missing: ortho.headings.commands]`; adding
+  focused en-US heading and nested-command messages lets the smoke test
+  assert user-facing `COMMANDS` output.
+- 2026-06-04: CodeRabbit suggested invoking the compiled
+  `cargo-orthohelp` test binary without the injected `orthohelp` token
+  in the Milestone 4 smoke test. Existing `cli_dispatch.rs` coverage
+  intentionally rejects that direct option shape, so the test keeps the
+  supported Cargo external-subcommand dispatch form.
+- 2026-06-04: The Milestone 4 test originally added assertion context
+  with `format!`, which erased the original error source. A tiny local
+  `AssertionFailure` wrapper now preserves `Error::source()` without
+  adding `anyhow` or `eyre` to `cargo-orthohelp`.
 
 ## Decision log
 
@@ -1400,6 +1419,23 @@ design choices.
   violate this plan's "no new public API" constraint. The macro module
   removes duplicate fixture logic while keeping the public crate surface
   unchanged. Date/Author: 2026-06-04 (implementer).
+- Decision: implement the end-to-end bridge fixture as a second root
+  type in the existing `orthohelp_fixture` crate and select it with
+  `--root-type`. Rationale: this keeps the package metadata default
+  root and existing bridge tests stable while avoiding unrelated
+  `examples/hello_world` runtime and localisation churn. Date/Author:
+  2026-06-04 (implementer).
+- Decision: drive Milestone 4 through the compiled `cargo-orthohelp`
+  binary rather than making `bridge` a public library module. Rationale:
+  the existing integration-test harness already exercises the bridge via
+  the normal Cargo external-subcommand path, and exposing bridge internals
+  would conflict with this plan's no-public-API-change constraint.
+  Date/Author: 2026-06-04 (implementer).
+- Decision: keep `PowerShell` split-wrapper end-to-end assertions
+  one-level deep. Rationale: generated wrapper functions expose the
+  first-level commands and delegate deeper command dispatch to the
+  executable, while MAML and roff renderer coverage assert the nested
+  command documentation itself. Date/Author: 2026-06-04 (implementer).
 
 ## Outcomes & retrospective
 
@@ -1432,6 +1468,16 @@ what would be done differently next time.
   `make check-fmt`, `make lint`, `make test`, `make markdownlint`, and
   `make nixie` passed before `coderabbit review --agent`, which reported
   zero findings after earlier fixture-sharing concerns were resolved.
+- 2026-06-04: Milestone 4 completed. The existing `orthohelp_fixture`
+  crate now exposes a second nested root selected via `--root-type`, and
+  `cargo-orthohelp/tests/nested_subcommand_end_to_end.rs` drives the
+  compiled binary through the bridge for IR, split roff, and
+  `PowerShell` output. The focused
+  `cargo test -p cargo-orthohelp --test nested_subcommand_end_to_end`
+  check passed, followed by `make check-fmt`, `make lint`, and
+  `make test`. `coderabbit review --agent` reported zero findings after
+  documentation, implicit-return, and error-source concerns were
+  resolved.
 
 ## Notes for the accompanying draft pull request
 
@@ -1469,3 +1515,5 @@ remaining work.
 - 2026-06-04 (implementer): recorded Milestone 3 renderer coverage,
   snapshot baselines, validation, discoveries, and CodeRabbit review
   outcome.
+- 2026-06-04 (implementer): recorded Milestone 4 end-to-end bridge
+  fixture, validation, discoveries, and CodeRabbit review outcome.
