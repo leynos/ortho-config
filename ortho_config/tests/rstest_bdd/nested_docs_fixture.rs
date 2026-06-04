@@ -2,7 +2,22 @@
 
 use clap::{Args, Parser, Subcommand};
 use ortho_config::{OrthoConfig, OrthoConfigSubcommandDocs};
+use rstest::fixture;
+use rstest_bdd::Slot;
+use rstest_bdd_macros::ScenarioState;
 use serde::{Deserialize, Serialize};
+
+/// Scenario state for nested documentation IR scenarios.
+#[derive(Debug, Default, ScenarioState)]
+pub struct NestedDocsContext {
+    pub metadata: Slot<ortho_config::docs::DocMetadata>,
+}
+
+/// Provides a clean nested documentation context for IR scenarios.
+#[fixture]
+pub fn nested_docs_context() -> NestedDocsContext {
+    NestedDocsContext::default()
+}
 
 /// Root configuration for recursive documentation metadata assertions.
 #[derive(Debug, Parser, Deserialize, Serialize, OrthoConfig)]

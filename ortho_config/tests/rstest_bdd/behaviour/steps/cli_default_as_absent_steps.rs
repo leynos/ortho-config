@@ -26,7 +26,11 @@ where
 }
 
 /// Helper to set a source value after normalization
-fn set_source_value<F>(cli_default_context: &CliDefaultContext, value: String, setter: F) -> Result<()>
+fn set_source_value<F>(
+    cli_default_context: &CliDefaultContext,
+    value: String,
+    setter: F,
+) -> Result<()>
 where
     F: FnOnce(&mut CliDefaultSources, String),
 {

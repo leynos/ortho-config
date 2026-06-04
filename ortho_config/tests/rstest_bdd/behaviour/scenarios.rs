@@ -2,10 +2,10 @@
 
 use crate::scenario_state::{
     CliDefaultContext, CollectionContext, ComposerContext, DocsContext, ErrorContext,
-    ExtendsContext, FlattenContext, LocalizerContext, MergeErrorContext, RulesContext,
-    SubcommandContext, binary_name, cli_default_context, collection_context, composer_context,
-    context, docs_context, error_context, extends_context, flatten_context, merge_error_context,
-    rules_context, subcommand_context,
+    ExtendsContext, FlattenContext, LocalizerContext, MergeErrorContext, NestedDocsContext,
+    RulesContext, SubcommandContext, binary_name, cli_default_context, collection_context,
+    composer_context, context, docs_context, error_context, extends_context, flatten_context,
+    merge_error_context, nested_docs_context, rules_context, subcommand_context,
 };
 use rstest_bdd_macros::scenarios;
 
@@ -32,6 +32,10 @@ scenarios!(
 scenarios!(
     "tests/features/docs_ir.feature",
     fixtures = [docs_context: DocsContext]
+);
+scenarios!(
+    "tests/features/docs_ir_nested.feature",
+    fixtures = [nested_docs_context: NestedDocsContext]
 );
 scenarios!(
     "tests/features/error_aggregation.feature",

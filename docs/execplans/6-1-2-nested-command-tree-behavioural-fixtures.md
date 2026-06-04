@@ -1245,7 +1245,9 @@ section must always reflect the actual current state of the work.
   markdownlint and nixie clean, CodeRabbit clear).
 - [x] (2026-06-04) Milestone 1 complete (fixture types added; recursive
   `rstest` assertions pass; CodeRabbit clear).
-- [ ] Milestone 2 complete (rstest-bdd scenarios bind and pass).
+- [x] (2026-06-04) Milestone 2 complete (rstest-bdd scenarios bind and
+  pass; `make check-fmt`, `make lint`, `make test`, `make
+  markdownlint`, and CodeRabbit clear).
 - [ ] Milestone 3 complete (renderer compatibility tests and `insta`
   snapshots pass; baselines committed).
 - [ ] Milestone 4 complete (end-to-end bridge smoke test passes;
@@ -1283,6 +1285,18 @@ risks. Document with evidence so future work benefits.
   is incompatible with `OrthoConfig`, whose derive parser requires
   named-field structs. The fixture now keeps the empty braced struct
   and documents the derive constraint in place.
+- 2026-06-04: `cargo test -p ortho_config -- --list` showed the
+  existing `ortho_config/tests/rstest_bdd/mod.rs` scaffold was not a
+  Cargo integration-test entry point, so neither the pre-existing BDD
+  features nor the new nested feature were registered as tests. Milestone
+  2 now adds an explicit `[[test]]` target named `rstest_bdd` pointing at
+  that module.
+- 2026-06-04: Enabling the dormant `rstest_bdd` target exposed
+  pre-existing Clippy findings across the BDD harness. Refactoring every
+  existing step module is out of scope for roadmap item 6.1.2, so the
+  integration-test entry point now carries a scoped crate-level lint
+  allowance with an explanatory reason. A future cleanup can remove the
+  allowance after normalising the existing BDD steps.
 
 ## Decision log
 
@@ -1332,6 +1346,15 @@ design choices.
   through the workspace build. If review prefers a dedicated fixture
   crate, this is reversible with a small edit. Date/Author: 2026-05-31
   (planner).
+- Decision: register `ortho_config/tests/rstest_bdd/mod.rs` as an
+  explicit Cargo integration-test target and keep the newly exposed
+  pre-existing Clippy debt contained behind a crate-scoped allowance on
+  that test target. Rationale: without the `[[test]]` entry, neither
+  the old behavioural scenarios nor the new nested scenarios are
+  observable under `make test`; refactoring the entire dormant BDD
+  harness would exceed the scope of roadmap item 6.1.2. The allowance is
+  local to the integration-test crate and names the follow-up cleanup.
+  Date/Author: 2026-06-04 (implementation).
 - Decision: bind new behavioural scenarios to a new
   `NestedDocsContext` rather than reusing `DocsContext`. Rationale:
   fixture isolation; the existing `DocsContext` already holds a
@@ -1357,7 +1380,6 @@ Summarise outcomes, gaps, and lessons learned at major milestones or
 at completion. Compare the result against the original purpose. Note
 what would be done differently next time.
 
-- (none yet — populate at completion)
 - 2026-06-04: Milestone 0 completed. `make markdownlint` and
   `make nixie` passed, and `coderabbit review --agent` reported
   zero findings for the approval/status update.
@@ -1368,6 +1390,13 @@ what would be done differently next time.
   recursive tree assertions.
 - 2026-06-04: Milestone 1 completed after resolving CodeRabbit review.
   The final `coderabbit review --agent` pass reported zero findings.
+- 2026-06-04: Milestone 2 completed. The `rstest_bdd` integration-test
+  target is now registered under Cargo, the nested docs feature binds to
+  a dedicated `NestedDocsContext`, and the behavioural suite covers
+  top-level command ordering, command fields, empty leaf commands,
+  nested command ordering, and Windows metadata. The targeted BDD suite
+  passed with 54 scenarios, `make check-fmt`, `make lint`, `make test`,
+  and `make markdownlint` passed, and CodeRabbit reported zero findings.
 
 ## Notes for the accompanying draft pull request
 
@@ -1399,4 +1428,6 @@ remaining work.
 - 2026-06-04 (implementer): recorded successful Milestone 0 validation
   and CodeRabbit review outcome.
 - 2026-06-04 (implementer): recorded Milestone 1 fixture implementation,
+  validation, discoveries, and CodeRabbit review outcome.
+- 2026-06-04 (implementer): recorded Milestone 2 BDD harness binding,
   validation, discoveries, and CodeRabbit review outcome.
