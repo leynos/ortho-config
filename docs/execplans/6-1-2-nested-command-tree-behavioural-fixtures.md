@@ -5,7 +5,7 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
 proceeds.
 
-Status: DRAFT
+Status: IN PROGRESS
 
 This plan covers roadmap item 6.1.2 only. It builds on roadmap item 6.1.1
 (see `docs/execplans/6-1-1-recursive-doc-metadata-subcommands-values.md`),
@@ -1239,9 +1239,10 @@ partially completed task into two ("done" vs. "remaining"). This
 section must always reflect the actual current state of the work.
 
 - [x] (2026-05-31) Draft ExecPlan created.
-- [ ] Maintainer approval recorded; status set to `APPROVED`.
-- [ ] Milestone 0 complete (plan approved, markdownlint and nixie
-  clean, CodeRabbit clear).
+- [x] (2026-06-04) Maintainer approval recorded; status set to
+  `IN PROGRESS` because implementation has begun.
+- [x] (2026-06-04) Milestone 0 complete (plan approved,
+  markdownlint and nixie clean, CodeRabbit clear).
 - [ ] Milestone 1 complete (fixture types added; recursive `rstest`
   assertions pass).
 - [ ] Milestone 2 complete (rstest-bdd scenarios bind and pass).
@@ -1261,7 +1262,11 @@ Use timestamps to detect tolerance breaches and to feed retrospectives.
 Unexpected findings during implementation that were not anticipated as
 risks. Document with evidence so future work benefits.
 
-- (none yet — populate during implementation)
+- 2026-06-04: `leta files` accepts one path argument, not multiple path
+  arguments. Repository orientation therefore used one invocation per
+  relevant path (`ortho_config/tests`, `cargo-orthohelp/src`, and
+  `cargo-orthohelp/tests`). This affects only navigation, not the
+  implementation design.
 
 ## Decision log
 
@@ -1317,6 +1322,12 @@ design choices.
   `Slot<DocMetadata>` for the `DocsConfig` walkthrough. Sharing it
   risks scenario interleaving issues with the rstest-bdd harness.
   Date/Author: 2026-05-31 (planner).
+- Decision: treat the maintainer's 2026-06-04 instruction to
+  "proceed with implementation" as explicit approval of the existing
+  ExecPlan. Rationale: the instruction directly requests execution of
+  this plan and supplies milestone validation requirements, so a
+  separate approval pause would contradict the current task. Date/Author:
+  2026-06-04 (implementer).
 
 ## Outcomes & retrospective
 
@@ -1325,6 +1336,9 @@ at completion. Compare the result against the original purpose. Note
 what would be done differently next time.
 
 - (none yet — populate at completion)
+- 2026-06-04: Milestone 0 completed. `make markdownlint` and
+  `make nixie` passed, and `coderabbit review --agent` reported
+  zero findings for the approval/status update.
 
 ## Notes for the accompanying draft pull request
 
@@ -1350,3 +1364,8 @@ entry states what changed, why it changed, and how it affects
 remaining work.
 
 - 2026-05-31 (planner): initial draft created.
+- 2026-06-04 (implementer): recorded approval, moved status to
+  `IN PROGRESS`, and added the initial navigation discovery before
+  implementation edits.
+- 2026-06-04 (implementer): recorded successful Milestone 0 validation
+  and CodeRabbit review outcome.
