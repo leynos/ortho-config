@@ -48,6 +48,12 @@ roadmap boundary:
    metadata for renderer policy, JSON mode contracts, exit-code classes, skill
    manifests, context naming, capability provenance, profile redaction,
    delivery and feedback parsers, and configurable execution ledgers.
+   [agent-native-cli-design.md](agent-native-cli-design.md) §2.2 is the
+   authoritative source for the hard and soft ship-time dependency tier of
+   those reusable capabilities.
+
+The existing `ir`, `man`, `ps`, and `all` format compatibility surfaces remain
+unchanged by the consumer dependency tier.
 
 ### 0.2 Revision 2
 

@@ -74,6 +74,58 @@ OrthoConfig models, generates, serializes, and lints reusable command
 contracts. Downstream applications own command execution, side effects,
 domain-specific safety policy, and long-running job semantics.
 
+The consumer dependency tier for each reusable capability is defined in
+§2.2, which is the authoritative source for hard and soft ship-time
+dependencies.
+
+## 2.2 Consumer dependency tier
+
+This section records ship-time contract dependency, not runtime resilience and
+not delivery state. A ship-time hard dependency means Weaver's generated
+command surface cannot ship without the named OrthoConfig capability. A
+ship-time soft dependency means a consumer may keep shipping by carrying a
+temporary local adapter while OrthoConfig support arrives later. This framing
+is aligned with the hard and soft dependency language used by the
+[AWS Well-Architected Reliability Pillar](https://docs.aws.amazon.com/wellarchitected/latest/reliability-pillar/),
+but inside OrthoConfig it is only a ship-time contract rule. Do not reuse
+these words in this project to mean runtime fallback, circuit breaking, or any
+other resilience pattern.
+
+The tier is independent of delivery status. A capability is hard or soft based
+on whether Weaver's generated command surface can ship without the reusable
+OrthoConfig contract, irrespective of whether that contract is already
+implemented, in flight, or planned for a later roadmap item. When a
+soft-dependency consumer adapter shadows an OrthoConfig roadmap item, it must
+declare the shadowed item so replacement can be tracked. Once OrthoConfig
+publishes the reusable contract, the consumer must replace the local adapter in
+the next consumer release. If the local adapter and published OrthoConfig shape
+disagree, the published OrthoConfig shape wins.
+
+Table 1 is the dependency-tier matrix. If a back-reference elsewhere in the
+documentation set disagrees with this table, this table wins.
+
+| Capability | Tier | Roadmap item | Consumer adaptation rule | Replacement trigger |
+| ---------- | ---- | ------------ | ------------------------ | ------------------- |
+| Whole-CLI introspection | Hard | §6.1 "Populate subcommand metadata" | No local adaptation is permitted for Weaver's generated command surface. | Not applicable. |
+| Strict vocabulary policy | Hard | §7.1 "Implement vocabulary policy" | No local adaptation is permitted for Weaver's generated command surface. | Not applicable. |
+| Agent-context IR | Hard | §6.2 "Add compact agent-context output" | No local adaptation is permitted for Weaver's generated command surface. | Not applicable. |
+| Localized help generation | Hard | Existing `OrthoConfigDocs` and `OrthoConfigSubcommandDocs` contracts with §6.1.1 "Generate recursive `DocMetadata.subcommands` values" | No local adaptation is permitted for Weaver's generated command surface. | Not applicable. |
+| Profiles | Soft | §9.1 "Profile contracts" and design §6.7 | A consumer may carry a temporary `--profile` parsing adapter only. | Replace within the next consumer release once §9.1 ships; on shape conflict, the OrthoConfig shape wins. |
+| Delivery | Soft | §9.2 "Delivery and feedback contracts" and design §6.8 | A consumer may carry a temporary `--deliver` parsing adapter for `stdout`, `file:<path>`, and `webhook:<url>` only. | Replace within the next consumer release once §9.2 ships; on shape conflict, the OrthoConfig shape wins. |
+| Feedback | Soft | §9.2 "Delivery and feedback contracts" and design §6.8 | A consumer may carry a temporary `feedback <text>` parsing adapter that writes local JSONL only. | Replace within the next consumer release once §9.2 ships; on shape conflict, the OrthoConfig shape wins. |
+| Skill manifests | Soft | §6.3 "Validate skill manifests against real commands" and design §3.4 | A consumer may carry a temporary local manifest parser only. | Replace within the next consumer release once §6.3 ships; on shape conflict, the OrthoConfig shape wins. |
+| Execution ledgers | Soft | §9.3 "Execution ledger contracts" and design §6.6 | A consumer may carry a temporary local JSONL ledger record format only. | Replace within the next consumer release once §9.3 ships; on shape conflict, the OrthoConfig shape wins. |
+
+Table 1: consumer dependency-tier matrix.
+
+Soft dependencies permit a temporary adapter for the reusable contract shape,
+such as parsing `--profile`, `--deliver`, `feedback <text>`, or a JSONL ledger
+record. They do not permit a consumer to fork the agent-context schema,
+documentation IR, or policy-report schema permanently. They also do not move
+domain execution into OrthoConfig or allow OrthoConfig contracts to duplicate
+consumer domains: Weaver still owns semantic code editing and Netsuke still
+owns build graph execution and package-specific run records.
+
 ## 3. Contract surfaces
 
 Agent-native support is split across four surfaces. Each surface has a

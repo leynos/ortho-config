@@ -114,6 +114,9 @@
     repository layout.
   - [Schema ownership ExecPlan](execplans/5-2-1-define-ownership-models.md):
     plan for roadmap item 5.2.1 and its approval gate.
+  - [Consumer dependency boundaries](execplans/5-2-3-record-consumer-dependency-boundaries.md):
+    plan for roadmap item 5.2.3 and the hard and soft dependency boundaries
+    between OrthoConfig, Weaver, and Netsuke.
   - [Recursive documentation metadata](execplans/6-1-1-recursive-doc-metadata-subcommands-values.md):
     plan for recursive subcommand and value metadata in generated command
     documentation.

@@ -95,16 +95,16 @@ responsibilities and downstream application responsibilities.
   - [x] Add compatibility notes for downstream crates that only consume
     human-facing documentation output.
 
-- [ ] 5.2.3. Record consumer dependency boundaries for Weaver and Netsuke.
+- [x] 5.2.3. Record consumer dependency boundaries for Weaver and Netsuke.
   - Requires 5.2.1 and 5.2.2.
   - See agent-native-cli-design.md §2.1 and adr-003-define-schema-ownership-for-agent-native-contracts.md.
-  - [ ] Document that OrthoConfig owns reusable command-contract machinery,
+  - [x] Document that OrthoConfig owns reusable command-contract machinery,
     while Weaver owns semantic code-edit execution and Netsuke owns build and
     package execution.
-  - [ ] Mark whole-CLI introspection, strict vocabulary policy, agent-context
+  - [x] Mark whole-CLI introspection, strict vocabulary policy, agent-context
     IR, and localized help generation as hard dependencies for Weaver's
     generated command surface.
-  - [ ] Mark profiles, delivery, feedback, skill manifests, and execution
+  - [x] Mark profiles, delivery, feedback, skill manifests, and execution
     ledgers as soft dependencies where consuming applications may temporarily
     adapt locally if OrthoConfig support is not available in time.
 

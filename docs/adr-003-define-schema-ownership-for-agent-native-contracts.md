@@ -103,6 +103,10 @@ Future roadmap work that adds `--format agent-context`,
 `--check-agent-native`, JSON result streams, or policy evaluation must build on
 these contracts instead of scraping rendered help output.
 
+The authoritative consumer dependency tier for Weaver, Netsuke, and other
+downstream consumers is recorded in
+[agent-native-cli-design.md](agent-native-cli-design.md) §2.2.
+
 Static Analysis Results Interchange Format (SARIF), JSON Schema, and Model
 Context Protocol tool definitions remain useful prior art for field naming and
 machine-readable structure. They are not compatibility targets for this

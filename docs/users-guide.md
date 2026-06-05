@@ -1263,6 +1263,10 @@ artefacts. A crate that parses localized IR directly should tolerate additive
 optional fields and should apply documented defaults for fields omitted by
 older derives, but it should not depend on agent-context or policy-report
 fields unless it opts into those newer formats.
+The consumer dependency tiers for downstream applications are defined in
+[Agent-native CLI assistance design](agent-native-cli-design.md) §2.2. Human
+documentation consumers may continue to use the existing roff and PowerShell
+outputs without engaging with those tiers.
 
 ### Generating IR with cargo-orthohelp
 

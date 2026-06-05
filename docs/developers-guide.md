@@ -102,6 +102,16 @@ belongs in `ortho_config::docs`, compact reusable agent context belongs in
 Do not introduce crate dependency cycles to share convenience helpers; move
 shared contracts downward instead.
 
+### Consumer dependency tiers
+
+[Agent-native CLI assistance design](agent-native-cli-design.md) §2.2 is the
+authoritative source for the hard and soft ship-time dependency tiers that
+apply to Weaver, Netsuke, and other downstream consumers. When changing a
+hard-dependency capability, update §2.2 and the cited roadmap item in the same
+change. When changing a soft-dependency capability, also record which roadmap
+item any temporary local consumer adapter shadows, so its eventual replacement
+can be tracked.
+
 Run `coderabbit review --agent` after major milestones that change schemas,
 documentation contracts, or externally visible behaviour. Clear its concerns
 before moving to the next milestone.
