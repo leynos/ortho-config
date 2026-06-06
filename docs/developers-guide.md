@@ -102,7 +102,6 @@ belongs in `ortho_config::docs`, compact reusable agent context belongs in
 Do not introduce crate dependency cycles to share convenience helpers; move
 shared contracts downward instead.
 
-
 ### Generating agent-context output
 
 `cargo-orthohelp --format agent-context` reads the same bridge
