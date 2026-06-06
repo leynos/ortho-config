@@ -4,6 +4,7 @@
 //! against the fixture crate and assert the compact JSON contract that agents
 //! consume.
 
+use std::fmt;
 use std::io::Read;
 
 use cap_std::ambient_authority;
@@ -12,6 +13,35 @@ use rstest_bdd_macros::{then, when};
 use serde_json::Value;
 
 use super::steps::{OrthoHelpContext, StepResult, get_out_dir, run_orthohelp};
+
+#[derive(Debug, Clone, Copy)]
+pub(super) enum JsonField {
+    SchemaVersion,
+    Kind,
+    Commands,
+    Path,
+    Summary,
+    Inputs,
+}
+
+impl JsonField {
+    const fn as_str(self) -> &'static str {
+        match self {
+            Self::SchemaVersion => "schema_version",
+            Self::Kind => "kind",
+            Self::Commands => "commands",
+            Self::Path => "path",
+            Self::Summary => "summary",
+            Self::Inputs => "inputs",
+        }
+    }
+}
+
+impl fmt::Display for JsonField {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
 
 #[when("I run cargo-orthohelp with format agent-context for the fixture")]
 fn run_with_format_agent_context(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
@@ -46,16 +76,20 @@ fn output_contains_agent_context(orthohelp_context: &mut OrthoHelpContext) -> St
     }
 
     let json = read_agent_context(orthohelp_context)?;
-    expect_str_field(&json, "schema_version", "1")?;
-    expect_str_field(&json, "kind", "orthohelp_fixture.agent_context")?;
+    expect_str_field(&json, JsonField::SchemaVersion, "1")?;
+    expect_str_field(&json, JsonField::Kind, "orthohelp_fixture.agent_context")?;
     let command = json
-        .get("commands")
+        .get(JsonField::Commands.as_str())
         .and_then(Value::as_array)
         .and_then(|commands| commands.first())
         .ok_or("first command missing")?;
-    expect_string_array_field(command, "path", &["fixture"])?;
-    expect_str_field(command, "summary", "Orthohelp fixture configuration.")?;
-    expect_non_empty_array(command, "inputs")?;
+    expect_string_array_field(command, JsonField::Path, &["fixture"])?;
+    expect_str_field(
+        command,
+        JsonField::Summary,
+        "Orthohelp fixture configuration.",
+    )?;
+    expect_non_empty_array(command, JsonField::Inputs)?;
     Ok(())
 }
 
@@ -68,14 +102,14 @@ fn read_agent_context(orthohelp_context: &mut OrthoHelpContext) -> StepResult<Va
     Ok(serde_json::from_str(&buffer)?)
 }
 
-fn string_field<'a>(value: &'a Value, field: &str) -> StepResult<&'a str> {
+fn string_field(value: &Value, field: JsonField) -> StepResult<&str> {
     value
-        .get(field)
+        .get(field.as_str())
         .and_then(Value::as_str)
         .ok_or_else(|| format!("{field} field missing").into())
 }
 
-fn expect_str_field(value: &Value, field: &str, expected: &str) -> StepResult<()> {
+fn expect_str_field(value: &Value, field: JsonField, expected: &str) -> StepResult<()> {
     let actual = string_field(value, field)?;
     if actual == expected {
         Ok(())
@@ -84,7 +118,7 @@ fn expect_str_field(value: &Value, field: &str, expected: &str) -> StepResult<()
     }
 }
 
-fn expect_string_array_field(value: &Value, field: &str, expected: &[&str]) -> StepResult<()> {
+fn expect_string_array_field(value: &Value, field: JsonField, expected: &[&str]) -> StepResult<()> {
     let actual = string_array_field(value, field)?;
     if actual
         .iter()
@@ -97,17 +131,17 @@ fn expect_string_array_field(value: &Value, field: &str, expected: &[&str]) -> S
     }
 }
 
-fn expect_non_empty_array(value: &Value, field: &str) -> StepResult<()> {
-    match value.get(field).and_then(Value::as_array) {
+fn expect_non_empty_array(value: &Value, field: JsonField) -> StepResult<()> {
+    match value.get(field.as_str()).and_then(Value::as_array) {
         Some(items) if !items.is_empty() => Ok(()),
         Some(_) => Err(format!("{field} should not be empty").into()),
         None => Err(format!("{field} field missing").into()),
     }
 }
 
-fn string_array_field(value: &Value, field: &str) -> StepResult<Vec<String>> {
+fn string_array_field(value: &Value, field: JsonField) -> StepResult<Vec<String>> {
     value
-        .get(field)
+        .get(field.as_str())
         .and_then(Value::as_array)
         .ok_or_else(|| format!("{field} field missing"))?
         .iter()
