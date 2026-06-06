@@ -13,6 +13,7 @@ The source documents for this roadmap are:
 - [Agent-native CLI assistance design](agent-native-cli-design.md);
 - [OrthoConfig IR documentation design for cargo-orthohelp](cargo-orthohelp-design.md);
 - [Improved error message design](improved-error-message-design.md);
+- [CLI localization surface design](cli-localization-design.md);
 - [DDLint gap analysis](ddlint-gap-analysis.md);
 - [ADR-001: Replace `serde_yaml` with `serde-saphyr`](adr-001-replace-serde-yaml-with-serde-saphyr.md);
 - [ADR-002: Replace `cucumber-rs` with `rstest-bdd`](adr-002-replace-cucumber-with-rstest-bdd.md);
@@ -513,3 +514,267 @@ are working.
   - See design.md §5 and §8.
 - [ ] 10.2.3. Investigate live reloading of configuration when files change.
   - See design.md §8.
+
+## 11. Promote and widen the CLI localization surface
+
+This phase promotes the load-bearing localization helpers from the
+`hello_world` example to first-class crate surface, widens clap-error
+translation coverage, names a locale-resolution lifecycle that survives the
+locale-flag chicken-and-egg, bridges OrthoConfig with `i18n-embed`, and
+extends the derive, so localization identifiers are generated rather than
+hand-authored. The design lives in
+[cli-localization-design.md](cli-localization-design.md). Sequencing is
+quality-of-life-first: §11.1 and §11.2 carry no policy risk, while §11.3
+and later progressively add opinion.
+
+### 11.1. Promote example helpers to crate API
+
+- [ ] 11.1.1. Promote `LocalizeCmd` to a public extension trait on
+  `clap::Command`.
+  - See cli-localization-design.md §4.
+  - [ ] Move the example trait into `ortho_config::localizer` and extend it
+    to cover per-argument `help`, `long_help`, and `value_name`, plus
+    subcommand `about`/`long_about` recursively, optional `version`/
+    `long_version`, and the help-template footer.
+  - [ ] Expose `LocalizeCmd::with_base("…")` for applications that share a
+    catalogue across multiple binaries.
+  - [ ] Add the public `ortho_config::message_id_for(&command_path, suffix)`
+    function with documented identifier shape, ASCII normalization rules,
+    and panic-on-collision behaviour.
+  - [ ] Success: the `hello_world` example deletes its local
+    `LocalizeCmd` impl and re-exports the crate one for one release.
+
+- [ ] 11.1.2. Promote `try_parse_localized*` to a generic blanket trait.
+  - Requires 11.1.1.
+  - See cli-localization-design.md §4.2.
+  - [ ] Add `LocalizedParse: clap::Parser` with `try_parse_localized`,
+    `try_parse_localized_from`, and `try_parse_localized_with_matches`.
+  - [ ] Provide a blanket impl for every `clap::Parser`.
+  - [ ] Preserve the `*_with_matches` variant for callers that need the
+    raw `ArgMatches` for `load_and_merge_with_matches`.
+  - [ ] Add identifier-coverage tests that compare derive-emitted
+    identifiers with `message_id_for` output across a fixture command tree.
+
+- [ ] 11.1.3. Add the `OrthoConfigLocalization` trait and derive emission.
+  - Requires 11.1.2.
+  - See cli-localization-design.md §8.1 and §8.2.
+  - [ ] Define `OrthoConfigLocalization` with `ABOUT_ID`, `LONG_ABOUT_ID`,
+    `USAGE_ID`, and per-argument `ARG_IDS` constants.
+  - [ ] Extend the `OrthoConfig` derive to emit `OrthoConfigLocalization`
+    impls. Generate identifiers from command path and field `id` (or
+    kebab-cased field name).
+  - [ ] Add a blanket `OrthoConfigDocs` impl that delegates to
+    `OrthoConfigLocalization` so the docs IR picks up the same identifiers.
+  - [ ] Emit `${OUT_DIR}/ortho-config/cli-identifiers.json` with a 1 MiB
+    cap and split-file behaviour for larger trees.
+  - [ ] Add a compile-time `compile_error!` for fields whose normalized
+    identifiers collide.
+
+### 11.2. Widen clap-error coverage and preserve clap's rich context
+
+- [ ] 11.2.1. Ship en-US translations for the complete clap stable error
+  matrix.
+  - Requires 11.1.1.
+  - See cli-localization-design.md §6.1 and §6.2.
+  - [ ] Add Fluent strings for `NoEquals`, `ValueValidation`, `TooManyValues`,
+    `TooFewValues`, `WrongNumberOfValues`, `ArgumentConflict`,
+    `InvalidUtf8`, `Io`, and `Format` (alongside the four existing
+    identifiers).
+  - [ ] Define `pub enum ClapErrorTranslation { Translated(&'static str),
+    DisplayOnly }` and expose `pub const CLAP_ERROR_IDS:
+    &[(clap::error::ErrorKind, ClapErrorTranslation)]`. The matrix is
+    **exhaustive** over `ErrorKind`: display-only variants
+    (`DisplayHelp`, `DisplayHelpOnMissingArgumentOrSubcommand`,
+    `DisplayVersion`) appear with the `DisplayOnly` sentinel, so the gate
+    reduces to a simple length comparison.
+  - [ ] Implement the mechanical coverage gate (build script plus
+    `const_assert_eq!`) as specified in
+    [cli-localization-design.md §6.1.1](cli-localization-design.md). The
+    design document owns the mechanism; this task implements it. The
+    build script emits the **total** `ErrorKind` variant count without
+    classifying display-only variants, because the exhaustive matrix
+    pairs each variant with either a translated identifier or the
+    sentinel.
+
+- [ ] 11.2.2. Switch error localization to clap's mutation surface.
+  - Requires 11.2.1.
+  - See cli-localization-design.md §6.4.
+  - [ ] Rewrite `localize_clap_error_with_command` to call
+    `clap::error::Error::insert(ContextKind::Custom, ...)` plus
+    `Error::format(cmd)` rather than `Error::raw`, so the usage tail,
+    suggestion list, and styling survive.
+  - [ ] Run the localization eagerly inside `try_parse_localized*` so the
+    error is fully rendered before it escapes the helper's stack frame.
+  - [ ] Add behavioural tests that prove the suggestion list survives
+    localization on at least `UnknownArgument` and `InvalidSubcommand`.
+  - [ ] Deprecate the old `Error::raw` path with a removal note for the
+    next minor release.
+
+- [ ] 11.2.3. Add observable fallback for missing translations.
+  - Requires 11.2.1.
+  - See cli-localization-design.md §6.3 and §9.
+  - [ ] Emit a `tracing` event at `warn` severity when the missing
+    identifier originates from a `ClapError`, and at `debug` severity for
+    application messages.
+  - [ ] Introduce the `MissingTranslationReporter` trait and wire it into
+    `FluentLocalizer`, `FluentEmbedLocalizer` (deferred to 11.4.1), and the
+    clap-error pipeline.
+  - [ ] Add a `ClapErrorCoverage` builder that walks `CLAP_ERROR_IDS`,
+    filters to `ClapErrorTranslation::Translated(id)` entries (skipping
+    the display-only sentinels), and reports identifiers that the supplied
+    `Localizer` fails to resolve.
+
+- [ ] 11.2.4. Document and ship the monomorphised `LocalizedFormatter`
+  escape hatch.
+  - Requires 11.2.2.
+  - See cli-localization-design.md §6.4.1.
+  - [ ] Implement `LocalizedFormatter<L: Localizer + Default + 'static>`
+    that swaps clap's formatter at the type level via `Error::apply`.
+  - [ ] Document the formatter as an advanced opt-in; recommend the eager
+    path for almost every adopter. Explicitly state that the crate does
+    **not** ship a thread-local-backed dynamic formatter.
+
+### 11.3. Define the locale-resolution lifecycle
+
+- [ ] 11.3.1. Add the `LocaleResolver` trait and shipped implementations.
+  - Requires 11.1.1.
+  - See cli-localization-design.md §5.1.
+  - [ ] Define `LocaleResolver` with `boot_locale()` and
+    `merged_locale(explicit)`.
+  - [ ] Ship `EnvLocaleResolver` (LC_ALL → LC_MESSAGES → LANG, with POSIX
+    normalization and `C`/`POSIX` special-cases), `FixedLocaleResolver`,
+    and `ConfigLocaleResolver`.
+  - [ ] Document `EnvLocaleResolver` as opt-in: daemons and embedded
+    interfaces are entitled to write their own resolver.
+
+- [ ] 11.3.2. Add the `BootLocalizer` factory and the `BootHandle`
+  typestate.
+  - Requires 11.3.1.
+  - See cli-localization-design.md §5.2 and §5.3.
+  - [ ] Implement `BootLocalizer::build` returning `BootHandle<Boot>`.
+  - [ ] Implement `BootHandle::finalize` and `BootHandle::finalize_with`
+    so the merge-phase locale, and optionally a fresh resolver, can be
+    applied without rebuilding the factory.
+  - [ ] Implement `Drop` for `BootHandle<Boot>` that emits a `warn`-level
+    tracing event when finalization was missed.
+  - [ ] Implement `BootHandle::build_failed()` on both `BootHandle<Boot>`
+    and `BootHandle<Final>` (see cli-localization-design.md §5.2) so
+    degraded-mode banners can be surfaced before parsing and again after
+    merge. Re-emit the build-failure event from `finalize` with
+    exponential backoff.
+
+- [ ] 11.3.3. Document the snapshot-per-parse contract.
+  - Requires 11.3.2.
+  - See cli-localization-design.md §1.2 and §12.
+  - [ ] Add a users'-guide section naming the snapshot semantics
+    explicitly, recommending `arc_swap::ArcSwap<dyn Localizer>` as the
+    swap primitive for long-lived services, and showing the daemon
+    rebuild pattern.
+  - [ ] Add an integration test that exercises a locale swap and asserts
+    requests started before the swap continue rendering in the original
+    locale.
+
+### 11.4. Bridge with `i18n-embed`
+
+- [ ] 11.4.1. Add the `FluentEmbedLocalizer` adapter behind a cargo
+  feature.
+  - Requires 11.3.2.
+  - See cli-localization-design.md §7.
+  - [ ] Add the `i18n-embed-bridge` cargo feature and gate the optional
+    `i18n-embed` dependency behind it.
+  - [ ] Implement `FluentEmbedLocalizer::new(Arc<FluentLanguageLoader>)`.
+  - [ ] Use `FluentLanguageLoader::has` (the public `i18n-embed` 0.16
+    presence API; it wraps the underlying bundle's `has_message`) for
+    presence detection, not the `loader.get(id) == id` heuristic.
+    Document the three Fluent edge cases (attributes-only messages,
+    self-transform values, empty string values) the heuristic would have
+    got wrong. Add a build-time symbol check so a rename in a future
+    `i18n-embed` release fails compilation rather than degrading
+    silently.
+  - [ ] Wire `MissingTranslationReporter` so the adapter participates in
+    the §11.2.3 reporting pipeline.
+
+- [ ] 11.4.2. Coordinate parity between `FluentLocalizer` and
+  `FluentEmbedLocalizer`.
+  - Requires 11.4.1.
+  - See cli-localization-design.md §7.
+  - [ ] Add a parity test suite that asserts the two implementations
+    return identical results for a shared fixture catalogue.
+  - [ ] Document the no-loader-constructor decision: the crate does not
+    build a `FluentLanguageLoader` from `I18nAssets` on the consumer's
+    behalf because that would obscure bundle ownership.
+
+### 11.5. Derive support for per-field embedded defaults
+
+- [ ] 11.5.1. Add per-field `localized_default` attribute support.
+  - Requires 11.1.3.
+  - See cli-localization-design.md §8.2.
+  - [ ] Accept values `none`, `help`, `long_help`, `value_name`,
+    `help+long_help`, and `all` on field-level
+    `#[ortho_config(localized_default = "...")]`.
+  - [ ] Accept a struct-level default that fields inherit unless they
+    override.
+  - [ ] When the Fluent catalogue is empty for a given identifier and the
+    field opted in, return the embedded default rather than the bare clap
+    string.
+
+- [ ] 11.5.2. Surface the build-time identifier artefact through
+  `cargo-orthohelp`.
+  - Requires 11.1.3 and step 6.2.
+  - See cli-localization-design.md §11.
+  - [ ] Add `cargo orthohelp i18n list-ids` with human, JSON, and Fluent
+    stub output formats. The Fluent stub seeds a translator-ready
+    catalogue.
+  - [ ] Add `cargo orthohelp i18n coverage --locale <tag>` that walks the
+    consumer's `Localizer` and reports identifiers the locale fails to
+    resolve. Exit non-zero when coverage is below a configurable
+    threshold.
+  - [ ] Honour the agent-context output contracts from
+    agent-native-cli-design.md §6.2.
+
+### 11.6. Translator diagnostics
+
+- [ ] 11.6.1. Ship the `MissingTranslationReporter` trait and aggregation
+  pipeline.
+  - Requires 11.2.3, 11.4.1, and 11.5.2.
+  - See cli-localization-design.md §9.
+  - [ ] Define `MissingTranslationReporter`, `MissingTranslationEvent`,
+    and `TranslationOrigin`.
+  - [ ] Provide a `cargo-orthohelp` reporter implementation that
+    aggregates events into
+    `target/orthohelp/missing-translations/<locale>.json`.
+  - [ ] Document the reporter API in the developers' guide alongside the
+    existing `FormattingIssueReporter`.
+
+### 11.7. Migrate the example and downstream guidance
+
+- [ ] 11.7.1. Collapse the `hello_world` example onto the promoted
+  surface.
+  - Requires 11.1.1 through 11.5.1.
+  - See cli-localization-design.md §10.
+  - [ ] Replace the example's `LocalizeCmd` impl and
+    `try_parse_localized*` helpers with re-exports of the crate types.
+  - [ ] Replace `DemoLocalizer` with a thin wrapper that composes
+    `EnvLocaleResolver`, `BootLocalizer`, and `FluentLocalizer`.
+  - [ ] Add documentation pointing users at §1.3 of the design as the
+    adopter quick-start.
+
+- [ ] 11.7.2. Update Weaver and Netsuke migration guidance.
+  - Requires 11.7.1.
+  - See cli-localization-design.md §3, §6.4, and §10.
+  - [ ] Document the migration from local `LocalizeCmd`-style helpers and
+    `LayeredLocalizer` wrappers to the promoted crate surface.
+  - [ ] Note that `localize_clap_error_with_command` is deprecated in 0.9
+    and removed in 0.10; consumers move to `LocalizedParse` for parse-time
+    localization.
+  - [ ] Spell out the `BootHandle` two-phase flow with a worked example, so
+    consumers cannot accidentally skip finalization.
+
+- [ ] 11.7.3. Add a migration note for `spycatcher-harness`.
+  - Requires 11.4.1.
+  - See cli-localization-design.md §3 and §7.
+  - [ ] Document how to migrate from a hand-rolled
+    `localize_harness_error` plus `FluentLanguageLoader` to
+    `FluentEmbedLocalizer`.
+  - [ ] Confirm that the bridge eliminates the duplicate FTL parse pass
+    and the duplicate locale-negotiation block.

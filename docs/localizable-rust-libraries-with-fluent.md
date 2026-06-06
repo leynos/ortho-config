@@ -1,5 +1,12 @@
 # Architecting Localizable Rust Libraries with Fluent
 
+Status: reference pattern. This document captures the application-authority
+pattern that OrthoConfig follows. The crate's concrete CLI localization
+surface — the promoted `LocalizeCmd` trait, `BootLocalizer` lifecycle,
+widened clap-error coverage, `i18n-embed` bridge, and derive-emitted
+identifiers — is specified in
+[CLI localization surface design](cli-localization-design.md).
+
 When building a reusable Rust library (a crate), providing localized text for
 elements like error messages or UI components presents a unique challenge. The
 library itself cannot and should not make assumptions about the end user's
