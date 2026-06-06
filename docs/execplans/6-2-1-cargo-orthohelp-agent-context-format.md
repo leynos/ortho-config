@@ -106,10 +106,12 @@ a workaround.
   live in `cargo_orthohelp::agent_context`. The transform must not depend on
   `cargo-orthohelp`'s renderer modules (`roff`, `powershell`), and the
   reusable schema must not depend on `cargo-orthohelp`.
-- The agent-context output is **not** localized. The transform must not call
-  `ortho_config::Localizer`, must not include Fluent identifiers in the
-  output, must not include `long_help` or `long_help_id` content, and must
-  not introduce any locale-specific behaviour.
+- The agent-context output is **not** localized. The adapter may pass an
+  en-US `ortho_config::Localizer` into the transform only to resolve the
+  short command summary used for command selection. The transform must not
+  include Fluent identifiers in the output, must not include `long_help` or
+  `long_help_id` content, and must not introduce any other locale-specific
+  behaviour.
 - `--format agent-context` writes exactly one file at
   `<out_dir>/agent-context.json`. The bridge cache, target directory layout,
   and `--cache`/`--no-build` flags continue to work unchanged.
