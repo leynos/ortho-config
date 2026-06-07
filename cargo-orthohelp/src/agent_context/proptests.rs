@@ -5,7 +5,7 @@ use proptest::prelude::*;
 use std::collections::BTreeSet;
 
 use super::bridge_ir_to_agent_context;
-use crate::schema::{DocMetadata, HeadingIds, SectionsMetadata};
+use crate::schema::{CliMetadata, DocMetadata, FieldMetadata, HeadingIds, SectionsMetadata};
 
 proptest! {
     #[test]
@@ -15,6 +15,40 @@ proptest! {
 
         for command in context.commands {
             prop_assert!(seen.insert(command.path));
+        }
+    }
+
+    #[test]
+    fn commands_are_sorted_by_path(tree in metadata_tree()) {
+        let context = bridge_ir_to_agent_context(&tree, "demo_pkg", None);
+
+        for (left, right) in context.commands.iter().zip(context.commands.iter().skip(1)) {
+            prop_assert!(left.path <= right.path);
+        }
+    }
+
+    #[test]
+    fn command_inputs_are_sorted_by_name(tree in metadata_tree_with_fields()) {
+        let context = bridge_ir_to_agent_context(&tree, "demo_pkg", None);
+
+        for command in context.commands {
+            for (left, right) in command.inputs.iter().zip(command.inputs.iter().skip(1)) {
+                prop_assert!(left.name <= right.name);
+            }
+        }
+    }
+
+    #[test]
+    fn hidden_fields_are_omitted_from_inputs(hidden_name in field_name("hidden")) {
+        let mut tree = doc("root", Some("demo"), Vec::new());
+        tree.fields = vec![field(&hidden_name, true)];
+
+        let context = bridge_ir_to_agent_context(&tree, "demo_pkg", None);
+
+        for command in context.commands {
+            prop_assert!(
+                command.inputs.iter().all(|input| input.name != hidden_name)
+            );
         }
     }
 }
@@ -39,8 +73,26 @@ fn metadata_tree() -> impl Strategy<Value = DocMetadata> {
         })
 }
 
+fn metadata_tree_with_fields() -> impl Strategy<Value = DocMetadata> {
+    (
+        metadata_tree(),
+        prop::collection::vec(field_name("field"), 1..8),
+    )
+        .prop_map(|(mut tree, field_names)| {
+            tree.fields = field_names
+                .into_iter()
+                .map(|name| field(&name, false))
+                .collect();
+            tree
+        })
+}
+
 fn command_name(prefix: &'static str) -> impl Strategy<Value = String> {
     (0_u16..=4096).prop_map(move |suffix| format!("{prefix}-{suffix}"))
+}
+
+fn field_name(prefix: &'static str) -> impl Strategy<Value = String> {
+    (0_u16..=4096).prop_map(move |suffix| format!("{prefix}_{suffix}"))
 }
 
 fn doc(app_name: &str, bin_name: Option<&str>, subcommands: Vec<DocMetadata>) -> DocMetadata {
@@ -54,6 +106,32 @@ fn doc(app_name: &str, bin_name: Option<&str>, subcommands: Vec<DocMetadata>) ->
         fields: Vec::new(),
         subcommands,
         windows: None,
+    }
+}
+
+fn field(name: &str, hide_in_help: bool) -> FieldMetadata {
+    FieldMetadata {
+        name: name.to_owned(),
+        help_id: format!("{name}.help"),
+        long_help_id: None,
+        value: None,
+        default: None,
+        required: false,
+        deprecated: None,
+        cli: Some(CliMetadata {
+            long: Some(name.to_owned()),
+            short: None,
+            value_name: Some("VALUE".to_owned()),
+            multiple: false,
+            takes_value: true,
+            possible_values: Vec::new(),
+            hide_in_help,
+        }),
+        env: None,
+        file: None,
+        examples: Vec::new(),
+        links: Vec::new(),
+        notes: Vec::new(),
     }
 }
 
