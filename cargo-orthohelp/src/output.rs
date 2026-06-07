@@ -66,13 +66,24 @@ pub fn write_agent_context(
         })?;
 
     let content = serde_json::to_string_pretty(payload)?;
+    let target = out_dir.join(filename);
+    tracing::debug!(
+        path = %target,
+        bytes = content.len(),
+        "writing agent-context JSON",
+    );
     file.write_all(content.as_bytes())
         .map_err(|io_err| OrthohelpError::Io {
-            path: out_dir.join(filename),
+            path: target.clone(),
             source: io_err,
         })?;
+    tracing::debug!(
+        path = %target,
+        bytes = content.len(),
+        "agent-context JSON written successfully",
+    );
 
-    Ok(out_dir.join(filename))
+    Ok(target)
 }
 
 fn ensure_dir(path: &Utf8Path) -> Result<Dir, OrthohelpError> {

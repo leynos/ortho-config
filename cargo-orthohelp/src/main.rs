@@ -148,10 +148,20 @@ fn generate_agent_context_if_requested(
         return Ok(());
     }
     let localizer = build_en_us_localizer(&selection.package_root)?;
+    tracing::debug!(
+        package = %selection.package_name,
+        format = "agent-context",
+        "starting agent-context transformation",
+    );
     let context = agent_context::bridge_ir_to_agent_context(
         doc_metadata,
         &selection.package_name,
         Some(&localizer),
+    );
+    tracing::debug!(
+        package = %selection.package_name,
+        command_count = context.commands.len(),
+        "agent-context transformation complete",
     );
     output::write_agent_context(out_dir.as_path(), &context)?;
     Ok(())
