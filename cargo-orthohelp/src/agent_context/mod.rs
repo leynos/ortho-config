@@ -162,7 +162,7 @@ fn build_input(field: &FieldMetadata) -> Option<AgentInput> {
     Some(AgentInput {
         name: field.name.clone(),
         long: cli.long.clone(),
-        value_type: field.value.as_ref().map(map_value_type),
+        value_type: map_input_value_type(field),
         required: field.required,
         default: field
             .default
@@ -182,6 +182,20 @@ const fn should_skip_non_flag_input(field: &FieldMetadata) -> bool {
         return false;
     };
     cli.long.is_none() && cli.short.is_none() && !cli.takes_value
+}
+
+fn map_input_value_type(field: &FieldMetadata) -> Option<String> {
+    if matches!(&field.value, Some(ValueType::Enum { .. })) {
+        return Some("enum".to_owned());
+    }
+    if field
+        .cli
+        .as_ref()
+        .is_some_and(|cli| !cli.possible_values.is_empty())
+    {
+        return Some("enum".to_owned());
+    }
+    field.value.as_ref().map(map_value_type)
 }
 
 fn map_value_type(value: &ValueType) -> String {
@@ -205,7 +219,11 @@ fn map_value_type(value: &ValueType) -> String {
 fn enum_values(field: &FieldMetadata) -> Vec<String> {
     match &field.value {
         Some(ValueType::Enum { variants }) => variants.clone(),
-        _ => Vec::new(),
+        _ => field
+            .cli
+            .as_ref()
+            .map(|cli| cli.possible_values.clone())
+            .unwrap_or_default(),
     }
 }
 

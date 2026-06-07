@@ -49,10 +49,15 @@ expression: snapshot
         {
           "name": "log_level",
           "long": "log-level",
-          "value_type": "LogLevel",
+          "value_type": "enum",
           "required": false,
           "default": "LogLevel :: Info",
-          "enum_values": []
+          "enum_values": [
+            "Debug",
+            "Info",
+            "Warn",
+            "Error"
+          ]
         },
         {
           "name": "port",

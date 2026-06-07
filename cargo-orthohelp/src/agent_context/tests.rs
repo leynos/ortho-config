@@ -118,6 +118,47 @@ fn transform_maps_visible_cli_fields_and_sorts_inputs() {
     assert_visible_inputs(command);
 }
 
+#[test]
+fn transform_recovers_enum_values_from_cli_metadata_for_custom_types() {
+    let metadata = doc(DocSpec {
+        app_name: "demo",
+        bin_name: Some("demo-bin"),
+        about_id: "root.about",
+        fields: vec![cli_field_with_possible_values(
+            FieldSpec {
+                name: "log_level",
+                long: Some("log-level"),
+                short: None,
+                takes_value: true,
+                hide_in_help: false,
+                value: Some(ValueType::Custom {
+                    name: "LogLevel".to_owned(),
+                }),
+                default: Some("LogLevel :: Info"),
+                required: false,
+            },
+            ["Debug", "Info", "Warn", "Error"],
+        )],
+        subcommands: Vec::new(),
+    });
+
+    let context = bridge_ir_to_agent_context(&metadata, "demo_pkg", None);
+    let command = context
+        .commands
+        .first()
+        .expect("root command should be generated");
+    let input = command
+        .inputs
+        .first()
+        .expect("log level input should be generated");
+
+    assert_eq!(input.value_type.as_deref(), Some("enum"));
+    assert_eq!(
+        input.enum_values,
+        ["Debug", "Info", "Warn", "Error"].map(str::to_owned)
+    );
+}
+
 #[rstest]
 #[case(None, None)]
 #[case(Some(""), None)]
@@ -287,6 +328,13 @@ struct FieldSpec<'a> {
 }
 
 fn cli_field(spec: FieldSpec<'_>) -> FieldMetadata {
+    cli_field_with_possible_values(spec, [])
+}
+
+fn cli_field_with_possible_values<const N: usize>(
+    spec: FieldSpec<'_>,
+    possible_values: [&str; N],
+) -> FieldMetadata {
     field(FieldParts {
         name: spec.name,
         value: spec.value,
@@ -298,7 +346,7 @@ fn cli_field(spec: FieldSpec<'_>) -> FieldMetadata {
             value_name: None,
             multiple: false,
             takes_value: spec.takes_value,
-            possible_values: Vec::new(),
+            possible_values: possible_values.map(str::to_owned).to_vec(),
             hide_in_help: spec.hide_in_help,
         }),
     })

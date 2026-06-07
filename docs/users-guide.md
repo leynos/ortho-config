@@ -1318,6 +1318,11 @@ Fluent message identifiers, roff fragments, and PowerShell wrapper/help
 structures. For the current schema, positional arguments are represented as
 inputs without `long` or `short` flag names.
 
+Input `default` values are display hints copied from the bridge metadata, not
+shell-ready invocation literals. Agents should treat them as descriptive text
+for prompts or explanations rather than passing them verbatim to the command
+line.
+
 `interaction_mode`, `mutation_effect`, and `policy.agent_native` currently use
 unknown or missing defaults unless richer agent-native metadata is declared by
 later roadmap work. Treat those fields as placeholders, not as proof that a

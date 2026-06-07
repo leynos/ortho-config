@@ -50,7 +50,7 @@ pub struct FixtureConfig {
     pub host: String,
 
     /// Log level for the service.
-    #[ortho_config(default = LogLevel::Info)]
+    #[ortho_config(default = LogLevel::Info, value(type = "enum(Debug, Info, Warn, Error)"))]
     pub log_level: LogLevel,
 
     /// Enable verbose output.

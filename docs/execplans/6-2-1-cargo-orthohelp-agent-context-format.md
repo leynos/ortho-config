@@ -320,6 +320,16 @@ work benefits.
   `make typecheck`, `make lint`, `make test`, `make markdownlint`, and
   `make nixie`. The final `coderabbit review --agent` completed with zero
   findings after the roadmap and retrospective updates.
+- Follow-up review found that the property coverage deliberately grew beyond
+  the original single uniqueness invariant. The extra checks cover command
+  path ordering, input name ordering, and hidden-field omission because those
+  invariants underpin snapshot stability and manifest usefulness.
+- Follow-up review also showed that the original tolerance budget
+  underestimated the documentation and test surface. The final implementation
+  exceeded the 12-file and 700-net-line planning budget once documentation,
+  snapshots, and the living execplan were included; future agent-context
+  plans should size similar work with a wider tolerance or split it into
+  smaller approved ExecPlans.
 
 ## Decision log
 
@@ -396,6 +406,11 @@ be done differently next time.
   implemented surface. CodeRabbit review was useful for tightening test helper
   style and keeping new file I/O aligned with the repository's `cap_std`
   convention.
+- A follow-up review tightened manifest usefulness for clap-derived enum
+  flags: the adapter now treats non-empty `CliMetadata.possible_values` as
+  enum metadata even when the IR reports a custom Rust type. The users' guide
+  also documents that `default` remains a display hint, not an invocation
+  literal, until upstream IR can expose normalized defaults.
 - The main implementation lesson was to keep the agent-context transform
   projective and narrow. Avoiding new `AgentInput` schema fields and keeping
   `--format all` unchanged preserved the compatibility boundary for existing

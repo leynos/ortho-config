@@ -24,7 +24,7 @@ pub mod schema;
 
 use camino::Utf8PathBuf;
 use clap::{Error as ClapError, Parser, error::ErrorKind};
-use ortho_config::{FluentLocalizer, LanguageIdentifier};
+use ortho_config::{FluentLocalizer, LanguageIdentifier, Localizer};
 use std::io::Write;
 use std::str::FromStr;
 use tracing_subscriber::EnvFilter;
@@ -147,16 +147,28 @@ fn generate_agent_context_if_requested(
     if !matches!(args.format, OutputFormat::AgentContext) {
         return Ok(());
     }
-    let localizer = build_en_us_localizer(&selection.package_root)?;
+    let en_us_localizer = match build_en_us_localizer(&selection.package_root) {
+        Ok(localizer) => Some(localizer),
+        Err(error) => {
+            tracing::warn!(
+                error = %error,
+                "no en-US localizer available; agent-context summaries will be omitted",
+            );
+            None
+        }
+    };
     tracing::debug!(
         package = %selection.package_name,
         format = "agent-context",
         "starting agent-context transformation",
     );
+    let summary_localizer = en_us_localizer
+        .as_ref()
+        .map(|resolved_localizer| resolved_localizer as &dyn Localizer);
     let context = agent_context::bridge_ir_to_agent_context(
         doc_metadata,
         &selection.package_name,
-        Some(&localizer),
+        summary_localizer,
     );
     tracing::debug!(
         package = %selection.package_name,
