@@ -240,7 +240,6 @@ Keep richer fixture families isolated. For example, `NestedDocsConfig` and
 fixture-specific `tests/rstest_bdd/behaviour/steps/nested_docs_steps.rs`
 module rather than expanding unrelated step files.
 
-
 ## Snapshot tests
 
 Use `insta` for renderer golden coverage that would be noisy as hand-written

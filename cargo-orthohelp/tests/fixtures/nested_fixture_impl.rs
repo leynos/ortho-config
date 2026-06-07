@@ -2,29 +2,49 @@
 
 macro_rules! define_nested_fixture {
     () => {
+        struct CompositeCommandSpec<'a> {
+            app_name: &'a str,
+            about: &'a str,
+            bin_name: Option<&'a str>,
+            fields: Vec<LocalizedFieldMetadata>,
+            windows: Option<WindowsMetadata>,
+            subcommands: Vec<LocalizedDocMetadata>,
+        }
+
+        fn composite_command(spec: CompositeCommandSpec<'_>) -> LocalizedDocMetadata {
+            let mut meta = command(spec.app_name, spec.about);
+            meta.bin_name = spec.bin_name.map(str::to_owned);
+            meta.fields = spec.fields;
+            meta.windows = spec.windows;
+            meta.subcommands = spec.subcommands;
+            meta
+        }
+
         /// Builds a localized nested command tree matching the `ortho_config`
         /// behavioural fixture.
         #[must_use]
         pub fn nested_doc() -> LocalizedDocMetadata {
-            let mut root = command("nested-app", "Nested fixture command tree.");
-            root.bin_name = Some("fixture".to_owned());
-            root.fields.push(text_field(TextFieldSpec {
-                name: "global",
-                help: "Global configuration value.",
-                long: "global",
-                env: Some("NESTED_APP_GLOBAL"),
-                default: None,
-                required: true,
-            }));
-            root.windows = Some(WindowsMetadata {
-                module_name: Some("Nested".to_owned()),
-                export_aliases: Vec::new(),
-                include_common_parameters: true,
-                split_subcommands_into_functions: false,
-                help_info_uri: None,
-            });
-            root.subcommands = vec![greet_command(), version_command(), admin_command()];
-            root
+            composite_command(CompositeCommandSpec {
+                app_name: "nested-app",
+                about: "Nested fixture command tree.",
+                bin_name: Some("fixture"),
+                fields: vec![text_field(TextFieldSpec {
+                    name: "global",
+                    help: "Global configuration value.",
+                    long: "global",
+                    env: Some("NESTED_APP_GLOBAL"),
+                    default: None,
+                    required: true,
+                })],
+                windows: Some(WindowsMetadata {
+                    module_name: Some("Nested".to_owned()),
+                    export_aliases: Vec::new(),
+                    include_common_parameters: true,
+                    split_subcommands_into_functions: false,
+                    help_info_uri: None,
+                }),
+                subcommands: vec![greet_command(), version_command(), admin_command()],
+            })
         }
 
         fn greet_command() -> LocalizedDocMetadata {
@@ -55,24 +75,27 @@ macro_rules! define_nested_fixture {
         }
 
         fn admin_command() -> LocalizedDocMetadata {
-            let mut metadata = command("admin", "Administers fixture state.");
-            metadata.fields.push(text_field(TextFieldSpec {
-                name: "scope",
-                help: "Scope to administer.",
-                long: "scope",
-                env: Some("NESTED_APP_SCOPE"),
-                default: Some("local"),
-                required: false,
-            }));
-            metadata.windows = Some(WindowsMetadata {
-                module_name: Some("NestedAdmin".to_owned()),
-                export_aliases: Vec::new(),
-                include_common_parameters: false,
-                split_subcommands_into_functions: true,
-                help_info_uri: None,
-            });
-            metadata.subcommands = vec![audit_command(), grant_command()];
-            metadata
+            composite_command(CompositeCommandSpec {
+                app_name: "admin",
+                about: "Administers fixture state.",
+                bin_name: None,
+                fields: vec![text_field(TextFieldSpec {
+                    name: "scope",
+                    help: "Scope to administer.",
+                    long: "scope",
+                    env: Some("NESTED_APP_SCOPE"),
+                    default: Some("local"),
+                    required: false,
+                })],
+                windows: Some(WindowsMetadata {
+                    module_name: Some("NestedAdmin".to_owned()),
+                    export_aliases: Vec::new(),
+                    include_common_parameters: false,
+                    split_subcommands_into_functions: true,
+                    help_info_uri: None,
+                }),
+                subcommands: vec![audit_command(), grant_command()],
+            })
         }
 
         fn audit_command() -> LocalizedDocMetadata {

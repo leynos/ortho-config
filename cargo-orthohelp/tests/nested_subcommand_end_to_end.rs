@@ -7,7 +7,7 @@
 
 mod fixtures;
 
-use camino::Utf8PathBuf;
+use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::ambient_authority;
 use cap_std::fs_utf8::Dir;
 use rstest::rstest;
@@ -130,7 +130,7 @@ fn run_orthohelp(out_dir: &Utf8PathBuf, format_args: &[&str]) -> Result<(), Test
 
 /// Asserts that localized IR preserves top-level and nested command ordering.
 fn assert_ir_contains_nested_tree(out_dir: &Utf8PathBuf) -> Result<(), TestError> {
-    let ir = read_output(out_dir, "ir/en-US.json")?;
+    let ir = read_output(out_dir, Utf8Path::new("ir/en-US.json"))?;
     let value: Value = serde_json::from_str(&ir)?;
     let subcommands = array_field(&value, "subcommands")?;
     assert_app_names(subcommands, &["greet", "version", "admin"])?;
@@ -148,14 +148,15 @@ fn assert_ir_contains_nested_tree(out_dir: &Utf8PathBuf) -> Result<(), TestError
 
 /// Asserts that split man pages include the nested admin command sections.
 fn assert_man_contains_nested_pages(out_dir: &Utf8PathBuf) -> Result<(), TestError> {
-    read_output(out_dir, "man/man1/nested_fixture.1")?;
+    read_output(out_dir, Utf8Path::new("man/man1/nested_fixture.1"))?;
 
-    read_output(out_dir, "man/man1/nested_fixture-greet.1")?;
-    read_output(out_dir, "man/man1/nested_fixture-version.1")?;
-    let admin_page = read_output(out_dir, "man/man1/nested_fixture-admin.1")?;
-    ensure_contains(&admin_page, ".SH COMMANDS", "admin man page")?;
-    ensure_contains(&admin_page, ".SS audit", "admin man page")?;
-    ensure_contains(&admin_page, ".SS grant-access", "admin man page")?;
+    read_output(out_dir, Utf8Path::new("man/man1/nested_fixture-greet.1"))?;
+    read_output(out_dir, Utf8Path::new("man/man1/nested_fixture-version.1"))?;
+    let admin_page = read_output(out_dir, Utf8Path::new("man/man1/nested_fixture-admin.1"))?;
+    let artefact = OutputArtefact::new(&admin_page, "admin man page");
+    ensure_contains(artefact, ".SH COMMANDS")?;
+    ensure_contains(artefact, ".SS audit")?;
+    ensure_contains(artefact, ".SS grant-access")?;
     Ok(())
 }
 
@@ -164,43 +165,42 @@ fn assert_man_contains_nested_pages(out_dir: &Utf8PathBuf) -> Result<(), TestErr
 /// `out_dir` is the directory containing generated files; returning `Result`
 /// lets the test report file and assertion failures without panicking.
 fn assert_powershell_contains_subcommand_functions(out_dir: &Utf8PathBuf) -> Result<(), TestError> {
-    let module = read_output(out_dir, "powershell/NestedFixture/NestedFixture.psm1")?;
-    ensure_contains(
-        &module,
-        "function nested_fixture_greet",
-        "PowerShell wrapper",
+    let module = read_output(
+        out_dir,
+        Utf8Path::new("powershell/NestedFixture/NestedFixture.psm1"),
     )?;
-    ensure_contains(
-        &module,
-        "function nested_fixture_version",
-        "PowerShell wrapper",
-    )?;
-    ensure_contains(
-        &module,
-        "function nested_fixture_admin",
-        "PowerShell wrapper",
-    )?;
+    let artefact = OutputArtefact::new(&module, "PowerShell wrapper");
+    ensure_contains(artefact, "function nested_fixture_greet")?;
+    ensure_contains(artefact, "function nested_fixture_version")?;
+    ensure_contains(artefact, "function nested_fixture_admin")?;
     // PowerShell wrapper splitting is intentionally one level deep: the
     // generated admin wrapper delegates nested dispatch to the executable
     // rather than exposing `nested_fixture_admin_audit` style functions.
-    ensure_excludes(
-        &module,
-        "function nested_fixture_admin_audit",
-        "PowerShell wrapper",
-    )?;
-    ensure_excludes(
-        &module,
-        "function nested_fixture_admin_grant_access",
-        "PowerShell wrapper",
-    )?;
+    ensure_excludes(artefact, "function nested_fixture_admin_audit")?;
+    ensure_excludes(artefact, "function nested_fixture_admin_grant_access")?;
     Ok(())
+}
+
+#[derive(Clone, Copy)]
+struct OutputArtefact<'a> {
+    content: &'a str,
+    description: &'a str,
+}
+
+impl<'a> OutputArtefact<'a> {
+    const fn new(content: &'a str, description: &'a str) -> Self {
+        Self {
+            content,
+            description,
+        }
+    }
 }
 
 /// Reads a generated UTF-8 text artefact through a capability directory.
 ///
 /// The ambient authority is scoped to the temporary output root produced by
 /// this test; I/O errors or invalid UTF-8 are reported to the caller.
-fn read_output(out_dir: &Utf8PathBuf, relative_path: &str) -> Result<String, TestError> {
+fn read_output(out_dir: &Utf8PathBuf, relative_path: &Utf8Path) -> Result<String, TestError> {
     let dir = Dir::open_ambient_dir(out_dir, ambient_authority())?;
     let mut file = dir.open(relative_path)?;
     let mut content = String::new();
@@ -236,18 +236,18 @@ fn assert_app_names(commands: &[Value], expected: &[&str]) -> Result<(), TestErr
 }
 
 /// Requires generated text to contain a marker and names the artefact on error.
-fn ensure_contains(haystack: &str, needle: &str, description: &str) -> Result<(), TestError> {
-    if haystack.contains(needle) {
+fn ensure_contains(artefact: OutputArtefact<'_>, needle: &str) -> Result<(), TestError> {
+    if artefact.content.contains(needle) {
         Ok(())
     } else {
-        Err(format!("{description} should contain {needle:?}").into())
+        Err(format!("{} should contain {needle:?}", artefact.description).into())
     }
 }
 
 /// Requires generated text to omit a marker and names the artefact on error.
-fn ensure_excludes(haystack: &str, needle: &str, description: &str) -> Result<(), TestError> {
-    if haystack.contains(needle) {
-        Err(format!("{description} should not contain {needle:?}").into())
+fn ensure_excludes(artefact: OutputArtefact<'_>, needle: &str) -> Result<(), TestError> {
+    if artefact.content.contains(needle) {
+        Err(format!("{} should not contain {needle:?}", artefact.description).into())
     } else {
         Ok(())
     }

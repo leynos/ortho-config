@@ -8,7 +8,7 @@
 //! # Examples
 //!
 //! ```no_run
-//! use test_helpers::cwd;
+//! use ortho_config_test_helpers::cwd;
 //!
 //! let guard = cwd::set_dir("/tmp/test-dir").expect("set cwd");
 //! // CWD is now `/tmp/test-dir`; it is restored when `guard` is dropped.

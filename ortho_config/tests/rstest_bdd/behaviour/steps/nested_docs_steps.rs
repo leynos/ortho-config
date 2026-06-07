@@ -36,16 +36,24 @@ fn nested_top_level_commands(
     Ok(())
 }
 
+fn in_command(
+    context: &NestedDocsContext,
+    command: String,
+    f: impl FnOnce(&DocMetadata, &str) -> Result<()>,
+) -> Result<()> {
+    let name = unquoted(&command);
+    with_command(context, &name, |meta| f(meta, &name))
+}
+
 #[then("command {command} contains field {field}")]
 fn command_contains_field(
     nested_docs_context: &NestedDocsContext,
     command: String,
     field: String,
 ) -> Result<()> {
-    let command = unquoted(&command);
-    let field = unquoted(&field);
-    with_command(nested_docs_context, &command, |metadata| {
-        field_by_name(metadata, &field).map(|_| ())
+    let field_name = unquoted(&field);
+    in_command(nested_docs_context, command, |meta, _cmd| {
+        field_by_name(meta, &field_name).map(|_| ())
     })
 }
 
@@ -56,11 +64,10 @@ fn command_field_has_default(
     field: String,
     expected: String,
 ) -> Result<()> {
-    let command = unquoted(&command);
-    let field_name = unquoted(&field);
-    let expected = unquoted(&expected);
-    with_command(nested_docs_context, &command, |metadata| {
-        let field = field_by_name(metadata, &field_name)?;
+    in_command(nested_docs_context, command, |meta, _cmd| {
+        let field_name = unquoted(&field);
+        let expected = unquoted(&expected);
+        let field = field_by_name(meta, &field_name)?;
         let actual = field.default.as_ref().map(|value| value.display.as_str());
         ensure!(
             actual == Some(expected.as_str()),
@@ -76,16 +83,14 @@ fn command_has_example(
     command: String,
     expected: String,
 ) -> Result<()> {
-    let command = unquoted(&command);
     let expected = unquoted(&expected);
-    with_command(nested_docs_context, &command, |metadata| {
+    in_command(nested_docs_context, command, |meta, cmd| {
         ensure!(
-            metadata
-                .sections
+            meta.sections
                 .examples
                 .iter()
                 .any(|example| example.code == expected),
-            "expected command {command:?} to include example {expected:?}",
+            "expected command {cmd:?} to include example {expected:?}",
         );
         Ok(())
     })
@@ -96,12 +101,11 @@ fn command_exposes_no_fields(
     nested_docs_context: &NestedDocsContext,
     command: String,
 ) -> Result<()> {
-    let command = unquoted(&command);
-    with_command(nested_docs_context, &command, |metadata| {
+    in_command(nested_docs_context, command, |meta, cmd| {
         ensure!(
-            metadata.fields.is_empty(),
-            "expected command {command:?} to expose no fields, got {:?}",
-            field_names(metadata),
+            meta.fields.is_empty(),
+            "expected command {cmd:?} to expose no fields, got {:?}",
+            field_names(meta),
         );
         Ok(())
     })
@@ -113,13 +117,12 @@ fn command_contains_nested_commands(
     command: String,
     expected: String,
 ) -> Result<()> {
-    let command = unquoted(&command);
-    with_command(nested_docs_context, &command, |metadata| {
-        let actual = command_names(metadata);
+    in_command(nested_docs_context, command, |meta, cmd| {
+        let actual = command_names(meta);
         let expected = names_from_csv(&expected);
         ensure!(
             actual == expected,
-            "expected command {command:?} to expose {expected:?}, got {actual:?}",
+            "expected command {cmd:?} to expose {expected:?}, got {actual:?}",
         );
         Ok(())
     })
@@ -130,11 +133,10 @@ fn command_exposes_windows_metadata(
     nested_docs_context: &NestedDocsContext,
     command: String,
 ) -> Result<()> {
-    let command = unquoted(&command);
-    with_command(nested_docs_context, &command, |metadata| {
+    in_command(nested_docs_context, command, |meta, cmd| {
         ensure!(
-            metadata.windows.is_some(),
-            "expected command {command:?} to expose Windows metadata",
+            meta.windows.is_some(),
+            "expected command {cmd:?} to expose Windows metadata",
         );
         Ok(())
     })
@@ -145,16 +147,15 @@ fn command_splits_subcommands(
     nested_docs_context: &NestedDocsContext,
     command: String,
 ) -> Result<()> {
-    let command = unquoted(&command);
-    with_command(nested_docs_context, &command, |metadata| {
-        let split = metadata
+    in_command(nested_docs_context, command, |meta, cmd| {
+        let split = meta
             .windows
             .as_ref()
-            .ok_or_else(|| anyhow!("missing Windows metadata for command {command}"))?
+            .ok_or_else(|| anyhow!("missing Windows metadata for command {cmd}"))?
             .split_subcommands_into_functions;
         ensure!(
             split,
-            "expected command {command:?} to split subcommands into functions",
+            "expected command {cmd:?} to split subcommands into functions",
         );
         Ok(())
     })
@@ -165,11 +166,10 @@ fn command_exposes_no_windows_metadata(
     nested_docs_context: &NestedDocsContext,
     command: String,
 ) -> Result<()> {
-    let command = unquoted(&command);
-    with_command(nested_docs_context, &command, |metadata| {
+    in_command(nested_docs_context, command, |meta, cmd| {
         ensure!(
-            metadata.windows.is_none(),
-            "expected command {command:?} to expose no Windows metadata",
+            meta.windows.is_none(),
+            "expected command {cmd:?} to expose no Windows metadata",
         );
         Ok(())
     })

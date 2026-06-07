@@ -152,32 +152,31 @@ fn nested_admin_audit_has_inherited_fluent_id_pattern(nested_metadata: DocMetada
     Ok(())
 }
 
-/// Finds a child command by application name within the supplied metadata.
-///
-/// Returns the matching command metadata, or an error when `name` is absent.
-fn command_by_name<'metadata>(
-    metadata: &'metadata DocMetadata,
+fn find_by_name<'a, T>(
+    collection: &'a [T],
     name: &str,
-) -> Result<&'metadata DocMetadata> {
-    metadata
-        .subcommands
+    label: &str,
+    key: impl Fn(&T) -> &str,
+) -> Result<&'a T> {
+    collection
         .iter()
-        .find(|entry| entry.app_name == name)
-        .ok_or_else(|| anyhow!("missing command metadata for {name}"))
+        .find(|item| key(item) == name)
+        .ok_or_else(|| anyhow!("missing {label} for {name}"))
 }
 
-/// Finds a field by Rust field name within the supplied command metadata.
-///
-/// Returns the matching field metadata, or an error when `name` is absent.
-fn field_by_name<'metadata>(
-    metadata: &'metadata DocMetadata,
+fn command_by_name<'m>(metadata: &'m DocMetadata, name: &str) -> Result<&'m DocMetadata> {
+    find_by_name(&metadata.subcommands, name, "command metadata", |c| {
+        c.app_name.as_str()
+    })
+}
+
+fn field_by_name<'m>(
+    metadata: &'m DocMetadata,
     name: &str,
-) -> Result<&'metadata ortho_config::docs::FieldMetadata> {
-    metadata
-        .fields
-        .iter()
-        .find(|field| field.name == name)
-        .ok_or_else(|| anyhow!("missing field metadata for {name}"))
+) -> Result<&'m ortho_config::docs::FieldMetadata> {
+    find_by_name(&metadata.fields, name, "field metadata", |f| {
+        f.name.as_str()
+    })
 }
 
 /// Lists child command application names in metadata order.
