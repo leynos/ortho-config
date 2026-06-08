@@ -218,6 +218,11 @@ fn sync_parent_dir(dir: &Dir, path: &Utf8Path) -> Result<(), OrthohelpError> {
     })
 }
 
+#[expect(
+    clippy::unnecessary_wraps,
+    reason = "non-Unix stub mirrors the Unix fn signature so call sites \
+              compile uniformly across platforms"
+)]
 #[cfg(not(unix))]
 const fn sync_parent_dir(_dir: &Dir, _path: &Utf8Path) -> Result<(), OrthohelpError> {
     Ok(())
