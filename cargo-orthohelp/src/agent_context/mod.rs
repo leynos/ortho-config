@@ -65,6 +65,11 @@ pub fn bridge_ir_to_agent_context(
     package: &str,
     localizer: Option<&dyn Localizer>,
 ) -> AgentContext {
+    tracing::debug!(
+        package = %package,
+        root = %meta.app_name,
+        "starting bridge IR to agent-context transformation",
+    );
     let mut context = AgentContext::new(package);
     walk(meta, &[], &mut context.commands, localizer);
     context
@@ -75,6 +80,11 @@ pub fn bridge_ir_to_agent_context(
             .inputs
             .sort_by(|left, right| left.name.cmp(&right.name));
     }
+    tracing::debug!(
+        package = %package,
+        command_count = context.commands.len(),
+        "bridge IR to agent-context transformation complete",
+    );
     context
 }
 

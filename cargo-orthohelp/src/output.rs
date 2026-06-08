@@ -53,30 +53,58 @@ pub fn write_agent_context(
     out_dir: &Utf8Path,
     payload: &AgentContext,
 ) -> Result<Utf8PathBuf, OrthohelpError> {
-    let dir = ensure_dir(out_dir)?;
     let filename = "agent-context.json";
+    let target = out_dir.join(filename);
+    let dir = ensure_dir(out_dir).map_err(|error| {
+        tracing::debug!(
+            path = %out_dir,
+            error = %error,
+            "failed to prepare agent-context output directory",
+        );
+        error
+    })?;
     let mut file = dir
         .open_with(
             filename,
             OpenOptions::new().write(true).create(true).truncate(true),
         )
-        .map_err(|io_err| OrthohelpError::Io {
-            path: out_dir.join(filename),
-            source: io_err,
+        .map_err(|io_err| {
+            tracing::debug!(
+                path = %target,
+                error = %io_err,
+                "failed to open agent-context JSON for writing",
+            );
+            OrthohelpError::Io {
+                path: target.clone(),
+                source: io_err,
+            }
         })?;
 
-    let content = serde_json::to_string_pretty(payload)?;
-    let target = out_dir.join(filename);
+    let content = serde_json::to_string_pretty(payload).map_err(|error| {
+        tracing::debug!(
+            path = %target,
+            error = %error,
+            "failed to serialize agent-context JSON",
+        );
+        OrthohelpError::IrJson(error)
+    })?;
     tracing::debug!(
         path = %target,
         bytes = content.len(),
         "writing agent-context JSON",
     );
-    file.write_all(content.as_bytes())
-        .map_err(|io_err| OrthohelpError::Io {
+    file.write_all(content.as_bytes()).map_err(|io_err| {
+        tracing::debug!(
+            path = %target,
+            bytes = content.len(),
+            error = %io_err,
+            "failed to write agent-context JSON",
+        );
+        OrthohelpError::Io {
             path: target.clone(),
             source: io_err,
-        })?;
+        }
+    })?;
     tracing::debug!(
         path = %target,
         bytes = content.len(),
