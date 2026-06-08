@@ -4,10 +4,13 @@ use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::ambient_authority;
 use cap_std::fs_utf8::{Dir, File, OpenOptions};
 use std::io::Write;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::error::OrthohelpError;
 use crate::ir::LocalizedDocMetadata;
 use ortho_config::AgentContext;
+
+static AGENT_CONTEXT_TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 /// Writes the localized IR JSON for a single locale.
 pub fn write_localized_ir(
@@ -81,7 +84,7 @@ pub fn write_agent_context(
     drop(file);
 
     replace_agent_context_file(&dir, &target)?;
-    sync_parent_dir(out_dir).map_err(|error| {
+    sync_parent_dir(&dir, out_dir).map_err(|error| {
         tracing::debug!(
             path = %out_dir,
             error = %error,
@@ -108,7 +111,8 @@ struct AgentContextWriteTarget {
 impl AgentContextWriteTarget {
     fn new(out_dir: &Utf8Path) -> Self {
         let filename = "agent-context.json";
-        let temp_filename = format!("{filename}.tmp");
+        let temp_id = AGENT_CONTEXT_TEMP_COUNTER.fetch_add(1, Ordering::Relaxed);
+        let temp_filename = format!("{filename}.{}.{}.tmp", std::process::id(), temp_id);
         Self {
             filename,
             path: out_dir.join(filename),
@@ -203,19 +207,19 @@ fn replace_agent_context_file(
 }
 
 #[cfg(unix)]
-fn sync_parent_dir(path: &Utf8Path) -> Result<(), OrthohelpError> {
-    let dir = std::fs::File::open(path).map_err(|io_err| OrthohelpError::Io {
+fn sync_parent_dir(dir: &Dir, path: &Utf8Path) -> Result<(), OrthohelpError> {
+    let dir_file = dir.open(".").map_err(|io_err| OrthohelpError::Io {
         path: path.to_path_buf(),
         source: io_err,
     })?;
-    dir.sync_all().map_err(|io_err| OrthohelpError::Io {
+    dir_file.sync_all().map_err(|io_err| OrthohelpError::Io {
         path: path.to_path_buf(),
         source: io_err,
     })
 }
 
 #[cfg(not(unix))]
-fn sync_parent_dir(_path: &Utf8Path) -> Result<(), OrthohelpError> {
+const fn sync_parent_dir(_dir: &Dir, _path: &Utf8Path) -> Result<(), OrthohelpError> {
     Ok(())
 }
 
