@@ -129,7 +129,7 @@ fn open_agent_context_temp_file(
 ) -> Result<File, OrthohelpError> {
     dir.open_with(
         temp_filename,
-        OpenOptions::new().write(true).create(true).truncate(true),
+        OpenOptions::new().write(true).create_new(true),
     )
     .map_err(|io_err| {
         tracing::debug!(
