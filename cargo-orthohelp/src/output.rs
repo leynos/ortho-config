@@ -2,7 +2,7 @@
 
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::ambient_authority;
-use cap_std::fs_utf8::{Dir, OpenOptions};
+use cap_std::fs_utf8::{Dir, File, OpenOptions};
 use std::io::Write;
 
 use crate::error::OrthohelpError;
@@ -53,8 +53,7 @@ pub fn write_agent_context(
     out_dir: &Utf8Path,
     payload: &AgentContext,
 ) -> Result<Utf8PathBuf, OrthohelpError> {
-    let filename = "agent-context.json";
-    let target = out_dir.join(filename);
+    let target = AgentContextWriteTarget::new(out_dir);
     let dir = ensure_dir(out_dir).map_err(|error| {
         tracing::debug!(
             path = %out_dir,
@@ -63,55 +62,161 @@ pub fn write_agent_context(
         );
         error
     })?;
-    let mut file = dir
-        .open_with(
-            filename,
-            OpenOptions::new().write(true).create(true).truncate(true),
-        )
-        .map_err(|io_err| {
-            tracing::debug!(
-                path = %target,
-                error = %io_err,
-                "failed to open agent-context JSON for writing",
-            );
-            OrthohelpError::Io {
-                path: target.clone(),
-                source: io_err,
-            }
-        })?;
+    let mut file = open_agent_context_temp_file(&dir, &target.temp_filename, &target.temp_path)?;
 
     let content = serde_json::to_string_pretty(payload).map_err(|error| {
         tracing::debug!(
-            path = %target,
+            path = %target.path,
             error = %error,
             "failed to serialize agent-context JSON",
         );
         OrthohelpError::IrJson(error)
     })?;
     tracing::debug!(
-        path = %target,
+        path = %target.path,
         bytes = content.len(),
         "writing agent-context JSON",
     );
+    write_and_sync_agent_context_temp_file(&mut file, &target.temp_path, &content)?;
+    drop(file);
+
+    replace_agent_context_file(&dir, &target)?;
+    sync_parent_dir(out_dir).map_err(|error| {
+        tracing::debug!(
+            path = %out_dir,
+            error = %error,
+            "failed to sync agent-context output directory",
+        );
+        error
+    })?;
+    tracing::debug!(
+        path = %target.path,
+        bytes = content.len(),
+        "agent-context JSON written successfully",
+    );
+
+    Ok(target.path)
+}
+
+struct AgentContextWriteTarget {
+    filename: &'static str,
+    path: Utf8PathBuf,
+    temp_filename: String,
+    temp_path: Utf8PathBuf,
+}
+
+impl AgentContextWriteTarget {
+    fn new(out_dir: &Utf8Path) -> Self {
+        let filename = "agent-context.json";
+        let temp_filename = format!("{filename}.tmp");
+        Self {
+            filename,
+            path: out_dir.join(filename),
+            temp_path: out_dir.join(&temp_filename),
+            temp_filename,
+        }
+    }
+}
+
+fn open_agent_context_temp_file(
+    dir: &Dir,
+    temp_filename: &str,
+    temp_target: &Utf8Path,
+) -> Result<File, OrthohelpError> {
+    dir.open_with(
+        temp_filename,
+        OpenOptions::new().write(true).create(true).truncate(true),
+    )
+    .map_err(|io_err| {
+        tracing::debug!(
+            path = %temp_target,
+            error = %io_err,
+            "failed to open agent-context JSON for writing",
+        );
+        OrthohelpError::Io {
+            path: temp_target.to_path_buf(),
+            source: io_err,
+        }
+    })
+}
+
+fn write_and_sync_agent_context_temp_file(
+    file: &mut File,
+    temp_target: &Utf8Path,
+    content: &str,
+) -> Result<(), OrthohelpError> {
     file.write_all(content.as_bytes()).map_err(|io_err| {
         tracing::debug!(
-            path = %target,
+            path = %temp_target,
             bytes = content.len(),
             error = %io_err,
             "failed to write agent-context JSON",
         );
         OrthohelpError::Io {
-            path: target.clone(),
+            path: temp_target.to_path_buf(),
             source: io_err,
         }
     })?;
-    tracing::debug!(
-        path = %target,
-        bytes = content.len(),
-        "agent-context JSON written successfully",
-    );
+    file.flush().map_err(|io_err| {
+        tracing::debug!(
+            path = %temp_target,
+            bytes = content.len(),
+            error = %io_err,
+            "failed to flush agent-context JSON",
+        );
+        OrthohelpError::Io {
+            path: temp_target.to_path_buf(),
+            source: io_err,
+        }
+    })?;
+    file.sync_all().map_err(|io_err| {
+        tracing::debug!(
+            path = %temp_target,
+            bytes = content.len(),
+            error = %io_err,
+            "failed to sync agent-context JSON",
+        );
+        OrthohelpError::Io {
+            path: temp_target.to_path_buf(),
+            source: io_err,
+        }
+    })
+}
 
-    Ok(target)
+fn replace_agent_context_file(
+    dir: &Dir,
+    target: &AgentContextWriteTarget,
+) -> Result<(), OrthohelpError> {
+    dir.rename(&target.temp_filename, dir, target.filename)
+        .map_err(|io_err| {
+            tracing::debug!(
+                source = %target.temp_path,
+                destination = %target.path,
+                error = %io_err,
+                "failed to replace agent-context JSON",
+            );
+            OrthohelpError::Io {
+                path: target.path.clone(),
+                source: io_err,
+            }
+        })
+}
+
+#[cfg(unix)]
+fn sync_parent_dir(path: &Utf8Path) -> Result<(), OrthohelpError> {
+    let dir = std::fs::File::open(path).map_err(|io_err| OrthohelpError::Io {
+        path: path.to_path_buf(),
+        source: io_err,
+    })?;
+    dir.sync_all().map_err(|io_err| OrthohelpError::Io {
+        path: path.to_path_buf(),
+        source: io_err,
+    })
+}
+
+#[cfg(not(unix))]
+fn sync_parent_dir(_path: &Utf8Path) -> Result<(), OrthohelpError> {
+    Ok(())
 }
 
 fn ensure_dir(path: &Utf8Path) -> Result<Dir, OrthohelpError> {
