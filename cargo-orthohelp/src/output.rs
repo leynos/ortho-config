@@ -327,7 +327,14 @@ mod tests {
 
         let result =
             open_agent_context_temp_file(&dir, "collision.tmp", &out_dir.join("collision.tmp"));
-        assert!(result.is_err(), "expected Err on collision, got Ok");
+        assert!(
+            matches!(
+                &result,
+                Err(OrthohelpError::Io { source, .. })
+                    if source.kind() == std::io::ErrorKind::AlreadyExists
+            ),
+            "expected create_new collision to report AlreadyExists, got {result:?}"
+        );
     }
 
     #[test]
