@@ -3,52 +3,8 @@
 use anyhow::{Result, anyhow, ensure};
 use ortho_config::docs::{DocMetadata, FieldMetadata, OrthoConfigDocs};
 use rstest_bdd_macros::{given, then, when};
-use std::convert::Infallible;
-use std::str::FromStr;
 
 use crate::scenario_state::{NestedDocsConfig, NestedDocsContext};
-
-/// A command path such as `admin grant-access`, with surrounding quotes
-/// stripped so step text may quote names that contain spaces.
-struct CommandPath(pub String);
-
-impl FromStr for CommandPath {
-    type Err = Infallible;
-
-    fn from_str(value: &str) -> Result<Self, Self::Err> {
-        Ok(Self(value.trim_matches('"').replace("\\\"", "\"")))
-    }
-}
-
-/// A quoted field or value name, with surrounding quotes stripped.
-struct QuotedName(pub String);
-
-impl FromStr for QuotedName {
-    type Err = Infallible;
-
-    fn from_str(value: &str) -> Result<Self, Self::Err> {
-        Ok(Self(value.trim_matches('"').replace("\\\"", "\"")))
-    }
-}
-
-/// A comma-separated list of command names, with whitespace trimmed and empty
-/// segments discarded.
-struct CommandNameList(pub Vec<String>);
-
-impl FromStr for CommandNameList {
-    type Err = Infallible;
-
-    fn from_str(value: &str) -> Result<Self, Self::Err> {
-        Ok(Self(
-            value
-                .split(',')
-                .map(str::trim)
-                .filter(|name| !name.is_empty())
-                .map(str::to_owned)
-                .collect(),
-        ))
-    }
-}
 
 #[given("the nested CLI fixture")]
 fn nested_cli_fixture(nested_docs_context: &NestedDocsContext) {
@@ -65,13 +21,13 @@ fn request_nested_metadata(nested_docs_context: &NestedDocsContext) {
 #[then("the nested top-level commands are {expected}")]
 fn nested_top_level_commands(
     nested_docs_context: &NestedDocsContext,
-    expected: CommandNameList,
+    expected: String,
 ) -> Result<()> {
     let actual = nested_docs_context
         .metadata
         .with_ref(command_names)
         .ok_or_else(|| anyhow!("nested docs metadata not captured"))?;
-    let expected = expected.0;
+    let expected = names_from_csv(&expected);
 
     ensure!(
         actual == expected,
@@ -82,20 +38,20 @@ fn nested_top_level_commands(
 
 fn in_command(
     context: &NestedDocsContext,
-    command: CommandPath,
+    command: String,
     f: impl FnOnce(&DocMetadata, &str) -> Result<()>,
 ) -> Result<()> {
-    let name = command.0;
+    let name = unquoted(&command);
     with_command(context, &name, |meta| f(meta, &name))
 }
 
 #[then("command {command} contains field {field}")]
 fn command_contains_field(
     nested_docs_context: &NestedDocsContext,
-    command: CommandPath,
-    field: QuotedName,
+    command: String,
+    field: String,
 ) -> Result<()> {
-    let field_name = field.0;
+    let field_name = unquoted(&field);
     in_command(nested_docs_context, command, |meta, _cmd| {
         field_by_name(meta, &field_name).map(|_| ())
     })
@@ -104,13 +60,13 @@ fn command_contains_field(
 #[then("command {command} field {field} has default {expected}")]
 fn command_field_has_default(
     nested_docs_context: &NestedDocsContext,
-    command: CommandPath,
-    field: QuotedName,
-    expected: QuotedName,
+    command: String,
+    field: String,
+    expected: String,
 ) -> Result<()> {
     in_command(nested_docs_context, command, |meta, _cmd| {
-        let field_name = field.0;
-        let expected = expected.0;
+        let field_name = unquoted(&field);
+        let expected = unquoted(&expected);
         let field = field_by_name(meta, &field_name)?;
         let actual = field.default.as_ref().map(|value| value.display.as_str());
         ensure!(
@@ -124,10 +80,10 @@ fn command_field_has_default(
 #[then("command {command} has example {expected}")]
 fn command_has_example(
     nested_docs_context: &NestedDocsContext,
-    command: CommandPath,
-    expected: QuotedName,
+    command: String,
+    expected: String,
 ) -> Result<()> {
-    let expected = expected.0;
+    let expected = unquoted(&expected);
     in_command(nested_docs_context, command, |meta, cmd| {
         ensure!(
             meta.sections
@@ -143,7 +99,7 @@ fn command_has_example(
 #[then("command {command} exposes no fields")]
 fn command_exposes_no_fields(
     nested_docs_context: &NestedDocsContext,
-    command: CommandPath,
+    command: String,
 ) -> Result<()> {
     in_command(nested_docs_context, command, |meta, cmd| {
         ensure!(
@@ -158,12 +114,12 @@ fn command_exposes_no_fields(
 #[then("command {command} contains nested commands {expected}")]
 fn command_contains_nested_commands(
     nested_docs_context: &NestedDocsContext,
-    command: CommandPath,
-    expected: CommandNameList,
+    command: String,
+    expected: String,
 ) -> Result<()> {
     in_command(nested_docs_context, command, |meta, cmd| {
         let actual = command_names(meta);
-        let expected = expected.0;
+        let expected = names_from_csv(&expected);
         ensure!(
             actual == expected,
             "expected command {cmd:?} to expose {expected:?}, got {actual:?}",
@@ -175,7 +131,7 @@ fn command_contains_nested_commands(
 #[then("command {command} exposes Windows wrapper metadata")]
 fn command_exposes_windows_metadata(
     nested_docs_context: &NestedDocsContext,
-    command: CommandPath,
+    command: String,
 ) -> Result<()> {
     in_command(nested_docs_context, command, |meta, cmd| {
         ensure!(
@@ -189,7 +145,7 @@ fn command_exposes_windows_metadata(
 #[then("command {command} splits subcommands into functions")]
 fn command_splits_subcommands(
     nested_docs_context: &NestedDocsContext,
-    command: CommandPath,
+    command: String,
 ) -> Result<()> {
     in_command(nested_docs_context, command, |meta, cmd| {
         let split = meta
@@ -208,7 +164,7 @@ fn command_splits_subcommands(
 #[then("command {command} exposes no Windows wrapper metadata")]
 fn command_exposes_no_windows_metadata(
     nested_docs_context: &NestedDocsContext,
-    command: CommandPath,
+    command: String,
 ) -> Result<()> {
     in_command(nested_docs_context, command, |meta, cmd| {
         ensure!(
@@ -257,6 +213,19 @@ fn field_by_name<'metadata>(
         .iter()
         .find(|field| field.name == name)
         .ok_or_else(|| anyhow!("field {name:?} not found"))
+}
+
+fn names_from_csv(value: &str) -> Vec<String> {
+    value
+        .split(',')
+        .map(str::trim)
+        .filter(|name| !name.is_empty())
+        .map(str::to_owned)
+        .collect()
+}
+
+fn unquoted(value: &str) -> String {
+    value.trim_matches('"').replace("\\\"", "\"")
 }
 
 fn command_names(metadata: &DocMetadata) -> Vec<String> {
