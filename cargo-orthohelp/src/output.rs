@@ -317,8 +317,11 @@ mod tests {
         let temp_dir = TempDir::new().expect("create temp dir");
         let out_dir = Utf8Path::from_path(temp_dir.path()).expect("path is UTF-8");
 
-        let dir = cap_std::fs_utf8::Dir::open_ambient_dir(out_dir, cap_std::ambient_authority())
-            .expect("open temp dir");
+        // `Dir` and `ambient_authority` are in scope via `use super::*`.
+        // `open_ambient_dir` requires `AsRef<Utf8Path>`, so the `Utf8Path`
+        // `out_dir` is passed directly rather than via `as_std_path()`, which
+        // would yield a `std::path::Path` and fail the bound.
+        let dir = Dir::open_ambient_dir(out_dir, ambient_authority()).expect("open temp dir");
 
         std::fs::File::create(out_dir.join("collision.tmp")).expect("pre-create collision file");
 
