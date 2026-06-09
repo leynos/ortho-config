@@ -305,8 +305,12 @@ mod tests {
         // when a stale file lingers from a crashed run with a reused PID.
         let second = open_agent_context_temp_file(&dir, temp_filename, &temp_path);
         assert!(
-            matches!(second, Err(OrthohelpError::Io { .. })),
-            "expected create_new collision to fail, got {second:?}"
+            matches!(
+                &second,
+                Err(OrthohelpError::Io { source, .. })
+                    if source.kind() == std::io::ErrorKind::AlreadyExists
+            ),
+            "expected create_new collision to report AlreadyExists, got {second:?}"
         );
     }
 
