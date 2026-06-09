@@ -57,10 +57,8 @@ pub fn write_agent_context(
     payload: &AgentContext,
 ) -> Result<Utf8PathBuf, OrthohelpError> {
     tracing::debug!(
-        path = %out_dir,
-        package = %payload.package,
-        commands = payload.commands.len(),
-        "writing agent-context output",
+        out_dir = %out_dir,
+        "starting agent-context write",
     );
     let target = AgentContextWriteTarget::new(out_dir);
     let dir = ensure_dir(out_dir).map_err(|error| {
@@ -312,6 +310,21 @@ mod tests {
             ),
             "expected create_new collision to report AlreadyExists, got {second:?}"
         );
+    }
+
+    #[test]
+    fn temp_file_open_fails_when_file_already_exists() {
+        let temp_dir = TempDir::new().expect("create temp dir");
+        let out_dir = Utf8Path::from_path(temp_dir.path()).expect("path is UTF-8");
+
+        let dir = cap_std::fs_utf8::Dir::open_ambient_dir(out_dir, cap_std::ambient_authority())
+            .expect("open temp dir");
+
+        std::fs::File::create(out_dir.join("collision.tmp")).expect("pre-create collision file");
+
+        let result =
+            open_agent_context_temp_file(&dir, "collision.tmp", &out_dir.join("collision.tmp"));
+        assert!(result.is_err(), "expected Err on collision, got Ok");
     }
 
     #[test]
