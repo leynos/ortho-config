@@ -56,6 +56,12 @@ pub fn write_agent_context(
     out_dir: &Utf8Path,
     payload: &AgentContext,
 ) -> Result<Utf8PathBuf, OrthohelpError> {
+    tracing::debug!(
+        path = %out_dir,
+        package = %payload.package,
+        commands = payload.commands.len(),
+        "writing agent-context output",
+    );
     let target = AgentContextWriteTarget::new(out_dir);
     let dir = ensure_dir(out_dir).map_err(|error| {
         tracing::debug!(
@@ -280,6 +286,28 @@ mod tests {
         let content =
             std::fs::read_to_string(out_dir.join("agent-context.json")).expect("read output JSON");
         serde_json::from_str::<serde_json::Value>(&content).expect("parse output JSON");
+    }
+
+    #[test]
+    fn temp_file_collision_fails_hard() {
+        let temp_dir = TempDir::new().expect("create temporary output directory");
+        let out_dir = Utf8Path::from_path(temp_dir.path()).expect("temporary path is UTF-8");
+        let dir = ensure_dir(out_dir).expect("open output directory");
+        let temp_filename = "agent-context.json.collision.tmp";
+        let temp_path = out_dir.join(temp_filename);
+
+        // The first `create_new` open succeeds and leaves the temp file in place.
+        let _first = open_agent_context_temp_file(&dir, temp_filename, &temp_path)
+            .expect("first temp file creation should succeed");
+
+        // A second open with the same name must fail hard: `create_new(true)`
+        // refuses to clobber an existing temp file, preserving atomicity even
+        // when a stale file lingers from a crashed run with a reused PID.
+        let second = open_agent_context_temp_file(&dir, temp_filename, &temp_path);
+        assert!(
+            matches!(second, Err(OrthohelpError::Io { .. })),
+            "expected create_new collision to fail, got {second:?}"
+        );
     }
 
     #[test]
