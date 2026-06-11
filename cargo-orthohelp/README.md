@@ -16,13 +16,13 @@ intermediate representation (IR) produced by `#[derive(OrthoConfig)]`.
 
 ## How it works
 
-1. It discovers your package and root config type from Cargo metadata or CLI
+1. Discovers your package and root config type from Cargo metadata or CLI
    flags.
-2. It builds a tiny bridge binary that calls
+2. Builds a tiny bridge binary that calls
    `OrthoConfigDocs::get_doc_metadata()`.
-3. It resolves Fluent message IDs for each requested locale.
-4. It emits localized IR JSON, roff man pages, PowerShell external help,
-   compact agent-context JSON, or all formats.
+3. Resolves Fluent message IDs for each requested locale.
+4. Emits localized IR JSON, roff man pages, PowerShell external help, compact
+   agent-context JSON, or every localized format.
 
 ## Core features
 
@@ -30,7 +30,8 @@ intermediate representation (IR) produced by `#[derive(OrthoConfig)]`.
 - **Localized output:** Resolve Fluent IDs per locale from `locales/<locale>`.
 - **Multiple output formats:** IR JSON (`ir`), UNIX man pages (`man`),
   PowerShell help (`ps`), compact agent-context JSON (`agent-context`), or all
-  formats (`all`).
+  localized output formats (`all`). Note: `--format all` currently excludes
+  `agent-context` until schema versioning is locked.
 - **Cache-aware pipeline:** `--cache` reuses bridge IR; `--no-build` enforces
   cache-only execution.
 - **Cargo-native workflow:** Run as `cargo orthohelp` from your workspace.

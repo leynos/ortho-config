@@ -87,7 +87,6 @@ fn run(cli: Cli) -> Result<(), OrthohelpError> {
 
     let metadata = metadata::load_metadata()?;
     let selection = metadata::select_package(&metadata, &args)?;
-    let locales = locale::resolve_locales(&args, &selection)?;
 
     let out_dir = resolve_out_dir(args.out_dir.clone(), &selection);
 
@@ -112,11 +111,19 @@ fn run(cli: Cli) -> Result<(), OrthohelpError> {
     let should_generate_ir = matches!(args.format, OutputFormat::Ir | OutputFormat::All);
     let should_generate_man = matches!(args.format, OutputFormat::Man | OutputFormat::All);
     let should_generate_ps = matches!(args.format, OutputFormat::Ps | OutputFormat::All);
+    let should_generate_localized_docs =
+        should_generate_ir || should_generate_man || should_generate_ps;
 
     generate_agent_context_if_requested(&args, &selection, &doc_metadata, &out_dir)?;
 
+    let locales = if should_generate_localized_docs {
+        locale::resolve_locales(&args, &selection)?
+    } else {
+        Vec::new()
+    };
+
     let localized_docs = localize_docs_if_requested(
-        should_generate_ir || should_generate_man || should_generate_ps,
+        should_generate_localized_docs,
         &selection,
         &doc_metadata,
         &locales,
