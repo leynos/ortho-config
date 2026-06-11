@@ -133,19 +133,37 @@ fn command_has_example(
     })
 }
 
+fn check_command_property(
+    context: &NestedDocsContext,
+    command: CommandPath,
+    predicate: impl FnOnce(&DocMetadata) -> bool,
+    err: impl FnOnce(&DocMetadata, &str) -> anyhow::Error,
+) -> Result<()> {
+    in_command(context, command, |meta, cmd| {
+        if predicate(meta) {
+            Ok(())
+        } else {
+            Err(err(meta, cmd))
+        }
+    })
+}
+
 #[then("command {command} exposes no fields")]
 fn command_exposes_no_fields(
     nested_docs_context: &NestedDocsContext,
     command: CommandPath,
 ) -> Result<()> {
-    in_command(nested_docs_context, command, |meta, cmd| {
-        ensure!(
-            meta.fields.is_empty(),
-            "expected command {cmd:?} to expose no fields, got {:?}",
-            field_names(meta),
-        );
-        Ok(())
-    })
+    check_command_property(
+        nested_docs_context,
+        command,
+        |meta| meta.fields.is_empty(),
+        |meta, cmd| {
+            anyhow!(
+                "expected command {cmd:?} to expose no fields, got {:?}",
+                field_names(meta),
+            )
+        },
+    )
 }
 
 #[then("command {command} contains nested commands {expected}")]
@@ -170,13 +188,12 @@ fn command_exposes_windows_metadata(
     nested_docs_context: &NestedDocsContext,
     command: CommandPath,
 ) -> Result<()> {
-    in_command(nested_docs_context, command, |meta, cmd| {
-        ensure!(
-            meta.windows.is_some(),
-            "expected command {cmd:?} to expose Windows metadata",
-        );
-        Ok(())
-    })
+    check_command_property(
+        nested_docs_context,
+        command,
+        |meta| meta.windows.is_some(),
+        |_meta, cmd| anyhow!("expected command {cmd:?} to expose Windows metadata"),
+    )
 }
 
 #[then("command {command} splits subcommands into functions")]
@@ -203,13 +220,12 @@ fn command_exposes_no_windows_metadata(
     nested_docs_context: &NestedDocsContext,
     command: CommandPath,
 ) -> Result<()> {
-    in_command(nested_docs_context, command, |meta, cmd| {
-        ensure!(
-            meta.windows.is_none(),
-            "expected command {cmd:?} to expose no Windows metadata",
-        );
-        Ok(())
-    })
+    check_command_property(
+        nested_docs_context,
+        command,
+        |meta| meta.windows.is_none(),
+        |_meta, cmd| anyhow!("expected command {cmd:?} to expose no Windows metadata"),
+    )
 }
 
 fn with_command(
