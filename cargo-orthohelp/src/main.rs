@@ -145,6 +145,11 @@ fn generate_agent_context_if_requested(
     out_dir: &Utf8PathBuf,
 ) -> Result<(), OrthohelpError> {
     if !matches!(args.format, OutputFormat::AgentContext) {
+        tracing::debug!(
+            package = %selection.package_name,
+            format = ?args.format,
+            "agent-context generation skipped for requested format",
+        );
         return Ok(());
     }
     let en_us_localizer = match build_en_us_localizer(&selection.package_root) {

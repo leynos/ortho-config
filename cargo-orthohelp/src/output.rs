@@ -10,6 +10,11 @@ use crate::error::OrthohelpError;
 use crate::ir::LocalizedDocMetadata;
 use ortho_config::AgentContext;
 
+// Process-wide suffix for agent-context temp names. `Relaxed` ordering is
+// sufficient because the atomic only needs to hand out distinct values; the
+// filesystem `create_new` and rename operations provide the actual
+// synchronisation. A `u64` wrap would require reusing one process for
+// 2^64 writes, so any collision remains a hard failure at temp-file creation.
 static AGENT_CONTEXT_TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 /// Writes the localized IR JSON for a single locale.
@@ -57,22 +62,30 @@ pub fn write_agent_context(
     payload: &AgentContext,
 ) -> Result<Utf8PathBuf, OrthohelpError> {
     tracing::debug!(
+        package = %payload.package,
         out_dir = %out_dir,
         "starting agent-context write",
     );
     let target = AgentContextWriteTarget::new(out_dir);
     let dir = ensure_dir(out_dir).map_err(|error| {
         tracing::debug!(
+            package = %payload.package,
             path = %out_dir,
             error = %error,
             "failed to prepare agent-context output directory",
         );
         error
     })?;
-    let mut file = open_agent_context_temp_file(&dir, &target.temp_filename, &target.temp_path)?;
+    let mut file = open_agent_context_temp_file(
+        &dir,
+        &target.temp_filename,
+        &target.temp_path,
+        &payload.package,
+    )?;
 
     let content = serde_json::to_string_pretty(payload).map_err(|error| {
         tracing::debug!(
+            package = %payload.package,
             path = %target.path,
             error = %error,
             "failed to serialize agent-context JSON",
@@ -80,16 +93,23 @@ pub fn write_agent_context(
         OrthohelpError::IrJson(error)
     })?;
     tracing::debug!(
+        package = %payload.package,
         path = %target.path,
         bytes = content.len(),
         "writing agent-context JSON",
     );
-    write_and_sync_agent_context_temp_file(&mut file, &target.temp_path, &content)?;
+    write_and_sync_agent_context_temp_file(
+        &mut file,
+        &target.temp_path,
+        &content,
+        &payload.package,
+    )?;
     drop(file);
 
-    replace_agent_context_file(&dir, &target)?;
+    replace_agent_context_file(&dir, &target, &payload.package)?;
     sync_parent_dir(&dir, out_dir).map_err(|error| {
         tracing::debug!(
+            package = %payload.package,
             path = %out_dir,
             error = %error,
             "failed to sync agent-context output directory",
@@ -97,6 +117,7 @@ pub fn write_agent_context(
         error
     })?;
     tracing::debug!(
+        package = %payload.package,
         path = %target.path,
         bytes = content.len(),
         "agent-context JSON written successfully",
@@ -130,6 +151,7 @@ fn open_agent_context_temp_file(
     dir: &Dir,
     temp_filename: &str,
     temp_target: &Utf8Path,
+    package: &str,
 ) -> Result<File, OrthohelpError> {
     dir.open_with(
         temp_filename,
@@ -137,6 +159,7 @@ fn open_agent_context_temp_file(
     )
     .map_err(|io_err| {
         tracing::debug!(
+            package = %package,
             path = %temp_target,
             error = %io_err,
             "failed to open agent-context JSON for writing",
@@ -152,9 +175,11 @@ fn write_and_sync_agent_context_temp_file(
     file: &mut File,
     temp_target: &Utf8Path,
     content: &str,
+    package: &str,
 ) -> Result<(), OrthohelpError> {
     file.write_all(content.as_bytes()).map_err(|io_err| {
         tracing::debug!(
+            package = %package,
             path = %temp_target,
             bytes = content.len(),
             error = %io_err,
@@ -167,6 +192,7 @@ fn write_and_sync_agent_context_temp_file(
     })?;
     file.flush().map_err(|io_err| {
         tracing::debug!(
+            package = %package,
             path = %temp_target,
             bytes = content.len(),
             error = %io_err,
@@ -179,6 +205,7 @@ fn write_and_sync_agent_context_temp_file(
     })?;
     file.sync_all().map_err(|io_err| {
         tracing::debug!(
+            package = %package,
             path = %temp_target,
             bytes = content.len(),
             error = %io_err,
@@ -194,10 +221,12 @@ fn write_and_sync_agent_context_temp_file(
 fn replace_agent_context_file(
     dir: &Dir,
     target: &AgentContextWriteTarget,
+    package: &str,
 ) -> Result<(), OrthohelpError> {
     dir.rename(&target.temp_filename, dir, target.filename)
         .map_err(|io_err| {
             tracing::debug!(
+                package = %package,
                 source = %target.temp_path,
                 destination = %target.path,
                 error = %io_err,
@@ -295,13 +324,13 @@ mod tests {
         let temp_path = out_dir.join(temp_filename);
 
         // The first `create_new` open succeeds and leaves the temp file in place.
-        let _first = open_agent_context_temp_file(&dir, temp_filename, &temp_path)
+        let _first = open_agent_context_temp_file(&dir, temp_filename, &temp_path, "test-package")
             .expect("first temp file creation should succeed");
 
         // A second open with the same name must fail hard: `create_new(true)`
         // refuses to clobber an existing temp file, preserving atomicity even
         // when a stale file lingers from a crashed run with a reused PID.
-        let second = open_agent_context_temp_file(&dir, temp_filename, &temp_path);
+        let second = open_agent_context_temp_file(&dir, temp_filename, &temp_path, "test-package");
         assert!(
             matches!(
                 &second,
@@ -325,8 +354,12 @@ mod tests {
 
         std::fs::File::create(out_dir.join("collision.tmp")).expect("pre-create collision file");
 
-        let result =
-            open_agent_context_temp_file(&dir, "collision.tmp", &out_dir.join("collision.tmp"));
+        let result = open_agent_context_temp_file(
+            &dir,
+            "collision.tmp",
+            &out_dir.join("collision.tmp"),
+            "test-package",
+        );
         assert!(
             matches!(
                 &result,
