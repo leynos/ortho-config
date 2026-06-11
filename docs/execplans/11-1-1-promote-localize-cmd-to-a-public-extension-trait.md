@@ -1,9 +1,8 @@
 # Promote `LocalizeCmd` to a public extension trait on `clap::Command`
 
-This ExecPlan (execution plan) is a living document. The sections
-`Constraints`, `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`,
-`Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
-proceeds.
+This ExecPlan (execution plan) is a living document. The sections `Constraints`,
+`Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
+and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
 Status: IN PROGRESS
 
@@ -14,11 +13,10 @@ source: [cli-localization-design.md](../cli-localization-design.md) §4, §4.1,
 ## Purpose / big picture
 
 Today the load-bearing helper that translates a `clap` command tree lives in the
-`hello_world` example, at
-`examples/hello_world/src/cli/localization.rs`. Every application that wants
-localized command-line help copies that trait verbatim. This plan promotes the
-helper into the library as a first-class, documented public API so applications
-re-use it instead of copying it.
+`hello_world` example, at `examples/hello_world/src/cli/localization.rs`.
+Every application that wants localized command-line help copies that trait
+verbatim. This plan promotes the helper into the library as a first-class,
+documented public API so applications re-use it instead of copying it.
 
 After this change a consumer can write:
 
@@ -36,18 +34,19 @@ Observable success is concrete and test-driven:
 
 1. `ortho_config::LocalizeCmd`, `ortho_config::WithBase`, and
    `ortho_config::message_id_for` are public and documented.
-2. The `hello_world` example deletes its local `LocalizeCmd` trait and re-exports
-   the crate one through the existing path `hello_world::cli::LocalizeCmd`, and
-   every existing example test still passes unchanged in assertion content.
+2. The `hello_world` example deletes its local `LocalizeCmd` trait and
+   re-exports the crate one through the existing path
+   `hello_world::cli::LocalizeCmd`, and every existing example test still
+   passes unchanged in assertion content.
 3. `make check-fmt`, `make typecheck`, `make lint`, and `make test` all pass,
    including doctests (`cargo test --doc`).
 
 This plan covers **only** 11.1.1: the promoted `LocalizeCmd` trait (widened to
 the full clap surface), `LocalizeCmd::with_base`, and the public
 `message_id_for` function. The blanket `LocalizedParse` trait (11.1.2), the
-`OrthoConfigLocalization` derive (11.1.3), the widened clap-error matrix (11.2),
-and the `BootLocalizer`/`BootHandle` lifecycle (11.3) are explicitly out of
-scope and are named where they touch this work.
+`OrthoConfigLocalization` derive (11.1.3), the widened clap-error matrix
+(11.2), and the `BootLocalizer`/`BootHandle` lifecycle (11.3) are explicitly
+out of scope and are named where they touch this work.
 
 ## Constraints
 
@@ -59,29 +58,31 @@ escalation, not a workaround.
    `ortho_config`; the example depends on the crate, never the reverse. No
    circular workspace dependency may be introduced.
 2. **Additive, non-destructive localization.** A missing catalogue key must
-   leave clap's stock value untouched (the localizer returns `None` → the setter
-   is not called). The walker must never reset a field to clap's default; it only
-   overwrites on a `Some` lookup. This preserves §10 backward compatibility.
+   leave clap's stock value untouched (the localizer returns `None` → the
+   setter is not called). The walker must never reset a field to clap's
+   default; it only overwrites on a `Some` lookup. This preserves §10 backward
+   compatibility.
 3. **Byte-for-byte identifier agreement.** Identifiers produced by
    `message_id_for` must, after the existing load-time normalization
    (`normalize_resource_ids`), match the keys in the shipped catalogues
-   (`examples/hello_world/src/locales/en-US/messages.ftl` and `.../ja/messages.ftl`).
-   The existing example tests are the regression gate for this.
+   (`examples/hello_world/src/locales/en-US/messages.ftl` and
+   `.../ja/messages.ftl`). The existing example tests are the regression gate
+   for this.
 4. **Public path stability for the deprecation window.** The path
    `hello_world::cli::LocalizeCmd` must keep resolving (now to the re-exported
    crate trait) so the `localizer.rs` doctest and `cli/tests/localisation.rs`
-   keep compiling for one release (§10: collapse to a re-export in 0.9, remove in
-   0.10).
+   keep compiling for one release (§10: collapse to a re-export in 0.9, remove
+   in 0.10).
 5. **No flag corruption.** Rewriting `value_name` on a `clap::Arg` implicitly
    sets `ArgAction::Set` (see Surprises). The walker must only set `value_name`
    on arguments that already take a value; it must never change a flag's action.
-6. **clap API reality.** `clap::Command` has no `get_arguments_mut`. Per-argument
-   edits go through `Command::mut_arg(id, f)`; child commands are walked via
-   `get_subcommands()` (read) + `find_subcommand_mut` + `std::mem::take`. See
-   Surprises and the Interfaces section.
+6. **clap API reality.** `clap::Command` has no `get_arguments_mut`.
+   Per-argument edits go through `Command::mut_arg(id, f)`; child commands are
+   walked via `get_subcommands()` (read) + `find_subcommand_mut` +
+   `std::mem::take`. See Surprises and the Interfaces section.
 7. **File size.** No code file may exceed 400 lines (AGENTS.md). The new
-   `localizer/clap_command.rs` and any `identifier` submodule must respect this;
-   split helpers if needed.
+   `localizer/clap_command.rs` and any `identifier` submodule must respect
+   this; split helpers if needed.
 8. **Spelling and style.** Comments and docs use en-GB-oxendict spelling, except
    references to external APIs. Documentation follows
    [documentation-style-guide.md](../documentation-style-guide.md).
@@ -91,19 +92,19 @@ escalation, not a workaround.
 Stop and escalate (record in `Decision Log`, await direction) when any of these
 is breached.
 
-1. **Scope.** If the implementation requires touching more than ~12 files or more
-   than ~600 net lines of non-test code, stop and escalate.
+1. **Scope.** If the implementation requires touching more than ~12 files or
+   more than ~600 net lines of non-test code, stop and escalate.
 2. **Public API shape.** The trait/function signatures in the Interfaces section
    are the contract. If implementation forces a *different* public signature
    (for example `message_id_for` must return `Result` rather than panic, or the
    `WithBase` wrapper proves unworkable), stop and escalate — this changes the
    ADR.
 3. **New runtime dependency.** Adding any non-dev dependency to `ortho_config`
-   is out of tolerance. Adding the `proptest` **dev**-dependency is in scope and
-   expected.
+   is out of tolerance. Adding the `proptest` **dev**-dependency is in scope
+   and expected.
 4. **Catalogue churn.** If making the example pass would require editing the
-   shipped `.ftl` catalogue keys (rather than wiring `with_base`), stop: that is
-   a breaking change to translators and needs sign-off.
+   shipped `.ftl` catalogue keys (rather than wiring `with_base`), stop: that
+   is a breaking change to translators and needs sign-off.
 5. **Iterations.** If a milestone's tests still fail after 3 focused attempts,
    stop and escalate with the transcript.
 6. **Cross-crate ripple.** If promoting the trait forces changes to
@@ -112,55 +113,52 @@ is breached.
 
 ## Risks
 
-1. Risk: **Identifier path divergence.** The example's old `message_id` omits the
-   root command segment (it hard-codes `hello_world.cli` and joins only
+1. Risk: **Identifier path divergence.** The example's old `message_id` omits
+   the root command segment (it hard-codes `hello_world.cli` and joins only
    subcommand names), whereas the design's `<base> ::= <root> <segment>...`
    includes the normalized binary name. A faithful `message_id_for` therefore
    emits `hello-world-greet-about`, not the catalogue's
-   `hello_world-cli-greet-about`.
-   Severity: high. Likelihood: high (certain if unaddressed).
-   Mitigation: the example calls `with_base("hello_world.cli")` so the derived
-   ids reproduce the existing keys. The existing example tests are the gate.
+   `hello_world-cli-greet-about`. Severity: high. Likelihood: high (certain if
+   unaddressed). Mitigation: the example calls `with_base("hello_world.cli")`
+   so the derived ids reproduce the existing keys. The existing example tests
+   are the gate.
 2. Risk: **Underscore normalization contradicts the design prose.** §4.1 says
    "underscores become hyphens", but the shipped keys preserve `_`
-   (`hello_world-cli-about`). If `message_id_for` converts `_`→`-`, every lookup
-   misses.
-   Severity: high. Likelihood: high.
-   Mitigation: preserve `_` (it is a legal Fluent character); amend the §4.1
-   prose as Milestone 0; add a byte-for-byte agreement test. See Decision Log.
+   (`hello_world-cli-about`). If `message_id_for` converts `_`→`-`, every
+   lookup misses. Severity: high. Likelihood: high. Mitigation: preserve `_`
+   (it is a legal Fluent character); amend the §4.1 prose as Milestone 0; add a
+   byte-for-byte agreement test. See Decision Log.
 3. Risk: **Doctest breakage.** The rustdoc doctest on `DemoLocalizer::new`
-   (`examples/hello_world/src/localizer.rs:55-63`) calls `.localize(&localizer)`
-   without a base and asserts `get_about().is_some()`. After promotion the
-   default base (binary name `hello-world`) will not resolve the
-   `hello_world.cli.*` keys, so the doctest fails under `cargo test --doc`.
-   Severity: medium. Likelihood: high.
-   Mitigation: update the doctest to `.with_base("hello_world.cli").localize(...)`;
-   gate `cargo test --doc` in acceptance.
+   (`examples/hello_world/src/localizer.rs:55-63`) calls
+   `.localize(&localizer)` without a base and asserts `get_about().is_some()`.
+   After promotion the default base (binary name `hello-world`) will not
+   resolve the `hello_world.cli.*` keys, so the doctest fails under
+   `cargo test --doc`. Severity: medium. Likelihood: high. Mitigation: update
+   the doctest to `.with_base("hello_world.cli").localize(...)`; gate
+   `cargo test --doc` in acceptance.
 4. Risk: **`value_name` action side-effect** corrupts flags (Constraint 5).
-   Severity: high. Likelihood: medium.
-   Mitigation: guard on a takes-value predicate captured from the read-only
-   `&Arg`; explicit unit test asserting a `SetTrue` flag keeps its action.
+   Severity: high. Likelihood: medium. Mitigation: guard on a takes-value
+   predicate captured from the read-only `&Arg`; explicit unit test asserting a
+   `SetTrue` flag keeps its action.
 5. Risk: **Dead-code lint-as-error.** Removing the example's helpers orphans
    `CLI_GREET_ABOUT_MESSAGE_ID` / `CLI_TAKE_LEAVE_ABOUT_MESSAGE_ID` (currently
-   unused) and possibly others; `make lint` denies warnings.
-   Severity: low. Likelihood: medium.
-   Mitigation: remove genuinely unused consts; retain only those the in-file
-   tests reference.
+   unused) and possibly others; `make lint` denies warnings. Severity: low.
+   Likelihood: medium. Mitigation: remove genuinely unused consts; retain only
+   those the in-file tests reference.
 6. Risk: **Load-time vs derive-time normalizer drift.** `normalize_resource_ids`
    currently *tolerates* non-ASCII ids (there is a Cyrillic test in
-   `fluent.rs`). A strict `message_id_for` and a tolerant load path can disagree
-   on exotic input.
-   Severity: low (no shipped catalogue uses non-ASCII keys). Likelihood: low.
-   Mitigation: keep the tolerant load path unchanged for 11.1.1; only correct
-   the misleading `is_valid_fluent_id_char` doc comment; record full unification
-   as a deferred open question (do **not** delete the Cyrillic test).
+   `fluent.rs`). A strict `message_id_for` and a tolerant load path can
+   disagree on exotic input. Severity: low (no shipped catalogue uses non-ASCII
+   keys). Likelihood: low. Mitigation: keep the tolerant load path unchanged
+   for 11.1.1; only correct the misleading `is_valid_fluent_id_char` doc
+   comment; record full unification as a deferred open question (do **not**
+   delete the Cyrillic test).
 7. Risk: **Panic as public-API contract.** `message_id_for` and `localize` panic
    on unrepresentable / colliding command paths. Reviewers flagged this as a
-   hard-to-reverse choice.
-   Severity: medium. Likelihood: low (inputs are compile-time-fixed command
-   trees).
-   Mitigation: this is mandated by §4.1 and the roadmap; record ADR-006 capturing
-   the decision and the rejected `Result` alternative. See Decision Log.
+   hard-to-reverse choice. Severity: medium. Likelihood: low (inputs are
+   compile-time-fixed command trees). Mitigation: this is mandated by §4.1 and
+   the roadmap; record ADR-006 capturing the decision and the rejected `Result`
+   alternative. See Decision Log.
 
 ## Progress
 
@@ -172,7 +170,10 @@ is breached.
   (red→green, proptest). Added `ortho_config/src/localizer/identifier.rs`,
   exported `message_id_for`, added table and property tests, and added the
   `proptest` dev-dependency to `ortho_config`.
-- [ ] (pending) Milestone 2 — `LocalizeCmd` trait, `WithBase`, walker (red→green).
+- [x] (2026-06-11) Milestone 2 — `LocalizeCmd` trait, `WithBase`, walker
+  (red→green). Added `ortho_config/src/localizer/clap_command/mod.rs`,
+  recursive command and argument localization, `with_base`, `localize_self`,
+  collision checks, and tests for flag-action preservation.
 - [ ] (pending) Milestone 3 — crate re-exports and `fluent.rs` doc-comment fix.
 - [ ] (pending) Milestone 4 — collapse the example onto the promoted trait.
 - [ ] (pending) Milestone 5 — snapshot + BDD acceptance; docs; final gates.
@@ -187,61 +188,55 @@ Recorded upfront from the planning research so the implementer does not
 rediscover them.
 
 1. Observation: **`clap::Command::get_arguments_mut()` does not exist** in clap
-   4.x (repo pins 4.5.60).
-   Evidence: clap docs.rs `Command` API; the only `*_mut` accessors are
-   `find_subcommand_mut`, `get_subcommands_mut`, `get_matches_mut`,
-   `try_get_matches_from_mut`, `borrow_mut`. `Arg` exposes no `get_*_mut`
-   setters.
-   Impact: per-argument edits must use `Command::mut_arg(id, |arg| ...)` (closure
-   takes an owned `Arg`, returns `Arg`). `mut_arg` panics on an unknown id, so
-   ids must be enumerated up-front via the read-only `get_arguments()`.
+   4.x (repo pins 4.5.60). Evidence: clap docs.rs `Command` API; the only
+   `*_mut` accessors are `find_subcommand_mut`, `get_subcommands_mut`,
+   `get_matches_mut`, `try_get_matches_from_mut`, `borrow_mut`. `Arg` exposes no
+   `get_*_mut` setters. Impact: per-argument edits must use
+   `Command::mut_arg(id, |arg| ...)` (closure takes an owned `Arg`, returns
+   `Arg`). `mut_arg` panics on an unknown id, so ids must be enumerated
+   up-front via the read-only `get_arguments()`.
 2. Observation: **`Arg::value_name` implicitly sets `ArgAction::Set`.**
-   Evidence: clap `Arg::value_name` docs.
-   Impact: Constraint 5 — never call `value_name` on a flag; guard on a
-   takes-value predicate.
+   Evidence: clap `Arg::value_name` docs. Impact: Constraint 5 — never call
+   `value_name` on a flag; guard on a takes-value predicate.
 3. Observation: **`Command::override_usage` has no getter.**
-   Evidence: clap `Command` API (no `get_override_usage`).
-   Impact: the walker can only overwrite usage wholesale on a `Some` lookup; it
-   cannot read-modify-translate. The `<base>-usage` key is a full-string
-   replacement contract.
-4. Observation: **`mut_args` / `mut_subcommands` do not affect the auto-generated
-   `--help` / `--version` arguments.**
-   Evidence: clap docs.
+   Evidence: clap `Command` API (no `get_override_usage`). Impact: the walker
+   can only overwrite usage wholesale on a `Some` lookup; it cannot
+   read-modify-translate. The `<base>-usage` key is a full-string replacement
+   contract.
+4. Observation: **`mut_args` / `mut_subcommands` do not affect the
+   auto-generated `--help` / `--version` arguments.** Evidence: clap docs.
    Impact: localizing the built-in flag descriptions is out of scope for 11.1.1
    (would require `disable_help_flag` + custom args). Deferred and documented.
 5. Observation: **`get_subcommands_mut` is shallow** (immediate children only).
-   Evidence: clap docs.
-   Impact: recurse manually; because clap setters consume `self` and a
-   `&mut Command` cannot call them directly, pull each child out with
-   `std::mem::take`, localize by value, and write it back via
+   Evidence: clap docs. Impact: recurse manually; because clap setters consume
+   `self` and a `&mut Command` cannot call them directly, pull each child out
+   with `std::mem::take`, localize by value, and write it back via
    `find_subcommand_mut`.
 6. Observation: **Fluent identifiers are ASCII-only:**
    `Identifier ::= [a-zA-Z] [a-zA-Z0-9_-]*`; `.` is a structural attribute
-   separator, not an id character.
-   Evidence: the canonical Fluent EBNF
-   (`projectfluent/fluent/spec/fluent.ebnf`).
-   Impact: the crate's `is_valid_fluent_id_char` doc comment (claiming Unicode
-   and `.` are legal) is wrong and is corrected. `_` *is* legal, which is why the
-   catalogues use it and `message_id_for` preserves it.
+   separator, not an id character. Evidence: the canonical Fluent EBNF
+   (`projectfluent/fluent/spec/fluent.ebnf`). Impact: the crate's
+   `is_valid_fluent_id_char` doc comment (claiming Unicode and `.` are legal)
+   is wrong and is corrected. `_` *is* legal, which is why the catalogues use
+   it and `message_id_for` preserves it.
 7. Observation: **`hello_world.cli` base mismatch.** The binary name is
    `hello-world`; the catalogue base is `hello_world.cli`. The default base
-   derivation cannot reproduce the example's keys.
-   Evidence: `examples/hello_world/src/cli/mod.rs` (`name = "hello-world"`) vs the
-   `CLI_BASE_MESSAGE_ID = "hello_world.cli"` consts.
-   Impact: the example must use `with_base("hello_world.cli")`; this is the
-   canonical "multi-segment catalogue" demonstration of `with_base`.
+   derivation cannot reproduce the example's keys. Evidence:
+   `examples/hello_world/src/cli/mod.rs` (`name = "hello-world"`) vs the
+   `CLI_BASE_MESSAGE_ID = "hello_world.cli"` consts. Impact: the example must
+   use `with_base("hello_world.cli")`; this is the canonical "multi-segment
+   catalogue" demonstration of `with_base`.
 8. Observation: **ADR location follows the existing flat docs convention.**
    Evidence: `docs/contents.md` indexes ADR-001 through ADR-005 at
-   `docs/adr-00x-...md`, not under `docs/adr/`.
-   Impact: ADR-006 was added as
+   `docs/adr-00x-...md`, not under `docs/adr/`. Impact: ADR-006 was added as
    `docs/adr-006-identifier-derivation-panics.md` to match the repository's
    current convention despite the generic ADR skill mentioning `docs/adr/`.
 9. Observation: **CodeRabbit can wedge during sandbox preparation.**
    Evidence: the second Milestone 0 review stayed at
    `{"phase":"setup","status":"preparing_sandbox"}` for about 18 minutes after
-   the two trivial ADR concerns were fixed.
-   Impact: the stuck review process was terminated and the review was retried
-   cleanly; this did not bypass the review gate.
+   the two trivial ADR concerns were fixed. Impact: the stuck review process
+   was terminated and the review was retried cleanly; this did not bypass the
+   review gate.
 10. Observation: **Empty command paths need an explicit root guard.**
     Evidence: the first Milestone 1 green attempt let
     `message_id_for(&[], "about")` produce `about`, because the suffix supplied
@@ -259,53 +254,83 @@ rediscover them.
     reaches the empty segment path after suffix splitting.
     Impact: `message_id_for_rejects_unrepresentable_segments` now documents
     that consecutive dots panic with `invalid Fluent identifier segment`.
+13. Observation: **Dynamic clap version and value-name strings need the
+    `string` feature.**
+    Evidence: the first Milestone 2 green attempt failed because
+    `Command::version`, `Command::long_version`, and `Arg::value_name` did not
+    accept `String` without clap's `string` feature.
+    Impact: the existing `clap` dependency now enables `string` alongside
+    `derive`; no new runtime dependency was added.
+14. Observation: **A test can accidentally trigger the `value_name` side
+    effect it is meant to guard.**
+    Evidence: the initial flag fixture set `.value_name(...)` on a
+    `SetTrue` flag, which would itself change clap's action before the walker
+    ran.
+    Impact: the flag fixture now omits `value_name`, and the test asserts that
+    localization does not add one while preserving `ArgAction::SetTrue`.
+15. Observation: **Clippy requires directory modules for self-named modules.**
+    Evidence: the first Milestone 2 `make lint` run failed with
+    `clippy::self-named-module-files` for
+    `ortho_config/src/localizer/clap_command.rs`.
+    Impact: `clap_command` now uses `clap_command/mod.rs` plus
+    `clap_command/tests.rs`, keeping both files under 400 lines while matching
+    the repository lint policy.
+16. Observation: **Milestone 2 CodeRabbit setup can repeat the sandbox wedge.**
+    Evidence: three post-gate CodeRabbit attempts for Milestone 2 stayed at
+    `{"phase":"setup","status":"preparing_sandbox"}` with no findings or
+    rate-limit output before being terminated; later attempts advanced after a
+    long setup phase.
+    Impact: only the stuck review processes were stopped; deterministic gates
+    remained green, and the review gate was kept open until CodeRabbit returned
+    zero findings.
+17. Observation: **Builder-style `must_use` needs messages.**
+    Evidence: Clippy rejected plain `#[must_use]` on `with_base` because the
+    return type is already `#[must_use]`, while CodeRabbit requested caller
+    warnings for discarded builder values.
+    Impact: `with_base` now uses message-bearing `#[must_use = "..."]`
+    attributes so both the lint policy and API ergonomics are satisfied.
 
 ## Decision log
 
 - Decision: **Preserve `_` in normalized identifiers; amend the design-doc prose
-  rather than re-key the catalogues.**
-  Rationale: `_` is a legal Fluent character and the shipped en-US/ja catalogues
-  plus `normalize_resource_ids` already rely on it. Converting `_`→`-` would
-  break every translator. Amending §4.1 prose is documentation-only
-  and lower risk.
-  Date/Author: 2026-06-09, planning agent (pending user approval).
+  rather than re-key the catalogues.** Rationale: `_` is a legal Fluent
+  character and the shipped en-US/ja catalogues plus `normalize_resource_ids`
+  already rely on it. Converting `_`→`-` would break every translator. Amending
+  §4.1 prose is documentation-only and lower risk. Date/Author: 2026-06-09,
+  planning agent (pending user approval).
 - Decision: **`message_id_for` and `LocalizeCmd::localize` panic** on
   unrepresentable segments and on identifier collisions, rather than returning
-  `Result`.
-  Rationale: §4.1 and the roadmap explicitly mandate "panic-on-collision
-  behaviour" / "runtime panic in `LocalizeCmd::localize`". Inputs are
-  compile-time-fixed command trees authored by the binary developer, so a
-  colliding/unrepresentable id is a build-time bug surfaced at first run,
+  `Result`. Rationale: §4.1 and the roadmap explicitly mandate
+  "panic-on-collision behaviour" / "runtime panic in `LocalizeCmd::localize`".
+  Inputs are compile-time-fixed command trees authored by the binary developer,
+  so a colliding/unrepresentable id is a build-time bug surfaced at first run,
   mirroring clap's own `mut_arg` panic-on-undefined-id. The reviewers' `Result`
   alternative is recorded as rejected in **ADR-006** so the trade-off is
   auditable; if a downstream consumer needs recoverability later, a
   `try_message_id_for -> Result` can be added without breaking the panicking
-  function.
-  Date/Author: 2026-06-09, planning agent (pending user approval and ADR-006
-  sign-off).
+  function. Date/Author: 2026-06-09, planning agent (pending user approval and
+  ADR-006 sign-off).
 - Decision: **Keep the example single-phase; do not wire `BootLocalizer`.**
-  Rationale: `BootLocalizer`/`BootHandle` are 11.3 deliverables and do not exist
-  yet. 11.1.1 keeps the example's current
-  `Self::command().with_base(...).localize(localizer)` shape and adds a doc note
-  pointing at §5.3 for the full two-phase lifecycle.
-  Date/Author: 2026-06-09, planning agent.
+  Rationale: `BootLocalizer`/`BootHandle` are 11.3 deliverables and do not
+  exist yet. 11.1.1 keeps the example's current
+  `Self::command().with_base(...).localize(localizer)` shape and adds a doc
+  note pointing at §5.3 for the full two-phase lifecycle. Date/Author:
+  2026-06-09, planning agent.
 - Decision: **Leave `normalize_resource_ids` tolerant** of non-ASCII ids for
-  11.1.1; only correct the `is_valid_fluent_id_char` doc comment and introduce a
-  strict `normalize_segment` for `message_id_for`.
-  Rationale: unifying both onto one strict normalizer would break the existing
-  Cyrillic-id load test and risk silently dropping consumer catalogue entries.
-  Full unification is a separate, breaking-risk change recorded as an open
-  question.
-  Date/Author: 2026-06-09, planning agent.
+  11.1.1; only correct the `is_valid_fluent_id_char` doc comment and introduce
+  a strict `normalize_segment` for `message_id_for`. Rationale: unifying both
+  onto one strict normalizer would break the existing Cyrillic-id load test and
+  risk silently dropping consumer catalogue entries. Full unification is a
+  separate, breaking-risk change recorded as an open question. Date/Author:
+  2026-06-09, planning agent.
 - Decision: **Leading-`[a-zA-Z]` check is a whole-id invariant**, enforced after
-  joining segments, not per-segment.
-  Rationale: a middle segment of `123` is legal; only the final id's first
-  character must be a letter. Keeping `normalize_segment` pure (no
-  composition-aware panic) lets the derive (11.1.3) and load path reuse it.
-  Date/Author: 2026-06-09, planning agent.
+  joining segments, not per-segment. Rationale: a middle segment of `123` is
+  legal; only the final id's first character must be a letter. Keeping
+  `normalize_segment` pure (no composition-aware panic) lets the derive
+  (11.1.3) and load path reuse it. Date/Author: 2026-06-09, planning agent.
 - Decision: **Keep ADR-006 in the flat `docs/` ADR series.**
-  Rationale: the repository's accepted ADRs and documentation index already
-  use flat `docs/adr-00x-...md` paths. Matching that local convention preserves
+  Rationale: the repository's accepted ADRs and documentation index already use
+  flat `docs/adr-00x-...md` paths. Matching that local convention preserves
   discoverability and avoids an unnecessary documentation-layout change.
   Date/Author: 2026-06-11, implementation agent.
 - Decision: **Merge the ADR Y-Statement into the canonical outcome section.**
@@ -315,12 +340,18 @@ rediscover them.
   architectural decision-record requirement without adding a duplicate section.
   Date/Author: 2026-06-11, implementation agent.
 - Decision: **Implement identifier derivation in a dedicated
-  `localizer::identifier` module.**
-  Rationale: the helper is pure and will be reused by the command-tree walker,
-  derive work, and documentation tests. Keeping it out of `fluent.rs` avoids
-  coupling strict derive-time identifier rules to the intentionally tolerant
-  load-time catalogue normalizer.
+  `localizer::identifier` module.** Rationale: the helper is pure and will be
+  reused by the command-tree walker, derive work, and documentation tests.
+  Keeping it out of `fluent.rs` avoids coupling strict derive-time identifier
+  rules to the intentionally tolerant load-time catalogue normalizer.
   Date/Author: 2026-06-11, implementation agent.
+- Decision: **Enable clap's `string` feature for `ortho_config`.**
+  Rationale: the promoted walker receives owned localized `String` values from
+  `Localizer`. Clap's dynamic `version`, `long_version`, and `value_name`
+  setters accept those owned values only when the existing dependency enables
+  `string`. This keeps the public API additive without leaking static-string
+  requirements onto localizer implementations. Date/Author: 2026-06-11,
+  implementation agent.
 
 ## Outcomes & retrospective
 
@@ -342,6 +373,27 @@ Milestone 1 gates `make check-fmt`, `make typecheck`, `make lint`, `make test`,
 and `make markdownlint` passed, and CodeRabbit reported zero findings after the
 suffix-capacity and consecutive-dot fixes.
 
+Milestone 2 is complete through focused validation. The red command
+`cargo test -p ortho_config localizer::clap_command::tests` failed with missing
+`with_base` / `localize` / `localize_self` methods. After implementation and
+enabling clap's `string` feature, the same command passed three focused tests:
+recursive localization, non-recursive `localize_self`, and subcommand collision
+panic coverage.
+
+After Clippy required the directory module shape, the walker was moved to
+`localizer/clap_command/mod.rs`, tests stayed in
+`localizer/clap_command/tests.rs`, and helper context was grouped to satisfy
+the argument-count lint. Milestone 2 gates `make check-fmt`, `make typecheck`,
+`make lint`, `make test`, and `make markdownlint` passed before CodeRabbit
+review. Three CodeRabbit attempts then wedged in sandbox preparation without
+findings or rate-limit output. A later review found missing builder
+`must_use` warnings, panic docs, and an Oxford spelling issue. After fixes and
+full gates, CodeRabbit requested explicit argument-collision coverage; that
+test was added, full gates were rerun, and CodeRabbit requested two clarifying
+comments plus one ownership comment for the subcommand take-and-replace path.
+After those comments and another full gate pass, CodeRabbit reported zero
+findings.
+
 ## Context and orientation
 
 The reader is assumed to know nothing about this repository. Key facts:
@@ -349,8 +401,8 @@ The reader is assumed to know nothing about this repository. Key facts:
 - This is a Cargo workspace. Members:
   `ortho_config` (the library), `ortho_config_macros` (the derive),
   `examples/hello_world`, `cargo-orthohelp`, `test_helpers`,
-  `tests/fixtures/orthohelp_fixture`. Workspace version is `0.8.0`; the promoted
-  helpers ship in `0.9` (§10).
+  `tests/fixtures/orthohelp_fixture`. Workspace version is `0.8.0`; the
+  promoted helpers ship in `0.9` (§10).
 - **Localization lives in `ortho_config/src/localizer/`.** `mod.rs` defines the
   object-safe `Localizer` trait (`lookup(&self, id, args) -> Option<String>`),
   `NoOpLocalizer`, `FluentLocalizer`, and re-exports the clap-error helpers.
@@ -358,9 +410,10 @@ The reader is assumed to know nothing about this repository. Key facts:
   `normalize_resource_ids` (load-time), and the `is_valid_fluent_id_char` /
   `is_valid_fluent_identifier` helpers. `clap_error.rs` maps `clap::ErrorKind`
   to Fluent ids.
-- **The thing being promoted** is `examples/hello_world/src/cli/localization.rs`:
-  a `LocalizeCmd` trait with one method `localize(self, &dyn Localizer) -> Self`,
-  an `impl LocalizeCmd for clap::Command`, and private helpers
+- **The thing being promoted** is
+  `examples/hello_world/src/cli/localization.rs`: a `LocalizeCmd` trait with
+  one method `localize(self, &dyn Localizer) -> Self`, an
+  `impl LocalizeCmd for clap::Command`, and private helpers
   `localize_command_tree`, `apply_command_metadata`, `localization_args_for`,
   `base_message_id_for_suffix`, and `message_id`. It currently covers only
   `about`, `long_about`, and `override_usage`, and omits the root segment from
@@ -473,8 +526,8 @@ load-time `normalize_resource_ids` rewrites `.`→`-`, so derive output,
 
 Dependencies: add `proptest` to `ortho_config`'s `[dev-dependencies]` only.
 `rstest`, `rstest-bdd`, `rstest-bdd-macros`, and `insta` are already present in
-`ortho_config`'s dev-deps; `proptest` is absent and must be added (verify with a
-dry `cargo add --dev proptest -p ortho_config --dry-run`). No runtime
+`ortho_config`'s dev-deps; `proptest` is absent and must be added (verify with
+a dry `cargo add --dev proptest -p ortho_config --dry-run`). No runtime
 dependency changes.
 
 ## Plan of work
@@ -484,8 +537,8 @@ Staged, each stage ending in validation. Do not advance past a failing stage.
 ### Milestone 0 — Reconcile the design doc (no code)
 
 1. Amend [cli-localization-design.md](../cli-localization-design.md) §4.1 prose:
-   replace "underscores become hyphens" with wording that states underscores are
-   preserved (a legal Fluent character per the EBNF
+   replace "underscores become hyphens" with wording that states underscores
+   are preserved (a legal Fluent character per the EBNF
    `[a-zA-Z][a-zA-Z0-9_-]*`); only `.` and out-of-grammar characters are
    transformed or rejected. Show both the author-facing dotted form and the
    final hyphenated id form side by side.
@@ -495,13 +548,14 @@ Staged, each stage ending in validation. Do not advance past a failing stage.
    (`after_help`/`after_long_help`) *are* localized.
 3. Author **ADR-006** (`docs/adr-006-identifier-derivation-panics.md`) in
    Y-Statement form (use the `arch-decision-records` skill): "In the context of
-   deriving Fluent identifiers from compile-time-fixed clap command trees, facing
-   the need to surface unrepresentable or colliding ids, we decided to panic
-   (matching clap's `mut_arg` convention and the §4.1 mandate) and neglected a
-   `Result`-returning API, accepting that hand-built dynamic trees must validate
-   names before localizing, because the inputs are developer-authored constants
-   surfaced at first run." Reference ADR-006 from the design doc and from
-   `message_id_for`'s rustdoc. Add it to [contents.md](../contents.md).
+   deriving Fluent identifiers from compile-time-fixed clap command trees,
+   facing the need to surface unrepresentable or colliding ids, we decided to
+   panic (matching clap's `mut_arg` convention and the §4.1 mandate) and
+   neglected a `Result`-returning API, accepting that hand-built dynamic trees
+   must validate names before localizing, because the inputs are
+   developer-authored constants surfaced at first run." Reference ADR-006 from
+   the design doc and from `message_id_for`'s rustdoc. Add it to
+   [contents.md](../contents.md).
 4. Validation: `make markdownlint` passes; the design doc no longer contradicts
    the planned code.
 
@@ -512,13 +566,13 @@ decisions before any code lands.
 
 1. **Red.** Add `ortho_config/src/localizer/tests.rs` cases (or a new
    `identifier` test submodule) for the not-yet-existing `message_id_for`. Use
-   `rstest` `#[case]`s for the happy path, `#[should_panic]` for unrepresentable
-   input, and a byte-for-byte agreement assertion against
-   `normalize_resource_ids`. Confirm they fail to compile / fail for the expected
-   reason.
+   `rstest` `#[case]`s for the happy path, `#[should_panic]` for
+   unrepresentable input, and a byte-for-byte agreement assertion against
+   `normalize_resource_ids`. Confirm they fail to compile / fail for the
+   expected reason.
 2. **Green.** Implement `normalize_segment` and `message_id_for` (split `suffix`
-   on `.` into trailing segments; normalize each segment; join with `-`; enforce
-   the leading-`[a-zA-Z]` whole-id invariant). Re-run; expect green.
+   on `.` into trailing segments; normalize each segment; join with `-`;
+   enforce the leading-`[a-zA-Z]` whole-id invariant). Re-run; expect green.
 3. Add `proptest` dev-dep and the invariant tests (validity regex, idempotence,
    collision-detectability at the helper level).
 4. **Refactor.** Keep `normalize_segment` pure and under the 400-line limit.
@@ -528,21 +582,21 @@ decisions before any code lands.
 ### Milestone 2 — `LocalizeCmd` trait, `WithBase`, and the walker (Red → Green)
 
 1. **Red.** In a `clap_command` test submodule, build a hand-rolled
-   `clap::Command` (root + one subcommand + one value-bearing arg + one `SetTrue`
-   flag) and drive it with a stub `Localizer` that echoes the requested id.
-   Assert: root `about`/`long_about`/`usage` set; subcommand `about` set
-   (recursion); the value-bearing arg's `help`/`value_name` set; the flag's
-   `value_name` *not* set and its action still `SetTrue`; `version` untouched
-   when no version id is echoed and overwritten when it is; `after_help` set;
-   `localize_self` leaves the subcommand at stock values. Add a `#[should_panic]`
-   collision test. These use a hand-built command, keeping `ortho_config` free of
-   the example (Constraint 1).
+   `clap::Command` (root + one subcommand + one value-bearing arg + one
+   `SetTrue` flag) and drive it with a stub `Localizer` that echoes the
+   requested id. Assert: root `about`/`long_about`/`usage` set; subcommand
+   `about` set (recursion); the value-bearing arg's `help`/`value_name` set;
+   the flag's `value_name` *not* set and its action still `SetTrue`; `version`
+   untouched when no version id is echoed and overwritten when it is;
+   `after_help` set; `localize_self` leaves the subcommand at stock values. Add
+   a `#[should_panic]` collision test. These use a hand-built command, keeping
+   `ortho_config` free of the example (Constraint 1).
 2. **Green.** Implement the trait, `WithBase`, and the walker per the Interfaces
    and the clap-API Surprises: command-level setters applied by value;
    per-argument edits via `mut_arg` with the takes-value guard; children pulled
    via `get_subcommands()` + `find_subcommand_mut` + `std::mem::take`;
-   per-parent `HashSet<String>` collision panic naming both raw segments and the
-   shared id.
+   per-parent `HashSet<String>` collision panic naming both raw segments and
+   the shared id.
 3. **Refactor.** Extract `apply_command_metadata` / `apply_arg_metadata` /
    `localize_command` to keep files small and single-responsibility.
 4. Validation: gates + CodeRabbit, all concerns cleared.
@@ -551,13 +605,13 @@ decisions before any code lands.
 
 1. Add `mod clap_command;` and `pub use clap_command::{LocalizeCmd, WithBase};`
    plus `pub use ...::message_id_for;` to `localizer/mod.rs`.
-2. Extend the `ortho_config/src/lib.rs` localizer re-export block (lines 118-122)
-   with `LocalizeCmd`, `WithBase`, and `message_id_for`.
+2. Extend the `ortho_config/src/lib.rs` localizer re-export block (lines
+   118-122) with `LocalizeCmd`, `WithBase`, and `message_id_for`.
 3. Correct the `is_valid_fluent_id_char` doc comment in `fluent.rs` to state the
-   ASCII-only grammar and to stop claiming `.` is legal; adjust its unit tests to
-   assert a non-ASCII char and `.` are rejected by the *strict* path while the
-   tolerant `normalize_resource_ids` load behaviour (including the Cyrillic test)
-   is retained unchanged (Decision Log / Risk 6).
+   ASCII-only grammar and to stop claiming `.` is legal; adjust its unit tests
+   to assert a non-ASCII char and `.` are rejected by the *strict* path while
+   the tolerant `normalize_resource_ids` load behaviour (including the Cyrillic
+   test) is retained unchanged (Decision Log / Risk 6).
 4. Validation: gates + CodeRabbit.
 
 ### Milestone 4 — Collapse the example onto the promoted trait
@@ -565,19 +619,20 @@ decisions before any code lands.
 1. In `examples/hello_world/src/cli/localization.rs`, delete the local
    `LocalizeCmd` trait, its impl, and the private helpers
    (`localize_command_tree`, `apply_command_metadata`, `localization_args_for`,
-   `base_message_id_for_suffix`, `message_id`). Keep `localize_parse_error` as a
-   thin shim over `ortho_config::localize_clap_error_with_command`, or inline it
-   at its single call site in `cli/mod.rs`.
+   `base_message_id_for_suffix`, `message_id`). Keep `localize_parse_error` as
+   a thin shim over `ortho_config::localize_clap_error_with_command`, or inline
+   it at its single call site in `cli/mod.rs`.
 2. In `examples/hello_world/src/cli/mod.rs`, change the line-30 re-export to
    `pub use ortho_config::LocalizeCmd;` (preserving the public path
    `hello_world::cli::LocalizeCmd`), and change `try_parse_localized` to
    `Self::command().with_base("hello_world.cli").localize(localizer)`.
 3. In `examples/hello_world/src/localizer.rs`: update the `DemoLocalizer::new`
-   doctest (lines 55-63) to `.with_base("hello_world.cli").localize(&localizer)`.
-   Retain the `CLI_*` consts the in-file tests reference (`CLI_ABOUT_MESSAGE_ID`,
-   `CLI_LONG_ABOUT_MESSAGE_ID` at lines 221/232/290); remove the genuinely unused
-   `CLI_GREET_ABOUT_MESSAGE_ID` / `CLI_TAKE_LEAVE_ABOUT_MESSAGE_ID` to avoid
-   dead-code lint-as-error (Risk 5).
+   doctest (lines 55-63) to
+   `.with_base("hello_world.cli").localize(&localizer)`. Retain the `CLI_*`
+   consts the in-file tests reference (`CLI_ABOUT_MESSAGE_ID`,
+   `CLI_LONG_ABOUT_MESSAGE_ID` at lines 221/232/290); remove the genuinely
+   unused `CLI_GREET_ABOUT_MESSAGE_ID` / `CLI_TAKE_LEAVE_ABOUT_MESSAGE_ID` to
+   avoid dead-code lint-as-error (Risk 5).
 4. Validation: the existing `examples/hello_world/src/cli/tests/localisation.rs`
    and the `localizer.rs` inline tests + doctest pass unchanged in assertion
    content (this is the byte-for-byte id-agreement gate, Constraint 3). Run
@@ -586,16 +641,17 @@ decisions before any code lands.
 ### Milestone 5 — Acceptance, snapshots, docs, final gates
 
 1. Add an `insta` snapshot test in `examples/hello_world` rendering
-   `CommandLine::command().with_base("hello_world.cli").localize(&loc)` long help
-   for three variants — en-US `DemoLocalizer`, `ja` `DemoLocalizer`, and
-   `NoOpLocalizer` — through an insta filter that strips clap version/ANSI noise.
-   Three named snapshots prove translated copy appears, ja copy appears, and the
-   no-op output equals stock clap.
-2. Add an `rstest-bdd` scenario (`examples/hello_world`) — feature "Localised CLI
-   help": Given locale `ja`, When the user renders `hello-world --help`, Then the
-   about line contains the ja copy and the greet subcommand help contains the ja
-   greeting; And Given locale `en-US`, the about contains the en-US copy. Embed
-   the feature text in this plan (below) and keep it synchronized.
+   `CommandLine::command().with_base("hello_world.cli").localize(&loc)` long
+   help for three variants — en-US `DemoLocalizer`, `ja` `DemoLocalizer`, and
+   `NoOpLocalizer` — through an insta filter that strips clap version/ANSI
+   noise. Three named snapshots prove translated copy appears, ja copy appears,
+   and the no-op output equals stock clap.
+2. Add an `rstest-bdd` scenario (`examples/hello_world`) — feature "Localised
+   CLI help": Given locale `ja`, When the user renders `hello-world --help`,
+   Then the about line contains the ja copy and the greet subcommand help
+   contains the ja greeting; And Given locale `en-US`, the about contains the
+   en-US copy. Embed the feature text in this plan (below) and keep it
+   synchronized.
 3. Documentation:
    - [users-guide.md](../users-guide.md) §"Localizing CLI copy": document
      `LocalizeCmd`, `with_base`, `message_id_for`, the identifier convention, and
@@ -685,7 +741,8 @@ Acceptance is behavioural:
    walker exists and pass after; the flag-action and collision assertions hold.
 3. **Example regression.** With no assertion-content changes to
    `cli/tests/localisation.rs` or the `localizer.rs` inline tests, the suite is
-   green — proving byte-for-byte id agreement via `with_base("hello_world.cli")`.
+   green — proving byte-for-byte id agreement via
+   `with_base("hello_world.cli")`.
 4. **Doctests pass:** `cargo test --doc -p ortho_config` and
    `cargo test --doc -p hello_world` both succeed (the updated `DemoLocalizer`
    doctest renders localized `about`).
@@ -693,8 +750,8 @@ Acceptance is behavioural:
    pass; the `rstest-bdd` "Localised CLI help" scenarios pass.
 6. **Gates.** `make all` passes.
 
-Quality criteria ("done"): all four make gates plus doctests, snapshots, and BDD
-green; CodeRabbit concerns cleared at each milestone; ADR-006 recorded and
+Quality criteria ("done"): all four make gates plus doctests, snapshots, and
+BDD green; CodeRabbit concerns cleared at each milestone; ADR-006 recorded and
 referenced; roadmap 11.1.1 marked done; users-guide, developers-guide, and the
 design/component docs updated.
 
@@ -720,24 +777,30 @@ design/component docs updated.
 
 ## Signposted documentation and skills
 
-Documentation: [cli-localization-design.md](../cli-localization-design.md) (§4,
-§4.1, §4.2, §10), [localizable-rust-libraries-with-fluent.md](../localizable-rust-libraries-with-fluent.md),
-[users-guide.md](../users-guide.md), [developers-guide.md](../developers-guide.md),
-[design.md](../design.md), [documentation-style-guide.md](../documentation-style-guide.md),
-[rust-testing-with-rstest-fixtures.md](../rust-testing-with-rstest-fixtures.md),
-[rust-doctest-dry-guide.md](../rust-doctest-dry-guide.md),
-[reliable-testing-in-rust-via-dependency-injection.md](../reliable-testing-in-rust-via-dependency-injection.md),
-[complexity-antipatterns-and-refactoring-strategies.md](../complexity-antipatterns-and-refactoring-strategies.md),
-[rstest-bdd-users-guide.md](../rstest-bdd-users-guide.md), and ADR-005
-(subcommand docs companion trait) for the existing companion-trait pattern.
+Documentation:
+
+- [cli-localization-design.md](../cli-localization-design.md) (§4, §4.1, §4.2,
+  §10)
+- [localizable-rust-libraries-with-fluent.md](../localizable-rust-libraries-with-fluent.md)
+- [users-guide.md](../users-guide.md)
+- [developers-guide.md](../developers-guide.md)
+- [design.md](../design.md)
+- [documentation-style-guide.md](../documentation-style-guide.md)
+- [rust-testing-with-rstest-fixtures.md](../rust-testing-with-rstest-fixtures.md)
+- [rust-doctest-dry-guide.md](../rust-doctest-dry-guide.md)
+- [reliable-testing-in-rust-via-dependency-injection.md](../reliable-testing-in-rust-via-dependency-injection.md)
+- [complexity-antipatterns-and-refactoring-strategies.md](../complexity-antipatterns-and-refactoring-strategies.md)
+- [rstest-bdd-users-guide.md](../rstest-bdd-users-guide.md)
+- ADR-005 (subcommand docs companion trait) for the existing companion-trait
+  pattern.
 
 Skills: `rust-router` → `rust-types-and-apis` (trait/API shape, `WithBase`
-wrapper), `arch-crate-design` (public-vs-internal surface, boundary), `rust-errors`
-(panic boundary rationale), `arch-decision-records` (ADR-006), `rust-unit-testing`
-(rstest fixtures, googletest/pretty_assertions, insta), `proptest` (the
-normalization invariants), `rstest-bdd` skill via the users-guide, `leta` for
-navigation/refactor, and `arch-supply-chain` (the `proptest` dev-dep / SemVer of
-the new public surface).
+wrapper), `arch-crate-design` (public-vs-internal surface, boundary),
+`rust-errors` (panic boundary rationale), `arch-decision-records` (ADR-006),
+`rust-unit-testing` (rstest fixtures, googletest/pretty_assertions, insta),
+`proptest` (the normalization invariants), `rstest-bdd` skill via the
+users-guide, `leta` for navigation/refactor, and `arch-supply-chain` (the
+`proptest` dev-dep / SemVer of the new public surface).
 
 ## Revision note
 
@@ -746,8 +809,8 @@ research, Fluent-identifier/prior-art research (Firecrawl), a code-surface map,
 an architect design synthesis, and a five-lens community-of-experts review. The
 review surfaced five must-fix corrections now baked into the plan: the
 non-existent `get_arguments_mut` (use `mut_arg`), the `value_name` action
-side-effect guard, the underscore-preservation prose contradiction (Milestone 0),
-the default-base mismatch forcing `with_base` in the example (Risk 1 / Milestone
-4), and the panic-as-public-API contract (ADR-006). The two-phase `BootLocalizer`
-lifecycle and built-in `--help`/`--version` text localization are explicitly
-scoped out (11.3 and a later item respectively).
+side-effect guard, the underscore-preservation prose contradiction (Milestone
+0), the default-base mismatch forcing `with_base` in the example (Risk 1 /
+Milestone 4), and the panic-as-public-API contract (ADR-006). The two-phase
+`BootLocalizer` lifecycle and built-in `--help`/`--version` text localization
+are explicitly scoped out (11.3 and a later item respectively).
