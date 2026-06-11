@@ -207,7 +207,8 @@ binary name normalized to a Fluent identifier) so applications can share one
 catalogue across multiple binaries by giving each a distinct prefix. The
 canonical function is exposed as `ortho_config::message_id_for(&command_path,
 suffix)` so applications, tests, and the IR pipeline can produce identical
-identifiers without re-implementing the convention.
+identifiers without re-implementing the convention (see
+[ADR-006](adr-006-identifier-derivation-panics.md)).
 
 Identifier normalization is a documented function: lowercase American
 Standard Code for Information Interchange (ASCII) letters pass through,
@@ -222,11 +223,12 @@ runtime id directly.
 
 Two segments that normalize to the same identifier are a build-time error in
 the macros crate and a runtime panic in `LocalizeCmd::localize` for
-hand-built command trees. The derive's identifier-generation pass therefore
-enforces uniqueness at compile time, and
-[ADR-006](adr-006-identifier-derivation-panics.md) records why the promoted
-runtime API panics rather than returning `Result` when a hand-built command
-tree cannot produce unique Fluent identifiers.
+hand-built command trees (see
+[ADR-006](adr-006-identifier-derivation-panics.md)). The derive's
+identifier-generation pass therefore enforces uniqueness at compile time, and
+ADR-006 records why the promoted runtime API panics rather than returning
+`Result` when a hand-built command tree cannot produce unique Fluent
+identifiers.
 
 ### 4.2 `try_parse_localized` helpers
 

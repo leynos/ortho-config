@@ -1,4 +1,4 @@
-# Architectural decision record (ADR) 006: Identifier derivation panics
+# Architectural decision record (ADR) 006: Identifier-derivation panics
 
 ## Status
 
@@ -6,91 +6,121 @@ Accepted.
 
 ## Date
 
-2026-06-11.
+2026-06-09.
 
 ## Context and problem statement
 
-Roadmap item 11.1.1 promotes the `hello_world` example's `LocalizeCmd` helper
-into the public `ortho_config` API. The promoted API derives Fluent message
-identifiers from a `clap::Command` tree, then uses those identifiers to
-localize command and argument help.
+Roadmap item 11.1.1 promotes the `hello_world` example's `LocalizeCmd`
+helper into the public `ortho_config` API. The promoted API derives Fluent
+message identifiers from a `clap::Command` tree and uses those identifiers to
+localise command and argument help.
 
-The derivation can fail when a developer-authored command path contains a
-character outside Fluent's identifier grammar, or when two sibling command or
-argument paths normalize to the same runtime identifier. The failure is a
-programmer error in the command declaration: it is not caused by user input,
-locale selection, or catalogue contents.
+Identifier derivation can fail when a developer-authored command path contains
+a segment that cannot be represented as a Fluent identifier, or when two
+sibling commands or arguments normalise to the same identifier. These failures
+come from command declarations, not from user input, locale selection, or
+catalogue contents.
 
-The question is whether `message_id_for` and `LocalizeCmd::localize` should
-return `Result` for these failures, or panic and make the invalid command tree
-fail at first use.
+The question is whether the public identifier helpers should return `Result`,
+panic, or silently leave invalid command-tree nodes unlocalised.
 
 ## Decision drivers
 
-- Keep the promoted 11.1.1 API small and ergonomic for ordinary static clap
-  command trees.
-- Match clap's own convention for programmer errors in command mutation,
-  including `Command::mut_arg` panicking for unknown argument ids.
-- Preserve the roadmap requirement that identifier collisions are surfaced as
-  a runtime panic in hand-built command trees.
-- Leave room for a future fallible API without committing every consumer to
-  fallible localization today.
+- Keep the 11.1.1 `LocalizeCmd` API ergonomic for ordinary static clap command
+  trees.
+- Match clap's convention for programmer errors in command mutation, including
+  `Command::mut_arg` panicking for invalid argument ids.
+- Honour the §4.1 design mandate that unrepresentable identifiers and
+  collisions are surfaced instead of hidden.
+- Preserve an additive path for dynamic command-tree builders that need a
+  fallible validation API later.
 
 ## Options considered
 
-### Option A: Panic on invalid derived identifiers
+### Option A: `Result`-returning API
+
+`message_id_for` and `LocalizeCmd::localize` could return a domain error for
+invalid segments and collisions.
+
+This gives dynamic command-tree builders a direct validation path, but it
+makes the common static-command path fallible for every consumer. It also
+infects otherwise straightforward command construction with error plumbing for
+bugs that are usually authored in source and found during testing or first
+run.
+
+### Option B: Panic on invalid derived identifiers
 
 `message_id_for` panics when the final id cannot be represented as a Fluent
-identifier. `LocalizeCmd::localize` panics when walking a command tree would
-route two sibling command or argument paths to the same id.
+identifier. `LocalizeCmd::localize` panics when the tree walk finds a
+collision among sibling commands or arguments under the same parent node.
 
-This keeps the common static-command path direct and makes invalid command
-declarations fail loudly at first use. It also mirrors clap's existing mutation
-API, where invalid programmer-authored ids are panic conditions.
+This keeps the default API direct, mirrors clap's mutation conventions, and
+surfaces declaration bugs immediately. It is the accepted option.
 
-### Option B: Return `Result` from the promoted API
+### Option C: Silent fallback
 
-The promoted functions could return a domain error describing invalid
-characters or collisions.
+The walker could skip invalid or colliding ids and leave clap's stock copy in
+place.
 
-This supports applications that build command trees dynamically, but it makes
-the default localization path fallible for every consumer, including the
-ordinary derive-generated and static-command cases where invalid ids are
-developer bugs.
-
-### Option C: Skip invalid or colliding ids
-
-The walker could ignore invalid ids, leave clap's stock text untouched, and
-possibly emit diagnostics.
-
-This avoids panics, but it makes two command paths silently share or lose
-translations. That is worse than failing because translators and application
-authors would see partial localization without a precise source of truth for
-the missing copy.
+This is rejected unconditionally. Silent fallback would make translations
+partially disappear, hide invalid identifiers from application authors, and
+leave translators without a precise signal that two paths cannot be
+distinguished.
 
 ## Decision outcome / proposed direction
 
-Use Option A. The promoted `message_id_for` and `LocalizeCmd::localize` APIs
-panic when a developer-authored command tree cannot produce a valid or unique
-Fluent identifier.
+In the context of deriving Fluent identifiers from compile-time-fixed clap
+command trees, facing the need to surface unrepresentable or colliding ids, we
+decided to panic (matching clap's `mut_arg` convention and the §4.1 mandate)
+and neglected a `Result`-returning API, accepting that hand-built dynamic
+trees must validate names before localizing, because the inputs are
+developer-authored constants surfaced at first run.
 
-The promoted API derives Fluent identifiers from compile-time-fixed clap
-command trees. When a command path contains unrepresentable characters or
-produces identifier collisions, `message_id_for` and `LocalizeCmd::localize`
-panic rather than returning `Result`. This design keeps the extension trait
-small and exposes declaration bugs immediately. Applications that build
-command trees dynamically must validate names before localizing.
+`message_id_for` owns the strict segment normalisation rule. The command-tree
+walker owns collision detection while it traverses each parent node. Collision
+checks are scoped per parent, so two commands in different subtrees may share a
+local name, but two siblings that normalise to the same id panic.
 
-A future additive `try_message_id_for` or fallible walker can be introduced for
-applications that construct command trees from runtime data. That future API
-should share the same normalization and collision rules rather than define a
-second identifier convention.
+The future additive extension is
+`try_message_id_for -> Result<String, IdentifierError>`. It should share the
+same normalisation rule as `message_id_for`, expose structured errors for
+invalid segments, and avoid changing the existing panic contract.
 
-## Consequences
+## Goals and non-goals
 
-- Rustdoc for `message_id_for` and `LocalizeCmd` must document the panic
-  cases clearly.
-- Tests must cover unrepresentable characters and collision panics, so the
-  behaviour is intentional rather than accidental.
-- Applications that build command trees from external input must validate or
-  sanitize names before calling `LocalizeCmd::localize`.
+- Goals:
+  - Record the accepted panic contract for the promoted 11.1.1 helpers.
+  - Keep invalid static command declarations loud and easy to diagnose.
+  - Preserve a non-breaking path for future fallible identifier validation.
+- Non-goals:
+  - Add a fallible command-tree walker in 11.1.1.
+  - Define translator diagnostics for missing catalogue entries.
+  - Change Fluent load-time resource-id normalisation.
+
+## Migration plan
+
+1. Document the panic contract in the CLI localisation design.
+2. Document the panic cases in rustdoc for `message_id_for` and
+   `LocalizeCmd::localize`.
+3. Add tests for invalid segments and per-parent collision panics.
+4. Leave `try_message_id_for` as a later additive API.
+
+## Known risks and limitations
+
+- Applications that build command trees from runtime data must validate names
+  before calling `LocalizeCmd::localize`, otherwise invalid external data can
+  become a process panic.
+- Panic contracts are harder to relax than ordinary internal implementation
+  choices because downstream tests may begin to rely on the exact failure
+  surface.
+- The future fallible API must avoid diverging from `message_id_for`, or the
+  crate will have two subtly different identifier conventions.
+
+## Outstanding decisions
+
+- Decide whether a future fallible command-tree walker should be named
+  `try_localize`, `try_localize_self`, or exposed through a separate trait.
+- Decide the exact `IdentifierError` variants and whether collision errors
+  belong in that enum or in a walker-specific error type.
+- Decide whether dynamic command-tree validation should expose all detected
+  errors at once or fail on the first invalid segment or collision.
