@@ -1,0 +1,37 @@
+---
+source: examples/hello_world/tests/localised_help.rs
+expression: output
+---
+Use ⁨hello-world⁩ to explore layered greetings across config, env, and CLI
+
+Usage: Usage:
+⁨hello-world⁩ [OPTIONS] <COMMAND>
+
+Visit --help for details.
+
+Commands:
+  greet       Prints a friendly greeting using any configured templates.
+  take-leave  Describes how the farewell workflow proceeds for the recipient.
+  help        Print this message or the help of the given subcommand(s)
+
+Options:
+  -c, --config <PATH>
+          Path to the configuration file
+
+  -r, --recipient <NAME>
+          Recipient of the greeting when supplied on the CLI
+
+  -s, --salutation <WORD>
+          Replacement salutations supplied on the CLI
+
+      --is-excited
+          Enables an enthusiastic delivery mode from the CLI
+
+      --is-quiet
+          Enables a quiet delivery mode from the CLI
+
+  -h, --help
+          Print help (see a summary with '-h')
+
+  -V, --version
+          Print version

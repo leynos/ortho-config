@@ -98,7 +98,8 @@ responsibilities and downstream application responsibilities.
 
 - [x] 5.2.3. Record consumer dependency boundaries for Weaver and Netsuke.
   - Requires 5.2.1 and 5.2.2.
-  - See agent-native-cli-design.md §2.1 and adr-003-define-schema-ownership-for-agent-native-contracts.md.
+  - See agent-native-cli-design.md §2.1 and
+    adr-003-define-schema-ownership-for-agent-native-contracts.md.
   - [x] Document that OrthoConfig owns reusable command-contract machinery,
     while Weaver owns semantic code-edit execution and Netsuke owns build and
     package execution.
@@ -286,7 +287,8 @@ unsafe mutation surfaces before release.
 - [ ] 7.3.1. Implement or restore enumerating missing-required-values errors
   after the phase 5 truth audit.
   - Requires 5.1.1.
-  - See improved-error-message-design.md §§1-3 and agent-native-cli-design.md §6.3.
+  - See improved-error-message-design.md §§1-3 and agent-native-cli-design.md
+    §6.3.
   - [ ] Aggregate all missing required values before returning an error.
   - [ ] Show valid supply paths through CLI flags, environment variables, and
     file keys.
@@ -520,28 +522,28 @@ are working.
 This phase promotes the load-bearing localization helpers from the
 `hello_world` example to first-class crate surface, widens clap-error
 translation coverage, names a locale-resolution lifecycle that survives the
-locale-flag chicken-and-egg, bridges OrthoConfig with `i18n-embed`, and
-extends the derive, so localization identifiers are generated rather than
+locale-flag chicken-and-egg, bridges OrthoConfig with `i18n-embed`, and extends
+the derive, so localization identifiers are generated rather than
 hand-authored. The design lives in
 [cli-localization-design.md](cli-localization-design.md). Sequencing is
-quality-of-life-first: §11.1 and §11.2 carry no policy risk, while §11.3
-and later progressively add opinion.
+quality-of-life-first: §11.1 and §11.2 carry no policy risk, while §11.3 and
+later progressively add opinion.
 
 ### 11.1. Promote example helpers to crate API
 
-- [ ] 11.1.1. Promote `LocalizeCmd` to a public extension trait on
+- [x] 11.1.1. Promote `LocalizeCmd` to a public extension trait on
   `clap::Command`.
   - See cli-localization-design.md §4.
-  - [ ] Move the example trait into `ortho_config::localizer` and extend it
+  - [x] Move the example trait into `ortho_config::localizer` and extend it
     to cover per-argument `help`, `long_help`, and `value_name`, plus
     subcommand `about`/`long_about` recursively, optional `version`/
     `long_version`, and the help-template footer.
-  - [ ] Expose `LocalizeCmd::with_base("…")` for applications that share a
+  - [x] Expose `LocalizeCmd::with_base("…")` for applications that share a
     catalogue across multiple binaries.
-  - [ ] Add the public `ortho_config::message_id_for(&command_path, suffix)`
+  - [x] Add the public `ortho_config::message_id_for(&command_path, suffix)`
     function with documented identifier shape, ASCII normalization rules,
     and panic-on-collision behaviour.
-  - [ ] Success: the `hello_world` example deletes its local
+  - [x] Success: the `hello_world` example deletes its local
     `LocalizeCmd` impl and re-exports the crate one for one release.
 
 - [ ] 11.1.2. Promote `try_parse_localized*` to a generic blanket trait.

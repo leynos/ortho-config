@@ -24,10 +24,6 @@ pub const CLI_ABOUT_MESSAGE_ID: &str = "hello_world.cli.about";
 pub const CLI_LONG_ABOUT_MESSAGE_ID: &str = "hello_world.cli.long_about";
 /// Identifier for the usage string presented on `--help`.
 pub const CLI_USAGE_MESSAGE_ID: &str = "hello_world.cli.usage";
-/// Identifier for the greet subcommand description.
-pub const CLI_GREET_ABOUT_MESSAGE_ID: &str = "hello_world.cli.greet.about";
-/// Identifier for the take-leave subcommand description.
-pub const CLI_TAKE_LEAVE_ABOUT_MESSAGE_ID: &str = "hello_world.cli.take-leave.about";
 
 const HELLO_WORLD_EN_US: &str = include_str!("../locales/en-US/messages.ftl");
 const HELLO_WORLD_JA: &str = include_str!("../locales/ja/messages.ftl");

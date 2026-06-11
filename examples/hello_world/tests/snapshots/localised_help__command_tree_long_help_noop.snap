@@ -1,0 +1,34 @@
+---
+source: examples/hello_world/tests/localised_help.rs
+expression: output
+---
+Friendly greeting demo showcasing OrthoConfig layering
+
+Usage: hello-world [OPTIONS] <COMMAND>
+
+Commands:
+  greet       Prints a greeting using the configured style
+  take-leave  Says goodbye while describing how the farewell will be delivered
+  help        Print this message or the help of the given subcommand(s)
+
+Options:
+  -c, --config <PATH>
+          Path to the configuration file
+
+  -r, --recipient <NAME>
+          Recipient of the greeting when supplied on the CLI
+
+  -s, --salutation <WORD>
+          Replacement salutations supplied on the CLI
+
+      --is-excited
+          Enables an enthusiastic delivery mode from the CLI
+
+      --is-quiet
+          Enables a quiet delivery mode from the CLI
+
+  -h, --help
+          Print help
+
+  -V, --version
+          Print version

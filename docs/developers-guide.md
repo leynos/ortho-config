@@ -40,7 +40,8 @@ configuration-loading concern. When the way a `cargo-*` binary accepts or
 forwards the injected subcommand token is changed, update all of the following
 in the same change:
 
-- `docs/design.md` §4.17 and [ADR-004](adr-004-cargo-external-subcommand-entry-point.md).
+- `docs/design.md` §4.17 and
+  [ADR-004](adr-004-cargo-external-subcommand-entry-point.md).
 - `docs/roadmap.md` if the work remains tracked there.
 - Any user-facing guide or README that shows `cargo <name>` or
   `cargo-<name> <name>` invocation.
@@ -66,6 +67,14 @@ downstream applications need a reusable machine-readable command contract. Use
 `ORTHO_AGENT_CONTEXT_SCHEMA_VERSION` for compatibility. Do not add Fluent
 message identifiers, localized long prose, or renderer-specific output
 structures to the agent-context schema.
+
+`localizer::identifier::normalize_segment` is the single source of truth for
+strict runtime and derive-time Fluent identifier segments. Reuse it from
+command localization, derive output, and future lookup-id generation instead of
+duplicating ASCII normalization rules. Keep the tolerant catalogue load path in
+`localizer::fluent` separate: it exists only to pre-normalize hand-authored
+resource ids such as dotted catalogue keys before Fluent parses them, and must
+not be used to validate generated command ids.
 
 Add agent-native warning and hard-failure report fields to
 `cargo_orthohelp::policy` while `cargo-orthohelp` is the only emitter. Use
@@ -98,9 +107,9 @@ status surfaces beside those formats rather than changing them.
 Keep schema ownership aligned with ADR-003. Localized human-documentation data
 belongs in `ortho_config::docs`, compact reusable agent context belongs in
 `ortho_config::agent_context`, and policy reports stay in
-`cargo_orthohelp::policy` until a later ADR extracts a shared report model.
-Do not introduce crate dependency cycles to share convenience helpers; move
-shared contracts downward instead.
+`cargo_orthohelp::policy` until a later ADR extracts a shared report model. Do
+not introduce crate dependency cycles to share convenience helpers; move shared
+contracts downward instead.
 
 ### Generating agent-context output
 
@@ -274,10 +283,10 @@ that downstream applications can attach the subscribers and exporters they
 prefer without contending with this workspace for global state.
 
 - Use the `tracing` crate for all diagnostic output. Prefer structured
-  `tracing::{trace, debug, info, warn, error}` events and spans over
-  `println!`, `eprintln!`, or direct `log` macros. Attach fields for
-  identifiers, state, and error context so subscribers can filter and
-  correlate events without parsing message text.
+  `tracing::{trace, debug, info, warn, error}` events and spans over `println!`,
+  `eprintln!`, or direct `log` macros. Attach fields for identifiers, state,
+  and error context so subscribers can filter and correlate events without
+  parsing message text.
 - Wrap meaningful units of work in spans. Use `#[tracing::instrument]` or
   explicit spans around request handling, command execution, retries, and
   background jobs. Do not hold a `Span::enter()` guard across `.await`; use
@@ -323,12 +332,12 @@ integration (CI) environments.
   document, so a later reader can re-evaluate the constraint.
 - Keep dependencies current. When upgrading a crate, run the full quality
   gates (`make check-fmt`, `make lint`, `make test`) and, where the upgrade
-  changes behaviour or public API, update the relevant design document, ADR,
-  or migration guide.
+  changes behaviour or public API, update the relevant design document, ADR, or
+  migration guide.
 - Capture substantive dependency choices, such as adopting or replacing a
   crate, in an ADR following the documentation style guide. Reference the ADR
-  from the design document and from this guide where future contributors
-  should be aware of the decision.
+  from the design document and from this guide where future contributors should
+  be aware of the decision.
 
 ## Command checklist
 

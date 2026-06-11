@@ -210,14 +210,14 @@ structures.
 Policy reports for agent-native warnings and hard failures are owned by
 `cargo-orthohelp`. The `cargo_orthohelp::policy` module defines
 `ORTHO_POLICY_REPORT_SCHEMA_VERSION` and machine-stable fields such as
-`rule_id`, `code`, `severity`, and `message`. Future `cargo-orthohelp`
-commands that emit those reports should keep machine-readable output separate
-from human diagnostics.
+`rule_id`, `code`, `severity`, and `message`. Future `cargo-orthohelp` commands
+that emit those reports should keep machine-readable output separate from human
+diagnostics.
 
 Existing `cargo-orthohelp --format ir`, `--format man`, `--format ps`, and
 `--format all` behaviour remains compatible. Agent-context generation and
-agent-native policy checking are future command surfaces unless a later
-roadmap item explicitly enables them.
+agent-native policy checking are future command surfaces unless a later roadmap
+item explicitly enables them.
 
 ### Localizing CLI copy
 
@@ -246,9 +246,9 @@ let localizer = FluentLocalizer::builder(langid!("en-US"))
 let mut args: LocalizationArgs<'_> = LocalizationArgs::default();
 args.insert("binary", "demo".into());
 assert_eq!(
-localizer
-    .lookup("cli.usage", Some(&args))
-    .expect("usage copy exists"),
+    localizer
+        .lookup("cli.usage", Some(&args))
+        .expect("usage copy exists"),
     "Usage: demo [OPTIONS] <COMMAND>"
 );
 ```
@@ -256,9 +256,60 @@ localizer
 Applications can inject a custom logger with `with_error_reporter` when they
 need to capture Fluent formatting errors alongside command parsing failures.
 
+Use `LocalizeCmd` to apply a localizer to a `clap::Command` tree before parsing
+or rendering help:
+
+```rust,ignore
+use clap::CommandFactory;
+use ortho_config::{LocalizeCmd, Localizer};
+
+# #[derive(clap::Parser)]
+# struct Cli {}
+fn command(localizer: &dyn Localizer) -> clap::Command {
+    Cli::command().localize(localizer)
+}
+```
+
+By default, identifiers derive from the command name. Use `with_base` when a
+catalogue has a shared namespace or when the binary name differs from the
+catalogue root:
+
+```rust,ignore
+use clap::CommandFactory;
+use ortho_config::{LocalizeCmd, Localizer};
+
+# #[derive(clap::Parser)]
+# struct Cli {}
+fn command(localizer: &dyn Localizer) -> clap::Command {
+    Cli::command()
+        .with_base("my_app.cli")
+        .localize(localizer)
+}
+```
+
+`message_id_for(&["my_app", "cli", "greet"], "args.name.help")` produces
+`my_app-cli-greet-args-name-help`. Each segment preserves ASCII letters, digits,
+`_`, and `-`, lowercases ASCII letters, rejects non-ASCII input, and joins
+path pieces with `-`. Author-facing Fluent files may still use dotted ids such
+as `my_app.cli.greet.about`; the loader normalizes those dots to match the
+runtime ids.
+
+Do not rely on the default command name when the catalogue uses a different
+root:
+
+```rust,ignore
+// DON'T: binary name `hello-world` looks for `hello-world-about`.
+CommandLine::command().localize(&localizer);
+
+// DO: catalogue keys start with `hello_world.cli`.
+CommandLine::command()
+    .with_base("hello_world.cli")
+    .localize(&localizer);
+```
+
 The Hello World example ships `hello_world::localizer::DemoLocalizer`, which
 builds a `FluentLocalizer` from `examples/hello_world/locales/en-US` and drives
-`CommandLine::command().localize(&localizer)` and
+`CommandLine::command().with_base("hello_world.cli").localize(&localizer)` and
 `CommandLine::try_parse_localized_env`. If the localization setup ever fails,
 the example falls back to `NoOpLocalizer`, preserving the stock `clap` strings
 until translations are fixed.
@@ -273,12 +324,14 @@ translation exists, the helper returns the original `clap` error unchanged:
 
 ```rust
 use clap::CommandFactory;
-use ortho_config::{localize_clap_error_with_command, Localizer};
+use ortho_config::{localize_clap_error_with_command, LocalizeCmd, Localizer};
 
 # #[derive(clap::Parser)]
 # struct Cli {}
 fn parse(localizer: &dyn Localizer) -> Result<Cli, clap::Error> {
-    let mut command = Cli::command().localize(localizer);
+    let mut command = Cli::command()
+        .with_base("my_app.cli")
+        .localize(localizer);
     let mut matches = command
         .try_get_matches()
         .map_err(|err| {
@@ -921,8 +974,8 @@ and environment variables before applying CLI overrides. When callers pass
 replaces file or environment values. The `greet` subcommand adds optional
 behaviour like a preamble (`--preamble "Good morning"`) or custom punctuation
 while reusing the merged global configuration. The `take-leave` subcommand
-combines switches and optional arguments (`--wave`, `--gift`,
-`--channel email`, `--remind-in 15`) alongside greeting adjustments
+combines switches and optional arguments (`--wave`, `--gift`, `--channel email`,
+`--remind-in 15`) alongside greeting adjustments
 (`--preamble "Until next time"`, `--punctuation ?`) to describe how the
 farewell should unfold. Each subcommand struct derives `OrthoConfig` so
 defaults from `[cmds.greet]` or `[cmds.take-leave]` merge automatically when
@@ -1013,14 +1066,14 @@ for a complete example.
 
 ## Error handling
 
-`load` and `load_and_merge_subcommand_for` return `OrthoResult<T>`, an alias
-for `Result<T, Arc<OrthoError>>`. `OrthoError` wraps errors from `clap`, file
-I/O and `figment`. Failures during the final merge of CLI values over
-configuration sources surface as the `Merge` variant, providing clearer
-diagnostics when the combined data is invalid. When multiple sources fail, the
-errors are collected into the `Aggregate` variant so callers can inspect each
-individual failure. Consumers should handle these errors appropriately, for
-example by printing them to stderr and exiting.
+`load` and `load_and_merge_subcommand_for` return `OrthoResult<T>`, an alias for
+`Result<T, Arc<OrthoError>>`. `OrthoError` wraps errors from `clap`, file I/O
+and `figment`. Failures during the final merge of CLI values over configuration
+sources surface as the `Merge` variant, providing clearer diagnostics when the
+combined data is invalid. When multiple sources fail, the errors are collected
+into the `Aggregate` variant so callers can inspect each individual failure.
+Consumers should handle these errors appropriately, for example by printing
+them to stderr and exiting.
 
 There is not currently an `OrthoError::MissingRequiredValues` variant. Missing
 required values therefore use the existing error surface:
@@ -1186,8 +1239,8 @@ loading behaviour.
 ### Documenting subcommands
 
 For a root config with a clap subcommand selector, derive
-`OrthoConfigSubcommandDocs` on the command enum and mark the selector field
-with `#[command(subcommand)]`. The selector is not emitted as a normal config
+`OrthoConfigSubcommandDocs` on the command enum and mark the selector field with
+`#[command(subcommand)]`. The selector is not emitted as a normal config
 field; instead, each enum variant contributes a child `DocMetadata` node.
 
 ```rust
@@ -1262,8 +1315,8 @@ PowerShell help can keep treating those files as the public documentation
 artefacts. A crate that parses localized IR directly should tolerate additive
 optional fields and should apply documented defaults for fields omitted by
 older derives, but it should not depend on agent-context or policy-report
-fields unless it opts into those formats.
-The consumer dependency tiers for downstream applications are defined in
+fields unless it opts into those formats. The consumer dependency tiers for
+downstream applications are defined in
 [Agent-native CLI assistance design](agent-native-cli-design.md) §2.2. Human
 documentation consumers may continue to use the existing roff and PowerShell
 outputs without engaging with those tiers.
@@ -1274,11 +1327,11 @@ outputs without engaging with those tiers.
 external-subcommand entry point. Cargo injects the subcommand token for
 `cargo orthohelp [OPTIONS]`, while direct `cargo-orthohelp [OPTIONS]` and
 `cargo-orthohelp orthohelp [OPTIONS]` invocations reach the same CLI parser.
-The wrapper calls
-`OrthoConfigDocs::get_doc_metadata()`, resolves Fluent messages per locale, and
-writes localized IR JSON into the chosen output directory. Add metadata to the
-package `Cargo.toml` so the tool knows which root type to inspect. This wrapper
-defines the CLI entry-point structure, not configuration loading.
+The wrapper calls `OrthoConfigDocs::get_doc_metadata()`, resolves Fluent
+messages per locale, and writes localized IR JSON into the chosen output
+directory. Add metadata to the package `Cargo.toml` so the tool knows which
+root type to inspect. This wrapper defines the CLI entry-point structure, not
+configuration loading.
 
 ```toml
 [package.metadata.ortho_config]
@@ -1296,37 +1349,6 @@ cargo orthohelp --out-dir target/orthohelp --locale en-US
 `target/orthohelp/<hash>/ir.json`, while `--no-build` skips the bridge build
 and fails if the cache is missing. The generated per-locale JSON lives under
 `<out>/ir/<locale>.json` and is ready for downstream generators.
-
-### Generating agent-context output
-
-`cargo-orthohelp` can generate compact agent-context JSON from the same bridge
-metadata as the human documentation outputs. Use `--format agent-context` to
-write one machine-oriented manifest for the selected package:
-
-```bash
-cargo orthohelp --format agent-context --out-dir target/orthohelp
-```
-
-The output file is `<out>/agent-context.json`. It contains
-`schema_version`, `kind`, `package`, and a flat `commands` array. Each command
-entry carries the full command path, an optional concise summary, a canonical
-verb when the command name matches the supported vocabulary, and one input
-entry per generated flag or positional argument.
-
-Agent-context output is not localized. It deliberately omits long prose,
-Fluent message identifiers, roff fragments, and PowerShell wrapper/help
-structures. For the current schema, positional arguments are represented as
-inputs without `long` or `short` flag names.
-
-Input `default` values are display hints copied from the bridge metadata, not
-shell-ready invocation literals. Agents should treat them as descriptive text
-for prompts or explanations rather than passing them verbatim to the command
-line.
-
-`interaction_mode`, `mutation_effect`, and `policy.agent_native` currently use
-unknown or missing defaults unless richer agent-native metadata is declared by
-later roadmap work. Treat those fields as placeholders, not as proof that a
-command is non-interactive, read-only, or policy-checked.
 
 ### Generating man pages
 

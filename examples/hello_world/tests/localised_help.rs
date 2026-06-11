@@ -3,8 +3,13 @@
 //! Uses `assert_cmd` to run the compiled binary with different `LANG`
 //! environment settings and `insta` to snapshot the `--help` output.
 
-use assert_cmd::Command;
+use assert_cmd::Command as AssertCommand;
+use clap::CommandFactory;
+use hello_world::cli::{CommandLine, LocalizeCmd};
+use hello_world::localizer::DemoLocalizer;
 use insta::assert_snapshot;
+use ortho_config::NoOpLocalizer;
+use ortho_config::langid;
 use rstest::rstest;
 
 /// Runs the `hello_world` binary with the specified locale environment variables
@@ -18,7 +23,7 @@ fn run_with_env(locale_env: &[(&str, &str)], args: &[&str]) -> String {
         clippy::expect_used,
         reason = "cargo_bin is the standard assert_cmd API and test panics are acceptable"
     )]
-    let mut cmd = Command::cargo_bin("hello_world").expect("binary should exist");
+    let mut cmd = AssertCommand::cargo_bin("hello_world").expect("binary should exist");
 
     // Clear locale-related env vars to ensure isolation
     cmd.env_remove("LC_ALL");
@@ -66,6 +71,18 @@ fn run_with_locale(locale: &str, args: &[&str]) -> String {
     run_with_env(&[("LANG", locale)], args)
 }
 
+fn render_localized_long_help(localizer: &dyn ortho_config::Localizer) -> String {
+    let mut command = CommandLine::command()
+        .with_base("hello_world.cli")
+        .localize(localizer);
+    command.render_long_help().to_string()
+}
+
+fn render_stock_long_help() -> String {
+    let mut command = CommandLine::command();
+    command.render_long_help().to_string()
+}
+
 /// Rewrites rustup toolchain source paths to a stable `<rust-src>` prefix.
 ///
 /// This keeps snapshots portable across environments where the absolute rustup
@@ -94,6 +111,33 @@ fn normalise_rust_src_paths(output: &str) -> String {
         normalised.push('\n');
     }
     normalised
+}
+
+// =============================================================================
+// Direct command-tree localization snapshots
+// =============================================================================
+
+#[test]
+fn command_tree_long_help_en_us() {
+    let localizer =
+        DemoLocalizer::try_for_locale(langid!("en-US")).expect("en-US demo localizer should build");
+    let output = render_localized_long_help(&localizer);
+    assert_snapshot!("command_tree_long_help_en_us", output);
+}
+
+#[test]
+fn command_tree_long_help_ja() {
+    let localizer =
+        DemoLocalizer::try_for_locale(langid!("ja")).expect("ja demo localizer should build");
+    let output = render_localized_long_help(&localizer);
+    assert_snapshot!("command_tree_long_help_ja", output);
+}
+
+#[test]
+fn command_tree_long_help_noop_matches_stock() {
+    let output = render_localized_long_help(&NoOpLocalizer::new());
+    assert_eq!(output, render_stock_long_help());
+    assert_snapshot!("command_tree_long_help_noop", output);
 }
 
 #[rstest]

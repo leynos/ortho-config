@@ -182,7 +182,10 @@ is breached.
   Replaced the example's copied walker with a re-export of
   `ortho_config::LocalizeCmd`, wired `with_base("hello_world.cli")` into the
   example parser and direct command tests, and updated example documentation.
-- [ ] (pending) Milestone 5 — snapshot + BDD acceptance; docs; final gates.
+- [x] (2026-06-11) Milestone 5 — snapshot + BDD acceptance; docs; final
+  gates. Added direct command-tree snapshots, bound and ran the localised-help
+  BDD feature, updated users/developers/design docs, and marked roadmap 11.1.1
+  complete.
 
 Each milestone ends with `make check-fmt typecheck lint test` (via `tee` logs)
 and a CodeRabbit review (`coderabbit review --agent`) with all concerns cleared
@@ -308,6 +311,23 @@ rediscover them.
     catalogue's `hello_world.cli` namespace. Impact: production parsing,
     direct localization tests, and the localizer doctest now call
     `.with_base("hello_world.cli").localize(...)`.
+20. Observation: **The hello_world BDD scaffold is dormant and out of scope.**
+    Evidence: `cargo test -p hello_world -- --list` showed no generated
+    `rstest_bdd` scenarios from the existing scaffold; temporarily compiling it
+    exposed unrelated legacy lint and scenario failures. Impact: Milestone 5
+    uses a standalone `localised_help_bdd.rs` integration test that binds only
+    the new localised-help feature and leaves the dormant scaffold unchanged.
+21. Observation: **Clap long help renders `long_about`, not short `about`.**
+    Evidence: the first localised-help BDD run showed `--help` output beginning
+    with the localised long-about string and omitting the short about string.
+    Impact: the BDD assertion labels retain the plan's wording but check the
+    rendered long-help copy, while the direct command-tree snapshots capture
+    both en-US and ja long-help output.
+22. Observation: **English BDD coverage should mirror the Japanese subcommand
+    assertion.** Evidence: Milestone 5 CodeRabbit review found the English
+    scenario asserted only the top-level long help. Impact: the feature now
+    checks English `greet` subcommand help as well, and the test comment uses
+    en-GB Oxford spelling.
 
 ## Decision log
 
@@ -405,13 +425,12 @@ After Clippy required the directory module shape, the walker was moved to
 the argument-count lint. Milestone 2 gates `make check-fmt`, `make typecheck`,
 `make lint`, `make test`, and `make markdownlint` passed before CodeRabbit
 review. Three CodeRabbit attempts then wedged in sandbox preparation without
-findings or rate-limit output. A later review found missing builder
-`must_use` warnings, panic docs, and an Oxford spelling issue. After fixes and
-full gates, CodeRabbit requested explicit argument-collision coverage; that
-test was added, full gates were rerun, and CodeRabbit requested two clarifying
-comments plus one ownership comment for the subcommand take-and-replace path.
-After those comments and another full gate pass, CodeRabbit reported zero
-findings.
+findings or rate-limit output. A later review found missing builder `must_use`
+warnings, panic docs, and an Oxford spelling issue. After fixes and full gates,
+CodeRabbit requested explicit argument-collision coverage; that test was added,
+full gates were rerun, and CodeRabbit requested two clarifying comments plus
+one ownership comment for the subcommand take-and-replace path. After those
+comments and another full gate pass, CodeRabbit reported zero findings.
 
 Milestone 3 is complete through focused validation. The load-time Fluent helper
 names and comments now describe the intentionally tolerant pre-normalization
@@ -425,11 +444,30 @@ and `cargo test -p ortho_config localizer::identifier::tests` passed.
 Milestone 4 is complete through focused validation. The example
 `cli/localization.rs` module now re-exports `ortho_config::LocalizeCmd` and
 retains only the example-specific parse-error helper. Production parsing and
-direct command-localization tests use `with_base("hello_world.cli")` to preserve
-the existing catalogue ids, and the public path `hello_world::cli::LocalizeCmd`
-still resolves through the re-export. Focused commands
-`cargo test -p hello_world cli::tests::localisation` and
+direct command-localization tests use `with_base("hello_world.cli")` to
+preserve the existing catalogue ids, and the public path
+`hello_world::cli::LocalizeCmd` still resolves through the re-export. Focused
+commands `cargo test -p hello_world cli::tests::localisation` and
 `cargo test -p hello_world --doc` passed.
+
+Milestone 5 is complete through focused validation. The direct command-tree
+snapshots `command_tree_long_help_en_us`, `command_tree_long_help_ja`, and
+`command_tree_long_help_noop` were added to
+`examples/hello_world/tests/localised_help.rs`; the no-op test asserts equality
+with stock clap output before snapshotting. The localised-help BDD feature is
+bound by a scoped `examples/hello_world/tests/localised_help_bdd.rs`
+integration test so the acceptance scenario is compiled without activating the
+dormant legacy BDD scaffold. Focused commands
+`INSTA_UPDATE=always cargo test -p hello_world command_tree_long_help` and
+`cargo test -p hello_world --test localised_help_bdd` passed. Explicit doctest
+gates `cargo test --doc -p ortho_config` and `cargo test --doc -p hello_world`
+passed after repairing stale doctest snippets, and the full `make all` gate
+passed via
+`/tmp/all-11-1-1-promote-localize-cmd-to-a-public-extension-trait.out`.
+CodeRabbit then requested mirrored English subcommand BDD coverage and an
+en-GB spelling fix; both were applied, and `make all` passed again using the
+same log path before follow-up review. The follow-up
+`coderabbit review --agent` completed with zero findings.
 
 ## Context and orientation
 
