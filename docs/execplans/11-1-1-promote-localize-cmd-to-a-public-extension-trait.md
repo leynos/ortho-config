@@ -174,7 +174,10 @@ is breached.
   (red→green). Added `ortho_config/src/localizer/clap_command/mod.rs`,
   recursive command and argument localization, `with_base`, `localize_self`,
   collision checks, and tests for flag-action preservation.
-- [ ] (pending) Milestone 3 — crate re-exports and `fluent.rs` doc-comment fix.
+- [x] (2026-06-11) Milestone 3 — crate re-exports and `fluent.rs`
+  doc-comment fix. Public re-exports were completed during Milestone 2; this
+  milestone corrected the Fluent load-time predicate wording and added strict
+  non-ASCII rejection coverage for `message_id_for`.
 - [ ] (pending) Milestone 4 — collapse the example onto the promoted trait.
 - [ ] (pending) Milestone 5 — snapshot + BDD acceptance; docs; final gates.
 
@@ -289,6 +292,12 @@ rediscover them.
     warnings for discarded builder values.
     Impact: `with_base` now uses message-bearing `#[must_use = "..."]`
     attributes so both the lint policy and API ergonomics are satisfied.
+18. Observation: **Milestone 3 re-exports were already complete.** Evidence:
+    `ortho_config/src/lib.rs` and `ortho_config/src/localizer/mod.rs` already
+    re-exported `LocalizeCmd`, `WithBase`, and `message_id_for` as part of the
+    Milestone 2 implementation. Impact: Milestone 3 was limited to clarifying
+    the Fluent load-time predicate and adding strict non-ASCII rejection
+    coverage for `message_id_for`.
 
 ## Decision log
 
@@ -393,6 +402,15 @@ test was added, full gates were rerun, and CodeRabbit requested two clarifying
 comments plus one ownership comment for the subcommand take-and-replace path.
 After those comments and another full gate pass, CodeRabbit reported zero
 findings.
+
+Milestone 3 is complete through focused validation. The load-time Fluent helper
+names and comments now describe the intentionally tolerant pre-normalization
+path rather than claiming dotted or non-ASCII ids are valid Fluent syntax. The
+behaviour stayed unchanged: `normalize_resource_ids` still accepts the existing
+Cyrillic resource-id test, while `message_id_for` now has explicit strict-path
+coverage showing that non-ASCII command segments panic. Focused commands
+`cargo test -p ortho_config localizer::fluent::tests::normalises_unicode_identifiers`
+and `cargo test -p ortho_config localizer::identifier::tests` passed.
 
 ## Context and orientation
 

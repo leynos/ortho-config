@@ -117,6 +117,7 @@ mod tests {
 
     #[rstest]
     #[case::space(["hello world"], "about")]
+    #[case::non_ascii(["ключ"], "about")]
     #[case::dot_inside_segment(["hello.world"], "about")]
     #[case::consecutive_dots(["hello_world", "cli"], "args..help")]
     #[case::slash_in_suffix(["hello_world", "cli"], "args.config/path.help")]
