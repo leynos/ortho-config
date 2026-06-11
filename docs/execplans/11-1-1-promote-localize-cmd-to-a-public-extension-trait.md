@@ -5,7 +5,7 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
 proceeds.
 
-Status: DRAFT
+Status: IN PROGRESS
 
 Roadmap item: **11.1.1** (see [docs/roadmap.md](../roadmap.md) §11.1). Design
 source: [cli-localization-design.md](../cli-localization-design.md) §4, §4.1,
@@ -164,7 +164,10 @@ is breached.
 
 ## Progress
 
-- [ ] (pending) Milestone 0 — design-doc reconciliation (§4.1 prose, ADR-006).
+- [x] (2026-06-11) Milestone 0 — design-doc reconciliation (§4.1 prose,
+  ADR-006). Updated `docs/cli-localization-design.md`, added
+  `docs/adr-006-identifier-derivation-panics.md`, indexed ADR-006 in
+  `docs/contents.md`, and began implementation status tracking.
 - [ ] (pending) Milestone 1 — `normalize_segment` + `message_id_for` (red→green,
   proptest).
 - [ ] (pending) Milestone 2 — `LocalizeCmd` trait, `WithBase`, walker (red→green).
@@ -225,6 +228,18 @@ rediscover them.
    `CLI_BASE_MESSAGE_ID = "hello_world.cli"` consts.
    Impact: the example must use `with_base("hello_world.cli")`; this is the
    canonical "multi-segment catalogue" demonstration of `with_base`.
+8. Observation: **ADR location follows the existing flat docs convention.**
+   Evidence: `docs/contents.md` indexes ADR-001 through ADR-005 at
+   `docs/adr-00x-...md`, not under `docs/adr/`.
+   Impact: ADR-006 was added as
+   `docs/adr-006-identifier-derivation-panics.md` to match the repository's
+   current convention despite the generic ADR skill mentioning `docs/adr/`.
+9. Observation: **CodeRabbit can wedge during sandbox preparation.**
+   Evidence: the second Milestone 0 review stayed at
+   `{"phase":"setup","status":"preparing_sandbox"}` for about 18 minutes after
+   the two trivial ADR concerns were fixed.
+   Impact: the stuck review process was terminated and the review was retried
+   cleanly; this did not bypass the review gate.
 
 ## Decision log
 
@@ -269,12 +284,24 @@ rediscover them.
   character must be a letter. Keeping `normalize_segment` pure (no
   composition-aware panic) lets the derive (11.1.3) and load path reuse it.
   Date/Author: 2026-06-09, planning agent.
+- Decision: **Keep ADR-006 in the flat `docs/` ADR series.**
+  Rationale: the repository's accepted ADRs and documentation index already
+  use flat `docs/adr-00x-...md` paths. Matching that local convention preserves
+  discoverability and avoids an unnecessary documentation-layout change.
+  Date/Author: 2026-06-11, implementation agent.
+- Decision: **Merge the ADR Y-Statement into the canonical outcome section.**
+  Rationale: CodeRabbit flagged a standalone `Y-Statement` heading as
+  non-standard for this repository's ADR format. The Y-Statement wording now
+  lives under `Decision outcome / proposed direction`, preserving the
+  architectural decision-record requirement without adding a duplicate section.
+  Date/Author: 2026-06-11, implementation agent.
 
 ## Outcomes & retrospective
 
-To be completed at milestones and at completion. Compare against Purpose: the
-promoted trait is public, the example re-exports it with all tests green, and the
-four gates pass.
+Milestone 0 is complete. The design document now preserves underscores in
+runtime Fluent ids, documents the 11.1.1 non-localized clap surfaces, and
+references ADR-006 for the public panic contract. The promoted trait is not yet
+implemented; Milestone 1 begins the red-green identifier helper work.
 
 ## Context and orientation
 
