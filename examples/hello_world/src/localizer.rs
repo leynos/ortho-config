@@ -58,7 +58,9 @@ impl DemoLocalizer {
     /// use hello_world::localizer::DemoLocalizer;
     ///
     /// let localizer = DemoLocalizer::new();
-    /// let command = CommandLine::command().localize(&localizer);
+    /// let command = CommandLine::command()
+    ///     .with_base("hello_world.cli")
+    ///     .localize(&localizer);
     /// assert!(command.get_about().is_some());
     /// ```
     ///

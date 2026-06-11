@@ -178,7 +178,10 @@ is breached.
   doc-comment fix. Public re-exports were completed during Milestone 2; this
   milestone corrected the Fluent load-time predicate wording and added strict
   non-ASCII rejection coverage for `message_id_for`.
-- [ ] (pending) Milestone 4 — collapse the example onto the promoted trait.
+- [x] (2026-06-11) Milestone 4 — collapse the example onto the promoted trait.
+  Replaced the example's copied walker with a re-export of
+  `ortho_config::LocalizeCmd`, wired `with_base("hello_world.cli")` into the
+  example parser and direct command tests, and updated example documentation.
 - [ ] (pending) Milestone 5 — snapshot + BDD acceptance; docs; final gates.
 
 Each milestone ends with `make check-fmt typecheck lint test` (via `tee` logs)
@@ -298,6 +301,13 @@ rediscover them.
     Milestone 2 implementation. Impact: Milestone 3 was limited to clarifying
     the Fluent load-time predicate and adding strict non-ASCII rejection
     coverage for `message_id_for`.
+19. Observation: **Direct example tests need the explicit catalogue base.**
+    Evidence: after the copied example trait is removed, direct
+    `CommandLine::command().localize(...)` calls use the crate trait's default
+    root `hello-world`, which intentionally does not match the example
+    catalogue's `hello_world.cli` namespace. Impact: production parsing,
+    direct localization tests, and the localizer doctest now call
+    `.with_base("hello_world.cli").localize(...)`.
 
 ## Decision log
 
@@ -411,6 +421,15 @@ Cyrillic resource-id test, while `message_id_for` now has explicit strict-path
 coverage showing that non-ASCII command segments panic. Focused commands
 `cargo test -p ortho_config localizer::fluent::tests::normalises_unicode_identifiers`
 and `cargo test -p ortho_config localizer::identifier::tests` passed.
+
+Milestone 4 is complete through focused validation. The example
+`cli/localization.rs` module now re-exports `ortho_config::LocalizeCmd` and
+retains only the example-specific parse-error helper. Production parsing and
+direct command-localization tests use `with_base("hello_world.cli")` to preserve
+the existing catalogue ids, and the public path `hello_world::cli::LocalizeCmd`
+still resolves through the re-export. Focused commands
+`cargo test -p hello_world cli::tests::localisation` and
+`cargo test -p hello_world --doc` passed.
 
 ## Context and orientation
 

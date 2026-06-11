@@ -44,11 +44,12 @@ production-ready complexity.
   `GlobalArgs`, asserting that default salutations are preserved when
   environment layers append new values.
 - **Localized help text**: ship a `DemoLocalizer` backed by
-`FluentLocalizer`, layer the example’s bundled catalogue over `ortho_config`’s
-defaults, and thread it through `CommandLine::command().localize(&localizer)`
-plus `CommandLine::try_parse_localized_env`. Formatting errors are logged, and
-the default bundle is used as a fallback, illustrating how applications can
-adopt Fluent without sacrificing existing help copy.
+  `FluentLocalizer`, layer the example’s bundled catalogue over
+  `ortho_config`’s defaults, and thread it through
+  `CommandLine::command().with_base("hello_world.cli").localize(&localizer)`
+  plus `CommandLine::try_parse_localized_env`. Formatting errors are logged,
+  and the default bundle is used as a fallback, illustrating how applications
+  can adopt Fluent without sacrificing existing help copy.
 - **Documentation IR emission**: serialize documentation metadata using
   `OrthoConfigDocs::get_doc_metadata` so `cargo-orthohelp` can generate man
   pages and PowerShell help without scraping `--help` output. The `emit_docs`
