@@ -168,8 +168,10 @@ is breached.
   ADR-006). Updated `docs/cli-localization-design.md`, added
   `docs/adr-006-identifier-derivation-panics.md`, indexed ADR-006 in
   `docs/contents.md`, and began implementation status tracking.
-- [ ] (pending) Milestone 1 — `normalize_segment` + `message_id_for` (red→green,
-  proptest).
+- [x] (2026-06-11) Milestone 1 — `normalize_segment` + `message_id_for`
+  (red→green, proptest). Added `ortho_config/src/localizer/identifier.rs`,
+  exported `message_id_for`, added table and property tests, and added the
+  `proptest` dev-dependency to `ortho_config`.
 - [ ] (pending) Milestone 2 — `LocalizeCmd` trait, `WithBase`, walker (red→green).
 - [ ] (pending) Milestone 3 — crate re-exports and `fluent.rs` doc-comment fix.
 - [ ] (pending) Milestone 4 — collapse the example onto the promoted trait.
@@ -240,6 +242,23 @@ rediscover them.
    the two trivial ADR concerns were fixed.
    Impact: the stuck review process was terminated and the review was retried
    cleanly; this did not bypass the review gate.
+10. Observation: **Empty command paths need an explicit root guard.**
+    Evidence: the first Milestone 1 green attempt let
+    `message_id_for(&[], "about")` produce `about`, because the suffix supplied
+    the leading ASCII letter.
+    Impact: `message_id_for` now panics before suffix handling when
+    `command_path` is empty, preserving the contract that `command_path[0]` is
+    the root.
+11. Observation: **Suffix splitting must be counted before preallocation.**
+    Evidence: CodeRabbit flagged that `Vec::with_capacity(command_path.len() +
+    1)` under-allocated for suffixes such as `args.reason.help`.
+    Impact: `message_id_for` now reuses one `suffix.split('.')` iterator and
+    counts its clone for exact capacity before extending the segment vector.
+12. Observation: **Consecutive suffix dots are an empty-segment edge case.**
+    Evidence: CodeRabbit requested explicit coverage for `args..help`, which
+    reaches the empty segment path after suffix splitting.
+    Impact: `message_id_for_rejects_unrepresentable_segments` now documents
+    that consecutive dots panic with `invalid Fluent identifier segment`.
 
 ## Decision log
 
@@ -295,6 +314,13 @@ rediscover them.
   lives under `Decision outcome / proposed direction`, preserving the
   architectural decision-record requirement without adding a duplicate section.
   Date/Author: 2026-06-11, implementation agent.
+- Decision: **Implement identifier derivation in a dedicated
+  `localizer::identifier` module.**
+  Rationale: the helper is pure and will be reused by the command-tree walker,
+  derive work, and documentation tests. Keeping it out of `fluent.rs` avoids
+  coupling strict derive-time identifier rules to the intentionally tolerant
+  load-time catalogue normalizer.
+  Date/Author: 2026-06-11, implementation agent.
 
 ## Outcomes & retrospective
 
@@ -302,6 +328,19 @@ Milestone 0 is complete. The design document now preserves underscores in
 runtime Fluent ids, documents the 11.1.1 non-localized clap surfaces, and
 references ADR-006 for the public panic contract. The promoted trait is not yet
 implemented; Milestone 1 begins the red-green identifier helper work.
+
+Milestone 1 is complete through focused validation. The red command
+`cargo test -p ortho_config localizer::tests::message_id_for` failed with
+`cannot find function message_id_for in this scope`. After implementation,
+`cargo test -p ortho_config localizer::tests` passed 29 localizer tests,
+including table tests, panic tests, and three proptest properties.
+
+After moving the identifier tests into `localizer::identifier` to keep code
+files under 400 lines, the focused command
+`cargo test -p ortho_config localizer::identifier::tests` passed 14 tests. The
+Milestone 1 gates `make check-fmt`, `make typecheck`, `make lint`, `make test`,
+and `make markdownlint` passed, and CodeRabbit reported zero findings after the
+suffix-capacity and consecutive-dot fixes.
 
 ## Context and orientation
 

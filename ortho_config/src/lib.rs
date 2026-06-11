@@ -118,7 +118,7 @@ pub use file::{FileLayerChain, load_config_file, load_config_file_as_chain};
 pub use localizer::{
     FluentBundleSource, FluentLocalizer, FluentLocalizerBuilder, FluentLocalizerError,
     FormattingIssue, LocalizationArgs, Localizer, NoOpLocalizer, clap_error_formatter,
-    localize_clap_error, localize_clap_error_with_command,
+    localize_clap_error, localize_clap_error_with_command, message_id_for,
 };
 /// Re-export sanitization helpers used to strip `None` fields and produce a
 /// Figment provider.

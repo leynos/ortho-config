@@ -16,6 +16,7 @@ use unic_langid::{LanguageIdentifier, langid};
 
 mod clap_error;
 mod fluent;
+mod identifier;
 use fluent::{BundleWithLocale, normalize_identifier};
 
 /// Arguments forwarded to localisation lookups.
@@ -25,6 +26,7 @@ use fluent::{BundleWithLocale, normalize_identifier};
 /// declared in the `.ftl` resources.
 pub type LocalizationArgs<'value> = HashMap<&'value str, FluentValue<'value>>;
 pub use clap_error::{clap_error_formatter, localize_clap_error, localize_clap_error_with_command};
+pub use identifier::message_id_for;
 
 /// Provides localised strings for user-facing CLI output.
 ///

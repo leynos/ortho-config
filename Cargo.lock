@@ -1260,6 +1260,7 @@ dependencies = [
  "json5",
  "ortho_config_macros",
  "ortho_config_test_helpers",
+ "proptest",
  "rstest 0.26.1",
  "rstest-bdd",
  "rstest-bdd-macros",
