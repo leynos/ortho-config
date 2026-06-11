@@ -1,0 +1,15 @@
+error: unused return value of `must_use_fn` that must be used
+  --> tests/ui/must_use_bridge_ir.rs:12:5
+   |
+12 |     must_use_fn();
+   |     ^^^^^^^^^^^^^
+   |
+note: the lint level is defined here
+  --> tests/ui/must_use_bridge_ir.rs:4:9
+   |
+4  | #![deny(unused_must_use)]
+   |         ^^^^^^^^^^^^^^^
+help: use `let _ = ...` to ignore the resulting value
+   |
+12 |     let _ = must_use_fn();
+   |     +++++++

@@ -15,6 +15,8 @@
 //! - [`roff_steps`] — `when`/`then` steps for roff man-page generation.
 //! - [`powershell_steps`] — `when`/`then` steps for `PowerShell` help
 //!   generation.
+//! - [`steps_agent_context`] — `when`/`then` steps for agent-context JSON
+//!   generation.
 //! - [`scenarios`] — wires each feature file to the step registry via
 //!   `scenarios!`.
 
@@ -22,6 +24,7 @@ mod powershell_steps;
 mod roff_steps;
 mod scenarios;
 pub mod steps;
+mod steps_agent_context;
 mod steps_cache;
 mod steps_cmd;
 mod steps_ir;

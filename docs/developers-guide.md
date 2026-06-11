@@ -102,6 +102,73 @@ belongs in `ortho_config::docs`, compact reusable agent context belongs in
 Do not introduce crate dependency cycles to share convenience helpers; move
 shared contracts downward instead.
 
+### Generating agent-context output
+
+`cargo-orthohelp --format agent-context` reads the same bridge
+`DocMetadata` as the human documentation generators and writes
+`<out>/agent-context.json`. Keep the transform projective: it may copy or
+derive compact command metadata from the bridge IR, but it must not inspect
+rendered roff, PowerShell help, or localized IR output.
+
+Agent-context output is not localized. The current transform may use the short
+en-US command description as `AgentCommand.summary`, but it must not copy
+localized long help, Fluent identifiers, roff fragments, or PowerShell wrapper
+structures into `ortho_config::agent_context`.
+
+Represent positional inputs by leaving `AgentInput.long` absent. The adapter
+detects a positional input from existing CLI metadata when
+`cli.long.is_none() && cli.short.is_none() && cli.takes_value`. Do not add a
+new `AgentInput` kind field unless a later ADR or roadmap item changes the
+schema ownership decision.
+
+Run `coderabbit review --agent` after major milestones that change schemas,
+documentation contracts, or externally visible behaviour. Clear its concerns
+before moving to the next milestone.
+
+### Public API
+
+The following functions form the stable agent-context surface for 6.2.1.
+
+`cargo_orthohelp::agent_context`:
+
+```rust
+/// Convert bridge documentation IR into an `AgentContext` payload.
+///
+/// `package` is used to populate `AgentContext.package`.  Pass `None` for
+/// `localizer` to omit command summaries; pass an EN-US `Localizer` to
+/// include them.
+#[must_use]
+pub fn bridge_ir_to_agent_context(
+    meta: &DocMetadata,
+    package: &str,
+    localizer: Option<&dyn Localizer>,
+) -> AgentContext
+```
+
+`cargo_orthohelp::output`:
+
+```rust
+/// Serialise `payload` as pretty-printed JSON and write it atomically to
+/// `<out_dir>/agent-context.json`.
+///
+/// Returns the path of the written file on success.  Fails with
+/// `OrthohelpError::Io` for filesystem errors and `OrthohelpError::IrJson`
+/// for serialisation failures.
+pub fn write_agent_context(
+    out_dir: &Utf8Path,
+    payload: &AgentContext,
+) -> Result<Utf8PathBuf, OrthohelpError>
+```
+
+`cargo_orthohelp::cli::OutputFormat`:
+
+```rust
+/// Emit a compact, non-localised agent-context JSON manifest.
+/// Writes `<out_dir>/agent-context.json`.
+/// Excluded from `--format all` until schema versioning is locked in 6.2.2.
+AgentContext,
+```
+
 ### Consumer dependency tiers
 
 [Agent-native CLI assistance design](agent-native-cli-design.md) §2.2 is the

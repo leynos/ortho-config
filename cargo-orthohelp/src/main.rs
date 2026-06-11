@@ -7,6 +7,7 @@
 //! parsed `orthohelp` arguments are converted into package selection, bridge
 //! configuration, localized IR, and renderer-specific outputs.
 
+pub mod agent_context;
 mod bridge;
 mod cache;
 mod cli;
@@ -23,7 +24,9 @@ pub mod schema;
 
 use camino::Utf8PathBuf;
 use clap::{Error as ClapError, Parser, error::ErrorKind};
+use ortho_config::{FluentLocalizer, LanguageIdentifier, Localizer};
 use std::io::Write;
+use std::str::FromStr;
 use tracing_subscriber::EnvFilter;
 
 use crate::bridge::BridgeConfig;
@@ -84,7 +87,6 @@ fn run(cli: Cli) -> Result<(), OrthohelpError> {
 
     let metadata = metadata::load_metadata()?;
     let selection = metadata::select_package(&metadata, &args)?;
-    let locales = locale::resolve_locales(&args, &selection)?;
 
     let out_dir = resolve_out_dir(args.out_dir.clone(), &selection);
 
@@ -109,8 +111,23 @@ fn run(cli: Cli) -> Result<(), OrthohelpError> {
     let should_generate_ir = matches!(args.format, OutputFormat::Ir | OutputFormat::All);
     let should_generate_man = matches!(args.format, OutputFormat::Man | OutputFormat::All);
     let should_generate_ps = matches!(args.format, OutputFormat::Ps | OutputFormat::All);
+    let should_generate_localized_docs =
+        should_generate_ir || should_generate_man || should_generate_ps;
 
-    let localized_docs = localize_docs(&selection.package_root, &doc_metadata, &locales)?;
+    generate_agent_context_if_requested(&args, &selection, &doc_metadata, &out_dir)?;
+
+    let locales = if should_generate_localized_docs {
+        locale::resolve_locales(&args, &selection)?
+    } else {
+        Vec::new()
+    };
+
+    let localized_docs = localize_docs_if_requested(
+        should_generate_localized_docs,
+        &selection,
+        &doc_metadata,
+        &locales,
+    )?;
 
     if should_generate_ir {
         generate_ir(&localized_docs, &out_dir)?;
@@ -126,6 +143,75 @@ fn run(cli: Cli) -> Result<(), OrthohelpError> {
     }
 
     Ok(())
+}
+
+fn generate_agent_context_if_requested(
+    args: &Args,
+    selection: &PackageSelection,
+    doc_metadata: &DocMetadata,
+    out_dir: &Utf8PathBuf,
+) -> Result<(), OrthohelpError> {
+    if !matches!(args.format, OutputFormat::AgentContext) {
+        tracing::debug!(
+            package = %selection.package_name,
+            format = ?args.format,
+            "agent-context generation skipped for requested format",
+        );
+        return Ok(());
+    }
+    let en_us_localizer = match build_en_us_localizer(&selection.package_root) {
+        Ok(localizer) => Some(localizer),
+        Err(error) => {
+            tracing::warn!(
+                error = %error,
+                "no en-US localizer available; agent-context summaries will be omitted",
+            );
+            None
+        }
+    };
+    tracing::debug!(
+        package = %selection.package_name,
+        format = "agent-context",
+        "starting agent-context transformation",
+    );
+    let summary_localizer = en_us_localizer
+        .as_ref()
+        .map(|resolved_localizer| resolved_localizer as &dyn Localizer);
+    let context = agent_context::bridge_ir_to_agent_context(
+        doc_metadata,
+        &selection.package_name,
+        summary_localizer,
+    );
+    tracing::debug!(
+        package = %selection.package_name,
+        command_count = context.commands.len(),
+        "agent-context transformation complete",
+    );
+    output::write_agent_context(out_dir.as_path(), &context)?;
+    Ok(())
+}
+
+fn build_en_us_localizer(package_root: &Utf8PathBuf) -> Result<FluentLocalizer, OrthohelpError> {
+    let locale =
+        LanguageIdentifier::from_str("en-US").map_err(|err| OrthohelpError::InvalidLocale {
+            value: "en-US".to_owned(),
+            message: err.to_string(),
+        })?;
+    let resources = locale::load_consumer_resources(package_root, &locale)?;
+    locale::build_localizer(&locale, resources)
+}
+
+fn localize_docs_if_requested(
+    should_generate_localized_docs: bool,
+    selection: &PackageSelection,
+    doc_metadata: &DocMetadata,
+    locales: &[ortho_config::LanguageIdentifier],
+) -> Result<Vec<ir::LocalizedDocMetadata>, OrthohelpError> {
+    if should_generate_localized_docs {
+        localize_docs(&selection.package_root, doc_metadata, locales)
+    } else {
+        Ok(Vec::new())
+    }
 }
 
 fn localize_docs(

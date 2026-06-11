@@ -67,6 +67,9 @@ impl AgentContext {
 pub struct AgentCommand {
     /// Invocation path, for example `["cargo", "orthohelp"]`.
     pub path: Vec<String>,
+    /// Concise command-selection summary when available.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub summary: Option<String>,
     /// Canonical verb when known, for example `get`, `list`, or `apply`.
     #[serde(default)]
     pub canonical_verb: Option<String>,

@@ -16,20 +16,22 @@ intermediate representation (IR) produced by `#[derive(OrthoConfig)]`.
 
 ## How it works
 
-1. It discovers your package and root config type from Cargo metadata or CLI
+1. Discovers your package and root config type from Cargo metadata or CLI
    flags.
-2. It builds a tiny bridge binary that calls
+2. Builds a tiny bridge binary that calls
    `OrthoConfigDocs::get_doc_metadata()`.
-3. It resolves Fluent message IDs for each requested locale.
-4. It emits localized IR JSON, roff man pages, PowerShell external help, or
-   all formats.
+3. Resolves Fluent message IDs for each requested locale.
+4. Emits localized IR JSON, roff man pages, PowerShell external help, compact
+   agent-context JSON, or every localized format.
 
 ## Core features
 
 - **Single source of truth:** Generate docs from OrthoConfig IR metadata.
 - **Localized output:** Resolve Fluent IDs per locale from `locales/<locale>`.
 - **Multiple output formats:** IR JSON (`ir`), UNIX man pages (`man`),
-  PowerShell help (`ps`), or all formats (`all`).
+  PowerShell help (`ps`), compact agent-context JSON (`agent-context`), or all
+  localized output formats (`all`). Note: `--format all` currently excludes
+  `agent-context` until schema versioning is locked.
 - **Cache-aware pipeline:** `--cache` reuses bridge IR; `--no-build` enforces
   cache-only execution.
 - **Cargo-native workflow:** Run as `cargo orthohelp` from your workspace.
@@ -37,8 +39,8 @@ intermediate representation (IR) produced by `#[derive(OrthoConfig)]`.
 ## Agent-native roadmap status
 
 `cargo-orthohelp` is the planned reference CLI for OrthoConfig's agent-native
-work. The current released surface generates human documentation artefacts. The
-roadmap adds compact `agent-context` output, `--json` command summaries,
+work. The current released surface generates human documentation artefacts and
+compact `agent-context` output. The roadmap adds `--json` command summaries,
 agent-native lint checks, enumerating errors, stable exit classes, and atomic
 artefact writes. See
 [Agent-native CLI assistance design](../docs/agent-native-cli-design.md) and
@@ -81,7 +83,7 @@ cargo orthohelp \
   [--package <pkg>] [--bin <name> | --lib] \
   [--root-type <path::Type>] \
   [--locale <locale>] [--all-locales] \
-  [--format ir|man|ps|all] \
+  [--format ir|man|ps|agent-context|all] \
   [--out-dir <path>] \
   [--cache] [--no-build]
 ```
@@ -143,6 +145,15 @@ Generate every output format in one run:
 cargo orthohelp --package my_app --all-locales --format all --out-dir target/docs
 ```
 
+Generate compact agent-context JSON:
+
+```bash
+cargo orthohelp \
+  --package my_app \
+  --format agent-context \
+  --out-dir target/orthohelp
+```
+
 ## Output layout
 
 For `--out-dir target/docs`:
@@ -157,6 +168,7 @@ For `--out-dir target/docs`:
   - `target/docs/powershell/<ModuleName>/<ModuleName>.psd1`
   - `target/docs/powershell/<ModuleName>/<locale>/<ModuleName>-help.xml`
   - `target/docs/powershell/<ModuleName>/<locale>/about_<ModuleName>.help.txt`
+- Agent context: `target/docs/agent-context.json`
 
 ## Cargo metadata defaults
 

@@ -46,6 +46,54 @@ fn compact_context_serialization_excludes_localization_fields() {
 }
 
 #[rstest]
+#[case(None, false)]
+#[case(Some("List configured resources."), true)]
+fn command_summary_serializes_only_when_present(
+    #[case] summary: Option<&str>,
+    #[case] should_include_summary: bool,
+) {
+    let mut context = sample_agent_context();
+    context
+        .commands
+        .first_mut()
+        .expect("sample context should contain one command")
+        .summary = summary.map(str::to_owned);
+
+    let value = serde_json::to_value(context).expect("serialize agent context");
+    let command = first_array_item(field(&value, "commands"));
+
+    assert_eq!(command.get("summary").is_some(), should_include_summary);
+    if let Some(expected) = summary {
+        assert_eq!(field(command, "summary"), expected);
+    }
+}
+
+#[rstest]
+fn command_summary_round_trips_when_present() {
+    let context: AgentContext = serde_json::from_value(json!({
+        "schema_version": "1",
+        "kind": "summary-cli.agent_context",
+        "package": "summary-cli",
+        "commands": [
+            {
+                "path": ["summary-cli", "list"],
+                "summary": "List configured resources."
+            }
+        ]
+    }))
+    .expect("deserialize context with command summary");
+
+    let command = context
+        .commands
+        .first()
+        .expect("context should contain one command");
+    assert_eq!(
+        command.summary.as_deref(),
+        Some("List configured resources.")
+    );
+}
+
+#[rstest]
 fn agent_context_json_snapshot_covers_wire_contract() {
     let json = serde_json::to_string_pretty(&sample_agent_context())
         .expect("serialize agent context snapshot");
@@ -61,6 +109,7 @@ fn agent_context_json_snapshot_covers_wire_contract() {
             "example-cli",
             "list"
           ],
+          "summary": "List configured resources.",
           "canonical_verb": "list",
           "inputs": [
             {
@@ -129,6 +178,7 @@ fn absent_optional_metadata_deserializes_to_documented_defaults() {
         .expect("legacy context should contain one command");
     assert_eq!(command.interaction_mode, InteractionMode::Unknown);
     assert_eq!(command.mutation_effect, MutationEffect::Unknown);
+    assert!(command.summary.is_none());
     assert!(command.async_submission.is_none());
     assert!(command.delivery_route.is_none());
     assert!(command.inputs.is_empty());
@@ -186,6 +236,7 @@ fn sample_agent_context() -> AgentContext {
         package: "example-cli".to_owned(),
         commands: vec![AgentCommand {
             path: vec!["example-cli".to_owned(), "list".to_owned()],
+            summary: Some("List configured resources.".to_owned()),
             canonical_verb: Some("list".to_owned()),
             inputs: vec![AgentInput {
                 name: "format".to_owned(),

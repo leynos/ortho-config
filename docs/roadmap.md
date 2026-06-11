@@ -137,13 +137,13 @@ fields.
 
 ### 6.2. Add compact agent-context output
 
-- [ ] 6.2.1. Add `--format agent-context` to `cargo-orthohelp`.
+- [x] 6.2.1. Add `--format agent-context` to `cargo-orthohelp`.
   - Requires 6.1.1.
   - See agent-native-cli-design.md §3.2 and §4; cargo-orthohelp-design.md §6.3.1.
-  - [ ] Generate JSON from the same bridge output used by documentation IR.
-  - [ ] Include command paths, verbs, flags, positional arguments, value types,
+  - [x] Generate JSON from the same bridge output used by documentation IR.
+  - [x] Include command paths, verbs, flags, positional arguments, value types,
     required inputs, defaults, and enum values.
-  - [ ] Exclude localized long prose unless a concise summary is needed for
+  - [x] Exclude localized long prose unless a concise summary is needed for
     command selection.
 
 - [ ] 6.2.2. Version and validate the agent-context schema.
