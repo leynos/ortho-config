@@ -50,26 +50,7 @@ fn command_tree() -> Command {
         .subcommand(Command::new("greet").about("stock greet about"))
 }
 
-#[rstest]
-fn localize_rewrites_command_tree_without_corrupting_flags() {
-    let localizer = SelectiveLocalizer::new([
-        "demo-cli-about",
-        "demo-cli-long_about",
-        "demo-cli-usage",
-        "demo-cli-long_version",
-        "demo-cli-after_help",
-        "demo-cli-after_long_help",
-        "demo-cli-args-config-help",
-        "demo-cli-args-config-long_help",
-        "demo-cli-args-config-value_name",
-        "demo-cli-args-verbose-help",
-        // This SelectiveLocalizer entry proves flag value-name lookups are ignored.
-        "demo-cli-args-verbose-value_name",
-        "demo-cli-greet-about",
-    ]);
-
-    let mut command = command_tree().with_base("demo.cli").localize(&localizer);
-
+fn assert_root_command_metadata(command: &mut Command) {
     assert_eq!(
         command.get_about().map(ToString::to_string).as_deref(),
         Some("demo-cli-about:localized")
@@ -100,7 +81,9 @@ fn localize_rewrites_command_tree_without_corrupting_flags() {
         help.contains("demo-cli-usage:localized"),
         "localized usage should appear in help:\n{help}"
     );
+}
 
+fn assert_config_arg(command: &Command) {
     let config = command
         .get_arguments()
         .find(|arg| arg.get_id() == "config")
@@ -121,7 +104,9 @@ fn localize_rewrites_command_tree_without_corrupting_flags() {
             .as_deref(),
         Some("demo-cli-args-config-value_name:localized")
     );
+}
 
+fn assert_verbose_arg(command: &Command) {
     let verbose = command
         .get_arguments()
         .find(|arg| arg.get_id() == "verbose")
@@ -132,7 +117,9 @@ fn localize_rewrites_command_tree_without_corrupting_flags() {
         verbose.get_help().map(ToString::to_string).as_deref(),
         Some("demo-cli-args-verbose-help:localized")
     );
+}
 
+fn assert_greet_subcommand(command: &Command) {
     let greet = command
         .find_subcommand("greet")
         .expect("greet subcommand should exist");
@@ -140,6 +127,32 @@ fn localize_rewrites_command_tree_without_corrupting_flags() {
         greet.get_about().map(ToString::to_string).as_deref(),
         Some("demo-cli-greet-about:localized")
     );
+}
+
+#[rstest]
+fn localize_rewrites_command_tree_without_corrupting_flags() {
+    let localizer = SelectiveLocalizer::new([
+        "demo-cli-about",
+        "demo-cli-long_about",
+        "demo-cli-usage",
+        "demo-cli-long_version",
+        "demo-cli-after_help",
+        "demo-cli-after_long_help",
+        "demo-cli-args-config-help",
+        "demo-cli-args-config-long_help",
+        "demo-cli-args-config-value_name",
+        "demo-cli-args-verbose-help",
+        // This SelectiveLocalizer entry proves flag value-name lookups are ignored.
+        "demo-cli-args-verbose-value_name",
+        "demo-cli-greet-about",
+    ]);
+
+    let mut command = command_tree().with_base("demo.cli").localize(&localizer);
+
+    assert_root_command_metadata(&mut command);
+    assert_config_arg(&command);
+    assert_verbose_arg(&command);
+    assert_greet_subcommand(&command);
 }
 
 #[rstest]
