@@ -76,6 +76,16 @@ pub struct FixtureConfig {
     pub is_legacy_mode: bool,
 }
 
+/// Nested command-tree fixture for end-to-end bridge smoke tests.
+#[derive(Debug, Clone, PartialEq, Eq, Parser, Deserialize, Serialize, OrthoConfig)]
+#[ortho_config(
+    prefix = "NESTED_FIXTURE",
+    windows(
+        module_name = "NestedFixture",
+        include_common_parameters = true,
+        split_subcommands = true
+    )
+)]
 pub struct NestedFixtureConfig {
     /// Global configuration value shared by nested fixture commands.
     #[ortho_config(default = String::from("workspace"))]
@@ -96,6 +106,8 @@ impl Default for NestedFixtureConfig {
     }
 }
 
+/// Top-level commands for [`NestedFixtureConfig`].
+#[derive(Debug, Clone, PartialEq, Eq, Subcommand, OrthoConfigSubcommandDocs)]
 pub enum NestedFixtureCommand {
     /// Greets a named recipient.
     #[command(name = "greet")]
@@ -114,6 +126,9 @@ impl Default for NestedFixtureCommand {
     }
 }
 
+/// Options for the nested fixture greet command.
+#[derive(Debug, Default, Clone, PartialEq, Eq, Parser, Deserialize, Serialize, OrthoConfig)]
+#[ortho_config(prefix = "NESTED_FIXTURE")]
 pub struct NestedGreetCommand {
     /// Recipient to greet.
     #[ortho_config(default = String::from("World"))]
@@ -122,8 +137,21 @@ pub struct NestedGreetCommand {
     #[ortho_config(default = false)]
     pub is_excited: bool,
 }
+/// Empty command proving leaf commands without options survive the bridge.
+#[derive(Debug, Default, Clone, PartialEq, Eq, Parser, Deserialize, Serialize, OrthoConfig)]
+#[ortho_config(prefix = "NESTED_FIXTURE")]
 pub struct NestedVersionCommand {}
 
+/// Options for the nested fixture admin command.
+#[derive(Debug, Clone, PartialEq, Eq, Parser, Deserialize, Serialize, OrthoConfig)]
+#[ortho_config(
+    prefix = "NESTED_FIXTURE",
+    windows(
+        module_name = "NestedFixtureAdmin",
+        include_common_parameters = false,
+        split_subcommands = true
+    )
+)]
 pub struct NestedAdminCommand {
     /// Scope to administer.
     #[ortho_config(default = String::from("local"))]
@@ -144,6 +172,8 @@ impl Default for NestedAdminCommand {
     }
 }
 
+/// Nested admin operations for [`NestedAdminCommand`].
+#[derive(Debug, Clone, PartialEq, Eq, Subcommand, OrthoConfigSubcommandDocs)]
 pub enum NestedAdminSubcommand {
     /// Audits fixture state.
     #[command(name = "audit")]
@@ -159,12 +189,18 @@ impl Default for NestedAdminSubcommand {
     }
 }
 
+/// Options for the nested fixture audit command.
+#[derive(Debug, Default, Clone, PartialEq, Eq, Parser, Deserialize, Serialize, OrthoConfig)]
+#[ortho_config(prefix = "NESTED_FIXTURE")]
 pub struct NestedAuditCommand {
     /// Reports intended audit actions without applying them.
     #[ortho_config(default = false)]
     pub is_dry_run: bool,
 }
 
+/// Options for the nested fixture grant-access command.
+#[derive(Debug, Default, Clone, PartialEq, Eq, Parser, Deserialize, Serialize, OrthoConfig)]
+#[ortho_config(prefix = "NESTED_FIXTURE")]
 pub struct NestedGrantAccessCommand {
     /// Principal receiving access.
     pub principal: Option<String>,
