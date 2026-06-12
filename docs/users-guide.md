@@ -282,44 +282,6 @@ fn parse(localizer: &dyn Localizer) -> Result<Cli, clap::Error> {
 }
 ```
 
-# #[derive(clap::Parser)]
-# struct Cli {}
-fn parse(localizer: &dyn Localizer) -> Result<Cli, clap::Error> {
-    let mut command = Cli::command()
-        .with_base("my_app.cli")
-        .localize(localizer);
-    let mut matches = command
-        .try_get_matches()
-        .map_err(|err| {
-            localize_clap_error_with_command(err, localizer, Some(&command))
-        })?;
-
-    Cli::from_arg_matches_mut(&mut matches).map_err(|err| {
-        let err = err.with_cmd(&command);
-        localize_clap_error_with_command(err, localizer, Some(&command))
-    })
-}
-```
-
-# #[derive(clap::Parser)]
-# struct Cli {}
-fn parse(localizer: &dyn Localizer) -> Result<Cli, clap::Error> {
-    let mut command = Cli::command()
-        .with_base("my_app.cli")
-        .localize(localizer);
-    let mut matches = command
-        .try_get_matches()
-        .map_err(|err| {
-            localize_clap_error_with_command(err, localizer, Some(&command))
-        })?;
-
-    Cli::from_arg_matches_mut(&mut matches).map_err(|err| {
-        let err = err.with_cmd(&command);
-        localize_clap_error_with_command(err, localizer, Some(&command))
-    })
-}
-```
-
 ## Installation and dependencies
 
 Add `ortho_config` as a dependency in `Cargo.toml` along with `serde`:
