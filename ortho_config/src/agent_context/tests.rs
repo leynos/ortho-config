@@ -2,6 +2,7 @@
 
 use super::*;
 use crate::docs::ORTHO_DOCS_IR_VERSION;
+use camino::Utf8PathBuf;
 use insta::assert_snapshot;
 use rstest::rstest;
 use serde_json::{Value, json};
@@ -95,6 +96,91 @@ fn command_summary_round_trips_when_present() {
 }
 
 #[rstest]
+fn skill_manifest_default_is_empty_list() {
+    let context: AgentContext = serde_json::from_value(json!({
+        "schema_version": "1",
+        "kind": "legacy-cli.agent_context",
+        "package": "legacy-cli",
+        "commands": []
+    }))
+    .expect("deserialize context without skill manifests");
+
+    assert!(context.skill_manifests.is_empty());
+}
+
+#[rstest]
+fn skill_manifest_serialises_with_camino_path() {
+    let manifest = SkillManifest {
+        id: "rename".to_owned(),
+        path: Utf8PathBuf::from("skills/rename.md"),
+        manifest_schema_version: "v1".to_owned(),
+        commands: vec![SkillCommandRef {
+            path: vec!["weaver".to_owned(), "rename".to_owned()],
+            flags: vec!["json".to_owned()],
+        }],
+    };
+
+    let value = serde_json::to_value(&manifest).expect("serialize skill manifest");
+    assert_eq!(field(&value, "path"), "skills/rename.md");
+    let json = serde_json::to_string_pretty(&manifest).expect("serialize skill manifest snapshot");
+
+    assert_snapshot!(json, @r###"
+    {
+      "id": "rename",
+      "path": "skills/rename.md",
+      "manifest_schema_version": "v1",
+      "commands": [
+        {
+          "path": [
+            "weaver",
+            "rename"
+          ],
+          "flags": [
+            "json"
+          ]
+        }
+      ]
+    }
+    "###);
+}
+
+#[rstest]
+fn skill_command_ref_defaults_flags_to_empty() {
+    let command: SkillCommandRef = serde_json::from_value(json!({
+        "path": ["weaver", "rename"]
+    }))
+    .expect("deserialize command ref without flags");
+
+    assert!(command.flags.is_empty());
+}
+
+#[rstest]
+#[case(json!({
+    "path": "skills/rename.md",
+    "manifest_schema_version": "v1",
+    "commands": []
+}))]
+#[case(json!({
+    "id": "rename",
+    "manifest_schema_version": "v1",
+    "commands": []
+}))]
+#[case(json!({
+    "id": "rename",
+    "path": "skills/rename.md",
+    "commands": []
+}))]
+fn skill_manifest_required_fields_fail_deserialization(#[case] payload: Value) {
+    let error = serde_json::from_value::<SkillManifest>(payload)
+        .expect_err("missing required skill manifest fields should fail");
+
+    assert!(
+        error.is_data() || error.is_syntax(),
+        "expected a data or syntax error, got {error}"
+    );
+}
+
+#[rstest]
 fn agent_context_json_snapshot_covers_wire_contract() {
     let json = serde_json::to_string_pretty(&sample_agent_context())
         .expect("serialize agent context snapshot");
@@ -155,7 +241,24 @@ fn agent_context_json_snapshot_covers_wire_contract() {
       "policy": {
         "agent_native": "warn"
       },
-      "skill_manifests": []
+      "skill_manifests": [
+        {
+          "id": "example-list",
+          "path": "skills/example-list.md",
+          "manifest_schema_version": "v1",
+          "commands": [
+            {
+              "path": [
+                "example-cli",
+                "list"
+              ],
+              "flags": [
+                "format"
+              ]
+            }
+          ]
+        }
+      ]
     }
     "###);
 }
@@ -271,6 +374,14 @@ fn sample_agent_context() -> AgentContext {
         policy: AgentPolicy {
             agent_native: PolicyMode::Warn,
         },
-        skill_manifests: Vec::new(),
+        skill_manifests: vec![SkillManifest {
+            id: "example-list".to_owned(),
+            path: Utf8PathBuf::from("skills/example-list.md"),
+            manifest_schema_version: "v1".to_owned(),
+            commands: vec![SkillCommandRef {
+                path: vec!["example-cli".to_owned(), "list".to_owned()],
+                flags: vec!["format".to_owned()],
+            }],
+        }],
     }
 }

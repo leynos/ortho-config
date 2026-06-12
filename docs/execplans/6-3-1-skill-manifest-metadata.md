@@ -1061,7 +1061,12 @@ into two.
   agent-context snapshots, passed `make check-fmt`, `make lint`,
   `make test`, confirmed no pending `insta` snapshots, and received a
   zero-finding CodeRabbit review.
-- [ ] (pending) Milestone 3: added passive-schema tests.
+- [x] (2026-06-12) Milestone 3: added passive-schema tests for absent-field
+  defaults, camino path serialization, command-reference flag defaults, and
+  required manifest fields. Extended the canonical unit fixture with one
+  populated manifest, passed the focused `cargo test -p ortho_config
+  agent_context` loop plus `make check-fmt`, `make lint`, `make test`,
+  `make markdownlint`, and received a zero-finding CodeRabbit review.
 - [ ] (pending) Milestone 4: updated documentation, changelog, and
   roadmap.
 - [ ] (pending) Moved the draft pull request out of draft.
