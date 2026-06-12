@@ -26,6 +26,7 @@ fn new_context_uses_legacy_defaults() {
     assert!(!context.profiles.supported);
     assert!(!context.feedback.supported);
     assert_eq!(context.policy.agent_native, PolicyMode::Warn);
+    assert!(context.skill_manifests.is_empty());
 }
 
 #[rstest]
@@ -153,7 +154,8 @@ fn agent_context_json_snapshot_covers_wire_contract() {
       },
       "policy": {
         "agent_native": "warn"
-      }
+      },
+      "skill_manifests": []
     }
     "###);
 }
@@ -185,6 +187,7 @@ fn absent_optional_metadata_deserializes_to_documented_defaults() {
     assert!(!context.profiles.supported);
     assert!(!context.feedback.supported);
     assert_eq!(context.policy.agent_native, PolicyMode::Warn);
+    assert!(context.skill_manifests.is_empty());
 }
 
 #[rstest]
@@ -268,5 +271,6 @@ fn sample_agent_context() -> AgentContext {
         policy: AgentPolicy {
             agent_native: PolicyMode::Warn,
         },
+        skill_manifests: Vec::new(),
     }
 }

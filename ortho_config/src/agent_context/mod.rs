@@ -33,6 +33,14 @@ pub struct AgentContext {
     /// Agent-native policy mode advertised for this command surface.
     #[serde(default)]
     pub policy: AgentPolicy,
+    /// Skill manifests linked to this command surface.
+    ///
+    /// Defaults to the empty list. The defaulting rule matches the legacy
+    /// compatibility table in `docs/agent-native-cli-design.md` §8.1.
+    /// Validation against the real command tree is deferred to roadmap
+    /// item 6.3.2.
+    #[serde(default)]
+    pub skill_manifests: Vec<SkillManifest>,
 }
 
 impl AgentContext {
@@ -47,6 +55,7 @@ impl AgentContext {
     /// assert_eq!(context.schema_version, ORTHO_AGENT_CONTEXT_SCHEMA_VERSION);
     /// assert_eq!(context.package, "example-cli");
     /// assert!(context.commands.is_empty());
+    /// assert!(context.skill_manifests.is_empty());
     /// ```
     #[must_use]
     pub fn new(package: impl Into<String>) -> Self {
@@ -59,6 +68,7 @@ impl AgentContext {
             profiles: SupportDeclaration::default(),
             feedback: SupportDeclaration::default(),
             policy: AgentPolicy::default(),
+            skill_manifests: Vec::new(),
         }
     }
 }
