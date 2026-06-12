@@ -108,7 +108,9 @@ impl CommandLine {
         I: IntoIterator<Item = T>,
         T: Into<std::ffi::OsString> + Clone,
     {
-        let mut command = Self::command().localize(localizer);
+        let mut command = Self::command()
+            .with_base("hello_world.cli")
+            .localize(localizer);
         let matches = command
             .try_get_matches_from_mut(iter)
             .map_err(|err| localize_parse_error(err, localizer, &command))?;

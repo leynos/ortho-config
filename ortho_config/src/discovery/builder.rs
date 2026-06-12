@@ -23,7 +23,9 @@ use super::ConfigDiscovery;
 /// if let Some(figment) = discovery.load_first()? {
 ///     #[derive(serde::Deserialize)]
 ///     struct Greeting { recipient: String }
-///     let config: Greeting = figment.extract()?;
+///     let config: Greeting = figment
+///         .extract()
+///         .map_err(ortho_config::OrthoError::gathering_arc)?;
 ///     println!("Loaded greeting for {}", config.recipient);
 /// }
 /// # Ok(())

@@ -1,4 +1,4 @@
-//! Fluent bundle utilities extracted from the localisation module.
+//! Fluent bundle utilities extracted from the localization module.
 //!
 //! Keeping parsing, resource registration, and identifier normalization in a
 //! dedicated module keeps `mod.rs` concise while retaining cohesion around
@@ -95,23 +95,23 @@ pub(super) fn normalize_resource_ids(resource: &str) -> String {
         .join("\n")
 }
 
-/// Returns true when `ch` is valid in a Fluent message identifier.
+/// Returns true when `ch` is accepted by the load-time id normalizer.
 ///
-/// Fluent identifiers permit Unicode letters and digits alongside `-`, `_`,
-/// and `.`. This matches the grammar used by Fluent and avoids excluding
-/// non-ASCII locales. See <https://projectfluent.org/fluent/guide/grammar.html>.
-fn is_valid_fluent_id_char(ch: char) -> bool {
+/// Fluent identifiers are ASCII-only and do not permit `.`. This load-time
+/// pre-normalization predicate is intentionally more tolerant so dotted
+/// catalogue ids and existing non-ASCII resource ids can be normalized or
+/// passed through before Fluent parses them.
+fn is_valid_load_time_id_char(ch: char) -> bool {
     ch.is_alphanumeric() || matches!(ch, '-' | '_' | '.')
 }
 
-/// Validates a Fluent identifier, ensuring the first character is alphabetic
-/// and all subsequent characters are permitted by `is_valid_fluent_id_char`.
-fn is_valid_fluent_identifier(id: &str) -> bool {
+/// Validates a load-time resource identifier before pre-normalization.
+fn is_valid_load_time_identifier(id: &str) -> bool {
     let mut chars = id.chars();
     let Some(first) = chars.next() else {
         return false;
     };
-    first.is_alphabetic() && chars.all(is_valid_fluent_id_char)
+    first.is_alphabetic() && chars.all(is_valid_load_time_id_char)
 }
 
 fn normalize_id_line(line: &str) -> String {
@@ -131,7 +131,7 @@ fn normalize_id_line(line: &str) -> String {
     }
 
     let id_segment = left.trim_end();
-    if !is_valid_fluent_identifier(id_segment) {
+    if !is_valid_load_time_identifier(id_segment) {
         return line.to_owned();
     }
 

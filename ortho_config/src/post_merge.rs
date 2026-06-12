@@ -191,7 +191,8 @@ impl PostMergeContext {
     /// let ctx_without_cli = PostMergeContext::new("APP_");
     /// assert!(!ctx_without_cli.has_cli_input());
     ///
-    /// let ctx_with_cli = PostMergeContext::new("APP_").with_cli_input();
+    /// let mut ctx_with_cli = PostMergeContext::new("APP_");
+    /// ctx_with_cli.with_cli_input();
     /// assert!(ctx_with_cli.has_cli_input());
     /// ```
     #[must_use]

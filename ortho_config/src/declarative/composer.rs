@@ -31,6 +31,7 @@ use super::MergeLayer;
 ///     greetings: Vec<String>,
 ///     #[serde(default)]
 ///     #[ortho_config(merge_strategy = "replace")]
+///     #[ortho_config(skip_cli)]
 ///     templates: BTreeMap<String, String>,
 /// }
 ///
@@ -54,7 +55,7 @@ use super::MergeLayer;
 ///     cfg.templates.get("casual"),
 ///     Some(&String::from("Hey {name}!"))
 /// );
-/// # Ok::<_, ortho_config::OrthoError>(())
+/// # Ok::<(), std::sync::Arc<ortho_config::OrthoError>>(())
 /// ```
 #[derive(Default)]
 pub struct MergeComposer {

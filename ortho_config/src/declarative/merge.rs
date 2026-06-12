@@ -55,7 +55,7 @@ use super::MergeLayer;
 /// }
 /// let settings = merge.finish()?;
 /// assert_eq!(settings.port, 4000);
-/// # Ok::<_, ortho_config::OrthoError>(())
+/// # Ok::<(), std::sync::Arc<ortho_config::OrthoError>>(())
 /// ```
 pub trait DeclarativeMerge: Sized {
     /// Output type returned after applying all layers.

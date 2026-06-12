@@ -12,7 +12,9 @@ fn demo_localizer() -> DemoLocalizer {
 
 #[rstest]
 fn command_with_localizer_overrides_copy(demo_localizer: DemoLocalizer) {
-    let command = CommandLine::command().localize(&demo_localizer);
+    let command = CommandLine::command()
+        .with_base("hello_world.cli")
+        .localize(&demo_localizer);
     let about = command
         .get_about()
         .expect("about text should be set")
@@ -28,7 +30,9 @@ fn command_with_localizer_overrides_copy(demo_localizer: DemoLocalizer) {
 
 #[rstest]
 fn localizes_subcommand_tree(demo_localizer: DemoLocalizer) {
-    let command = CommandLine::command().localize(&demo_localizer);
+    let command = CommandLine::command()
+        .with_base("hello_world.cli")
+        .localize(&demo_localizer);
     let greet = command
         .get_subcommands()
         .find(|sub| sub.get_name() == "greet")
@@ -85,7 +89,9 @@ fn command_with_noop_localizer_uses_stock_clap_strings() {
     let mut default_command = CommandLine::command();
 
     let noop_localizer = DemoLocalizer::noop();
-    let mut noop_localized_command = CommandLine::command().localize(&noop_localizer);
+    let mut noop_localized_command = CommandLine::command()
+        .with_base("hello_world.cli")
+        .localize(&noop_localizer);
 
     let default_about = default_command
         .get_about()

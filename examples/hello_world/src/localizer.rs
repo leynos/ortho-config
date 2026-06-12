@@ -24,10 +24,6 @@ pub const CLI_ABOUT_MESSAGE_ID: &str = "hello_world.cli.about";
 pub const CLI_LONG_ABOUT_MESSAGE_ID: &str = "hello_world.cli.long_about";
 /// Identifier for the usage string presented on `--help`.
 pub const CLI_USAGE_MESSAGE_ID: &str = "hello_world.cli.usage";
-/// Identifier for the greet subcommand description.
-pub const CLI_GREET_ABOUT_MESSAGE_ID: &str = "hello_world.cli.greet.about";
-/// Identifier for the take-leave subcommand description.
-pub const CLI_TAKE_LEAVE_ABOUT_MESSAGE_ID: &str = "hello_world.cli.take-leave.about";
 
 const HELLO_WORLD_EN_US: &str = include_str!("../locales/en-US/messages.ftl");
 const HELLO_WORLD_JA: &str = include_str!("../locales/ja/messages.ftl");
@@ -58,7 +54,9 @@ impl DemoLocalizer {
     /// use hello_world::localizer::DemoLocalizer;
     ///
     /// let localizer = DemoLocalizer::new();
-    /// let command = CommandLine::command().localize(&localizer);
+    /// let command = CommandLine::command()
+    ///     .with_base("hello_world.cli")
+    ///     .localize(&localizer);
     /// assert!(command.get_about().is_some());
     /// ```
     ///

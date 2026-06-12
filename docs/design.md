@@ -266,16 +266,16 @@ shell and Windows scripts copy these files into a temporary working directory
 before invoking `cargo run` so that configuration layering can be demonstrated
 without mutating the caller's checkout.
 
-`MergeComposer` feeds these files, environment variables, and CLI arguments
-into `DeclarativeMerge`. Discovery still honours `HELLO_WORLD_CONFIG_PATH`
-first, then standard user configuration directories (`$XDG_CONFIG_HOME`, each
-entry in `$XDG_CONFIG_DIRS`, and `%APPDATA%` on Windows), the user's home
-directory (`$HOME/.config/hello_world/config.toml` and
-`$HOME/.hello_world.toml`), and finally the working directory. Behavioural
-tests exercise each path and assert that environment overrides win over files
-while CLI wins overall. Additional unit tests confirm that salutation vectors
-append deterministically and that subcommand defaults flow straight from
-`[cmds.greet]` and `[cmds.take-leave]` sections without bespoke glue code.
+`MergeComposer` feeds these files, environment variables, and CLI arguments into
+`DeclarativeMerge`. Discovery still honours `HELLO_WORLD_CONFIG_PATH` first,
+then standard user configuration directories (`$XDG_CONFIG_HOME`, each entry in
+`$XDG_CONFIG_DIRS`, and `%APPDATA%` on Windows), the user's home directory
+(`$HOME/.config/hello_world/config.toml` and `$HOME/.hello_world.toml`), and
+finally the working directory. Behavioural tests exercise each path and assert
+that environment overrides win over files while CLI wins overall. Additional
+unit tests confirm that salutation vectors append deterministically and that
+subcommand defaults flow straight from `[cmds.greet]` and `[cmds.take-leave]`
+sections without bespoke glue code.
 
 ### 4.5. Configuration discovery helper
 
@@ -382,8 +382,8 @@ This is the most complex component. It needs to perform the following using
 `syn` and `quote`:
 
 1. **Parse Attributes:** Define `#[ortho_config(...)]` attributes for both
-   struct-level (e.g., `prefix`, `file_name`) and field-level (e.g.,
-   `cli_long`, `env`, `default`, `merge_strategy`). A small helper named
+   struct-level (e.g., `prefix`, `file_name`) and field-level (e.g., `cli_long`,
+   `env`, `default`, `merge_strategy`). A small helper named
    `parse_ortho_config` walks all attributes once and delegates each nested
    meta item to a callback. Both struct- and field-level parsers call this
    helper, so the iteration logic is not duplicated. The inner type extraction
@@ -626,10 +626,10 @@ sequenceDiagram
 ### 4.12. Localization architecture
 
 `clap` surfaces every string presented to end users, so localization must be
-first-class. `ortho-config` introduces a `Localizer` trait that abstracts string
-lookup and delegates to a Fluent-powered implementation layered over built-in
-defaults. Consumers can therefore opt into internationalization without giving
-up a working baseline.
+first-class. `ortho-config` introduces a `Localizer` trait that abstracts
+string lookup and delegates to a Fluent-powered implementation layered over
+built-in defaults. Consumers can therefore opt into internationalization
+without giving up a working baseline.
 
 - **Trait surface:** The trait exposes a single lookup entry point,
   `fn lookup(&self, id: &str, args: Option<&HashMap<&str, FluentValue<'_>>>)`,
@@ -644,10 +644,10 @@ up a working baseline.
   to `clap`'s native message.
 
 - **Bundling defaults:** Default message catalogues live under
-  `locales/<lang>/messages.ftl` and are embedded with `include_str!`. A
-  helper constructs the default `FluentBundle` for the selected locale, parsing
-  the static resources once at start-up. Additional locales reuse the same
-  helper by passing a different language identifier.
+  `locales/<lang>/messages.ftl` and are embedded with `include_str!`. A helper
+  constructs the default `FluentBundle` for the selected locale, parsing the
+  static resources once at start-up. Additional locales reuse the same helper
+  by passing a different language identifier.
 
 - **Consumer integration:** Callers either pass a fully built
   `FluentBundle<&FluentResource>` or supply paths that are loaded into a bundle
@@ -687,14 +687,26 @@ without reconfiguring global loggers.
 The implementation introduces a `LocalizationArgs<'a>` alias that wraps a
 `HashMap<&'a str, FluentValue<'a>>` so Fluent lookups retain access to named
 placeholders without forcing each caller to spell out the map shape. The
-  `Localizer` trait itself is `Send + Sync`, exposing `lookup` for optional
-  translations and `message` when callers need a convenient fallback string.
-  A `NoOpLocalizer` ships alongside the trait so binaries that have not adopted
-  translations can opt out without additional glue. The `hello_world` example
-  exercises the trait via a `DemoLocalizer`, threading translations into
-  `CommandLine::command().localize(&demo)` and `try_parse_localized_env` to prove
-  that the Command-Line Interface (CLI) help text and errors can be patched
-  without rewriting parser wiring.
+`Localizer` trait itself is `Send + Sync`, exposing `lookup` for optional
+translations and `message` when callers need a convenient fallback string. A
+`NoOpLocalizer` ships alongside the trait so binaries that have not adopted
+translations can opt out without additional glue. The `hello_world` example
+exercises the trait via a `DemoLocalizer`, threading translations into
+`CommandLine::command().with_base("hello_world.cli").localize(&demo)` and
+`try_parse_localized_env` to prove that the Command-Line Interface (CLI) help
+text and errors can be patched without rewriting parser wiring.
+
+- **Command-tree localization:** `LocalizeCmd` is a public extension trait on
+  `clap::Command`. It walks command metadata, value-bearing argument metadata,
+  and immediate child commands recursively while leaving missing translations
+  untouched. The walker uses `Command::mut_arg` for per-argument edits because
+  clap exposes no `get_arguments_mut`; it pulls each child command out with
+  `std::mem::take` because clap setters consume `self` and
+  `get_subcommands_mut` is shallow. Argument `value_name` localization is
+  guarded so boolean flags keep their original `ArgAction`, since
+  `Arg::value_name` would otherwise turn a flag into a value-taking option.
+  Collision checks are scoped per parent: two sibling commands or two sibling
+  arguments that normalize to the same Fluent id panic as programmer errors.
 
 - **Error formatter:** `localize_clap_error_with_command` maps each `ErrorKind`
   onto a Fluent identifier (`clap-error-<kebab-kind>`), special-casing help on
@@ -703,12 +715,12 @@ placeholders without forcing each caller to spell out the map shape. The
   available subcommands using keys like `argument`, `value`, `expected`,
   `actual`, `subcommand`, and `valid_subcommands`. When `clap` omits these
   details (for example, `DisplayHelpOnMissingArgumentOrSubcommand`), the
-  command is inspected to populate subcommand names. Display requests
-  (`--help`/`--version`) bypass localisation. When a lookup fails, the original
-  `clap` message is preserved, ensuring the formatter is non-destructive. A
-  companion `clap_error_formatter` closure wraps a shared `Arc<dyn Localizer>`
-  so command builders can reuse the formatter without cloning localiser
-  internals; `localize_clap_error` remains as a convenience when the command is
+  command is inspected to populate subcommand names. Display requests (`--help`/
+  `--version`) bypass localisation. When a lookup fails, the original `clap`
+  message is preserved, ensuring the formatter is non-destructive. A companion
+  `clap_error_formatter` closure wraps a shared `Arc<dyn Localizer>` so command
+  builders can reuse the formatter without cloning localiser internals;
+  `localize_clap_error` remains as a convenience when the command is
   unavailable.
 
 ### 4.13. Dynamic rule tables
@@ -740,8 +752,8 @@ to rename the hidden `--config-path` flag by defining their own field with a
 Vector fields continue to append values from each layer unless a caller
 explicitly opts into replacement. Applying
 `#[ortho_config(merge_strategy = "replace")]` ensures that higher-precedence
-layers discard previous entries instead of extending them. Map fields default to
-keyed merges where later layers only update the entries they define. When a
+layers discard previous entries instead of extending them. Map fields default
+to keyed merges where later layers only update the entries they define. When a
 configuration needs to swap the entire table—such as the hello_world example's
 `greeting_templates` map—setting the merge strategy to `"replace"` records the
 last observed map as typed data and reapplies it after processing all layers.
@@ -752,15 +764,15 @@ escape hatch for wholesale replacements.
 
 Cargo invokes external subcommands through an intentional argument-shape
 contract: `cargo <name> [OPTIONS]` resolves `cargo-<name>` on `PATH` and then
-executes `cargo-<name> <name> [OPTIONS]`. A clap parser whose top level is
-only `cargo-<name> [OPTIONS]` rejects that injected `<name>` token before any
+executes `cargo-<name> <name> [OPTIONS]`. A clap parser whose top level is only
+`cargo-<name> [OPTIONS]` rejects that injected `<name>` token before any
 application logic can run.
 
 OrthoConfig should make this pattern easy to adopt for Cargo subcommand
 binaries, but it should not move Cargo dispatch semantics into the
 `OrthoConfig` trait or the configuration merge pipeline. The entry-point shape
-belongs at the command boundary; configuration precedence remains
-defaults → files → environment → explicit command-line arguments.
+belongs at the command boundary; configuration precedence remains defaults →
+files → environment → explicit command-line arguments.
 
 The near-term API should be a small `ortho_config::cargo` helper for callers
 that build clap commands by hand. A function such as
@@ -782,8 +794,8 @@ is narrow: a binary should accept both `cargo <name> [OPTIONS]` through Cargo
 dispatch and `cargo-<name> <name> [OPTIONS]` when invoked directly with the
 same injected token.
 
-Derive-based users need a documented template because `clap` already models
-the required shape cleanly:
+Derive-based users need a documented template because `clap` already models the
+required shape cleanly:
 
 ```rust
 #[derive(clap::Parser)]
@@ -825,9 +837,9 @@ project should keep the helper plus documentation as the supported abstraction.
 
 Regression coverage should exercise both invocation forms. A shared fixture or
 test helper should run `cargo-<name> <name> --help`, then run
-`cargo <name> --help` with the fixture binary on `PATH`. Future `cargo-*`
-tools should reuse that coverage, so a flat direct invocation cannot pass
-while Cargo dispatch fails.
+`cargo <name> --help` with the fixture binary on `PATH`. Future `cargo-*` tools
+should reuse that coverage, so a flat direct invocation cannot pass while Cargo
+dispatch fails.
 
 ## 5. Dependency Strategy
 
@@ -852,8 +864,8 @@ while Cargo dispatch fails.
     with the YAML 1.2 specification.
   - `thiserror`: For ergonomic error type definitions.
 
-  The core crate re-exports `figment`, `uncased`, `xdg` (on Unix-like and
-  Redox targets), and the optional format parsers (`figment_json5`, `json5`,
+  The core crate re-exports `figment`, `uncased`, `xdg` (on Unix-like and Redox
+  targets), and the optional format parsers (`figment_json5`, `json5`,
   `serde_saphyr`, `toml`), so downstream libraries can import them via
   `ortho_config::` without declaring separate dependencies.
 
@@ -903,9 +915,8 @@ the agent-native design in
 
 ## 7. Hello world example
 
-The example crate under `examples/hello_world` demonstrates how to layer
-global flags on top of the derive macro while keeping the application logic
-explicit.
+The example crate under `examples/hello_world` demonstrates how to layer global
+flags on top of the derive macro while keeping the application logic explicit.
 
 - `HelloWorldCli` derives `OrthoConfig` and exposes the public fields used by
   the binary. The struct defines short flags for the repeated salutation array
@@ -949,7 +960,8 @@ explicit.
   manifest validation, capability provenance metadata, profile redaction,
   delivery and feedback parser contracts, and configurable execution ledgers.
   The authoritative consumer dependency tier for those reusable capabilities is
-  [agent-native-cli-design.md](agent-native-cli-design.md) §2.2.
+  [agent-native-cli-design.md](agent-native-cli-design.md)
+  §2.2.
 - **Async configuration loading:** A version of `load` that uses non-blocking
   IO remains useful, but it is distinct from application-level async job
   metadata such as `--wait`, `jobs get`, or durable job ledgers.
@@ -981,10 +993,10 @@ generated documentation, generated agent context, and enforceable CLI policy.
   regressions in the derive macro before they reach downstream crates.
 
 - **Adopt `rstest-bdd` (Behaviour-Driven Development) for behavioural coverage
-  (2025-11-15):** Workspace and example behavioural suites now use
-  `rstest-bdd` fixtures[^rstest-bdd-guide] instead of a custom `cucumber-rs`
-  runner. The shared harness spawns binaries under `cargo test`, enforces
-  execution timeouts, and binds feature files with compile-time tag filters so
+  (2025-11-15):** Workspace and example behavioural suites now use `rstest-bdd`
+  fixtures[^rstest-bdd-guide] instead of a custom `cucumber-rs` runner. The
+  shared harness spawns binaries under `cargo test`, enforces execution
+  timeouts, and binds feature files with compile-time tag filters so
   feature-gated scenarios disappear from unsupported builds.
 
 - **Prefix normalisation:** The `prefix` struct attribute now appends a trailing
@@ -1005,15 +1017,16 @@ generated documentation, generated agent context, and enforceable CLI policy.
 
 - **Treat clap defaults as absent for subcommand merging (2025-12-11):**
   Fields marked with `#[ortho_config(cli_default_as_absent)]` are excluded from
-  the CLI layer when `clap::ArgMatches::value_source()` indicates the value came
-  from a default rather than explicit user input. This allows configuration file
-  and environment variable values to take precedence over clap's `default_value_t`
-  while still honouring explicit CLI overrides. The derive macro generates a
-  `CliValueExtractor` implementation that inspects `value_source()` for each
-  annotated field, and `load_and_merge_subcommand_with_matches` uses this trait
-  to extract only user-provided CLI values before merging. This eliminates the
-  need for workarounds where `[cmds.greet]` sections were ignored because clap
-  defaults always populated the CLI layer.
+  the CLI layer when `clap::ArgMatches::value_source()` indicates the value
+  came from a default rather than explicit user input. This allows
+  configuration file and environment variable values to take precedence over
+  clap's `default_value_t` while still honouring explicit CLI overrides. The
+  derive macro generates a `CliValueExtractor` implementation that inspects
+  `value_source()` for each annotated field, and
+  `load_and_merge_subcommand_with_matches` uses this trait to extract only
+  user-provided CLI values before merging. This eliminates the need for
+  workarounds where `[cmds.greet]` sections were ignored because clap defaults
+  always populated the CLI layer.
 
 - **Introduce post-merge hooks for custom configuration logic (2025-12-18):**
   The `PostMergeHook` trait and `#[ortho_config(post_merge_hook)]` attribute
@@ -1022,8 +1035,8 @@ generated documentation, generated agent context, and enforceable CLI policy.
   `merge_from_layers` function builds a `PostMergeContext` containing the
   prefix, loaded file paths, and whether CLI input was present, then invokes
   `PostMergeHook::post_merge(&mut result, &ctx)` before returning. This allows
-  advanced cases to adjust the merged struct without manual glue code, addressing
-  the boilerplate highlighted in the hello_world example where
+  advanced cases to adjust the merged struct without manual glue code,
+  addressing the boilerplate highlighted in the hello_world example where
   `apply_greet_overrides` had to be called separately.[^hello-world-feedback]
   The hybrid trait-plus-attribute approach was chosen over alternatives:
   - Pure trait-based: Would require manual invocation, defeating the purpose
@@ -1037,11 +1050,11 @@ generated documentation, generated agent context, and enforceable CLI policy.
   merged global configuration and the selected subcommand configuration in a
   single call. This removes repetitive `match` scaffolding that existed solely
   to call `load_and_merge()` for each variant, keeping entry points focused on
-  orchestration and business logic. The derive supports
-  `cli_default_as_absent` by allowing variants to opt into `ArgMatches`-aware
-  merging via `#[ortho_subcommand(with_matches)]`; this explicit marker was
-  chosen over implicit detection to keep generated bounds predictable and to
-  avoid surprising compile errors when a subcommand type does not implement
+  orchestration and business logic. The derive supports `cli_default_as_absent`
+  by allowing variants to opt into `ArgMatches`-aware merging via
+  `#[ortho_subcommand(with_matches)]`; this explicit marker was chosen over
+  implicit detection to keep generated bounds predictable and to avoid
+  surprising compile errors when a subcommand type does not implement
   `CliValueExtractor`.
 - **Generate recursive subcommand documentation metadata (2026-05-24):**
   Introduce the `OrthoConfigSubcommandDocs` companion trait and derive for

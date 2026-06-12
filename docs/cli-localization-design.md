@@ -184,13 +184,20 @@ For each argument visited via `Command::get_arguments_mut`:
   mutated post-hoc and the design defers this to a future iteration when
   clap supports it.
 
+The 11.1.1 implementation does not localize clap's built-in `--help` and
+`--version` argument text, per-`PossibleValue` help, or the `help_template`
+layout string. Applications that need localized built-in flags can disable
+clap's built-ins and provide explicit arguments in a later iteration. The
+footer slots `after_help` and `after_long_help` are localized because clap
+exposes setters for them on `Command`.
+
 ### 4.1 Identifier convention
 
 The identifier shape is a documented pure function of the command path:
 
 ```text
 <base>             ::= <root> "." <segment>...
-<segment>          ::= command name as a kebab-case Fluent identifier
+<segment>          ::= command name as an ASCII Fluent identifier segment
 <command id>       ::= <base> "." ( "about" | "long_about" | "usage" | "version" )
 <argument id>      ::= <base> ".args." <arg id> "." ( "help" | "long_help" | "value_name" )
 ```
@@ -200,18 +207,28 @@ binary name normalized to a Fluent identifier) so applications can share one
 catalogue across multiple binaries by giving each a distinct prefix. The
 canonical function is exposed as `ortho_config::message_id_for(&command_path,
 suffix)` so applications, tests, and the IR pipeline can produce identical
-identifiers without re-implementing the convention.
+identifiers without re-implementing the convention (see
+[ADR-006](adr-006-identifier-derivation-panics.md)).
 
 Identifier normalization is a documented function: lowercase American
-Standard Code for Information Interchange (ASCII) letters and digits pass
-through, underscores become hyphens, and any other character is rejected.
-Two segments that normalize to the same identifier (for example, subcommands
-`foo-bar` and `foo_bar`) are a build-time error in the macros crate and a
-runtime panic in `LocalizeCmd::localize` for hand-built command trees. The
-derive's identifier-generation pass therefore enforces uniqueness at compile
-time, and `message_id_for` is documented as panicking on a collision so that
-hand-built command trees do not silently route two clap commands to one
-Fluent identifier.
+Standard Code for Information Interchange (ASCII) letters pass through,
+ASCII digits, hyphens, and underscores pass through unchanged, and any other
+character is rejected. Underscores are preserved because Fluent identifiers
+allow `[a-zA-Z0-9_-]` after the leading letter. Author-facing Fluent
+Translation List (FTL) keys use dotted ids such as
+`hello_world.cli.about`; OrthoConfig's load-time normalizer rewrites that to
+the runtime id `hello_world-cli-about`. The canonical function
+`message_id_for(["hello_world", "cli"], "about")` produces the same
+runtime id directly.
+
+Two segments that normalize to the same identifier are a build-time error in
+the macros crate and a runtime panic in `LocalizeCmd::localize` for
+hand-built command trees (see
+[ADR-006](adr-006-identifier-derivation-panics.md)). The derive's
+identifier-generation pass therefore enforces uniqueness at compile time, and
+ADR-006 records why the promoted runtime API panics rather than returning
+`Result` when a hand-built command tree cannot produce unique Fluent
+identifiers.
 
 ### 4.2 `try_parse_localized` helpers
 

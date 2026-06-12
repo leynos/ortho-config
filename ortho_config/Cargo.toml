@@ -17,7 +17,7 @@ workspace = true
 ortho_config_macros = { path = "../ortho_config_macros", version = "0.8.0" }
 serde = { version = "1", features = ["derive"] }
 thiserror = "2"
-clap = { version = "4", features = ["derive"] }
+clap = { version = "4", features = ["derive", "string"] }
 clap-dispatch = "0.1"
 figment = { version = "0.10", default-features = false, features = ["env", "test"] }
 fluent-bundle = "0.16.0"
@@ -63,6 +63,7 @@ tempfile = "3"
 test_helpers = { package = "ortho_config_test_helpers", path = "../test_helpers", version = "0.8.0" }
 anyhow = "1"
 ortho_config_macros = { path = "../ortho_config_macros", version = "0.8.0" }
+proptest = "1.11.0"
 
 [[example]]
 name = "registry_ctl"

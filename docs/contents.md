@@ -42,6 +42,9 @@
 - [ADR-005: Subcommand docs companion trait](adr-005-subcommand-docs-companion-trait.md):
   review the accepted companion trait for recursive subcommand documentation
   metadata.
+- [ADR-006: Identifier-derivation panics](adr-006-identifier-derivation-panics.md):
+  review the accepted panic-on-collision and panic-on-unrepresentable-segment
+  contract for `message_id_for` and `LocalizeCmd::localize`.
 - [Archived v0.8.0 roadmap](archive/v0-8-0-roadmap.md): review completed
   phases, steps, and tasks from the roadmap that preceded the active
   agent-native plan.
