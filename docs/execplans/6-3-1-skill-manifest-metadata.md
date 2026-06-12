@@ -63,21 +63,27 @@ Observable success is checked by:
 ### Dependency on roadmap item 6.2.1
 
 Roadmap item 6.2.1 ("Add `--format agent-context` to `cargo-orthohelp`") is
-listed as a prerequisite for 6.3.1. The agent-context generator does not yet
-exist. This plan is nevertheless safe to land first because the agent-context
-*schema types* already live in `ortho_config::agent_context` (introduced by
-roadmap item 5.2.1 and pull request 325). An additive `#[serde(default)]`
-field on `AgentContext` is observable to any future generator without
-requiring the generator to exist yet. The 5.2.1 plan
-(`docs/execplans/5-2-1-define-ownership-models.md`) reached the same
-conclusion when it introduced `AgentContext`, `AgentCommand`, and the surround
-types as passive schema types deliberately separate from the deferred
-generator work.
+listed as a prerequisite for 6.3.1. As of 2026-06-12 it has landed on `main`
+via pull request 342: `cargo orthohelp --format agent-context` now emits an
+`agent-context.json` document from the bridge IR, and 6.2.1 added an
+additive `summary: Option<String>` field to `AgentCommand`. The prerequisite
+is therefore satisfied, and the consumer that will read the new
+`skill_manifests` field already exists.
 
-If the maintainer prefers to gate 6.3.1 behind 6.2.1, that is a Milestone 0
-escalation. The default of this plan is: land 6.3.1 as passive types now;
-6.2.1 will consume the field once it lands; 6.3.2 will consume the field for
-validation once the generator is in place.
+This plan remains a passive-schema change. It adds reusable types to
+`ortho_config::agent_context` (the module introduced by roadmap item 5.2.1 and
+pull request 325) plus one additive `#[serde(default)]` field on
+`AgentContext`. Because the field is defaulted, the existing 6.2.1 generator
+keeps producing valid output without modification, and a later generator
+change can populate the field when an application declares skill manifests.
+The 5.2.1 plan (`docs/execplans/5-2-1-define-ownership-models.md`) established
+this passive-schema pattern when it introduced `AgentContext`, `AgentCommand`,
+and the surround types ahead of the generator.
+
+This plan does not modify the 6.2.1 generator. Wiring the new field into
+`cargo orthohelp --format agent-context` output, and validating that a skill
+manifest references real commands and flags, are deferred to roadmap item
+6.3.2.
 
 This plan does not change `ORTHO_AGENT_CONTEXT_SCHEMA_VERSION`,
 `ORTHO_DOCS_IR_VERSION`, or `ORTHO_POLICY_REPORT_SCHEMA_VERSION`. It does not
@@ -121,8 +127,8 @@ a workaround.
 - Do not add a new external crate dependency. `camino`, `serde`, and
   `serde_json` are already declared. `semver` is not needed.
 - Keep every Rust file under 400 lines. `ortho_config/src/agent_context/mod.rs`
-  is 252 lines today and gains roughly 45 lines under this plan;
-  `ortho_config/src/agent_context/tests.rs` is 222 lines and gains roughly
+  is 254 lines today and gains roughly 45 lines under this plan;
+  `ortho_config/src/agent_context/tests.rs` is 272 lines and gains roughly
   60 lines. Both stay well below the cap.
 - Every Rust module must begin with a `//!` comment, and every new public type
   must carry a Rustdoc comment explaining its purpose and pointing at the
@@ -241,12 +247,14 @@ risks emerge.
   `docs/users-guide.md`. If a real consumer needs non-UTF-8 paths, that is a
   separate ADR.
 - Risk: roadmap-dependency confusion. A future contributor reads
-  `docs/roadmap.md` §6.3.1 ("Requires 6.2.1") and waits for 6.2.1 before
-  opening this plan. Severity: medium. Likelihood: medium. Mitigation: the
-  plan's "Purpose / big picture" states explicitly that 6.3.1 lands as
-  passive schema types and that 6.2.1 will consume the field once it lands.
-  Milestone 4 adds a single sentence to `docs/roadmap.md` §6.3.1 noting
-  "Modelling can land before 6.2.1; only generator output depends on 6.2.1".
+  `docs/roadmap.md` §6.3.1 ("Requires 6.2.1") and assumes the prerequisite is
+  still outstanding. Severity: low (down from medium after 6.2.1 landed on
+  2026-06-12). Likelihood: low. Mitigation: the plan's "Purpose / big
+  picture" states that 6.2.1 has landed and that 6.3.1 is an additive,
+  defaulted change that the existing generator tolerates without
+  modification. Milestone 4 keeps the `docs/roadmap.md` §6.3.1 note that only
+  generator output, deferred to 6.3.2, depends on wiring the field through
+  `cargo orthohelp --format agent-context`.
 - Risk: scope creep into validation. A reviewer asks "while you are there,
   also check that referenced flags resolve against `AgentCommand.path`".
   Severity: high. Likelihood: medium. Mitigation: the Constraints section
@@ -387,21 +395,24 @@ All three recommendations are folded into §"Recommended design".
 
 The relevant code is concentrated in a single module:
 
-- `ortho_config/src/agent_context/mod.rs` (252 lines). This file declares
+- `ortho_config/src/agent_context/mod.rs` (254 lines). This file declares
   `ORTHO_AGENT_CONTEXT_SCHEMA_VERSION`, `AGENT_CONTEXT_KIND_SUFFIX`, the
   `AgentContext` struct (`commands`, `profiles`, `feedback`, `policy`), and
   the surround types (`AgentCommand`, `AgentInput`, `AgentExample`,
   `AsyncSubmission`, `AsyncSubmissionMode`, `DeliveryRoute`,
   `PaginationContract`, `SupportDeclaration`, `AgentPolicy`, `PolicyMode`,
-  `InteractionMode`, `MutationEffect`). It is a flat schema-types file
-  appropriate for two more additive types.
-- `ortho_config/src/agent_context/tests.rs` (222 lines). It uses `rstest`
+  `InteractionMode`, `MutationEffect`). Roadmap item 6.2.1 added an additive
+  `summary: Option<String>` field to `AgentCommand`; the file remains a flat
+  schema-types module appropriate for two more additive types.
+- `ortho_config/src/agent_context/tests.rs` (272 lines). It uses `rstest`
   fixtures and inline `insta` snapshots
   (`assert_snapshot!(json, @r###"..."###)`) to lock the wire contract. The
   fixture helper `sample_agent_context` builds a fully populated
   `AgentContext` value; the inline snapshot
   `agent_context_json_snapshot_covers_wire_contract` records the canonical
-  JSON.
+  JSON, which now includes the 6.2.1 `AgentCommand.summary` field. Milestone 2
+  and Milestone 3 must extend that snapshot from its current 6.2.1 shape
+  rather than the pre-6.2.1 shape.
 - `ortho_config/src/lib.rs:61-65`. The
   `pub use agent_context::{...}` block re-exports the public agent-context
   types. Two new names (`SkillManifest`, `SkillCommandRef`) join the block.
@@ -1035,6 +1046,10 @@ into two.
   ExecPlan via the request to proceed with implementation.
 - [x] (2026-06-12) Confirmed this ExecPlan is already linked from
   `docs/contents.md`.
+- [x] (2026-06-12) Rebased the branch onto `origin/main` after roadmap items
+  6.2.1, 5.2.3, and 11.1.1 merged. Reconciled the plan with 6.2.1, which
+  landed the agent-context generator and added `AgentCommand.summary`.
+  Updated the dependency framing, line counts, and the wire-snapshot note.
 - [ ] (pending) Milestone 1: introduced `SkillManifest` and
   `SkillCommandRef`.
 - [ ] (pending) Milestone 2: linked `skill_manifests` into `AgentContext`.
@@ -1053,9 +1068,16 @@ Document with evidence so future work benefits.
   row `skill_manifest_paths`, but the design narrative throughout §3.4
   describes structured descriptors with paths, schema versions, and a
   command index. The two are inconsistent. Evidence:
-  `docs/agent-native-cli-design.md:588` (row) versus lines 244-254
-  (narrative). Impact: the plan renames the row to `skill_manifests` to
-  match the structured shape and records the rename in `Decision Log`.
+  `docs/agent-native-cli-design.md:640` (row, after the 6.2.1 rebase) versus
+  the §3.4 narrative. Impact: the plan renames the row to `skill_manifests`
+  to match the structured shape and records the rename in `Decision Log`.
+- Observation: roadmap item 6.2.1 merged on 2026-06-12 while this plan was a
+  draft, landing the `cargo orthohelp --format agent-context` generator and
+  adding an additive `summary: Option<String>` field to `AgentCommand`.
+  Evidence: pull request 342 (commit `fc420c7`). Impact: 6.3.1's prerequisite
+  is now satisfied; the plan's dependency framing, file line counts, and
+  wire-snapshot note were updated during the rebase. The change does not
+  conflict with the proposed `skill_manifests` field on `AgentContext`.
 - Observation: Anthropic's Claude Skills format ships a free-form
   `allowed-tools` list rather than a structured command index. Evidence:
   Firecrawl scrape of
@@ -1083,6 +1105,13 @@ Document with evidence so future work benefits.
   passed. Impact: quote the labels that contain `#once` and
   `StepContext::insert_owned` so the documentation gate can validate before
   implementation proceeds.
+- Observation: the first Milestone 0 `coderabbit review --agent`
+  invocation reached sandbox preparation and then produced no further output
+  for several minutes. Evidence:
+  `/tmp/coderabbit-ortho-config-6-3-1-skill-manifest-metadata.out`
+  contained only setup status. Impact: terminate only that review process
+  and retry the same review with a bounded shell timeout so the milestone
+  still receives CodeRabbit validation.
 
 ## Decision Log
 
@@ -1151,6 +1180,9 @@ choices.
   rather than carrying it as known debt. Rationale: `make nixie` is a
   required gate for this plan, and the fix is syntax-only documentation
   maintenance outside the Rust implementation surface.
+- Decision: retry CodeRabbit after a stalled invocation. Rationale: no
+  review findings were emitted, no rate-limit response was reported, and the
+  plan requires CodeRabbit review before moving to Milestone 1.
 
 ## Outcomes & Retrospective
 
@@ -1174,3 +1206,11 @@ Pending implementation. To be filled in at the end of Milestone 4 with:
   awaiting maintainer approval before Milestone 1 may begin.
 - 2026-06-12 (approval): maintainer requested implementation. Status:
   APPROVED; Milestone 0 may proceed to validation and review.
+- 2026-06-12 (rebase onto `origin/main`): reconciled the plan with roadmap
+  item 6.2.1, which merged via pull request 342 and now provides the
+  `cargo orthohelp --format agent-context` generator plus an additive
+  `AgentCommand.summary` field. Updated the dependency framing (prerequisite
+  now satisfied), the `mod.rs` and `tests.rs` line counts (254 and 272),
+  the wire-snapshot note (now carries `summary`), and the roadmap-dependency
+  risk (downgraded). The proposed `skill_manifests` field and the two new
+  types are unaffected by 6.2.1. No remaining open questions.
