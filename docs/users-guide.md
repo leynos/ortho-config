@@ -207,6 +207,31 @@ without forcing a documentation IR version bump. The schema deliberately keeps
 out Fluent identifiers, localized long prose, roff details, and PowerShell help
 structures.
 
+Skill manifest descriptors are part of that compact agent-context schema.
+`AgentContext.skill_manifests` defaults to an empty list, and populated entries
+use `SkillManifest` plus `SkillCommandRef` to record the manifest path,
+downstream manifest schema version, and referenced command paths and long
+flags. OrthoConfig records this metadata only; downstream skill prose and
+manifest validation remain application-owned.
+
+```json
+{
+  "skill_manifests": [
+    {
+      "id": "example-list",
+      "path": "skills/example-list.md",
+      "manifest_schema_version": "v1",
+      "commands": [
+        {
+          "path": ["example-cli", "list"],
+          "flags": ["format"]
+        }
+      ]
+    }
+  ]
+}
+```
+
 Policy reports for agent-native warnings and hard failures are owned by
 `cargo-orthohelp`. The `cargo_orthohelp::policy` module defines
 `ORTHO_POLICY_REPORT_SCHEMA_VERSION` and machine-stable fields such as
@@ -214,10 +239,10 @@ Policy reports for agent-native warnings and hard failures are owned by
 that emit those reports should keep machine-readable output separate from human
 diagnostics.
 
-Existing `cargo-orthohelp --format ir`, `--format man`, `--format ps`, and
-`--format all` behaviour remains compatible. Agent-context generation and
-agent-native policy checking are future command surfaces unless a later roadmap
-item explicitly enables them.
+Existing `cargo-orthohelp --format ir`, `--format man`, `--format ps`,
+`--format agent-context`, and `--format all` behaviour remains compatible.
+Agent-native policy checking is a future command surface unless a later roadmap
+item explicitly enables it.
 
 ### Localizing CLI copy
 
