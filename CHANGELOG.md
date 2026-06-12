@@ -20,6 +20,9 @@ All notable changes to this project will be documented in this file.
   emit per-variant documentation metadata.
 - Populate recursive `DocMetadata.subcommands` values from `OrthoConfig`
   structs that hold a `#[command(subcommand)]` field.
+- Add `SkillManifest`, `SkillCommandRef`, and the
+  `AgentContext.skill_manifests` field for declaring downstream skill manifests
+  in agent context (roadmap item 6.3.1).
 
 ### Changed
 
@@ -41,6 +44,12 @@ All notable changes to this project will be documented in this file.
   runner to `rstest-bdd`, introducing a reusable harness fixture, compile-time
   tag filters, and removing the `cucumber`, `gherkin`, and Tokio
   dev-dependencies.
+
+### Changed (design)
+
+- Rename the agent-context defaulting-table row from `skill_manifest_paths` to
+  `skill_manifests` to reflect that entries are structured descriptors rather
+  than bare paths.
 
 ### Fixed
 
