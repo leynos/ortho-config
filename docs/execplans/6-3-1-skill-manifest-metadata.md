@@ -1047,7 +1047,8 @@ two.
   `make check-fmt`, `make lint`, `make test`, `make markdownlint`, and
   `make nixie`; all deterministic gates passed before the milestone's
   zero-finding CodeRabbit review.
-- [ ] (pending) Moved the draft pull request out of draft.
+- [x] (2026-06-12) Moved pull request 344 out of draft after the implementation
+  and documentation milestones passed their gates and CodeRabbit reviews.
 - [x] (2026-06-12) Marked roadmap item 6.3.1 done in the branch after the
   implementation, documentation, and validation gates passed.
 
