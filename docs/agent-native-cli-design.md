@@ -41,8 +41,8 @@ validate, and optionally provide reusable helpers for common surfaces such as
 profiles, delivery targets, feedback stores, and job ledgers. Downstream
 applications still own their domain side effects.
 
-This document is the canonical agent-native contract and boundary reference
-for OrthoConfig. Other project documents should link here when they need to
+This document is the canonical agent-native contract and boundary reference for
+OrthoConfig. Other project documents should link here when they need to
 describe agent-native scope instead of duplicating the full contract.
 
 ## 2.1 Consumer application boundary
@@ -74,9 +74,8 @@ OrthoConfig models, generates, serializes, and lints reusable command
 contracts. Downstream applications own command execution, side effects,
 domain-specific safety policy, and long-running job semantics.
 
-The consumer dependency tier for each reusable capability is defined in
-§2.2, which is the authoritative source for hard and soft ship-time
-dependencies.
+The consumer dependency tier for each reusable capability is defined in §2.2,
+which is the authoritative source for hard and soft ship-time dependencies.
 
 ## 2.2 Consumer dependency tier
 
@@ -104,17 +103,17 @@ disagree, the published OrthoConfig shape wins.
 Table 1 is the dependency-tier matrix. If a back-reference elsewhere in the
 documentation set disagrees with this table, this table wins.
 
-| Capability | Tier | Roadmap item | Consumer adaptation rule | Replacement trigger |
-| ---------- | ---- | ------------ | ------------------------ | ------------------- |
-| Whole-CLI introspection | Hard | §6.1 "Populate subcommand metadata" | No local adaptation is permitted for Weaver's generated command surface. | Not applicable. |
-| Strict vocabulary policy | Hard | §7.1 "Implement vocabulary policy" | No local adaptation is permitted for Weaver's generated command surface. | Not applicable. |
-| Agent-context IR | Hard | §6.2 "Add compact agent-context output" | No local adaptation is permitted for Weaver's generated command surface. | Not applicable. |
-| Localized help generation | Hard | Existing `OrthoConfigDocs` and `OrthoConfigSubcommandDocs` contracts with §6.1.1 "Generate recursive `DocMetadata.subcommands` values" | No local adaptation is permitted for Weaver's generated command surface. | Not applicable. |
-| Profiles | Soft | §9.1 "Profile contracts" and design §6.7 | A consumer may carry a temporary `--profile` parsing adapter only. | Replace within the next consumer release once §9.1 ships; on shape conflict, the OrthoConfig shape wins. |
-| Delivery | Soft | §9.2 "Delivery and feedback contracts" and design §6.8 | A consumer may carry a temporary `--deliver` parsing adapter for `stdout`, `file:<path>`, and `webhook:<url>` only. | Replace within the next consumer release once §9.2 ships; on shape conflict, the OrthoConfig shape wins. |
-| Feedback | Soft | §9.2 "Delivery and feedback contracts" and design §6.8 | A consumer may carry a temporary `feedback <text>` parsing adapter that writes local JSONL only. | Replace within the next consumer release once §9.2 ships; on shape conflict, the OrthoConfig shape wins. |
-| Skill manifests | Soft | §6.3 "Validate skill manifests against real commands" and design §3.4 | A consumer may carry a temporary local manifest parser only. | Replace within the next consumer release once §6.3 ships; on shape conflict, the OrthoConfig shape wins. |
-| Execution ledgers | Soft | §9.3 "Execution ledger contracts" and design §6.6 | A consumer may carry a temporary local JSONL ledger record format only. | Replace within the next consumer release once §9.3 ships; on shape conflict, the OrthoConfig shape wins. |
+| Capability                | Tier | Roadmap item                                                                                                                           | Consumer adaptation rule                                                                                            | Replacement trigger                                                                                      |
+| ------------------------- | ---- | -------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| Whole-CLI introspection   | Hard | §6.1 "Populate subcommand metadata"                                                                                                    | No local adaptation is permitted for Weaver's generated command surface.                                            | Not applicable.                                                                                          |
+| Strict vocabulary policy  | Hard | §7.1 "Implement vocabulary policy"                                                                                                     | No local adaptation is permitted for Weaver's generated command surface.                                            | Not applicable.                                                                                          |
+| Agent-context IR          | Hard | §6.2 "Add compact agent-context output"                                                                                                | No local adaptation is permitted for Weaver's generated command surface.                                            | Not applicable.                                                                                          |
+| Localized help generation | Hard | Existing `OrthoConfigDocs` and `OrthoConfigSubcommandDocs` contracts with §6.1.1 "Generate recursive `DocMetadata.subcommands` values" | No local adaptation is permitted for Weaver's generated command surface.                                            | Not applicable.                                                                                          |
+| Profiles                  | Soft | §9.1 "Profile contracts" and design §6.7                                                                                               | A consumer may carry a temporary `--profile` parsing adapter only.                                                  | Replace within the next consumer release once §9.1 ships; on shape conflict, the OrthoConfig shape wins. |
+| Delivery                  | Soft | §9.2 "Delivery and feedback contracts" and design §6.8                                                                                 | A consumer may carry a temporary `--deliver` parsing adapter for `stdout`, `file:<path>`, and `webhook:<url>` only. | Replace within the next consumer release once §9.2 ships; on shape conflict, the OrthoConfig shape wins. |
+| Feedback                  | Soft | §9.2 "Delivery and feedback contracts" and design §6.8                                                                                 | A consumer may carry a temporary `feedback <text>` parsing adapter that writes local JSONL only.                    | Replace within the next consumer release once §9.2 ships; on shape conflict, the OrthoConfig shape wins. |
+| Skill manifests           | Soft | §6.3 "Validate skill manifests against real commands" and design §3.4                                                                  | A consumer may carry a temporary local manifest parser only.                                                        | Replace within the next consumer release once §6.3 ships; on shape conflict, the OrthoConfig shape wins. |
+| Execution ledgers         | Soft | §9.3 "Execution ledger contracts" and design §6.6                                                                                      | A consumer may carry a temporary local JSONL ledger record format only.                                             | Replace within the next consumer release once §9.3 ships; on shape conflict, the OrthoConfig shape wins. |
 
 Table 1: consumer dependency-tier matrix.
 
@@ -157,13 +156,12 @@ needed by both outputs.
 
 Schema ownership is defined in
 [ADR-003](adr-003-define-schema-ownership-for-agent-native-contracts.md).
-Reusable agent-context types and
-`ORTHO_AGENT_CONTEXT_SCHEMA_VERSION` live in
+Reusable agent-context types and `ORTHO_AGENT_CONTEXT_SCHEMA_VERSION` live in
 `ortho_config::agent_context`. `cargo-orthohelp` may generate or transform the
 context in later roadmap work, but it does not own the reusable context
-contract. The documentation IR remains owned by `ortho_config::docs`, so
-Fluent identifiers, localized long prose, roff details, and PowerShell help
-structures are not agent-context source fields.
+contract. The documentation IR remains owned by `ortho_config::docs`, so Fluent
+identifiers, localized long prose, roff details, and PowerShell help structures
+are not agent-context source fields.
 
 The planned `cargo-orthohelp` generator interface is:
 
@@ -227,8 +225,7 @@ The policy-report schema is initially owned by `cargo_orthohelp::policy`,
 including `ORTHO_POLICY_REPORT_SCHEMA_VERSION`. This keeps warnings, hard
 failures, source locations, rule identifiers, machine-readable codes, and mode
 handling close to the reference CLI that emits them. A later ADR can extract a
-shared report model if downstream libraries need to construct identical
-reports.
+shared report model if downstream libraries need to construct identical reports.
 
 The planned command shape is:
 
@@ -298,11 +295,12 @@ but they are downstream of the compact contracts. They should be generated or
 validated against the documentation IR and agent context rather than maintained
 as an independent source of truth.
 
-Skill manifests are still first-class contracts. OrthoConfig should model the
-manifest path, schema version, command index, and validation rules that prove a
-manifest mentions real commands and flags. It must not own a downstream skill's
-domain prose, such as Weaver's safe Rust rename workflow or Netsuke's build
-workflow.
+Skill manifests are still first-class contracts. `ortho_config::agent_context`
+models the reusable metadata with `SkillManifest`, `SkillCommandRef`, and the
+`AgentContext.skill_manifests` field: the manifest path, the downstream
+manifest schema version, and the command index that later validation will
+check. OrthoConfig must not own a downstream skill's domain prose, such as
+Weaver's safe Rust rename workflow or Netsuke's build workflow.
 
 ## 4. Whole-CLI introspection
 
@@ -479,8 +477,8 @@ names, and policy modes.
 
 Roadmap item 5.1.1 reconciled the missing-required-values design with the
 actual error enum. The current public surface does not expose
-`OrthoError::MissingRequiredValues`; missing required values still route through
-the existing command-line parsing, merge, gathering/deserialization, or
+`OrthoError::MissingRequiredValues`; missing required values still route
+through the existing command-line parsing, merge, gathering/deserialization, or
 aggregate error channels. The improved aggregate diagnostic remains phase 7.3.1
 implementation work.
 
@@ -642,7 +640,7 @@ apply explicit defaults instead of guessing from absent data.
 | `delivery_support`     | `{ "supported": false }` | Delivery sinks change artefact routing and must be explicit.               |
 | `feedback_support`     | `{ "supported": false }` | Feedback storage or upload must be explicitly available.                   |
 | `execution_ledger`     | `{ "supported": false }` | Jobs, runs, or tasks require application-owned execution state.            |
-| `skill_manifest_paths` | `[]`                     | Skills are absent until declared and validated.                            |
+| `skill_manifests`      | `[]`                     | Skill manifests are absent until declared; validation lands in 6.3.2.      |
 | `capability_id`        | `null`                   | Capability routing is optional downstream metadata.                        |
 | `provider_provenance`  | `{ "reported": false }`  | Provider names are not emitted unless the application declares provenance. |
 | `renderer.human`       | `{ "supported": true }`  | Existing documentation IR already supports human help material.            |
@@ -696,9 +694,13 @@ The design and roadmap updates must address these known gaps:
 - `cargo-orthohelp` does not yet enumerate all valid choices in errors;
 - generated file writes are not specified as atomic;
 - renderer metadata, JSON-mode stream contracts, exit-code taxonomy metadata,
-  skill manifest validation, capability/provenance metadata, profile redaction,
-  delivery, feedback, execution ledger, mutation, and pagination metadata are
-  not yet modelled as first-class contracts.
+  capability/provenance metadata, profile redaction, delivery, feedback,
+  execution ledger, mutation, and pagination metadata are not yet modelled as
+  first-class contracts;
+- skill manifest metadata is modelled in
+  `ortho_config::agent_context::SkillManifest` and `SkillCommandRef`; roadmap
+  item 6.3.2 still owes validation that referenced command paths and flags
+  resolve against the real command tree.
 
 ## 10. Deferred extensions
 

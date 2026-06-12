@@ -68,6 +68,11 @@ downstream applications need a reusable machine-readable command contract. Use
 message identifiers, localized long prose, or renderer-specific output
 structures to the agent-context schema.
 
+Skill manifest descriptors are part of this agent-context contract: keep
+`SkillManifest`, `SkillCommandRef`, and `AgentContext.skill_manifests` in
+`ortho_config::agent_context`, and keep downstream manifest prose
+application-owned.
+
 `localizer::identifier::normalize_segment` is the single source of truth for
 strict runtime and derive-time Fluent identifier segments. Reuse it from
 command localization, derive output, and future lookup-id generation instead of
@@ -113,11 +118,11 @@ contracts downward instead.
 
 ### Generating agent-context output
 
-`cargo-orthohelp --format agent-context` reads the same bridge
-`DocMetadata` as the human documentation generators and writes
-`<out>/agent-context.json`. Keep the transform projective: it may copy or
-derive compact command metadata from the bridge IR, but it must not inspect
-rendered roff, PowerShell help, or localized IR output.
+`cargo-orthohelp --format agent-context` reads the same bridge `DocMetadata` as
+the human documentation generators and writes `<out>/agent-context.json`. Keep
+the transform projective: it may copy or derive compact command metadata from
+the bridge IR, but it must not inspect rendered roff, PowerShell help, or
+localized IR output.
 
 Agent-context output is not localized. The current transform may use the short
 en-US command description as `AgentCommand.summary`, but it must not copy
@@ -126,9 +131,9 @@ structures into `ortho_config::agent_context`.
 
 Represent positional inputs by leaving `AgentInput.long` absent. The adapter
 detects a positional input from existing CLI metadata when
-`cli.long.is_none() && cli.short.is_none() && cli.takes_value`. Do not add a
-new `AgentInput` kind field unless a later ADR or roadmap item changes the
-schema ownership decision.
+`cli.long.is_none() && cli.short.is_none() && cli.takes_value`. Do not add a new
+`AgentInput` kind field unless a later ADR or roadmap item changes the schema
+ownership decision.
 
 Run `coderabbit review --agent` after major milestones that change schemas,
 documentation contracts, or externally visible behaviour. Clear its concerns

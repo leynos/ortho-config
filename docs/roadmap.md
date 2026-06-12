@@ -140,7 +140,8 @@ fields.
 
 - [x] 6.2.1. Add `--format agent-context` to `cargo-orthohelp`.
   - Requires 6.1.1.
-  - See agent-native-cli-design.md §3.2 and §4; cargo-orthohelp-design.md §6.3.1.
+  - See agent-native-cli-design.md §3.2 and §4; cargo-orthohelp-design.md
+    §6.3.1.
   - [x] Generate JSON from the same bridge output used by documentation IR.
   - [x] Include command paths, verbs, flags, positional arguments, value types,
     required inputs, defaults, and enum values.
@@ -149,7 +150,8 @@ fields.
 
 - [ ] 6.2.2. Version and validate the agent-context schema.
   - Requires 6.2.1.
-  - See agent-native-cli-design.md §3.2 and §8; adr-003-define-schema-ownership-for-agent-native-contracts.md.
+  - See agent-native-cli-design.md §3.2 and §8;
+    adr-003-define-schema-ownership-for-agent-native-contracts.md.
   - [ ] Add schema-version tests that fail on accidental shape changes.
   - [ ] Add golden fixtures for a simple CLI, a nested CLI, and a CLI with enum
     values.
@@ -167,12 +169,13 @@ fields.
 
 ### 6.3. Validate skill manifests against real commands
 
-- [ ] 6.3.1. Add skill manifest metadata.
+- [x] 6.3.1. Add skill manifest metadata.
   - Requires 6.2.1.
   - See agent-native-cli-design.md §3.4.
-  - [ ] Model skill manifest path, schema version, and command index metadata.
-  - [ ] Link skill manifest locations from agent context.
-  - [ ] Keep downstream skill prose application-owned.
+  - Modelling can land before 6.2.1; only generator output depends on 6.2.1.
+  - [x] Model skill manifest path, schema version, and command index metadata.
+  - [x] Link skill manifest locations from agent context.
+  - [x] Keep downstream skill prose application-owned.
 
 - [ ] 6.3.2. Add skill manifest validation.
   - Requires 6.3.1 and step 7.1.
