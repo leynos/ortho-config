@@ -167,8 +167,8 @@ of autonomous action, not quality criteria.
   approval before any milestone other than Milestone 0 is started.
 - Scope: stop if the implementation requires changes to more than 9 files or
   more than 300 net lines of code and documentation (excluding the inline
-  `insta` snapshot update on the agent-context wire snapshot, which is one
-  large block that gets reviewed as a unit).
+  `insta` snapshot updates on the agent-context wire snapshots, which are
+  reviewed as a unit).
 - Public API: stop if any existing public type, trait, constant, function, or
   derived attribute must be renamed or removed. Additive items
   (`SkillManifest`, `SkillCommandRef`, and the additive
@@ -914,13 +914,14 @@ cargo test -p ortho_config agent_context 2>&1 \
 Snapshot review during Milestone 2 and Milestone 3:
 
 ```sh
-cargo insta accept --check 2>&1 \
+cargo insta accept --snapshot agent_context__fixture.json 2>&1 \
   | tee /tmp/insta-ortho-config-6-3-1-skill-manifest-metadata.out
 ```
 
-`cargo insta accept --check` confirms that pending snapshots match the
-current code without rewriting committed snapshots. Treat any unexpected
-pending snapshot as a Milestone failure and investigate before accepting.
+The installed `cargo-insta` accepts pending snapshots through `cargo insta
+accept`; it does not support the obsolete `accept --check` form. Treat any
+unexpected pending snapshot as a Milestone failure and investigate before
+accepting.
 
 Post-milestone review:
 
@@ -1055,7 +1056,11 @@ into two.
   path field, passed `make check-fmt`, `make lint`, `make test`, and
   received a zero-finding CodeRabbit review for the uncommitted milestone
   diff.
-- [ ] (pending) Milestone 2: linked `skill_manifests` into `AgentContext`.
+- [x] (2026-06-12) Milestone 2: linked `skill_manifests` into
+  `AgentContext`, updated constructor defaults and the existing
+  agent-context snapshots, passed `make check-fmt`, `make lint`,
+  `make test`, confirmed no pending `insta` snapshots, and received a
+  zero-finding CodeRabbit review.
 - [ ] (pending) Milestone 3: added passive-schema tests.
 - [ ] (pending) Milestone 4: updated documentation, changelog, and
   roadmap.
@@ -1123,6 +1128,20 @@ Document with evidence so future work benefits.
   `Utf8PathBuf`. Impact: enable the standard `serde1` feature on the
   existing `camino = "1"` dependency in `ortho_config/Cargo.toml` rather
   than adding a new crate or replacing the typed path with a string.
+- Observation: Milestone 2 also moves the `cargo-orthohelp` generated
+  agent-context golden snapshot because the generator serializes
+  `AgentContext::new` and therefore emits the defaulted empty
+  `skill_manifests` field. Evidence: `make test` produced
+  `cargo-orthohelp/tests/golden/agent_context__fixture.json.snap.new`
+  with only the added `"skill_manifests": []` field. Impact: update the
+  committed golden snapshot in the same milestone as the field addition.
+- Observation: the planned `cargo insta accept --check` command is not
+  supported by the installed `cargo-insta`; it exits with "unexpected
+  argument '--check'". Evidence:
+  `/tmp/insta-ortho-config-6-3-1-skill-manifest-metadata.out`. Impact:
+  replace the plan's snapshot command with targeted `cargo insta accept`
+  usage and rely on `git diff` plus the test rerun to verify the accepted
+  snapshot.
 
 ## Decision Log
 
@@ -1199,6 +1218,10 @@ choices.
   serialized field, `camino` already exists as a runtime dependency, and the
   feature is the crate-supported serde integration rather than a new
   dependency or custom adapter.
+- Decision: update the `cargo-orthohelp` agent-context golden snapshot in
+  Milestone 2. Rationale: roadmap item 6.2.1 has landed, so the passive
+  schema type is now visible through the existing generator's default
+  serialization path even though 6.3.1 does not add generator logic.
 
 ## Outcomes & Retrospective
 

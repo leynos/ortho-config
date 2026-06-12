@@ -101,5 +101,6 @@ expression: snapshot
   },
   "policy": {
     "agent_native": "warn"
-  }
+  },
+  "skill_manifests": []
 }
