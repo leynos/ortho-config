@@ -1050,8 +1050,11 @@ into two.
   6.2.1, 5.2.3, and 11.1.1 merged. Reconciled the plan with 6.2.1, which
   landed the agent-context generator and added `AgentCommand.summary`.
   Updated the dependency framing, line counts, and the wire-snapshot note.
-- [ ] (pending) Milestone 1: introduced `SkillManifest` and
-  `SkillCommandRef`.
+- [x] (2026-06-12) Milestone 1: introduced `SkillManifest` and
+  `SkillCommandRef`, enabled `camino`'s `serde1` feature for their typed
+  path field, passed `make check-fmt`, `make lint`, `make test`, and
+  received a zero-finding CodeRabbit review for the uncommitted milestone
+  diff.
 - [ ] (pending) Milestone 2: linked `skill_manifests` into `AgentContext`.
 - [ ] (pending) Milestone 3: added passive-schema tests.
 - [ ] (pending) Milestone 4: updated documentation, changelog, and
@@ -1112,6 +1115,14 @@ Document with evidence so future work benefits.
   contained only setup status. Impact: terminate only that review process
   and retry the same review with a bounded shell timeout so the milestone
   still receives CodeRabbit validation.
+- Observation: Milestone 1 exposed that `camino::Utf8PathBuf` does not
+  implement `Serialize` or `Deserialize` unless the existing `camino`
+  dependency enables its `serde1` feature. Evidence: `make test` failed in
+  the `cargo-orthohelp` golden agent-context test while rebuilding
+  `ortho_config` through the bridge with trait-bound errors on
+  `Utf8PathBuf`. Impact: enable the standard `serde1` feature on the
+  existing `camino = "1"` dependency in `ortho_config/Cargo.toml` rather
+  than adding a new crate or replacing the typed path with a string.
 
 ## Decision Log
 
@@ -1183,6 +1194,11 @@ choices.
 - Decision: retry CodeRabbit after a stalled invocation. Rationale: no
   review findings were emitted, no rate-limit response was reported, and the
   plan requires CodeRabbit review before moving to Milestone 1.
+- Decision: enable `camino`'s standard `serde1` feature for
+  `ortho_config`. Rationale: the approved schema uses `Utf8PathBuf` as a
+  serialized field, `camino` already exists as a runtime dependency, and the
+  feature is the crate-supported serde integration rather than a new
+  dependency or custom adapter.
 
 ## Outcomes & Retrospective
 
