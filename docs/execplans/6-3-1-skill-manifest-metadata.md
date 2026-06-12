@@ -566,7 +566,7 @@ the documented default matches the implemented field. No shipped consumer
 reads the old name. The rename lands as part of Milestone 4 alongside the
 other documentation updates and is logged in `Decision Log`.
 
-### No new ADR
+### No new ADR (confirmed)
 
 `docs/adr-003-define-schema-ownership-for-agent-native-contracts.md`
 already authorises additive evolution of the agent-context schema inside
@@ -575,8 +575,9 @@ overview and adds a single sentence to `docs/developers-guide.md`
 "Schema ownership" noting that skill manifest descriptors are part of the
 agent-context contract, not a sibling schema.
 
-If review prefers an explicit ADR for the design-doc field rename, that is
-a Milestone 0 escalation, not a default of this plan.
+The maintainer confirmed on 2026-06-12 that referencing ADR-003 is
+sufficient and that no new ADR is required for the wire-field rename. The
+open question is therefore closed; Milestone 0 no longer needs to ask it.
 
 ### Out of scope
 
@@ -609,15 +610,13 @@ Steps:
 1. Submit this ExecPlan for review and wait for explicit maintainer
    approval. Record the approval date in `Progress`. Update `Status:` to
    `APPROVED`.
-2. Confirm with the maintainer whether the wire-field rename from
-   `skill_manifest_paths` to `skill_manifests` warrants a new ADR (for
-   example, an ADR-006) or whether referencing ADR-003 in
-   `docs/developers-guide.md` is sufficient. The default of this plan is
-   "no new ADR"; if review prefers an ADR, draft it before Milestone 1
-   following the template in `docs/documentation-style-guide.md` and add it
-   to `docs/contents.md`.
+2. The ADR question is closed: the maintainer confirmed on 2026-06-12 that
+   referencing ADR-003 in `docs/developers-guide.md` is sufficient and that
+   no new ADR is required for the wire-field rename. No ADR drafting is
+   needed in this milestone.
 3. Add this ExecPlan to `docs/contents.md` next to the other phase-6
-   execplans so the plan is discoverable from the documentation index.
+   execplans so the plan is discoverable from the documentation index
+   (already done as part of the draft commit).
 
 Validation:
 
@@ -1029,6 +1028,9 @@ into two.
   comments on `SkillCommandRef`, room reserved for future non-filesystem
   sources) into §"Recommended design".
 - [x] (2026-06-02) Drafted this ExecPlan for approval.
+- [x] (2026-06-12) Maintainer confirmed the ADR question: referencing
+  ADR-003 is sufficient, so no new ADR is required for the wire-field
+  rename.
 - [ ] (pending) Received explicit maintainer approval to implement this
   ExecPlan.
 - [ ] (pending) Added this ExecPlan to `docs/contents.md`.
@@ -1121,9 +1123,9 @@ choices.
 - Decision: do not write a new ADR for this work; reference ADR-003.
   Rationale: ADR-003 already authorises additive evolution of the
   agent-context schema inside `ortho_config::agent_context`. Two new
-  schema types fit that authorisation. If review prefers an explicit
-  ADR-006 for the field rename, that is a Milestone 0 escalation, not a
-  default.
+  schema types fit that authorisation. The maintainer confirmed on
+  2026-06-12 that referencing ADR-003 is sufficient and that no new ADR is
+  required for the wire-field rename, closing the only open question.
 - Decision: defer validation, parsing, and `cargo-orthohelp` integration
   to 6.3.2. Rationale: §3.4 of the design distinguishes "modelling" from
   "validation rules"; 6.3.1 is the modelling step and 6.3.2 is the
