@@ -5,7 +5,7 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
 proceeds.
 
-Status: DRAFT
+Status: APPROVED
 
 This plan covers roadmap item 6.3.1 only. It does not implement skill manifest
 validation, parsing, prose loading, or any new `cargo-orthohelp` flag; those
@@ -1031,9 +1031,10 @@ into two.
 - [x] (2026-06-12) Maintainer confirmed the ADR question: referencing
   ADR-003 is sufficient, so no new ADR is required for the wire-field
   rename.
-- [ ] (pending) Received explicit maintainer approval to implement this
-  ExecPlan.
-- [ ] (pending) Added this ExecPlan to `docs/contents.md`.
+- [x] (2026-06-12) Received explicit maintainer approval to implement this
+  ExecPlan via the request to proceed with implementation.
+- [x] (2026-06-12) Confirmed this ExecPlan is already linked from
+  `docs/contents.md`.
 - [ ] (pending) Milestone 1: introduced `SkillManifest` and
   `SkillCommandRef`.
 - [ ] (pending) Milestone 2: linked `skill_manifests` into `AgentContext`.
@@ -1075,6 +1076,13 @@ Document with evidence so future work benefits.
   future schema version. Evidence: review report 2026-06-02. Impact: the
   plan adds an `id: String` to `SkillManifest` so 6.3.2's validator
   findings can quote a stable identifier rather than a brittle path.
+- Observation: Milestone 0 validation found a pre-existing Mermaid parse
+  failure in `docs/rstest-bdd-v0-5-0-migration-guide.md` around the
+  migration flowchart. Evidence: `make nixie` failed on diagram 1 with
+  "Unterminated node label (missing `}`)" after `make markdownlint`
+  passed. Impact: quote the labels that contain `#once` and
+  `StepContext::insert_owned` so the documentation gate can validate before
+  implementation proceeds.
 
 ## Decision Log
 
@@ -1135,6 +1143,14 @@ choices.
   behaviour, no invariant over a broad input domain, and no bounded
   state machine to verify. The same conclusion was reached by the 5.2.1
   plan for the same reason.
+- Decision: proceed with implementation on 2026-06-12. Rationale: the
+  maintainer explicitly requested implementation of this ExecPlan, which
+  satisfies the approval gate and turns the plan from `DRAFT` to
+  `APPROVED`.
+- Decision: fix the pre-existing Mermaid syntax failure during Milestone 0
+  rather than carrying it as known debt. Rationale: `make nixie` is a
+  required gate for this plan, and the fix is syntax-only documentation
+  maintenance outside the Rust implementation surface.
 
 ## Outcomes & Retrospective
 
@@ -1156,3 +1172,5 @@ Pending implementation. To be filled in at the end of Milestone 4 with:
   (`id: String`, exact-match documentation on `SkillCommandRef`,
   forward-compatibility note on `SkillManifest::path`). Status: DRAFT;
   awaiting maintainer approval before Milestone 1 may begin.
+- 2026-06-12 (approval): maintainer requested implementation. Status:
+  APPROVED; Milestone 0 may proceed to validation and review.
