@@ -4,6 +4,7 @@ use super::super::test_fixtures;
 use super::*;
 use crate::ir::{LocalizedDocMetadata, LocalizedFieldMetadata};
 use crate::schema::{CliMetadata, DefaultValue, EnvMetadata, FileMetadata, ValueType};
+use crate::test_support::nested_fixture::nested_doc;
 use rstest::{fixture, rstest};
 
 #[fixture]
@@ -89,4 +90,45 @@ fn xml_escapes_reserved_chars(mut minimal_doc: LocalizedDocMetadata) {
         },
     );
     assert!(xml.contains("Use &lt;tag&gt; &amp; more"));
+}
+
+#[rstest]
+fn render_help_includes_nested_subcommand_help() {
+    let metadata = nested_doc();
+    let greet = metadata
+        .subcommands
+        .iter()
+        .find(|command| command.app_name == "greet")
+        .expect("greet command");
+    let audit = metadata
+        .subcommands
+        .iter()
+        .find(|command| command.app_name == "admin")
+        .and_then(|admin| {
+            admin
+                .subcommands
+                .iter()
+                .find(|command| command.app_name == "audit")
+        })
+        .expect("admin audit command");
+    let commands = [
+        CommandSpec {
+            name: "greet".to_owned(),
+            metadata: greet,
+        },
+        CommandSpec {
+            name: "audit".to_owned(),
+            metadata: audit,
+        },
+    ];
+    let xml = render_help(
+        &commands,
+        MamlOptions {
+            should_include_common_parameters: false,
+        },
+    );
+
+    assert!(xml.contains("<command:name>greet</command:name>"));
+    assert!(xml.contains("<command:name>audit</command:name>"));
+    assert!(xml.contains("Audits fixture state."));
 }

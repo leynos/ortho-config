@@ -14,6 +14,7 @@ use std::sync::{Arc, Mutex};
 /// Re-exported so BDD merge-error steps can reference the sample config
 /// struct without reaching into the shared fixtures module directly.
 pub use super::fixtures::merge_fixtures::MergeErrorSample;
+pub use super::nested_docs_fixture::*;
 
 /// Scenario state for rules-oriented precedence scenarios (CLI, env, config path, ignore).
 #[derive(Debug, Default, ScenarioState)]

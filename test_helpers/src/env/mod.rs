@@ -21,7 +21,7 @@
 //! # Examples
 //!
 //! ```
-//! use test_helpers::env;
+//! use ortho_config_test_helpers::env;
 //!
 //! let _g = env::set_var("KEY", "VALUE");
 //! // `KEY` is set to `VALUE` for the duration of the guard.
@@ -92,7 +92,7 @@ pub struct EnvVarGuard {
 ///
 /// # Examples
 /// ```
-/// use test_helpers::env;
+/// use ortho_config_test_helpers::env;
 ///
 /// let _lock = env::lock();
 /// let _guard = _lock.set_var("KEY", "VALUE");
@@ -144,7 +144,7 @@ impl EnvVarLock {
 ///
 /// # Examples
 /// ```
-/// use test_helpers::env;
+/// use ortho_config_test_helpers::env;
 ///
 /// let guards = vec![env::remove_var("FOO"), env::remove_var("BAR")];
 /// let _scope = env::EnvScope::new(guards);
@@ -165,7 +165,7 @@ impl EnvScope {
     ///
     /// # Examples
     /// ```
-    /// use test_helpers::env;
+    /// use ortho_config_test_helpers::env;
     ///
     /// let guards = vec![env::remove_var("FOO"), env::remove_var("BAR")];
     /// let _scope = env::EnvScope::new(guards);
@@ -185,7 +185,7 @@ impl EnvScope {
     ///
     /// # Examples
     /// ```
-    /// use test_helpers::env;
+    /// use ortho_config_test_helpers::env;
     ///
     /// let _scope = env::EnvScope::new_with(|lock| {
     ///     vec![lock.remove_var("FOO"), lock.remove_var("BAR")]
@@ -240,7 +240,7 @@ impl fmt::Debug for EnvVarGuard {
 ///
 /// # Examples
 /// ```
-/// use test_helpers::env;
+/// use ortho_config_test_helpers::env;
 /// let _g = env::set_var("FOO", "bar");
 /// assert!(matches!(std::env::var("FOO"), Ok(ref value) if value == "bar"));
 /// // Dropping `_g` restores the prior value (or unsets it if none existed).
@@ -266,7 +266,7 @@ where
 ///
 /// # Examples
 /// ```
-/// use test_helpers::env;
+/// use ortho_config_test_helpers::env;
 /// let _g = env::remove_var("FOO");
 /// assert!(std::env::var("FOO").is_err());
 /// // Dropping `_g` restores the prior value (if any).
@@ -298,7 +298,7 @@ impl Drop for EnvVarGuard {
 ///
 /// # Examples
 /// ```
-/// use test_helpers::env;
+/// use ortho_config_test_helpers::env;
 ///
 /// let _lock = env::lock();
 /// let _guard = env::set_var("KEY", "VALUE");
@@ -313,7 +313,7 @@ pub fn lock() -> EnvVarLock {
 ///
 /// # Examples
 /// ```
-/// use test_helpers::env;
+/// use ortho_config_test_helpers::env;
 ///
 /// let _scope = env::scope(vec![env::remove_var("FOO")]);
 /// ```
@@ -329,7 +329,7 @@ pub fn scope(guards: Vec<EnvVarGuard>) -> EnvScope {
 ///
 /// # Examples
 /// ```
-/// use test_helpers::env;
+/// use ortho_config_test_helpers::env;
 ///
 /// let _scope = env::scope_with(|lock| vec![lock.remove_var("FOO")]);
 /// ```
@@ -344,7 +344,7 @@ where
 ///
 /// # Examples
 /// ```
-/// use test_helpers::env;
+/// use ortho_config_test_helpers::env;
 ///
 /// let _scope = env::scope_from_iter([env::remove_var("FOO")]);
 /// ```
@@ -359,7 +359,7 @@ where
 ///
 /// # Examples
 /// ```
-/// use test_helpers::env;
+/// use ortho_config_test_helpers::env;
 ///
 /// env::with_lock(|lock| {
 ///     let _guard = lock.set_var("KEY", "VALUE");

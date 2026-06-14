@@ -1,0 +1,12 @@
+---
+source: cargo-orthohelp/tests/golden/nested_subcommand_snapshots.rs
+expression: "read_text(&module_root, \"en-US/about_NestedFixture.help.txt\")"
+---
+TOPIC
+    about_NestedFixture
+
+SHORT DESCRIPTION
+    Nested fixture command tree.
+
+LONG DESCRIPTION
+    Nested fixture command tree.

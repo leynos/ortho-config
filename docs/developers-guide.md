@@ -235,6 +235,24 @@ fixtures and `Slot<T>` values inside `#[derive(ScenarioState)]` structs.
 Cross-scenario mutable sharing is forbidden; use `#[once]` only for expensive,
 effectively read-only infrastructure.
 
+Keep richer fixture families isolated. For example, `NestedDocsConfig` and
+`NestedDocsContext` back `docs_ir_nested.feature`, and their steps live in a
+fixture-specific `tests/rstest_bdd/behaviour/steps/nested_docs_steps.rs`
+module rather than expanding unrelated step files.
+
+## Snapshot tests
+
+Use `insta` for renderer golden coverage that would be noisy as hand-written
+string assertions. Place snapshots beside the integration test that owns them,
+as `cargo-orthohelp/tests/golden/nested_subcommand_snapshots.rs` does, and
+redact dates, absolute paths, and other environment-specific substrings with
+`insta::with_settings!` filters before committing baselines.
+
+Review snapshot changes with `cargo insta review`. For non-interactive baseline
+creation in a controlled milestone, use `INSTA_UPDATE=always` and then verify
+that no `.pending-snap` or `.snap.new` files remain before running the normal
+quality gates.
+
 ## `rstest-bdd` v0.5.0 migration strategy
 
 Status: adopted. See `docs/execplans/adopt-rstest-bdd-v0-5-0.md` for execution

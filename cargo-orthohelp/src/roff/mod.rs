@@ -69,7 +69,9 @@ fn generate_subcommand_page(
     config: &RoffConfig,
     composite_name: &str,
 ) -> String {
-    generate_man_page_with_name(metadata, config, composite_name)
+    let mut subcommand_config = config.clone();
+    subcommand_config.should_split_subcommands = false;
+    generate_man_page_with_name(metadata, &subcommand_config, composite_name)
 }
 
 fn generate_man_page_with_name(
@@ -255,6 +257,11 @@ pub fn generate_to_string(metadata: &LocalizedDocMetadata, config: &RoffConfig) 
 mod tests {
     use super::*;
     use crate::ir::{LocalizedHeadings, LocalizedSectionsMetadata};
+    use crate::test_support::nested_fixture::nested_doc;
+    use camino::Utf8PathBuf;
+    use cap_std::ambient_authority;
+    use cap_std::fs_utf8::Dir;
+    use std::io::Read;
 
     fn minimal_metadata() -> LocalizedDocMetadata {
         LocalizedDocMetadata {
@@ -326,5 +333,56 @@ mod tests {
         assert!(result.contains("Run the task."));
         assert!(result.contains(".SS audit"));
         assert!(result.contains("Audit the task."));
+    }
+
+    #[test]
+    fn inline_subcommands_render_for_nested_fixture() {
+        let metadata = nested_doc();
+        let config = RoffConfig::default();
+        let result = generate_to_string(&metadata, &config);
+
+        assert!(result.contains(".SH COMMANDS"));
+        assert!(result.contains(".SS greet"));
+        assert!(result.contains(".SS version"));
+        assert!(result.contains(".SS admin"));
+        assert!(result.contains("\\fB\\-\\-recipient\\fR \\fIRECIPIENT\\fR"));
+    }
+
+    #[test]
+    fn split_subcommands_render_for_nested_fixture() {
+        let metadata = nested_doc();
+        let temp_dir = tempfile::tempdir().expect("create temp dir");
+        let out_dir = Utf8PathBuf::from_path_buf(temp_dir.path().to_path_buf())
+            .expect("temp dir path should be UTF-8");
+        let config = RoffConfig {
+            out_dir: out_dir.clone(),
+            date: Some("2026-06-04".to_owned()),
+            should_split_subcommands: true,
+            ..RoffConfig::default()
+        };
+        let output = generate(&metadata, &config).expect("generate split man pages");
+        let filenames = output
+            .files
+            .iter()
+            .filter_map(|path| path.file_name())
+            .collect::<Vec<_>>();
+
+        assert!(filenames.contains(&"fixture-greet.1"));
+        assert!(filenames.contains(&"fixture-version.1"));
+        assert!(filenames.contains(&"fixture-admin.1"));
+
+        let admin_page = read_utf8(&out_dir, "man/man1/fixture-admin.1");
+        assert!(admin_page.contains(".SH COMMANDS"));
+        assert!(admin_page.contains(".SS audit"));
+        assert!(admin_page.contains(".SS grant-access"));
+    }
+
+    fn read_utf8(out_dir: &Utf8PathBuf, relative: &str) -> String {
+        let dir = Dir::open_ambient_dir(out_dir, ambient_authority()).expect("open output dir");
+        let mut file = dir.open(relative).expect("open generated man page");
+        let mut content = String::new();
+        file.read_to_string(&mut content)
+            .expect("read generated man page");
+        content
     }
 }

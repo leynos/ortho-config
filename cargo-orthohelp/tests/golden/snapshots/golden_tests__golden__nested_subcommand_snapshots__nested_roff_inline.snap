@@ -1,0 +1,47 @@
+---
+source: cargo-orthohelp/tests/golden/nested_subcommand_snapshots.rs
+expression: output
+---
+.TH "FIXTURE" "1" "2026-06-04" "cargo-orthohelp 0.8.0" "Fixture Manual"
+.SH NAME
+fixture \- Nested fixture command tree.
+.SH SYNOPSIS
+.B fixture
+\fB\-\-global\fR \fIGLOBAL\fR
+.SH DESCRIPTION
+Nested fixture command tree.
+.SH OPTIONS
+.TP
+\fB\-\-global\fR \fIGLOBAL\fR
+Global configuration value.
+.SH ENVIRONMENT
+.TP
+\fBNESTED_APP_GLOBAL\fR
+Global configuration value. Equivalent to \fB\--global\fR.
+.SH EXIT STATUS
+.TP
+\fB0\fR
+Successful execution.
+.TP
+\fB1\fR
+General errors.
+.SH COMMANDS
+.SS greet
+Greets a named recipient.
+.PP
+OPTIONS:
+.TP
+\fB\-\-excited\fR
+Adds an exclamation mark to the greeting.
+.TP
+\fB\-\-recipient\fR \fIRECIPIENT\fR
+Recipient to greet.
+.SS version
+Prints version information.
+.SS admin
+Administers fixture state.
+.PP
+OPTIONS:
+.TP
+\fB\-\-scope\fR \fISCOPE\fR
+Scope to administer.

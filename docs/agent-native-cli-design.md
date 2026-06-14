@@ -313,6 +313,11 @@ implementations populate that tree from `clap::Subcommand` enums. This closes
 the human-documentation IR gap needed before compact agent-context output can
 reuse the same command tree.
 
+The nested-command behavioural fixture suite closes the verification gate for
+this layer: it asserts recursive metadata, behavioural scenarios, renderer
+snapshots, and an end-to-end `cargo-orthohelp` bridge smoke test before any
+agent-context format consumes the tree.
+
 The target is a command tree where each command node can describe:
 
 - its command path, such as `profile save` or `jobs get`;

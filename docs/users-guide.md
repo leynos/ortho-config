@@ -265,69 +265,6 @@ use ortho_config::{LocalizeCmd, Localizer};
 
 # #[derive(clap::Parser)]
 # struct Cli {}
-fn command(localizer: &dyn Localizer) -> clap::Command {
-    Cli::command().localize(localizer)
-}
-```
-
-By default, identifiers derive from the command name. Use `with_base` when a
-catalogue has a shared namespace or when the binary name differs from the
-catalogue root:
-
-```rust,ignore
-use clap::CommandFactory;
-use ortho_config::{LocalizeCmd, Localizer};
-
-# #[derive(clap::Parser)]
-# struct Cli {}
-fn command(localizer: &dyn Localizer) -> clap::Command {
-    Cli::command()
-        .with_base("my_app.cli")
-        .localize(localizer)
-}
-```
-
-`message_id_for(&["my_app", "cli", "greet"], "args.name.help")` produces
-`my_app-cli-greet-args-name-help`. Each segment preserves ASCII letters, digits,
-`_`, and `-`, lowercases ASCII letters, rejects non-ASCII input, and joins
-path pieces with `-`. Author-facing Fluent files may still use dotted ids such
-as `my_app.cli.greet.about`; the loader normalizes those dots to match the
-runtime ids.
-
-Do not rely on the default command name when the catalogue uses a different
-root:
-
-```rust,ignore
-// DON'T: binary name `hello-world` looks for `hello-world-about`.
-CommandLine::command().localize(&localizer);
-
-// DO: catalogue keys start with `hello_world.cli`.
-CommandLine::command()
-    .with_base("hello_world.cli")
-    .localize(&localizer);
-```
-
-The Hello World example ships `hello_world::localizer::DemoLocalizer`, which
-builds a `FluentLocalizer` from `examples/hello_world/locales/en-US` and drives
-`CommandLine::command().with_base("hello_world.cli").localize(&localizer)` and
-`CommandLine::try_parse_localized_env`. If the localization setup ever fails,
-the example falls back to `NoOpLocalizer`, preserving the stock `clap` strings
-until translations are fixed.
-
-Errors surfaced by `clap` can be localized as well. Use
-`localize_clap_error_with_command` to map each `ErrorKind` to a Fluent
-identifier of the form `clap-error-<kebab-case>`, forwarding argument context
-such as the missing flag or the offending value. Supplying the command enables
-the helper to populate missing context (for example, the available subcommands
-when `clap` emits `DisplayHelpOnMissingArgumentOrSubcommand`). When no
-translation exists, the helper returns the original `clap` error unchanged:
-
-```rust
-use clap::CommandFactory;
-use ortho_config::{localize_clap_error_with_command, LocalizeCmd, Localizer};
-
-# #[derive(clap::Parser)]
-# struct Cli {}
 fn parse(localizer: &dyn Localizer) -> Result<Cli, clap::Error> {
     let mut command = Cli::command()
         .with_base("my_app.cli")
@@ -1292,6 +1229,13 @@ command label: the `Run` variant becomes `run`, and the explicit
 struct also derives `Deserialize`, mark the selector with `#[serde(skip)]` and
 provide a default command value so serde does not require the command enum to
 deserialize from configuration files.
+
+Run `cargo orthohelp --format ir` against the package to inspect the generated
+tree. The root node lists subcommands in declaration order, and each child node
+carries its own fields, examples, headings, nested children, and optional
+Windows wrapper metadata. The repository's
+`ortho_config/tests/features/docs_ir_nested.feature` file shows the
+behavioural-test style used to assert this recursive contract.
 
 The documentation IR is the human documentation contract. Agent-native work
 adds a compact, independently versioned sibling agent-context output for

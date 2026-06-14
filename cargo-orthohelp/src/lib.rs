@@ -11,3 +11,5 @@ pub mod policy;
 pub mod powershell;
 pub mod roff;
 pub mod schema;
+#[cfg(test)]
+mod test_support;

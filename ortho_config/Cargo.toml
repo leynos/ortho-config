@@ -9,7 +9,6 @@ license.workspace = true
 repository.workspace = true
 
 
-
 [lints]
 workspace = true
 
@@ -69,3 +68,7 @@ proptest = "1.11.0"
 name = "registry_ctl"
 path = "examples/registry_ctl.rs"
 test = true
+
+[[test]]
+name = "rstest_bdd"
+path = "tests/rstest_bdd/mod.rs"

@@ -65,8 +65,19 @@ fn sample_subcommand() -> ortho_docs::DocMetadata {
         bin_name: None,
         about_id: "run.about",
         synopsis_id: None,
-        subcommands: Vec::new(),
+        subcommands: vec![sample_nested_subcommand()],
         windows: None,
+    })
+}
+
+fn sample_nested_subcommand() -> ortho_docs::DocMetadata {
+    make_doc_metadata(DocMetadataSpec {
+        app_name: "audit",
+        bin_name: None,
+        about_id: "audit.about",
+        synopsis_id: None,
+        subcommands: Vec::new(),
+        windows: Some(sample_child_windows()),
     })
 }
 
@@ -224,5 +235,15 @@ fn sample_windows() -> ortho_docs::WindowsMetadata {
         include_common_parameters: true,
         split_subcommands_into_functions: false,
         help_info_uri: Some("https://example.com/help".to_owned()),
+    }
+}
+
+fn sample_child_windows() -> ortho_docs::WindowsMetadata {
+    ortho_docs::WindowsMetadata {
+        module_name: Some("DemoAudit".to_owned()),
+        export_aliases: vec!["demo-audit".to_owned()],
+        include_common_parameters: false,
+        split_subcommands_into_functions: true,
+        help_info_uri: None,
     }
 }
