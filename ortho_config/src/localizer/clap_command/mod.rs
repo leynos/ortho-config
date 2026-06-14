@@ -5,6 +5,10 @@ use clap::{Arg, ArgAction, Command};
 use fluent_bundle::FluentValue;
 use std::collections::{HashMap, HashSet};
 
+mod parse;
+
+pub use parse::{LocalizedParse, parse_localized_command};
+
 /// Extension trait that applies a [`Localizer`] to a [`clap::Command`] tree.
 pub trait LocalizeCmd: Sized {
     /// Applies the localizer to this command and every subcommand recursively.

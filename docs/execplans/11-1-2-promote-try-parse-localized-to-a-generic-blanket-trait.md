@@ -1,18 +1,17 @@
 # Promote `try_parse_localized*` to a generic blanket trait (11.1.2)
 
-This ExecPlan (execution plan) is a living document. The sections
-`Constraints`, `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`,
-`Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
-proceeds.
+This ExecPlan (execution plan) is a living document. The sections `Constraints`,
+`Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
+and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
-Status: DRAFT
+Status: IN PROGRESS
 
 ## Purpose / big picture
 
-Today, any application that wants localized command-line parsing must
-copy a four-step ritual out of the `hello_world` example: build the
-`clap::Command`, override its identifier base, localize the command tree, then
-parse arguments while routing both the `try_get_matches_from_mut` error and the
+Today, any application that wants localized command-line parsing must copy a
+four-step ritual out of the `hello_world` example: build the `clap::Command`,
+override its identifier base, localize the command tree, then parse arguments
+while routing both the `try_get_matches_from_mut` error and the
 `from_arg_matches` error through the crate's error localizer. That ritual lives
 in `examples/hello_world/src/cli/mod.rs` as the inherent methods
 `try_parse_localized`, `try_parse_localized_env`, and
@@ -92,8 +91,8 @@ escalation, not a workaround.
 7. The public method names are exactly those in
    `docs/cli-localization-design.md` §4.2: `try_parse_localized` (reads the
    environment), `try_parse_localized_from` (takes an iterator), and
-   `try_parse_localized_with_matches` (takes an iterator, returns matches).
-   The example's `_env`-suffixed names are removed, not preserved.
+   `try_parse_localized_with_matches` (takes an iterator, returns matches). The
+   example's `_env`-suffixed names are removed, not preserved.
 
 ## Tolerances (exception triggers)
 
@@ -122,46 +121,45 @@ Stop and escalate (do not work around) when any of these is reached.
    panics (on Fluent-unsafe argument ids, duplicate normalized ids, or a
    non-letter-initial root) to **every** `clap::Parser`, so a consumer with a
    valid-for-clap but invalid-for-Fluent identifier panics at parse time. clap
-   itself never panics on a valid command definition.
-   Severity: high. Likelihood: medium.
-   Mitigation: document the Fluent-safe identifier contract on every new public
-   item with a `# Panics` section; add a `#[should_panic]` negative test at the
-   trait/free-function level; record the panic-as-contract decision and tie its
-   acceptability to 11.1.3's compile-time `compile_error!` guard (Decision Log
-   D-5, ADR-006 amendment).
+   itself never panics on a valid command definition. Severity: high.
+   Likelihood: medium. Mitigation: document the Fluent-safe identifier contract
+   on every new public item with a `# Panics` section; add a `#[should_panic]`
+   negative test at the trait/free-function level; record the panic-as-contract
+   decision and tie its acceptability to 11.1.3's compile-time `compile_error!`
+   guard (Decision Log D-5, ADR-006 amendment).
 2. Risk: the migration silently drops the load-bearing `.with_cmd(&command)`
    enrichment on the `from_arg_matches` error path, degrading the
    missing-subcommand translation (it loses `valid_subcommands`). The two error
-   paths are asymmetric.
-   Severity: medium. Likelihood: medium.
-   Mitigation: keep `.with_cmd` in the free function; add a test asserting a
+   paths are asymmetric. Severity: medium. Likelihood: medium. Mitigation: keep
+   `.with_cmd` in the free function; add a test asserting a
    `from_arg_matches`-originated error still carries `valid_subcommands`.
 3. Risk: inherent methods on `CommandLine` silently shadow the blanket trait
    methods (inherent wins) with incompatible signatures, so the promotion
-   becomes a no-op for the example and the old behaviour persists.
-   Severity: medium. Likelihood: medium.
-   Mitigation: delete every inherent `try_parse_localized*` method on
-   `CommandLine`; the example's primary path uses the free function (custom
-   base), and a crate-level fixture exercises the trait.
+   becomes a no-op for the example and the old behaviour persists. Severity:
+   medium. Likelihood: medium. Mitigation: delete every inherent
+   `try_parse_localized*` method on `CommandLine`; the example's primary path
+   uses the free function (custom base), and a crate-level fixture exercises
+   the trait.
 4. Risk: snapshot tests assert text only, not exit code or stream, so a
-   regression to exit code or stderr could pass.
-   Severity: low. Likelihood: low.
-   Mitigation: add explicit `success()`/exit-code and stdout assertions for
+   regression to exit code or stderr could pass. Severity: low. Likelihood:
+   low. Mitigation: add explicit `success()`/exit-code and stdout assertions for
    `--help`/`--version`.
 5. Risk: the example's `main.rs` and tests destructure a named
    `ParsedCommandLine`; replacing it with a tuple touches several call sites.
-   Severity: low. Likelihood: high.
-   Mitigation: the migration sites are fully enumerated in "Plan of work";
-   `(cli, matches)` binding names match the old field names.
+   Severity: low. Likelihood: high. Mitigation: the migration sites are fully
+   enumerated in "Plan of work"; `(cli, matches)` binding names match the old
+   field names.
 
 ## Progress
 
-- [ ] (pending approval) Milestone 0: design-doc and ADR reconciliation.
-- [ ] Milestone 1: red tests for the free function and blanket trait
+- [x] (2026-06-15) Milestone 0: design-doc and ADR reconciliation.
+- [x] (2026-06-15) Milestone 1: red tests for the free function and blanket
+      trait
   (crate-level), failing for the expected reasons.
-- [ ] Milestone 2: implement `parse_localized_command` free function and the
+- [x] (2026-06-15) Milestone 2: implement `parse_localized_command` free
+      function and the
   `LocalizedParse` blanket trait; re-export both.
-- [ ] Milestone 3: identifier-coverage test and panic/negative tests.
+- [x] (2026-06-15) Milestone 3: identifier-coverage test and panic/negative tests.
 - [ ] Milestone 4: migrate `examples/hello_world` onto the free function;
   delete inherent methods and `ParsedCommandLine`.
 - [ ] Milestone 5: documentation sweep (users' guide, developers' guide,
@@ -172,7 +170,31 @@ commit. Run gates sequentially (build caching), never in parallel.
 
 ## Surprises & discoveries
 
-- Observation: (to be filled during implementation).
+- Observation: 2026-06-15 initial implementation pass started on branch
+  `11-1-2-promote-try-parse-localized-to-a-generic-blanket-trait`; the worktree
+  was clean before edits and the branch was already task-named.
+- Observation: 2026-06-15 red run
+  `cargo test -p ortho_config --test localized_parse` failed for the expected
+  missing root exports (`LocalizedParse`, `parse_localized_command`) before the
+  implementation existed. The test double also exposed that `FluentValue` does
+  not implement `Display`; the localizer test now formats that diagnostic-only
+  value with `Debug`.
+- Observation: 2026-06-15 green run
+  `cargo test -p ortho_config --test localized_parse` passed with 6 tests. The
+  identifier coverage expectation is intentionally built with
+  `message_id_for(...)` rather than hand-normalised literals so the test locks
+  the runtime lookup set to the public helper.
+- Observation: 2026-06-15 milestone gates passed after implementation:
+  `make check-fmt`, `make typecheck`, `make lint`, and `make test`. Logs are
+  under `/tmp/*-ortho-config-11-1-2-promote-try-parse-localized-to-a-generic-blanket-trait.out`.
+- Observation: 2026-06-15 `coderabbit review --agent` was attempted twice
+  after the milestone gates. Both invocations connected and then stalled at
+  `preparing_sandbox` with no findings or rate-limit message; logs are
+  `/tmp/coderabbit-ortho-config-11-1-2-promote-try-parse-localized-to-a-generic-blanket-trait-milestone-2.out`
+  and
+  `/tmp/coderabbit-ortho-config-11-1-2-promote-try-parse-localized-to-a-generic-blanket-trait-milestone-2-retry.out`.
+  The stalled local processes were terminated before continuing so no orphaned
+  task remains from this milestone.
 
 ## Decision log
 
@@ -183,8 +205,8 @@ commit. Run gates sequentially (build caching), never in parallel.
   deletes the multi-segment base demonstration that 11.1.3's
   `OrthoConfigLocalization` derive depends on, and contradicts the existing
   users' guide guidance and ADR-006. The free function (D-2) lets the example
-  drop the copy-pasted glue *without* abandoning its base.
-  Date/Author: 2026-06-14, planning session (logisphere-experts panel).
+  drop the copy-pasted glue *without* abandoning its base. Date/Author:
+  2026-06-14, planning session (logisphere-experts panel).
 
 - Decision (D-2): **Ship a base-agnostic public free function as the
   load-bearing primitive; the blanket trait is a thin default-base convenience
@@ -214,21 +236,22 @@ commit. Run gates sequentially (build caching), never in parallel.
   derive (parsing is uniform across types, so a blanket impl dominates).
   Date/Author: 2026-06-14, planning session.
 
-- Decision (D-3): **Trait shape and signatures.** `pub trait LocalizedParse:
-  clap::Parser` (no redundant `+ Sized`; `Parser: Sized` already), three
-  methods with default bodies, empty blanket impl `impl<P: clap::Parser>
-  LocalizedParse for P {}` (itertools precedent). Methods take `localizer:
-  &dyn Localizer` (matches the crate-wide convention; avoids monomorphization
-  with no benefit). `*_with_matches` returns the tuple `(Self, ArgMatches)`
-  (value first, mirroring clap), not a named wrapper struct. Use
-  `from_arg_matches` (borrow), not `from_arg_matches_mut`, so the matches stay
-  returnable. Rationale: Telefono contract review.
-  Date/Author: 2026-06-14, planning session.
+- Decision (D-3): **Trait shape and signatures.**
+  `pub trait LocalizedParse: clap::Parser` (no redundant `+ Sized`;
+  `Parser: Sized` already), three
+  methods with default bodies, empty blanket impl
+  `impl<P: clap::Parser> LocalizedParse for P {}` (itertools precedent).
+  Methods take `localizer: &dyn Localizer` (matches the crate-wide convention;
+  avoids monomorphization with no benefit). `*_with_matches` returns the tuple
+  `(Self, ArgMatches)` (value first, mirroring clap), not a named wrapper
+  struct. Use `from_arg_matches` (borrow), not `from_arg_matches_mut`, so the
+  matches stay returnable. Rationale: Telefono contract review. Date/Author:
+  2026-06-14, planning session.
 
 - Decision (D-4): **Identifier-coverage test interpretation.** The roadmap
   wording "compare derive-emitted identifiers with `message_id_for` output
-  across a fixture command tree" is read, for 11.1.2, as: the *derive* is
-  clap's `#[derive(Parser)]` (which emits the command tree); OrthoConfig's
+  across a fixture command tree" is read, for 11.1.2, as: the *derive* is clap's
+  `#[derive(Parser)]` (which emits the command tree); OrthoConfig's
   identifier-emitting derive arrives in 11.1.3. The test builds a fixture
   `#[derive(Parser)]` tree, localizes it with a recording `Localizer` that
   captures every `lookup(id, _)` call, and asserts the recorded identifier set
@@ -237,18 +260,18 @@ commit. Run gates sequentially (build caching), never in parallel.
   lookups to the public identifier contract and guards the 11.1.3 transition.
   Date/Author: 2026-06-14, planning session.
 
-- Decision (D-5): **Panic-as-contract, tied to 11.1.3.** `parse_localized_command`
+- Decision (D-5): **Panic-as-contract, tied to 11.1.3.**
+  `parse_localized_command`
   and the `LocalizedParse` methods inherit `LocalizeCmd::localize`'s panic on
   Fluent-unsafe or colliding identifiers. We keep the panic (an illegal
-  identifier is a command-declaration bug, per ADR-006 and
-  `identifier.rs`'s module doc) rather than introducing a fallible `try_*`
-  variant in 11.1.2. We document it loudly and note the ordering risk: until
-  11.1.3 lands the compile-time `compile_error!` guard, 11.1.2 ships a runtime
-  panic with no compile-time check. ADR-006 is amended to record that the
-  blanket trait widens the reachable panic surface to every `clap::Parser`.
-  Rationale: Doggylump failure-mode review. A fallible variant is recorded as
-  possible future work, out of scope here.
-  Date/Author: 2026-06-14, planning session.
+  identifier is a command-declaration bug, per ADR-006 and `identifier.rs`'s
+  module doc) rather than introducing a fallible `try_*` variant in 11.1.2. We
+  document it loudly and note the ordering risk: until 11.1.3 lands the
+  compile-time `compile_error!` guard, 11.1.2 ships a runtime panic with no
+  compile-time check. ADR-006 is amended to record that the blanket trait
+  widens the reachable panic surface to every `clap::Parser`. Rationale:
+  Doggylump failure-mode review. A fallible variant is recorded as possible
+  future work, out of scope here. Date/Author: 2026-06-14, planning session.
 
 ## Outcomes & retrospective
 
@@ -258,16 +281,16 @@ To be completed at milestone boundaries and on completion.
 
 You are working in the `ortho_config` workspace. The relevant crates are
 `ortho_config` (the library) and `examples/hello_world` (a demonstration
-binary). The workspace builds with a `Makefile`; the gates are `make
-check-fmt`, `make typecheck`, `make lint`, and `make test`. Run them
-sequentially to benefit from build caching; never run them in parallel.
+binary). The workspace builds with a `Makefile`; the gates are `make check-fmt`,
+`make typecheck`, `make lint`, and `make test`. Run them sequentially to
+benefit from build caching; never run them in parallel.
 
 Key terms:
 
 1. **Localizer** — `ortho_config::Localizer`, an object-safe `Send + Sync`
    trait with `lookup(&self, id, args) -> Option<String>`. Returning `None`
-   means "no translation"; callers fall back to clap's stock English.
-   Defined in `ortho_config/src/localizer/mod.rs`.
+   means "no translation"; callers fall back to clap's stock English. Defined in
+   `ortho_config/src/localizer/mod.rs`.
 2. **`LocalizeCmd`** — extension trait on `clap::Command` (shipped in 11.1.1).
    `localize(self, &dyn Localizer) -> Command` walks the command tree and
    replaces metadata (about, long_about, usage, version, after_help, per-arg
@@ -278,15 +301,17 @@ Key terms:
    `ortho_config/src/localizer/clap_command/mod.rs`.
 3. **`message_id_for(command_path, suffix) -> String`** — the public identifier
    builder. Normalizes each segment to lowercase ASCII `[A-Za-z0-9_-]`, joins
-   with `-`, and **panics** on an unrepresentable segment or a non-letter-initial
-   identifier. Defined in `ortho_config/src/localizer/identifier.rs`.
-4. **`localize_clap_error_with_command(err, &dyn Localizer, Some(&Command)) ->
-   clap::Error`** — rewrites a clap error's message via the localizer while
-   preserving its `ErrorKind` (it rebuilds with `clap::Error::raw(err.kind(),
-   message)`), and returns the error unchanged for `DisplayHelp`/`DisplayVersion`
-   and when no translation differs from the stock text. Defined in
-   `ortho_config/src/localizer/clap_error.rs`. It is idempotent by construction
-   (translated == fallback → early return).
+   with `-`, and **panics** on an unrepresentable segment or a
+   non-letter-initial identifier. Defined in
+   `ortho_config/src/localizer/identifier.rs`.
+4. **
+   `localize_clap_error_with_command(err, &dyn Localizer, Some(&Command)) -> clap::Error`
+   ** — rewrites a clap error's message via the localizer while
+   preserving its `ErrorKind` (it rebuilds with
+   `clap::Error::raw(err.kind(), message)`), and returns the error unchanged for
+   `DisplayHelp`/`DisplayVersion` and when no translation differs from the
+   stock text. Defined in `ortho_config/src/localizer/clap_error.rs`. It is
+   idempotent by construction (translated == fallback → early return).
 5. **`is_display_request(&clap::Error) -> bool`** — true for `DisplayHelp` and
    `DisplayVersion`. The example calls `err.exit()` on these so help/version
    exit `0` to stdout. Defined in `ortho_config/src/error/helpers.rs`,
@@ -295,16 +320,16 @@ Key terms:
 The clap 4.5.60 facts this plan relies on (verified against the resolved
 source): `Parser: FromArgMatches + CommandFactory + Sized`;
 `CommandFactory::command() -> Command`;
-`Command::try_get_matches_from_mut(&mut self, itr) -> Result<ArgMatches,
-Error>` where `itr: IntoIterator<Item = T>, T: Into<OsString> + Clone`;
+`Command::try_get_matches_from_mut(&mut self, itr) -> Result<ArgMatches, Error>`
+where `itr: IntoIterator<Item = T>, T: Into<OsString> + Clone`;
 `FromArgMatches::from_arg_matches(&ArgMatches) -> Result<Self, Error>`;
 `Error::with_cmd(self, &Command) -> Self` preserves the kind.
 
-The current example glue to be replaced is `examples/hello_world/src/cli/mod.rs`
-lines 60–123 (the `ParsedCommandLine` struct and the three inherent methods),
-its single thin wrapper `localize_parse_error` in
-`examples/hello_world/src/cli/localization.rs`, and the call sites in
-`examples/hello_world/src/main.rs` (lines 8, 19, 43–45) and
+The current example glue to be replaced is
+`examples/hello_world/src/cli/mod.rs` lines 60–123 (the `ParsedCommandLine`
+struct and the three inherent methods), its single thin wrapper
+`localize_parse_error` in `examples/hello_world/src/cli/localization.rs`, and
+the call sites in `examples/hello_world/src/main.rs` (lines 8, 19, 43–45) and
 `examples/hello_world/src/cli/tests/localisation.rs` (lines 51, 57, 77).
 
 Signposted documentation and skills:
@@ -322,9 +347,9 @@ Signposted documentation and skills:
    `docs/complexity-antipatterns-and-refactoring-strategies.md`.
 4. Skills: `rust-router` then `rust-types-and-apis` (trait/blanket-impl design)
    and `arch-crate-design` (public-surface/re-export placement);
-   `rust-unit-testing` (rstest fixtures, table tests, googletest/insta);
-   `leta` for navigation and the example migration; `arch-decision-records`
-   for the ADR-006 amendment; `pr-creation` for the draft PR.
+   `rust-unit-testing` (rstest fixtures, table tests, googletest/insta); `leta`
+   for navigation and the example migration; `arch-decision-records` for the
+   ADR-006 amendment; `pr-creation` for the draft PR.
 
 ## Plan of work
 
@@ -393,8 +418,9 @@ Write these tests (each must fail to compile or assert before Stage C):
    `version`, `long_version`, `after_help`, `after_long_help`,
    `args.config.help|long_help|value_name`; recursively for the `greet`
    subcommand). See Decision D-4.
-6. `fluent_unsafe_identifier_panics` (`#[should_panic(expected = "invalid
-   Fluent identifier segment")]`): a fixture with `#[arg(id = "bad.id")]`
+6. `fluent_unsafe_identifier_panics`
+   (`#[should_panic(expected = "invalid Fluent identifier segment")]`): a
+   fixture with `#[arg(id = "bad.id")]`
    parsed through the trait must panic, pinning the panic contract (D-5).
 
 Use `rstest` fixtures for the localizer doubles, `pretty_assertions` for
@@ -404,8 +430,8 @@ helpers, place them in the test file (or `ortho_config/tests/support/` if an
 existing support module is the better home — check
 `ortho_config/tests/support/localizers.rs`). No `proptest`/`kani`/`verus` is
 warranted here: the new surface is thin glue over already-property-tested
-identifier logic; the invariants are covered by the coverage test and the
-panic test.
+identifier logic; the invariants are covered by the coverage test and the panic
+test.
 
 Go/no-go: `make test` shows the six new tests failing for the expected reasons
 (missing symbol, then assertion). Commit the red tests.
@@ -461,19 +487,19 @@ Go/no-go: `make test` shows the six new tests failing for the expected reasons
    ```
 
    Document every item. Each method and the free function gets a `# Panics`
-   section pointing at the Fluent-safe identifier contract (D-5) and a `#
-   Errors` section. The trait gets a runnable doctest showing the zero-config
-   common case (a small `#[derive(Parser)]` plus a `NoOpLocalizer`, asserting it
-   parses). Keep doctests DRY per `docs/rust-doctest-dry-guide.md`.
+   section pointing at the Fluent-safe identifier contract (D-5) and a
+   `# Errors` section. The trait gets a runnable doctest showing the
+   zero-config common case (a small `#[derive(Parser)]` plus a `NoOpLocalizer`,
+   asserting it parses). Keep doctests DRY per `docs/rust-doctest-dry-guide.md`.
 2. Wire the module: add `mod parse;` (or `pub use` as appropriate) in
    `ortho_config/src/localizer/clap_command/mod.rs`, re-export `LocalizedParse`
    and `parse_localized_command` from `ortho_config/src/localizer/mod.rs`, and
    add both to the single existing `pub use localizer::{ … }` block in
-   `ortho_config/src/lib.rs` (lines 118–122) — do not start a second
-   re-export statement.
+   `ortho_config/src/lib.rs` (lines 118–122) — do not start a second re-export
+   statement.
 
-Go/no-go: the Stage B tests 1–5 now pass; test 6 (panic) passes. `make
-check-fmt typecheck lint test` is green. Commit.
+Go/no-go: the Stage B tests 1–5 now pass; test 6 (panic) passes.
+`make check-fmt typecheck lint test` is green. Commit.
 
 ### Stage D — example migration (Milestone 4)
 
@@ -484,11 +510,11 @@ check-fmt typecheck lint test` is green. Commit.
    they become orphaned.
 2. In `examples/hello_world/src/cli/localization.rs`: delete the
    `localize_parse_error` wrapper; the crate's `parse_localized_command` now
-   owns the error glue. Keep the `pub use ortho_config::LocalizeCmd;`
-   re-export if other modules rely on it; otherwise remove.
+   owns the error glue. Keep the `pub use ortho_config::LocalizeCmd;` re-export
+   if other modules rely on it; otherwise remove.
 3. In `examples/hello_world/src/main.rs`: keep the private `parse_command_line`
-   helper but have it call the free function with the example's custom base, and
-   return a tuple:
+   helper but have it call the free function with the example's custom base,
+   and return a tuple:
 
    ```rust,ignore
    fn parse_command_line() -> Result<(CommandLine, clap::ArgMatches)> {
@@ -510,15 +536,17 @@ check-fmt typecheck lint test` is green. Commit.
    Update the caller (`let (cli, matches) = parse_command_line()?;`) and remove
    `ParsedCommandLine` from the `use` on line 8.
 4. In `examples/hello_world/src/cli/tests/localisation.rs`: replace the three
-   `try_parse_localized` call sites with `parse_localized_command::<CommandLine,
-   _, _>(CommandLine::command().with_base("hello_world.cli").localize(&loc),
-   args, &loc)`, destructuring `(cli, _)` where the test inspects `cli.command`.
-   The two error-path tests (lines 57, 77) only call `.expect_err()` and need
-   only the call-shape update.
+   `try_parse_localized` call sites with
+   `parse_localized_command::<CommandLine, _, _>(
+   CommandLine::command().with_base("hello_world.cli").localize(&loc), args,
+   &loc)`,
+   destructuring `(cli, _)` where the test inspects `cli.command`. The two
+   error-path tests (lines 57, 77) only call `.expect_err()` and need only the
+   call-shape update.
 
 Go/no-go: `make test` (workspace, including `examples/hello_world`) is green;
-the `localised_help.rs` snapshots and BDD scenarios are unchanged (Constraint 2;
-Tolerance 4). Commit.
+the `localised_help.rs` snapshots and BDD scenarios are unchanged (Constraint
+2; Tolerance 4). Commit.
 
 ### Stage E — failure-mode hardening and docs (Milestone 5)
 
