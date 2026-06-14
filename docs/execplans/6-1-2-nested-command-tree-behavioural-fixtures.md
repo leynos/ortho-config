@@ -5,7 +5,7 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
 proceeds.
 
-Status: IN PROGRESS
+Status: COMPLETE
 
 This plan covers roadmap item 6.1.2 only. It builds on roadmap item 6.1.1
 (see `docs/execplans/6-1-1-recursive-doc-metadata-subcommands-values.md`),
@@ -1256,8 +1256,8 @@ section must always reflect the actual current state of the work.
 - [x] (2026-06-04) Milestone 5 complete (documentation, changelog,
   schema round-trip fixture, roadmap entry, full gates, and CodeRabbit
   clear).
-- [ ] Draft pull request moved to ready-for-review.
-- [ ] Pull request merged into `main`.
+- [x] (2026-06-14) Draft pull request moved to ready-for-review (PR #340).
+- [x] (2026-06-14) Pull request merged into `main` (PR #340).
 
 Use timestamps to detect tolerance breaches and to feed retrospectives.
 
@@ -1486,6 +1486,22 @@ what would be done differently next time.
   nested-fixture coverage. The focused schema test passed, followed by
   `make check-fmt`, `make lint`, `make test`, `make markdownlint`, and
   `make nixie`. `coderabbit review --agent` reported zero findings.
+- 2026-06-14: Plan complete. All five milestones landed on `main` via
+  PR #340 ("Nested command tree behavioural fixtures (6.1.2)"), merged on
+  2026-06-14. The roadmap entry 6.1.2 and its three sub-bullets are marked
+  done. Measured against the original purpose, the plan delivered: the
+  `NestedDocsConfig` behavioural fixture, recursive `rstest` IR assertions,
+  rstest-bdd scenarios, roff/`PowerShell`/MAML renderer compatibility
+  coverage, `insta` golden snapshots, an end-to-end bridge smoke test, and
+  the schema round-trip and documentation updates — all without an IR
+  schema change or new public API, staying inside the stated tolerances.
+  Deferred work surfaced during implementation (parent-to-child
+  `WindowsMetadata` propagation; normalising the pre-existing BDD-harness
+  Clippy debt behind the newly registered `rstest_bdd` target) was recorded
+  for a future roadmap item rather than expanded into this one. Lesson for
+  next time: register dormant integration-test targets early — the
+  `rstest_bdd` target gap (see "Surprises & discoveries") meant the
+  behavioural suite was not observable under `make test` until Milestone 2.
 
 ## Notes for the accompanying draft pull request
 
@@ -1528,3 +1544,7 @@ remaining work.
 - 2026-06-04 (implementer): recorded Milestone 5 documentation,
   schema round-trip, roadmap close-out, validation, and CodeRabbit
   review outcome.
+- 2026-06-14 (implementer): set `Status` to `COMPLETE`, checked the
+  remaining Progress items, and added the completion entry to
+  `Outcomes & retrospective` after PR #340 merged the full plan into
+  `main`.
