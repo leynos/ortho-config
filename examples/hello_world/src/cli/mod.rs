@@ -5,8 +5,8 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
-use clap::{ArgAction, Args, CommandFactory, FromArgMatches, Parser, Subcommand};
-use ortho_config::{Localizer, OrthoConfig, OrthoConfigSubcommandDocs};
+use clap::{ArgAction, Args, Parser, Subcommand};
+use ortho_config::{OrthoConfig, OrthoConfigSubcommandDocs};
 use serde::{Deserialize, Serialize};
 
 use crate::error::ValidationError;
@@ -17,8 +17,6 @@ mod global_config;
 mod localization;
 mod overrides;
 
-use self::localization::localize_parse_error;
-
 #[cfg(test)]
 pub(crate) use self::config_loading::load_config_overrides;
 pub use commands::{FarewellChannel, GreetCommand, TakeLeaveCommand};
@@ -26,7 +24,7 @@ pub use global_config::{apply_greet_overrides, load_global_config, load_greet_de
 /// Extension trait for applying localisation to a [`clap::Command`] tree.
 ///
 /// Re-exported to allow consumers to localise CLI metadata (about, help, usage)
-/// using a [`Localizer`] implementation.
+/// using a [`ortho_config::Localizer`] implementation.
 pub use localization::LocalizeCmd;
 #[cfg(test)]
 pub(crate) use overrides::{CommandOverrides, FileOverrides, GreetOverrides};
@@ -55,71 +53,6 @@ pub struct CommandLine {
     /// Selected workflow to execute.
     #[command(subcommand)]
     pub command: Commands,
-}
-
-/// Result of parsing command-line arguments, including the raw matches.
-#[derive(Debug)]
-pub struct ParsedCommandLine {
-    /// The parsed command-line structure.
-    pub cli: CommandLine,
-    /// The raw argument matches for subcommand CLI extraction.
-    pub matches: clap::ArgMatches,
-}
-
-impl CommandLine {
-    /// Parses command-line arguments using the supplied localizer.
-    ///
-    /// # Errors
-    ///
-    /// Returns a [`clap::Error`] when parsing fails.
-    pub fn try_parse_localized_env(localizer: &dyn Localizer) -> Result<Self, clap::Error> {
-        Self::try_parse_localized(std::env::args_os(), localizer).map(|parsed| parsed.cli)
-    }
-
-    /// Parses command-line arguments, returning both the struct and matches.
-    ///
-    /// This variant is useful when you need access to `ArgMatches` for
-    /// features like `cli_default_as_absent`.
-    ///
-    /// # Errors
-    ///
-    /// Returns a [`clap::Error`] when parsing fails.
-    pub fn try_parse_localized_with_matches_env(
-        localizer: &dyn Localizer,
-    ) -> Result<ParsedCommandLine, clap::Error> {
-        Self::try_parse_localized(std::env::args_os(), localizer)
-    }
-
-    /// Parses the provided iterator of arguments using the supplied localizer.
-    ///
-    /// Returns both the parsed struct and the raw `ArgMatches` for use with
-    /// `load_and_merge_with_matches`.
-    ///
-    /// # Errors
-    ///
-    /// Returns a [`clap::Error`] when parsing fails. Errors are localized via
-    /// [`ortho_config::localize_clap_error_with_command`], falling back to the
-    /// stock `clap` message when a translation is unavailable.
-    pub fn try_parse_localized<I, T>(
-        iter: I,
-        localizer: &dyn Localizer,
-    ) -> Result<ParsedCommandLine, clap::Error>
-    where
-        I: IntoIterator<Item = T>,
-        T: Into<std::ffi::OsString> + Clone,
-    {
-        let mut command = Self::command()
-            .with_base("hello_world.cli")
-            .localize(localizer);
-        let matches = command
-            .try_get_matches_from_mut(iter)
-            .map_err(|err| localize_parse_error(err, localizer, &command))?;
-        let cli = Self::from_arg_matches(&matches).map_err(|parse_err| {
-            let err_with_command = parse_err.with_cmd(&command);
-            localize_parse_error(err_with_command, localizer, &command)
-        })?;
-        Ok(ParsedCommandLine { cli, matches })
-    }
 }
 
 #[expect(

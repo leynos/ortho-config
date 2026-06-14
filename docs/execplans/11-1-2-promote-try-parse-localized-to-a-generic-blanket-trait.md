@@ -160,7 +160,7 @@ Stop and escalate (do not work around) when any of these is reached.
       function and the
   `LocalizedParse` blanket trait; re-export both.
 - [x] (2026-06-15) Milestone 3: identifier-coverage test and panic/negative tests.
-- [ ] Milestone 4: migrate `examples/hello_world` onto the free function;
+- [x] (2026-06-15) Milestone 4: migrate `examples/hello_world` onto the free function;
   delete inherent methods and `ParsedCommandLine`.
 - [ ] Milestone 5: documentation sweep (users' guide, developers' guide,
   design doc, README), final gates, CodeRabbit review, roadmap tick.
@@ -195,6 +195,18 @@ commit. Run gates sequentially (build caching), never in parallel.
   `/tmp/coderabbit-ortho-config-11-1-2-promote-try-parse-localized-to-a-generic-blanket-trait-milestone-2-retry.out`.
   The stalled local processes were terminated before continuing so no orphaned
   task remains from this milestone.
+- Observation: 2026-06-15 example migration deleted `ParsedCommandLine` and the
+  inherent `CommandLine::try_parse_localized*` helpers. The example now calls
+  `parse_localized_command` with
+  `CommandLine::command().with_base("hello_world.cli").localize(&localizer)` so
+  the existing catalogue keys and localized snapshots remain unchanged.
+  `cargo test -p hello_world` passed after the migration.
+- Observation: 2026-06-15 Milestone 4 gates passed: `make check-fmt`,
+  `make typecheck`, `make lint`, and `make test`.
+- Observation: 2026-06-15 CodeRabbit was attempted again after Milestone 4
+  gates and again stalled at `preparing_sandbox` without findings or a
+  rate-limit message. Log:
+  `/tmp/coderabbit-ortho-config-11-1-2-promote-try-parse-localized-to-a-generic-blanket-trait-milestone-4.out`.
 
 ## Decision log
 
