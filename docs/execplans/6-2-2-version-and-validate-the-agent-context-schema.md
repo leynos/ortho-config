@@ -5,7 +5,8 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
 proceeds.
 
-Status: DRAFT
+Status: DRAFT (revised after roadmap 6.1.2 landed on `main`; see the revision
+note at the end)
 
 ## Purpose / big picture
 
@@ -25,10 +26,12 @@ After this change a maintainer can observe success directly:
 1. Running `make test` passes, and a deliberate, accidental edit to any
    agent-context field name, enum wire string, or serialization attribute makes
    a named test fail (see `Validation and acceptance`).
-2. `cargo orthohelp --format agent-context --package <fixture>` produces JSON
-   that matches a committed golden snapshot for each of three fixtures
-   (`orthohelp_simple_fixture`, `orthohelp_enum_fixture`,
-   `orthohelp_nested_fixture`).
+2. `cargo orthohelp --format agent-context` produces JSON that matches a
+   committed golden snapshot for each of three command-tree shapes, all rooted
+   in the existing `orthohelp_fixture` crate and selected with `--root-type`:
+   a simple flat CLI (a new minimal `SimpleFixtureConfig`), a CLI with enum
+   values (the existing `FixtureConfig`, the crate's default root), and a nested
+   command tree (the `NestedFixtureConfig` added by roadmap 6.1.2).
 3. `docs/agent-native-cli-design.md` §8.2 states, in plain rules, what changes
    are additive (no version bump) versus breaking (version bump required), and
    `docs/developers-guide.md` tells a contributor how to evolve the schema.
@@ -196,16 +199,23 @@ recommendation unless the reviewer states otherwise.
 
 ## Risks
 
-1. Risk: The nested fixture is the first end-to-end exercise of 6.1.1's
-   recursive `DocMetadata.subcommands` → agent-context path (6.1.2's nested
-   behavioural fixtures are not yet done). It may surface generator or
-   path-construction bugs (for example root-vs-child `bin_name`/`app_name`
-   handling in `command_path`).
-   - Severity: medium. Likelihood: medium.
-   - Mitigation: Milestone 2/3 require an in-process structural assertion on the
-     nested tree (paths, ordering) to pass *before* any nested golden is
-     blessed. If a real bug appears and its fix exceeds Tolerance 3, escalate as
-     possible 6.1.x work rather than absorbing it silently.
+1. Risk: 6.2.2 is the first to run the *agent-context transform*
+   (`bridge_ir_to_agent_context`, with its `walk`/`command_path` recursion) over
+   a nested command tree. Roadmap 6.1.2 (now merged) validated the recursive
+   `DocMetadata.subcommands` IR and its roff/PowerShell/man rendering thoroughly,
+   but explicitly *not* the agent-context format. So the recursion is sound at
+   the IR layer; the residual risk is confined to the agent-context projection of
+   that tree (for example root-vs-child `bin_name`/`app_name` handling in
+   `command_path`, summary localization per node, and command/input sort order).
+   - Severity: low-medium (narrowed by 6.1.2). Likelihood: low-medium.
+   - Mitigation: Milestone 2 adds an in-process structural assertion on the
+     agent-context projection of a nested tree (expected paths, ordering) that
+     must pass *before* any nested golden is blessed. Reuse 6.1.2's nested
+     fixtures where possible (the `NestedFixtureConfig` crate type for the
+     end-to-end golden; the in-crate `define_nested_fixture!` /
+     `LocalizedDocMetadata` helper, or a hand-built `DocMetadata`, for the
+     in-process test). If a real bug appears and its fix exceeds Tolerance 3,
+     escalate as possible 6.1.x work rather than absorbing it silently.
 2. Risk: Default-display strings churn goldens on toolchain upgrades (D2).
    - Severity: medium. Likelihood: medium.
    - Mitigation: D2 normalization plus the "non-normative display" policy.
@@ -217,12 +227,14 @@ recommendation unless the reviewer states otherwise.
      `agent_context::tests` are (they already use `serde_json` under default
      features); verify with `cargo test -p ortho_config` (default features) that
      they run.
-4. Risk: Adding three workspace fixture crates slows the build and the
-   shell-out golden tests (each compiles an ephemeral bridge crate).
+4. Risk: The shell-out golden tests are slow (each compiles an ephemeral bridge
+   crate that builds the fixture crate).
    - Severity: low. Likelihood: high.
-   - Mitigation: keep fixtures *minimal*; push most assertions to cheap
-     in-process tests on `bridge_ir_to_agent_context`; reserve exactly one
-     shell-out golden per fixture as an end-to-end smoke (see test matrix).
+   - Mitigation: reuse the existing `orthohelp_fixture` crate (add only one
+     minimal root type rather than new crates, so no new crate enters the
+     workspace build); push most assertions to cheap in-process tests on
+     `bridge_ir_to_agent_context`; reserve exactly one shell-out golden per root
+     type as an end-to-end smoke (see test matrix).
 5. Risk: Documentation drift — a hand-authored per-field schema table would rot
    against the Rust source.
    - Severity: medium. Likelihood: high if attempted.
@@ -236,7 +248,9 @@ recommendation unless the reviewer states otherwise.
 - [ ] Milestone 1: schema shape and version guards in `ortho_config`.
 - [ ] Milestone 2: generator determinism property + default-display policy in
       `cargo-orthohelp`, plus in-process nested structural assertions.
-- [ ] Milestone 3: three minimal golden fixtures (simple / enum / nested) and
+- [ ] Milestone 3: three golden roots (simple / enum / nested) in the existing
+      `orthohelp_fixture` crate — add a minimal `SimpleFixtureConfig`, reuse
+      `FixtureConfig` (enum) and 6.1.2's `NestedFixtureConfig` (nested) — plus
       the parametrized golden + nested BDD scenario.
 - [ ] Milestone 4: include agent-context in `--format all` (if D3 approved).
 - [ ] Milestone 5: documentation — §8.2 policy, §8.1 reconciliation, ADR-003
@@ -256,27 +270,57 @@ cleared before the next milestone. Commit after each green milestone.
   deserialization guards, and a per-variant `MutationEffect` wire-value test.
   Impact: 6.2.2 is mostly *extending* existing modules, not greenfield work;
   the plan must audit and extend rather than duplicate.
-- Observation: `orthohelp_fixture` is a single flat command (no subcommands);
-  the earlier impression that it exercised `OrthoConfigSubcommandDocs` was
-  wrong.
-  Evidence: `tests/fixtures/orthohelp_fixture/src/lib.rs` declares no
-  `#[command(subcommand)]` field.
-  Impact: the nested fixture genuinely is the first end-to-end nested exercise
-  (Risk 1).
+- Observation: Roadmap 6.1.2 ("Nested command tree behavioural fixtures",
+  commit `5073b6d`, PR #340) merged to `main` while this plan was in draft, and
+  was picked up by a rebase. It added a real nested clap tree
+  (`NestedFixtureConfig` and its subcommand enums) *to the existing*
+  `orthohelp_fixture` crate, a hand-built in-crate nested IR
+  (`define_nested_fixture!` / `LocalizedDocMetadata` in
+  `cargo-orthohelp/src/test_support/nested_fixture.rs`), behavioural nested IR
+  fixtures in `ortho_config/tests/rstest_bdd/`, and roff/PowerShell/IR nested
+  golden snapshots.
+  Evidence: `git show 5073b6d --stat`; `tests/fixtures/orthohelp_fixture/src/lib.rs`
+  now defines `NestedFixtureConfig` alongside the original flat `FixtureConfig`;
+  `cargo-orthohelp/tests/nested_subcommand_end_to_end.rs` drives the binary with
+  `--root-type orthohelp_fixture::NestedFixtureConfig`.
+  Impact: this plan no longer needs to author new fixture crates. It reuses
+  `NestedFixtureConfig` for the nested golden via `--root-type`, reuses the flat
+  `FixtureConfig` (the crate's default root) for the enum golden, and adds only
+  a minimal `SimpleFixtureConfig` root for the simple golden. See the revised
+  Decision Log and Milestone 3.
+- Observation: 6.1.2 covers the nested tree only for IR, roff, and PowerShell —
+  *not* the agent-context format.
+  Evidence: `nested_subcommand_end_to_end.rs` and
+  `tests/golden/nested_subcommand_snapshots.rs` invoke `--format ir|man|ps`
+  only; no nested test calls `bridge_ir_to_agent_context` or
+  `--format agent-context`.
+  Impact: 6.2.2 is still the first to exercise the agent-context transform over
+  a nested tree, but the underlying recursion is now well-tested, narrowing
+  Risk 1.
 
 ## Decision log
 
-- Decision: Three *new minimal* fixtures (`orthohelp_simple_fixture`,
-  `orthohelp_enum_fixture`, `orthohelp_nested_fixture`), each isolating one
-  axis; keep the existing kitchen-sink `orthohelp_fixture` golden as a bonus
-  regression, not as one of the three named fixtures.
-  Rationale: the roadmap names three fixture *types*. The architecture reviewer
-  preferred reusing the existing flat fixture; the test reviewer warned the
-  kitchen-sink fixture conflates "enum" with "everything" and drifts on
-  unrelated edits. Minimal isolated fixtures satisfy the literal roadmap
-  requirement *and* give stable, single-axis goldens; the marginal cost of one
-  extra tiny crate is acceptable under "measure twice, cut once".
-  Date/Author: 2026-06-14, planning (community-of-experts synthesis).
+- Decision (SUPERSEDED 2026-06-15): originally, three *new* minimal fixture
+  crates (`orthohelp_simple_fixture`, `orthohelp_enum_fixture`,
+  `orthohelp_nested_fixture`). Superseded because roadmap 6.1.2 landed a reusable
+  nested fixture and established the multi-root-per-crate convention; see the next
+  entry.
+- Decision: Use three golden *root types* within the existing `orthohelp_fixture`
+  crate, selected via `--root-type`, rather than new fixture crates: add a
+  minimal `SimpleFixtureConfig` (flat, scalars only, no enum) for the simple
+  case; reuse the existing `FixtureConfig` (the crate's default root, which has
+  the `LogLevel` enum and an existing agent-context golden) for the enum case;
+  reuse 6.1.2's `NestedFixtureConfig` for the nested case.
+  Rationale: 6.1.2 established the multi-root pattern
+  (`--root-type orthohelp_fixture::NestedFixtureConfig`) and already ships a real
+  nested tree, so authoring new crates would duplicate it and add workspace build
+  cost for no benefit. Reusing root types keeps the three golden shapes isolated
+  (each is a distinct root) while matching the now-canonical convention. The
+  simple case still needs a *new* minimal root because `FixtureConfig` carries an
+  enum and many fields and is not "simple"; adding one small struct to an existing
+  crate is far cheaper than a new crate and needs no `Cargo.toml`/`members`
+  change.
+  Date/Author: 2026-06-15, planning (revised after 6.1.2 rebase).
 - Decision: Dependency-free shape guard (insta snapshot + variant-exhaustive
   wire-value tests + version pin); no `schemars`.
   Rationale: a byte-exact snapshot is strictly stronger than a permissive JSON
@@ -301,8 +345,26 @@ A reader new to this repository needs these anchors.
 The workspace (`Cargo.toml`) contains `ortho_config` (the library that owns the
 schema), `ortho_config_macros` (the derive macro), `cargo-orthohelp` (the CLI
 tool / adapter that generates output), `test_helpers`, the
-`examples/hello_world` crate, and `tests/fixtures/orthohelp_fixture` (an
-existing fixture crate). New fixtures join the `members` list here.
+`examples/hello_world` crate, and `tests/fixtures/orthohelp_fixture` (the single
+existing fixture crate). This plan adds *no* new workspace member: the three
+golden roots all live in `orthohelp_fixture`.
+
+Nested fixtures (added by roadmap 6.1.2, PR #340): the `orthohelp_fixture` crate
+now defines a real nested clap tree, `NestedFixtureConfig`
+(`tests/fixtures/orthohelp_fixture/src/lib.rs`), alongside the original flat
+`FixtureConfig`. The tree is `nested-app` → `greet` / `version` / `admin`, with
+`admin` → `audit` / `grant-access` (a two-level tree with a leaf command that has
+no subcommands). It is selected at generation time with
+`--root-type orthohelp_fixture::NestedFixtureConfig`. The crate's default root
+(`[package.metadata.ortho_config] root_type`) is
+`orthohelp_fixture::FixtureConfig`, so the existing agent-context golden already
+covers the enum-bearing flat tree. For cheap in-process tests,
+`cargo-orthohelp/src/test_support/nested_fixture.rs` exposes a `pub(crate)`
+`define_nested_fixture!` macro producing a `LocalizedDocMetadata` value; note the
+agent-context transform takes `&DocMetadata`, so an in-process nested test either
+converts from that helper or hand-builds a small nested `DocMetadata` (as the
+existing proptests do via their `doc()` helper). 6.1.2 covers the nested tree for
+IR, roff, and PowerShell only — not agent-context.
 
 Schema types and the version constant:
 `ortho_config/src/agent_context/mod.rs` defines `AgentContext`,
@@ -419,13 +481,20 @@ stabilize default rendering. Work in
    Existing properties (unique paths, sorted commands/inputs, hidden-field
    omission) stay.
 2. **Nested structural assertions (in-process, the Red gate for Milestone 3).**
-   Add rstest unit tests that build a *nested* `DocMetadata` by hand (root with
-   subcommands, one two-level branch, one leaf with no subcommands, one enum
-   field) and assert the resulting `AgentContext`: expected `commands[].path`
-   values (including a two-segment path), canonical verbs, per-command inputs,
-   and that commands/inputs are sorted. These must pass before any nested golden
-   is blessed; if they cannot be made to pass, that indicates a 6.1.1/bridge bug
-   (Risk 1 / Tolerance 3).
+   Add rstest unit tests that drive `bridge_ir_to_agent_context` over a *nested*
+   `DocMetadata` (root with subcommands, one two-level branch, one leaf with no
+   subcommands, one enum field) and assert the resulting `AgentContext`: expected
+   `commands[].path` values (including a two-segment path), canonical verbs,
+   per-command inputs, and that commands/inputs are sorted. Prefer reusing
+   6.1.2's in-crate nested fixture
+   (`cargo-orthohelp/src/test_support/nested_fixture.rs`,
+   `define_nested_fixture!` → `LocalizedDocMetadata`) if a `DocMetadata` view is
+   available; otherwise hand-build a small nested `DocMetadata` as the existing
+   proptests do (`proptests.rs` `doc()` helper). These must pass before any
+   nested golden is blessed; if they cannot be made to pass, that indicates a bug
+   in the agent-context transform's recursion (Risk 1 / Tolerance 3) — note that
+   6.1.2 already validated the IR-level recursion, so any failure is likely
+   specific to `walk`/`command_path`.
 3. **Default-display normalization (D2).** Add a normalization step so the
    rendered `AgentInput.default` display is insensitive to `proc_macro2` token
    spacing (for example collapse the spaced `::` separator to a tight `::`),
@@ -439,44 +508,47 @@ the determinism property is inherently satisfied by construction, so instead
 prove the nested structural test fails first against an empty/flat tree, then
 passes against the nested tree.
 
-### Milestone 3 — golden fixtures (simple / enum / nested)
+### Milestone 3 — golden roots (simple / enum / nested)
 
-Goal: prove end-to-end generation across the three shapes the roadmap names.
+Goal: prove end-to-end generation across the three shapes the roadmap names,
+reusing the existing `orthohelp_fixture` crate and 6.1.2's nested fixture rather
+than authoring new crates.
 
-1. **Create three minimal fixture crates** under `tests/fixtures/`:
-   - `orthohelp_simple_fixture`: a flat struct with two or three scalar fields
-     (string, integer, bool); no enum; no subcommands.
-   - `orthohelp_enum_fixture`: one enum field (deriving `clap::ValueEnum`) plus
-     one scalar; no subcommands. Isolates the enum-rendering contract.
-   - `orthohelp_nested_fixture`: a root with `#[command(subcommand)]`, a
-     `clap::Subcommand` enum deriving `OrthoConfigSubcommandDocs` with at least
-     one nested level and one leaf command with no subcommands, and at least one
-     enum value, to exercise enum-in-subcommand and recursive `walk`.
-   Each `Cargo.toml` mirrors `tests/fixtures/orthohelp_fixture/Cargo.toml`
-   exactly: `publish = false`, `[lints] workspace = true`,
-   `rust-version.workspace = true`, matching `version` and path+version
-   `ortho_config` dependency, and `[package.metadata.ortho_config]` `root_type`.
-   Add each path to the workspace `members` list. The nested fixture's
-   `lib.rs` carries a doc-comment fencing scope: "used by 6.2.2 agent-context
-   goldens; roff/PowerShell/man render assertions over this crate belong to
-   6.1.2, not here."
+1. **Add one minimal root type** to `tests/fixtures/orthohelp_fixture/src/lib.rs`:
+   `SimpleFixtureConfig`, a flat struct with two or three scalar fields (string,
+   integer, bool), no enum, no subcommands. This is the only new fixture code;
+   no new crate, no `Cargo.toml` or workspace `members` change is needed. Add the
+   matching Fluent message keys to the crate's `locales/*/messages.ftl` as 6.1.2
+   did for its nested commands. The other two roots already exist:
+   - **enum**: `FixtureConfig` — the crate's default `root_type`, which carries
+     the `LogLevel` enum and already has a committed agent-context golden.
+   - **nested**: `NestedFixtureConfig` — 6.1.2's two-level tree, selected with
+     `--root-type orthohelp_fixture::NestedFixtureConfig`.
 2. **Parametrized golden test.** Refactor
    `cargo-orthohelp/tests/golden/agent_context_tests.rs` into an rstest
-   `#[case]` test over `(package_name, snapshot_name)` with the snapshot name
-   derived from the package (explicit coupling, not case index), covering the
-   three fixtures. Each commits its own `.snap`. Keep the existing
-   `orthohelp_fixture` golden as an additional case.
+   `#[case]` test over `(root_type, snapshot_name)` (snapshot name explicitly
+   coupled to the root, not case index), covering the three roots. Each commits
+   its own `.snap`. The simple and nested cases pass `--root-type`; the enum case
+   uses the crate default (or passes `--root-type orthohelp_fixture::FixtureConfig`
+   explicitly for clarity). Keep the existing default-root golden so it is not
+   orphaned.
    - Red gate: the Milestone 2 in-process nested structural test must already be
      green. Generate the nested golden, then review the diff line-by-line
      (paths, default strings, ordering) before committing — never blind-bless.
+   - Fence vs 6.1.2: 6.2.2 asserts only the *agent-context* projection of
+     `NestedFixtureConfig`. It does not add or modify roff/PowerShell/man render
+     assertions over that tree — those are owned by 6.1.2's
+     `tests/golden/nested_subcommand_snapshots.rs` and stay untouched.
 3. **Nested BDD scenario.** Add a scenario to
    `cargo-orthohelp/tests/features/orthohelp_agent_context.feature` (+ steps)
-   that asserts a *two-segment* command path is present in `commands[].path`, so
-   the behaviour layer distinguishes nested from flat (not merely "JSON
-   exists").
+   that runs agent-context generation over `NestedFixtureConfig` (via
+   `--root-type`) and asserts a *two-segment* command path is present in
+   `commands[].path`, so the behaviour layer distinguishes nested from flat (not
+   merely "JSON exists").
 
 Validation: `make test` passes; the three goldens exist and match; the nested
-BDD scenario fails before the nested fixture/steps exist and passes after.
+BDD scenario fails before its step assertions/generation are added and passes
+after.
 
 ### Milestone 4 — include agent-context in `--format all` (if D3 approved)
 
@@ -488,9 +560,10 @@ BDD scenario fails before the nested fixture/steps exist and passes after.
    regresses (Constraint 4).
 3. Update the `OutputFormat::AgentContext` doc-comment to state inclusion.
 
-Validation: `cargo orthohelp --format all --package orthohelp_simple_fixture`
-writes `agent-context.json` alongside the existing artefacts; existing `all`
-goldens still pass (except the intended additive change).
+Validation: `cargo orthohelp --format all --package orthohelp_fixture`
+(optionally with `--root-type orthohelp_fixture::SimpleFixtureConfig`) writes
+`agent-context.json` alongside the existing artefacts; existing `all` goldens
+still pass (except the intended additive change).
 
 ### Milestone 5 — documentation
 
@@ -538,8 +611,11 @@ goldens still pass (except the intended additive change).
 5. **`docs/developers-guide.md`.** Retire/fulfil the
    `OutputFormat::AgentContext` "until 6.2.2" doc-comment; under "Generating
    agent-context output" add the schema-evolution convention (when to bump the
-   version, how to add a golden fixture, the nested-fixture 6.2.2-vs-6.1.2
-   fence) and the default-display policy. Do not author a per-field table —
+   version, how to add an agent-context golden root, the nested-fixture
+   6.2.2-vs-6.1.2 fence) and the default-display policy. Build on — do not
+   duplicate — the fixture-isolation and `insta` snapshot guidance 6.1.2 added
+   (developers-guide lines ~238-254); reference the multi-root pattern
+   (`--root-type`) that 6.1.2 established. Do not author a per-field table —
    point to the rustdoc, the §3.2 example, and the wire snapshot.
 6. **`docs/cargo-orthohelp-design.md`.** Update only if it documents the
    `--format all` bundle composition (then note agent-context inclusion).
@@ -564,6 +640,18 @@ make typecheck 2>&1 | tee "/tmp/typecheck-ortho-config-$(git branch --show-curre
 make lint      2>&1 | tee "/tmp/lint-ortho-config-$(git branch --show-current).out"
 make test      2>&1 | tee "$LOG"
 coderabbit review --agent
+```
+
+Generating each golden root by hand (for inspection before blessing):
+
+```bash
+# bash — run from the worktree root; writes <out>/agent-context.json
+cargo orthohelp --out-dir /tmp/ac-simple --package orthohelp_fixture \
+  --root-type orthohelp_fixture::SimpleFixtureConfig --format agent-context
+cargo orthohelp --out-dir /tmp/ac-enum --package orthohelp_fixture \
+  --root-type orthohelp_fixture::FixtureConfig --format agent-context
+cargo orthohelp --out-dir /tmp/ac-nested --package orthohelp_fixture \
+  --root-type orthohelp_fixture::NestedFixtureConfig --format agent-context
 ```
 
 Focused test commands during development:
@@ -596,10 +684,10 @@ Acceptance is behavioural and observable:
 2. **Version pin works.** Temporarily change
    `ORTHO_AGENT_CONTEXT_SCHEMA_VERSION` to `"2"`; observe the pin test fail.
    Revert.
-3. **Three goldens.** `cargo orthohelp --format agent-context --package
-   orthohelp_simple_fixture` (and `_enum_`, `_nested_`) each produce JSON
-   matching the committed `.snap`. The nested golden contains at least one
-   two-segment `commands[].path`.
+3. **Three goldens.** Generating agent-context for each of the three roots
+   (`SimpleFixtureConfig`, `FixtureConfig`, `NestedFixtureConfig`) via
+   `--root-type` produces JSON matching the committed `.snap`. The nested golden
+   contains at least one two-segment `commands[].path`.
 4. **Forward compatibility.** The unknown-extra-key deserialization test passes,
    proving consumers tolerate unknown fields.
 5. **Determinism.** The proptest proving identical JSON across two transforms of
@@ -627,10 +715,12 @@ each milestone, plus the explicit Red proofs in items 1-2.
 
 - All steps are re-runnable. `cargo insta` snapshots are only re-blessed by an
   explicit `cargo insta review`; never auto-accept.
-- Adding a fixture crate is additive; if a fixture fails to resolve, the most
-  common cause is a `Cargo.toml` that diverges from the `orthohelp_fixture`
-  template (missing `publish = false`, `[lints] workspace`, or the
-  `[package.metadata.ortho_config] root_type`). Re-diff against the template.
+- Adding the `SimpleFixtureConfig` root type is additive and lives in the
+  existing `orthohelp_fixture` crate; no `Cargo.toml`/`members` change is needed.
+  If a `--root-type` fails to resolve, the most common cause is a missing or
+  mistyped fully-qualified path (`orthohelp_fixture::SimpleFixtureConfig`) or a
+  missing Fluent message key; cross-check against how `NestedFixtureConfig` is
+  declared and localized.
 - If a milestone's gates fail, fix forward within tolerances; if blocked, the
   work is committed per milestone so `git` provides clean rollback points.
 - Leave `/tmp` logs in place for review; they do not pollute the work tree.
@@ -644,12 +734,13 @@ Recommended new/changed files (final shape may refine during implementation):
 - `cargo-orthohelp/src/agent_context/tests.rs` — nested structural + default-
   display normalization tests.
 - `cargo-orthohelp/src/agent_context/mod.rs` — default-display normalization.
-- `tests/fixtures/orthohelp_simple_fixture/{Cargo.toml,src/lib.rs}` (and locales
-  if the bridge requires them, mirroring `orthohelp_fixture`).
-- `tests/fixtures/orthohelp_enum_fixture/...`
-- `tests/fixtures/orthohelp_nested_fixture/...`
-- `Cargo.toml` — three new `members` entries.
-- `cargo-orthohelp/tests/golden/agent_context_tests.rs` — parametrized.
+- `tests/fixtures/orthohelp_fixture/src/lib.rs` — add the minimal
+  `SimpleFixtureConfig` root type (no new crate; `FixtureConfig` and
+  `NestedFixtureConfig` already exist).
+- `tests/fixtures/orthohelp_fixture/locales/*/messages.ftl` — Fluent keys for
+  the new `SimpleFixtureConfig`.
+- `cargo-orthohelp/tests/golden/agent_context_tests.rs` — parametrized over the
+  three roots via `--root-type`.
 - `cargo-orthohelp/tests/golden/agent_context__{simple,enum,nested}.json.snap`.
 - `cargo-orthohelp/tests/features/orthohelp_agent_context.feature` + steps —
   nested scenario.
@@ -662,9 +753,10 @@ Recommended new/changed files (final shape may refine during implementation):
 
 No new public API is required. The schema types and
 `ORTHO_AGENT_CONTEXT_SCHEMA_VERSION` are already public from 6.2.1; this item
-adds tests, test-only fixture crates (`publish = false`), and documentation,
-plus (if D3) an additive change to `--format all` behaviour. The generator
-public surface stays:
+adds tests, one test-only fixture root type inside the existing
+`orthohelp_fixture` crate (`publish = false`), and documentation, plus (if D3)
+an additive change to `--format all` behaviour. No new workspace member is
+added. The generator public surface stays:
 
 ```rust
 // cargo-orthohelp/src/agent_context/mod.rs
@@ -676,8 +768,10 @@ pub fn bridge_ir_to_agent_context(
 ```
 
 `ortho_config` gains no new runtime dependency (Tolerance 1). Any default-
-display normalization is internal to the generator path. New fixture crates
-depend only on `ortho_config` (+ derive), `clap`, `serde`.
+display normalization is internal to the generator path. No new fixture crate is
+added; the new `SimpleFixtureConfig` root reuses the existing
+`orthohelp_fixture` crate's dependencies (`ortho_config` + derive, `clap`,
+`serde`).
 
 ## Test matrix (layer → concern → type)
 
@@ -686,13 +780,15 @@ depend only on `ortho_config` (+ derive), `clap`, `serde`.
   variant-exhaustive enum wire strings; missing-required rejection; unknown-key
   tolerance.
 - `cargo-orthohelp` unit (`rstest`): path construction, enum mapping, hidden-
-  field skip, and nested structural assertions on hand-built `DocMetadata`;
+  field skip, and nested structural assertions over a nested `DocMetadata`
+  (reusing 6.1.2's `define_nested_fixture!` helper or a hand-built tree);
   default-display normalization.
 - `cargo-orthohelp` property (`proptest`): unique paths, command/input sort,
   hidden-field omission (existing) + transform determinism (new).
 - `cargo-orthohelp` integration golden (`rstest` parametrized, shell-out):
-  one end-to-end smoke per fixture (simple / enum / nested) + existing
-  kitchen-sink, comparing committed `.snap`.
+  one end-to-end smoke per root (simple `SimpleFixtureConfig` / enum
+  `FixtureConfig` / nested `NestedFixtureConfig`), selected via `--root-type`,
+  comparing committed `.snap`.
 - `cargo-orthohelp` BDD (`rstest-bdd`): agent-context emitted (existing) +
   nested-depth scenario (new).
 
@@ -701,10 +797,11 @@ depend only on `ortho_config` (+ derive), `clap`, `serde`.
 Skills to load during implementation: `rust-router` first, then
 `rust-unit-testing` (assertion/fixture shape, `serial_test` if needed),
 `proptest` (determinism property), `nextest` (running/filtering tests),
-`arch-crate-design` (fixture crate boundaries), `arch-decision-records` (the
+`arch-crate-design` (fixture root-type boundaries), `arch-decision-records` (the
 ADR-003 cross-reference judgement), `leta` (navigation/refactor), and
 `execplans` (keeping this document current). Use `rstest-bdd` guidance for the
-behavioural scenario.
+behavioural scenario. Study how 6.1.2 (PR #340) wired `NestedFixtureConfig` and
+its `--root-type` selection before adding `SimpleFixtureConfig`.
 
 Documentation to consult: `docs/agent-native-cli-design.md` (§3.2, §8, §8.1),
 `docs/adr-003-define-schema-ownership-for-agent-native-contracts.md`,
@@ -719,7 +816,34 @@ Documentation to consult: `docs/agent-native-cli-design.md` (§3.2, §8, §8.1),
 ## Outcomes & retrospective
 
 To be completed at milestone boundaries and on completion: compare the result
-against `Purpose / big picture`, record what the nested fixture surfaced about
-6.1.1 recursion (Risk 1), note any `Open decision` the reviewer changed and its
+against `Purpose / big picture`, record what running the agent-context transform
+over 6.1.2's `NestedFixtureConfig` surfaced about the `walk`/`command_path`
+recursion (Risk 1), note any `Open decision` the reviewer changed and its
 impact, and capture lessons for 6.2.3 (downstream `context --json` naming) and
 6.3 (skill manifests), which build on this locked schema.
+
+## Revision note
+
+- 2026-06-15 — Revised after roadmap 6.1.2 ("Nested command tree behavioural
+  fixtures", PR #340, commit `5073b6d`) merged to `main` and was picked up by a
+  rebase of this branch.
+  - What changed: the plan no longer creates three new fixture crates
+    (`orthohelp_simple_fixture`, `orthohelp_enum_fixture`,
+    `orthohelp_nested_fixture`). It now reuses the multi-root pattern 6.1.2
+    established inside the existing `orthohelp_fixture` crate — reusing
+    `NestedFixtureConfig` (nested) and `FixtureConfig` (enum, the default root),
+    and adding only a minimal `SimpleFixtureConfig` root for the simple case,
+    each golden selected via `--root-type`. Affected sections: Purpose,
+    Risks (Risk 1 narrowed, Risk 4 reworded), Progress, Surprises, Decision Log
+    (old fixture decision superseded), Context and orientation, Milestone 2
+    (reuse `define_nested_fixture!`), Milestone 3 (root types not crates, plus a
+    6.2.2-vs-6.1.2 render-assertion fence), Concrete steps, Validation,
+    Idempotence, Artifacts, Interfaces, Test matrix, and Signposted docs.
+  - Why: 6.1.2 shipped a reusable real nested tree and the `--root-type`
+    convention, so authoring parallel crates would duplicate it and add build
+    cost; reuse is cheaper and matches the now-canonical pattern.
+  - Effect on remaining work: net scope is reduced (one new struct + locale keys
+    instead of three crates). Risk 1 is narrowed but not eliminated — 6.2.2 is
+    still the first to exercise the agent-context transform over a nested tree,
+    so the in-process structural Red gate (Milestone 2) remains mandatory. The
+    `Open decisions` (D1–D5) are unaffected and still await approval.
