@@ -119,39 +119,24 @@ state to fixture-based scenario isolation.
 
 ```mermaid
 flowchart TD
-    A[Start migration] --> B{Does the suite rely on
-shared mutable state
-across scenarios?}
+    A[Start migration] --> B{Does the suite rely on shared mutable state across scenarios?}
 
-    B -- Yes --> C[Identify global World like structures
-and cross-scenario mutation]
-    C --> D[Move shared mutable data into
-scenario-local fixtures
-using &mut FixtureType or Slot]
-    D --> E{Is any expensive, mostly
-read-only infrastructure used?}
+    B -- Yes --> C[Identify global World like structures and cross-scenario mutation]
+    C --> D[Move shared mutable data into scenario-local fixtures using &mut FixtureType or Slot]
+    D --> E{Is any expensive, mostly read-only infrastructure used?}
 
-    E -- Yes --> F[Wrap expensive, read-only infra
-in #once fixtures
-for reuse across scenarios]
-    E -- No --> G[Keep all fixtures per-scenario
-without #once]
+    E -- Yes --> F[Wrap expensive, read-only infra in #once fixtures for reuse across scenarios]
+    E -- No --> G[Keep all fixtures per-scenario without #once]
 
-    F --> H[Ensure scenario data is recreated
-per scenario and does not
-depend on execution order]
+    F --> H[Ensure scenario data is recreated per scenario and does not depend on execution order]
     G --> H
 
-    B -- No --> I[Keep existing fixtures
-but verify they follow
-per-scenario isolation]
+    B -- No --> I[Keep existing fixtures but verify they follow per-scenario isolation]
 
-    H --> J[Reserve StepContext::insert_owned
-for custom plumbing only]
+    H --> J[Reserve StepContext::insert_owned for custom plumbing only]
     I --> J
 
-    J --> K[Update docs and templates
-around state sharing and fixtures]
+    J --> K[Update docs and templates around state sharing and fixtures]
     K --> L[End migration]
 ```
 
