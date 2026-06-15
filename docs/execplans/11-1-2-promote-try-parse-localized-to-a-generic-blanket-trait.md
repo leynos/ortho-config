@@ -4,7 +4,7 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
 and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
-Status: IN PROGRESS
+Status: COMPLETE
 
 ## Purpose / big picture
 
@@ -220,6 +220,9 @@ commit. Run gates sequentially (build caching), never in parallel.
   stalled at `preparing_sandbox` without findings or a rate-limit message.
   Log:
   `/tmp/coderabbit-ortho-config-11-1-2-promote-try-parse-localized-to-a-generic-blanket-trait-final.out`.
+- Observation: 2026-06-16 `docs/roadmap.md` was updated after implementation
+  to carry the 11.1.2 decisions, findings, progress, validation status, and
+  CodeRabbit stall observation alongside the completed checklist.
 
 ## Decision log
 
@@ -304,6 +307,9 @@ commit. Run gates sequentially (build caching), never in parallel.
 its existing `hello_world.cli` base and no longer carries local parsing glue.
 The identifier-coverage and panic-contract tests live in
 `ortho_config/tests/localized_parse.rs`, and the roadmap item is checked off.
+On 2026-06-16, the roadmap was expanded with the same decision, finding,
+progress, validation, and CodeRabbit observations recorded here so both living
+documents reflect the current implementation status.
 
 CodeRabbit could not complete in this environment: repeated invocations stalled
 at `preparing_sandbox` without findings or a rate-limit message. Deterministic
