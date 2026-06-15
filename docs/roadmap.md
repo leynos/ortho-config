@@ -559,6 +559,24 @@ later progressively add opinion.
     raw `ArgMatches` for `load_and_merge_with_matches`.
   - [x] Add identifier-coverage tests that compare derive-emitted
     identifiers with `message_id_for` output across a fixture command tree.
+  - Decision: expose `parse_localized_command` as the base-agnostic primitive
+    and keep `LocalizedParse` as the default-base convenience wrapper.
+  - Decision: keep the `hello_world` example on the `hello_world.cli` base so
+    the multi-segment catalogue example remains available for 11.1.3.
+  - Finding: identifier coverage is locked by a recording localizer that
+    compares every runtime lookup with `message_id_for` over a fixture
+    `#[derive(clap::Parser)]` command tree.
+  - Finding: the promoted parser helpers inherit `LocalizeCmd::localize`
+    panics for invalid Fluent roots or colliding identifiers; ADR-006 records
+    that widened panic surface until 11.1.3 adds derive-time guards.
+  - Progress: `examples/hello_world` now calls `parse_localized_command` and
+    no longer carries `ParsedCommandLine` or inherent
+    `CommandLine::try_parse_localized*` methods.
+  - Validation: `make check-fmt`, `make typecheck`, `make lint`, `make test`,
+    `make markdownlint`, and `make nixie` passed on 2026-06-15.
+  - Observation: repeated `coderabbit review --agent` attempts stalled at
+    `preparing_sandbox` with no findings or rate-limit message; this is
+    recorded in the 11.1.2 execplan.
 
 - [ ] 11.1.3. Add the `OrthoConfigLocalization` trait and derive emission.
   - Requires 11.1.2.
