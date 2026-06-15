@@ -41,15 +41,15 @@ consumer.
 This design promotes those load-bearing pieces to crate API, widens the
 `clap-error-*` translation matrix so coverage tracks clap stable releases,
 stops the error pipeline from discarding clap's coloured suggestion text,
-defines a locale-resolution lifecycle that survives the chicken-and-egg
-between locale flags and parse errors, bridges OrthoConfig with
-`i18n-embed`'s `FluentLanguageLoader`, and extends the derive so localization
-identifiers are generated rather than hand-authored.
+defines a locale-resolution lifecycle that survives the chicken-and-egg between
+locale flags and parse errors, bridges OrthoConfig with `i18n-embed`'s
+`FluentLanguageLoader`, and extends the derive so localization identifiers are
+generated rather than hand-authored.
 
 ### 1.1 Out of scope
 
-The crate must remain a layered-configuration plus localization-adapter
-crate. The following are explicitly out of scope:
+The crate must remain a layered-configuration plus localization-adapter crate.
+The following are explicitly out of scope:
 
 - a translation editor or Translation Management System (TMS) integration;
 - a runtime locale swapper that mutates a process-wide Fluent bundle in place;
@@ -58,9 +58,9 @@ crate. The following are explicitly out of scope:
 - replacing `i18n-embed` rather than bridging with it.
 
 The crate continues to ship a `LocaleResolver` implementation for environment
-detection, and applications may opt into it. Daemons, embedded interfaces,
-and Windows services need different policies; they are entitled to write
-their own resolver.
+detection, and applications may opt into it. Daemons, embedded interfaces, and
+Windows services need different policies; they are entitled to write their own
+resolver.
 
 ### 1.2 Snapshot-per-parse contract
 
@@ -68,13 +68,13 @@ The `Localizer` an application holds is a **snapshot**, not a live binding.
 Translations resolved during a parse correspond to the locale at the moment
 `try_parse_localized*` returned. Long-lived services that swap locales at
 runtime must hold the localizer behind their own swap primitive
-(`arc_swap::ArcSwap<dyn Localizer>` is the documented baseline) and re-read
-on every request boundary; the crate does not own that swap because the
-correct rebuild policy is service-shaped, not library-shaped.
+(`arc_swap::ArcSwap<dyn Localizer>` is the documented baseline) and re-read on
+every request boundary; the crate does not own that swap because the correct
+rebuild policy is service-shaped, not library-shaped.
 
-For command-line interface (CLI) processes, which is the dominant case in
-§3, snapshot semantics match the lifecycle exactly: one parse, one merge,
-one rebuild, then the localizer is stable for the rest of the process.
+For command-line interface (CLI) processes, which is the dominant case in §3,
+snapshot semantics match the lifecycle exactly: one parse, one merge, one
+rebuild, then the localizer is stable for the rest of the process.
 
 ### 1.3 Adopter quick-start
 
@@ -92,8 +92,8 @@ The minimum viable adoption uses five public concepts:
 Everything else in this document is either an extension point (§5.1 custom
 resolvers, §7 `i18n-embed` bridge, §9 translator diagnostics) or a backwards
 compatibility shim (§6.4 eager localization as the supported path, with a
-formatter-swap escape hatch). New adopters should not need to reach for them
-on day one.
+formatter-swap escape hatch). New adopters should not need to reach for them on
+day one.
 
 ## 2. Design principles
 
@@ -111,11 +111,11 @@ on day one.
    applications combine. It does not ship a single God-builder that hides the
    two-phase parse pattern.
 5. **One Fluent bundle per application.** When an application already owns a
-   `FluentLanguageLoader` for its library messages, OrthoConfig delegates to
-   it rather than parsing the same Fluent Translation List (FTL) twice.
+   `FluentLanguageLoader` for its library messages, OrthoConfig delegates to it
+   rather than parsing the same Fluent Translation List (FTL) twice.
 6. **Scope discipline.** Stateful locale-switching APIs, hot reload, and
-   bundle merging across processes are different problems and stay out of
-   this crate.
+   bundle merging across processes are different problems and stay out of this
+   crate.
 
 ## 3. Evidence base
 
@@ -127,9 +127,9 @@ Promotion is driven by concrete repository evidence, not anticipation.
   design and execution-plan documents.
 - `netsuke` (`src/cli_localization.rs`): consumes `FluentLocalizer`,
   `FluentLocalizerBuilder`, `Localizer`, `NoOpLocalizer`, and
-  `LanguageIdentifier`. Ships `locales/en-US/` and `locales/es-ES/`.
-  Implements a `LayeredLocalizer` wrapper that provides primary-then-fallback
-  chaining, evidence that the trait is being extended in the field.
+  `LanguageIdentifier`. Ships `locales/en-US/` and `locales/es-ES/`. Implements
+  a `LayeredLocalizer` wrapper that provides primary-then-fallback chaining,
+  evidence that the trait is being extended in the field.
 - `spycatcher-harness` (`src/i18n.rs`): depends on `i18n-embed` directly with
   the `fluent-system` feature, embeds via `RustEmbed`, and writes its own
   `localize_harness_error` free function. The module's own doc comment notes
@@ -139,15 +139,15 @@ Promotion is driven by concrete repository evidence, not anticipation.
   directory yet. A future consumer of the promoted helpers.
 
 In none of these four projects does a `LocalizeCmd` extension trait on
-`clap::Command` exist; only the `hello_world` example provides one. The
-example is the reference implementation that every consumer either copies
-inline or omits.
+`clap::Command` exist; only the `hello_world` example provides one. The example
+is the reference implementation that every consumer either copies inline or
+omits.
 
 ## 4. `LocalizeCmd`: a promoted extension trait
 
-The example trait localizes `about`, `long_about`, and `override_usage` at
-the root and recurses through `Command::get_subcommands_mut`. The crate
-version generalizes that to the full clap surface:
+The example trait localizes `about`, `long_about`, and `override_usage` at the
+root and recurses through `Command::get_subcommands_mut`. The crate version
+generalizes that to the full clap surface:
 
 ```rust
 pub trait LocalizeCmd: Sized {
@@ -169,8 +169,8 @@ The recursion covers, for every command in the tree:
 - `about` and `long_about`;
 - `override_usage`;
 - `version` and `long_version` (when the application opts in by registering
-  a `<command>.version` identifier in its catalogue — otherwise the stock
-  clap value is preserved);
+  a `<command>.version` identifier in its catalogue — otherwise the stock clap
+  value is preserved);
 - the help template footer (replacing the ad-hoc `after_long_help` pattern
   that downstream code uses today).
 
@@ -181,8 +181,8 @@ For each argument visited via `Command::get_arguments_mut`:
 - `value_name`, keyed `<command-path>.args.<arg-id>.value_name`;
 - per-value documentation for `clap::builder::PossibleValue` is exposed via
   the IR mechanism only; clap does not currently allow per-value help to be
-  mutated post-hoc and the design defers this to a future iteration when
-  clap supports it.
+  mutated post-hoc and the design defers this to a future iteration when clap
+  supports it.
 
 The 11.1.1 implementation does not localize clap's built-in `--help` and
 `--version` argument text, per-`PossibleValue` help, or the `help_template`
@@ -205,51 +205,58 @@ The identifier shape is a documented pure function of the command path:
 `<root>` is configurable via `LocalizeCmd::with_base("…")` (defaulting to the
 binary name normalized to a Fluent identifier) so applications can share one
 catalogue across multiple binaries by giving each a distinct prefix. The
-canonical function is exposed as `ortho_config::message_id_for(&command_path,
-suffix)` so applications, tests, and the IR pipeline can produce identical
-identifiers without re-implementing the convention (see
-[ADR-006](adr-006-identifier-derivation-panics.md)).
+canonical function is exposed as
+`ortho_config::message_id_for(&command_path, suffix)` so applications, tests,
+and the IR pipeline can produce identical identifiers without re-implementing
+the convention (see [ADR-006](adr-006-identifier-derivation-panics.md)).
 
-Identifier normalization is a documented function: lowercase American
-Standard Code for Information Interchange (ASCII) letters pass through,
-ASCII digits, hyphens, and underscores pass through unchanged, and any other
-character is rejected. Underscores are preserved because Fluent identifiers
-allow `[a-zA-Z0-9_-]` after the leading letter. Author-facing Fluent
-Translation List (FTL) keys use dotted ids such as
-`hello_world.cli.about`; OrthoConfig's load-time normalizer rewrites that to
-the runtime id `hello_world-cli-about`. The canonical function
-`message_id_for(["hello_world", "cli"], "about")` produces the same
-runtime id directly.
+Identifier normalization is a documented function: lowercase American Standard
+Code for Information Interchange (ASCII) letters pass through, ASCII digits,
+hyphens, and underscores pass through unchanged, and any other character is
+rejected. Underscores are preserved because Fluent identifiers allow
+`[a-zA-Z0-9_-]` after the leading letter. Author-facing Fluent Translation List
+(FTL) keys use dotted ids such as `hello_world.cli.about`; OrthoConfig's
+load-time normalizer rewrites that to the runtime id `hello_world-cli-about`.
+The canonical function `message_id_for(["hello_world", "cli"], "about")`
+produces the same runtime id directly.
 
 Two segments that normalize to the same identifier are a build-time error in
-the macros crate and a runtime panic in `LocalizeCmd::localize` for
-hand-built command trees (see
-[ADR-006](adr-006-identifier-derivation-panics.md)). The derive's
-identifier-generation pass therefore enforces uniqueness at compile time, and
-ADR-006 records why the promoted runtime API panics rather than returning
-`Result` when a hand-built command tree cannot produce unique Fluent
+the macros crate and a runtime panic in `LocalizeCmd::localize` for hand-built
+command trees (see [ADR-006](adr-006-identifier-derivation-panics.md)). The
+derive's identifier-generation pass therefore enforces uniqueness at compile
+time, and ADR-006 records why the promoted runtime API panics rather than
+returning `Result` when a hand-built command tree cannot produce unique Fluent
 identifiers.
 
 ### 4.2 `try_parse_localized` helpers
 
 ```rust
-pub trait LocalizedParse: clap::Parser + Sized {
+pub trait LocalizedParse: clap::Parser {
     /// Equivalent to `Parser::try_parse`, but with localized error and metadata.
-    fn try_parse_localized(localizer: &dyn Localizer) -> Result<Self, clap::Error>;
+    fn try_parse_localized(localizer: &dyn Localizer) -> Result<Self, clap::Error> {
+        Self::try_parse_localized_from(std::env::args_os(), localizer)
+    }
 
     /// Equivalent to `Parser::try_parse_from`, but with localization.
     fn try_parse_localized_from<I, T>(iter: I, localizer: &dyn Localizer)
         -> Result<Self, clap::Error>
     where
         I: IntoIterator<Item = T>,
-        T: Into<std::ffi::OsString> + Clone;
+        T: Into<std::ffi::OsString> + Clone
+    {
+        Self::try_parse_localized_with_matches(iter, localizer)
+            .map(|(value, _)| value)
+    }
 
     /// Returns both the parsed struct and the raw `ArgMatches`.
     fn try_parse_localized_with_matches<I, T>(iter: I, localizer: &dyn Localizer)
         -> Result<(Self, clap::ArgMatches), clap::Error>
     where
         I: IntoIterator<Item = T>,
-        T: Into<std::ffi::OsString> + Clone;
+        T: Into<std::ffi::OsString> + Clone
+    {
+        parse_localized_command(Self::command().localize(localizer), iter, localizer)
+    }
 }
 
 impl<P: clap::Parser> LocalizedParse for P {}
@@ -260,12 +267,33 @@ The blanket implementation removes the "copy this from the example" step. The
 `load_and_merge_with_matches` requires the raw `ArgMatches`, which
 `Parser::try_parse` discards.
 
+The trait is the zero-configuration path for catalogues keyed by a command's
+`bin_name`. Applications that need a custom root use the base-agnostic
+primitive directly:
+
+```rust
+pub fn parse_localized_command<P, I, T>(
+    command: clap::Command,
+    iter: I,
+    localizer: &dyn Localizer,
+) -> Result<(P, clap::ArgMatches), clap::Error>
+where
+    P: clap::FromArgMatches,
+    I: IntoIterator<Item = T>,
+    T: Into<std::ffi::OsString> + Clone;
+```
+
+Callers pass an already-localised command, such as
+`Cli::command().with_base("acme.tool").localize(localizer)`. The unsuffixed
+`try_parse_localized` method is the environment-reading variant; the older
+example-only `_env` suffix is not part of the promoted API.
+
 ## 5. Locale-resolution lifecycle
 
-There is a chicken-and-egg problem in every CLI: the requested locale is
-itself a CLI flag, but parse errors must be localized before that flag is
-read. Today, every consumer reinvents the same two-phase dance. The crate
-ships the primitives.
+There is a chicken-and-egg problem in every CLI: the requested locale is itself
+a CLI flag, but parse errors must be localized before that flag is read. Today,
+every consumer reinvents the same two-phase dance. The crate ships the
+primitives.
 
 ### 5.1 `LocaleResolver` trait
 
@@ -288,9 +316,9 @@ pub trait LocaleResolver: Send + Sync {
 The crate ships three implementations:
 
 - `EnvLocaleResolver` — checks `LC_ALL`, `LC_MESSAGES`, and `LANG` in that
-  order, normalizing POSIX values like `ja_JP.UTF-8` into Best Common
-  Practices 47 (BCP 47) tags. Special-cases `C` and `POSIX` as `en-US`.
-  Mirrors the example's `parse_posix_locale` rules exactly.
+  order, normalizing POSIX values like `ja_JP.UTF-8` into Best Common Practices
+  47 (BCP 47) tags. Special-cases `C` and `POSIX` as `en-US`. Mirrors the
+  example's `parse_posix_locale` rules exactly.
 - `FixedLocaleResolver` — wraps a single `LanguageIdentifier` for tests and
   for non-locale-aware deployments.
 - `ConfigLocaleResolver` — composes a primary resolver with an override read
@@ -299,12 +327,12 @@ The crate ships three implementations:
 
 ### 5.2 `BootLocalizer` factory and `BootHandle` typestate
 
-The factory is split from the handle so non-invocation of the merge-phase
-step is detectable rather than silent. `BootLocalizer::build` returns a
+The factory is split from the handle so non-invocation of the merge-phase step
+is detectable rather than silent. `BootLocalizer::build` returns a
 **typestate** handle — `BootHandle<Boot>` — that callers must transition to
 `BootHandle<Final>` via `finalize` before extracting a usable
-`Arc<dyn Localizer>`. Dropping a `BootHandle<Boot>` without finalizing emits
-a `warn`-level tracing event so operators see the missed lifecycle step.
+`Arc<dyn Localizer>`. Dropping a `BootHandle<Boot>` without finalizing emits a
+`warn`-level tracing event so operators see the missed lifecycle step.
 
 ```rust
 pub struct BootLocalizer { /* ... */ }
@@ -367,15 +395,15 @@ impl Drop for BootHandle<Boot> {
 }
 ```
 
-`BootLocalizer::build` substitutes `Arc::new(NoOpLocalizer::new())` on
-failure and emits a `warn`-level tracing event with the configured sentinel
-as a `target`. The handle records the failure in shared state owned by the
-typestate, so `build_failed()` is meaningful on both `BootHandle<Boot>`
-(where callers may want to surface a "translations unavailable; parse
-errors will be English" banner before parsing) and `BootHandle<Final>`
-(where the same state drives a sustained degraded-mode banner for the
-rest of the process). `finalize` re-emits the failure event on every retry
-while the failure persists, with exponential backoff to bound log volume.
+`BootLocalizer::build` substitutes `Arc::new(NoOpLocalizer::new())` on failure
+and emits a `warn`-level tracing event with the configured sentinel as a
+`target`. The handle records the failure in shared state owned by the
+typestate, so `build_failed()` is meaningful on both `BootHandle<Boot>` (where
+callers may want to surface a "translations unavailable; parse errors will be
+English" banner before parsing) and `BootHandle<Final>` (where the same state
+drives a sustained degraded-mode banner for the rest of the process).
+`finalize` re-emits the failure event on every retry while the failure
+persists, with exponential backoff to bound log volume.
 
 ### 5.3 Documented two-phase pattern
 
@@ -389,11 +417,10 @@ The intended lifecycle is:
    environment requested.
 4. Merge configuration via `OrthoConfig::load_and_merge_with_matches`.
 5. Call `handle.finalize(merged_locale)`. The transition is enforced by the
-   typestate: the application cannot retrieve a long-lived `Arc<dyn
-   Localizer>` for library messages without performing this step. Dropping
-   the `BootHandle<Boot>` without finalizing emits a `warn`-level tracing
-   event, so non-invocation is observable in production logs rather than
-   silent.
+   typestate: the application cannot retrieve a long-lived `Arc<dyn Localizer>`
+   for library messages without performing this step. Dropping the
+   `BootHandle<Boot>` without finalizing emits a `warn`-level tracing event, so
+   non-invocation is observable in production logs rather than silent.
 
 Step 5 is the point applications get wrong today, and the typestate is the
 mechanism that makes the invariant enforceable rather than ceremonial. Parse
@@ -404,46 +431,46 @@ because they describe what the user actually typed.
 
 The crate ships translations for four clap `ErrorKind` variants today
 (`MissingRequiredArgument`, `UnknownArgument`, `InvalidValue`,
-`MissingSubcommand`). clap's `ErrorKind` is `#[non_exhaustive]` and stable
-clap 4.x exposes many more parse-raisable variants. The current behaviour is
-silent fall-through, which degrades quietly as clap adds variants.
+`MissingSubcommand`). clap's `ErrorKind` is `#[non_exhaustive]` and stable clap
+4.x exposes many more parse-raisable variants. The current behaviour is silent
+fall-through, which degrades quietly as clap adds variants.
 
 ### 6.1 Complete en-US matrix
 
-The crate ships en-US translations for every raisable variant in stable
-clap 4.x: `InvalidValue`, `UnknownArgument`, `InvalidSubcommand`, `NoEquals`,
+The crate ships en-US translations for every raisable variant in stable clap
+4.x: `InvalidValue`, `UnknownArgument`, `InvalidSubcommand`, `NoEquals`,
 `ValueValidation`, `TooManyValues`, `TooFewValues`, `WrongNumberOfValues`,
 `ArgumentConflict`, `MissingRequiredArgument`, `MissingSubcommand`,
 `InvalidUtf8`, `Io`, and `Format`. The three display-only variants
 (`DisplayHelp`, `DisplayHelpOnMissingArgumentOrSubcommand`, `DisplayVersion`)
 are recorded but **not** translated — clap renders the help or version text
 itself, and the matrix marks them with a `DisplayOnly` sentinel so the
-mechanical gate (§6.1.1) can prove exhaustive coverage of `ErrorKind`
-without tying the assertion to a hand-maintained subset count.
+mechanical gate (§6.1.1) can prove exhaustive coverage of `ErrorKind` without
+tying the assertion to a hand-maintained subset count.
 
-The matrix is **exhaustive** over `ErrorKind`. Every declared variant
-appears exactly once, either with a translated Fluent identifier or with
-the `DisplayOnly` sentinel. In clap 4.5.60 (the version currently locked
-in `Cargo.lock`) that is 14 translated entries plus 3 sentinel entries,
-totalling 17. The matrix shape lets the gate reduce to a single
-`len() == ORTHO_CONFIG_CLAP_ERROR_KIND_COUNT` comparison without filtering
-or subtraction, which is the property the mechanical gate requires.
+The matrix is **exhaustive** over `ErrorKind`. Every declared variant appears
+exactly once, either with a translated Fluent identifier or with the
+`DisplayOnly` sentinel. In clap 4.5.60 (the version currently locked in
+`Cargo.lock`) that is 14 translated entries plus 3 sentinel entries, totalling
+
+1. The matrix shape lets the gate reduce to a single
+`len() == ORTHO_CONFIG_CLAP_ERROR_KIND_COUNT` comparison without filtering or
+subtraction, which is the property the mechanical gate requires.
 
 #### 6.1.1 Mechanical coverage gate
 
 `clap::error::ErrorKind` is `#[non_exhaustive]`; the crate must therefore
-detect coverage gaps automatically rather than relying on a release-time
-audit. The gate is a single mechanism, described once here and referenced
-from the roadmap:
+detect coverage gaps automatically rather than relying on a release-time audit.
+The gate is a single mechanism, described once here and referenced from the
+roadmap:
 
 1. A build script (`build.rs` in the `ortho_config` crate) inspects the
-   `clap::error::ErrorKind` enum exposed by the resolved clap dependency
-   and emits `cargo:rustc-env=ORTHO_CONFIG_CLAP_ERROR_KIND_COUNT=<n>`,
-   where `<n>` is the count of declared variants (all of them — the
-   build script does **not** classify variants as raisable or
-   display-only). Cargo's resolver picks the clap version from the
-   workspace's `Cargo.lock`, so the build script sees the same clap minor
-   or patch the test will run against.
+   `clap::error::ErrorKind` enum exposed by the resolved clap dependency and
+   emits `cargo:rustc-env=ORTHO_CONFIG_CLAP_ERROR_KIND_COUNT=<n>`, where `<n>`
+   is the count of declared variants (all of them — the build script does
+   **not** classify variants as raisable or display-only). Cargo's resolver
+   picks the clap version from the workspace's `Cargo.lock`, so the build
+   script sees the same clap minor or patch the test will run against.
 2. A const-evaluated test reads that constant and compares it to the
    length of the exhaustive `CLAP_ERROR_IDS`:
 
@@ -454,13 +481,12 @@ from the roadmap:
    const_assert_eq!(CLAP_ERROR_IDS.len(), CLAP_ERROR_KIND_COUNT);
    ```
 
-When clap adds a variant in a minor or patch release, the lengths diverge
-and CI fails before publish. The fix is mechanical: add a new
-`CLAP_ERROR_IDS` entry that either points at a new Fluent identifier (for
-a raisable variant) or marks the variant `DisplayOnly` (for a new display
-shape). This replaces a maintenance ritual with a mechanical contract.
-Roadmap §11.2.1 references this section rather than restating the
-mechanism.
+When clap adds a variant in a minor or patch release, the lengths diverge and
+CI fails before publish. The fix is mechanical: add a new `CLAP_ERROR_IDS`
+entry that either points at a new Fluent identifier (for a raisable variant) or
+marks the variant `DisplayOnly` (for a new display shape). This replaces a
+maintenance ritual with a mechanical contract. Roadmap §11.2.1 references this
+section rather than restating the mechanism.
 
 ### 6.2 Canonical mapping constant
 
@@ -492,35 +518,35 @@ pub const CLAP_ERROR_IDS: &[(clap::error::ErrorKind, ClapErrorTranslation)] = &[
 The constant lets consumers:
 
 - iterate the matrix and produce coverage tests against their own
-  catalogues, filtering with `matches!(translation, Translated(_))` to
-  ignore display-only variants;
+  catalogues, filtering with `matches!(translation, Translated(_))` to ignore
+  display-only variants;
 - validate that overrides cover every shipped translated identifier before
   release;
 - generate translator briefs that list every translated identifier and its
   English source string.
 
-A `ClapErrorCoverage` builder consumes the constant, filters to
-`Translated` entries, and returns a report listing identifiers the
-consumer's `Localizer` fails to resolve.
+A `ClapErrorCoverage` builder consumes the constant, filters to `Translated`
+entries, and returns a report listing identifiers the consumer's `Localizer`
+fails to resolve.
 
 ### 6.3 Observable fallback
 
 The `localize_clap_error_with_command` path currently swallows missing
-identifiers silently. The new path emits tracing events at severities
-matched to channel: `warn` when the missing identifier originates from a
-clap error (because the user is staring at an untranslated parse error and
-operators want to alert on it), and `debug` for application-message origins
-(where the en-US fallback is usually acceptable). Events carry the
-identifier, the `ErrorKind`, and the locale, and are also surfaced through a
-`MissingTranslationReporter` hook (§9). The default reporter is a no-op so
-production binaries pay no cost when telemetry is off.
+identifiers silently. The new path emits tracing events at severities matched
+to channel: `warn` when the missing identifier originates from a clap error
+(because the user is staring at an untranslated parse error and operators want
+to alert on it), and `debug` for application-message origins (where the en-US
+fallback is usually acceptable). Events carry the identifier, the `ErrorKind`,
+and the locale, and are also surfaced through a `MissingTranslationReporter`
+hook (§9). The default reporter is a no-op so production binaries pay no cost
+when telemetry is off.
 
 ### 6.4 Preserve clap's rich context
 
-`localize_clap_error_with_command` currently builds a `clap::error::Error`
-via `Error::raw`, discarding suggestions, the usage tail, and styling. The
-supported path is **eager localization** inside the parse helpers, using
-clap's stable mutation surface available under the `error-context` feature:
+`localize_clap_error_with_command` currently builds a `clap::error::Error` via
+`Error::raw`, discarding suggestions, the usage tail, and styling. The
+supported path is **eager localization** inside the parse helpers, using clap's
+stable mutation surface available under the `error-context` feature:
 
 ```rust
 pub fn insert(&mut self, kind: ContextKind, value: ContextValue) -> Option<ContextValue>;
@@ -528,26 +554,25 @@ pub fn remove(&mut self, kind: ContextKind) -> Option<ContextValue>;
 pub fn format(self, cmd: &mut Command) -> Error<F>;
 ```
 
-The pipeline runs synchronously inside `try_parse_localized*`, before the
-error escapes the helper's stack frame:
+The pipeline runs synchronously inside `try_parse_localized*`, before the error
+escapes the helper's stack frame:
 
 1. Take the original `clap::error::Error` produced by
    `try_get_matches_from_mut`.
-2. Resolve the localized message body for the matched `(ErrorKind,
-   ContextKind)` pair using `CLAP_ERROR_IDS` plus per-variant Fluent
+2. Resolve the localized message body for the matched
+   `(ErrorKind, ContextKind)` pair using `CLAP_ERROR_IDS` plus per-variant
+   Fluent
    argument extraction.
 3. Replace the `ContextKind::Custom` slot via `Error::insert`, so
-   `RichFormatter` uses the supplied text in place of the kind-message
-   portion while keeping clap's usage tail, suggestion list, and styling
-   intact.
+   `RichFormatter` uses the supplied text in place of the kind-message portion
+   while keeping clap's usage tail, suggestion list, and styling intact.
 4. Call `Error::format(cmd)` to re-attach command context if the command
    tree was rebuilt during localization.
 
-This is **the** supported path. It runs synchronously, requires no
-thread-local state, and works identically in sync and async call sites:
-because localization happens before the error is returned, the formatter
-that eventually renders the error never needs to look up the localizer
-itself.
+This is **the** supported path. It runs synchronously, requires no thread-local
+state, and works identically in sync and async call sites: because localization
+happens before the error is returned, the formatter that eventually renders the
+error never needs to look up the localizer itself.
 
 #### 6.4.1 Escape hatch: monomorphised formatter
 
@@ -571,19 +596,19 @@ The formatter is monomorphised over a concrete `Localizer + Default` type,
 sidestepping clap's non-dyn-compatible `ErrorFormatter` trait. Adopters who
 need a runtime-chosen localizer can use a thin newtype that reads from a
 process-wide `OnceLock<Arc<dyn Localizer>>`. The crate does **not** ship a
-thread-local-backed dynamic formatter: eager localization in §6.4 covers
-the dynamic case, and the thread-local pattern has known async footguns
-(empty thread-local after a parse helper drops mid-render).
+thread-local-backed dynamic formatter: eager localization in §6.4 covers the
+dynamic case, and the thread-local pattern has known async footguns (empty
+thread-local after a parse helper drops mid-render).
 
 The escape hatch is an advanced opt-in. The default adoption path uses §6.4
-eager localization; the typestate handle in §5.2 plus the parse helpers in
-§4.2 make this the easy path.
+eager localization; the typestate handle in §5.2 plus the parse helpers in §4.2
+make this the easy path.
 
 ## 7. Bridge with `i18n-embed`
 
-`FluentLocalizer` and `i18n_embed::fluent::FluentLanguageLoader` cannot
-share a `FluentBundle` today, so applications that already own a loader for
-library messages compile every FTL twice and negotiate locale twice. The
+`FluentLocalizer` and `i18n_embed::fluent::FluentLanguageLoader` cannot share a
+`FluentBundle` today, so applications that already own a loader for library
+messages compile every FTL twice and negotiate locale twice. The
 spycatcher-harness case study above shows the consequence: a consumer that
 needed library messages routed around OrthoConfig's helpers entirely.
 
@@ -615,18 +640,18 @@ impl Localizer for FluentEmbedLocalizer {
 
 Presence is queried via `FluentLanguageLoader::has(message_id)`. As of
 `i18n-embed` 0.16, `has` is the documented public API; it delegates to the
-underlying Fluent bundle's `has_message` but is the only stable entry
-point the adapter is allowed to call. The `loader.get(id) == id` heuristic
-is rejected because it is unsound on three Fluent shapes: a message with
-only attributes and no value, a message whose value transforms to the
-identifier string, and a message with an empty-string value. `has`
-returns `true` for the first two cases (correctly marking the identifier
-as present) and `false` for nothing-defined, which matches the
-`Localizer::lookup -> Option<String>` contract honestly.
+underlying Fluent bundle's `has_message` but is the only stable entry point the
+adapter is allowed to call. The `loader.get(id) == id` heuristic is rejected
+because it is unsound on three Fluent shapes: a message with only attributes
+and no value, a message whose value transforms to the identifier string, and a
+message with an empty-string value. `has` returns `true` for the first two
+cases (correctly marking the identifier as present) and `false` for
+nothing-defined, which matches the `Localizer::lookup -> Option<String>`
+contract honestly.
 
-If a future `i18n-embed` release renames `has`, the adapter's build
-script asserts the method exists and fails fast with a clear migration
-pointer rather than silently degrading; see §12.
+If a future `i18n-embed` release renames `has`, the adapter's build script
+asserts the method exists and fails fast with a clear migration pointer rather
+than silently degrading; see §12.
 
 Trade-offs the documentation must record:
 
@@ -634,33 +659,32 @@ Trade-offs the documentation must record:
   one locale-negotiation pass. Library messages and CLI messages share one
   source of truth.
 - Applications that do not own a loader keep using `FluentLocalizer`. The
-  two implementations remain in parity: any feature added to one ships in
-  the other within the same release. The crate does **not** add a
-  constructor that builds a `FluentLanguageLoader` from
-  `i18n_embed::I18nAssets`; that would make OrthoConfig a partial re-export
-  of `i18n-embed` and obscures which crate owns the bundle lifecycle.
-  Resolves [Open question 13.2].
+  two implementations remain in parity: any feature added to one ships in the
+  other within the same release. The crate does **not** add a constructor that
+  builds a `FluentLanguageLoader` from `i18n_embed::I18nAssets`; that would
+  make OrthoConfig a partial re-export of `i18n-embed` and obscures which crate
+  owns the bundle lifecycle. Resolves [Open question 13.2].
 - `FluentLanguageLoader::select_languages` returns a *new* loader. The
-  adapter therefore re-wraps the new loader in a fresh `Arc` on locale
-  switch; callers update their `Arc<dyn Localizer>` reference via the
-  `BootHandle::finalize_with` path. For long-lived services that swap
-  locale under concurrent traffic, the §1.2 snapshot-per-parse contract
-  applies: services hold an `ArcSwap<dyn Localizer>` and re-read on each
-  request boundary, and the adapter's per-swap cost is one fresh `Arc`
-  allocation per locale change.
+  adapter therefore re-wraps the new loader in a fresh `Arc` on locale switch;
+  callers update their `Arc<dyn Localizer>` reference via the
+  `BootHandle::finalize_with` path. For long-lived services that swap locale
+  under concurrent traffic, the §1.2 snapshot-per-parse contract applies:
+  services hold an `ArcSwap<dyn Localizer>` and re-read on each request
+  boundary, and the adapter's per-swap cost is one fresh `Arc` allocation per
+  locale change.
 
 ## 8. Derive support
 
 A `#[derive(Parser)]` user should not have to hand-author Fluent identifiers
 for every argument. The `OrthoConfig` derive is extended (a separate
-`LocalizedParser` derive is rejected: the existing derive already owns the
-clap surface, and a second derive would duplicate field walks).
+`LocalizedParser` derive is rejected: the existing derive already owns the clap
+surface, and a second derive would duplicate field walks).
 
 ### 8.1 `OrthoConfigLocalization` trait
 
 Identifier constants live on a dedicated trait, **not** on `OrthoConfigDocs`.
-Adopters who never opt into the documentation IR (the spycatcher-harness
-shape in §3) need identifiers without dragging in the docs surface:
+Adopters who never opt into the documentation IR (the spycatcher-harness shape
+in §3) need identifiers without dragging in the docs surface:
 
 ```rust
 pub trait OrthoConfigLocalization {
@@ -677,8 +701,8 @@ pub trait OrthoConfigLocalization {
 ```
 
 `OrthoConfigDocs::ABOUT_ID` (and friends) is implemented via a blanket impl
-that delegates to `OrthoConfigLocalization`, so the docs pipeline picks up
-the same identifiers without taking ownership of them.
+that delegates to `OrthoConfigLocalization`, so the docs pipeline picks up the
+same identifiers without taking ownership of them.
 
 ### 8.2 Derive behaviour
 
@@ -686,12 +710,12 @@ The extended derive:
 
 - Generates the localization identifier for each argument from the command
   path and the field's `id` (or, when absent, the kebab-cased field name).
-  Identifiers are exposed as `OrthoConfigLocalization` associated constants
-  so application code can refer to them without string concatenation.
+  Identifiers are exposed as `OrthoConfigLocalization` associated constants so
+  application code can refer to them without string concatenation.
 - Optionally embeds the doc-comment-derived default English text into the
   binary. The flag is **per-field**, not per-struct, because help strings
-  dominate binary size while value names are tiny and the cost should be
-  paid per field:
+  dominate binary size while value names are tiny and the cost should be paid
+  per field:
 
   ```rust
   #[derive(OrthoConfig)]
@@ -707,25 +731,24 @@ The extended derive:
   ```
 
   Permitted values are `none` (default), `help`, `long_help`, `value_name`,
-  `help+long_help`, and `all`. A struct-level `#[ortho_config(
-  localized_default = "...")]` sets the default that fields inherit unless
-  they override it.
+  `help+long_help`, and `all`. A struct-level
+  `#[ortho_config( localized_default = "...")]` sets the default that fields
+  inherit unless they override it.
 
 - Emits a build-time artefact at `${OUT_DIR}/ortho-config/cli-identifiers.json`
   listing every generated identifier, its source span, and its embedded
   default. The artefact is capped at 1 MiB; larger trees split across files
   named `cli-identifiers.<n>.json` with an index file. `cargo-orthohelp`
   consumes the artefact (see §11) so translators receive an authoritative
-  identifier inventory without scraping Fluent Translation List (FTL) files
-  by hand.
+  identifier inventory without scraping Fluent Translation List (FTL) files by
+  hand.
 
 The convention matches §4.1 exactly so identifiers generated by the derive,
 emitted by `message_id_for`, and referenced in hand-authored FTL agree
-byte-for-byte. The derive enforces collision detection at compile time
-(§4.1): two fields whose identifiers normalize to the same value produce a
-`compile_error!`. A regression test in the macros crate compares derive
-output against `message_id_for` for a fixture command tree to lock the
-agreement.
+byte-for-byte. The derive enforces collision detection at compile time (§4.1):
+two fields whose identifiers normalize to the same value produce a
+`compile_error!`. A regression test in the macros crate compares derive output
+against `message_id_for` for a fixture command tree to lock the agreement.
 
 ## 9. Translator diagnostics
 
@@ -753,49 +776,47 @@ pub enum TranslationOrigin {
 }
 ```
 
-Wired into `FluentLocalizer`, `FluentEmbedLocalizer`, and the clap-error
-path. The default reporter is a no-op so production builds pay nothing.
+Wired into `FluentLocalizer`, `FluentEmbedLocalizer`, and the clap-error path.
+The default reporter is a no-op so production builds pay nothing.
 `cargo-orthohelp` ships a built-in reporter that aggregates events into a
-JavaScript Object Notation (JSON) report suitable for translator
-workflows, written under
-`target/orthohelp/missing-translations/<locale>.json`.
+JavaScript Object Notation (JSON) report suitable for translator workflows,
+written under `target/orthohelp/missing-translations/<locale>.json`.
 
 ## 10. Compatibility
 
 The promoted helpers ship in OrthoConfig 0.9. The example crate's
-`localization.rs` and `localizer.rs` modules collapse into thin wrappers
-that re-export the crate types for one release, then are removed in 0.10.
+`localization.rs` and `localizer.rs` modules collapse into thin wrappers that
+re-export the crate types for one release, then are removed in 0.10.
 
-The clap-error widening is additive: any consumer who has overridden one of
-the existing four identifiers continues to work, and the new identifiers
-return the embedded en-US text unless the consumer provides a translation.
-The supported error-localization path is the eager pipeline in §6.4; the
-`localize_clap_error_with_command` function remains in 0.9 as a deprecated
-shim that delegates to the eager path with a deprecation warning, and is
-removed in 0.10.
+The clap-error widening is additive: any consumer who has overridden one of the
+existing four identifiers continues to work, and the new identifiers return the
+embedded en-US text unless the consumer provides a translation. The supported
+error-localization path is the eager pipeline in §6.4; the
+`localize_clap_error_with_command` function remains in 0.9 as a deprecated shim
+that delegates to the eager path with a deprecation warning, and is removed in
+0.10.
 
 The derive change is opt-in via `localized_default` on fields (or as a
 struct-level default). Consumers that do not set the attribute see no
 behavioural change.
 
-`FluentEmbedLocalizer` adds an optional dependency on `i18n-embed` behind a
-new `i18n-embed-bridge` cargo feature so the existing dependency footprint
-is unchanged for consumers that do not need the bridge.
+`FluentEmbedLocalizer` adds an optional dependency on `i18n-embed` behind a new
+`i18n-embed-bridge` cargo feature so the existing dependency footprint is
+unchanged for consumers that do not need the bridge.
 
 ## 11. Interaction with `cargo-orthohelp`
 
-The build-time identifier artefact (§8) and the missing-translation report
-(§9) feed `cargo-orthohelp`. The reference CLI gains two subcommands:
+The build-time identifier artefact (§8) and the missing-translation report (§9)
+feed `cargo-orthohelp`. The reference CLI gains two subcommands:
 
 - `cargo orthohelp i18n list-ids` — emits the identifier inventory in
-  human-readable, JSON, and Fluent stub formats. The Fluent stub is a
-  catalogue scaffold containing every identifier with empty values, ready
-  for translators.
+  human-readable, JSON, and Fluent stub formats. The Fluent stub is a catalogue
+  scaffold containing every identifier with empty values, ready for translators.
 - `cargo orthohelp i18n coverage --locale <tag>` — walks the consumer's
-  `Localizer` (built via `FluentLocalizerBuilder` or
-  `FluentEmbedLocalizer`) and reports identifiers the locale fails to
-  resolve. Non-zero exit when coverage is below a configurable threshold,
-  for use in continuous integration (CI).
+  `Localizer` (built via `FluentLocalizerBuilder` or `FluentEmbedLocalizer`)
+  and reports identifiers the locale fails to resolve. Non-zero exit when
+  coverage is below a configurable threshold, for use in continuous integration
+  (CI).
 
 Both commands honour the agent-context output contracts already defined in
 [agent-native-cli-design.md](agent-native-cli-design.md) §6.2.
@@ -805,46 +826,45 @@ Both commands honour the agent-context output contracts already defined in
 - **clap patch releases adding `ErrorKind` variants.** `ErrorKind` is
   `#[non_exhaustive]` and clap may add variants in a patch release. The §6.1
   const assertion catches this in CI before publish; the §6.3 `warn`-level
-  tracing event catches it in production. The matrix is therefore
-  mechanically gated rather than ceremonially audited.
+  tracing event catches it in production. The matrix is therefore mechanically
+  gated rather than ceremonially audited.
 - **`BootHandle` non-finalization.** A consumer who drops a
-  `BootHandle<Boot>` without calling `finalize` loses the merge-phase
-  locale. The typestate prevents extraction of a long-lived `Arc<dyn
-  Localizer>` for library messages, and the `Drop` impl emits a
-  `warn`-level event so the missed step is observable.
+  `BootHandle<Boot>` without calling `finalize` loses the merge-phase locale.
+  The typestate prevents extraction of a long-lived `Arc<dyn Localizer>` for
+  library messages, and the `Drop` impl emits a `warn`-level event so the
+  missed step is observable.
 - **i18n-embed bundle ownership and concurrent locale swap.** Locale
-  switching returns a new loader rather than mutating in place. Daemons
-  must hold an `ArcSwap<dyn Localizer>` (or equivalent) and re-read on each
-  request boundary. The §1.2 snapshot-per-parse contract names this
-  responsibility explicitly so it is not surprise behaviour.
+  switching returns a new loader rather than mutating in place. Daemons must
+  hold an `ArcSwap<dyn Localizer>` (or equivalent) and re-read on each request
+  boundary. The §1.2 snapshot-per-parse contract names this responsibility
+  explicitly so it is not surprise behaviour.
 - **Derive scope creep.** It is tempting to grow the derive into a general
   IR for help text. The scope is held to identifier generation, optional
-  default embedding, and artefact emission. Anything beyond that belongs in
-  the documentation IR pipeline.
+  default embedding, and artefact emission. Anything beyond that belongs in the
+  documentation IR pipeline.
 - **Fluent presence-method drift.** The adapter calls
   `FluentLanguageLoader::has` (the public API in `i18n-embed` 0.16). If a
   future release renames or removes the method, a build script in the
-  `i18n-embed-bridge` feature asserts the symbol resolves at compile time
-  and fails with a migration pointer rather than silently degrading.
+  `i18n-embed-bridge` feature asserts the symbol resolves at compile time and
+  fails with a migration pointer rather than silently degrading.
 - **`LocalizedFormatter` escape hatch (§6.4.1) used incorrectly.** The
   monomorphised formatter is opt-in for advanced cases. Misusing it with a
-  process-wide `OnceLock<Arc<dyn Localizer>>` that is never initialised
-  falls back to en-US silently. The rustdoc for the formatter must call out
-  this case and recommend the eager path for almost every adopter.
+  process-wide `OnceLock<Arc<dyn Localizer>>` that is never initialised falls
+  back to en-US silently. The rustdoc for the formatter must call out this case
+  and recommend the eager path for almost every adopter.
 
 ## 13. Open questions
 
 1. Should the en-US clap-error matrix be split per cargo feature so
    minimal-dependency builds can omit the strings? The current design ships
    them unconditionally because the binary cost is small and skipping them
-   silently reproduces the bug §6 is designed to fix. Revisit if profile
-   data shows the strings are material to small embedded binaries.
+   silently reproduces the bug §6 is designed to fix. Revisit if profile data
+   shows the strings are material to small embedded binaries.
 2. Should `BootHandle::finalize_with` accept a *list* of resolvers so
-   composite policies (environment + file + flag) can be evaluated in a
-   single call? The current shape pushes composition onto the resolver
-   implementation (`ConfigLocaleResolver` already composes one chain).
-   Revisit if downstream applications start writing their own chain
-   adapters.
+   composite policies (environment + file + flag) can be evaluated in a single
+   call? The current shape pushes composition onto the resolver implementation
+   (`ConfigLocaleResolver` already composes one chain). Revisit if downstream
+   applications start writing their own chain adapters.
 
 Open questions 13.1 (resolver on rebuild) and 13.2 (loader-from-assets
 constructor) from the prior draft are resolved in §5.2 and §7 respectively.

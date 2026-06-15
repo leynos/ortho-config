@@ -71,6 +71,37 @@ fn run_with_locale(locale: &str, args: &[&str]) -> String {
     run_with_env(&[("LANG", locale)], args)
 }
 
+fn assert_display_request_succeeds(locale: &str, args: &[&str]) {
+    #[expect(
+        deprecated,
+        clippy::expect_used,
+        reason = "cargo_bin is the standard assert_cmd API and test panics are acceptable"
+    )]
+    let mut cmd = AssertCommand::cargo_bin("hello_world").expect("binary should exist");
+    cmd.env_remove("LC_ALL");
+    cmd.env_remove("LC_MESSAGES");
+    cmd.env_remove("LANG");
+    cmd.env("LANG", locale);
+    cmd.env("RUST_BACKTRACE", "0");
+    cmd.args(args);
+
+    #[expect(clippy::expect_used, reason = "test panics are acceptable")]
+    let output = cmd.output().expect("command should execute");
+
+    assert!(
+        output.status.success(),
+        "display request should exit successfully: {output:?}"
+    );
+    assert!(
+        !output.stdout.is_empty(),
+        "display request should write to stdout: {output:?}"
+    );
+    assert!(
+        output.stderr.is_empty(),
+        "display request should not write to stderr: {output:?}"
+    );
+}
+
 fn render_localized_long_help(localizer: &dyn ortho_config::Localizer) -> String {
     let mut command = CommandLine::command()
         .with_base("hello_world.cli")
@@ -183,6 +214,8 @@ fn normalise_rust_src_paths_works_correctly(
 
 #[test]
 fn help_en_us() {
+    assert_display_request_succeeds("en_US.UTF-8", &["--help"]);
+    assert_display_request_succeeds("en_US.UTF-8", &["--version"]);
     let output = run_with_locale("en_US.UTF-8", &["--help"]);
     assert_snapshot!(output);
 }
@@ -211,6 +244,8 @@ fn missing_subcommand_error_en_us() {
 
 #[test]
 fn help_ja() {
+    assert_display_request_succeeds("ja_JP.UTF-8", &["--help"]);
+    assert_display_request_succeeds("ja_JP.UTF-8", &["--version"]);
     let output = run_with_locale("ja_JP.UTF-8", &["--help"]);
     assert_snapshot!(output);
 }

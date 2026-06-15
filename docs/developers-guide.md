@@ -81,6 +81,14 @@ duplicating ASCII normalization rules. Keep the tolerant catalogue load path in
 resource ids such as dotted catalogue keys before Fluent parses them, and must
 not be used to validate generated command ids.
 
+Use `LocalizedParse` for default-base localised clap parsing and
+`parse_localized_command` when callers need to pass a command that has already
+been localised with `LocalizeCmd::with_base`. Keep the two parse-error paths in
+that helper distinct: errors from `try_get_matches_from_mut` already have the
+command available, while `FromArgMatches::from_arg_matches` errors must be
+enriched with `with_cmd(&command)` so missing-subcommand translations retain
+`valid_subcommands`.
+
 Add agent-native warning and hard-failure report fields to
 `cargo_orthohelp::policy` while `cargo-orthohelp` is the only emitter. Use
 `ORTHO_POLICY_REPORT_SCHEMA_VERSION` for compatibility and keep rule
@@ -242,8 +250,8 @@ effectively read-only infrastructure.
 
 Keep richer fixture families isolated. For example, `NestedDocsConfig` and
 `NestedDocsContext` back `docs_ir_nested.feature`, and their steps live in a
-fixture-specific `tests/rstest_bdd/behaviour/steps/nested_docs_steps.rs`
-module rather than expanding unrelated step files.
+fixture-specific `tests/rstest_bdd/behaviour/steps/nested_docs_steps.rs` module
+rather than expanding unrelated step files.
 
 ## Snapshot tests
 

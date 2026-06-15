@@ -10,10 +10,16 @@ Accepted.
 
 ## Context and problem statement
 
-Roadmap item 11.1.1 promotes the `hello_world` example's `LocalizeCmd`
-helper into the public `ortho_config` API. The promoted API derives Fluent
-message identifiers from a `clap::Command` tree and uses those identifiers to
-localise command and argument help.
+Roadmap item 11.1.1 promotes the `hello_world` example's `LocalizeCmd` helper
+into the public `ortho_config` API. The promoted API derives Fluent message
+identifiers from a `clap::Command` tree and uses those identifiers to localise
+command and argument help.
+
+Roadmap item 11.1.2 builds on that surface with `LocalizedParse`, a blanket
+trait for every `clap::Parser`, and `parse_localized_command`, the
+base-agnostic parsing primitive. These helpers call `LocalizeCmd::localize`
+before parsing, so the same identifier panic contract is reachable from any
+consumer parser that opts into localised parsing.
 
 Identifier derivation can fail when a developer-authored command path contains
 a segment that cannot be represented as a Fluent identifier, or when two
@@ -42,17 +48,16 @@ panic, or silently leave invalid command-tree nodes unlocalised.
 `message_id_for` and `LocalizeCmd::localize` could return a domain error for
 invalid segments and collisions.
 
-This gives dynamic command-tree builders a direct validation path, but it
-makes the common static-command path fallible for every consumer. It also
-infects otherwise straightforward command construction with error plumbing for
-bugs that are usually authored in source and found during testing or first
-run.
+This gives dynamic command-tree builders a direct validation path, but it makes
+the common static-command path fallible for every consumer. It also infects
+otherwise straightforward command construction with error plumbing for bugs
+that are usually authored in source and found during testing or first run.
 
 ### Option B: Panic on invalid derived identifiers
 
 `message_id_for` panics when the final id cannot be represented as a Fluent
-identifier. `LocalizeCmd::localize` panics when the tree walk finds a
-collision among sibling commands or arguments under the same parent node.
+identifier. `LocalizeCmd::localize` panics when the tree walk finds a collision
+among sibling commands or arguments under the same parent node.
 
 This keeps the default API direct, mirrors clap's mutation conventions, and
 surfaces declaration bugs immediately. It is the accepted option.
@@ -72,8 +77,8 @@ distinguished.
 In the context of deriving Fluent identifiers from compile-time-fixed clap
 command trees, facing the need to surface unrepresentable or colliding ids, we
 decided to panic (matching clap's `mut_arg` convention and the §4.1 mandate)
-and neglected a `Result`-returning API, accepting that hand-built dynamic
-trees must validate names before localizing, because the inputs are
+and neglected a `Result`-returning API, accepting that hand-built dynamic trees
+must validate names before localizing, because the inputs are
 developer-authored constants surfaced at first run.
 
 `message_id_for` owns the strict segment normalisation rule. The command-tree
@@ -110,6 +115,10 @@ invalid segments, and avoid changing the existing panic contract.
 - Applications that build command trees from runtime data must validate names
   before calling `LocalizeCmd::localize`, otherwise invalid external data can
   become a process panic.
+- `LocalizedParse` widens the reachable panic surface from explicit command
+  localisation calls to every `clap::Parser` that opts into localised parsing.
+  This is accepted until the planned derive-time guard in 11.1.3 can emit a
+  compile-time error for generated identifiers.
 - Panic contracts are harder to relax than ordinary internal implementation
   choices because downstream tests may begin to rely on the exact failure
   surface.

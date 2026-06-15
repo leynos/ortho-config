@@ -281,31 +281,24 @@ assert_eq!(
 Applications can inject a custom logger with `with_error_reporter` when they
 need to capture Fluent formatting errors alongside command parsing failures.
 
-Use `LocalizeCmd` to apply a localizer to a `clap::Command` tree before parsing
-or rendering help:
+Use `LocalizedParse` when catalogue keys are rooted at the command `bin_name`:
 
 ```rust,ignore
-use clap::CommandFactory;
-use ortho_config::{LocalizeCmd, Localizer};
+use ortho_config::{LocalizedParse, Localizer};
 
 # #[derive(clap::Parser)]
 # struct Cli {}
-fn parse(localizer: &dyn Localizer) -> Result<Cli, clap::Error> {
-    let mut command = Cli::command()
+fn parse(localizer: &dyn Localizer) -> Result<(Cli, clap::ArgMatches), clap::Error> {
+    let command = Cli::command()
         .with_base("my_app.cli")
         .localize(localizer);
-    let mut matches = command
-        .try_get_matches()
-        .map_err(|err| {
-            localize_clap_error_with_command(err, localizer, Some(&command))
-        })?;
 
-    Cli::from_arg_matches_mut(&mut matches).map_err(|err| {
-        let err = err.with_cmd(&command);
-        localize_clap_error_with_command(err, localizer, Some(&command))
-    })
+    parse_localized_command(command, std::env::args_os(), localizer)
 }
 ```
+
+The `*_with_matches` trait variant and the free function return raw
+`clap::ArgMatches` for loaders that need `load_and_merge_with_matches`.
 
 ## Installation and dependencies
 

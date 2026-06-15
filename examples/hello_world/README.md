@@ -10,15 +10,15 @@ production-ready complexity.
 - **Global parameters (switches and arrays)**: illustrate how the command-line
   parser exposes top-level configuration that applies to every command,
   covering boolean feature switches, repeated values, and precedence between
-  defaults and caller-supplied input. The loader now reuses the
-  derive-generated `compose_layers_from_iter` output and clears salutation
-  defaults when callers pass `-s/--salutation`, so CLI vectors replace file or
-  environment entries.
+  defaults and caller-supplied input. The loader now reuses the derive-generated
+  `compose_layers_from_iter` output and clears salutation defaults when
+  callers pass `-s/--salutation`, so CLI vectors replace file or environment
+  entries.
 - **Collection merge strategies**: demonstrate vector appends alongside map
-  replacement semantics. The `greeting_templates` field in `GlobalArgs` uses
-  the `merge_strategy = "replace"` attribute, so configuration files can swap
-  the entire template set without leaking defaults from other layers. This
-  keeps the example defaults isolated when consumers override templates.
+  replacement semantics. The `greeting_templates` field in `GlobalArgs` uses the
+  `merge_strategy = "replace"` attribute, so configuration files can swap the
+  entire template set without leaking defaults from other layers. This keeps
+  the example defaults isolated when consumers override templates.
 - **Subcommands**: implement a friendly `greet` command that accepts a name and
   configurable greeting, alongside a `take-leave` workflow that combines
   switches, optional arguments, and shared greeting customizations to decide
@@ -44,12 +44,13 @@ production-ready complexity.
   `GlobalArgs`, asserting that default salutations are preserved when
   environment layers append new values.
 - **Localized help text**: ship a `DemoLocalizer` backed by
-  `FluentLocalizer`, layer the example’s bundled catalogue over
-  `ortho_config`’s defaults, and thread it through
+  `FluentLocalizer`, layer the example’s bundled catalogue over `ortho_config`
+  ’s defaults, and thread it through
   `CommandLine::command().with_base("hello_world.cli").localize(&localizer)`
-  plus `CommandLine::try_parse_localized_env`. Formatting errors are logged,
+  plus `ortho_config::parse_localized_command`. Formatting errors are logged,
   and the default bundle is used as a fallback, illustrating how applications
-  can adopt Fluent without sacrificing existing help copy.
+  can adopt Fluent without sacrificing existing help copy while keeping custom
+  catalogue roots.
 - **Documentation IR emission**: serialize documentation metadata using
   `OrthoConfigDocs::get_doc_metadata` so `cargo-orthohelp` can generate man
   pages and PowerShell help without scraping `--help` output. The `emit_docs`
@@ -88,12 +89,13 @@ production-ready complexity.
 The `src/localizer.rs` module builds a `FluentLocalizer` from the embedded
 `examples/hello_world/locales/en-US/messages.ftl` catalogue and layers it over
 `ortho_config`’s default messages. The binary instantiates this localizer
-before parsing arguments and calls `CommandLine::try_parse_localized_env`,
-ensuring `--help` output reflects the translated copy. If catalogue parsing
-fails, the demo logs a warning and falls back to `NoOpLocalizer`, keeping the
-stock `clap` strings available while translations are repaired. Consumers who
-are not ready to ship real strings can explicitly choose
-`DemoLocalizer::noop()` for the same effect.
+before parsing arguments, localizes the command tree with
+`with_base("hello_world.cli")`, and calls
+`ortho_config::parse_localized_command`, ensuring `--help` output reflects the
+translated copy. If catalogue parsing fails, the demo logs a warning and falls
+back to `NoOpLocalizer`, keeping the stock `clap` strings available while
+translations are repaired. Consumers who are not ready to ship real strings can
+explicitly choose `DemoLocalizer::noop()` for the same effect.
 
 Parsing failures are also routed through
 `ortho_config::localize_clap_error_with_command`, so missing subcommands or
@@ -136,9 +138,9 @@ variables are set.
 
 ## Generating documentation IR
 
-`cargo-orthohelp` reads the `package.metadata.ortho_config` metadata declared
-in `Cargo.toml` to locate the root configuration type and supported locales.
-Run it from the repository root to emit per-locale JSON:
+`cargo-orthohelp` reads the `package.metadata.ortho_config` metadata declared in
+`Cargo.toml` to locate the root configuration type and supported locales. Run
+it from the repository root to emit per-locale JSON:
 
 ```sh
 cargo orthohelp --package hello_world --out-dir target/orthohelp --locale en-US

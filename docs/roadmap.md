@@ -549,15 +549,15 @@ later progressively add opinion.
   - [x] Success: the `hello_world` example deletes its local
     `LocalizeCmd` impl and re-exports the crate one for one release.
 
-- [ ] 11.1.2. Promote `try_parse_localized*` to a generic blanket trait.
+- [x] 11.1.2. Promote `try_parse_localized*` to a generic blanket trait.
   - Requires 11.1.1.
   - See cli-localization-design.md §4.2.
-  - [ ] Add `LocalizedParse: clap::Parser` with `try_parse_localized`,
+  - [x] Add `LocalizedParse: clap::Parser` with `try_parse_localized`,
     `try_parse_localized_from`, and `try_parse_localized_with_matches`.
-  - [ ] Provide a blanket impl for every `clap::Parser`.
-  - [ ] Preserve the `*_with_matches` variant for callers that need the
+  - [x] Provide a blanket impl for every `clap::Parser`.
+  - [x] Preserve the `*_with_matches` variant for callers that need the
     raw `ArgMatches` for `load_and_merge_with_matches`.
-  - [ ] Add identifier-coverage tests that compare derive-emitted
+  - [x] Add identifier-coverage tests that compare derive-emitted
     identifiers with `message_id_for` output across a fixture command tree.
 
 - [ ] 11.1.3. Add the `OrthoConfigLocalization` trait and derive emission.

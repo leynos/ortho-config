@@ -159,10 +159,12 @@ Stop and escalate (do not work around) when any of these is reached.
 - [x] (2026-06-15) Milestone 2: implement `parse_localized_command` free
       function and the
   `LocalizedParse` blanket trait; re-export both.
-- [x] (2026-06-15) Milestone 3: identifier-coverage test and panic/negative tests.
-- [x] (2026-06-15) Milestone 4: migrate `examples/hello_world` onto the free function;
+- [x] (2026-06-15) Milestone 3: identifier-coverage test and panic/negative
+      tests.
+- [x] (2026-06-15) Milestone 4: migrate `examples/hello_world` onto the free
+      function;
   delete inherent methods and `ParsedCommandLine`.
-- [ ] Milestone 5: documentation sweep (users' guide, developers' guide,
+- [x] (2026-06-15) Milestone 5: documentation sweep (users' guide, developers' guide,
   design doc, README), final gates, CodeRabbit review, roadmap tick.
 
 Each milestone ends with `make check-fmt typecheck lint test` passing and a
@@ -186,7 +188,8 @@ commit. Run gates sequentially (build caching), never in parallel.
   the runtime lookup set to the public helper.
 - Observation: 2026-06-15 milestone gates passed after implementation:
   `make check-fmt`, `make typecheck`, `make lint`, and `make test`. Logs are
-  under `/tmp/*-ortho-config-11-1-2-promote-try-parse-localized-to-a-generic-blanket-trait.out`.
+  under
+  `/tmp/*-ortho-config-11-1-2-promote-try-parse-localized-to-a-generic-blanket-trait.out`.
 - Observation: 2026-06-15 `coderabbit review --agent` was attempted twice
   after the milestone gates. Both invocations connected and then stalled at
   `preparing_sandbox` with no findings or rate-limit message; logs are
@@ -207,6 +210,16 @@ commit. Run gates sequentially (build caching), never in parallel.
   gates and again stalled at `preparing_sandbox` without findings or a
   rate-limit message. Log:
   `/tmp/coderabbit-ortho-config-11-1-2-promote-try-parse-localized-to-a-generic-blanket-trait-milestone-4.out`.
+- Observation: 2026-06-15 final documentation sweep updated the users' guide,
+  developers' guide, design document, ADR-006, `hello_world` README, and
+  roadmap. `localised_help.rs` now asserts `--help` and `--version` display
+  requests exit successfully, write stdout, and leave stderr empty. Final gates
+  passed: `make check-fmt`, `make typecheck`, `make lint`, `make test`,
+  `make markdownlint`, and `make nixie`.
+- Observation: 2026-06-15 final `coderabbit review --agent` attempt also
+  stalled at `preparing_sandbox` without findings or a rate-limit message.
+  Log:
+  `/tmp/coderabbit-ortho-config-11-1-2-promote-try-parse-localized-to-a-generic-blanket-trait-final.out`.
 
 ## Decision log
 
@@ -250,9 +263,8 @@ commit. Run gates sequentially (build caching), never in parallel.
 
 - Decision (D-3): **Trait shape and signatures.**
   `pub trait LocalizedParse: clap::Parser` (no redundant `+ Sized`;
-  `Parser: Sized` already), three
-  methods with default bodies, empty blanket impl
-  `impl<P: clap::Parser> LocalizedParse for P {}` (itertools precedent).
+  `Parser: Sized` already), three methods with default bodies, empty blanket
+  impl `impl<P: clap::Parser> LocalizedParse for P {}` (itertools precedent).
   Methods take `localizer: &dyn Localizer` (matches the crate-wide convention;
   avoids monomorphization with no benefit). `*_with_matches` returns the tuple
   `(Self, ArgMatches)` (value first, mirroring clap), not a named wrapper
@@ -273,21 +285,30 @@ commit. Run gates sequentially (build caching), never in parallel.
   Date/Author: 2026-06-14, planning session.
 
 - Decision (D-5): **Panic-as-contract, tied to 11.1.3.**
-  `parse_localized_command`
-  and the `LocalizedParse` methods inherit `LocalizeCmd::localize`'s panic on
-  Fluent-unsafe or colliding identifiers. We keep the panic (an illegal
-  identifier is a command-declaration bug, per ADR-006 and `identifier.rs`'s
-  module doc) rather than introducing a fallible `try_*` variant in 11.1.2. We
-  document it loudly and note the ordering risk: until 11.1.3 lands the
-  compile-time `compile_error!` guard, 11.1.2 ships a runtime panic with no
-  compile-time check. ADR-006 is amended to record that the blanket trait
-  widens the reachable panic surface to every `clap::Parser`. Rationale:
-  Doggylump failure-mode review. A fallible variant is recorded as possible
-  future work, out of scope here. Date/Author: 2026-06-14, planning session.
+  `parse_localized_command` and the `LocalizedParse` methods inherit
+  `LocalizeCmd::localize`'s panic on Fluent-unsafe or colliding identifiers. We
+  keep the panic (an illegal identifier is a command-declaration bug, per
+  ADR-006 and `identifier.rs`'s module doc) rather than introducing a fallible
+  `try_*` variant in 11.1.2. We document it loudly and note the ordering risk:
+  until 11.1.3 lands the compile-time `compile_error!` guard, 11.1.2 ships a
+  runtime panic with no compile-time check. ADR-006 is amended to record that
+  the blanket trait widens the reachable panic surface to every `clap::Parser`.
+  Rationale: Doggylump failure-mode review. A fallible variant is recorded as
+  possible future work, out of scope here. Date/Author: 2026-06-14, planning
+  session.
 
 ## Outcomes & retrospective
 
-To be completed at milestone boundaries and on completion.
+11.1.2 is implemented. `ortho_config` now exposes `LocalizedParse` and
+`parse_localized_command`; `examples/hello_world` uses the free function with
+its existing `hello_world.cli` base and no longer carries local parsing glue.
+The identifier-coverage and panic-contract tests live in
+`ortho_config/tests/localized_parse.rs`, and the roadmap item is checked off.
+
+CodeRabbit could not complete in this environment: repeated invocations stalled
+at `preparing_sandbox` without findings or a rate-limit message. Deterministic
+quality gates passed before each attempted review; the final stalled invocation
+is recorded in the observations above.
 
 ## Context and orientation
 
@@ -318,12 +339,12 @@ Key terms:
    `ortho_config/src/localizer/identifier.rs`.
 4. **
    `localize_clap_error_with_command(err, &dyn Localizer, Some(&Command)) -> clap::Error`
-   ** — rewrites a clap error's message via the localizer while
-   preserving its `ErrorKind` (it rebuilds with
-   `clap::Error::raw(err.kind(), message)`), and returns the error unchanged for
-   `DisplayHelp`/`DisplayVersion` and when no translation differs from the
-   stock text. Defined in `ortho_config/src/localizer/clap_error.rs`. It is
-   idempotent by construction (translated == fallback → early return).
+   ** — rewrites a clap error's message via the localizer while preserving its
+   `ErrorKind` (it rebuilds with `clap::Error::raw(err.kind(), message)`), and
+   returns the error unchanged for `DisplayHelp`/`DisplayVersion` and when no
+   translation differs from the stock text. Defined in
+   `ortho_config/src/localizer/clap_error.rs`. It is idempotent by construction
+   (translated == fallback → early return).
 5. **`is_display_request(&clap::Error) -> bool`** — true for `DisplayHelp` and
    `DisplayVersion`. The example calls `err.exit()` on these so help/version
    exit `0` to stdout. Defined in `ortho_config/src/error/helpers.rs`,
@@ -432,8 +453,8 @@ Write these tests (each must fail to compile or assert before Stage C):
    subcommand). See Decision D-4.
 6. `fluent_unsafe_identifier_panics`
    (`#[should_panic(expected = "invalid Fluent identifier segment")]`): a
-   fixture with `#[arg(id = "bad.id")]`
-   parsed through the trait must panic, pinning the panic contract (D-5).
+   fixture with `#[arg(id = "bad.id")]` parsed through the trait must panic,
+   pinning the panic contract (D-5).
 
 Use `rstest` fixtures for the localizer doubles, `pretty_assertions` for
 equality, and `googletest` matchers where they read better than `assert_eq!`.

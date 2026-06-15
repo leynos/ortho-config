@@ -693,7 +693,7 @@ translations and `message` when callers need a convenient fallback string. A
 translations can opt out without additional glue. The `hello_world` example
 exercises the trait via a `DemoLocalizer`, threading translations into
 `CommandLine::command().with_base("hello_world.cli").localize(&demo)` and
-`try_parse_localized_env` to prove that the Command-Line Interface (CLI) help
+`parse_localized_command` to prove that the Command-Line Interface (CLI) help
 text and errors can be patched without rewriting parser wiring.
 
 - **Command-tree localization:** `LocalizeCmd` is a public extension trait on
