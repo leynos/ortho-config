@@ -25,6 +25,9 @@ All notable changes to this project will be documented in this file.
 - Add renderer compatibility tests and `insta` golden snapshots for populated
   nested-subcommand `DocMetadata`
   (`cargo-orthohelp/tests/golden/nested_subcommand_snapshots.rs`).
+- Add `SkillManifest`, `SkillCommandRef`, and the
+  `AgentContext.skill_manifests` field for declaring downstream skill manifests
+  in agent context (roadmap item 6.3.1).
 
 ### Changed
 
@@ -46,6 +49,12 @@ All notable changes to this project will be documented in this file.
   runner to `rstest-bdd`, introducing a reusable harness fixture, compile-time
   tag filters, and removing the `cucumber`, `gherkin`, and Tokio
   dev-dependencies.
+
+### Changed (design)
+
+- Rename the agent-context defaulting-table row from `skill_manifest_paths` to
+  `skill_manifests` to reflect that entries are structured descriptors rather
+  than bare paths.
 
 ### Fixed
 
