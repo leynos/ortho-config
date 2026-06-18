@@ -49,6 +49,14 @@
   phases, steps, and tasks from the roadmap that preceded the active
   agent-native plan.
 
+## Requests for comments (RFCs)
+
+- [RFC 0001: Field-level environment aliases](rfcs/0001-field-level-environment-aliases.md):
+  review the proposal to add first-class field-level environment-variable
+  aliases and projections, with deterministic intra-environment precedence,
+  empty-value handling, and secret-redaction metadata, motivated by the `vk` and
+  `podbot` use cases.
+
 ## Feature and migration notes
 
 - [Clap dispatch and OrthoConfig integration](clap-dispatch-and-ortho-config-integration.md):
