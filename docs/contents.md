@@ -49,6 +49,13 @@
   phases, steps, and tasks from the roadmap that preceded the active
   agent-native plan.
 
+## Requests for comments (RFCs)
+
+- [RFC 0002: Customizable configuration layering policy](rfcs/0002-config-layer-resolution-policy.md):
+  review the proposed generic file-layer resolution policy — ordered explicit
+  selectors, multi-scope stacking, and a reusable resolver — with Netsuke as the
+  proof case.
+
 ## Feature and migration notes
 
 - [Clap dispatch and OrthoConfig integration](clap-dispatch-and-ortho-config-integration.md):
