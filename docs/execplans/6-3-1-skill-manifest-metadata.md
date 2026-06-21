@@ -1203,15 +1203,15 @@ decisions to escalate, decisions on ambiguous requirements, and design choices.
 
 ## Outcomes & Retrospective
 
-The implementation matched the approved passive-schema plan. `SkillManifest`
-and `SkillCommandRef` now live in `ortho_config::agent_context`, are re-exported
+The implementation matched the approved passive-schema plan. `SkillManifest` and
+`SkillCommandRef` now live in `ortho_config::agent_context`, are re-exported
 from `ortho_config`, and are connected through the additive defaulted
 `AgentContext.skill_manifests` field. No validator, command-line behaviour, or
 policy-report behaviour was added; that remains roadmap item 6.3.2.
 
-The main divergence from the draft plan was caused by the already-landed
-6.2.1 generator. Because `cargo-orthohelp` now serializes `AgentContext::new`,
-the defaulted field appears in the generator's existing golden snapshot. The
+The main divergence from the draft plan was caused by the already-landed 6.2.1
+generator. Because `cargo-orthohelp` now serializes `AgentContext::new`, the
+defaulted field appears in the generator's existing golden snapshot. The
 snapshot was updated as a consequence of the schema addition, without adding
 generator-specific logic. The other implementation discovery was that
 `camino::Utf8PathBuf` needs the crate-supported `serde1` feature for the chosen
@@ -1228,8 +1228,7 @@ Validation evidence:
   `make check-fmt`, `make lint`, `make test`, and `make markdownlint`, followed
   by a zero-finding CodeRabbit review.
 - Milestone 4 passed `make fmt`, `make check-fmt`, `make lint`, `make test`,
-  `make markdownlint`, and `make nixie` before a zero-finding CodeRabbit
-  review.
+  `make markdownlint`, and `make nixie` before a zero-finding CodeRabbit review.
 
 Lessons for 6.3.2: the `id: String` field gives the future validator a stable
 diagnostic target independent of path normalisation, symlinks, and future

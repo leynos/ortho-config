@@ -288,7 +288,43 @@ use ortho_config::{LocalizedParse, Localizer};
 
 # #[derive(clap::Parser)]
 # struct Cli {}
-fn parse(localizer: &dyn Localizer) -> Result<(Cli, clap::ArgMatches), clap::Error> {
+fn parse_env(localizer: &dyn Localizer) -> Result<Cli, clap::Error> {
+    Cli::try_parse_localized(localizer)
+}
+
+fn parse_supplied_args(localizer: &dyn Localizer) -> Result<Cli, clap::Error> {
+    Cli::try_parse_localized_from(["demo", "--verbose"], localizer)
+}
+```
+
+Use `try_parse_localized_with_matches` when a later configuration merge needs
+the raw `clap::ArgMatches` alongside the typed parser:
+
+```rust,ignore
+use ortho_config::{LocalizedParse, Localizer};
+
+# #[derive(clap::Parser)]
+# struct Cli {}
+fn parse_with_matches(
+    localizer: &dyn Localizer,
+) -> Result<(Cli, clap::ArgMatches), clap::Error> {
+    Cli::try_parse_localized_with_matches(["demo", "--verbose"], localizer)
+}
+```
+
+The trait derives the catalogue root from `bin_name`, falling back to the
+command name. When a binary needs a different root, build the command with
+`LocalizeCmd::with_base` and pass it to `parse_localized_command`:
+
+```rust,ignore
+use clap::CommandFactory;
+use ortho_config::{LocalizeCmd, Localizer, parse_localized_command};
+
+# #[derive(clap::Parser)]
+# struct Cli {}
+fn parse_custom_base(
+    localizer: &dyn Localizer,
+) -> Result<(Cli, clap::ArgMatches), clap::Error> {
     let command = Cli::command()
         .with_base("my_app.cli")
         .localize(localizer);
@@ -297,8 +333,9 @@ fn parse(localizer: &dyn Localizer) -> Result<(Cli, clap::ArgMatches), clap::Err
 }
 ```
 
-The `*_with_matches` trait variant and the free function return raw
-`clap::ArgMatches` for loaders that need `load_and_merge_with_matches`.
+The free function is the right choice when the catalogue keys intentionally do
+not match the command `bin_name`, as in applications that share one binary name
+across several catalogue namespaces.
 
 ## Installation and dependencies
 
