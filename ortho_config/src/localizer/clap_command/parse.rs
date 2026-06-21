@@ -1,4 +1,16 @@
-//! Localised parsing glue for `clap` command trees.
+//! Localisation-aware parsing for `clap` command trees.
+//!
+//! This module connects three pieces that are otherwise easy to wire
+//! inconsistently: [`clap::Parser`] implementations, [`LocalizeCmd`] command
+//! metadata rewriting, and [`crate::Localizer`] error-message lookup. It keeps
+//! the parse path responsible for both building a localised command tree before
+//! `clap` sees the arguments and localising any parse or `from_arg_matches`
+//! error after `clap` rejects them.
+//!
+//! Use [`parse_localized_command`] when the caller already has a command tree
+//! or needs an explicit catalogue key root via [`LocalizeCmd::with_base`]. Use
+//! [`LocalizedParse`] for the common zero-configuration path where the default
+//! catalogue root should come from the parser's binary name or command name.
 
 use super::LocalizeCmd;
 use crate::{Localizer, localize_clap_error_with_command};
