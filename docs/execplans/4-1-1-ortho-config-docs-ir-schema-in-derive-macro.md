@@ -132,8 +132,8 @@ modules under `ortho_config_macros/src/derive`. Attribute parsing is handled in
 is under `ortho_config_macros/src/derive/generate`. The runtime crate is
 `ortho_config`, with public APIs defined in `ortho_config/src/lib.rs`. Tests
 for macros and runtime features are primarily under `ortho_config/tests` and
-behavioural tests using `rstest-bdd` live in `ortho_config/tests/rstest_bdd`
-and `examples/hello_world/tests/rstest_bdd`.
+behavioural tests using `rstest-bdd` live in `ortho_config/tests/rstest_bdd` and
+`examples/hello_world/tests/rstest_bdd`.
 
 The IR schema to implement is defined in `docs/cargo-orthohelp-design.md`
 (section 2). The plan must ensure the derive macro emits a new trait
@@ -158,9 +158,9 @@ and enums from schema v1.1 with `serde::Serialize` derives and module-level
 
 Stage C: Extend macro parsing to capture doc-related attributes. Update
 `StructAttrs` and `FieldAttrs` to include fields for `about_id`, `synopsis_id`,
-`help_id`, `long_help_id`, `value(type = ...)`, `deprecated`, `example`,
-`link`, `note`, `headings`, `discovery`, `precedence`, and `windows` metadata.
-Keep existing keys backward compatible and decide how unknown keys are handled.
+`help_id`, `long_help_id`, `value(type = ...)`, `deprecated`, `example`, `link`,
+`note`, `headings`, `discovery`, `precedence`, and `windows` metadata. Keep
+existing keys backward compatible and decide how unknown keys are handled.
 Document any new parsing decisions in `docs/cargo-orthohelp-design.md`.
 
 Stage D: Generate IR metadata and auto-IDs. Implement a new generator module

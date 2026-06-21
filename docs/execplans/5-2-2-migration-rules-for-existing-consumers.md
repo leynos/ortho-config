@@ -1,7 +1,7 @@
 # Record migration rules for existing consumers
 
 This ExecPlan (execution plan) is a living document. The sections `Constraints`,
- `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
+`Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
 and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
 Status: COMPLETED
@@ -267,13 +267,13 @@ implementation, record which compatibility rules were documented, which tests
 were added or strengthened, which review concerns were cleared, and whether any
 follow-up roadmap items were created.
 
-Implementation began on 2026-05-24 after explicit user approval.
-The first milestone added executable compatibility coverage for legacy
-`cargo-orthohelp` formats and wired the dormant `rstest-bdd` feature files into
-Cargo. The second milestone documented migration rules for existing consumers
-and marked roadmap item 5.2.2 done. CodeRabbit review found two trivial harness
-entry-point issues in the first milestone, both addressed, and no findings in
-the documentation milestone.
+Implementation began on 2026-05-24 after explicit user approval. The first
+milestone added executable compatibility coverage for legacy `cargo-orthohelp`
+formats and wired the dormant `rstest-bdd` feature files into Cargo. The second
+milestone documented migration rules for existing consumers and marked roadmap
+item 5.2.2 done. CodeRabbit review found two trivial harness entry-point issues
+in the first milestone, both addressed, and no findings in the documentation
+milestone.
 
 ## Context and orientation
 
@@ -289,7 +289,7 @@ The current output format enum lives in `cargo-orthohelp/src/cli.rs` as
 
 The format dispatch lives in `cargo-orthohelp/src/main.rs`. It currently maps
 `Ir` and `All` to `generate_ir`, `Man` and `All` to `generate_man`, and `Ps` and
- `All` to `generate_powershell`. In one `all` run the order is IR, man, then
+`All` to `generate_powershell`. In one `all` run the order is IR, man, then
 PowerShell.
 
 The base documentation IR type lives in `ortho_config/src/docs/ir.rs`.
@@ -315,7 +315,7 @@ generation live under `cargo-orthohelp/src/powershell/`.
 Existing behavioural tests live under `cargo-orthohelp/tests/features/` and
 `cargo-orthohelp/tests/rstest_bdd/behaviour/`. Existing golden tests live under
 `cargo-orthohelp/tests/golden/`. Windows-specific PowerShell validation lives in
- `cargo-orthohelp/tests/powershell_windows.rs`.
+`cargo-orthohelp/tests/powershell_windows.rs`.
 
 Relevant documentation sources are:
 
@@ -397,7 +397,7 @@ that cannot be captured cleanly in the design documents or ADR-003.
 Stage D: review and harden. Run `make fmt` if Markdown formatting changes are
 needed. Then run `make check-fmt`, `make lint`, and `make test` sequentially
 with `tee`. Run `make typecheck` when the Makefile exposes that target. Also run
- `make markdownlint` because Markdown files change. Run `make nixie` if Mermaid
+`make markdownlint` because Markdown files change. Run `make nixie` if Mermaid
 diagrams are added or edited. Run `coderabbit review --agent`, address every
 concern that fits within this plan's constraints, and rerun affected gates. If
 CodeRabbit asks for work outside tolerance, record it in this plan and escalate.
@@ -619,10 +619,10 @@ Main-branch schema ownership work from
 - `docs/adr-003-define-schema-ownership-for-agent-native-contracts.md` is the
   accepted ownership record. This 5.2.2 plan should add migration rules that
   respect it rather than introducing a competing ownership model.
-- `docs/users-guide.md` already states that existing `cargo-orthohelp
-  --format ir`, `--format man`, `--format ps`, and `--format all`
-  behaviour remains compatible while agent-context generation and policy
-  checking remain future surfaces.
+- `docs/users-guide.md` already states that existing
+  `cargo-orthohelp --format ir`, `--format man`, `--format ps`, and
+  `--format all` behaviour remains compatible while agent-context generation
+  and policy checking remain future surfaces.
 
 Context-pack exchange for the agent team was recorded in finalised context pack
 `5-2-2-migration-rules-planning`.

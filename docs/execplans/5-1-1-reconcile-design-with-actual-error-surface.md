@@ -1,9 +1,8 @@
 # Reconcile missing required value errors
 
-This execution plan (ExecPlan) is a living document. The sections
-`Constraints`, `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`,
-`Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
-proceeds.
+This execution plan (ExecPlan) is a living document. The sections `Constraints`,
+`Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
+and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
 Status: COMPLETE
 
@@ -157,8 +156,8 @@ two.
   completed progress state, future-tense execution steps, and the 400-line
   constraint.
 - [x] (2026-05-18) Updated the remaining stale reconciliation note in
-  `docs/agent-native-cli-design.md` so it treats roadmap item 5.1.1 as
-  complete and leaves only the phase 7 diagnostic implementation open.
+  `docs/agent-native-cli-design.md` so it treats roadmap item 5.1.1 as complete
+  and leaves only the phase 7 diagnostic implementation open.
 - [x] (2026-05-18) Ran `coderabbit review --agent` for the agent-native design
   follow-up; it completed with zero findings.
 
@@ -240,10 +239,10 @@ Summarize outcomes, gaps, and lessons learned at major milestones or at
 completion. Compare the result against the original purpose.
 
 - Outcome: The phase 5.1.1 documentation reconciliation is complete. The
-  design note and users guide now state that `OrthoError::MissingRequiredValues`
-  is absent from the current public error surface, the changelog records the
-  clarification, and the roadmap marks item 5.1.1 done while leaving the actual
-  diagnostic implementation in phase 7.3.1.
+  design note and users guide now state that
+  `OrthoError::MissingRequiredValues` is absent from the current public error
+  surface, the changelog records the clarification, and the roadmap marks item
+  5.1.1 done while leaving the actual diagnostic implementation in phase 7.3.1.
 - Gap: Repository-wide `make fmt` still fails on pre-existing Markdown
   line-length violations in unrelated documents. The edited ExecPlan, design
   note, roadmap, and changelog pass direct Markdown linting; the edited users
@@ -286,8 +285,7 @@ in `CHANGELOG.md`.
 
 Stage A: Reconfirm the error surface before editing. Read
 `ortho_config/src/error/types.rs`, `ortho_config/src/error/constructors.rs`,
-`ortho_config/src/result_ext.rs`,
-`ortho_config_macros/src/derive/load_impl.rs`,
+`ortho_config/src/result_ext.rs`, `ortho_config_macros/src/derive/load_impl.rs`,
 `ortho_config_macros/src/derive/generate/declarative/merge_tokens.rs`,
 `ortho_config/src/declarative/convert.rs`, and
 `ortho_config/src/subcommand/mod.rs`. Search the repository for

@@ -89,6 +89,13 @@ command available, while `FromArgMatches::from_arg_matches` errors must be
 enriched with `with_cmd(&command)` so missing-subcommand translations retain
 `valid_subcommands`.
 
+Compile-time coverage for this API belongs in `trybuild` pass/fail cases that
+exercise the public trait bound (`LocalizedParse: clap::Parser`). Fluent-unsafe
+command identifiers are still a documented runtime panic contract owned by
+`message_id_for` and `LocalizeCmd::localize`, so keep that coverage in ordinary
+runtime panic tests until derive-emitted identifiers move validation to compile
+time.
+
 Add agent-native warning and hard-failure report fields to
 `cargo_orthohelp::policy` while `cargo-orthohelp` is the only emitter. Use
 `ORTHO_POLICY_REPORT_SCHEMA_VERSION` for compatibility and keep rule

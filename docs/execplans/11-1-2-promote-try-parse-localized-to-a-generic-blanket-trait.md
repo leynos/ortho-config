@@ -164,7 +164,8 @@ Stop and escalate (do not work around) when any of these is reached.
 - [x] (2026-06-15) Milestone 4: migrate `examples/hello_world` onto the free
       function;
   delete inherent methods and `ParsedCommandLine`.
-- [x] (2026-06-15) Milestone 5: documentation sweep (users' guide, developers' guide,
+- [x] (2026-06-15) Milestone 5: documentation sweep (users' guide, developers'
+      guide,
   design doc, README), final gates, CodeRabbit review, roadmap tick.
 
 Each milestone ends with `make check-fmt typecheck lint test` passing and a
@@ -217,8 +218,7 @@ commit. Run gates sequentially (build caching), never in parallel.
   passed: `make check-fmt`, `make typecheck`, `make lint`, `make test`,
   `make markdownlint`, and `make nixie`.
 - Observation: 2026-06-15 final `coderabbit review --agent` attempt also
-  stalled at `preparing_sandbox` without findings or a rate-limit message.
-  Log:
+  stalled at `preparing_sandbox` without findings or a rate-limit message. Log:
   `/tmp/coderabbit-ortho-config-11-1-2-promote-try-parse-localized-to-a-generic-blanket-trait-final.out`.
 - Observation: 2026-06-16 `docs/roadmap.md` was updated after implementation
   to carry the 11.1.2 decisions, findings, progress, validation status, and
@@ -576,9 +576,9 @@ Go/no-go: the Stage B tests 1–5 now pass; test 6 (panic) passes.
    `ParsedCommandLine` from the `use` on line 8.
 4. In `examples/hello_world/src/cli/tests/localisation.rs`: replace the three
    `try_parse_localized` call sites with
-   `parse_localized_command::<CommandLine, _, _>(
-   CommandLine::command().with_base("hello_world.cli").localize(&loc), args,
-   &loc)`,
+   `parse_localized_command::<CommandLine, _, _>(command, args, &loc)`, where
+   `command` is
+   `CommandLine::command().with_base("hello_world.cli").localize(&loc)`,
    destructuring `(cli, _)` where the test inspects `cli.command`. The two
    error-path tests (lines 57, 77) only call `.expect_err()` and need only the
    call-shape update.

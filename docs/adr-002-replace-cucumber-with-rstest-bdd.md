@@ -170,8 +170,8 @@ entrypoints as the rest of the workspace.
      parameter.
 2. Bind every scenario in `tests/features/global_parameters.feature` either via
    `scenarios!` or explicit `#[scenario]` functions when fixtures are required.
-   Use two `scenarios!` invocations gated by `cfg(feature = "yaml")` to keep
-   the `@requires.yaml` logic declarative.
+   Use two `scenarios!` invocations gated by `cfg(feature = "yaml")` to keep the
+   `@requires.yaml` logic declarative.
 3. Remove the bespoke tag-filtering logic and the `[[test]]` harness definition
    from `examples/hello_world/Cargo.toml` once all tests run under the stock
    harness.

@@ -1,14 +1,13 @@
 # Define schema ownership for documentation IR, agent context, and policy reports
 
-This ExecPlan (execution plan) is a living document. The sections
-`Constraints`, `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`,
-`Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
-proceeds.
+This ExecPlan (execution plan) is a living document. The sections `Constraints`,
+`Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
+and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
 Status: COMPLETE
 
-This plan covers roadmap item 5.2.1 only. It was approved for implementation
-on 2026-05-20 when the maintainer asked Codex to proceed with the planned
+This plan covers roadmap item 5.2.1 only. It was approved for implementation on
+2026-05-20 when the maintainer asked Codex to proceed with the planned
 functionality.
 
 ## Purpose / big picture
@@ -21,8 +20,8 @@ different schemas:
 - compact agent-context JSON for command invocation;
 - policy reports emitted by `cargo-orthohelp`.
 
-After this plan is approved and implemented, a maintainer should be able to
-read `docs/agent-native-cli-design.md`, `docs/cargo-orthohelp-design.md`,
+After this plan is approved and implemented, a maintainer should be able to read
+`docs/agent-native-cli-design.md`, `docs/cargo-orthohelp-design.md`,
 `docs/users-guide.md`, `docs/developers-guide.md`, and any new Architecture
 Decision Record (ADR) and tell exactly which crate owns each schema, how each
 schema is versioned, and which future roadmap items are allowed to implement
@@ -223,8 +222,8 @@ after ownership is approved.
 
 The implementation should record these decisions, subject to plan approval.
 
-First, localized documentation IR remains in `ortho_config::docs` and the
-public `OrthoConfigDocs` contract. `DocMetadata.ir_version` continues to govern
+First, localized documentation IR remains in `ortho_config::docs` and the public
+`OrthoConfigDocs` contract. `DocMetadata.ir_version` continues to govern
 human-documentation IR compatibility. Add only metadata that human
 documentation needs or metadata that is genuinely shared by both human docs and
 agent context.
@@ -370,9 +369,9 @@ cargo-orthohelp/tests/rstest_bdd/behaviour/
 ```
 
 If this implementation only records schema ownership and adds passive schema
-types, behavioural tests may be limited to parseable fixture outputs. If it
-adds `--format agent-context`, `--check-agent-native`, `--json`, or output
-files, add end-to-end tests that invoke the real binary and assert:
+types, behavioural tests may be limited to parseable fixture outputs. If it adds
+`--format agent-context`, `--check-agent-native`, `--json`, or output files,
+add end-to-end tests that invoke the real binary and assert:
 
 - stdout contains machine-readable JSON only when JSON output is requested;
 - human diagnostics stay on stderr;
@@ -617,8 +616,7 @@ Record every significant decision made while working on the plan. Include
 decisions to escalate, decisions on ambiguous requirements, and design choices.
 
 - Decision: Treat this branch as a pre-implementation ExecPlan branch.
-  Rationale:
-  the user explicitly required plan approval before implementation.
+  Rationale: the user explicitly required plan approval before implementation.
 - Decision: Recommend `ortho_config::docs` as the continuing owner of localized
   documentation IR. Rationale: this preserves the existing public
   `OrthoConfigDocs` contract and avoids breaking current `cargo-orthohelp`
@@ -657,8 +655,8 @@ decisions to escalate, decisions on ambiguous requirements, and design choices.
 
 ## Outcomes & Retrospective
 
-Roadmap item 5.2.1 is complete. The accepted ownership decisions keep
-localized documentation IR in `ortho_config::docs`, compact agent context in
+Roadmap item 5.2.1 is complete. The accepted ownership decisions keep localized
+documentation IR in `ortho_config::docs`, compact agent context in
 `ortho_config::agent_context`, and policy reports in `cargo_orthohelp::policy`.
 
 The implementation added `ORTHO_AGENT_CONTEXT_SCHEMA_VERSION` and

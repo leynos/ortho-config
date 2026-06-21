@@ -531,15 +531,14 @@ fails to resolve.
 
 ### 6.3 Observable fallback
 
-The `localize_clap_error_with_command` path currently swallows missing
-identifiers silently. The new path emits tracing events at severities matched
-to channel: `warn` when the missing identifier originates from a clap error
-(because the user is staring at an untranslated parse error and operators want
-to alert on it), and `debug` for application-message origins (where the en-US
-fallback is usually acceptable). Events carry the identifier, the `ErrorKind`,
-and the locale, and are also surfaced through a `MissingTranslationReporter`
-hook (§9). The default reporter is a no-op so production binaries pay no cost
-when telemetry is off.
+The `localize_clap_error_with_command` path emits tracing events at severities
+matched to channel: `warn` when the missing identifier originates from a clap
+error (because the user is staring at an untranslated parse error and operators
+want to alert on it), and `debug` for application-message origins (where the
+en-US fallback is usually acceptable). Events carry the identifier, the
+`ErrorKind`, and the locale when the localizer exposes one. The broader
+`MissingTranslationReporter` hook remains future work (§9). The default
+reporter is a no-op so production binaries pay no cost when telemetry is off.
 
 ### 6.4 Preserve clap's rich context
 
@@ -561,8 +560,7 @@ escapes the helper's stack frame:
    `try_get_matches_from_mut`.
 2. Resolve the localized message body for the matched
    `(ErrorKind, ContextKind)` pair using `CLAP_ERROR_IDS` plus per-variant
-   Fluent
-   argument extraction.
+   Fluent argument extraction.
 3. Replace the `ContextKind::Custom` slot via `Error::insert`, so
    `RichFormatter` uses the supplied text in place of the kind-message portion
    while keeping clap's usage tail, suggestion list, and styling intact.

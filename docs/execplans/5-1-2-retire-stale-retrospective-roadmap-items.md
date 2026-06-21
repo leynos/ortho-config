@@ -1,14 +1,13 @@
 # Retire stale retrospective roadmap items
 
-This execution plan (ExecPlan) is a living document. The sections
-`Constraints`, `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`,
-`Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
-proceeds.
+This execution plan (ExecPlan) is a living document. The sections `Constraints`,
+`Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
+and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
 Status: COMPLETE
 
-This plan covers roadmap item 5.1.2 only. It was approved for implementation
-on 2026-05-19.
+This plan covers roadmap item 5.1.2 only. It was approved for implementation on
+2026-05-19.
 
 ## Purpose / big picture
 
@@ -442,8 +441,8 @@ For the later implementation pull request, validation proves that:
 - Observation: `make fmt` remains unsuitable as a clean gate for this
   plan-only change because its `mdformat-all` wrapper reports existing
   repository-wide MD013 line-length failures through `markdownlint --fix`.
-  Impact: the branch records the failure log, keeps unrelated formatter rewrites
-  out of the commit, and validates the changed Markdown through
+  Impact: the branch records the failure log, keeps unrelated formatter
+  rewrites out of the commit, and validates the changed Markdown through
   `markdownlint-cli2` and the repository `make markdownlint` target.
 - Observation: The implementation audit found that
   `docs/behavioural-testing-in-rust-with-cucumber.md` lacks a document-level
@@ -490,15 +489,15 @@ For the later implementation pull request, validation proves that:
 
 ## Outcomes & Retrospective
 
-The implementation completed roadmap item 5.1.2 as a documentation truth
-repair. `docs/roadmap.md` now marks the item done and keeps active phase 5.1
-focused on the boundary between historical context and future work.
+The implementation completed roadmap item 5.1.2 as a documentation truth repair.
+`docs/roadmap.md` now marks the item done and keeps active phase 5.1 focused
+on the boundary between historical context and future work.
 `docs/archive/v0-8-0-roadmap.md` now explains how to read archived checkmarks
 and calls out the missing-required-values entry as corrected and deferred
 active work. `docs/ddlint-gap-analysis.md` now classifies loading gaps as
-implemented, treats `--no-ignore` as DDLint prior art, and routes command-policy
-ideas to the relevant agent-native roadmap phases. The only historical note
-that needed a new status marker was
+implemented, treats `--no-ignore` as DDLint prior art, and routes
+command-policy ideas to the relevant agent-native roadmap phases. The only
+historical note that needed a new status marker was
 `docs/behavioural-testing-in-rust-with-cucumber.md`, which is now labelled as a
 historical reference superseded in current practice by `rstest-bdd`.
 

@@ -140,8 +140,8 @@ done differently next time.
 
 The IR schema and pipeline requirements live in
 `docs/cargo-orthohelp-design.md`. The IR types and `OrthoConfigDocs` trait are
-already implemented in `ortho_config/src/docs`, and localization helpers live
-in `ortho_config/src/localizer`. The roadmap entry for this work is in
+already implemented in `ortho_config/src/docs`, and localization helpers live in
+`ortho_config/src/localizer`. The roadmap entry for this work is in
 `docs/roadmap.md` under 4.1.1. The `cargo-orthohelp` crate now lives under
 `cargo-orthohelp/` as a workspace member with the bridge pipeline
 implementation.
@@ -164,8 +164,8 @@ emit per-locale IR JSON (schema and file naming) and record that decision in
 `docs/cargo-orthohelp-design.md` before writing code.
 
 Stage B: Scaffold the new `cargo-orthohelp` crate and command-line interface
-(CLI) parser. Add a new workspace member (package name `cargo-orthohelp`) with
-a `main.rs` that parses the CLI flags described in section 6.1 of the design
+(CLI) parser. Add a new workspace member (package name `cargo-orthohelp`) with a
+`main.rs` that parses the CLI flags described in section 6.1 of the design
 doc. Use a small internal module layout (for example `cli`, `metadata`,
 `bridge`, `cache`, `locale`, `output`) with module-level `//!` comments. Add or
 update workspace `[workspace.dependencies]` entries only as needed (likely

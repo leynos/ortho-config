@@ -210,8 +210,8 @@ assert!(
 ```
 
 The file loader selects the parser based on the extension (`.toml`, `.json`,
-`.json5`, `.yaml`, `.yml`). When the `json5` feature is active, both `.json`
-and `.json5` files are parsed using the JSON5 format. Standard JSON is valid
+`.json5`, `.yaml`, `.yml`). When the `json5` feature is active, both `.json` and
+`.json5` files are parsed using the JSON5 format. Standard JSON is valid
 JSON5, so existing `.json` files continue to work. Without this feature
 enabled, attempting to load a `.json` or `.json5` file will result in an error.
 When the `yaml` feature is enabled, `.yaml` and `.yml` files are also

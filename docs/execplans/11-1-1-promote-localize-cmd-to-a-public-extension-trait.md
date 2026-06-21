@@ -464,10 +464,10 @@ gates `cargo test --doc -p ortho_config` and `cargo test --doc -p hello_world`
 passed after repairing stale doctest snippets, and the full `make all` gate
 passed via
 `/tmp/all-11-1-1-promote-localize-cmd-to-a-public-extension-trait.out`.
-CodeRabbit then requested mirrored English subcommand BDD coverage and an
-en-GB spelling fix; both were applied, and `make all` passed again using the
-same log path before follow-up review. The follow-up
-`coderabbit review --agent` completed with zero findings.
+CodeRabbit then requested mirrored English subcommand BDD coverage and an en-GB
+spelling fix; both were applied, and `make all` passed again using the same log
+path before follow-up review. The follow-up `coderabbit review --agent`
+completed with zero findings.
 
 ## Context and orientation
 

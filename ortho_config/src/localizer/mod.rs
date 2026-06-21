@@ -42,6 +42,11 @@ pub trait Localizer: Send + Sync {
     /// Performs a localisation lookup for the provided identifier.
     fn lookup(&self, id: &str, args: Option<&LocalizationArgs<'_>>) -> Option<String>;
 
+    /// Returns the locale used for localisation lookups when it is known.
+    fn locale(&self) -> Option<&LanguageIdentifier> {
+        None
+    }
+
     /// Resolves the message and returns a fallback string when no translation exists.
     ///
     /// # Examples
@@ -217,6 +222,13 @@ impl FluentLocalizer {
 }
 
 impl Localizer for FluentLocalizer {
+    fn locale(&self) -> Option<&LanguageIdentifier> {
+        self.consumer
+            .as_ref()
+            .or(self.defaults.as_ref())
+            .map(|bundle| &bundle.locale)
+    }
+
     fn lookup(&self, id: &str, args: Option<&LocalizationArgs<'_>>) -> Option<String> {
         let fluent_args = args.map(fluent_args_from);
         let normalized_id = normalize_identifier(id);

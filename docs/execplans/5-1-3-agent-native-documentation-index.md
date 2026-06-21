@@ -1,9 +1,8 @@
 # Add the agent-native documentation index
 
-This execution plan (ExecPlan) is a living document. The sections
-`Constraints`, `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`,
-`Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
-proceeds.
+This execution plan (ExecPlan) is a living document. The sections `Constraints`,
+`Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
+and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
 Status: COMPLETE
 
@@ -163,8 +162,7 @@ two.
   milestone; it completed with zero findings.
 - [x] (2026-05-20) Ran `make fmt`; it failed on existing repository-wide
   Markdown line-length debt after reflowing many unrelated Markdown files.
-  Restored unrelated formatter churn and kept only scoped documentation
-  changes.
+  Restored unrelated formatter churn and kept only scoped documentation changes.
 - [x] (2026-05-20) Ran validation gates for the implementation:
   `make markdownlint`, `make nixie`, `make check-fmt`, `make lint`, and
   `make test` all passed.
@@ -229,12 +227,12 @@ Document with evidence so future work benefits.
   Impact: no review concerns needed remediation before validation.
 - Observation: `make fmt` still fails in the approved implementation for the
   same repository-wide Markdown line-length debt discovered during planning,
-  plus one long command line in this ExecPlan that has now been split.
-  Evidence: `/tmp/fmt-ortho-config-5-1-3-agent-native-documentation-index.out`
-  contains unrelated MD013 reports in files such as `cargo-orthohelp/README.md`
-  and historical guides. Impact: the implementation keeps unrelated formatter
-  churn out of the commit and relies on `make markdownlint` plus targeted
-  Markdown linting for documentation validation.
+  plus one long command line in this ExecPlan that has now been split. Evidence:
+  `/tmp/fmt-ortho-config-5-1-3-agent-native-documentation-index.out` contains
+  unrelated MD013 reports in files such as `cargo-orthohelp/README.md` and
+  historical guides. Impact: the implementation keeps unrelated formatter churn
+  out of the commit and relies on `make markdownlint` plus targeted Markdown
+  linting for documentation validation.
 - Observation: The implementation validation gates passed after unrelated
   formatter churn was removed. Evidence: branch-scoped logs under `/tmp` for
   `markdownlint`, `nixie`, `check-fmt`, `lint`, and `test` all end
@@ -463,8 +461,8 @@ documentation-only change. `docs/contents.md` now identifies
 command-contract and boundary document. `docs/design.md`,
 `docs/cargo-orthohelp-design.md`, and `docs/users-guide.md` now link to that
 boundary in the right audience context. `docs/agent-native-cli-design.md` now
-states the sibling-output relationship and command-runner boundary directly,
-and `docs/cargo-orthohelp-design.md` ties compatibility to
+states the sibling-output relationship and command-runner boundary directly, and
+`docs/cargo-orthohelp-design.md` ties compatibility to
 `DocMetadata.ir_version` for human documentation IR and the future
 agent-context schema version for agent-facing output.
 
@@ -479,7 +477,7 @@ documentation milestone and final cleaned diff with zero findings.
 
 A post-commit PR check found that `docs/developers-guide.md` also needed to
 document the internal agent-native architecture boundary. The follow-up update
-adds that contributor-facing section and keeps the canonical design reference
-in `docs/agent-native-cli-design.md`. Targeted Markdown linting,
+adds that contributor-facing section and keeps the canonical design reference in
+`docs/agent-native-cli-design.md`. Targeted Markdown linting,
 `make markdownlint`, `make nixie`, and `coderabbit review --agent` passed for
 that follow-up.

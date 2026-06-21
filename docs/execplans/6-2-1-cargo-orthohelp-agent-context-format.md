@@ -1,19 +1,18 @@
 
 # Add `--format agent-context` to `cargo-orthohelp`
 
-This ExecPlan (execution plan) is a living document. The sections
-`Constraints`, `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`,
-`Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
-proceeds.
+This ExecPlan (execution plan) is a living document. The sections `Constraints`,
+`Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
+and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
 Status: COMPLETE
 
 This plan covers roadmap item 6.2.1 only (`docs/roadmap.md` §6.2.1). It does
 not implement schema versioning or golden fixtures for nested or enum-bearing
 CLIs (6.2.2), the downstream `<tool> context --json` command naming work
-(6.2.3), skill manifest metadata (6.3.1), or skill manifest validation
-(6.3.2). The plan also does not extend `ortho_config::agent_context` beyond a
-single additive optional field; broader schema work is reserved for 6.2.2.
+(6.2.3), skill manifest metadata (6.3.1), or skill manifest validation (6.3.2).
+The plan also does not extend `ortho_config::agent_context` beyond a single
+additive optional field; broader schema work is reserved for 6.2.2.
 
 ## Purpose / big picture
 
@@ -21,22 +20,22 @@ Phase 6 of the active roadmap (`docs/roadmap.md` §6, "Deliver whole-CLI
 introspection") makes the command tree visible. With roadmap item 6.1.1
 completed, the documentation intermediate representation (IR) now carries a
 recursive `DocMetadata.subcommands` tree, but `cargo-orthohelp` still has no
-output that an LLM agent can consume. This plan closes that gap by adding a
-new `--format agent-context` output that emits a compact, machine-oriented
-JSON document describing the CLI's command tree.
+output that an LLM agent can consume. This plan closes that gap by adding a new
+`--format agent-context` output that emits a compact, machine-oriented JSON
+document describing the CLI's command tree.
 
 After this plan is approved and implemented, a maintainer working in a
 downstream consumer crate should be able to:
 
 1. annotate their root `clap::Parser` struct with `#[derive(OrthoConfig)]`,
-   ensure any subcommand enum has `#[derive(OrthoConfigSubcommandDocs)]`,
-   then run `cargo orthohelp --format agent-context --root-type ...`;
+   ensure any subcommand enum has `#[derive(OrthoConfigSubcommandDocs)]`, then
+   run `cargo orthohelp --format agent-context --root-type ...`;
 2. observe a single JSON file at `<out_dir>/agent-context.json` that contains
    `schema_version`, `kind` (in the form `<package>.agent_context`), `package`,
-   and a flat `commands` array. Each entry carries the full command path
-   (root plus subcommands), a canonical verb when the last path segment
-   matches the canonical set, an `inputs` array with one entry per CLI flag
-   and positional argument, and a short `summary` for command selection;
+   and a flat `commands` array. Each entry carries the full command path (root
+   plus subcommands), a canonical verb when the last path segment matches the
+   canonical set, an `inputs` array with one entry per CLI flag and positional
+   argument, and a short `summary` for command selection;
 3. point that JSON file at an agent or test harness and confirm it never
    contains localized long prose, Fluent identifiers, roff fragments, or
    PowerShell help structures.
@@ -74,8 +73,8 @@ context fields are emitted using their existing schema defaults.
 ## Constraints
 
 Hard invariants that must hold throughout implementation. These are not
-suggestions; violating any of them requires escalation in `Decision Log`, not
-a workaround.
+suggestions; violating any of them requires escalation in `Decision Log`, not a
+workaround.
 
 - Do not implement code, tests, examples, or documentation in this branch
   until this ExecPlan is explicitly approved by the maintainer. A "DRAFT" plan
@@ -94,8 +93,8 @@ a workaround.
 - Do not add or rename any of the existing fields on `ortho_config::docs::ir::*`
   types. The bridge IR shape is reused verbatim; cache invalidation
   (`CacheKey.ir_version`) therefore stays unchanged and existing
-  `--format ir|man|ps|all` outputs are bit-identical for consumers whose
-  IR is unchanged.
+  `--format ir|man|ps|all` outputs are bit-identical for consumers whose IR is
+  unchanged.
 - Do not add new fields to `AgentInput`. Positional inputs are detected from
   existing IR data using the rule
   `cli.long.is_none() && cli.short.is_none() && cli.takes_value`. (See
@@ -104,27 +103,26 @@ a workaround.
   (`docs/adr-003-define-schema-ownership-for-agent-native-contracts.md`). The
   schema lives in `ortho_config::agent_context`; the new transform and emitter
   live in `cargo_orthohelp::agent_context`. The transform must not depend on
-  `cargo-orthohelp`'s renderer modules (`roff`, `powershell`), and the
-  reusable schema must not depend on `cargo-orthohelp`.
+  `cargo-orthohelp`'s renderer modules (`roff`, `powershell`), and the reusable
+  schema must not depend on `cargo-orthohelp`.
 - The agent-context output is **not** localized. The adapter may pass an
-  en-US `ortho_config::Localizer` into the transform only to resolve the
-  short command summary used for command selection. The transform must not
-  include Fluent identifiers in the output, must not include `long_help` or
+  en-US `ortho_config::Localizer` into the transform only to resolve the short
+  command summary used for command selection. The transform must not include
+  Fluent identifiers in the output, must not include `long_help` or
   `long_help_id` content, and must not introduce any other locale-specific
   behaviour.
 - `--format agent-context` writes exactly one file at
-  `<out_dir>/agent-context.json`. The bridge cache, target directory layout,
-  and `--cache`/`--no-build` flags continue to work unchanged.
+  `<out_dir>/agent-context.json`. The bridge cache, target directory layout, and
+  `--cache`/`--no-build` flags continue to work unchanged.
 - `--format all` does **not** include `agent-context` in this plan. Including
   it in the default bundle is deferred until 6.2.2 lands schema-versioning
   tests and at least one consumer relies on the bundle.
 - Use `cap_std`/`camino` instead of `std::fs`/`std::path` for any new
   filesystem I/O. The existing crates already follow this rule.
 - Use `rstest` for unit tests and `rstest-bdd` for behavioural tests, per
-  `docs/developers-guide.md` and the workspace `Cargo.toml` lints. Use
-  `insta` for the single golden file. Use `proptest` only for the one narrow
-  uniqueness invariant on the transform; do not introduce `kani` or `verus`
-  for this work.
+  `docs/developers-guide.md` and the workspace `Cargo.toml` lints. Use `insta`
+  for the single golden file. Use `proptest` only for the one narrow uniqueness
+  invariant on the transform; do not introduce `kani` or `verus` for this work.
 
 ## Tolerances (exception triggers)
 
@@ -136,11 +134,11 @@ of autonomous action, not quality criteria.
   plus a small change to the CLI enum and one tiny `ortho_config` schema
   addition, should fit well inside that budget.
 - Interface: if changing a public API beyond
-  (a) adding `AgentContext` to `cargo_orthohelp::cli::OutputFormat`,
-  (b) adding `pub fn bridge_ir_to_agent_context(...)` in the new module, and
-  (c) adding `pub summary: Option<String>` to `AgentCommand`, stop and
-  escalate. In particular, do not add or rename other public agent-context
-  fields without approval.
+  (a) adding `AgentContext` to `cargo_orthohelp::cli::OutputFormat`, (b) adding
+  `pub fn bridge_ir_to_agent_context(...)` in the new module, and (c) adding
+  `pub summary: Option<String>` to `AgentCommand`, stop and escalate. In
+  particular, do not add or rename other public agent-context fields without
+  approval.
 - Dependencies: if a new external dependency is required (beyond what
   `cargo-orthohelp/Cargo.toml` and `ortho_config/Cargo.toml` already declare),
   stop and escalate. The transform is pure data manipulation and needs none.
@@ -149,54 +147,49 @@ of autonomous action, not quality criteria.
 - Time: if a single milestone consumes more than four hours of work, stop
   and escalate. Sub-milestones may be split if useful.
 - Ambiguity: if the value of any IR field cannot be unambiguously mapped to
-  an agent-context field (for example, an unrecognised `ValueType` variant
-  or a field carrying both `cli.long` and `takes_value = false` other than
-  `Bool`), stop and present options in `Decision Log` rather than guessing.
+  an agent-context field (for example, an unrecognised `ValueType` variant or a
+  field carrying both `cli.long` and `takes_value = false` other than `Bool`),
+  stop and present options in `Decision Log` rather than guessing.
 
 ## Risks
 
 Known uncertainties that might affect the plan. Update as work proceeds.
 
 - Risk: the canonical-verb mapping picks up a false positive when a real
-  command name happens to spell `list` or `get`.
-  Severity: low. Likelihood: medium.
-  Mitigation: derive the verb only from the **last** path segment, only when
-  the segment exactly matches the canonical set in `docs/agent-native-cli-design.md`
-  §5, and document the exact set in code. A consumer that uses `list` to
-  mean something else can opt out in a future item (6.2.2 or 7.1).
+  command name happens to spell `list` or `get`. Severity: low. Likelihood:
+  medium. Mitigation: derive the verb only from the **last** path segment, only
+  when the segment exactly matches the canonical set in
+  `docs/agent-native-cli-design.md` §5, and document the exact set in code. A
+  consumer that uses `list` to mean something else can opt out in a future item
+  (6.2.2 or 7.1).
 
 - Risk: golden snapshot churn on unrelated IR changes (for example, a new
   field in `DocMetadata` that is unused by the transform but ends up in the
-  fixture's IR).
-  Severity: low. Likelihood: medium.
-  Mitigation: the transform is purely projective. Snapshot only the
-  agent-context JSON, never the upstream IR. The transform sorts commands by
-  path and inputs by name before serialising so that input ordering changes
-  in upstream IR do not flip the snapshot.
+  fixture's IR). Severity: low. Likelihood: medium. Mitigation: the transform
+  is purely projective. Snapshot only the agent-context JSON, never the
+  upstream IR. The transform sorts commands by path and inputs by name before
+  serialising so that input ordering changes in upstream IR do not flip the
+  snapshot.
 
 - Risk: positional-detection rule misclassifies an unusual field (for
   example, a field with `cli: Some(_)`, no `long`, no `short`, but
-  `takes_value = false`). The IR macro does not currently produce such a
-  field, so the rule should be tight.
-  Severity: low. Likelihood: low.
-  Mitigation: the rule rejects such fields entirely (treats them as neither
-  flag nor positional) and emits a `tracing::warn!` so the gap surfaces in
-  development. A unit test covers this branch.
+  `takes_value = false`). The IR macro does not currently produce such a field,
+  so the rule should be tight. Severity: low. Likelihood: low. Mitigation: the
+  rule rejects such fields entirely (treats them as neither flag nor
+  positional) and emits a `tracing::warn!` so the gap surfaces in development.
+  A unit test covers this branch.
 
 - Risk: agents pin to the `agent_context` JSON shape and break when 6.2.2
-  introduces semver-style schema-version bookkeeping.
-  Severity: medium. Likelihood: low.
-  Mitigation: `schema_version` is already emitted as `"1"`; 6.2.2 will lock
-  it down with tests but not change it. This plan does not change the
-  version. Document the compatibility policy in the user's guide.
+  introduces semver-style schema-version bookkeeping. Severity: medium.
+  Likelihood: low. Mitigation: `schema_version` is already emitted as `"1"`;
+  6.2.2 will lock it down with tests but not change it. This plan does not
+  change the version. Document the compatibility policy in the user's guide.
 
 - Risk: the new transform's `proptest` invariant produces flaky shrink output
-  on CI.
-  Severity: low. Likelihood: low.
-  Mitigation: cap the strategy depth and width to small numbers (depth ≤ 3,
-  per-level width ≤ 4) so the search space stays tiny and shrink times
-  bounded. Persist regressions under `cargo-orthohelp/proptest-regressions/`
-  per the `proptest` skill guidance.
+  on CI. Severity: low. Likelihood: low. Mitigation: cap the strategy depth and
+  width to small numbers (depth ≤ 3, per-level width ≤ 4) so the search space
+  stays tiny and shrink times bounded. Persist regressions under
+  `cargo-orthohelp/proptest-regressions/` per the `proptest` skill guidance.
 
 ## Progress
 
@@ -206,48 +199,42 @@ task into two. This section must always reflect the actual state of the work.
 
 - [x] Milestone 0: ExecPlan approved by maintainer. (2026-06-04 00:59Z)
 - [x] Milestone 1: Add `AgentCommand.summary: Option<String>` to
-  `ortho_config/src/agent_context/mod.rs` under `#[serde(default,
-  skip_serializing_if = "Option::is_none")]`. Update existing
+  `ortho_config/src/agent_context/mod.rs` under
+  `#[serde(default, skip_serializing_if = "Option::is_none")]`. Update existing
   `ortho_config/src/agent_context/tests.rs` cases. Update
   `docs/cargo-orthohelp-design.md` §6.3.1 to record the inclusion of a short
   command summary in the transform. (2026-06-04 01:06Z)
 - [x] Milestone 2: Add `OutputFormat::AgentContext` to
   `cargo-orthohelp/src/cli.rs`. Update existing parser unit tests: keep the
-  `--format` `value_enum` rejection coverage by switching the rejected token
-  in `format_rejects_unsupported_values` (for example, to `xml`) and add a
-  positive test that accepts `agent-context`.
-  (2026-06-04 01:19Z)
+  `--format` `value_enum` rejection coverage by switching the rejected token in
+  `format_rejects_unsupported_values` (for example, to `xml`) and add a
+  positive test that accepts `agent-context`. (2026-06-04 01:19Z)
 - [x] Milestone 3: Create `cargo-orthohelp/src/agent_context/mod.rs` with
   `bridge_ir_to_agent_context`, the deterministic verb-mapping table, and the
-  helper that flattens a `DocMetadata` tree into `Vec<AgentCommand>`. Wire
-  the transform from `cargo-orthohelp/src/main.rs::run` through
-  `cargo-orthohelp/src/output.rs::write_agent_context`. Update the
-  `mod` declaration in `cargo-orthohelp/src/lib.rs` and `main.rs`.
-  (2026-06-04 01:37Z)
+  helper that flattens a `DocMetadata` tree into `Vec<AgentCommand>`. Wire the
+  transform from `cargo-orthohelp/src/main.rs::run` through
+  `cargo-orthohelp/src/output.rs::write_agent_context`. Update the `mod`
+  declaration in `cargo-orthohelp/src/lib.rs` and `main.rs`. (2026-06-04 01:37Z)
 - [x] Milestone 4: Add unit tests at
-  `cargo-orthohelp/src/agent_context/tests.rs` (table-driven `rstest`
-  cases) and the property test at
-  `cargo-orthohelp/src/agent_context/proptests.rs` (single uniqueness
-  invariant). (2026-06-04 03:12Z)
+  `cargo-orthohelp/src/agent_context/tests.rs` (table-driven `rstest` cases)
+  and the property test at `cargo-orthohelp/src/agent_context/proptests.rs`
+  (single uniqueness invariant). (2026-06-04 03:12Z)
 - [x] Milestone 5: Add the behavioural scenario at
   `cargo-orthohelp/tests/features/orthohelp_agent_context.feature` plus step
   definitions at
-  `cargo-orthohelp/tests/rstest_bdd/behaviour/steps_agent_context.rs`. Add
-  the matching insta snapshot at
+  `cargo-orthohelp/tests/rstest_bdd/behaviour/steps_agent_context.rs`. Add the
+  matching insta snapshot at
   `cargo-orthohelp/tests/golden/agent_context__fixture.json.snap` through a
   focused golden test after running `cargo insta review`. Full gates and
-  CodeRabbit review passed after the BDD and snapshot work.
-  (2026-06-04 06:20Z)
+  CodeRabbit review passed after the BDD and snapshot work. (2026-06-04 06:20Z)
 - [x] Milestone 6: Update `docs/users-guide.md` with a "Agent-context output"
   subsection under the existing `cargo-orthohelp` material. Update
-  `docs/developers-guide.md` with the positional-detection rule and the
-  fact that the agent-context output is not localized.
-  (2026-06-04 06:25Z)
+  `docs/developers-guide.md` with the positional-detection rule and the fact
+  that the agent-context output is not localized. (2026-06-04 06:25Z)
 - [x] Milestone 7: Run `make check-fmt`, `make typecheck`, `make lint`,
-  `make test`, `make markdownlint`, `make nixie`, then `coderabbit review
-  --agent` and resolve all findings. Mark roadmap §6.2.1 as done in
-  `docs/roadmap.md`.
-  (2026-06-04 06:56Z)
+  `make test`, `make markdownlint`, `make nixie`, then
+  `coderabbit review --agent` and resolve all findings. Mark roadmap §6.2.1 as
+  done in `docs/roadmap.md`. (2026-06-04 06:56Z)
 
 Use timestamps (`(YYYY-MM-DD HH:MMZ)`) on each `[x]` line as work completes.
 
@@ -257,8 +244,8 @@ Unexpected findings during implementation. Document with evidence so future
 work benefits.
 
 - Clippy denied direct indexing in the new summary serialization test under
-  `clippy::indexing_slicing`. The test now uses `first_mut().expect(...)`
-  so failures report intent rather than panic at an implicit index.
+  `clippy::indexing_slicing`. The test now uses `first_mut().expect(...)` so
+  failures report intent rather than panic at an implicit index.
 - `coderabbit review --agent` completed with zero findings after Milestone 1
   validation.
 - `coderabbit review --agent` completed with zero findings after Milestone 2
@@ -267,14 +254,15 @@ work benefits.
   over the `clippy::cognitive_complexity` limit. Extracting
   `generate_agent_context_if_requested` and `localize_docs_if_requested` kept
   `run` focused on orchestration and cleared the lint.
-- A manual fixture run wrote `/tmp/orthohelp-agent-context-m3/agent-context.json`
-  with `schema_version = "1"`, `kind = "orthohelp_fixture.agent_context"`,
-  a populated command summary, sorted inputs, and default unknown interaction
-  and mutation fields.
+- A manual fixture run wrote
+  `/tmp/orthohelp-agent-context-m3/agent-context.json` with
+  `schema_version = "1"`, `kind = "orthohelp_fixture.agent_context"`, a
+  populated command summary, sorted inputs, and default unknown interaction and
+  mutation fields.
 - CodeRabbit's first Milestone 3 review pass requested concise helper
-  doc comments, simpler `None`/`Vec::new()` field defaults, and Oxford
-  spelling in a transformer comment. After the fixes, the deterministic gates
-  passed again.
+  doc comments, simpler `None`/`Vec::new()` field defaults, and Oxford spelling
+  in a transformer comment. After the fixes, the deterministic gates passed
+  again.
 - CodeRabbit rate-limited three follow-up Milestone 3 review attempts. Each
   retry used the requested randomized `vsleep` backoff. The fourth follow-up
   attempt completed with zero findings.
@@ -301,16 +289,16 @@ work benefits.
   stability. This matches the existing test layout better than embedding the
   snapshot assertion inside the BDD step module.
 - Clippy caught `panic_in_result_fn` in the Milestone 5 golden test before
-  CodeRabbit review. Returning an error for failed command status kept the
-  test diagnostics explicit and cleared the deterministic gate.
+  CodeRabbit review. Returning an error for failed command status kept the test
+  diagnostics explicit and cleared the deterministic gate.
 - CodeRabbit's first Milestone 5 review requested a single-expression
   `string_field` helper and `cap_std::fs_utf8::Dir` for reading the golden
   fixture output. After those fixes, `make check-fmt`, `make typecheck`,
   `make lint`, `make test`, `make markdownlint`, and the follow-up
-  `coderabbit review --agent` all passed; the final CodeRabbit review
-  reported zero findings.
-- Milestone 6 updates the user and developer docs to treat `--format
-  agent-context` as an implemented output while keeping `--json`,
+  `coderabbit review --agent` all passed; the final CodeRabbit review reported
+  zero findings.
+- Milestone 6 updates the user and developer docs to treat
+  `--format agent-context` as an implemented output while keeping `--json`,
   `--check-agent-native`, and policy-report generation as future work.
   `docs/agent-native-cli-design.md` no longer lists missing compact
   agent-context output or missing subcommand consumption as current gaps.
@@ -321,45 +309,43 @@ work benefits.
   `make nixie`. The final `coderabbit review --agent` completed with zero
   findings after the roadmap and retrospective updates.
 - Follow-up review found that the property coverage deliberately grew beyond
-  the original single uniqueness invariant. The extra checks cover command
-  path ordering, input name ordering, and hidden-field omission because those
+  the original single uniqueness invariant. The extra checks cover command path
+  ordering, input name ordering, and hidden-field omission because those
   invariants underpin snapshot stability and manifest usefulness.
 - Follow-up review also showed that the original tolerance budget
   underestimated the documentation and test surface. The final implementation
   exceeded the 12-file and 700-net-line planning budget once documentation,
-  snapshots, and the living execplan were included; future agent-context
-  plans should size similar work with a wider tolerance or split it into
-  smaller approved ExecPlans.
+  snapshots, and the living execplan were included; future agent-context plans
+  should size similar work with a wider tolerance or split it into smaller
+  approved ExecPlans.
 
 ## Decision log
 
 Record every significant decision made while working on this plan.
 
 - Decision: drop the proposed `AgentInput.kind` schema extension and detect
-  positional inputs from existing IR data instead.
-  Rationale: the Logisphere review (2026-06-02) flagged that adding a new
-  schema field on `AgentInput` in this PR muddies ADR-003 ownership and
-  requires version coordination. The
+  positional inputs from existing IR data instead. Rationale: the Logisphere
+  review (2026-06-02) flagged that adding a new schema field on `AgentInput` in
+  this PR muddies ADR-003 ownership and requires version coordination. The
   `cli.long.is_none() && cli.short.is_none() && cli.takes_value` rule is
-  sufficient given the IR macro's current output.
-  Date/Author: 2026-06-02 / planning agent.
+  sufficient given the IR macro's current output. Date/Author: 2026-06-02 /
+  planning agent.
 
 - Decision: include a `summary: Option<String>` field on `AgentCommand` as
-  the only schema addition in this plan.
-  Rationale: §6.2.1 of the roadmap explicitly permits "a concise summary
-  needed for command selection." The agent-context manifest is meant to help
-  agents choose commands, and shipping zero descriptive text undermines that
-  use case. The field is optional and defaults to `None`, which keeps it
-  non-breaking under serde semantics and consistent with §8.1's
-  legacy-defaulting policy.
-  Date/Author: 2026-06-02 / planning agent.
+  the only schema addition in this plan. Rationale: §6.2.1 of the roadmap
+  explicitly permits "a concise summary needed for command selection." The
+  agent-context manifest is meant to help agents choose commands, and shipping
+  zero descriptive text undermines that use case. The field is optional and
+  defaults to `None`, which keeps it non-breaking under serde semantics and
+  consistent with §8.1's legacy-defaulting policy. Date/Author: 2026-06-02 /
+  planning agent.
 
 - Decision: exclude `agent-context` from `--format all` for this iteration.
   Rationale: the Logisphere review flagged that bundling an output whose
   semantic fields default to `unknown` into the default group could mislead
-  consumers. Defer inclusion until 6.2.2 locks the schema version with
-  tests and at least one downstream relies on bundled emission.
-  Date/Author: 2026-06-02 / planning agent.
+  consumers. Defer inclusion until 6.2.2 locks the schema version with tests
+  and at least one downstream relies on bundled emission. Date/Author:
+  2026-06-02 / planning agent.
 
 - Decision: write the agent-context output to `<out_dir>/agent-context.json`,
   not under `<out_dir>/agent-context/<package>.json` or `<out_dir>/ir/`.
@@ -370,31 +356,28 @@ Record every significant decision made while working on this plan.
 
 - Decision: emit the agent-context with `interaction_mode = unknown`,
   `mutation_effect = unknown`, and `policy.agent_native = warn` (schema
-  defaults) for v1.
-  Rationale: the schema already establishes these defaults, and §8.1 of
-  `docs/agent-native-cli-design.md` documents them as the least-capable
-  compatible state until later phases populate them. The users' guide and
-  the new `docs/cargo-orthohelp-design.md` §6.3.1 amendment will state
-  explicitly that these fields are placeholders pending later roadmap work
-  (6.2.2 and 7.1.x).
-  Date/Author: 2026-06-02 / planning agent.
+  defaults) for v1. Rationale: the schema already establishes these defaults,
+  and §8.1 of `docs/agent-native-cli-design.md` documents them as the
+  least-capable compatible state until later phases populate them. The users'
+  guide and the new `docs/cargo-orthohelp-design.md` §6.3.1 amendment will
+  state explicitly that these fields are placeholders pending later roadmap
+  work (6.2.2 and 7.1.x). Date/Author: 2026-06-02 / planning agent.
 
 - Decision: move this ExecPlan from `DRAFT` to `IN PROGRESS` and begin
-  implementation.
-  Rationale: the maintainer explicitly requested implementation of the
-  planned functionality on 2026-06-04, satisfying the approval gate in the
-  plan and repository instructions.
-  Date/Author: 2026-06-04 / implementation agent.
+  implementation. Rationale: the maintainer explicitly requested implementation
+  of the planned functionality on 2026-06-04, satisfying the approval gate in
+  the plan and repository instructions. Date/Author: 2026-06-04 /
+  implementation agent.
 
 ## Outcomes & retrospective
 
 Summarize outcomes, gaps, and lessons learned at major milestones or at
-completion. Compare the result against the original purpose. Note what would
-be done differently next time.
+completion. Compare the result against the original purpose. Note what would be
+done differently next time.
 
 - `cargo-orthohelp --format agent-context` now writes
-  `<out_dir>/agent-context.json` from the same bridge `DocMetadata` used by
-  the human documentation generators.
+  `<out_dir>/agent-context.json` from the same bridge `DocMetadata` used by the
+  human documentation generators.
 - The reusable agent-context schema gained only the planned optional
   `AgentCommand.summary` field. Broader schema versioning, validation, JSON
   status output, policy reporting, and agent-native linting remain deferred to
@@ -407,10 +390,10 @@ be done differently next time.
   style and keeping new file I/O aligned with the repository's `cap_std`
   convention.
 - A follow-up review tightened manifest usefulness for clap-derived enum
-  flags: the adapter now treats non-empty `CliMetadata.possible_values` as
-  enum metadata even when the IR reports a custom Rust type. The users' guide
-  also documents that `default` remains a display hint, not an invocation
-  literal, until upstream IR can expose normalized defaults.
+  flags: the adapter now treats non-empty `CliMetadata.possible_values` as enum
+  metadata even when the IR reports a custom Rust type. The users' guide also
+  documents that `default` remains a display hint, not an invocation literal,
+  until upstream IR can expose normalized defaults.
 - The main implementation lesson was to keep the agent-context transform
   projective and narrow. Avoiding new `AgentInput` schema fields and keeping
   `--format all` unchanged preserved the compatibility boundary for existing
@@ -418,31 +401,30 @@ be done differently next time.
 
 ## Context and orientation
 
-The reader is assumed to know nothing about the repository. The relevant
-files and modules are:
+The reader is assumed to know nothing about the repository. The relevant files
+and modules are:
 
 - `docs/roadmap.md` defines the work items. §6.2.1 is the scope of this plan.
 - `docs/agent-native-cli-design.md` defines the agent-context contract. §3.2
-  describes the JSON shape. §5 lists canonical verbs and flags. §8.1
-  documents the defaulting policy for legacy derives.
+  describes the JSON shape. §5 lists canonical verbs and flags. §8.1 documents
+  the defaulting policy for legacy derives.
 - `docs/cargo-orthohelp-design.md` §6.3.1 names the cargo-orthohelp side of
   the transform.
 - `docs/adr-003-define-schema-ownership-for-agent-native-contracts.md`
-  establishes the boundary: schema lives in `ortho_config::agent_context`;
-  the transform and emitter live in `cargo_orthohelp`.
+  establishes the boundary: schema lives in `ortho_config::agent_context`; the
+  transform and emitter live in `cargo_orthohelp`.
 - `ortho_config/src/agent_context/mod.rs` defines `AgentContext`,
-  `AgentCommand`, `AgentInput`, `AgentExample`, `AgentPolicy`,
-  `MutationEffect`, `InteractionMode`, `PaginationContract`,
-  `AsyncSubmission`, `DeliveryRoute`, `SupportDeclaration`, and
-  `ORTHO_AGENT_CONTEXT_SCHEMA_VERSION = "1"`. These types are already
-  re-exported from `ortho_config::lib.rs:61-65`.
+  `AgentCommand`, `AgentInput`, `AgentExample`, `AgentPolicy`, `MutationEffect`,
+  `InteractionMode`, `PaginationContract`, `AsyncSubmission`, `DeliveryRoute`,
+  `SupportDeclaration`, and `ORTHO_AGENT_CONTEXT_SCHEMA_VERSION = "1"`. These
+  types are already re-exported from `ortho_config::lib.rs:61-65`.
 - `cargo-orthohelp/src/cli.rs` defines the parser. `OutputFormat` (lines
   16-26) lists the accepted `--format` values. Test
   `format_rejects_unsupported_values` (lines 217-223) currently asserts
   `agent-context` is rejected; this plan inverts that assertion.
 - `cargo-orthohelp/src/main.rs::run` (lines 77-129) calls the bridge, parses
-  the IR JSON into `DocMetadata`, localizes it for each locale, and routes
-  to the per-format emitters. Match arms on `OutputFormat` decide what gets
+  the IR JSON into `DocMetadata`, localizes it for each locale, and routes to
+  the per-format emitters. Match arms on `OutputFormat` decide what gets
   written.
 - `cargo-orthohelp/src/output.rs::write_localized_ir` (lines 11-48) is the
   existing emitter pattern using `cap_std`/`camino`. A new
@@ -454,8 +436,8 @@ files and modules are:
   `cargo-orthohelp/tests/rstest_bdd/behaviour/steps_ir.rs` show the existing
   behavioural-test patterns for IR.
 - `cargo-orthohelp/src/cli.rs` and `cargo-orthohelp/src/error.rs` show how
-  the existing CLI surface, including the unsupported-format error variant,
-  is laid out.
+  the existing CLI surface, including the unsupported-format error variant, is
+  laid out.
 
 Key terms:
 
@@ -473,9 +455,9 @@ Key terms:
 ## Design overview
 
 The transform reads the bridge IR (`cargo_orthohelp::schema::DocMetadata`),
-walks the recursive `subcommands` tree, and produces an `AgentContext`
-whose `commands` array contains one entry per node, sorted by full command
-path. The transform is pure: same IR in, byte-identical JSON out.
+walks the recursive `subcommands` tree, and produces an `AgentContext` whose
+`commands` array contains one entry per node, sorted by full command path. The
+transform is pure: same IR in, byte-identical JSON out.
 
 For each `DocMetadata` node visited:
 
@@ -487,13 +469,12 @@ For each `DocMetadata` node visited:
   alongside the transform. The table is the literal list from
   `docs/agent-native-cli-design.md` §5. Any other case yields `None`.
 - `summary` is the short, untranslated description fallback. It is computed
-  from the `about_id` Fluent ID by looking up the **en-US** entry only,
-  using `ortho_config::FluentLocalizer` against the same consumer-resource
-  paths the existing IR pipeline uses. The result is trimmed; if the
-  identifier resolves to the sentinel `[missing: <id>]`, `summary` is left
-  `None`. The agent-context output remains otherwise unlocalized; only the
-  short summary uses en-US so that command-selection prompts are not
-  empty.
+  from the `about_id` Fluent ID by looking up the **en-US** entry only, using
+  `ortho_config::FluentLocalizer` against the same consumer-resource paths the
+  existing IR pipeline uses. The result is trimmed; if the identifier resolves
+  to the sentinel `[missing: <id>]`, `summary` is left `None`. The
+  agent-context output remains otherwise unlocalized; only the short summary
+  uses en-US so that command-selection prompts are not empty.
 - `inputs` is built from `fields` by:
   - skipping any field where `cli.is_none()` (env-only or file-only fields
     are out of scope for this iteration);
@@ -513,20 +494,19 @@ For each `DocMetadata` node visited:
     - `enum_values = match &field.value { Some(Enum { variants }) =>
       variants.clone(), _ => Vec::new() }`.
 - Positional detection: a flag-style input becomes a positional input when
-  `cli.long.is_none() && cli.short.is_none() && cli.takes_value`. For the
-  v1 schema (which has no `kind` field on `AgentInput`), positional inputs
-  carry their name in `name` and have `long = None`; the rule lets later
-  schema work add a discriminator without forcing it now.
+  `cli.long.is_none() && cli.short.is_none() && cli.takes_value`. For the v1
+  schema (which has no `kind` field on `AgentInput`), positional inputs carry
+  their name in `name` and have `long = None`; the rule lets later schema work
+  add a discriminator without forcing it now.
 
-The resulting `AgentContext` is sorted by command path; each command's
-`inputs` are sorted by `name`. Both sorts are stable Unicode lexicographic
-sorts, applied in the transform so the snapshot does not depend on the IR's
-field ordering.
+The resulting `AgentContext` is sorted by command path; each command's `inputs`
+are sorted by `name`. Both sorts are stable Unicode lexicographic sorts,
+applied in the transform so the snapshot does not depend on the IR's field
+ordering.
 
 The emitter writes the document to `<out_dir>/agent-context.json` using
-`cap_std` + `camino` and `serde_json::to_string_pretty`, matching the
-existing IR emitter's atomicity discipline (open with `create + truncate`,
-write, close).
+`cap_std` + `camino` and `serde_json::to_string_pretty`, matching the existing
+IR emitter's atomicity discipline (open with `create + truncate`, write, close).
 
 `--format all` continues to mean `ir + man + ps` and does **not** include
 `agent-context` in this plan.
@@ -544,37 +524,32 @@ The work is split into seven milestones, each ending with a validation gate.
    pub summary: Option<String>,
    ```
 
-   Place the field between `path` and `canonical_verb` to keep related
-   metadata adjacent. Update the doc-comment on the struct to describe the
-   new field.
+   Place the field between `path` and `canonical_verb` to keep related metadata
+   adjacent. Update the doc-comment on the struct to describe the new field.
 2. In `ortho_config/src/agent_context/tests.rs`, add table-driven `rstest`
-   cases covering: (a) serialising `AgentCommand` with `summary = None`
-   omits the field; (b) round-tripping a payload with `summary = Some("…")`
-   preserves the field; (c) deserialising a legacy payload without `summary`
-   succeeds. Update any tests that pin the exact serialised JSON to expect
-   the new field.
+   cases covering: (a) serialising `AgentCommand` with `summary = None` omits
+   the field; (b) round-tripping a payload with `summary = Some("…")` preserves
+   the field; (c) deserialising a legacy payload without `summary` succeeds.
+   Update any tests that pin the exact serialised JSON to expect the new field.
 3. Update `docs/cargo-orthohelp-design.md` §6.3.1 to record that the
    transform emits a short en-US summary per command and document the
    positional-detection rule.
 
 Validation: `make check-fmt`, `make typecheck`, `make lint`, `make test`
-(scoped to `ortho_config` with `cargo test -p ortho_config`) all pass.
-Existing `ortho_config::agent_context::tests` snapshots remain stable.
+(scoped to `ortho_config` with `cargo test -p ortho_config`) all pass. Existing
+`ortho_config::agent_context::tests` snapshots remain stable.
 
 ### Milestone 2: CLI flag and parser tests
 
 1. In `cargo-orthohelp/src/cli.rs`, add `AgentContext` to `OutputFormat`
-   (clap derives `ValueEnum`, which kebab-cases the variant to
-   `agent-context`).
+   (clap derives `ValueEnum`, which kebab-cases the variant to `agent-context`).
 2. Replace the unsupported-format-rejection assertion: change
    `format_rejects_unsupported_values` to use an unmistakably invalid token
-   such as `xml`. Add a new test `format_accepts_agent_context` that
-   confirms `--format agent-context` parses successfully and yields the
-   new variant.
+   such as `xml`. Add a new test `format_accepts_agent_context` that confirms
+   `--format agent-context` parses successfully and yields the new variant.
 3. Update the `proptest` strategy in
-   `parses_option_and_bool_flag_combinations` to include `"agent-context"`
-   in the format sample so the parser sees the new variant under random
-   inputs.
+   `parses_option_and_bool_flag_combinations` to include `"agent-context"` in
+   the format sample so the parser sees the new variant under random inputs.
 
 Validation: `cargo test -p cargo-orthohelp cli::` passes.
 
@@ -618,8 +593,8 @@ Validation: `cargo test -p cargo-orthohelp cli::` passes.
    transform actually needs a new variant; if the transform is total (it is),
    no new variant is required.
 
-Validation: `cargo build -p cargo-orthohelp` and `cargo check --workspace
---all-targets --all-features` succeed.
+Validation: `cargo build -p cargo-orthohelp` and
+`cargo check --workspace --all-targets --all-features` succeed.
 
 ### Milestone 4: unit and property tests
 
@@ -640,15 +615,15 @@ Validation: `cargo build -p cargo-orthohelp` and `cargo check --workspace
      `create`, `update`, `delete`, `jobs`, `profile`, `feedback` map; any
      other token (including `add`, `set`, and capitalised forms) does not.
 2. Add `cargo-orthohelp/src/agent_context/proptests.rs` driven by `proptest`
-   with one invariant: for any randomly generated `DocMetadata` tree with
-   depth ≤ 3 and per-level width ≤ 4, the resulting `AgentContext.commands`
-   has unique non-empty paths. Persist regressions under
+   with one invariant: for any randomly generated `DocMetadata` tree with depth
+   ≤ 3 and per-level width ≤ 4, the resulting `AgentContext.commands` has
+   unique non-empty paths. Persist regressions under
    `cargo-orthohelp/proptest-regressions/agent_context.txt`.
 3. Document in the test file's module comment why the property test is
    intentionally minimal (per the Logisphere review).
 
-Validation: `cargo test -p cargo-orthohelp agent_context::` passes.
-`make test` for the full workspace passes.
+Validation: `cargo test -p cargo-orthohelp agent_context::` passes. `make test`
+for the full workspace passes.
 
 ### Milestone 5: behavioural test and golden snapshot
 
@@ -684,9 +659,9 @@ Validation: `cargo test -p cargo-orthohelp agent_context::` passes.
    `cargo-orthohelp/tests/rstest_bdd/behaviour/mod.rs`.
 4. Generate the golden snapshot by running
    `INSTA_UPDATE=always cargo test -p cargo-orthohelp \
-   --test rstest_bdd agent_context` once, then commit the resulting
-   `cargo-orthohelp/tests/golden/agent_context__fixture.json.snap`. Inspect
-   the snapshot by hand against the design document before committing.
+   --test rstest_bdd agent_context` once, then commit the resulting `cargo
+   -orthohelp/tests/golden/agent_context__fixture.json.snap
+   `. Inspect the snapshot by hand against the design document before committing.
 
 Validation: `cargo test -p cargo-orthohelp --test rstest_bdd` passes.
 `make test` for the full workspace passes.
@@ -697,11 +672,11 @@ Validation: `cargo test -p cargo-orthohelp --test rstest_bdd` passes.
    describing `cargo orthohelp --format agent-context`, the output file
    location, the omitted fields (long prose, Fluent identifiers, roff,
    PowerShell wrappers), and the explicit note that `interaction_mode`,
-   `mutation_effect`, and `policy.agent_native` are placeholders pending
-   later roadmap items.
+   `mutation_effect`, and `policy.agent_native` are placeholders pending later
+   roadmap items.
 2. Add a "Generating agent-context output" section to
-   `docs/developers-guide.md` documenting the positional-detection rule
-   and the en-US-only summary rule.
+   `docs/developers-guide.md` documenting the positional-detection rule and the
+   en-US-only summary rule.
 3. Update `docs/cargo-orthohelp-design.md` §6.3.1 to mark the implemented
    bits and to record the additive `summary` field.
 4. Re-check `docs/agent-native-cli-design.md` §9 ("Current gaps to resolve")
@@ -712,8 +687,8 @@ Validation: `make markdownlint` and `make nixie` pass.
 
 ### Milestone 7: gates and roadmap update
 
-1. Run, in order: `make check-fmt`, `make typecheck`, `make lint`, `make
-   test`, `make markdownlint`, `make nixie`, redirecting each into
+1. Run, in order: `make check-fmt`, `make typecheck`, `make lint`, `make test`,
+   `make markdownlint`, `make nixie`, redirecting each into
    `/tmp/$ACTION-cargo-orthohelp-6-2-1-cargo-orthohelp-agent-context-format.out`
    for review.
 2. Run `coderabbit review --agent` and resolve every finding before the
@@ -782,8 +757,8 @@ $EDITOR docs/roadmap.md
 
 Expected outputs:
 
-- Each milestone's `cargo test` invocation reports `test result: ok. N
-  passed; 0 failed`.
+- Each milestone's `cargo test` invocation reports
+  `test result: ok. N passed; 0 failed`.
 - `make lint` reports zero clippy or rustdoc warnings.
 - `make markdownlint` reports zero violations.
 - `coderabbit review --agent` returns "no issues" or an explicitly resolved
@@ -810,15 +785,15 @@ jq . /tmp/orthohelp-agent-context/agent-context.json
 ```
 
 Expected: a JSON document with `schema_version: "1"`, a `kind` of
-`orthohelp_fixture.agent_context`, and a non-empty `commands` array whose
-first entry has `path: ["orthohelp_fixture"]` (or the configured binary
-name) and at least one `inputs` entry for the fixture's port field.
+`orthohelp_fixture.agent_context`, and a non-empty `commands` array whose first
+entry has `path: ["orthohelp_fixture"]` (or the configured binary name) and at
+least one `inputs` entry for the fixture's port field.
 
 Quality criteria:
 
 - Tests: `cargo test -p cargo-orthohelp --all-targets` passes;
-  `cargo test -p ortho_config agent_context::` passes; the new
-  rstest-bdd scenario passes; the new property test runs cleanly.
+  `cargo test -p ortho_config agent_context::` passes; the new rstest-bdd
+  scenario passes; the new property test runs cleanly.
 - Lint/typecheck: `make lint` and `make typecheck` pass with `-D warnings`.
 - Format: `make check-fmt` passes.
 - Markdown: `make markdownlint` passes.
@@ -836,21 +811,21 @@ Quality method:
 ## Idempotence and recovery
 
 - Re-running `cargo orthohelp --format agent-context` overwrites
-  `<out_dir>/agent-context.json` atomically (via cap-std `create +
-  truncate`). No cleanup is required between runs.
+  `<out_dir>/agent-context.json` atomically (via cap-std `create + truncate`).
+  No cleanup is required between runs.
 - Re-running individual milestone command blocks is safe; cargo's
   incremental compilation handles repeated builds.
 - If the `insta` snapshot diverges from the transform output, run
   `cargo insta review` to inspect the diff; never accept changes blindly.
 - If the property test produces a regression file, commit it under
-  `cargo-orthohelp/proptest-regressions/` so future runs replay the
-  shrunk case before exploring new ones.
+  `cargo-orthohelp/proptest-regressions/` so future runs replay the shrunk case
+  before exploring new ones.
 
 ## Artifacts and notes
 
 A sketch of the expected agent-context JSON for the existing fixture
-(`cargo-orthohelp/tests/fixtures/...`), to be replaced by the actual
-snapshot at Milestone 5:
+(`cargo-orthohelp/tests/fixtures/...`), to be replaced by the actual snapshot
+at Milestone 5:
 
 ```json
 {
@@ -997,6 +972,6 @@ sections:
 
 - 2026-06-02: initial DRAFT created. Reflects the Logisphere design review
   outcome: schema change scoped to a single optional `summary` field;
-  positional detection sniffs `cli` data; agent-context output is omitted
-  from `--format all`; commands and inputs are sorted in the transform;
-  property testing is scoped to one invariant.
+  positional detection sniffs `cli` data; agent-context output is omitted from
+  `--format all`; commands and inputs are sorted in the transform; property
+  testing is scoped to one invariant.

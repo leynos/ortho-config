@@ -179,9 +179,9 @@ and captures:
 
 Stage C: Implement generator and integration.
 
-Implement a `powershell::generate` entry point that writes the module tree
-under `out/powershell/{ModuleName}/` using `cap_std` and `camino`. The
-generator must:
+Implement a `powershell::generate` entry point that writes the module tree under
+`out/powershell/{ModuleName}/` using `cap_std` and `camino`. The generator
+must:
 
 - Emit `.psm1` and `.psd1` with CRLF line endings.
 - Emit MAML XML with UTF-8 BOM and CRLF line endings.

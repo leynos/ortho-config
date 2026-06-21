@@ -134,7 +134,8 @@ Key choices:
   documentation IR. `DocMetadata.ir_version` governs compatibility for human
   documentation IR, while the future agent-context schema version governs
   compact agent-facing output.
-- Ownership boundary: [ADR-003](adr-003-define-schema-ownership-for-agent-native-contracts.md)
+- Ownership boundary:
+  [ADR-003](adr-003-define-schema-ownership-for-agent-native-contracts.md)
   keeps documentation IR in `ortho_config::docs`, reusable agent context in
   `ortho_config::agent_context`, and policy reports in
   `cargo_orthohelp::policy` until a later extraction is approved.
@@ -523,12 +524,12 @@ cargo orthohelp \
 `ir`, `man`, `ps`, `agent-context`, and `all` are the currently implemented
 formats. The current default is `ir`; unsupported format values fail during
 Clap parsing before generation begins. `--json` and `--check-agent-native` are
-planned agent-native additions. Until they are implemented, generated
-artefacts continue to report success or failure through process exit status.
-When `--json` is provided in a future migration, success must emit exactly one
-JSON result document to stdout and nothing to stderr. Failure must emit no
-stdout, unless a non-JSON artefact was explicitly delivered earlier, and
-exactly one JSON diagnostic document to stderr.
+planned agent-native additions. Until they are implemented, generated artefacts
+continue to report success or failure through process exit status. When
+`--json` is provided in a future migration, success must emit exactly one JSON
+result document to stdout and nothing to stderr. Failure must emit no stdout,
+unless a non-JSON artefact was explicitly delivered earlier, and exactly one
+JSON diagnostic document to stderr.
 
 The existing format behaviours are compatibility contracts until a versioned
 migration is explicitly approved:
@@ -540,8 +541,8 @@ migration is explicitly approved:
   `<out>/<locale>/man/man<section>/<name>.<section>` for multiple locales.
 - `--format ps` writes a PowerShell module under
   `<out>/powershell/<ModuleName>/`, including module files, localized MAML
-  help, about topics, and default `en-US` support unless
-  `--ensure-en-us false` is supplied.
+  help, about topics, and default `en-US` support unless `--ensure-en-us false`
+  is supplied.
 - `--format agent-context` writes one compact JSON document at
   `<out>/agent-context.json`.
 - `--format all` generates IR, then man pages, then PowerShell artefacts in a
@@ -591,8 +592,8 @@ help_info_uri = "https://example.com/help/MyApp"
 ### 6.3 Caching
 
 Cache IR at `target/orthohelp/<hash>/ir.json` keyed by the crate fingerprint,
-macro version, tool version, and the workspace `Cargo.lock` hash (when
-present). `--cache` reuses it when valid; `--no-build` trusts the existing IR.
+macro version, tool version, and the workspace `Cargo.lock` hash (when present).
+`--cache` reuses it when valid; `--no-build` trusts the existing IR.
 
 Crate fingerprints hash `Cargo.toml`, `build.rs` (when present), `src/`, and
 `locales/` so changes to configuration schemas or translations invalidate the
@@ -600,8 +601,8 @@ cache.
 
 ### 6.3.1 Agent-context pipeline additions
 
-Agent-context generation reuses the same bridge output, then transforms
-the documentation-oriented metadata into the compact contract described in
+Agent-context generation reuses the same bridge output, then transforms the
+documentation-oriented metadata into the compact contract described in
 [agent-native-cli-design.md](agent-native-cli-design.md). The transform must:
 
 - preserve schema versioning separately from `DocMetadata.ir_version`, which
@@ -622,18 +623,18 @@ the documentation-oriented metadata into the compact contract described in
   `--check-agent-native`.
 
 The reusable schema types and `ORTHO_AGENT_CONTEXT_SCHEMA_VERSION` live in
-`ortho_config::agent_context`. `cargo-orthohelp` owns the adapter work:
-loading the bridge IR, applying defaults, transforming structured metadata,
-writing artefacts, and reporting diagnostics.
+`ortho_config::agent_context`. `cargo-orthohelp` owns the adapter work: loading
+the bridge IR, applying defaults, transforming structured metadata, writing
+artefacts, and reporting diagnostics.
 
 For the first `--format agent-context` implementation, the adapter emits an
 optional `AgentCommand.summary` from the short en-US command description. It
-does not emit Fluent identifiers, long help text, roff fragments, or
-PowerShell help structures. Positional inputs are detected from existing CLI
-metadata when an input has no `long` or `short` flag and still takes a value;
-the v1 schema represents those inputs by leaving `AgentInput.long` absent.
-The output is written as exactly one file at `<out>/agent-context.json`.
-`--format all` continues to mean `ir + man + ps`.
+does not emit Fluent identifiers, long help text, roff fragments, or PowerShell
+help structures. Positional inputs are detected from existing CLI metadata when
+an input has no `long` or `short` flag and still takes a value; the v1 schema
+represents those inputs by leaving `AgentInput.long` absent. The output is
+written as exactly one file at `<out>/agent-context.json`. `--format all`
+continues to mean `ir + man + ps`.
 
 The agent-context output must not be scraped from rendered man pages or
 PowerShell help. Rendering surfaces may consume agent metadata for examples or

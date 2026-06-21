@@ -76,6 +76,15 @@ pub fn localize_clap_error_with_command(
 
     let localised = localizer.message(&id, args_ref, &fallback);
     if localised == fallback {
+        let locale = localizer
+            .locale()
+            .map_or_else(|| "unknown".to_owned(), std::string::ToString::to_string);
+        tracing::warn!(
+            identifier = %id,
+            error_kind = ?error.kind(),
+            locale = %locale,
+            "missing translation for clap error"
+        );
         return error;
     }
 
