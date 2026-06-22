@@ -1,8 +1,8 @@
 # Gap analysis: OrthoConfig vs ddlint configuration requirements
 
 This document compares OrthoConfig's current capabilities with the command-line
-and configuration interface described in the [ddlint design
-document][ddlint-design].
+and configuration interface described in the [ddlint design document][
+ddlint-design].
 
 Status: historical analysis. The original loading gap list has been addressed
 by later OrthoConfig work and is no longer the active roadmap. The remaining
@@ -125,9 +125,9 @@ support; it is the broader agent-native command policy described in
 The following policy items supersede the original loading-focused checklist:
 
 1. **Vocabulary policy** – replaced by phase 7 agent-native policy work. Decide
-   how strict agent-native mode treats
-   domain-specific format flags such as ddlint's `--format <compact|json|rich>`
-   when the cross-CLI structured-output convention is `--json`.
+   how strict agent-native mode treats domain-specific format flags such as
+   ddlint's `--format <compact|json|rich>` when the cross-CLI structured-output
+   convention is `--json`.
 2. **Agent context** – replaced by phase 6 whole-CLI introspection work. Command
    trees such as `rules` and `explain` should be represented compactly for
    agents without making those DDLint commands OrthoConfig features.

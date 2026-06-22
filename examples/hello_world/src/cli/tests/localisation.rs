@@ -3,6 +3,7 @@
 use super::super::{CommandLine, Commands, LocalizeCmd};
 use crate::localizer::DemoLocalizer;
 use clap::CommandFactory;
+use ortho_config::parse_localized_command;
 use rstest::{fixture, rstest};
 
 #[fixture]
@@ -47,15 +48,23 @@ fn localizes_subcommand_tree(demo_localizer: DemoLocalizer) {
 #[rstest]
 fn try_parse_with_localizer_builds_cli(demo_localizer: DemoLocalizer) {
     let args = ["hello-world", "greet"];
-    let parsed =
-        CommandLine::try_parse_localized(args, &demo_localizer).expect("expected to parse args");
-    assert!(matches!(parsed.cli.command, Commands::Greet(_)));
+    let command = CommandLine::command()
+        .with_base("hello_world.cli")
+        .localize(&demo_localizer);
+    let (cli, _matches) =
+        parse_localized_command::<CommandLine, _, _>(command, args, &demo_localizer)
+            .expect("expected to parse args");
+    assert!(matches!(cli.command, Commands::Greet(_)));
 }
 
 #[rstest]
 fn try_parse_with_localizer_localises_errors(demo_localizer: DemoLocalizer) {
-    let err = CommandLine::try_parse_localized(["hello-world"], &demo_localizer)
-        .expect_err("missing subcommand should be reported");
+    let command = CommandLine::command()
+        .with_base("hello_world.cli")
+        .localize(&demo_localizer);
+    let err =
+        parse_localized_command::<CommandLine, _, _>(command, ["hello-world"], &demo_localizer)
+            .expect_err("missing subcommand should be reported");
     let rendered = err.to_string();
     assert!(
         rendered.contains("Pick a workflow"),
@@ -74,8 +83,13 @@ fn noop_localizer_keeps_stock_error_messages() {
         .expect_err("default clap parsing should fail without subcommand")
         .to_string();
 
-    let err = CommandLine::try_parse_localized(["hello-world"], &DemoLocalizer::noop())
-        .expect_err("expected parse failure to bubble up");
+    let noop_localizer = DemoLocalizer::noop();
+    let command = CommandLine::command()
+        .with_base("hello_world.cli")
+        .localize(&noop_localizer);
+    let err =
+        parse_localized_command::<CommandLine, _, _>(command, ["hello-world"], &noop_localizer)
+            .expect_err("expected parse failure to bubble up");
 
     assert_eq!(
         err.to_string(),

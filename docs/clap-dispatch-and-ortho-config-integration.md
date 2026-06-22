@@ -387,8 +387,8 @@ arguments themselves.
 - `add-user` takes `--username <String>` and an optional `--admin` flag.
 - `list-items` takes an optional `--category <String>` and an optional `--all`
   flag.
-- Both are dispatched via `fn execute(&self, db_connection_url: &str) ->
-  Result<(), String>`.
+- Both are dispatched via
+  `fn execute(&self, db_connection_url: &str) -> Result<(), String>`.
 
 **Full** `src/main.rs`**:**
 
@@ -520,8 +520,8 @@ which support merging configurations from various file formats (TOML, YAML,
 JSON) and environment variables, allowing access to nested fields via a
 path-like string.6 The "orthographic" aspect implies that a configuration
 parameter, say `feature_x.enabled`, would have a predictable representation
-whether specified as a CLI flag (`--feature-x-enabled`), an environment
-variable (`APP_FEATURE_X_ENABLED`), or an entry in a config file
+whether specified as a CLI flag (`--feature-x-enabled`), an environment variable
+(`APP_FEATURE_X_ENABLED`), or an entry in a config file
 (`[feature_x] enabled = true`). This consistency suggests that `ortho-config`
 likely employs a hierarchical data structure internally (e.g., a map or a
 `serde_json::Value`-like structure) to store the merged configuration, enabling
@@ -552,8 +552,8 @@ Following the user's request, a TOML configuration file might look like this:
 # api_key = "from_file_for_add_cmd"
 ```
 
-Here, `[cmds.list]` and `[cmds.add]` define configuration blocks specific to
-the `list` and `add` subcommands, respectively.
+Here, `[cmds.list]` and `[cmds.add]` define configuration blocks specific to the
+`list` and `add` subcommands, respectively.
 
 2\. Environment Variable Naming Convention
 
@@ -681,8 +681,8 @@ pub struct ListArgs {
 ```
 
 Fields in these structs should correspond to the keys used in the TOML/JSON
-configuration and the suffixes of environment variables. `serde` attributes
-like `#[serde(default)]` (to use `Default::default()` for missing fields during
+configuration and the suffixes of environment variables. `serde` attributes like
+`#[serde(default)]` (to use `Default::default()` for missing fields during
 deserialization from config files/env vars) or
 `#[serde(rename = "other-name")]` can be used to map Rust field names to
 different configuration key names if necessary. The `Default` trait is also

@@ -63,6 +63,7 @@ test_helpers = { package = "ortho_config_test_helpers", path = "../test_helpers"
 anyhow = "1"
 ortho_config_macros = { path = "../ortho_config_macros", version = "0.8.0" }
 proptest = "1.11.0"
+tracing-subscriber = "0.3"
 
 [[example]]
 name = "registry_ctl"

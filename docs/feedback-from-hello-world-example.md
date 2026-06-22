@@ -198,8 +198,8 @@ transparently:
   scenarios that the library might not cover generically.
 
 - **Unified Global and Subcommand Loading:** Another improvement is offering a
-  one-stop API for subcommand configs. For example, if the main CLI struct has
-  a `Commands` enum, `ortho-config` could provide a method to directly get the
+  one-stop API for subcommand configs. For example, if the main CLI struct has a
+  `Commands` enum, `ortho-config` could provide a method to directly get the
   merged configuration for the chosen subcommand along with globals. This might
   involve enhancing the derive to generate code that detects which subcommand
   was selected and loads its config accordingly. While this is a larger design

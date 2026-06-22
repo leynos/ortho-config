@@ -26,7 +26,7 @@ use fluent::{BundleWithLocale, normalize_identifier};
 /// Fluent-backed scenarios the map keys correspond to the placeholder names
 /// declared in the `.ftl` resources.
 pub type LocalizationArgs<'value> = HashMap<&'value str, FluentValue<'value>>;
-pub use clap_command::{LocalizeCmd, WithBase};
+pub use clap_command::{LocalizeCmd, LocalizedParse, WithBase, parse_localized_command};
 pub use clap_error::{clap_error_formatter, localize_clap_error, localize_clap_error_with_command};
 pub use identifier::message_id_for;
 
@@ -41,6 +41,11 @@ pub use identifier::message_id_for;
 pub trait Localizer: Send + Sync {
     /// Performs a localisation lookup for the provided identifier.
     fn lookup(&self, id: &str, args: Option<&LocalizationArgs<'_>>) -> Option<String>;
+
+    /// Returns the locale used for localisation lookups when it is known.
+    fn locale(&self) -> Option<&LanguageIdentifier> {
+        None
+    }
 
     /// Resolves the message and returns a fallback string when no translation exists.
     ///
@@ -217,6 +222,13 @@ impl FluentLocalizer {
 }
 
 impl Localizer for FluentLocalizer {
+    fn locale(&self) -> Option<&LanguageIdentifier> {
+        self.consumer
+            .as_ref()
+            .or(self.defaults.as_ref())
+            .map(|bundle| &bundle.locale)
+    }
+
     fn lookup(&self, id: &str, args: Option<&LocalizationArgs<'_>>) -> Option<String> {
         let fluent_args = args.map(fluent_args_from);
         let normalized_id = normalize_identifier(id);

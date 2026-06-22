@@ -28,6 +28,10 @@ All notable changes to this project will be documented in this file.
 - Add `SkillManifest`, `SkillCommandRef`, and the
   `AgentContext.skill_manifests` field for declaring downstream skill manifests
   in agent context (roadmap item 6.3.1).
+- Add the public `LocalizedParse` blanket trait so any `clap::Parser` can
+  parse arguments with localised command metadata and parse errors.
+- Add the public `parse_localized_command` helper for applications that need
+  to parse an already-localised `clap::Command` with a custom message-id base.
 
 ### Changed
 

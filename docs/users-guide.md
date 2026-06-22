@@ -281,8 +281,67 @@ assert_eq!(
 Applications can inject a custom logger with `with_error_reporter` when they
 need to capture Fluent formatting errors alongside command parsing failures.
 
-Use `LocalizeCmd` to apply a localizer to a `clap::Command` tree before parsing
-or rendering help:
+Use `LocalizedParse` when catalogue keys are rooted at the command `bin_name`:
+
+```rust,ignore
+use ortho_config::{LocalizedParse, Localizer};
+
+# #[derive(clap::Parser)]
+# struct Cli {}
+fn parse_env(localizer: &dyn Localizer) -> Result<Cli, clap::Error> {
+    Cli::try_parse_localized(localizer)
+}
+
+fn parse_supplied_args(localizer: &dyn Localizer) -> Result<Cli, clap::Error> {
+    Cli::try_parse_localized_from(["demo", "--verbose"], localizer)
+}
+```
+
+Use `try_parse_localized_with_matches` when a later configuration merge needs
+the raw `clap::ArgMatches` alongside the typed parser:
+
+```rust,ignore
+use ortho_config::{LocalizedParse, Localizer};
+
+# #[derive(clap::Parser)]
+# struct Cli {}
+fn parse_with_matches(
+    localizer: &dyn Localizer,
+) -> Result<(Cli, clap::ArgMatches), clap::Error> {
+    Cli::try_parse_localized_with_matches(["demo", "--verbose"], localizer)
+}
+```
+
+The trait derives the catalogue root from `bin_name`, falling back to the
+command name. When a binary needs a different root, build the command with
+`LocalizeCmd::with_base` and pass it to `parse_localized_command`:
+
+```rust,ignore
+use clap::CommandFactory;
+use ortho_config::{LocalizeCmd, Localizer, parse_localized_command};
+
+# #[derive(clap::Parser)]
+# struct Cli {}
+fn parse_custom_base(
+    localizer: &dyn Localizer,
+) -> Result<(Cli, clap::ArgMatches), clap::Error> {
+    let command = Cli::command()
+        .with_base("my_app.cli")
+        .localize(localizer);
+
+    parse_localized_command(command, std::env::args_os(), localizer)
+}
+```
+
+The free function is the right choice when the catalogue keys intentionally do
+not match the command `bin_name`, as in applications that share one binary name
+across several catalogue namespaces.
+
+#### Migrating localized parsing code
+
+Earlier localization code often built a localized `clap::Command` and parsed it
+directly. That kept translated help text, but it left parse-error localization
+and `from_arg_matches` error enrichment to application glue:
 
 ```rust,ignore
 use clap::CommandFactory;
@@ -290,20 +349,46 @@ use ortho_config::{LocalizeCmd, Localizer};
 
 # #[derive(clap::Parser)]
 # struct Cli {}
-fn parse(localizer: &dyn Localizer) -> Result<Cli, clap::Error> {
-    let mut command = Cli::command()
-        .with_base("my_app.cli")
-        .localize(localizer);
-    let mut matches = command
-        .try_get_matches()
-        .map_err(|err| {
-            localize_clap_error_with_command(err, localizer, Some(&command))
-        })?;
+fn parse_old(localizer: &dyn Localizer) -> Result<clap::ArgMatches, clap::Error> {
+    Cli::command()
+        .with_base("demo.cli")
+        .localize(localizer)
+        .try_get_matches_from(std::env::args_os())
+}
+```
 
-    Cli::from_arg_matches_mut(&mut matches).map_err(|err| {
-        let err = err.with_cmd(&command);
-        localize_clap_error_with_command(err, localizer, Some(&command))
-    })
+For catalogue roots that match the command `bin_name`, migrate to
+`LocalizedParse` and let the trait localize the command tree, parse errors, and
+typed parser conversion in one path:
+
+```rust,ignore
+use ortho_config::{LocalizedParse, Localizer};
+
+# #[derive(clap::Parser)]
+# struct Cli {}
+fn parse_new(localizer: &dyn Localizer) -> Result<Cli, clap::Error> {
+    Cli::try_parse_localized(localizer)
+}
+```
+
+When the application still needs a custom catalogue root, keep
+`LocalizeCmd::with_base` but hand the command to `parse_localized_command`
+instead of invoking `clap` parsing directly:
+
+```rust,ignore
+use clap::CommandFactory;
+use ortho_config::{LocalizeCmd, Localizer, parse_localized_command};
+
+# #[derive(clap::Parser)]
+# struct Cli {}
+fn parse_new_with_base(
+    localizer: &dyn Localizer,
+) -> Result<(Cli, clap::ArgMatches), clap::Error> {
+    let command = Cli::command()
+        .with_base("demo.cli")
+        .localize(localizer);
+
+    parse_localized_command(command, std::env::args_os(), localizer)
 }
 ```
 

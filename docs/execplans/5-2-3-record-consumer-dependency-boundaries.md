@@ -1,9 +1,8 @@
 # Record consumer dependency boundaries for Weaver and Netsuke
 
-This ExecPlan (execution plan) is a living document. The sections
-`Constraints`, `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`,
-`Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
-proceeds.
+This ExecPlan (execution plan) is a living document. The sections `Constraints`,
+`Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
+and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
 Status: COMPLETE
 
@@ -22,17 +21,17 @@ temporarily satisfy with a local adapter until OrthoConfig catches up.
 
 Observable success looks like this. A maintainer can open
 `docs/agent-native-cli-design.md` §2.1 and read three explicit lists: what
-OrthoConfig owns; what Weaver owns; and what Netsuke owns. They can then read
-a sibling §2.2, "Consumer dependency tier", and see a single dependency-tier
+OrthoConfig owns; what Weaver owns; and what Netsuke owns. They can then read a
+sibling §2.2, "Consumer dependency tier", and see a single dependency-tier
 matrix (capability, tier, roadmap item, consumer adaptation rule, replacement
 trigger) showing that whole-CLI introspection, strict vocabulary policy,
-agent-context IR, and localized help generation are ship-time hard
-dependencies for Weaver's generated command surface, while profiles, delivery,
-feedback, skill manifests, and execution ledgers are ship-time soft
-dependencies that may be locally adapted. Every other affected document
-(`docs/design.md`, `docs/cargo-orthohelp-design.md`, `docs/users-guide.md`,
-`docs/developers-guide.md`, and ADR-003) carries only a back-reference to
-§2.2; none restates the matrix. Roadmap item 5.2.3 is then marked done.
+agent-context IR, and localized help generation are ship-time hard dependencies
+for Weaver's generated command surface, while profiles, delivery, feedback,
+skill manifests, and execution ledgers are ship-time soft dependencies that may
+be locally adapted. Every other affected document (`docs/design.md`,
+`docs/cargo-orthohelp-design.md`, `docs/users-guide.md`,
+`docs/developers-guide.md`, and ADR-003) carries only a back-reference to §2.2;
+none restates the matrix. Roadmap item 5.2.3 is then marked done.
 
 The plan is documentation-only. It does not change schema ownership, runtime
 code, generated artefacts, public Rust APIs, or `cargo-orthohelp` command-line
@@ -52,8 +51,8 @@ suggestions; violation requires escalation, not workarounds.
   `cargo-orthohelp` generator, and no schema definition file changes are in
   scope.
 - Preserve the schema ownership defined in ADR-003 and recorded in
-  `docs/agent-native-cli-design.md` §3, `docs/cargo-orthohelp-design.md` §1,
-  and `docs/developers-guide.md` "Schema ownership". OrthoConfig owns reusable
+  `docs/agent-native-cli-design.md` §3, `docs/cargo-orthohelp-design.md` §1, and
+  `docs/developers-guide.md` "Schema ownership". OrthoConfig owns reusable
   command-contract machinery, agent context lives in
   `ortho_config::agent_context`, documentation IR lives in
   `ortho_config::docs`, and policy reports live in `cargo_orthohelp::policy`.
@@ -84,8 +83,8 @@ suggestions; violation requires escalation, not workarounds.
   tier is "blocked".
 - Treat `docs/agent-native-cli-design.md` §2.2 as the authoritative location
   for the dependency-tier matrix. ADR-003 and every other affected document
-  carry only a one-sentence back-reference. If the back-reference and §2.2
-  ever disagree, §2.2 wins.
+  carry only a one-sentence back-reference. If the back-reference and §2.2 ever
+  disagree, §2.2 wins.
 - Mark whole-CLI introspection, strict vocabulary policy, agent-context IR, and
   localized help generation as hard dependencies for Weaver's generated command
   surface, with explicit references to the roadmap items that deliver them:
@@ -98,16 +97,16 @@ suggestions; violation requires escalation, not workarounds.
   adapter until OrthoConfig publishes the reusable contract.
 - Keep the soft-dependency adaptation rule consistent with the existing scope
   boundary: a consumer may carry a temporary local adapter for the *contract*
-  shape (for example, parsing `--profile`, `--deliver`, `feedback <text>`,
-  or a JSONL ledger record), but must not duplicate the *domain* behaviour
+  shape (for example, parsing `--profile`, `--deliver`, `feedback <text>`, or a
+  JSONL ledger record), but must not duplicate the *domain* behaviour
   OrthoConfig does not own (semantic code editing for Weaver, build graph
   execution for Netsuke).
 - Spell out the conflict-resolution rule. When OrthoConfig publishes the
-  reusable contract for a soft-dependency capability, the consumer must
-  replace its local adapter within the next consumer release; if the consumer
-  adapter and the published OrthoConfig shape disagree, the published shape
-  wins. The local adapter must declare which roadmap item it shadows so the
-  replacement can be tracked.
+  reusable contract for a soft-dependency capability, the consumer must replace
+  its local adapter within the next consumer release; if the consumer adapter
+  and the published OrthoConfig shape disagree, the published shape wins. The
+  local adapter must declare which roadmap item it shadows so the replacement
+  can be tracked.
 - Use British English Oxford spelling throughout, except for code identifiers,
   external API names, and direct quotations.
 - Follow `docs/documentation-style-guide.md` for headings, link style, ADR
@@ -122,11 +121,11 @@ suggestions; violation requires escalation, not workarounds.
   consumers depend on) and must never describe `ortho_config` as depending on
   Weaver or Netsuke crates.
 - Do not mark roadmap item 5.2.3 done until the approved implementation,
-  documentation updates, validation gates, CodeRabbit review, commit, push,
-  and pull-request updates are complete.
+  documentation updates, validation gates, CodeRabbit review, commit, push, and
+  pull-request updates are complete.
 
-If satisfying the objective requires violating a constraint, stop, document
-the conflict in `Decision Log`, and ask for direction.
+If satisfying the objective requires violating a constraint, stop, document the
+conflict in `Decision Log`, and ask for direction.
 
 ## Tolerances (exception triggers)
 
@@ -136,8 +135,8 @@ of autonomous action, not quality criteria.
 - Approval: stop after this draft is complete and wait for explicit approval
   before implementation.
 - Scope: stop if implementation requires touching more than 10 files or more
-  than 700 net lines of documentation. The expected surface is ADR-003 and
-  five design or guide documents.
+  than 700 net lines of documentation. The expected surface is ADR-003 and five
+  design or guide documents.
 - Public API: stop if any public Rust type, trait, constant, command-line
   spelling, or generated file path must change.
 - Ownership: stop if writing the dependency-tier list shows that ADR-003 is
@@ -171,11 +170,11 @@ Known uncertainties that might affect the plan. Identify these upfront and
 update as work proceeds.
 
 - Risk: the hard or soft classification could be mistaken because a roadmap
-  capability is more entangled with Weaver's generated command surface than
-  the design currently records. Severity: high. Likelihood: medium.
-  Mitigation: anchor every classification to a concrete consumer behaviour
-  (what fails if the capability is missing), and require the agent-native
-  design document to spell out that behaviour beside the classification.
+  capability is more entangled with Weaver's generated command surface than the
+  design currently records. Severity: high. Likelihood: medium. Mitigation:
+  anchor every classification to a concrete consumer behaviour (what fails if
+  the capability is missing), and require the agent-native design document to
+  spell out that behaviour beside the classification.
 
 - Risk: the documentation could imply that consumers are allowed to fork
   OrthoConfig domains (for example, to ship their own agent-context schema)
@@ -195,23 +194,22 @@ update as work proceeds.
   §2.2.
 
 - Risk: "hard" and "soft" already carry a runtime resilience meaning in the
-  AWS Well-Architected framework, so a future reader could repurpose the
-  terms for runtime fallback inside this project. Severity: medium.
-  Likelihood: medium. Mitigation: qualify the terms as "ship-time" on first
-  use in §2.2 and forbid runtime resilience reuse of the same words in the
-  same paragraph.
+  AWS Well-Architected framework, so a future reader could repurpose the terms
+  for runtime fallback inside this project. Severity: medium. Likelihood:
+  medium. Mitigation: qualify the terms as "ship-time" on first use in §2.2 and
+  forbid runtime resilience reuse of the same words in the same paragraph.
 
 - Risk: the back-reference paragraph in ADR-003 and the matrix in §2.2 drift
   apart after a future ADR-003 edit. Severity: medium. Likelihood: medium.
-  Mitigation: keep ADR-003's amendment a single back-reference sentence with
-  no normative content of its own, and record the precedence rule (§2.2
-  wins) in Constraints.
+  Mitigation: keep ADR-003's amendment a single back-reference sentence with no
+  normative content of its own, and record the precedence rule (§2.2 wins) in
+  Constraints.
 
 - Risk: introducing hard or soft vocabulary could clash with the existing
   Compatibility and Migration wording or with ADR-003's "reusable contracts"
-  language. Severity: medium. Likelihood: medium. Mitigation: define the
-  terms once in `docs/agent-native-cli-design.md` §2.1, cross-link from every
-  other document, and keep the Compatibility and Migration sections in 5.2.2
+  language. Severity: medium. Likelihood: medium. Mitigation: define the terms
+  once in `docs/agent-native-cli-design.md` §2.1, cross-link from every other
+  document, and keep the Compatibility and Migration sections in 5.2.2
   documents unchanged unless a wording conflict is found in review.
 
 - Risk: documentation could drift from code if future roadmap work renames a
@@ -233,19 +231,17 @@ update as work proceeds.
 
 Use a list with checkboxes to summarise granular steps. Every stopping point
 must be documented here, even if it requires splitting a partially completed
-task into two. This section must always reflect the actual current state of
-the work.
+task into two. This section must always reflect the actual current state of the
+work.
 
 - [x] (2026-06-02T00:00:00Z) Loaded the `leta`, `rust-router`, and `execplans`
   skills.
 - [x] (2026-06-02T00:00:00Z) Added the worktree to the leta workspace.
 - [x] (2026-06-02T00:00:00Z) Read source documents:
-  `docs/roadmap.md` §5.2.3,
-  `docs/agent-native-cli-design.md` §2.1 and §6,
-  `docs/cargo-orthohelp-design.md` §0.1 and §12,
-  `docs/design.md` §2 and §8,
-  `docs/users-guide.md` "Documentation metadata",
-  `docs/developers-guide.md` "Schema ownership", and
+  `docs/roadmap.md` §5.2.3, `docs/agent-native-cli-design.md` §2.1 and §6,
+  `docs/cargo-orthohelp-design.md` §0.1 and §12, `docs/design.md` §2 and §8,
+  `docs/users-guide.md` "Documentation metadata", `docs/developers-guide.md`
+  "Schema ownership", and
   `docs/adr-003-define-schema-ownership-for-agent-native-contracts.md`.
 - [x] (2026-06-02T00:00:00Z) Used an Explore reconnaissance subagent to confirm
   every existing Weaver and Netsuke reference and to verify that the terms
@@ -258,11 +254,11 @@ the work.
 - [x] (2026-06-02T00:00:00Z) Ran a logisphere community-of-experts review on
   the draft (Pandalump, Wafflecat, Buzzy Bee, Telefono, Doggylump, Dinolump)
   and applied the blocking punch-list items: moved the dependency tier to a
-  sibling §2.2, qualified the vocabulary as "ship-time", added the
-  precedence rule that §2.2 wins over back-references, sharpened the
-  soft-dependency conflict-resolution rule, separated contract dependency
-  from delivery state, added the considered options to the Decision Log,
-  and switched the §2.2 representation from prose to a single matrix.
+  sibling §2.2, qualified the vocabulary as "ship-time", added the precedence
+  rule that §2.2 wins over back-references, sharpened the soft-dependency
+  conflict-resolution rule, separated contract dependency from delivery state,
+  added the considered options to the Decision Log, and switched the §2.2
+  representation from prose to a single matrix.
 - [x] (2026-06-04T00:00:00Z) Received explicit user approval to proceed with
   implementation.
 - [x] (2026-06-04T00:00:00Z) Confirmed the current branch is
@@ -275,10 +271,8 @@ the work.
   `docs/agent-native-cli-design.md` §2.1 and the authoritative dependency
   matrix in §2.2.
 - [x] (2026-06-04T00:00:00Z) Cross-linked the dependency tiers from
-  `docs/design.md`,
-  `docs/cargo-orthohelp-design.md`, `docs/users-guide.md`,
-  `docs/developers-guide.md`, and amended ADR-003 with a brief consequence
-  note.
+  `docs/design.md`, `docs/cargo-orthohelp-design.md`, `docs/users-guide.md`,
+  `docs/developers-guide.md`, and amended ADR-003 with a brief consequence note.
 - [x] (2026-06-04T00:00:00Z) Ran the documentation milestone gates before
   CodeRabbit review: `make check-fmt`, `make lint`, `make test`,
   `make typecheck`, and `make markdownlint` all passed with `/tmp` logs.
@@ -289,8 +283,8 @@ the work.
 - [x] (2026-06-04T00:00:00Z) Marked roadmap item 5.2.3 and its three
   acceptance bullets done in `docs/roadmap.md`.
 - [x] (2026-06-04T00:00:00Z) Pushed branch
-  `5-2-3-record-consumer-dependency-boundaries` to origin and updated draft
-  PR #343, "Record consumer dependency boundaries (5.2.3)".
+  `5-2-3-record-consumer-dependency-boundaries` to origin and updated draft PR
+  #343, "Record consumer dependency boundaries (5.2.3)".
 - [x] (2026-06-04T00:00:00Z) Prepared this final ExecPlan bookkeeping entry
   for the follow-up commit and push.
 
@@ -307,18 +301,18 @@ implementation.
 
 - Observation: the AWS Well-Architected reliability pillar already uses
   "hard dependency" and "soft dependency" with the same intent that this plan
-  proposes (a soft dependency failure can be compensated for, a hard
-  dependency failure cannot). Evidence: AWS publishes the framework at
+  proposes (a soft dependency failure can be compensated for, a hard dependency
+  failure cannot). Evidence: AWS publishes the framework at
   <https://docs.aws.amazon.com/wellarchitected/latest/reliability-pillar/>.
   Impact: the plan can adopt the same terms with a one-line definition rather
   than inventing new vocabulary.
 
 - Observation: roadmap §9.1, §9.2, and §9.3 already explicitly describe
   profiles, delivery and feedback, and execution ledgers as optional or
-  application-owned. Evidence: `docs/roadmap.md` §9 lists them under
-  "Add compounding primitives". Impact: the soft-dependency classification can
-  cite those phase 9 items as the future OrthoConfig surface rather than
-  inventing new ones.
+  application-owned. Evidence: `docs/roadmap.md` §9 lists them under "Add
+  compounding primitives". Impact: the soft-dependency classification can cite
+  those phase 9 items as the future OrthoConfig surface rather than inventing
+  new ones.
 
 - Observation: implementation approval arrived on 2026-06-04 while the plan
   still carried `DRAFT` status from 2026-06-02. Impact: the plan status was
@@ -327,9 +321,9 @@ implementation.
 
 - Observation: the baseline quality gates passed before the dependency-tier
   documentation was edited. Evidence: `make check-fmt`, `make lint`,
-  `make test`, `make typecheck`, and `make markdownlint` all exited with
-  status 0 with logs written under `/tmp`. Impact: later failures can be
-  attributed to the implementation rather than pre-existing repository state.
+  `make test`, `make typecheck`, and `make markdownlint` all exited with status
+  0 with logs written under `/tmp`. Impact: later failures can be attributed to
+  the implementation rather than pre-existing repository state.
 
 - Observation: `make fmt` applied repository-wide Markdown reflow beyond the
   planned document surface and then failed on one line-length issue. Impact:
@@ -340,14 +334,13 @@ implementation.
   the cleaned final diff and reported zero findings each time. Evidence:
   `coderabbit review --agent` completed with
   `{"status":"review_completed","findings":0}` after the final deterministic
-  gate run. Impact: there are no review concerns to clear before committing
-  the milestone.
+  gate run. Impact: there are no review concerns to clear before committing the
+  milestone.
 
 ## Decision log
 
 Record every significant decision made while working on the plan, including
-decisions to escalate, decisions on ambiguous requirements, and design
-choices.
+decisions to escalate, decisions on ambiguous requirements, and design choices.
 
 - Decision: Treat this branch as a pre-implementation plan branch and leave
   roadmap item 5.2.3 unchecked until implementation completes. Rationale: the
@@ -356,10 +349,10 @@ choices.
   Date/Author: 2026-06-02 / Codex.
 
 - Decision: Adopt the AWS Well-Architected "hard dependency" and "soft
-  dependency" vocabulary rather than coining new terms. Rationale: the
-  industry vocabulary is widely understood; it captures the consumer
-  adaptation rule the roadmap text requires; and it does not invent a
-  competing framework. Date/Author: 2026-06-02 / Codex.
+  dependency" vocabulary rather than coining new terms. Rationale: the industry
+  vocabulary is widely understood; it captures the consumer adaptation rule the
+  roadmap text requires; and it does not invent a competing framework.
+  Date/Author: 2026-06-02 / Codex.
 
 - Decision: Land the dependency-tier matrix as a sibling §2.2 of
   `docs/agent-native-cli-design.md` and cross-link from every other affected
@@ -392,8 +385,8 @@ choices.
 
 - Decision: Map every hard and soft classification to specific roadmap items.
   Rationale: a dependency tier without an implementation reference would be a
-  documentation claim with no enforcement. The roadmap citations make
-  drift visible. Date/Author: 2026-06-02 / Codex.
+  documentation claim with no enforcement. The roadmap citations make drift
+  visible. Date/Author: 2026-06-02 / Codex.
 
 - Decision: Treat the user's 2026-06-04 instruction to proceed as explicit
   implementation approval for this ExecPlan. Rationale: the message names the
@@ -428,23 +421,23 @@ The boundary between OrthoConfig and downstream consumers is canonical in
 `docs/agent-native-cli-design.md` §2.1. OrthoConfig owns schemas and command
 metadata, documentation IR and compact agent-context IR, vocabulary and
 global-option policy, renderer metadata, generated help, man pages,
-completions, reference artefacts, policy linting and drift checks, and
-optional primitives for profiles, delivery targets, feedback stores, skill
-manifests, and execution ledgers. Weaver owns semantic execution: capability
-routing, Rope, rust-analyzer, Language Server Protocol providers, Tree-sitter
-parsing, Sempai providers, sandboxing, Double-Lock safety, actual edits,
-semantic refusal logic, and provider-specific idempotency. Netsuke owns build
-and package semantics: manifest interpretation, subprocess execution, build
-graph logic, and package-specific run records.
+completions, reference artefacts, policy linting and drift checks, and optional
+primitives for profiles, delivery targets, feedback stores, skill manifests,
+and execution ledgers. Weaver owns semantic execution: capability routing,
+Rope, rust-analyzer, Language Server Protocol providers, Tree-sitter parsing,
+Sempai providers, sandboxing, Double-Lock safety, actual edits, semantic
+refusal logic, and provider-specific idempotency. Netsuke owns build and
+package semantics: manifest interpretation, subprocess execution, build graph
+logic, and package-specific run records.
 
 Roadmap item 5.2.1 recorded that compact agent context lives in
 `ortho_config::agent_context` with `ORTHO_AGENT_CONTEXT_SCHEMA_VERSION`, the
 documentation IR remains owned by `ortho_config::docs` with
 `ORTHO_DOCS_IR_VERSION`, and policy reports live in `cargo_orthohelp::policy`
-with `ORTHO_POLICY_REPORT_SCHEMA_VERSION`. Roadmap item 5.2.2 recorded that
-the existing `cargo-orthohelp` `ir`, `man`, `ps`, and `all` formats stay
-compatible until a versioned migration is approved. This plan applies both of
-those baselines without renegotiating them.
+with `ORTHO_POLICY_REPORT_SCHEMA_VERSION`. Roadmap item 5.2.2 recorded that the
+existing `cargo-orthohelp` `ir`, `man`, `ps`, and `all` formats stay compatible
+until a versioned migration is approved. This plan applies both of those
+baselines without renegotiating them.
 
 Relevant documentation sources are:
 
@@ -482,19 +475,19 @@ Supporting practice references signposted by the roadmap task description:
 External prior art used while drafting this plan:
 
 - AWS Well-Architected Framework, Reliability Pillar,
-  <https://docs.aws.amazon.com/wellarchitected/latest/reliability-pillar/>,
-  for the canonical "hard dependency" and "soft dependency" terminology and
-  for the rule that a soft-dependency failure can be compensated for by the
-  consuming application while a hard-dependency failure cannot.
+  <https://docs.aws.amazon.com/wellarchitected/latest/reliability-pillar/>, for
+  the canonical "hard dependency" and "soft dependency" terminology and for the
+  rule that a soft-dependency failure can be compensated for by the consuming
+  application while a hard-dependency failure cannot.
 - Christopher Meiklejohn, *Resilient Microservice Applications, by Design,
   and without the Chaos*, PhD thesis, 2024, for the formal definition of soft
   dependency in terms of consumer compensation behaviour.
 - AgentSkills "Skill Package Manifest" discussion,
   <https://github.com/agentskills/agentskills/discussions/210>, and Skilldex
-  (arXiv:2604.16911), as prior art for the dependency-resolution shape of
-  skill manifests. These remain reference material only; OrthoConfig models
-  manifest paths, schema versions, command indexes, and validation rules
-  rather than adopting any specific manifest format.
+  (arXiv:2604.16911), as prior art for the dependency-resolution shape of skill
+  manifests. These remain reference material only; OrthoConfig models manifest
+  paths, schema versions, command indexes, and validation rules rather than
+  adopting any specific manifest format.
 - Microsoft Bot Framework Solutions, "Skill Manifest" reference, and
   TrueFoundry "agent-skill manifest" documentation, as further prior art for
   command index and capability declaration. These are also reference material
@@ -517,9 +510,9 @@ so the plan and the roadmap evolve together:
 ## Plan of work
 
 Stage A: approval and baseline. Stop until the user approves this plan. After
-approval, check `git status --short --branch`, confirm the branch name, and
-run the existing gates once to establish the starting state. Use `tee` for
-logs in `/tmp` and do not run format, lint, or tests in parallel.
+approval, check `git status --short --branch`, confirm the branch name, and run
+the existing gates once to establish the starting state. Use `tee` for logs in
+`/tmp` and do not run format, lint, or tests in parallel.
 
 Stage B: introduce the dependency-tier vocabulary as a sibling §2.2 of
 `docs/agent-native-cli-design.md`, leaving §2.1 unchanged except for a
@@ -529,17 +522,17 @@ dependency-tier location. The new §2.2 ("Consumer dependency tier") must:
 - Define "ship-time hard dependency" and "ship-time soft dependency" in plain
   language, anchored to consumer adaptation behaviour. Cite the AWS
   Well-Architected reliability pillar as prior art and add an explicit
-  one-sentence note that this is a ship-time framing only: the same words
-  must not be reused inside the project for runtime fallback, circuit
-  breaking, or any other resilience pattern.
+  one-sentence note that this is a ship-time framing only: the same words must
+  not be reused inside the project for runtime fallback, circuit breaking, or
+  any other resilience pattern.
 - State that the tier records contract dependency, not delivery state. An
-  entry is hard or soft based on whether Weaver's generated command surface
-  can ship without the OrthoConfig contract, irrespective of whether that
-  contract is already shipped, in flight, or merely planned.
+  entry is hard or soft based on whether Weaver's generated command surface can
+  ship without the OrthoConfig contract, irrespective of whether that contract
+  is already shipped, in flight, or merely planned.
 - Present a single dependency-tier matrix with the columns: capability, tier,
   roadmap item (number and title), consumer adaptation rule, replacement
-  trigger. The matrix replaces prose lists so that drift surfaces in review.
-  At minimum it must contain rows for:
+  trigger. The matrix replaces prose lists so that drift surfaces in review. At
+  minimum it must contain rows for:
 
   - Whole-CLI introspection, hard, roadmap §6.1 ("Populate subcommand
     metadata"), no local adaptation permitted, replacement trigger not
@@ -577,52 +570,52 @@ dependency-tier location. The new §2.2 ("Consumer dependency tier") must:
     conflict the OrthoConfig shape wins.
 
 - Reinforce that Weaver and Netsuke continue to own semantic execution and
-  build and package execution respectively, and that no dependency tier
-  permits consumers to fork the agent-context schema, documentation IR, or
+  build and package execution respectively, and that no dependency tier permits
+  consumers to fork the agent-context schema, documentation IR, or
   policy-report schema permanently.
 
-Stage C: propagate cross-references only. No other document restates the
-matrix or duplicates the normative tier definitions. Each affected document
-gets a one-sentence back-reference to `docs/agent-native-cli-design.md` §2.2
-as the authoritative location, plus the smallest domain-appropriate framing
-needed to make the back-reference legible.
+Stage C: propagate cross-references only. No other document restates the matrix
+or duplicates the normative tier definitions. Each affected document gets a
+one-sentence back-reference to `docs/agent-native-cli-design.md` §2.2 as the
+authoritative location, plus the smallest domain-appropriate framing needed to
+make the back-reference legible.
 
 - `docs/design.md` §2 ("Reusable consumer contracts") and §8 ("Future Work")
   acquire a one-sentence back-reference pointing to §2.2 of the agent-native
   design document. No new architectural claim is introduced and no list is
   duplicated.
 - `docs/cargo-orthohelp-design.md` §0.1 or §12 acquires a one-sentence
-  back-reference and a parallel one-sentence statement that the existing
-  format compatibility surfaces are unchanged. No matrix is restated.
+  back-reference and a parallel one-sentence statement that the existing format
+  compatibility surfaces are unchanged. No matrix is restated.
 - `docs/users-guide.md` "Documentation metadata (OrthoConfigDocs)" acquires
   a one-sentence back-reference and a one-sentence downstream guidance line
   that human-facing consumers may continue to use the existing roff and
   PowerShell outputs without engaging with the dependency tier.
 - `docs/developers-guide.md` "Schema ownership" gains a short subsection
-  describing the dependency tier as internal practice for contributors:
-  changes that affect a hard-dependency capability must update both §2.2
-  and the cited roadmap item in the same change; changes that affect a
-  soft-dependency capability must also record which roadmap item the local
-  adapter shadows so the eventual replacement can be tracked. This is the
-  "shadowed contracts" pointer the review recommended.
+  describing the dependency tier as internal practice for contributors: changes
+  that affect a hard-dependency capability must update both §2.2 and the cited
+  roadmap item in the same change; changes that affect a soft-dependency
+  capability must also record which roadmap item the local adapter shadows so
+  the eventual replacement can be tracked. This is the "shadowed contracts"
+  pointer the review recommended.
 - `docs/adr-003-define-schema-ownership-for-agent-native-contracts.md`
-  acquires a single back-reference sentence in its "Consequences" section
-  that names §2.2 as the authoritative dependency-tier location. The ADR's
-  decision and rationale do not change.
+  acquires a single back-reference sentence in its "Consequences" section that
+  names §2.2 as the authoritative dependency-tier location. The ADR's decision
+  and rationale do not change.
 
 Stage D: review and harden. Run `make fmt` if Markdown formatting changes are
 needed. Then run `make check-fmt`, `make lint`, `make test`, `make typecheck`,
 and `make markdownlint` sequentially with `tee`. Run `make nixie` only if a
 Mermaid diagram is added or edited (none is anticipated). Run
-`coderabbit review --agent`, address every concern that fits within this
-plan's constraints, and rerun affected gates. If CodeRabbit asks for work
-outside tolerance, record it in this plan and escalate.
+`coderabbit review --agent`, address every concern that fits within this plan's
+constraints, and rerun affected gates. If CodeRabbit asks for work outside
+tolerance, record it in this plan and escalate.
 
-Stage E: commit and completion. Commit the implementation only after gates
-and review pass. Mark roadmap item 5.2.3 in `docs/roadmap.md` done only after
-the approved implementation is complete. Push the branch to
-`origin/5-2-3-record-consumer-dependency-boundaries` and open or update a
-draft pull request whose title includes `(5.2.3)`.
+Stage E: commit and completion. Commit the implementation only after gates and
+review pass. Mark roadmap item 5.2.3 in `docs/roadmap.md` done only after the
+approved implementation is complete. Push the branch to
+`origin/5-2-3-record-consumer-dependency-boundaries` and open or update a draft
+pull request whose title includes `(5.2.3)`.
 
 ## Concrete steps
 
@@ -654,8 +647,8 @@ make markdownlint 2>&1 |
   tee "/tmp/markdownlint-ortho-config-$(git branch --show-current).out"
 ```
 
-Expected result: each Make target exits with status 0. If a log is truncated
-in the terminal, inspect the matching file under `/tmp`.
+Expected result: each Make target exits with status 0. If a log is truncated in
+the terminal, inspect the matching file under `/tmp`.
 
 Inspect the documents that will be edited before changing them:
 
@@ -668,8 +661,8 @@ sed -n '50,110p' docs/developers-guide.md
 sed -n '60,110p' docs/adr-003-define-schema-ownership-for-agent-native-contracts.md
 ```
 
-Update documentation in the order described in Stage B and Stage C. After
-each substantive edit, rerun the relevant gates:
+Update documentation in the order described in Stage B and Stage C. After each
+substantive edit, rerun the relevant gates:
 
 ```sh
 make check-fmt 2>&1 |
@@ -748,40 +741,39 @@ The pull-request body must mention this ExecPlan and include:
 The implementation is accepted when all of the following are true:
 
 - `docs/agent-native-cli-design.md` contains a new §2.2 ("Consumer dependency
-  tier"). §2.1 is unchanged except for a single sentence at its end pointing
-  to §2.2 as the authoritative dependency-tier location.
+  tier"). §2.1 is unchanged except for a single sentence at its end pointing to
+  §2.2 as the authoritative dependency-tier location.
 - §2.2 defines "ship-time hard dependency" and "ship-time soft dependency" in
   plain language, anchors the terms in AWS Well-Architected prior art, and
-  explicitly forbids reuse of the same words for runtime resilience inside
-  the project. §2.2 also states that the tier records contract dependency,
-  not delivery state.
+  explicitly forbids reuse of the same words for runtime resilience inside the
+  project. §2.2 also states that the tier records contract dependency, not
+  delivery state.
 - §2.2 presents a single dependency-tier matrix with the columns capability,
   tier, roadmap item (number and title), consumer adaptation rule, and
   replacement trigger. The matrix contains the four hard-dependency rows
   (whole-CLI introspection, strict vocabulary policy, agent-context IR,
   localized help generation) and the five soft-dependency rows (profiles,
-  delivery, feedback, skill manifests, execution ledgers) named by the
-  roadmap.
+  delivery, feedback, skill manifests, execution ledgers) named by the roadmap.
 - Every matrix row references the roadmap item that delivers the capability
   by both number and title, so renumbering surfaces in review.
 - §2.2 records the conflict-resolution rule: when OrthoConfig publishes the
-  reusable contract for a soft-dependency capability, the consumer must
-  replace its local adapter within the next consumer release, and if the
-  consumer adapter and the published OrthoConfig shape disagree, the
-  published shape wins.
+  reusable contract for a soft-dependency capability, the consumer must replace
+  its local adapter within the next consumer release, and if the consumer
+  adapter and the published OrthoConfig shape disagree, the published shape
+  wins.
 - `docs/design.md`, `docs/cargo-orthohelp-design.md`, `docs/users-guide.md`,
-  `docs/developers-guide.md`, and ADR-003 each carry only a back-reference
-  to §2.2. None duplicates the matrix or restates the normative tier
-  definitions. `docs/developers-guide.md` additionally records the
-  "shadowed contracts" pointer for soft-dependency adapters.
+  `docs/developers-guide.md`, and ADR-003 each carry only a back-reference to
+  §2.2. None duplicates the matrix or restates the normative tier definitions.
+  `docs/developers-guide.md` additionally records the "shadowed contracts"
+  pointer for soft-dependency adapters.
 - The existing schema ownership boundary in ADR-003 and the migration rules
   recorded by roadmap item 5.2.2 are unchanged.
 - No production Rust code or `cargo-orthohelp` command-line behaviour
   changed.
 - New tests are added only if the implementation surfaces a code change. The
   task description signposts `rstest`, `rstest-bdd`, `proptest`, `kani`, and
-  `verus`; none is added unless implementation introduces a real invariant
-  over a range of inputs, states, orderings, or transitions, in line with the
+  `verus`; none is added unless implementation introduces a real invariant over
+  a range of inputs, states, orderings, or transitions, in line with the
   predecessor 5.2.1 and 5.2.2 plans.
 - `docs/roadmap.md` marks 5.2.3 done only after implementation is complete.
 - `make check-fmt`, `make lint`, `make test`, `make typecheck`, and
@@ -789,9 +781,9 @@ The implementation is accepted when all of the following are true:
 - `coderabbit review --agent` has no unresolved concerns within this plan's
   scope.
 - The branch is renamed to
-  `5-2-3-record-consumer-dependency-boundaries`, pushed with upstream
-  tracking, and a draft pull request whose title contains `(5.2.3)` is
-  open with the Lody session link in the References section.
+  `5-2-3-record-consumer-dependency-boundaries`, pushed with upstream tracking,
+  and a draft pull request whose title contains `(5.2.3)` is open with the Lody
+  session link in the References section.
 
 ## Idempotence and recovery
 
@@ -800,44 +792,42 @@ an edit, use the matching `/tmp` log to identify the failure, apply the
 smallest fix, and rerun the failed gate before continuing. If the same gate
 fails twice, stop and escalate under the tolerances above.
 
-If `make fmt` changes unrelated Markdown or Rust files, inspect the diff
-before staging. Do not commit unrelated user changes. If unrelated files are
-already dirty, leave them unstaged and record the situation in `Decision
-Log`.
+If `make fmt` changes unrelated Markdown or Rust files, inspect the diff before
+staging. Do not commit unrelated user changes. If unrelated files are already
+dirty, leave them unstaged and record the situation in `Decision Log`.
 
-If the branch push fails because the remote branch already exists, inspect
-the remote state with
-`git ls-remote --heads origin 5-2-3-record-consumer-dependency-boundaries`
-and escalate before overwriting anything.
+If the branch push fails because the remote branch already exists, inspect the
+remote state with
+`git ls-remote --heads origin 5-2-3-record-consumer-dependency-boundaries` and
+escalate before overwriting anything.
 
-If a CodeRabbit run produces concerns that would require violating a
-constraint or tolerance, stop and escalate rather than relaxing the
-constraint to clear the review.
+If a CodeRabbit run produces concerns that would require violating a constraint
+or tolerance, stop and escalate rather than relaxing the constraint to clear
+the review.
 
 ## Artefacts and notes
 
 Reconnaissance facts collected before drafting:
 
 - `docs/agent-native-cli-design.md` §2.1 (lines 48 to 75) is the canonical
-  boundary section and already names Weaver and Netsuke explicitly. It is
-  the right location for the new "Consumer dependency tier" subsection.
+  boundary section and already names Weaver and Netsuke explicitly. It is the
+  right location for the new "Consumer dependency tier" subsection.
 - `docs/design.md` §2 lines 56 to 69 already record the reusable consumer
   contracts and the stable migration boundary that the new tiers will sit
   alongside.
 - `docs/cargo-orthohelp-design.md` §0.1 lines 47 to 50 already cite Weaver
-  and Netsuke as consumers of generic metadata, including renderer policy,
-  JSON mode contracts, exit-code classes, skill manifests, capability
-  provenance, profile redaction, delivery and feedback parsers, and
-  configurable execution ledgers. This list maps cleanly onto the soft
-  dependency tier.
+  and Netsuke as consumers of generic metadata, including renderer policy, JSON
+  mode contracts, exit-code classes, skill manifests, capability provenance,
+  profile redaction, delivery and feedback parsers, and configurable execution
+  ledgers. This list maps cleanly onto the soft dependency tier.
 - `docs/developers-guide.md` "Schema ownership" already records the internal
-  practice for adding metadata fields without inferring defaults from
-  command names. The new subsection extends that practice with the
-  dependency tier and roadmap citation rule.
+  practice for adding metadata fields without inferring defaults from command
+  names. The new subsection extends that practice with the dependency tier and
+  roadmap citation rule.
 - `docs/users-guide.md` "Documentation metadata (OrthoConfigDocs)" already
   states that human-facing consumers can keep using existing outputs without
-  adopting agent-context metadata. The new sentence reinforces this by
-  pointing to the consumer dependency tier.
+  adopting agent-context metadata. The new sentence reinforces this by pointing
+  to the consumer dependency tier.
 - The repository Makefile defines `check-fmt`, `lint`, `test`, `typecheck`,
   `markdownlint`, `nixie`, `build`, `release`, and supporting targets via a
   single `.PHONY` declaration. The 5.2.2 validation strategy applies without
@@ -868,38 +858,36 @@ not modified by this plan:
 - `ortho_config::docs::OrthoConfigDocs` and `DocMetadata` with
   `ORTHO_DOCS_IR_VERSION` for the localized human documentation IR.
 - `ortho_config::agent_context::AgentContext`, `AgentCommand`,
-  `InteractionMode`, `MutationEffect`, and
-  `ORTHO_AGENT_CONTEXT_SCHEMA_VERSION` for compact agent invocation
-  metadata.
+  `InteractionMode`, `MutationEffect`, and `ORTHO_AGENT_CONTEXT_SCHEMA_VERSION`
+  for compact agent invocation metadata.
 - `cargo_orthohelp::policy::PolicyReport`, `PolicySummary`, and
-  `ORTHO_POLICY_REPORT_SCHEMA_VERSION` for warnings and hard failures
-  emitted by `cargo-orthohelp`.
+  `ORTHO_POLICY_REPORT_SCHEMA_VERSION` for warnings and hard failures emitted by
+  `cargo-orthohelp`.
 
-The dependency-tier paragraphs name these contracts by full path the first
-time they are introduced so a reader can navigate from the boundary
-documentation directly to the owning crate without re-reading ADR-003.
+The dependency-tier paragraphs name these contracts by full path the first time
+they are introduced so a reader can navigate from the boundary documentation
+directly to the owning crate without re-reading ADR-003.
 
 ## Revision note
 
 2026-06-02: Initial draft created from roadmap item 5.2.3, repository
-reconnaissance through an Explore subagent, Firecrawl prior-art research on
-the AWS hard and soft dependency vocabulary and agent skill manifest
-ecosystem, and the predecessor 5.2.1 and 5.2.2 ExecPlans. The plan is
-pre-implementation and requires explicit user approval before any feature
-implementation begins.
+reconnaissance through an Explore subagent, Firecrawl prior-art research on the
+AWS hard and soft dependency vocabulary and agent skill manifest ecosystem, and
+the predecessor 5.2.1 and 5.2.2 ExecPlans. The plan is pre-implementation and
+requires explicit user approval before any feature implementation begins.
 
 2026-06-02: Revised after a logisphere community-of-experts review. The
 dependency-tier content moved from a §2.1 subsection to a sibling §2.2
-("Consumer dependency tier") to avoid colliding with the ownership boundary
-in §2.1 and the legacy defaulting table in §8.1. The terms "hard dependency"
-and "soft dependency" are now qualified as "ship-time" with an explicit
-prohibition on reuse for runtime resilience. A conflict-resolution rule was
-added stating that when OrthoConfig publishes the reusable contract the
-published shape wins on disagreement, and that the consumer must replace its
-local adapter within the next consumer release. A "shadowed contracts"
-practice was added for `docs/developers-guide.md`. The §2.2 content is now
-expressed as a single matrix (capability, tier, roadmap item with title,
-consumer adaptation rule, replacement trigger) so renumbering and contract
-drift surface mechanically in review. The Decision Log now records the
-considered options A through D. ADR-003 is amended only with a single
-back-reference sentence; §2.2 wins on any future disagreement.
+("Consumer dependency tier") to avoid colliding with the ownership boundary in
+§2.1 and the legacy defaulting table in §8.1. The terms "hard dependency" and
+"soft dependency" are now qualified as "ship-time" with an explicit prohibition
+on reuse for runtime resilience. A conflict-resolution rule was added stating
+that when OrthoConfig publishes the reusable contract the published shape wins
+on disagreement, and that the consumer must replace its local adapter within
+the next consumer release. A "shadowed contracts" practice was added for
+`docs/developers-guide.md`. The §2.2 content is now expressed as a single
+matrix (capability, tier, roadmap item with title, consumer adaptation rule,
+replacement trigger) so renumbering and contract drift surface mechanically in
+review. The Decision Log now records the considered options A through D.
+ADR-003 is amended only with a single back-reference sentence; §2.2 wins on any
+future disagreement.

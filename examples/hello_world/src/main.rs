@@ -2,10 +2,11 @@
 
 use ortho_config::{
     LoadGlobalsAndSelectedSubcommandError, SelectedSubcommandMergeError, is_display_request,
-    load_globals_and_merge_selected_subcommand,
+    load_globals_and_merge_selected_subcommand, parse_localized_command,
 };
 
-use hello_world::cli::{CommandLine, Commands, ParsedCommandLine, load_global_config};
+use clap::CommandFactory;
+use hello_world::cli::{CommandLine, Commands, LocalizeCmd, load_global_config};
 use hello_world::error::{HelloWorldError, Result};
 use hello_world::localizer::DemoLocalizer;
 use hello_world::message::{build_plan, build_take_leave_plan, print_plan, print_take_leave};
@@ -16,7 +17,7 @@ fn main() -> color_eyre::Result<()> {
 }
 
 fn run() -> Result<()> {
-    let ParsedCommandLine { cli, matches } = parse_command_line()?;
+    let (cli, matches) = parse_command_line()?;
     let program = std::env::args_os()
         .next()
         .unwrap_or_else(|| std::ffi::OsString::from("hello-world"));
@@ -40,9 +41,13 @@ fn run() -> Result<()> {
     Ok(())
 }
 
-fn parse_command_line() -> Result<ParsedCommandLine> {
+fn parse_command_line() -> Result<(CommandLine, clap::ArgMatches)> {
     let localizer = DemoLocalizer::default();
-    match CommandLine::try_parse_localized_with_matches_env(&localizer) {
+    let command = CommandLine::command()
+        .with_base("hello_world.cli")
+        .localize(&localizer);
+
+    match parse_localized_command::<CommandLine, _, _>(command, std::env::args_os(), &localizer) {
         Ok(parsed) => Ok(parsed),
         Err(err) => {
             if is_display_request(&err) {

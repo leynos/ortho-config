@@ -31,8 +31,8 @@ the configuration files.
 ## Proposed Improvements to `OrthoConfig`
 
 I propose a refinement of the `OrthoConfig` trait and its derive macro to
-natively support this pattern, thereby eliminating the need for workarounds
-like `load_with_reference_fallback`.
+natively support this pattern, thereby eliminating the need for workarounds like
+`load_with_reference_fallback`.
 
 ### 1. A more intuitive `load_and_merge` Method
 
@@ -50,8 +50,8 @@ The new process for `load_and_merge` would be:
    arguments) over the top of the loaded defaults.
 
 3. **Final Extraction**: Extract the final, merged configuration. This step
-   will now succeed because any fields required by `clap` will be present in
-   the `self` struct.
+   will now succeed because any fields required by `clap` will be present in the
+   `self` struct.
 
 This change would make the `load_and_merge` method more intuitive, as it would
 correctly reflect the desired precedence (CLI &gt; Env &gt; File &gt; Defaults)

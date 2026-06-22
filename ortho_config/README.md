@@ -34,6 +34,9 @@ manual aliasing.
   rename the generated config override flag, adjust environment variables, and
   customise the filenames searched for configuration files without bespoke glue
   code.
+- **Localized CLI parsing:** Use `LocalizedParse` or
+  `parse_localized_command` to translate `clap` help text and parse errors
+  through the same Fluent catalogue used by the rest of the application.
 - **Nested Configuration:** Naturally supports nested structs for organized
   configuration.
 - **Sensible Defaults:** Aims for intuitive behavior out-of-the-box.
@@ -210,8 +213,8 @@ assert!(
 ```
 
 The file loader selects the parser based on the extension (`.toml`, `.json`,
-`.json5`, `.yaml`, `.yml`). When the `json5` feature is active, both `.json`
-and `.json5` files are parsed using the JSON5 format. Standard JSON is valid
+`.json5`, `.yaml`, `.yml`). When the `json5` feature is active, both `.json` and
+`.json5` files are parsed using the JSON5 format. Standard JSON is valid
 JSON5, so existing `.json` files continue to work. Without this feature
 enabled, attempting to load a `.json` or `.json5` file will result in an error.
 When the `yaml` feature is enabled, `.yaml` and `.yml` files are also

@@ -106,8 +106,8 @@ impl PostMergeHook for GreetArgs {
 ```
 
 Use hooks sparingly. Prefer field-level attributes where possible, and only
-reach for `PostMergeHook` when behaviour depends on multiple merged fields.
-[^post-merge]
+reach for `PostMergeHook` when behaviour depends on multiple merged
+fields.[^post-merge]
 
 ## 4. Localise CLI copy and errors
 
@@ -176,8 +176,8 @@ step. Variants that depend on `cli_default_as_absent` should be annotated with
 - Use `is_display_request` before mapping `clap::Error` into your own error
   types, so `--help` and `--version` still exit with code 0.[^display-request]
 - `OrthoJsonMergeExt::into_ortho_merge_json()` lets you attribute JSON parsing
-  failures to the merge phase while preserving line and column details.
-  [^json-merge]
+  failures to the merge phase while preserving line and column
+  details.[^json-merge]
 - The `hello_world` behavioural suite now uses `rstest-bdd` instead of
   `cucumber-rs`. If you copied the example harness or pinned CI scripts to the
   old runner, update them to use the `rstest-bdd` macros and compile-time tag

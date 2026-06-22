@@ -1,10 +1,9 @@
 
 # Generate recursive DocMetadata.subcommands values
 
-This ExecPlan (execution plan) is a living document. The sections
-`Constraints`, `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`,
-`Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
-proceeds.
+This ExecPlan (execution plan) is a living document. The sections `Constraints`,
+`Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
+and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
 Status: APPROVED
 
@@ -30,10 +29,10 @@ downstream consumer crate should be able to:
    keep its `#[command(subcommand)]` field referencing a `clap::Subcommand`
    enum, and add `#[derive(OrthoConfigSubcommandDocs)]` to that enum;
 2. run `cargo orthohelp --format ir` against the consumer crate and observe a
-   JSON document whose `subcommands` array contains one entry per enum
-   variant, in declaration order, each entry carrying that variant's full
-   `DocMetadata` (fields, headings, examples, windows metadata, and any further
-   nested subcommands);
+   JSON document whose `subcommands` array contains one entry per enum variant,
+   in declaration order, each entry carrying that variant's full `DocMetadata`
+   (fields, headings, examples, windows metadata, and any further nested
+   subcommands);
 3. point `cargo orthohelp --format man` or `--format ps` at the same root type
    and see the generated man pages or PowerShell wrappers include sections for
    every subcommand without bespoke per-app glue code.
@@ -49,8 +48,7 @@ Observable success is checked by:
   exercising a nested fixture;
 - updated round-trip and rendering smoke tests in
   `cargo-orthohelp/src/schema/tests.rs` (and supporting fixtures) that prove
-  the existing renderers consume non-empty subcommand trees without
-  regressions;
+  the existing renderers consume non-empty subcommand trees without regressions;
 - `make check-fmt`, `make lint`, `make test`, `make markdownlint`, and
   `make nixie` all passing at the close of each milestone; and
 - `coderabbit review --agent` returning clean (or with all concerns resolved)
@@ -58,26 +56,26 @@ Observable success is checked by:
 
 This plan does not change the IR schema version, the bridge pipeline,
 `cargo-orthohelp`'s CLI surface, the agent-context schema, or policy reports.
-It also does not add new external dependencies; the necessary `heck` traits
-are already declared in `ortho_config_macros/Cargo.toml:21`.
+It also does not add new external dependencies; the necessary `heck` traits are
+already declared in `ortho_config_macros/Cargo.toml:21`.
 
 ## Constraints
 
 Hard invariants that must hold throughout implementation. These are not
-suggestions; violating any of them requires escalation in `Decision Log`, not
-a workaround.
+suggestions; violating any of them requires escalation in `Decision Log`, not a
+workaround.
 
 - Do not implement code, tests, examples, or documentation in this branch
   until this ExecPlan is explicitly approved by the maintainer. A "DRAFT" plan
   must remain a planning artefact only.
 - Keep this work focused on roadmap item 6.1.1 ("Generate recursive
-  `DocMetadata.subcommands` values"). Behavioural fixtures and Windows
-  wrapper assertions described by item 6.1.2 are explicitly out of scope; if
-  partial coverage of 6.1.2 falls out of 6.1.1 work, mark it clearly and stop
-  for separate approval before extending it.
+  `DocMetadata.subcommands` values"). Behavioural fixtures and Windows wrapper
+  assertions described by item 6.1.2 are explicitly out of scope; if partial
+  coverage of 6.1.2 falls out of 6.1.1 work, mark it clearly and stop for
+  separate approval before extending it.
 - Do not change `ORTHO_DOCS_IR_VERSION`, `ORTHO_AGENT_CONTEXT_SCHEMA_VERSION`,
-  or `ORTHO_POLICY_REPORT_SCHEMA_VERSION`. The added `subcommands`
-  population is an IR data fix, not a schema migration.
+  or `ORTHO_POLICY_REPORT_SCHEMA_VERSION`. The added `subcommands` population
+  is an IR data fix, not a schema migration.
 - Do not add or rename fields on `ortho_config::docs::ir::DocMetadata`,
   `SectionsMetadata`, `HeadingIds`, `FieldMetadata`, `CliMetadata`,
   `EnvMetadata`, `FileMetadata`, `ValueType`, `DefaultValue`, `Deprecation`,
@@ -98,9 +96,9 @@ a workaround.
   policy reports.
 - Keep `cargo-orthohelp/src/bridge.rs` unchanged in its public behaviour. The
   bridge's `<RootType as OrthoConfigDocs>::get_doc_metadata()` invocation at
-  `cargo-orthohelp/src/bridge.rs:174-183` already serializes the recursive
-  IR; this work plumbs data into that structure, it does not change how the
-  bridge runs.
+  `cargo-orthohelp/src/bridge.rs:174-183` already serializes the recursive IR;
+  this work plumbs data into that structure, it does not change how the bridge
+  runs.
 - Preserve `cargo orthohelp --format ir`, `--format man`, `--format ps`, and
   `--format all` output for any consumer whose top-level config has no
   subcommand selector. New behaviour only manifests when the consumer opts in
@@ -108,16 +106,15 @@ a workaround.
   field marker on the parent struct (see Design Overview below).
 - Keep the new trait additive: the default `subcommands: Vec::new()` must
   still be emitted for any config without a `#[command(subcommand)]` /
-  `#[clap(subcommand)]` field. No existing `#[derive(OrthoConfig)]`
-  invocation may begin to fail after this work.
+  `#[clap(subcommand)]` field. No existing `#[derive(OrthoConfig)]` invocation
+  may begin to fail after this work.
 - Use `cap_std`/`camino` instead of `std::fs`/`std::path` if any test or
   example introduces filesystem I/O. The existing crates already follow this
   rule; no new I/O is anticipated for this plan.
 - Use `rstest` for unit tests and `rstest-bdd` for behavioural tests, per
   `docs/developers-guide.md` and the project's `Cargo.toml` lints. Do not
-  introduce `proptest`, `kani`, or `verus` for this work: there is no
-  invariant beyond declaration-order preservation that a deterministic test
-  cannot cover.
+  introduce `proptest`, `kani`, or `verus` for this work: there is no invariant
+  beyond declaration-order preservation that a deterministic test cannot cover.
 - Use `heck::ToKebabCase` (already in `ortho_config_macros/Cargo.toml:21`) for
   the default variant-to-command-name conversion. Do not introduce any new
   crate dependency.
@@ -137,8 +134,8 @@ a workaround.
   validation gate listed in "Validation and acceptance" has passed and the
   draft pull request created from this plan has been moved out of draft state.
 
-If satisfying the objective requires violating a constraint, stop, document
-the conflict in `Decision Log`, and ask the maintainer for direction.
+If satisfying the objective requires violating a constraint, stop, document the
+conflict in `Decision Log`, and ask the maintainer for direction.
 
 ## Tolerances (exception triggers)
 
@@ -146,8 +143,8 @@ Thresholds that trigger escalation when breached. These define the boundaries
 of autonomous action, not quality criteria.
 
 - Approval: stop after drafting this plan and wait for explicit maintainer
-  approval before any milestone other than Milestone 0 (`Approval and ADR
-  drafting`) is started.
+  approval before any milestone other than Milestone 0
+  (`Approval and ADR drafting`) is started.
 - Scope: stop if the implementation requires changes to more than 22 files or
   more than 1100 net lines of code and documentation (excluding `.stderr`
   fixtures and golden snapshots, which are reviewed separately).
@@ -156,10 +153,9 @@ of autonomous action, not quality criteria.
   removed. Additive new items (a trait, a derive, a field attribute) do not
   trip this tolerance.
 - Schema shape: stop if a plausible alternative shape for the new trait or
-  the new derive attribute would materially affect downstream
-  compatibility — for example, if the derive must expose a stable
-  `command_name` override on the IR itself. Present the alternatives with
-  trade-offs.
+  the new derive attribute would materially affect downstream compatibility —
+  for example, if the derive must expose a stable `command_name` override on
+  the IR itself. Present the alternatives with trade-offs.
 - IR schema: stop if any field on any of the existing IR types must change.
   This work is not authorised to evolve the schema; that requires a separate
   ADR and a bump of `ORTHO_DOCS_IR_VERSION`.
@@ -175,8 +171,8 @@ of autonomous action, not quality criteria.
   `docs/agent-native-cli-design.md`, and the new ADR cannot describe the same
   trait surface and ownership without contradiction.
 - Process: stop if branch rename, push, draft pull-request creation, or
-  `coderabbit review --agent` fails in a way that might hide review feedback
-  or leave the repository in an inconsistent state.
+  `coderabbit review --agent` fails in a way that might hide review feedback or
+  leave the repository in an inconsistent state.
 - Iteration: stop if a single milestone takes more than three working sessions
   without observable progress on its acceptance criteria. Record the cause in
   `Surprises & Discoveries`.
@@ -210,8 +206,8 @@ risks emerge.
   `is_subcommand` flag on `FieldAttrs` (set during `parse_field_attrs`,
   `ortho_config_macros/src/derive/parse/mod.rs:343`) and add an early
   `if attrs.is_subcommand { continue; }` guard to every loop listed above.
-  Cover with `ortho_config_macros/src/tests.rs` unit tests that prove the
-  guard fires before any per-field code is emitted.
+  Cover with `ortho_config_macros/src/tests.rs` unit tests that prove the guard
+  fires before any per-field code is emitted.
 - Risk: the `serde::Deserialize` bound enforced by
   `ortho_config_macros/src/derive/generate/ortho_impl.rs:43-46` (the
   `_assert_deser` helper) is transitive. Even with every per-field generator
@@ -219,17 +215,17 @@ risks emerge.
   `DeserializeOwned`, which transitively demands `Commands: Deserialize`. Real
   consumer `clap::Subcommand` enums do not derive `Deserialize`. Severity:
   high. Likelihood: high. Mitigation: change `_assert_deser` (or whatever
-  contains the `where Self: DeserializeOwned` bound) so that the assertion
-  only fires for fields the loader will actually deserialize. The simplest
+  contains the `where Self: DeserializeOwned` bound) so that the assertion only
+  fires for fields the loader will actually deserialize. The simplest
   expression is to add `#[serde(skip)]` to the generated CLI/default-struct
   field for the subcommand selector or to omit the field from those generated
   structs entirely (preferred). Add an `rstest` case that derives `OrthoConfig`
   on a `Parser` struct with a non-`Deserialize` `Commands` enum field and
   proves it compiles.
-- Risk: clap forbids combining `#[command(subcommand)]` with `#[arg(long =
-  ...)]` on the same field. If the generated CLI struct still emits an
-  `#[arg]` for the subcommand selector, compilation fails inside clap, not
-  inside the derive. Severity: high. Likelihood: high. Mitigation: the
+- Risk: clap forbids combining `#[command(subcommand)]` with
+  `#[arg(long = ...)]` on the same field. If the generated CLI struct still
+  emits an `#[arg]` for the subcommand selector, compilation fails inside clap,
+  not inside the derive. Severity: high. Likelihood: high. Mitigation: the
   subcommand guard in `build_cli_struct_fields` must skip the field entirely
   (not merely change its attributes). Cover with a `trybuild` smoke case
   asserting the derive expansion compiles end-to-end alongside a real
@@ -237,8 +233,8 @@ risks emerge.
 - Risk: ambiguity over where the enum-level `DocMetadata` derivation should
   live. The roadmap (`docs/roadmap.md:119-120`) frames the choice as "Introduce
   a small companion trait if enum-level documentation cannot be represented
-  cleanly through the existing `OrthoConfigDocs` trait." The recommended
-  design (below) introduces a new trait. Severity: medium. Likelihood: medium.
+  cleanly through the existing `OrthoConfigDocs` trait." The recommended design
+  (below) introduces a new trait. Severity: medium. Likelihood: medium.
   Mitigation: capture the choice in ADR-005 (see Milestone 0); the ADR is the
   approval gate. If review prefers to extend `OrthoConfigDocs` instead, stop
   and revise the plan.
@@ -251,59 +247,57 @@ risks emerge.
   `clap_variant_name` helper logic from
   `ortho_config_macros/src/selected_subcommand_merge.rs:27-45` for the
   override. Lift `clap_variant_name` into
-  `ortho_config_macros/src/derive/parse/clap_attrs.rs` so both derives share
-  it without `SelectedSubcommandMerge` taking a `serde_json` dependency.
+  `ortho_config_macros/src/derive/parse/clap_attrs.rs` so both derives share it
+  without `SelectedSubcommandMerge` taking a `serde_json` dependency.
 - Risk: validation drift between `SelectedSubcommandMerge` and the new
   `OrthoConfigSubcommandDocs` derive. Today `SelectedSubcommandMerge` accepts
   only tuple variants with exactly one field (see
-  `ortho_config_macros/src/selected_subcommand_merge.rs:47-63`). For docs,
-  unit variants (subcommands without arguments) are a legitimate clap
-  pattern. Severity: medium. Likelihood: medium. Mitigation: keep the
-  derives separate; share only `clap_variant_name` and an unvalidated variant
-  iterator. The first cut of the docs derive may keep the same single-tuple
-  rule and reject unit variants with a clear compile-time error; lifting that
-  restriction is an explicitly deferred follow-up tracked in
-  `Decision Log`.
+  `ortho_config_macros/src/selected_subcommand_merge.rs:47-63`). For docs, unit
+  variants (subcommands without arguments) are a legitimate clap pattern.
+  Severity: medium. Likelihood: medium. Mitigation: keep the derives separate;
+  share only `clap_variant_name` and an unvalidated variant iterator. The first
+  cut of the docs derive may keep the same single-tuple rule and reject unit
+  variants with a clear compile-time error; lifting that restriction is an
+  explicitly deferred follow-up tracked in `Decision Log`.
 - Risk: variant-naming overrides may need to flow into the child
   `DocMetadata.app_name`. The default app-name resolver in
   `ortho_config_macros/src/derive/generate/docs/sections.rs:29-35` builds
-  `app_name` from the consumer struct's identifier (or `discovery(app_name =
-  ...)`). For a subcommand variant whose inner type is `RunArgs`, the
-  generated `app_name` would be `run-args` — not `run`. Severity: medium.
-  Likelihood: high. Mitigation: the enum derive overrides `app_name` (and the
-  derived `about_id`, which is `format!("{app_name}.about")`) for each child
-  `DocMetadata` before pushing it into the parent's `subcommands` vector.
-  Cover with `rstest` cases asserting both the kebab-case default and the
-  `#[command(name = "...")]` override.
+  `app_name` from the consumer struct's identifier (or
+  `discovery(app_name = ...)`). For a subcommand variant whose inner type is
+  `RunArgs`, the generated `app_name` would be `run-args` — not `run`.
+  Severity: medium. Likelihood: high. Mitigation: the enum derive overrides
+  `app_name` (and the derived `about_id`, which is
+  `format!("{app_name}.about")`) for each child `DocMetadata` before pushing it
+  into the parent's `subcommands` vector. Cover with `rstest` cases asserting
+  both the kebab-case default and the `#[command(name = "...")]` override.
 - Risk: hidden, aliased, and deprecated commands have no current IR shape.
-  Firecrawl research found clap models them via `hide(true)`,
-  `alias()`/`visible_alias()`, and a deprecation note; gcloud models a
-  `hidden` flag on tree nodes. The current `DocMetadata` schema does not
-  represent any of those. Severity: low (for 6.1.1). Likelihood: medium.
-  Mitigation: explicitly scope this plan to populated, visible, non-aliased
-  subcommands; record hidden/alias/deprecated support as deferred work in
-  `Decision Log` and surface in the ADR.
+  Firecrawl research found clap models them via `hide(true)`, `alias()`/
+  `visible_alias()`, and a deprecation note; gcloud models a `hidden` flag on
+  tree nodes. The current `DocMetadata` schema does not represent any of those.
+  Severity: low (for 6.1.1). Likelihood: medium. Mitigation: explicitly scope
+  this plan to populated, visible, non-aliased subcommands; record
+  hidden/alias/deprecated support as deferred work in `Decision Log` and
+  surface in the ADR.
 - Risk: existing renderers (`cargo-orthohelp/src/roff/mod.rs`,
   `cargo-orthohelp/src/powershell/wrapper.rs`) already iterate
-  `metadata.subcommands` but have only ever been exercised with empty
-  vectors. Filling those vectors may expose latent rendering bugs (heading
-  Fluent ID lookups, command-name resolution, or nesting depth assumptions).
-  Severity: medium. Likelihood: medium. Mitigation: add a renderer smoke
-  test in Milestone 4 that drives the existing public renderer entry points
-  with a `DocMetadata` containing two subcommands and asserts the run
-  succeeds and emits the expected section headers. Defer richer rendering
-  assertions to roadmap item 6.1.2.
+  `metadata.subcommands` but have only ever been exercised with empty vectors.
+  Filling those vectors may expose latent rendering bugs (heading Fluent ID
+  lookups, command-name resolution, or nesting depth assumptions). Severity:
+  medium. Likelihood: medium. Mitigation: add a renderer smoke test in
+  Milestone 4 that drives the existing public renderer entry points with a
+  `DocMetadata` containing two subcommands and asserts the run succeeds and
+  emits the expected section headers. Defer richer rendering assertions to
+  roadmap item 6.1.2.
 - Risk: `markdownlint` or `nixie` may report pre-existing line-length or
   diagram issues unrelated to this work. Severity: low. Likelihood: medium.
-  Mitigation: keep all edited paragraphs at ≤80 columns; record any
-  unrelated failures (with exact file:line references) in `Surprises &
-  Discoveries` and ask the maintainer whether to expand scope.
+  Mitigation: keep all edited paragraphs at ≤80 columns; record any unrelated
+  failures (with exact file:line references) in `Surprises & Discoveries` and
+  ask the maintainer whether to expand scope.
 - Risk: `leta` may fail to provide Rust symbols if `rust-analyzer` is not
-  available or fails to start. Severity: low. Likelihood: medium.
-  Mitigation: install `rust-analyzer` via `rustup component add
-  rust-analyzer` at session start; fall back to `Grep` and direct file
-  inspection if `leta` is unavailable; record the limitation in `Surprises
-  & Discoveries`.
+  available or fails to start. Severity: low. Likelihood: medium. Mitigation:
+  install `rust-analyzer` via `rustup component add rust-analyzer` at session
+  start; fall back to `Grep` and direct file inspection if `leta` is
+  unavailable; record the limitation in `Surprises & Discoveries`.
 
 ## Skills and source signposts
 
@@ -330,9 +324,10 @@ deliberately:
   obvious public surface over flexible-but-mysterious extension points.
 - `rust-unused-code`: ensure conditional code paths (such as the
   subcommand-field guard) do not produce `dead_code` warnings.
-- `rust-testing-with-rstest-fixtures` (`docs/rust-testing-with-rstest-fixtures.md`)
-  and `docs/reliable-testing-in-rust-via-dependency-injection.md` for unit
-  test patterns.
+- `rust-testing-with-rstest-fixtures`
+  (`docs/rust-testing-with-rstest-fixtures.md`) and
+  `docs/reliable-testing-in-rust-via-dependency-injection.md` for unit test
+  patterns.
 - `docs/rstest-bdd-users-guide.md` for behavioural scenario authoring.
 - `docs/rust-doctest-dry-guide.md` for doctest patterns on the new derive.
 - `docs/localizable-rust-libraries-with-fluent.md` because the recursive IR
@@ -374,12 +369,13 @@ External prior art checked during planning (firecrawl, 2026-05-22):
   (<https://www.fig.io/manual/gcloud/meta/cli-trees>) emits a recursive tree
   with children under a `commands` field. This is the closest tool-side
   analogue to what `cargo-orthohelp` will produce once 6.1.1 lands.
-- AWS CLI (<https://docs.aws.amazon.com/cli/latest/userguide/cli-usage-commandstructure.html>),
+- AWS CLI
+  (<https://docs.aws.amazon.com/cli/latest/userguide/cli-usage-commandstructure.html>),
   `kubectl` (<https://kubernetes.io/docs/reference/kubectl/>), and Model
   Context Protocol `tools/list`
-  (<https://modelcontextprotocol.io/specification/2025-06-18/server/tools>)
-  all use flat command listings — informative for phase 6.2 (agent-context
-  output), not for 6.1.1's recursive IR shape.
+  (<https://modelcontextprotocol.io/specification/2025-06-18/server/tools>) all
+  use flat command listings — informative for phase 6.2 (agent-context output),
+  not for 6.1.1's recursive IR shape.
 - Declaration order is the de facto convention across clap, botocore, gcloud
   trees, and MCP listings; no tool guarantees alphabetical ordering. The plan
   preserves Rust enum declaration order.
@@ -394,30 +390,30 @@ The relevant code is concentrated in three crates:
 - `ortho_config` (runtime crate). Documentation IR lives in
   `ortho_config/src/docs/`. The trait `OrthoConfigDocs` is declared at
   `ortho_config/src/docs/mod.rs:18-21`. The IR schema lives in
-  `ortho_config/src/docs/ir.rs`; `DocMetadata.subcommands: Vec<DocMetadata>`
-  is at line 26 and `HeadingIds.commands: Option<String>` is at lines 72-73.
-  The subcommand-merge surface (`SelectedSubcommandMerge` trait and helper)
-  lives at `ortho_config/src/subcommand/selected.rs` and is feature-gated on
+  `ortho_config/src/docs/ir.rs`; `DocMetadata.subcommands: Vec<DocMetadata>` is
+  at line 26 and `HeadingIds.commands: Option<String>` is at lines 72-73. The
+  subcommand-merge surface (`SelectedSubcommandMerge` trait and helper) lives at
+  `ortho_config/src/subcommand/selected.rs` and is feature-gated on
   `serde_json`.
 - `ortho_config_macros` (procedural-macro crate). The struct derive entry
   point is `ortho_config_macros/src/lib.rs:44-99`; the docs-generation hook
-  inside it is at line 80. The enum derive for subcommand merging is
-  declared at `ortho_config_macros/src/lib.rs:109-116` and implemented in
+  inside it is at line 80. The enum derive for subcommand merging is declared at
+  `ortho_config_macros/src/lib.rs:109-116` and implemented in
   `ortho_config_macros/src/selected_subcommand_merge.rs`. The docs-generation
   module is `ortho_config_macros/src/derive/generate/docs/`; the literal
   `subcommands: Vec::new(),` that this plan replaces is at
   `ortho_config_macros/src/derive/generate/docs/mod.rs:67`. Clap-attribute
-  parsing helpers live at
-  `ortho_config_macros/src/derive/parse/clap_attrs.rs`; the parallel struct
-  attribute parser is `ortho_config_macros/src/derive/parse/mod.rs`. The
-  `heck` crate is already declared at `ortho_config_macros/Cargo.toml:21`.
+  parsing helpers live at `ortho_config_macros/src/derive/parse/clap_attrs.rs`;
+  the parallel struct attribute parser is
+  `ortho_config_macros/src/derive/parse/mod.rs`. The `heck` crate is already
+  declared at `ortho_config_macros/Cargo.toml:21`.
 - `cargo-orthohelp` (reference tool). The bridge wrapper that prints the IR
   for a target crate is `cargo-orthohelp/src/bridge.rs`. The bridge invokes
   `<RootType as OrthoConfigDocs>::get_doc_metadata()` at lines 174-183. The
-  localizer that walks the recursive IR is
-  `cargo-orthohelp/src/ir.rs:198-202`. The mirrored schema lives at
-  `cargo-orthohelp/src/schema/mod.rs:13`. Renderers iterate
-  `metadata.subcommands` today (see `cargo-orthohelp/src/roff/mod.rs` and
+  localizer that walks the recursive IR is `cargo-orthohelp/src/ir.rs:198-202`.
+  The mirrored schema lives at `cargo-orthohelp/src/schema/mod.rs:13`.
+  Renderers iterate `metadata.subcommands` today (see
+  `cargo-orthohelp/src/roff/mod.rs` and
   `cargo-orthohelp/src/powershell/wrapper.rs`) but have only ever been
   exercised with empty vectors.
 
@@ -466,21 +462,21 @@ pub trait OrthoConfigSubcommandDocs {
 ```
 
 Re-export from `ortho_config/src/lib.rs` so consumers can write
-`use ortho_config::OrthoConfigSubcommandDocs;` (and the docs-module
-re-export remains the canonical path for downstream tooling that depends on
-the IR contract).
+`use ortho_config::OrthoConfigSubcommandDocs;` (and the docs-module re-export
+remains the canonical path for downstream tooling that depends on the IR
+contract).
 
 The trait is unconditional (no `#[cfg(feature = ...)]`), mirroring
-`OrthoConfigDocs`, because the documentation IR module is itself
-unconditional (`ortho_config/src/docs/mod.rs:1-21`).
+`OrthoConfigDocs`, because the documentation IR module is itself unconditional
+(`ortho_config/src/docs/mod.rs:1-21`).
 
 ### A new derive macro `OrthoConfigSubcommandDocs`
 
-Add a `#[proc_macro_derive(OrthoConfigSubcommandDocs, attributes(ortho_config,
-ortho_subcommand))]` entry point to `ortho_config_macros/src/lib.rs`, sitting
-beside `derive_selected_subcommand_merge` at lines 109-116. The
-implementation lives in a new file
-`ortho_config_macros/src/subcommand_docs.rs` (sibling of
+Add a
+`#[proc_macro_derive(OrthoConfigSubcommandDocs, attributes(ortho_config, ortho_subcommand))]`
+entry point to `ortho_config_macros/src/lib.rs`, sitting beside
+`derive_selected_subcommand_merge` at lines 109-116. The implementation lives
+in a new file `ortho_config_macros/src/subcommand_docs.rs` (sibling of
 `selected_subcommand_merge.rs`).
 
 The derive:
@@ -488,8 +484,7 @@ The derive:
 1. validates the input is a `Data::Enum` (compile error otherwise with the
    same tone as `SelectedSubcommandMerge`);
 2. for each variant in declaration order, requires a single-tuple variant
-   `Variant(Args)` and produces a `DocMetadata` token expression equal to
-   `{
+   `Variant(Args)` and produces a `DocMetadata` token expression equal to `{
        let mut md = <Args as #krate::docs::OrthoConfigDocs>::get_doc_metadata();
        md.app_name = <command-name-literal>.to_string();
        md.about_id = format!("{}.about", md.app_name);
@@ -501,8 +496,8 @@ The derive:
    `SelectedSubcommandMerge` already supports (reuse
    `ortho_config_macros/src/derive/crate_path.rs`).
 
-Unit variants and multi-tuple variants emit the same kind of compile-time
-error that `SelectedSubcommandMerge` produces today. Document the unit-variant
+Unit variants and multi-tuple variants emit the same kind of compile-time error
+that `SelectedSubcommandMerge` produces today. Document the unit-variant
 restriction explicitly in `Decision Log` so a follow-up plan can lift it.
 
 The variant command label is resolved by a helper lifted out of
@@ -514,17 +509,17 @@ The variant command label is resolved by a helper lifted out of
 ### Struct-side detection of `#[command(subcommand)]`
 
 The struct derive (`OrthoConfig`) learns to recognize a single field marked
-`#[command(subcommand)]` or `#[clap(subcommand)]` and treats it as a
-subcommand selector rather than a configuration field.
+`#[command(subcommand)]` or `#[clap(subcommand)]` and treats it as a subcommand
+selector rather than a configuration field.
 
 The mechanism:
 
 1. Add a helper
    `pub(crate) fn clap_field_is_subcommand(field: &syn::Field) -> syn::Result<bool>`
    to `ortho_config_macros/src/derive/parse/clap_attrs.rs`. The shape mirrors
-   `clap_arg_id` (`clap_attrs.rs:59-65`) and uses `parse_nested_meta` to flip
-   a `bool` when `meta.path.is_ident("subcommand")` with no `= value` (the
-   exact pattern used by `variant_has_matches` in
+   `clap_arg_id` (`clap_attrs.rs:59-65`) and uses `parse_nested_meta` to flip a
+   `bool` when `meta.path.is_ident("subcommand")` with no `= value` (the exact
+   pattern used by `variant_has_matches` in
    `selected_subcommand_merge.rs:10-25`).
 2. Extend `FieldAttrs` (`derive/parse/mod.rs:74-84`) with a non-public
    `pub(crate) is_subcommand: bool` field.
@@ -548,8 +543,8 @@ The mechanism:
    field, expands to
    `<#FieldType as #krate::docs::OrthoConfigSubcommandDocs>::get_subcommand_doc_metadata()`
    and concatenates the results (single field expected; reject more than one
-   subcommand selector per struct as a compile-time error, mirroring clap's
-   own behaviour).
+   subcommand selector per struct as a compile-time error, mirroring clap's own
+   behaviour).
 6. Repair the `_assert_deser` bound check
    (`derive/generate/ortho_impl.rs:43-46`) so the subcommand-selector field is
    not transitively forced to implement `Deserialize`. The preferred approach
@@ -563,8 +558,8 @@ unaffected.
 ### Naming and ordering
 
 - Default variant command name: `variant.ident.to_string().to_kebab_case()`
-  via `heck::ToKebabCase`. Matches clap's own default for `Subcommand`
-  variants without an explicit `name`.
+  via `heck::ToKebabCase`. Matches clap's own default for `Subcommand` variants
+  without an explicit `name`.
 - Override: `#[command(name = "...")]` (also `#[clap(name = "...")]`).
 - Ordering: enum source declaration order. The generated `Vec<DocMetadata>` is
   built by `push`ing entries in the order produced by
@@ -575,10 +570,10 @@ unaffected.
 ### Recursion
 
 A subcommand variant's inner type is itself a `#[derive(OrthoConfig)]` struct.
-If that struct has its own `#[command(subcommand)]` field referencing a
-further `clap::Subcommand` enum (also annotated with
-`#[derive(OrthoConfigSubcommandDocs)]`), recursion happens naturally: the
-inner struct's `get_doc_metadata` calls the inner enum's
+If that struct has its own `#[command(subcommand)]` field referencing a further
+`clap::Subcommand` enum (also annotated with
+`#[derive(OrthoConfigSubcommandDocs)]`), recursion happens naturally: the inner
+struct's `get_doc_metadata` calls the inner enum's
 `get_subcommand_doc_metadata`, and so on. No explicit recursion depth limit is
 imposed beyond what clap accepts, because subcommand depth is bounded by the
 consumer's enum definitions.
@@ -590,8 +585,7 @@ The following are deliberately not addressed by this plan:
 - hidden, aliased, and deprecated subcommand annotations (no IR shape for
   them yet; record as deferred work);
 - per-variant Fluent identifiers for command descriptions (the derived
-  `about_id` is `<kebab>.about`, identical to the existing top-level
-  default);
+  `about_id` is `<kebab>.about`, identical to the existing top-level default);
 - unit variants of `clap::Subcommand` enums (no inner type; deferred);
 - `#[command(flatten)]` on the subcommand selector (clap allows it, but it
   changes the field meaning entirely and is not a "subcommand selector");
@@ -644,8 +638,8 @@ make nixie 2>&1 \
   | tee /tmp/nixie-ortho-config-6-1-1-recursive-doc-metadata-subcommands-values.out
 ```
 
-Expected: both commands exit successfully. Unrelated pre-existing failures
-must be recorded in `Surprises & Discoveries` before continuing.
+Expected: both commands exit successfully. Unrelated pre-existing failures must
+be recorded in `Surprises & Discoveries` before continuing.
 
 Run `coderabbit review --agent` and clear concerns.
 
@@ -661,27 +655,26 @@ Steps:
 
 1. Add the trait `OrthoConfigSubcommandDocs` to
    `ortho_config/src/docs/mod.rs` (immediately after `OrthoConfigDocs`). Keep
-   the file under 400 lines. Include a Rustdoc example that uses a derive
-   the consumer will see (acceptable as `rust,ignore` until Milestone 3 makes
-   the derive available; flip back to a compiled `rust,no_run` doctest as
-   part of Milestone 3).
+   the file under 400 lines. Include a Rustdoc example that uses a derive the
+   consumer will see (acceptable as `rust,ignore` until Milestone 3 makes the
+   derive available; flip back to a compiled `rust,no_run` doctest as part of
+   Milestone 3).
 2. Re-export from `ortho_config/src/lib.rs` alongside the existing docs
    re-exports.
 3. Lift `clap_variant_name` from
    `ortho_config_macros/src/selected_subcommand_merge.rs:27-45` into
    `ortho_config_macros/src/derive/parse/clap_attrs.rs` (export as
-   `pub(crate) fn clap_variant_name(variant: &syn::Variant) ->
-   syn::Result<Option<syn::LitStr>>`). Update
-   `selected_subcommand_merge.rs` to call the moved helper. Keep the test
-   coverage in `ortho_config_macros/src/derive/parse/tests/clap_attrs.rs`
+   `pub(crate) fn clap_variant_name(variant: &syn::Variant) -> syn::Result<Option<syn::LitStr>>`).
+   Update `selected_subcommand_merge.rs` to call the moved helper. Keep the
+   test coverage in `ortho_config_macros/src/derive/parse/tests/clap_attrs.rs`
    and add a focused case asserting the helper round-trips
    `#[command(name = "foo")]` and `#[clap(name = "foo")]`.
 4. Add a new helper
-   `pub(crate) fn clap_field_is_subcommand(field: &syn::Field) ->
-   syn::Result<bool>` to `clap_attrs.rs`. Add unit tests for the helper
-   covering `#[command(subcommand)]`, `#[clap(subcommand)]`, neither, and
-   the conflict case `#[command(subcommand, long = "foo")]` (which the
-   helper itself need not flag; clap rejects it at expansion time).
+   `pub(crate) fn clap_field_is_subcommand(field: &syn::Field) -> syn::Result<bool>`
+   to `clap_attrs.rs`. Add unit tests for the helper covering
+   `#[command(subcommand)]`, `#[clap(subcommand)]`, neither, and the conflict
+   case `#[command(subcommand, long = "foo")]` (which the helper itself need
+   not flag; clap rejects it at expansion time).
 
 Validation:
 
@@ -697,28 +690,28 @@ make markdownlint 2>&1 \
   | tee /tmp/markdownlint-ortho-config-6-1-1-recursive-doc-metadata-subcommands-values.out
 ```
 
-Expected: all four commands exit successfully. Existing tests must continue
-to pass because no generator behaviour has changed yet; only the parsing
-helper has moved.
+Expected: all four commands exit successfully. Existing tests must continue to
+pass because no generator behaviour has changed yet; only the parsing helper
+has moved.
 
 Run `coderabbit review --agent` and clear concerns.
 
-Acceptance: the trait is published, the helper is shared, no existing test
-has changed in intent, and lint/format are clean.
+Acceptance: the trait is published, the helper is shared, no existing test has
+changed in intent, and lint/format are clean.
 
 ### Milestone 2: implement the enum derive (prototyping milestone)
 
 Goal: stand up `#[derive(OrthoConfigSubcommandDocs)]` end-to-end on a small
-fixture and prove the shape of the generated `Vec<DocMetadata>` before
-plumbing the struct side. This is an explicit prototyping milestone; the
-fixture introduced here is permanent test code, not throwaway.
+fixture and prove the shape of the generated `Vec<DocMetadata>` before plumbing
+the struct side. This is an explicit prototyping milestone; the fixture
+introduced here is permanent test code, not throwaway.
 
 Steps:
 
 1. Create `ortho_config_macros/src/subcommand_docs.rs` with a
-   `pub(crate) fn derive_subcommand_docs(input: DeriveInput) ->
-   syn::Result<TokenStream>` mirroring
-   `selected_subcommand_merge::derive_selected_subcommand_merge`. The function:
+   `pub(crate) fn derive_subcommand_docs(input: DeriveInput) -> syn::Result<TokenStream>`
+   mirroring `selected_subcommand_merge::derive_selected_subcommand_merge`.
+   The function:
    - validates `Data::Enum`;
    - iterates variants in declaration order;
    - validates single-tuple variants; rejects unit and multi-tuple variants
@@ -745,12 +738,11 @@ Steps:
    }
    ```
 
-   Add `mod subcommand_docs;` at the same place as `mod
-   selected_subcommand_merge;`.
+   Add `mod subcommand_docs;` at the same place as
+   `mod selected_subcommand_merge;`.
 3. Add `ortho_config/tests/subcommand_docs.rs`. Use `rstest` fixtures (see
-   `docs/rust-testing-with-rstest-fixtures.md`) for an enum with two
-   variants, one with a `#[command(name = "...")]` override and one without.
-   Assert:
+   `docs/rust-testing-with-rstest-fixtures.md`) for an enum with two variants,
+   one with a `#[command(name = "...")]` override and one without. Assert:
    - the returned vector has length two;
    - ordering matches declaration order (not alphabetical);
    - each child's `app_name` equals the kebab-cased label or the override;
@@ -760,8 +752,8 @@ Steps:
 4. Add `ortho_config_macros/src/tests.rs` unit cases that drive
    `subcommand_docs::derive_subcommand_docs` directly with synthetic
    `DeriveInput` values and assert the emitted token stream contains the
-   expected `<Ty as #krate::docs::OrthoConfigDocs>::get_doc_metadata()`
-   calls in order. Mirror the existing parser-test pattern at
+   expected `<Ty as #krate::docs::OrthoConfigDocs>::get_doc_metadata()` calls
+   in order. Mirror the existing parser-test pattern at
    `ortho_config_macros/src/derive/parse/tests/`.
 5. Add a `trybuild` ui case under `ortho_config/tests/ui/` for each rejected
    shape (unit variant, named-field variant, multi-tuple variant). Include
@@ -780,14 +772,13 @@ make test 2>&1 \
   | tee /tmp/test-ortho-config-6-1-1-recursive-doc-metadata-subcommands-values.out
 ```
 
-Expected: all commands pass, including the new `subcommand_docs.rs` tests
-and the new `trybuild` cases.
+Expected: all commands pass, including the new `subcommand_docs.rs` tests and
+the new `trybuild` cases.
 
 Run `coderabbit review --agent` and clear concerns.
 
-Acceptance: a developer can derive `OrthoConfigSubcommandDocs` on a
-hand-written `clap::Subcommand` enum and observe the populated
-`Vec<DocMetadata>` in tests.
+Acceptance: a developer can derive `OrthoConfigSubcommandDocs` on a hand-written
+`clap::Subcommand` enum and observe the populated `Vec<DocMetadata>` in tests.
 
 ### Milestone 3: extend the struct derive to recurse into subcommand fields
 
@@ -801,8 +792,8 @@ Steps:
    `pub(crate) is_subcommand: bool`.
 2. Populate it in `parse_field_attrs` (`derive/parse/mod.rs:343`) by calling
    `clap_field_is_subcommand` immediately after attribute parsing. Reject
-   subcommand fields that also carry incompatible `#[ortho_config(...)]`
-   options (`skip_cli`, `default`, `merge_strategy`, `cli_default_as_absent`,
+   subcommand fields that also carry incompatible `#[ortho_config(...)]` options
+   (`skip_cli`, `default`, `merge_strategy`, `cli_default_as_absent`,
    `cli_long`, `cli_short`) with a compile-time error message of the form
    `"#[command(subcommand)] fields cannot be combined with
    #[ortho_config(skip_cli)]; remove the conflicting attribute"`.
@@ -820,11 +811,9 @@ Steps:
    - `build_fields_metadata` (`derive/generate/docs/fields/mod.rs:40-74`).
    Audit `ortho_config_macros/src/derive/build/` and
    `ortho_config_macros/src/derive/generate/` for any other
-   `field_attrs.iter().zip(fields.iter())` patterns and apply the same
-   guard.
+   `field_attrs.iter().zip(fields.iter())` patterns and apply the same guard.
 4. In `generate_docs_impl`
-   (`derive/generate/docs/mod.rs:32-73`), compute a `subcommands_tokens`
-   value:
+   (`derive/generate/docs/mod.rs:32-73`), compute a `subcommands_tokens` value:
    - iterate `args.fields.iter().zip(args.field_attrs.iter())` looking for
      `attrs.is_subcommand`;
    - if zero are found, emit the existing `Vec::new()`;
@@ -838,8 +827,8 @@ Steps:
    `Vec::new()` on line 67.
 5. Repair the deserialize bound in
    `derive/generate/ortho_impl.rs:43-46`. With the subcommand field removed
-   from the generated CLI and default structs (Step 3), the assertion no
-   longer reaches the enum type. Confirm by adding an `rstest` case in
+   from the generated CLI and default structs (Step 3), the assertion no longer
+   reaches the enum type. Confirm by adding an `rstest` case in
    `ortho_config/tests/docs_ir.rs` (or a sibling test file) that derives
    `OrthoConfig` on a `Parser` struct whose `command: Commands` field's
    `Commands` enum does not derive `Deserialize`.
@@ -868,15 +857,15 @@ make test 2>&1 \
   | tee /tmp/test-ortho-config-6-1-1-recursive-doc-metadata-subcommands-values.out
 ```
 
-Expected: all tests pass. The new `docs_ir.rs` assertions exercise the
-populated `subcommands` array; the existing fixture for the no-subcommand
-case still passes; every `trybuild` case from Milestone 2 still passes.
+Expected: all tests pass. The new `docs_ir.rs` assertions exercise the populated
+`subcommands` array; the existing fixture for the no-subcommand case still
+passes; every `trybuild` case from Milestone 2 still passes.
 
 Run `coderabbit review --agent` and clear concerns.
 
-Acceptance: a consumer can derive `OrthoConfig` on a top-level `Parser`
-struct with a `#[command(subcommand)]` field and observe a populated
-`subcommands` array in the returned `DocMetadata`.
+Acceptance: a consumer can derive `OrthoConfig` on a top-level `Parser` struct
+with a `#[command(subcommand)]` field and observe a populated `subcommands`
+array in the returned `DocMetadata`.
 
 ### Milestone 4: behavioural coverage and renderer smoke tests
 
@@ -903,11 +892,11 @@ Steps:
    round-trip test continues to pass.
 4. Add a renderer smoke test in `cargo-orthohelp` (under
    `cargo-orthohelp/src/roff/tests.rs` or a new `tests` submodule of
-   `cargo-orthohelp/src/powershell/`) that drives the existing renderer
-   public entry points with a `LocalizedDocMetadata` containing two
-   subcommands and asserts the output is non-empty and includes the child
-   command names. The aim is to prove the existing recursion paths do not
-   panic on populated data; deep rendering assertions belong to 6.1.2.
+   `cargo-orthohelp/src/powershell/`) that drives the existing renderer public
+   entry points with a `LocalizedDocMetadata` containing two subcommands and
+   asserts the output is non-empty and includes the child command names. The
+   aim is to prove the existing recursion paths do not panic on populated data;
+   deep rendering assertions belong to 6.1.2.
 5. Update `ortho_config/examples/registry_ctl.rs` and at least one
    `examples/hello_world` binary so that:
    - the subcommand enum derives `OrthoConfigSubcommandDocs`;
@@ -930,9 +919,8 @@ make nixie 2>&1 \
   | tee /tmp/nixie-ortho-config-6-1-1-recursive-doc-metadata-subcommands-values.out
 ```
 
-Expected: all five commands exit successfully; the new behavioural
-scenarios pass; the renderer smoke tests pass; the updated examples
-compile.
+Expected: all five commands exit successfully; the new behavioural scenarios
+pass; the renderer smoke tests pass; the updated examples compile.
 
 Run `coderabbit review --agent` and clear concerns.
 
@@ -941,8 +929,8 @@ renderers, and the reference examples demonstrate the recommended pattern.
 
 ### Milestone 5: documentation, changelog, roadmap close-out
 
-Goal: bring documentation in line with the implementation and mark the
-roadmap entry done.
+Goal: bring documentation in line with the implementation and mark the roadmap
+entry done.
 
 Steps:
 
@@ -1007,9 +995,9 @@ make nixie 2>&1 \
   | tee /tmp/nixie-ortho-config-6-1-1-recursive-doc-metadata-subcommands-values.out
 ```
 
-Expected: all five commands pass. Run `coderabbit review --agent` and
-clear concerns. Move the draft pull request out of draft state once the
-maintainer has reviewed.
+Expected: all five commands pass. Run `coderabbit review --agent` and clear
+concerns. Move the draft pull request out of draft state once the maintainer
+has reviewed.
 
 Acceptance: the roadmap entry is closed, every doc references the new trait
 consistently, the draft PR is moved to ready-for-review, and the change has
@@ -1065,15 +1053,14 @@ coderabbit review --agent 2>&1 \
   | tee /tmp/coderabbit-ortho-config-6-1-1-recursive-doc-metadata-subcommands-values.out
 ```
 
-Branch hygiene (only after maintainer approval; do not run while plan is
-DRAFT):
+Branch hygiene (only after maintainer approval; do not run while plan is DRAFT):
 
 ```sh
 git push -u origin 6-1-1-recursive-doc-metadata-subcommands-values
 ```
 
-Draft pull-request creation (once Milestone 0 completes; see PR template
-notes at the end of this document):
+Draft pull-request creation (once Milestone 0 completes; see PR template notes
+at the end of this document):
 
 ```sh
 gh pr create --draft \
@@ -1081,8 +1068,8 @@ gh pr create --draft \
   --body-file /tmp/pr-body-6-1-1-recursive-doc-metadata-subcommands-values.md
 ```
 
-Update this `Concrete steps` section whenever a milestone changes the
-commands a new contributor must run.
+Update this `Concrete steps` section whenever a milestone changes the commands
+a new contributor must run.
 
 ## Validation and acceptance
 
@@ -1145,24 +1132,24 @@ Quality criteria for "done":
 - `coderabbit review --agent` is idempotent per branch state; re-running it
   after addressing comments produces a fresh report.
 - The draft pull request can be force-recreated only by closing the
-  existing draft; do not delete the branch unless the maintainer approves
-  the destructive operation.
+  existing draft; do not delete the branch unless the maintainer approves the
+  destructive operation.
 - The renamed branch
   `6-1-1-recursive-doc-metadata-subcommands-values` tracks
-  `origin/6-1-1-recursive-doc-metadata-subcommands-values`; re-pushing is
-  safe because no other agent or human is expected to push to that branch.
+  `origin/6-1-1-recursive-doc-metadata-subcommands-values`; re-pushing is safe
+  because no other agent or human is expected to push to that branch.
 
 ## Artefacts and notes
 
 This section captures evidence that helped shape the plan. Update it as
-implementation proceeds (transcripts of failing test runs, comparative
-output before and after a change, etc.).
+implementation proceeds (transcripts of failing test runs, comparative output
+before and after a change, etc.).
 
 - The existing literal `subcommands: Vec::new()` lives at
-  `ortho_config_macros/src/derive/generate/docs/mod.rs:67`. That single line
-  is the focal point of the change; every other touched site exists either
-  to allow the substitution (by suppressing per-field code generation for
-  the subcommand selector) or to demonstrate the result (by populating it).
+  `ortho_config_macros/src/derive/generate/docs/mod.rs:67`. That single line is
+  the focal point of the change; every other touched site exists either to
+  allow the substitution (by suppressing per-field code generation for the
+  subcommand selector) or to demonstrate the result (by populating it).
 - The bridge writes the following `main.rs` template
   (`cargo-orthohelp/src/bridge.rs:171-208`):
 
@@ -1176,15 +1163,14 @@ output before and after a change, etc.).
   }
   ```
 
-  No change to the bridge template is required; the `metadata` value will
-  carry populated `subcommands` automatically once the consumer's
-  `RootType` is a top-level `Parser` struct with `#[command(subcommand)]`
-  and the new derive.
+  No change to the bridge template is required; the `metadata` value will carry
+  populated `subcommands` automatically once the consumer's `RootType` is a
+  top-level `Parser` struct with `#[command(subcommand)]` and the new derive.
 
 - ADR-003
   (`docs/adr-003-define-schema-ownership-for-agent-native-contracts.md`)
-  governs the ownership boundary; ADR-005 will sit alongside it and inherit
-  its versioning rules.
+  governs the ownership boundary; ADR-005 will sit alongside it and inherit its
+  versioning rules.
 
 ## Interfaces and dependencies
 
@@ -1242,8 +1228,8 @@ No new external crate dependency is introduced. The implementation reuses:
 - `rstest`, `rstest-bdd`, `figment`, `serde_json` (already declared) for new
   tests.
 
-The new trait depends on no other module; the new derive depends only on
-`syn`/`quote`/`proc-macro2`/`heck` and on the shared helpers in
+The new trait depends on no other module; the new derive depends only on `syn`/
+`quote`/`proc-macro2`/`heck` and on the shared helpers in
 `ortho_config_macros/src/derive/parse/clap_attrs.rs`,
 `ortho_config_macros/src/derive/crate_path.rs`.
 
@@ -1258,24 +1244,18 @@ actual current state of the work.
 - [x] (2026-05-24 12:40Z) Plan approved by maintainer instruction to
   proceed with implementation; status set to `APPROVED`.
 - [x] (2026-05-24 12:58Z) Milestone 0 complete (ADR-005 drafted,
-  contents index updated,
-  developers guide note added, markdownlint and nixie clean, CodeRabbit
-  clear).
+  contents index updated, developers guide note added, markdownlint and nixie
+  clean, CodeRabbit clear).
 - [x] (2026-05-24 13:16Z) Milestone 1 complete (trait published,
-  shared parsing helper lifted,
-  helper unit-tested).
+  shared parsing helper lifted, helper unit-tested).
 - [x] (2026-05-24 13:40Z) Milestone 2 complete (enum derive emits
-  populated `Vec<DocMetadata>`,
-  trybuild cases cover rejected shapes).
+  populated `Vec<DocMetadata>`, trybuild cases cover rejected shapes).
 - [x] (2026-05-24 14:01Z) Milestone 3 complete (struct derive recurses;
-  existing tests still
-  green; new `docs_ir.rs` cases pass).
+  existing tests still green; new `docs_ir.rs` cases pass).
 - [x] (2026-05-24 14:19Z) Milestone 4 complete (behavioural scenarios pass;
-  renderer smoke
-  tests pass; examples updated).
+  renderer smoke tests pass; examples updated).
 - [x] (2026-05-24 14:28Z) Milestone 5 complete (documentation, changelog,
-  README updates,
-  roadmap entry marked done).
+  README updates, roadmap entry marked done).
 - [ ] Draft pull request moved to ready-for-review.
 - [ ] Pull request merged into `main`.
 
@@ -1290,8 +1270,7 @@ Document with evidence so future work benefits.
   `markdownlint --fix` reports pre-existing line-length violations across
   unrelated Markdown files, including `cargo-orthohelp/README.md`,
   `docs/behavioural-testing-in-rust-with-cucumber.md`,
-  `docs/repository-layout.md`, and `docs/rstest-bdd-users-guide.md`.
-  Evidence:
+  `docs/repository-layout.md`, and `docs/rstest-bdd-users-guide.md`. Evidence:
   `/tmp/fmt-ortho-config-6-1-1-recursive-doc-metadata-subcommands-values.out`.
   Impact: the failed formatter run was reverted for unrelated files; the
   milestone validation will still run the planned gates and record exact
@@ -1302,8 +1281,8 @@ Document with evidence so future work benefits.
   with `expected ','`. Evidence:
   `/tmp/test-ortho-config-6-1-1-recursive-doc-metadata-subcommands-values.out`
   before the parser fix. Impact: the shared clap parser now consumes unknown
-  `= value` and parenthesised meta items, matching the existing default
-  parser behaviour.
+  `= value` and parenthesised meta items, matching the existing default parser
+  behaviour.
 - Observation: Milestone 2 lint and CodeRabbit both pushed the derive and
   tests away from defensive indexing. Evidence:
   `/tmp/lint-ortho-config-6-1-1-recursive-doc-metadata-subcommands-values.out`
@@ -1312,85 +1291,81 @@ Document with evidence so future work benefits.
   Impact: tuple-variant field extraction now uses iterator validation, and
   tests assert nested variant construction without no-effect bindings.
 - Observation: Milestone 3 proves the generated docs path can avoid a
-  subcommand enum `Deserialize` bound when the consumer marks the clap
-  selector with `#[serde(skip)]` and provides a `Default` command value.
-  Evidence:
+  subcommand enum `Deserialize` bound when the consumer marks the clap selector
+  with `#[serde(skip)]` and provides a `Default` command value. Evidence:
   `/tmp/test-ortho-config-6-1-1-recursive-doc-metadata-subcommands-values.out`.
-  Impact: the struct derive now omits the selector from generated CLI,
-  default, override, and docs-field code, while the root config type still
-  satisfies the existing `DeserializeOwned` assertion through serde's skip
-  handling.
+  Impact: the struct derive now omits the selector from generated CLI, default,
+  override, and docs-field code, while the root config type still satisfies the
+  existing `DeserializeOwned` assertion through serde's skip handling.
 - Observation: Milestone 4 exposed that the `ortho_config/tests/rstest_bdd/`
-  directory is not registered as an integration test target. Adding a
-  temporary root target made the new docs scenarios pass, but also surfaced
-  71 pre-existing Clippy failures across unrelated dormant BDD step modules.
+  directory is not registered as an integration test target. Adding a temporary
+  root target made the new docs scenarios pass, but also surfaced 71
+  pre-existing Clippy failures across unrelated dormant BDD step modules.
   Evidence:
   `/tmp/targeted-rstest-bdd-ortho-config-6-1-1-recursive-doc-metadata-subcommands-values.out`
   and
   `/tmp/lint-ortho-config-6-1-1-recursive-doc-metadata-subcommands-values.out`.
   Impact: the feature and step definitions were added, and the temporary
   test-target registration was removed to keep this milestone scoped. A
-  follow-up should register the BDD target and clean the existing BDD lint
-  debt before relying on those scenarios in the default gate.
+  follow-up should register the BDD target and clean the existing BDD lint debt
+  before relying on those scenarios in the default gate.
 - Observation: `make fmt` still fails during Milestone 5 because
   `markdownlint --fix` reports pre-existing line-length issues in unrelated
   Markdown files. Evidence:
   `/tmp/fmt-ortho-config-6-1-1-recursive-doc-metadata-subcommands-values.out`.
-  Impact: unrelated formatter rewrites were reverted again, and the
-  milestone used the explicit `make markdownlint` and `make nixie` gates for
+  Impact: unrelated formatter rewrites were reverted again, and the milestone
+  used the explicit `make markdownlint` and `make nixie` gates for
   documentation validation.
 
 ## Decision log
 
 Record every significant decision made while working on the plan. Include
-decisions to escalate, decisions on ambiguous requirements, and design
-choices.
+decisions to escalate, decisions on ambiguous requirements, and design choices.
 
 - Decision: introduce a new public trait `OrthoConfigSubcommandDocs` rather
   than extending `OrthoConfigDocs` or asking consumers to combine
   `Vec<DocMetadata>` manually. Rationale: the roadmap leaves the choice open
   ("Introduce a small companion trait if enum-level documentation cannot be
   represented cleanly through the existing `OrthoConfigDocs` trait", roadmap
-  line 119-120). Extending `OrthoConfigDocs` would require the trait to
-  return per-type metadata that distinguishes "I am a config struct" from
-  "I am a subcommand selector enum", which is a single-method trait change
-  the existing IR schema does not need. A companion trait is the smallest
-  additive surface and decouples docs concerns from `SelectedSubcommandMerge`
-  (which is `serde_json`-gated). Date/Author: 2026-05-23 (planner).
+  line 119-120). Extending `OrthoConfigDocs` would require the trait to return
+  per-type metadata that distinguishes "I am a config struct" from "I am a
+  subcommand selector enum", which is a single-method trait change the existing
+  IR schema does not need. A companion trait is the smallest additive surface
+  and decouples docs concerns from `SelectedSubcommandMerge` (which is
+  `serde_json`-gated). Date/Author: 2026-05-23 (planner).
 - Decision: keep the new derive separate from `SelectedSubcommandMerge` and
   share only `clap_variant_name` and (potentially) an unvalidated variant
   iterator. Rationale: the two derives have different validation rules.
   `SelectedSubcommandMerge` rejects unit variants because it has nowhere to
-  merge configuration for them; docs would naturally accept them (a
-  subcommand with no flags is a valid clap pattern). Sharing only the
-  parsing primitives keeps each derive's validation honest. The current
-  scope keeps the same single-tuple constraint to minimize risk; lifting it
-  is a deferred follow-up. Date/Author: 2026-05-23 (planner).
+  merge configuration for them; docs would naturally accept them (a subcommand
+  with no flags is a valid clap pattern). Sharing only the parsing primitives
+  keeps each derive's validation honest. The current scope keeps the same
+  single-tuple constraint to minimize risk; lifting it is a deferred follow-up.
+  Date/Author: 2026-05-23 (planner).
 - Decision: default the variant command label to
-  `variant.ident.to_string().to_kebab_case()` via `heck::ToKebabCase`,
-  matching clap's own default. Honour `#[command(name = "...")]` (and the
+  `variant.ident.to_string().to_kebab_case()` via `heck::ToKebabCase`, matching
+  clap's own default. Honour `#[command(name = "...")]` (and the
   `#[clap(name = "...")]` synonym) as an override. Rationale: matches clap's
-  observable behaviour, reuses an existing dependency, and avoids a
-  divergent IR convention. Date/Author: 2026-05-23 (planner).
+  observable behaviour, reuses an existing dependency, and avoids a divergent
+  IR convention. Date/Author: 2026-05-23 (planner).
 - Decision: defer support for hidden, aliased, and deprecated subcommand
   metadata. Rationale: the IR schema does not model them today, and adding
   schema fields requires a separate ADR and a `ORTHO_DOCS_IR_VERSION` bump.
   Date/Author: 2026-05-23 (planner).
 - Decision: defer support for unit variants of `clap::Subcommand` enums.
-  Rationale: unit variants must still produce a `DocMetadata` entry, but
-  their `app_name` resolution path is different (no inner Args struct to
-  source headings, fields, and Fluent IDs from), and the v1 scope mirrors
+  Rationale: unit variants must still produce a `DocMetadata` entry, but their
+  `app_name` resolution path is different (no inner Args struct to source
+  headings, fields, and Fluent IDs from), and the v1 scope mirrors
   `SelectedSubcommandMerge`'s constraint. Lifting it later is additive.
   Date/Author: 2026-05-23 (planner).
 - Decision: keep the bridge unchanged. Rationale: the bridge already
-  invokes `<RootType as OrthoConfigDocs>::get_doc_metadata()` and
-  serializes the full recursive structure; populating `subcommands` happens
-  inside the derive output, not at the bridge boundary. Date/Author:
-  2026-05-23 (planner).
+  invokes `<RootType as OrthoConfigDocs>::get_doc_metadata()` and serializes
+  the full recursive structure; populating `subcommands` happens inside the
+  derive output, not at the bridge boundary. Date/Author: 2026-05-23 (planner).
 - Decision: treat the maintainer's 2026-05-24 instruction to proceed with
-  implementation as explicit approval of this restored ExecPlan. Rationale:
-  the requested implementation names this exact plan and asks that it be kept
-  up to date, which supersedes the restored draft status without changing the
+  implementation as explicit approval of this restored ExecPlan. Rationale: the
+  requested implementation names this exact plan and asks that it be kept up to
+  date, which supersedes the restored draft status without changing the
   technical scope. Date/Author: 2026-05-24 (Codex).
 - Decision: keep `_assert_deser` unchanged for Milestone 3 and document the
   consumer-side `#[serde(skip)]` requirement for subcommand selector fields.
@@ -1401,25 +1376,25 @@ choices.
   assertion for ordinary configs. Date/Author: 2026-05-24 (Codex).
 - Decision: do not expand Milestone 4 into a full `rstest_bdd` harness
   registration and lint cleanup. Rationale: registering the dormant BDD
-  directory is valuable but out of scope for roadmap item 6.1.1, and fixing
-  the unrelated Clippy failures would swamp the renderer/schema/example
-  validation work. Date/Author: 2026-05-24 (Codex).
+  directory is valuable but out of scope for roadmap item 6.1.1, and fixing the
+  unrelated Clippy failures would swamp the renderer/schema/example validation
+  work. Date/Author: 2026-05-24 (Codex).
 
 ## Outcomes & retrospective
 
 Summarize outcomes, gaps, and lessons learned at major milestones or at
-completion. Compare the result against the original purpose. Note what
-would be done differently next time.
+completion. Compare the result against the original purpose. Note what would be
+done differently next time.
 
 - Outcome: all five milestones (0–5) completed and gated. The
-  `OrthoConfigSubcommandDocs` trait, its derive macro, struct-side
-  recursion, BDD scenarios, renderer smoke tests, and documentation
-  artefacts were delivered. The plan's original purpose — populating the
+  `OrthoConfigSubcommandDocs` trait, its derive macro, struct-side recursion,
+  BDD scenarios, renderer smoke tests, and documentation artefacts were
+  delivered. The plan's original purpose — populating the
   `DocMetadata.subcommands` array for CLI structs that carry a
-  `#[command(subcommand)]` selector field — is fully satisfied. The
-  remaining actions are to move the draft PR to ready-for-review and
-  merge into `main`; no further code changes are required for 6.1.1.
-  Deeper rendering assertions are deferred to roadmap item 6.1.2.
+  `#[command(subcommand)]` selector field — is fully satisfied. The remaining
+  actions are to move the draft PR to ready-for-review and merge into `main`;
+  no further code changes are required for 6.1.1. Deeper rendering assertions
+  are deferred to roadmap item 6.1.2.
 
 ## Notes for the accompanying draft pull request
 
@@ -1429,26 +1404,26 @@ authoring, not by an implementer):
 
 - Title: `Plan: recursive DocMetadata.subcommands (6.1.1)`.
 - Body must mention this plan file
-  (`docs/execplans/6-1-1-recursive-doc-metadata-subcommands-values.md`) and
-  the roadmap entry `(6.1.1)`.
+  (`docs/execplans/6-1-1-recursive-doc-metadata-subcommands-values.md`) and the
+  roadmap entry `(6.1.1)`.
 - Body must include a `## References` section that links to the lody
   session via the `LODY_SESSION_ID` environment variable.
 - Mark the pull request as draft until the plan is approved; mark it
-  ready-for-review once approval is recorded in `Decision Log` and the
-  status field above is updated to `APPROVED`.
+  ready-for-review once approval is recorded in `Decision Log` and the status
+  field above is updated to `APPROVED`.
 
 ## Revision history
 
-This section records edits to this plan after the first draft. Each entry
-must state what changed, why it changed, and how it affects remaining work.
+This section records edits to this plan after the first draft. Each entry must
+state what changed, why it changed, and how it affects remaining work.
 
 - 2026-05-23 (planner): initial draft created.
 - 2026-05-24 (Codex): restored the plan from repository history into this
   worktree, recorded implementation approval from the maintainer's latest
   instruction, and set status to `APPROVED`.
 - 2026-05-24 (Codex): recorded Milestone 3 completion after
-  `make check-fmt`, `make lint`, `make test`, and CodeRabbit all passed for
-  the struct-side recursive metadata implementation.
+  `make check-fmt`, `make lint`, `make test`, and CodeRabbit all passed for the
+  struct-side recursive metadata implementation.
 - 2026-05-24 (Codex): recorded Milestone 4 completion after renderer/schema
   smoke tests, example docs output validation, all required gates, and
   CodeRabbit passed.

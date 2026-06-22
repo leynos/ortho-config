@@ -2,9 +2,8 @@
 
 Status: historical reference. This document preserves the earlier Cucumber
 guidance and BDD rationale. Current OrthoConfig behavioural testing practice
-uses `rstest-bdd`; see
-[rstest-bdd-users-guide.md](rstest-bdd-users-guide.md) and
-[ADR-002](adr-002-replace-cucumber-with-rstest-bdd.md).
+uses `rstest-bdd`; see [rstest-bdd-users-guide.md](rstest-bdd-users-guide.md)
+and [ADR-002](adr-002-replace-cucumber-with-rstest-bdd.md).
 
 ## Part 1: The Philosophy and Practice of Behaviour-Driven Development (BDD)
 
