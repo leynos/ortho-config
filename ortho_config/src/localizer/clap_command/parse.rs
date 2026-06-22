@@ -23,6 +23,13 @@ use std::ffi::OsString;
 /// This is the base-agnostic primitive for applications that need to override
 /// the command identifier base before parsing.
 ///
+/// # Side effects
+///
+/// Parse errors are passed through [`crate::localize_clap_error_with_command`].
+/// When that fallback path cannot find a translation, it emits a warn-level
+/// `tracing` event with stable `identifier`, `error_kind`, and `locale` fields
+/// before returning the original `clap` error.
+///
 /// # Errors
 ///
 /// Returns `clap::Error` when clap rejects the input or when the parsed
@@ -92,6 +99,12 @@ where
 /// The methods panic when the command contains identifiers that cannot be
 /// represented as Fluent message identifiers. This matches the
 /// [`LocalizeCmd::localize`] and [`crate::message_id_for`] contract.
+///
+/// # Observability
+///
+/// Parse errors flow through [`parse_localized_command`], so missing
+/// translations emit the same warn-level `tracing` event before the original
+/// `clap` error is returned.
 ///
 /// # Examples
 ///

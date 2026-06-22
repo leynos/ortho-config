@@ -1,3 +1,6 @@
+//! Compile-time contract proving `LocalizedParse` is not available to types
+//! that do not implement `clap::Parser`.
+
 use ortho_config::{LocalizedParse, NoOpLocalizer};
 
 struct NotAParser;

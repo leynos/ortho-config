@@ -337,6 +337,61 @@ The free function is the right choice when the catalogue keys intentionally do
 not match the command `bin_name`, as in applications that share one binary name
 across several catalogue namespaces.
 
+#### Migrating localized parsing code
+
+Earlier localization code often built a localized `clap::Command` and parsed it
+directly. That kept translated help text, but it left parse-error localization
+and `from_arg_matches` error enrichment to application glue:
+
+```rust,ignore
+use clap::CommandFactory;
+use ortho_config::{LocalizeCmd, Localizer};
+
+# #[derive(clap::Parser)]
+# struct Cli {}
+fn parse_old(localizer: &dyn Localizer) -> Result<clap::ArgMatches, clap::Error> {
+    Cli::command()
+        .with_base("demo.cli")
+        .localize(localizer)
+        .try_get_matches_from(std::env::args_os())
+}
+```
+
+For catalogue roots that match the command `bin_name`, migrate to
+`LocalizedParse` and let the trait localize the command tree, parse errors, and
+typed parser conversion in one path:
+
+```rust,ignore
+use ortho_config::{LocalizedParse, Localizer};
+
+# #[derive(clap::Parser)]
+# struct Cli {}
+fn parse_new(localizer: &dyn Localizer) -> Result<Cli, clap::Error> {
+    Cli::try_parse_localized(localizer)
+}
+```
+
+When the application still needs a custom catalogue root, keep
+`LocalizeCmd::with_base` but hand the command to `parse_localized_command`
+instead of invoking `clap` parsing directly:
+
+```rust,ignore
+use clap::CommandFactory;
+use ortho_config::{LocalizeCmd, Localizer, parse_localized_command};
+
+# #[derive(clap::Parser)]
+# struct Cli {}
+fn parse_new_with_base(
+    localizer: &dyn Localizer,
+) -> Result<(Cli, clap::ArgMatches), clap::Error> {
+    let command = Cli::command()
+        .with_base("demo.cli")
+        .localize(localizer);
+
+    parse_localized_command(command, std::env::args_os(), localizer)
+}
+```
+
 ## Installation and dependencies
 
 Add `ortho_config` as a dependency in `Cargo.toml` along with `serde`:

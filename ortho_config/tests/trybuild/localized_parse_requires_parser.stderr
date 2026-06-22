@@ -1,24 +1,24 @@
 error[E0599]: the function or associated item `try_parse_localized_from` exists for struct `NotAParser`, but its trait bounds were not satisfied
- --> tests/trybuild/localized_parse_requires_parser.rs:7:31
-  |
-3 | struct NotAParser;
-  | ----------------- function or associated item `try_parse_localized_from` not found for this struct because it doesn't satisfy `NotAParser: LocalizedParse` or `NotAParser: clap_builder::derive::Parser`
+  --> tests/trybuild/localized_parse_requires_parser.rs:10:31
+   |
+6  | struct NotAParser;
+   | ----------------- function or associated item `try_parse_localized_from` not found for this struct because it doesn't satisfy `NotAParser: LocalizedParse` or `NotAParser: clap_builder::derive::Parser`
 ...
-7 |     let _parsed = NotAParser::try_parse_localized_from(["demo"], &localizer);
-  |                               ^^^^^^^^^^^^^^^^^^^^^^^^ function or associated item cannot be called on `NotAParser` due to unsatisfied trait bounds
-  |
-  = note: the following trait bounds were not satisfied:
-          `NotAParser: clap_builder::derive::Parser`
-          which is required by `NotAParser: LocalizedParse`
-          `&NotAParser: clap_builder::derive::Parser`
-          which is required by `&NotAParser: LocalizedParse`
-          `&mut NotAParser: clap_builder::derive::Parser`
-          which is required by `&mut NotAParser: LocalizedParse`
+10 |     let _parsed = NotAParser::try_parse_localized_from(["demo"], &localizer);
+   |                               ^^^^^^^^^^^^^^^^^^^^^^^^ function or associated item cannot be called on `NotAParser` due to unsatisfied trait bounds
+   |
+   = note: the following trait bounds were not satisfied:
+           `NotAParser: clap_builder::derive::Parser`
+           which is required by `NotAParser: LocalizedParse`
+           `&NotAParser: clap_builder::derive::Parser`
+           which is required by `&NotAParser: LocalizedParse`
+           `&mut NotAParser: clap_builder::derive::Parser`
+           which is required by `&mut NotAParser: LocalizedParse`
 note: the trait `clap_builder::derive::Parser` must be implemented
- --> $CARGO/clap_builder-$VERSION/src/derive.rs
-  |
-  | pub trait Parser: FromArgMatches + CommandFactory + Sized {
-  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  = help: items from traits can only be used if the trait is implemented and in scope
-  = note: the following trait defines an item `try_parse_localized_from`, perhaps you need to implement it:
-          candidate #1: `LocalizedParse`
+  --> $CARGO/clap_builder-$VERSION/src/derive.rs
+   |
+   | pub trait Parser: FromArgMatches + CommandFactory + Sized {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   = help: items from traits can only be used if the trait is implemented and in scope
+   = note: the following trait defines an item `try_parse_localized_from`, perhaps you need to implement it:
+           candidate #1: `LocalizedParse`

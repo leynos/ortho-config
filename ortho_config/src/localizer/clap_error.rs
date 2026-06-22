@@ -1,4 +1,4 @@
-//! `clap` error localisation helpers.
+//! `clap` error localization helpers.
 //!
 //! Provides a formatter that maps [`clap::ErrorKind`] variants onto Fluent
 //! identifiers and forwards any captured argument context to the supplied
@@ -20,7 +20,7 @@ use std::sync::Arc;
 /// handling.
 ///
 /// The returned closure is [`Clone`] so it can be reused when the command tree
-/// is rebuilt. It applies [`localize_clap_error`] with the shared localiser,
+/// is rebuilt. It applies [`localize_clap_error`] with the shared localizer,
 /// preserving the original `clap` output when no translation is available.
 #[must_use = "Attach this formatter when wiring clap error handling"]
 pub fn clap_error_formatter(
@@ -29,24 +29,37 @@ pub fn clap_error_formatter(
     move |error| localize_clap_error(error, localizer.as_ref())
 }
 
-/// Rewrites a `clap` error message using the provided localiser.
+/// Rewrites a `clap` error message using the provided localizer.
 ///
 /// - Maps the [`ErrorKind`] to a Fluent identifier of the form
 ///   `clap-error-<kebab-kind>`.
 /// - Includes relevant [`ContextKind`] values as Fluent arguments (for
 ///   example, `argument`, `value`, `expected`, `actual`).
-/// - Falls back to the original `clap` message when the localiser does not
+/// - Falls back to the original `clap` message when the localizer does not
 ///   return a translation.
 /// - Intended for display-only scenarios: the returned [`ClapError`] carries
 ///   the translated text and original rendered tail but does not preserve the
 ///   internal `clap` context/command metadata.
+///
+/// # Observability
+///
+/// Missing translations emit a warn-level `tracing` event before the original
+/// error is returned. The event includes stable `identifier`, `error_kind`, and
+/// `locale` fields so applications can observe catalogue gaps without parsing
+/// display text.
 #[must_use]
 pub fn localize_clap_error(error: ClapError, localizer: &dyn Localizer) -> ClapError {
     localize_clap_error_with_command(error, localizer, None)
 }
 
-/// Rewrites a `clap` error message, enriching localisation arguments with
+/// Rewrites a `clap` error message, enriching localization arguments with
 /// details from the provided [`ClapCommand`] where possible.
+///
+/// # Observability
+///
+/// If the computed `clap-error-*` identifier resolves to the fallback text, the
+/// function emits a warn-level `tracing` event with `identifier`, `error_kind`,
+/// and `locale` fields, then returns the original `clap` error unchanged.
 #[must_use]
 pub fn localize_clap_error_with_command(
     error: ClapError,
@@ -74,8 +87,8 @@ pub fn localize_clap_error_with_command(
         .unwrap_or(first_line)
         .to_owned();
 
-    let localised = localizer.message(&id, args_ref, &fallback);
-    if localised == fallback {
+    let translated = localizer.message(&id, args_ref, &fallback);
+    if translated == fallback {
         let locale = localizer
             .locale()
             .map_or_else(|| "unknown".to_owned(), std::string::ToString::to_string);
@@ -89,9 +102,9 @@ pub fn localize_clap_error_with_command(
     }
 
     let message = if tail.is_empty() {
-        localised
+        translated
     } else {
-        format!("{localised}\n{tail}")
+        format!("{translated}\n{tail}")
     };
 
     let _ = command; // preserved for API symmetry; context is not retained

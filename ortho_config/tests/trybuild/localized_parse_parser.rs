@@ -1,3 +1,6 @@
+//! Compile-time contract proving `LocalizedParse` is available to `clap::Parser`
+//! types.
+
 use clap::Parser;
 use ortho_config::{LocalizedParse, NoOpLocalizer};
 
