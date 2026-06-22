@@ -1,10 +1,10 @@
-//! Localisation-aware parsing for `clap` command trees.
+//! Localization-aware parsing for `clap` command trees.
 //!
 //! This module connects three pieces that are otherwise easy to wire
 //! inconsistently: [`clap::Parser`] implementations, [`LocalizeCmd`] command
 //! metadata rewriting, and [`crate::Localizer`] error-message lookup. It keeps
-//! the parse path responsible for both building a localised command tree before
-//! `clap` sees the arguments and localising any parse or `from_arg_matches`
+//! the parse path responsible for both building a localized command tree before
+//! `clap` sees the arguments and localizing any parse or `from_arg_matches`
 //! error after `clap` rejects them.
 //!
 //! Use [`parse_localized_command`] when the caller already has a command tree
@@ -17,7 +17,7 @@ use crate::{Localizer, localize_clap_error_with_command};
 use clap::{ArgMatches, Command, FromArgMatches, Parser};
 use std::ffi::OsString;
 
-/// Parses arguments with a pre-built localised command and localises parse
+/// Parses arguments with a pre-built localized command and localizes parse
 /// errors through the supplied localizer.
 ///
 /// This is the base-agnostic primitive for applications that need to override
@@ -79,7 +79,7 @@ where
     Ok((value, matches))
 }
 
-/// Blanket extension trait for parsing any `clap::Parser` type with localised
+/// Blanket extension trait for parsing any `clap::Parser` type with localized
 /// command metadata and errors.
 ///
 /// The default implementation derives the identifier base from the command's
@@ -113,7 +113,7 @@ where
 /// # Ok::<(), clap::Error>(())
 /// ```
 pub trait LocalizedParse: Parser {
-    /// Parses arguments from the process environment with localised command
+    /// Parses arguments from the process environment with localized command
     /// metadata and errors.
     ///
     /// # Errors
@@ -129,7 +129,7 @@ pub trait LocalizedParse: Parser {
         Self::try_parse_localized_from(std::env::args_os(), localizer)
     }
 
-    /// Parses the supplied arguments with localised command metadata and
+    /// Parses the supplied arguments with localized command metadata and
     /// errors.
     ///
     /// # Errors

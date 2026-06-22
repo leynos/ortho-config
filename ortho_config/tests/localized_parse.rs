@@ -5,6 +5,7 @@ use ortho_config::{
     LocalizationArgs, LocalizeCmd, LocalizedParse, Localizer, NoOpLocalizer, langid,
     message_id_for, parse_localized_command,
 };
+use rstest::{fixture, rstest};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -102,10 +103,6 @@ impl TranslatedLocalizer {
         }
     }
 
-    fn fallback(locale: LanguageIdentifier) -> Self {
-        Self::new(locale, [])
-    }
-
     fn hits(&self) -> MutexGuard<'_, Vec<String>> {
         match self.hits.lock() {
             Ok(hits) => hits,
@@ -149,9 +146,7 @@ impl CapturedEvents {
     }
 }
 
-struct CaptureLayer {
-    events: Arc<CapturedEvents>,
-}
+struct CaptureLayer(Arc<CapturedEvents>);
 
 impl<S> Layer<S> for CaptureLayer
 where
@@ -165,7 +160,7 @@ where
         event.record(&mut FieldVisitor {
             fields: &mut captured.fields,
         });
-        self.events.events().push(captured);
+        self.0.events().push(captured);
     }
 }
 
@@ -186,8 +181,31 @@ impl Visit for FieldVisitor<'_> {
 }
 
 fn capture_events_during<R>(events: Arc<CapturedEvents>, f: impl FnOnce() -> R) -> R {
-    let subscriber = Registry::default().with(CaptureLayer { events });
+    let subscriber = Registry::default().with(CaptureLayer(events));
     tracing::subscriber::with_default(subscriber, f)
+}
+
+#[fixture]
+fn missing_subcommand_localizer() -> MissingSubcommandLocalizer {
+    MissingSubcommandLocalizer
+}
+
+#[fixture]
+fn fallback_localizer() -> TranslatedLocalizer {
+    TranslatedLocalizer::new(langid!("fr-FR"), [])
+}
+
+#[fixture]
+fn translated_localizer() -> TranslatedLocalizer {
+    TranslatedLocalizer::new(
+        langid!("en-US"),
+        [
+            ("custom-fixture-about", "Translated fixture help"),
+            ("custom-fixture-args-config-value_name", "SETTINGS"),
+            ("custom-fixture-greet-about", "Translated greet help"),
+            ("custom-fixture-greet-args-name-value_name", "RECIPIENT"),
+        ],
+    )
 }
 
 #[test]
@@ -210,20 +228,13 @@ fn try_parse_localized_with_matches_returns_matches() {
     assert_eq!(matches.subcommand_name(), Some("greet"));
 }
 
-#[test]
-fn parse_localized_command_uses_translated_metadata_on_success() {
-    let localizer = TranslatedLocalizer::new(
-        langid!("en-US"),
-        [
-            ("custom-fixture-about", "Translated fixture help"),
-            ("custom-fixture-args-config-value_name", "SETTINGS"),
-            ("custom-fixture-greet-about", "Translated greet help"),
-            ("custom-fixture-greet-args-name-value_name", "RECIPIENT"),
-        ],
-    );
+#[rstest]
+fn parse_localized_command_uses_translated_metadata_on_success(
+    translated_localizer: TranslatedLocalizer,
+) {
     let command = Fixture::command()
         .with_base("custom.fixture")
-        .localize(&localizer);
+        .localize(&translated_localizer);
     let (parsed, matches) = parse_localized_command::<Fixture, _, _>(
         command,
         [
@@ -234,7 +245,7 @@ fn parse_localized_command_uses_translated_metadata_on_success() {
             "--name",
             "Ada",
         ],
-        &localizer,
+        &translated_localizer,
     )
     .expect("translated fixture args should parse");
 
@@ -252,7 +263,7 @@ fn parse_localized_command_uses_translated_metadata_on_success() {
         Some(PathBuf::from("settings.toml").as_path())
     );
     assert_eq!(
-        localizer.recorded_hits(),
+        translated_localizer.recorded_hits(),
         [
             "custom-fixture-about",
             "custom-fixture-after_help",
@@ -294,14 +305,16 @@ fn noop_localizer_matches_stock_clap() {
     assert_eq!(localized.to_string(), stock.to_string());
 }
 
-#[test]
-fn from_arg_matches_error_retains_valid_subcommands() {
+#[rstest]
+fn from_arg_matches_error_retains_valid_subcommands(
+    missing_subcommand_localizer: MissingSubcommandLocalizer,
+) {
     let mut command = Fixture::command();
     command = command.subcommand_required(false);
     let err = parse_localized_command::<Fixture, _, _>(
         command.localize(&NoOpLocalizer::new()),
         ["fixture"],
-        &MissingSubcommandLocalizer,
+        &missing_subcommand_localizer,
     )
     .expect_err("from_arg_matches should reject the missing subcommand");
 
@@ -311,13 +324,12 @@ fn from_arg_matches_error_retains_valid_subcommands() {
     );
 }
 
-#[test]
-fn missing_clap_error_translation_emits_warning_fields() {
+#[rstest]
+fn missing_clap_error_translation_emits_warning_fields(fallback_localizer: TranslatedLocalizer) {
     let events = Arc::new(CapturedEvents::default());
-    let localizer = TranslatedLocalizer::fallback(langid!("fr-FR"));
 
     let err = capture_events_during(Arc::clone(&events), || {
-        Fixture::try_parse_localized_from(["fixture"], &localizer)
+        Fixture::try_parse_localized_from(["fixture"], &fallback_localizer)
             .expect_err("missing subcommand should fail")
     });
 
