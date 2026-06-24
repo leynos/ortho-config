@@ -166,10 +166,10 @@ escalation, not a workaround.
   help copy, and updated help snapshots.
 - [x] (2026-06-24 14:35Z) Milestone 3 CodeRabbit review completed with zero
   findings after commit `15b4d39`.
-- [ ] Milestone 4 — documentation: ADR-007, normative promotion of
-  `agent-native-cli-design.md` §3.2, users' guide subsection, developers' guide
-  note, design-doc decision-log entry, `cargo-orthohelp-design.md`
-  clarification, `contents.md` registration.
+- [x] (2026-06-24 14:55Z) Milestone 4 — documentation: ADR-007, normative
+  promotion of `agent-native-cli-design.md` §3.2, users' guide subsection,
+  developers' guide note, design-doc decision-log entry,
+  `cargo-orthohelp-design.md` clarification, `contents.md` registration.
 - [ ] Milestone 5 — mark roadmap 6.2.3 done; final full-gate run; CodeRabbit
   review cleared.
 
@@ -247,6 +247,14 @@ Use timestamps (for example `(2026-06-14 13:00Z)`) when ticking items.
   `examples/hello_world/tests/agent_context_bdd.rs` target wired directly to
   `tests/features/agent_context.feature`; this keeps the BDD coverage active
   without widening the task into a harness repair.
+- Observation: the project-wide `make fmt` target can rewrite many historical
+  Markdown files before failing on unrelated line-length issues. Evidence: the
+  first Milestone 3 documentation update run failed on
+  `docs/execplans/6-1-2-nested-command-tree-behavioural-fixtures.md` and left
+  broad unrelated Markdown edits. Impact: unrelated formatter edits were
+  restored, and Markdown validation for this work relies on `make markdownlint`
+  plus targeted review of touched files unless the full formatter can complete
+  cleanly.
 
 ## Decision log
 
@@ -336,6 +344,15 @@ validated by BDD, process-level e2e tests, an insta snapshot, and localised
 help snapshot updates. Standard workspace gates passed after adding localised
 context command copy and accepting the intended help snapshot drift. CodeRabbit
 reviewed commit `15b4d39` with zero findings.
+
+Milestone 4 outcome (2026-06-24): ADR-007 records the downstream
+`context --json` naming decision, the accepted Y-Statement, the rejected
+alternatives, the `schema_version` compatibility rule, and prior-art
+references. The agent-native design now treats `context --json` as the
+normative downstream application command while preserving
+`cargo-orthohelp --format agent-context` as the generator format. The users'
+guide, developers' guide, design decision log, cargo-orthohelp design, and
+contents index now all reference the convention.
 
 ## Context and orientation
 
@@ -715,6 +732,30 @@ downside); all cross-links resolve; `contents.md` lists ADR-007. A manual read
 confirms the `kind`-is-not-a-version warning appears in both ADR-007 and the
 users' guide, and that en-GB Oxford spelling holds in prose while code/JSON
 identifiers are untouched.
+
+Acceptance evidence (2026-06-24):
+
+- ADR shape:
+  `docs/adr-007-downstream-context-command-naming.md` contains a non-empty
+  Y-Statement, three considered options, a captioned comparison table, known
+  risks, consequences, and external prior-art references.
+- Cross-links:
+  `docs/contents.md` registers ADR-007; `docs/design.md`,
+  `docs/agent-native-cli-design.md`, `docs/users-guide.md`,
+  `docs/developers-guide.md`, and `docs/cargo-orthohelp-design.md` link or
+  refer to the accepted convention.
+- Compatibility wording:
+  ADR-007 and the users' guide state that consumers compare `schema_version`
+  rather than parsing `kind`.
+- Formatting caveat:
+  `make fmt` was attempted and failed on unrelated line-length findings in
+  `docs/execplans/6-1-2-nested-command-tree-behavioural-fixtures.md`.
+  Unrelated formatter edits were restored; touched files were formatted with
+  `mdtablefix` and `markdownlint-cli2 --fix`.
+- Markdown gate:
+  `make markdownlint` passed with zero errors.
+- Standard gates:
+  `make check-fmt`, `make typecheck`, `make lint`, and `make test` all passed.
 
 ### Whole-task quality gates
 

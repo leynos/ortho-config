@@ -636,9 +636,77 @@ represents those inputs by leaving `AgentInput.long` absent. The output is
 written as exactly one file at `<out>/agent-context.json`. `--format all`
 continues to mean `ir + man + ps`.
 
+`--format agent-context` is the generator format and remains unchanged by
+[ADR-007](adr-007-downstream-context-command-naming.md). The downstream
+application command convention is `<tool> context --json`; it does not add a
+public `context` or `agent-context` subcommand to `cargo-orthohelp`.
+
 The agent-context output must not be scraped from rendered man pages or
 PowerShell help. Rendering surfaces may consume agent metadata for examples or
 warnings, but they are not the source of truth for agents.
+
+
+## 6.4 Localized IR JSON output
+
+`cargo-orthohelp` emits a localized IR JSON file per locale into
+`<out>/ir/<locale>.json`. The schema mirrors `DocMetadata` but resolves every
+Fluent identifier into a concrete string. The output includes the locale for
+traceability and preserves non-localized fields such as value types or Windows
+metadata.
+
+When a Fluent ID cannot be resolved, the output uses `[missing: <id>]` as a
+sentinel so generators can surface gaps during development.
+
+
+### 6.4.1 Localized IR schema
+
+```json
+{
+  "ir_version": "1.1",
+  "locale": "en-US",
+  "app_name": "my-app",
+  "bin_name": "my-app",
+  "about": "My App CLI",
+  "synopsis": "Run the app",
+  "sections": {
+    "headings": {
+      "name": "NAME",
+      "synopsis": "SYNOPSIS",
+      "description": "DESCRIPTION",
+      "options": "OPTIONS",
+      "environment": "ENVIRONMENT",
+      "files": "FILES",
+      "precedence": "PRECEDENCE",
+      "exit_status": "EXIT STATUS",
+      "examples": "EXAMPLES",
+      "see_also": "SEE ALSO"
+    }
+  },
+  "fields": [
+    {
+      "name": "port",
+      "help": "Port to bind",
+      "long_help": null
+    }
+  ],
+  "subcommands": [
+    {
+      "app_name": "run",
+      "about": "Run the app",
+      "fields": []
+    }
+  ]
+}
+```
+
+Fields that remain identifiers in the base IR are renamed to text in the
+localized IR:
+
+- `about_id` -> `about`
+- `synopsis_id` -> `synopsis`
+- `headings_ids` -> `headings`
+- `help_id`/`long_help_id` -> `help`/`long_help`
+- `note_id`/`title_id`/`text_id` -> `note`/`title`/`text`
 
 ## 6.4 Localized IR JSON output
 
