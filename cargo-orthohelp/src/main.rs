@@ -151,7 +151,7 @@ fn generate_agent_context_if_requested(
     doc_metadata: &DocMetadata,
     out_dir: &Utf8PathBuf,
 ) -> Result<(), OrthohelpError> {
-    if !matches!(args.format, OutputFormat::AgentContext) {
+    if !matches!(args.format, OutputFormat::AgentContext | OutputFormat::All) {
         tracing::debug!(
             package = %selection.package_name,
             format = ?args.format,

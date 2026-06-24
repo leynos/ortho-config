@@ -252,7 +252,9 @@ These decide the exact v1 wire shape that this plan ossifies.
       `SimpleFixtureConfig`, reused `FixtureConfig` and `NestedFixtureConfig`, a
       parametrized golden, a nested BDD scenario, deterministic gates, and
       CodeRabbit review passed.
-- [ ] Milestone 4: include agent-context in `--format all` (if D3 approved).
+- [x] 2026-06-24: Milestone 4 complete — `--format all` now includes
+      `agent-context.json` in addition to IR, man pages, and PowerShell
+      artefacts; deterministic gates and CodeRabbit review passed.
 - [ ] Milestone 5: documentation — §8.2 policy, §8.1 reconciliation, ADR-003
       cross-reference, users-guide and developers-guide updates, roadmap tick.
 
@@ -439,6 +441,33 @@ cleared before the next milestone. Commit after each green milestone.
   Evidence: `coderabbit review --agent` completed with `findings: 0`, logged at
   `/tmp/coderabbit-m3-ortho-config-6-2-2-version-and-validate-the-agent-context-schema.out`.
   Impact: Milestone 4 may begin after committing the Milestone 3 changes.
+- Observation: Milestone 4 makes `--format all` write `agent-context.json`
+  without changing the existing IR, man-page, or PowerShell assertions.
+  Evidence: after adding the BDD expectation, the focused red run
+  `/tmp/test-red-m4-format-all-agent-context-ortho-config-6-2-2-version-and-validate-the-agent-context-schema.out`
+  failed because `agent-context.json` was missing. After changing
+  `generate_agent_context_if_requested` to accept `OutputFormat::All`, the
+  focused green run
+  `/tmp/test-green-m4-format-all-agent-context-ortho-config-6-2-2-version-and-validate-the-agent-context-schema.out`
+  passed the same `orthohelp_roff_generate_all_formats` scenario.
+  Impact: D3 is implemented as an additive `all` output: the existing scenario
+  still checks localized IR, man page, and PowerShell module outputs, and now
+  also checks the agent-context file.
+- Observation: Milestone 4 deterministic gates passed.
+  Evidence: `make check-fmt`, `make typecheck`, `make lint`, `make test`, and
+  `make markdownlint` passed with logs in
+  `/tmp/check-fmt-m4-ortho-config-6-2-2-version-and-validate-the-agent-context-schema.out`,
+  `/tmp/typecheck-m4-ortho-config-6-2-2-version-and-validate-the-agent-context-schema.out`,
+  `/tmp/lint-m4-ortho-config-6-2-2-version-and-validate-the-agent-context-schema.out`,
+  `/tmp/test-m4-ortho-config-6-2-2-version-and-validate-the-agent-context-schema.out`,
+  and `/tmp/markdownlint-m4-ortho-config-6-2-2-version-and-validate-the-agent-context-schema.out`.
+  Impact: CodeRabbit review can be requested for Milestone 4 with deterministic
+  issues already cleared.
+- Observation: Milestone 4 CodeRabbit review passed with no concerns.
+  Evidence: `coderabbit review --agent` completed with `findings: 0`, logged at
+  `/tmp/coderabbit-m4-ortho-config-6-2-2-version-and-validate-the-agent-context-schema.out`.
+  Impact: Milestone 5 documentation work may begin after committing the
+  Milestone 4 changes.
 
 ## Decision log
 
