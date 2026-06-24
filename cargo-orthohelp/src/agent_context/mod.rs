@@ -177,7 +177,7 @@ fn build_input(field: &FieldMetadata) -> Option<AgentInput> {
         default: field
             .default
             .as_ref()
-            .map(|default| default.display.clone()),
+            .map(|default| normalize_default_display(&default.display)),
         enum_values: enum_values(field),
     })
 }
@@ -235,6 +235,32 @@ fn enum_values(field: &FieldMetadata) -> Vec<String> {
             .map(|cli| cli.possible_values.clone())
             .unwrap_or_default(),
     }
+}
+
+fn normalize_default_display(display: &str) -> String {
+    let mut normalised = String::with_capacity(display.len());
+    let mut chars = display.chars().peekable();
+
+    while let Some(character) = chars.next() {
+        if character == ':' && chars.peek() == Some(&':') {
+            while normalised
+                .chars()
+                .next_back()
+                .is_some_and(char::is_whitespace)
+            {
+                normalised.pop();
+            }
+            normalised.push_str("::");
+            chars.next();
+            while chars.peek().is_some_and(|next| next.is_whitespace()) {
+                chars.next();
+            }
+        } else {
+            normalised.push(character);
+        }
+    }
+
+    normalised
 }
 
 #[cfg(test)]

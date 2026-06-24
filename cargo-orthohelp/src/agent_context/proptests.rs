@@ -39,6 +39,19 @@ proptest! {
     }
 
     #[test]
+    fn transformed_trees_serialize_deterministically(tree in metadata_tree_with_fields()) {
+        let first = bridge_ir_to_agent_context(&tree, "demo_pkg", None);
+        let second = bridge_ir_to_agent_context(&tree, "demo_pkg", None);
+
+        let first_json = serde_json::to_string_pretty(&first)
+            .expect("first transform should serialize");
+        let second_json = serde_json::to_string_pretty(&second)
+            .expect("second transform should serialize");
+
+        prop_assert_eq!(first_json, second_json);
+    }
+
+    #[test]
     fn hidden_fields_are_omitted_from_inputs(hidden_name in field_name("hidden")) {
         let mut tree = doc("root", Some("demo"), Vec::new());
         tree.fields = vec![field(&hidden_name, true)];
