@@ -37,8 +37,8 @@ After this change a maintainer can observe success directly:
    `docs/developers-guide.md` tells a contributor how to evolve the schema.
 
 This plan is the moment the v1 wire contract ossifies. Several small but
-load-bearing decisions about the *exact* v1 shape are therefore surfaced under
-`Open decisions requiring approval` and must be resolved before implementation.
+load-bearing decisions about the *exact* v1 shape are therefore recorded under
+`Approved decisions`.
 
 ## Plain-language glossary
 
@@ -114,7 +114,7 @@ Stop and escalate (record in `Decision Log`) when any of these is reached:
 2. **Public API signature change.** If locking the schema requires changing the
    public signature of `bridge_ir_to_agent_context`, `write_agent_context`, or
    any public `ortho_config::agent_context` type *beyond* serde attribute
-   adjustments approved under `Open decisions`, stop and escalate.
+   adjustments approved under `Approved decisions`, stop and escalate.
 3. **Generator logic rewrite.** If the nested fixture reveals a bug in 6.1.1's
    recursive metadata or in `bridge_ir_to_agent_context` whose fix exceeds ~80
    net changed lines or touches `ortho_config_macros` derive logic beyond the
@@ -124,37 +124,35 @@ Stop and escalate (record in `Decision Log`) when any of these is reached:
    stop and escalate.
 5. **Iterations.** If a milestone's gates still fail after 3 focused attempts,
    stop and escalate.
-6. **Ambiguity.** If an `Open decision` is resolved during approval in a way
-   that materially enlarges scope (for example "redesign all Option fields"),
+6. **Ambiguity.** If an approved decision is later changed in a way that
+   materially enlarges scope (for example "redesign all Option fields"),
    re-cost the affected milestone and escalate if a tolerance would break.
 
-## Open decisions requiring approval
+## Approved decisions
 
-These decide the exact v1 wire shape that this plan ossifies. Each has a
-recommended default; approval of this plan constitutes approval of the
-recommendation unless the reviewer states otherwise.
+These decide the exact v1 wire shape that this plan ossifies.
 
 1. **`summary` omission asymmetry (D1).** `AgentCommand.summary` uses
    `#[serde(skip_serializing_if = "Option::is_none")]`, so it is *omitted* when
    absent, whereas every other optional field (for example `canonical_verb`,
    `pagination`, `AgentInput.default`) serializes as explicit `null`.
-   - Recommendation: **lock the current shape**; keep `summary` omitted-when-
-     absent (it suits a "compact" payload), keep the others as explicit `null`,
-     and *document the asymmetry as intentional* in §8.2. The compatibility
-     policy names "toggling `skip_serializing_if`" as a breaking change so the
+   - Decision: **lock the current shape**; keep `summary` omitted-when-absent
+     (it suits a "compact" payload), keep the others as explicit `null`, and
+     *document the asymmetry as intentional* in §8.2. The compatibility policy
+     names "toggling `skip_serializing_if`" as a breaking change so the
      asymmetry cannot drift silently.
-   - Alternative (rejected unless requested): normalize all optional fields to
-     one convention. This is a wire change to the 6.2.1 shape and is scope creep
-     for a "version and validate" item.
+   - Rejected alternative: normalize all optional fields to one convention. This
+     is a wire change to the 6.2.1 shape and is scope creep for a "version and
+     validate" item.
 2. **Default-display rendering brittleness (D2).** Field defaults are rendered
    by the derive macro as `proc_macro2` token strings, for example
    `"String :: from(\"localhost\")"` and `"LogLevel :: Info"` (see the existing
    golden). The spacing around `::` is a formatting artifact of the toolchain,
    not a stable contract, so a `quote`/`proc_macro2`/rustc upgrade could flip
    every default-bearing golden to red.
-   - Recommendation: **(a) add a whitespace-normalization step** for the
-     rendered default display in the generator path so token re-spacing does not
-     churn goldens, **and (b) document** in §8.2 and the developers-guide that
+   - Decision: **(a) add a whitespace-normalization step** for the rendered
+     default display in the generator path so token re-spacing does not churn
+     goldens, **and (b) document** in §8.2 and the developers-guide that
      `AgentInput.default` is a best-effort human-readable display, not a
      normative or machine-parseable wire value. This keeps the deliverable
      goldens stable without redesigning how defaults are captured.
@@ -164,13 +162,13 @@ recommendation unless the reviewer states otherwise.
    is currently "Excluded from `--format all` until schema versioning is locked
    in 6.2.2" (`docs/developers-guide.md:177`; `cargo-orthohelp/src/main.rs:154`
    special-cases it). 6.2.2 locks the versioning.
-   - Recommendation: **include agent-context in `--format all`**, fulfilling the
+   - Decision: **include agent-context in `--format all`**, fulfilling the
      promise. This is additive to `all` (it writes an extra `agent-context.json`
      and does not alter existing outputs), is the one externally visible
      behaviour change in this item, and is governed by Constraint 4. Update the
      three docs and the `--format all` coverage accordingly (Milestone 4).
-   - Alternative: keep it excluded and only correct the stale doc-comment. This
-     leaves a dangling, now-unmotivated deferral; not recommended.
+   - Rejected alternative: keep it excluded and only correct the stale
+     doc-comment. This leaves a dangling, now-unmotivated deferral.
 4. **Enum casing inconsistency (D4).** `AsyncSubmissionMode` uses
    `#[serde(rename_all = "kebab-case")]` while `InteractionMode` and
    `PolicyMode` use `snake_case`, and `MutationEffect` uses per-variant
@@ -178,24 +176,23 @@ recommendation unless the reviewer states otherwise.
    (`inline`, `submit`) are single words, so kebab vs snake is invisible *now*,
    but it is a latent inconsistency a future cleanup could "fix", silently
    breaking the wire contract.
-   - Recommendation: **lock and document the current per-type casing as
-     intentional** in §8.2, and pin each enum's wire strings with
-     variant-exhaustive tests (Milestone 1) so the casing cannot drift. Do *not*
-     re-case `AsyncSubmissionMode` now — that would itself be a v1 wire change.
-   - Alternative (only if reviewer prefers a clean v1): standardize all enums to
-     `snake_case` before locking. This is a deliberate pre-1.0 wire change; if
-     chosen, it is folded into Milestone 1 and the 6.2.1 wire snapshot/golden are
-     re-baselined once.
+   - Decision: **standardize all enums to `snake_case` before locking.** This is
+     a deliberate pre-1.0 wire change, folded into Milestone 1. The 6.2.1 wire
+     snapshot and golden fixtures are re-baselined once, and variant-exhaustive
+     tests pin every enum wire string after the change.
+   - Rejected alternative: lock and document the current per-type casing as
+     intentional. The clean pre-1.0 contract is preferred before downstream
+     consumers depend on the schema.
 5. **§8.1 defaulting-table reconciliation (D5).** The §8.1 "Defaulting for
    legacy derives" table lists fields that are *not* present on the shipped v1
    types (for example `supports_json`, `exit_classes`, `renderer.human`,
    `profile_support`, `capability_id`). The table is forward-looking across the
    whole agent-native phase, but §8.2's "readers apply §8.1 defaults" clause
    would otherwise reference fields that do not exist yet.
-   - Recommendation: **annotate §8.1** to mark which rows are *realized in
-     schema v1* versus *planned for a later schema version*, and scope §8.2's
-     defaulting clause to the realized fields. No field is removed from the
-     forward-looking table; it is only labelled.
+   - Decision: **annotate §8.1** to mark which rows are *realized in schema v1*
+     versus *planned for a later schema version*, and scope §8.2's defaulting
+     clause to the realized fields. No field is removed from the forward-looking
+     table; it is only labelled.
 
 ## Risks
 
@@ -244,7 +241,7 @@ recommendation unless the reviewer states otherwise.
 
 ## Progress
 
-- [ ] Stage A: approval of this plan and the `Open decisions` (no code).
+- [x] Stage A: approval of this plan and the `Approved decisions` (no code).
 - [ ] Milestone 1: schema shape and version guards in `ortho_config`.
 - [ ] Milestone 2: generator determinism property + default-display policy in
       `cargo-orthohelp`, plus in-process nested structural assertions.
@@ -337,6 +334,15 @@ cleared before the next milestone. Commit after each green milestone.
   compatibility-type framing maps this to forward compatibility. The types today
   correctly omit `deny_unknown_fields`.
   Date/Author: 2026-06-14, planning.
+- Decision: Accept D1, D2, D3, and D5 as recommended, and choose D4's clean
+  pre-1.0 enum casing change: all agent-context enums are standardized to
+  `snake_case` before the v1 contract is locked.
+  Rationale: D1, D2, D3, and D5 preserve the intended compact payload,
+  stabilize default displays, fulfil the documented `--format all` deferral, and
+  clarify realized versus future defaulting fields. For D4, a deliberate
+  pre-1.0 re-baseline is less risky than freezing mixed enum casing and asking
+  future maintainers to remember that the inconsistency is contractual.
+  Date/Author: 2026-06-24, reviewer direction.
 
 ## Context and orientation
 
@@ -416,10 +422,10 @@ Documentation homes: `docs/agent-native-cli-design.md` (§3.2 schema purpose,
 
 ### Stage A — approval (no code changes)
 
-Present this plan and the `Open decisions`. Do not begin implementation until
-the user explicitly approves. Silence is not approval. If the reviewer changes
-an `Open decision`, update the `Decision Log` and re-cost the affected
-milestone before proceeding.
+Present this plan and the `Approved decisions`. Do not begin implementation
+until the user explicitly approves execution. Silence is not approval. If a
+reviewer later changes an approved decision, update the `Decision Log` and
+re-cost the affected milestone before proceeding.
 
 ### Milestone 1 — schema shape and version guards (`ortho_config`)
 
@@ -455,10 +461,11 @@ Red → Green → Refactor for each addition:
    successfully (locks the "consumers ignore unknown fields" guarantee and
    prevents a future accidental `deny_unknown_fields`). Keep the existing
    missing-required-field rejection tests.
-5. **If D1/D4 approved as "lock current shape"** (recommended): no serde
-   attribute changes; the asymmetry and casing are pinned by tests 1-2. **If a
-   reviewer chose normalization**, apply the serde changes here and re-baseline
-   the snapshot once, intentionally.
+5. **Apply D4 before locking.** Standardize every agent-context enum to
+   `snake_case`, then re-baseline the 6.2.1 wire snapshot and golden fixtures
+   once, intentionally. D1 remains locked as the current `summary`
+   omitted-when-absent asymmetry. Variant-exhaustive tests pin every enum's wire
+   strings after the re-baseline.
 6. **Feature gating.** Confirm the new tests are reachable under the same
    features as the existing `agent_context::tests` and run under default
    features.
@@ -594,8 +601,9 @@ still pass (except the intended additive change).
      test so overlap compatibility can be demonstrated.
    - `AgentInput.default` is best-effort human-readable display, not a
      normative or machine-parseable value (D2).
-   - The current `summary` omission asymmetry (D1) and per-enum casing (D4) are
-     intentional and locked by tests.
+   - The current `summary` omission asymmetry (D1) is intentional and locked by
+     tests. All enum wire strings use the standardized `snake_case` policy from
+     D4 and are locked by variant-exhaustive tests.
    - schemars/JSON-Schema emission is a deferred enhancement; if added it lives
      as a dev-dependency or behind a non-default feature.
 2. **Reconcile §8.1 (D5).** Annotate each row as *realized in schema v1* or
@@ -627,10 +635,10 @@ Validation: `make markdownlint` and `make nixie` pass; cross-references resolve.
 ## Concrete steps
 
 Run from the worktree root
-`/home/leynos/.lody/repos/github---leynos---ortho-config/worktrees/c9aef42a-eb57-43e7-a174-6501e7d82cfd`.
+`/home/leynos/.lody/repos/github---leynos---ortho-config/worktrees/b88005e0-6d82-4ef3-bd6c-998039c3c514`.
 
 Gating sequence after each milestone (sequential, never parallel; tee to a log
-per `CLAUDE.md`):
+per `AGENTS.md`):
 
 ```bash
 # bash
@@ -818,7 +826,7 @@ Documentation to consult: `docs/agent-native-cli-design.md` (§3.2, §8, §8.1),
 To be completed at milestone boundaries and on completion: compare the result
 against `Purpose / big picture`, record what running the agent-context transform
 over 6.1.2's `NestedFixtureConfig` surfaced about the `walk`/`command_path`
-recursion (Risk 1), note any `Open decision` the reviewer changed and its
+recursion (Risk 1), note any approved decision that later changed and its
 impact, and capture lessons for 6.2.3 (downstream `context --json` naming) and
 6.3 (skill manifests), which build on this locked schema.
 
@@ -846,4 +854,6 @@ impact, and capture lessons for 6.2.3 (downstream `context --json` naming) and
     instead of three crates). Risk 1 is narrowed but not eliminated — 6.2.2 is
     still the first to exercise the agent-context transform over a nested tree,
     so the in-process structural Red gate (Milestone 2) remains mandatory. The
-    `Open decisions` (D1–D5) are unaffected and still await approval.
+    `Approved decisions` (D1-D5) were later resolved on 2026-06-24: D1, D2, D3,
+    and D5 were accepted as recommended, while D4 now standardizes all enum wire
+    strings to `snake_case` before locking.
