@@ -242,8 +242,8 @@ These decide the exact v1 wire shape that this plan ossifies.
 ## Progress
 
 - [x] Stage A: approval of this plan and the `Approved decisions` (no code).
-- [ ] 2026-06-24: Milestone 1 in progress — schema shape and version guards in
-      `ortho_config`.
+- [x] 2026-06-24: Milestone 1 complete — schema shape and version guards in
+      `ortho_config`; deterministic gates and CodeRabbit review passed.
 - [ ] Milestone 2: generator determinism property + default-display policy in
       `cargo-orthohelp`, plus in-process nested structural assertions.
 - [ ] Milestone 3: three golden roots (simple / enum / nested) in the existing
@@ -304,6 +304,44 @@ cleared before the next milestone. Commit after each green milestone.
   `b88005e0-6d82-4ef3-bd6c-998039c3c514` was renamed to the same title.
   Impact: the plan has moved from approval to execution; subsequent entries
   record implementation progress and validation evidence.
+- Observation: Milestone 1 extended the existing schema guard module rather
+  than adding parallel tests.
+  Evidence: `ortho_config/src/agent_context/tests.rs` now widens the inline
+  wire snapshot, pins `AGENT_CONTEXT_KIND_SUFFIX`, proves unknown top-level
+  fields deserialize, checks absent optional fields serialize as documented
+  `null`s except for omitted `summary`, and adds variant-exhaustive tests for
+  `AsyncSubmissionMode`, `InteractionMode`, `PolicyMode`, and
+  `MutationEffect`.
+  Impact: the guard suite now directly covers the approved D1 and D4 wire-shape
+  decisions.
+- Observation: D4's only visible current wire change is
+  `MutationEffect::ReadOnly`, which now serializes as `read_only`.
+  Evidence: the first focused red run,
+  `/tmp/test-red-m1-ortho-config-6-2-2-version-and-validate-the-agent-context-schema.out`,
+  failed on `read-only` versus `read_only`; after changing
+  `MutationEffect` to `#[serde(rename_all = "snake_case")]`, the focused green
+  run passed 27 `agent_context` tests.
+  Impact: the 6.2.1 schema snapshot and downstream goldens must be re-baselined
+  once during later milestones, as approved in D4.
+- Observation: The explicit red proofs for field and version drift passed.
+  Evidence:
+  `/tmp/test-red-field-m1-ortho-config-6-2-2-version-and-validate-the-agent-context-schema.out`
+  shows the snapshot failing when `canonical_verb` temporarily serialized as
+  `verb`; `/tmp/test-red-version-m1-ortho-config-6-2-2-version-and-validate-the-agent-context-schema.out`
+  shows the version pin failing when `ORTHO_AGENT_CONTEXT_SCHEMA_VERSION` was
+  temporarily changed to `"2"`. Both temporary mutations were reverted before
+  the final focused green run.
+  Impact: the Milestone 1 Red-Green-Refactor evidence required by this plan is
+  captured in `/tmp` logs.
+- Observation: Milestone 1 passed all deterministic gates and CodeRabbit review.
+  Evidence: `make check-fmt`, `make typecheck`, `make lint`, and `make test`
+  passed with logs in `/tmp/check-fmt-ortho-config-6-2-2-version-and-validate-the-agent-context-schema.out`,
+  `/tmp/typecheck-ortho-config-6-2-2-version-and-validate-the-agent-context-schema.out`,
+  `/tmp/lint-ortho-config-6-2-2-version-and-validate-the-agent-context-schema.out`,
+  and `/tmp/test-ortho-config-6-2-2-version-and-validate-the-agent-context-schema.out`.
+  `coderabbit review --agent` initially hit a rate limit, the required `vsleep`
+  backoff ran for 63 minutes, and the retry completed with `findings: 0`.
+  Impact: Milestone 2 may begin after the Milestone 1 commit.
 
 ## Decision log
 
