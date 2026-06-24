@@ -4,7 +4,7 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
 and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
-Status: DRAFT
+Status: IN PROGRESS
 
 ## Purpose / big picture
 
@@ -135,10 +135,22 @@ escalation, not a workaround.
 
 ## Progress
 
-- [ ] (pending approval) Milestone 0 — approval gate.
-- [ ] Milestone 1 — convention API in `ortho_config::agent_context` (constants,
-  `agent_context_kind`, `serde_json`-gated `to_json` / `to_json_pretty`),
-  re-exports, unit + property tests. Red-Green-Refactor.
+- [x] (2026-06-24 12:29Z) Milestone 0 — approval gate satisfied by the user's
+  explicit implementation request on PR #352.
+- [x] (2026-06-24 12:29Z) Repository administration aligned before code work:
+  local branch tracks
+  `origin/6-2-3-define-downstream-context-json-command-naming`; PR title is
+  `Downstream context --json command naming (6.2.3)`; Lody session title
+  matches the PR title; PR description references
+  `https://lody.ai/leynos/sessions/3d5cd4de-ad94-49af-8867-b403bd1bbf77`.
+- [x] (2026-06-24 12:45Z) Milestone 1 — convention API in
+  `ortho_config::agent_context` implemented: constants,
+  `agent_context_kind`, `serde_json`-gated `to_json` / `to_json_pretty`,
+  crate-root re-exports, rstest coverage, and one proptest round-trip property.
+  Red-Green-Refactor evidence is recorded under Validation.
+- [ ] (2026-06-24 12:45Z) Milestone 1 CodeRabbit review remains pending after
+  commit. Standard gates passed; the extra `--no-default-features` check fails
+  on pre-existing discovery/file feature imports and is recorded below.
 - [ ] Milestone 2 — guard test in `cargo-orthohelp` proving no public
   `context` / `agent-context` alias, plus positive control for
   `--format agent-context`.
@@ -180,12 +192,27 @@ Use timestamps (for example `(2026-06-14 13:00Z)`) when ticking items.
   `load_globals_and_merge_selected_subcommand`. Evidence:
   `examples/hello_world/src/main.rs:24-39`. Impact: `context` should
   short-circuit before that merge (Decision D3).
-- Observation: `assert_cmd` is already a `hello_world` dev-dependency;
-  `proptest`
-  is present for `cargo-orthohelp` but not `ortho_config`. Evidence:
-  `examples/hello_world/Cargo.toml` dev-dependencies; absence of `proptest` in
-  `ortho_config/Cargo.toml`. Impact: no e2e escalation needed; the only
-  candidate new dev-dependency is `proptest` on `ortho_config` (Decision D5).
+- Observation: `assert_cmd` is already a `hello_world` dev-dependency, and
+  `proptest` is already an `ortho_config` dev-dependency. Evidence:
+  `examples/hello_world/Cargo.toml` and `ortho_config/Cargo.toml`
+  dev-dependencies. Impact: Milestone 1 used the property-test path without
+  adding or changing dependencies; Decision D5's fallback is unnecessary.
+- Observation: the active worktree path differs from the original planning
+  worktree path. Evidence: current working directory is
+  `/home/leynos/.lody/repos/github---leynos---ortho-config/worktrees/3d5cd4de-ad94-49af-8867-b403bd1bbf77`;
+  the initial plan named
+  `/home/leynos/.lody/repos/github---leynos---ortho-config/worktrees/da2a7f44-0569-4a05-87f2-08429d969afb`.
+  Impact: the concrete command section now names the active worktree so future
+  agents can resume without following stale paths.
+- Observation: `cargo check -p ortho_config --no-default-features` does not
+  compile before any Milestone 1-specific code path is involved. Evidence:
+  `/tmp/check-no-default-ortho-config-6-2-3-define-downstream-context-json-command-naming.out`
+  reports unresolved imports for `MergeLayer`, `figment::providers::Toml`,
+  `serde_json`, and `toml` from `ortho_config/src/discovery/*` and
+  `ortho_config/src/file/*`. Impact: the new render helpers are correctly
+  feature-gated, but the plan's no-default acceptance check is currently
+  blocked by an existing broader feature-boundary issue outside the
+  agent-context API change.
 
 ## Decision log
 
@@ -236,11 +263,23 @@ Use timestamps (for example `(2026-06-14 13:00Z)`) when ticking items.
   display form is `format!("--{flag}")` when needed. Date/Author: 2026-06-14,
   API-design agent.
 
+- Decision D7: Do not widen Milestone 1 to repair the existing
+  `--no-default-features` discovery/file feature-boundary failure. Rationale:
+  the failure is outside the new `agent_context` API surface, standard
+  workspace gates pass, and repairing no-default mode would require a separate
+  feature-boundary design decision across file loading, discovery, TOML, and
+  declarative merge APIs. Date/Author: 2026-06-24, implementation agent.
+
 ## Outcomes & retrospective
 
-To be completed at milestone boundaries and at completion. Compare the result
-against the Purpose section: example emits the payload; crate API is documented
-and tested; docs are normative with rationale; guard test holds.
+Milestone 1 outcome (2026-06-24): the crate API portion is implemented and
+validated. `ortho_config::agent_context` now exposes the downstream command
+name, JSON flag name, and canonical `kind` constructor; `AgentContext::new`
+uses the constructor; and compact/pretty JSON render helpers are available
+behind `serde_json`. The focused red test failed for the expected missing API,
+the green run passed 33 `agent_context` tests, and the standard workspace gates
+passed. The only gap is the pre-existing `--no-default-features` compile
+failure recorded in Surprises & discoveries and Decision D7.
 
 ## Context and orientation
 
@@ -455,7 +494,7 @@ ADR-007 reference to its `See` line. Run the full gate. Clear CodeRabbit.
 ## Concrete steps
 
 Run all commands from the repository root
-(`/home/leynos/.lody/repos/github---leynos---ortho-config/worktrees/da2a7f44-0569-4a05-87f2-08429d969afb`).
+(`/home/leynos/.lody/repos/github---leynos---ortho-config/worktrees/3d5cd4de-ad94-49af-8867-b403bd1bbf77`).
 Per the global agent instructions, pipe long gate output through `tee` to a
 log, for example
 `make test 2>&1 | tee /tmp/test-ortho-config-$(git branch --show-current).out`.
@@ -497,8 +536,8 @@ Red-Green-Refactor in `ortho_config/src/agent_context/tests.rs`:
   the dotted-name behaviour), `("Foo-Bar_9", "Foo-Bar_9.agent_context")`.
 - `new_uses_agent_context_kind`:
   `AgentContext::new(pkg).kind == agent_context_kind(pkg)` for a couple of
-  packages; the pre-existing
-  `new_context_uses_legacy_defaults` stays as the regression anchor.
+  packages; the pre-existing `new_context_uses_legacy_defaults` stays as the
+  regression anchor.
 - Render helper: `to_json_is_valid_parseable_json` (parses as a JSON object);
   `to_json_round_trips_via_serde` (`from_str::<AgentContext>` equals the
   original); `to_json_is_deterministic` (byte-for-byte equal across two calls);
@@ -511,9 +550,25 @@ Red-Green-Refactor in `ortho_config/src/agent_context/tests.rs`:
   `AgentContext` (arbitrary package and a small `Vec<AgentCommand>` spanning
   the enum variants), `from_str(to_json(&ctx)?)? == ctx`.
 
-Acceptance: `cargo test -p ortho_config agent_context` passes; the new tests
-fail before the implementation and pass after;
-`cargo check -p ortho_config --no-default-features` compiles.
+Acceptance evidence (2026-06-24):
+
+- Red:
+  `cargo test -p ortho_config agent_context` failed with missing
+  `AGENT_CONTEXT_COMMAND`, `AGENT_CONTEXT_JSON_FLAG`, `agent_context_kind`,
+  `to_json`, and `to_json_pretty`.
+- Green:
+  `cargo test -p ortho_config agent_context` passed with 33 `agent_context`
+  tests.
+- Feature check:
+  `cargo test -p ortho_config --features serde_json agent_context` passed with
+  33 `agent_context` tests.
+- Standard gates:
+  `make check-fmt`, `make typecheck`, `make lint`, and `make test` all passed.
+- Caveat:
+  `cargo check -p ortho_config --no-default-features` failed on pre-existing
+  discovery/file feature imports unrelated to the new render helpers. See
+  Decision D7 before treating this milestone as a complete no-default feature
+  cleanup.
 
 ### Milestone 2 — guard test
 
@@ -665,3 +720,12 @@ dev-dependency.
   bare-`context` human default per D2; illustrative example context per the
   drift risk; `serde_json` feature gate). Awaiting approval before
   implementation.
+- Implementation start update (2026-06-24): marked the plan `IN PROGRESS` after
+  explicit approval, recorded branch/PR/Lody-session metadata, and corrected
+  the concrete working-directory path. This does not change the planned
+  implementation; it only makes the plan resumable from the active worktree.
+- Milestone 1 update (2026-06-24): recorded the implemented crate API, red and
+  green test evidence, standard gate results, the already-present
+  `ortho_config` `proptest` dev-dependency, and the pre-existing
+  `--no-default-features` failure in discovery/file loading. Remaining work is
+  unchanged except that no new dependency is needed for the property test.
