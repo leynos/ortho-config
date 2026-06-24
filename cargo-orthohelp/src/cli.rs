@@ -21,7 +21,7 @@ pub enum OutputFormat {
     Man,
     /// Emit `PowerShell` help output.
     Ps,
-    /// Emit all outputs (IR, man pages, and `PowerShell` help).
+    /// Emit all outputs (IR, man pages, `PowerShell` help, and agent-context).
     All,
     /// Emit compact agent-context JSON output.
     AgentContext,
