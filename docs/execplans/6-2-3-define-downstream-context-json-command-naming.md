@@ -170,6 +170,9 @@ escalation, not a workaround.
   promotion of `agent-native-cli-design.md` §3.2, users' guide subsection,
   developers' guide note, design-doc decision-log entry,
   `cargo-orthohelp-design.md` clarification, `contents.md` registration.
+- [x] (2026-06-24 16:01Z) Milestone 4 CodeRabbit review completed with zero
+  findings after commit `393b54c`. The first attempt hit CodeRabbit rate
+  limiting; after a 58-minute `vsleep`, the retry completed cleanly.
 - [ ] Milestone 5 — mark roadmap 6.2.3 done; final full-gate run; CodeRabbit
   review cleared.
 
@@ -352,7 +355,8 @@ references. The agent-native design now treats `context --json` as the
 normative downstream application command while preserving
 `cargo-orthohelp --format agent-context` as the generator format. The users'
 guide, developers' guide, design decision log, cargo-orthohelp design, and
-contents index now all reference the convention.
+contents index now all reference the convention. CodeRabbit reviewed commit
+`393b54c` with zero findings after the required rate-limit wait and retry.
 
 ## Context and orientation
 
@@ -878,3 +882,9 @@ dev-dependency.
   workspace gates.
 - Milestone 3 review update (2026-06-24): recorded CodeRabbit's zero-finding
   review of commit `15b4d39`. Milestone 4 may proceed after this checkpoint.
+- Milestone 4 update (2026-06-24): recorded ADR-007 and the supporting
+  documentation updates, the `make fmt` caveat, and green Markdown and standard
+  workspace gates.
+- Milestone 4 review update (2026-06-24): recorded CodeRabbit's rate-limit
+  response, the 58-minute `vsleep`, and the zero-finding retry for commit
+  `393b54c`. Milestone 5 may proceed after this checkpoint.
