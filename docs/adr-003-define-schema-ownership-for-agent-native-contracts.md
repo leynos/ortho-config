@@ -92,7 +92,12 @@ Existing human-documentation outputs remain compatible until a separate
 versioned migration is approved. Adding agent-context metadata, JSON result
 streams, or policy reports does not change the accepted `cargo-orthohelp` `ir`,
 `man`, `ps`, or `all` formats, generated file paths, or process success/failure
-contract.
+contract unless that migration explicitly updates the surface. Roadmap item
+6.2.2 is such a migration for `--format all`: it adds `agent-context.json`
+beside the existing IR, man-page, and PowerShell artefacts without changing
+their paths or meanings. The agent-context versioning and compatibility
+mechanism is defined in
+[agent-native-cli-design.md](agent-native-cli-design.md) §8.2.
 
 New optional metadata fields require explicit defaults for older derives. Those
 defaults are applied by OrthoConfig readers, generators, or transforms; schema
