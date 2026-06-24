@@ -30,3 +30,4 @@ Feature: cargo-orthohelp roff man page generation
     Then the output contains localized IR JSON for en-US
     And the output contains a man page for fixture
     And the output contains a PowerShell module named FixtureHelp
+    And the output contains agent-context JSON for the fixture
