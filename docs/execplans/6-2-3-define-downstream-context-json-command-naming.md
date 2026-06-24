@@ -157,8 +157,9 @@ escalation, not a workaround.
   for `--format agent-context`. Mutation check with a temporary
   `alias = "context"` failed for the expected reason, then the alias was
   reverted and the guard passed.
-- [ ] (2026-06-24 13:03Z) Milestone 2 CodeRabbit review remains pending after
-  commit. Standard gates passed.
+- [x] (2026-06-24 14:28Z) Milestone 2 CodeRabbit review completed with zero
+  findings after commit `1c581a3`. The first attempt hit CodeRabbit rate
+  limiting; after a 77-minute `vsleep`, the retry completed cleanly.
 - [ ] Milestone 3 — wire an illustrative `context --json` command into the
   `hello_world` example (early short-circuit), with BDD, insta snapshot, and an
   `assert_cmd` e2e test.
@@ -304,7 +305,8 @@ agent-context` value remains accepted. A temporary mutation adding
 `alias = "context"` to `Orthohelp` failed the guard with
 `alias 'context' on 'orthohelp'`; the mutation was reverted and the guard
 passed. Standard workspace gates passed after extracting helper functions to
-satisfy Clippy's excessive-nesting lint.
+satisfy Clippy's excessive-nesting lint. CodeRabbit reviewed commit `1c581a3`
+with zero findings after the required rate-limit wait and retry.
 
 ## Context and orientation
 
@@ -777,3 +779,6 @@ dev-dependency.
   and the standard gate results. Remaining work is unchanged except that future
   agents should not use the ineffective `--lib cli` filter for this binary
   module.
+- Milestone 2 review update (2026-06-24): recorded CodeRabbit's rate-limit
+  response, the 77-minute `vsleep`, and the zero-finding retry for commit
+  `1c581a3`. Milestone 3 may proceed after this checkpoint.
