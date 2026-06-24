@@ -153,10 +153,13 @@ mod tests {
     //! Parser tests for Cargo external-subcommand dispatch.
 
     use clap::{CommandFactory, Parser, error::ErrorKind};
+    use ortho_config::AGENT_CONTEXT_COMMAND;
     use proptest::prelude::*;
     use rstest::rstest;
 
     use super::{CargoSubcommand, Cli, OutputFormat};
+
+    const RESERVED_AGENT_CONTEXT_ALIAS: &str = "agent-context";
 
     #[test]
     fn format_defaults_to_ir() {
@@ -187,6 +190,19 @@ mod tests {
         let CargoSubcommand::Orthohelp(args) = cli.command;
 
         assert!(matches!(args.format, OutputFormat::AgentContext));
+    }
+
+    #[test]
+    fn no_context_or_agent_context_subcommand_alias() {
+        let command = Cli::command();
+        let mut violations = Vec::new();
+
+        collect_reserved_agent_context_commands(&command, &mut Vec::new(), &mut violations);
+
+        assert!(
+            violations.is_empty(),
+            "reserved downstream context command names leaked into cargo-orthohelp: {violations:?}"
+        );
     }
 
     #[test]
@@ -374,5 +390,51 @@ mod tests {
         if is_enabled {
             argv.push(flag.to_owned());
         }
+    }
+
+    fn collect_reserved_agent_context_commands(
+        command: &clap::Command,
+        path: &mut Vec<String>,
+        violations: &mut Vec<String>,
+    ) {
+        for subcommand in command.get_subcommands() {
+            path.push(subcommand.get_name().to_owned());
+            let display_path = path.join(" ");
+
+            record_reserved_subcommand_name(subcommand, &display_path, violations);
+            record_reserved_aliases(subcommand, &display_path, violations);
+            collect_reserved_agent_context_commands(subcommand, path, violations);
+            path.pop();
+        }
+    }
+
+    fn record_reserved_subcommand_name(
+        subcommand: &clap::Command,
+        display_path: &str,
+        violations: &mut Vec<String>,
+    ) {
+        if is_reserved_agent_context_command(subcommand.get_name()) {
+            violations.push(format!("subcommand `{display_path}`"));
+        }
+    }
+
+    fn record_reserved_aliases(
+        subcommand: &clap::Command,
+        display_path: &str,
+        violations: &mut Vec<String>,
+    ) {
+        for alias in subcommand
+            .get_all_aliases()
+            .filter(|alias| is_reserved_agent_context_command(alias))
+        {
+            violations.push(format!("alias `{alias}` on `{display_path}`"));
+        }
+    }
+
+    fn is_reserved_agent_context_command(candidate: &str) -> bool {
+        matches!(
+            candidate,
+            AGENT_CONTEXT_COMMAND | RESERVED_AGENT_CONTEXT_ALIAS
+        )
     }
 }

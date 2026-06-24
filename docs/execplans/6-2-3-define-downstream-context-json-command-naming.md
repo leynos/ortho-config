@@ -152,9 +152,13 @@ escalation, not a workaround.
   findings after commit `bb721ab`. Standard gates passed; the extra
   `--no-default-features` check fails on pre-existing discovery/file feature
   imports and is recorded below.
-- [ ] Milestone 2 — guard test in `cargo-orthohelp` proving no public
-  `context` / `agent-context` alias, plus positive control for
-  `--format agent-context`.
+- [x] (2026-06-24 13:03Z) Milestone 2 — guard test in `cargo-orthohelp`
+  proving no public `context` / `agent-context` alias, plus positive control
+  for `--format agent-context`. Mutation check with a temporary
+  `alias = "context"` failed for the expected reason, then the alias was
+  reverted and the guard passed.
+- [ ] (2026-06-24 13:03Z) Milestone 2 CodeRabbit review remains pending after
+  commit. Standard gates passed.
 - [ ] Milestone 3 — wire an illustrative `context --json` command into the
   `hello_world` example (early short-circuit), with BDD, insta snapshot, and an
   `assert_cmd` e2e test.
@@ -214,6 +218,16 @@ Use timestamps (for example `(2026-06-14 13:00Z)`) when ticking items.
   feature-gated, but the plan's no-default acceptance check is currently
   blocked by an existing broader feature-boundary issue outside the
   agent-context API change.
+- Observation: the planned focused command
+  `cargo test -p cargo-orthohelp --lib cli` does not exercise
+  `cargo-orthohelp/src/cli.rs`; it runs unrelated library tests whose names
+  contain `cli`. Evidence: the command reported two
+  `agent_context::tests::*visible_cli*` tests and did not run
+  `cli::tests::no_context_or_agent_context_subcommand_alias`. Impact: use the
+  exact filters
+  `cargo test -p cargo-orthohelp no_context_or_agent_context_subcommand_alias`
+  and `cargo test -p cargo-orthohelp format_accepts_agent_context` for
+  Milestone 2 evidence.
 
 ## Decision log
 
@@ -282,6 +296,15 @@ the green run passed 33 `agent_context` tests, and the standard workspace gates
 passed. CodeRabbit reviewed commit `bb721ab` with zero findings. The only gap
 is the pre-existing `--no-default-features` compile failure recorded in
 Surprises & discoveries and Decision D7.
+
+Milestone 2 outcome (2026-06-24): `cargo-orthohelp` now has a guard test that
+walks the clap command tree, including hidden aliases, and rejects public
+`context` or `agent-context` command names. The existing `--format
+agent-context` value remains accepted. A temporary mutation adding
+`alias = "context"` to `Orthohelp` failed the guard with
+`alias 'context' on 'orthohelp'`; the mutation was reverted and the guard
+passed. Standard workspace gates passed after extracting helper functions to
+satisfy Clippy's excessive-nesting lint.
 
 ## Context and orientation
 
@@ -579,6 +602,22 @@ if a `context`/`agent-context` subcommand or alias is added (verify by
 temporarily adding one and observing the failure, then reverting).
 `format_accepts_agent_context` continues to pass.
 
+Acceptance evidence (2026-06-24):
+
+- Positive guard:
+  `cargo test -p cargo-orthohelp no_context_or_agent_context_subcommand_alias`
+  passed and ran
+  `cli::tests::no_context_or_agent_context_subcommand_alias`.
+- Mutation red:
+  after temporarily adding `#[command(version, alias = "context")]` to
+  `CargoSubcommand::Orthohelp`, the same focused test failed with
+  `alias 'context' on 'orthohelp'`.
+- Positive format control:
+  `cargo test -p cargo-orthohelp format_accepts_agent_context` passed and ran
+  `cli::tests::format_accepts_agent_context`.
+- Standard gates:
+  `make check-fmt`, `make typecheck`, `make lint`, and `make test` all passed.
+
 ### Milestone 3 — example behaviour
 
 BDD feature `examples/hello_world/tests/features/agent_context.feature`, wired
@@ -733,3 +772,8 @@ dev-dependency.
   unchanged except that no new dependency is needed for the property test.
 - Milestone 1 review update (2026-06-24): recorded CodeRabbit's zero-finding
   review of commit `bb721ab`. Milestone 2 may proceed after this checkpoint.
+- Milestone 2 update (2026-06-24): recorded the cargo-orthohelp guard test,
+  the corrected focused test commands, the temporary-alias mutation failure,
+  and the standard gate results. Remaining work is unchanged except that future
+  agents should not use the ineffective `--lib cli` filter for this binary
+  module.
