@@ -917,3 +917,14 @@ dev-dependency.
 - Final review update (2026-06-24): recorded CodeRabbit's two final rate-limit
   responses, the 75-minute and 88-minute `vsleep` waits, and the zero-finding
   retry for commit `173507f`.
+- Rebase update (2026-06-24): rebased the branch onto `origin/main`. Conflicts
+  were resolved by keeping both the upstream command-localisation parser path
+  and this branch's `hello_world context --json` short-circuit, combining
+  crate-root agent-context exports, and merging the documentation so ADR-007's
+  downstream command naming guidance coexists with the skill-manifest schema
+  notes. Post-rebase validation required restoring dropped `AgentContext`
+  derives and rstest attributes, updating the `hello_world` snapshot for the
+  default `skill_manifests: []` field, and removing a Clippy-reported Rustdoc
+  spacing issue. `make check-fmt`, `make test`, `make typecheck`, and
+  `make lint` passed; the Cargo-heavy gates used `CARGO_BUILD_JOBS=1` after
+  unconstrained nested Cargo builds hit OS process/thread limits.

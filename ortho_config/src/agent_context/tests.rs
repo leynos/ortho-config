@@ -1,14 +1,14 @@
 //! Tests for the compact agent-context schema.
 
-use camino::Utf8PathBuf;
+use super::*;
 use crate::docs::ORTHO_DOCS_IR_VERSION;
+use camino::Utf8PathBuf;
 use insta::assert_snapshot;
+use proptest::{collection::vec, option, prelude::*};
 use rstest::rstest;
 use serde_json::{Value, json};
-use super::*;
 
 #[rstest]
-use proptest::{collection::vec, option, prelude::*};
 fn agent_context_version_is_independent_from_docs_ir() {
     assert_eq!(ORTHO_AGENT_CONTEXT_SCHEMA_VERSION, "1");
     assert_ne!(
@@ -17,17 +17,27 @@ fn agent_context_version_is_independent_from_docs_ir() {
     );
 }
 
+#[rstest]
 fn agent_context_command_name_const_is_context() {
     assert_eq!(crate::AGENT_CONTEXT_COMMAND, "context");
 }
 
+#[rstest]
 fn agent_context_json_flag_const_is_long_json() {
     assert_eq!(crate::AGENT_CONTEXT_JSON_FLAG, "json");
 }
 
+#[rstest]
+#[case::hyphenated("example-cli", "example-cli.agent_context")]
+#[case::underscored("hello_world", "hello_world.agent_context")]
+#[case::empty("", ".agent_context")]
+#[case::dotted("ns.tool", "ns.tool.agent_context")]
+#[case::mixed("Foo-Bar_9", "Foo-Bar_9.agent_context")]
 fn agent_context_kind_appends_suffix(#[case] package: &str, #[case] expected: &str) {
     assert_eq!(crate::agent_context_kind(package), expected);
 }
+
+#[rstest]
 fn new_context_uses_legacy_defaults() {
     let context = AgentContext::new("example-cli");
 
@@ -41,12 +51,16 @@ fn new_context_uses_legacy_defaults() {
     assert!(context.skill_manifests.is_empty());
 }
 
+#[rstest]
+#[case::hyphenated("example-cli")]
+#[case::underscored("hello_world")]
 fn new_uses_agent_context_kind(#[case] package: &str) {
     let context = AgentContext::new(package);
 
     assert_eq!(context.kind, crate::agent_context_kind(package));
 }
 
+#[rstest]
 fn to_json_is_valid_parseable_json() {
     let context = sample_agent_context();
     let json = context.to_json().expect("serialize compact agent context");
@@ -55,6 +69,7 @@ fn to_json_is_valid_parseable_json() {
     assert!(value.is_object());
 }
 
+#[rstest]
 fn to_json_round_trips_via_serde() {
     let context = sample_agent_context();
     let json = context.to_json().expect("serialize compact agent context");
@@ -63,6 +78,7 @@ fn to_json_round_trips_via_serde() {
     assert_eq!(parsed, context);
 }
 
+#[rstest]
 fn to_json_is_deterministic() {
     let context = sample_agent_context();
 
@@ -72,6 +88,7 @@ fn to_json_is_deterministic() {
     );
 }
 
+#[rstest]
 fn to_json_includes_kind_and_schema_version() {
     let context = sample_agent_context();
     let json = context.to_json().expect("serialize compact agent context");
@@ -88,6 +105,7 @@ fn to_json_includes_kind_and_schema_version() {
     );
 }
 
+#[rstest]
 fn to_json_has_trailing_newline() {
     let context = sample_agent_context();
     let json = context.to_json().expect("serialize compact agent context");
@@ -95,6 +113,7 @@ fn to_json_has_trailing_newline() {
     assert!(json.ends_with('\n'));
 }
 
+#[rstest]
 fn to_json_pretty_has_no_trailing_newline() {
     let context = sample_agent_context();
     let json = context
@@ -103,6 +122,8 @@ fn to_json_pretty_has_no_trailing_newline() {
 
     assert!(!json.ends_with('\n'));
 }
+
+#[rstest]
 fn compact_context_serialization_excludes_localization_fields() {
     let context = sample_agent_context();
 
@@ -404,6 +425,7 @@ fn any_agent_context() -> impl Strategy<Value = AgentContext> {
         policy: AgentPolicy {
             agent_native: PolicyMode::Warn,
         },
+        skill_manifests: Vec::new(),
     })
 }
 
