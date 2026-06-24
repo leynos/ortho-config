@@ -174,7 +174,11 @@ escalation, not a workaround.
   findings after commit `393b54c`. The first attempt hit CodeRabbit rate
   limiting; after a 58-minute `vsleep`, the retry completed cleanly.
 - [x] (2026-06-24 16:16Z) Milestone 5 — marked roadmap 6.2.3 done and ran
-  the final full deterministic gate set. Final CodeRabbit review is pending.
+  the final full deterministic gate set.
+- [x] (2026-06-24 18:45Z) Final CodeRabbit review completed with zero findings
+  after commit `173507f`. Two final-review attempts hit CodeRabbit rate
+  limiting; after 75-minute and 88-minute `vsleep` waits, the retry completed
+  cleanly.
 
 Use timestamps (for example `(2026-06-14 13:00Z)`) when ticking items.
 
@@ -362,7 +366,8 @@ Milestone 5 outcome (2026-06-24): `docs/roadmap.md` now marks 6.2.3 and its
 three subrequirements complete, with ADR-007 added to the item's references.
 The final deterministic gate set passed before the closeout commit:
 `make markdownlint`, `make check-fmt`, `make typecheck`, `make lint`, and
-`make test`.
+`make test`. CodeRabbit reviewed commit `173507f` with zero findings after the
+required rate-limit waits and retries.
 
 ## Context and orientation
 
@@ -788,7 +793,7 @@ Final acceptance evidence (2026-06-24):
 - Final standard gates:
   `make check-fmt`, `make typecheck`, `make lint`, and `make test` all passed.
 - Review:
-  final CodeRabbit review is pending the Milestone 5 commit.
+  final CodeRabbit review completed with zero findings after commit `173507f`.
 
 ## Idempotence and recovery
 
@@ -909,3 +914,6 @@ dev-dependency.
 - Milestone 5 update (2026-06-24): marked roadmap item 6.2.3 complete,
   recorded the final deterministic gates, and left the final CodeRabbit review
   pending the closeout commit.
+- Final review update (2026-06-24): recorded CodeRabbit's two final rate-limit
+  responses, the 75-minute and 88-minute `vsleep` waits, and the zero-finding
+  retry for commit `173507f`.
