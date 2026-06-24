@@ -247,10 +247,11 @@ These decide the exact v1 wire shape that this plan ossifies.
 - [x] 2026-06-24: Milestone 2 complete — generator determinism property,
       default-display normalization, in-process nested structural assertions,
       deterministic gates, and CodeRabbit review passed.
-- [ ] Milestone 3: three golden roots (simple / enum / nested) in the existing
-      `orthohelp_fixture` crate — add a minimal `SimpleFixtureConfig`, reuse
-      `FixtureConfig` (enum) and 6.1.2's `NestedFixtureConfig` (nested) — plus
-      the parametrized golden + nested BDD scenario.
+- [x] 2026-06-24: Milestone 3 complete — three golden roots (simple / enum /
+      nested) now use the existing `orthohelp_fixture` crate, with a new
+      `SimpleFixtureConfig`, reused `FixtureConfig` and `NestedFixtureConfig`, a
+      parametrized golden, a nested BDD scenario, deterministic gates, and
+      CodeRabbit review passed.
 - [ ] Milestone 4: include agent-context in `--format all` (if D3 approved).
 - [ ] Milestone 5: documentation — §8.2 policy, §8.1 reconciliation, ADR-003
       cross-reference, users-guide and developers-guide updates, roadmap tick.
@@ -392,6 +393,52 @@ cleared before the next milestone. Commit after each green milestone.
   attempt completed with `findings: 0`, logged at
   `/tmp/coderabbit-m2-retry2-ortho-config-6-2-2-version-and-validate-the-agent-context-schema.out`.
   Impact: Milestone 3 may begin after committing the Milestone 2 changes.
+- Observation: Milestone 3 expands the agent-context golden matrix without
+  adding a new fixture crate.
+  Evidence: `tests/fixtures/orthohelp_fixture/src/lib.rs` now defines
+  `SimpleFixtureConfig`; `FixtureConfig` remains the enum-bearing default root;
+  `NestedFixtureConfig` is selected with `--root-type`. The focused red golden
+  run
+  `/tmp/test-red-m3-agent-context-goldens-ortho-config-6-2-2-version-and-validate-the-agent-context-schema.out`
+  showed the default enum root still passing, the simple root failing because
+  it did not exist yet, and the nested root producing a reviewed `.snap.new`.
+  After adding the simple root and accepting the reviewed simple and nested
+  snapshots, `/tmp/test-green-m3-agent-context-goldens-ortho-config-6-2-2-version-and-validate-the-agent-context-schema.out`
+  passed all three agent-context golden cases.
+  Impact: end-to-end agent-context generation is now covered for flat scalar,
+  enum-bearing, and nested command-tree shapes.
+- Observation: The new nested BDD scenario required recompiling the BDD harness
+  before it appeared in the generated test list.
+  Evidence: the first focused BDD run
+  `/tmp/test-red-m3-agent-context-bdd-ortho-config-6-2-2-version-and-validate-the-agent-context-schema.out`
+  selected only the pre-existing flat scenario after only the feature file
+  changed. Once step definitions changed, `cargo test -p cargo-orthohelp --test
+  rstest_bdd -- --list` showed the new
+  `orthohelp_agent_context_generate_nested_agent_context_json_from_the_fixture`
+  scenario, and
+  `/tmp/test-green-m3-agent-context-bdd-ortho-config-6-2-2-version-and-validate-the-agent-context-schema.out`
+  passed both agent-context scenarios.
+  Impact: the BDD layer now asserts the externally observable nested path
+  `["nested_fixture", "admin", "audit"]` rather than merely checking that JSON
+  exists.
+- Observation: Milestone 3 deterministic gates passed after fixing one clippy
+  shadowing finding.
+  Evidence: the first `make lint` run,
+  `/tmp/lint-m3-ortho-config-6-2-2-version-and-validate-the-agent-context-schema.out`,
+  rejected an inner `root_type` binding in the parametrized golden helper. After
+  renaming it, `make check-fmt`, `make typecheck`, `make lint`, `make test`, and
+  `make markdownlint` passed with logs in
+  `/tmp/check-fmt-m3-ortho-config-6-2-2-version-and-validate-the-agent-context-schema.out`,
+  `/tmp/typecheck-m3-ortho-config-6-2-2-version-and-validate-the-agent-context-schema.out`,
+  `/tmp/lint-m3-ortho-config-6-2-2-version-and-validate-the-agent-context-schema.out`,
+  `/tmp/test-m3-ortho-config-6-2-2-version-and-validate-the-agent-context-schema.out`,
+  and `/tmp/markdownlint-m3-ortho-config-6-2-2-version-and-validate-the-agent-context-schema.out`.
+  Impact: CodeRabbit review can be requested for Milestone 3 with deterministic
+  issues already cleared.
+- Observation: Milestone 3 CodeRabbit review passed with no concerns.
+  Evidence: `coderabbit review --agent` completed with `findings: 0`, logged at
+  `/tmp/coderabbit-m3-ortho-config-6-2-2-version-and-validate-the-agent-context-schema.out`.
+  Impact: Milestone 4 may begin after committing the Milestone 3 changes.
 
 ## Decision log
 

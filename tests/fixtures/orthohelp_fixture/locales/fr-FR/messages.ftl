@@ -8,3 +8,7 @@ fixture.fields.workers.help = Nombre de threads de travail.
 fixture.fields.timeout.help = Délai d'expiration des requêtes en secondes.
 fixture.fields.is_legacy_mode.help = Active le mode de traitement hérité.
 fixture.fields.is_legacy_mode.deprecated = Le mode hérité sera supprimé lors de la prochaine version.
+simple_fixture.about = Configuration simple du fixture.
+simple_fixture.fields.host.help = Hôte de terminaison utilisé par le fixture simple.
+simple_fixture.fields.retries.help = Nombre de nouvelles tentatives du fixture simple.
+simple_fixture.fields.is_dry_run.help = Exécuter sans appliquer de changements.
