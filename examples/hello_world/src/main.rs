@@ -6,6 +6,7 @@ use ortho_config::{
 };
 
 use clap::CommandFactory;
+use hello_world::cli::context::{ContextCommand, context_json_pointer, render_agent_context_json};
 use hello_world::cli::{
     CommandLine, Commands, GreetCommand, HelloWorldCli, LocalizeCmd, TakeLeaveCommand,
     load_global_config,
@@ -14,13 +15,23 @@ use hello_world::error::{HelloWorldError, Result};
 use hello_world::localizer::DemoLocalizer;
 use hello_world::message::{build_plan, build_take_leave_plan, print_plan, print_take_leave};
 
+use std::io::{self, Write};
+
 fn main() -> color_eyre::Result<()> {
     color_eyre::install()?;
     run().map_err(color_eyre::eyre::Report::from)
 }
 
+struct ParsedCommandLine {
+    cli: CommandLine,
+    matches: clap::ArgMatches,
+}
 fn run() -> Result<()> {
-    let (cli, matches) = parse_command_line()?;
+    let ParsedCommandLine { cli, matches } = parse_command_line()?;
+    if let Commands::Context(context) = &cli.command {
+        return print_context(context);
+    }
+
     let program = std::env::args_os()
         .next()
         .unwrap_or_else(|| std::ffi::OsString::from("hello-world"));
@@ -34,11 +45,24 @@ fn run() -> Result<()> {
     execute_command(&globals, command)
 }
 
+fn print_context(context: &ContextCommand) -> Result<()> {
+    let output = if context.json {
+        render_agent_context_json().map_err(|err| HelloWorldError::Internal(Box::new(err)))?
+    } else {
+        context_json_pointer()
+    };
+    io::stdout().write_all(output.as_bytes())?;
+    Ok(())
+}
+
 /// Dispatch the selected subcommand against the merged global configuration.
 fn execute_command(globals: &HelloWorldCli, command: Commands) -> Result<()> {
     match command {
         Commands::Greet(merged) => run_greet(globals, &merged),
         Commands::TakeLeave(merged) => run_take_leave(globals, &merged),
+        Commands::Context(_) => {
+            unreachable!("context commands return before configuration merging")
+        }
     }
 }
 
@@ -56,14 +80,14 @@ fn run_take_leave(globals: &HelloWorldCli, merged: &TakeLeaveCommand) -> Result<
     Ok(())
 }
 
-fn parse_command_line() -> Result<(CommandLine, clap::ArgMatches)> {
+fn parse_command_line() -> Result<ParsedCommandLine> {
     let localizer = DemoLocalizer::default();
     let command = CommandLine::command()
         .with_base("hello_world.cli")
         .localize(&localizer);
 
     match parse_localized_command::<CommandLine, _, _>(command, std::env::args_os(), &localizer) {
-        Ok(parsed) => Ok(parsed),
+        Ok((cli, matches)) => Ok(ParsedCommandLine { cli, matches }),
         Err(err) => {
             if is_display_request(&err) {
                 err.exit();

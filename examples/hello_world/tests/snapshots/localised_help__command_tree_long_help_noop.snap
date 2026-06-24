@@ -7,6 +7,7 @@ Friendly greeting demo showcasing OrthoConfig layering
 Usage: hello-world [OPTIONS] <COMMAND>
 
 Commands:
+  context     Emits machine-readable command context for agents
   greet       Prints a greeting using the configured style
   take-leave  Says goodbye while describing how the farewell will be delivered
   help        Print this message or the help of the given subcommand(s)

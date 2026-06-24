@@ -144,25 +144,26 @@ escalation, not a workaround.
   matches the PR title; PR description references
   `https://lody.ai/leynos/sessions/3d5cd4de-ad94-49af-8867-b403bd1bbf77`.
 - [x] (2026-06-24 12:45Z) Milestone 1 — convention API in
-  `ortho_config::agent_context` implemented: constants,
-  `agent_context_kind`, `serde_json`-gated `to_json` / `to_json_pretty`,
-  crate-root re-exports, rstest coverage, and one proptest round-trip property.
-  Red-Green-Refactor evidence is recorded under Validation.
+  `ortho_config::agent_context` implemented: constants, `agent_context_kind`,
+  `serde_json`-gated `to_json` / `to_json_pretty`, crate-root re-exports,
+  rstest coverage, and one proptest round-trip property. Red-Green-Refactor
+  evidence is recorded under Validation.
 - [x] (2026-06-24 12:48Z) Milestone 1 CodeRabbit review completed with zero
   findings after commit `bb721ab`. Standard gates passed; the extra
   `--no-default-features` check fails on pre-existing discovery/file feature
   imports and is recorded below.
 - [x] (2026-06-24 13:03Z) Milestone 2 — guard test in `cargo-orthohelp`
-  proving no public `context` / `agent-context` alias, plus positive control
-  for `--format agent-context`. Mutation check with a temporary
+  proving no public `context` / `agent-context` alias, plus positive control for
+  `--format agent-context`. Mutation check with a temporary
   `alias = "context"` failed for the expected reason, then the alias was
   reverted and the guard passed.
 - [x] (2026-06-24 14:28Z) Milestone 2 CodeRabbit review completed with zero
   findings after commit `1c581a3`. The first attempt hit CodeRabbit rate
   limiting; after a 77-minute `vsleep`, the retry completed cleanly.
-- [ ] Milestone 3 — wire an illustrative `context --json` command into the
-  `hello_world` example (early short-circuit), with BDD, insta snapshot, and an
-  `assert_cmd` e2e test.
+- [x] (2026-06-24 14:31Z) Milestone 3 — wired an illustrative
+  `context --json` command into the `hello_world` example (early
+  short-circuit), with BDD, insta snapshot, `assert_cmd` e2e tests, localised
+  help copy, and updated help snapshots.
 - [ ] Milestone 4 — documentation: ADR-007, normative promotion of
   `agent-native-cli-design.md` §3.2, users' guide subsection, developers' guide
   note, design-doc decision-log entry, `cargo-orthohelp-design.md`
@@ -229,6 +230,21 @@ Use timestamps (for example `(2026-06-14 13:00Z)`) when ticking items.
   `cargo test -p cargo-orthohelp no_context_or_agent_context_subcommand_alias`
   and `cargo test -p cargo-orthohelp format_accepts_agent_context` for
   Milestone 2 evidence.
+- Observation: exposing the hello_world `context` subcommand necessarily
+  changes localised help and missing-subcommand diagnostics. Evidence: the
+  first full `make test` after wiring Milestone 3 failed only the
+  `localised_help` insta snapshots, showing the new `context` row and the
+  extended valid-subcommands list. Impact: added explicit en-US and Japanese
+  Fluent entries for `hello_world-cli-context-about`, then regenerated the
+  affected snapshots with `INSTA_UPDATE=always`.
+- Observation: the dormant
+  `examples/hello_world/tests/rstest_bdd/behaviour/...` module tree is not the
+  right insertion point for Milestone 3 right now. Evidence: exposing it as a
+  new test target surfaced pre-existing fixture/trait wiring incompatibilities
+  unrelated to the new command. Impact: Milestone 3 uses a focused
+  `examples/hello_world/tests/agent_context_bdd.rs` target wired directly to
+  `tests/features/agent_context.feature`; this keeps the BDD coverage active
+  without widening the task into a harness repair.
 
 ## Decision log
 
@@ -300,13 +316,23 @@ Surprises & discoveries and Decision D7.
 
 Milestone 2 outcome (2026-06-24): `cargo-orthohelp` now has a guard test that
 walks the clap command tree, including hidden aliases, and rejects public
-`context` or `agent-context` command names. The existing `--format
-agent-context` value remains accepted. A temporary mutation adding
+`context` or `agent-context` command names. The existing
+`--format agent-context` value remains accepted. A temporary mutation adding
 `alias = "context"` to `Orthohelp` failed the guard with
 `alias 'context' on 'orthohelp'`; the mutation was reverted and the guard
 passed. Standard workspace gates passed after extracting helper functions to
 satisfy Clippy's excessive-nesting lint. CodeRabbit reviewed commit `1c581a3`
 with zero findings after the required rate-limit wait and retry.
+
+Milestone 3 outcome (2026-06-24): the `hello_world` example now exposes
+`context --json` as a downstream application command. `context --json`
+short-circuits before config merging, writes compact agent-context JSON to
+stdout, and exits successfully; bare `context` prints a human pointer to
+`--json`. The illustrative payload is hand-authored in
+`examples/hello_world/src/cli/context.rs`, documented as a convention demo, and
+validated by BDD, process-level e2e tests, an insta snapshot, and localised
+help snapshot updates. Standard workspace gates passed after adding localised
+context command copy and accepting the intended help snapshot drift.
 
 ## Context and orientation
 
@@ -356,7 +382,7 @@ Terms of art:
 
 - *Agent context*: a compact, machine-readable JSON document describing how to
   invoke a CLI, intended to be cheap for an automated agent to load. It is a
-  sibling of, not nested within, the localized documentation IR.
+  sibling of, not nested within, the localised documentation IR.
 - *`kind` discriminator*: a string field that lets a consumer recognize the
   payload type without inspecting its shape, here `<tool>.agent_context`. The
   same idea appears as Kubernetes `kind` and Dapr reverse-DNS-prefixed kinds.
@@ -608,8 +634,7 @@ Acceptance evidence (2026-06-24):
 
 - Positive guard:
   `cargo test -p cargo-orthohelp no_context_or_agent_context_subcommand_alias`
-  passed and ran
-  `cli::tests::no_context_or_agent_context_subcommand_alias`.
+  passed and ran `cli::tests::no_context_or_agent_context_subcommand_alias`.
 - Mutation red:
   after temporarily adding `#[command(version, alias = "context")]` to
   `CargoSubcommand::Orthohelp`, the same focused test failed with
@@ -623,8 +648,7 @@ Acceptance evidence (2026-06-24):
 ### Milestone 3 — example behaviour
 
 BDD feature `examples/hello_world/tests/features/agent_context.feature`, wired
-through the existing `scenarios.rs`, with a step module under the example's BDD
-`steps/`:
+through the dedicated `examples/hello_world/tests/agent_context_bdd.rs` target:
 
 ```gherkin
 Feature: hello_world agent context command
@@ -657,6 +681,28 @@ e2e (`assert_cmd`, already a dev-dependency)
 Acceptance: `cargo test -p hello_world` passes, including BDD, snapshot, and
 e2e; `cargo run -p hello_world -- context --json` prints a payload whose `kind`
 is `hello_world.agent_context`.
+
+Acceptance evidence (2026-06-24):
+
+- Red:
+  `cargo test -p hello_world agent_context` failed before implementation with
+  unresolved import `hello_world::cli::context::render_agent_context_json`.
+- Green focused:
+  `cargo test -p hello_world context` passed the two BDD scenarios, three
+  `assert_cmd` e2e tests, and the `context_agent_context_json_snapshot` insta
+  test.
+- Snapshot update:
+  `INSTA_UPDATE=always cargo test -p hello_world context_agent_context_json_snapshot`
+  wrote `agent_context_snapshot__context_agent_context_json.snap`.
+- Help snapshot update:
+  the first full `make test` failed only the localised help snapshots because
+  the new public `context` subcommand appears in help and missing-subcommand
+  output. Added en-US and Japanese Fluent copy for the command, then ran
+  `INSTA_UPDATE=always cargo test -p hello_world --test localised_help`; all 19
+  localised-help tests passed and the affected snapshots were updated.
+- Standard gates:
+  `make check-fmt`, `make typecheck`, `make lint`, and `make test` all passed
+  after the snapshot and localisation updates.
 
 ### Milestone 4 — documentation
 
@@ -768,10 +814,10 @@ dev-dependency.
   the concrete working-directory path. This does not change the planned
   implementation; it only makes the plan resumable from the active worktree.
 - Milestone 1 update (2026-06-24): recorded the implemented crate API, red and
-  green test evidence, standard gate results, the already-present
-  `ortho_config` `proptest` dev-dependency, and the pre-existing
-  `--no-default-features` failure in discovery/file loading. Remaining work is
-  unchanged except that no new dependency is needed for the property test.
+  green test evidence, standard gate results, the already-present `ortho_config`
+  `proptest` dev-dependency, and the pre-existing `--no-default-features`
+  failure in discovery/file loading. Remaining work is unchanged except that no
+  new dependency is needed for the property test.
 - Milestone 1 review update (2026-06-24): recorded CodeRabbit's zero-finding
   review of commit `bb721ab`. Milestone 2 may proceed after this checkpoint.
 - Milestone 2 update (2026-06-24): recorded the cargo-orthohelp guard test,
@@ -782,3 +828,8 @@ dev-dependency.
 - Milestone 2 review update (2026-06-24): recorded CodeRabbit's rate-limit
   response, the 77-minute `vsleep`, and the zero-finding retry for commit
   `1c581a3`. Milestone 3 may proceed after this checkpoint.
+- Milestone 3 update (2026-06-24): recorded the hello_world `context --json`
+  implementation, the dedicated BDD target, the intended localised-help
+  snapshot drift, the added Fluent context copy, and the green focused and
+  workspace gates. CodeRabbit review is still pending for the Milestone 3
+  commit.
