@@ -5,8 +5,8 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
 proceeds.
 
-Status: DRAFT (revised after roadmap 6.1.2 landed on `main`; see the revision
-note at the end)
+Status: IN PROGRESS (implementation started 2026-06-24; revised after roadmap
+6.1.2 landed on `main`; see the revision note at the end)
 
 ## Purpose / big picture
 
@@ -242,7 +242,8 @@ These decide the exact v1 wire shape that this plan ossifies.
 ## Progress
 
 - [x] Stage A: approval of this plan and the `Approved decisions` (no code).
-- [ ] Milestone 1: schema shape and version guards in `ortho_config`.
+- [ ] 2026-06-24: Milestone 1 in progress — schema shape and version guards in
+      `ortho_config`.
 - [ ] Milestone 2: generator determinism property + default-display policy in
       `cargo-orthohelp`, plus in-process nested structural assertions.
 - [ ] Milestone 3: three golden roots (simple / enum / nested) in the existing
@@ -294,6 +295,15 @@ cleared before the next milestone. Commit after each green milestone.
   Impact: 6.2.2 is still the first to exercise the agent-context transform over
   a nested tree, but the underlying recursion is now well-tested, narrowing
   Risk 1.
+- Observation: Implementation began on 2026-06-24 from branch
+  `6-2-2-version-and-validate-the-agent-context-schema`, tracking
+  `origin/6-2-2-version-and-validate-the-agent-context-schema`.
+  Evidence: `git status --short --branch` reported a clean branch tracking
+  origin before edits; PR #349 title was updated to
+  `Version and validate the agent-context schema (6.2.2)`; Lody session
+  `b88005e0-6d82-4ef3-bd6c-998039c3c514` was renamed to the same title.
+  Impact: the plan has moved from approval to execution; subsequent entries
+  record implementation progress and validation evidence.
 
 ## Decision log
 
