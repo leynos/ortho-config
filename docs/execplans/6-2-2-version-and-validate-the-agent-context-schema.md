@@ -244,8 +244,9 @@ These decide the exact v1 wire shape that this plan ossifies.
 - [x] Stage A: approval of this plan and the `Approved decisions` (no code).
 - [x] 2026-06-24: Milestone 1 complete — schema shape and version guards in
       `ortho_config`; deterministic gates and CodeRabbit review passed.
-- [ ] Milestone 2: generator determinism property + default-display policy in
-      `cargo-orthohelp`, plus in-process nested structural assertions.
+- [x] 2026-06-24: Milestone 2 complete — generator determinism property,
+      default-display normalization, in-process nested structural assertions,
+      deterministic gates, and CodeRabbit review passed.
 - [ ] Milestone 3: three golden roots (simple / enum / nested) in the existing
       `orthohelp_fixture` crate — add a minimal `SimpleFixtureConfig`, reuse
       `FixtureConfig` (enum) and 6.1.2's `NestedFixtureConfig` (nested) — plus
@@ -342,6 +343,55 @@ cleared before the next milestone. Commit after each green milestone.
   `coderabbit review --agent` initially hit a rate limit, the required `vsleep`
   backoff ran for 63 minutes, and the retry completed with `findings: 0`.
   Impact: Milestone 2 may begin after the Milestone 1 commit.
+- Observation: Milestone 2 used a hand-built nested `DocMetadata` for the
+  in-process structural test rather than the 6.1.2 localized nested fixture.
+  Evidence: `cargo-orthohelp/src/test_support/nested_fixture.rs` produces
+  `LocalizedDocMetadata`, while `bridge_ir_to_agent_context` consumes
+  `DocMetadata`; no reverse bridge-IR view exists. The test now pins the
+  `fixture admin audit` and `fixture admin grant-access` paths, root/child
+  inputs, sorted command order, and sorted input order directly against
+  `DocMetadata`.
+  Impact: the test remains on the adapter boundary under review and avoids
+  adding conversion code solely for tests.
+- Observation: D2 default-display normalization deliberately re-baselines the
+  existing end-to-end agent-context golden.
+  Evidence: the focused red run
+  `/tmp/test-red-m2-agent-context-ortho-config-6-2-2-version-and-validate-the-agent-context-schema.out`
+  failed on `String :: from("localhost")`, `LogLevel :: Info`, and equivalent
+  nested fixture defaults. After adding generator-side `::` spacing
+  normalization and accepting the reviewed snapshot, the focused green run
+  `/tmp/test-green-m2-agent-context-ortho-config-6-2-2-version-and-validate-the-agent-context-schema.out`
+  passed all `agent_context`-filtered tests.
+  Impact: Milestone 3 starts from the normalized default-display contract, so
+  new simple/enum/nested goldens should use tight `::` defaults.
+- Observation: The first Milestone 2 red command did not use `set -o pipefail`,
+  so the shell returned the `tee` exit status even though Cargo reported test
+  failures.
+  Evidence: the log named above contains failing tests despite the command
+  wrapper reporting exit code 0.
+  Impact: subsequent piped validation commands include `set -o pipefail` so
+  command status reflects Cargo failures.
+- Observation: Milestone 2 deterministic gates passed after refactoring the
+  nested structural test into helper fixtures.
+  Evidence: the first `make lint` run,
+  `/tmp/lint-m2-ortho-config-6-2-2-version-and-validate-the-agent-context-schema.out`,
+  rejected the long nested test with `clippy::too_many_lines`. After extracting
+  named nested fixture and expected-summary helpers, `make check-fmt`,
+  `make typecheck`, `make lint`, `make test`, and `make markdownlint` passed
+  with logs in `/tmp/check-fmt-m2-ortho-config-6-2-2-version-and-validate-the-agent-context-schema.out`,
+  `/tmp/typecheck-m2-ortho-config-6-2-2-version-and-validate-the-agent-context-schema.out`,
+  `/tmp/lint-m2-ortho-config-6-2-2-version-and-validate-the-agent-context-schema.out`,
+  `/tmp/test-m2-ortho-config-6-2-2-version-and-validate-the-agent-context-schema.out`,
+  and `/tmp/markdownlint-m2-ortho-config-6-2-2-version-and-validate-the-agent-context-schema.out`.
+  Impact: CodeRabbit review can be requested for Milestone 2 with deterministic
+  issues already cleared.
+- Observation: Milestone 2 CodeRabbit review passed with no concerns after two
+  rate-limit backoffs.
+  Evidence: `coderabbit review --agent` was rate-limited twice; the requested
+  random `vsleep` backoffs ran for 64 minutes and 48 minutes. The third review
+  attempt completed with `findings: 0`, logged at
+  `/tmp/coderabbit-m2-retry2-ortho-config-6-2-2-version-and-validate-the-agent-context-schema.out`.
+  Impact: Milestone 3 may begin after committing the Milestone 2 changes.
 
 ## Decision log
 
