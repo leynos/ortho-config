@@ -55,8 +55,8 @@ Documentation IR, agent context, and policy reports have separate owners. See
 [ADR-003](adr-003-define-schema-ownership-for-agent-native-contracts.md) for
 the accepted decision.
 
-Add localized human-documentation fields to `ortho_config::docs` only when they
-are required by generated documentation, localization, roff, PowerShell help,
+Add localised human-documentation fields to `ortho_config::docs` only when they
+are required by generated documentation, localisation, roff, PowerShell help,
 or other human-facing reference material. Those fields are versioned by
 `ORTHO_DOCS_IR_VERSION` and exposed through `OrthoConfigDocs`.
 `OrthoConfigSubcommandDocs` is part of the same human-documentation IR contract
@@ -65,8 +65,13 @@ and uses the same versioning boundary for recursive subcommand metadata.
 Add compact agent invocation fields to `ortho_config::agent_context` when
 downstream applications need a reusable machine-readable command contract. Use
 `ORTHO_AGENT_CONTEXT_SCHEMA_VERSION` for compatibility. Do not add Fluent
-message identifiers, localized long prose, or renderer-specific output
+message identifiers, localised long prose, or renderer-specific output
 structures to the agent-context schema.
+
+Use `AGENT_CONTEXT_KIND_SUFFIX` and `agent_context_kind` as the single source
+for the agent-context `kind` discriminator. Do not hand-format
+`"<tool>.agent_context"` at call-sites. `kind` identifies the payload family;
+compatibility detection stays on `ORTHO_AGENT_CONTEXT_SCHEMA_VERSION`.
 
 Skill manifest descriptors are part of this agent-context contract: keep
 `SkillManifest`, `SkillCommandRef`, and `AgentContext.skill_manifests` in
@@ -75,7 +80,7 @@ application-owned.
 
 `localizer::identifier::normalize_segment` is the single source of truth for
 strict runtime and derive-time Fluent identifier segments. Reuse it from
-command localization, derive output, and future lookup-id generation instead of
+command localisation, derive output, and future lookup-id generation instead of
 duplicating ASCII normalization rules. Keep the tolerant catalogue load path in
 `localizer::fluent` separate: it exists only to pre-normalize hand-authored
 resource ids such as dotted catalogue keys before Fluent parses them, and must
@@ -137,11 +142,15 @@ contracts downward instead.
 the human documentation generators and writes `<out>/agent-context.json`. Keep
 the transform projective: it may copy or derive compact command metadata from
 the bridge IR, but it must not inspect rendered roff, PowerShell help, or
-localized IR output.
+localised IR output.
 
-Agent-context output is not localized. The current transform may use the short
+`--format agent-context` is the generator format. Downstream applications that
+emit their own runtime payload expose `context --json` as defined by
+[ADR-007](adr-007-downstream-context-command-naming.md).
+
+Agent-context output is not localised. The current transform may use the short
 en-US command description as `AgentCommand.summary`, but it must not copy
-localized long help, Fluent identifiers, roff fragments, or PowerShell wrapper
+localised long help, Fluent identifiers, roff fragments, or PowerShell wrapper
 structures into `ortho_config::agent_context`.
 
 Represent positional inputs by leaving `AgentInput.long` absent. The adapter
