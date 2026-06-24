@@ -19,9 +19,23 @@ pub const AGENT_CONTEXT_COMMAND: &str = "context";
 /// Canonical clap long-flag name for JSON agent-context output.
 pub const AGENT_CONTEXT_JSON_FLAG: &str = "json";
 
+/// Builds the stable agent-context `kind` discriminator for a package.
+///
+/// # Examples
+///
+/// ```rust
+/// assert_eq!(
+///     ortho_config::agent_context_kind("example-cli"),
+///     "example-cli.agent_context"
+/// );
+/// ```
+#[must_use]
 pub fn agent_context_kind(package: &str) -> String {
     format!("{package}.{AGENT_CONTEXT_KIND_SUFFIX}")
 }
+
+/// Top-level agent-context document.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct AgentContext {
     /// Agent-context schema version string.
     pub schema_version: String,
@@ -121,7 +135,6 @@ impl AgentContext {
     /// # Ok(())
     /// # }
     /// ```
-
     pub fn to_json_pretty(&self) -> Result<String, serde_json::Error> {
         serde_json::to_string_pretty(self)
     }
