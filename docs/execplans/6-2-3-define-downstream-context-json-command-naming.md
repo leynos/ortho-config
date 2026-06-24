@@ -164,6 +164,8 @@ escalation, not a workaround.
   `context --json` command into the `hello_world` example (early
   short-circuit), with BDD, insta snapshot, `assert_cmd` e2e tests, localised
   help copy, and updated help snapshots.
+- [x] (2026-06-24 14:35Z) Milestone 3 CodeRabbit review completed with zero
+  findings after commit `15b4d39`.
 - [ ] Milestone 4 — documentation: ADR-007, normative promotion of
   `agent-native-cli-design.md` §3.2, users' guide subsection, developers' guide
   note, design-doc decision-log entry, `cargo-orthohelp-design.md`
@@ -332,7 +334,8 @@ stdout, and exits successfully; bare `context` prints a human pointer to
 `examples/hello_world/src/cli/context.rs`, documented as a convention demo, and
 validated by BDD, process-level e2e tests, an insta snapshot, and localised
 help snapshot updates. Standard workspace gates passed after adding localised
-context command copy and accepting the intended help snapshot drift.
+context command copy and accepting the intended help snapshot drift. CodeRabbit
+reviewed commit `15b4d39` with zero findings.
 
 ## Context and orientation
 
@@ -831,5 +834,6 @@ dev-dependency.
 - Milestone 3 update (2026-06-24): recorded the hello_world `context --json`
   implementation, the dedicated BDD target, the intended localised-help
   snapshot drift, the added Fluent context copy, and the green focused and
-  workspace gates. CodeRabbit review is still pending for the Milestone 3
-  commit.
+  workspace gates.
+- Milestone 3 review update (2026-06-24): recorded CodeRabbit's zero-finding
+  review of commit `15b4d39`. Milestone 4 may proceed after this checkpoint.
