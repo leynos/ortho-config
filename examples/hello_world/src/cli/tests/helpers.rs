@@ -101,6 +101,7 @@ pub fn expect_greet(command: Commands) -> Result<GreetCommand> {
     match command {
         Commands::Greet(greet) => Ok(greet),
         Commands::TakeLeave(_) => Err(anyhow!("expected greet command, found take-leave")),
+        Commands::Context(_) => Err(anyhow!("expected greet command, found context")),
     }
 }
 
@@ -108,6 +109,7 @@ pub fn expect_take_leave(command: Commands) -> Result<TakeLeaveCommand> {
     match command {
         Commands::TakeLeave(take_leave) => Ok(take_leave),
         Commands::Greet(_) => Err(anyhow!("expected take-leave command, found greet")),
+        Commands::Context(_) => Err(anyhow!("expected take-leave command, found context")),
     }
 }
 
