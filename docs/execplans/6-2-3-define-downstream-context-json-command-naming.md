@@ -173,8 +173,8 @@ escalation, not a workaround.
 - [x] (2026-06-24 16:01Z) Milestone 4 CodeRabbit review completed with zero
   findings after commit `393b54c`. The first attempt hit CodeRabbit rate
   limiting; after a 58-minute `vsleep`, the retry completed cleanly.
-- [ ] Milestone 5 — mark roadmap 6.2.3 done; final full-gate run; CodeRabbit
-  review cleared.
+- [x] (2026-06-24 16:16Z) Milestone 5 — marked roadmap 6.2.3 done and ran
+  the final full deterministic gate set. Final CodeRabbit review is pending.
 
 Use timestamps (for example `(2026-06-14 13:00Z)`) when ticking items.
 
@@ -357,6 +357,12 @@ normative downstream application command while preserving
 guide, developers' guide, design decision log, cargo-orthohelp design, and
 contents index now all reference the convention. CodeRabbit reviewed commit
 `393b54c` with zero findings after the required rate-limit wait and retry.
+
+Milestone 5 outcome (2026-06-24): `docs/roadmap.md` now marks 6.2.3 and its
+three subrequirements complete, with ADR-007 added to the item's references.
+The final deterministic gate set passed before the closeout commit:
+`make markdownlint`, `make check-fmt`, `make typecheck`, `make lint`, and
+`make test`.
 
 ## Context and orientation
 
@@ -753,9 +759,9 @@ Acceptance evidence (2026-06-24):
   rather than parsing `kind`.
 - Formatting caveat:
   `make fmt` was attempted and failed on unrelated line-length findings in
-  `docs/execplans/6-1-2-nested-command-tree-behavioural-fixtures.md`.
-  Unrelated formatter edits were restored; touched files were formatted with
-  `mdtablefix` and `markdownlint-cli2 --fix`.
+  `docs/execplans/6-1-2-nested-command-tree-behavioural-fixtures.md`. Unrelated
+  formatter edits were restored; touched files were formatted with `mdtablefix`
+  and `markdownlint-cli2 --fix`.
 - Markdown gate:
   `make markdownlint` passed with zero errors.
 - Standard gates:
@@ -771,6 +777,18 @@ Acceptance evidence (2026-06-24):
   `--features serde_json` if those tools are wired into CI.
 - Review: `coderabbit review --agent` is clear at each milestone before moving
   on; all deterministic gates pass before each CodeRabbit run.
+
+Final acceptance evidence (2026-06-24):
+
+- Roadmap:
+  `docs/roadmap.md` marks item 6.2.3 and its three subrequirements complete and
+  references ADR-007.
+- Final documentation gate:
+  `make markdownlint` passed with zero errors.
+- Final standard gates:
+  `make check-fmt`, `make typecheck`, `make lint`, and `make test` all passed.
+- Review:
+  final CodeRabbit review is pending the Milestone 5 commit.
 
 ## Idempotence and recovery
 
@@ -888,3 +906,6 @@ dev-dependency.
 - Milestone 4 review update (2026-06-24): recorded CodeRabbit's rate-limit
   response, the 58-minute `vsleep`, and the zero-finding retry for commit
   `393b54c`. Milestone 5 may proceed after this checkpoint.
+- Milestone 5 update (2026-06-24): marked roadmap item 6.2.3 complete,
+  recorded the final deterministic gates, and left the final CodeRabbit review
+  pending the closeout commit.

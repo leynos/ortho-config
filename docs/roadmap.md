@@ -158,13 +158,14 @@ fields.
   - [ ] Document the schema and compatibility policy in
     `docs/agent-native-cli-design.md`.
 
-- [ ] 6.2.3. Define downstream `context --json` command naming.
+- [x] 6.2.3. Define downstream `context --json` command naming.
   - Requires 6.2.1.
-  - See agent-native-cli-design.md §3.2 and §5.
-  - [ ] Prefer `<tool> context --json` for application command surfaces while
+  - See agent-native-cli-design.md §3.2 and §5;
+    adr-007-downstream-context-command-naming.md.
+  - [x] Prefer `<tool> context --json` for application command surfaces while
     keeping `cargo orthohelp --format agent-context` as the generator format.
-  - [ ] Include a payload `kind` such as `<tool>.agent_context`.
-  - [ ] Avoid public `agent-context` aliases before first release unless a
+  - [x] Include a payload `kind` such as `<tool>.agent_context`.
+  - [x] Avoid public `agent-context` aliases before first release unless a
     migration explicitly requires them.
 
 ### 6.3. Validate skill manifests against real commands
