@@ -255,8 +255,10 @@ These decide the exact v1 wire shape that this plan ossifies.
 - [x] 2026-06-24: Milestone 4 complete — `--format all` now includes
       `agent-context.json` in addition to IR, man pages, and PowerShell
       artefacts; deterministic gates and CodeRabbit review passed.
-- [ ] Milestone 5: documentation — §8.2 policy, §8.1 reconciliation, ADR-003
-      cross-reference, users-guide and developers-guide updates, roadmap tick.
+- [x] 2026-06-24: Milestone 5 complete — §8.2 policy, §8.1 reconciliation,
+      ADR-003 cross-reference, cargo-orthohelp design, users-guide,
+      developers-guide, and roadmap updates are complete; deterministic gates
+      and CodeRabbit review passed.
 
 Each milestone ends by running, in this order and sequentially (never in
 parallel, to benefit from build caching): `make check-fmt`, `make typecheck`,
@@ -468,6 +470,33 @@ cleared before the next milestone. Commit after each green milestone.
   `/tmp/coderabbit-m4-ortho-config-6-2-2-version-and-validate-the-agent-context-schema.out`.
   Impact: Milestone 5 documentation work may begin after committing the
   Milestone 4 changes.
+- Observation: Milestone 5 documentation now records the locked schema
+  contract in all relevant user and contributor surfaces.
+  Evidence: `docs/agent-native-cli-design.md` §8.1 distinguishes realized v1
+  fields from planned fields, and §8.2 records the compatibility policy:
+  integer-valued version string, additive versus breaking changes,
+  forward-compatible unknown-field handling, byte-exact snapshot review,
+  prior-version fixture retention on bumps, snake_case enum strings,
+  `summary` omission, and display-only `AgentInput.default`. ADR-003 now points
+  to §8.2 for the mechanism; `docs/cargo-orthohelp-design.md`,
+  `docs/developers-guide.md`, and `docs/users-guide.md` all state that
+  `--format all` writes `agent-context.json`; `docs/roadmap.md` ticks 6.2.2.
+  Impact: remaining Milestone 5 work is validation, CodeRabbit review, commit,
+  and push rather than additional design work.
+- Observation: Milestone 5 deterministic gates and CodeRabbit review passed.
+  Evidence: `make check-fmt`, `make typecheck`, `make lint`, `make test`,
+  `make markdownlint`, and `make nixie` passed with logs in
+  `/tmp/check-fmt-m5-ortho-config-6-2-2-version-and-validate-the-agent-context-schema.out`,
+  `/tmp/typecheck-m5-ortho-config-6-2-2-version-and-validate-the-agent-context-schema.out`,
+  `/tmp/lint-m5-ortho-config-6-2-2-version-and-validate-the-agent-context-schema.out`,
+  `/tmp/test-m5-ortho-config-6-2-2-version-and-validate-the-agent-context-schema.out`,
+  `/tmp/markdownlint-m5-post-test-ortho-config-6-2-2-version-and-validate-the-agent-context-schema.out`,
+  and
+  `/tmp/nixie-m5-post-test-ortho-config-6-2-2-version-and-validate-the-agent-context-schema.out`.
+  `coderabbit review --agent` completed with `findings: 0`, logged at
+  `/tmp/coderabbit-m5-ortho-config-6-2-2-version-and-validate-the-agent-context-schema.out`.
+  Impact: the implementation milestones are complete; the remaining work is
+  final PR-body refresh, final validation/review, and reporting.
 
 ## Decision log
 
