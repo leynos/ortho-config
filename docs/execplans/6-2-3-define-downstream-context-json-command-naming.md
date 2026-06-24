@@ -148,9 +148,10 @@ escalation, not a workaround.
   `agent_context_kind`, `serde_json`-gated `to_json` / `to_json_pretty`,
   crate-root re-exports, rstest coverage, and one proptest round-trip property.
   Red-Green-Refactor evidence is recorded under Validation.
-- [ ] (2026-06-24 12:45Z) Milestone 1 CodeRabbit review remains pending after
-  commit. Standard gates passed; the extra `--no-default-features` check fails
-  on pre-existing discovery/file feature imports and is recorded below.
+- [x] (2026-06-24 12:48Z) Milestone 1 CodeRabbit review completed with zero
+  findings after commit `bb721ab`. Standard gates passed; the extra
+  `--no-default-features` check fails on pre-existing discovery/file feature
+  imports and is recorded below.
 - [ ] Milestone 2 — guard test in `cargo-orthohelp` proving no public
   `context` / `agent-context` alias, plus positive control for
   `--format agent-context`.
@@ -278,8 +279,9 @@ name, JSON flag name, and canonical `kind` constructor; `AgentContext::new`
 uses the constructor; and compact/pretty JSON render helpers are available
 behind `serde_json`. The focused red test failed for the expected missing API,
 the green run passed 33 `agent_context` tests, and the standard workspace gates
-passed. The only gap is the pre-existing `--no-default-features` compile
-failure recorded in Surprises & discoveries and Decision D7.
+passed. CodeRabbit reviewed commit `bb721ab` with zero findings. The only gap
+is the pre-existing `--no-default-features` compile failure recorded in
+Surprises & discoveries and Decision D7.
 
 ## Context and orientation
 
@@ -729,3 +731,5 @@ dev-dependency.
   `ortho_config` `proptest` dev-dependency, and the pre-existing
   `--no-default-features` failure in discovery/file loading. Remaining work is
   unchanged except that no new dependency is needed for the property test.
+- Milestone 1 review update (2026-06-24): recorded CodeRabbit's zero-finding
+  review of commit `bb721ab`. Milestone 2 may proceed after this checkpoint.
