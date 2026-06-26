@@ -1,13 +1,13 @@
 //! Tests for the compact agent-context schema.
 
-use super::*;
+use camino::Utf8PathBuf;
 use crate::docs::ORTHO_DOCS_IR_VERSION;
 use crate::serialize_agent_context;
-use camino::Utf8PathBuf;
 use insta::assert_snapshot;
 use proptest::{collection::vec, option, prelude::*};
 use rstest::rstest;
 use serde_json::{Value, json};
+use super::*;
 
 #[path = "tests_json.rs"]
 mod json;
@@ -198,85 +198,7 @@ fn agent_context_json_snapshot_covers_wire_contract() {
     let json = serde_json::to_string_pretty(&sample_agent_context())
         .expect("serialize agent context snapshot");
 
-    assert_snapshot!(json, @r###"
-    {
-      "schema_version": "1",
-      "kind": "example-cli.agent_context",
-      "package": "example-cli",
-      "commands": [
-        {
-          "path": [
-            "example-cli",
-            "list"
-          ],
-          "summary": "List configured resources.",
-          "canonical_verb": "list",
-          "inputs": [
-            {
-              "name": "format",
-              "long": "format",
-              "value_type": "string",
-              "required": false,
-              "default": "json",
-              "enum_values": [
-                "json"
-              ]
-            }
-          ],
-          "output_modes": [
-            "json"
-          ],
-          "interaction_mode": "non_interactive",
-          "mutation_effect": "read_only",
-          "async_submission": {
-            "mode": "submit",
-            "noun": "job"
-          },
-          "delivery_route": {
-            "supported": true,
-            "target": "file"
-          },
-          "pagination": {
-            "limit_input": "limit",
-            "cursor_input": "cursor"
-          },
-          "examples": [
-            {
-              "command": "example-cli list --format json",
-              "output_mode": "json"
-            }
-          ]
-        }
-      ],
-      "profiles": {
-        "supported": false
-      },
-      "feedback": {
-        "supported": false
-      },
-      "policy": {
-        "agent_native": "warn"
-      },
-      "skill_manifests": [
-        {
-          "id": "example-list",
-          "path": "skills/example-list.md",
-          "manifest_schema_version": "v1",
-          "commands": [
-            {
-              "path": [
-                "example-cli",
-                "list"
-              ],
-              "flags": [
-                "format"
-              ]
-            }
-          ]
-        }
-      ]
-    }
-    "###);
+    assert_eq!(json, AGENT_CONTEXT_WIRE_CONTRACT_JSON);
 }
 
 fn absent_optional_fields_serialize_with_documented_nulls() {
@@ -551,3 +473,81 @@ fn command_segment() -> impl Strategy<Value = String> {
 fn summary() -> impl Strategy<Value = String> {
     "[A-Za-z0-9 .,;-]{0,48}"
 }
+
+const AGENT_CONTEXT_WIRE_CONTRACT_JSON: &str = r#"{
+  "schema_version": "1",
+  "kind": "example-cli.agent_context",
+  "package": "example-cli",
+  "commands": [
+    {
+      "path": [
+        "example-cli",
+        "list"
+      ],
+      "summary": "List configured resources.",
+      "canonical_verb": "list",
+      "inputs": [
+        {
+          "name": "format",
+          "long": "format",
+          "value_type": "string",
+          "required": false,
+          "default": "json",
+          "enum_values": [
+            "json"
+          ]
+        }
+      ],
+      "output_modes": [
+        "json"
+      ],
+      "interaction_mode": "non_interactive",
+      "mutation_effect": "read_only",
+      "async_submission": {
+        "mode": "submit",
+        "noun": "job"
+      },
+      "delivery_route": {
+        "supported": true,
+        "target": "file"
+      },
+      "pagination": {
+        "limit_input": "limit",
+        "cursor_input": "cursor"
+      },
+      "examples": [
+        {
+          "command": "example-cli list --format json",
+          "output_mode": "json"
+        }
+      ]
+    }
+  ],
+  "profiles": {
+    "supported": false
+  },
+  "feedback": {
+    "supported": false
+  },
+  "policy": {
+    "agent_native": "warn"
+  },
+  "skill_manifests": [
+    {
+      "id": "example-list",
+      "path": "skills/example-list.md",
+      "manifest_schema_version": "v1",
+      "commands": [
+        {
+          "path": [
+            "example-cli",
+            "list"
+          ],
+          "flags": [
+            "format"
+          ]
+        }
+      ]
+    }
+  ]
+}"#;
