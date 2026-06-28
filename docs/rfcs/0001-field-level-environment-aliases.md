@@ -1008,6 +1008,16 @@ A control case with `empty = "keep"` proves that, without the policy, an empty
 `VK_GITHUB_TOKEN` is a value and shadows `GITHUB_TOKEN`, guarding against the
 default flipping.
 
+In addition to the fixed table, the implementation must include property tests
+for the resolver's ordering invariant. A `proptest` strategy generates one to
+eight declared candidate names, assigns each candidate to the `primary`,
+canonical, or `fallback` band, and then generates unset, empty, and non-empty
+states for each candidate. The expected result is computed by the RFC's
+first-match rule: sort by `(band, author order)`, skip unset values, apply the
+field empty policy to the first present value, and select at most one value.
+The property asserts that the resolver returns the same selected source and
+value, or the same empty-value error, for every generated case.
+
 ### 8.2 The critical negative test
 
 ```rust,ignore
@@ -1025,6 +1035,14 @@ This test must share a single serial key with every other env-mutating test in
 the crate (including the discovery tests that read `HOME`/`XDG_*`), so they
 cannot interleave.
 
+The no-whole-environment guarantee also needs a property test against the
+injectable `EnvSource`. The generated source contains a bounded set of declared
+candidate names and a disjoint set of unrelated variables, including
+secret-shaped names. The property asserts that adding, removing, or changing
+the unrelated variables never changes the resolved `Value`, the selected source
+metadata, or the collected errors. This covers the state space that the single
+negative generated-loader test cannot exhaustively enumerate.
+
 ### 8.3 Collection safety
 
 A `Vec<T>` field with an alias, with **both** its canonical and alias names
@@ -1034,10 +1052,22 @@ substrate-picks-canonical and projection-picks-canonical collision on one key.
 A companion test confirms that ordinary cross-layer append (file then
 environment, no alias hit) still produces the merged vector.
 
+This invariant is property-tested over generated vectors and layer states. For
+each case, the file layer, canonical environment candidate, and alias
+candidate may be absent or contain a generated vector. The oracle first applies
+alias selection to produce zero or one environment vector, then applies the
+field's declared cross-layer merge strategy once between file and environment.
+The property asserts that the implementation never observes two environment
+vectors for one field and therefore never appends the canonical and alias
+values together.
+
 ### 8.4 Further cases
 
 | Case                                | Asserts                                                                                                                                              |
 | ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Resolver precedence property        | Generated candidate orderings, empty states, and values obey first-match selection and produce at most one value or one empty-value error.           |
+| No-whole-env-scan property          | Generated unrelated environment variables cannot affect the resolved value, selected source metadata, or errors for declared projections.            |
+| Collection merge property           | Generated canonical/alias/file vector states select one environment vector before cross-layer merging, preventing alias-driven double append.        |
 | No-`env` golden fixture             | A struct with nested, flattened, `BTreeMap`-typed, and mixed-case fields produces a byte-identical composed env `Value` before and after the change. |
 | Nested/map field with alias         | Selecting an aliased leaf preserves sibling keys (recursive merge, not whole-subtree overwrite).                                                     |
 | `","` edge value                    | A value of `","` is non-empty after trim, is selected, and parses to `["", ""]`; the empty policy does not fire.                                     |
