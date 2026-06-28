@@ -358,13 +358,9 @@ External prior art checked during planning:
 - `groff_man(7)` documents that the `.TH` date register is build-environment
   dependent (<https://man7.org/linux/man-pages/man7/groff_man.7.html>);
   snapshots over roff output must pin or redact the date.
-- `PowerShell` AST-parse validation via
-  `[System.Management.Automation.Language.Parser]::ParseFile($path,
-  [ref]$tokens, [ref]$errors)` is the standard "did it parse" gate and
-  runs under `pwsh` on Linux
-  (<https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.utility/parsing>);
-  this plan keeps any such gate optional and skipped when `pwsh` is
-  absent.
+- `PowerShell` AST-parse validation via the `ParseFile` API is the standard
+  "did it parse" gate and runs under `pwsh` on Linux; this plan keeps any such
+  gate optional and skipped when `pwsh` is absent.
 
 These sources inform the design but do not override repository documents.
 
@@ -741,9 +737,9 @@ Steps:
    Register the new module in
    `ortho_config/tests/rstest_bdd/behaviour/steps/mod.rs`.
 4. Bind the feature file in
-   `ortho_config/tests/rstest_bdd/behaviour/scenarios.rs` via a new
-   `scenarios!("tests/features/docs_ir_nested.feature", fixtures =
-   [nested_docs_context: NestedDocsContext]);` block.
+   `ortho_config/tests/rstest_bdd/behaviour/scenarios.rs` via a new `scenarios!`
+   block for `tests/features/docs_ir_nested.feature` using the
+   `NestedDocsContext` fixture.
 5. Confirm the existing `docs_ir.feature` scenarios continue to pass
    unchanged.
 
