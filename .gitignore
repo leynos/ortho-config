@@ -23,6 +23,7 @@ target/
 
 .claude/
 .crush/
+.memdb/
 
 # Python tooling
 scripts/.venv/
