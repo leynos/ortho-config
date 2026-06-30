@@ -227,7 +227,7 @@ VK_GITHUB_TOKEN > GITHUB_TOKEN
 ```
 
 This mirrors the GitHub command-line tool's documented convention that the
-tool-specific name outranks the generic shared name[^ghcli], inverted to the
+tool-specific name outranks the generic shared name[^1], inverted to the
 crate's own namespace: the application-owned `VK_GITHUB_TOKEN` shadows the
 external `GITHUB_TOKEN`.
 
@@ -559,8 +559,9 @@ Combining the substrate and the projections is a **recursive object merge with
 leaf replacement**, using the crate's existing `merge_value` semantics
 (`declarative/merge.rs`), *not* a blind whole-subtree overwrite. For a nested
 or map-typed field this preserves sibling keys: if the substrate produced
-`{database: {url, pool}}` and a projection selects a value for `database.url`,
-the result is `{database: {url': pool}}` — `url` is replaced, `pool` survives.
+`{database: {url: "old", pool}}` and a projection selects a value for
+`database.url`, the result is `{database: {url: "new", pool}}` — `url` is
+replaced, `pool` survives.
 For a scalar or `Vec<T>` leaf, the leaf is replaced wholesale. Fields whose
 keys are not known at derive time (arbitrary map keys, flattened structs) are
 served entirely by the substrate; their alias-free projections, if any, are a
@@ -585,6 +586,13 @@ value is copied (most dangerously, deserialization-error messages).
 
 ```rust,ignore
 pub struct Secret<T>(T);
+
+impl<T> Secret<T> {
+    /// Returns a direct reference to the wrapped value.
+    pub fn expose_secret(&self) -> &T {
+        &self.0
+    }
+}
 
 impl<T> fmt::Debug   for Secret<T> { /* writes "Secret([REDACTED])" */ }
 impl<T> fmt::Display for Secret<T> { /* same */ }
@@ -828,8 +836,7 @@ the target stay with the application.
 ### 6.2 Technical requirements
 
 - The change is additive at runtime. A struct using no new attribute compiles
-  and
-  loads identically, including nested, flattened, and map-typed fields,
+  and loads identically, including nested, flattened, and map-typed fields,
   verified by a byte-identical golden fixture (§8.4).
 - Aliases are resolved to a single value per field before the environment layer
   is composed; no field contributes more than one environment value, so
@@ -840,12 +847,11 @@ the target stay with the application.
   merge with leaf replacement (`merge_value` semantics).
 - The generated code calls `composer.push_environment` exactly once and appends
   resolution errors, individually, to the existing `errors` collection.
-- The runtime glue types (`EnvProjection`, `EnvAlias`, the resolver) are
-  internal
-  (`#[doc(hidden)]`), not committed public API, and are not `#[non_exhaustive]`.
+- The runtime glue types (`EnvProjection`, `EnvAlias`, the resolver) are internal
+  (`#[doc(hidden)]`), not committed public API, and are not
+  `#[non_exhaustive]`.
 - The IR extension renames `var_name` to `canonical` (read-compatible via a
-  serde
-  alias) and bumps `ir_version` to `1.2`; the agent-context `env` block is
+  serde alias) and bumps `ir_version` to `1.2`; the agent-context `env` block is
   additive and does not bump the agent-context schema version.
 
 ### 6.3 Safety requirements
@@ -899,7 +905,7 @@ pub struct GlobalArgs {
     pub github_token: Secret<String>,
 }
 
-let token = global.github_token.as_deref();   // Secret<String> exposes the inner value explicitly
+let token = global.github_token.expose_secret();
 ```
 
 The native semantics reproduce the bespoke ranking exactly: command line, then
@@ -1092,7 +1098,7 @@ set (or via a global switch). Rejected: unrelated variables collide with field
 names, ambient secrets enter config-shaped space, and the useful distinction
 between application-owned and external variables is lost. Every ecosystem that
 offers this documents the hazard — `figment`'s `Env::raw` exposes the entire
-environment, and `Viper`'s `AutomaticEnv` scans on every read[^viper][^figment].
+environment, and `Viper`'s `AutomaticEnv` scans on every read[^2][^3].
 
 ### 9.2 Option B: aliases as additional merge layers or providers
 
@@ -1139,30 +1145,30 @@ public builder is deferred until a real requirement justifies it.
 The design follows established precedent. Python's `pydantic-settings` is the
 closest analogue: `AliasChoices("a", "b")` provides an explicit, ordered,
 per-field list where "the first environment variable that is found will be
-used", and an explicit alias bypasses the configured prefix[^pydantic]. Go's
+used", and an explicit alias bypasses the configured prefix[^4]. Go's
 `Viper` offers the same shape at runtime — `BindEnv(key, name1, name2, …)`
 where "if more than one are provided, they will take precedence in the
 specified order" — but pairs it with the dangerous whole-environment
-`AutomaticEnv`, which this RFC explicitly rejects[^viper]. Both `AliasChoices`
+`AutomaticEnv`, which this RFC explicitly rejects[^2]. Both `AliasChoices`
 and `BindEnv` take an ordered list of arbitrary length; this RFC's two-band
 grammar expresses the same total order through grouping and author order, and
 §11 records the path to an explicit rank should three-plus ordered categories
 prove common. `clap` contributes the clean layering of command line over
 environment over default, and the practice of showing the bound environment
-variable in help, but binds only a single name per argument[^clap].
+variable in help, but binds only a single name per argument[^5].
 
 The empty-value policy borrows config-rs's `ignore_empty` semantics directly —
-"ignore empty env values (treat as unset)"[^configrs]. The "canonical shadows
+"ignore empty env values (treat as unset)"[^6]. The "canonical shadows
 alias" rule mirrors the GitHub command-line tool, which documents `GH_TOKEN` and
 `GITHUB_TOKEN` "in order of precedence" — the tool-specific name beating the
-generic one — and warns when an ambient `GITHUB_TOKEN` is picked up[^ghcli].
+generic one — and warns when an ambient `GITHUB_TOKEN` is picked up[^1].
 Storing configuration, and especially credentials, in environment variables is
 the Twelve-Factor App's third factor, whose litmus test — that the codebase
 could be made open source "without compromising any credentials" — directly
-motivates the secret-redaction metadata[^twelvefactor]. The crate's existing
+motivates the secret-redaction metadata[^7]. The crate's existing
 prefix-to-path mapping is itself a relative of Spring Boot's relaxed binding,
 which normalises `MY_APP_GITHUB_TOKEN`-style names to canonical properties
-[^spring]; the difference is that aliasing accepts genuinely *different*
+[^8]; the difference is that aliasing accepts genuinely *different*
 external names rather than alternative spellings of one name.
 
 Two cross-cutting risks recur across every ecosystem and shape this design:
@@ -1243,42 +1249,42 @@ delivery. The material findings, and where each is addressed:
 
 ______________________________________________________________________
 
-[^ghcli]: GitHub CLI manual, environment reference,
+[^1]: GitHub CLI manual, environment reference,
     <https://cli.github.com/manual/gh_help_environment>. Documents
     `GH_TOKEN`, `GITHUB_TOKEN` "in order of precedence" and the warning when an
     ambient `GITHUB_TOKEN` is used.
 
-[^viper]: Viper documentation, <https://pkg.go.dev/github.com/spf13/viper>.
+[^2]: Viper documentation, <https://pkg.go.dev/github.com/spf13/viper>.
     `BindEnv` accepts an ordered list where the provided names "take precedence
     in the specified order"; `AutomaticEnv` checks the environment on every
     `Get`.
 
-[^figment]: Figment `Env` provider,
+[^3]: Figment `Env` provider,
             <https://docs.rs/figment/latest/figment/providers/struct.Env.html>.
     `Env::raw()` exposes the entire process environment; the documentation steers
     users to `prefixed`/`only`/`filter` to avoid pulling in unrelated variables.
 
-[^pydantic]: pydantic-settings documentation,
+[^4]: pydantic-settings documentation,
     <https://docs.pydantic.dev/latest/concepts/pydantic_settings/>. `AliasChoices`
     gives an ordered candidate list where "the first environment variable that is
     found will be used", and an explicit alias bypasses `env_prefix`.
 
-[^configrs]: config crate `Environment` provider,
-    <https://docs.rs/config/latest/config/struct.Environment.html>.
-    `ignore_empty(true)` ignores empty environment values, treating them as
-    unset.
-
-[^clap]: clap `Arg` documentation,
+[^5]: clap `Arg` documentation,
     <https://docs.rs/clap/latest/clap/struct.Arg.html>. `Arg::env`/`env_os` read
     a single environment variable as a fallback below the explicit argument and
     surface it in generated help.
 
-[^twelvefactor]: The Twelve-Factor App, Factor III: Config,
+[^6]: config crate `Environment` provider,
+    <https://docs.rs/config/latest/config/struct.Environment.html>.
+    `ignore_empty(true)` ignores empty environment values, treating them as
+    unset.
+
+[^7]: The Twelve-Factor App, Factor III: Config,
     <https://12factor.net/config>. Stores configuration, including external-service
     credentials, in environment variables; the litmus test is open-sourcing the
     codebase "without compromising any credentials".
 
-[^spring]: Spring Boot reference, externalized configuration,
+[^8]: Spring Boot reference, externalized configuration,
     <https://docs.spring.io/spring-boot/reference/features/external-config.html>.
     Relaxed binding maps environment-variable spellings to canonical
     kebab-case properties.
