@@ -636,6 +636,11 @@ represents those inputs by leaving `AgentInput.long` absent. The output is
 written as exactly one file at `<out>/agent-context.json`. `--format all`
 continues to mean `ir + man + ps`.
 
+`--format agent-context` is the generator format and remains unchanged by
+[ADR-007](adr-007-downstream-context-command-naming.md). The downstream
+application command convention is `<tool> context --json`; it does not add a
+public `context` or `agent-context` subcommand to `cargo-orthohelp`.
+
 The agent-context output must not be scraped from rendered man pages or
 PowerShell help. Rendering surfaces may consume agent metadata for examples or
 warnings, but they are not the source of truth for agents.

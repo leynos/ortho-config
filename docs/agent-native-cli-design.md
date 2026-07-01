@@ -133,9 +133,9 @@ different audience and stability requirement.
 ### 3.1 Human documentation IR
 
 The existing `OrthoConfigDocs` and `DocMetadata` model remains the source for
-localized documentation, roff man pages, PowerShell help, and generated
+localised documentation, roff man pages, PowerShell help, and generated
 reference material. It is allowed to contain prose, headings, examples, and
-localization metadata.
+localisation metadata.
 
 The documentation IR must continue to be versioned and serializable. It should
 gain only the command metadata required to keep human documentation accurate.
@@ -144,12 +144,12 @@ It must not become the compact agent context by accident.
 ### 3.2 Agent context
 
 The new agent-context contract is a compact, machine-oriented JSON document
-that describes how to invoke the CLI. It is not localized prose and should be
+that describes how to invoke the CLI. It is not localised prose and should be
 kept small enough for agents to load cheaply.
 
 The documentation IR and agent-context schema are sibling outputs from the same
 metadata spine, not nested versions of one another. The documentation IR stays
-localized and human-documentation-oriented. The agent-context schema stays
+localised and human-documentation-oriented. The agent-context schema stays
 compact, machine-oriented, and independently versioned so agent-facing changes
 do not force documentation IR migrations unless the same data is genuinely
 needed by both outputs.
@@ -160,35 +160,38 @@ Reusable agent-context types and `ORTHO_AGENT_CONTEXT_SCHEMA_VERSION` live in
 `ortho_config::agent_context`. `cargo-orthohelp` may generate or transform the
 context in later roadmap work, but it does not own the reusable context
 contract. The documentation IR remains owned by `ortho_config::docs`, so Fluent
-identifiers, localized long prose, roff details, and PowerShell help structures
+identifiers, localised long prose, roff details, and PowerShell help structures
 are not agent-context source fields.
 
-The planned `cargo-orthohelp` generator interface is:
+The `cargo-orthohelp` generator interface is:
 
 ```console
 cargo orthohelp --format agent-context
 ```
 
-Equivalent command forms are acceptable if implementation work finds a cleaner
-fit, but the output must remain a first-class format, not a scraped help page.
-For downstream application command surfaces, OrthoConfig should prefer the
-public command name `context`:
+This remains a generator format that writes an artefact. It is not the
+downstream application command name. For downstream application command
+surfaces, OrthoConfig defines the public command name `context` with the
+canonical `--json` flag:
 
 ```console
 example-cli context --json
 ```
 
-The payload should identify itself precisely, for example:
+The payload identifies itself precisely, for example:
 
 ```json
 {
+  "schema_version": "1",
   "kind": "example-cli.agent_context"
 }
 ```
 
 This keeps the public command approachable while preserving an explicit machine
-schema. Hidden aliases such as `agent-context` should be avoided before the
-first public release unless a migration requires them.
+schema. Hidden aliases such as `agent-context` are avoided before the first
+public release unless a migration requires them. Compatibility detection uses
+`schema_version`; consumers must not parse `kind` as a version. ADR-007 records
+the naming decision and prior-art divergence.
 
 The top-level shape should include:
 
@@ -295,12 +298,11 @@ but they are downstream of the compact contracts. They should be generated or
 validated against the documentation IR and agent context rather than maintained
 as an independent source of truth.
 
-Skill manifests are still first-class contracts. `ortho_config::agent_context`
-models the reusable metadata with `SkillManifest`, `SkillCommandRef`, and the
-`AgentContext.skill_manifests` field: the manifest path, the downstream
-manifest schema version, and the command index that later validation will
-check. OrthoConfig must not own a downstream skill's domain prose, such as
-Weaver's safe Rust rename workflow or Netsuke's build workflow.
+Skill manifests are still first-class contracts. OrthoConfig should model the
+manifest path, schema version, command index, and validation rules that prove a
+manifest mentions real commands and flags. It must not own a downstream skill's
+domain prose, such as Weaver's safe Rust rename workflow or Netsuke's build
+workflow.
 
 ## 4. Whole-CLI introspection
 
@@ -358,6 +360,12 @@ The canonical flags are:
 - `--profile` for selecting a named persistent identity;
 - `--deliver` for routing generated artefacts.
 
+The canonical downstream introspection command is `context --json`, defined by
+[ADR-007](adr-007-downstream-context-command-naming.md). The `context` command
+name is fixed for application surfaces, while
+`cargo-orthohelp --format agent-context` remains the build-time generator
+format.
+
 The canonical human-facing global option glossary is:
 
 - `--color auto|always|never` for colour policy;
@@ -367,7 +375,7 @@ The canonical human-facing global option glossary is:
 - `--plain` for plain text fallback;
 - `--no-pager` for pager suppression;
 - `--width <columns>` for terminal-width-sensitive rendering;
-- `--locale <locale>` for localized human output;
+- `--locale <locale>` for localised human output;
 - `--quiet` and `--verbose` for diagnostic verbosity.
 
 The policy should flag or reject off-convention aliases such as `info`, `ls`,
@@ -420,7 +428,7 @@ JSON mode must be stricter than "mostly JSON". The default contract is:
 - failure writes no stdout unless an explicit artefact has already been
   delivered, and exactly one JSON diagnostic document to stderr;
 - subprocess output never leaks beside the result document on stdout;
-- protocol identifiers and error classes are not localized.
+- protocol identifiers and error classes are not localised.
 
 Some commands legitimately need streams. OrthoConfig should therefore model a
 `JsonModeContract`-style shape with these choices:
@@ -443,7 +451,7 @@ renderer. The reusable contract should describe:
 - colour, emoji, progress, pager, width, accessibility, and plain-output
   policy;
 - stdout and stderr contracts per renderer;
-- localized versus non-localized fields;
+- localised versus non-localised fields;
 - whether progress or subprocess output may be inherited in human mode only.
 
 This supports Weaver's dual human/machine output and Netsuke's human-first,
@@ -640,7 +648,7 @@ apply explicit defaults instead of guessing from absent data.
 | `delivery_support`     | `{ "supported": false }` | Delivery sinks change artefact routing and must be explicit.               |
 | `feedback_support`     | `{ "supported": false }` | Feedback storage or upload must be explicitly available.                   |
 | `execution_ledger`     | `{ "supported": false }` | Jobs, runs, or tasks require application-owned execution state.            |
-| `skill_manifests`      | `[]`                     | Skill manifests are absent until declared; validation lands in 6.3.2.      |
+| `skill_manifest_paths` | `[]`                     | Skills are absent until declared and validated.                            |
 | `capability_id`        | `null`                   | Capability routing is optional downstream metadata.                        |
 | `provider_provenance`  | `{ "reported": false }`  | Provider names are not emitted unless the application declares provenance. |
 | `renderer.human`       | `{ "supported": true }`  | Existing documentation IR already supports human help material.            |
@@ -694,13 +702,9 @@ The design and roadmap updates must address these known gaps:
 - `cargo-orthohelp` does not yet enumerate all valid choices in errors;
 - generated file writes are not specified as atomic;
 - renderer metadata, JSON-mode stream contracts, exit-code taxonomy metadata,
-  capability/provenance metadata, profile redaction, delivery, feedback,
-  execution ledger, mutation, and pagination metadata are not yet modelled as
-  first-class contracts;
-- skill manifest metadata is modelled in
-  `ortho_config::agent_context::SkillManifest` and `SkillCommandRef`; roadmap
-  item 6.3.2 still owes validation that referenced command paths and flags
-  resolve against the real command tree.
+  skill manifest validation, capability/provenance metadata, profile redaction,
+  delivery, feedback, execution ledger, mutation, and pagination metadata are
+  not yet modelled as first-class contracts.
 
 ## 10. Deferred extensions
 

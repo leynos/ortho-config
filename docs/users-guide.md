@@ -196,15 +196,15 @@ uses a post-merge hook to clean up whitespace-only preambles.
 ### Documentation and agent contracts
 
 `OrthoConfigDocs` remains the public contract for human documentation metadata.
-It emits localized documentation IR through `DocMetadata` and
+It emits localised documentation IR through `DocMetadata` and
 `ORTHO_DOCS_IR_VERSION`; `cargo-orthohelp` consumes that IR to produce
-localized JSON, roff man pages, and PowerShell help.
+localised JSON, roff man pages, and PowerShell help.
 
 Agent invocation context is a separate compact schema. Its reusable Rust types
 live under `ortho_config::agent_context` and use
 `ORTHO_AGENT_CONTEXT_SCHEMA_VERSION`, so agent-facing compatibility can change
 without forcing a documentation IR version bump. The schema deliberately keeps
-out Fluent identifiers, localized long prose, roff details, and PowerShell help
+out Fluent identifiers, localised long prose, roff details, and PowerShell help
 structures.
 
 Skill manifest descriptors are part of that compact agent-context schema.
@@ -231,6 +231,47 @@ manifest validation remain application-owned.
   ]
 }
 ```
+
+#### Downstream `context --json` commands
+
+Applications that expose agent invocation context use the downstream command
+surface defined by [ADR-007](adr-007-downstream-context-command-naming.md):
+
+```console
+example-cli context --json
+```
+
+The application command is `context`, not `agent-context`. The emitted payload
+uses `kind: "<tool>.agent_context"` to identify the payload family and
+`schema_version` to identify compatibility. Consumers should compare
+`schema_version` with `ORTHO_AGENT_CONTEXT_SCHEMA_VERSION`; they should not
+parse `kind` as a version.
+
+```rust
+use ortho_config::{AgentCommand, AgentContext};
+
+fn build_agent_context() -> AgentContext {
+    let mut context = AgentContext::new("example-cli");
+    context.commands = vec![AgentCommand {
+        path: vec!["example-cli".to_owned(), "status".to_owned()],
+        summary: Some("Report the current service status.".to_owned()),
+        canonical_verb: Some("get".to_owned()),
+        inputs: Vec::new(),
+        output_modes: vec!["json".to_owned()],
+        interaction_mode: ortho_config::InteractionMode::NonInteractive,
+        mutation_effect: ortho_config::MutationEffect::ReadOnly,
+        async_submission: None,
+        delivery_route: None,
+        pagination: None,
+        examples: Vec::new(),
+    }];
+    context
+}
+```
+
+Use `AgentContext::to_json` for the command-surface form when the `serde_json`
+feature is enabled. It writes compact JSON with a trailing newline for
+stdout-oriented commands.
 
 Policy reports for agent-native warnings and hard failures are owned by
 `cargo-orthohelp`. The `cargo_orthohelp::policy` module defines

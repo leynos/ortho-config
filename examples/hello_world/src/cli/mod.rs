@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 use crate::error::ValidationError;
 mod commands;
 mod config_loading;
+pub mod context;
 mod discovery;
 mod global_config;
 mod localization;
@@ -20,6 +21,7 @@ mod overrides;
 #[cfg(test)]
 pub(crate) use self::config_loading::load_config_overrides;
 pub use commands::{FarewellChannel, GreetCommand, TakeLeaveCommand};
+pub use context::ContextCommand;
 pub use global_config::{apply_greet_overrides, load_global_config, load_greet_defaults};
 /// Extension trait for applying localisation to a [`clap::Command`] tree.
 ///
@@ -127,6 +129,9 @@ impl GlobalArgs {
     OrthoConfigSubcommandDocs,
 )]
 pub enum Commands {
+    /// Emits machine-readable command context for agents.
+    #[command(name = "context")]
+    Context(ContextCommand),
     /// Prints a greeting using the configured style.
     #[command(name = "greet")]
     #[ortho_subcommand(with_matches)]
