@@ -122,7 +122,7 @@ pub struct AsyncSubmission {
 
 /// Supported asynchronous submission styles.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "kebab-case")]
+#[serde(rename_all = "snake_case")]
 pub enum AsyncSubmissionMode {
     /// Command completes before returning to the caller.
     Inline,
@@ -226,21 +226,17 @@ impl Default for InteractionMode {
 
 /// Mutation boundary for a command.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
 pub enum MutationEffect {
     /// Legacy or undeclared mutation behaviour.
-    #[serde(rename = "unknown")]
     Unknown,
     /// Read-only command.
-    #[serde(rename = "read-only")]
     ReadOnly,
     /// Command may write local or remote state.
-    #[serde(rename = "write")]
     Write,
     /// Command may delete local or remote state.
-    #[serde(rename = "delete")]
     Delete,
     /// Command submits asynchronous work.
-    #[serde(rename = "submit")]
     Submit,
 }
 

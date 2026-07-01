@@ -7,9 +7,93 @@ use insta::assert_snapshot;
 use rstest::rstest;
 use serde_json::{Value, json};
 
+const AGENT_CONTEXT_WIRE_CONTRACT_JSON: &str = r#"{
+  "schema_version": "1",
+  "kind": "example-cli.agent_context",
+  "package": "example-cli",
+  "commands": [
+    {
+      "path": [
+        "example-cli",
+        "list"
+      ],
+      "summary": "List configured resources.",
+      "canonical_verb": "list",
+      "inputs": [
+        {
+          "name": "format",
+          "long": "format",
+          "value_type": "string",
+          "required": false,
+          "default": "json",
+          "enum_values": [
+            "json"
+          ]
+        }
+      ],
+      "output_modes": [
+        "json"
+      ],
+      "interaction_mode": "non_interactive",
+      "mutation_effect": "read_only",
+      "async_submission": {
+        "mode": "submit",
+        "noun": "job"
+      },
+      "delivery_route": {
+        "supported": true,
+        "target": "file"
+      },
+      "pagination": {
+        "limit_input": "limit",
+        "cursor_input": "cursor"
+      },
+      "examples": [
+        {
+          "command": "example-cli list --format json",
+          "output_mode": "json"
+        }
+      ]
+    }
+  ],
+  "profiles": {
+    "supported": false
+  },
+  "feedback": {
+    "supported": false
+  },
+  "policy": {
+    "agent_native": "warn"
+  },
+  "skill_manifests": [
+    {
+      "id": "example-list",
+      "path": "skills/example-list.md",
+      "manifest_schema_version": "v1",
+      "commands": [
+        {
+          "path": [
+            "example-cli",
+            "list"
+          ],
+          "flags": [
+            "format"
+          ]
+        }
+      ]
+    }
+  ]
+}"#;
+
 #[rstest]
 fn agent_context_version_is_independent_from_docs_ir() {
     assert_eq!(ORTHO_AGENT_CONTEXT_SCHEMA_VERSION, "1");
+    assert_eq!(AGENT_CONTEXT_KIND_SUFFIX, "agent_context");
+    assert!(
+        AgentContext::new("example-cli")
+            .kind
+            .ends_with(AGENT_CONTEXT_KIND_SUFFIX)
+    );
     assert_ne!(
         ORTHO_AGENT_CONTEXT_SCHEMA_VERSION, ORTHO_DOCS_IR_VERSION,
         "agent context must not share the documentation IR version"
@@ -39,7 +123,7 @@ fn compact_context_serialization_excludes_localization_fields() {
     assert_eq!(field(&value, "kind"), "example-cli.agent_context");
     let command = first_array_item(field(&value, "commands"));
     assert_eq!(field(command, "interaction_mode"), "non_interactive");
-    assert_eq!(field(command, "mutation_effect"), "read-only");
+    assert_eq!(field(command, "mutation_effect"), "read_only");
     assert_eq!(field(field(command, "async_submission"), "mode"), "submit");
     assert_eq!(field(field(command, "delivery_route"), "target"), "file");
     assert!(value.get("about_id").is_none());
@@ -184,7 +268,45 @@ fn skill_manifest_required_fields_fail_deserialization(#[case] payload: Value) {
 fn agent_context_json_snapshot_covers_wire_contract() {
     let json = serde_json::to_string_pretty(&sample_agent_context())
         .expect("serialize agent context snapshot");
-    assert_snapshot!(json);
+
+    assert_eq!(json, AGENT_CONTEXT_WIRE_CONTRACT_JSON);
+}
+
+#[rstest]
+fn absent_optional_fields_serialize_with_documented_nulls() {
+    let mut context = sample_agent_context();
+    let mutable_command = context
+        .commands
+        .first_mut()
+        .expect("sample context should contain one command");
+    mutable_command.summary = None;
+    mutable_command.canonical_verb = None;
+    mutable_command.async_submission = None;
+    mutable_command.delivery_route = None;
+    mutable_command.pagination = None;
+    mutable_command
+        .inputs
+        .first_mut()
+        .expect("sample command should contain one input")
+        .default = None;
+    mutable_command
+        .examples
+        .first_mut()
+        .expect("sample command should contain one example")
+        .output_mode = None;
+
+    let value = serde_json::to_value(context).expect("serialize agent context");
+    let serialized_command = first_array_item(field(&value, "commands"));
+    let input = first_array_item(field(serialized_command, "inputs"));
+    let example = first_array_item(field(serialized_command, "examples"));
+
+    assert!(serialized_command.get("summary").is_none());
+    assert!(field(serialized_command, "canonical_verb").is_null());
+    assert!(field(serialized_command, "async_submission").is_null());
+    assert!(field(serialized_command, "delivery_route").is_null());
+    assert!(field(serialized_command, "pagination").is_null());
+    assert!(field(input, "default").is_null());
+    assert!(field(example, "output_mode").is_null());
 }
 
 #[rstest]
@@ -233,8 +355,59 @@ fn missing_required_top_level_fields_fail_deserialization(#[case] payload: Value
 }
 
 #[rstest]
+fn unknown_top_level_fields_are_ignored_for_forward_compatibility() {
+    let payload = json!({
+        "schema_version": "1",
+        "kind": "future-cli.agent_context",
+        "package": "future-cli",
+        "commands": [],
+        "future_optional_field": {
+            "producer": "newer-ortho-config"
+        }
+    });
+
+    let context = serde_json::from_value::<AgentContext>(payload)
+        .expect("unknown fields should be ignored within the same major version");
+
+    assert_eq!(context.package, "future-cli");
+    assert!(context.commands.is_empty());
+}
+
+#[rstest]
+#[case(AsyncSubmissionMode::Inline, "inline")]
+#[case(AsyncSubmissionMode::Submit, "submit")]
+fn async_submission_mode_serializes_canonical_wire_values(
+    #[case] mode: AsyncSubmissionMode,
+    #[case] expected: &str,
+) {
+    let value = serde_json::to_value(mode).expect("serialize async submission mode");
+    assert_eq!(value, expected);
+}
+
+#[rstest]
+#[case(InteractionMode::Unknown, "unknown")]
+#[case(InteractionMode::NonInteractive, "non_interactive")]
+#[case(InteractionMode::Interactive, "interactive")]
+fn interaction_mode_serializes_canonical_wire_values(
+    #[case] mode: InteractionMode,
+    #[case] expected: &str,
+) {
+    let value = serde_json::to_value(mode).expect("serialize interaction mode");
+    assert_eq!(value, expected);
+}
+
+#[rstest]
+#[case(PolicyMode::Off, "off")]
+#[case(PolicyMode::Warn, "warn")]
+#[case(PolicyMode::Deny, "deny")]
+fn policy_mode_serializes_canonical_wire_values(#[case] mode: PolicyMode, #[case] expected: &str) {
+    let value = serde_json::to_value(mode).expect("serialize policy mode");
+    assert_eq!(value, expected);
+}
+
+#[rstest]
 #[case(MutationEffect::Unknown, "unknown")]
-#[case(MutationEffect::ReadOnly, "read-only")]
+#[case(MutationEffect::ReadOnly, "read_only")]
 #[case(MutationEffect::Write, "write")]
 #[case(MutationEffect::Delete, "delete")]
 #[case(MutationEffect::Submit, "submit")]
@@ -287,7 +460,10 @@ fn sample_agent_context() -> AgentContext {
                 supported: true,
                 target: Some("file".to_owned()),
             }),
-            pagination: None,
+            pagination: Some(PaginationContract {
+                limit_input: Some("limit".to_owned()),
+                cursor_input: Some("cursor".to_owned()),
+            }),
             examples: vec![AgentExample {
                 command: "example-cli list --format json".to_owned(),
                 output_mode: Some("json".to_owned()),

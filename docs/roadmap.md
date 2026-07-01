@@ -148,14 +148,14 @@ fields.
   - [x] Exclude localized long prose unless a concise summary is needed for
     command selection.
 
-- [ ] 6.2.2. Version and validate the agent-context schema.
+- [x] 6.2.2. Version and validate the agent-context schema.
   - Requires 6.2.1.
   - See agent-native-cli-design.md §3.2 and §8;
     adr-003-define-schema-ownership-for-agent-native-contracts.md.
-  - [ ] Add schema-version tests that fail on accidental shape changes.
-  - [ ] Add golden fixtures for a simple CLI, a nested CLI, and a CLI with enum
+  - [x] Add schema-version tests that fail on accidental shape changes.
+  - [x] Add golden fixtures for a simple CLI, a nested CLI, and a CLI with enum
     values.
-  - [ ] Document the schema and compatibility policy in
+  - [x] Document the schema and compatibility policy in
     `docs/agent-native-cli-design.md`.
 
 - [ ] 6.2.3. Define downstream `context --json` command naming.

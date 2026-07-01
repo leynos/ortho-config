@@ -119,9 +119,9 @@ defaults in OrthoConfig readers, generators, or transforms; do not rely on JSON
 Schema validation to mutate payloads.
 
 Keep generated human documentation compatible unless a roadmap item approves a
-versioned migration. The `cargo-orthohelp` `ir`, `man`, `ps`, and `all`
-formats, their accepted spellings, generated paths, and process success/failure
-contract are externally visible behaviours. Add agent-context, policy, and JSON
+versioned migration. The `cargo-orthohelp` `ir`, `man`, `ps`, `agent-context`,
+and `all` formats, their accepted spellings, generated paths, and process
+success/failure contract are externally visible behaviours. Add policy and JSON
 status surfaces beside those formats rather than changing them.
 
 Keep schema ownership aligned with ADR-003. Localized human-documentation data
@@ -134,10 +134,11 @@ contracts downward instead.
 ### Generating agent-context output
 
 `cargo-orthohelp --format agent-context` reads the same bridge `DocMetadata` as
-the human documentation generators and writes `<out>/agent-context.json`. Keep
-the transform projective: it may copy or derive compact command metadata from
-the bridge IR, but it must not inspect rendered roff, PowerShell help, or
-localized IR output.
+the human documentation generators and writes `<out>/agent-context.json`.
+`cargo-orthohelp --format all` writes the same file beside IR, man-page, and
+PowerShell artefacts. Keep the transform projective: it may copy or derive
+compact command metadata from the bridge IR, but it must not inspect rendered
+roff, PowerShell help, or localized IR output.
 
 Agent-context output is not localized. The current transform may use the short
 en-US command description as `AgentCommand.summary`, but it must not copy
@@ -150,13 +151,33 @@ detects a positional input from existing CLI metadata when
 `AgentInput` kind field unless a later ADR or roadmap item changes the schema
 ownership decision.
 
+Treat `AgentInput.default` as display-only. It is normalized for stable
+goldens, but it is not executable or machine-parseable.
+
+Evolve the schema through the compatibility policy in
+[agent-native-cli-design.md](agent-native-cli-design.md) §8.2. Bump
+`ORTHO_AGENT_CONTEXT_SCHEMA_VERSION` for breaking changes such as field
+renames, enum wire-string changes, null-versus-omitted changes, required-field
+changes, or `deny_unknown_fields`. Additive optional fields stay within the
+same version, and consumers must ignore unknown fields.
+
+Pin every schema change with the `ortho_config` wire snapshot and
+variant-exhaustive enum tests. Add end-to-end `cargo-orthohelp` goldens by
+using the existing multi-root fixture pattern: add a root type to
+`tests/fixtures/orthohelp_fixture` and select it with `--root-type` rather than
+creating a new workspace crate. Keep the 6.2.2 nested agent-context assertions
+separate from the 6.1.2 roff, PowerShell, and IR nested-renderer assertions. Do
+not duplicate a per-field schema table here; use the rustdoc for
+`ortho_config::agent_context`, the §3.2 JSON example, and the committed wire
+snapshot as the canonical field references.
+
 Run `coderabbit review --agent` after major milestones that change schemas,
 documentation contracts, or externally visible behaviour. Clear its concerns
 before moving to the next milestone.
 
 ### Public API
 
-The following functions form the stable agent-context surface for 6.2.1.
+The following functions form the stable agent-context surface for 6.2.2.
 
 `cargo_orthohelp::agent_context`:
 
@@ -194,7 +215,6 @@ pub fn write_agent_context(
 ```rust
 /// Emit a compact, non-localised agent-context JSON manifest.
 /// Writes `<out_dir>/agent-context.json`.
-/// Excluded from `--format all` until schema versioning is locked in 6.2.2.
 AgentContext,
 ```
 
