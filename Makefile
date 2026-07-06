@@ -1,4 +1,4 @@
-.PHONY: help all clean test build release lint fmt check-fmt markdownlint nixie typecheck python-test-deps publish-check powershell-wrapper-validate FORCE
+.PHONY: help all clean test build release lint fmt check-fmt markdownlint nixie typecheck python-test-deps publish-check powershell-wrapper-validate test-workflow-contracts FORCE
 
 CRATE ?= ortho_config
 CARGO ?= cargo
@@ -39,6 +39,9 @@ test: python-test-deps ## Run tests with warnings treated as errors
 
 python-test-deps: ## Ensure Python test dependencies are provisioned
 	$(PYTEST) --version > $(NULL_DEVICE)
+
+test-workflow-contracts: ## Validate the mutation-testing caller contract
+	$(UV) run --with 'pytest>=8' --with 'pyyaml>=6' pytest tests/workflow_contracts -q
 
 # will match target/debug/libmy_library.rlib and target/release/libmy_library.rlib
 target/%/lib$(CRATE).rlib: FORCE ## Build library in debug or release

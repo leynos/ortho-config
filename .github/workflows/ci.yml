@@ -64,6 +64,10 @@ jobs:
       - name: Lint
         run: make lint
 
+      - name: Workflow contract tests
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        run: make test-workflow-contracts
+
       - name: Test and Measure Coverage (with serde_saphyr)
         uses: leynos/shared-actions/.github/actions/generate-coverage@aebb3f5b831102e2a10ef909c83d7d50ea86c332
         with:

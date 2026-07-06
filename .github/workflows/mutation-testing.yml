@@ -1,0 +1,40 @@
+name: Mutation testing
+
+# Thin caller of the shared mutation-testing reusable workflow; caller
+# guide: leynos/shared-actions docs/mutation-cargo-workflow.md.
+# Scheduled runs mutate only files changed within the detection window;
+# manual dispatch runs mutate everything, fanned out across shards. To
+# test a branch, select it in the Actions "Run workflow" control.
+
+on:
+  schedule:
+    - cron: "5 5 * * *" # Daily, 05:05 UTC
+  workflow_dispatch:
+
+# Default the token to no scopes; the job opts in explicitly.
+permissions: {}
+
+# Serialize runs per ref: a dispatch during a scheduled run (or vice
+# versa) queues rather than racing. Runs are informational, so queued
+# runs wait instead of cancelling.
+concurrency:
+  group: mutation-testing-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  mutation:
+    permissions:
+      contents: read
+      id-token: write # OIDC workflow-source resolution
+    uses: leynos/shared-actions/.github/workflows/mutation-cargo.yml@47aea18960d24f33aedc4782ec6b73e365418313
+    with:
+      # Virtual workspace: the library, derive macro, orthohelp cargo
+      # subcommand, and example crates all live in subdirectories, so
+      # the default src/ prefix would miss every workspace member.
+      paths: "cargo-orthohelp/,examples/,ortho_config/,ortho_config_macros/"
+      # Test-support crate and the orthohelp test fixture crate exist
+      # only to exercise other crates' tests; their survivors are noise.
+      exclude-globs: "test_helpers/**,tests/fixtures/**"
+      # Mirror the CI coverage baseline's feature set (serde_json toml
+      # json5 yaml) so feature-gated parsers are tested against mutants.
+      extra-args: "--features serde_json,toml,json5,yaml"
