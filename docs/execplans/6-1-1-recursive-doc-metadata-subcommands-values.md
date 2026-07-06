@@ -157,7 +157,7 @@ of autonomous action, not quality criteria.
   for example, if the derive must expose a stable `command_name` override on
   the IR itself. Present the alternatives with trade-offs.
 - IR schema: stop if any field on any of the existing IR types must change.
-  This work is not authorised to evolve the schema; that requires a separate
+  This work is not authorized to evolve the schema; that requires a separate
   ADR and a bump of `ORTHO_DOCS_IR_VERSION`.
 - Dependencies: stop if any new crate, build script, generated file, or
   non-standard Cargo feature is required.

@@ -283,7 +283,7 @@ where
     T: Into<std::ffi::OsString> + Clone;
 ```
 
-Callers pass an already-localised command, such as
+Callers pass an already-localized command, such as
 `Cli::command().with_base("acme.tool").localize(localizer)`. The unsuffixed
 `try_parse_localized` method is the environment-reading variant; the older
 example-only `_env` suffix is not part of the promoted API.
@@ -847,7 +847,7 @@ Both commands honour the agent-context output contracts already defined in
   fails with a migration pointer rather than silently degrading.
 - **`LocalizedFormatter` escape hatch (§6.4.1) used incorrectly.** The
   monomorphised formatter is opt-in for advanced cases. Misusing it with a
-  process-wide `OnceLock<Arc<dyn Localizer>>` that is never initialised falls
+  process-wide `OnceLock<Arc<dyn Localizer>>` that is never initialized falls
   back to en-US silently. The rustdoc for the formatter must call out this case
   and recommend the eager path for almost every adopter.
 

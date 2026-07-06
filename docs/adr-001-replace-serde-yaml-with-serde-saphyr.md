@@ -92,14 +92,14 @@ powerful configuration merging capabilities provided by `figment`.
 - The library is newer than `serde_yaml` though it is well-tested against the
   official YAML test suite.
 - **Viability**: Highly viable and aligns perfectly with all decision drivers.
-  The required integration effort is minimal and localised.
+  The required integration effort is minimal and localized.
 
 ## Decision Outcome
 
 **Chosen Option**: Option 3. We will replace `serde_yaml` with `serde-saphyr`
 as the YAML parser for `ortho-config`.
 
-This decision prioritises safety, maintainability, and correctness. The
+This decision prioritizes safety, maintainability, and correctness. The
 technical analysis confirms that `ortho-config`'s architecture is sufficiently
 decoupled to allow for the creation of a custom `figment` provider for
 `serde-saphyr` with minimal disruption to the existing codebase. The benefits
@@ -280,7 +280,7 @@ to validate the new implementation thoroughly.
 ### Implementation Outcome
 
 - Added a feature-gated `SaphyrYaml` provider that reads files or in-memory
-  strings, deserialises them with `serde-saphyr` using
+  strings, deserializes them with `serde-saphyr` using
   `Options::strict_booleans`, and emits a `Dict` for `figment`.
 - Replaced the old `figment::providers::Yaml` integration in
   `parse_config_by_format`, ensuring `.yaml` and `.yml` files are parsed

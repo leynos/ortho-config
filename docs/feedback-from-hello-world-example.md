@@ -52,8 +52,8 @@ call. Specifically:
   internally. This follows the “convention over configuration” goal from the
   design docs by providing sensible default behaviour for config file lookup.
 
-- **Customisation via attributes:** For flexibility, the derive macro could
-  allow an attribute on the root config struct to customise the config file
+- **Customization via attributes:** For flexibility, the derive macro could
+  allow an attribute on the root config struct to customize the config file
   name or the env var name. For example,
   `#[ortho_config(config = "hello_world", config_flag = "config")]` might
   generate a `--config` CLI flag and use `HELLO_WORLD_CONFIG_PATH` internally

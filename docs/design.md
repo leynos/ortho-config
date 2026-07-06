@@ -245,7 +245,7 @@ overrides) ahead of the final merge.
 
 The `examples/hello_world` crate now anchors both unit and behavioural testing
 for the workspace. Deterministic components such as CLI parsing, validation,
-and plan construction are covered with `rstest` parameterisations; fixtures
+and plan construction are covered with `rstest` parameterizations; fixtures
 expose pre-populated `HelloWorldCli`, `GreetCommand`, and `TakeLeaveCommand`
 values to exercise edge-cases like conflicting modes, blank input, and
 punctuation overrides. End-to-end workflows are expressed with `rstest-bdd`
@@ -280,7 +280,7 @@ sections without bespoke glue code.
 ### 4.5. Configuration discovery helper
 
 `ConfigDiscovery` now wraps the path search order previously hand-written in
-the example. A builder customises the environment variable, dotfile name,
+the example. A builder customizes the environment variable, dotfile name,
 project roots, and the canonical config filename without duplicating the
 discovery routine. The helper maintains the precedence from the example:
 explicit overrides via `<PREFIX>_CONFIG_PATH`, then XDG locations (including
@@ -716,10 +716,10 @@ text and errors can be patched without rewriting parser wiring.
   `actual`, `subcommand`, and `valid_subcommands`. When `clap` omits these
   details (for example, `DisplayHelpOnMissingArgumentOrSubcommand`), the
   command is inspected to populate subcommand names. Display requests (`--help`/
-  `--version`) bypass localisation. When a lookup fails, the original `clap`
+  `--version`) bypass localization. When a lookup fails, the original `clap`
   message is preserved, ensuring the formatter is non-destructive. A companion
   `clap_error_formatter` closure wraps a shared `Arc<dyn Localizer>` so command
-  builders can reuse the formatter without cloning localiser internals;
+  builders can reuse the formatter without cloning localizer internals;
   `localize_clap_error` remains as a convenience when the command is
   unavailable.
 
@@ -925,7 +925,7 @@ flags on top of the derive macro while keeping the application logic explicit.
   captures mutually exclusive switches and the helper trims salutation input so
   command execution never needs to re-implement parsing safeguards.
 - `GreetingPlan` encapsulates the formatted message. The builder enforces the
-  validation contract, canonicalises punctuation, and records the delivery mode
+  validation contract, canonicalizes punctuation, and records the delivery mode
   for downstream rendering. This keeps the `main` function focused on
   orchestration.
 - Unit tests rely on `rstest` fixtures to exercise validation and message
@@ -934,7 +934,7 @@ flags on top of the derive macro while keeping the application logic explicit.
   text without a bespoke runner.
 - Behavioural tests delegate CLI parsing and output assertions to the shared
   harness fixture so each step stays as a single, intention-revealing line.
-- Subcommands showcase layering strategies: the `greet` command customises
+- Subcommands showcase layering strategies: the `greet` command customizes
   punctuation and optional preambles, while `take-leave` composes switches,
   optional arguments, and shared greeting overrides to describe a farewell
   workflow. Declarative merging applies the `[cmds.<name>]` sections before CLI
@@ -986,7 +986,7 @@ generated documentation, generated agent context, and enforceable CLI policy.
   now accumulates vector fields in typed append buffers and emits per-field
   merge logic so defaults, nested structures, and enumerations survive layered
   declarative inputs without auxiliary helper structs.
-- **Enumerate declarative precedence via fixtures (2024-06-21):** Parameterised
+- **Enumerate declarative precedence via fixtures (2024-06-21):** Parameterized
   `rstest` suites exercise `merge_from_layers` across defaults, file,
   environment, and CLI permutations while `trybuild` pass cases guard the
   generated helper signatures. This codifies precedence semantics and catches
@@ -999,7 +999,7 @@ generated documentation, generated agent context, and enforceable CLI policy.
   timeouts, and binds feature files with compile-time tag filters so
   feature-gated scenarios disappear from unsupported builds.
 
-- **Prefix normalisation:** The `prefix` struct attribute now appends a trailing
+- **Prefix normalization:** The `prefix` struct attribute now appends a trailing
   underscore when callers omit it (unless the string is empty). This keeps
   attribute usage ergonomic for API consumers—`#[ortho_config(prefix = "APP")]`
   produces environment variables such as `APP_PORT`—whilst preserving existing

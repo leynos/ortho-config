@@ -117,7 +117,7 @@ this plan until the user approves it.
 - [x] (2026-05-20T23:06:46Z) Used Firecrawl to check external prior art for
   schema evolution, SemVer public API compatibility, JSON Schema defaults, and
   CLI output-generation practice.
-- [x] (2026-05-20T23:06:46Z) Created a finalised context pack named
+- [x] (2026-05-20T23:06:46Z) Created a finalized context pack named
   `5-2-2-migration-rules-planning` for team context exchange.
 - [x] (2026-05-20T23:06:46Z) Drafted this pre-implementation ExecPlan.
 - [x] (2026-05-20T23:21:00Z) Ran `make check-fmt`, `make lint`,
@@ -624,7 +624,7 @@ Main-branch schema ownership work from
   `--format all` behaviour remains compatible while agent-context generation
   and policy checking remain future surfaces.
 
-Context-pack exchange for the agent team was recorded in finalised context pack
+Context-pack exchange for the agent team was recorded in finalized context pack
 `5-2-2-migration-rules-planning`.
 
 Firecrawl prior-art findings:

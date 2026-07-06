@@ -29,17 +29,17 @@ manual aliasing.
 - **Easy to Use:** A simple `#[derive(OrthoConfig)]` macro enables a quick
   start.
 - **Customizable:** Field-level attributes allow fine-grained control over
-  naming, defaults, and merging behavior.
+  naming, defaults, and merging behaviour.
 - **Config discovery attributes:** Use `#[ortho_config(discovery(...))]` to
   rename the generated config override flag, adjust environment variables, and
-  customise the filenames searched for configuration files without bespoke glue
+  customize the filenames searched for configuration files without bespoke glue
   code.
 - **Localized CLI parsing:** Use `LocalizedParse` or
   `parse_localized_command` to translate `clap` help text and parse errors
   through the same Fluent catalogue used by the rest of the application.
 - **Nested Configuration:** Naturally supports nested structs for organized
   configuration.
-- **Sensible Defaults:** Aims for intuitive behavior out-of-the-box.
+- **Sensible Defaults:** Aims for intuitive behaviour out-of-the-box.
 
 ## Quick Start
 <!-- markdownlint-disable MD029 -->
@@ -515,7 +515,7 @@ to call `load_and_merge_subcommand_for` instead of manually merging defaults.
 
 Run `make publish-check` before releasing to execute the `lading` publish
 pre-flight validations with the repository's helper scripts on the `PATH`. The
-target is parameterised via `PUBLISH_CHECK_FLAGS`, which now defaults to an
+target is parameterized via `PUBLISH_CHECK_FLAGS`, which now defaults to an
 empty value, so the command enforces a clean working tree. Developers who want
 the previous convenience may opt in explicitly:
 

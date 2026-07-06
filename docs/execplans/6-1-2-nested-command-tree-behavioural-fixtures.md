@@ -403,7 +403,7 @@ for `#[ortho_config(example(code = ...))]` is at the same file lines
 them.
 
 `cargo-orthohelp` (reference tool). The bridge wrapper is
-`cargo-orthohelp/src/bridge.rs`. The localised IR (renderers consume this)
+`cargo-orthohelp/src/bridge.rs`. The localized IR (renderers consume this)
 is `cargo-orthohelp/src/ir.rs`; the recursion mapping is at
 `cargo-orthohelp/src/ir.rs:198-202`. The mirrored IR schema is at
 `cargo-orthohelp/src/schema/mod.rs`; round-trip and version-alignment tests
@@ -456,7 +456,7 @@ Tests live at:
 Examples live at `ortho_config/examples/registry_ctl.rs` and the
 `examples/hello_world` crate. Either is a valid candidate for the
 end-to-end smoke test; this plan uses the existing `examples/hello_world`
-crate to minimise unrelated churn.
+crate to minimize unrelated churn.
 
 `pwsh` (PowerShell Core) is not installed in the development sandbox
 (`pwsh: command not found`). Any AST-parse or `PSScriptAnalyzer` gate
@@ -785,7 +785,7 @@ Steps:
    surface) that constructs a fixture matching the shape of the
    `NestedDocsConfig` tree (the same names, ordering, fields, examples,
    and per-node Windows metadata). Re-use the existing
-   `LocalizedHeadings` and `LocalizedSectionsMetadata` initialisers.
+   `LocalizedHeadings` and `LocalizedSectionsMetadata` initializers.
 2. Extend `cargo-orthohelp/src/roff/mod.rs::tests` with:
    - `inline_subcommands_render_for_nested_fixture` (asserts
      `.SH COMMANDS`, `.SS greet`, `.SS version`, `.SS admin` and the
@@ -1233,7 +1233,7 @@ already-declared dependencies:
 
 ## Progress
 
-Use a list with checkboxes to summarise granular steps. Every stopping
+Use a list with checkboxes to summarize granular steps. Every stopping
 point must be documented here, even if it requires splitting a
 partially completed task into two ("done" vs. "remaining"). This
 section must always reflect the actual current state of the work.
@@ -1298,7 +1298,7 @@ risks. Document with evidence so future work benefits.
   existing step module is out of scope for roadmap item 6.1.2, so the
   integration-test entry point now carries a scoped crate-level lint
   allowance with an explanatory reason. A future cleanup can remove the
-  allowance after normalising the existing BDD steps.
+  allowance after normalizing the existing BDD steps.
 - 2026-06-04: The nested roff split-page test exposed that split
   subcommand pages suppressed their own nested `COMMANDS` section. The
   renderer now splits the root command into separate pages but renders
@@ -1380,7 +1380,7 @@ design choices.
 - Decision: place the end-to-end bridge smoke test against the
   existing `examples/hello_world` crate, extending its `Commands` enum
   by one variant rather than creating a brand-new fixture crate.
-  Rationale: minimises workspace churn, exercises the same code path
+  Rationale: minimizes workspace churn, exercises the same code path
   consumers exercise, and avoids dragging a fresh `Cargo.toml`
   through the workspace build. If review prefers a dedicated fixture
   crate, this is reversible with a small edit. Date/Author: 2026-05-31
@@ -1424,7 +1424,7 @@ design choices.
   type in the existing `orthohelp_fixture` crate and select it with
   `--root-type`. Rationale: this keeps the package metadata default
   root and existing bridge tests stable while avoiding unrelated
-  `examples/hello_world` runtime and localisation churn. Date/Author:
+  `examples/hello_world` runtime and localization churn. Date/Author:
   2026-06-04 (implementer).
 - Decision: drive Milestone 4 through the compiled `cargo-orthohelp`
   binary rather than making `bridge` a public library module. Rationale:
@@ -1440,7 +1440,7 @@ design choices.
 
 ## Outcomes & retrospective
 
-Summarise outcomes, gaps, and lessons learned at major milestones or
+Summarize outcomes, gaps, and lessons learned at major milestones or
 at completion. Compare the result against the original purpose. Note
 what would be done differently next time.
 
@@ -1496,7 +1496,7 @@ what would be done differently next time.
   the schema round-trip and documentation updates — all without an IR
   schema change or new public API, staying inside the stated tolerances.
   Deferred work surfaced during implementation (parent-to-child
-  `WindowsMetadata` propagation; normalising the pre-existing BDD-harness
+  `WindowsMetadata` propagation; normalizing the pre-existing BDD-harness
   Clippy debt behind the newly registered `rstest_bdd` target) was recorded
   for a future roadmap item rather than expanded into this one. Lesson for
   next time: register dormant integration-test targets early — the

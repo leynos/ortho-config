@@ -13,7 +13,7 @@ All notable changes to this project will be documented in this file.
   simplify dependency graphs for consumers.
 - Forward `json5`, `yaml`, and `toml` feature flags to
   `ortho_config_macros`, so macros compile with matching support.
-- Introduce the `#[ortho_config(discovery(...))]` attribute to customise config
+- Introduce the `#[ortho_config(discovery(...))]` attribute to customize config
   discovery (filenames, environment overrides, and the generated CLI flag) and
   expose the new flag in the `hello_world` example.
 - Add the `OrthoConfigSubcommandDocs` trait and derive so subcommand enums can
@@ -29,9 +29,9 @@ All notable changes to this project will be documented in this file.
   `AgentContext.skill_manifests` field for declaring downstream skill manifests
   in agent context (roadmap item 6.3.1).
 - Add the public `LocalizedParse` blanket trait so any `clap::Parser` can
-  parse arguments with localised command metadata and parse errors.
+  parse arguments with localized command metadata and parse errors.
 - Add the public `parse_localized_command` helper for applications that need
-  to parse an already-localised `clap::Command` with a custom message-id base.
+  to parse an already-localized `clap::Command` with a custom message-id base.
 
 ### Changed
 

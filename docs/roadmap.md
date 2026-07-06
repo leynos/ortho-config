@@ -25,7 +25,7 @@ dual human/machine renderers, canonical global flags, strict JSON mode,
 exit-code metadata, skill manifest validation, context command naming,
 capability provenance, profile redaction, delivery and feedback parsers, and
 configurable execution ledgers. OrthoConfig should absorb those reusable
-contracts before the applications fossilize divergent local schemas.
+contracts before the applications fossilise divergent local schemas.
 
 ## 5. Reconcile the design baseline
 
