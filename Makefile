@@ -13,7 +13,7 @@ TYPOS_VERSION ?= 1.48.0
 TYPOS ?= $(UV) tool run typos@$(TYPOS_VERSION)
 # Markdown file list shared by the spelling gate. markdownlint-cli2 does its
 # own globbing via .markdownlint-cli2.jsonc; typos takes an explicit list.
-MD_FILES_FIND ?= find . -type f -name '*.md' -not -path './target/*' -not -path './scripts/.venv/*' -not -path './.git/*' -not -path './.memdb/*' -print0
+MD_FILES_FIND ?= find . -type f -name '*.md' -not -path './target/*' -not -path './$(PYTHON_VENV)/*' -not -path './.git/*' -not -path './.memdb/*' -print0
 PUBLISH_CHECK_FLAGS ?=
 PYTHON_VENV ?= scripts/.venv
 UV ?= uv

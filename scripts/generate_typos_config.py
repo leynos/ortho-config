@@ -234,7 +234,8 @@ def render_config() -> str:
     for line in lines[1:]:
         key = line.split(' = "', 1)[0]
         if key in seen:
-            raise ValueError(f"duplicate typos key generated: {key!r}")
+            message = f"duplicate typos key generated: {key!r}"
+            raise ValueError(message)
         seen.add(key)
     return "\n".join(lines) + "\n"
 
