@@ -19,7 +19,7 @@ PYTHON_VENV ?= scripts/.venv
 UV ?= uv
 PYTHON_VERSION ?= 3.13
 PYTHON_DEPS_FILE ?= scripts/requirements-test.txt
-PYTEST_FLAGS ?= --doctest-modules scripts/bump_version.py scripts/tests -q
+PYTEST_FLAGS ?= --doctest-modules scripts/bump_version.py scripts/generate_typos_config.py scripts/tests -q
 LADING ?= uvx --from git+https://github.com/leynos/lading lading
 POWERSHELL ?= pwsh
 ifeq ($(OS),Windows_NT)

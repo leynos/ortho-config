@@ -402,10 +402,14 @@ uv run scripts/generate_typos_config.py
 
 The generator script owns three maintainer-facing lists:
 
-- `STEMS` — word stems that take Oxford `-ize`. When the gate flags a
-  legitimate `-ize` word (or silently accepts its `-ise` variant) because the
-  stem is missing, add the stem here and regenerate. Do not add genuinely
-  `-ise`-only words (`advise`, `revise`, `exercise`, `supervise`).
+- `STEMS` — word stems that take Oxford `-ize`. Curating this list is a
+  contributor responsibility: the `en-gb` locale silently accepts the `-ise`
+  form of any stem that is absent, so the gate will pass green even when the
+  prose is wrong. When you write or review prose that contains an Oxford `-ize`
+  word whose stem is not yet listed, you must add it here and regenerate
+  `typos.toml` (`uv run scripts/generate_typos_config.py`); do not leave the
+  word spelled `-ise`. Do not add genuinely `-ise`-only words (`advise`,
+  `revise`, `exercise`, `supervise`, and similar), which must stay `-ise`.
 - `EXTRA_ACCEPTED_WORDS` — words accepted verbatim, such as the `astroid`
   library, suffix fragments quoted in prose, and non-English example text.
 - `extend-ignore-re` patterns in `HEADER` — regions exempt from spelling

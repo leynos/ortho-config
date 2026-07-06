@@ -21,9 +21,9 @@ on) are excluded from the stem list, so they remain accepted.
 
 Examples
 --------
-Run from the repository root to rewrite ``typos.toml`` in place:
+Run from the repository root to rewrite ``typos.toml`` in place::
 
->>> # uv run scripts/generate_typos_config.py  # doctest: +SKIP
+    uv run scripts/generate_typos_config.py
 
 The stem ``organ`` produces entries such as ``organised = "organized"``
 and ``organized = "organized"`` for every suffix pair.
@@ -35,6 +35,7 @@ from pathlib import Path
 #: not including the ``-ise``/``-ize`` suffix. Curated for vocabulary
 #: plausible in software documentation; extend as new words appear.
 STEMS = (
+    "alphabet",
     "anonym",
     "apolog",
     "author",
@@ -45,6 +46,7 @@ STEMS = (
     "character",
     "civil",
     "colon",
+    "conceptual",
     "container",
     "critic",
     "custom",
@@ -59,6 +61,7 @@ STEMS = (
     "familiar",
     "final",
     "formal",
+    "fossil",
     "general",
     "global",
     "harmon",
@@ -82,6 +85,7 @@ STEMS = (
     "modern",
     "modular",
     "monet",
+    "monomorph",
     "neutral",
     "normal",
     "operational",
@@ -122,6 +126,7 @@ STEMS = (
     "unauthor",
     "uncategor",
     "uninitial",
+    "unlocal",
     "unoptim",
     "unrecogn",
     "unsynchron",
@@ -220,6 +225,17 @@ def render_config() -> str:
             f'{stem}{ize} = "{stem}{ize}"',
         )
     )
+    # Two overlapping stems (or a stem colliding with an accepted word) would
+    # emit the same key twice, which typos silently resolves to the last one
+    # and hides a curation mistake. Fail loudly instead so a bad STEMS edit is
+    # caught at generation time rather than in a confusing gate result. The
+    # header is lines[0]; every other line is a `key = "value"` entry.
+    seen: set[str] = set()
+    for line in lines[1:]:
+        key = line.split(' = "', 1)[0]
+        if key in seen:
+            raise ValueError(f"duplicate typos key generated: {key!r}")
+        seen.add(key)
     return "\n".join(lines) + "\n"
 
 

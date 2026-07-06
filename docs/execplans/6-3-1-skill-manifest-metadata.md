@@ -271,7 +271,7 @@ risks emerge.
 - Risk: re-export bloat in `ortho_config/src/lib.rs`. The
   `pub use agent_context::{...}` block at lines 61-65 currently lists ten names
   and grows to twelve. Severity: low. Likelihood: low. Mitigation: keep the
-  additions alphabetised; if the formatting changes, defer to `cargo fmt`
+  additions alphabetized; if the formatting changes, defer to `cargo fmt`
   rather than hand-editing.
 - Risk: `markdownlint` flags pre-existing 80-column violations in the §8.1
   table when the row is renamed. Severity: low. Likelihood: medium. The row at
@@ -528,7 +528,7 @@ Update the inline doctest on `AgentContext::new` to assert
 
 Re-export `SkillManifest` and `SkillCommandRef` from `ortho_config/src/lib.rs`
 in the existing `pub use agent_context::{...}` block at lines 61-65. Keep the
-block alphabetised.
+block alphabetized.
 
 ### What the new types deliberately omit
 
@@ -650,7 +650,7 @@ Steps:
    §"Recommended design".
 3. Re-export both names from `ortho_config/src/lib.rs` in the existing
    `pub use agent_context::{...}` block at lines 61-65. Keep the block
-   alphabetised. Do not add a separate `pub use` line.
+   alphabetized. Do not add a separate `pub use` line.
 4. Do **not** touch `AgentContext` in this milestone. Do **not** add tests
    in this milestone. The milestone is intentionally tiny so a reviewer can
    verify "two new types added, no behaviour change, no test churn".

@@ -67,7 +67,7 @@ specifications.[^7]
 For developers, the `Given-When-Then` structure is not an entirely new concept.
 It is a highly effective reformulation of well-established testing patterns
 that many are already familiar with from unit testing.[^5] The most common
-parallel is the **Arrange-Act-Assert (AAA)** pattern, conceptualised by Bill
+parallel is the **Arrange-Act-Assert (AAA)** pattern, conceptualized by Bill
 Wake.
 
 - **Given** corresponds to **Arrange**: This phase sets up the world. It

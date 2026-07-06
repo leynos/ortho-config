@@ -28,7 +28,7 @@ come from command declarations, not from user input, locale selection, or
 catalogue contents.
 
 The question is whether the public identifier helpers should return `Result`,
-panic, or silently leave invalid command-tree nodes unlocalised.
+panic, or silently leave invalid command-tree nodes unlocalized.
 
 ## Decision drivers
 
