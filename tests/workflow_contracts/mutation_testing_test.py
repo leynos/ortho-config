@@ -22,10 +22,9 @@ WORKFLOW_PATH = (
     Path(__file__).resolve().parents[2] / ".github" / "workflows" / "mutation-testing.yml"
 )
 
-#: The merge commit of leynos/shared-actions PR #319, matching the
-#: estate template (leynos/wireframe#572). Bump the workflow and this
-#: test together.
-PINNED_SHA = "47aea18960d24f33aedc4782ec6b73e365418313"
+#: The leynos/shared-actions commit adding artefact preservation on
+#: timeout. Bump the workflow and this test together.
+PINNED_SHA = "2b09d10192627fd6e1034e7c12625dd266b45503"
 
 EXPECTED_USES = (
     "leynos/shared-actions/.github/workflows/mutation-cargo.yml@" + PINNED_SHA
@@ -33,11 +32,13 @@ EXPECTED_USES = (
 
 #: The exact caller configuration: workspace member paths (virtual
 #: workspace, so the default src/ prefix covers nothing), test-support
-#: and fixture-crate excludes, and the CI coverage feature set.
+#: and fixture-crate excludes, and the CI coverage feature set plus
+#: workspace-wide test runs (the derive-macro crate's coverage lives in
+#: ortho_config's tests, so package-scoped runs report false survivors).
 EXPECTED_WITH = {
     "paths": "cargo-orthohelp/,examples/,ortho_config/,ortho_config_macros/",
     "exclude-globs": "test_helpers/**,tests/fixtures/**",
-    "extra-args": "--features serde_json,toml,json5,yaml",
+    "extra-args": "--features serde_json,toml,json5,yaml --test-workspace=true",
 }
 
 
