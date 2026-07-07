@@ -296,7 +296,7 @@ dependencies = [
  "ortho_config",
  "ortho_config_test_helpers",
  "proptest",
- "rstest 0.26.1",
+ "rstest",
  "rstest-bdd",
  "rstest-bdd-macros",
  "serde",
@@ -927,7 +927,7 @@ dependencies = [
  "ortho_config",
  "ortho_config_macros",
  "ortho_config_test_helpers",
- "rstest 0.23.0",
+ "rstest",
  "rstest-bdd",
  "rstest-bdd-macros",
  "serde",
@@ -1261,7 +1261,7 @@ dependencies = [
  "ortho_config_macros",
  "ortho_config_test_helpers",
  "proptest",
- "rstest 0.26.1",
+ "rstest",
  "rstest-bdd",
  "rstest-bdd-macros",
  "serde",
@@ -1288,7 +1288,7 @@ dependencies = [
  "heck 0.5.0",
  "proc-macro2",
  "quote",
- "rstest 0.26.1",
+ "rstest",
  "serde",
  "syn 2.0.118",
 ]
@@ -1689,25 +1689,13 @@ checksum = "ba39f3699c378cd8970968dcbff9c43159ea4cfbd88d43c00b22f2ef10a435d2"
 
 [[package]]
 name = "rstest"
-version = "0.23.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0a2c585be59b6b5dd66a9d2084aa1d8bd52fbdb806eafdeffb52791147862035"
-dependencies = [
- "futures",
- "futures-timer",
- "rstest_macros 0.23.0",
- "rustc_version",
-]
-
-[[package]]
-name = "rstest"
 version = "0.26.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f5a3193c063baaa2a95a33f03035c8a72b83d97a54916055ba22d35ed3839d49"
 dependencies = [
  "futures-timer",
  "futures-util",
- "rstest_macros 0.26.1",
+ "rstest_macros",
 ]
 
 [[package]]
@@ -1774,24 +1762,6 @@ name = "rstest-bdd-policy"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "88f2ca584f7d9d359a09f616900be015302c959d58c2c2da6c075573352dfa0d"
-
-[[package]]
-name = "rstest_macros"
-version = "0.23.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "825ea780781b15345a146be27eaefb05085e337e869bff01b4306a4fd4a9ad5a"
-dependencies = [
- "cfg-if",
- "glob",
- "proc-macro-crate",
- "proc-macro2",
- "quote",
- "regex",
- "relative-path",
- "rustc_version",
- "syn 2.0.118",
- "unicode-ident",
-]
 
 [[package]]
 name = "rstest_macros"
