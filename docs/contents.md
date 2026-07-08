@@ -82,7 +82,7 @@
   review the legacy behaviour-driven development (BDD) approach retained as
   historical reference.
 - [Behavioural tests](behavioural-tests.md): understand the current behavioural
-  test organisation and expectations.
+  test organization and expectations.
 - [Complexity antipatterns and refactoring strategies](complexity-antipatterns-and-refactoring-strategies.md):
   identify common complexity smells and refactoring responses.
 - [Documentation style guide](documentation-style-guide.md): follow the house

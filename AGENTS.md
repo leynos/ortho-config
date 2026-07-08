@@ -23,7 +23,9 @@
   related to a domain concept rather than splitting by type.
 - **Use consistent spelling and grammar.** Comments must use en-GB-oxendict
   ("-ize" / "-yse" / "-our") spelling and grammar, with the exception of
-  references to external APIs.
+  references to external APIs. Markdown prose is enforced mechanically by the
+  `typos` spelling gate inside `make markdownlint`; see the Markdown guidance
+  section below for how to maintain its configuration.
 - **Illustrate with clear examples.** Function documentation must include clear
   examples demonstrating the usage and outcome of the function. Test
   documentation should omit examples where the example serves only to reiterate
@@ -307,7 +309,19 @@ project:
 
 ## Markdown guidance
 
-- Validate Markdown files using `make markdownlint`.
+- Validate Markdown files using `make markdownlint`. This target also
+  enforces en-GB-oxendict spelling with `typos`, pinned by the Makefile
+  `TYPOS_VERSION` variable, so local runs and CI use the same version. Run
+  the spelling gate alone with `make spellcheck`.
+- The spelling configuration `typos.toml` is generated; never edit its
+  entries by hand. To handle a false positive or add a new Oxford `-ize`
+  stem, edit `scripts/generate_typos_config.py` (the `STEMS`,
+  `EXTRA_ACCEPTED_WORDS`, or `extend-ignore-re` lists) and regenerate with
+  `uv run scripts/generate_typos_config.py`. See the spelling gate section
+  of `docs/developers-guide.md` for details.
+- Quoted APIs and identifiers keep their upstream spelling; put them in
+  backticks or fenced code blocks, which the spelling gate ignores, rather
+  than adding word-level exceptions.
 - Run `make fmt` after any documentation changes to format all Markdown
   files and fix table markup.
 - Validate Mermaid diagrams in Markdown files by running `make nixie`.

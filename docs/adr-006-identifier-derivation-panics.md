@@ -12,23 +12,23 @@ Accepted.
 
 Roadmap item 11.1.1 promotes the `hello_world` example's `LocalizeCmd` helper
 into the public `ortho_config` API. The promoted API derives Fluent message
-identifiers from a `clap::Command` tree and uses those identifiers to localise
+identifiers from a `clap::Command` tree and uses those identifiers to localize
 command and argument help.
 
 Roadmap item 11.1.2 builds on that surface with `LocalizedParse`, a blanket
 trait for every `clap::Parser`, and `parse_localized_command`, the
 base-agnostic parsing primitive. These helpers call `LocalizeCmd::localize`
 before parsing, so the same identifier panic contract is reachable from any
-consumer parser that opts into localised parsing.
+consumer parser that opts into localized parsing.
 
 Identifier derivation can fail when a developer-authored command path contains
 a segment that cannot be represented as a Fluent identifier, or when two
-sibling commands or arguments normalise to the same identifier. These failures
+sibling commands or arguments normalize to the same identifier. These failures
 come from command declarations, not from user input, locale selection, or
 catalogue contents.
 
 The question is whether the public identifier helpers should return `Result`,
-panic, or silently leave invalid command-tree nodes unlocalised.
+panic, or silently leave invalid command-tree nodes unlocalized.
 
 ## Decision drivers
 
@@ -81,14 +81,14 @@ and neglected a `Result`-returning API, accepting that hand-built dynamic trees
 must validate names before localizing, because the inputs are
 developer-authored constants surfaced at first run.
 
-`message_id_for` owns the strict segment normalisation rule. The command-tree
+`message_id_for` owns the strict segment normalization rule. The command-tree
 walker owns collision detection while it traverses each parent node. Collision
 checks are scoped per parent, so two commands in different subtrees may share a
-local name, but two siblings that normalise to the same id panic.
+local name, but two siblings that normalize to the same id panic.
 
 The future additive extension is
 `try_message_id_for -> Result<String, IdentifierError>`. It should share the
-same normalisation rule as `message_id_for`, expose structured errors for
+same normalization rule as `message_id_for`, expose structured errors for
 invalid segments, and avoid changing the existing panic contract.
 
 ## Goals and non-goals
@@ -100,11 +100,11 @@ invalid segments, and avoid changing the existing panic contract.
 - Non-goals:
   - Add a fallible command-tree walker in 11.1.1.
   - Define translator diagnostics for missing catalogue entries.
-  - Change Fluent load-time resource-id normalisation.
+  - Change Fluent load-time resource-id normalization.
 
 ## Migration plan
 
-1. Document the panic contract in the CLI localisation design.
+1. Document the panic contract in the CLI localization design.
 2. Document the panic cases in rustdoc for `message_id_for` and
    `LocalizeCmd::localize`.
 3. Add tests for invalid segments and per-parent collision panics.
@@ -116,7 +116,7 @@ invalid segments, and avoid changing the existing panic contract.
   before calling `LocalizeCmd::localize`, otherwise invalid external data can
   become a process panic.
 - `LocalizedParse` widens the reachable panic surface from explicit command
-  localisation calls to every `clap::Parser` that opts into localised parsing.
+  localization calls to every `clap::Parser` that opts into localized parsing.
   This is accepted until the planned derive-time guard in 11.1.3 can emit a
   compile-time error for generated identifiers.
 - Panic contracts are harder to relax than ordinary internal implementation

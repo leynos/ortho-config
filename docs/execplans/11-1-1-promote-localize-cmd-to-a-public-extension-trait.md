@@ -183,7 +183,7 @@ is breached.
   `ortho_config::LocalizeCmd`, wired `with_base("hello_world.cli")` into the
   example parser and direct command tests, and updated example documentation.
 - [x] (2026-06-11) Milestone 5 — snapshot + BDD acceptance; docs; final
-  gates. Added direct command-tree snapshots, bound and ran the localised-help
+  gates. Added direct command-tree snapshots, bound and ran the localized-help
   BDD feature, updated users/developers/design docs, and marked roadmap 11.1.1
   complete.
 
@@ -316,10 +316,10 @@ rediscover them.
     `rstest_bdd` scenarios from the existing scaffold; temporarily compiling it
     exposed unrelated legacy lint and scenario failures. Impact: Milestone 5
     uses a standalone `localised_help_bdd.rs` integration test that binds only
-    the new localised-help feature and leaves the dormant scaffold unchanged.
+    the new localized-help feature and leaves the dormant scaffold unchanged.
 21. Observation: **Clap long help renders `long_about`, not short `about`.**
-    Evidence: the first localised-help BDD run showed `--help` output beginning
-    with the localised long-about string and omitting the short about string.
+    Evidence: the first localized-help BDD run showed `--help` output beginning
+    with the localized long-about string and omitting the short about string.
     Impact: the BDD assertion labels retain the plan's wording but check the
     rendered long-help copy, while the direct command-tree snapshots capture
     both en-US and ja long-help output.
@@ -454,7 +454,7 @@ Milestone 5 is complete through focused validation. The direct command-tree
 snapshots `command_tree_long_help_en_us`, `command_tree_long_help_ja`, and
 `command_tree_long_help_noop` were added to
 `examples/hello_world/tests/localised_help.rs`; the no-op test asserts equality
-with stock clap output before snapshotting. The localised-help BDD feature is
+with stock clap output before snapshotting. The localized-help BDD feature is
 bound by a scoped `examples/hello_world/tests/localised_help_bdd.rs`
 integration test so the acceptance scenario is compiled without activating the
 dormant legacy BDD scaffold. Focused commands
@@ -721,7 +721,7 @@ decisions before any code lands.
    `NoOpLocalizer` — through an insta filter that strips clap version/ANSI
    noise. Three named snapshots prove translated copy appears, ja copy appears,
    and the no-op output equals stock clap.
-2. Add an `rstest-bdd` scenario (`examples/hello_world`) — feature "Localised
+2. Add an `rstest-bdd` scenario (`examples/hello_world`) — feature "Localized
    CLI help": Given locale `ja`, When the user renders `hello-world --help`,
    Then the about line contains the ja copy and the greet subcommand help
    contains the ja greeting; And Given locale `en-US`, the about contains the
@@ -790,7 +790,7 @@ cargo add --dev proptest -p ortho_config --dry-run   # verify, then drop --dry-r
 ```
 
 Expected transcript shape for the example regression gate (Milestone 4): the
-existing localisation tests pass without assertion edits, e.g.
+existing localization tests pass without assertion edits, e.g.
 
 ```plaintext
 test cli::tests::localisation::command_with_localizer_overrides_copy ... ok
@@ -822,7 +822,7 @@ Acceptance is behavioural:
    `cargo test --doc -p hello_world` both succeed (the updated `DemoLocalizer`
    doctest renders localized `about`).
 5. **Snapshots and BDD.** `insta` snapshots for en-US/ja/no-op are committed and
-   pass; the `rstest-bdd` "Localised CLI help" scenarios pass.
+   pass; the `rstest-bdd` "Localized CLI help" scenarios pass.
 6. **Gates.** `make all` passes.
 
 Quality criteria ("done"): all four make gates plus doctests, snapshots, and
@@ -847,7 +847,7 @@ design/component docs updated.
   (args/version/footer/recursion) is additive and falls back gracefully on
   missing keys.
 - The single most likely failure is the base mismatch (Risk 1). If any example
-  localisation assertion goes red after Milestone 4, check first that
+  localization assertion goes red after Milestone 4, check first that
   `with_base("hello_world.cli")` is wired at every parse/help site.
 
 ## Signposted documentation and skills

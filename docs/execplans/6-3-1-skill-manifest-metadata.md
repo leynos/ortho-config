@@ -271,7 +271,7 @@ risks emerge.
 - Risk: re-export bloat in `ortho_config/src/lib.rs`. The
   `pub use agent_context::{...}` block at lines 61-65 currently lists ten names
   and grows to twelve. Severity: low. Likelihood: low. Mitigation: keep the
-  additions alphabetised; if the formatting changes, defer to `cargo fmt`
+  additions alphabetized; if the formatting changes, defer to `cargo fmt`
   rather than hand-editing.
 - Risk: `markdownlint` flags pre-existing 80-column violations in the §8.1
   table when the row is renamed. Severity: low. Likelihood: medium. The row at
@@ -522,13 +522,13 @@ pub struct AgentContext {
 }
 ```
 
-Update `AgentContext::new` so it initialises `skill_manifests: Vec::new()`.
+Update `AgentContext::new` so it initializes `skill_manifests: Vec::new()`.
 Update the inline doctest on `AgentContext::new` to assert
 `context.skill_manifests.is_empty()` alongside the existing assertions.
 
 Re-export `SkillManifest` and `SkillCommandRef` from `ortho_config/src/lib.rs`
 in the existing `pub use agent_context::{...}` block at lines 61-65. Keep the
-block alphabetised.
+block alphabetized.
 
 ### What the new types deliberately omit
 
@@ -567,7 +567,7 @@ documentation updates and is logged in `Decision Log`.
 ### No new ADR (confirmed)
 
 `docs/adr-003-define-schema-ownership-for-agent-native-contracts.md` already
-authorises additive evolution of the agent-context schema inside
+authorizes additive evolution of the agent-context schema inside
 `ortho_config::agent_context`. This plan cites ADR-003 in the design overview
 and adds a single sentence to `docs/developers-guide.md` "Schema ownership"
 noting that skill manifest descriptors are part of the agent-context contract,
@@ -650,7 +650,7 @@ Steps:
    §"Recommended design".
 3. Re-export both names from `ortho_config/src/lib.rs` in the existing
    `pub use agent_context::{...}` block at lines 61-65. Keep the block
-   alphabetised. Do not add a separate `pub use` line.
+   alphabetized. Do not add a separate `pub use` line.
 4. Do **not** touch `AgentContext` in this milestone. Do **not** add tests
    in this milestone. The milestone is intentionally tiny so a reviewer can
    verify "two new types added, no behaviour change, no test churn".
@@ -688,7 +688,7 @@ Steps:
    field order matches the wire snapshot's reading order.
 2. Update `AgentContext::new`
    (`ortho_config/src/agent_context/mod.rs:50-63`) to set
-   `skill_manifests: Vec::new()` alongside the existing default initialisers.
+   `skill_manifests: Vec::new()` alongside the existing default initializers.
 3. Update the inline doctest on `AgentContext::new` (lines 42-49) to add
    `assert!(context.skill_manifests.is_empty());`. The existing assertions stay
    intact.
@@ -999,7 +999,7 @@ new crate-level additions.
 
 ## Progress
 
-Use this list to summarise granular steps. Every stopping point must be
+Use this list to summarize granular steps. Every stopping point must be
 documented here, even if it requires splitting a partially completed task into
 two.
 
@@ -1081,7 +1081,7 @@ Document with evidence so future work benefits.
 - Observation: the OpenAI `schema_version: "v1"` convention and the
   Microsoft 365 Copilot `schema_version: "2.1"` convention disagree on whether
   the value is semver. A typed `semver::Version` would reject one of the two.
-  Evidence: Firecrawl research summarised in §"Skills and source signposts".
+  Evidence: Firecrawl research summarized in §"Skills and source signposts".
   Impact: keep `manifest_schema_version` as an opaque `String`; defer parsing
   to 6.3.2 if comparison semantics are ever needed.
 - Observation: the Logisphere pre-mortem identified that path equality is
@@ -1159,7 +1159,7 @@ decisions to escalate, decisions on ambiguous requirements, and design choices.
   6.3.1.
 - Decision: keep `SkillManifest::path` as a `camino::Utf8PathBuf`.
   Rationale: the runtime already pulls in `camino = "1"`, the project's
-  filesystem code uses `camino` throughout, and `Utf8PathBuf` serialises as a
+  filesystem code uses `camino` throughout, and `Utf8PathBuf` serializes as a
   plain JSON string. UTF-8 paths are the documented expectation.
 - Decision: keep `SkillManifest::commands` as `Vec<SkillCommandRef>` with
   `#[serde(default)]`. Rationale: distinguishing absent from empty is what
@@ -1167,9 +1167,9 @@ decisions to escalate, decisions on ambiguous requirements, and design choices.
   "prose-only skill" value, not malformed data. Make `commands` defaulted at
   the wire level so legacy payloads remain readable.
 - Decision: do not write a new ADR for this work; reference ADR-003.
-  Rationale: ADR-003 already authorises additive evolution of the agent-context
+  Rationale: ADR-003 already authorizes additive evolution of the agent-context
   schema inside `ortho_config::agent_context`. Two new schema types fit that
-  authorisation. The maintainer confirmed on 2026-06-12 that referencing
+  authorization. The maintainer confirmed on 2026-06-12 that referencing
   ADR-003 is sufficient and that no new ADR is required for the wire-field
   rename, closing the only open question.
 - Decision: defer validation, parsing, and `cargo-orthohelp` integration
@@ -1231,7 +1231,7 @@ Validation evidence:
   `make markdownlint`, and `make nixie` before a zero-finding CodeRabbit review.
 
 Lessons for 6.3.2: the `id: String` field gives the future validator a stable
-diagnostic target independent of path normalisation, symlinks, and future
+diagnostic target independent of path normalization, symlinks, and future
 non-filesystem manifest sources. The `manifest_schema_version: String` choice
 also remains appropriate because this milestone uncovered no need for version
 comparison semantics. The validator should treat `commands: []` as an explicit

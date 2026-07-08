@@ -283,7 +283,7 @@ where
     T: Into<std::ffi::OsString> + Clone;
 ```
 
-Callers pass an already-localised command, such as
+Callers pass an already-localized command, such as
 `Cli::command().with_base("acme.tool").localize(localizer)`. The unsuffixed
 `try_parse_localized` method is the environment-reading variant; the older
 example-only `_env` suffix is not part of the promoted API.
@@ -572,7 +572,7 @@ state, and works identically in sync and async call sites: because localization
 happens before the error is returned, the formatter that eventually renders the
 error never needs to look up the localizer itself.
 
-#### 6.4.1 Escape hatch: monomorphised formatter
+#### 6.4.1 Escape hatch: monomorphized formatter
 
 For adopters who want clap to defer rendering (for example, a custom error
 formatter that interleaves localization with structured logging), the crate
@@ -590,7 +590,7 @@ impl<L: Localizer + Default + 'static> clap::error::ErrorFormatter
 }
 ```
 
-The formatter is monomorphised over a concrete `Localizer + Default` type,
+The formatter is monomorphized over a concrete `Localizer + Default` type,
 sidestepping clap's non-dyn-compatible `ErrorFormatter` trait. Adopters who
 need a runtime-chosen localizer can use a thin newtype that reads from a
 process-wide `OnceLock<Arc<dyn Localizer>>`. The crate does **not** ship a
@@ -846,8 +846,8 @@ Both commands honour the agent-context output contracts already defined in
   `i18n-embed-bridge` feature asserts the symbol resolves at compile time and
   fails with a migration pointer rather than silently degrading.
 - **`LocalizedFormatter` escape hatch (§6.4.1) used incorrectly.** The
-  monomorphised formatter is opt-in for advanced cases. Misusing it with a
-  process-wide `OnceLock<Arc<dyn Localizer>>` that is never initialised falls
+  monomorphized formatter is opt-in for advanced cases. Misusing it with a
+  process-wide `OnceLock<Arc<dyn Localizer>>` that is never initialized falls
   back to en-US silently. The rustdoc for the formatter must call out this case
   and recommend the eager path for almost every adopter.
 

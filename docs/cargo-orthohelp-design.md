@@ -640,7 +640,7 @@ The agent-context output must not be scraped from rendered man pages or
 PowerShell help. Rendering surfaces may consume agent metadata for examples or
 warnings, but they are not the source of truth for agents.
 
-## 6.4 Localised IR JSON output
+## 6.4 Localized IR JSON output
 
 `cargo-orthohelp` emits a localized IR JSON file per locale into
 `<out>/ir/<locale>.json`. The schema mirrors `DocMetadata` but resolves every
@@ -651,7 +651,7 @@ metadata.
 When a Fluent ID cannot be resolved, the output uses `[missing: <id>]` as a
 sentinel so generators can surface gaps during development.
 
-### 6.4.1 Localised IR schema
+### 6.4.1 Localized IR schema
 
 ```json
 {

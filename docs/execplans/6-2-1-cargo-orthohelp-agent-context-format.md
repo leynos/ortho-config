@@ -147,7 +147,7 @@ of autonomous action, not quality criteria.
 - Time: if a single milestone consumes more than four hours of work, stop
   and escalate. Sub-milestones may be split if useful.
 - Ambiguity: if the value of any IR field cannot be unambiguously mapped to
-  an agent-context field (for example, an unrecognised `ValueType` variant or a
+  an agent-context field (for example, an unrecognized `ValueType` variant or a
   field carrying both `cli.long` and `takes_value = false` other than `Bool`),
   stop and present options in `Decision Log` rather than guessing.
 
@@ -168,7 +168,7 @@ Known uncertainties that might affect the plan. Update as work proceeds.
   fixture's IR). Severity: low. Likelihood: medium. Mitigation: the transform
   is purely projective. Snapshot only the agent-context JSON, never the
   upstream IR. The transform sorts commands by path and inputs by name before
-  serialising so that input ordering changes in upstream IR do not flip the
+  serializing so that input ordering changes in upstream IR do not flip the
   snapshot.
 
 - Risk: positional-detection rule misclassifies an unusual field (for
@@ -193,7 +193,7 @@ Known uncertainties that might affect the plan. Update as work proceeds.
 
 ## Progress
 
-Use a list with checkboxes to summarise granular steps. Every stopping point
+Use a list with checkboxes to summarize granular steps. Every stopping point
 must be documented here, even if it requires splitting a partially completed
 task into two. This section must always reflect the actual state of the work.
 
@@ -444,7 +444,7 @@ Key terms:
 - **Agent context**: a compact, machine-readable JSON document that
   describes how an agent should invoke a CLI. Not a localized help artefact.
 - **Bridge IR**: the JSON produced by the ephemeral `cargo orthohelp` bridge
-  crate; it deserialises into `cargo_orthohelp::schema::DocMetadata`.
+  crate; it deserializes into `cargo_orthohelp::schema::DocMetadata`.
 - **Canonical verb**: one of `get`, `list`, `create`, `update`, `delete`,
   `jobs`, `profile`, `feedback` (per `docs/agent-native-cli-design.md` §5).
 - **Command path**: the ordered list of names from root binary to leaf
@@ -527,10 +527,10 @@ The work is split into seven milestones, each ending with a validation gate.
    Place the field between `path` and `canonical_verb` to keep related metadata
    adjacent. Update the doc-comment on the struct to describe the new field.
 2. In `ortho_config/src/agent_context/tests.rs`, add table-driven `rstest`
-   cases covering: (a) serialising `AgentCommand` with `summary = None` omits
+   cases covering: (a) serializing `AgentCommand` with `summary = None` omits
    the field; (b) round-tripping a payload with `summary = Some("…")` preserves
-   the field; (c) deserialising a legacy payload without `summary` succeeds.
-   Update any tests that pin the exact serialised JSON to expect the new field.
+   the field; (c) deserializing a legacy payload without `summary` succeeds.
+   Update any tests that pin the exact serialized JSON to expect the new field.
 3. Update `docs/cargo-orthohelp-design.md` §6.3.1 to record that the
    transform emits a short en-US summary per command and document the
    positional-detection rule.
@@ -611,9 +611,9 @@ Validation: `cargo build -p cargo-orthohelp` and
      to `value_type = "Bytes"`).
    - Localizer present vs absent: asserts `summary` is populated when the
      Fluent ID resolves and `None` when it returns the missing-sentinel.
-   - Verb mapping table: a parameterised case asserting `get`, `list`,
+   - Verb mapping table: a parameterized case asserting `get`, `list`,
      `create`, `update`, `delete`, `jobs`, `profile`, `feedback` map; any
-     other token (including `add`, `set`, and capitalised forms) does not.
+     other token (including `add`, `set`, and capitalized forms) does not.
 2. Add `cargo-orthohelp/src/agent_context/proptests.rs` driven by `proptest`
    with one invariant: for any randomly generated `DocMetadata` tree with depth
    ≤ 3 and per-level width ≤ 4, the resulting `AgentContext.commands` has
@@ -648,10 +648,10 @@ for the full workspace passes.
      `--format agent-context`.
    - "Then the output contains an agent-context JSON document": opens
      `agent-context.json` from the scenario output directory, asserts it
-     deserialises into `AgentContext`, asserts `schema_version == "1"`,
+     deserializes into `AgentContext`, asserts `schema_version == "1"`,
      `kind == "<package>.agent_context"`, and `commands` is non-empty.
    - "And the agent-context JSON matches the golden snapshot": uses
-     `insta::assert_snapshot!` against the parsed JSON normalised to a
+     `insta::assert_snapshot!` against the parsed JSON normalized to a
      stable byte sequence with `serde_json::to_string_pretty`. Apply
      `insta::Settings::set_sort_maps(true)`; no redactions are needed
      because the transform itself produces a stable sort order.
@@ -859,7 +859,7 @@ at Milestone 5:
 ```
 
 The actual snapshot may differ in field ordering, but the transform sorts
-commands by path and inputs by name before serialising.
+commands by path and inputs by name before serializing.
 
 ## Interfaces and dependencies
 

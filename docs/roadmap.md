@@ -647,7 +647,7 @@ later progressively add opinion.
     the display-only sentinels), and reports identifiers that the supplied
     `Localizer` fails to resolve.
 
-- [ ] 11.2.4. Document and ship the monomorphised `LocalizedFormatter`
+- [ ] 11.2.4. Document and ship the monomorphized `LocalizedFormatter`
   escape hatch.
   - Requires 11.2.2.
   - See cli-localization-design.md §6.4.1.

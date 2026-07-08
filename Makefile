@@ -1,4 +1,4 @@
-.PHONY: help all clean test build release lint fmt check-fmt markdownlint nixie typecheck python-test-deps publish-check powershell-wrapper-validate test-workflow-contracts FORCE
+.PHONY: help all clean test build release lint fmt check-fmt markdownlint spellcheck nixie typecheck python-test-deps publish-check powershell-wrapper-validate test-workflow-contracts FORCE
 
 CRATE ?= ortho_config
 CARGO ?= cargo
@@ -7,12 +7,19 @@ BUILD_JOBS ?=
 CLIPPY_FLAGS ?= --all-targets --all-features -- -D warnings
 MDLINT ?= markdownlint-cli2
 NIXIE ?= nixie
+# Single source of truth for the typos version; CI consumes it through the
+# spellcheck target, so the Makefile and CI cannot drift apart.
+TYPOS_VERSION ?= 1.48.0
+TYPOS ?= $(UV) tool run typos@$(TYPOS_VERSION)
+# Markdown file list shared by the spelling gate. markdownlint-cli2 does its
+# own globbing via .markdownlint-cli2.jsonc; typos takes an explicit list.
+MD_FILES_FIND ?= find . -type f -name '*.md' -not -path './target/*' -not -path './$(PYTHON_VENV)/*' -not -path './.git/*' -not -path './.memdb/*' -print0
 PUBLISH_CHECK_FLAGS ?=
 PYTHON_VENV ?= scripts/.venv
 UV ?= uv
 PYTHON_VERSION ?= 3.13
 PYTHON_DEPS_FILE ?= scripts/requirements-test.txt
-PYTEST_FLAGS ?= --doctest-modules scripts/bump_version.py scripts/tests -q
+PYTEST_FLAGS ?= --doctest-modules scripts/bump_version.py scripts/generate_typos_config.py scripts/tests -q
 LADING ?= uvx --from git+https://github.com/leynos/lading lading
 POWERSHELL ?= pwsh
 ifeq ($(OS),Windows_NT)
@@ -70,8 +77,12 @@ fmt: ## Format Rust and Markdown sources
 check-fmt: ## Verify formatting
 	$(CARGO) fmt --all -- --check
 
-markdownlint: ## Lint Markdown files
+markdownlint: ## Lint Markdown files and enforce en-GB-oxendict spelling
 	$(MDLINT) "**/*.md"
+	$(MAKE) spellcheck
+
+spellcheck: ## Enforce en-GB-oxendict (Oxford) spelling over Markdown prose
+	$(MD_FILES_FIND) | xargs -0 $(TYPOS) --config typos.toml --force-exclude
 
 nixie:
 	# CI currently requires --no-sandbox; remove once nixie supports

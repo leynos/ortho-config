@@ -229,7 +229,7 @@ update as work proceeds.
 
 ## Progress
 
-Use a list with checkboxes to summarise granular steps. Every stopping point
+Use a list with checkboxes to summarize granular steps. Every stopping point
 must be documented here, even if it requires splitting a partially completed
 task into two. This section must always reflect the actual current state of the
 work.
@@ -500,7 +500,7 @@ so the plan and the roadmap evolve together:
 - Agent-context IR: §6.2 (`6.2.1`, `6.2.2`, `6.2.3`).
 - Strict vocabulary policy: §7.1 (`7.1.1`, `7.1.2`, `7.1.3`).
 - Localized help generation: the existing `OrthoConfigDocs` and
-  `OrthoConfigSubcommandDocs` contract together with §6.1.1, which finalises
+  `OrthoConfigSubcommandDocs` contract together with §6.1.1, which finalizes
   the recursive subcommand tree.
 - Profiles: §6.7 of the design and §9.1 of the roadmap.
 - Delivery and feedback: §6.8 of the design and §9.2 of the roadmap.

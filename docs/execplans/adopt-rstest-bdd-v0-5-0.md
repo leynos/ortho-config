@@ -95,7 +95,7 @@ If satisfying the objective requires violating a constraint, stop and escalate.
   explicit `scenarios!(..., fixtures = [...])` usage.
 - [x] (2026-02-09 01:20Z) Removed duplicate step registry collisions and fixed
   v0.5.0 fixture-resolution failures in `ortho_config`.
-- [x] (2026-02-09 01:45Z) Normalised quoted placeholder capture handling across
+- [x] (2026-02-09 01:45Z) Normalized quoted placeholder capture handling across
   behavioural steps with shared parsing helpers.
 - [x] (2026-02-09 02:10Z) Migrated `hello_world` behavioural step placeholders
   away from generic `{string}` captures to explicit named captures.
@@ -239,7 +239,7 @@ generated test names remain easy to filter by feature.
 Stage C: Type-safety improvements in step contracts.
 
 Introduce `StepArgs` for steps with multiple placeholder captures where this
-improves readability and eliminates ad hoc parsing. Normalise fallible step and
+improves readability and eliminates ad hoc parsing. Normalize fallible step and
 scenario signatures to explicit `Result<(), E>` or
 `rstest_bdd::StepResult<(), E>`. Use step return-value injection where it
 reduces mutable fixture plumbing without obscuring behaviour.

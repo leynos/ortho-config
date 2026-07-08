@@ -185,7 +185,7 @@ commit. Run gates sequentially (build caching), never in parallel.
 - Observation: 2026-06-15 green run
   `cargo test -p ortho_config --test localized_parse` passed with 6 tests. The
   identifier coverage expectation is intentionally built with
-  `message_id_for(...)` rather than hand-normalised literals so the test locks
+  `message_id_for(...)` rather than hand-normalized literals so the test locks
   the runtime lookup set to the public helper.
 - Observation: 2026-06-15 milestone gates passed after implementation:
   `make check-fmt`, `make typecheck`, `make lint`, and `make test`. Logs are

@@ -81,9 +81,9 @@ duplicating ASCII normalization rules. Keep the tolerant catalogue load path in
 resource ids such as dotted catalogue keys before Fluent parses them, and must
 not be used to validate generated command ids.
 
-Use `LocalizedParse` for default-base localised clap parsing and
+Use `LocalizedParse` for default-base localized clap parsing and
 `parse_localized_command` when callers need to pass a command that has already
-been localised with `LocalizeCmd::with_base`. Keep the two parse-error paths in
+been localized with `LocalizeCmd::with_base`. Keep the two parse-error paths in
 that helper distinct: errors from `try_get_matches_from_mut` already have the
 command available, while `FromArgMatches::from_arg_matches` errors must be
 enriched with `with_cmd(&command)` so missing-subcommand translations retain
@@ -312,7 +312,7 @@ When adding scenarios or steps:
    only when a feature needs bespoke fixtures or per-scenario control.
 4. Keep assertions user-observable (`Then` steps) and avoid asserting private
    internals unless the behaviour cannot be observed externally.
-5. Run the full required quality gates before finalising.
+5. Run the full required quality gates before finalizing.
 
 ## Observability
 
@@ -377,6 +377,69 @@ integration (CI) environments.
   from the design document and from this guide where future contributors should
   be aware of the decision.
 
+## Spelling gate
+
+`make markdownlint` enforces en-GB-oxendict (Oxford) spelling over the
+repository's Markdown prose with [`typos`](https://github.com/crate-ci/typos),
+as required by the [documentation style guide](documentation-style-guide.md).
+Run the gate on its own with `make spellcheck`. The configuration lives in the
+repository-root `typos.toml` and works in two layers:
+
+1. The `en-gb` locale corrects American spellings (`color` to `colour`,
+   `behavior` to `behaviour`, `analyzed` to `analysed`).
+2. Generated `extend-words` entries restore Oxford spelling, which the locale
+   alone would not enforce: identity entries accept `-ize` inflections that
+   the locale would otherwise "correct" to `-ise`, and `-ise` entries are
+   corrected to `-ize`. Stems taking `-yse` (`analyse`, `paralyse`) are left
+   to the locale, which already enforces them.
+
+`typos.toml` is a generated file. Never edit its entries by hand; change
+`scripts/generate_typos_config.py` and regenerate:
+
+```bash
+uv run scripts/generate_typos_config.py
+```
+
+The generator script owns three maintainer-facing lists:
+
+- `STEMS` — word stems that take Oxford `-ize`. Curating this list is a
+  contributor responsibility: the `en-gb` locale silently accepts the `-ise`
+  form of any stem that is absent, so the gate will pass green even when the
+  prose is wrong. When you write or review prose that contains an Oxford `-ize`
+  word whose stem is not yet listed, you must add it here and regenerate
+  `typos.toml` (`uv run scripts/generate_typos_config.py`); do not leave the
+  word spelled `-ise`. Do not add genuinely `-ise`-only words (`advise`,
+  `revise`, `exercise`, `supervise`, and similar), which must stay `-ise`.
+- `EXTRA_ACCEPTED_WORDS` — words accepted verbatim, such as the `astroid`
+  library, suffix fragments quoted in prose, and non-English example text.
+- `extend-ignore-re` patterns in `HEADER` — regions exempt from spelling
+  checks: inline code spans, fenced code blocks, tool names that keep their
+  upstream spelling (`rust-analyzer`), proper nouns such as
+  `GitHub Flavored Markdown`, and the `## Artifacts and notes` ExecPlan
+  template heading owned by the execplans skill. Quoted APIs keep US spelling
+  per the documentation style guide, so put them in backticks rather than
+  adding word-level exceptions.
+
+The gate runs over the `MD_FILES_FIND` Markdown file list with
+`--force-exclude` so the `typos.toml` excludes also apply to explicitly passed
+paths (for example, Markdown that appears inside `target` build output). To fix
+findings mechanically, rerun the gate's `typos` command with `--write-changes`
+appended, substituting the version from the Makefile `TYPOS_VERSION` variable:
+
+```bash
+uv tool run typos@<TYPOS_VERSION> --config typos.toml --force-exclude \
+  --write-changes <files>
+```
+
+Review automated rewrites before committing; spelling corrections must not
+touch code samples, API names, or quoted material.
+
+`typos` is a Rust binary rather than a locked Python dependency, so its version
+is pinned once in the Makefile `TYPOS_VERSION` variable and run through
+`uv tool run typos@$(TYPOS_VERSION)`. CI inherits the pin by calling
+`make spellcheck`. When bumping the version, update `TYPOS_VERSION` and rerun
+the gate.
+
 ## Command checklist
 
 Run from repository root:
@@ -384,6 +447,7 @@ Run from repository root:
 ```bash
 set -o pipefail; make check-fmt 2>&1 | tee /tmp/make-check-fmt.log
 set -o pipefail; make lint 2>&1 | tee /tmp/make-lint.log
+set -o pipefail; make markdownlint 2>&1 | tee /tmp/make-markdownlint.log
 set -o pipefail; make test 2>&1 | tee /tmp/make-test.log
 ```
 

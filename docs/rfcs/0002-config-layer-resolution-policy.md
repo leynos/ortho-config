@@ -806,7 +806,7 @@ later scopes winning and an explicit scope-origin display
 ([git-config documentation](https://git-scm.com/docs/git-config)); Viper's
 `SetConfigFile`, which forces an explicit file and disables search; and
 cosmiconfig's distinction between an explicit `load` and a scoped `search`. The
-proposal generalises these into selectors (explicit, ordered, optionally
+proposal generalizes these into selectors (explicit, ordered, optionally
 exclusive) and scopes (stacked, ordered), without copying any one tool's naming.
 Reusing Figment's own profile and provider merge directly was considered and set
 aside: OrthoConfig deliberately explodes each `extends` chain into separate

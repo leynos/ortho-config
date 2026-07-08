@@ -61,6 +61,9 @@ jobs:
         with:
           globs: '**/*.md'
 
+      - name: Spelling (en-GB-oxendict)
+        run: make spellcheck
+
       - name: Lint
         run: make lint
 
