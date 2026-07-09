@@ -10,9 +10,15 @@ slow-timeout = { period = "120s", terminate-after = 5 }
 # Serialise powershell_windows cases: both cases write to the same bridge
 # directory under target/orthohelp/<hash>/ and Windows file-sharing semantics
 # prevent concurrent truncate+write while cargo holds a read lock on the manifest.
+# Serialise nested_subcommand_end_to_end: its rstest cases spawn concurrent
+# bridge builds that share the target/orthohelp/<hash>/ cache, and an
+# inter-process race on that shared Cargo.toml intermittently yields
+# BridgeBuildFailure ("manifest is missing either a [package] or a
+# [workspace]") under coverage runs.
 [test-groups]
 rstest_bdd = { max-threads = 1 }
 powershell_windows = { max-threads = 1 }
+nested_subcommand_end_to_end = { max-threads = 1 }
 
 [[profile.default.overrides]]
 filter = 'binary(rstest_bdd)'
@@ -21,3 +27,7 @@ test-group = 'rstest_bdd'
 [[profile.default.overrides]]
 filter = 'binary(powershell_windows)'
 test-group = 'powershell_windows'
+
+[[profile.default.overrides]]
+filter = 'binary(nested_subcommand_end_to_end)'
+test-group = 'nested_subcommand_end_to_end'
