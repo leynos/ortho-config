@@ -115,8 +115,9 @@ jobs:
       # configuration." — a CodeScene-side per-project setting, not a CI
       # defect (ddlint and chutoro hit the byte-identical error). Add the
       # gate in a fast-follow PR — merge the two feature-leg reports with
-      # `bun x lcov-result-merger lcov-serde-saphyr.info
-      # lcov-no-serde-saphyr.info > lcov.info`, then run the guarded
-      # `mode: check` step on the ubuntu leg only — once coverage-main.yml
-      # has uploaded to main at least once and the project's coverage gate
-      # is confirmed enabled CodeScene-side.
+      # `bun x lcov-result-merger 'lcov-*.info' > lcov.info` (a single glob
+      # pattern; two file paths would make the second the output file and
+      # leave stdout empty), then run the guarded `mode: check` step on the
+      # ubuntu leg only — once coverage-main.yml has uploaded to main at
+      # least once and the project's coverage gate is confirmed enabled
+      # CodeScene-side.
