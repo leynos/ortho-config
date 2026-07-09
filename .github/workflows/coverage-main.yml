@@ -57,9 +57,12 @@ jobs:
 
       - name: Merge coverage results
         shell: bash
-        run: >-
-          bun x lcov-result-merger
-          lcov-serde-saphyr.info lcov-no-serde-saphyr.info > lcov.info
+        # lcov-result-merger takes a single glob pattern and an optional
+        # output file; passing two file paths treats the second as the
+        # output and leaves stdout empty. Match both feature-leg reports
+        # with one glob ('lcov-*.info' excludes the lcov.info output) and
+        # write the merged result via stdout.
+        run: bun x lcov-result-merger 'lcov-*.info' > lcov.info
 
       - name: Upload coverage data to CodeScene
         env:
