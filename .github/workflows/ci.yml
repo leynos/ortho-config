@@ -108,23 +108,15 @@ jobs:
         if: ${{ github.event_name == 'workflow_dispatch' }}
         run: make publish-check
 
-      - name: Merge coverage results
-        if: ${{ matrix.os == 'ubuntu-latest' }}
-        shell: bash
-        run: >-
-          bun x lcov-result-merger
-          lcov-serde-saphyr.info lcov-no-serde-saphyr.info > lcov.info
-
-      # cs-coverage check diffs the pull request against its merge base and
-      # evaluates changed-line coverage. Run it from the ubuntu leg only so
-      # CodeScene receives one report per commit. The guard lets secret-less
-      # runs (forks) skip rather than fail.
-      - name: Check coverage against CodeScene gates
-        if: ${{ matrix.os == 'ubuntu-latest' && env.CS_ACCESS_TOKEN }}
-        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@927edd45ae77be4251a8a18ca9eb5613a2e32cbd
-        with:
-          format: lcov
-          mode: check
-          project-url: https://api.codescene.io/v2/projects/69279
-          access-token: ${{ env.CS_ACCESS_TOKEN }}
-          installer-checksum: ${{ vars.CODESCENE_CLI_SHA256 }}
+      # The `mode: check` CodeScene coverage gate is deliberately not wired
+      # in yet: CodeScene project 69279 has no coverage-gates configuration,
+      # so `cs-coverage check` fails every run with "HTTP call succeeded,
+      # but the received project-config isn't valid. Lacks the gates
+      # configuration." — a CodeScene-side per-project setting, not a CI
+      # defect (ddlint and chutoro hit the byte-identical error). Add the
+      # gate in a fast-follow PR — merge the two feature-leg reports with
+      # `bun x lcov-result-merger lcov-serde-saphyr.info
+      # lcov-no-serde-saphyr.info > lcov.info`, then run the guarded
+      # `mode: check` step on the ubuntu leg only — once coverage-main.yml
+      # has uploaded to main at least once and the project's coverage gate
+      # is confirmed enabled CodeScene-side.
