@@ -1,0 +1,72 @@
+name: Coverage (main)
+
+# CodeScene accepts `cs-coverage upload` only for analysed branches, so
+# main-branch coverage is uploaded here on push; pull requests run the
+# changed-line gate (`cs-coverage check`) in ci.yml instead. This
+# workflow also advances the coverage ratchet baseline: caches saved on
+# main are readable by every pull-request run, so the baseline written
+# here is the one PR ratchet checks compare against.
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  coverage-upload:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      CARGO_TERM_COLOR: always
+      RUSTFLAGS: -D warnings
+      RUSTDOCFLAGS: -D warnings
+      # generate-coverage kills cargo after RUN_RUST_CARGO_WAIT_TIMEOUT
+      # seconds (default 600); the full-suite coverage run needs longer.
+      RUN_RUST_CARGO_WAIT_TIMEOUT: '1800'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Rust
+        uses: leynos/shared-actions/.github/actions/setup-rust@927edd45ae77be4251a8a18ca9eb5613a2e32cbd
+
+      - name: Install bun
+        uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76  # v2
+        with:
+          bun-version: '1.2.21'
+
+      - name: Test and Measure Coverage (with serde_saphyr)
+        # Broadest feature set, so this leg carries the coverage ratchet
+        # (one baseline per job); it writes the authoritative baseline that
+        # pull-request runs compare against.
+        uses: leynos/shared-actions/.github/actions/generate-coverage@927edd45ae77be4251a8a18ca9eb5613a2e32cbd
+        with:
+          output-path: lcov-serde-saphyr.info
+          format: lcov
+          features: serde_json toml json5 yaml
+          artefact-name-suffix: serde-saphyr-main
+          with-ratchet: 'true'
+
+      - name: Test and Measure Coverage (without serde_saphyr)
+        uses: leynos/shared-actions/.github/actions/generate-coverage@927edd45ae77be4251a8a18ca9eb5613a2e32cbd
+        with:
+          output-path: lcov-no-serde-saphyr.info
+          format: lcov
+          features: serde_json toml json5
+          artefact-name-suffix: no-serde-saphyr-main
+
+      - name: Merge coverage results
+        shell: bash
+        run: >-
+          bun x lcov-result-merger
+          lcov-serde-saphyr.info lcov-no-serde-saphyr.info > lcov.info
+
+      - name: Upload coverage data to CodeScene
+        env:
+          CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}
+        if: env.CS_ACCESS_TOKEN != ''
+        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@927edd45ae77be4251a8a18ca9eb5613a2e32cbd
+        with:
+          format: lcov
+          access-token: ${{ env.CS_ACCESS_TOKEN }}
+          installer-checksum: ${{ vars.CODESCENE_CLI_SHA256 }}

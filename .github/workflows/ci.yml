@@ -13,9 +13,13 @@ jobs:
     env:
       CARGO_TERM_COLOR: always
       CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}
-      CODESCENE_CLI_SHA256: ${{ vars.CODESCENE_CLI_SHA256 }}
       RUSTFLAGS: -D warnings
       RUSTDOCFLAGS: -D warnings
+      # generate-coverage kills cargo after RUN_RUST_CARGO_WAIT_TIMEOUT
+      # seconds (default 600). The windows coverage run legitimately takes
+      # ~12 min (the compile_fail trybuild test alone is ~200s), and the
+      # 927edd4 action now emits full per-line data, so raise the ceiling.
+      RUN_RUST_CARGO_WAIT_TIMEOUT: '1800'
     strategy:
       fail-fast: false
       matrix:
@@ -24,10 +28,15 @@ jobs:
           - os: windows-latest
     steps:
       - name: Checkout
+        # fetch-depth: 0 makes the pull request's merge base reachable so the
+        # CodeScene changed-line coverage gate (cs-coverage check) can diff
+        # against it.
         uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@aebb3f5b831102e2a10ef909c83d7d50ea86c332
+        uses: leynos/shared-actions/.github/actions/setup-rust@927edd45ae77be4251a8a18ca9eb5613a2e32cbd
 
       - name: Install bun
         uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76  # v2
@@ -72,17 +81,21 @@ jobs:
         run: make test-workflow-contracts
 
       - name: Test and Measure Coverage (with serde_saphyr)
-        uses: leynos/shared-actions/.github/actions/generate-coverage@aebb3f5b831102e2a10ef909c83d7d50ea86c332
+        # Broadest feature set, so this leg carries the coverage ratchet
+        # (one baseline per job). Ratchet only on the ubuntu leg, which
+        # compares against the baseline written by coverage-main.yml.
+        uses: leynos/shared-actions/.github/actions/generate-coverage@927edd45ae77be4251a8a18ca9eb5613a2e32cbd
         with:
-          output-path: lcov.info
+          output-path: lcov-serde-saphyr.info
           format: lcov
           features: serde_json toml json5 yaml
           artefact-name-suffix: serde-saphyr
+          with-ratchet: ${{ matrix.os == 'ubuntu-latest' }}
 
       - name: Test and Measure Coverage (without serde_saphyr)
-        uses: leynos/shared-actions/.github/actions/generate-coverage@aebb3f5b831102e2a10ef909c83d7d50ea86c332
+        uses: leynos/shared-actions/.github/actions/generate-coverage@927edd45ae77be4251a8a18ca9eb5613a2e32cbd
         with:
-          output-path: lcov.info
+          output-path: lcov-no-serde-saphyr.info
           format: lcov
           features: serde_json toml json5
           artefact-name-suffix: no-serde-saphyr
@@ -95,10 +108,15 @@ jobs:
         if: ${{ github.event_name == 'workflow_dispatch' }}
         run: make publish-check
 
-      - name: Upload coverage data to CodeScene
-        if: ${{ matrix.coverage && env.CS_ACCESS_TOKEN && vars.CODESCENE_CLI_SHA256 }}
-        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@aebb3f5b831102e2a10ef909c83d7d50ea86c332
-        with:
-          format: lcov
-          access-token: ${{ env.CS_ACCESS_TOKEN }}
-          installer-checksum: ${{ vars.CODESCENE_CLI_SHA256 }}
+      # The `mode: check` CodeScene coverage gate is deliberately not wired
+      # in yet: CodeScene project 69279 has no coverage-gates configuration,
+      # so `cs-coverage check` fails every run with "HTTP call succeeded,
+      # but the received project-config isn't valid. Lacks the gates
+      # configuration." — a CodeScene-side per-project setting, not a CI
+      # defect (ddlint and chutoro hit the byte-identical error). Add the
+      # gate in a fast-follow PR — merge the two feature-leg reports with
+      # `bun x lcov-result-merger lcov-serde-saphyr.info
+      # lcov-no-serde-saphyr.info > lcov.info`, then run the guarded
+      # `mode: check` step on the ubuntu leg only — once coverage-main.yml
+      # has uploaded to main at least once and the project's coverage gate
+      # is confirmed enabled CodeScene-side.
