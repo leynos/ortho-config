@@ -15,6 +15,11 @@ jobs:
       CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}
       RUSTFLAGS: -D warnings
       RUSTDOCFLAGS: -D warnings
+      # generate-coverage kills cargo after RUN_RUST_CARGO_WAIT_TIMEOUT
+      # seconds (default 600). The windows coverage run legitimately takes
+      # ~12 min (the compile_fail trybuild test alone is ~200s), and the
+      # 927edd4 action now emits full per-line data, so raise the ceiling.
+      RUN_RUST_CARGO_WAIT_TIMEOUT: '1800'
     strategy:
       fail-fast: false
       matrix:

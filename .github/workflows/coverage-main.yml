@@ -20,6 +20,9 @@ jobs:
       CARGO_TERM_COLOR: always
       RUSTFLAGS: -D warnings
       RUSTDOCFLAGS: -D warnings
+      # generate-coverage kills cargo after RUN_RUST_CARGO_WAIT_TIMEOUT
+      # seconds (default 600); the full-suite coverage run needs longer.
+      RUN_RUST_CARGO_WAIT_TIMEOUT: '1800'
     steps:
       - name: Checkout
         uses: actions/checkout@v7
