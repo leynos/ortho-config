@@ -1,7 +1,8 @@
-.PHONY: help all clean test build release lint fmt check-fmt markdownlint spellcheck nixie typecheck python-test-deps publish-check powershell-wrapper-validate test-workflow-contracts FORCE
+.PHONY: help all clean test build release lint lint-clippy lint-whitaker fmt check-fmt markdownlint spellcheck nixie typecheck python-test-deps publish-check powershell-wrapper-validate test-workflow-contracts FORCE
 
 CRATE ?= ortho_config
 CARGO ?= cargo
+WHITAKER ?= whitaker
 PUBLISH_CHECK_CARGO_REAL ?= $(shell command -v $(CARGO))
 BUILD_JOBS ?=
 CLIPPY_FLAGS ?= --all-targets --all-features -- -D warnings
@@ -63,9 +64,14 @@ target/%/lib$(CRATE).rlib: FORCE ## Build library in debug or release
 
 FORCE:
 
-lint: ## Run Clippy with warnings denied
+lint: lint-clippy lint-whitaker ## Run Clippy and the Whitaker Dylint suite with warnings denied
+
+lint-clippy: ## Run rustdoc and Clippy with warnings denied
 	RUSTDOCFLAGS="$(RUSTDOC_FLAGS)" $(CARGO) doc --workspace --no-deps
 	$(CARGO) clippy $(CLIPPY_FLAGS)
+
+lint-whitaker: ## Run the Whitaker Dylint suite with warnings denied
+	RUSTFLAGS="-D warnings" $(WHITAKER) --all -- --all-targets --all-features
 
 typecheck: ## Typecheck workspace (cargo check)
 	RUSTFLAGS="-D warnings" $(CARGO) check --workspace --all-targets --all-features $(BUILD_JOBS)
