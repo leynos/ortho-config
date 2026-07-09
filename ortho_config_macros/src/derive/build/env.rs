@@ -53,6 +53,8 @@ pub(crate) fn default_app_name(struct_attrs: &StructAttrs, ident: &Ident) -> Str
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for environment-variable token generation.
+
     use super::*;
     use anyhow::{Result, anyhow, ensure};
 

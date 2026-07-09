@@ -255,6 +255,8 @@ pub fn generate_to_string(metadata: &LocalizedDocMetadata, config: &RoffConfig) 
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for man page generation.
+
     use super::*;
     use crate::ir::{LocalizedHeadings, LocalizedSectionsMetadata};
     use crate::test_support::nested_fixture::nested_doc;
@@ -371,18 +373,18 @@ mod tests {
         assert!(filenames.contains(&"fixture-version.1"));
         assert!(filenames.contains(&"fixture-admin.1"));
 
-        let admin_page = read_utf8(&out_dir, "man/man1/fixture-admin.1");
+        let admin_page =
+            read_utf8(&out_dir, "man/man1/fixture-admin.1").expect("read generated man page");
         assert!(admin_page.contains(".SH COMMANDS"));
         assert!(admin_page.contains(".SS audit"));
         assert!(admin_page.contains(".SS grant-access"));
     }
 
-    fn read_utf8(out_dir: &Utf8PathBuf, relative: &str) -> String {
-        let dir = Dir::open_ambient_dir(out_dir, ambient_authority()).expect("open output dir");
-        let mut file = dir.open(relative).expect("open generated man page");
+    fn read_utf8(out_dir: &Utf8PathBuf, relative: &str) -> std::io::Result<String> {
+        let dir = Dir::open_ambient_dir(out_dir, ambient_authority())?;
+        let mut file = dir.open(relative)?;
         let mut content = String::new();
-        file.read_to_string(&mut content)
-            .expect("read generated man page");
-        content
+        file.read_to_string(&mut content)?;
+        Ok(content)
     }
 }

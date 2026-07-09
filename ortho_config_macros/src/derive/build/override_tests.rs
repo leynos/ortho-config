@@ -58,7 +58,7 @@ fn assert_collection_skip(
 }
 
 #[fixture]
-fn demo_input() -> DemoInput {
+fn demo_input() -> Result<DemoInput> {
     let input: syn::DeriveInput = syn::parse_quote! {
         #[ortho_config(prefix = "CFG_")]
         struct Demo {
@@ -70,14 +70,13 @@ fn demo_input() -> DemoInput {
             field3: std::collections::BTreeMap<String, u32>,
         }
     };
-    let (_, fields, struct_attrs, field_attrs) =
-        parse_input(&input).expect("fixture should parse derive input");
-    (fields, field_attrs, struct_attrs)
+    let (_, fields, struct_attrs, field_attrs) = parse_input(&input)?;
+    Ok((fields, field_attrs, struct_attrs))
 }
 
 #[rstest]
-fn collect_collection_strategies_selects_collections(demo_input: DemoInput) -> Result<()> {
-    let (fields, field_attrs, _) = demo_input;
+fn collect_collection_strategies_selects_collections(demo_input: Result<DemoInput>) -> Result<()> {
+    let (fields, field_attrs, _) = demo_input?;
     let strategies = collect_collection_strategies(&fields, &field_attrs)?;
     ensure!(
         strategies.append.len() == 1,
@@ -105,8 +104,8 @@ fn collect_collection_strategies_selects_collections(demo_input: DemoInput) -> R
 }
 
 #[rstest]
-fn build_collection_logic_includes_map_assignment(demo_input: DemoInput) -> Result<()> {
-    let (fields, field_attrs, _) = demo_input;
+fn build_collection_logic_includes_map_assignment(demo_input: Result<DemoInput>) -> Result<()> {
+    let (fields, field_attrs, _) = demo_input?;
     let strategies = collect_collection_strategies(&fields, &field_attrs)?;
     let tokens = build_collection_logic(&strategies, &quote!(std::option::Option::<&()>::None));
     ensure!(
@@ -117,8 +116,8 @@ fn build_collection_logic_includes_map_assignment(demo_input: DemoInput) -> Resu
 }
 
 #[rstest]
-fn build_collection_logic_preserves_empty_maps(demo_input: DemoInput) -> Result<()> {
-    let (fields, field_attrs, _) = demo_input;
+fn build_collection_logic_preserves_empty_maps(demo_input: Result<DemoInput>) -> Result<()> {
+    let (fields, field_attrs, _) = demo_input?;
     let strategies = collect_collection_strategies(&fields, &field_attrs)?;
     let tokens = build_collection_logic(&strategies, &quote!(std::option::Option::<&()>::None));
     let pre_merge = tokens.pre_merge.to_string();
@@ -136,8 +135,8 @@ fn build_collection_logic_preserves_empty_maps(demo_input: DemoInput) -> Result<
 }
 
 #[rstest]
-fn build_override_struct_creates_struct(demo_input: DemoInput) -> Result<()> {
-    let (fields, field_attrs, _) = demo_input;
+fn build_override_struct_creates_struct(demo_input: Result<DemoInput>) -> Result<()> {
+    let (fields, field_attrs, _) = demo_input?;
     let strategies = collect_collection_strategies(&fields, &field_attrs)?;
     let (ts, init_ts) = build_override_struct(&syn::parse_quote!(Demo), &strategies);
     ensure!(

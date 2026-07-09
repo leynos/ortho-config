@@ -337,6 +337,8 @@ pub fn exit_status_section(headings: &LocalizedHeadings) -> String {
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for roff section rendering.
+
     use super::*;
     use rstest::{fixture, rstest};
 

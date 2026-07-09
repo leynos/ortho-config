@@ -191,6 +191,8 @@ pub(crate) fn candidate_paths(prefix: &Prefix) -> Vec<PathBuf> {
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for subcommand configuration path resolution.
+
     #[cfg(any(unix, target_os = "redox"))]
     use super::*;
     #[cfg(any(unix, target_os = "redox"))]

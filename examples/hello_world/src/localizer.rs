@@ -209,6 +209,8 @@ fn parse_posix_locale(value: &str) -> Option<LanguageIdentifier> {
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for the demo localizer.
+
     use super::*;
     use std::collections::HashMap;
 
@@ -259,15 +261,17 @@ mod tests {
     /// messages containing the expected substring.
     fn assert_clap_error_translation(locale: LanguageIdentifier, expected_substring: &str) {
         let locale_str = locale.to_string();
-        let localiser = DemoLocalizer::try_for_locale(locale)
-            .unwrap_or_else(|e| panic!("localiser for {locale_str} should build: {e}"));
+        let localiser = match DemoLocalizer::try_for_locale(locale) {
+            Ok(localiser) => localiser,
+            Err(e) => panic!("localiser for {locale_str} should build: {e}"),
+        };
 
         let mut args: LocalizationArgs<'_> = HashMap::new();
         args.insert("valid_subcommands", "greet, take-leave".into());
 
-        let message = localiser
-            .lookup("clap-error-missing-subcommand", Some(&args))
-            .unwrap_or_else(|| panic!("catalogue for {locale_str} should include clap error copy"));
+        let Some(message) = localiser.lookup("clap-error-missing-subcommand", Some(&args)) else {
+            panic!("catalogue for {locale_str} should include clap error copy");
+        };
 
         assert!(
             message.contains(expected_substring),

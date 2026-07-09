@@ -7,6 +7,8 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 mod support_localizers {
+    //! Localizer doubles shared by the localization tests.
+
     use crate as crate_root;
     include!("../../tests/support/localizers.rs");
 }

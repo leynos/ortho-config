@@ -13,6 +13,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 mod support_localizers {
+    //! Localizer doubles shared by the behaviour steps.
+
     use ortho_config as crate_root;
     include!("../../../support/localizers.rs");
 }

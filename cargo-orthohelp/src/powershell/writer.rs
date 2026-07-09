@@ -85,6 +85,8 @@ fn normalise_to_crlf(content: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for `PowerShell` output writing.
+
     use super::*;
     use rstest::rstest;
 

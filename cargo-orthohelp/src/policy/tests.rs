@@ -117,16 +117,17 @@ fn missing_required_report_fields_fail_deserialization(#[case] payload: Value) {
 }
 
 fn field<'a>(value: &'a Value, name: &str) -> &'a Value {
-    value
-        .get(name)
-        .unwrap_or_else(|| panic!("JSON object should contain `{name}`"))
+    let Some(field) = value.get(name) else {
+        panic!("JSON object should contain `{name}`");
+    };
+    field
 }
 
 fn first_array_item(value: &Value) -> &Value {
-    value
-        .as_array()
-        .and_then(|items| items.first())
-        .expect("JSON value should be a non-empty array")
+    let Some(item) = value.as_array().and_then(|items| items.first()) else {
+        panic!("JSON value should be a non-empty array");
+    };
+    item
 }
 
 fn sample_policy_report() -> PolicyReport {

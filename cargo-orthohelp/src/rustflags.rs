@@ -141,6 +141,8 @@ fn is_instrument_coverage_option(token: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for `RUSTFLAGS` handling.
+
     use super::*;
     use rstest::rstest;
 

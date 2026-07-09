@@ -25,9 +25,9 @@ fn canonicalish(path: &Path) -> PathBuf {
 }
 
 fn assert_first_error_path(errors: &[Arc<OrthoError>], expected: &Path) {
-    let err = errors
-        .first()
-        .expect("expected at least one error when asserting path");
+    let Some(err) = errors.first() else {
+        panic!("expected at least one error when asserting path");
+    };
     let path = match err.as_ref() {
         OrthoError::File { path, .. } => path,
         other => panic!("expected OrthoError::File, got {other:?}"),

@@ -201,37 +201,54 @@ impl FluentLocalizerBuilder {
     /// Returns [`FluentLocalizerError`] if any catalogue fails to parse or
     /// registers conflicting identifiers.
     pub fn try_build(self) -> Result<FluentLocalizer, FluentLocalizerError> {
-        let defaults = if self.use_defaults {
-            Some(bundle_from_resources(
-                &self.locale,
-                default_resources(&self.locale).ok_or_else(|| {
-                    FluentLocalizerError::UnsupportedLocale {
-                        locale: self.locale.clone(),
-                    }
-                })?,
-                FluentBundleSource::Default,
-            )?)
-        } else {
-            None
-        };
-
-        let consumer = if let Some(bundle) = self.consumer_bundle {
-            Some(bundle)
-        } else if self.consumer_resources.is_empty() {
-            None
-        } else {
-            Some(bundle_from_resources(
-                &self.locale,
-                &self.consumer_resources,
-                FluentBundleSource::Consumer,
-            )?)
-        };
+        let defaults = self.build_defaults_bundle()?;
+        let consumer = Self::build_consumer_bundle(
+            &self.locale,
+            self.consumer_bundle,
+            &self.consumer_resources,
+        )?;
 
         Ok(FluentLocalizer {
             consumer,
             defaults,
             report_issue: self.report_issue,
         })
+    }
+
+    /// Build the built-in defaults bundle when defaults are enabled.
+    fn build_defaults_bundle(&self) -> Result<Option<BundleWithLocale>, FluentLocalizerError> {
+        if !self.use_defaults {
+            return Ok(None);
+        }
+        let resources = default_resources(&self.locale).ok_or_else(|| {
+            FluentLocalizerError::UnsupportedLocale {
+                locale: self.locale.clone(),
+            }
+        })?;
+        Ok(Some(bundle_from_resources(
+            &self.locale,
+            resources,
+            FluentBundleSource::Default,
+        )?))
+    }
+
+    /// Build the consumer bundle from an explicit bundle or gathered resources.
+    fn build_consumer_bundle(
+        locale: &LanguageIdentifier,
+        explicit: Option<BundleWithLocale>,
+        resources: &[&'static str],
+    ) -> Result<Option<BundleWithLocale>, FluentLocalizerError> {
+        if let Some(bundle) = explicit {
+            return Ok(Some(bundle));
+        }
+        if resources.is_empty() {
+            return Ok(None);
+        }
+        Ok(Some(bundle_from_resources(
+            locale,
+            resources,
+            FluentBundleSource::Consumer,
+        )?))
     }
 }
 

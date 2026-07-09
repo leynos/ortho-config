@@ -79,6 +79,8 @@ fn format_array<'a>(values: impl Iterator<Item = &'a str>) -> String {
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for `PowerShell` module manifest generation.
+
     use super::*;
     use rstest::rstest;
 
