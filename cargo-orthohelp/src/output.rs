@@ -285,6 +285,8 @@ fn ensure_dir(path: &Utf8Path) -> Result<Dir, OrthohelpError> {
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for output-path handling and file writing.
+
     use super::*;
     use camino::Utf8Path;
     use std::collections::HashSet;

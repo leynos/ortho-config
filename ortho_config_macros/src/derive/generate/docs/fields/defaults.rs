@@ -37,6 +37,8 @@ pub(super) fn default_env_name(prefix: Option<&str>, field: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for default-value rendering.
+
     use super::*;
 
     #[test]

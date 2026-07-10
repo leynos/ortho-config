@@ -231,6 +231,21 @@ fn parameter_display_name(field: &LocalizedFieldMetadata) -> String {
     field.name.clone()
 }
 
+/// Map an integer width and signedness to the `PowerShell` type name.
+const fn integer_type_name(bits: u8, signed: bool) -> &'static str {
+    match (signed, bits > 32) {
+        (true, true) => "Int64",
+        (true, false) => "Int32",
+        (false, true) => "UInt64",
+        (false, false) => "UInt32",
+    }
+}
+
+/// Map a float width to the `PowerShell` type name.
+const fn float_type_name(bits: u8) -> &'static str {
+    if bits > 32 { "Double" } else { "Single" }
+}
+
 #[expect(
     clippy::missing_const_for_fn,
     reason = "runtime-only call sites intentionally keep this helper unconstrained"
@@ -245,26 +260,8 @@ fn parameter_value_type(field: &LocalizedFieldMetadata) -> (&'static str, bool) 
     }
 
     match field.value.as_ref() {
-        Some(ValueType::Integer { bits, signed }) => {
-            if *signed {
-                if *bits > 32 {
-                    ("Int64", false)
-                } else {
-                    ("Int32", false)
-                }
-            } else if *bits > 32 {
-                ("UInt64", false)
-            } else {
-                ("UInt32", false)
-            }
-        }
-        Some(ValueType::Float { bits }) => {
-            if *bits > 32 {
-                ("Double", false)
-            } else {
-                ("Single", false)
-            }
-        }
+        Some(ValueType::Integer { bits, signed }) => (integer_type_name(*bits, *signed), false),
+        Some(ValueType::Float { bits }) => (float_type_name(*bits), false),
         Some(ValueType::Bool) => ("Boolean", false),
         Some(ValueType::Duration) => ("TimeSpan", false),
         Some(

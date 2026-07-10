@@ -205,6 +205,8 @@ impl Deref for CsvEnv {
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for CSV environment-variable parsing.
+
     use super::*;
     use figment::value::Tag;
     use rstest::rstest;

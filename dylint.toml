@@ -1,0 +1,19 @@
+# Configuration for the Whitaker Dylint suite (see `make lint-whitaker`).
+
+[no_std_fs_operations]
+excluded_crates = [
+    # Configuration discovery library: its contract is to resolve and read
+    # configuration from ambient locations (current directory, home, and
+    # XDG paths supplied by the user or environment), so there is no
+    # capability root to thread through. Unit tests stage config trees in
+    # ambient temp directories to exercise the same discovery paths.
+    "ortho_config",
+    # Integration test crate (ortho_config/tests/discovery_attributes.rs):
+    # stages configuration trees in ambient temp directories so the derive
+    # macro's discovery attributes resolve them exactly as end users would.
+    "discovery_attributes",
+    # Cargo subcommand binary: operates on the ambient cargo workspace,
+    # target directory, and bridge scratch space that `cargo` itself
+    # resolves ambiently; its tests stage the same ambient layouts.
+    "cargo_orthohelp",
+]

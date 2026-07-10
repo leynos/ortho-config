@@ -84,10 +84,9 @@ fn assert_root_command_metadata(command: &mut Command) {
 }
 
 fn assert_config_arg(command: &Command) {
-    let config = command
-        .get_arguments()
-        .find(|arg| arg.get_id() == "config")
-        .expect("config argument should exist");
+    let Some(config) = command.get_arguments().find(|arg| arg.get_id() == "config") else {
+        panic!("config argument should exist");
+    };
     assert_eq!(
         config.get_help().map(ToString::to_string).as_deref(),
         Some("demo-cli-args-config-help:localized")
@@ -107,10 +106,12 @@ fn assert_config_arg(command: &Command) {
 }
 
 fn assert_verbose_arg(command: &Command) {
-    let verbose = command
+    let Some(verbose) = command
         .get_arguments()
         .find(|arg| arg.get_id() == "verbose")
-        .expect("verbose argument should exist");
+    else {
+        panic!("verbose argument should exist");
+    };
     assert!(matches!(verbose.get_action(), ArgAction::SetTrue));
     assert!(verbose.get_value_names().is_none());
     assert_eq!(
@@ -120,9 +121,9 @@ fn assert_verbose_arg(command: &Command) {
 }
 
 fn assert_greet_subcommand(command: &Command) {
-    let greet = command
-        .find_subcommand("greet")
-        .expect("greet subcommand should exist");
+    let Some(greet) = command.find_subcommand("greet") else {
+        panic!("greet subcommand should exist");
+    };
     assert_eq!(
         greet.get_about().map(ToString::to_string).as_deref(),
         Some("demo-cli-greet-about:localized")
@@ -167,9 +168,9 @@ fn localize_self_does_not_recurse_into_subcommands() {
         command.get_about().map(ToString::to_string).as_deref(),
         Some("demo-cli-about:localized")
     );
-    let greet = command
-        .find_subcommand("greet")
-        .expect("greet subcommand should exist");
+    let Some(greet) = command.find_subcommand("greet") else {
+        panic!("greet subcommand should exist");
+    };
     assert_eq!(
         greet.get_about().map(ToString::to_string).as_deref(),
         Some("stock greet about")

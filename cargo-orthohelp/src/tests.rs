@@ -18,9 +18,10 @@ fn dummy_paths() -> BridgePaths {
 }
 
 fn read_mtime(path: &Utf8Path) -> SystemTime {
-    std::fs::metadata(path.as_std_path())
-        .and_then(|metadata| metadata.modified())
-        .expect("read cache file mtime")
+    match std::fs::metadata(path.as_std_path()).and_then(|metadata| metadata.modified()) {
+        Ok(mtime) => mtime,
+        Err(err) => panic!("read cache file mtime for {path}: {err}"),
+    }
 }
 
 fn poll_mtime_until(

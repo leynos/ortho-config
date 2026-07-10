@@ -203,6 +203,8 @@ impl PostMergeContext {
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for post-merge hook behaviour.
+
     use super::*;
 
     #[test]

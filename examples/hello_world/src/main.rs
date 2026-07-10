@@ -6,7 +6,10 @@ use ortho_config::{
 };
 
 use clap::CommandFactory;
-use hello_world::cli::{CommandLine, Commands, LocalizeCmd, load_global_config};
+use hello_world::cli::{
+    CommandLine, Commands, GreetCommand, HelloWorldCli, LocalizeCmd, TakeLeaveCommand,
+    load_global_config,
+};
 use hello_world::error::{HelloWorldError, Result};
 use hello_world::localizer::DemoLocalizer;
 use hello_world::message::{build_plan, build_take_leave_plan, print_plan, print_take_leave};
@@ -28,16 +31,28 @@ fn run() -> Result<()> {
         })
         .map_err(map_load_error)?;
 
+    execute_command(&globals, command)
+}
+
+/// Dispatch the selected subcommand against the merged global configuration.
+fn execute_command(globals: &HelloWorldCli, command: Commands) -> Result<()> {
     match command {
-        Commands::Greet(merged) => {
-            let plan = build_plan(&globals, &merged)?;
-            print_plan(&plan)?;
-        }
-        Commands::TakeLeave(merged) => {
-            let plan = build_take_leave_plan(&globals, &merged)?;
-            print_take_leave(&plan)?;
-        }
+        Commands::Greet(merged) => run_greet(globals, &merged),
+        Commands::TakeLeave(merged) => run_take_leave(globals, &merged),
     }
+}
+
+/// Build and print the greeting plan for the `greet` subcommand.
+fn run_greet(globals: &HelloWorldCli, merged: &GreetCommand) -> Result<()> {
+    let plan = build_plan(globals, merged)?;
+    print_plan(&plan)?;
+    Ok(())
+}
+
+/// Build and print the farewell plan for the `take-leave` subcommand.
+fn run_take_leave(globals: &HelloWorldCli, merged: &TakeLeaveCommand) -> Result<()> {
+    let plan = build_take_leave_plan(globals, merged)?;
+    print_take_leave(&plan)?;
     Ok(())
 }
 

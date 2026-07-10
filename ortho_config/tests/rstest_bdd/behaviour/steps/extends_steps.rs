@@ -125,36 +125,50 @@ impl ExtendsScenario {
 
     fn setup(self, j: &mut figment::Jail) -> figment::error::Result<()> {
         match self {
-            Self::Extended => {
-                j.create_file("base.toml", "rules = [\"base\"]")?;
-                j.create_file(
-                    ".ddlint.toml",
-                    "extends = \"base.toml\"\nrules = [\"child\"]",
-                )?;
-            }
-            Self::Cyclic => {
-                j.create_file("a.toml", "extends = \"b.toml\"\nrules = [\"a\"]")?;
-                j.create_file("b.toml", "extends = \"a.toml\"\nrules = [\"b\"]")?;
-                j.create_file(".ddlint.toml", "extends = \"a.toml\"")?;
-            }
-            Self::MissingBase => {
-                j.create_file(
-                    ".ddlint.toml",
-                    "extends = \"missing.toml\"\nrules = [\"main\"]",
-                )?;
-            }
-            Self::MultiLevel => {
-                let grandparent = concat!("rules = [\"grandparent\"]\n");
-                let parent = concat!("extends = \"grandparent.toml\"\n", "rules = [\"parent\"]\n",);
-                let child = concat!("extends = \"parent.toml\"\n", "rules = [\"child\"]\n",);
-                j.create_file("grandparent.toml", grandparent)?;
-                j.create_file("parent.toml", parent)?;
-                j.create_file(".ddlint.toml", child)?;
-            }
-            Self::NonString => {
-                j.create_file(".ddlint.toml", "extends = 1")?;
-            }
+            Self::Extended => Self::setup_extended(j),
+            Self::Cyclic => Self::setup_cyclic(j),
+            Self::MissingBase => Self::setup_missing_base(j),
+            Self::MultiLevel => Self::setup_multi_level(j),
+            Self::NonString => Self::setup_non_string(j),
         }
+    }
+
+    fn setup_extended(j: &mut figment::Jail) -> figment::error::Result<()> {
+        j.create_file("base.toml", "rules = [\"base\"]")?;
+        j.create_file(
+            ".ddlint.toml",
+            "extends = \"base.toml\"\nrules = [\"child\"]",
+        )?;
+        Ok(())
+    }
+
+    fn setup_cyclic(j: &mut figment::Jail) -> figment::error::Result<()> {
+        j.create_file("a.toml", "extends = \"b.toml\"\nrules = [\"a\"]")?;
+        j.create_file("b.toml", "extends = \"a.toml\"\nrules = [\"b\"]")?;
+        j.create_file(".ddlint.toml", "extends = \"a.toml\"")?;
+        Ok(())
+    }
+
+    fn setup_missing_base(j: &mut figment::Jail) -> figment::error::Result<()> {
+        j.create_file(
+            ".ddlint.toml",
+            "extends = \"missing.toml\"\nrules = [\"main\"]",
+        )?;
+        Ok(())
+    }
+
+    fn setup_multi_level(j: &mut figment::Jail) -> figment::error::Result<()> {
+        let grandparent = concat!("rules = [\"grandparent\"]\n");
+        let parent = concat!("extends = \"grandparent.toml\"\n", "rules = [\"parent\"]\n",);
+        let child = concat!("extends = \"parent.toml\"\n", "rules = [\"child\"]\n",);
+        j.create_file("grandparent.toml", grandparent)?;
+        j.create_file("parent.toml", parent)?;
+        j.create_file(".ddlint.toml", child)?;
+        Ok(())
+    }
+
+    fn setup_non_string(j: &mut figment::Jail) -> figment::error::Result<()> {
+        j.create_file(".ddlint.toml", "extends = 1")?;
         Ok(())
     }
 }

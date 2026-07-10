@@ -1,6 +1,7 @@
 //! Field-level documentation IR generation.
 
 mod defaults;
+mod resolution;
 mod tokens;
 mod validation;
 mod value_types;
@@ -12,19 +13,15 @@ use quote::quote;
 use syn::Ident;
 
 use crate::derive::build::CliFieldMetadata;
-use crate::derive::parse::{
-    FieldAttrs, SerdeRenameAll, btree_map_inner, hash_map_inner, option_inner, serde_has_default,
-    serde_serialized_field_key, vec_inner,
-};
+use crate::derive::parse::{FieldAttrs, SerdeRenameAll, serde_serialized_field_key};
 
+use self::resolution::{resolve_required, resolve_value_type};
 use super::AppName;
 use super::{example_tokens, link_tokens, note_tokens, option_char_tokens, option_string_tokens};
 use defaults::{default_env_name, default_field_id};
 use tokens::{build_possible_values, default_tokens, deprecated_tokens};
 use validation::{ensure_unique, validate_env_name, validate_file_key};
-use value_types::{
-    ValueTypeModel, infer_value_type, is_multi_value, parse_value_type_override, value_type_tokens,
-};
+use value_types::{ValueTypeModel, is_multi_value, value_type_tokens};
 
 pub(super) struct FieldDocArgs<'a> {
     pub app_name: &'a AppName,
@@ -357,47 +354,4 @@ fn render_meta_block(meta: MetaParts) -> TokenStream {
 fn render_vec_field(field_name: &str, items: &[TokenStream]) -> TokenStream {
     let ident = syn::Ident::new(field_name, proc_macro2::Span::call_site());
     quote! { #ident: vec![ #( #items ),* ], }
-}
-
-fn resolve_value_type(attrs: &FieldAttrs, field: &syn::Field) -> Option<ValueTypeModel> {
-    attrs
-        .doc
-        .value_type
-        .as_deref()
-        .map(parse_value_type_override)
-        .or_else(|| infer_value_type(&field.ty))
-}
-
-fn resolve_required(field: &syn::Field, attrs: &FieldAttrs) -> syn::Result<bool> {
-    if let Some(required) = attrs.doc.required {
-        return Ok(required);
-    }
-    Ok(!infers_non_required(field, attrs)?)
-}
-
-/// Returns `true` when the field can be inferred as non-required (`Option<T>`,
-/// `#[ortho_config(default = ...)]`, `#[serde(default)]`, or a collection type).
-fn infers_non_required(field: &syn::Field, attrs: &FieldAttrs) -> syn::Result<bool> {
-    if option_inner(&field.ty).is_some() {
-        return Ok(true);
-    }
-    if attrs.default.is_some() {
-        return Ok(true);
-    }
-    if attrs.inferred_clap_default.is_some() {
-        return Ok(true);
-    }
-    if serde_has_default(&field.attrs)? {
-        return Ok(true);
-    }
-    // Collections (Vec, BTreeMap, HashMap) default to non-required since they can be empty.
-    if is_collection_type(&field.ty) {
-        return Ok(true);
-    }
-    Ok(false)
-}
-
-/// Returns `true` if `ty` is a collection type (`Vec`, `BTreeMap`, `HashMap`).
-fn is_collection_type(ty: &syn::Type) -> bool {
-    vec_inner(ty).is_some() || btree_map_inner(ty).is_some() || hash_map_inner(ty).is_some()
 }

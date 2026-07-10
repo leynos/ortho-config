@@ -287,6 +287,18 @@ pub(crate) fn parse_struct_attrs(attrs: &[Attribute]) -> Result<StructAttrs, syn
 /// # Ok(())
 /// # }
 /// ```
+/// Parse the optional boolean value of `cli_default_as_absent`.
+///
+/// A bare `cli_default_as_absent` enables the behaviour; an explicit
+/// `cli_default_as_absent = <bool>` sets it directly.
+fn parse_cli_default_as_absent(meta: &syn::meta::ParseNestedMeta) -> Result<bool, syn::Error> {
+    if meta.input.peek(Token![=]) {
+        Ok(meta.value()?.parse::<syn::LitBool>()?.value)
+    } else {
+        Ok(true)
+    }
+}
+
 fn apply_field_attr(
     meta: &syn::meta::ParseNestedMeta,
     out: &mut FieldAttrs,
@@ -320,12 +332,7 @@ fn apply_field_attr(
             Ok(true)
         }
         "cli_default_as_absent" => {
-            let v = if meta.input.peek(Token![=]) {
-                meta.value()?.parse::<syn::LitBool>()?.value
-            } else {
-                true
-            };
-            out.cli_default_as_absent = v;
+            out.cli_default_as_absent = parse_cli_default_as_absent(meta)?;
             Ok(true)
         }
         _ => apply_field_doc_attr(meta, out),

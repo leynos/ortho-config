@@ -64,6 +64,8 @@ pub(crate) fn build_config_flag_field(
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for config-flag token generation.
+
     use super::*;
     use crate::derive::build::build_cli_struct_fields;
     use crate::derive::parse::{DiscoveryAttrs, StructAttrs};

@@ -215,12 +215,16 @@ mod tests {
     }
 
     fn write_file(dir: &Dir, path: &str, contents: &str) {
-        let mut file = dir
-            .open_with(
-                path,
-                OpenOptions::new().write(true).create(true).truncate(true),
-            )
-            .expect("open file");
-        file.write_all(contents.as_bytes()).expect("write file");
+        let opened = dir.open_with(
+            path,
+            OpenOptions::new().write(true).create(true).truncate(true),
+        );
+        let mut file = match opened {
+            Ok(file) => file,
+            Err(err) => panic!("open file {path}: {err}"),
+        };
+        if let Err(err) = file.write_all(contents.as_bytes()) {
+            panic!("write file {path}: {err}");
+        }
     }
 }

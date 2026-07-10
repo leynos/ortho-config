@@ -12,6 +12,8 @@ use quote::{format_ident, quote};
 use syn::{DeriveInput, parse_macro_input};
 
 mod derive {
+    //! Implementation modules for the `OrthoConfig` derive macro.
+
     pub(crate) mod build;
     pub(crate) mod crate_path;
     pub(crate) mod generate;

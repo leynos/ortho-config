@@ -105,6 +105,8 @@ where
 
 #[cfg(test)]
 mod tests {
+    //! Tests for the `registry_ctl` example configuration.
+
     use super::*;
     use anyhow::{Context, Result, ensure};
     use serde::de::DeserializeOwned;

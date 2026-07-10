@@ -235,6 +235,8 @@ fn render_completion_block(command_name: &BinName) -> String {
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for `PowerShell` wrapper script generation.
+
     use super::*;
     use crate::powershell::test_fixtures::minimal_doc_with_subcommand;
     use crate::test_support::nested_fixture::nested_doc;

@@ -1,3 +1,5 @@
+//! Shared assertions for greeting-plan tests.
+
 use super::fixtures::{ExpectedPlan, Plan, with_sample_config};
 use super::*;
 use anyhow::{Result, ensure};

@@ -225,6 +225,8 @@ pub fn value_type_placeholder(value_type: &ValueType) -> Cow<'static, str> {
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for roff escaping.
+
     use super::*;
     use rstest::rstest;
 

@@ -126,6 +126,23 @@ fn ensure_bridge_layout(paths: &BridgePaths) -> Result<(), OrthohelpError> {
     Ok(())
 }
 
+/// Appends the `ortho_config` dependency line to the bridge manifest.
+fn append_ortho_config_dependency(
+    manifest: &mut String,
+    dependency: &OrthoConfigDependency,
+) -> Result<(), OrthohelpError> {
+    let render = match &dependency.path {
+        Some(path) => writeln!(
+            manifest,
+            "ortho_config = {{ path = {:?}, version = \"{}\" }}",
+            path.as_str(),
+            dependency.requirement,
+        ),
+        None => writeln!(manifest, "ortho_config = \"{}\"", dependency.requirement),
+    };
+    render.map_err(|_| OrthohelpError::Message("failed to render bridge manifest".to_owned()))
+}
+
 /// Generates and writes the ephemeral bridge `Cargo.toml`.
 fn write_bridge_manifest(config: &BridgeConfig, paths: &BridgePaths) -> Result<(), OrthohelpError> {
     let mut manifest = String::from(concat!(
@@ -149,25 +166,7 @@ fn write_bridge_manifest(config: &BridgeConfig, paths: &BridgePaths) -> Result<(
     )
     .map_err(|_| OrthohelpError::Message("failed to render bridge manifest".to_owned()))?;
 
-    match &config.ortho_config_dependency.path {
-        Some(path) => {
-            writeln!(
-                manifest,
-                "ortho_config = {{ path = {:?}, version = \"{}\" }}",
-                path.as_str(),
-                config.ortho_config_dependency.requirement,
-            )
-            .map_err(|_| OrthohelpError::Message("failed to render bridge manifest".to_owned()))?;
-        }
-        None => {
-            writeln!(
-                manifest,
-                "ortho_config = \"{}\"",
-                config.ortho_config_dependency.requirement
-            )
-            .map_err(|_| OrthohelpError::Message("failed to render bridge manifest".to_owned()))?;
-        }
-    }
+    append_ortho_config_dependency(&mut manifest, &config.ortho_config_dependency)?;
 
     let mut file = open_bridge_file(paths, "Cargo.toml", &paths.manifest_path)?;
     file.write_all(manifest.as_bytes())

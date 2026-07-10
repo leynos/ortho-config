@@ -33,6 +33,8 @@ pub fn strip_isolates(value: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for text normalization helpers.
+
     use super::{normalize_scalar, strip_isolates, unquote};
 
     #[test]
