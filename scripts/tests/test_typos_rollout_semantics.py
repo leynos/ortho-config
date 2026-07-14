@@ -7,13 +7,29 @@ import re
 import types
 import urllib.error
 from pathlib import Path
+from typing import Protocol
 
 import pytest
 
 from typos_rollout_test_support import dictionary_text
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
+AUTHORITY_SOURCE = "https://example.test/base"
 type RolloutModules = tuple[types.ModuleType, types.ModuleType, types.ModuleType]
+
+
+class _RefreshResult(Protocol):
+    """Describe the refresh result attributes asserted by these tests."""
+
+    status: str
+    cache: Path
+
+
+def _write_authority(tmp_path: Path, content: str) -> Path:
+    """Write one authority fixture and return its path."""
+    authority = tmp_path / "base.toml"
+    authority.write_text(content, encoding="utf-8")
+    return authority
 
 
 @pytest.mark.parametrize("schema", ["true", "1.0"])
@@ -24,10 +40,9 @@ def test_authority_requires_integer_schema(
 ) -> None:
     """Boolean and floating-point schemas cannot validate as version one."""
     _, rollout, _ = rollout_modules
-    authority = tmp_path / "base.toml"
-    authority.write_text(
+    authority = _write_authority(
+        tmp_path,
         dictionary_text().replace("schema = 1", f"schema = {schema}"),
-        encoding="utf-8",
     )
 
     with pytest.raises(ValueError, match="unsupported dictionary schema"):
@@ -49,8 +64,7 @@ def test_authority_requires_complete_policy(
 ) -> None:
     """Every authority table and expected field is mandatory."""
     _, rollout, _ = rollout_modules
-    authority = tmp_path / "base.toml"
-    authority.write_text(dictionary_text().replace(fragment, ""), encoding="utf-8")
+    authority = _write_authority(tmp_path, dictionary_text().replace(fragment, ""))
 
     with pytest.raises(ValueError, match=message):
         rollout.load_dictionary(authority)
@@ -122,10 +136,9 @@ def test_authority_rejects_unsafe_ignore_patterns(
 ) -> None:
     """Every authority regex must compile with bounded matching complexity."""
     _, rollout, _ = rollout_modules
-    authority = tmp_path / "base.toml"
-    authority.write_text(
+    authority = _write_authority(
+        tmp_path,
         dictionary_text().replace("ignore = []", f"ignore = [{pattern!r}]"),
-        encoding="utf-8",
     )
 
     with pytest.raises(ValueError, match=message) as raised:
@@ -176,7 +189,7 @@ def test_merge_accepts_repository_local_exceptions(
 def _not_modified_error() -> urllib.error.HTTPError:
     """Build the production representation of an HTTP 304 response."""
     return urllib.error.HTTPError(
-        "https://example.test/base",
+        AUTHORITY_SOURCE,
         304,
         "not modified",
         email.message.Message(),
@@ -184,25 +197,21 @@ def _not_modified_error() -> urllib.error.HTTPError:
     )
 
 
-def test_http_304_requires_valid_cache(
-    rollout_modules: RolloutModules,
-    tmp_path: Path,
-) -> None:
-    """The HTTPError 304 path cannot accept a missing cache."""
-    _, rollout, _ = rollout_modules
-    not_modified = _not_modified_error()
-
-    with pytest.raises(urllib.error.HTTPError) as raised:
-        rollout.refresh_base(
-            "https://example.test/base",
-            tmp_path / "cache.toml",
-            rollout.RefreshOptions(
-                metadata=tmp_path / "cache.json",
-                opener=lambda *_args, **_kwargs: (_ for _ in ()).throw(not_modified),
-            ),
-        )
-
-    assert raised.value is not_modified, "HTTP 304 accepted a missing cache"
+def _refresh_after_not_modified(
+    rollout: types.ModuleType,
+    cache: Path,
+    metadata: Path,
+    error: urllib.error.HTTPError,
+) -> _RefreshResult:
+    """Refresh with an opener that reports the supplied HTTP 304 error."""
+    return rollout.refresh_base(
+        AUTHORITY_SOURCE,
+        cache,
+        rollout.RefreshOptions(
+            metadata=metadata,
+            opener=lambda *_args, **_kwargs: (_ for _ in ()).throw(error),
+        ),
+    )
 
 
 def test_http_304_preserves_valid_cache(
@@ -218,67 +227,45 @@ def test_http_304_preserves_valid_cache(
         '{"source": "https://example.test/base"}\n',
         encoding="utf-8",
     )
-    not_modified = _not_modified_error()
-
-    result = rollout.refresh_base(
-        "https://example.test/base",
-        cache,
-        rollout.RefreshOptions(
-            metadata=metadata,
-            opener=lambda *_args, **_kwargs: (_ for _ in ()).throw(not_modified),
-        ),
+    result = _refresh_after_not_modified(
+        rollout, cache, metadata, _not_modified_error()
     )
 
     assert result.status == "current", "HTTP 304 did not preserve a valid cache"
     assert result.cache == cache, "HTTP 304 returned a different cache path"
 
 
-def test_http_304_rejects_cache_from_different_source(
+@pytest.mark.parametrize(
+    "case",
+    [
+        pytest.param((False, None, "missing cache"), id="missing-cache"),
+        pytest.param(
+            (True, "https://other.example.test/base", "another source's cache"),
+            id="different-source",
+        ),
+        pytest.param(
+            (True, None, "unscoped cache"),
+            id="missing-source-metadata",
+        ),
+    ],
+)
+def test_http_304_rejects_invalid_cache_scope(
     rollout_modules: RolloutModules,
     tmp_path: Path,
+    case: tuple[bool, str | None, str],
 ) -> None:
-    """HTTP 304 cannot validate a cache written for another authority."""
+    """HTTP 304 cannot validate a missing cache or one outside its source."""
     _, rollout, _ = rollout_modules
+    has_cache, metadata_source, diagnostic = case
     cache = tmp_path / "cache.toml"
-    cache.write_text(dictionary_text(), encoding="utf-8")
+    if has_cache:
+        cache.write_text(dictionary_text(), encoding="utf-8")
     metadata = tmp_path / "cache.json"
-    metadata.write_text(
-        '{"source": "https://other.example.test/base"}\n',
-        encoding="utf-8",
-    )
+    if metadata_source is not None:
+        metadata.write_text(f'{{"source": "{metadata_source}"}}\n', encoding="utf-8")
     not_modified = _not_modified_error()
 
     with pytest.raises(urllib.error.HTTPError) as raised:
-        rollout.refresh_base(
-            "https://example.test/base",
-            cache,
-            rollout.RefreshOptions(
-                metadata=metadata,
-                opener=lambda *_args, **_kwargs: (_ for _ in ()).throw(not_modified),
-            ),
-        )
+        _refresh_after_not_modified(rollout, cache, metadata, not_modified)
 
-    assert raised.value is not_modified, "HTTP 304 accepted another source's cache"
-
-
-def test_http_304_rejects_valid_cache_without_source_metadata(
-    rollout_modules: RolloutModules,
-    tmp_path: Path,
-) -> None:
-    """HTTP 304 cannot validate a cache whose authority is unknown."""
-    _, rollout, _ = rollout_modules
-    cache = tmp_path / "cache.toml"
-    cache.write_text(dictionary_text(), encoding="utf-8")
-    not_modified = _not_modified_error()
-
-    with pytest.raises(urllib.error.HTTPError) as raised:
-        rollout.refresh_base(
-            "https://example.test/base",
-            cache,
-            rollout.RefreshOptions(
-                metadata=tmp_path / "cache.json",
-                opener=lambda *_args, **_kwargs: (_ for _ in ()).throw(not_modified),
-            ),
-        )
-
-    assert raised.value is not_modified, "HTTP 304 accepted an unscoped cache"
+    assert raised.value is not_modified, f"HTTP 304 accepted {diagnostic}"

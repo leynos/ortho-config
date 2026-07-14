@@ -283,13 +283,24 @@ def _stale_cache_or_raise(
     cache: pathlib.Path,
     error: NetworkUnavailableError,
     validate: ContentValidator,
-    *,
     has_matching_source: bool,
 ) -> typos_rollout_cache.RefreshResult:
     """Return a valid stale cache or propagate the connectivity failure."""
     if has_matching_source and _valid_cache(cache, validate):
         return typos_rollout_cache.RefreshResult("stale-cache", cache)
     raise error
+
+
+def _not_modified_cache_is_current(
+    error: urllib.error.HTTPError,
+    cache: pathlib.Path,
+    validate: ContentValidator,
+    has_matching_source: bool,
+) -> bool:
+    """Return whether an HTTP 304 proves the source-scoped cache is current."""
+    if error.code != HTTP_NOT_MODIFIED or not has_matching_source:
+        return False
+    return _valid_cache(cache, validate)
 
 
 def _refresh_http(
@@ -309,31 +320,25 @@ def _refresh_http(
     try:
         response_context = open_remote(request, timeout=30.0)
     except urllib.error.HTTPError as error:
-        if (
-            error.code == HTTP_NOT_MODIFIED
-            and has_matching_source
-            and _valid_cache(cache, context.validate)
+        if _not_modified_cache_is_current(
+            error, cache, context.validate, has_matching_source
         ):
             return typos_rollout_cache.RefreshResult("current", cache)
         raise
     except urllib.error.URLError:
         message = f"shared dictionary authority is unavailable: {source}"
-        unavailable = NetworkUnavailableError(message)
         return _stale_cache_or_raise(
             cache,
-            unavailable,
+            NetworkUnavailableError(message),
             context.validate,
-            has_matching_source=has_matching_source,
+            has_matching_source,
         )
     with response_context as response:
         try:
             return _remote_response_result(
                 _RemoteRequestState(
                     source,
-                    typos_rollout_cache.CacheTargets(
-                        cache,
-                        context.options.metadata,
-                    ),
+                    typos_rollout_cache.CacheTargets(cache, context.options.metadata),
                     saved,
                 ),
                 response,
@@ -344,7 +349,7 @@ def _refresh_http(
                 cache,
                 error,
                 context.validate,
-                has_matching_source=has_matching_source,
+                has_matching_source,
             )
 
 

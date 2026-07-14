@@ -41,6 +41,138 @@ class _GroupState:
         if self.atoms_since_repetition is not None:
             self.atoms_since_repetition += 1
 
+    def note_repetition(self, *, repeats_ambiguous_group: bool) -> bool:
+        """Record a repetition and return whether it compounds ambiguity."""
+        is_unsafe = self.atoms_since_repetition == 1 or repeats_ambiguous_group
+        self.has_repetition = True
+        self.atoms_since_repetition = 0
+        return is_unsafe
+
+
+@dc.dataclass(slots=True)
+class _RepetitionScanner:
+    """Recognize unsafe nested or adjacent repetition in one regex pattern.
+
+    This scanner is deliberately private to spelling-policy validation. It
+    tracks only the syntax needed to reject backtracking-prone repetition; the
+    standard-library regex compiler remains the authority for full syntax.
+    """
+
+    pattern: str
+    groups: list[_GroupState] = dc.field(
+        default_factory=lambda: [_GroupState()],
+        init=False,
+    )
+    position: int = 0
+    is_in_character_class: bool = False
+    previous_group_is_ambiguous: bool = False
+
+    def has_unsafe_repetition(self) -> bool:
+        """Return whether scanning finds repetition that compounds ambiguity."""
+        while self.position < len(self.pattern):
+            if self._consume_current_character():
+                return True
+        return False
+
+    def _consume_current_character(self) -> bool:
+        """Consume one regex token and report an unsafe repetition suffix."""
+        character = self.pattern[self.position]
+        if self.is_in_character_class:
+            self._consume_character_class(character)
+            return False
+        match character:
+            case "\\":
+                self._consume_escape()
+            case "[":
+                self._open_character_class()
+            case "(":
+                self._open_group()
+            case ")" if len(self.groups) > 1:
+                self._close_group()
+            case "|":
+                self._consume_alternation()
+            case _:
+                return self._consume_atom_or_operator(character)
+        return False
+
+    def _consume_character_class(self, character: str) -> None:
+        """Advance through a character class without parsing its contents."""
+        if character == "\\":
+            self.position += 2
+            return
+        self.is_in_character_class = character != "]"
+        self.position += 1
+
+    def _consume_escape(self) -> None:
+        """Treat an escaped token as one atom and skip its escaped character."""
+        self.groups[-1].note_atom()
+        self.previous_group_is_ambiguous = False
+        self.position += 2
+
+    def _open_character_class(self) -> None:
+        """Record a character class as one atom and enter its contents."""
+        self.is_in_character_class = True
+        self.groups[-1].note_atom()
+        self.previous_group_is_ambiguous = False
+        self.position += 1
+
+    def _open_group(self) -> None:
+        """Begin tracking ambiguity within a nested group."""
+        self.groups.append(_GroupState())
+        self.previous_group_is_ambiguous = False
+        self.position += 1
+
+    def _close_group(self) -> None:
+        """Merge a completed group's ambiguity into its parent group."""
+        closed_group = self.groups.pop()
+        parent_group = self.groups[-1]
+        parent_group.note_atom()
+        parent_group.has_repetition |= closed_group.has_repetition
+        parent_group.has_alternation |= closed_group.has_alternation
+        self.previous_group_is_ambiguous = (
+            closed_group.has_repetition or closed_group.has_alternation
+        )
+        self.position += 1
+
+    def _consume_alternation(self) -> None:
+        """Mark the current group as ambiguous across its alternatives."""
+        self.groups[-1].has_alternation = True
+        self.groups[-1].atoms_since_repetition = None
+        self.previous_group_is_ambiguous = False
+        self.position += 1
+
+    def _consume_atom_or_operator(self, character: str) -> bool:
+        """Consume a plain atom or repetition-related regex operator."""
+        repetition = REPETITION.match(self.pattern, self.position)
+        if self._is_group_syntax(character) or self._is_repetition_modifier(character):
+            self._advance_one_character()
+            return False
+        if character not in "*+?" and repetition is None:
+            self.groups[-1].note_atom()
+            self._advance_one_character()
+            return False
+        is_unsafe = self.groups[-1].note_repetition(
+            repeats_ambiguous_group=self.previous_group_is_ambiguous,
+        )
+        self.previous_group_is_ambiguous = False
+        self.position = self.position + 1 if repetition is None else repetition.end()
+        return is_unsafe
+
+    def _is_group_syntax(self, character: str) -> bool:
+        """Return whether a question mark introduces special group syntax."""
+        previous_character = self.pattern[self.position - 1 : self.position]
+        return character == "?" and previous_character == "("
+
+    def _is_repetition_modifier(self, character: str) -> bool:
+        """Return whether a suffix modifies an existing repetition operator."""
+        previous_character = self.pattern[self.position - 1 : self.position]
+        return character in "+?" and previous_character in "*+?}"
+
+    def _advance_one_character(self) -> None:
+        """Advance past a token that breaks adjacency with a closed group."""
+        self.previous_group_is_ambiguous = False
+        self.position += 1
+
 
 def _has_valid_schema(schema: object) -> bool:
     """Return whether a schema value identifies the supported policy format."""
@@ -96,85 +228,9 @@ def validate_document(
         _validate_required_authority_field(document, table_name, field_name)
 
 
-def _consume_repetition(
-    pattern: str,
-    position: int,
-    group: _GroupState,
-    previous_group: tuple[bool, bool],
-) -> tuple[int, bool, bool]:
-    """Consume one repetition suffix and report its syntax and safety."""
-    previous_was_group, previous_group_is_ambiguous = previous_group
-    character = pattern[position]
-    repetition = REPETITION.match(pattern, position)
-    is_suffix = character in "*+?" or repetition is not None
-    is_group_syntax = character == "?" and pattern[position - 1 : position] == "("
-    is_modifier = character in "+?" and pattern[position - 1 : position] in "*+?}"
-    if not is_suffix or is_group_syntax or is_modifier:
-        return position, False, is_group_syntax or is_modifier
-    is_unsafe = group.atoms_since_repetition == 1 or (
-        previous_was_group and previous_group_is_ambiguous
-    )
-    group.has_repetition = True
-    group.atoms_since_repetition = 0
-    end = position if repetition is None else repetition.end() - 1
-    return end, is_unsafe, True
-
-
 def _has_unsafe_repetition(pattern: str) -> bool:
     """Return whether repetition can amplify another ambiguous expression."""
-    groups = [_GroupState()]
-    previous_was_group = False
-    previous_group_is_ambiguous = False
-    in_character_class = False
-    position = 0
-    while position < len(pattern):
-        character = pattern[position]
-        if in_character_class:
-            if character == "\\":
-                position += 2
-                continue
-            in_character_class = character != "]"
-            position += 1
-            continue
-        if character == "\\":
-            groups[-1].note_atom()
-            position += 2
-            previous_was_group = False
-            continue
-        if character == "[":
-            in_character_class = True
-            groups[-1].note_atom()
-            previous_was_group = False
-        elif character == "(":
-            groups.append(_GroupState())
-            previous_was_group = False
-        elif character == ")" and len(groups) > 1:
-            closed_group = groups.pop()
-            groups[-1].note_atom()
-            groups[-1].has_repetition |= closed_group.has_repetition
-            groups[-1].has_alternation |= closed_group.has_alternation
-            previous_was_group = True
-            previous_group_is_ambiguous = (
-                closed_group.has_repetition or closed_group.has_alternation
-            )
-        elif character == "|":
-            groups[-1].has_alternation = True
-            groups[-1].atoms_since_repetition = None
-            previous_was_group = False
-        else:
-            position, is_unsafe, is_operator = _consume_repetition(
-                pattern,
-                position,
-                groups[-1],
-                (previous_was_group, previous_group_is_ambiguous),
-            )
-            if is_unsafe:
-                return True
-            if not is_operator:
-                groups[-1].note_atom()
-            previous_was_group = False
-        position += 1
-    return False
+    return _RepetitionScanner(pattern).has_unsafe_repetition()
 
 
 def _compile_policy_pattern(pattern: str) -> re.Pattern[str]:
