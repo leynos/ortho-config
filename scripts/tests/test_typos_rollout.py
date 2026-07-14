@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import re
 import tomllib
 import typing as typ
 from pathlib import Path
@@ -15,6 +16,7 @@ if typ.TYPE_CHECKING:
     import types
 
 SCRIPT_DIRECTORY = Path(__file__).resolve().parents[1]
+PROHIBITED_PHRASE = "hand" + "-written"
 
 
 def test_rollout_scripts_support_python_313() -> None:
@@ -39,60 +41,149 @@ def test_rollout_generates_oxford_corrections(
     assert mappings["organise"] == "organize"
 
 
-def test_https_failure_reuses_valid_tracked_config(
+def test_network_failure_fails_early_without_cache(
     rollout_modules: tuple[types.ModuleType, types.ModuleType, types.ModuleType],
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    """A clean network-restricted checkout retains its reviewed policy."""
+    """Connectivity failure propagates before tracked policy can be reused."""
     _, rollout, generator = rollout_modules
     tracked_config = tmp_path / "typos.toml"
-    tracked_config.write_text('[default]\nlocale = "en-gb"\n', encoding="utf-8")
+    reviewed = '[default]\nlocale = "en-gb"\n'
+    tracked_config.write_text(reviewed, encoding="utf-8")
+    failure = rollout.NetworkUnavailableError("offline")
 
     def unavailable(*_args: object, **_kwargs: object) -> None:
-        """Model an unavailable HTTPS authority."""
-        raise rollout.NetworkUnavailableError("offline")
+        """Model an unavailable shared authority."""
+        raise failure
 
     monkeypatch.setattr(rollout, "refresh_base", unavailable)
 
-    result = generator.main(repository=tmp_path, source="https://example.invalid/base")
+    with pytest.raises(rollout.NetworkUnavailableError) as raised:
+        generator.main(
+            repository=tmp_path,
+            source="https://example.invalid/base",
+        )
 
-    assert result.status == "tracked-config"
-    assert result.cache == tracked_config
+    assert raised.value is failure, "generator replaced the domain failure"
+    assert tracked_config.read_text(encoding="utf-8") == reviewed, (
+        "generator modified tracked config after refresh failure"
+    )
 
 
+@pytest.mark.parametrize(
+    ("document", "expected"),
+    [
+        pytest.param(
+            _dictionary_text().replace("schema = 1", "schema = 2"),
+            (ValueError, "unsupported dictionary schema 2"),
+            id="unsupported-schema",
+        ),
+        pytest.param(
+            _dictionary_text().replace(
+                '[oxford]\nstems = ["organ"]',
+                'oxford = "bad"',
+            ),
+            (TypeError, "'oxford' must be a table"),
+            id="invalid-table",
+        ),
+        pytest.param(
+            _dictionary_text().replace('stems = ["organ"]', "stems = [1]"),
+            (TypeError, "'stems' must be a list of strings"),
+            id="invalid-string-list",
+        ),
+        pytest.param(
+            _dictionary_text().replace(
+                "[words.corrections]",
+                "[words.corrections]\nteh = 1",
+            ),
+            (TypeError, "word corrections must map strings to strings"),
+            id="invalid-word-correction",
+        ),
+        pytest.param(
+            _dictionary_text()
+            + f"\n[phrases.corrections]\n'{PROHIBITED_PHRASE}' = 1\n",
+            (TypeError, "phrase corrections must map strings to strings"),
+            id="invalid-phrase-correction",
+        ),
+    ],
+)
 def test_dictionary_validation_rejects_invalid_documents(
     rollout_modules: tuple[types.ModuleType, types.ModuleType, types.ModuleType],
     tmp_path: Path,
+    document: str,
+    expected: tuple[type[Exception], str],
 ) -> None:
     """Schema, table, string-list and correction types remain validated."""
     _, rollout, _ = rollout_modules
+    expected_error, expected_message = expected
     source = tmp_path / "base.toml"
-    invalid_documents = (
-        _dictionary_text().replace("schema = 1", "schema = 2"),
-        _dictionary_text().replace('[oxford]\nstems = ["organ"]', 'oxford = "bad"'),
-        _dictionary_text().replace('stems = ["organ"]', "stems = [1]"),
-        _dictionary_text().replace(
-            "[words.corrections]", "[words.corrections]\nteh = 1"
-        ),
-    )
+    source.write_text(document, encoding="utf-8")
 
-    for document in invalid_documents:
-        source.write_text(document, encoding="utf-8")
-        with pytest.raises((TypeError, ValueError)):
-            rollout.load_dictionary(source)
+    with pytest.raises(expected_error, match=rf"^{re.escape(expected_message)}$"):
+        rollout.load_dictionary(source)
 
 
 def test_merge_rejects_conflicting_corrections(
     rollout_modules: tuple[types.ModuleType, types.ModuleType, types.ModuleType],
 ) -> None:
-    """A local overlay cannot silently weaken a shared correction."""
+    """A local overlay cannot silently weaken shared word or phrase policy."""
     _, rollout, _ = rollout_modules
-    base = rollout.Dictionary(corrections=(("teh", "the"),))
-    local = rollout.Dictionary(corrections=(("teh", "ten"),))
+    base = rollout.Dictionary(
+        corrections=(("teh", "the"),),
+        phrase_corrections=((PROHIBITED_PHRASE, "handwritten"),),
+    )
 
-    with pytest.raises(ValueError, match="conflicting correction"):
-        rollout.merge_dictionaries(base, local)
+    merged = rollout.merge_dictionaries(base, rollout.Dictionary())
+
+    assert merged.phrase_corrections == base.phrase_corrections, (
+        "an empty local policy discarded the shared phrase correction"
+    )
+
+    with pytest.raises(
+        ValueError,
+        match=r"^conflicting correction for 'teh': 'the' != 'ten'$",
+    ):
+        rollout.merge_dictionaries(
+            base,
+            rollout.Dictionary(corrections=(("teh", "ten"),)),
+        )
+    with pytest.raises(
+        ValueError,
+        match=(
+            rf"^conflicting phrase correction for '{re.escape(PROHIBITED_PHRASE)}': "
+            r"'handwritten' != 'other'$"
+        ),
+    ):
+        rollout.merge_dictionaries(
+            base,
+            rollout.Dictionary(phrase_corrections=((PROHIBITED_PHRASE, "other"),)),
+        )
+
+
+def test_merge_sorts_word_and_phrase_corrections(
+    rollout_modules: tuple[types.ModuleType, types.ModuleType, types.ModuleType],
+) -> None:
+    """Word and phrase policies retain deterministic key ordering."""
+    _, rollout, _ = rollout_modules
+    base = rollout.Dictionary(
+        corrections=(("zeta", "last"),),
+        phrase_corrections=(("zeta phrase", "last phrase"),),
+    )
+    local = rollout.Dictionary(
+        corrections=(("alpha", "first"),),
+        phrase_corrections=(("alpha phrase", "first phrase"),),
+    )
+
+    merged = rollout.merge_dictionaries(base, local)
+
+    assert merged.corrections == (("alpha", "first"), ("zeta", "last")), (
+        "word correction ordering changed"
+    )
+    assert merged.phrase_corrections == (
+        ("alpha phrase", "first phrase"),
+        ("zeta phrase", "last phrase"),
+    ), "phrase correction ordering changed"
 
 
 def test_render_and_write_are_deterministic_valid_toml(

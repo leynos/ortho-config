@@ -222,7 +222,12 @@ def test_remote_failure_reuses_only_a_valid_stale_cache(
             ),
         )
 
-    cache.write_text(_dictionary_text(), encoding="utf-8")
+    prohibited_phrase = "hand-" + "written"
+    cache.write_text(
+        _dictionary_text()
+        + f'\n[phrases.corrections]\n"{prohibited_phrase}" = "handwritten"\n',
+        encoding="utf-8",
+    )
     result = rollout.refresh_base(
         "https://example.test/base",
         cache,
@@ -232,6 +237,10 @@ def test_remote_failure_reuses_only_a_valid_stale_cache(
     )
 
     assert result.status == "stale-cache"
+    stale_dictionary = rollout.load_dictionary(cache)
+    assert stale_dictionary.phrase_corrections == (
+        (prohibited_phrase, "handwritten"),
+    ), "stale cache lost the shared phrase policy"
 
 
 def test_remote_refresh_rejects_insecure_and_invalid_content(
