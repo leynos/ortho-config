@@ -1,0 +1,29 @@
+# Repository-specific identifiers, quotations and deliberate fixtures.
+
+schema = 1
+
+[oxford]
+stems = []
+
+[words]
+accepted = [
+  "astroid",
+  "inventario",
+  "mis",
+]
+
+[words.corrections]
+
+[patterns]
+ignore = [
+  "rust-analyzer",
+  "GitHub\\s+Flavored\\s+Markdown",
+  "## Artifacts and [Nn]otes",
+]
+
+[files]
+exclude = [
+  ".memdb",
+  "scripts/.venv",
+  "scripts/tests/test_typos_rollout_hardening.py",
+]

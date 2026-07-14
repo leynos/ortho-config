@@ -30,7 +30,7 @@ let cli = MyCli::try_parse_localized_from(args, &localizer)?;
 let (cli, matches) = MyCli::try_parse_localized_with_matches(args, &localizer)?;
 ```
 
-with no hand-written parsing glue. Applications that need a custom identifier
+with no handwritten parsing glue. Applications that need a custom identifier
 base (the multi-binary "share one catalogue across several binaries" case that
 `LocalizeCmd::with_base` exists for) call one public free function and still
 avoid copying the error-localization glue:
@@ -45,7 +45,7 @@ let (cli, matches): (MyCli, clap::ArgMatches) =
 ```
 
 You can observe success three ways. First, `examples/hello_world` deletes its
-hand-written parsing methods and its `ParsedCommandLine` struct, yet
+handwritten parsing methods and its `ParsedCommandLine` struct, yet
 `cargo run -p hello_world -- greet` and the localized `--help`/error output
 behave exactly as before (the snapshot suite in
 `examples/hello_world/tests/localised_help.rs` stays green). Second, a new
@@ -664,7 +664,7 @@ Acceptance is behavioural:
    `MyCli::try_parse_localized(&localizer)`,
    `MyCli::try_parse_localized_from(args, &localizer)`, and
    `MyCli::try_parse_localized_with_matches(args, &localizer)` with no
-   hand-written glue. Proven by the crate-level integration tests.
+   handwritten glue. Proven by the crate-level integration tests.
 2. `parse_localized_command(cmd, args, &localizer)` parses against a
    pre-localized (optionally `with_base`) command and localizes errors. Proven
    by the example using it and by the `with_cmd` enrichment test.

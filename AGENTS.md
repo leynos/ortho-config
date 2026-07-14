@@ -322,9 +322,10 @@ project:
   `TYPOS_VERSION` variable, so local runs and CI use the same version. Run
   the spelling gate alone with `make spellcheck`.
 - The spelling configuration `typos.toml` is generated; never edit its
-  entries by hand. To handle a false positive or add a new Oxford `-ize`
-  stem, edit `scripts/generate_typos_config.py` (the `STEMS`,
-  `EXTRA_ACCEPTED_WORDS`, or `extend-ignore-re` lists) and regenerate with
+  entries by hand. The generator refreshes the estate-wide dictionary into
+  an untracked local cache before merging the narrow repository policy in
+  `typos.local.toml`. Put only repository-specific names, quotations and
+  deliberate fixtures in the overlay, then regenerate with
   `uv run scripts/generate_typos_config.py`. See the spelling gate section
   of `docs/developers-guide.md` for details.
 - Quoted APIs and identifiers keep their upstream spelling; put them in

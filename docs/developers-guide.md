@@ -262,7 +262,7 @@ rather than expanding unrelated step files.
 
 ## Snapshot tests
 
-Use `insta` for renderer golden coverage that would be noisy as hand-written
+Use `insta` for renderer golden coverage that would be noisy as handwritten
 string assertions. Place snapshots beside the integration test that owns them,
 as `cargo-orthohelp/tests/golden/nested_subcommand_snapshots.rs` does, and
 redact dates, absolute paths, and other environment-specific substrings with
@@ -382,43 +382,45 @@ integration (CI) environments.
 `make markdownlint` enforces en-GB-oxendict (Oxford) spelling over the
 repository's Markdown prose with [`typos`](https://github.com/crate-ci/typos),
 as required by the [documentation style guide](documentation-style-guide.md).
-Run the gate on its own with `make spellcheck`. The configuration lives in the
-repository-root `typos.toml` and works in two layers:
+Run the gate on its own with `make spellcheck`. The generated configuration
+lives in the repository-root `typos.toml` and works in three layers:
 
 1. The `en-gb` locale corrects American spellings (`color` to `colour`,
    `behavior` to `behaviour`, `analyzed` to `analysed`).
-2. Generated `extend-words` entries restore Oxford spelling, which the locale
+2. The shared estate dictionary supplies generated `extend-words` entries that
+   restore Oxford spelling, which the locale
    alone would not enforce: identity entries accept `-ize` inflections that
    the locale would otherwise "correct" to `-ise`, and `-ise` entries are
    corrected to `-ize`. Stems taking `-yse` (`analyse`, `paralyse`) are left
    to the locale, which already enforces them.
+3. `typos.local.toml` adds only repository-specific names, quotations,
+   deliberate fixtures and exclusions that do not belong in the shared base.
 
-`typos.toml` is a generated file. Never edit its entries by hand; change
-`scripts/generate_typos_config.py` and regenerate:
+`typos.toml` is a generated file. Never edit its entries by hand. The generator
+refreshes the shared dictionary into untracked `.typos-oxendict-base.toml`
+only when its configured authority is newer, merges `typos.local.toml`, and
+writes deterministic output:
 
 ```bash
 uv run scripts/generate_typos_config.py
 ```
 
-The generator script owns three maintainer-facing lists:
+Generic Oxford stems and corrections belong in the shared dictionary maintained
+by `leynos/agent-helper-scripts`. Keep local entries narrow: this repository's
+overlay preserves its library names, non-English fixtures, tool and standards
+names, and ExecPlan headings. Quoted APIs keep US spelling per the documentation
+style guide, so put them in backticks rather than adding word-level exceptions.
+The helper tests cover dictionary validation, source-scoped HTTP validators,
+freshness decisions, offline fallback, deterministic rendering and generated
+configuration drift.
 
-- `STEMS` — word stems that take Oxford `-ize`. Curating this list is a
-  contributor responsibility: the `en-gb` locale silently accepts the `-ise`
-  form of any stem that is absent, so the gate will pass green even when the
-  prose is wrong. When you write or review prose that contains an Oxford `-ize`
-  word whose stem is not yet listed, you must add it here and regenerate
-  `typos.toml` (`uv run scripts/generate_typos_config.py`); do not leave the
-  word spelled `-ise`. Do not add genuinely `-ise`-only words (`advise`,
-  `revise`, `exercise`, `supervise`, and similar), which must stay `-ise`.
-- `EXTRA_ACCEPTED_WORDS` — words accepted verbatim, such as the `astroid`
-  library, suffix fragments quoted in prose, and non-English example text.
-- `extend-ignore-re` patterns in `HEADER` — regions exempt from spelling
-  checks: inline code spans, fenced code blocks, tool names that keep their
-  upstream spelling (`rust-analyzer`), proper nouns such as
-  `GitHub Flavored Markdown`, and the `## Artifacts and notes` ExecPlan
-  template heading owned by the execplans skill. Quoted APIs keep US spelling
-  per the documentation style guide, so put them in backticks rather than
-  adding word-level exceptions.
+`scripts/typos_rollout_http.py` owns shared-cache freshness, HTTPS transport
+security and persistence coordination. Only `scripts/typos_rollout.py` may
+compose it with dictionary validation. The established
+`scripts/generate_typos_config.py` adapter retains its no-argument
+`render_config()` and positional `main(output)` interfaces for operator
+automation; application and release code must not reuse these spelling-policy
+internals.
 
 The gate runs over the `MD_FILES_FIND` Markdown file list with
 `--force-exclude` so the `typos.toml` excludes also apply to explicitly passed
@@ -437,8 +439,9 @@ touch code samples, API names, or quoted material.
 `typos` is a Rust binary rather than a locked Python dependency, so its version
 is pinned once in the Makefile `TYPOS_VERSION` variable and run through
 `uv tool run typos@$(TYPOS_VERSION)`. CI inherits the pin by calling
-`make spellcheck`. When bumping the version, update `TYPOS_VERSION` and rerun
-the gate.
+`make spellcheck`. The target first runs the isolated helper tests, refreshes
+and regenerates the configuration, and fails when the tracked output drifts.
+When bumping the version, update `TYPOS_VERSION` and rerun the gate.
 
 ## Command checklist
 

@@ -279,7 +279,7 @@ sections without bespoke glue code.
 
 ### 4.5. Configuration discovery helper
 
-`ConfigDiscovery` now wraps the path search order previously hand-written in
+`ConfigDiscovery` now wraps the path search order previously handwritten in
 the example. A builder customizes the environment variable, dotfile name,
 project roots, and the canonical config filename without duplicating the
 discovery routine. The helper maintains the precedence from the example:
