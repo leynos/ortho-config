@@ -25,5 +25,4 @@ ignore = [
 exclude = [
   ".memdb",
   "scripts/.venv",
-  "scripts/tests/test_typos_rollout_hardening.py",
 ]

@@ -23,8 +23,8 @@ def test_render_config_keeps_the_no_argument_api(
 
     config = generator.render_config()
 
-    assert '"organise" = "organize"' in config
-    assert '"organize" = "organize"' in config
+    assert '"organise" = "organize"' in config, "Oxford correction was omitted"
+    assert '"organize" = "organize"' in config, "Oxford spelling was omitted"
 
 
 def test_main_keeps_the_positional_output_api(
@@ -40,5 +40,7 @@ def test_main_keeps_the_positional_output_api(
 
     result = generator.main(output)
 
-    assert result == refresh
-    assert '"organise" = "organize"' in output.read_text(encoding="utf-8")
+    assert result == refresh, "generator did not return the refresh result"
+    assert '"organise" = "organize"' in output.read_text(encoding="utf-8"), (
+        "positional output omitted the Oxford correction"
+    )

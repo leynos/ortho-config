@@ -73,6 +73,47 @@ def test_checker_boundaries_ignores_exclusions(
     assert actual == expected, "phrase boundaries or policy exclusions changed"
 
 
+def test_checker_rejects_unsafe_masking_patterns(
+    modules: tuple[types.ModuleType, types.ModuleType],
+) -> None:
+    """Policy regexes cannot introduce unbounded backtracking in the scanner."""
+    _, check = modules
+
+    with pytest.raises(ValueError, match="unsafe repetition"):
+        check._masked("a" * 100, ("(a+)+$",))
+
+
+def test_checker_propagates_file_read_failures(
+    modules: tuple[types.ModuleType, types.ModuleType],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Filesystem failures fail the gate instead of silently skipping a file."""
+    rollout, check = modules
+
+    def deny_read(_path: Path, *, encoding: str) -> str:
+        """Model a tracked file that cannot be read."""
+        raise PermissionError(encoding)
+
+    monkeypatch.setattr(Path, "read_text", deny_read)
+    with pytest.raises(PermissionError, match="utf-8"):
+        check._file_findings(tmp_path, Path("README.md"), rollout.Dictionary())
+
+
+def test_checker_skips_non_utf8_files(
+    modules: tuple[types.ModuleType, types.ModuleType],
+    tmp_path: Path,
+) -> None:
+    """Binary tracked content remains outside phrase enforcement."""
+    rollout, check = modules
+    relative = Path("binary.dat")
+    (tmp_path / relative).write_bytes(b"\xff")
+
+    assert check._file_findings(tmp_path, relative, rollout.Dictionary()) == (), (
+        "non-UTF-8 tracked content produced phrase findings"
+    )
+
+
 def test_checker_orders_complete_findings_by_path_phrase_and_source(
     modules: tuple[types.ModuleType, types.ModuleType],
     tmp_path: Path,

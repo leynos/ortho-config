@@ -388,18 +388,17 @@ lives in the repository-root `typos.toml` and works in three layers:
 1. The `en-gb` locale corrects American spellings (`color` to `colour`,
    `behavior` to `behaviour`, `analyzed` to `analysed`).
 2. The shared estate dictionary supplies generated `extend-words` entries that
-   restore Oxford spelling, which the locale
-   alone would not enforce: identity entries accept `-ize` inflections that
-   the locale would otherwise "correct" to `-ise`, and `-ise` entries are
-   corrected to `-ize`. Stems taking `-yse` (`analyse`, `paralyse`) are left
-   to the locale, which already enforces them.
+   restore Oxford spelling, which the locale alone would not enforce: identity
+   entries accept `-ize` inflections that the locale would otherwise "correct"
+   to `-ise`, and `-ise` entries are corrected to `-ize`. Stems taking `-yse`
+   (`analyse`, `paralyse`) are left to the locale, which already enforces them.
 3. `typos.local.toml` adds only repository-specific names, quotations,
-   deliberate fixtures and exclusions that do not belong in the shared base.
+   deliberate fixtures, and exclusions that do not belong in the shared base.
 
 `typos.toml` is a generated file. Never edit its entries by hand. The generator
-refreshes the shared dictionary into untracked `.typos-oxendict-base.toml`
-only when its configured authority is newer, merges `typos.local.toml`, and
-writes deterministic output:
+refreshes the shared dictionary into untracked `.typos-oxendict-base.toml` only
+when its configured authority is newer, merges `typos.local.toml`, and writes
+deterministic output:
 
 ```bash
 uv run scripts/generate_typos_config.py
@@ -408,11 +407,11 @@ uv run scripts/generate_typos_config.py
 Generic Oxford stems and corrections belong in the shared dictionary maintained
 by `leynos/agent-helper-scripts`. Keep local entries narrow: this repository's
 overlay preserves its library names, non-English fixtures, tool and standards
-names, and ExecPlan headings. Quoted APIs keep US spelling per the documentation
-style guide, so put them in backticks rather than adding word-level exceptions.
-The helper tests cover dictionary validation, source-scoped HTTP validators,
-freshness decisions, offline fallback, deterministic rendering and generated
-configuration drift.
+names, and ExecPlan headings. Quoted APIs keep US spelling per the
+documentation style guide, so put them in backticks rather than adding
+word-level exceptions. The helper tests cover dictionary validation,
+source-scoped HTTP validators, freshness decisions, offline fallback,
+deterministic rendering, and generated configuration drift.
 
 `scripts/typos_rollout_http.py` owns shared-cache freshness, HTTPS transport
 security and persistence coordination. Only `scripts/typos_rollout.py` may

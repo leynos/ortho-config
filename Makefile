@@ -35,16 +35,19 @@ RUSTDOC_FLAGS ?= -D warnings
 SPELLING_PY_SRCS := \
 	scripts/generate_typos_config.py scripts/typos_rollout_check.py \
 	scripts/typos_rollout.py scripts/typos_rollout_cache.py \
-	scripts/typos_rollout_http.py scripts/tests/test_generate_typos_config.py \
+	scripts/typos_rollout_http.py scripts/typos_rollout_policy.py \
+	scripts/tests/test_generate_typos_config.py \
 	scripts/tests/test_typos_rollout.py scripts/tests/test_typos_rollout_check.py \
 	scripts/tests/test_typos_rollout_hardening.py \
-	scripts/tests/test_typos_rollout_refresh.py scripts/tests/conftest.py \
+	scripts/tests/test_typos_rollout_refresh.py \
+	scripts/tests/test_typos_rollout_semantics.py scripts/tests/conftest.py \
 	scripts/tests/typos_rollout_test_support.py
 SPELLING_PY_TESTS := \
 	scripts/tests/test_generate_typos_config.py scripts/tests/test_typos_rollout*.py
 SPELLING_COVERAGE_ARGS := \
 	--cov=generate_typos_config --cov=typos_rollout_check --cov=typos_rollout \
-	--cov=typos_rollout_cache --cov=typos_rollout_http --cov-fail-under=90
+	--cov=typos_rollout_cache --cov=typos_rollout_http \
+	--cov=typos_rollout_policy --cov-fail-under=90
 SPELLING_HELPER_PYTEST = PYTHONPATH=scripts $(UV_ENV) $(UV) run --no-project \
 	--python 3.13 --with pytest==9.1.1 --with pytest-cov==7.0.0 python -m pytest
 

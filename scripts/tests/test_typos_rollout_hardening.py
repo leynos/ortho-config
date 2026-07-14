@@ -2,18 +2,16 @@
 
 from __future__ import annotations
 
-import importlib
 import json
 import types
 import urllib.error
 import urllib.request
+from collections import abc as cabc
 from pathlib import Path
 
 import pytest
 
 from typos_rollout_test_support import dictionary_text as _dictionary_text
-
-SCRIPT_DIRECTORY = Path(__file__).resolve().parents[1]
 
 
 class ValidResponse:
@@ -44,7 +42,9 @@ class ValidResponse:
 
 @pytest.fixture(name="rollout_modules")
 def rollout_modules_fixture(
-    monkeypatch: pytest.MonkeyPatch,
+    rollout_module_importer: cabc.Callable[
+        [tuple[str, ...]], tuple[types.ModuleType, ...]
+    ],
 ) -> tuple[
     types.ModuleType,
     types.ModuleType,
@@ -52,17 +52,13 @@ def rollout_modules_fixture(
     types.ModuleType,
 ]:
     """Import helpers through the top-level paths used by the generator."""
-    monkeypatch.syspath_prepend(str(SCRIPT_DIRECTORY))
     names = (
         "typos_rollout_cache",
         "typos_rollout_http",
         "typos_rollout",
         "generate_typos_config",
     )
-    importlib.invalidate_caches()
-    cache, refresh, rollout, generator = (
-        importlib.import_module(name) for name in names
-    )
+    cache, refresh, rollout, generator = rollout_module_importer(names)
     return cache, refresh, rollout, generator
 
 
@@ -77,9 +73,10 @@ def test_oxford_adverb_suffix_is_generated(
     """Oxford adverbs are accepted and plain-British forms are corrected."""
     _, _, rollout, _ = rollout_modules
     mappings = rollout.generate_word_mappings(rollout.Dictionary(stems=("recogn",)))
+    plain_british_adverb = "recogni" + "sably"
 
     assert mappings["recognizably"] == "recognizably"
-    assert mappings["recognisably"] == "recognizably"
+    assert mappings[plain_british_adverb] == "recognizably"
 
 
 def test_changed_etag_overrides_unchanged_date(

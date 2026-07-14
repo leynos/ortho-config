@@ -279,15 +279,15 @@ sections without bespoke glue code.
 
 ### 4.5. Configuration discovery helper
 
-`ConfigDiscovery` now wraps the path search order previously handwritten in
-the example. A builder customizes the environment variable, dotfile name,
-project roots, and the canonical config filename without duplicating the
-discovery routine. The helper maintains the precedence from the example:
-explicit overrides via `<PREFIX>_CONFIG_PATH`, then XDG locations (including
-`/etc/xdg` when `XDG_CONFIG_DIRS` is unset), Windows application data
-directories, the user's home directory, and finally project roots. Candidates
-are gathered without duplication, using case-insensitive comparison on Windows
-to avoid repeated I/O. Consumers can call `utf8_candidates()` to receive
+`ConfigDiscovery` now wraps the path search order previously handwritten in the
+example. A builder customizes the environment variable, dotfile name, project
+roots, and the canonical config filename without duplicating the discovery
+routine. The helper maintains the precedence from the example: explicit
+overrides via `<PREFIX>_CONFIG_PATH`, then XDG locations (including `/etc/xdg`
+when `XDG_CONFIG_DIRS` is unset), Windows application data directories, the
+user's home directory, and finally project roots. Candidates are gathered
+without duplication, using case-insensitive comparison on Windows to avoid
+repeated I/O. Consumers can call `utf8_candidates()` to receive
 `camino::Utf8PathBuf` values when they prefer strong UTF-8 typing.
 
 When a struct applies the new `#[ortho_config(discovery(...))]` attribute the

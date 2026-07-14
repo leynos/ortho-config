@@ -53,8 +53,8 @@
 
 - [RFC 0002: Customizable configuration layering policy](rfcs/0002-config-layer-resolution-policy.md):
   review the proposed generic file-layer resolution policy — ordered explicit
-  selectors, multi-scope stacking, and a reusable resolver — with Netsuke as the
-  proof case.
+  selectors, multi-scope stacking, and a reusable resolver — with Netsuke as
+  the proof case.
 
 ## Feature and migration notes
 

@@ -7,20 +7,35 @@
 
 from __future__ import annotations
 import argparse
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 import re
 import subprocess
-from typing import Sequence
 import generate_typos_config as generator
 import typos_rollout as rollout
+import typos_rollout_policy as policy_validation
 
 POLICY_PATHS = frozenset({Path(".typos-oxendict-base.toml"), Path("typos.local.toml")})
 
 
 @dataclass(frozen=True)
 class PhraseFinding:
-    """Describe one prohibited phrase in tracked text."""
+    """Describe one prohibited phrase in tracked text.
+
+    Attributes
+    ----------
+    path
+        Repository-relative file containing the phrase.
+    line
+        One-based source line.
+    column
+        One-based source column.
+    phrase
+        Original source spelling.
+    correction
+        Required replacement spelling.
+    """
 
     path: Path
     line: int
@@ -41,17 +56,21 @@ def _tracked(repository: Path) -> tuple[Path, ...]:
 
 
 def _excluded(path: Path, dictionary: rollout.Dictionary) -> bool:
+    """Return whether policy excludes a repository-relative path."""
     return any(
         item in path.parts or path.match(item) for item in dictionary.excluded_files
     )
 
 
 def _masked(text: str, patterns: tuple[str, ...]) -> str:
+    """Blank safely bounded policy matches while preserving positions."""
+
     def blank(match: re.Match[str]) -> str:
+        """Replace non-newline match characters with spaces."""
         return "".join("\n" if c == "\n" else " " for c in match.group())
 
-    for pattern in patterns:
-        text = re.sub(pattern, blank, text)
+    for pattern in policy_validation.compile_ignore_patterns(patterns):
+        text = pattern.sub(blank, text)
     return text
 
 
@@ -92,7 +111,7 @@ def _file_findings(
         return ()
     try:
         text = (repository / relative).read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError):
+    except UnicodeDecodeError:
         return ()
     masked = _masked(text, dictionary.ignore_patterns)
     return tuple(
@@ -105,7 +124,25 @@ def _file_findings(
 def check_phrase_corrections(
     repository: Path, dictionary: rollout.Dictionary
 ) -> tuple[PhraseFinding, ...]:
-    """Find prohibited exact phrases in tracked UTF-8 text."""
+    """Find prohibited exact phrases in tracked UTF-8 text.
+
+    Parameters
+    ----------
+    repository
+        Git repository whose tracked files are scanned.
+    dictionary
+        Validated spelling policy containing phrases and exclusions.
+
+    Returns
+    -------
+    tuple[PhraseFinding, ...]
+        Findings ordered by tracked path and phrase policy order.
+
+    Raises
+    ------
+    OSError, subprocess.CalledProcessError, ValueError
+        If repository discovery, file reading or regex validation fails.
+    """
     return tuple(
         finding
         for relative in _tracked(repository)
@@ -114,6 +151,23 @@ def check_phrase_corrections(
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    """Run the phrase checker command.
+
+    Parameters
+    ----------
+    argv
+        Optional command-line arguments, excluding the executable name.
+
+    Returns
+    -------
+    int
+        ``2`` when findings exist, otherwise ``0``.
+
+    Raises
+    ------
+    OSError, subprocess.CalledProcessError, TypeError, ValueError
+        If policy loading or repository scanning fails.
+    """
     parser = argparse.ArgumentParser()
     parser.add_argument("--repository", type=Path, default=Path.cwd())
     repository = parser.parse_args(argv).repository

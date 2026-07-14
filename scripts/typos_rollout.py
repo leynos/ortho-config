@@ -20,8 +20,6 @@ if typ.TYPE_CHECKING:
 
 RefreshResult = typos_rollout_cache.RefreshResult
 RefreshOptions = typos_rollout_http.RefreshOptions
-_CacheTargets = typos_rollout_cache.CacheTargets
-_RemoteResponse = typos_rollout_cache.RemoteResponse
 NetworkUnavailableError = typos_rollout_http.NetworkUnavailableError
 InsecureSourceError = typos_rollout_http.InsecureSourceError
 _HttpsRedirectHandler = typos_rollout_http._HttpsRedirectHandler
@@ -49,7 +47,23 @@ SUFFIX_PAIRS = (
 
 @dc.dataclass(frozen=True)
 class Dictionary:
-    """Curated words and exclusions used to generate a ``typos`` config."""
+    """Curated words and exclusions used to generate a ``typos`` config.
+
+    Attributes
+    ----------
+    stems
+        Oxford ``-ize`` stems expanded through the supported suffix pairs.
+    accepted
+        Words accepted exactly as written.
+    corrections
+        Explicit misspelling-to-correction pairs.
+    phrase_corrections
+        Prohibited phrase-to-correction pairs checked outside ``typos``.
+    ignore_patterns
+        Safe regular expressions used to mask quoted or upstream text.
+    excluded_files
+        File globs omitted from spelling checks.
+    """
 
     stems: tuple[str, ...] = ()
     accepted: tuple[str, ...] = ()
@@ -113,7 +127,7 @@ def _dictionary_from_text(text: str, *, sparse: bool = False) -> Dictionary:
         "corrections",
         description="phrase corrections",
     )
-    return Dictionary(
+    dictionary = Dictionary(
         stems=_string_list(oxford, "stems"),
         accepted=_string_list(words, "accepted"),
         corrections=tuple(sorted(corrections.items())),
@@ -121,6 +135,8 @@ def _dictionary_from_text(text: str, *, sparse: bool = False) -> Dictionary:
         ignore_patterns=_string_list(patterns, "ignore"),
         excluded_files=_string_list(files, "exclude"),
     )
+    typos_rollout_policy.validate_ignore_patterns(dictionary.ignore_patterns)
+    return dictionary
 
 
 def load_dictionary(
@@ -128,7 +144,25 @@ def load_dictionary(
     *,
     local_overlay: bool = False,
 ) -> Dictionary:
-    """Load a validated shared dictionary from *path*."""
+    """Load a validated shared dictionary or local overlay.
+
+    Parameters
+    ----------
+    path
+        UTF-8 TOML dictionary path.
+    local_overlay
+        Whether the document may omit complete-authority fields.
+
+    Returns
+    -------
+    Dictionary
+        Parsed and validated spelling policy.
+
+    Raises
+    ------
+    OSError, UnicodeDecodeError, tomllib.TOMLDecodeError, TypeError, ValueError
+        If the dictionary cannot be read as UTF-8 or violates policy.
+    """
     return _dictionary_from_text(path.read_text(encoding="utf-8"), sparse=local_overlay)
 
 
@@ -152,7 +186,25 @@ def _merge_correction_items(
 
 
 def merge_dictionaries(base: Dictionary, local: Dictionary) -> Dictionary:
-    """Merge a shared dictionary with a non-conflicting local overlay."""
+    """Merge a shared dictionary with a non-conflicting local overlay.
+
+    Parameters
+    ----------
+    base
+        Complete shared spelling policy.
+    local
+        Sparse repository-specific policy additions.
+
+    Returns
+    -------
+    Dictionary
+        Deterministically ordered union of the two policies.
+
+    Raises
+    ------
+    ValueError
+        If corrections conflict or local exceptions weaken shared policy.
+    """
     typos_rollout_policy.validate_local_exceptions(
         local.ignore_patterns, local.excluded_files
     )
@@ -179,7 +231,23 @@ def merge_dictionaries(base: Dictionary, local: Dictionary) -> Dictionary:
 
 
 def generate_word_mappings(dictionary: Dictionary) -> dict[str, str]:
-    """Expand Oxford stems and explicit words into deterministic mappings."""
+    """Expand Oxford stems and explicit words into deterministic mappings.
+
+    Parameters
+    ----------
+    dictionary
+        Spelling policy to expand.
+
+    Returns
+    -------
+    dict[str, str]
+        Sorted source-word-to-correction mapping for ``typos``.
+
+    Raises
+    ------
+    ValueError
+        If generated and explicit corrections conflict.
+    """
     mappings = {word: word for word in dictionary.accepted}
 
     def add(word: str, correction: str) -> None:
@@ -215,7 +283,23 @@ def _render_array(name: str, values: tuple[str, ...]) -> list[str]:
 
 
 def render_typos_config(dictionary: Dictionary) -> str:
-    """Render a deterministic, parse-checked ``typos.toml`` document."""
+    """Render a deterministic, parse-checked ``typos.toml`` document.
+
+    Parameters
+    ----------
+    dictionary
+        Validated spelling policy to render.
+
+    Returns
+    -------
+    str
+        Complete generated TOML document.
+
+    Raises
+    ------
+    ValueError, tomllib.TOMLDecodeError
+        If mappings conflict or the generated document does not parse.
+    """
     lines = [
         "# Generated from the shared en-GB-oxendict dictionary.",
         "# Regenerate with scripts/generate_typos_config.py; do not edit by hand.",
@@ -239,7 +323,20 @@ def render_typos_config(dictionary: Dictionary) -> str:
 
 
 def write_config(path: pathlib.Path, dictionary: Dictionary) -> None:
-    """Atomically write validated generated configuration to *path*."""
+    """Atomically write validated generated configuration.
+
+    Parameters
+    ----------
+    path
+        Destination ``typos.toml`` path.
+    dictionary
+        Validated spelling policy to render and write.
+
+    Raises
+    ------
+    OSError, ValueError, tomllib.TOMLDecodeError
+        If rendering, writing or replacement fails.
+    """
     _atomic_write(path, render_typos_config(dictionary).encode())
 
 
@@ -248,24 +345,34 @@ def _validate_dictionary_bytes(content: bytes) -> None:
     _dictionary_from_text(content.decode())
 
 
-def _http_error_result(
-    cache: pathlib.Path,
-    error: urllib.error.HTTPError,
-) -> RefreshResult:
-    """Preserve the HTTP-status helper at the compatibility boundary."""
-    return typos_rollout_http._http_error_result(
-        cache,
-        error,
-        _validate_dictionary_bytes,
-    )
-
-
 def refresh_base(
     source: str | pathlib.Path,
     cache: pathlib.Path,
     options: RefreshOptions,
 ) -> RefreshResult:
-    """Refresh an untracked base cache when the authoritative copy is newer."""
+    """Refresh an untracked base cache from its authoritative copy.
+
+    Parameters
+    ----------
+    source
+        Local path or HTTPS URL for the shared authority.
+    cache
+        Untracked local cache destination.
+    options
+        Metadata, offline-mode and HTTP-opening options.
+
+    Returns
+    -------
+    RefreshResult
+        Refresh status and validated cache path.
+
+    Raises
+    ------
+    FileNotFoundError, NetworkUnavailableError, InsecureSourceError
+        If policy cannot be obtained securely from the selected authority.
+    OSError, urllib.error.HTTPError, UnicodeDecodeError, TypeError, ValueError
+        If retrieval, persistence or dictionary validation fails.
+    """
     selected_options = options
     if options.opener is None and urllib.request.urlopen is not _DEFAULT_URLOPEN:
         # Existing focused tests patch this legacy boundary; production retains

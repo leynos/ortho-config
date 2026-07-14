@@ -230,6 +230,10 @@ def test_remote_failure_reuses_only_a_valid_stale_cache(
         ),
         encoding="utf-8",
     )
+    metadata.write_text(
+        json.dumps({"source": "https://example.test/base"}),
+        encoding="utf-8",
+    )
     result = rollout.refresh_base(
         "https://example.test/base",
         cache,
@@ -243,6 +247,13 @@ def test_remote_failure_reuses_only_a_valid_stale_cache(
     assert stale_dictionary.phrase_corrections == (
         (prohibited_phrase, "handwritten"),
     ), "stale cache lost the shared phrase policy"
+
+    with pytest.raises(rollout.NetworkUnavailableError):
+        rollout.refresh_base(
+            "https://example.test/replacement",
+            cache,
+            rollout.RefreshOptions(metadata=metadata),
+        )
 
 
 def test_remote_refresh_rejects_insecure_and_invalid_content(
@@ -310,28 +321,30 @@ def test_metadata_reader_handles_invalid_and_non_object_json(
     assert rollout._read_metadata(metadata) == {}
 
 
-def test_http_error_translation_handles_not_modified_and_stale_cache(
+def test_http_error_propagates_non_not_modified_status(
     rollout_modules: tuple[types.ModuleType, types.ModuleType, types.ModuleType],
     tmp_path: Path,
 ) -> None:
-    """HTTP status handling distinguishes current, stale and absent data."""
+    """A non-304 HTTP status remains the authority's original failure."""
     _, rollout, _ = rollout_modules
     cache = tmp_path / "cache.toml"
     cache.write_text(_dictionary_text(), encoding="utf-8")
     headers = email.message.Message()
-    not_modified = urllib.error.HTTPError(
-        "https://example.test/base", 304, "not modified", headers, None
-    )
     unavailable = urllib.error.HTTPError(
         "https://example.test/base", 503, "unavailable", headers, None
     )
 
-    assert rollout._http_error_result(cache, not_modified).status == "current"
-    with pytest.raises(urllib.error.HTTPError):
-        rollout._http_error_result(cache, unavailable)
-    cache.unlink()
-    with pytest.raises(urllib.error.HTTPError):
-        rollout._http_error_result(cache, unavailable)
+    with pytest.raises(urllib.error.HTTPError) as raised:
+        rollout.refresh_base(
+            "https://example.test/base",
+            cache,
+            rollout.RefreshOptions(
+                metadata=tmp_path / "cache.json",
+                opener=lambda *_args, **_kwargs: (_ for _ in ()).throw(unavailable),
+            ),
+        )
+
+    assert raised.value is unavailable, "HTTP status was replaced at the boundary"
 
 
 def test_remote_freshness_uses_dates_and_falls_back_on_invalid_values(

@@ -118,20 +118,19 @@ def _remote_is_not_newer(
     headers: cabc.Mapping[str, str],
 ) -> bool:
     """Return whether HTTP validators prove the response is not newer."""
-    etag = headers.get("ETag")
-    saved_etag = saved.get("etag")
-    if isinstance(etag, str) and isinstance(saved_etag, str):
-        return etag == saved_etag
-    modified = headers.get("Last-Modified")
-    saved_modified = saved.get("last_modified")
-    if not isinstance(modified, str) or not isinstance(saved_modified, str):
-        return False
-    try:
-        return email.utils.parsedate_to_datetime(
-            modified
-        ) <= email.utils.parsedate_to_datetime(saved_modified)
-    except (TypeError, ValueError):
-        return modified == saved_modified
+    match headers.get("ETag"), saved.get("etag"):
+        case ((str() as etag), (str() as saved_etag)):
+            return etag == saved_etag
+    match headers.get("Last-Modified"), saved.get("last_modified"):
+        case ((str() as modified), (str() as saved_modified)):
+            try:
+                return email.utils.parsedate_to_datetime(
+                    modified
+                ) <= email.utils.parsedate_to_datetime(saved_modified)
+            except (TypeError, ValueError):
+                return modified == saved_modified
+        case _:
+            return False
 
 
 def _local_cache_is_current(
@@ -140,11 +139,12 @@ def _local_cache_is_current(
     source: _LocalSourceState,
 ) -> bool:
     """Return whether metadata proves a valid local-source cache is current."""
-    saved_mtime = saved.get("mtime_ns")
     has_matching_source = saved.get("source") == source.name
-    has_new_enough_mtime = (
-        isinstance(saved_mtime, int) and source.mtime_ns <= saved_mtime
-    )
+    match saved.get("mtime_ns"):
+        case int() as saved_mtime:
+            has_new_enough_mtime = source.mtime_ns <= saved_mtime
+        case _:
+            has_new_enough_mtime = False
     return (
         _valid_cache(cache, source.validate)
         and has_matching_source
@@ -183,12 +183,14 @@ def _refresh_local(
 def _conditional_headers(saved: cabc.Mapping[str, object]) -> dict[str, str]:
     """Build conditional HTTP headers from persisted validators."""
     headers: dict[str, str] = {}
-    etag = saved.get("etag")
-    if isinstance(etag, str):
-        headers["If-None-Match"] = etag
-    last_modified = saved.get("last_modified")
-    if isinstance(last_modified, str):
-        headers["If-Modified-Since"] = last_modified
+    match saved.get("etag"), saved.get("last_modified"):
+        case ((str() as etag), (str() as last_modified)):
+            headers["If-None-Match"] = etag
+            headers["If-Modified-Since"] = last_modified
+        case ((str() as etag), _):
+            headers["If-None-Match"] = etag
+        case _, (str() as last_modified):
+            headers["If-Modified-Since"] = last_modified
     return headers
 
 
@@ -281,21 +283,12 @@ def _stale_cache_or_raise(
     cache: pathlib.Path,
     error: NetworkUnavailableError,
     validate: ContentValidator,
+    *,
+    has_matching_source: bool,
 ) -> typos_rollout_cache.RefreshResult:
     """Return a valid stale cache or propagate the connectivity failure."""
-    if _valid_cache(cache, validate):
+    if has_matching_source and _valid_cache(cache, validate):
         return typos_rollout_cache.RefreshResult("stale-cache", cache)
-    raise error
-
-
-def _http_error_result(
-    cache: pathlib.Path,
-    error: urllib.error.HTTPError,
-    validate: ContentValidator,
-) -> typos_rollout_cache.RefreshResult:
-    """Translate an HTTP response into a current result or propagate it."""
-    if error.code == HTTP_NOT_MODIFIED and _valid_cache(cache, validate):
-        return typos_rollout_cache.RefreshResult("current", cache)
     raise error
 
 
@@ -306,7 +299,8 @@ def _refresh_http(
 ) -> typos_rollout_cache.RefreshResult:
     """Refresh a cache from a validated HTTPS source with stale fallback."""
     saved = _read_metadata(context.options.metadata)
-    if saved.get("source") != source:
+    has_matching_source = saved.get("source") == source
+    if not has_matching_source:
         saved = {}
     request = _https_request(source, _conditional_headers(saved))
     open_remote = (
@@ -315,11 +309,22 @@ def _refresh_http(
     try:
         response_context = open_remote(request, timeout=30.0)
     except urllib.error.HTTPError as error:
-        return _http_error_result(cache, error, context.validate)
+        if (
+            error.code == HTTP_NOT_MODIFIED
+            and has_matching_source
+            and _valid_cache(cache, context.validate)
+        ):
+            return typos_rollout_cache.RefreshResult("current", cache)
+        raise
     except urllib.error.URLError:
         message = f"shared dictionary authority is unavailable: {source}"
         unavailable = NetworkUnavailableError(message)
-        return _stale_cache_or_raise(cache, unavailable, context.validate)
+        return _stale_cache_or_raise(
+            cache,
+            unavailable,
+            context.validate,
+            has_matching_source=has_matching_source,
+        )
     with response_context as response:
         try:
             return _remote_response_result(
@@ -335,7 +340,12 @@ def _refresh_http(
                 context.validate,
             )
         except NetworkUnavailableError as error:
-            return _stale_cache_or_raise(cache, error, context.validate)
+            return _stale_cache_or_raise(
+                cache,
+                error,
+                context.validate,
+                has_matching_source=has_matching_source,
+            )
 
 
 def refresh_base(

@@ -21,22 +21,22 @@ small set of additive runtime types — `ConfigPathSelector`, `ExplicitMode`,
 `AutomaticMode`, `DiscoveryScope`, `ConfigFilePolicy`, and `FileLayerOutcome` —
 plus a resolver entry point and, in a later stage, an extended derive
 attribute. The `leynos/netsuke` build tool is used throughout as the proof
-case, because its `src/cli/discovery.rs` is exactly the kind of bespoke
-"config goblin" the proposed API is meant to absorb.
+case, because its `src/cli/discovery.rs` is exactly the kind of bespoke "config
+goblin" the proposed API is meant to absorb.
 
 The guiding boundary is unchanged from OrthoConfig's existing decision record
-posture: OrthoConfig owns the generic mechanics, and the downstream
-application owns the names and the policy choices. Baking `NETSUKE_CONFIG` or
-any other application-specific name into OrthoConfig would recreate a
-previously rejected option.
+posture: OrthoConfig owns the generic mechanics, and the downstream application
+owns the names and the policy choices. Baking `NETSUKE_CONFIG` or any other
+application-specific name into OrthoConfig would recreate a previously rejected
+option.
 
 ## Problem
 
 OrthoConfig's discovery helper, `ConfigDiscovery`, can enumerate candidate
 files across explicit paths, a single environment variable, and the standard
-platform directories, then load the first candidate that parses. That model
-is a good fit for "pick one configuration file". It is a poor fit for
-applications whose file-selection policy is more elaborate.
+platform directories, then load the first candidate that parses. That model is
+a good fit for "pick one configuration file". It is a poor fit for applications
+whose file-selection policy is more elaborate.
 
 Netsuke is such an application. Its policy has four distinct behaviours that
 the current primitives cannot express directly:
@@ -47,13 +47,13 @@ the current primitives cannot express directly:
    ordered "first non-empty of three sources" chain cannot be described.
 2. **Fail-closed explicit selection.** A selected file that is missing or
    malformed must report that selected-file error and must _not_ fall through
-   to automatic discovery. The current `add_required_path` records an error
-   for a missing required path, but does not suppress later candidates.
+   to automatic discovery. The current `add_required_path` records an error for
+   a missing required path, but does not suppress later candidates.
 3. **Multi-scope automatic discovery.** When no explicit file is selected,
    user-scope configuration and project-scope configuration must both load,
    with the project scope later in merge order so that project keys override
-   user keys while user-only keys survive. The current `compose_layers`
-   returns the first successfully loaded chain and stops.
+   user keys while user-only keys survive. The current `compose_layers` returns
+   the first successfully loaded chain and stops.
 4. **Early access to file layers.** A diagnostics flag (`diag_json`) read from
    the configuration files must be available before the full merge runs, so
    that startup and merge errors are rendered in the correct format. The same
@@ -78,8 +78,8 @@ environment variable, file-name overrides, project roots, and explicit paths
 (`ortho_config/src/discovery/candidates.rs`) produces an ordered, de-duplicated
 list: required explicit paths first (these set a `required_bound`), then
 optional explicit paths, then the single environment-variable path, then XDG
-Base Directory locations, Windows application-data folders, the home
-directory, and finally the project roots.
+Base Directory locations, Windows application-data folders, the home directory,
+and finally the project roots.
 
 Layer composition (`ortho_config/src/discovery/load.rs`) is **first-file-wins**:
 
@@ -97,24 +97,22 @@ Layer composition (`ortho_config/src/discovery/load.rs`) is **first-file-wins**:
 
 `LayerComposition` (`ortho_config/src/declarative/composer.rs`) carries layers
 and errors together; `into_merge_result` aggregates any pre-recorded errors
-with merge failures, collapsing a single error to itself and multiple errors
-to an aggregate. A `MergeLayer`
-(`ortho_config/src/declarative/layer.rs`) records a provenance
-(`Defaults`, `File`, `Environment`, or `Cli`), an owned JSON value, and an
-optional file path.
+with merge failures, collapsing a single error to itself and multiple errors to
+an aggregate. A `MergeLayer` (`ortho_config/src/declarative/layer.rs`) records
+a provenance (`Defaults`, `File`, `Environment`, or `Cli`), an owned JSON
+value, and an optional file path.
 
 Two facts from this baseline matter for the proposal. First, a required
-explicit path can mechanically coexist with later discovered layers even
-though the final result errors; the `required_bound` split is used only to
-_route_ errors, not to _suppress_ probing. Second, the single environment
-variable is injected into the automatic candidate list, not into an ordered,
-exclusive pre-discovery chain.
+explicit path can mechanically coexist with later discovered layers even though
+the final result errors; the `required_bound` split is used only to _route_
+errors, not to _suppress_ probing. Second, the single environment variable is
+injected into the automatic candidate list, not into an ordered, exclusive
+pre-discovery chain.
 
 ### Netsuke's hand-rolled policy
 
 Netsuke's `src/cli/discovery.rs` builds the missing behaviours on top of the
-primitives above. The relevant shapes (paraphrased from the current source)
-are:
+primitives above. The relevant shapes (paraphrased from the current source) are:
 
 ```rust,no_run
 const CONFIG_ENV_VAR: &str = "NETSUKE_CONFIG";
@@ -146,16 +144,15 @@ project keys win while user-only keys persist. `config_discovery` redirects the
 project scope to the `-C/--directory` value with
 `clear_project_roots().add_project_root(dir)`. The CLI struct in
 `src/cli/parser.rs` documents the intent directly: `--directory` "affects
-manifest lookup, output paths, and config discovery", while `--config` is
-"a configuration file, bypassing automatic discovery" and is annotated
+manifest lookup, output paths, and config discovery", while `--config` is "a
+configuration file, bypassing automatic discovery" and is annotated
 `#[serde(skip)]` so it does not participate in serialization or layering.
 
 The diagnostics path duplicates the selection logic. `collect_diag_file_layers`
 resolves the same selected or discovered layers so that `diag_json` can be read
 before the full merge, mirroring `push_file_layers` almost line for line. The
 result is correct but repetitive, and the repetition exists only because the
-"resolve file layers once, reuse twice" shape is not available from the
-library.
+"resolve file layers once, reuse twice" shape is not available from the library.
 
 ## Goals and non-goals
 
@@ -191,10 +188,10 @@ library.
 
 OrthoConfig owns the generic mechanics: ordered selectors, the choice between
 fail-closed and fall-through behaviour, and scope stacking. The application
-owns the names and the policy: the spelling of `--config`, the
-`NETSUKE_CONFIG` chain, the `.netsuke.toml` file name, which scopes exist, and
-their order. Every name in the proposed types is therefore an argument supplied
-by the caller; no literal an application would choose appears in OrthoConfig.
+owns the names and the policy: the spelling of `--config`, the `NETSUKE_CONFIG`
+chain, the `.netsuke.toml` file name, which scopes exist, and their order.
+Every name in the proposed types is therefore an argument supplied by the
+caller; no literal an application would choose appears in OrthoConfig.
 
 All new items are additive and live in `ortho_config::discovery`. No existing
 signature changes.
@@ -458,23 +455,23 @@ errors that surface only when no layer loaded.
 rest of the system unchanged. First, a thin
 `ConfigDiscovery::compose_scoped_layers(mode, &scopes) -> DiscoveryLayersOutcome`
 gives builder-based callers scope stacking without adopting the policy type.
-This is not a full unification: `compose_layers()` scans a single flat candidate
-list that interleaves explicit, environment, and platform candidates, whereas
-the scoped engine groups the platform generators into scopes and leaves explicit
-and environment selection to the selector chain. The legacy `compose_layers()`
-is therefore retained unchanged, and `compose_scoped_layers` is a new sibling
-that shares the per-scope traversal; they are two tested code paths, not one
-path wearing two signatures.
+This is not a full unification: `compose_layers()` scans a single flat
+candidate list that interleaves explicit, environment, and platform candidates,
+whereas the scoped engine groups the platform generators into scopes and leaves
+explicit and environment selection to the selector chain. The legacy
+`compose_layers()` is therefore retained unchanged, and `compose_scoped_layers`
+is a new sibling that shares the per-scope traversal; they are two tested code
+paths, not one path wearing two signatures.
 
 Second, a `From<DiscoveryLayersOutcome>` lift carries a legacy outcome into a
 `FileLayerOutcome`. The lift is fold-preserving, not lossless: the legacy type
-already collapses "absent" and "present-but-invalid" into one
-`required_errors`/`optional_errors` split, so the lift cannot recover the new
-classification. It maps `required_errors` to reportable and `optional_errors` to
-ignorable, which reproduces the current generated fold exactly, but the
-absent-versus-invalid distinction is available only through the native
-`resolve_layers` path. A malformed file lifted through `From` therefore behaves
-exactly as today; it does not gain the "surface regardless" treatment.
+already collapses "absent" and "present-but-invalid" into one `required_errors`/
+`optional_errors` split, so the lift cannot recover the new classification. It
+maps `required_errors` to reportable and `optional_errors` to ignorable, which
+reproduces the current generated fold exactly, but the absent-versus-invalid
+distinction is available only through the native `resolve_layers` path. A
+malformed file lifted through `From` therefore behaves exactly as today; it
+does not gain the "surface regardless" treatment.
 
 Relative paths resolve against the process working directory, except that a
 `project_root` set from `-C/--directory` rebases project-scope discovery; an
@@ -486,12 +483,12 @@ bare relative name they cannot locate.
 The four file outcomes Netsuke cares about map onto the `FileLayerOutcome`
 fields as follows.
 
-| Outcome                  | Winning source         | Error bucket        | Surfacing rule                                  |
-| ------------------------ | ---------------------- | ------------------- | ----------------------------------------------- |
-| Selected explicit failed | explicit selector      | `selected_error`    | always; automatic discovery never ran           |
-| Optional probe absent    | automatic or none      | `ignorable_errors`  | only when no layers loaded and no other error   |
-| Present but invalid      | automatic scope        | `reportable_errors` | always, even when another layer loaded          |
-| Chain succeeded          | explicit or automatic  | none                | layers preserved in load order                  |
+| Outcome                  | Winning source        | Error bucket        | Surfacing rule                                |
+| ------------------------ | --------------------- | ------------------- | --------------------------------------------- |
+| Selected explicit failed | explicit selector     | `selected_error`    | always; automatic discovery never ran         |
+| Optional probe absent    | automatic or none     | `ignorable_errors`  | only when no layers loaded and no other error |
+| Present but invalid      | automatic scope       | `reportable_errors` | always, even when another layer loaded        |
+| Chain succeeded          | explicit or automatic | none                | layers preserved in load order                |
 
 _Table 2: File-layer outcomes and how they surface._
 
@@ -510,11 +507,11 @@ maintains, and `LayerComposition::into_merge_result` already aggregates
 pre-recorded errors with merge failures, the classification flows through the
 existing aggregation collapse without any change to `LayerComposition`.
 
-A present-but-invalid file in a participating scope is fatal: the merge does not
-quietly proceed with the remaining valid layers and discard the broken file. The
-error names the offending scope, and when several such errors (or a merge error)
-coexist they aggregate with their scope labels intact, so an operator can tell a
-malformed project file from a malformed user file.
+A present-but-invalid file in a participating scope is fatal: the merge does
+not quietly proceed with the remaining valid layers and discard the broken
+file. The error names the offending scope, and when several such errors (or a
+merge error) coexist they aggregate with their scope labels intact, so an
+operator can tell a malformed project file from a malformed user file.
 
 The suppression gate removes the "uncanny" coexistence noted in the current
 state. Under `ExplicitMode::RequiredExclusive`, when an explicit selector wins,
@@ -638,11 +635,11 @@ behaviours, while preserving the existing defaults exactly.
   compile error, because the combined precedence would be ambiguous; `env_var`
   remains the single-variable shorthand.
 - `explicit_mode` and `automatic_mode` accept the string forms of the runtime
-  enum variants. Their defaults reproduce the current behaviour, but the default
-  explicit mode is named `fallthrough` (today's required-but-non-suppressing
-  path), not `optional`, so the macro string never contradicts the runtime
-  `ExplicitMode::Optional`, which is suppress-but-tolerant. The default automatic
-  mode is `first_wins`.
+  enum variants. Their defaults reproduce the current behaviour, but the
+  default explicit mode is named `fallthrough` (today's
+  required-but-non-suppressing path), not `optional`, so the macro string never
+  contradicts the runtime `ExplicitMode::Optional`, which is
+  suppress-but-tolerant. The default automatic mode is `first_wins`.
 - `scope_order` lists scopes by name and is validated at compile time.
 - `project_root_from = "field"` is the key that reaches a runtime-parsed value.
   The generated loader already reads `cli.config_path` off the parsed CLI
@@ -657,10 +654,10 @@ The static grammar cannot express every policy — a root derived from two
 fields, or conditional scopes. For those, the runtime `ConfigFilePolicy` is
 already the escape hatch: an application builds one by hand and bypasses the
 derive entirely. A dedicated derive hook (a `policy_hook` flag, parsed like the
-existing `post_merge_hook`, lowering to a `ConfigPolicy` trait the loader calls)
-is therefore deferred to a follow-up, to be added only when a second consumer
-needs declarative access to an imperative policy. Keeping it out of this RFC
-avoids speculative macro surface for a hypothetical caller.
+existing `post_merge_hook`, lowering to a `ConfigPolicy` trait the loader
+calls) is therefore deferred to a follow-up, to be added only when a second
+consumer needs declarative access to an imperative policy. Keeping it out of
+this RFC avoids speculative macro surface for a hypothetical caller.
 
 The derive extension is deliberately staged last (see the delivery plan):
 `explicit_mode`, `automatic_mode`, and `scope_order` are renamings of runtime
@@ -697,9 +694,9 @@ diagnostics can be developed and soaked independently of the runtime resolver.
 ### Technical requirements
 
 - All new items are additive and reside in `ortho_config::discovery`. The
-  signatures and behaviour of `compose_layers`, `compose_layer`,
-  `load_first*`, `DiscoveryLayersOutcome`, `LayerComposition`, `MergeComposer`,
-  and `MergeLayer` are unchanged.
+  signatures and behaviour of `compose_layers`, `compose_layer`, `load_first*`,
+  `DiscoveryLayersOutcome`, `LayerComposition`, `MergeComposer`, and
+  `MergeLayer` are unchanged.
 - New enums carry `#[non_exhaustive]` so future variants remain non-breaking,
   and new structs (`ConfigPathSelector`, `ConfigFilePolicy`, `FileLayerOutcome`,
   `ResolvedSelection`) keep private fields behind accessors with
@@ -729,31 +726,31 @@ change to candidate ordering.
 Netsuke's migration is mechanical and preserves its existing test contracts.
 The local helpers map onto the new API as follows.
 
-| Netsuke helper                                | Replaced by                                          |
-| --------------------------------------------- | ---------------------------------------------------- |
-| `explicit_config_path`                        | a `ConfigPathSelector` chain in selector order       |
-| `load_layers_from_path`                       | `resolve_layers` under `RequiredExclusive`           |
-| `collect_file_layers` / `push_file_layers`    | `FileLayerOutcome::into_layers_and_errors` then push |
-| `collect_diag_file_layers`                    | `merged_file_value` on the single resolved outcome   |
+| Netsuke helper                             | Replaced by                                          |
+| ------------------------------------------ | ---------------------------------------------------- |
+| `explicit_config_path`                     | a `ConfigPathSelector` chain in selector order       |
+| `load_layers_from_path`                    | `resolve_layers` under `RequiredExclusive`           |
+| `collect_file_layers` / `push_file_layers` | `FileLayerOutcome::into_layers_and_errors` then push |
+| `collect_diag_file_layers`                 | `merged_file_value` on the single resolved outcome   |
 
 _Table 3: Netsuke helper-to-API migration map._
 
-The existing Netsuke test cases translate into outcome assertions: selected-file
-fail-closed becomes an assertion that the selection won, automatic discovery
-was suppressed, and a single selected error surfaced; env-alias precedence
-becomes a selector-chain ordering test; user-plus-project stacking becomes an
-assertion on layer order by scope; a malformed project file becomes an
-assertion that it appears among the reportable errors even when the user file
-loaded; `extends` ordering becomes an assertion on parent-before-child order
-within each scope and user-before-project order across scopes; and project root
-from `-C/--directory` becomes an assertion on the resolved project-layer path.
-Netsuke pins the new minor and adopts the richer outcome incrementally; nothing
-it currently relies on is removed.
+The existing Netsuke test cases translate into outcome assertions:
+selected-file fail-closed becomes an assertion that the selection won,
+automatic discovery was suppressed, and a single selected error surfaced;
+env-alias precedence becomes a selector-chain ordering test; user-plus-project
+stacking becomes an assertion on layer order by scope; a malformed project file
+becomes an assertion that it appears among the reportable errors even when the
+user file loaded; `extends` ordering becomes an assertion on
+parent-before-child order within each scope and user-before-project order
+across scopes; and project root from `-C/--directory` becomes an assertion on
+the resolved project-layer path. Netsuke pins the new minor and adopts the
+richer outcome incrementally; nothing it currently relies on is removed.
 
 ### Stability surface
 
-Several contracts freeze at the first release that ships them and must be settled
-before that release:
+Several contracts freeze at the first release that ships them and must be
+settled before that release:
 
 - The field posture of every new struct. `ConfigPathSelector`,
   `ConfigFilePolicy`, `FileLayerOutcome`, and `ResolvedSelection` ship with
@@ -762,8 +759,8 @@ before that release:
   fields are a one-way door.
 - The derive attribute strings (`required_exclusive`, `fallthrough`,
   `stack_scopes`, `first_wins`, `system`/`user`/`project`) become a public
-  grammar that can only change through a deprecation cycle once shipped, which is
-  why the derive extension is staged last.
+  grammar that can only change through a deprecation cycle once shipped, which
+  is why the derive extension is staged last.
 - The drain precedence of `into_layers_and_errors` (selected error sole, else
   reportable always, else ignorable when empty) and its single-versus-aggregate
   collapse become observable the moment a downstream test asserts on them.
@@ -794,8 +791,8 @@ surfacing) are easy to get wrong in each reimplementation.
 ### Option C: Generic selector and scoped-layer policy
 
 The recommended option adds the generic mechanics to OrthoConfig and leaves the
-names and policy choices with the application. It draws on established prior art
-for layered configuration: Figment's provenance-tracked merge and join
+names and policy choices with the application. It draws on established prior
+art for layered configuration: Figment's provenance-tracked merge and join
 semantics, on which OrthoConfig already builds
 ([Figment documentation](https://docs.rs/figment/latest/figment/)); Cargo's
 hierarchical configuration, which merges files discovered from the working
@@ -807,22 +804,22 @@ later scopes winning and an explicit scope-origin display
 `SetConfigFile`, which forces an explicit file and disables search; and
 cosmiconfig's distinction between an explicit `load` and a scoped `search`. The
 proposal generalizes these into selectors (explicit, ordered, optionally
-exclusive) and scopes (stacked, ordered), without copying any one tool's naming.
-Reusing Figment's own profile and provider merge directly was considered and set
-aside: OrthoConfig deliberately explodes each `extends` chain into separate
-layers so its field-level append and keyed-merge strategies apply across the
-chain, which Figment's leaf-replacement merge would defeat. The new policy
-therefore composes `MergeLayer` values rather than delegating to Figment
-profiles.
+exclusive) and scopes (stacked, ordered), without copying any one tool's
+naming. Reusing Figment's own profile and provider merge directly was
+considered and set aside: OrthoConfig deliberately explodes each `extends`
+chain into separate layers so its field-level append and keyed-merge strategies
+apply across the chain, which Figment's leaf-replacement merge would defeat.
+The new policy therefore composes `MergeLayer` values rather than delegating to
+Figment profiles.
 
-| Topic                     | Option A | Option B | Option C |
-| ------------------------- | -------- | -------- | -------- |
-| Owns application names    | library  | app      | app      |
-| Reuse across consumers    | none     | none     | high     |
-| Fail-closed exclusivity   | built-in | manual   | generic  |
-| Multi-scope stacking      | built-in | manual   | generic  |
-| Resolve-once reuse        | built-in | manual   | built-in |
-| Breaking change risk      | high     | none     | none     |
+| Topic                   | Option A | Option B | Option C |
+| ----------------------- | -------- | -------- | -------- |
+| Owns application names  | library  | app      | app      |
+| Reuse across consumers  | none     | none     | high     |
+| Fail-closed exclusivity | built-in | manual   | generic  |
+| Multi-scope stacking    | built-in | manual   | generic  |
+| Resolve-once reuse      | built-in | manual   | built-in |
+| Breaking change risk    | high     | none     | none     |
 
 _Table 4: Comparison of layering-policy ownership options._
 
@@ -830,25 +827,26 @@ _Table 4: Comparison of layering-policy ownership options._
 
 Option D shares Option C's ownership split but differs in shape. Instead of
 composing selectors, modes, and scopes as data, the application implements one
-trait method — `FileLayerProvider::resolve(&self, &Candidates) ->
-FileLayerOutcome` — and writes its policy as ordinary control flow, with the
-library supplying combinators (`explicit_first_of`, `load_exclusive`, `stack`).
-This collapses the mode and scope enums into a few combinator methods and makes
-the escape hatch the front door, so no policy is ever unreachable. It is rejected
-for one decisive reason: OrthoConfig's identity is _declared_ configuration from
-a struct. A policy expressed only as imperative trait code cannot be lowered from
+trait method —
+`FileLayerProvider::resolve(&self, &Candidates) -> FileLayerOutcome` — and
+writes its policy as ordinary control flow, with the library supplying
+combinators (`explicit_first_of`, `load_exclusive`, `stack`). This collapses
+the mode and scope enums into a few combinator methods and makes the escape
+hatch the front door, so no policy is ever unreachable. It is rejected for one
+decisive reason: OrthoConfig's identity is _declared_ configuration from a
+struct. A policy expressed only as imperative trait code cannot be lowered from
 a derive attribute, and cannot be read back by the generated agent-context and
 documentation tooling the crate already ships. The declarative form is chosen
 precisely because the policy must be inspectable and derivable, not merely
 executable. The combinator insight is retained internally: the declarative
-resolver is built on a shared per-scope traversal core, so a future `policy_hook`
-and the declarative path use one engine.
+resolver is built on a shared per-scope traversal core, so a future
+`policy_hook` and the declarative path use one engine.
 
 ## Open questions
 
 - Should `ExplicitMode` ship a third, fall-through-required variant (a selected
-  file that must load if present but still permits discovery when absent), or is
-  that better deferred behind `#[non_exhaustive]` until a consumer needs it?
+  file that must load if present but still permits discovery when absent), or
+  is that better deferred behind `#[non_exhaustive]` until a consumer needs it?
 - Should scope provenance also be carried per layer (a new `MergeProvenance`
   variant, which `#[non_exhaustive]` permits) in addition to the outcome-level
   `origins`, so a key can be traced to a scope after merging?
@@ -875,19 +873,19 @@ The work decomposes into atomic, dependency-ordered steps suitable for a
 roadmap entry. Each step is additive and individually mergeable.
 
 1. **Add runtime types.** Introduce `ConfigPathSelector`, `ExplicitMode`,
-   `AutomaticMode`, `DiscoveryScope`, `ResolvedSelection`, and `FileLayerOutcome`
-   (all `#[non_exhaustive]` with accessor methods), the fold-preserving
-   `From<DiscoveryLayersOutcome>` lift, and the `into_layers_and_errors` and
-   `into_result` drains. Acceptance: the four-case mapping in Table 2 is
-   unit-tested, and a golden fixture in this step proves the lift reproduces the
-   current loader fold exactly — the safety net lands with the change, not at the
-   end.
+   `AutomaticMode`, `DiscoveryScope`, `ResolvedSelection`, and
+   `FileLayerOutcome` (all `#[non_exhaustive]` with accessor methods), the
+   fold-preserving `From<DiscoveryLayersOutcome>` lift, and the
+   `into_layers_and_errors` and `into_result` drains. Acceptance: the four-case
+   mapping in Table 2 is unit-tested, and a golden fixture in this step proves
+   the lift reproduces the current loader fold exactly — the safety net lands
+   with the change, not at the end.
 2. **Add scoped resolution.** Add `compose_scoped_layers` and the
    `ConfigFilePolicy` resolver with the suppression gate and environment
    snapshotting. Acceptance: a `RequiredExclusive` win probes no automatic
    candidate (verified against a filesystem spy); `compose_layers` remains
-   unchanged and green; and a test mutating the environment between a peek and a
-   replay of one outcome asserts identical file provenance.
+   unchanged and green; and a test mutating the environment between a peek and
+   a replay of one outcome asserts identical file provenance.
 3. **Add the explicit selector chain.** Add the ordered selector resolution and
    the `--config` then `NETSUKE_CONFIG` then `NETSUKE_CONFIG_PATH` shape, named
    only by the caller. Acceptance: first present selector wins and suppresses
@@ -901,10 +899,11 @@ roadmap entry. Each step is additive and individually mergeable.
    fail-closed (missing and malformed) with the selector named in the error, no
    automatic probe under suppression, optional probe absent with a later
    success, optional probes exhausted, present-but-invalid surfacing despite a
-   later success, user-plus-project stacking order, `extends` ordering within and
-   across scopes, the same canonical file reached from two scopes loading once
-   (append vectors not doubled), relative-path resolution against the working
-   directory versus `-C/--directory`, env-alias precedence, a legacy alias
-   winning and emitting the default deprecation signal, the operator `origins`
-   trace, project root from a CLI field, the aggregation collapse, and the SemVer
-   additivity guard. (The back-compat lift fixture lands in step 1.)
+   later success, user-plus-project stacking order, `extends` ordering within
+   and across scopes, the same canonical file reached from two scopes loading
+   once (append vectors not doubled), relative-path resolution against the
+   working directory versus `-C/--directory`, env-alias precedence, a legacy
+   alias winning and emitting the default deprecation signal, the operator
+   `origins` trace, project root from a CLI field, the aggregation collapse,
+   and the SemVer additivity guard. (The back-compat lift fixture lands in step
+   1.)

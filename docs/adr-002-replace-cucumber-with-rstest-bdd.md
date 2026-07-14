@@ -22,11 +22,11 @@ compiled binary synchronously.
 
 `rstest-bdd` (<https://github.com/leynos/rstest-bdd>) provides Given/When/Then
 macros that integrate directly with `rstest`. Scenarios run as ordinary Rust
-integration tests without disabling the test harness, scenario state is modelled
-via fixtures or the lightweight `ScenarioState` derive, and features such as
-data tables or docstrings map cleanly onto strongly typed parameters. Migrating
-the suite aligns the behavioural layer with the rest of the workspace and
-reduces the maintenance burden of a separate async runner and world model.
+integration tests without disabling the test harness, scenario state is
+modelled via fixtures or the lightweight `ScenarioState` derive, and features
+such as data tables or docstrings map cleanly onto strongly typed parameters.
+Migrating the suite aligns the behavioural layer with the rest of the workspace
+and reduces the maintenance burden of a separate async runner and world model.
 
 ## Decision drivers
 
