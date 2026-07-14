@@ -777,7 +777,7 @@ the new `trybuild` cases.
 
 Run `coderabbit review --agent` and clear concerns.
 
-Acceptance: a developer can derive `OrthoConfigSubcommandDocs` on a hand-written
+Acceptance: a developer can derive `OrthoConfigSubcommandDocs` on a handwritten
 `clap::Subcommand` enum and observe the populated `Vec<DocMetadata>` in tests.
 
 ### Milestone 3: extend the struct derive to recurse into subcommand fields
@@ -1281,7 +1281,7 @@ Document with evidence so future work benefits.
   with `expected ','`. Evidence:
   `/tmp/test-ortho-config-6-1-1-recursive-doc-metadata-subcommands-values.out`
   before the parser fix. Impact: the shared clap parser now consumes unknown
-  `= value` and parenthesised meta items, matching the existing default parser
+  `= value` and parenthesized meta items, matching the existing default parser
   behaviour.
 - Observation: Milestone 2 lint and CodeRabbit both pushed the derive and
   tests away from defensive indexing. Evidence:

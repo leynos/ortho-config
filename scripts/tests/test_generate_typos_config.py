@@ -1,22 +1,46 @@
-"""Tests for the en-GB-oxendict ``typos.toml`` generator."""
+"""Compatibility tests for the established spelling-config generator API."""
+
+from pathlib import Path
 
 import pytest
 
-from scripts import generate_typos_config
-from scripts.generate_typos_config import render_config
+import generate_typos_config as generator
+import typos_rollout as rollout
 
 
-def test_render_config_emits_paired_oxford_entries() -> None:
-    """Each curated stem yields an -ise correction and an -ize identity key."""
-    config = render_config()
-    assert 'organise = "organize"' in config
-    assert 'organize = "organize"' in config
+def _dictionary(
+    _repository: Path = generator.REPOSITORY_ROOT,
+) -> rollout.Dictionary:
+    """Return a deterministic dictionary for compatibility tests."""
+    return rollout.Dictionary(stems=("organ",))
 
 
-def test_render_config_rejects_duplicate_keys(
+def test_render_config_keeps_the_no_argument_api(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Colliding stems fail loudly instead of emitting a duplicate TOML key."""
-    monkeypatch.setattr(generate_typos_config, "STEMS", ("token", "token"))
-    with pytest.raises(ValueError, match="duplicate typos key"):
-        render_config()
+    """The established no-argument renderer still emits Oxford entries."""
+    monkeypatch.setattr(generator, "dictionary_from_cache", _dictionary)
+
+    config = generator.render_config()
+
+    assert '"organise" = "organize"' in config, "Oxford correction was omitted"
+    assert '"organize" = "organize"' in config, "Oxford spelling was omitted"
+
+
+def test_main_keeps_the_positional_output_api(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """A positional destination still receives the generated configuration."""
+    output = tmp_path / "custom-typos.toml"
+    refresh = rollout.RefreshResult("current", tmp_path / "base.toml")
+
+    monkeypatch.setattr(generator, "dictionary_from_cache", _dictionary)
+    monkeypatch.setattr(rollout, "refresh_base", lambda *_args, **_kwargs: refresh)
+
+    result = generator.main(output)
+
+    assert result == refresh, "generator did not return the refresh result"
+    assert '"organise" = "organize"' in output.read_text(encoding="utf-8"), (
+        "positional output omitted the Oxford correction"
+    )
