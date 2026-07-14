@@ -224,8 +224,10 @@ def test_remote_failure_reuses_only_a_valid_stale_cache(
 
     prohibited_phrase = "hand-" + "written"
     cache.write_text(
-        _dictionary_text()
-        + f'\n[phrases.corrections]\n"{prohibited_phrase}" = "handwritten"\n',
+        _dictionary_text().replace(
+            "[phrases.corrections]",
+            f'[phrases.corrections]\n"{prohibited_phrase}" = "handwritten"',
+        ),
         encoding="utf-8",
     )
     result = rollout.refresh_base(

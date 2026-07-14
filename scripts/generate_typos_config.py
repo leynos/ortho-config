@@ -29,7 +29,7 @@ def dictionary_from_cache(repository: Path = REPOSITORY_ROOT) -> rollout.Diction
     if local_overlay.exists():
         dictionary = rollout.merge_dictionaries(
             dictionary,
-            rollout.load_dictionary(local_overlay),
+            rollout.load_dictionary(local_overlay, local_overlay=True),
         )
     return dictionary
 

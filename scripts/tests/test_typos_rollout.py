@@ -101,8 +101,10 @@ def test_network_failure_fails_early_without_cache(
             id="invalid-word-correction",
         ),
         pytest.param(
-            _dictionary_text()
-            + f"\n[phrases.corrections]\n'{PROHIBITED_PHRASE}' = 1\n",
+            _dictionary_text().replace(
+                "[phrases.corrections]",
+                f"[phrases.corrections]\n'{PROHIBITED_PHRASE}' = 1",
+            ),
             (TypeError, "phrase corrections must map strings to strings"),
             id="invalid-phrase-correction",
         ),

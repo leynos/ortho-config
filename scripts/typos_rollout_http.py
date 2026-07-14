@@ -260,10 +260,6 @@ def _remote_response_result(
     validate: ContentValidator,
 ) -> typos_rollout_cache.RefreshResult:
     """Return the cache result for a successful HTTP response."""
-    if response.status == HTTP_NOT_MODIFIED and _valid_cache(
-        state.targets.cache, validate
-    ):
-        return typos_rollout_cache.RefreshResult("current", state.targets.cache)
     if _valid_cache(state.targets.cache, validate) and _remote_is_not_newer(
         state.saved, response.headers
     ):

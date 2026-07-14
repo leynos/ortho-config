@@ -13,6 +13,7 @@ import urllib.request
 
 import typos_rollout_cache
 import typos_rollout_http
+import typos_rollout_policy
 
 if typ.TYPE_CHECKING:
     import collections.abc as cabc
@@ -93,13 +94,10 @@ def _string_mapping(
     return typ.cast("cabc.Mapping[str, str]", value)
 
 
-def _dictionary_from_text(text: str) -> Dictionary:
+def _dictionary_from_text(text: str, *, sparse: bool = False) -> Dictionary:
     """Parse and validate shared dictionary text."""
     document = tomllib.loads(text)
-    schema = document.get("schema")
-    if schema != SCHEMA_VERSION:
-        message = f"unsupported dictionary schema {schema!r}"
-        raise ValueError(message)
+    typos_rollout_policy.validate_document(document, sparse=sparse)
     oxford = _table(document, "oxford")
     words = _table(document, "words")
     phrases = _table(document, "phrases")
@@ -125,9 +123,13 @@ def _dictionary_from_text(text: str) -> Dictionary:
     )
 
 
-def load_dictionary(path: pathlib.Path) -> Dictionary:
+def load_dictionary(
+    path: pathlib.Path,
+    *,
+    local_overlay: bool = False,
+) -> Dictionary:
     """Load a validated shared dictionary from *path*."""
-    return _dictionary_from_text(path.read_text(encoding="utf-8"))
+    return _dictionary_from_text(path.read_text(encoding="utf-8"), sparse=local_overlay)
 
 
 def _merge_correction_items(
@@ -151,6 +153,9 @@ def _merge_correction_items(
 
 def merge_dictionaries(base: Dictionary, local: Dictionary) -> Dictionary:
     """Merge a shared dictionary with a non-conflicting local overlay."""
+    typos_rollout_policy.validate_local_exceptions(
+        local.ignore_patterns, local.excluded_files
+    )
     return Dictionary(
         stems=tuple(sorted(set(base.stems) | set(local.stems))),
         accepted=tuple(sorted(set(base.accepted) | set(local.accepted))),
