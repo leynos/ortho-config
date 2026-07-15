@@ -51,6 +51,11 @@
 
 ## Requests for comments (RFCs)
 
+- [RFC 0001: Field-level environment aliases](rfcs/0001-field-level-environment-aliases.md):
+  review the proposal to add first-class field-level environment-variable
+  aliases and projections, with deterministic intra-environment precedence,
+  empty-value handling, and secret-redaction metadata, motivated by the `vk` and
+  `podbot` use cases.
 - [RFC 0002: Customizable configuration layering policy](rfcs/0002-config-layer-resolution-policy.md):
   review the proposed generic file-layer resolution policy — ordered explicit
   selectors, multi-scope stacking, and a reusable resolver — with Netsuke as
