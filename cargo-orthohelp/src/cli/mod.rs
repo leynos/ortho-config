@@ -376,3 +376,6 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+mod reserved_agent_context_tests;

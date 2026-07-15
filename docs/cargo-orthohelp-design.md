@@ -623,9 +623,9 @@ documentation-oriented metadata into the compact contract described in
   `--check-agent-native`.
 
 The reusable schema types and `ORTHO_AGENT_CONTEXT_SCHEMA_VERSION` live in
-`ortho_config::agent_context`. `cargo-orthohelp` owns the adapter work: loading
-the bridge IR, applying defaults, transforming structured metadata, writing
-artefacts, and reporting diagnostics.
+`ortho_config::agent_context`. `cargo-orthohelp` owns the adapter layer only:
+loading the bridge IR, applying defaults, transforming structured metadata,
+writing artefacts, and reporting diagnostics.
 
 For the first `--format agent-context` implementation, the adapter emits an
 optional `AgentCommand.summary` from the short en-US command description. It
@@ -635,6 +635,12 @@ an input has no `long` or `short` flag and still takes a value; the v1 schema
 represents those inputs by leaving `AgentInput.long` absent. The output is
 written as exactly one file at `<out>/agent-context.json`. `--format all`
 continues to mean `ir + man + ps`.
+
+`--format agent-context` is the generator format and remains unchanged by
+[ADR-007](adr-007-downstream-context-command-naming.md). The downstream
+application command convention is `<tool> context --json`; the `context` name
+is reserved for application surfaces, and `cargo-orthohelp` does not add a
+public `context` or `agent-context` subcommand or alias.
 
 The agent-context output must not be scraped from rendered man pages or
 PowerShell help. Rendering surfaces may consume agent metadata for examples or

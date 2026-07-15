@@ -58,11 +58,14 @@ pub mod subcommand;
 #[cfg(feature = "serde_json")]
 #[cfg_attr(docsrs, doc(cfg(feature = "serde_json")))]
 pub use crate::subcommand::SubcmdConfigMerge;
+#[cfg(feature = "serde_json")]
+#[cfg_attr(docsrs, doc(cfg(feature = "serde_json")))]
+pub use agent_context::json::{serialize_agent_context, serialize_agent_context_pretty};
 pub use agent_context::{
     AGENT_CONTEXT_KIND_SUFFIX, AgentCommand, AgentContext, AgentExample, AgentInput, AgentPolicy,
     AsyncSubmission, AsyncSubmissionMode, DeliveryRoute, InteractionMode, MutationEffect,
     ORTHO_AGENT_CONTEXT_SCHEMA_VERSION, PaginationContract, PolicyMode, SkillCommandRef,
-    SkillManifest, SupportDeclaration,
+    SkillManifest, SupportDeclaration, agent_context_kind,
 };
 pub use docs::{
     CliMetadata, ConfigDiscoveryMeta, ConfigFormat, DefaultValue, Deprecation, DocMetadata,

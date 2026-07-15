@@ -6,6 +6,7 @@ hello_world-cli-usage =
 
     Visit --help for details.
 hello_world-cli-greet-about = Prints a friendly greeting using any configured templates.
+hello_world-cli-context-about = Emits machine-readable command context for agents.
 hello_world-cli-take-leave-about = Describes how the farewell workflow proceeds for the recipient.
 clap-error-missing-argument = Please supply the missing option: { $argument }
 clap-error-missing-subcommand = Pick a workflow: { $valid_subcommands }

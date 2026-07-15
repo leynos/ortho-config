@@ -7,11 +7,30 @@
 use camino::Utf8PathBuf;
 use serde::{Deserialize, Serialize};
 
+#[cfg(feature = "serde_json")]
+#[cfg_attr(docsrs, doc(cfg(feature = "serde_json")))]
+pub mod json;
+
 /// Current agent-context schema version.
 pub const ORTHO_AGENT_CONTEXT_SCHEMA_VERSION: &str = "1";
 
 /// Canonical suffix used for agent-context document kinds.
 pub const AGENT_CONTEXT_KIND_SUFFIX: &str = "agent_context";
+
+/// Builds the stable agent-context `kind` discriminator for a package.
+///
+/// # Examples
+///
+/// ```rust
+/// assert_eq!(
+///     ortho_config::agent_context_kind("example-cli"),
+///     "example-cli.agent_context"
+/// );
+/// ```
+#[must_use]
+pub fn agent_context_kind(package: &str) -> String {
+    format!("{package}.{AGENT_CONTEXT_KIND_SUFFIX}")
+}
 
 /// Top-level agent-context document.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -62,7 +81,7 @@ impl AgentContext {
         let package_name = package.into();
         Self {
             schema_version: ORTHO_AGENT_CONTEXT_SCHEMA_VERSION.to_owned(),
-            kind: format!("{package_name}.{AGENT_CONTEXT_KIND_SUFFIX}"),
+            kind: agent_context_kind(&package_name),
             package: package_name,
             commands: Vec::new(),
             profiles: SupportDeclaration::default(),

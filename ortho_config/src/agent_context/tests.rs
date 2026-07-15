@@ -2,10 +2,15 @@
 
 use super::*;
 use crate::docs::ORTHO_DOCS_IR_VERSION;
+use crate::serialize_agent_context;
 use camino::Utf8PathBuf;
 use insta::assert_snapshot;
+use proptest::{collection::vec, option, prelude::*};
 use rstest::rstest;
 use serde_json::{Value, json};
+
+#[path = "tests_json.rs"]
+mod json;
 
 #[rstest]
 fn agent_context_version_is_independent_from_docs_ir() {
@@ -17,6 +22,16 @@ fn agent_context_version_is_independent_from_docs_ir() {
 }
 
 #[rstest]
+#[case::hyphenated("example-cli", "example-cli.agent_context")]
+#[case::underscored("hello_world", "hello_world.agent_context")]
+#[case::empty("", ".agent_context")]
+#[case::dotted("ns.tool", "ns.tool.agent_context")]
+#[case::mixed("Foo-Bar_9", "Foo-Bar_9.agent_context")]
+fn agent_context_kind_appends_suffix(#[case] package: &str, #[case] expected: &str) {
+    assert_eq!(crate::agent_context_kind(package), expected);
+}
+
+#[test]
 fn new_context_uses_legacy_defaults() {
     let context = AgentContext::new("example-cli");
 
@@ -31,20 +46,12 @@ fn new_context_uses_legacy_defaults() {
 }
 
 #[rstest]
-fn compact_context_serialization_excludes_localization_fields() {
-    let context = sample_agent_context();
+#[case::hyphenated("example-cli")]
+#[case::underscored("hello_world")]
+fn new_uses_agent_context_kind(#[case] package: &str) {
+    let context = AgentContext::new(package);
 
-    let value = serde_json::to_value(context).expect("serialize agent context");
-    assert_eq!(field(&value, "schema_version"), "1");
-    assert_eq!(field(&value, "kind"), "example-cli.agent_context");
-    let command = first_array_item(field(&value, "commands"));
-    assert_eq!(field(command, "interaction_mode"), "non_interactive");
-    assert_eq!(field(command, "mutation_effect"), "read-only");
-    assert_eq!(field(field(command, "async_submission"), "mode"), "submit");
-    assert_eq!(field(field(command, "delivery_route"), "target"), "file");
-    assert!(value.get("about_id").is_none());
-    assert!(value.get("headings_ids").is_none());
-    assert!(command.get("help_id").is_none());
+    assert_eq!(context.kind, crate::agent_context_kind(package));
 }
 
 #[rstest]
@@ -246,21 +253,32 @@ fn mutation_effect_serializes_canonical_wire_values(
     assert_eq!(value, expected);
 }
 
-fn field<'a>(value: &'a Value, name: &str) -> &'a Value {
+proptest! {
+    #[test]
+    fn to_json_always_round_trips(context in any_agent_context()) {
+        let json = serialize_agent_context(&context).expect("serialize compact agent context");
+        let parsed: AgentContext =
+            serde_json::from_str(&json).expect("parse compact agent context");
+
+        prop_assert_eq!(parsed, context);
+    }
+}
+
+pub(super) fn field<'a>(value: &'a Value, name: &str) -> &'a Value {
     let Some(field) = value.get(name) else {
         panic!("JSON object should contain `{name}`");
     };
     field
 }
 
-fn first_array_item(value: &Value) -> &Value {
+pub(super) fn first_array_item(value: &Value) -> &Value {
     let Some(item) = value.as_array().and_then(|items| items.first()) else {
         panic!("JSON value should be a non-empty array");
     };
     item
 }
 
-fn sample_agent_context() -> AgentContext {
+pub(super) fn sample_agent_context() -> AgentContext {
     AgentContext {
         schema_version: ORTHO_AGENT_CONTEXT_SCHEMA_VERSION.to_owned(),
         kind: "example-cli.agent_context".to_owned(),
@@ -309,4 +327,73 @@ fn sample_agent_context() -> AgentContext {
             }],
         }],
     }
+}
+
+fn any_agent_context() -> impl Strategy<Value = AgentContext> {
+    (package_name(), vec(any_agent_command(), 0..4)).prop_map(|(package, commands)| AgentContext {
+        schema_version: ORTHO_AGENT_CONTEXT_SCHEMA_VERSION.to_owned(),
+        kind: crate::agent_context_kind(&package),
+        package,
+        commands,
+        profiles: SupportDeclaration { supported: false },
+        feedback: SupportDeclaration { supported: false },
+        policy: AgentPolicy {
+            agent_native: PolicyMode::Warn,
+        },
+        skill_manifests: Vec::new(),
+    })
+}
+
+fn any_agent_command() -> impl Strategy<Value = AgentCommand> {
+    (
+        vec(command_segment(), 1..4),
+        option::of(summary()),
+        interaction_mode(),
+        mutation_effect(),
+    )
+        .prop_map(
+            |(path, summary, interaction_mode, mutation_effect)| AgentCommand {
+                path,
+                summary,
+                canonical_verb: None,
+                inputs: Vec::new(),
+                output_modes: vec!["json".to_owned()],
+                interaction_mode,
+                mutation_effect,
+                async_submission: None,
+                delivery_route: None,
+                pagination: None,
+                examples: Vec::new(),
+            },
+        )
+}
+
+fn interaction_mode() -> impl Strategy<Value = InteractionMode> {
+    prop_oneof![
+        Just(InteractionMode::Unknown),
+        Just(InteractionMode::NonInteractive),
+        Just(InteractionMode::Interactive),
+    ]
+}
+
+fn mutation_effect() -> impl Strategy<Value = MutationEffect> {
+    prop_oneof![
+        Just(MutationEffect::Unknown),
+        Just(MutationEffect::ReadOnly),
+        Just(MutationEffect::Write),
+        Just(MutationEffect::Delete),
+        Just(MutationEffect::Submit),
+    ]
+}
+
+fn package_name() -> impl Strategy<Value = String> {
+    "[A-Za-z0-9_.-]{0,16}"
+}
+
+fn command_segment() -> impl Strategy<Value = String> {
+    "[a-z][a-z0-9-]{0,12}"
+}
+
+fn summary() -> impl Strategy<Value = String> {
+    "[A-Za-z0-9 .,;-]{0,48}"
 }

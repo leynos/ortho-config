@@ -68,6 +68,11 @@ downstream applications need a reusable machine-readable command contract. Use
 message identifiers, localized long prose, or renderer-specific output
 structures to the agent-context schema.
 
+Use `AGENT_CONTEXT_KIND_SUFFIX` and `agent_context_kind` as the single source
+for the agent-context `kind` discriminator. Do not hand-format
+`"<tool>.agent_context"` at call-sites. `kind` identifies the payload family;
+compatibility detection stays on `ORTHO_AGENT_CONTEXT_SCHEMA_VERSION`.
+
 Skill manifest descriptors are part of this agent-context contract: keep
 `SkillManifest`, `SkillCommandRef`, and `AgentContext.skill_manifests` in
 `ortho_config::agent_context`, and keep downstream manifest prose
@@ -139,6 +144,10 @@ the transform projective: it may copy or derive compact command metadata from
 the bridge IR, but it must not inspect rendered roff, PowerShell help, or
 localized IR output.
 
+`--format agent-context` is the generator format. Downstream applications that
+emit their own runtime payload expose `context --json` as defined by
+[ADR-007](adr-007-downstream-context-command-naming.md).
+
 Agent-context output is not localized. The current transform may use the short
 en-US command description as `AgentCommand.summary`, but it must not copy
 localized long help, Fluent identifiers, roff fragments, or PowerShell wrapper
@@ -192,7 +201,7 @@ pub fn write_agent_context(
 `cargo_orthohelp::cli::OutputFormat`:
 
 ```rust
-/// Emit a compact, non-localised agent-context JSON manifest.
+/// Emit a compact, non-localized agent-context JSON manifest.
 /// Writes `<out_dir>/agent-context.json`.
 /// Excluded from `--format all` until schema versioning is locked in 6.2.2.
 AgentContext,
