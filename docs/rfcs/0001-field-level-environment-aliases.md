@@ -29,7 +29,7 @@ is additive at runtime: a struct that uses no new attribute behaves exactly as
 it does today.
 
 Two consumers drive the design and are used as worked examples throughout: `vk`
-(a single GitHub-token fallback) and `podbot` (a hand-written
+(a single GitHub-token fallback) and `podbot` (a handwritten
 environment-to-config-path table). `podbot` also has a distinct "list of
 environment-variable names" concern; this RFC analyses it but defers the
 concrete primitive to a planned companion, RFC 0002 (see §4 and §5.7).
@@ -116,7 +116,7 @@ compatible with that.
 
 ### 3.2 Field-level attributes and the error model today
 
-The derive macro recognises the field-level keys `cli_long`, `cli_short`,
+The derive macro recognizes the field-level keys `cli_long`, `cli_short`,
 `default`, `merge_strategy`, `skip_cli`, and `cli_default_as_absent`, plus
 documentation attributes (`ortho_config_macros/src/derive/parse/mod.rs`). There
 is **no** `env(...)` grammar. Unknown attribute keys are silently discarded for
@@ -149,7 +149,7 @@ the configuration-file value. The helper is semantically correct but lives
 outside the crate's layer machinery, so documentation, provenance, generated
 behaviour, and tests must all remember the side-tunnel.
 
-`podbot` maintains a hand-written table mapping concrete names such as
+`podbot` maintains a handwritten table mapping concrete names such as
 `PODBOT_GITHUB_APP_ID` onto JSON paths such as `["github", "app_id"]`, with
 explicit per-type handling for strings, string lists, booleans, and `u64`s. Its
 loader inserts that environment JSON between file configuration and host
@@ -181,7 +181,7 @@ two concepts cleanly and explains why the second is deferred to RFC 0002.
     in generated documentation and provenance, marking each alias's priority and
     whether it is prefixed, and marking secrets as redacted.
   - Let `vk` delete its bespoke token resolver and let `podbot` delete most of
-    its hand-written projection table.
+    its handwritten projection table.
 - Non-goals:
   - Reading the entire process environment, implicitly or via a global switch.
   - Changing the cross-layer precedence order or the number of environment
@@ -992,7 +992,7 @@ round-trips cleanly under `PartialEq`/`Eq`.
 
 ### 8.1 Precedence (the core table)
 
-The precedence table is exercised with parametrised `rstest` cases, run
+The precedence table is exercised with parametrized `rstest` cases, run
 serially because they mutate the environment. The columns are the command-line
 flag, the canonical `VK_GITHUB_TOKEN`, the external `GITHUB_TOKEN`, and the
 file value; the field uses
@@ -1167,7 +1167,7 @@ the Twelve-Factor App's third factor, whose litmus test — that the codebase
 could be made open source "without compromising any credentials" — directly
 motivates the secret-redaction metadata[^7]. The crate's existing
 prefix-to-path mapping is itself a relative of Spring Boot's relaxed binding,
-which normalises `MY_APP_GITHUB_TOKEN`-style names to canonical properties
+which normalizes `MY_APP_GITHUB_TOKEN`-style names to canonical properties
 [^8]; the difference is that aliasing accepts genuinely *different*
 external names rather than alternative spellings of one name.
 
@@ -1214,7 +1214,7 @@ and structured surfaces; and a backwards-compatible `EnvMetadata` extension
 conceptual separation explicit here.
 
 This lets `vk` express `GITHUB_TOKEN` natively and delete its bespoke resolver,
-lets `podbot` delete most of its hand-written projection table while keeping
+lets `podbot` delete most of its handwritten projection table while keeping
 its trust boundary intact, and avoids the swamp-dragon solution of reading the
 entire raw environment. It preserves the orthodox precedence and the
 single-environment-layer merge model, keeps new public surface to a minimum,
