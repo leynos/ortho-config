@@ -936,3 +936,7 @@ dev-dependency.
   `make typecheck`, `make lint`, and `make markdownlint` passed. CodeRabbit
   reviewed the final remediation with zero findings; no rate-limit retry was
   needed.
+- Rebase update (2026-07-15): rebased cleanly onto `origin/main` at
+  `2cca782`. Upstream's Oxford spelling and lint-policy updates introduced no
+  additional branch changes because the touched code and documentation already
+  conform; post-rebase validation remains required before publishing.
