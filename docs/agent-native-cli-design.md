@@ -170,9 +170,8 @@ cargo orthohelp --format agent-context
 ```
 
 This remains a generator format that writes an artefact. It is not the
-downstream application command name. For downstream application command
-surfaces, OrthoConfig defines the public command name `context` with the
-canonical `--json` flag:
+downstream application command name. Downstream applications expose the
+public command surface `context --json`:
 
 ```console
 example-cli context --json
@@ -188,8 +187,9 @@ The payload identifies itself precisely, for example:
 ```
 
 This keeps the public command approachable while preserving an explicit machine
-schema. Hidden aliases such as `agent-context` are avoided before the first
-public release unless a migration requires them. Compatibility detection uses
+schema. Downstream applications do not ship a public `agent-context` alias
+before the first public release unless a migration explicitly requires one.
+Compatibility detection uses
 `schema_version`; consumers must not parse `kind` as a version. ADR-007 records
 the naming decision and prior-art divergence.
 

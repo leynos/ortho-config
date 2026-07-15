@@ -79,8 +79,8 @@ payload family and is governed by `ORTHO_AGENT_CONTEXT_SCHEMA_VERSION` and
 compatibility.
 
 The `AGENT_CONTEXT_COMMAND`, `AGENT_CONTEXT_JSON_FLAG`,
-`AGENT_CONTEXT_KIND_SUFFIX`, and `agent_context_kind` API in
-`ortho_config::agent_context` is the source of truth for this convention.
+`AGENT_CONTEXT_KIND_SUFFIX`, and `agent_context_kind` symbols in
+`ortho_config::agent_context` are the source of truth for this convention.
 Downstream applications should not hand-format `kind`.
 
 Table 1 compares the accepted option with the rejected alternatives.
