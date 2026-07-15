@@ -16,7 +16,7 @@ use std::error::Error;
 use std::fmt::{self, Display, Formatter};
 use std::io::Read;
 use std::process::Command;
-use std::sync::{LazyLock, Mutex};
+use std::sync::{LazyLock, Mutex, PoisonError};
 use tempfile::TempDir;
 
 type TestError = Box<dyn Error + Send + Sync>;
@@ -62,11 +62,13 @@ fn nested_subcommand_tree_survives_bridge_outputs(
     #[case] args: &[&str],
     #[case] assertion: fn(&Utf8PathBuf) -> Result<(), TestError>,
 ) -> Result<(), TestError> {
-    let _bridge_build_guard = BRIDGE_BUILD_MUTEX
-        .lock()
-        .expect("bridge build test mutex is not poisoned");
     let (_temp, out_dir) = temp_out_dir()?;
-    run_orthohelp(&out_dir, args)?;
+    {
+        let _bridge_build_guard = BRIDGE_BUILD_MUTEX
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        run_orthohelp(&out_dir, args)?;
+    }
     assertion(&out_dir).map_err(|err| assertion_failed(name, err))?;
     Ok(())
 }

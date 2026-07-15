@@ -66,22 +66,19 @@ which schema they are reading.
 
 ## Decision outcome
 
-In the context of downstream application agent-context discovery, facing the
-need to choose between prior-art explicitness and a concise public command, we
-decided for `<tool> context --json` plus `kind: "<tool>.agent_context"` and
-against a public `agent-context` command or shape-only detection, to achieve a
-stable and approachable runtime surface, accepting deliberate divergence from
-the `agent-context` command name used in some prior art.
+For downstream application agent-context discovery, the selected surface is
+`<tool> context --json` plus `kind: "<tool>.agent_context"`. The decision keeps
+the runtime surface stable and approachable while rejecting a public
+`agent-context` command or shape-only detection, even though that deliberately
+diverges from some prior art.
 
-Compatibility detection uses `schema_version`. The `kind` value identifies the
-payload family and is governed by `ORTHO_AGENT_CONTEXT_SCHEMA_VERSION` and
-`AGENT_CONTEXT_KIND_SUFFIX`; consumers must not parse `kind` to infer schema
-compatibility.
+Schema compatibility is determined only by `schema_version`. The
+`AGENT_CONTEXT_KIND_SUFFIX` constant and `agent_context_kind` function construct
+the `kind` value independently. Changing `schema_version` does not imply a
+change to `kind`, and consumers must not infer compatibility from `kind`.
 
-`AGENT_CONTEXT_KIND_SUFFIX` and `agent_context_kind` in
-`ortho_config::agent_context` are the source of truth for the `kind`
-discriminator. Downstream applications own their command and flag literals, and
-JSON formatting is provided by the feature-gated serializer adapter.
+Downstream applications own their command and flag literals, while JSON
+formatting is provided by the feature-gated serializer adapter.
 
 Table 1 compares the accepted option with the rejected alternatives.
 

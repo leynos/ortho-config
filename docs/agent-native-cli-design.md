@@ -160,8 +160,8 @@ Reusable agent-context types and `ORTHO_AGENT_CONTEXT_SCHEMA_VERSION` live in
 `ortho_config::agent_context`. `cargo-orthohelp` may generate or transform the
 context in later roadmap work, but it does not own the reusable context
 contract. The documentation IR remains owned by `ortho_config::docs`, so Fluent
-identifiers, localized long prose, roff details, and PowerShell help structures
-are not agent-context source fields.
+identifiers, localized long prose, roff details, and PowerShell help
+structures are not agent-context source fields.
 
 The `cargo-orthohelp` generator interface is:
 
@@ -177,7 +177,8 @@ command surface `context --json`:
 example-cli context --json
 ```
 
-The payload identifies itself precisely, for example:
+The payload below is illustrative and hand-authored; a generated payload may
+include different optional fields or field ordering.
 
 ```json
 {
@@ -297,11 +298,10 @@ but they are downstream of the compact contracts. They should be generated or
 validated against the documentation IR and agent context rather than maintained
 as an independent source of truth.
 
-Skill manifests are still first-class contracts. OrthoConfig should model the
-manifest path, schema version, command index, and validation rules that prove a
-manifest mentions real commands and flags. It must not own a downstream skill's
-domain prose, such as Weaver's safe Rust rename workflow or Netsuke's build
-workflow.
+Skill manifests are still first-class contracts. OrthoConfig models only the
+manifest path, schema version, and command index. Downstream applications
+perform manifest validation and own skill-specific prose and workflow guidance,
+such as Weaver's safe Rust rename workflow or Netsuke's build workflow.
 
 ## 4. Whole-CLI introspection
 
@@ -361,7 +361,7 @@ The canonical flags are:
 
 The canonical downstream introspection command is `context --json`, defined by
 [ADR-007](adr-007-downstream-context-command-naming.md). The `context` command
-name is fixed for application surfaces, while
+name is reserved for application surfaces, while
 `cargo-orthohelp --format agent-context` remains the build-time generator
 format.
 

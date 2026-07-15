@@ -144,10 +144,11 @@ escalation, not a workaround.
   matches the PR title; PR description references
   `https://lody.ai/leynos/sessions/3d5cd4de-ad94-49af-8867-b403bd1bbf77`.
 - [x] (2026-06-24 12:45Z) Milestone 1 — convention API in
-  `ortho_config::agent_context` implemented: constants, `agent_context_kind`,
-  `serde_json`-gated `to_json` / `to_json_pretty`, crate-root re-exports,
-  rstest coverage, and one proptest round-trip property. Red-Green-Refactor
-  evidence is recorded under Validation.
+  `ortho_config::agent_context` implemented: `agent_context_kind`, the
+  feature-gated `agent_context::json` serializer adapter, corresponding
+  crate-root re-exports, rstest coverage, and one proptest round-trip property.
+  Application-owned command and flag literals remain outside the reusable API.
+  Red-Green-Refactor evidence is recorded under Validation.
 - [x] (2026-06-24 12:48Z) Milestone 1 CodeRabbit review completed with zero
   findings after commit `bb721ab`. Standard gates passed; the extra
   `--no-default-features` check fails on pre-existing discovery/file feature
@@ -324,12 +325,13 @@ Use timestamps (for example `(2026-06-14 13:00Z)`) when ticking items.
 Milestone 1 outcome (2026-06-24): the crate API portion is implemented and
 validated. `ortho_config::agent_context` now exposes the downstream command
 name, JSON flag name, and canonical `kind` constructor; `AgentContext::new`
-uses the constructor; and compact/pretty JSON render helpers are available
-behind `serde_json`. The focused red test failed for the expected missing API,
-the green run passed 33 `agent_context` tests, and the standard workspace gates
-passed. CodeRabbit reviewed commit `bb721ab` with zero findings. The only gap
-is the pre-existing `--no-default-features` compile failure recorded in
-Surprises & discoveries and Decision D7.
+uses the constructor; and compact/pretty JSON render helpers live in
+`ortho_config::agent_context::json` behind `serde_json`. The focused red test
+failed for the expected missing API, the green run passed 33 `agent_context`
+tests, and the standard workspace gates passed. CodeRabbit reviewed commit
+`bb721ab` with zero findings. The only gap is the pre-existing
+`--no-default-features` compile failure recorded in Surprises &
+discoveries and Decision D7.
 
 Milestone 2 outcome (2026-06-24): `cargo-orthohelp` now has a guard test that
 walks the clap command tree, including hidden aliases, and rejects public
@@ -378,21 +380,27 @@ The reader is assumed to know nothing about this repository. Key locations:
   `kind = "<package>.agent_context"`), constants
   `ORTHO_AGENT_CONTEXT_SCHEMA_VERSION = "1"` and
   `AGENT_CONTEXT_KIND_SUFFIX = "agent_context"`, and the command/input/enum
-  types. All types derive serde `Serialize`/`Deserialize` and `PartialEq`/`Eq`.
-- `ortho_config/src/agent_context/tests.rs` — existing unit tests (`rstest`,
+  types. `json.rs` provides the feature-gated compact and pretty render
+  helpers. All types derive serde `Serialize`/`Deserialize` and
+  `PartialEq`/`Eq`.
+- `ortho_config/src/agent_context/tests.rs` and
+  `ortho_config/src/agent_context/tests_json.rs` — unit tests (`rstest`,
   `insta`, `serde_json`), including `new_context_uses_legacy_defaults` and an
-  insta wire-contract snapshot. Extend this file; do not create a parallel one.
+  insta wire-contract snapshot. The sibling JSON module keeps both test files
+  within the file-size limit.
 - `ortho_config/src/lib.rs` — the crate's public re-export block (around lines
-  44 and 61-65) that re-exports `agent_context` items. New public constants and
-  the `agent_context_kind` function must be re-exported here.
+  44 and 61-65) that re-exports `agent_context` items, `agent_context_kind`,
+  and feature-gated JSON adapter functions. It does not re-export command or
+  flag literals.
 - `ortho_config/src/error/conversions.rs` — already provides
   `#[cfg(feature = "serde_json")] impl From<serde_json::Error> for OrthoError`,
-  so `ctx.to_json()?` composes in any `Result<_, OrthoError>` function. No new
-  error type is needed.
+  so `serialize_agent_context(ctx)?` composes in any `Result<_, OrthoError>`
+  function. No new error type is needed.
 - `ortho_config/Cargo.toml` — `serde_json` is an optional, default-on feature.
 - `cargo-orthohelp/src/cli/mod.rs` — the generator CLI. `OutputFormat` enum (with
-  `AgentContext`) and `CargoSubcommand` (only `Orthohelp`). Inline
-  `#[cfg(test)] mod tests` already uses `clap::CommandFactory` and `rstest`.
+  `AgentContext`) and `CargoSubcommand` (only `Orthohelp`). The positive
+  control lives in `cli::tests`; the reserved-name guard lives in
+  `cli/reserved_agent_context_tests.rs`.
 - `cargo-orthohelp/src/agent_context/mod.rs` and
   `cargo-orthohelp/src/output.rs` — the generator transform
   (`bridge_ir_to_agent_context`) and the file writer (`write_agent_context`,
@@ -435,20 +443,9 @@ each ending in validation. Stages within a milestone follow Red-Green-Refactor.
 
 Edit `ortho_config/src/agent_context/mod.rs`:
 
-1. Add two public constants beside the existing schema/suffix constants:
-
-   ```rust
-   /// Canonical subcommand name a downstream application exposes to emit its
-   /// agent context, as in `example-cli context --json`. OrthoConfig reserves
-   /// `agent-context` and chooses the shorter, approachable `context`.
-   pub const AGENT_CONTEXT_COMMAND: &str = "context";
-
-   /// Canonical clap *long-flag name* (without leading dashes) selecting
-   /// machine-readable JSON output, as in `example-cli context --json`.
-   pub const AGENT_CONTEXT_JSON_FLAG: &str = "json";
-   ```
-
-2. Add a public `kind` constructor and refactor `AgentContext::new` to call it:
+1. Keep the schema constants and add a public `kind` constructor. Downstream
+   command and flag literals remain owned by each application, including the
+   illustrative `hello_world` CLI:
 
    ```rust
    /// Builds the canonical agent-context document `kind` for a package:
@@ -463,48 +460,49 @@ Edit `ortho_config/src/agent_context/mod.rs`:
    `AgentContext::new` changes only its `kind` line to call
    `agent_context_kind(&package_name)`; signature and behaviour are unchanged.
 
-3. Add `serde_json`-gated render helpers on `AgentContext`:
+2. Add `serde_json`-gated render helpers in
+   `ortho_config::agent_context::json`:
 
    ```rust
    #[cfg(feature = "serde_json")]
-   impl AgentContext {
-       /// Compact single-line JSON with a trailing newline, for a
-       /// `context --json` command surface.
-       pub fn to_json(&self) -> Result<String, serde_json::Error> {
-           let mut json = serde_json::to_string(self)?;
-           json.push('\n');
-           Ok(json)
-       }
+   pub fn serialize_agent_context(
+       context: &AgentContext,
+   ) -> Result<String, serde_json::Error> {
+       let mut json = serde_json::to_string(context)?;
+       json.push('\n');
+       Ok(json)
+   }
 
-       /// Pretty-printed JSON without a trailing newline, matching the
-       /// `cargo-orthohelp` file artifact form.
-       pub fn to_json_pretty(&self) -> Result<String, serde_json::Error> {
-           serde_json::to_string_pretty(self)
-       }
+   #[cfg(feature = "serde_json")]
+   pub fn serialize_agent_context_pretty(
+       context: &AgentContext,
+   ) -> Result<String, serde_json::Error> {
+       serde_json::to_string_pretty(context)
    }
    ```
 
    Compact is the command-surface wire form (cheap to load, matches prior art);
-   pretty is offered only for parity with the generator's file output. The bare
-   `serde_json::Error` return composes with the existing `From` impl, so no new
-   error type is added.
+   pretty is offered only for parity with the generator's file output. The
+   bare `serde_json::Error` return composes with the existing `From` impl, so
+   no new error type is added.
 
-4. Re-export `AGENT_CONTEXT_COMMAND`, `AGENT_CONTEXT_JSON_FLAG`, and
-   `agent_context_kind` from `ortho_config/src/lib.rs` beside the existing
-   agent-context re-exports. The methods need no re-export (they hang off the
-   already-exported `AgentContext`).
+3. Re-export `agent_context_kind` and the feature-gated JSON adapter functions
+   from `ortho_config/src/lib.rs`. No reusable command or flag constants, and
+   no `AgentContext::to_json` or `AgentContext::to_json_pretty` methods, are
+   part of the final public API.
 
 Tests (extend `ortho_config/src/agent_context/tests.rs`): see Validation.
 
 ### Milestone 2 — guard test in `cargo-orthohelp`
 
-Extend the inline `#[cfg(test)] mod tests` in `cargo-orthohelp/src/cli/mod.rs` with
-`no_context_or_agent_context_subcommand_alias`, which walks `Cli::command()` via
+The guard-test module
+`cargo-orthohelp/src/cli/reserved_agent_context_tests.rs` owns
+`no_context_or_agent_context_subcommand_alias`. It walks `Cli::command()` via
 `clap::CommandFactory` and asserts that no command in the tree is named
-`context` or `agent-context` and that no command exposes either as an alias (use
-`get_all_aliases()` so hidden aliases cannot slip through). Add or reference a
-positive control proving `--format agent-context` still parses (the existing
-`format_accepts_agent_context` test). No new dependency.
+`context` or `agent-context` and that no command exposes either as an alias
+(using `get_all_aliases()` so hidden aliases cannot slip through). The existing
+`format_accepts_agent_context` test remains the positive control. No new
+dependency.
 
 ### Milestone 3 — illustrative `context --json` in the example
 
@@ -515,14 +513,15 @@ Add a small `context` command to `examples/hello_world`:
    public types (`AgentContext::new("hello_world")` plus a couple of
    `AgentCommand` entries for `greet`/`take-leave`), clearly commented as a
    convention demonstration, not an auto-generated tree. Provide a function
-   returning the `AgentContext` and a renderer using `AgentContext::to_json`.
-2. Wire a `context` surface with a `--json` flag (using
-   `ortho_config::AGENT_CONTEXT_COMMAND` / `AGENT_CONTEXT_JSON_FLAG` where the
-   derive allows literal-free wiring). Handle it as an early short-circuit in
+   returning the `AgentContext` and a renderer using
+   `serialize_agent_context`.
+2. Wire a `context` surface with a `--json` flag using application-owned
+   literals. Handle it as an early short-circuit in
    `examples/hello_world/src/main.rs` before
    `load_globals_and_merge_selected_subcommand` (Decision D3): if the parsed
    invocation is `context`, render and print, then return — bypassing config
-   merge. With `--json`, print `to_json` to stdout and exit 0; without
+   merge. With `--json`, print `serialize_agent_context` output to stdout and
+   exit 0; without
    `--json`, print a one-line human pointer to `--json` on stdout and exit 0
    (Decision D2).
 3. Keep `context` output on stdout and diagnostics on stderr.
@@ -592,7 +591,9 @@ Per-milestone loop:
 
 1. Write the red test(s) first; run the focused test and confirm it fails for
    the intended reason: `cargo test -p ortho_config agent_context` (Milestone
-   1), `cargo test -p cargo-orthohelp --lib cli` (Milestone 2),
+   1), `cargo test -p cargo-orthohelp
+   no_context_or_agent_context_subcommand_alias` and `cargo test -p
+   cargo-orthohelp format_accepts_agent_context` (Milestone 2),
    `cargo test -p hello_world` (Milestone 3).
 2. Make the minimal production change; rerun the focused test (green).
 3. Refactor; rerun the focused test and then the milestone gates:
@@ -626,13 +627,13 @@ Red-Green-Refactor in `ortho_config/src/agent_context/tests.rs`:
   `AgentContext::new(pkg).kind == agent_context_kind(pkg)` for a couple of
   packages; the pre-existing `new_context_uses_legacy_defaults` stays as the
   regression anchor.
-- Render helper: `to_json_is_valid_parseable_json` (parses as a JSON object);
-  `to_json_round_trips_via_serde` (`from_str::<AgentContext>` equals the
-  original); `to_json_is_deterministic` (byte-for-byte equal across two calls);
-  `to_json_includes_kind_and_schema_version` (parsed `kind` ends with
+- Serializer adapter: `to_json_is_valid_parseable_json` (parses as a JSON
+  object); `to_json_round_trips_via_serde` (`from_str::<AgentContext>` equals
+  the original); `to_json_is_deterministic` (byte-for-byte equal across two
+  calls); `to_json_includes_kind_and_schema_version` (parsed `kind` ends with
   `AGENT_CONTEXT_KIND_SUFFIX`; `schema_version` equals
   `ORTHO_AGENT_CONTEXT_SCHEMA_VERSION`); `to_json_has_trailing_newline` and
-  `to_json_pretty_has_no_trailing_newline` (pin the newline policy).
+  `pretty_json_is_indented_without_a_trailing_newline` (pin the newline policy).
 - Property (Decision D5; `ortho_config` dev-dependency `proptest`, or
   `#[rstest]` fallback): `to_json_always_round_trips` — for an arbitrary
   `AgentContext` (arbitrary package and a small `Vec<AgentCommand>` spanning
@@ -642,8 +643,7 @@ Acceptance evidence (2026-06-24):
 
 - Red:
   `cargo test -p ortho_config agent_context` failed with missing
-  `AGENT_CONTEXT_COMMAND`, `AGENT_CONTEXT_JSON_FLAG`, `agent_context_kind`,
-  `to_json`, and `to_json_pretty`.
+  `agent_context_kind` and the feature-gated serializer adapter functions.
 - Green:
   `cargo test -p ortho_config agent_context` passed with 33 `agent_context`
   tests.
@@ -825,20 +825,24 @@ validation:
 
 ## Interfaces and dependencies
 
-At the end of Milestone 1, `ortho_config::agent_context` must expose, and
-`ortho_config` must re-export:
+At the end of Milestone 1, `ortho_config::agent_context` exposes the schema
+model and `kind` constructor. The crate root re-exports only these public
+symbols and the feature-gated JSON adapter functions:
 
 ```rust
-pub const AGENT_CONTEXT_COMMAND: &str;        // "context"
-pub const AGENT_CONTEXT_JSON_FLAG: &str;      // "json"
 pub fn agent_context_kind(package: &str) -> String;
 
 #[cfg(feature = "serde_json")]
-impl AgentContext {
-    pub fn to_json(&self) -> Result<String, serde_json::Error>;
-    pub fn to_json_pretty(&self) -> Result<String, serde_json::Error>;
-}
+pub fn serialize_agent_context(
+    context: &AgentContext,
+) -> Result<String, serde_json::Error>;
+pub fn serialize_agent_context_pretty(
+    context: &AgentContext,
+) -> Result<String, serde_json::Error>;
 ```
+
+The example CLI owns its `context` and `json` literals; `AgentContext` has no
+JSON rendering methods.
 
 No new runtime dependencies. The only candidate dev-dependency is `proptest` on
 `ortho_config` (Decision D5), with a zero-dependency `#[rstest]` fallback.
@@ -857,7 +861,7 @@ dev-dependency.
 - Testing: `docs/rust-testing-with-rstest-fixtures.md`,
   `docs/rust-doctest-dry-guide.md`,
   `docs/reliable-testing-in-rust-via-dependency-injection.md`,
-  `docs/rtest-bdd-users-guide.md`; skills `rust-unit-testing`, `proptest`,
+  `docs/rstest-bdd-users-guide.md`; skills `rust-unit-testing`, `proptest`,
   `nextest`.
 - Localization context (example):
   `docs/localizable-rust-libraries-with-fluent.md`.
@@ -929,9 +933,10 @@ dev-dependency.
   `make lint` passed; the Cargo-heavy gates used `CARGO_BUILD_JOBS=1` after
   unconstrained nested Cargo builds hit OS process/thread limits.
 - Review remediation update (2026-07-15): moved JSON formatting to the
-  feature-gated `agent_context::json` adapter, kept `AgentContext` as the
-  schema model, and moved downstream command and flag literals into the example
-  CLI. The cargo-orthohelp reserved-name guard moved to a sibling test module.
+  feature-gated `agent_context::json` adapter boundary, kept `AgentContext` as
+  the schema model, and moved downstream command and flag literals into the
+  example CLI. The cargo-orthohelp reserved-name guard moved to a sibling test
+  module.
 - Review remediation validation (2026-07-15): `make check-fmt`, `make test`,
   `make typecheck`, `make lint`, and `make markdownlint` passed. CodeRabbit
   reviewed the final remediation with zero findings; no rate-limit retry was
@@ -939,4 +944,13 @@ dev-dependency.
 - Rebase update (2026-07-15): rebased cleanly onto `origin/main` at
   `2cca782`. Upstream's Oxford spelling and lint-policy updates introduced no
   additional branch changes because the touched code and documentation already
-  conform; post-rebase validation remains required before publishing.
+  conform; post-rebase validation stayed green before publishing.
+- Review follow-up (2026-07-15): verified the reserved-name mutex, complete
+  `TakeLeaveCommand` context inputs, context-path observability, and all
+  documentation findings against the rebased tree. The mutex now recovers from
+  poison and covers only the shared bridge subprocess; the example context
+  declares every command input and emits payload-free tracing at dispatch and
+  failure boundaries. The polymer vocabulary request was stale because the
+  shared spelling source and generated configuration already contain its full
+  mapping. `make check-fmt`, `make test`, `make typecheck`, `make lint`, and
+  `make markdownlint` passed; final CodeRabbit review reported zero findings.

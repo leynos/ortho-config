@@ -16,6 +16,7 @@ use hello_world::localizer::DemoLocalizer;
 use hello_world::message::{build_plan, build_take_leave_plan, print_plan, print_take_leave};
 
 use std::io::{self, Write};
+use tracing::{debug, error};
 
 fn main() -> color_eyre::Result<()> {
     color_eyre::install()?;
@@ -29,6 +30,11 @@ struct ParsedCommandLine {
 fn run() -> Result<()> {
     let ParsedCommandLine { cli, matches } = parse_command_line()?;
     if let Commands::Context(context) = &cli.command {
+        debug!(
+            command = "context",
+            json = context.json,
+            "dispatching agent context"
+        );
         return print_context(context);
     }
 
@@ -47,11 +53,17 @@ fn run() -> Result<()> {
 
 fn print_context(context: &ContextCommand) -> Result<()> {
     let output = if context.json {
-        render_agent_context_json().map_err(|err| HelloWorldError::Internal(Box::new(err)))?
+        render_agent_context_json().map_err(|err| {
+            error!(command = "context", json = true, error = %err, "agent context serialization failed");
+            HelloWorldError::Internal(Box::new(err))
+        })?
     } else {
         context_json_pointer()
     };
-    io::stdout().write_all(output.as_bytes())?;
+    io::stdout().write_all(output.as_bytes()).map_err(|err| {
+        error!(command = "context", json = context.json, error = %err, "agent context output failed");
+        HelloWorldError::Output(err)
+    })?;
     Ok(())
 }
 
