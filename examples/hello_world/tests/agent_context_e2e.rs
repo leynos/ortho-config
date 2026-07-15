@@ -38,6 +38,8 @@ fn context_json_writes_only_to_stdout() {
         .output()
         .expect("context command should execute");
 
+    // This depends on no global tracing subscriber or logger being installed
+    // before `Commands::Context` returns early in `main::run`.
     assert!(output.stderr.is_empty());
     assert!(!output.stdout.is_empty());
 }
