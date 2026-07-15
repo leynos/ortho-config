@@ -5,17 +5,20 @@
 
 use clap::Parser;
 use ortho_config::{
-    AGENT_CONTEXT_JSON_FLAG, AgentCommand, AgentContext, AgentExample, AgentInput, InteractionMode,
-    MutationEffect, OrthoConfig, serde_json,
+    AgentCommand, AgentContext, AgentExample, AgentInput, InteractionMode, MutationEffect,
+    OrthoConfig, serde_json, serialize_agent_context,
 };
 use serde::{Deserialize, Serialize};
+
+const CONTEXT_COMMAND: &str = "context";
+const CONTEXT_JSON_FLAG: &str = "json";
 
 /// Arguments for the `context` introspection command.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Parser, Deserialize, Serialize, OrthoConfig)]
 #[ortho_config(prefix = "HELLO_WORLD_CONTEXT")]
 pub struct ContextCommand {
     /// Emit the agent context as compact JSON.
-    #[arg(long = AGENT_CONTEXT_JSON_FLAG)]
+    #[arg(long = CONTEXT_JSON_FLAG)]
     #[serde(default)]
     #[ortho_config(default = false)]
     pub json: bool,
@@ -58,7 +61,7 @@ pub fn hello_world_agent_context() -> AgentContext {
 /// # Ok::<(), ortho_config::serde_json::Error>(())
 /// ```
 pub fn render_agent_context_json() -> Result<String, serde_json::Error> {
-    hello_world_agent_context().to_json()
+    serialize_agent_context(&hello_world_agent_context())
 }
 
 /// Returns the human-readable pointer shown by bare `context`.
@@ -72,7 +75,7 @@ pub fn render_agent_context_json() -> Result<String, serde_json::Error> {
 /// ```
 #[must_use]
 pub fn context_json_pointer() -> String {
-    format!("Run `hello-world context --{AGENT_CONTEXT_JSON_FLAG}` for JSON agent context.\n")
+    format!("Run `hello-world {CONTEXT_COMMAND} --{CONTEXT_JSON_FLAG}` for JSON agent context.\n")
 }
 
 fn greet_command_context() -> AgentCommand {

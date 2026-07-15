@@ -162,7 +162,7 @@ escalation, not a workaround.
   limiting; after a 77-minute `vsleep`, the retry completed cleanly.
 - [x] (2026-06-24 14:31Z) Milestone 3 — wired an illustrative
   `context --json` command into the `hello_world` example (early
-  short-circuit), with BDD, insta snapshot, `assert_cmd` e2e tests, localised
+  short-circuit), with BDD, insta snapshot, `assert_cmd` e2e tests, localized
   help copy, and updated help snapshots.
 - [x] (2026-06-24 14:35Z) Milestone 3 CodeRabbit review completed with zero
   findings after commit `15b4d39`.
@@ -193,8 +193,8 @@ Use timestamps (for example `(2026-06-14 13:00Z)`) when ticking items.
   testable function rather than newly invented.
 - Observation: no public `agent-context` subcommand or alias exists today; the
   only surface is the `--format agent-context` enum value. Evidence:
-  `cargo-orthohelp/src/cli.rs:16-28` (the `OutputFormat` enum) and
-  `cargo-orthohelp/src/cli.rs:42-47` (`CargoSubcommand` has only `Orthohelp`).
+  `cargo-orthohelp/src/cli/mod.rs:16-28` (the `OutputFormat` enum) and
+  `cargo-orthohelp/src/cli/mod.rs:42-47` (`CargoSubcommand` has only `Orthohelp`).
   Impact: the "avoid public aliases" requirement is satisfied today; the task
   is to *lock it in* with a guard test and document the rule.
 - Observation: prominent prior art names the introspection *command*
@@ -231,7 +231,7 @@ Use timestamps (for example `(2026-06-14 13:00Z)`) when ticking items.
   agent-context API change.
 - Observation: the planned focused command
   `cargo test -p cargo-orthohelp --lib cli` does not exercise
-  `cargo-orthohelp/src/cli.rs`; it runs unrelated library tests whose names
+  `cargo-orthohelp/src/cli/mod.rs`; it runs unrelated library tests whose names
   contain `cli`. Evidence: the command reported two
   `agent_context::tests::*visible_cli*` tests and did not run
   `cli::tests::no_context_or_agent_context_subcommand_alias`. Impact: use the
@@ -240,7 +240,7 @@ Use timestamps (for example `(2026-06-14 13:00Z)`) when ticking items.
   and `cargo test -p cargo-orthohelp format_accepts_agent_context` for
   Milestone 2 evidence.
 - Observation: exposing the hello_world `context` subcommand necessarily
-  changes localised help and missing-subcommand diagnostics. Evidence: the
+  changes localized help and missing-subcommand diagnostics. Evidence: the
   first full `make test` after wiring Milestone 3 failed only the
   `localised_help` insta snapshots, showing the new `context` row and the
   extended valid-subcommands list. Impact: added explicit en-US and Japanese
@@ -347,8 +347,8 @@ short-circuits before config merging, writes compact agent-context JSON to
 stdout, and exits successfully; bare `context` prints a human pointer to
 `--json`. The illustrative payload is hand-authored in
 `examples/hello_world/src/cli/context.rs`, documented as a convention demo, and
-validated by BDD, process-level e2e tests, an insta snapshot, and localised
-help snapshot updates. Standard workspace gates passed after adding localised
+validated by BDD, process-level e2e tests, an insta snapshot, and localized
+help snapshot updates. Standard workspace gates passed after adding localized
 context command copy and accepting the intended help snapshot drift. CodeRabbit
 reviewed commit `15b4d39` with zero findings.
 
@@ -390,7 +390,7 @@ The reader is assumed to know nothing about this repository. Key locations:
   so `ctx.to_json()?` composes in any `Result<_, OrthoError>` function. No new
   error type is needed.
 - `ortho_config/Cargo.toml` — `serde_json` is an optional, default-on feature.
-- `cargo-orthohelp/src/cli.rs` — the generator CLI. `OutputFormat` enum (with
+- `cargo-orthohelp/src/cli/mod.rs` — the generator CLI. `OutputFormat` enum (with
   `AgentContext`) and `CargoSubcommand` (only `Orthohelp`). Inline
   `#[cfg(test)] mod tests` already uses `clap::CommandFactory` and `rstest`.
 - `cargo-orthohelp/src/agent_context/mod.rs` and
@@ -417,7 +417,7 @@ Terms of art:
 
 - *Agent context*: a compact, machine-readable JSON document describing how to
   invoke a CLI, intended to be cheap for an automated agent to load. It is a
-  sibling of, not nested within, the localised documentation IR.
+  sibling of, not nested within, the localized documentation IR.
 - *`kind` discriminator*: a string field that lets a consumer recognize the
   payload type without inspecting its shape, here `<tool>.agent_context`. The
   same idea appears as Kubernetes `kind` and Dapr reverse-DNS-prefixed kinds.
@@ -498,7 +498,7 @@ Tests (extend `ortho_config/src/agent_context/tests.rs`): see Validation.
 
 ### Milestone 2 — guard test in `cargo-orthohelp`
 
-Extend the inline `#[cfg(test)] mod tests` in `cargo-orthohelp/src/cli.rs` with
+Extend the inline `#[cfg(test)] mod tests` in `cargo-orthohelp/src/cli/mod.rs` with
 `no_context_or_agent_context_subcommand_alias`, which walks `Cli::command()` via
 `clap::CommandFactory` and asserts that no command in the tree is named
 `context` or `agent-context` and that no command exposes either as an alias (use
@@ -730,14 +730,14 @@ Acceptance evidence (2026-06-24):
   `INSTA_UPDATE=always cargo test -p hello_world context_agent_context_json_snapshot`
   wrote `agent_context_snapshot__context_agent_context_json.snap`.
 - Help snapshot update:
-  the first full `make test` failed only the localised help snapshots because
+  the first full `make test` failed only the localized help snapshots because
   the new public `context` subcommand appears in help and missing-subcommand
   output. Added en-US and Japanese Fluent copy for the command, then ran
   `INSTA_UPDATE=always cargo test -p hello_world --test localised_help`; all 19
-  localised-help tests passed and the affected snapshots were updated.
+  localized-help tests passed and the affected snapshots were updated.
 - Standard gates:
   `make check-fmt`, `make typecheck`, `make lint`, and `make test` all passed
-  after the snapshot and localisation updates.
+  after the snapshot and localization updates.
 
 ### Milestone 4 — documentation
 
@@ -900,7 +900,7 @@ dev-dependency.
   response, the 77-minute `vsleep`, and the zero-finding retry for commit
   `1c581a3`. Milestone 3 may proceed after this checkpoint.
 - Milestone 3 update (2026-06-24): recorded the hello_world `context --json`
-  implementation, the dedicated BDD target, the intended localised-help
+  implementation, the dedicated BDD target, the intended localized-help
   snapshot drift, the added Fluent context copy, and the green focused and
   workspace gates.
 - Milestone 3 review update (2026-06-24): recorded CodeRabbit's zero-finding
@@ -918,7 +918,7 @@ dev-dependency.
   responses, the 75-minute and 88-minute `vsleep` waits, and the zero-finding
   retry for commit `173507f`.
 - Rebase update (2026-06-24): rebased the branch onto `origin/main`. Conflicts
-  were resolved by keeping both the upstream command-localisation parser path
+  were resolved by keeping both the upstream command-localization parser path
   and this branch's `hello_world context --json` short-circuit, combining
   crate-root agent-context exports, and merging the documentation so ADR-007's
   downstream command naming guidance coexists with the skill-manifest schema
@@ -928,3 +928,11 @@ dev-dependency.
   spacing issue. `make check-fmt`, `make test`, `make typecheck`, and
   `make lint` passed; the Cargo-heavy gates used `CARGO_BUILD_JOBS=1` after
   unconstrained nested Cargo builds hit OS process/thread limits.
+- Review remediation update (2026-07-15): moved JSON formatting to the
+  feature-gated `agent_context::json` adapter, kept `AgentContext` as the
+  schema model, and moved downstream command and flag literals into the example
+  CLI. The cargo-orthohelp reserved-name guard moved to a sibling test module.
+- Review remediation validation (2026-07-15): `make check-fmt`, `make test`,
+  `make typecheck`, `make lint`, and `make markdownlint` passed. CodeRabbit
+  reviewed the final remediation with zero findings; no rate-limit retry was
+  needed.

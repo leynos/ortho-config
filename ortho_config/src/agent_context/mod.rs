@@ -7,17 +7,15 @@
 use camino::Utf8PathBuf;
 use serde::{Deserialize, Serialize};
 
+#[cfg(feature = "serde_json")]
+#[cfg_attr(docsrs, doc(cfg(feature = "serde_json")))]
+pub mod json;
+
 /// Current agent-context schema version.
 pub const ORTHO_AGENT_CONTEXT_SCHEMA_VERSION: &str = "1";
 
 /// Canonical suffix used for agent-context document kinds.
 pub const AGENT_CONTEXT_KIND_SUFFIX: &str = "agent_context";
-
-/// Canonical downstream subcommand name for emitting an agent context.
-pub const AGENT_CONTEXT_COMMAND: &str = "context";
-
-/// Canonical clap long-flag name for JSON agent-context output.
-pub const AGENT_CONTEXT_JSON_FLAG: &str = "json";
 
 /// Builds the stable agent-context `kind` discriminator for a package.
 ///
@@ -83,7 +81,7 @@ impl AgentContext {
         let package_name = package.into();
         Self {
             schema_version: ORTHO_AGENT_CONTEXT_SCHEMA_VERSION.to_owned(),
-            kind: format!("{package_name}.{AGENT_CONTEXT_KIND_SUFFIX}"),
+            kind: agent_context_kind(&package_name),
             package: package_name,
             commands: Vec::new(),
             profiles: SupportDeclaration::default(),
@@ -91,52 +89,6 @@ impl AgentContext {
             policy: AgentPolicy::default(),
             skill_manifests: Vec::new(),
         }
-    }
-
-    /// Renders this context as compact JSON with a trailing newline.
-    ///
-    /// # Errors
-    ///
-    /// Returns a [`serde_json::Error`] if the context cannot be serialized.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use ortho_config::AgentContext;
-    ///
-    /// # fn main() -> Result<(), serde_json::Error> {
-    /// let json = AgentContext::new("example-cli").to_json()?;
-    ///
-    /// assert!(json.ends_with('\n'));
-    /// # Ok(())
-    /// # }
-    /// ```
-    pub fn to_json(&self) -> Result<String, serde_json::Error> {
-        let mut json = serde_json::to_string(self)?;
-        json.push('\n');
-        Ok(json)
-    }
-
-    /// Renders this context as pretty-printed JSON without a trailing newline.
-    ///
-    /// # Errors
-    ///
-    /// Returns a [`serde_json::Error`] if the context cannot be serialized.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use ortho_config::AgentContext;
-    ///
-    /// # fn main() -> Result<(), serde_json::Error> {
-    /// let json = AgentContext::new("example-cli").to_json_pretty()?;
-    ///
-    /// assert!(!json.ends_with('\n'));
-    /// # Ok(())
-    /// # }
-    /// ```
-    pub fn to_json_pretty(&self) -> Result<String, serde_json::Error> {
-        serde_json::to_string_pretty(self)
     }
 }
 

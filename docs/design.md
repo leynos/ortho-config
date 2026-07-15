@@ -56,7 +56,7 @@ The implementation must adhere to the following principles:
 - **Reusable consumer contracts:** Downstream applications such as Weaver and
   Netsuke should depend on OrthoConfig for reusable command-contract machinery,
   including command metadata, documentation and agent-context IR, renderer
-  metadata, vocabulary policy, skill manifest validation, profile metadata,
+  metadata, vocabulary policy, `skill_manifests` validation, profile metadata,
   delivery and feedback parsers, and execution-ledger metadata. They continue
   to own command execution, side effects, safety policy, and domain execution
   engines. The canonical boundary is documented in
@@ -999,12 +999,13 @@ generated documentation, generated agent context, and enforceable CLI policy.
   timeouts, and binds feature files with compile-time tag filters so
   feature-gated scenarios disappear from unsupported builds.
 
-- **Define downstream agent-context command naming (2026-06-24):**
+- **Define downstream agent-context command naming (2026-06-14):**
   Downstream applications expose `context --json` and emit
   `kind: "<tool>.agent_context"`, while `cargo-orthohelp` retains
   `--format agent-context` as its generator format. ADR-007 records the
-  rationale and the compatibility rule: use `schema_version`, not parsed
-  `kind`, to detect schema compatibility.
+  rationale, the compatibility rule: use `schema_version`, not parsed `kind`,
+  to detect schema compatibility, and the split between the reusable JSON
+  adapter and the application CLI literals.
 
 - **Prefix normalization:** The `prefix` struct attribute now appends a trailing
   underscore when callers omit it (unless the string is empty). This keeps

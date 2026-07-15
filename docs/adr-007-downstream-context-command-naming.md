@@ -9,13 +9,13 @@ Date: 2026-06-14.
 OrthoConfig defines a compact agent-context schema in
 `ortho_config::agent_context`, and `cargo-orthohelp` can emit that schema as a
 build-time file with `--format agent-context`. Downstream applications need a
-runtime command surface for the same contract so agents can discover invocation
+runtime command surface for the same contract, so agents can discover invocation
 metadata directly from an installed tool.
 
 The command name has two competing pressures. Prior art for agent-native CLIs
 uses an explicit `agent-context` introspection layer, while OrthoConfig's
 application-facing command should be short, stable, and approachable. The JSON
-payload still needs an unambiguous discriminator so consumers can recognise the
+payload still needs an unambiguous discriminator, so consumers can recognize the
 document without relying on command names alone.
 
 The question is whether downstream applications expose `agent-context`, expose
@@ -28,7 +28,7 @@ The question is whether downstream applications expose `agent-context`, expose
 - Preserve a clear distinction between the `cargo-orthohelp` generator format
   and application runtime command surfaces.
 - Align structured output with the existing canonical `--json` vocabulary.
-- Avoid shipping hidden aliases before the first public release unless a
+- Avoid shipping hidden aliases before the first public release, unless a
   migration explicitly requires them.
 - Keep compatibility detection tied to `schema_version`, not string parsing of
   `kind`.
@@ -78,10 +78,10 @@ payload family and is governed by `ORTHO_AGENT_CONTEXT_SCHEMA_VERSION` and
 `AGENT_CONTEXT_KIND_SUFFIX`; consumers must not parse `kind` to infer schema
 compatibility.
 
-The `AGENT_CONTEXT_COMMAND`, `AGENT_CONTEXT_JSON_FLAG`,
-`AGENT_CONTEXT_KIND_SUFFIX`, and `agent_context_kind` symbols in
-`ortho_config::agent_context` are the source of truth for this convention.
-Downstream applications should not hand-format `kind`.
+`AGENT_CONTEXT_KIND_SUFFIX` and `agent_context_kind` in
+`ortho_config::agent_context` are the source of truth for the `kind`
+discriminator. Downstream applications own their command and flag literals, and
+JSON formatting is provided by the feature-gated serializer adapter.
 
 Table 1 compares the accepted option with the rejected alternatives.
 

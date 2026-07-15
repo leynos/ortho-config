@@ -2,11 +2,15 @@
 
 use super::*;
 use crate::docs::ORTHO_DOCS_IR_VERSION;
+use crate::serialize_agent_context;
 use camino::Utf8PathBuf;
 use insta::assert_snapshot;
 use proptest::{collection::vec, option, prelude::*};
 use rstest::rstest;
 use serde_json::{Value, json};
+
+#[path = "tests_json.rs"]
+mod json;
 
 #[rstest]
 fn agent_context_version_is_independent_from_docs_ir() {
@@ -18,16 +22,6 @@ fn agent_context_version_is_independent_from_docs_ir() {
 }
 
 #[rstest]
-fn agent_context_command_name_const_is_context() {
-    assert_eq!(crate::AGENT_CONTEXT_COMMAND, "context");
-}
-
-#[rstest]
-fn agent_context_json_flag_const_is_long_json() {
-    assert_eq!(crate::AGENT_CONTEXT_JSON_FLAG, "json");
-}
-
-#[rstest]
 #[case::hyphenated("example-cli", "example-cli.agent_context")]
 #[case::underscored("hello_world", "hello_world.agent_context")]
 #[case::empty("", ".agent_context")]
@@ -36,6 +30,8 @@ fn agent_context_json_flag_const_is_long_json() {
 fn agent_context_kind_appends_suffix(#[case] package: &str, #[case] expected: &str) {
     assert_eq!(crate::agent_context_kind(package), expected);
 }
+
+#[test]
 fn new_context_uses_legacy_defaults() {
     let context = AgentContext::new("example-cli");
 
@@ -56,84 +52,6 @@ fn new_uses_agent_context_kind(#[case] package: &str) {
     let context = AgentContext::new(package);
 
     assert_eq!(context.kind, crate::agent_context_kind(package));
-}
-
-#[rstest]
-fn to_json_is_valid_parseable_json() {
-    let context = sample_agent_context();
-    let json = context.to_json().expect("serialize compact agent context");
-    let value: Value = serde_json::from_str(&json).expect("parse compact agent context JSON");
-
-    assert!(value.is_object());
-}
-
-#[rstest]
-fn to_json_round_trips_via_serde() {
-    let context = sample_agent_context();
-    let json = context.to_json().expect("serialize compact agent context");
-    let parsed: AgentContext = serde_json::from_str(&json).expect("parse compact agent context");
-
-    assert_eq!(parsed, context);
-}
-
-#[rstest]
-fn to_json_is_deterministic() {
-    let context = sample_agent_context();
-
-    assert_eq!(
-        context.to_json().expect("serialize compact agent context"),
-        context.to_json().expect("serialize compact agent context")
-    );
-}
-
-#[rstest]
-fn to_json_includes_kind_and_schema_version() {
-    let context = sample_agent_context();
-    let json = context.to_json().expect("serialize compact agent context");
-    let value: Value = serde_json::from_str(&json).expect("parse compact agent context JSON");
-
-    assert_eq!(
-        field(&value, "schema_version"),
-        ORTHO_AGENT_CONTEXT_SCHEMA_VERSION
-    );
-    assert!(
-        field(&value, "kind")
-            .as_str()
-            .is_some_and(|kind| kind.ends_with(AGENT_CONTEXT_KIND_SUFFIX))
-    );
-}
-
-#[rstest]
-fn to_json_has_trailing_newline() {
-    let context = sample_agent_context();
-    let json = context.to_json().expect("serialize compact agent context");
-
-    assert!(json.ends_with('\n'));
-}
-
-#[rstest]
-fn to_json_pretty_has_no_trailing_newline() {
-    let context = sample_agent_context();
-    let json = context
-        .to_json_pretty()
-        .expect("serialize pretty agent context");
-
-    assert!(!json.ends_with('\n'));
-}
-fn compact_context_serialization_excludes_localization_fields() {
-    let context = sample_agent_context();
-
-    let value = serde_json::to_value(context).expect("serialize agent context");
-    assert_eq!(field(&value, "schema_version"), "1");
-    assert_eq!(field(&value, "kind"), "example-cli.agent_context");
-    let command = first_array_item(field(&value, "commands"));
-    assert_eq!(field(command, "interaction_mode"), "non_interactive");
-    assert_eq!(field(command, "mutation_effect"), "read-only");
-    assert_eq!(field(field(command, "async_submission"), "mode"), "submit");
-    assert_eq!(field(field(command, "delivery_route"), "target"), "file");
-    assert!(value.get("about_id").is_none());
-    assert!(value.get("headings_ids").is_none());
-    assert!(command.get("help_id").is_none());
 }
 
 #[rstest]
@@ -338,7 +256,7 @@ fn mutation_effect_serializes_canonical_wire_values(
 proptest! {
     #[test]
     fn to_json_always_round_trips(context in any_agent_context()) {
-        let json = context.to_json().expect("serialize compact agent context");
+        let json = serialize_agent_context(&context).expect("serialize compact agent context");
         let parsed: AgentContext =
             serde_json::from_str(&json).expect("parse compact agent context");
 
@@ -346,21 +264,21 @@ proptest! {
     }
 }
 
-fn field<'a>(value: &'a Value, name: &str) -> &'a Value {
+pub(super) fn field<'a>(value: &'a Value, name: &str) -> &'a Value {
     let Some(field) = value.get(name) else {
         panic!("JSON object should contain `{name}`");
     };
     field
 }
 
-fn first_array_item(value: &Value) -> &Value {
+pub(super) fn first_array_item(value: &Value) -> &Value {
     let Some(item) = value.as_array().and_then(|items| items.first()) else {
         panic!("JSON value should be a non-empty array");
     };
     item
 }
 
-fn sample_agent_context() -> AgentContext {
+pub(super) fn sample_agent_context() -> AgentContext {
     AgentContext {
         schema_version: ORTHO_AGENT_CONTEXT_SCHEMA_VERSION.to_owned(),
         kind: "example-cli.agent_context".to_owned(),

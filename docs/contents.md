@@ -137,6 +137,9 @@
   - [Recursive documentation metadata](execplans/6-1-1-recursive-doc-metadata-subcommands-values.md):
     plan for recursive subcommand and value metadata in generated command
     documentation.
+  - [Downstream context `--json` command naming](execplans/6-2-3-define-downstream-context-json-command-naming.md):
+    plan for roadmap item 6.2.3 and the downstream `context --json` command
+    naming.
   - [Skill manifest metadata](execplans/6-3-1-skill-manifest-metadata.md):
     plan for roadmap item 6.3.1 and the additive agent-context types that
     model downstream skill manifests.

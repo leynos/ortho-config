@@ -43,6 +43,15 @@ fn context_json_writes_only_to_stdout() {
 }
 
 #[test]
+fn bare_context_prints_the_exact_json_pointer() {
+    hello_world_command()
+        .arg("context")
+        .assert()
+        .success()
+        .stdout("Run `hello-world context --json` for JSON agent context.\n");
+}
+
+#[test]
 fn context_exit_code_is_zero() {
     hello_world_command()
         .args(["context", "--json"])

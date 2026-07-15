@@ -60,6 +60,10 @@ fn execute_command(globals: &HelloWorldCli, command: Commands) -> Result<()> {
     match command {
         Commands::Greet(merged) => run_greet(globals, &merged),
         Commands::TakeLeave(merged) => run_take_leave(globals, &merged),
+        #[expect(
+            clippy::unreachable,
+            reason = "the early return in run handles context before configuration merging"
+        )]
         Commands::Context(_) => {
             unreachable!("context commands return before configuration merging")
         }

@@ -112,7 +112,7 @@ documentation set disagrees with this table, this table wins.
 | Profiles                  | Soft | §9.1 "Profile contracts" and design §6.7                                                                                               | A consumer may carry a temporary `--profile` parsing adapter only.                                                  | Replace within the next consumer release once §9.1 ships; on shape conflict, the OrthoConfig shape wins. |
 | Delivery                  | Soft | §9.2 "Delivery and feedback contracts" and design §6.8                                                                                 | A consumer may carry a temporary `--deliver` parsing adapter for `stdout`, `file:<path>`, and `webhook:<url>` only. | Replace within the next consumer release once §9.2 ships; on shape conflict, the OrthoConfig shape wins. |
 | Feedback                  | Soft | §9.2 "Delivery and feedback contracts" and design §6.8                                                                                 | A consumer may carry a temporary `feedback <text>` parsing adapter that writes local JSONL only.                    | Replace within the next consumer release once §9.2 ships; on shape conflict, the OrthoConfig shape wins. |
-| Skill manifests           | Soft | §6.3 "Validate skill manifests against real commands" and design §3.4                                                                  | A consumer may carry a temporary local manifest parser only.                                                        | Replace within the next consumer release once §6.3 ships; on shape conflict, the OrthoConfig shape wins. |
+| `skill_manifests`         | Soft | §6.3 "Validate skill manifests against real commands" and design §3.4                                                                  | A consumer may carry a temporary local manifest parser only.                                                        | Replace within the next consumer release once §6.3 ships; on shape conflict, the OrthoConfig shape wins. |
 | Execution ledgers         | Soft | §9.3 "Execution ledger contracts" and design §6.6                                                                                      | A consumer may carry a temporary local JSONL ledger record format only.                                             | Replace within the next consumer release once §9.3 ships; on shape conflict, the OrthoConfig shape wins. |
 
 Table 1: consumer dependency-tier matrix.
@@ -133,9 +133,9 @@ different audience and stability requirement.
 ### 3.1 Human documentation IR
 
 The existing `OrthoConfigDocs` and `DocMetadata` model remains the source for
-localised documentation, roff man pages, PowerShell help, and generated
+localized documentation, roff man pages, PowerShell help, and generated
 reference material. It is allowed to contain prose, headings, examples, and
-localisation metadata.
+localization metadata.
 
 The documentation IR must continue to be versioned and serializable. It should
 gain only the command metadata required to keep human documentation accurate.
@@ -144,13 +144,13 @@ It must not become the compact agent context by accident.
 ### 3.2 Agent context
 
 The new agent-context contract is a compact, machine-oriented JSON document
-that describes how to invoke the CLI. It is not localised prose and should be
+that describes how to invoke the CLI. It is not localized prose and should be
 kept small enough for agents to load cheaply.
 
 The documentation IR and agent-context schema are sibling outputs from the same
 metadata spine, not nested versions of one another. The documentation IR stays
-localised and human-documentation-oriented. The agent-context schema stays
-compact, machine-oriented, and independently versioned so agent-facing changes
+localized and human-documentation-oriented. The agent-context schema stays
+compact, machine-oriented, and independently versioned, so agent-facing changes
 do not force documentation IR migrations unless the same data is genuinely
 needed by both outputs.
 
@@ -160,7 +160,7 @@ Reusable agent-context types and `ORTHO_AGENT_CONTEXT_SCHEMA_VERSION` live in
 `ortho_config::agent_context`. `cargo-orthohelp` may generate or transform the
 context in later roadmap work, but it does not own the reusable context
 contract. The documentation IR remains owned by `ortho_config::docs`, so Fluent
-identifiers, localised long prose, roff details, and PowerShell help structures
+identifiers, localized long prose, roff details, and PowerShell help structures
 are not agent-context source fields.
 
 The `cargo-orthohelp` generator interface is:
@@ -170,8 +170,8 @@ cargo orthohelp --format agent-context
 ```
 
 This remains a generator format that writes an artefact. It is not the
-downstream application command name. Downstream applications expose the
-public command surface `context --json`:
+downstream application command name. Downstream applications expose the public
+command surface `context --json`:
 
 ```console
 example-cli context --json
@@ -188,10 +188,9 @@ The payload identifies itself precisely, for example:
 
 This keeps the public command approachable while preserving an explicit machine
 schema. Downstream applications do not ship a public `agent-context` alias
-before the first public release unless a migration explicitly requires one.
-Compatibility detection uses
-`schema_version`; consumers must not parse `kind` as a version. ADR-007 records
-the naming decision and prior-art divergence.
+before the first public release, unless a migration explicitly requires one.
+Compatibility detection uses `schema_version`; consumers must not parse `kind`
+as a version. ADR-007 records the naming decision and prior-art divergence.
 
 The top-level shape should include:
 
@@ -375,7 +374,7 @@ The canonical human-facing global option glossary is:
 - `--plain` for plain text fallback;
 - `--no-pager` for pager suppression;
 - `--width <columns>` for terminal-width-sensitive rendering;
-- `--locale <locale>` for localised human output;
+- `--locale <locale>` for localized human output;
 - `--quiet` and `--verbose` for diagnostic verbosity.
 
 The policy should flag or reject off-convention aliases such as `info`, `ls`,
@@ -428,7 +427,7 @@ JSON mode must be stricter than "mostly JSON". The default contract is:
 - failure writes no stdout unless an explicit artefact has already been
   delivered, and exactly one JSON diagnostic document to stderr;
 - subprocess output never leaks beside the result document on stdout;
-- protocol identifiers and error classes are not localised.
+- protocol identifiers and error classes are not localized.
 
 Some commands legitimately need streams. OrthoConfig should therefore model a
 `JsonModeContract`-style shape with these choices:
@@ -451,7 +450,7 @@ renderer. The reusable contract should describe:
 - colour, emoji, progress, pager, width, accessibility, and plain-output
   policy;
 - stdout and stderr contracts per renderer;
-- localised versus non-localised fields;
+- localized versus non-localized fields;
 - whether progress or subprocess output may be inherited in human mode only.
 
 This supports Weaver's dual human/machine output and Netsuke's human-first,
@@ -648,7 +647,7 @@ apply explicit defaults instead of guessing from absent data.
 | `delivery_support`     | `{ "supported": false }` | Delivery sinks change artefact routing and must be explicit.               |
 | `feedback_support`     | `{ "supported": false }` | Feedback storage or upload must be explicitly available.                   |
 | `execution_ledger`     | `{ "supported": false }` | Jobs, runs, or tasks require application-owned execution state.            |
-| `skill_manifest_paths` | `[]`                     | Skills are absent until declared and validated.                            |
+| `skill_manifests`      | `[]`                     | Skills are absent until declared and validated.                            |
 | `capability_id`        | `null`                   | Capability routing is optional downstream metadata.                        |
 | `provider_provenance`  | `{ "reported": false }`  | Provider names are not emitted unless the application declares provenance. |
 | `renderer.human`       | `{ "supported": true }`  | Existing documentation IR already supports human help material.            |
@@ -664,7 +663,7 @@ enough for their command surface.
 
 The first implementation phase should introduce agent-native support behind
 explicit formats, commands, or metadata attributes. Existing generated
-documentation output should remain compatible unless the roadmap names a
+documentation output should remain compatible, unless the roadmap names a
 migration step.
 
 Legacy defaulting is an OrthoConfig reader or generator responsibility. JSON

@@ -196,15 +196,15 @@ uses a post-merge hook to clean up whitespace-only preambles.
 ### Documentation and agent contracts
 
 `OrthoConfigDocs` remains the public contract for human documentation metadata.
-It emits localised documentation IR through `DocMetadata` and
+It emits localized documentation IR through `DocMetadata` and
 `ORTHO_DOCS_IR_VERSION`; `cargo-orthohelp` consumes that IR to produce
-localised JSON, roff man pages, and PowerShell help.
+localized JSON, roff man pages, and PowerShell help.
 
 Agent invocation context is a separate compact schema. Its reusable Rust types
 live under `ortho_config::agent_context` and use
 `ORTHO_AGENT_CONTEXT_SCHEMA_VERSION`, so agent-facing compatibility can change
 without forcing a documentation IR version bump. The schema deliberately keeps
-out Fluent identifiers, localised long prose, roff details, and PowerShell help
+out Fluent identifiers, localized long prose, roff details, and PowerShell help
 structures.
 
 Skill manifest descriptors are part of that compact agent-context schema.
@@ -232,7 +232,6 @@ manifest validation remain application-owned.
 }
 ```
 
-
 #### Downstream `context --json` commands
 
 Applications that expose agent invocation context use the downstream command
@@ -248,7 +247,7 @@ uses `kind: "<tool>.agent_context"` to identify the payload family and
 `schema_version` with `ORTHO_AGENT_CONTEXT_SCHEMA_VERSION`; they should not
 parse `kind` as a version.
 
-```rust
+```rust,no_run
 use ortho_config::{AgentCommand, AgentContext};
 
 fn build_agent_context() -> AgentContext {
@@ -341,32 +340,6 @@ fn parse_new_with_base(
 }
 ```
 
-# #[derive(clap::Parser)]
-# struct Cli {}
-fn parse_new_with_base(
-    localizer: &dyn Localizer,
-) -> Result<(Cli, clap::ArgMatches), clap::Error> {
-    let command = Cli::command()
-        .with_base("demo.cli")
-        .localize(localizer);
-
-    parse_localized_command(command, std::env::args_os(), localizer)
-}
-```
-
-# #[derive(clap::Parser)]
-# struct Cli {}
-fn parse_new_with_base(
-    localizer: &dyn Localizer,
-) -> Result<(Cli, clap::ArgMatches), clap::Error> {
-    let command = Cli::command()
-        .with_base("demo.cli")
-        .localize(localizer);
-
-    parse_localized_command(command, std::env::args_os(), localizer)
-}
-```
-
 #### Migrating localized parsing code
 
 Earlier localization code often built a localized `clap::Command` and parsed it
@@ -376,32 +349,6 @@ and `from_arg_matches` error enrichment to application glue:
 ```rust,ignore
 use clap::CommandFactory;
 use ortho_config::{LocalizeCmd, Localizer};
-
-# #[derive(clap::Parser)]
-# struct Cli {}
-fn parse_new_with_base(
-    localizer: &dyn Localizer,
-) -> Result<(Cli, clap::ArgMatches), clap::Error> {
-    let command = Cli::command()
-        .with_base("demo.cli")
-        .localize(localizer);
-
-    parse_localized_command(command, std::env::args_os(), localizer)
-}
-```
-
-# #[derive(clap::Parser)]
-# struct Cli {}
-fn parse_new_with_base(
-    localizer: &dyn Localizer,
-) -> Result<(Cli, clap::ArgMatches), clap::Error> {
-    let command = Cli::command()
-        .with_base("demo.cli")
-        .localize(localizer);
-
-    parse_localized_command(command, std::env::args_os(), localizer)
-}
-```
 
 # #[derive(clap::Parser)]
 # struct Cli {}
