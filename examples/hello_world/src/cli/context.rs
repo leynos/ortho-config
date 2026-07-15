@@ -20,7 +20,6 @@ pub struct ContextCommand {
     /// Emit the agent context as compact JSON.
     #[arg(long = CONTEXT_JSON_FLAG)]
     #[serde(default)]
-    #[ortho_config(default = false)]
     pub json: bool,
 }
 
