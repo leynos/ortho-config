@@ -235,7 +235,8 @@ Use timestamps (for example `(2026-06-14 13:00Z)`) when ticking items.
   `cargo-orthohelp/src/cli/mod.rs`; it runs unrelated library tests whose names
   contain `cli`. Evidence: the command reported two
   `agent_context::tests::*visible_cli*` tests and did not run
-  `cli::tests::no_context_or_agent_context_subcommand_alias`. Impact: use the
+  `cli::reserved_agent_context_tests::no_context_or_agent_context_subcommand_alias`.
+  Impact: use the
   exact filters
   `cargo test -p cargo-orthohelp no_context_or_agent_context_subcommand_alias`
   and `cargo test -p cargo-orthohelp format_accepts_agent_context` for
@@ -669,7 +670,8 @@ Acceptance evidence (2026-06-24):
 
 - Positive guard:
   `cargo test -p cargo-orthohelp no_context_or_agent_context_subcommand_alias`
-  passed and ran `cli::tests::no_context_or_agent_context_subcommand_alias`.
+  passed and ran
+  `cli::reserved_agent_context_tests::no_context_or_agent_context_subcommand_alias`.
 - Mutation red:
   after temporarily adding `#[command(version, alias = "context")]` to
   `CargoSubcommand::Orthohelp`, the same focused test failed with
@@ -836,6 +838,8 @@ pub fn agent_context_kind(package: &str) -> String;
 pub fn serialize_agent_context(
     context: &AgentContext,
 ) -> Result<String, serde_json::Error>;
+
+#[cfg(feature = "serde_json")]
 pub fn serialize_agent_context_pretty(
     context: &AgentContext,
 ) -> Result<String, serde_json::Error>;
