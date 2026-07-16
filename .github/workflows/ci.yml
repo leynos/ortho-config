@@ -138,6 +138,30 @@ jobs:
           features: serde_json toml json5
           artefact-name-suffix: no-serde-saphyr
 
+      - name: Merge coverage results
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        shell: bash
+        # lcov-result-merger takes a single glob pattern and an optional
+        # output file; passing two file paths treats the second as the
+        # output and leaves stdout empty. Match both feature-leg reports
+        # with one glob ('lcov-*.info' excludes the lcov.info output) and
+        # write the merged result via stdout.
+        run: bun x lcov-result-merger 'lcov-*.info' > lcov.info
+
+      - name: Check coverage against CodeScene gates
+        env:
+          CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}
+        if: >-
+          env.CS_ACCESS_TOKEN != '' && github.event_name == 'pull_request' &&
+          matrix.os == 'ubuntu-latest'
+        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@927edd45ae77be4251a8a18ca9eb5613a2e32cbd
+        with:
+          format: lcov
+          mode: check
+          project-url: https://api.codescene.io/v2/projects/69279
+          access-token: ${{ env.CS_ACCESS_TOKEN }}
+          installer-checksum: ${{ vars.CODESCENE_CLI_SHA256 }}
+
       - name: Validate PowerShell wrapper
         if: ${{ matrix.os == 'windows-latest' }}
         run: make powershell-wrapper-validate
@@ -145,17 +169,3 @@ jobs:
       - name: Publish dry run
         if: ${{ github.event_name == 'workflow_dispatch' }}
         run: make publish-check
-
-      # The `mode: check` CodeScene coverage gate is deliberately not wired
-      # in yet: CodeScene project 69279 has no coverage-gates configuration,
-      # so `cs-coverage check` fails every run with "HTTP call succeeded,
-      # but the received project-config isn't valid. Lacks the gates
-      # configuration." — a CodeScene-side per-project setting, not a CI
-      # defect (ddlint and chutoro hit the byte-identical error). Add the
-      # gate in a fast-follow PR — merge the two feature-leg reports with
-      # `bun x lcov-result-merger 'lcov-*.info' > lcov.info` (a single glob
-      # pattern; two file paths would make the second the output file and
-      # leave stdout empty), then run the guarded `mode: check` step on the
-      # ubuntu leg only — once coverage-main.yml has uploaded to main at
-      # least once and the project's coverage gate is confirmed enabled
-      # CodeScene-side.
