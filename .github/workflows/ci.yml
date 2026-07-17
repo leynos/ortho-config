@@ -15,7 +15,7 @@ jobs:
       CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}
       RUSTFLAGS: -D warnings
       RUSTDOCFLAGS: -D warnings
-      WHITAKER_INSTALLER_VERSION: '0.2.5'
+      WHITAKER_INSTALLER_VERSION: '0.2.6'
       # generate-coverage kills cargo after RUN_RUST_CARGO_WAIT_TIMEOUT
       # seconds (default 600). The windows coverage run legitimately takes
       # ~12 min (the compile_fail trybuild test alone is ~200s), and the
