@@ -40,4 +40,10 @@ jobs:
       # and run the whole workspace's tests against each mutant: the
       # derive-macro crate's behaviour is exercised by ortho_config's
       # tests, so package-scoped runs would report false survivors.
+      # The bare feature names only resolve because every mutated
+      # workspace member defines (or forwards) the full set:
+      # cargo-mutants scopes the baseline build to the packages
+      # containing a shard's mutants, and Cargo resolves bare names
+      # against the selected packages only (issue #380). The contract
+      # tests pin each member's feature list to prevent drift.
       extra-args: "--features serde_json,toml,json5,yaml --test-workspace=true"
