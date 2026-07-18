@@ -18,6 +18,17 @@ path = "src/main.rs"
 [lints]
 workspace = true
 
+# Forwarding features mirroring hello_world's: cargo-mutants scopes the
+# mutation-testing baseline build to the packages containing a shard's
+# mutants, and Cargo resolves the caller's bare feature list against
+# the selected packages only, so every mutated workspace member must
+# define the CI feature set for the baseline to build (issue #380).
+[features]
+serde_json = ["ortho_config/serde_json"]
+toml = ["ortho_config/toml"]
+json5 = ["ortho_config/json5"]
+yaml = ["ortho_config/yaml"]
+
 [dependencies]
 camino = "1"
 cap-std = { version = "4", features = ["fs_utf8"] }

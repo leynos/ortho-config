@@ -18,8 +18,10 @@ Run via ``make test-workflow-contracts``.
 from __future__ import annotations
 
 import re
+import tomllib
 from pathlib import Path
 
+import pytest
 import yaml
 
 WORKFLOW_PATH = (
@@ -42,6 +44,21 @@ EXPECTED_WITH = {
     "paths": "cargo-orthohelp/,examples/,ortho_config/,ortho_config_macros/",
     "exclude-globs": "test_helpers/**,tests/fixtures/**",
     "extra-args": "--features serde_json,toml,json5,yaml --test-workspace=true",
+}
+
+#: The feature set named in extra-args, and the manifest of every
+#: workspace member that cargo-mutants may mutate (the paths above,
+#: minus the excluded scaffolding). A package-scoped baseline such as
+#: ``cargo test --package=cargo-orthohelp --features serde_json,...``
+#: fails feature resolution unless the selected package defines every
+#: bare name, so each mutated member must define (or forward) the set
+#: (issue #380).
+BASELINE_FEATURES = frozenset({"serde_json", "toml", "json5", "yaml"})
+MUTATED_MEMBER_MANIFESTS = {
+    "cargo-orthohelp": Path("cargo-orthohelp/Cargo.toml"),
+    "hello_world": Path("examples/hello_world/Cargo.toml"),
+    "ortho_config": Path("ortho_config/Cargo.toml"),
+    "ortho_config_macros": Path("ortho_config_macros/Cargo.toml"),
 }
 
 
@@ -135,4 +152,27 @@ def test_with_block_carries_the_caller_configuration() -> None:
         "jobs.mutation.with must be exactly the documented configuration "
         f"(workspace paths, scaffolding excludes, CI feature set); expected "
         f"{EXPECTED_WITH!r}, got {with_block!r}"
+    )
+
+
+@pytest.mark.parametrize(
+    "member", sorted(MUTATED_MEMBER_MANIFESTS), ids=sorted(MUTATED_MEMBER_MANIFESTS)
+)
+def test_mutated_members_define_the_baseline_feature_set(member: str) -> None:
+    """Every mutated workspace member defines the bare baseline features.
+
+    cargo-mutants scopes the unmutated baseline build to the packages
+    containing a shard's mutants, and Cargo resolves the caller's bare
+    feature names against the selected packages only. A member missing
+    any name deterministically fails its shard's baseline (issue #380),
+    so this pins the forwarding features alongside the extra-args value.
+    """
+    manifest_path = WORKFLOW_PATH.parents[2] / MUTATED_MEMBER_MANIFESTS[member]
+    manifest = tomllib.loads(manifest_path.read_text(encoding="utf-8"))
+    features = set(manifest.get("features", {}))
+    missing = BASELINE_FEATURES - features
+    assert not missing, (
+        f"{member} must define (or forward) the mutation baseline feature set "
+        f"{sorted(BASELINE_FEATURES)}; missing {sorted(missing)} — a shard whose "
+        "mutants all fall in this package cannot build its baseline without them"
     )
