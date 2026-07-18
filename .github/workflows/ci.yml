@@ -94,13 +94,23 @@ jobs:
       - name: Install Whitaker
         if: ${{ matrix.os == 'ubuntu-latest' }}
         run: |
+          # `cargo binstall --version` exits non-zero (the flag requires a
+          # value), so probe availability with `-V` instead.
           if ! command -v whitaker-installer >/dev/null 2>&1; then
-            if cargo binstall --version >/dev/null 2>&1; then
+            if cargo binstall -V >/dev/null 2>&1; then
               cargo binstall --no-confirm --locked "whitaker-installer@${WHITAKER_INSTALLER_VERSION}"
             else
               echo "cargo-binstall unavailable; building whitaker-installer from crates.io"
               cargo install --locked whitaker-installer --version "${WHITAKER_INSTALLER_VERSION}"
             fi
+          fi
+          # whitaker-installer 0.2.6 probes binstall with the same broken
+          # `--version` flag, so its dylint-link fallback compiles from
+          # crates.io and needs rustc >= 1.91 — newer than this repository's
+          # pinned nightly. Preinstall the prebuilt dylint-link that the
+          # installer expects so it detects the tool and skips that path.
+          if cargo binstall -V >/dev/null 2>&1; then
+            cargo binstall --no-confirm dylint-link@6.0.1
           fi
           whitaker-installer
 
