@@ -1,5 +1,8 @@
 # OrthoConfig
 
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](
+https://deepwiki.com/leynos/ortho-config)
+
 **OrthoConfig** is a Rust configuration management library designed for
 simplicity and power, inspired by the flexible configuration mechanisms found
 in tools like `esbuild`. This enables an application to seamlessly load
