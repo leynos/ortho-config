@@ -43,34 +43,25 @@ impl fmt::Display for JsonField {
     }
 }
 
+const BASE_AGENT_CONTEXT_ARGS: [&str; 4] = [
+    "--format",
+    "agent-context",
+    "--package",
+    "orthohelp_fixture",
+];
+
 #[when("I run cargo-orthohelp with format agent-context for the fixture")]
 fn run_with_format_agent_context(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
-    run_with_agent_context_args(
-        orthohelp_context,
-        &[
-            "--format",
-            "agent-context",
-            "--package",
-            "orthohelp_fixture",
-        ],
-    )
+    run_with_agent_context_args(orthohelp_context, &BASE_AGENT_CONTEXT_ARGS)
 }
 
 #[when("I run cargo-orthohelp with format agent-context for the nested fixture")]
 fn run_with_format_agent_context_nested(
     orthohelp_context: &mut OrthoHelpContext,
 ) -> StepResult<()> {
-    run_with_agent_context_args(
-        orthohelp_context,
-        &[
-            "--format",
-            "agent-context",
-            "--package",
-            "orthohelp_fixture",
-            "--root-type",
-            "orthohelp_fixture::NestedFixtureConfig",
-        ],
-    )
+    let mut args = Vec::from(BASE_AGENT_CONTEXT_ARGS);
+    args.extend(["--root-type", "orthohelp_fixture::NestedFixtureConfig"]);
+    run_with_agent_context_args(orthohelp_context, &args)
 }
 
 fn run_with_agent_context_args(
