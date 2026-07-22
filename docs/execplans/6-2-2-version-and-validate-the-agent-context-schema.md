@@ -5,8 +5,8 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
 proceeds.
 
-Status: IN PROGRESS (implementation started 2026-06-24; revised after roadmap
-6.1.2 landed on `main`; see the revision note at the end)
+Status: COMPLETE (implementation started 2026-06-24 and completed 2026-07-22;
+revised after roadmap 6.1.2 landed on `main`; see the revision notes at the end)
 
 ## Purpose / big picture
 
@@ -14,12 +14,12 @@ OrthoConfig emits a compact, machine-readable "agent-context" JSON document so
 that automated agents can learn how to invoke a command-line interface (CLI)
 without scraping help text. Roadmap item 6.2.1 shipped the schema types in
 `ortho_config::agent_context`, the `cargo orthohelp --format agent-context`
-generator, and a single golden snapshot. What is still missing is the contract
-that makes the schema *safe to depend on*: tests that fail loudly when the wire
-shape changes by accident, golden fixtures that prove the generator behaves
-across the shapes downstream consumers will meet (a flat CLI, a CLI with enum
-values, and a nested command tree), and a written compatibility policy that
-tells a maintainer when they must bump `ORTHO_AGENT_CONTEXT_SCHEMA_VERSION`.
+generator, and a single golden snapshot. This change adds the contract that
+makes the schema *safe to depend on*: tests that fail loudly when the wire shape
+changes by accident, golden fixtures that prove the generator behaves across
+the shapes downstream consumers will meet (a flat CLI, a CLI with enum values,
+and a nested command tree), and a written compatibility policy that tells a
+maintainer when they must bump `ORTHO_AGENT_CONTEXT_SCHEMA_VERSION`.
 
 After this change a maintainer can observe success directly:
 
@@ -259,6 +259,17 @@ These decide the exact v1 wire shape that this plan ossifies.
       ADR-003 cross-reference, cargo-orthohelp design, users-guide,
       developers-guide, and roadmap updates are complete; deterministic gates
       and CodeRabbit review passed.
+- [x] 2026-07-22: Post-implementation CodeScene findings resolved without
+      changing behaviour: the wire-contract JSON moved to a module constant,
+      cohesive assertion groups moved to private helpers, and repeated BDD
+      arguments moved to `BASE_AGENT_CONTEXT_ARGS`.
+- [x] 2026-07-22: Rebased onto `origin/main`, reconciled upstream test-support
+      extraction with the branch's schema tests, re-baselined the upstream
+      hello-world snapshot for `snake_case`, and passed `make check-fmt`,
+      `make test`, `make typecheck`, and `make lint`.
+- [x] 2026-07-22: Final documentation reconciliation complete. Roadmap item
+      6.2.2 and all three subtasks are checked, duplicate text introduced by
+      the rebase was removed, and `make markdownlint` and `make nixie` passed.
 
 Each milestone ends by running, in this order and sequentially (never in
 parallel, to benefit from build caching): `make check-fmt`, `make typecheck`,
@@ -497,6 +508,32 @@ cleared before the next milestone. Commit after each green milestone.
   `/tmp/coderabbit-m5-ortho-config-6-2-2-version-and-validate-the-agent-context-schema.out`.
   Impact: the implementation milestones are complete; the remaining work is
   final PR-body refresh, final validation/review, and reporting.
+- Observation: Replaying the branch over the latest `main` crossed upstream
+  test-module extraction work and silently dropped several test attributes even
+  after textual conflicts were resolved.
+  Evidence: the first post-rebase validation exposed missing `#[test]`,
+  `#[rstest]`, and `#[case]` attributes in agent-context tests. Restoring those
+  attributes and retaining upstream support modules recovered the intended test
+  matrix. The final workspace test suite passed.
+  Impact: conflict-free files still require behavioural validation after a
+  rebase; successful textual replay alone does not prove that test registration
+  survived.
+- Observation: The CodeScene refactors exposed a module-size constraint after
+  assertion helpers were extracted.
+  Evidence: Whitaker rejected `ortho_config/src/agent_context/tests.rs` after it
+  exceeded 400 lines. Assertion support moved to
+  `tests_contract_support.rs`, round-trip property tests moved to
+  `tests_round_trip.rs`, and nested generator support moved to
+  `tests_nested_support.rs`; all affected test names and assertions remain.
+  Impact: test helpers are now grouped by concern, the original coverage is
+  preserved, and all source modules comply with the repository size policy.
+- Observation: The final documentation gate found a duplicate localized-IR
+  section introduced during rebase reconciliation.
+  Evidence: `make markdownlint` reported duplicate headings and consecutive
+  blank lines in `docs/cargo-orthohelp-design.md`. Removing the identical extra
+  section and correcting three ExecPlan spelling findings made both
+  `make markdownlint` and `make nixie` pass.
+  Impact: the completed branch now passes both code and documentation gates.
 
 ## Decision log
 
@@ -546,6 +583,13 @@ cleared before the next milestone. Commit after each green milestone.
   pre-1.0 re-baseline is less risky than freezing mixed enum casing and asking
   future maintainers to remember that the inconsistency is contractual.
   Date/Author: 2026-06-24, reviewer direction.
+- Decision: Preserve upstream test-module extraction during the final rebase
+  and place branch-specific test support in adjacent private modules rather
+  than folding helpers back into the parent test modules.
+  Rationale: this retains `main`'s module-size and ownership improvements while
+  preserving every branch assertion, property test, and nested fixture. It also
+  satisfies the 400-line source-file limit without lint suppressions.
+  Date/Author: 2026-07-22, implementation.
 
 ## Context and orientation
 
@@ -1026,14 +1070,34 @@ Documentation to consult: `docs/agent-native-cli-design.md` (§3.2, §8, §8.1),
 
 ## Outcomes & retrospective
 
-To be completed at milestone boundaries and on completion: compare the result
-against `Purpose / big picture`, record what running the agent-context transform
-over 6.1.2's `NestedFixtureConfig` surfaced about the `walk`/`command_path`
-recursion (Risk 1), note any approved decision that later changed and its
-impact, and capture lessons for 6.2.3 (downstream `context --json` naming) and
-6.3 (skill manifests), which build on this locked schema.
+Roadmap item 6.2.2 is complete. The reusable schema now has an independently
+pinned version, a byte-exact wire-contract guard, variant-exhaustive enum tests,
+forward-compatible deserialization coverage, and documented additive versus
+breaking change rules. All enum wire strings are consistently `snake_case`,
+including the deliberate pre-1.0 `read-only` to `read_only` change.
+
+The generator is covered at three observable levels: property tests establish
+determinism, in-process tests verify nested projection and ordering, and golden
+plus BDD tests cover simple, enum-bearing, and nested fixture roots. Running the
+6.1.2 nested tree through the transform confirmed that recursive command paths
+remain correct; no production recursion change was required. `--format all`
+now includes the same `agent-context.json` artefact as the dedicated format.
+
+The main implementation lesson is that schema locking needs both semantic and
+byte-level checks. Property and structural tests explain invariants, while the
+wire snapshot catches details such as null-versus-omitted fields and enum
+strings. The final rebase also showed that test registration can be lost without
+a textual conflict, so the full workspace gates remain mandatory after history
+rewrites. Roadmap 6.2.3 can rely on the locked downstream naming convention,
+and 6.3 can add skill-manifest links additively under the documented policy.
 
 ## Revision note
+
+- 2026-07-22 — Marked the ExecPlan complete after implementation, CodeScene
+  follow-up refactors, final rebase, and documentation reconciliation. Recorded
+  the final validation evidence, rebase findings, test-module organization
+  decision, completed outcomes, and confirmed that roadmap item 6.2.2 and its
+  subtasks are checked complete.
 
 - 2026-06-15 — Revised after roadmap 6.1.2 ("Nested command tree behavioural
   fixtures", PR #340, commit `5073b6d`) merged to `main` and was picked up by a
