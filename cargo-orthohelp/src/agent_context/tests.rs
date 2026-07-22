@@ -2,7 +2,7 @@
 
 use rstest::rstest;
 
-use super::bridge_ir_to_agent_context;
+use super::{bridge_ir_to_agent_context, normalize_default_display};
 use crate::schema::ValueType;
 
 #[test]
@@ -169,7 +169,7 @@ fn transform_normalizes_default_path_separators() {
             takes_value: true,
             hide_in_help: false,
             value: Some(ValueType::String),
-            default: Some("String :: from(\"localhost\")"),
+            default: Some("String :: from(\"left :: right\")"),
             required: false,
         })],
         subcommands: Vec::new(),
@@ -187,8 +187,25 @@ fn transform_normalizes_default_path_separators() {
 
     assert_eq!(
         input.default.as_deref(),
-        Some("String::from(\"localhost\")")
+        Some("String::from(\"left :: right\")")
     );
+}
+
+#[rstest]
+#[case(
+    r#"Type :: new("left \" :: right")"#,
+    r#"Type::new("left \" :: right")"#
+)]
+#[case(
+    r##"Type :: new(r#"left "quoted" :: right"#)"##,
+    r##"Type::new(r#"left "quoted" :: right"#)"##
+)]
+#[case(
+    r###"Type :: new(br##"left :: right"##)"###,
+    r###"Type::new(br##"left :: right"##)"###
+)]
+fn default_normalization_preserves_quoted_contents(#[case] display: &str, #[case] expected: &str) {
+    assert_eq!(normalize_default_display(display), expected);
 }
 
 #[test]

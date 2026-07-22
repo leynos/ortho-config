@@ -240,9 +240,16 @@ fn enum_values(field: &FieldMetadata) -> Vec<String> {
 fn normalize_default_display(display: &str) -> String {
     let mut normalised = String::with_capacity(display.len());
     let mut chars = display.chars().peekable();
+    let mut literal = StringLiteralState::default();
 
     while let Some(character) = chars.next() {
-        if character == ':' && chars.peek() == Some(&':') {
+        if literal.copy_character(character, &mut normalised, &mut chars) {
+            continue;
+        }
+        if character == '"' {
+            literal.start(&normalised);
+            normalised.push(character);
+        } else if character == ':' && chars.peek() == Some(&':') {
             normalize_path_separator(&mut normalised, &mut chars);
         } else {
             normalised.push(character);
@@ -250,6 +257,82 @@ fn normalize_default_display(display: &str) -> String {
     }
 
     normalised
+}
+
+#[derive(Default)]
+struct StringLiteralState {
+    is_quoted: bool,
+    is_escaped: bool,
+    raw_hashes: Option<usize>,
+}
+
+impl StringLiteralState {
+    fn start(&mut self, prefix: &str) {
+        self.raw_hashes = raw_string_hash_count(prefix);
+        self.is_quoted = self.raw_hashes.is_none();
+    }
+
+    fn copy_character(
+        &mut self,
+        character: char,
+        normalised: &mut String,
+        chars: &mut std::iter::Peekable<std::str::Chars<'_>>,
+    ) -> bool {
+        if let Some(hash_count) = self.raw_hashes {
+            normalised.push(character);
+            if character == '"' && next_chars_are_hashes(chars, hash_count) {
+                copy_hashes(normalised, chars, hash_count);
+                self.raw_hashes = None;
+            }
+            return true;
+        }
+        if !self.is_quoted {
+            return false;
+        }
+
+        normalised.push(character);
+        if self.is_escaped {
+            self.is_escaped = false;
+        } else if character == '\\' {
+            self.is_escaped = true;
+        } else if character == '"' {
+            self.is_quoted = false;
+        }
+        true
+    }
+}
+
+fn raw_string_hash_count(prefix: &str) -> Option<usize> {
+    let hash_count = prefix.chars().rev().take_while(|char| *char == '#').count();
+    let before_hashes = prefix.trim_end_matches('#');
+    let before_marker = ["br", "cr", "r"]
+        .into_iter()
+        .find_map(|marker| before_hashes.strip_suffix(marker))?;
+
+    (!before_marker
+        .chars()
+        .next_back()
+        .is_some_and(|char| char == '_' || char.is_alphanumeric()))
+    .then_some(hash_count)
+}
+
+fn next_chars_are_hashes(
+    chars: &std::iter::Peekable<std::str::Chars<'_>>,
+    hash_count: usize,
+) -> bool {
+    chars.clone().take(hash_count).all(|char| char == '#')
+}
+
+fn copy_hashes(
+    normalised: &mut String,
+    chars: &mut std::iter::Peekable<std::str::Chars<'_>>,
+    hash_count: usize,
+) {
+    for _ in 0..hash_count {
+        if let Some(hash) = chars.next() {
+            normalised.push(hash);
+        }
+    }
 }
 
 fn normalize_path_separator(
