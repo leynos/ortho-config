@@ -37,7 +37,7 @@ jobs:
           fetch-depth: 0
 
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@e0d9b652b137eb15314fff188f09e1ba18d3cc5b
+        uses: leynos/shared-actions/.github/actions/setup-rust@074f7d8ba75a6e5d18532b72cbe38fccbda4e9c6
 
       - name: Install bun
         uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76  # v2
