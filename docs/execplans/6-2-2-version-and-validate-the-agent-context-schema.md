@@ -147,7 +147,7 @@ These decide the exact v1 wire shape that this plan ossifies.
 2. **Default-display rendering brittleness (D2).** Field defaults are rendered
    by the derive macro as `proc_macro2` token strings, for example
    `"String :: from(\"localhost\")"` and `"LogLevel :: Info"` (see the existing
-   golden). The spacing around `::` is a formatting artifact of the toolchain,
+   golden). The spacing around `::` is a formatting artefact of the toolchain,
    not a stable contract, so a `quote`/`proc_macro2`/rustc upgrade could flip
    every default-bearing golden to red.
    - Decision: **(a) add a whitespace-normalization step** for the rendered
@@ -525,7 +525,7 @@ cleared before the next milestone. Commit after each green milestone.
   wire-value tests + version pin); no `schemars`.
   Rationale: a byte-exact snapshot is strictly stronger than a permissive JSON
   Schema diff for detecting accidental shape changes (it catches null-vs-absent
-  and enum-string renames). schemars' real value is a *publishable* artifact,
+  and enum-string renames). schemars' real value is a *publishable* artefact,
   which is a different, deferred requirement; ADR-003 calls JSON Schema prior
   art, not a compatibility target. Avoids Tolerance 1.
   Date/Author: 2026-06-14, planning.
@@ -1049,7 +1049,7 @@ impact, and capture lessons for 6.2.3 (downstream `context --json` naming) and
     (old fixture decision superseded), Context and orientation, Milestone 2
     (reuse `define_nested_fixture!`), Milestone 3 (root types not crates, plus a
     6.2.2-vs-6.1.2 render-assertion fence), Concrete steps, Validation,
-    Idempotence, Artifacts, Interfaces, Test matrix, and Signposted docs.
+    Idempotence, Artefacts, Interfaces, Test matrix, and Signposted docs.
   - Why: 6.1.2 shipped a reusable real nested tree and the `--root-type`
     convention, so authoring parallel crates would duplicate it and add build
     cost; reuse is cheaper and matches the now-canonical pattern.
