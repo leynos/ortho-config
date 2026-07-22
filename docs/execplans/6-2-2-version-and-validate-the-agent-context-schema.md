@@ -270,6 +270,10 @@ These decide the exact v1 wire shape that this plan ossifies.
 - [x] 2026-07-22: Final documentation reconciliation complete. Roadmap item
       6.2.2 and all three subtasks are checked, duplicate text introduced by
       the rebase was removed, and `make markdownlint` and `make nixie` passed.
+- [x] 2026-07-22: Review follow-up complete — default-display normalization now
+      preserves `::` and whitespace inside ordinary, byte, and raw string
+      literals while still tightening Rust path separators outside literals;
+      all code and documentation gates passed.
 
 Each milestone ends by running, in this order and sequentially (never in
 parallel, to benefit from build caching): `make check-fmt`, `make typecheck`,
@@ -534,6 +538,14 @@ cleared before the next milestone. Commit after each green milestone.
   section and correcting three ExecPlan spelling findings made both
   `make markdownlint` and `make nixie` pass.
   Impact: the completed branch now passes both code and documentation gates.
+- Observation: The original D2 character-level normalizer could not distinguish
+  Rust path separators from `::` inside string literals.
+  Evidence: the focused red test transformed
+  `String :: from("left :: right")` into
+  `String::from("left::right")`. Quote-aware scanning made that test green, and
+  parametrized cases cover escaped quotes and hash-delimited raw byte strings.
+  Impact: default displays remain stable without corrupting human-readable
+  literal values.
 
 ## Decision log
 
@@ -590,6 +602,12 @@ cleared before the next milestone. Commit after each green milestone.
   preserving every branch assertion, property test, and nested fixture. It also
   satisfies the 400-line source-file limit without lint suppressions.
   Date/Author: 2026-07-22, implementation.
+- Decision: Normalize `::` only in Rust code regions of default-display strings;
+  preserve ordinary, byte, and raw string literal contents verbatim.
+  Rationale: token-spacing stabilization must not alter values embedded in the
+  human-readable expression. A small lexical state machine handles escapes and
+  raw-string hash delimiters without adding a runtime parsing dependency.
+  Date/Author: 2026-07-22, review follow-up.
 
 ## Context and orientation
 
