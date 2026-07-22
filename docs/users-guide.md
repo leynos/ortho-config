@@ -291,6 +291,12 @@ enum strings for a fixed `schema_version`. They must ignore object fields they
 do not understand so newer producers can add optional metadata without breaking
 older consumers.
 
+`AgentInput.default` is display-only. The generator removes unstable whitespace
+around Rust `::` path separators while preserving string and character literal
+contents verbatim. The v1 contract also standardizes enum wire strings as
+`snake_case`; pre-1.0 consumers must read the mutation effect as `read_only`
+rather than `read-only`.
+
 ### Localizing CLI copy
 
 `ortho_config` exposes a `Localizer` trait, so applications can swap the text
