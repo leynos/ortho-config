@@ -243,24 +243,31 @@ fn normalize_default_display(display: &str) -> String {
 
     while let Some(character) = chars.next() {
         if character == ':' && chars.peek() == Some(&':') {
-            while normalised
-                .chars()
-                .next_back()
-                .is_some_and(char::is_whitespace)
-            {
-                normalised.pop();
-            }
-            normalised.push_str("::");
-            chars.next();
-            while chars.peek().is_some_and(|next| next.is_whitespace()) {
-                chars.next();
-            }
+            normalize_path_separator(&mut normalised, &mut chars);
         } else {
             normalised.push(character);
         }
     }
 
     normalised
+}
+
+fn normalize_path_separator(
+    normalised: &mut String,
+    chars: &mut std::iter::Peekable<std::str::Chars<'_>>,
+) {
+    while normalised
+        .chars()
+        .next_back()
+        .is_some_and(char::is_whitespace)
+    {
+        normalised.pop();
+    }
+    normalised.push_str("::");
+    chars.next();
+    while chars.peek().is_some_and(|next| next.is_whitespace()) {
+        chars.next();
+    }
 }
 
 #[cfg(test)]
