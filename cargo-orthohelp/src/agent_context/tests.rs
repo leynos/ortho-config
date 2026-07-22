@@ -204,6 +204,11 @@ fn transform_normalizes_default_path_separators() {
     r###"Type :: new(br##"left :: right"##)"###,
     r###"Type::new(br##"left :: right"##)"###
 )]
+#[case(
+    r#"Tuple :: new('\"', Other :: new())"#,
+    r#"Tuple::new('\"', Other::new())"#
+)]
+#[case("Type :: <'static> :: value", "Type::<'static>::value")]
 fn default_normalization_preserves_quoted_contents(#[case] display: &str, #[case] expected: &str) {
     assert_eq!(normalize_default_display(display), expected);
 }

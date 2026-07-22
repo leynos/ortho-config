@@ -697,7 +697,7 @@ in warning mode before enforcing it in CI.
 
 ### 8.2 Agent-context schema compatibility policy
 
-The agent-context schema is versioned independently from the documentation IR
+The agent-context schema is versioned independently of the documentation IR
 as recorded in
 [ADR-003](adr-003-define-schema-ownership-for-agent-native-contracts.md).
 `ORTHO_AGENT_CONTEXT_SCHEMA_VERSION` is a major-version string for the compact
@@ -734,12 +734,13 @@ part of the wire contract; changing it is breaking.
 `AgentInput.default` is a best-effort human-readable display. It is useful for
 selection and review, but it is not normative, executable, or
 machine-parseable. The generator normalizes unstable Rust token spacing around
-`::` before emitting the string so toolchain formatting changes do not churn
-goldens.
+`::` outside literals before emitting the string, so toolchain formatting
+changes do not churn goldens. String and character literal contents remain
+unchanged.
 
 The contract is pinned by a byte-exact snapshot and variant-exhaustive
 wire-value tests for every enum. When the version is bumped, retain the prior
-version's frozen wire fixture and a round-trip or compatibility test so overlap
+version's frozen wire fixture and a round-trip or compatibility test, so overlap
 compatibility is demonstrable. JSON Schema emission remains a deferred
 enhancement; if it is added, it belongs in dev tooling or behind a non-default
 feature, not in the runtime schema path.

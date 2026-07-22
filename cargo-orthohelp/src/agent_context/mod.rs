@@ -238,67 +238,94 @@ fn enum_values(field: &FieldMetadata) -> Vec<String> {
 }
 
 fn normalize_default_display(display: &str) -> String {
-    let mut normalised = String::with_capacity(display.len());
+    let mut normalized = String::with_capacity(display.len());
     let mut chars = display.chars().peekable();
-    let mut literal = StringLiteralState::default();
+    let mut literal = LiteralState::default();
 
     while let Some(character) = chars.next() {
-        if literal.copy_character(character, &mut normalised, &mut chars) {
+        if literal.copy_character(character, &mut normalized, &mut chars) {
             continue;
         }
         if character == '"' {
-            literal.start(&normalised);
-            normalised.push(character);
+            literal.start_string(&normalized);
+            normalized.push(character);
+        } else if character == '\'' && starts_character_literal(&chars) {
+            literal.start_character();
+            normalized.push(character);
         } else if character == ':' && chars.peek() == Some(&':') {
-            normalize_path_separator(&mut normalised, &mut chars);
+            normalize_path_separator(&mut normalized, &mut chars);
         } else {
-            normalised.push(character);
+            normalized.push(character);
         }
     }
 
-    normalised
+    normalized
 }
 
 #[derive(Default)]
-struct StringLiteralState {
-    is_quoted: bool,
+struct LiteralState {
+    quote: Option<char>,
     is_escaped: bool,
     raw_hashes: Option<usize>,
 }
 
-impl StringLiteralState {
-    fn start(&mut self, prefix: &str) {
+impl LiteralState {
+    fn start_string(&mut self, prefix: &str) {
         self.raw_hashes = raw_string_hash_count(prefix);
-        self.is_quoted = self.raw_hashes.is_none();
+        self.quote = self.raw_hashes.is_none().then_some('"');
+    }
+
+    const fn start_character(&mut self) {
+        self.quote = Some('\'');
     }
 
     fn copy_character(
         &mut self,
         character: char,
-        normalised: &mut String,
+        normalized: &mut String,
         chars: &mut std::iter::Peekable<std::str::Chars<'_>>,
     ) -> bool {
         if let Some(hash_count) = self.raw_hashes {
-            normalised.push(character);
+            normalized.push(character);
             if character == '"' && next_chars_are_hashes(chars, hash_count) {
-                copy_hashes(normalised, chars, hash_count);
+                copy_hashes(normalized, chars, hash_count);
                 self.raw_hashes = None;
             }
             return true;
         }
-        if !self.is_quoted {
+        let Some(quote) = self.quote else {
             return false;
-        }
+        };
 
-        normalised.push(character);
+        normalized.push(character);
         if self.is_escaped {
             self.is_escaped = false;
         } else if character == '\\' {
             self.is_escaped = true;
-        } else if character == '"' {
-            self.is_quoted = false;
+        } else if character == quote {
+            self.quote = None;
         }
         true
+    }
+}
+
+fn starts_character_literal(chars: &std::iter::Peekable<std::str::Chars<'_>>) -> bool {
+    let mut lookahead = chars.clone();
+    match lookahead.next() {
+        Some('\\') => escaped_character_has_closing_quote(&mut lookahead),
+        Some('\'' | '\n' | '\r') | None => false,
+        Some(_) => lookahead.next() == Some('\''),
+    }
+}
+
+fn escaped_character_has_closing_quote(chars: &mut impl Iterator<Item = char>) -> bool {
+    match chars.next() {
+        Some('x') => chars.nth(2) == Some('\''),
+        Some('u') if chars.next() == Some('{') => {
+            chars.any(|character| character == '}') && chars.next() == Some('\'')
+        }
+        Some(_) => chars.next() == Some('\''),
+        None => false,
     }
 }
 
@@ -324,29 +351,29 @@ fn next_chars_are_hashes(
 }
 
 fn copy_hashes(
-    normalised: &mut String,
+    normalized: &mut String,
     chars: &mut std::iter::Peekable<std::str::Chars<'_>>,
     hash_count: usize,
 ) {
     for _ in 0..hash_count {
         if let Some(hash) = chars.next() {
-            normalised.push(hash);
+            normalized.push(hash);
         }
     }
 }
 
 fn normalize_path_separator(
-    normalised: &mut String,
+    normalized: &mut String,
     chars: &mut std::iter::Peekable<std::str::Chars<'_>>,
 ) {
-    while normalised
+    while normalized
         .chars()
         .next_back()
         .is_some_and(char::is_whitespace)
     {
-        normalised.pop();
+        normalized.pop();
     }
-    normalised.push_str("::");
+    normalized.push_str("::");
     chars.next();
     while chars.peek().is_some_and(|next| next.is_whitespace()) {
         chars.next();

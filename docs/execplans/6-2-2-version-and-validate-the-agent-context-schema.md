@@ -92,7 +92,7 @@ Hard invariants. Violation requires escalation, not a workaround.
    `ps`, and `all` formats, their spellings, generated file paths, stdout and
    stderr contracts, and process success/failure behaviour must not change
    except through the explicit, documented `--format all` decision in this plan
-   (Milestone 4). See `docs/developers-guide.md` lines 101-105.
+   (Milestone 4). See `docs/developers-guide.md` under "Schema ownership".
 5. **The transform stays projective and non-localized.** The generator may copy
    or derive compact metadata from bridge IR but must not inspect rendered
    roff, PowerShell, or localized long help, and must not copy Fluent
@@ -274,6 +274,11 @@ These decide the exact v1 wire shape that this plan ossifies.
       preserves `::` and whitespace inside ordinary, byte, and raw string
       literals while still tightening Rust path separators outside literals;
       all code and documentation gates passed.
+- [x] 2026-07-22: Final inline-review reconciliation complete — character
+      literals and lifetimes are distinguished, stale documentation references
+      are corrected, the user guide records the wire migration, and en-US and
+      fr-FR fixture message keys are synchronized. The requested absent-summary
+      change was rejected because D1 deliberately locks omission.
 
 Each milestone ends by running, in this order and sequentially (never in
 parallel, to benefit from build caching): `make check-fmt`, `make typecheck`,
@@ -546,6 +551,14 @@ cleared before the next milestone. Commit after each green milestone.
   parametrized cases cover escaped quotes and hash-delimited raw byte strings.
   Impact: default displays remain stable without corrupting human-readable
   literal values.
+- Observation: A later review correctly identified that character literals were
+  not tracked, but incorrectly treated absent `summary` as a serialization bug.
+  Evidence: focused cases now cover an escaped quote character followed by a
+  second Rust path and a `'static` lifetime. By contrast, D1, the serde
+  attribute, §8.2, and `command_summary_serializes_only_when_present` all pin
+  absent `summary` as omitted rather than `null`.
+  Impact: literal-boundary coverage is complete without making an unapproved
+  breaking wire-contract change.
 
 ## Decision log
 
@@ -658,8 +671,8 @@ Generation pipeline: `cargo-orthohelp/src/main.rs` parses CLI
 metadata (`metadata.rs`), builds bridge IR by compiling an ephemeral crate
 (`bridge.rs`) that calls `OrthoConfigDocs::get_doc_metadata()`, transforms it,
 and writes `<out>/agent-context.json` atomically (`output.rs`,
-`write_agent_context`). `--format all` currently does *not* include
-agent-context (`main.rs:154` special-cases it; ir/man/ps include `All`).
+`write_agent_context`). Before Milestone 4, `--format all` did *not* include
+agent-context; the completed implementation now includes it.
 
 Existing end-to-end golden: `cargo-orthohelp/tests/golden/agent_context_tests.rs`
 runs the built binary against `--package orthohelp_fixture` and snapshots
@@ -742,7 +755,7 @@ confirm the relevant tests fail, revert. Use `pretty_assertions` and
 
 ### Milestone 2 — generator determinism and default-display policy (`cargo-orthohelp`)
 
-Goal: replace a near-trivial property with one that constrains *our* code, and
+Goal: replace a near-trivial property with one that constrains *the* code, and
 stabilize default rendering. Work in
 `cargo-orthohelp/src/agent_context/{proptests.rs,tests.rs}` and the generator.
 
