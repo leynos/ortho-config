@@ -1,16 +1,19 @@
 //! Tests for the compact agent-context schema.
 
+use super::*;
 use camino::Utf8PathBuf;
-use crate::docs::ORTHO_DOCS_IR_VERSION;
-use crate::serialize_agent_context;
 use insta::assert_snapshot;
-use proptest::{collection::vec, option, prelude::*};
 use rstest::rstest;
 use serde_json::{Value, json};
-use super::*;
-
 #[path = "tests_json.rs"]
 mod json;
+
+#[path = "tests_contract_support.rs"]
+mod contract_support;
+use contract_support::*;
+
+#[path = "tests_round_trip.rs"]
+mod round_trip;
 
 #[rstest]
 fn agent_context_version_is_independent_from_docs_ir() {
@@ -184,6 +187,7 @@ fn agent_context_json_snapshot_covers_wire_contract() {
     assert_eq!(json, AGENT_CONTEXT_WIRE_CONTRACT_JSON);
 }
 
+#[rstest]
 fn absent_optional_fields_serialize_with_documented_nulls() {
     let mut context = sample_agent_context();
     let mutable_command = context
@@ -209,6 +213,8 @@ fn absent_optional_fields_serialize_with_documented_nulls() {
     let value = serde_json::to_value(context).expect("serialize agent context");
     assert_optional_command_fields_are_null(&value);
 }
+
+#[rstest]
 fn absent_optional_metadata_deserializes_to_documented_defaults() {
     let context: AgentContext = serde_json::from_value(json!({
         "schema_version": "1",
@@ -244,6 +250,7 @@ fn missing_required_top_level_fields_fail_deserialization(#[case] payload: Value
     );
 }
 
+#[rstest]
 fn unknown_top_level_fields_are_ignored_for_forward_compatibility() {
     let payload = json!({
         "schema_version": "1",
@@ -262,6 +269,9 @@ fn unknown_top_level_fields_are_ignored_for_forward_compatibility() {
     assert!(context.commands.is_empty());
 }
 
+#[rstest]
+#[case(AsyncSubmissionMode::Inline, "inline")]
+#[case(AsyncSubmissionMode::Submit, "submit")]
 fn async_submission_mode_serializes_canonical_wire_values(
     #[case] mode: AsyncSubmissionMode,
     #[case] expected: &str,
@@ -270,6 +280,10 @@ fn async_submission_mode_serializes_canonical_wire_values(
     assert_eq!(value, expected);
 }
 
+#[rstest]
+#[case(InteractionMode::Unknown, "unknown")]
+#[case(InteractionMode::NonInteractive, "non_interactive")]
+#[case(InteractionMode::Interactive, "interactive")]
 fn interaction_mode_serializes_canonical_wire_values(
     #[case] mode: InteractionMode,
     #[case] expected: &str,
@@ -278,10 +292,21 @@ fn interaction_mode_serializes_canonical_wire_values(
     assert_eq!(value, expected);
 }
 
+#[rstest]
+#[case(PolicyMode::Off, "off")]
+#[case(PolicyMode::Warn, "warn")]
+#[case(PolicyMode::Deny, "deny")]
 fn policy_mode_serializes_canonical_wire_values(#[case] mode: PolicyMode, #[case] expected: &str) {
     let value = serde_json::to_value(mode).expect("serialize policy mode");
     assert_eq!(value, expected);
 }
+
+#[rstest]
+#[case(MutationEffect::Unknown, "unknown")]
+#[case(MutationEffect::ReadOnly, "read_only")]
+#[case(MutationEffect::Write, "write")]
+#[case(MutationEffect::Delete, "delete")]
+#[case(MutationEffect::Submit, "submit")]
 fn mutation_effect_serializes_canonical_wire_values(
     #[case] effect: MutationEffect,
     #[case] expected: &str,
@@ -290,119 +315,6 @@ fn mutation_effect_serializes_canonical_wire_values(
     assert_eq!(value, expected);
 }
 
-fn assert_agent_context_version_metadata() {
-    assert_agent_context_schema_identity();
-    assert_agent_context_schema_independence();
-}
-
-fn assert_agent_context_schema_identity() {
-    assert_eq!(ORTHO_AGENT_CONTEXT_SCHEMA_VERSION, "1");
-    assert_eq!(AGENT_CONTEXT_KIND_SUFFIX, "agent_context");
-}
-
-fn assert_agent_context_schema_independence() {
-    assert!(
-        AgentContext::new("example-cli")
-            .kind
-            .ends_with(AGENT_CONTEXT_KIND_SUFFIX)
-    );
-    assert_ne!(
-        ORTHO_AGENT_CONTEXT_SCHEMA_VERSION, ORTHO_DOCS_IR_VERSION,
-        "agent context must not share the documentation IR version"
-    );
-}
-
-fn assert_legacy_default_context(context: &AgentContext) {
-    assert_legacy_default_identity(context);
-    assert_legacy_default_support_declarations(context);
-    assert_legacy_default_policy_and_skills(context);
-}
-
-fn assert_legacy_default_identity(context: &AgentContext) {
-    assert_eq!(context.schema_version, ORTHO_AGENT_CONTEXT_SCHEMA_VERSION);
-    assert_eq!(context.kind, "example-cli.agent_context");
-    assert_eq!(context.package, "example-cli");
-}
-
-fn assert_legacy_default_support_declarations(context: &AgentContext) {
-    assert!(context.commands.is_empty());
-    assert!(!context.profiles.supported);
-    assert!(!context.feedback.supported);
-}
-
-fn assert_legacy_default_policy_and_skills(context: &AgentContext) {
-    assert_eq!(context.policy.agent_native, PolicyMode::Warn);
-    assert!(context.skill_manifests.is_empty());
-}
-
-fn assert_optional_command_fields_are_null(value: &Value) {
-    let serialized_command = first_array_item(field(value, "commands"));
-    let input = first_array_item(field(serialized_command, "inputs"));
-    let example = first_array_item(field(serialized_command, "examples"));
-
-    assert_optional_command_presence_fields_are_null(serialized_command);
-    assert_optional_command_route_fields_are_null(serialized_command);
-    assert_optional_command_nested_fields_are_null(input, example);
-}
-
-fn assert_optional_command_presence_fields_are_null(serialized_command: &Value) {
-    assert!(serialized_command.get("summary").is_none());
-    assert!(field(serialized_command, "canonical_verb").is_null());
-    assert!(field(serialized_command, "async_submission").is_null());
-}
-
-fn assert_optional_command_route_fields_are_null(serialized_command: &Value) {
-    assert!(field(serialized_command, "delivery_route").is_null());
-    assert!(field(serialized_command, "pagination").is_null());
-}
-
-fn assert_optional_command_nested_fields_are_null(input: &Value, example: &Value) {
-    assert!(field(input, "default").is_null());
-    assert!(field(example, "output_mode").is_null());
-}
-
-fn assert_legacy_omission_defaults(context: &AgentContext, command: &AgentCommand) {
-    assert_legacy_command_modes(command);
-    assert_legacy_command_optional_metadata(command);
-    assert_legacy_command_collections(command);
-    assert_legacy_context_support_defaults(context);
-    assert_legacy_context_policy_defaults(context);
-}
-
-fn assert_legacy_command_modes(command: &AgentCommand) {
-    assert_eq!(command.interaction_mode, InteractionMode::Unknown);
-    assert_eq!(command.mutation_effect, MutationEffect::Unknown);
-}
-
-fn assert_legacy_command_optional_metadata(command: &AgentCommand) {
-    assert!(command.summary.is_none());
-    assert!(command.async_submission.is_none());
-    assert!(command.delivery_route.is_none());
-}
-
-fn assert_legacy_command_collections(command: &AgentCommand) {
-    assert!(command.inputs.is_empty());
-}
-
-fn assert_legacy_context_support_defaults(context: &AgentContext) {
-    assert!(!context.profiles.supported);
-    assert!(!context.feedback.supported);
-}
-
-fn assert_legacy_context_policy_defaults(context: &AgentContext) {
-    assert_eq!(context.policy.agent_native, PolicyMode::Warn);
-    assert!(context.skill_manifests.is_empty());
-}
-proptest! {
-    #[test]
-    fn to_json_always_round_trips(context in any_agent_context()) {
-        let json = serialize_agent_context(&context).expect("serialize compact agent context");
-        let parsed: AgentContext =
-            serde_json::from_str(&json).expect("parse compact agent context");
-
-        prop_assert_eq!(parsed, context);
-    }
-}
 pub(super) fn field<'a>(value: &'a Value, name: &str) -> &'a Value {
     let Some(field) = value.get(name) else {
         panic!("JSON object should contain `{name}`");
@@ -470,150 +382,3 @@ pub(super) fn sample_agent_context() -> AgentContext {
         }],
     }
 }
-
-fn any_agent_context() -> impl Strategy<Value = AgentContext> {
-    (package_name(), vec(any_agent_command(), 0..4)).prop_map(|(package, commands)| AgentContext {
-        schema_version: ORTHO_AGENT_CONTEXT_SCHEMA_VERSION.to_owned(),
-        kind: crate::agent_context_kind(&package),
-        package,
-        commands,
-        profiles: SupportDeclaration { supported: false },
-        feedback: SupportDeclaration { supported: false },
-        policy: AgentPolicy {
-            agent_native: PolicyMode::Warn,
-        },
-        skill_manifests: Vec::new(),
-    })
-}
-
-fn any_agent_command() -> impl Strategy<Value = AgentCommand> {
-    (
-        vec(command_segment(), 1..4),
-        option::of(summary()),
-        interaction_mode(),
-        mutation_effect(),
-    )
-        .prop_map(
-            |(path, summary, interaction_mode, mutation_effect)| AgentCommand {
-                path,
-                summary,
-                canonical_verb: None,
-                inputs: Vec::new(),
-                output_modes: vec!["json".to_owned()],
-                interaction_mode,
-                mutation_effect,
-                async_submission: None,
-                delivery_route: None,
-                pagination: None,
-                examples: Vec::new(),
-            },
-        )
-}
-
-fn interaction_mode() -> impl Strategy<Value = InteractionMode> {
-    prop_oneof![
-        Just(InteractionMode::Unknown),
-        Just(InteractionMode::NonInteractive),
-        Just(InteractionMode::Interactive),
-    ]
-}
-
-fn mutation_effect() -> impl Strategy<Value = MutationEffect> {
-    prop_oneof![
-        Just(MutationEffect::Unknown),
-        Just(MutationEffect::ReadOnly),
-        Just(MutationEffect::Write),
-        Just(MutationEffect::Delete),
-        Just(MutationEffect::Submit),
-    ]
-}
-
-fn package_name() -> impl Strategy<Value = String> {
-    "[A-Za-z0-9_.-]{0,16}"
-}
-
-fn command_segment() -> impl Strategy<Value = String> {
-    "[a-z][a-z0-9-]{0,12}"
-}
-
-fn summary() -> impl Strategy<Value = String> {
-    "[A-Za-z0-9 .,;-]{0,48}"
-}
-
-const AGENT_CONTEXT_WIRE_CONTRACT_JSON: &str = r#"{
-  "schema_version": "1",
-  "kind": "example-cli.agent_context",
-  "package": "example-cli",
-  "commands": [
-    {
-      "path": [
-        "example-cli",
-        "list"
-      ],
-      "summary": "List configured resources.",
-      "canonical_verb": "list",
-      "inputs": [
-        {
-          "name": "format",
-          "long": "format",
-          "value_type": "string",
-          "required": false,
-          "default": "json",
-          "enum_values": [
-            "json"
-          ]
-        }
-      ],
-      "output_modes": [
-        "json"
-      ],
-      "interaction_mode": "non_interactive",
-      "mutation_effect": "read_only",
-      "async_submission": {
-        "mode": "submit",
-        "noun": "job"
-      },
-      "delivery_route": {
-        "supported": true,
-        "target": "file"
-      },
-      "pagination": {
-        "limit_input": "limit",
-        "cursor_input": "cursor"
-      },
-      "examples": [
-        {
-          "command": "example-cli list --format json",
-          "output_mode": "json"
-        }
-      ]
-    }
-  ],
-  "profiles": {
-    "supported": false
-  },
-  "feedback": {
-    "supported": false
-  },
-  "policy": {
-    "agent_native": "warn"
-  },
-  "skill_manifests": [
-    {
-      "id": "example-list",
-      "path": "skills/example-list.md",
-      "manifest_schema_version": "v1",
-      "commands": [
-        {
-          "path": [
-            "example-cli",
-            "list"
-          ],
-          "flags": [
-            "format"
-          ]
-        }
-      ]
-    }
-  ]
-}"#;
