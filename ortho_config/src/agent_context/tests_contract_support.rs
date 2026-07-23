@@ -8,6 +8,8 @@ use crate::agent_context::{
 use crate::docs::ORTHO_DOCS_IR_VERSION;
 use serde_json::Value;
 
+/// Asserts the schema identity constants and their independence from the
+/// documentation IR version.
 pub(super) fn assert_agent_context_version_metadata() {
     assert_agent_context_schema_identity();
     assert_agent_context_schema_independence();
@@ -30,6 +32,8 @@ fn assert_agent_context_schema_independence() {
     );
 }
 
+/// Asserts the complete legacy-compatible state produced by
+/// [`AgentContext::new`].
 pub(super) fn assert_legacy_default_context(context: &AgentContext) {
     assert_legacy_default_identity(context);
     assert_legacy_default_support_declarations(context);
@@ -53,6 +57,8 @@ fn assert_legacy_default_policy_and_skills(context: &AgentContext) {
     assert!(context.skill_manifests.is_empty());
 }
 
+/// Asserts the schema-v1 serialization contract for absent optional command,
+/// input, and example fields.
 pub(super) fn assert_optional_command_fields_are_null(value: &Value) {
     let serialized_command = first_array_item(field(value, "commands"));
     let input = first_array_item(field(serialized_command, "inputs"));
@@ -79,6 +85,8 @@ fn assert_optional_command_nested_fields_are_null(input: &Value, example: &Value
     assert!(field(example, "output_mode").is_null());
 }
 
+/// Asserts the schema-v1 defaults applied when legacy JSON omits optional
+/// command and context metadata.
 pub(super) fn assert_legacy_omission_defaults(context: &AgentContext, command: &AgentCommand) {
     assert_legacy_command_modes(command);
     assert_legacy_command_optional_metadata(command);
@@ -112,6 +120,7 @@ fn assert_legacy_context_policy_defaults(context: &AgentContext) {
     assert!(context.skill_manifests.is_empty());
 }
 
+/// Canonical pretty-printed schema-v1 JSON used by the wire-contract test.
 pub(super) const AGENT_CONTEXT_WIRE_CONTRACT_JSON: &str = r#"{
   "schema_version": "1",
   "kind": "example-cli.agent_context",

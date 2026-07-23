@@ -237,6 +237,7 @@ fn enum_values(field: &FieldMetadata) -> Vec<String> {
     }
 }
 
+/// Normalizes displayed Rust paths while preserving all literal contents.
 fn normalize_default_display(display: &str) -> String {
     let mut normalized = String::with_capacity(display.len());
     let mut chars = display.chars().peekable();
@@ -270,15 +271,18 @@ struct LiteralState {
 }
 
 impl LiteralState {
+    /// Enters a quoted or raw string based on its opening prefix.
     fn start_string(&mut self, prefix: &str) {
         self.raw_hashes = raw_string_hash_count(prefix);
         self.quote = self.raw_hashes.is_none().then_some('"');
     }
 
+    /// Enters a character literal at its opening quote.
     const fn start_character(&mut self) {
         self.quote = Some('\'');
     }
 
+    /// Copies a literal character and reports whether it was consumed.
     fn copy_character(
         &mut self,
         character: char,
@@ -309,6 +313,7 @@ impl LiteralState {
     }
 }
 
+/// Distinguishes a complete character literal from lifetime syntax.
 fn starts_character_literal(chars: &std::iter::Peekable<std::str::Chars<'_>>) -> bool {
     let mut lookahead = chars.clone();
     match lookahead.next() {
@@ -318,6 +323,7 @@ fn starts_character_literal(chars: &std::iter::Peekable<std::str::Chars<'_>>) ->
     }
 }
 
+/// Checks that an escaped character sequence ends with a closing quote.
 fn escaped_character_has_closing_quote(chars: &mut impl Iterator<Item = char>) -> bool {
     match chars.next() {
         Some('x') => chars.nth(2) == Some('\''),
@@ -329,6 +335,7 @@ fn escaped_character_has_closing_quote(chars: &mut impl Iterator<Item = char>) -
     }
 }
 
+/// Returns the delimiter width for a valid raw-string prefix.
 fn raw_string_hash_count(prefix: &str) -> Option<usize> {
     let hash_count = prefix.chars().rev().take_while(|char| *char == '#').count();
     let before_hashes = prefix.trim_end_matches('#');
@@ -343,6 +350,7 @@ fn raw_string_hash_count(prefix: &str) -> Option<usize> {
     .then_some(hash_count)
 }
 
+/// Checks whether the next `hash_count` characters close a raw string.
 fn next_chars_are_hashes(
     chars: &std::iter::Peekable<std::str::Chars<'_>>,
     hash_count: usize,
@@ -350,6 +358,7 @@ fn next_chars_are_hashes(
     chars.clone().take(hash_count).all(|char| char == '#')
 }
 
+/// Copies a raw string's closing hashes into the normalized output.
 fn copy_hashes(
     normalized: &mut String,
     chars: &mut std::iter::Peekable<std::str::Chars<'_>>,
@@ -362,6 +371,7 @@ fn copy_hashes(
     }
 }
 
+/// Replaces a path separator and its surrounding whitespace with `::`.
 fn normalize_path_separator(
     normalized: &mut String,
     chars: &mut std::iter::Peekable<std::str::Chars<'_>>,

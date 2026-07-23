@@ -7,6 +7,8 @@ use crate::schema::{
     CliMetadata, DefaultValue, DocMetadata, FieldMetadata, HeadingIds, SectionsMetadata, ValueType,
 };
 
+/// Projects a generated command into the path, canonical verb, and summary
+/// compared by bridge tests.
 pub(super) fn command_summary(
     command: &ortho_config::AgentCommand,
 ) -> (Vec<String>, Option<String>, Option<String>) {
@@ -17,6 +19,7 @@ pub(super) fn command_summary(
     )
 }
 
+/// Builds root documentation metadata containing the supplied subcommands.
 pub(super) fn metadata_with_subcommands(subcommands: Vec<DocMetadata>) -> DocMetadata {
     doc(DocSpec {
         app_name: "demo",
@@ -27,6 +30,8 @@ pub(super) fn metadata_with_subcommands(subcommands: Vec<DocMetadata>) -> DocMet
     })
 }
 
+/// Asserts that a command contains only the visible, invocable fixture inputs
+/// in their canonical order.
 pub(super) fn assert_visible_inputs(command: &ortho_config::AgentCommand) {
     let inputs: Vec<_> = command.inputs.iter().map(input_summary).collect();
 
@@ -53,6 +58,7 @@ pub(super) fn assert_visible_inputs(command: &ortho_config::AgentCommand) {
     );
 }
 
+/// Projects an agent input into the fields compared by bridge tests.
 pub(super) fn input_summary(
     input: &ortho_config::AgentInput,
 ) -> (
@@ -82,6 +88,8 @@ pub(super) struct DocSpec {
 }
 
 impl DocSpec {
+    /// Creates an empty child-command specification with the given command and
+    /// localization identifiers.
     pub(super) fn child(app_name: &'static str, about_id: &'static str) -> Self {
         Self {
             app_name,
@@ -92,6 +100,7 @@ impl DocSpec {
         }
     }
 
+    /// Creates the standard root-command specification without fields.
     pub(super) fn root_without_fields() -> Self {
         Self {
             app_name: "demo",
@@ -103,6 +112,7 @@ impl DocSpec {
     }
 }
 
+/// Expands a compact test specification into documentation metadata.
 pub(super) fn doc(spec: DocSpec) -> DocMetadata {
     DocMetadata {
         ir_version: "1.1".to_owned(),
@@ -117,6 +127,7 @@ pub(super) fn doc(spec: DocSpec) -> DocMetadata {
     }
 }
 
+/// Builds the stable section-heading metadata shared by bridge fixtures.
 pub(super) fn sections() -> SectionsMetadata {
     SectionsMetadata {
         headings_ids: HeadingIds {
@@ -151,10 +162,12 @@ pub(super) struct FieldSpec<'a> {
     pub(super) required: bool,
 }
 
+/// Builds CLI-backed field metadata without enumerated possible values.
 pub(super) fn cli_field(spec: FieldSpec<'_>) -> FieldMetadata {
     cli_field_with_possible_values(spec, [])
 }
 
+/// Builds CLI-backed field metadata and records the supplied possible values.
 pub(super) fn cli_field_with_possible_values<const N: usize>(
     spec: FieldSpec<'_>,
     possible_values: [&str; N],
@@ -176,6 +189,7 @@ pub(super) fn cli_field_with_possible_values<const N: usize>(
     })
 }
 
+/// Builds field metadata with no CLI invocation contract.
 pub(super) fn non_cli_field(name: &str) -> FieldMetadata {
     field(FieldParts {
         name,
@@ -194,6 +208,7 @@ pub(super) struct FieldParts<'a> {
     pub(super) cli: Option<CliMetadata>,
 }
 
+/// Expands field fixture parts into complete documentation field metadata.
 pub(super) fn field(parts: FieldParts<'_>) -> FieldMetadata {
     FieldMetadata {
         name: parts.name.to_owned(),
@@ -219,6 +234,7 @@ pub(super) struct StaticLocalizer {
 }
 
 impl StaticLocalizer {
+    /// Creates a deterministic localizer from fixed identifier-message pairs.
     pub(super) fn new<const N: usize>(entries: [(&str, &str); N]) -> Self {
         let messages = entries
             .into_iter()
@@ -227,6 +243,7 @@ impl StaticLocalizer {
         Self { messages }
     }
 
+    /// Creates a localizer containing one optional message for omission tests.
     pub(super) fn maybe(id: &str, message: Option<&str>) -> Self {
         message.map_or_else(
             || Self {
