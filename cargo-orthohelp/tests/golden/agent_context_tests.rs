@@ -4,16 +4,29 @@ use camino::Utf8PathBuf;
 use cap_std::ambient_authority;
 use cap_std::fs_utf8::Dir;
 use insta::{assert_snapshot, with_settings};
+use rstest::rstest;
 use std::error::Error;
 use std::process::{Command, Output};
 use tempfile::TempDir;
 
 use crate::fixtures;
 
-#[test]
-fn fixture_agent_context_matches_snapshot() -> Result<(), Box<dyn Error + Send + Sync>> {
+#[rstest]
+#[case::simple(
+    Some("orthohelp_fixture::SimpleFixtureConfig"),
+    "agent_context__simple_fixture.json"
+)]
+#[case::enum_root(None, "agent_context__fixture.json")]
+#[case::nested(
+    Some("orthohelp_fixture::NestedFixtureConfig"),
+    "agent_context__nested_fixture.json"
+)]
+fn fixture_agent_context_matches_snapshot(
+    #[case] root_type: Option<&str>,
+    #[case] snapshot_name: &str,
+) -> Result<(), Box<dyn Error + Send + Sync>> {
     let out_dir = tempfile::tempdir()?;
-    let output = run_agent_context(&out_dir)?;
+    let output = run_agent_context(&out_dir, root_type)?;
     if !output.status.success() {
         return Err(format!(
             "cargo-orthohelp should succeed: {:?}",
@@ -27,14 +40,18 @@ fn fixture_agent_context_matches_snapshot() -> Result<(), Box<dyn Error + Send +
     let dir = Dir::open_ambient_dir(&out_path, ambient_authority())?;
     let snapshot = dir.read_to_string("agent-context.json")?;
     with_settings!({snapshot_path => ".", prepend_module_to_snapshot => false}, {
-        assert_snapshot!("agent_context__fixture.json", snapshot);
+        assert_snapshot!(snapshot_name, snapshot);
     });
     Ok(())
 }
 
-fn run_agent_context(out_dir: &TempDir) -> Result<Output, Box<dyn Error + Send + Sync>> {
+fn run_agent_context(
+    out_dir: &TempDir,
+    root_type: Option<&str>,
+) -> Result<Output, Box<dyn Error + Send + Sync>> {
     let exe = fixtures::cargo_orthohelp_exe()?;
-    Ok(Command::new(exe.as_str())
+    let mut command = Command::new(exe.as_str());
+    command
         .current_dir(fixtures::workspace_root()?.as_std_path())
         .arg("orthohelp")
         .arg("--out-dir")
@@ -42,6 +59,9 @@ fn run_agent_context(out_dir: &TempDir) -> Result<Output, Box<dyn Error + Send +
         .arg("--format")
         .arg("agent-context")
         .arg("--package")
-        .arg("orthohelp_fixture")
-        .output()?)
+        .arg("orthohelp_fixture");
+    if let Some(selected_root_type) = root_type {
+        command.arg("--root-type").arg(selected_root_type);
+    }
+    Ok(command.output()?)
 }

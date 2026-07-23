@@ -87,7 +87,7 @@ fn assert_context_identity_fields(value: &Value) {
 
 fn assert_command_policy_fields(command: &Value) {
     assert_eq!(field(command, "interaction_mode"), "non_interactive");
-    assert_eq!(field(command, "mutation_effect"), "read-only");
+    assert_eq!(field(command, "mutation_effect"), "read_only");
     assert_eq!(field(field(command, "async_submission"), "mode"), "submit");
     assert_eq!(field(field(command, "delivery_route"), "target"), "file");
 }

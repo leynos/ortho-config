@@ -1,24 +1,23 @@
 //! Tests for the compact agent-context schema.
 
 use super::*;
-use crate::docs::ORTHO_DOCS_IR_VERSION;
-use crate::serialize_agent_context;
 use camino::Utf8PathBuf;
 use insta::assert_snapshot;
-use proptest::{collection::vec, option, prelude::*};
 use rstest::rstest;
 use serde_json::{Value, json};
-
 #[path = "tests_json.rs"]
 mod json;
 
+#[path = "tests_contract_support.rs"]
+mod contract_support;
+use contract_support::*;
+
+#[path = "tests_round_trip.rs"]
+mod round_trip;
+
 #[rstest]
 fn agent_context_version_is_independent_from_docs_ir() {
-    assert_eq!(ORTHO_AGENT_CONTEXT_SCHEMA_VERSION, "1");
-    assert_ne!(
-        ORTHO_AGENT_CONTEXT_SCHEMA_VERSION, ORTHO_DOCS_IR_VERSION,
-        "agent context must not share the documentation IR version"
-    );
+    assert_agent_context_version_metadata();
 }
 
 #[rstest]
@@ -35,14 +34,7 @@ fn agent_context_kind_appends_suffix(#[case] package: &str, #[case] expected: &s
 fn new_context_uses_legacy_defaults() {
     let context = AgentContext::new("example-cli");
 
-    assert_eq!(context.schema_version, ORTHO_AGENT_CONTEXT_SCHEMA_VERSION);
-    assert_eq!(context.kind, "example-cli.agent_context");
-    assert_eq!(context.package, "example-cli");
-    assert!(context.commands.is_empty());
-    assert!(!context.profiles.supported);
-    assert!(!context.feedback.supported);
-    assert_eq!(context.policy.agent_native, PolicyMode::Warn);
-    assert!(context.skill_manifests.is_empty());
+    assert_legacy_default_context(&context);
 }
 
 #[rstest]
@@ -191,7 +183,35 @@ fn skill_manifest_required_fields_fail_deserialization(#[case] payload: Value) {
 fn agent_context_json_snapshot_covers_wire_contract() {
     let json = serde_json::to_string_pretty(&sample_agent_context())
         .expect("serialize agent context snapshot");
-    assert_snapshot!(json);
+
+    assert_eq!(json, AGENT_CONTEXT_WIRE_CONTRACT_JSON);
+}
+
+#[rstest]
+fn absent_optional_fields_serialize_with_documented_nulls() {
+    let mut context = sample_agent_context();
+    let mutable_command = context
+        .commands
+        .first_mut()
+        .expect("sample context should contain one command");
+    mutable_command.summary = None;
+    mutable_command.canonical_verb = None;
+    mutable_command.async_submission = None;
+    mutable_command.delivery_route = None;
+    mutable_command.pagination = None;
+    mutable_command
+        .inputs
+        .first_mut()
+        .expect("sample command should contain one input")
+        .default = None;
+    mutable_command
+        .examples
+        .first_mut()
+        .expect("sample command should contain one example")
+        .output_mode = None;
+
+    let value = serde_json::to_value(context).expect("serialize agent context");
+    assert_optional_command_fields_are_null(&value);
 }
 
 #[rstest]
@@ -212,16 +232,7 @@ fn absent_optional_metadata_deserializes_to_documented_defaults() {
         .commands
         .first()
         .expect("legacy context should contain one command");
-    assert_eq!(command.interaction_mode, InteractionMode::Unknown);
-    assert_eq!(command.mutation_effect, MutationEffect::Unknown);
-    assert!(command.summary.is_none());
-    assert!(command.async_submission.is_none());
-    assert!(command.delivery_route.is_none());
-    assert!(command.inputs.is_empty());
-    assert!(!context.profiles.supported);
-    assert!(!context.feedback.supported);
-    assert_eq!(context.policy.agent_native, PolicyMode::Warn);
-    assert!(context.skill_manifests.is_empty());
+    assert_legacy_omission_defaults(&context, command);
 }
 
 #[rstest]
@@ -240,8 +251,59 @@ fn missing_required_top_level_fields_fail_deserialization(#[case] payload: Value
 }
 
 #[rstest]
+fn unknown_top_level_fields_are_ignored_for_forward_compatibility() {
+    let payload = json!({
+        "schema_version": "1",
+        "kind": "future-cli.agent_context",
+        "package": "future-cli",
+        "commands": [],
+        "future_optional_field": {
+            "producer": "newer-ortho-config"
+        }
+    });
+
+    let context = serde_json::from_value::<AgentContext>(payload)
+        .expect("unknown fields should be ignored within the same major version");
+
+    assert_eq!(context.package, "future-cli");
+    assert!(context.commands.is_empty());
+}
+
+#[rstest]
+#[case(AsyncSubmissionMode::Inline, "inline")]
+#[case(AsyncSubmissionMode::Submit, "submit")]
+fn async_submission_mode_serializes_canonical_wire_values(
+    #[case] mode: AsyncSubmissionMode,
+    #[case] expected: &str,
+) {
+    let value = serde_json::to_value(mode).expect("serialize async submission mode");
+    assert_eq!(value, expected);
+}
+
+#[rstest]
+#[case(InteractionMode::Unknown, "unknown")]
+#[case(InteractionMode::NonInteractive, "non_interactive")]
+#[case(InteractionMode::Interactive, "interactive")]
+fn interaction_mode_serializes_canonical_wire_values(
+    #[case] mode: InteractionMode,
+    #[case] expected: &str,
+) {
+    let value = serde_json::to_value(mode).expect("serialize interaction mode");
+    assert_eq!(value, expected);
+}
+
+#[rstest]
+#[case(PolicyMode::Off, "off")]
+#[case(PolicyMode::Warn, "warn")]
+#[case(PolicyMode::Deny, "deny")]
+fn policy_mode_serializes_canonical_wire_values(#[case] mode: PolicyMode, #[case] expected: &str) {
+    let value = serde_json::to_value(mode).expect("serialize policy mode");
+    assert_eq!(value, expected);
+}
+
+#[rstest]
 #[case(MutationEffect::Unknown, "unknown")]
-#[case(MutationEffect::ReadOnly, "read-only")]
+#[case(MutationEffect::ReadOnly, "read_only")]
 #[case(MutationEffect::Write, "write")]
 #[case(MutationEffect::Delete, "delete")]
 #[case(MutationEffect::Submit, "submit")]
@@ -253,17 +315,8 @@ fn mutation_effect_serializes_canonical_wire_values(
     assert_eq!(value, expected);
 }
 
-proptest! {
-    #[test]
-    fn to_json_always_round_trips(context in any_agent_context()) {
-        let json = serialize_agent_context(&context).expect("serialize compact agent context");
-        let parsed: AgentContext =
-            serde_json::from_str(&json).expect("parse compact agent context");
-
-        prop_assert_eq!(parsed, context);
-    }
-}
-
+/// Returns a required object field for schema assertions, failing with the
+/// field name when the fixture is malformed.
 pub(super) fn field<'a>(value: &'a Value, name: &str) -> &'a Value {
     let Some(field) = value.get(name) else {
         panic!("JSON object should contain `{name}`");
@@ -271,6 +324,7 @@ pub(super) fn field<'a>(value: &'a Value, name: &str) -> &'a Value {
     field
 }
 
+/// Returns the first array item required by a schema assertion.
 pub(super) fn first_array_item(value: &Value) -> &Value {
     let Some(item) = value.as_array().and_then(|items| items.first()) else {
         panic!("JSON value should be a non-empty array");
@@ -278,6 +332,8 @@ pub(super) fn first_array_item(value: &Value) -> &Value {
     item
 }
 
+/// Builds a fully populated context used by serialization and round-trip
+/// contract tests.
 pub(super) fn sample_agent_context() -> AgentContext {
     AgentContext {
         schema_version: ORTHO_AGENT_CONTEXT_SCHEMA_VERSION.to_owned(),
@@ -306,7 +362,10 @@ pub(super) fn sample_agent_context() -> AgentContext {
                 supported: true,
                 target: Some("file".to_owned()),
             }),
-            pagination: None,
+            pagination: Some(PaginationContract {
+                limit_input: Some("limit".to_owned()),
+                cursor_input: Some("cursor".to_owned()),
+            }),
             examples: vec![AgentExample {
                 command: "example-cli list --format json".to_owned(),
                 output_mode: Some("json".to_owned()),
@@ -327,73 +386,4 @@ pub(super) fn sample_agent_context() -> AgentContext {
             }],
         }],
     }
-}
-
-fn any_agent_context() -> impl Strategy<Value = AgentContext> {
-    (package_name(), vec(any_agent_command(), 0..4)).prop_map(|(package, commands)| AgentContext {
-        schema_version: ORTHO_AGENT_CONTEXT_SCHEMA_VERSION.to_owned(),
-        kind: crate::agent_context_kind(&package),
-        package,
-        commands,
-        profiles: SupportDeclaration { supported: false },
-        feedback: SupportDeclaration { supported: false },
-        policy: AgentPolicy {
-            agent_native: PolicyMode::Warn,
-        },
-        skill_manifests: Vec::new(),
-    })
-}
-
-fn any_agent_command() -> impl Strategy<Value = AgentCommand> {
-    (
-        vec(command_segment(), 1..4),
-        option::of(summary()),
-        interaction_mode(),
-        mutation_effect(),
-    )
-        .prop_map(
-            |(path, summary, interaction_mode, mutation_effect)| AgentCommand {
-                path,
-                summary,
-                canonical_verb: None,
-                inputs: Vec::new(),
-                output_modes: vec!["json".to_owned()],
-                interaction_mode,
-                mutation_effect,
-                async_submission: None,
-                delivery_route: None,
-                pagination: None,
-                examples: Vec::new(),
-            },
-        )
-}
-
-fn interaction_mode() -> impl Strategy<Value = InteractionMode> {
-    prop_oneof![
-        Just(InteractionMode::Unknown),
-        Just(InteractionMode::NonInteractive),
-        Just(InteractionMode::Interactive),
-    ]
-}
-
-fn mutation_effect() -> impl Strategy<Value = MutationEffect> {
-    prop_oneof![
-        Just(MutationEffect::Unknown),
-        Just(MutationEffect::ReadOnly),
-        Just(MutationEffect::Write),
-        Just(MutationEffect::Delete),
-        Just(MutationEffect::Submit),
-    ]
-}
-
-fn package_name() -> impl Strategy<Value = String> {
-    "[A-Za-z0-9_.-]{0,16}"
-}
-
-fn command_segment() -> impl Strategy<Value = String> {
-    "[a-z][a-z0-9-]{0,12}"
-}
-
-fn summary() -> impl Strategy<Value = String> {
-    "[A-Za-z0-9 .,;-]{0,48}"
 }

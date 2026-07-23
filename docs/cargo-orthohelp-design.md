@@ -545,9 +545,9 @@ migration is explicitly approved:
   is supplied.
 - `--format agent-context` writes one compact JSON document at
   `<out>/agent-context.json`.
-- `--format all` generates IR, then man pages, then PowerShell artefacts in a
-  single invocation. It reports success or failure through process exit status
-  and does not include `agent-context`.
+- `--format all` generates the agent-context document, IR, man pages, and
+  PowerShell artefacts in a single invocation. It reports success or failure
+  through process exit status.
 
 Agent-context output is added beside the human documentation formats. Policy
 output and JSON status output must also be added beside these contracts when
@@ -634,7 +634,14 @@ help structures. Positional inputs are detected from existing CLI metadata when
 an input has no `long` or `short` flag and still takes a value; the v1 schema
 represents those inputs by leaving `AgentInput.long` absent. The output is
 written as exactly one file at `<out>/agent-context.json`. `--format all`
-continues to mean `ir + man + ps`.
+includes the same agent-context document beside IR, man pages, and PowerShell
+artefacts.
+
+`AgentInput.default` is a best-effort display string, not a normative or
+machine-parseable value. The generator normalizes unstable Rust token spacing
+around `::` outside quoted literals before writing agent-context JSON so
+proc-macro formatting changes do not churn goldens. Ordinary, byte, and raw
+string literal contents are preserved verbatim.
 
 `--format agent-context` is the generator format and remains unchanged by
 [ADR-007](adr-007-downstream-context-command-naming.md). The downstream

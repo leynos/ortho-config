@@ -633,25 +633,30 @@ Older derives will not emit every new metadata field immediately. The
 agent-context schema, documentation IR, and man-page generation must therefore
 apply explicit defaults instead of guessing from absent data.
 
-| Field                  | Default                  | Rationale                                                                  |
-| ---------------------- | ------------------------ | -------------------------------------------------------------------------- |
-| `canonical_verb`       | `null`                   | Legacy command metadata did not classify verbs.                            |
-| `supports_json`        | `false`                  | Structured output must be declared before tools rely on it.                |
-| `json_stdout_contract` | `null`                   | No JSON stream invariant exists until the command opts in.                 |
-| `json_stderr_contract` | `null`                   | Diagnostics remain unspecified for legacy commands.                        |
-| `exit_classes`         | `[]`                     | Exit-code semantics are unavailable unless documented.                     |
-| `interaction_mode`     | `"unknown"`              | Legacy derives cannot prove whether a command prompts.                     |
-| `mutation_effect`      | `"unknown"`              | Read/write/delete boundaries must not be inferred from names.              |
-| `pagination`           | `null`                   | List bounds and cursors require explicit command metadata.                 |
-| `profile_support`      | `{ "supported": false }` | Profiles are opt-in persistent state.                                      |
-| `delivery_support`     | `{ "supported": false }` | Delivery sinks change artefact routing and must be explicit.               |
-| `feedback_support`     | `{ "supported": false }` | Feedback storage or upload must be explicitly available.                   |
-| `execution_ledger`     | `{ "supported": false }` | Jobs, runs, or tasks require application-owned execution state.            |
-| `skill_manifests`      | `[]`                     | Skills are absent until declared and validated.                            |
-| `capability_id`        | `null`                   | Capability routing is optional downstream metadata.                        |
-| `provider_provenance`  | `{ "reported": false }`  | Provider names are not emitted unless the application declares provenance. |
-| `renderer.human`       | `{ "supported": true }`  | Existing documentation IR already supports human help material.            |
-| `renderer.machine`     | `{ "supported": false }` | Machine renderer support must be declared before agents depend on it.      |
+The table distinguishes fields realized in agent-context schema v1 from
+forward-looking fields planned for later schema versions. Readers for schema v1
+apply defaults only to realized fields; planned rows record the intended future
+contract and do not imply that those fields exist today.
+
+| Field                  | Default                  | Status  | Rationale                                                                  |
+| ---------------------- | ------------------------ | ------- | -------------------------------------------------------------------------- |
+| `canonical_verb`       | `null`                   | v1      | Legacy command metadata did not classify verbs.                            |
+| `supports_json`        | `false`                  | planned | Structured output must be declared before tools rely on it.                |
+| `json_stdout_contract` | `null`                   | planned | No JSON stream invariant exists until the command opts in.                 |
+| `json_stderr_contract` | `null`                   | planned | Diagnostics remain unspecified for legacy commands.                        |
+| `exit_classes`         | `[]`                     | planned | Exit-code semantics are unavailable unless documented.                     |
+| `interaction_mode`     | `"unknown"`              | v1      | Legacy derives cannot prove whether a command prompts.                     |
+| `mutation_effect`      | `"unknown"`              | v1      | Read/write/delete boundaries must not be inferred from names.              |
+| `pagination`           | `null`                   | v1      | List bounds and cursors require explicit command metadata.                 |
+| `profiles.supported`   | `false`                  | v1      | Profiles are opt-in persistent state.                                      |
+| `delivery_route`       | `null`                   | v1      | Delivery sinks change artefact routing and must be explicit.               |
+| `feedback.supported`   | `false`                  | v1      | Feedback storage or upload must be explicitly available.                   |
+| `execution_ledger`     | `{ "supported": false }` | planned | Jobs, runs, or tasks require application-owned execution state.            |
+| `skill_manifests`      | `[]`                     | v1      | Skill manifests are absent until declared; validation lands in 6.3.2.      |
+| `capability_id`        | `null`                   | planned | Capability routing is optional downstream metadata.                        |
+| `provider_provenance`  | `{ "reported": false }`  | planned | Provider names are not emitted unless the application declares provenance. |
+| `renderer.human`       | `{ "supported": true }`  | planned | Existing documentation IR already supports human help material.            |
+| `renderer.machine`     | `{ "supported": false }` | planned | Machine renderer support must be declared before agents depend on it.      |
 
 Lint behaviour for omitted metadata follows the selected mode. In `off` mode,
 the check is not run. In `warn` mode, omitted fields that block an agent-native
@@ -663,7 +668,7 @@ enough for their command surface.
 
 The first implementation phase should introduce agent-native support behind
 explicit formats, commands, or metadata attributes. Existing generated
-documentation output should remain compatible, unless the roadmap names a
+documentation output should remain compatible unless the roadmap names a
 migration step.
 
 Legacy defaulting is an OrthoConfig reader or generator responsibility. JSON
@@ -681,14 +686,70 @@ execution-ledger support. The default is always the least capable compatible
 state until a derive attribute, application adapter, or later schema version
 declares a stronger contract.
 
-The existing `cargo-orthohelp --format ir`, `--format man`, `--format ps`, and
-`--format all` outputs are legacy-compatible surfaces. Agent-context output,
-JSON result streams, and policy reports may be added beside them, but they must
-not alter those existing formats, output paths, stdout and stderr contracts, or
-exit-status behaviour without an approved versioned migration.
+The existing `cargo-orthohelp --format ir`, `--format man`, `--format ps`,
+`--format agent-context`, and `--format all` outputs are compatibility
+surfaces. JSON result streams and policy reports may be added beside them, but
+they must not alter those existing formats, output paths, stdout and stderr
+contracts, or exit-status behaviour without an approved versioned migration.
 
 Strict policy should begin as opt-in. Projects should be able to run the check
 in warning mode before enforcing it in CI.
+
+### 8.2 Agent-context schema compatibility policy
+
+The agent-context schema is versioned independently of the documentation IR
+as recorded in
+[ADR-003](adr-003-define-schema-ownership-for-agent-native-contracts.md).
+`ORTHO_AGENT_CONTEXT_SCHEMA_VERSION` is a major-version string for the compact
+wire shape emitted by `cargo orthohelp --format agent-context` and by
+`--format all`. It is an integer-valued breaking-change counter, not SemVer:
+additive changes keep the same value, and breaking changes bump it.
+
+Within a major version, producers may add optional fields, add enum variants
+only when consumers are documented to ignore unknown values, or populate a
+previously `null` optional field with data that already has a defined meaning.
+Readers must ignore unknown object fields, and schema types must not add
+`deny_unknown_fields` while retaining the same major version. Absent fields use
+the realized-field defaults recorded in §8.1; validation never mutates payloads
+to populate those defaults.
+
+Breaking changes require bumping `ORTHO_AGENT_CONTEXT_SCHEMA_VERSION`. Breaking
+changes include renaming or removing fields, changing enum wire strings,
+changing enum casing, changing required fields, moving fields between objects,
+changing a field's JSON type, changing a serialized default or `Default`
+implementation, toggling whether an optional field is omitted or serialized as
+`null`, adding `deny_unknown_fields`, removing an enum variant, or changing the
+meaning of an existing value. The v1 contract deliberately uses snake_case enum
+strings.
+
+JSON object ordering is not semantically meaningful to consumers, but the
+wire-contract snapshot is byte-sensitive. Field or key reordering therefore
+requires a deliberate snapshot review even when the schema meaning does not
+change.
+
+`AgentCommand.summary` is intentionally omitted when absent. Other optional
+schema v1 fields serialize as explicit `null` when absent. This asymmetry is
+part of the wire contract; changing it is breaking.
+
+`AgentInput.default` is a best-effort human-readable display. It is useful for
+selection and review, but it is not normative, executable, or
+machine-parseable. The generator normalizes unstable Rust token spacing around
+`::` outside literals before emitting the string, so toolchain formatting
+changes do not churn goldens. String and character literal contents remain
+unchanged.
+
+The contract is pinned by a byte-exact snapshot and variant-exhaustive
+wire-value tests for every enum. When the version is bumped, retain the prior
+version's frozen wire fixture and a round-trip or compatibility test, so overlap
+compatibility is demonstrable. JSON Schema emission remains a deferred
+enhancement; if it is added, it belongs in dev tooling or behind a non-default
+feature, not in the runtime schema path.
+
+Schema v1 history:
+
+- `1`: locked by roadmap item 6.2.2. The lock standardizes agent-context enum
+  wire strings to snake_case, records the null-versus-omitted optional-field
+  policy, and includes agent-context output in `cargo orthohelp --format all`.
 
 ## 9. Current gaps to resolve
 
