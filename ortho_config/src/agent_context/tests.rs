@@ -315,6 +315,8 @@ fn mutation_effect_serializes_canonical_wire_values(
     assert_eq!(value, expected);
 }
 
+/// Returns a required object field for schema assertions, failing with the
+/// field name when the fixture is malformed.
 pub(super) fn field<'a>(value: &'a Value, name: &str) -> &'a Value {
     let Some(field) = value.get(name) else {
         panic!("JSON object should contain `{name}`");
@@ -322,6 +324,7 @@ pub(super) fn field<'a>(value: &'a Value, name: &str) -> &'a Value {
     field
 }
 
+/// Returns the first array item required by a schema assertion.
 pub(super) fn first_array_item(value: &Value) -> &Value {
     let Some(item) = value.as_array().and_then(|items| items.first()) else {
         panic!("JSON value should be a non-empty array");
@@ -329,6 +332,8 @@ pub(super) fn first_array_item(value: &Value) -> &Value {
     item
 }
 
+/// Builds a fully populated context used by serialization and round-trip
+/// contract tests.
 pub(super) fn sample_agent_context() -> AgentContext {
     AgentContext {
         schema_version: ORTHO_AGENT_CONTEXT_SCHEMA_VERSION.to_owned(),

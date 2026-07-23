@@ -5,6 +5,8 @@ use ortho_config::AgentCommand;
 use super::support::{DocSpec, FieldSpec, cli_field, doc};
 use crate::schema::{DocMetadata, FieldMetadata, ValueType};
 
+/// Builds the nested documentation tree used to verify flattened command and
+/// input ordering.
 pub(super) fn nested_metadata() -> DocMetadata {
     doc(DocSpec {
         app_name: "nested-app",
@@ -78,6 +80,8 @@ fn leaf_metadata(
 type NestedInputSummary = (String, Option<String>, Option<String>);
 type NestedCommandSummary = (Vec<String>, Vec<NestedInputSummary>, Option<String>);
 
+/// Projects a generated command into the path, inputs, and canonical verb
+/// compared by nested-command tests.
 pub(super) fn nested_command_summary(command: &AgentCommand) -> NestedCommandSummary {
     (
         command.path.clone(),
@@ -96,6 +100,7 @@ pub(super) fn nested_command_summary(command: &AgentCommand) -> NestedCommandSum
     )
 }
 
+/// Returns the ordered command summaries expected from [`nested_metadata`].
 pub(super) fn expected_nested_command_summaries() -> Vec<NestedCommandSummary> {
     vec![
         (
