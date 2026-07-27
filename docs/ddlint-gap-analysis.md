@@ -1,8 +1,8 @@
 # Gap analysis: OrthoConfig vs ddlint configuration requirements
 
 This document compares OrthoConfig's current capabilities with the command-line
-and configuration interface described in the [ddlint design document][
-ddlint-design].
+and configuration interface described in the
+[ddlint design document][ ddlint-design].
 
 Status: historical analysis. The original loading gap list has been addressed
 by later OrthoConfig work and is no longer the active roadmap. The remaining

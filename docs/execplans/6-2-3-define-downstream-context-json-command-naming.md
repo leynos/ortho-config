@@ -195,9 +195,9 @@ Use timestamps (for example `(2026-06-14 13:00Z)`) when ticking items.
 - Observation: no public `agent-context` subcommand or alias exists today; the
   only surface is the `--format agent-context` enum value. Evidence:
   `cargo-orthohelp/src/cli/mod.rs:16-28` (the `OutputFormat` enum) and
-  `cargo-orthohelp/src/cli/mod.rs:42-47` (`CargoSubcommand` has only `Orthohelp`).
-  Impact: the "avoid public aliases" requirement is satisfied today; the task
-  is to *lock it in* with a guard test and document the rule.
+  `cargo-orthohelp/src/cli/mod.rs:42-47` (`CargoSubcommand` has only
+  `Orthohelp`). Impact: the "avoid public aliases" requirement is satisfied
+  today; the task is to *lock it in* with a guard test and document the rule.
 - Observation: prominent prior art names the introspection *command*
   `agent-context`, not `context`. Evidence: Trevin Chow, "10 Principles for
   Agent-Native CLIs" (§7, three-layer introspection) shows
@@ -236,8 +236,7 @@ Use timestamps (for example `(2026-06-14 13:00Z)`) when ticking items.
   contain `cli`. Evidence: the command reported two
   `agent_context::tests::*visible_cli*` tests and did not run
   `cli::reserved_agent_context_tests::no_context_or_agent_context_subcommand_alias`.
-  Impact: use the
-  exact filters
+  Impact: use the exact filters
   `cargo test -p cargo-orthohelp no_context_or_agent_context_subcommand_alias`
   and `cargo test -p cargo-orthohelp format_accepts_agent_context` for
   Milestone 2 evidence.
@@ -331,8 +330,8 @@ uses the constructor; and compact/pretty JSON render helpers live in
 failed for the expected missing API, the green run passed 33 `agent_context`
 tests, and the standard workspace gates passed. CodeRabbit reviewed commit
 `bb721ab` with zero findings. The only gap is the pre-existing
-`--no-default-features` compile failure recorded in Surprises &
-discoveries and Decision D7.
+`--no-default-features` compile failure recorded in Surprises & discoveries and
+Decision D7.
 
 Milestone 2 outcome (2026-06-24): `cargo-orthohelp` now has a guard test that
 walks the clap command tree, including hidden aliases, and rejects public
@@ -382,8 +381,8 @@ The reader is assumed to know nothing about this repository. Key locations:
   `ORTHO_AGENT_CONTEXT_SCHEMA_VERSION = "1"` and
   `AGENT_CONTEXT_KIND_SUFFIX = "agent_context"`, and the command/input/enum
   types. `json.rs` provides the feature-gated compact and pretty render
-  helpers. All types derive serde `Serialize`/`Deserialize` and
-  `PartialEq`/`Eq`.
+  helpers. All types derive serde `Serialize`/`Deserialize` and `PartialEq`/
+  `Eq`.
 - `ortho_config/src/agent_context/tests.rs` and
   `ortho_config/src/agent_context/tests_json.rs` — unit tests (`rstest`,
   `insta`, `serde_json`), including `new_context_uses_legacy_defaults` and an
@@ -398,7 +397,8 @@ The reader is assumed to know nothing about this repository. Key locations:
   so `serialize_agent_context(ctx)?` composes in any `Result<_, OrthoError>`
   function. No new error type is needed.
 - `ortho_config/Cargo.toml` — `serde_json` is an optional, default-on feature.
-- `cargo-orthohelp/src/cli/mod.rs` — the generator CLI. `OutputFormat` enum (with
+- `cargo-orthohelp/src/cli/mod.rs` — the generator CLI. `OutputFormat` enum
+  (with
   `AgentContext`) and `CargoSubcommand` (only `Orthohelp`). The positive
   control lives in `cli::tests`; the reserved-name guard lives in
   `cli/reserved_agent_context_tests.rs`.
@@ -483,23 +483,22 @@ Edit `ortho_config/src/agent_context/mod.rs`:
    ```
 
    Compact is the command-surface wire form (cheap to load, matches prior art);
-   pretty is offered only for parity with the generator's file output. The
-   bare `serde_json::Error` return composes with the existing `From` impl, so
-   no new error type is added.
+   pretty is offered only for parity with the generator's file output. The bare
+   `serde_json::Error` return composes with the existing `From` impl, so no new
+   error type is added.
 
 3. Re-export `agent_context_kind` and the feature-gated JSON adapter functions
-   from `ortho_config/src/lib.rs`. No reusable command or flag constants, and
-   no `AgentContext::to_json` or `AgentContext::to_json_pretty` methods, are
-   part of the final public API.
+   from `ortho_config/src/lib.rs`. No reusable command or flag constants, and no
+   `AgentContext::to_json` or `AgentContext::to_json_pretty` methods, are part
+   of the final public API.
 
 Tests (extend `ortho_config/src/agent_context/tests.rs`): see Validation.
 
 ### Milestone 2 — guard test in `cargo-orthohelp`
 
-The guard-test module
-`cargo-orthohelp/src/cli/reserved_agent_context_tests.rs` owns
-`no_context_or_agent_context_subcommand_alias`. It walks `Cli::command()` via
-`clap::CommandFactory` and asserts that no command in the tree is named
+The guard-test module `cargo-orthohelp/src/cli/reserved_agent_context_tests.rs`
+owns `no_context_or_agent_context_subcommand_alias`. It walks `Cli::command()`
+via `clap::CommandFactory` and asserts that no command in the tree is named
 `context` or `agent-context` and that no command exposes either as an alias
 (using `get_all_aliases()` so hidden aliases cannot slip through). The existing
 `format_accepts_agent_context` test remains the positive control. No new
@@ -514,17 +513,15 @@ Add a small `context` command to `examples/hello_world`:
    public types (`AgentContext::new("hello_world")` plus a couple of
    `AgentCommand` entries for `greet`/`take-leave`), clearly commented as a
    convention demonstration, not an auto-generated tree. Provide a function
-   returning the `AgentContext` and a renderer using
-   `serialize_agent_context`.
+   returning the `AgentContext` and a renderer using `serialize_agent_context`.
 2. Wire a `context` surface with a `--json` flag using application-owned
    literals. Handle it as an early short-circuit in
    `examples/hello_world/src/main.rs` before
    `load_globals_and_merge_selected_subcommand` (Decision D3): if the parsed
    invocation is `context`, render and print, then return — bypassing config
    merge. With `--json`, print `serialize_agent_context` output to stdout and
-   exit 0; without
-   `--json`, print a one-line human pointer to `--json` on stdout and exit 0
-   (Decision D2).
+   exit 0; without `--json`, print a one-line human pointer to `--json` on
+   stdout and exit 0 (Decision D2).
 3. Keep `context` output on stdout and diagnostics on stderr.
 
 If integrating `context` as a clap-derive subcommand forces it through the
@@ -592,10 +589,10 @@ Per-milestone loop:
 
 1. Write the red test(s) first; run the focused test and confirm it fails for
    the intended reason: `cargo test -p ortho_config agent_context` (Milestone
-   1), `cargo test -p cargo-orthohelp
-   no_context_or_agent_context_subcommand_alias` and `cargo test -p
-   cargo-orthohelp format_accepts_agent_context` (Milestone 2),
-   `cargo test -p hello_world` (Milestone 3).
+   1),
+   `cargo test -p cargo-orthohelp no_context_or_agent_context_subcommand_alias`
+   and `cargo test -p cargo-orthohelp format_accepts_agent_context` (Milestone
+   2), `cargo test -p hello_world` (Milestone 3).
 2. Make the minimal production change; rerun the focused test (green).
 3. Refactor; rerun the focused test and then the milestone gates:
    `make check-fmt`, `make typecheck`, `make lint`, `make test` (sequentially).

@@ -160,8 +160,8 @@ Reusable agent-context types and `ORTHO_AGENT_CONTEXT_SCHEMA_VERSION` live in
 `ortho_config::agent_context`. `cargo-orthohelp` may generate or transform the
 context in later roadmap work, but it does not own the reusable context
 contract. The documentation IR remains owned by `ortho_config::docs`, so Fluent
-identifiers, localized long prose, roff details, and PowerShell help
-structures are not agent-context source fields.
+identifiers, localized long prose, roff details, and PowerShell help structures
+are not agent-context source fields.
 
 The `cargo-orthohelp` generator interface is:
 

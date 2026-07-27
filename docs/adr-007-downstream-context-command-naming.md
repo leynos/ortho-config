@@ -9,14 +9,14 @@ Date: 2026-06-14.
 OrthoConfig defines a compact agent-context schema in
 `ortho_config::agent_context`, and `cargo-orthohelp` can emit that schema as a
 build-time file with `--format agent-context`. Downstream applications need a
-runtime command surface for the same contract, so agents can discover invocation
-metadata directly from an installed tool.
+runtime command surface for the same contract, so agents can discover
+invocation metadata directly from an installed tool.
 
 The command name has two competing pressures. Prior art for agent-native CLIs
 uses an explicit `agent-context` introspection layer, while OrthoConfig's
 application-facing command should be short, stable, and approachable. The JSON
-payload still needs an unambiguous discriminator, so consumers can recognize the
-document without relying on command names alone.
+payload still needs an unambiguous discriminator, so consumers can recognize
+the document without relying on command names alone.
 
 The question is whether downstream applications expose `agent-context`, expose
 `context --json` with a payload discriminator, or rely only on JSON shape.
@@ -73,9 +73,10 @@ the runtime surface stable and approachable while rejecting a public
 diverges from some prior art.
 
 Schema compatibility is determined only by `schema_version`. The
-`AGENT_CONTEXT_KIND_SUFFIX` constant and `agent_context_kind` function construct
-the `kind` value independently. Changing `schema_version` does not imply a
-change to `kind`, and consumers must not infer compatibility from `kind`.
+`AGENT_CONTEXT_KIND_SUFFIX` constant and `agent_context_kind` function
+construct the `kind` value independently. Changing `schema_version` does not
+imply a change to `kind`, and consumers must not infer compatibility from
+`kind`.
 
 Downstream applications own their command and flag literals, while JSON
 formatting is provided by the feature-gated serializer adapter.

@@ -561,13 +561,12 @@ leaf replacement**, using the crate's existing `merge_value` semantics
 or map-typed field this preserves sibling keys: if the substrate produced
 `{database: {url: "old", pool}}` and a projection selects a value for
 `database.url`, the result is `{database: {url: "new", pool}}` — `url` is
-replaced, `pool` survives.
-For a scalar or `Vec<T>` leaf, the leaf is replaced wholesale. Fields whose
-keys are not known at derive time (arbitrary map keys, flattened structs) are
-served entirely by the substrate; their alias-free projections, if any, are a
-no-op overlay. The single uniform code path avoids a behavioural cliff where
-adding one alias silently switches a struct between two loaders, and
-`composer.push_environment` is still called exactly once.
+replaced, `pool` survives. For a scalar or `Vec<T>` leaf, the leaf is replaced
+wholesale. Fields whose keys are not known at derive time (arbitrary map keys,
+flattened structs) are served entirely by the substrate; their alias-free
+projections, if any, are a no-op overlay. The single uniform code path avoids a
+behavioural cliff where adding one alias silently switches a struct between two
+loaders, and `composer.push_environment` is still called exactly once.
 
 `resolve` therefore composes in two phases: first the substrate `Value`, then
 each projection's selected value deep-merged onto it. A regression test asserts
@@ -847,12 +846,12 @@ the target stay with the application.
   merge with leaf replacement (`merge_value` semantics).
 - The generated code calls `composer.push_environment` exactly once and appends
   resolution errors, individually, to the existing `errors` collection.
-- The runtime glue types (`EnvProjection`, `EnvAlias`, the resolver) are internal
-  (`#[doc(hidden)]`), not committed public API, and are not
-  `#[non_exhaustive]`.
+- The runtime glue types (`EnvProjection`, `EnvAlias`, the resolver) are
+  internal
+  (`#[doc(hidden)]`), not committed public API, and are not `#[non_exhaustive]`.
 - The IR extension renames `var_name` to `canonical` (read-compatible via a
-  serde alias) and bumps `ir_version` to `1.2`; the agent-context `env` block is
-  additive and does not bump the agent-context schema version.
+  serde alias) and bumps `ir_version` to `1.2`; the agent-context `env` block
+  is additive and does not bump the agent-context schema version.
 
 ### 6.3 Safety requirements
 
@@ -977,8 +976,7 @@ Rollout order:
 2. Migrate `vk`: add the attribute and `Secret<String>` type, run the
    differential test, gut and then delete the shim, flip call sites.
 3. Migrate `podbot`: replace the table with projections, delete the bespoke
-   table
-   and insertion point. Convert `env_allowlist` once RFC 0002 lands.
+   table and insertion point. Convert `env_allowlist` once RFC 0002 lands.
 
 ### 7.4 IR snapshot churn
 
@@ -1059,13 +1057,13 @@ A companion test confirms that ordinary cross-layer append (file then
 environment, no alias hit) still produces the merged vector.
 
 This invariant is property-tested over generated vectors and layer states. For
-each case, the file layer, canonical environment candidate, and alias
-candidate may be absent or contain a generated vector. The oracle first applies
-alias selection to produce zero or one environment vector, then applies the
-field's declared cross-layer merge strategy once between file and environment.
-The property asserts that the implementation never observes two environment
-vectors for one field and therefore never appends the canonical and alias
-values together.
+each case, the file layer, canonical environment candidate, and alias candidate
+may be absent or contain a generated vector. The oracle first applies alias
+selection to produce zero or one environment vector, then applies the field's
+declared cross-layer merge strategy once between file and environment. The
+property asserts that the implementation never observes two environment vectors
+for one field and therefore never appends the canonical and alias values
+together.
 
 ### 8.4 Further cases
 
@@ -1145,21 +1143,21 @@ public builder is deferred until a real requirement justifies it.
 The design follows established precedent. Python's `pydantic-settings` is the
 closest analogue: `AliasChoices("a", "b")` provides an explicit, ordered,
 per-field list where "the first environment variable that is found will be
-used", and an explicit alias bypasses the configured prefix[^4]. Go's
-`Viper` offers the same shape at runtime — `BindEnv(key, name1, name2, …)`
-where "if more than one are provided, they will take precedence in the
-specified order" — but pairs it with the dangerous whole-environment
-`AutomaticEnv`, which this RFC explicitly rejects[^2]. Both `AliasChoices`
-and `BindEnv` take an ordered list of arbitrary length; this RFC's two-band
-grammar expresses the same total order through grouping and author order, and
-§11 records the path to an explicit rank should three-plus ordered categories
-prove common. `clap` contributes the clean layering of command line over
-environment over default, and the practice of showing the bound environment
-variable in help, but binds only a single name per argument[^5].
+used", and an explicit alias bypasses the configured prefix[^4]. Go's `Viper`
+offers the same shape at runtime — `BindEnv(key, name1, name2, …)` where "if
+more than one are provided, they will take precedence in the specified order" —
+but pairs it with the dangerous whole-environment `AutomaticEnv`, which this
+RFC explicitly rejects[^2]. Both `AliasChoices` and `BindEnv` take an ordered
+list of arbitrary length; this RFC's two-band grammar expresses the same total
+order through grouping and author order, and §11 records the path to an
+explicit rank should three-plus ordered categories prove common. `clap`
+contributes the clean layering of command line over environment over default,
+and the practice of showing the bound environment variable in help, but binds
+only a single name per argument[^5].
 
 The empty-value policy borrows config-rs's `ignore_empty` semantics directly —
-"ignore empty env values (treat as unset)"[^6]. The "canonical shadows
-alias" rule mirrors the GitHub command-line tool, which documents `GH_TOKEN` and
+"ignore empty env values (treat as unset)"[^6]. The "canonical shadows alias"
+rule mirrors the GitHub command-line tool, which documents `GH_TOKEN` and
 `GITHUB_TOKEN` "in order of precedence" — the tool-specific name beating the
 generic one — and warns when an ambient `GITHUB_TOKEN` is picked up[^1].
 Storing configuration, and especially credentials, in environment variables is
@@ -1168,8 +1166,8 @@ could be made open source "without compromising any credentials" — directly
 motivates the secret-redaction metadata[^7]. The crate's existing
 prefix-to-path mapping is itself a relative of Spring Boot's relaxed binding,
 which normalizes `MY_APP_GITHUB_TOKEN`-style names to canonical properties
-[^8]; the difference is that aliasing accepts genuinely *different*
-external names rather than alternative spellings of one name.
+[^8]; the difference is that aliasing accepts genuinely *different* external
+names rather than alternative spellings of one name.
 
 Two cross-cutting risks recur across every ecosystem and shape this design:
 whole-environment scanning leaks or injects via undeclared variables (so the
@@ -1214,8 +1212,8 @@ and structured surfaces; and a backwards-compatible `EnvMetadata` extension
 conceptual separation explicit here.
 
 This lets `vk` express `GITHUB_TOKEN` natively and delete its bespoke resolver,
-lets `podbot` delete most of its handwritten projection table while keeping
-its trust boundary intact, and avoids the swamp-dragon solution of reading the
+lets `podbot` delete most of its handwritten projection table while keeping its
+trust boundary intact, and avoids the swamp-dragon solution of reading the
 entire raw environment. It preserves the orthodox precedence and the
 single-environment-layer merge model, keeps new public surface to a minimum,
 and extends the crate's "describe once, emit many surfaces" philosophy to
@@ -1242,8 +1240,7 @@ delivery. The material findings, and where each is addressed:
   combine by recursive merge with leaf replacement, with a byte-identical
   golden fixture (§5.4, §8.4).
 - **Grammar scope and empty edges.** Group-versus-field scope is stated,
-  conflict
-  rules added, and the `","`/trim edge pinned by a test (§5.2, §8.4).
+  conflict rules added, and the `","`/trim edge pinned by a test (§5.2, §8.4).
 - **Scope.** The `env_value_names`/`EnvPassthrough` primitive is deferred to RFC
   0002 to keep this proposal cohesive (§4, §5.7).
 
