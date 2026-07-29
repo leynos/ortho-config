@@ -35,6 +35,11 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
+- Adopt `sha2` 0.11 in `cargo-orthohelp` and render cache digests through a new
+  crate-internal lowercase hexadecimal encoder, because `sha2` 0.11 returns
+  `hybrid_array::Array<u8, _>` from `finalize`, which no longer implements
+  `core::fmt::LowerHex`. Rendered cache keys are unchanged, so existing cache
+  directories remain valid (closes #400).
 - Clarify that `OrthoError::MissingRequiredValues` is proposed future work, not
   part of the current public error surface, and keep the implementation tracked
   in the phase 7 roadmap.
