@@ -380,6 +380,42 @@ as additional metric families or span fields used across crates, should be
 mentioned in the relevant design or component architecture document, so the
 contract stays discoverable.
 
+
+## Digest rendering
+
+`cargo-orthohelp` hashes cache inputs with SHA-256 and renders the digest as 64
+lowercase hexadecimal digits. From `sha2` 0.11 the `finalize` and `digest`
+methods return `hybrid_array::Array<u8, _>`, which dereferences to `[u8]` but
+does not implement `core::fmt::LowerHex`, so the `{:x}` formatting the cache
+previously used no longer compiles. `sha2` 0.11 also no longer implements
+`std::io::Write`, so `std::io::copy` cannot stream into a hasher.
+
+- Render digest bytes through the crate-internal `to_lower_hex` helper in
+  `cargo-orthohelp/src/hex.rs`. It is scoped to `cargo-orthohelp`, owns no
+  state, and may be called from any crate-internal site that needs lowercase
+  hex. Do not reintroduce `{:x}` or per-byte `format!` calls.
+- The helper maps each nibble arithmetically rather than indexing a digit
+  table, because the workspace denies `clippy::indexing_slicing`. Keep it that
+  way instead of adding a scoped suppression.
+- Keep the helper private. The crate exposes no hex-encoding contract to
+  downstream consumers, and publishing one would commit it to supporting that
+  contract. Add a dedicated dependency such as `hex` only if a public surface
+  genuinely needs one.
+- Pass the digest by reference, as in `to_lower_hex(&hasher.finalize())`, so
+  `Array` coerces to `&[u8]` through `Deref`.
+- Feed a hasher with `update` from a bounded buffered read loop, or through a
+  small `std::io::Write` adapter newtype that forwards to `update`. Do not
+  reach for `std::io::copy` with a hasher as the sink.
+- The sibling RustCrypto crates move in lockstep and carry the same break:
+  `sha1`, `sha3`, and `md-5` go to 0.11, and `hmac`, `hkdf`, and `pbkdf2` go to
+  0.13. Apply the same rules when introducing any of them.
+
+The rendered form is byte-for-byte identical to the previous `{:x}` output, so
+the change does not invalidate cache directories. A bounded exhaustive unit test
+covers the whole `u8` range, and `cache.rs` pins the canonical SHA-256 digest of
+`b"abc"` so a self-consistent but wrongly ordered or zero-truncated encoder
+cannot pass.
+
 ### Discovery telemetry
 
 `discovery/telemetry.rs` is the only place configuration discovery emits

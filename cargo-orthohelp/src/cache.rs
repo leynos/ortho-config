@@ -7,6 +7,7 @@ use sha2::{Digest, Sha256};
 use std::io::Read;
 
 use crate::error::OrthohelpError;
+use crate::hex::to_lower_hex;
 
 /// Cache key inputs for the bridge IR.
 #[derive(Debug, Clone)]
@@ -31,7 +32,7 @@ impl CacheKey {
             Some(hash) => hasher.update(hash.as_bytes()),
             None => hasher.update(b"none"),
         }
-        format!("{:x}", hasher.finalize())
+        to_lower_hex(&hasher.finalize())
     }
 }
 
@@ -61,7 +62,7 @@ pub fn lockfile_fingerprint(workspace_root: &Utf8Path) -> Result<Option<String>,
         })?;
     let mut hasher = Sha256::new();
     hasher.update(&buffer);
-    Ok(Some(format!("{:x}", hasher.finalize())))
+    Ok(Some(to_lower_hex(&hasher.finalize())))
 }
 
 /// Computes a fingerprint over the package inputs that influence the IR.
@@ -89,7 +90,7 @@ pub fn fingerprint_package(package_root: &Utf8Path) -> Result<String, OrthohelpE
     hash_directory_if_present(&dir, Utf8Path::new("src"), &mut hasher)?;
     hash_directory_if_present(&dir, Utf8Path::new("locales"), &mut hasher)?;
 
-    Ok(format!("{:x}", hasher.finalize()))
+    Ok(to_lower_hex(&hasher.finalize()))
 }
 
 fn hash_file_if_present(
@@ -196,12 +197,14 @@ mod tests {
     use rstest::rstest;
     use std::io::Write;
 
+    /// Well-known SHA-256 digest of `b"abc"`. Pinning a canonical vector keeps
+    /// the digest rendering honest: a self-consistent but wrongly ordered or
+    /// zero-truncated encoder would still satisfy change-detection assertions.
+    const ABC_SHA256: &str = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
+
     #[rstest]
     fn fingerprint_changes_on_file_update() {
-        let tempdir = tempfile::tempdir().expect("create temp dir");
-        let root = Utf8PathBuf::from_path_buf(tempdir.path().to_path_buf())
-            .expect("tempdir path is UTF-8");
-        let dir = Dir::open_ambient_dir(&root, ambient_authority()).expect("open temp dir");
+        let (_tempdir, root, dir) = temp_root();
         dir.create_dir_all("src").expect("create src directory");
 
         write_file(&dir, "Cargo.toml", "[package]\nname = \"demo\"\n");
@@ -212,6 +215,90 @@ mod tests {
         let second = fingerprint_package(&root).expect("fingerprint after update");
 
         assert_ne!(first, second, "fingerprint should change when files change");
+        assert!(
+            is_sha256_hex(&first),
+            "package fingerprint should render as lowercase hex: {first}"
+        );
+    }
+
+    #[rstest]
+    fn lockfile_fingerprint_matches_known_digest_vector() {
+        let (_tempdir, root, dir) = temp_root();
+        write_file(&dir, "Cargo.lock", "abc");
+
+        let fingerprint = lockfile_fingerprint(&root).expect("fingerprint lockfile");
+
+        assert_eq!(fingerprint.as_deref(), Some(ABC_SHA256));
+    }
+
+    #[rstest]
+    fn lockfile_fingerprint_is_absent_without_a_lockfile() {
+        let (_tempdir, root, _dir) = temp_root();
+
+        let fingerprint = lockfile_fingerprint(&root).expect("fingerprint missing lockfile");
+
+        assert_eq!(fingerprint, None, "absent lockfile should not fingerprint");
+    }
+
+    #[rstest]
+    fn cache_key_hash_renders_lowercase_hex() {
+        let hash = cache_key().hash();
+
+        assert!(
+            is_sha256_hex(&hash),
+            "cache key hash should be 64 lowercase hex digits: {hash}"
+        );
+    }
+
+    #[rstest]
+    #[case::fingerprint(CacheKey { fingerprint: "other".to_owned(), ..cache_key() })]
+    #[case::root_type(CacheKey { root_type: "workspace".to_owned(), ..cache_key() })]
+    #[case::tool_version(CacheKey { tool_version: "0.9.0".to_owned(), ..cache_key() })]
+    #[case::ir_version(CacheKey { ir_version: "2".to_owned(), ..cache_key() })]
+    #[case::lockfile_hash(CacheKey { lockfile_hash: None, ..cache_key() })]
+    fn cache_key_hash_tracks_every_input(#[case] varied: CacheKey) {
+        assert_ne!(
+            cache_key().hash(),
+            varied.hash(),
+            "hash should change when any input changes"
+        );
+    }
+
+    /// Baseline cache key whose fields each differ, so a hash that ignores or
+    /// transposes one field is detectable.
+    fn cache_key() -> CacheKey {
+        CacheKey {
+            fingerprint: "fingerprint".to_owned(),
+            root_type: "package".to_owned(),
+            tool_version: "0.8.0".to_owned(),
+            ir_version: "1".to_owned(),
+            lockfile_hash: Some("lockfile".to_owned()),
+        }
+    }
+
+    /// Reports whether `value` is a 64-digit lowercase hexadecimal string, the
+    /// shape every SHA-256 digest in this module must render as.
+    fn is_sha256_hex(value: &str) -> bool {
+        value.len() == 64
+            && value
+                .bytes()
+                .all(|digit| digit.is_ascii_digit() || (b'a'..=b'f').contains(&digit))
+    }
+
+    fn temp_root() -> (tempfile::TempDir, Utf8PathBuf, Dir) {
+        let tempdir = match tempfile::tempdir() {
+            Ok(tempdir) => tempdir,
+            Err(err) => panic!("create temp dir: {err}"),
+        };
+        let root = match Utf8PathBuf::from_path_buf(tempdir.path().to_path_buf()) {
+            Ok(root) => root,
+            Err(path) => panic!("tempdir path is not UTF-8: {}", path.display()),
+        };
+        let dir = match Dir::open_ambient_dir(&root, ambient_authority()) {
+            Ok(dir) => dir,
+            Err(err) => panic!("open temp dir {root}: {err}"),
+        };
+        (tempdir, root, dir)
     }
 
     fn write_file(dir: &Dir, path: &str, contents: &str) {
