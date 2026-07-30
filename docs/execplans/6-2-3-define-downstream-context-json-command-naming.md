@@ -398,8 +398,7 @@ The reader is assumed to know nothing about this repository. Key locations:
   function. No new error type is needed.
 - `ortho_config/Cargo.toml` — `serde_json` is an optional, default-on feature.
 - `cargo-orthohelp/src/cli/mod.rs` — the generator CLI. `OutputFormat` enum
-  (with
-  `AgentContext`) and `CargoSubcommand` (only `Orthohelp`). The positive
+  (with `AgentContext`) and `CargoSubcommand` (only `Orthohelp`). The positive
   control lives in `cli::tests`; the reserved-name guard lives in
   `cli/reserved_agent_context_tests.rs`.
 - `cargo-orthohelp/src/agent_context/mod.rs` and

@@ -847,8 +847,8 @@ the target stay with the application.
 - The generated code calls `composer.push_environment` exactly once and appends
   resolution errors, individually, to the existing `errors` collection.
 - The runtime glue types (`EnvProjection`, `EnvAlias`, the resolver) are
-  internal
-  (`#[doc(hidden)]`), not committed public API, and are not `#[non_exhaustive]`.
+  internal (`#[doc(hidden)]`), not committed public API, and are not
+  `#[non_exhaustive]`.
 - The IR extension renames `var_name` to `canonical` (read-compatible via a
   serde alias) and bumps `ir_version` to `1.2`; the agent-context `env` block
   is additive and does not bump the agent-context schema version.
