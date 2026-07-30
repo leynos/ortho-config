@@ -3,16 +3,19 @@
 use super::super::{CommandLine, Commands, LocalizeCmd};
 use crate::localizer::DemoLocalizer;
 use clap::CommandFactory;
-use ortho_config::parse_localized_command;
+use ortho_config::{FluentLocalizerError, parse_localized_command};
 use rstest::{fixture, rstest};
 
 #[fixture]
-fn demo_localizer() -> DemoLocalizer {
-    DemoLocalizer::try_new().expect("demo localiser should build")
+fn demo_localizer() -> Result<DemoLocalizer, FluentLocalizerError> {
+    DemoLocalizer::try_new()
 }
 
 #[rstest]
-fn command_with_localizer_overrides_copy(demo_localizer: DemoLocalizer) {
+fn command_with_localizer_overrides_copy(
+    #[from(demo_localizer)] localizer_result: Result<DemoLocalizer, FluentLocalizerError>,
+) {
+    let demo_localizer = localizer_result.expect("demo localiser should build");
     let command = CommandLine::command()
         .with_base("hello_world.cli")
         .localize(&demo_localizer);
@@ -30,7 +33,10 @@ fn command_with_localizer_overrides_copy(demo_localizer: DemoLocalizer) {
 }
 
 #[rstest]
-fn localizes_subcommand_tree(demo_localizer: DemoLocalizer) {
+fn localizes_subcommand_tree(
+    #[from(demo_localizer)] localizer_result: Result<DemoLocalizer, FluentLocalizerError>,
+) {
+    let demo_localizer = localizer_result.expect("demo localiser should build");
     let command = CommandLine::command()
         .with_base("hello_world.cli")
         .localize(&demo_localizer);
@@ -46,7 +52,10 @@ fn localizes_subcommand_tree(demo_localizer: DemoLocalizer) {
 }
 
 #[rstest]
-fn try_parse_with_localizer_builds_cli(demo_localizer: DemoLocalizer) {
+fn try_parse_with_localizer_builds_cli(
+    #[from(demo_localizer)] localizer_result: Result<DemoLocalizer, FluentLocalizerError>,
+) {
+    let demo_localizer = localizer_result.expect("demo localiser should build");
     let args = ["hello-world", "greet"];
     let command = CommandLine::command()
         .with_base("hello_world.cli")
@@ -58,7 +67,10 @@ fn try_parse_with_localizer_builds_cli(demo_localizer: DemoLocalizer) {
 }
 
 #[rstest]
-fn try_parse_with_localizer_localises_errors(demo_localizer: DemoLocalizer) {
+fn try_parse_with_localizer_localises_errors(
+    #[from(demo_localizer)] localizer_result: Result<DemoLocalizer, FluentLocalizerError>,
+) {
+    let demo_localizer = localizer_result.expect("demo localiser should build");
     let command = CommandLine::command()
         .with_base("hello_world.cli")
         .localize(&demo_localizer);
