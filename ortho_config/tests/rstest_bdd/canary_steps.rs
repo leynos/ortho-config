@@ -1,7 +1,7 @@
 //! Step definitions backing the canary `rstest-bdd` scenario.
 
 use super::scenario_state::{CanaryConfig, CanaryState};
-use anyhow::{Result, anyhow, ensure};
+use anyhow::{Context, Result, anyhow, ensure};
 use ortho_config::OrthoConfig;
 use rstest_bdd::ScenarioState as _;
 use rstest_bdd_macros::{given, then, when};
@@ -23,7 +23,7 @@ fn load_canary(canary_state: &CanaryState, binary_name: &str, level: u8) -> Resu
         level.to_string(),
     ];
     let config = CanaryConfig::load_from_iter(args)
-        .map_err(|error| anyhow!("canary configuration should load successfully: {error}"))?;
+        .context("canary configuration should load successfully")?;
     canary_state.loaded_config.set(config);
     Ok(())
 }

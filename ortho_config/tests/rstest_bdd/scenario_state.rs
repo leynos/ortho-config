@@ -11,6 +11,10 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, PoisonError};
 
+#[cfg(test)]
+#[path = "scenario_state_tests.rs"]
+mod scenario_state_tests;
+
 /// Re-exported so BDD merge-error steps can reference the sample config
 /// struct without reaching into the shared fixtures module directly.
 pub use super::fixtures::merge_fixtures::MergeErrorSample;
