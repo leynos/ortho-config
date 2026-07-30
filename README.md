@@ -2,7 +2,8 @@
 
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](
 https://deepwiki.com/leynos/ortho-config)
-![Crates.io Version](https://img.shields.io/crates/v/ortho-config)
+[![Crates.io Version](https://img.shields.io/crates/v/ortho-config)](
+https://crates.io/crates/ortho-config)
 
 **OrthoConfig** is a Rust configuration management library designed for
 simplicity and power, inspired by the flexible configuration mechanisms found
