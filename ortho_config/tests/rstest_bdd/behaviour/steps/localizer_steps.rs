@@ -216,8 +216,8 @@ fn assert_localised(context: &LocalizerContext, expected: String) -> Result<()> 
 fn assert_formatting_issue_logged(context: &LocalizerContext) -> Result<()> {
     let issues = context.take_issues();
     ensure!(
-        !issues.is_empty(),
-        "expected at least one formatting issue to be captured"
+        issues == ["cli.usage"],
+        "expected only the cli.usage formatting issue, captured {issues:?}"
     );
     Ok(())
 }

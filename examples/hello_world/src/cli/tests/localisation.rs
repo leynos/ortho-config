@@ -3,12 +3,14 @@
 use super::super::{CommandLine, Commands, LocalizeCmd};
 use crate::localizer::DemoLocalizer;
 use clap::CommandFactory;
-use ortho_config::{FluentLocalizerError, parse_localized_command};
+use ortho_config::{FluentLocalizerError, LanguageIdentifier, langid, parse_localized_command};
 use rstest::{fixture, rstest};
 
 #[fixture]
-fn demo_localizer() -> Result<DemoLocalizer, FluentLocalizerError> {
-    DemoLocalizer::try_new()
+fn demo_localizer(
+    #[default(langid!("en-US"))] locale: LanguageIdentifier,
+) -> Result<DemoLocalizer, FluentLocalizerError> {
+    DemoLocalizer::try_for_locale(locale)
 }
 
 #[track_caller]
@@ -120,6 +122,16 @@ fn try_parse_with_localizer_localises_errors(
     let demo_localizer = localizer_result?;
     assert_localized_error(&demo_localizer);
     Ok(())
+}
+
+#[rstest]
+fn demo_localizer_propagates_unsupported_locale(
+    #[with(langid!("fr"))] demo_localizer: Result<DemoLocalizer, FluentLocalizerError>,
+) {
+    assert!(matches!(
+        demo_localizer,
+        Err(FluentLocalizerError::UnsupportedLocale { locale }) if locale == langid!("fr")
+    ));
 }
 
 #[test]
