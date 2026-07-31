@@ -9,7 +9,11 @@ use rstest_bdd_macros::ScenarioState;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, PoisonError};
+
+#[cfg(test)]
+#[path = "scenario_state_tests.rs"]
+mod scenario_state_tests;
 
 /// Re-exported so BDD merge-error steps can reference the sample config
 /// struct without reaching into the shared fixtures module directly.
@@ -117,9 +121,7 @@ impl LocalizerContext {
     #[must_use]
     pub fn take_issues(&self) -> Vec<String> {
         if let Some(issues) = self.issues.take() {
-            let mut guard = issues
-                .lock()
-                .expect("formatting issue mutex poisoned during take");
+            let mut guard = issues.lock().unwrap_or_else(PoisonError::into_inner);
             let collected = guard.clone();
             guard.clear();
             collected

@@ -55,21 +55,21 @@ fn clap_aware_localizer(context: &LocalizerContext) {
 }
 
 #[given("a fluent localizer with consumer overrides")]
-fn fluent_localizer(context: &LocalizerContext) {
+fn fluent_localizer(context: &LocalizerContext) -> Result<()> {
     install_fluent_localizer(
         context,
         &["cli.about = Localised about from consumer"],
         false,
-    );
+    )
 }
 
 #[given("a fluent localizer with a mismatched template")]
-fn fluent_localizer_with_error(context: &LocalizerContext) {
+fn fluent_localizer_with_error(context: &LocalizerContext) -> Result<()> {
     install_fluent_localizer(
         context,
         &["cli.usage = Usage: { $binary } and { $missing }"],
         true,
-    );
+    )
 }
 
 #[when("I request id {id} with fallback {fallback}")]
@@ -216,8 +216,8 @@ fn assert_localised(context: &LocalizerContext, expected: String) -> Result<()> 
 fn assert_formatting_issue_logged(context: &LocalizerContext) -> Result<()> {
     let issues = context.take_issues();
     ensure!(
-        !issues.is_empty(),
-        "expected at least one formatting issue to be captured"
+        issues == ["cli.usage"],
+        "expected only the cli.usage formatting issue, captured {issues:?}"
     );
     Ok(())
 }
@@ -267,7 +267,7 @@ fn install_fluent_localizer(
     context: &LocalizerContext,
     resources: &[&'static str],
     capture_errors: bool,
-) {
+) -> Result<()> {
     let mut builder = FluentLocalizer::builder(langid!("en-US"))
         .with_consumer_resources(resources.iter().copied());
 
@@ -283,10 +283,9 @@ fn install_fluent_localizer(
         }));
     }
 
-    let localizer = builder
-        .try_build()
-        .expect("fluent localizer should be constructed in tests");
+    let localizer = builder.try_build()?;
     context.localizer.set(Box::new(localizer));
+    Ok(())
 }
 
 fn extract_argument(error: &clap::Error) -> String {
