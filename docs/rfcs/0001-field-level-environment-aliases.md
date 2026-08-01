@@ -465,9 +465,14 @@ is not public:
 // Internal; the macro emits the equivalent of this, then drains the errors.
 let (env_value, env_errors) = ortho_config::env::resolve(
     &__ORTHO_ENV_PROJECTIONS,   // &'static [EnvProjection]
-    EnvSource::Process,         // injectable; an in-memory map in unit tests
+    // Arc<dyn EnvSource>; a MapEnv in unit tests.
+    &*ortho_config::process_env_source(),
 );
 ```
+
+`EnvSource` is a **trait**, not an enum — see the document history for the
+reasoning — and is supplied as `Arc<dyn EnvSource>`. `ProcessEnv` is the
+default and `MapEnv` models a closed set of variables for unit tests.
 
 `resolve` returns `(serde_json::Value, Vec<Arc<OrthoError>>)` — the resolved
 environment object **plus** the errors gathered while resolving it. This shape
@@ -511,14 +516,30 @@ present-but-empty value at the highest-priority *present* source is a definite
 user mistake, and continuing would mask it. The recorded error names the
 *variable*, never the value.
 
-Reading the environment is safe by construction. For declared projections,
-`resolve` reads only the *named* candidate variables. A process with thousands
-of unrelated secrets in its environment never has them enumerated, copied, or
-logged. The `EnvSource` is injectable (process environment by default, an
-in-memory map for unit tests). Note that this seam covers the resolver's own
-unit tests; the generated loader's compatibility substrate (§5.4) still reads
-the real process environment through `figment`, so the negative test in §8.2
-mutates the real environment under a shared serial guard.
+Reading the environment is safe by construction, and the trait enforces it
+rather than merely inviting it. `EnvSource` exposes lookup **by name only**; it
+has deliberately no enumeration method, so a process with thousands of
+unrelated secrets in its environment cannot have them enumerated, copied, or
+logged by any holder of the source, however carelessly. This is what makes the
+§3 non-goal ("Reading the entire process environment") a property of the type
+instead of a convention. The `CsvEnv` compatibility substrate does scan a
+prefix, because that is what `figment::providers::Env` does; when it gains an
+injectable source ([ortho-config#412][oc-412]) that scanning capability must
+live on a separate, explicitly-named abstraction, so it stays visible in the
+type rather than latent in a trait whose other users must not scan.
+
+`EnvSource::get` returns `Option<OsString>`, not `Option<String>`, because
+discovery resolves configuration *paths*, which need not be UTF-8. The resolver
+therefore owns the lossy conversion explicitly before `raw.trim()` and
+`CsvEnv::parse_value`: a non-UTF-8 value for a declared projection is a
+`Validation` error naming the variable, never a silent fallthrough to the next
+candidate, since a present-but-undecodable value at the highest-priority
+present source is the same class of definite user mistake as `empty = "error"`.
+
+Note that this seam covers the resolver's own unit tests; the generated
+loader's compatibility substrate (§5.4) still reads the real process
+environment through `figment`, so the negative test in §8.2 mutates the real
+environment under a shared serial guard.
 
 `resolve` reuses `CsvEnv` rather than re-implementing it: value typing calls
 `CsvEnv::parse_value` (whose visibility widens to `pub(crate)` or a thin public
@@ -1243,6 +1264,59 @@ delivery. The material findings, and where each is addressed:
   conflict rules added, and the `","`/trim edge pinned by a test (§5.2, §8.4).
 - **Scope.** The `env_value_names`/`EnvPassthrough` primitive is deferred to RFC
   0002 to keep this proposal cohesive (§4, §5.7).
+
+______________________________________________________________________
+
+## 14. Document history
+
+### 2026-08-01 — `EnvSource` shape settled during implementation
+
+The discovery half of `EnvSource` was implemented ahead of this RFC in
+[ortho-config#411][oc-411], to unblock a downstream testing mandate (
+[netsuke#496][netsuke-496]) that forbids in-process environment mutation. Three
+points settled there, and this document is updated to match.
+
+- **`EnvSource` is a trait, not an enum.** §5.3 previously sketched
+  `EnvSource::Process`, an enum variant. The implementation uses an object-safe
+  trait held as `Arc<dyn EnvSource>`.
+
+  The deciding factor was not extensibility but object safety. A method
+  returning `impl Iterator` would be RPITIT and make the trait unusable behind
+  a trait object, forcing `ConfigDiscovery<S>` generics to leak through the
+  derive-generated `load()` and every call site; returning owned values keeps
+  the trait object-safe. `Arc` rather than `Box` keeps `ConfigDiscovery`'s
+  `Clone` derivable. The enum remains viable, but the crate is pre-1.0 with a
+  single consumer, and a trait leaves room for layered or fallback sources
+  without a breaking change.
+
+- **No enumeration method, and that is load-bearing.** The implementation
+  initially carried an `iter_prefixed` method for the `CsvEnv` layer. It was
+  removed before merge: it contradicted this RFC's §3 non-goal and voided the
+  §5.3 safety property for *every* holder of an `EnvSource`, not merely for
+  careless ones. §5.3 now states the guarantee as a property of the type, and
+  records that the `CsvEnv` layer's genuine prefix-scan belongs on a separate,
+  explicitly-named abstraction ([ortho-config#412][oc-412]).
+
+  The general rule this settles: a capability that most users of an abstraction
+  must **not** have does not belong on that abstraction, even when one user
+  legitimately needs it.
+
+- **`get` returns `OsString`.** Discovery resolves configuration paths, which
+  need not be UTF-8, so the honest primitive is `OsString`. §5.3 now states
+  that the resolver owns the conversion explicitly and treats a non-UTF-8 value
+  for a declared projection as a `Validation` error naming the variable, rather
+  than falling through to the next candidate — consistent with the existing
+  `empty = "error"` reasoning.
+
+The §8.2 caveat is unchanged: the compatibility substrate still reads the real
+process environment through `figment`, so that negative test continues to
+mutate under a serial guard until [ortho-config#412][oc-412] lands.
+
+[oc-411]: https://github.com/leynos/ortho-config/pull/411
+
+[oc-412]: https://github.com/leynos/ortho-config/issues/412
+
+[netsuke-496]: https://github.com/leynos/netsuke/issues/496
 
 ______________________________________________________________________
 
