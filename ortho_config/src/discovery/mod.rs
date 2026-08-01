@@ -8,6 +8,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use crate::env_source::SharedEnvSource;
 use crate::{MergeLayer, OrthoError};
 
 mod builder;
@@ -28,6 +29,7 @@ pub struct ConfigDiscovery {
     dotfile_name: String,
     project_file_name: String,
     project_roots: Vec<PathBuf>,
+    env_source: SharedEnvSource,
 }
 
 /// Result of a discovery attempt that keeps required and optional errors separate.

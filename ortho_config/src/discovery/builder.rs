@@ -6,6 +6,8 @@
 
 use std::path::{Path, PathBuf};
 
+use crate::env_source::{SharedEnvSource, process_env_source};
+
 use super::ConfigDiscovery;
 
 /// Builder for [`ConfigDiscovery`].
@@ -41,6 +43,7 @@ pub struct ConfigDiscoveryBuilder {
     project_roots: Vec<PathBuf>,
     explicit_paths: Vec<PathBuf>,
     required_explicit_paths: Vec<PathBuf>,
+    env_source: Option<SharedEnvSource>,
 }
 
 impl ConfigDiscoveryBuilder {
@@ -60,7 +63,34 @@ impl ConfigDiscoveryBuilder {
             project_roots: Vec::new(),
             explicit_paths: Vec::new(),
             required_explicit_paths: Vec::new(),
+            env_source: None,
         }
+    }
+
+    /// Supplies the environment source consulted during discovery.
+    ///
+    /// Discovery otherwise reads the live process environment. Injecting a
+    /// source lets tests drive the configuration-path selector and the
+    /// platform base directories without mutating global state, so they need
+    /// no serialising lock and may run concurrently.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use ortho_config::{ConfigDiscovery, MapEnv};
+    /// use std::sync::Arc;
+    ///
+    /// let env = Arc::new(MapEnv::new().with_var("DEMO_CONFIG", "/etc/demo.toml"));
+    /// let discovery = ConfigDiscovery::builder("demo")
+    ///     .env_var("DEMO_CONFIG")
+    ///     .env_source(env)
+    ///     .build();
+    /// assert!(discovery.candidates().iter().any(|p| p.ends_with("demo.toml")));
+    /// ```
+    #[must_use]
+    pub fn env_source(mut self, env_source: SharedEnvSource) -> Self {
+        self.env_source = Some(env_source);
+        self
     }
 
     /// Sets the environment variable consulted for an explicit configuration path.
@@ -198,6 +228,7 @@ impl ConfigDiscoveryBuilder {
             dotfile_name,
             project_file_name,
             project_roots,
+            env_source: self.env_source.unwrap_or_else(process_env_source),
         }
     }
 }

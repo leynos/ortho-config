@@ -3,8 +3,6 @@
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
-use dirs::home_dir;
-
 use super::ConfigDiscovery;
 
 #[cfg(windows)]
@@ -107,11 +105,11 @@ impl ConfigDiscovery {
     }
 
     fn push_xdg(&self, paths: &mut Vec<PathBuf>, seen: &mut HashSet<String>) {
-        if let Some(dir) = std::env::var_os("XDG_CONFIG_HOME") {
+        if let Some(dir) = self.env_source.get("XDG_CONFIG_HOME") {
             self.push_for_bases(std::iter::once(PathBuf::from(dir)), paths, seen);
         }
 
-        match std::env::var_os("XDG_CONFIG_DIRS") {
+        match self.env_source.get("XDG_CONFIG_DIRS") {
             Some(dirs) => {
                 let mut xdg_dirs = std::env::split_paths(&dirs)
                     .filter(|path| !path.as_os_str().is_empty())
@@ -129,15 +127,17 @@ impl ConfigDiscovery {
     fn push_windows(&self, paths: &mut Vec<PathBuf>, seen: &mut HashSet<String>) {
         let dirs = ["APPDATA", "LOCALAPPDATA"]
             .into_iter()
-            .filter_map(|key| std::env::var_os(key).map(PathBuf::from));
+            .filter_map(|key| self.env_source.get(key).map(PathBuf::from));
         self.push_for_bases(dirs, paths, seen);
     }
 
     fn push_home(&self, paths: &mut Vec<PathBuf>, seen: &mut HashSet<String>) {
-        let home = std::env::var_os("HOME")
-            .or_else(|| std::env::var_os("USERPROFILE"))
+        let home = self
+            .env_source
+            .get("HOME")
+            .or_else(|| self.env_source.get("USERPROFILE"))
             .map(PathBuf::from)
-            .or_else(home_dir);
+            .or_else(|| self.env_source.home_fallback());
         if let Some(home_path) = home {
             let config_dir = home_path.join(".config");
             self.push_for_bases(std::iter::once(config_dir), paths, seen);
@@ -216,7 +216,7 @@ impl ConfigDiscovery {
         if let Some(value) = self
             .env_var
             .as_ref()
-            .and_then(|env_var| std::env::var_os(env_var).filter(|v| !v.is_empty()))
+            .and_then(|env_var| self.env_source.get(env_var).filter(|v| !v.is_empty()))
         {
             let _ = Self::push_unique(&mut paths, &mut seen, PathBuf::from(value));
         }
