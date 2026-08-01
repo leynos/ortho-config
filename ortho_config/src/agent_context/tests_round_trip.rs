@@ -34,24 +34,110 @@ fn any_agent_command() -> impl Strategy<Value = AgentCommand> {
     (
         vec(command_segment(), 1..4),
         option::of(summary()),
+        option::of(command_segment()),
+        vec(any_agent_input(), 0..4),
+        vec(output_mode(), 0..4),
         interaction_mode(),
         mutation_effect(),
+        option::of(async_submission()),
+        option::of(delivery_route()),
+        option::of(pagination_contract()),
+        vec(any_agent_example(), 0..4),
     )
         .prop_map(
-            |(path, summary, interaction_mode, mutation_effect)| AgentCommand {
+            |(
                 path,
                 summary,
-                canonical_verb: None,
-                inputs: Vec::new(),
-                output_modes: vec!["json".to_owned()],
+                canonical_verb,
+                inputs,
+                output_modes,
                 interaction_mode,
                 mutation_effect,
-                async_submission: None,
-                delivery_route: None,
-                pagination: None,
-                examples: Vec::new(),
+                async_submission,
+                delivery_route,
+                pagination,
+                examples,
+            )| AgentCommand {
+                path,
+                summary,
+                canonical_verb,
+                inputs,
+                output_modes,
+                interaction_mode,
+                mutation_effect,
+                async_submission,
+                delivery_route,
+                pagination,
+                examples,
             },
         )
+}
+
+fn any_agent_input() -> impl Strategy<Value = AgentInput> {
+    (
+        command_segment(),
+        option::of(command_segment()),
+        option::of(value_type()),
+        any::<bool>(),
+        option::of(summary()),
+        vec(summary(), 0..4),
+    )
+        .prop_map(
+            |(name, long, value_type, required, default, enum_values)| AgentInput {
+                name,
+                long,
+                value_type,
+                required,
+                default,
+                enum_values,
+            },
+        )
+}
+
+fn any_agent_example() -> impl Strategy<Value = AgentExample> {
+    (summary(), option::of(output_mode())).prop_map(|(command, output_mode)| AgentExample {
+        command,
+        output_mode,
+    })
+}
+
+fn async_submission() -> impl Strategy<Value = AsyncSubmission> {
+    (async_submission_mode(), option::of(summary()))
+        .prop_map(|(mode, noun)| AsyncSubmission { mode, noun })
+}
+
+fn async_submission_mode() -> impl Strategy<Value = AsyncSubmissionMode> {
+    prop_oneof![
+        Just(AsyncSubmissionMode::Inline),
+        Just(AsyncSubmissionMode::Submit),
+    ]
+}
+
+fn delivery_route() -> impl Strategy<Value = DeliveryRoute> {
+    (any::<bool>(), option::of(summary()))
+        .prop_map(|(supported, target)| DeliveryRoute { supported, target })
+}
+
+fn pagination_contract() -> impl Strategy<Value = PaginationContract> {
+    (option::of(command_segment()), option::of(command_segment())).prop_map(
+        |(limit_input, cursor_input)| PaginationContract {
+            limit_input,
+            cursor_input,
+        },
+    )
+}
+
+fn output_mode() -> impl Strategy<Value = String> {
+    prop_oneof![Just("json".to_owned()), Just("text".to_owned())]
+}
+
+fn value_type() -> impl Strategy<Value = String> {
+    prop_oneof![
+        Just("string".to_owned()),
+        Just("bool".to_owned()),
+        Just("path".to_owned()),
+        Just("enum".to_owned()),
+    ]
 }
 
 fn interaction_mode() -> impl Strategy<Value = InteractionMode> {

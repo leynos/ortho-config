@@ -695,7 +695,6 @@ contracts, or exit-status behaviour without an approved versioned migration.
 Strict policy should begin as opt-in. Projects should be able to run the check
 in warning mode before enforcing it in CI.
 
-
 ### 8.2 Agent-context schema compatibility policy
 
 The agent-context schema is versioned independently of the documentation IR
@@ -706,13 +705,14 @@ wire shape emitted by `cargo orthohelp --format agent-context` and by
 `--format all`. It is an integer-valued breaking-change counter, not SemVer:
 additive changes keep the same value, and breaking changes bump it.
 
-Within a major version, producers may add optional fields, add enum variants
-only when consumers are documented to ignore unknown values, or populate a
+Within a major version, producers may add optional fields or populate a
 previously `null` optional field with data that already has a defined meaning.
-Readers must ignore unknown object fields, and schema types must not add
-`deny_unknown_fields` while retaining the same major version. Absent fields use
-the realized-field defaults recorded in §8.1; validation never mutates payloads
-to populate those defaults.
+They may add enum variants only when the contract defines and tests an
+unknown-variant fallback that preserves the documented legacy default for
+strict deserializers. Readers must ignore unknown object fields, and schema
+types must not add `deny_unknown_fields` while retaining the same major version.
+Absent fields use the realized-field defaults recorded in §8.1; validation
+never mutates payloads to populate those defaults.
 
 Breaking changes require bumping `ORTHO_AGENT_CONTEXT_SCHEMA_VERSION`. Breaking
 changes include renaming or removing fields, changing enum wire strings,

@@ -4,7 +4,7 @@ use proptest::collection::btree_set;
 use proptest::prelude::*;
 use std::collections::BTreeSet;
 
-use super::bridge_ir_to_agent_context;
+use super::{bridge_ir_to_agent_context, normalize_default_display};
 use crate::schema::{CliMetadata, DocMetadata, FieldMetadata, HeadingIds, SectionsMetadata};
 
 proptest! {
@@ -64,6 +64,32 @@ proptest! {
             );
         }
     }
+
+    #[test]
+    fn default_normalization_preserves_generated_literal_contents(
+        left in literal_fragment(),
+        right in literal_fragment(),
+        inner_before in separator_spacing(),
+        inner_after in separator_spacing(),
+        outer_before in separator_spacing(),
+        outer_after in separator_spacing(),
+    ) {
+        let literal = format!("\"{left}{inner_before}::{inner_after}{right}\"");
+        let display = format!("String{outer_before}::{outer_after}from({literal})");
+
+        prop_assert_eq!(
+            normalize_default_display(&display),
+            format!("String::from({literal})")
+        );
+    }
+}
+
+fn literal_fragment() -> impl Strategy<Value = String> {
+    "[A-Za-z0-9 _:-]{0,32}"
+}
+
+fn separator_spacing() -> impl Strategy<Value = &'static str> {
+    prop_oneof![Just(""), Just(" "), Just("  "), Just("\t")]
 }
 
 fn metadata_tree() -> impl Strategy<Value = DocMetadata> {

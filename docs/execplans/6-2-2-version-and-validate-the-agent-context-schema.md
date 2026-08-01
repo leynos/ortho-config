@@ -279,6 +279,10 @@ These decide the exact v1 wire shape that this plan ossifies.
       are corrected, the user guide records the wire migration, and en-US and
       fr-FR fixture message keys are synchronized. The requested absent-summary
       change was rejected because D1 deliberately locks omission.
+- [x] 2026-08-01: Final property and maintainability follow-up complete —
+      generated literal contents are property-tested, round-trip strategies
+      populate nested command metadata, the wire-contract JSON is an external
+      fixture, and the enum compatibility rule requires a tested fallback.
 
 Each milestone ends by running, in this order and sequentially (never in
 parallel, to benefit from build caching): `make check-fmt`, `make typecheck`,
@@ -559,6 +563,13 @@ cleared before the next milestone. Commit after each green milestone.
   absent `summary` as omitted rather than `null`.
   Impact: literal-boundary coverage is complete without making an unapproved
   breaking wire-contract change.
+- Observation: The final full CodeRabbit review found genuine property-coverage
+  gaps but repeated the previously rejected absent-`summary` recommendation.
+  Evidence: `any_agent_command` fixed all nested fields to empty values, and no
+  property generated separator-like literal contents. D1, the serde attribute,
+  and focused omission tests still lock absent `summary` as omitted.
+  Impact: the property domains now cover nested metadata and literal boundaries
+  while preserving the approved schema-v1 wire contract.
 
 ## Decision log
 
