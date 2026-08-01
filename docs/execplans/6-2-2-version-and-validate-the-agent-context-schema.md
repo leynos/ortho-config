@@ -283,6 +283,9 @@ These decide the exact v1 wire shape that this plan ossifies.
       generated literal contents are property-tested, round-trip strategies
       populate nested command metadata, the wire-contract JSON is an external
       fixture, and the enum compatibility rule requires a tested fallback.
+- [x] 2026-08-01: The external wire-contract fixture is pinned to LF line
+      endings so its byte-exact assertion is consistent on Windows and Unix
+      checkouts.
 
 Each milestone ends by running, in this order and sequentially (never in
 parallel, to benefit from build caching): `make check-fmt`, `make typecheck`,
@@ -570,6 +573,13 @@ cleared before the next milestone. Commit after each green milestone.
   and focused omission tests still lock absent `summary` as omitted.
   Impact: the property domains now cover nested metadata and literal boundaries
   while preserving the approved schema-v1 wire contract.
+- Observation: Moving the wire-contract JSON out of Rust source exposed it to
+  Git's platform-specific checkout conversion.
+  Evidence: Windows CI read CRLF bytes through `include_str!`, while
+  `serde_json::to_string_pretty` produced LF bytes, causing the byte-exact
+  assertion to fail even though the JSON values matched.
+  Impact: a fixture-specific `.gitattributes` rule now pins LF at checkout and
+  preserves one canonical wire-contract expectation across platforms.
 
 ## Decision log
 
