@@ -33,20 +33,23 @@ use std::sync::Arc;
 /// Read-only environment access used during configuration discovery.
 ///
 /// The trait is deliberately object-safe so it can be held as
-/// `Arc<dyn EnvSource>` without making every consumer generic. Both methods
-/// return owned values for the same reason: an `impl Iterator` return would
-/// make the trait unusable behind a trait object, and configuration is
-/// resolved once per process, so the allocation is immaterial.
+/// `Arc<dyn EnvSource>` without making every consumer generic.
+///
+/// Lookup is **by name only**. There is deliberately no method to enumerate
+/// the environment, because RFC 0001 makes "the crate never scans the whole
+/// process environment" a safety property of environment access: a process
+/// holding thousands of unrelated secrets must never have them enumerated,
+/// copied, or logged. An enumeration method here would void that guarantee for
+/// every holder of an `EnvSource`, however carefully individual callers behaved.
+///
+/// The `CsvEnv` merge layer does legitimately scan a prefix, because that is
+/// what `figment::providers::Env` does. When that layer gains an injectable
+/// source (#412) it should take a separate, explicitly-named abstraction, so
+/// that the scanning capability is visible in the type rather than latent in a
+/// trait whose other users must not scan.
 pub trait EnvSource: fmt::Debug + Send + Sync {
     /// Return the value of `key`, or `None` when it is unset.
     fn get(&self, key: &str) -> Option<OsString>;
-
-    /// Return every variable whose name begins with `prefix`.
-    ///
-    /// Names are returned in full, including the prefix; callers strip it as
-    /// their own semantics require. Implementations should yield a stable
-    /// order so that callers producing ordered output remain deterministic.
-    fn iter_prefixed(&self, prefix: &str) -> Vec<(String, OsString)>;
 
     /// Return the user's home directory when the environment does not name one.
     ///
@@ -82,17 +85,6 @@ impl EnvSource for ProcessEnv {
     fn home_fallback(&self) -> Option<std::path::PathBuf> {
         dirs::home_dir()
     }
-
-    fn iter_prefixed(&self, prefix: &str) -> Vec<(String, OsString)> {
-        let mut vars: Vec<(String, OsString)> = std::env::vars_os()
-            .filter_map(|(raw_key, value)| {
-                let key = raw_key.into_string().ok()?;
-                key.starts_with(prefix).then_some((key, value))
-            })
-            .collect();
-        vars.sort_by(|(a, _), (b, _)| a.cmp(b));
-        vars
-    }
 }
 
 /// Environment source backed by a fixed set of values.
@@ -111,13 +103,12 @@ impl EnvSource for ProcessEnv {
 ///     .with_var("APP_PORT", "8080");
 ///
 /// assert_eq!(env.get("APP_HOST").as_deref(), Some("localhost".as_ref()));
-/// assert_eq!(env.iter_prefixed("APP_").len(), 2);
 /// assert!(env.get("MISSING").is_none());
 /// ```
 #[derive(Debug, Default, Clone)]
 pub struct MapEnv {
-    // `BTreeMap` rather than `HashMap` so `iter_prefixed` is deterministic
-    // without an explicit sort, keeping discovery order reproducible.
+    // `BTreeMap` rather than `HashMap` so iteration is deterministic, keeping
+    // any ordered output built from this source reproducible.
     vars: BTreeMap<String, OsString>,
 }
 
@@ -149,14 +140,6 @@ impl MapEnv {
 impl EnvSource for MapEnv {
     fn get(&self, key: &str) -> Option<OsString> {
         self.vars.get(key).cloned()
-    }
-
-    fn iter_prefixed(&self, prefix: &str) -> Vec<(String, OsString)> {
-        self.vars
-            .range(prefix.to_owned()..)
-            .take_while(|(key, _)| key.starts_with(prefix))
-            .map(|(key, value)| (key.clone(), value.clone()))
-            .collect()
     }
 }
 
@@ -194,37 +177,6 @@ mod tests {
     fn map_env_reports_unset_variables_as_none() {
         let env = MapEnv::new().with_var("PRESENT", "yes");
         assert!(env.get("ABSENT").is_none());
-    }
-
-    #[test]
-    fn map_env_iter_prefixed_excludes_non_matching_keys() {
-        let env = MapEnv::new()
-            .with_var("APP_A", "1")
-            .with_var("APP_B", "2")
-            .with_var("OTHER_C", "3");
-        let keys: Vec<String> = env
-            .iter_prefixed("APP_")
-            .into_iter()
-            .map(|(key, _)| key)
-            .collect();
-        assert_eq!(keys, vec!["APP_A".to_owned(), "APP_B".to_owned()]);
-    }
-
-    /// `range` must not admit keys that sort after the prefix but do not start
-    /// with it; `take_while` is what enforces that, and removing it would let
-    /// `APP` match `APPLE` as well.
-    #[test]
-    fn map_env_iter_prefixed_stops_at_the_prefix_boundary() {
-        let env = MapEnv::new()
-            .with_var("APP_A", "1")
-            .with_var("APPLE", "2")
-            .with_var("ZZZ", "3");
-        let keys: Vec<String> = env
-            .iter_prefixed("APP_")
-            .into_iter()
-            .map(|(key, _)| key)
-            .collect();
-        assert_eq!(keys, vec!["APP_A".to_owned()]);
     }
 
     #[test]
