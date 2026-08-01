@@ -286,6 +286,9 @@ These decide the exact v1 wire shape that this plan ossifies.
 - [x] 2026-08-01: The external wire-contract fixture is pinned to LF line
       endings so its byte-exact assertion is consistent on Windows and Unix
       checkouts.
+- [x] 2026-08-01: Final documentation review aligned the formatter's
+      character-literal contract, consumer requirements, and portable
+      execution instructions; all local and hosted gates passed.
 
 Each milestone ends by running, in this order and sequentially (never in
 parallel, to benefit from build caching): `make check-fmt`, `make typecheck`,
@@ -933,18 +936,18 @@ Validation: `make markdownlint` and `make nixie` pass; cross-references resolve.
 
 ## Concrete steps
 
-Run from the worktree root
-`/home/leynos/.lody/repos/github---leynos---ortho-config/worktrees/b88005e0-6d82-4ef3-bd6c-998039c3c514`.
+Run from the repository worktree root.
 
 Gating sequence after each milestone (sequential, never parallel; tee to a log
 per `AGENTS.md`):
 
 ```bash
 # bash
-ACTION=test; LOG="/tmp/${ACTION}-ortho-config-$(git branch --show-current).out"
-make check-fmt 2>&1 | tee "/tmp/check-fmt-ortho-config-$(git branch --show-current).out"
-make typecheck 2>&1 | tee "/tmp/typecheck-ortho-config-$(git branch --show-current).out"
-make lint      2>&1 | tee "/tmp/lint-ortho-config-$(git branch --show-current).out"
+BRANCH_SLUG=$(git branch --show-current | tr '/:' '__')
+ACTION=test; LOG="/tmp/${ACTION}-ortho-config-${BRANCH_SLUG}.out"
+make check-fmt 2>&1 | tee "/tmp/check-fmt-ortho-config-${BRANCH_SLUG}.out"
+make typecheck 2>&1 | tee "/tmp/typecheck-ortho-config-${BRANCH_SLUG}.out"
+make lint      2>&1 | tee "/tmp/lint-ortho-config-${BRANCH_SLUG}.out"
 make test      2>&1 | tee "$LOG"
 coderabbit review --agent
 ```

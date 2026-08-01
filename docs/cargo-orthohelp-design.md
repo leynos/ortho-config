@@ -640,8 +640,9 @@ artefacts.
 `AgentInput.default` is a best-effort display string, not a normative or
 machine-parseable value. The generator normalizes unstable Rust token spacing
 around `::` outside quoted literals before writing agent-context JSON so
-proc-macro formatting changes do not churn goldens. Ordinary, byte, and raw
-string literal contents are preserved verbatim.
+proc-macro formatting changes do not churn goldens. Ordinary, byte, raw string,
+and character literal contents are preserved verbatim, and lifetime syntax is
+not treated as a path separator.
 
 `--format agent-context` is the generator format and remains unchanged by
 [ADR-007](adr-007-downstream-context-command-naming.md). The downstream
