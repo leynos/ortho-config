@@ -6,6 +6,7 @@
 //! silently reintroduce the coupling it was written to demonstrate is gone.
 
 use ortho_config::{ConfigDiscovery, EnvSource, MapEnv};
+use rstest::rstest;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -41,27 +42,23 @@ fn empty_selector_is_ignored() {
     );
 }
 
-#[test]
-fn xdg_config_home_from_injected_source_is_honoured() {
-    let discovery = discovery_with(MapEnv::new().with_var("XDG_CONFIG_HOME", "/xdg"));
+/// Platform base directories are taken from the injected source.
+///
+/// `XDG_CONFIG_HOME` and `HOME` seed different candidate generators but share
+/// one assertion shape, so they are parameterized rather than duplicated.
+#[rstest]
+#[case::xdg_config_home("XDG_CONFIG_HOME", "/xdg", "/xdg/demo")]
+#[case::home("HOME", "/home/injected", "/home/injected")]
+fn base_directory_from_injected_source_is_honoured(
+    #[case] key: &str,
+    #[case] value: &str,
+    #[case] expected_prefix: &str,
+) {
+    let discovery = discovery_with(MapEnv::new().with_var(key, value));
+    let candidates = discovery.candidates();
     assert!(
-        discovery
-            .candidates()
-            .iter()
-            .any(|p| p.starts_with("/xdg/demo")),
-        "expected an /xdg/demo candidate"
-    );
-}
-
-#[test]
-fn home_from_injected_source_is_honoured() {
-    let discovery = discovery_with(MapEnv::new().with_var("HOME", "/home/injected"));
-    assert!(
-        discovery
-            .candidates()
-            .iter()
-            .any(|p| p.starts_with("/home/injected")),
-        "expected a candidate under the injected home"
+        candidates.iter().any(|p| p.starts_with(expected_prefix)),
+        "expected a candidate under {expected_prefix}, got {candidates:?}"
     );
 }
 
