@@ -380,6 +380,46 @@ as additional metric families or span fields used across crates, should be
 mentioned in the relevant design or component architecture document, so the
 contract stays discoverable.
 
+
+## Environment access boundary
+
+`EnvSource` (`ortho_config/src/env_source.rs`) is the crate's injectable
+environment. `ProcessEnv` is the default and preserves the historical
+behaviour; `MapEnv` models a closed set of variables for tests.
+
+
+### Ownership and permitted call sites
+
+- `EnvSource` is owned by the discovery subsystem. `ConfigDiscovery` holds one
+  as `Arc<dyn EnvSource>`, supplied through `ConfigDiscoveryBuilder::env_source`
+  and defaulting to `ProcessEnv`.
+- `discovery/candidates.rs` is the only module that reads through it, and after
+  this change contains no `std::env::var_os` call of its own.
+- It is **not** a general environment service. Adding readers elsewhere in the
+  crate requires a decision about scope, not a call site.
+
+
+### Composition rules
+
+- **Lookup by name only.** There is deliberately no enumeration method. RFC 0001
+  makes "the crate never scans the whole process environment" a safety property
+  of environment access: a process holding unrelated secrets must never have
+  them enumerated, copied, or logged. An enumeration method here would void that
+  guarantee for every holder of an `EnvSource`, however careful individual
+  callers were.
+- **The merge layer needs a different abstraction.** `CsvEnv` legitimately scans
+  a prefix, because `figment::providers::Env` does. When it gains an injectable
+  source it must take a separate, explicitly-named type, so the scanning
+  capability is visible in the signature rather than latent in a trait whose
+  other users must not scan.
+- **Owned returns, deliberately.** An `impl Iterator` return would be RPITIT and
+  make the trait unusable behind a trait object, forcing `ConfigDiscovery<S>`
+  generics to leak through the derive-generated `load()` and every call site.
+  Configuration resolves once per process, so the allocation is immaterial.
+- **`home_fallback` defaults to `None`.** Only `ProcessEnv` overrides it. See
+  the users' guide for why an injected source must be able to suppress the
+  platform lookup.
+
 ## Dependency management
 
 Cargo dependencies in this workspace follow strict version pinning rules so

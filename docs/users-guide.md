@@ -681,6 +681,58 @@ Supplying only the keys you need lets you rename the CLI flag without altering
 file discovery, or vice versa. When the attribute is omitted, the defaults
 described in [Config path override](#config-path-override) continue to apply.
 
+
+### Injecting the environment for discovery
+
+`ConfigDiscovery` reads several environment variables: the configuration-path
+selector named by `env_var`, the XDG base directories, the Windows
+application-data folders, and `HOME`/`USERPROFILE`. By default these come from
+the live process.
+
+`env_source` supplies them instead, which lets tests drive discovery without
+mutating global state — so they need no serializing lock and may run
+concurrently.
+
+```rust,no_run
+use ortho_config::{ConfigDiscovery, MapEnv};
+use std::sync::Arc;
+
+let env = Arc::new(MapEnv::new().with_var("DEMO_CONFIG", "/etc/demo.toml"));
+let discovery = ConfigDiscovery::builder("demo")
+    .env_var("DEMO_CONFIG")
+    .env_source(env)
+    .build();
+```
+
+Implement `EnvSource` directly for anything richer than a fixed map; it is
+object-safe and held as `Arc<dyn EnvSource>`.
+
+
+#### What it does and does not cover
+
+> [!IMPORTANT]
+> An injected source controls **file discovery only**. It does not make a full
+> `OrthoConfig` load independent of the process environment.
+
+- **Covered:** the `env_var` selector, XDG and Windows base directories, and
+  home resolution.
+- **Not covered:** the `APP_*` configuration-value merge layer, which
+  `figment`'s `Env` provider reads from the process. Injecting that source is
+  tracked separately; until then, a test needing to control `APP_*` values must
+  still set them in the process.
+
+
+#### Home fallback
+
+When neither `HOME` nor `USERPROFILE` is set, the default `ProcessEnv` falls
+back to a platform home lookup that consults the real user database. A custom
+source does **not**, because `EnvSource::home_fallback` defaults to `None`.
+
+That difference is deliberate. Were the fallback to apply to an injected
+source, a test supplying no home would still pick up the host's, and the
+candidate list would vary between machines. Implement `home_fallback` if a
+custom source should provide one.
+
 ## Loading configuration and precedence rules
 
 ### How loading works
