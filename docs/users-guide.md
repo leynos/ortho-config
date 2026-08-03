@@ -717,10 +717,11 @@ object-safe and held as `Arc<dyn EnvSource>`.
 - **Covered:** the `env_var` selector, XDG and Windows base directories, and
   home resolution.
 - **Not covered:** the `APP_*` configuration-value merge layer, which
-  `figment`'s `Env` provider reads from the process. Injecting that source is
-  tracked separately; until then, a test needing to control `APP_*` values must
-  still set them in the process.
-
+  `CsvEnv` (wrapping `figment`'s `Env` provider) reads from the process.
+  Injecting that source is out of scope here and is tracked separately by
+  [issue #412](https://github.com/leynos/ortho-config/issues/412). Until it
+  lands, a consumer needing to control `APP_*` configuration-value variables
+  must still set them in the process.
 
 #### Home fallback
 

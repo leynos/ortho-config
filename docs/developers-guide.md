@@ -409,9 +409,12 @@ behaviour; `MapEnv` models a closed set of variables for tests.
   callers were.
 - **The merge layer needs a different abstraction.** `CsvEnv` legitimately scans
   a prefix, because `figment::providers::Env` does. When it gains an injectable
-  source it must take a separate, explicitly-named type, so the scanning
-  capability is visible in the signature rather than latent in a trait whose
-  other users must not scan.
+  source ([#412](https://github.com/leynos/ortho-config/issues/412)) it must
+  take a separate, explicitly-named type, so the scanning capability is
+  visible in the signature rather than latent in a trait whose other users
+  must not scan. Until then, `CsvEnv` injection is out of scope and a
+  consumer needing to control `APP_*` configuration-value variables must
+  still set them in the process.
 - **Owned returns, deliberately.** An `impl Iterator` return would be RPITIT and
   make the trait unusable behind a trait object, forcing `ConfigDiscovery<S>`
   generics to leak through the derive-generated `load()` and every call site.
