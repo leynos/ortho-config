@@ -135,14 +135,12 @@ impl ConfigDiscovery {
     }
 
     fn push_windows(&self, paths: &mut Vec<PathBuf>, seen: &mut HashSet<String>) {
-        let dirs = ["APPDATA", "LOCALAPPDATA"]
-            .into_iter()
-            .filter_map(|key| {
-                self.env_source
-                    .get(key)
-                    .filter(|value| !value.is_empty())
-                    .map(PathBuf::from)
-            });
+        let dirs = ["APPDATA", "LOCALAPPDATA"].into_iter().filter_map(|key| {
+            self.env_source
+                .get(key)
+                .filter(|value| !value.is_empty())
+                .map(PathBuf::from)
+        });
         self.push_for_bases(dirs, paths, seen);
     }
 
