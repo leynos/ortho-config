@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 use crate::env_source::{SharedEnvSource, process_env_source};
 
 use super::ConfigDiscovery;
+use super::telemetry;
 
 /// Builder for [`ConfigDiscovery`].
 ///
@@ -208,6 +209,12 @@ impl ConfigDiscoveryBuilder {
         let project_file_name = self
             .custom_project_file_name
             .unwrap_or_else(|| dotfile_name.clone());
+
+        telemetry::source_selected(if self.env_source.is_some() {
+            telemetry::SOURCE_INJECTED
+        } else {
+            telemetry::SOURCE_PROCESS
+        });
 
         let mut project_roots = self.project_roots;
         let default_dir = if project_roots.is_empty() {

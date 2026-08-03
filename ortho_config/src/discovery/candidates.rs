@@ -4,6 +4,7 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use super::ConfigDiscovery;
+use super::telemetry;
 
 #[cfg(windows)]
 /// Normalizes a path according to Windows' case-insensitive comparison rules by
@@ -111,27 +112,46 @@ impl ConfigDiscovery {
         // working directory — loading configuration from wherever the tool
         // happens to be run. `XDG_CONFIG_DIRS` and the selector already guard
         // this; these three did not.
-        if let Some(dir) = self
-            .env_source
-            .get("XDG_CONFIG_HOME")
-            .filter(|value| !value.is_empty())
-        {
+        let config_home = self.env_source.get("XDG_CONFIG_HOME");
+        let config_home_state = telemetry::presence(config_home.as_ref());
+        if let Some(dir) = config_home.filter(|value| !value.is_empty()) {
             self.push_for_bases(std::iter::once(PathBuf::from(dir)), paths, seen);
         }
 
-        match self.env_source.get("XDG_CONFIG_DIRS") {
-            Some(dirs) => {
-                let mut xdg_dirs = std::env::split_paths(&dirs)
-                    .filter(|path| !path.as_os_str().is_empty())
-                    .peekable();
-                if xdg_dirs.peek().is_none() {
-                    self.push_default_xdg(paths, seen);
-                } else {
-                    self.push_for_bases(xdg_dirs, paths, seen);
-                }
-            }
-            None => self.push_default_xdg(paths, seen),
+        let dirs = self.env_source.get("XDG_CONFIG_DIRS");
+        let dirs_state = telemetry::presence(dirs.as_ref());
+        let resolution = self.push_xdg_dirs(dirs.as_ref(), paths, seen);
+
+        telemetry::xdg_decision(config_home_state, dirs_state, resolution);
+    }
+
+    /// Push the `XDG_CONFIG_DIRS` bases, reporting which source supplied them.
+    ///
+    /// A list that is absent, or that contains only empty segments, falls back
+    /// to the platform default. The two cases are reported separately because a
+    /// value of `":"` is *present* yet still resolves to the default, and the
+    /// distinction is exactly what makes a misconfigured list diagnosable.
+    fn push_xdg_dirs(
+        &self,
+        dirs: Option<&std::ffi::OsString>,
+        paths: &mut Vec<PathBuf>,
+        seen: &mut HashSet<String>,
+    ) -> &'static str {
+        let Some(list) = dirs else {
+            self.push_default_xdg(paths, seen);
+            return telemetry::XDG_RESOLUTION_DEFAULT;
+        };
+
+        let mut xdg_dirs = std::env::split_paths(list)
+            .filter(|path| !path.as_os_str().is_empty())
+            .peekable();
+        if xdg_dirs.peek().is_none() {
+            self.push_default_xdg(paths, seen);
+            return telemetry::XDG_RESOLUTION_DEFAULT;
         }
+
+        self.push_for_bases(xdg_dirs, paths, seen);
+        telemetry::XDG_RESOLUTION_LIST
     }
 
     fn push_windows(&self, paths: &mut Vec<PathBuf>, seen: &mut HashSet<String>) {
@@ -144,17 +164,57 @@ impl ConfigDiscovery {
         self.push_for_bases(dirs, paths, seen);
     }
 
+    /// Resolve the home directory, reporting which source named it.
+    ///
+    /// `HOME` outranks `USERPROFILE`, and the source's own platform fallback is
+    /// consulted only when neither is set — an injected source returns `None`
+    /// there, which is what keeps a test's candidate list independent of the
+    /// host machine.
+    fn resolve_home(&self) -> (Option<PathBuf>, &'static str) {
+        if let Some(value) = self.env_source.get("HOME") {
+            return (Some(PathBuf::from(value)), telemetry::HOME_FROM_HOME);
+        }
+        if let Some(value) = self.env_source.get("USERPROFILE") {
+            return (Some(PathBuf::from(value)), telemetry::HOME_FROM_USERPROFILE);
+        }
+        self.env_source
+            .home_fallback()
+            .map_or((None, telemetry::HOME_NONE), |path| {
+                (Some(path), telemetry::HOME_FROM_FALLBACK)
+            })
+    }
+
     fn push_home(&self, paths: &mut Vec<PathBuf>, seen: &mut HashSet<String>) {
-        let home = self
-            .env_source
-            .get("HOME")
-            .or_else(|| self.env_source.get("USERPROFILE"))
-            .map(PathBuf::from)
-            .or_else(|| self.env_source.home_fallback());
+        let (home, source) = self.resolve_home();
+        telemetry::home_decision(source);
         if let Some(home_path) = home {
             let config_dir = home_path.join(".config");
             self.push_for_bases(std::iter::once(config_dir), paths, seen);
             Self::push_unique(paths, seen, home_path.join(&self.dotfile_name));
+        }
+    }
+
+    /// Push the configuration-path selector, reporting how it resolved.
+    ///
+    /// The three non-accepting states are kept distinct because they call for
+    /// different action: no selector was configured at all, one was configured
+    /// but the operator has not set it, or it is set to an empty value — the
+    /// last being a likely mistake that discovery deliberately ignores.
+    fn push_selector(&self, paths: &mut Vec<PathBuf>, seen: &mut HashSet<String>) {
+        let Some(env_var) = self.env_var.as_ref() else {
+            telemetry::selector_decision(telemetry::SELECTOR_NOT_CONFIGURED);
+            return;
+        };
+
+        match self.env_source.get(env_var) {
+            None => telemetry::selector_decision(telemetry::SELECTOR_UNSET),
+            Some(value) if value.is_empty() => {
+                telemetry::selector_decision(telemetry::SELECTOR_EMPTY);
+            }
+            Some(value) => {
+                telemetry::selector_decision(telemetry::SELECTOR_ACCEPTED);
+                let _ = Self::push_unique(paths, seen, PathBuf::from(value));
+            }
         }
     }
 
@@ -226,14 +286,7 @@ impl ConfigDiscovery {
             let _ = Self::push_unique(&mut paths, &mut seen, path.clone());
         }
 
-        if let Some(value) = self
-            .env_var
-            .as_ref()
-            .and_then(|env_var| self.env_source.get(env_var).filter(|v| !v.is_empty()))
-        {
-            let _ = Self::push_unique(&mut paths, &mut seen, PathBuf::from(value));
-        }
-
+        self.push_selector(&mut paths, &mut seen);
         self.push_xdg(&mut paths, &mut seen);
         self.push_windows(&mut paths, &mut seen);
         self.push_home(&mut paths, &mut seen);

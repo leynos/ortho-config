@@ -12,54 +12,91 @@ use crate::{
 };
 
 use super::outcome::DiscoveryOutcome;
+use super::telemetry;
 use super::{ConfigDiscovery, DiscoveryLayerOutcome, DiscoveryLayersOutcome, DiscoveryLoadOutcome};
 
+/// Candidate errors partitioned by whether the candidate was required.
+///
+/// Bundling the two vectors keeps the recording helper within the project's
+/// four-argument ceiling, but the real reason is that the partition and the
+/// telemetry share one decision — whether the candidate was required. Making
+/// that decision in a single place is what stops the emitted event and the
+/// reported error disagreeing.
+#[derive(Debug, Default)]
+struct PartitionedErrors {
+    required: Vec<Arc<OrthoError>>,
+    optional: Vec<Arc<OrthoError>>,
+}
+
+impl PartitionedErrors {
+    fn record(&mut self, operation: &'static str, err: Arc<OrthoError>, required: bool) {
+        telemetry::candidate_failure(operation, required);
+        if required {
+            self.required.push(err);
+        } else {
+            self.optional.push(err);
+        }
+    }
+
+    fn into_outcome<T>(self, value: Option<T>) -> DiscoveryOutcome<T> {
+        DiscoveryOutcome {
+            value,
+            required_errors: self.required,
+            optional_errors: self.optional,
+        }
+    }
+
+    fn into_layers_outcome(self, value: Vec<MergeLayer<'static>>) -> DiscoveryLayersOutcome {
+        DiscoveryLayersOutcome {
+            value,
+            required_errors: self.required,
+            optional_errors: self.optional,
+        }
+    }
+}
+
 impl ConfigDiscovery {
+    /// Attempt one candidate, distinguishing "absent" from "failed".
+    ///
+    /// `Ok(None)` means the candidate simply is not there, which is ordinary
+    /// for an optional location and an error only for a required one.
+    fn try_candidate<T, F>(
+        path: &Path,
+        required: bool,
+        build: &mut F,
+    ) -> Result<Option<T>, Arc<OrthoError>>
+    where
+        F: FnMut(figment::Figment, &Path) -> Result<T, Arc<OrthoError>>,
+    {
+        match load_config_file(path)? {
+            Some(figment) => build(figment, path).map(Some),
+            None if required => Err(Self::missing_required_error(path)),
+            None => Ok(None),
+        }
+    }
+
     fn discover_first<T, F>(&self, mut build: F) -> DiscoveryOutcome<T>
     where
         F: FnMut(figment::Figment, &Path) -> Result<T, Arc<OrthoError>>,
     {
-        let mut required_errors = Vec::new();
-        let mut optional_errors = Vec::new();
+        const OPERATION: &str = telemetry::OPERATION_DISCOVER_FIRST;
+
+        telemetry::attempt(OPERATION);
+        let mut errors = PartitionedErrors::default();
         let (candidates, required_bound) = self.candidates_with_required_bound();
         for (idx, path) in candidates.into_iter().enumerate() {
-            match load_config_file(&path) {
-                Ok(Some(figment)) => match build(figment, &path) {
-                    Ok(value) => {
-                        return DiscoveryOutcome {
-                            value: Some(value),
-                            required_errors,
-                            optional_errors,
-                        };
-                    }
-                    Err(err) if idx < required_bound => required_errors.push(err),
-                    Err(err) => optional_errors.push(err),
-                },
-                Ok(None) if idx < required_bound => {
-                    required_errors.push(Self::missing_required_error(&path));
+            let required = Self::is_required_candidate(idx, required_bound);
+            match Self::try_candidate(&path, required, &mut build) {
+                Ok(Some(value)) => {
+                    telemetry::load_outcome(OPERATION, telemetry::OUTCOME_SUCCESS);
+                    return errors.into_outcome(Some(value));
                 }
                 Ok(None) => {}
-                Err(err) if idx < required_bound => required_errors.push(err),
-                Err(err) => optional_errors.push(err),
+                Err(err) => errors.record(OPERATION, err, required),
             }
         }
-        DiscoveryOutcome {
-            value: None,
-            required_errors,
-            optional_errors,
-        }
-    }
-
-    /// Records a missing candidate error if this is a required path.
-    fn record_missing_candidate(
-        idx: usize,
-        required_bound: usize,
-        path: &Path,
-        required_errors: &mut Vec<Arc<OrthoError>>,
-    ) {
-        if idx < required_bound {
-            required_errors.push(Self::missing_required_error(path));
-        }
+        telemetry::load_outcome(OPERATION, telemetry::OUTCOME_NOT_FOUND);
+        errors.into_outcome(None)
     }
 
     /// Returns true if the candidate at `idx` is required.
@@ -150,45 +187,45 @@ impl ConfigDiscovery {
     /// Captures errors for required and optional candidates separately so
     /// callers can mirror the aggregation semantics of [`Self::load_first`].
     pub fn compose_layers(&self) -> DiscoveryLayersOutcome {
-        let mut required_errors = Vec::new();
-        let mut optional_errors = Vec::new();
+        const OPERATION: &str = telemetry::OPERATION_COMPOSE_LAYERS;
+
+        telemetry::attempt(OPERATION);
+        let mut errors = PartitionedErrors::default();
         let (candidates, required_bound) = self.candidates_with_required_bound();
 
         for (idx, candidate_path) in candidates.into_iter().enumerate() {
-            match load_config_file_as_chain(&candidate_path) {
-                Ok(Some(chain)) => {
-                    let layers = chain
-                        .values
-                        .into_iter()
-                        .map(|(value, path)| MergeLayer::file(Cow::Owned(value), Some(path)))
-                        .collect();
-                    return DiscoveryLayersOutcome {
-                        value: layers,
-                        required_errors,
-                        optional_errors,
-                    };
+            let required = Self::is_required_candidate(idx, required_bound);
+            match Self::chain_layers(&candidate_path, required) {
+                Ok(Some(layers)) => {
+                    telemetry::load_outcome(OPERATION, telemetry::OUTCOME_SUCCESS);
+                    return errors.into_layers_outcome(layers);
                 }
-                Ok(None) => {
-                    Self::record_missing_candidate(
-                        idx,
-                        required_bound,
-                        &candidate_path,
-                        &mut required_errors,
-                    );
-                }
-                Err(err) if Self::is_required_candidate(idx, required_bound) => {
-                    required_errors.push(err);
-                }
-                Err(err) => {
-                    optional_errors.push(err);
-                }
+                Ok(None) => {}
+                Err(err) => errors.record(OPERATION, err, required),
             }
         }
 
-        DiscoveryLayersOutcome {
-            value: Vec::new(),
-            required_errors,
-            optional_errors,
+        telemetry::load_outcome(OPERATION, telemetry::OUTCOME_NOT_FOUND);
+        errors.into_layers_outcome(Vec::new())
+    }
+
+    /// Load one candidate's `extends` chain as a layer stack.
+    fn chain_layers(
+        path: &Path,
+        required: bool,
+    ) -> Result<Option<Vec<MergeLayer<'static>>>, Arc<OrthoError>> {
+        match load_config_file_as_chain(path)? {
+            Some(chain) => Ok(Some(
+                chain
+                    .values
+                    .into_iter()
+                    .map(|(value, layer_path)| {
+                        MergeLayer::file(Cow::Owned(value), Some(layer_path))
+                    })
+                    .collect(),
+            )),
+            None if required => Err(Self::missing_required_error(path)),
+            None => Ok(None),
         }
     }
 

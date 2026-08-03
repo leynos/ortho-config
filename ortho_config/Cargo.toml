@@ -32,6 +32,7 @@ figment-json5 = { version = "0.1", optional = true }
 serde_saphyr = { package = "serde-saphyr", version = "0.0.6", optional = true }
 json5 = { version = "0.4", optional = true }
 serde_json = { version = "1", optional = true }
+metrics = { version = "0.24", optional = true }
 
 [target.'cfg(not(any(unix, target_os = "redox")))'.dependencies]
 directories = "6"
@@ -48,6 +49,11 @@ serde_json = ["dep:serde_json"]
 toml = ["figment/toml", "dep:toml"]
 json5 = ["dep:figment-json5", "dep:json5"]
 yaml = ["dep:serde_saphyr", "serde_json"]
+# Emit discovery counters through the `metrics` facade. Off by default: a
+# library must not choose a metrics backend for the application embedding it,
+# and the facade costs nothing until a recorder is installed. Structured
+# `tracing` events are emitted regardless of this feature.
+metrics = ["dep:metrics"]
 
 [dev-dependencies]
 figment = { version = "0.10", features = ["toml", "env"] }
@@ -64,6 +70,7 @@ anyhow = "1"
 ortho_config_macros = { path = "../ortho_config_macros", version = "0.8.0" }
 proptest = "1.11.0"
 tracing-subscriber = "0.3"
+metrics-util = { version = "0.20", features = ["debugging"] }
 
 [[example]]
 name = "registry_ctl"

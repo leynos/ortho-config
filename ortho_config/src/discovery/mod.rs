@@ -15,6 +15,7 @@ mod builder;
 mod candidates;
 mod load;
 mod outcome;
+mod telemetry;
 
 pub use builder::ConfigDiscoveryBuilder;
 
