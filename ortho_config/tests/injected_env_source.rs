@@ -86,3 +86,39 @@ fn map_env_reports_absent_keys_as_unset() {
     assert!(env.get("XDG_CONFIG_HOME").is_none());
     assert!(env.home_fallback().is_none());
 }
+
+/// An empty base-directory variable must contribute no candidate.
+///
+/// `PathBuf::from("")` joined with the app name yields a *relative* path such
+/// as `demo/config.toml`. Left unguarded, that would be resolved against the
+/// process's working directory, so a tool run from an untrusted directory
+/// could load configuration from it.
+#[rstest]
+#[case::xdg_config_home("XDG_CONFIG_HOME")]
+#[case::appdata("APPDATA")]
+#[case::localappdata("LOCALAPPDATA")]
+fn empty_base_directory_contributes_no_candidate(#[case] key: &str) {
+    let discovery = discovery_with(MapEnv::new().with_var(key, ""));
+    let candidates = discovery.candidates();
+    assert!(
+        candidates.iter().all(|path| path.is_absolute()),
+        "{key} empty should yield no relative candidate, got {candidates:?}"
+    );
+    assert!(
+        !candidates.iter().any(|path| path.starts_with("demo")),
+        "{key} empty must not produce a working-directory candidate, got {candidates:?}"
+    );
+}
+
+/// A non-empty base directory is still honoured.
+#[rstest]
+fn non_empty_base_directory_is_retained() {
+    let discovery = discovery_with(MapEnv::new().with_var("XDG_CONFIG_HOME", "/xdg"));
+    assert!(
+        discovery
+            .candidates()
+            .iter()
+            .any(|path| path.starts_with("/xdg/demo")),
+        "a non-empty XDG_CONFIG_HOME should still contribute candidates"
+    );
+}

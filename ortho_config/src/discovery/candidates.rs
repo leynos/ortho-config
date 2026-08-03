@@ -105,7 +105,17 @@ impl ConfigDiscovery {
     }
 
     fn push_xdg(&self, paths: &mut Vec<PathBuf>, seen: &mut HashSet<String>) {
-        if let Some(dir) = self.env_source.get("XDG_CONFIG_HOME") {
+        // An empty value must not contribute a base. `PathBuf::from("")` joined
+        // with the app name yields a *relative* candidate such as
+        // `demo/config.toml`, which would be resolved against the process's
+        // working directory — loading configuration from wherever the tool
+        // happens to be run. `XDG_CONFIG_DIRS` and the selector already guard
+        // this; these three did not.
+        if let Some(dir) = self
+            .env_source
+            .get("XDG_CONFIG_HOME")
+            .filter(|value| !value.is_empty())
+        {
             self.push_for_bases(std::iter::once(PathBuf::from(dir)), paths, seen);
         }
 
@@ -127,7 +137,12 @@ impl ConfigDiscovery {
     fn push_windows(&self, paths: &mut Vec<PathBuf>, seen: &mut HashSet<String>) {
         let dirs = ["APPDATA", "LOCALAPPDATA"]
             .into_iter()
-            .filter_map(|key| self.env_source.get(key).map(PathBuf::from));
+            .filter_map(|key| {
+                self.env_source
+                    .get(key)
+                    .filter(|value| !value.is_empty())
+                    .map(PathBuf::from)
+            });
         self.push_for_bases(dirs, paths, seen);
     }
 
