@@ -19,7 +19,7 @@ use ortho_config::{ConfigDiscovery, MapEnv};
 use rstest::rstest;
 use std::collections::BTreeMap;
 use std::path::Path;
-use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+use std::sync::{Arc, Mutex, MutexGuard, OnceLock, PoisonError};
 use tracing::field::{Field, Visit};
 use tracing_subscriber::layer::Context;
 use tracing_subscriber::prelude::*;
@@ -83,12 +83,31 @@ impl Visit for FieldVisitor<'_> {
     }
 }
 
+/// Keep one registered dispatcher alive for the lifetime of the test binary.
+///
+/// `tracing::debug!` consults a *global* maximum level before it ever reaches
+/// the thread-local subscriber, and that maximum is recomputed as dispatchers
+/// register and drop. With tests running concurrently, one thread leaving its
+/// `with_default` scope could drop the global maximum to `OFF` while another
+/// was still inside its own — and the second thread's events would vanish.
+///
+/// This was observed as a genuine intermittent failure, not a theoretical one.
+/// Holding a dispatcher that is never dropped pins the maximum at the registry
+/// default, so no thread can lower it out from under another. It is deliberately
+/// never installed as the default subscriber: each test still captures through
+/// its own thread-local one.
+fn pin_global_max_level() {
+    static PINNED: OnceLock<tracing::Dispatch> = OnceLock::new();
+    let _ = PINNED.get_or_init(|| tracing::Dispatch::new(Registry::default()));
+}
+
 /// Run `f` with a capturing subscriber installed on this thread only.
 ///
 /// `with_default` is thread-local, so these tests need no lock and no
 /// `#[serial]` — the same property the injected environment source provides
 /// for the environment itself.
 fn capture<R>(f: impl FnOnce() -> R) -> Vec<Captured> {
+    pin_global_max_level();
     let events = Arc::new(Events::default());
     let subscriber = Registry::default().with(CaptureLayer(Arc::clone(&events)));
     tracing::subscriber::with_default(subscriber, f);
