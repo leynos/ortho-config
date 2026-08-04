@@ -85,9 +85,18 @@ fn selector_state_is_reported(
     assert_eq!(only(&events, "discovery.selector").field("state"), expected);
 }
 
+/// A `XDG_CONFIG_DIRS` value consisting of the separator alone.
+///
+/// Selected by `cfg!` rather than written as `":"`. The path-list separator is
+/// `;` on Windows, so a literal colon is a single *non-empty* segment there:
+/// the case would then assert `list` where it means `default`, which is exactly
+/// how it failed on the Windows CI leg.
+const SEPARATOR_ONLY: &str = if cfg!(windows) { ";" } else { ":" };
+
 /// The XDG decision separates the two variables and the resolution taken.
 ///
-/// `XDG_CONFIG_DIRS=":"` is the case worth having: the variable is *present*
+/// A separator-only `XDG_CONFIG_DIRS` is the case worth having: the variable
+/// is *present*
 /// yet every segment is empty, so discovery still falls back to the platform
 /// default. Reporting presence and resolution as separate fields is what makes
 /// that distinguishable from the variable simply being unset.
@@ -96,7 +105,7 @@ fn selector_state_is_reported(
 #[case::config_home_only(&[("XDG_CONFIG_HOME", "/xdg")], ("present", "absent", "default"))]
 #[case::empty_config_home(&[("XDG_CONFIG_HOME", "")], ("empty", "absent", "default"))]
 #[case::dirs_supply_the_list(&[("XDG_CONFIG_DIRS", "/a")], ("absent", "present", "list"))]
-#[case::dirs_present_but_all_empty(&[("XDG_CONFIG_DIRS", ":")], ("absent", "present", "default"))]
+#[case::dirs_present_but_all_empty(&[("XDG_CONFIG_DIRS", SEPARATOR_ONLY)], ("absent", "present", "default"))]
 #[case::empty_dirs(&[("XDG_CONFIG_DIRS", "")], ("absent", "empty", "default"))]
 fn xdg_decision_is_reported(#[case] pairs: &[(&str, &str)], #[case] expected: (&str, &str, &str)) {
     let (expected_config_home, expected_dirs, expected_resolution) = expected;
