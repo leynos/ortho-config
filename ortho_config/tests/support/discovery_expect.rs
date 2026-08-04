@@ -8,7 +8,7 @@
 //!
 //! The expectations must therefore be built rather than written out, because
 //! `json5` and `yaml` each add variant filenames to every base-directory group.
-//! A hand-written list would be right under `--no-default-features` and wrong
+//! A handwritten list would be right under `--no-default-features` and wrong
 //! under `--all-features`, so it would be corrected into a containment check
 //! the first time CI disagreed with a developer's machine.
 

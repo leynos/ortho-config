@@ -734,6 +734,40 @@ source, a test supplying no home would still pick up the host's, and the
 candidate list would vary between machines. Implement `home_fallback` if a
 custom source should provide one.
 
+
+#### Seeing why a file was chosen
+
+Discovery consults a dozen locations and returns only the winner, so "why did
+it load _that_ file?" is otherwise unanswerable. It emits a `tracing` event at
+each decision point: which environment source was used, how the selector
+resolved, which variables supplied the base directories, and the outcome of
+each load attempt. Attach any `tracing` subscriber at `DEBUG` level to see them.
+
+> [!IMPORTANT]
+> These events never carry environment variable values, resolved paths, or
+> file contents. Every field is drawn from a fixed vocabulary such as
+> `accepted`, `empty`, `unset`, or `not_found`. The events describe the
+> _decision_, never the datum it was made from, so they are safe to ship to
+> a log aggregator from a process holding secrets in its environment.
+
+The consequence is worth stating plainly: the telemetry will tell you that the
+selector was accepted, not which path it named. Pair it with
+`ConfigDiscovery::candidates()` when a specific path is what you need.
+
+Enabling the optional `metrics` feature additionally emits two counters,
+`ortho_config.discovery.attempts` and `ortho_config.discovery.outcomes`,
+through the [`metrics`](https://docs.rs/metrics) facade:
+
+```toml
+[dependencies]
+ortho_config = { version = "0.8", features = ["metrics"] }
+```
+
+The feature is off by default. A library should not choose a metrics backend
+for the application embedding it, and the facade records nothing until that
+application installs a recorder — OrthoConfig never installs one. The `tracing`
+events above are emitted either way.
+
 ## Loading configuration and precedence rules
 
 ### How loading works
