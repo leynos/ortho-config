@@ -64,16 +64,20 @@ pub fn home_group(directory: impl AsRef<Path>) -> Vec<PathBuf> {
 /// On other platforms `push_default_xdg` is deliberately a no-op, so the
 /// expectation is empty rather than absent — callers splice this in
 /// unconditionally and get the right answer on every target.
+///
+/// Split by `cfg` rather than branching inside one body: the non-Unix arm
+/// reduces to `Vec::new()`, and the workspace denies
+/// `clippy::missing_const_for_fn`, so a single body would fail Windows Clippy.
+#[cfg(any(unix, target_os = "redox"))]
 #[must_use]
 pub fn default_xdg_group() -> Vec<PathBuf> {
-    #[cfg(any(unix, target_os = "redox"))]
-    {
-        base_group("/etc/xdg")
-    }
-    #[cfg(not(any(unix, target_os = "redox")))]
-    {
-        Vec::new()
-    }
+    base_group("/etc/xdg")
+}
+
+#[cfg(not(any(unix, target_os = "redox")))]
+#[must_use]
+pub const fn default_xdg_group() -> Vec<PathBuf> {
+    Vec::new()
 }
 
 /// The candidate contributed by the single deterministic project root.

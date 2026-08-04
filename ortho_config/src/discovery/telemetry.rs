@@ -143,11 +143,13 @@ pub(super) fn candidate_failure(operation: &'static str, required: bool) {
     } else {
         OUTCOME_OPTIONAL_FAILURE
     };
+    // `outcome` and `required` already encode the single bit that matters, so
+    // there is no third `candidate_kind` field: three renderings of one boolean
+    // inflate every event and give a consumer three things to keep in step.
     tracing::debug!(
         event = "discovery.candidate",
         operation,
         outcome,
-        candidate_kind = if required { "required" } else { "optional" },
         required,
         "configuration candidate rejected"
     );
