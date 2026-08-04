@@ -541,11 +541,15 @@ loader and never enumerates the automatic generators at all; the gate lives at
 candidate generation, not after it, so a required path can no longer
 mechanically coexist with later discovered layers. A failure then yields a
 single terminal `selected_error` that carries the winning `ResolvedSelection`,
-and `into_merge_result` returns that one error rather than an aggregate —
-matching Netsuke's "report that error" contract, and naming the selector that
-chose the file — including, where an application still carries one, a
-deprecated alias. The legacy `compose_layers()` keeps its current
-non-suppressing behaviour; suppression is reached only through the new policy.
+naming the selector that chose the file — including, where an application still
+carries one, a deprecated alias. It is the _sole file-discovery error_: the
+partitioning happens at discovery, so `FileLayerOutcome` drains one error
+rather than an aggregate of candidate failures, matching Netsuke's "report that
+error" contract. That is a claim about discovery only.
+`LayerComposition::into_merge_result` may still aggregate it with later
+environment, CLI, or merge failures, which belong to a separate stage. The
+legacy `compose_layers()` keeps its current non-suppressing behaviour;
+suppression is reached only through the new policy.
 
 ### Behaviour mapping
 

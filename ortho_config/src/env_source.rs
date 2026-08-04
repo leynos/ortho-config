@@ -169,7 +169,7 @@ mod tests {
     //!
     //! Discovery-level behaviour is covered by
     //! `tests/injected_env_source.rs`; these cases pin `MapEnv`'s own lookup
-    //! and prefix-enumeration semantics.
+    //! semantics.
 
     use super::*;
 

@@ -73,7 +73,7 @@ impl ConfigDiscoveryBuilder {
     /// Discovery otherwise reads the live process environment. Injecting a
     /// source lets tests drive the configuration-path selector and the
     /// platform base directories without mutating global state, so they need
-    /// no serialising lock and may run concurrently.
+    /// no serializing lock and may run concurrently.
     ///
     /// # Examples
     ///

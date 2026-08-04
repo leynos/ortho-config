@@ -750,9 +750,9 @@ each load attempt. Attach any `tracing` subscriber at `DEBUG` level to see them.
 > _decision_, never the datum it was made from, so they are safe to ship to
 > a log aggregator from a process holding secrets in its environment.
 
-The consequence is worth stating plainly: the telemetry will tell you that the
+The consequence is worth stating plainly: the telemetry reports that the
 selector was accepted, not which path it named. Pair it with
-`ConfigDiscovery::candidates()` when a specific path is what you need.
+`ConfigDiscovery::candidates()` when a specific path is required.
 
 Enabling the optional `metrics` feature additionally emits two counters,
 `ortho_config.discovery.attempts` and `ortho_config.discovery.outcomes`,

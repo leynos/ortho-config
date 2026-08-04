@@ -530,11 +530,13 @@ type rather than latent in a trait whose other users must not scan.
 
 `EnvSource::get` returns `Option<OsString>`, not `Option<String>`, because
 discovery resolves configuration *paths*, which need not be UTF-8. The resolver
-therefore owns the lossy conversion explicitly before `raw.trim()` and
-`CsvEnv::parse_value`: a non-UTF-8 value for a declared projection is a
-`Validation` error naming the variable, never a silent fallthrough to the next
-candidate, since a present-but-undecodable value at the highest-priority
-present source is the same class of definite user mistake as `empty = "error"`.
+therefore owns the *fallible* conversion explicitly before `raw.trim()` and
+`CsvEnv::parse_value`. Fallible, not lossy: a lossy conversion substitutes
+replacement characters and so cannot produce the error this policy requires.
+Conversion failure for a declared projection is a `Validation` error naming the
+variable, never a silent fallthrough to the next candidate, since a
+present-but-undecodable value at the highest-priority present source is the
+same class of definite user mistake as `empty = "error"`.
 
 Note that this seam covers the resolver's own unit tests; the generated
 loader's compatibility substrate (§5.4) still reads the real process

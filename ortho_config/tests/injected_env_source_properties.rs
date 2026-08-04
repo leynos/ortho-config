@@ -7,7 +7,7 @@
 //! Every case is generated from the proptest seed alone. Nothing here reads or
 //! mutates the process environment — that is what makes property testing
 //! possible at all for this code. A generator that had to `set_var` would need
-//! the whole suite behind a lock, and a thousand serialised cases is not a
+//! the whole suite behind a lock, and a thousand serialized cases is not a
 //! property test anyone runs.
 
 use ortho_config::{ConfigDiscovery, MapEnv};
@@ -63,7 +63,7 @@ fn path_segment() -> impl Strategy<Value = String> {
 }
 
 proptest! {
-    /// Injecting variables discovery does not read changes nothing.
+    /// Injecting variables that discovery does not read changes nothing.
     ///
     /// This is the containment half of the trait's contract: `EnvSource::get`
     /// is by-name only, so a source holding a thousand unrelated secrets must

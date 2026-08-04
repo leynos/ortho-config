@@ -387,15 +387,15 @@ contract stays discoverable.
 events, and it is written so that a leak is a compile-time impossibility rather
 than a review responsibility.
 
-| Event                       | Fields                                                                                       | Emitted from                |
-| --------------------------- | -------------------------------------------------------------------------------------------- | --------------------------- |
-| `discovery.source_selected` | `source`: `process`, `injected`                                                              | `builder::build`            |
-| `discovery.selector`        | `state`: `not_configured`, `unset`, `empty`, `accepted`                                      | `candidates::push_selector` |
-| `discovery.xdg`             | `config_home` and `dirs`: `absent`, `empty`, `present`; `resolution`: `default`, `list`      | `candidates::push_xdg`      |
-| `discovery.home`            | `source`: `home`, `userprofile`, `fallback`, `none`                                          | `candidates::push_home`     |
-| `discovery.attempt`         | `operation`: `discover_first`, `compose_layers`                                              | `load`                      |
-| `discovery.candidate`       | `operation`; `outcome`: `optional_failure`, `required_failure`; `candidate_kind`; `required` | `load`                      |
-| `discovery.load`            | `operation`; `outcome`: `success`, `not_found`                                               | `load`                      |
+| Event                       | Fields                                                                                  | Emitted from                |
+| --------------------------- | --------------------------------------------------------------------------------------- | --------------------------- |
+| `discovery.source_selected` | `source`: `process`, `injected`                                                         | `builder::build`            |
+| `discovery.selector`        | `state`: `not_configured`, `unset`, `empty`, `accepted`                                 | `candidates::push_selector` |
+| `discovery.xdg`             | `config_home` and `dirs`: `absent`, `empty`, `present`; `resolution`: `default`, `list` | `candidates::push_xdg`      |
+| `discovery.home`            | `source`: `home`, `userprofile`, `fallback`, `none`                                     | `candidates::push_home`     |
+| `discovery.attempt`         | `operation`: `discover_first`, `compose_layers`                                         | `load`                      |
+| `discovery.candidate`       | `operation`; `outcome`: `optional_failure`, `required_failure`; `required`              | `load`                      |
+| `discovery.load`            | `operation`; `outcome`: `success`, `not_found`                                          | `load`                      |
 
 Rules for extending this set:
 
