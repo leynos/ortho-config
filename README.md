@@ -409,6 +409,15 @@ Use these notes when upgrading from v0.7.x to v0.8.0:
   `[package.metadata.ortho_config.windows]` overrides, then run
   `cargo orthohelp` (`--format man` / `--format ps`) against the emitted
   `OrthoConfigDocs` metadata.
+- Generate compact agent metadata with `cargo orthohelp --format agent-context`.
+  `--format all` now writes `agent-context.json` alongside localized IR, man
+  pages, and PowerShell help.
+- Treat `schema_version` as the agent-context compatibility boundary and ignore
+  unknown object fields within the same major version. Enum wire strings remain
+  exact contract values.
+- Update agent-context parsers and golden fixtures that expected the
+  `MutationEffect::ReadOnly` wire value `read-only`; the locked schema-v1 value
+  is now `read_only` after enum strings were standardized on `snake_case`.
 
 ## Migration notes for v0.7.0
 

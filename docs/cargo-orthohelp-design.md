@@ -627,6 +627,12 @@ The reusable schema types and `ORTHO_AGENT_CONTEXT_SCHEMA_VERSION` live in
 loading the bridge IR, applying defaults, transforming structured metadata,
 writing artefacts, and reporting diagnostics.
 
+Within `cargo-orthohelp`'s binary entrypoint, the private `GenerationContext`
+only groups borrowed, run-scoped inputs for output dispatch: package selection,
+bridge IR, output directory, and the optional cached en-US localizer. It may be
+used by format-generation helpers in `main.rs`; it is not a reusable library
+context or an owner of those values.
+
 For the first `--format agent-context` implementation, the adapter emits an
 optional `AgentCommand.summary` from the short en-US command description. It
 does not emit Fluent identifiers, long help text, roff fragments, or PowerShell

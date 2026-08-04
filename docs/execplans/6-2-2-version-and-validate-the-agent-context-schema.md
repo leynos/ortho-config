@@ -289,6 +289,9 @@ These decide the exact v1 wire shape that this plan ossifies.
 - [x] 2026-08-01: Final documentation review aligned the formatter's
       character-literal contract, consumer requirements, and portable
       execution instructions; all local and hosted gates passed.
+- [x] 2026-08-04: Final resource and migration follow-up reused the successful
+      en-US localizer across agent-context and localized output, corrected the
+      package README, and extended the v0.8 migration notes.
 
 Each milestone ends by running, in this order and sequentially (never in
 parallel, to benefit from build caching): `make check-fmt`, `make typecheck`,
@@ -583,6 +586,18 @@ cleared before the next milestone. Commit after each green milestone.
   assertion to fail even though the JSON values matched.
   Impact: a fixture-specific `.gitattributes` rule now pins LF at checkout and
   preserves one canonical wire-contract expectation across platforms.
+- Observation: `--format all` built and leaked the en-US consumer resources for
+  agent-context, then repeated the same filesystem read and allocation while
+  localizing documentation.
+  Evidence: `generate_agent_context_if_requested` called
+  `build_en_us_localizer`, while `localize_docs` independently called
+  `load_consumer_resources` and `build_localizer` for every requested locale.
+  After the change, a cached `--format all` run under
+  `strace -e trace=%file` showed one actual en-US consumer-resource read after
+  metadata fingerprinting.
+  Impact: `run` now retains a successfully built en-US localizer and lends it
+  to both phases. A failed agent-context localizer remains uncached, preserving
+  the existing warning followed by localized-output error behaviour.
 
 ## Decision log
 

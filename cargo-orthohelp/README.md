@@ -30,8 +30,8 @@ intermediate representation (IR) produced by `#[derive(OrthoConfig)]`.
 - **Localized output:** Resolve Fluent IDs per locale from `locales/<locale>`.
 - **Multiple output formats:** IR JSON (`ir`), UNIX man pages (`man`),
   PowerShell help (`ps`), compact agent-context JSON (`agent-context`), or all
-  localized output formats (`all`). Note: `--format all` currently excludes
-  `agent-context` until schema versioning is locked.
+  outputs (`all`). `--format all` includes `agent-context.json` alongside every
+  localized output format.
 - **Cache-aware pipeline:** `--cache` reuses bridge IR; `--no-build` enforces
   cache-only execution.
 - **Cargo-native workflow:** Run as `cargo orthohelp` from your workspace.
