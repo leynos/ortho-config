@@ -147,7 +147,10 @@ jobs:
         with:
           output-path: lcov-serde-saphyr.info
           format: lcov
-          features: serde_json toml json5 yaml
+          # `metrics` rides on this leg rather than gaining a job of its own:
+          # it is off by default, so without it here the facade code and its
+          # tests would never be compiled in CI at all.
+          features: serde_json toml json5 yaml metrics
           artefact-name-suffix: serde-saphyr
           with-ratchet: ${{ matrix.os == 'ubuntu-latest' }}
 
