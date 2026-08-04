@@ -519,14 +519,23 @@ user mistake, and continuing would mask it. The recorded error names the
 Reading the environment is safe by construction, and the trait enforces it
 rather than merely inviting it. `EnvSource` exposes lookup **by name only**; it
 has deliberately no enumeration method, so a process with thousands of
-unrelated secrets in its environment cannot have them enumerated, copied, or
-logged by any holder of the source, however carelessly. This is what makes the
-§3 non-goal ("Reading the entire process environment") a property of the type
-instead of a convention. The `CsvEnv` compatibility substrate does scan a
-prefix, because that is what `figment::providers::Env` does; when it gains an
-injectable source ([ortho-config#412][oc-412]) that scanning capability must
-live on a separate, explicitly-named abstraction, so it stays visible in the
-type rather than latent in a trait whose other users must not scan.
+unrelated secrets in its environment cannot have them *discovered* or read in
+bulk by a holder of the source. This is what makes the §3 non-goal ("Reading
+the entire process environment") a property of the type instead of a convention.
+
+The guarantee is exactly that and no more. A holder can still request any name
+it already knows — `get("AWS_SECRET_ACCESS_KEY")` is a legal call — and is free
+to copy or log what comes back. What the type removes is the ability to sweep
+an environment whose contents the caller does not know in advance, which is the
+difference between a targeted read a reviewer can see in the source and an
+undirected one that scoops up whatever the deployment happens to export.
+Protecting a named value remains the caller's responsibility, and is why the
+discovery telemetry records decisions rather than values. The `CsvEnv`
+compatibility substrate does scan a prefix, because that is what
+`figment::providers::Env` does; when it gains an injectable source (
+[ortho-config#412][oc-412]) that scanning capability must live on a separate,
+explicitly-named abstraction, so it stays visible in the type rather than
+latent in a trait whose other users must not scan.
 
 `EnvSource::get` returns `Option<OsString>`, not `Option<String>`, because
 discovery resolves configuration *paths*, which need not be UTF-8. The resolver

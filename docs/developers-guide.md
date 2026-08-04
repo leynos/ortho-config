@@ -397,6 +397,9 @@ than a review responsibility.
 | `discovery.candidate`       | `operation`; `outcome`: `optional_failure`, `required_failure`; `required`              | `load`                      |
 | `discovery.load`            | `operation`; `outcome`: `success`, `not_found`                                          | `load`                      |
 
+Table: Structured events emitted during configuration discovery, with the
+closed field vocabulary each carries and the module that emits it.
+
 Rules for extending this set:
 
 - **Every field is a `&'static str` from a constant declared in
@@ -430,8 +433,8 @@ environment. `ProcessEnv` is the default and preserves the historical behaviour;
 - `EnvSource` is owned by the discovery subsystem. `ConfigDiscovery` holds one
   as `Arc<dyn EnvSource>`, supplied through
   `ConfigDiscoveryBuilder::env_source` and defaulting to `ProcessEnv`.
-- `discovery/candidates.rs` is the only module that reads through it, and after
-  this change contains no `std::env::var_os` call of its own.
+- `discovery/candidates.rs` is the only module that reads through it, and holds
+  no `std::env::var_os` call of its own.
 - It is **not** a general environment service. Adding readers elsewhere in the
   crate requires a decision about scope, not a call site.
 
@@ -444,9 +447,9 @@ environment. `ProcessEnv` is the default and preserves the historical behaviour;
   that guarantee for every holder of an `EnvSource`, however careful individual
   callers were.
 - **The merge layer needs a different abstraction.** `CsvEnv` legitimately scans
-  a prefix, because `figment::providers::Env` does. When it gains an injectable
+  a prefix because `figment::providers::Env` does. When it gains an injectable
   source ([#412](https://github.com/leynos/ortho-config/issues/412)) it must
-  take a separate, explicitly-named type, so the scanning capability is visible
+  take a separate, explicitly named type, so the scanning capability is visible
   in the signature rather than latent in a trait whose other users must not
   scan. Until then, `CsvEnv` injection is out of scope and a consumer needing
   to control `APP_*` configuration-value variables must still set them in the
