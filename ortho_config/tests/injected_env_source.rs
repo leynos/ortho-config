@@ -205,6 +205,32 @@ fn absent_home_does_not_fall_back_to_the_host() {
     }
 }
 
+/// An empty home variable is treated as unset, and does not block the next one.
+///
+/// `PathBuf::from("")` joined with `.config` yields a *relative* path, so an
+/// empty `HOME` would search the process's working directory. It must also not
+/// mask a populated `USERPROFILE`: an operator who exports an empty `HOME` has
+/// said nothing about where the home is, not that there is none.
+#[rstest]
+#[case::empty_home(&[("HOME", "")], None)]
+#[case::empty_userprofile(&[("USERPROFILE", "")], None)]
+#[case::both_empty(&[("HOME", ""), ("USERPROFILE", "")], None)]
+#[case::empty_home_falls_through(
+    &[("HOME", ""), ("USERPROFILE", "/users/injected")],
+    Some("/users/injected")
+)]
+fn an_empty_home_variable_is_treated_as_unset(
+    #[case] pairs: &[(&str, &str)],
+    #[case] expected_home: Option<&str>,
+) {
+    let actual = candidates_for(pairs);
+    let home_group = expected_home.map_or_else(Vec::new, home_group);
+    assert_eq!(
+        actual,
+        sequence([default_xdg_group(), home_group, project_group()]),
+    );
+}
+
 /// A `MapEnv` models a closed set, so unknown keys are unset.
 #[test]
 fn map_env_reports_absent_keys_as_unset() {

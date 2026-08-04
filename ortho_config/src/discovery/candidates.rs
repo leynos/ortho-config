@@ -164,17 +164,33 @@ impl ConfigDiscovery {
         self.push_for_bases(dirs, paths, seen);
     }
 
+    /// Read `key`, treating an empty value as unset.
+    ///
+    /// Every environment-derived base directory goes through this: an empty
+    /// value joined with an application name produces a working-directory
+    /// relative candidate, which would load configuration from wherever the
+    /// tool happened to be run.
+    fn non_empty(&self, key: &str) -> Option<std::ffi::OsString> {
+        self.env_source.get(key).filter(|value| !value.is_empty())
+    }
+
     /// Resolve the home directory, reporting which source named it.
     ///
     /// `HOME` outranks `USERPROFILE`, and the source's own platform fallback is
     /// consulted only when neither is set — an injected source returns `None`
     /// there, which is what keeps a test's candidate list independent of the
     /// host machine.
+    ///
+    /// An empty value is treated as unset, for the same reason the XDG and
+    /// Windows base directories are: `PathBuf::from("")` joined with `.config`
+    /// yields a *relative* path, so an empty `HOME` would silently search the
+    /// process's working directory. Treating it as unset also lets a populated
+    /// `USERPROFILE` be reached, which an empty `HOME` would otherwise block.
     fn resolve_home(&self) -> (Option<PathBuf>, &'static str) {
-        if let Some(value) = self.env_source.get("HOME") {
+        if let Some(value) = self.non_empty("HOME") {
             return (Some(PathBuf::from(value)), telemetry::HOME_FROM_HOME);
         }
-        if let Some(value) = self.env_source.get("USERPROFILE") {
+        if let Some(value) = self.non_empty("USERPROFILE") {
             return (Some(PathBuf::from(value)), telemetry::HOME_FROM_USERPROFILE);
         }
         self.env_source
