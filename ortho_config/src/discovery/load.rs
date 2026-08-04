@@ -75,28 +75,45 @@ impl ConfigDiscovery {
         }
     }
 
-    fn discover_first<T, F>(&self, mut build: F) -> DiscoveryOutcome<T>
-    where
-        F: FnMut(figment::Figment, &Path) -> Result<T, Arc<OrthoError>>,
-    {
-        const OPERATION: &str = telemetry::OPERATION_DISCOVER_FIRST;
-
-        telemetry::attempt(OPERATION);
+    /// Walk the candidates in order, stopping at the first that yields a value.
+    ///
+    /// The two discovery entry points differ only in what they attempt per
+    /// candidate and what they build from the result; the traversal — ordering,
+    /// the required/optional split, error routing, and the telemetry around it —
+    /// is identical, and duplicating it once let the two drift in exactly the
+    /// places a reader would assume they agree.
+    fn walk_candidates<T>(
+        &self,
+        operation: &'static str,
+        mut try_one: impl FnMut(&Path, bool) -> Result<Option<T>, Arc<OrthoError>>,
+    ) -> (Option<T>, PartitionedErrors) {
+        telemetry::attempt(operation);
         let mut errors = PartitionedErrors::default();
         let (candidates, required_bound) = self.candidates_with_required_bound();
         for (idx, path) in candidates.into_iter().enumerate() {
             let required = Self::is_required_candidate(idx, required_bound);
-            match Self::try_candidate(&path, required, &mut build) {
+            match try_one(&path, required) {
                 Ok(Some(value)) => {
-                    telemetry::load_outcome(OPERATION, telemetry::OUTCOME_SUCCESS);
-                    return errors.into_outcome(Some(value));
+                    telemetry::load_outcome(operation, telemetry::OUTCOME_SUCCESS);
+                    return (Some(value), errors);
                 }
                 Ok(None) => {}
-                Err(err) => errors.record(OPERATION, err, required),
+                Err(err) => errors.record(operation, err, required),
             }
         }
-        telemetry::load_outcome(OPERATION, telemetry::OUTCOME_NOT_FOUND);
-        errors.into_outcome(None)
+        telemetry::load_outcome(operation, telemetry::OUTCOME_NOT_FOUND);
+        (None, errors)
+    }
+
+    fn discover_first<T, F>(&self, mut build: F) -> DiscoveryOutcome<T>
+    where
+        F: FnMut(figment::Figment, &Path) -> Result<T, Arc<OrthoError>>,
+    {
+        let (value, errors) = self
+            .walk_candidates(telemetry::OPERATION_DISCOVER_FIRST, |path, required| {
+                Self::try_candidate(path, required, &mut build)
+            });
+        errors.into_outcome(value)
     }
 
     /// Returns true if the candidate at `idx` is required.
@@ -187,26 +204,9 @@ impl ConfigDiscovery {
     /// Captures errors for required and optional candidates separately so
     /// callers can mirror the aggregation semantics of [`Self::load_first`].
     pub fn compose_layers(&self) -> DiscoveryLayersOutcome {
-        const OPERATION: &str = telemetry::OPERATION_COMPOSE_LAYERS;
-
-        telemetry::attempt(OPERATION);
-        let mut errors = PartitionedErrors::default();
-        let (candidates, required_bound) = self.candidates_with_required_bound();
-
-        for (idx, candidate_path) in candidates.into_iter().enumerate() {
-            let required = Self::is_required_candidate(idx, required_bound);
-            match Self::chain_layers(&candidate_path, required) {
-                Ok(Some(layers)) => {
-                    telemetry::load_outcome(OPERATION, telemetry::OUTCOME_SUCCESS);
-                    return errors.into_layers_outcome(layers);
-                }
-                Ok(None) => {}
-                Err(err) => errors.record(OPERATION, err, required),
-            }
-        }
-
-        telemetry::load_outcome(OPERATION, telemetry::OUTCOME_NOT_FOUND);
-        errors.into_layers_outcome(Vec::new())
+        let (value, errors) =
+            self.walk_candidates(telemetry::OPERATION_COMPOSE_LAYERS, Self::chain_layers);
+        errors.into_layers_outcome(value.unwrap_or_default())
     }
 
     /// Load one candidate's `extends` chain as a layer stack.
