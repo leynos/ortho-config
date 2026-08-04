@@ -28,10 +28,10 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@074f7d8ba75a6e5d18532b72cbe38fccbda4e9c6
+        uses: leynos/shared-actions/.github/actions/setup-rust@47b337e4f230b591891656534d4ffad868131740
 
       - name: Install bun
-        uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76  # v2
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6  # v2
         with:
           bun-version: '1.2.21'
 
@@ -39,7 +39,7 @@ jobs:
         # Broadest feature set, so this leg carries the coverage ratchet
         # (one baseline per job); it writes the authoritative baseline that
         # pull-request runs compare against.
-        uses: leynos/shared-actions/.github/actions/generate-coverage@18bed1ca49a6de3d8882bd72635a32ae3f023d57
+        uses: leynos/shared-actions/.github/actions/generate-coverage@47b337e4f230b591891656534d4ffad868131740
         with:
           output-path: lcov-serde-saphyr.info
           format: lcov
@@ -48,7 +48,7 @@ jobs:
           with-ratchet: 'true'
 
       - name: Test and Measure Coverage (without serde_saphyr)
-        uses: leynos/shared-actions/.github/actions/generate-coverage@18bed1ca49a6de3d8882bd72635a32ae3f023d57
+        uses: leynos/shared-actions/.github/actions/generate-coverage@47b337e4f230b591891656534d4ffad868131740
         with:
           output-path: lcov-no-serde-saphyr.info
           format: lcov
@@ -68,7 +68,7 @@ jobs:
         env:
           CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}
         if: env.CS_ACCESS_TOKEN != ''
-        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@18bed1ca49a6de3d8882bd72635a32ae3f023d57
+        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@47b337e4f230b591891656534d4ffad868131740
         with:
           format: lcov
           access-token: ${{ env.CS_ACCESS_TOKEN }}
