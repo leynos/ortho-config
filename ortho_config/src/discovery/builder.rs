@@ -217,13 +217,15 @@ impl ConfigDiscoveryBuilder {
         });
 
         let mut project_roots = self.project_roots;
-        let default_dir = if project_roots.is_empty() {
-            std::env::current_dir().ok()
-        } else {
-            None
-        };
-        if let Some(dir) = default_dir {
-            project_roots.push(dir);
+        if project_roots.is_empty() {
+            // A missing working directory (deleted cwd, permission denial) is
+            // survivable — discovery simply has no default project root — but
+            // it must not be survivable *silently*, so the decision is
+            // recorded in bounded telemetry rather than discarded with `.ok()`.
+            match std::env::current_dir() {
+                Ok(dir) => project_roots.push(dir),
+                Err(_) => telemetry::project_root_cwd_unavailable(),
+            }
         }
 
         ConfigDiscovery {

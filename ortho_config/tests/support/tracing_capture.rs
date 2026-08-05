@@ -134,9 +134,18 @@ pub fn only<'a>(events: &'a [Captured], name: &str) -> &'a Captured {
 /// directory it may touch, so a fixture cannot accidentally write relative to
 /// the process's working directory.
 pub fn write_fixture(dir: &std::path::Path, name: &str) -> anyhow::Result<std::path::PathBuf> {
+    write_fixture_with(dir, name, "value = 1\n")
+}
+
+/// Write a fixture with the given content through the same capability handle.
+pub fn write_fixture_with(
+    dir: &std::path::Path,
+    name: &str,
+    content: &str,
+) -> anyhow::Result<std::path::PathBuf> {
     let cap =
         Dir::open_ambient_dir(dir, ambient_authority()).context("open the temporary directory")?;
-    cap.write(name, b"value = 1\n")
+    cap.write(name, content.as_bytes())
         .context("write the fixture")?;
     Ok(dir.join(name))
 }

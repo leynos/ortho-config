@@ -1,6 +1,5 @@
 //! Candidate-path generation and deduplication for `ConfigDiscovery`.
 
-use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use super::ConfigDiscovery;
@@ -25,8 +24,10 @@ fn windows_normalized_key(path: &Path) -> String {
     String::from_utf16_lossy(&normalized)
 }
 
+use super::candidate_set::{CandidateAccumulator, CandidateDecisions, CandidateSet};
+
 impl ConfigDiscovery {
-    fn dedup_key(path: &Path) -> String {
+    pub(super) fn dedup_key(path: &Path) -> String {
         #[cfg(windows)]
         {
             windows_normalized_key(path)
@@ -35,23 +36,6 @@ impl ConfigDiscovery {
         #[cfg(not(windows))]
         {
             path.to_string_lossy().into_owned()
-        }
-    }
-
-    fn push_unique(
-        paths: &mut Vec<PathBuf>,
-        seen: &mut HashSet<String>,
-        candidate: PathBuf,
-    ) -> bool {
-        if candidate.as_os_str().is_empty() {
-            return false;
-        }
-        let key = Self::dedup_key(&candidate);
-        if seen.insert(key) {
-            paths.push(candidate);
-            true
-        } else {
-            false
         }
     }
 
@@ -92,7 +76,7 @@ impl ConfigDiscovery {
         candidates
     }
 
-    fn push_for_bases<I>(&self, bases: I, paths: &mut Vec<PathBuf>, seen: &mut HashSet<String>)
+    fn push_for_bases<I>(&self, bases: I, acc: &mut CandidateAccumulator, source: &'static str)
     where
         I: IntoIterator,
         I::Item: Into<PathBuf>,
@@ -100,12 +84,15 @@ impl ConfigDiscovery {
         for base in bases {
             let base_path: PathBuf = base.into();
             for candidate in self.candidates_for_base(base_path.as_path()) {
-                let _ = Self::push_unique(paths, seen, candidate);
+                let _ = acc.push_unique(candidate, source);
             }
         }
     }
 
-    fn push_xdg(&self, paths: &mut Vec<PathBuf>, seen: &mut HashSet<String>) {
+    fn push_xdg(
+        &self,
+        acc: &mut CandidateAccumulator,
+    ) -> (&'static str, &'static str, &'static str) {
         // An empty value must not contribute a base. `PathBuf::from("")` joined
         // with the app name yields a *relative* candidate such as
         // `demo/config.toml`, which would be resolved against the process's
@@ -115,14 +102,18 @@ impl ConfigDiscovery {
         let config_home = self.env_source.get("XDG_CONFIG_HOME");
         let config_home_state = telemetry::presence(config_home.as_ref());
         if let Some(dir) = config_home.filter(|value| !value.is_empty()) {
-            self.push_for_bases(std::iter::once(PathBuf::from(dir)), paths, seen);
+            self.push_for_bases(
+                std::iter::once(PathBuf::from(dir)),
+                acc,
+                telemetry::CANDIDATE_XDG,
+            );
         }
 
         let dirs = self.env_source.get("XDG_CONFIG_DIRS");
         let dirs_state = telemetry::presence(dirs.as_ref());
-        let resolution = self.push_xdg_dirs(dirs.as_ref(), paths, seen);
+        let resolution = self.push_xdg_dirs(dirs.as_ref(), acc);
 
-        telemetry::xdg_decision(config_home_state, dirs_state, resolution);
+        (config_home_state, dirs_state, resolution)
     }
 
     /// Push the `XDG_CONFIG_DIRS` bases, reporting which source supplied them.
@@ -134,11 +125,10 @@ impl ConfigDiscovery {
     fn push_xdg_dirs(
         &self,
         dirs: Option<&std::ffi::OsString>,
-        paths: &mut Vec<PathBuf>,
-        seen: &mut HashSet<String>,
+        acc: &mut CandidateAccumulator,
     ) -> &'static str {
         let Some(list) = dirs else {
-            self.push_default_xdg(paths, seen);
+            self.push_default_xdg(acc);
             return telemetry::XDG_RESOLUTION_DEFAULT;
         };
 
@@ -146,22 +136,22 @@ impl ConfigDiscovery {
             .filter(|path| !path.as_os_str().is_empty())
             .peekable();
         if xdg_dirs.peek().is_none() {
-            self.push_default_xdg(paths, seen);
+            self.push_default_xdg(acc);
             return telemetry::XDG_RESOLUTION_DEFAULT;
         }
 
-        self.push_for_bases(xdg_dirs, paths, seen);
+        self.push_for_bases(xdg_dirs, acc, telemetry::CANDIDATE_XDG);
         telemetry::XDG_RESOLUTION_LIST
     }
 
-    fn push_windows(&self, paths: &mut Vec<PathBuf>, seen: &mut HashSet<String>) {
+    fn push_windows(&self, acc: &mut CandidateAccumulator) {
         let dirs = ["APPDATA", "LOCALAPPDATA"].into_iter().filter_map(|key| {
             self.env_source
                 .get(key)
                 .filter(|value| !value.is_empty())
                 .map(PathBuf::from)
         });
-        self.push_for_bases(dirs, paths, seen);
+        self.push_for_bases(dirs, acc, telemetry::CANDIDATE_WINDOWS);
     }
 
     /// Read `key`, treating an empty value as unset.
@@ -200,14 +190,17 @@ impl ConfigDiscovery {
             })
     }
 
-    fn push_home(&self, paths: &mut Vec<PathBuf>, seen: &mut HashSet<String>) {
+    fn push_home(&self, acc: &mut CandidateAccumulator) -> &'static str {
         let (home, source) = self.resolve_home();
-        telemetry::home_decision(source);
         if let Some(home_path) = home {
             let config_dir = home_path.join(".config");
-            self.push_for_bases(std::iter::once(config_dir), paths, seen);
-            Self::push_unique(paths, seen, home_path.join(&self.dotfile_name));
+            self.push_for_bases(std::iter::once(config_dir), acc, telemetry::CANDIDATE_HOME);
+            let _ = acc.push_unique(
+                home_path.join(&self.dotfile_name),
+                telemetry::CANDIDATE_HOME,
+            );
         }
+        source
     }
 
     /// Push the configuration-path selector, reporting how it resolved.
@@ -216,27 +209,27 @@ impl ConfigDiscovery {
     /// different action: no selector was configured at all, one was configured
     /// but the operator has not set it, or it is set to an empty value — the
     /// last being a likely mistake that discovery deliberately ignores.
-    fn push_selector(&self, paths: &mut Vec<PathBuf>, seen: &mut HashSet<String>) {
+    fn push_selector(&self, acc: &mut CandidateAccumulator) -> &'static str {
         let Some(env_var) = self.env_var.as_ref() else {
-            telemetry::selector_decision(telemetry::SELECTOR_NOT_CONFIGURED);
-            return;
+            return telemetry::SELECTOR_NOT_CONFIGURED;
         };
 
         match self.env_source.get(env_var) {
-            None => telemetry::selector_decision(telemetry::SELECTOR_UNSET),
-            Some(value) if value.is_empty() => {
-                telemetry::selector_decision(telemetry::SELECTOR_EMPTY);
-            }
+            None => telemetry::SELECTOR_UNSET,
+            Some(value) if value.is_empty() => telemetry::SELECTOR_EMPTY,
             Some(value) => {
-                telemetry::selector_decision(telemetry::SELECTOR_ACCEPTED);
-                let _ = Self::push_unique(paths, seen, PathBuf::from(value));
+                let _ = acc.push_unique(PathBuf::from(value), telemetry::CANDIDATE_SELECTOR);
+                telemetry::SELECTOR_ACCEPTED
             }
         }
     }
 
-    fn push_projects(&self, paths: &mut Vec<PathBuf>, seen: &mut HashSet<String>) {
+    fn push_projects(&self, acc: &mut CandidateAccumulator) {
         for root in &self.project_roots {
-            Self::push_unique(paths, seen, root.join(&self.project_file_name));
+            let _ = acc.push_unique(
+                root.join(&self.project_file_name),
+                telemetry::CANDIDATE_PROJECT,
+            );
         }
     }
 
@@ -264,8 +257,12 @@ impl ConfigDiscovery {
     }
 
     #[cfg(any(unix, target_os = "redox"))]
-    fn push_default_xdg(&self, paths: &mut Vec<PathBuf>, seen: &mut HashSet<String>) {
-        self.push_for_bases(std::iter::once(PathBuf::from("/etc/xdg")), paths, seen);
+    fn push_default_xdg(&self, acc: &mut CandidateAccumulator) {
+        self.push_for_bases(
+            std::iter::once(PathBuf::from("/etc/xdg")),
+            acc,
+            telemetry::CANDIDATE_XDG,
+        );
     }
 
     #[cfg(not(any(unix, target_os = "redox")))]
@@ -273,42 +270,55 @@ impl ConfigDiscovery {
         clippy::missing_const_for_fn,
         reason = "signature must match the Unix variant which is not const"
     )]
-    #[expect(
-        clippy::ptr_arg,
-        reason = "signature must match the Unix variant which requires Vec for push"
-    )]
-    fn push_default_xdg(&self, _paths: &mut Vec<PathBuf>, _seen: &mut HashSet<String>) {
+    fn push_default_xdg(&self, _acc: &mut CandidateAccumulator) {
         _ = self;
     }
 
     /// Returns the ordered configuration candidates.
+    ///
+    /// This is a pure query: assembling the list emits no telemetry. The
+    /// assembly decisions are recorded alongside the list and emitted only by
+    /// the discovery operations that act on it.
     #[must_use]
     pub fn candidates(&self) -> Vec<PathBuf> {
-        self.candidates_with_required_bound().0
+        self.candidate_set()
+            .candidates
+            .into_iter()
+            .map(|candidate| candidate.path)
+            .collect()
     }
 
-    pub(super) fn candidates_with_required_bound(&self) -> (Vec<PathBuf>, usize) {
-        let mut seen: HashSet<String> = HashSet::new();
-        let mut paths = Vec::new();
+    pub(super) fn candidate_set(&self) -> CandidateSet {
+        let mut acc = CandidateAccumulator::default();
         let mut required_bound = 0;
 
         for path in &self.required_explicit_paths {
-            if Self::push_unique(&mut paths, &mut seen, path.clone()) {
+            if acc.push_unique(path.clone(), telemetry::CANDIDATE_REQUIRED_EXPLICIT) {
                 required_bound += 1;
             }
         }
 
         for path in &self.explicit_paths {
-            let _ = Self::push_unique(&mut paths, &mut seen, path.clone());
+            let _ = acc.push_unique(path.clone(), telemetry::CANDIDATE_EXPLICIT);
         }
 
-        self.push_selector(&mut paths, &mut seen);
-        self.push_xdg(&mut paths, &mut seen);
-        self.push_windows(&mut paths, &mut seen);
-        self.push_home(&mut paths, &mut seen);
-        self.push_projects(&mut paths, &mut seen);
+        let selector = self.push_selector(&mut acc);
+        let (xdg_config_home, xdg_dirs, xdg_resolution) = self.push_xdg(&mut acc);
+        self.push_windows(&mut acc);
+        let home = self.push_home(&mut acc);
+        self.push_projects(&mut acc);
 
-        (paths, required_bound)
+        CandidateSet {
+            candidates: acc.candidates,
+            required_bound,
+            decisions: CandidateDecisions {
+                selector,
+                xdg_config_home,
+                xdg_dirs,
+                xdg_resolution,
+                home,
+            },
+        }
     }
 
     /// Returns the ordered configuration candidates as [`camino::Utf8PathBuf`] values.

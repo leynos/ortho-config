@@ -28,10 +28,27 @@ struct PartitionedErrors {
     optional: Vec<Arc<OrthoError>>,
 }
 
+/// Where and how one candidate failed, in bounded labels only.
+///
+/// Grouping the labels keeps [`PartitionedErrors::record`] within the
+/// four-argument ceiling and keeps the telemetry decision in one place: the
+/// error's category is derived from the error itself at the recording site,
+/// so the emitted event and the stored error cannot disagree.
+struct CandidateFailure {
+    operation: &'static str,
+    required: bool,
+    source: &'static str,
+}
+
 impl PartitionedErrors {
-    fn record(&mut self, operation: &'static str, err: Arc<OrthoError>, required: bool) {
-        telemetry::candidate_failure(operation, required);
-        if required {
+    fn record(&mut self, failure: &CandidateFailure, err: Arc<OrthoError>) {
+        telemetry::candidate_failure(
+            failure.operation,
+            failure.required,
+            failure.source,
+            telemetry::error_category(&err),
+        );
+        if failure.required {
             self.required.push(err);
         } else {
             self.optional.push(err);
@@ -89,16 +106,24 @@ impl ConfigDiscovery {
     ) -> (Option<T>, PartitionedErrors) {
         telemetry::attempt(operation);
         let mut errors = PartitionedErrors::default();
-        let (candidates, required_bound) = self.candidates_with_required_bound();
-        for (idx, path) in candidates.into_iter().enumerate() {
-            let required = Self::is_required_candidate(idx, required_bound);
-            match try_one(&path, required) {
+        let set = self.candidate_set();
+        set.decisions.emit();
+        for (idx, candidate) in set.candidates.into_iter().enumerate() {
+            let required = Self::is_required_candidate(idx, set.required_bound);
+            match try_one(&candidate.path, required) {
                 Ok(Some(value)) => {
                     telemetry::load_outcome(operation, telemetry::OUTCOME_SUCCESS);
                     return (Some(value), errors);
                 }
                 Ok(None) => {}
-                Err(err) => errors.record(operation, err, required),
+                Err(err) => errors.record(
+                    &CandidateFailure {
+                        operation,
+                        required,
+                        source: candidate.source,
+                    },
+                    err,
+                ),
             }
         }
         telemetry::load_outcome(operation, telemetry::OUTCOME_NOT_FOUND);

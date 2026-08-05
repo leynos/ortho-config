@@ -53,6 +53,32 @@ pub(super) const HOME_FROM_FALLBACK: &str = "fallback";
 /// No home directory could be determined, so no home candidates were added.
 pub(super) const HOME_NONE: &str = "none";
 
+/// A path the builder was told is required.
+pub(super) const CANDIDATE_REQUIRED_EXPLICIT: &str = "required_explicit";
+/// A path the builder was given explicitly but optionally.
+pub(super) const CANDIDATE_EXPLICIT: &str = "explicit";
+/// The configuration-path selector variable named the path.
+pub(super) const CANDIDATE_SELECTOR: &str = "selector";
+/// An XDG base directory (explicit or the platform default) supplied the path.
+pub(super) const CANDIDATE_XDG: &str = "xdg";
+/// A Windows application-data directory supplied the path.
+pub(super) const CANDIDATE_WINDOWS: &str = "windows";
+/// The home directory (its `.config` tree or the dotfile) supplied the path.
+pub(super) const CANDIDATE_HOME: &str = "home";
+/// A project root supplied the path.
+pub(super) const CANDIDATE_PROJECT: &str = "project";
+
+/// The candidate's file could not be read or was required but absent.
+pub(super) const CATEGORY_FILE: &str = "file";
+/// The candidate's `extends` chain loops back on itself.
+pub(super) const CATEGORY_CYCLIC_EXTENDS: &str = "cyclic_extends";
+/// The candidate parsed but gathering its figures failed.
+pub(super) const CATEGORY_GATHERING: &str = "gathering";
+/// The candidate loaded but a value failed validation.
+pub(super) const CATEGORY_VALIDATION: &str = "validation";
+/// Any other error the closed set above does not name.
+pub(super) const CATEGORY_OTHER: &str = "other";
+
 /// The `load_first`/`compose_layer` family.
 pub(super) const OPERATION_DISCOVER_FIRST: &str = "discover_first";
 /// The `compose_layers` extends-chain family.
@@ -132,28 +158,61 @@ pub(super) fn attempt(operation: &'static str) {
     count_attempt(operation);
 }
 
+/// Classify an error into the closed `CATEGORY_*` vocabulary.
+///
+/// The raw error carries paths and values, so only its variant reaches an
+/// event; the category answers "why did this candidate fail" without leaking
+/// what it was.
+pub(super) const fn error_category(err: &crate::OrthoError) -> &'static str {
+    match err {
+        crate::OrthoError::File { .. } => CATEGORY_FILE,
+        crate::OrthoError::CyclicExtends { .. } => CATEGORY_CYCLIC_EXTENDS,
+        crate::OrthoError::Gathering(_) => CATEGORY_GATHERING,
+        crate::OrthoError::Validation { .. } => CATEGORY_VALIDATION,
+        _ => CATEGORY_OTHER,
+    }
+}
+
 /// Record a single candidate failing to load.
 ///
 /// This is not terminal: discovery continues to the next candidate. `required`
 /// distinguishes a failure that will be reported even if a later fallback
-/// succeeds from one that is discarded when a fallback works.
-pub(super) fn candidate_failure(operation: &'static str, required: bool) {
+/// succeeds from one that is discarded when a fallback works. `outcome` and
+/// `required` deliberately encode the same bit — no third rendering is added —
+/// while `source` and `category` carry the two facts the pair cannot: which
+/// rung produced the candidate and why it failed, each drawn from a closed set.
+pub(super) fn candidate_failure(
+    operation: &'static str,
+    required: bool,
+    source: &'static str,
+    category: &'static str,
+) {
     let outcome = if required {
         OUTCOME_REQUIRED_FAILURE
     } else {
         OUTCOME_OPTIONAL_FAILURE
     };
-    // `outcome` and `required` already encode the single bit that matters, so
-    // there is no third `candidate_kind` field: three renderings of one boolean
-    // inflate every event and give a consumer three things to keep in step.
     tracing::debug!(
         event = "discovery.candidate",
         operation,
         outcome,
         required,
+        source,
+        category,
         "configuration candidate rejected"
     );
     count_outcome(operation, outcome);
+    count_candidate_failure(operation, source, category);
+}
+
+/// Record that no working directory was available for the project-root
+/// fallback, so no default project root was added.
+pub(super) fn project_root_cwd_unavailable() {
+    tracing::debug!(
+        event = "discovery.project_root",
+        state = "cwd_unavailable",
+        "working directory unavailable; no default project root added"
+    );
 }
 
 /// Record the terminal outcome of a discovery operation.
@@ -187,6 +246,25 @@ fn count_outcome(operation: &'static str, outcome: &'static str) {
 
 #[cfg(not(feature = "metrics"))]
 const fn count_outcome(_operation: &'static str, _outcome: &'static str) {}
+
+#[cfg(feature = "metrics")]
+fn count_candidate_failure(operation: &'static str, source: &'static str, category: &'static str) {
+    metrics::counter!(
+        "ortho_config.discovery.candidate_failures",
+        "operation" => operation,
+        "source" => source,
+        "category" => category,
+    )
+    .increment(1);
+}
+
+#[cfg(not(feature = "metrics"))]
+const fn count_candidate_failure(
+    _operation: &'static str,
+    _source: &'static str,
+    _category: &'static str,
+) {
+}
 
 #[cfg(test)]
 mod tests {

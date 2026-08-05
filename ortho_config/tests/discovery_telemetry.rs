@@ -81,7 +81,7 @@ fn selector_state_is_reported(
     }
     let discovery = builder.build();
 
-    let events = capture(|| discovery.candidates());
+    let events = capture(|| discovery.load_first());
     assert_eq!(only(&events, "discovery.selector").field("state"), expected);
 }
 
@@ -112,7 +112,7 @@ fn xdg_decision_is_reported(#[case] pairs: &[(&str, &str)], #[case] expected: (&
     let env: MapEnv = pairs.iter().copied().collect();
     let discovery = discovery_with(env);
 
-    let events = capture(|| discovery.candidates());
+    let events = capture(|| discovery.load_first());
     let event = only(&events, "discovery.xdg");
     assert_eq!(event.field("config_home"), expected_config_home);
     assert_eq!(event.field("dirs"), expected_dirs);
@@ -132,7 +132,7 @@ fn home_decision_is_reported(#[case] pairs: &[(&str, &str)], #[case] expected: &
     let env: MapEnv = pairs.iter().copied().collect();
     let discovery = discovery_with(env);
 
-    let events = capture(|| discovery.candidates());
+    let events = capture(|| discovery.load_first());
     assert_eq!(only(&events, "discovery.home").field("source"), expected);
 }
 
@@ -162,7 +162,7 @@ fn home_from_the_source_fallback_is_reported() {
         .env_source(Arc::new(FallbackOnlyEnv))
         .build();
 
-    let events = capture(|| discovery.candidates());
+    let events = capture(|| discovery.load_first());
     assert_eq!(only(&events, "discovery.home").field("source"), "fallback");
 }
 
@@ -294,6 +294,55 @@ fn no_event_field_carries_an_environment_value_or_path() {
             );
         }
     }
+}
+
+/// Assembling the candidate list is a query and stays silent.
+///
+/// The decision events belong to the discovery operations that act on the
+/// list; a caller inspecting the search order with `candidates()` performs no
+/// discovery and must not generate events claiming otherwise.
+#[test]
+fn the_candidates_query_emits_no_events() {
+    let discovery = discovery_with(MapEnv::new().with_var("HOME", "/home/injected"));
+    let events = capture(|| discovery.candidates());
+    assert!(
+        events.is_empty(),
+        "candidates() should be silent, got {} event(s)",
+        events.len()
+    );
+}
+
+/// A candidate failure names the rung that produced the candidate and why it
+/// failed, both drawn from closed vocabularies.
+#[test]
+fn a_candidate_failure_carries_source_and_category() {
+    let discovery = ConfigDiscovery::builder("demo")
+        .clear_project_roots()
+        .add_required_path("/nonexistent/required.toml")
+        .env_source(Arc::new(MapEnv::new()))
+        .build();
+
+    let events = capture(|| discovery.load_first_partitioned());
+
+    let candidate = only(&events, "discovery.candidate");
+    assert_eq!(candidate.field("source"), "required_explicit");
+    assert_eq!(candidate.field("category"), "file");
+}
+
+/// A selector-supplied candidate that fails to parse is labelled `selector`.
+#[test]
+fn a_selector_candidate_failure_is_labelled_selector() {
+    let dir = tempfile::tempdir().expect("a temporary directory should be creatable");
+    let path =
+        capture_support::write_fixture_with(dir.path(), "broken.toml", "this is not toml = = =\n")
+            .expect("fixture should be written");
+
+    let discovery = discovery_with(MapEnv::new().with_var("DEMO_CONFIG", &path));
+    let events = capture(|| discovery.load_first());
+
+    let candidate = only(&events, "discovery.candidate");
+    assert_eq!(candidate.field("source"), "selector");
+    assert_eq!(candidate.field("category"), "file");
 }
 
 #[cfg(feature = "metrics")]

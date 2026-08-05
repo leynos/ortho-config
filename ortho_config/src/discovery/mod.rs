@@ -12,6 +12,7 @@ use crate::env_source::SharedEnvSource;
 use crate::{MergeLayer, OrthoError};
 
 mod builder;
+mod candidate_set;
 mod candidates;
 mod load;
 mod outcome;
