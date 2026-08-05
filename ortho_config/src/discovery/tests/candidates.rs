@@ -12,12 +12,17 @@ use super::fixtures::{config_temp_dir, env_guards, env_override_discovery};
 
 #[rstest]
 fn env_override_precedes_other_candidates(
-    env_override_discovery: (ConfigDiscovery, PathBuf, EnvScope, test_env::EnvVarGuard),
+    env_override_discovery: Result<(
+        ConfigDiscovery,
+        Utf8PathBuf,
+        EnvScope,
+        test_env::EnvVarGuard,
+    )>,
 ) -> Result<()> {
-    let (discovery, path, _scope, _env) = env_override_discovery;
+    let (discovery, path, _scope, _env) = env_override_discovery?;
     let candidates = discovery.candidates();
     ensure!(
-        candidates.first() == Some(&path),
+        candidates.first().map(PathBuf::as_path) == Some(path.as_std_path()),
         "expected explicit env override candidate to appear first"
     );
     Ok(())
@@ -106,19 +111,22 @@ fn xdg_dirs_with_values_excludes_default(env_guards: EnvScope) -> Result<()> {
 
 #[rstest]
 fn utf8_candidates_prioritise_env_paths(
-    env_override_discovery: (ConfigDiscovery, PathBuf, EnvScope, test_env::EnvVarGuard),
+    env_override_discovery: Result<(
+        ConfigDiscovery,
+        Utf8PathBuf,
+        EnvScope,
+        test_env::EnvVarGuard,
+    )>,
 ) -> Result<()> {
-    let (discovery, path, _scope, _env) = env_override_discovery;
+    let (discovery, path, _scope, _env) = env_override_discovery?;
     let candidates = discovery.utf8_candidates();
     let first = candidates
         .first()
         .cloned()
         .ok_or_else(|| anyhow!("expected at least one UTF-8 candidate"))?;
-    let expected =
-        Utf8PathBuf::from_path_buf(path).map_err(|_| anyhow!("explicit path not valid UTF-8"))?;
     ensure!(
-        first == expected,
-        "unexpected first candidate {first:?}, expected {expected:?}"
+        first == path,
+        "unexpected first candidate {first:?}, expected {path:?}"
     );
     Ok(())
 }

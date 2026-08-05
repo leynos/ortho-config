@@ -1,10 +1,9 @@
 //! Loading behaviour tests for discovery.
 
 use std::io::Write as _;
-use std::path::PathBuf;
 
 use anyhow::{Context, Result, anyhow, ensure};
-use camino::Utf8Path;
+use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir as Utf8Dir};
 use rstest::rstest;
 use serde::Deserialize;
@@ -36,7 +35,7 @@ fn write_cap_file(dir: &Utf8Dir, name: &str, contents: &str) -> Result<()> {
 #[rstest]
 fn load_first_reads_first_existing_file(
     env_guards: EnvScope,
-    sample_config_file: Result<(TempDir, PathBuf)>,
+    sample_config_file: Result<(TempDir, Utf8PathBuf)>,
 ) -> Result<()> {
     let _guards = env_guards;
     let (temp_dir, _config_path) = sample_config_file?;

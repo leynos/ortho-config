@@ -282,8 +282,25 @@ diagnostics.
 
 Existing `cargo-orthohelp --format ir`, `--format man`, `--format ps`,
 `--format agent-context`, and `--format all` behaviour remains compatible.
-Agent-native policy checking is a future command surface unless a later roadmap
-item explicitly enables it.
+`--format all` writes `agent-context.json` beside the human documentation
+artefacts. Agent-native policy checking remains a future command surface unless
+a later roadmap item explicitly enables it.
+
+Consumers that read `agent-context.json` may rely on the meaning of fields and
+enum strings for a fixed `schema_version`. They must ignore object fields they
+do not understand so newer producers can add optional metadata without breaking
+older consumers.
+
+`AgentInput.default` is display-only. The generator removes unstable whitespace
+around Rust `::` path separators only outside literals; the contents of
+ordinary string, byte string, raw string, and character literals are preserved
+verbatim. Lifetime syntax such as `'a` is not treated as a path separator or as
+the start of a character literal, so it too is preserved unchanged. Consumers
+must not treat this value as source-code-preserving formatter output: it is a
+normalized rendering intended for display, not a faithful reproduction of the
+original expression. The v1 contract also standardizes enum wire strings as
+`snake_case`; pre-1.0 consumers must read the mutation effect as `read_only`
+rather than `read-only`.
 
 ### Localizing CLI copy
 
@@ -1329,10 +1346,15 @@ canonical boundary and [Roadmap](roadmap.md) for the implementation sequence.
 
 Existing `cargo-orthohelp` documentation outputs are compatibility surfaces.
 Until a versioned migration is approved, `--format ir`, `--format man`,
-`--format ps`, and `--format all` keep their accepted spellings, defaulting,
-output paths, and success/failure behaviour. Agent-context output, policy
-reports, or JSON status output are added beside those formats rather than
-changing them.
+`--format ps`, `--format agent-context`, and `--format all` keep their accepted
+spellings, defaulting, output paths, and success/failure behaviour.
+Agent-context output is now part of `--format all`; future policy reports or
+JSON status output are added beside those formats rather than changing them.
+
+For a fixed `schema_version`, agent-context consumers may rely on field
+meanings, enum strings, and the documented null-versus-omitted behaviour.
+Consumers must ignore unknown object fields; a version bump signals a
+breaking wire-shape change that must be reviewed before accepting the payload.
 
 Crates that only consume human-facing documentation do not need to adopt
 agent-context metadata. A package that installs generated man pages or

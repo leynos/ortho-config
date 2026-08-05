@@ -2,7 +2,7 @@
 
 use rstest::rstest;
 
-use super::bridge_ir_to_agent_context;
+use super::{bridge_ir_to_agent_context, normalize_default_display};
 use crate::schema::ValueType;
 
 #[test]
@@ -149,12 +149,81 @@ fn transform_recovers_enum_values_from_cli_metadata_for_custom_types() {
         .expect("log level input should be generated");
 
     assert_eq!(input.value_type.as_deref(), Some("enum"));
+    assert_eq!(input.default.as_deref(), Some("LogLevel::Info"));
     assert_eq!(
         input.enum_values,
         ["Debug", "Info", "Warn", "Error"].map(str::to_owned)
     );
 }
 
+#[test]
+fn transform_normalizes_default_path_separators() {
+    let metadata = doc(DocSpec {
+        app_name: "demo",
+        bin_name: Some("demo-bin"),
+        about_id: "root.about",
+        fields: vec![cli_field(FieldSpec {
+            name: "host",
+            long: Some("host"),
+            short: None,
+            takes_value: true,
+            hide_in_help: false,
+            value: Some(ValueType::String),
+            default: Some("String :: from(\"left :: right\")"),
+            required: false,
+        })],
+        subcommands: Vec::new(),
+    });
+
+    let context = bridge_ir_to_agent_context(&metadata, "demo_pkg", None);
+    let command = context
+        .commands
+        .first()
+        .expect("root command should be generated");
+    let input = command
+        .inputs
+        .first()
+        .expect("host input should be generated");
+
+    assert_eq!(
+        input.default.as_deref(),
+        Some("String::from(\"left :: right\")")
+    );
+}
+
+#[rstest]
+#[case(
+    r#"Type :: new("left \" :: right")"#,
+    r#"Type::new("left \" :: right")"#
+)]
+#[case(
+    r##"Type :: new(r#"left "quoted" :: right"#)"##,
+    r##"Type::new(r#"left "quoted" :: right"#)"##
+)]
+#[case(
+    r###"Type :: new(br##"left :: right"##)"###,
+    r###"Type::new(br##"left :: right"##)"###
+)]
+#[case(
+    r#"Tuple :: new('\"', Other :: new())"#,
+    r#"Tuple::new('\"', Other::new())"#
+)]
+#[case("Type :: <'static> :: value", "Type::<'static>::value")]
+fn default_normalization_preserves_quoted_contents(#[case] display: &str, #[case] expected: &str) {
+    assert_eq!(normalize_default_display(display), expected);
+}
+
+#[test]
+fn transform_projects_nested_tree_with_sorted_commands_and_inputs() {
+    let context = bridge_ir_to_agent_context(&nested_metadata(), "demo_pkg", None);
+    let commands: Vec<_> = context
+        .commands
+        .iter()
+        .map(nested_command_summary)
+        .collect();
+
+    assert_eq!(commands, expected_nested_command_summaries());
+}
 #[rstest]
 #[case(None, None)]
 #[case(Some(""), None)]
@@ -182,3 +251,7 @@ fn transform_omits_missing_or_blank_summaries(
 #[path = "tests_support.rs"]
 mod support;
 use support::*;
+
+#[path = "tests_nested_support.rs"]
+mod nested_support;
+use nested_support::*;

@@ -1,0 +1,172 @@
+---
+source: cargo-orthohelp/tests/golden/agent_context_tests.rs
+assertion_line: 43
+expression: snapshot
+---
+{
+  "schema_version": "1",
+  "kind": "orthohelp_fixture.agent_context",
+  "package": "orthohelp_fixture",
+  "commands": [
+    {
+      "path": [
+        "nested_fixture"
+      ],
+      "summary": "Nested fixture command tree.",
+      "canonical_verb": null,
+      "inputs": [
+        {
+          "name": "global",
+          "long": "global",
+          "value_type": "string",
+          "required": false,
+          "default": "String::from(\"workspace\")",
+          "enum_values": []
+        }
+      ],
+      "output_modes": [],
+      "interaction_mode": "unknown",
+      "mutation_effect": "unknown",
+      "async_submission": null,
+      "delivery_route": null,
+      "pagination": null,
+      "examples": []
+    },
+    {
+      "path": [
+        "nested_fixture",
+        "admin"
+      ],
+      "summary": "Administers fixture state.",
+      "canonical_verb": null,
+      "inputs": [
+        {
+          "name": "scope",
+          "long": "scope",
+          "value_type": "string",
+          "required": false,
+          "default": "String::from(\"local\")",
+          "enum_values": []
+        }
+      ],
+      "output_modes": [],
+      "interaction_mode": "unknown",
+      "mutation_effect": "unknown",
+      "async_submission": null,
+      "delivery_route": null,
+      "pagination": null,
+      "examples": []
+    },
+    {
+      "path": [
+        "nested_fixture",
+        "admin",
+        "audit"
+      ],
+      "summary": "Audits fixture state.",
+      "canonical_verb": null,
+      "inputs": [
+        {
+          "name": "is_dry_run",
+          "long": "is-dry-run",
+          "value_type": "bool",
+          "required": false,
+          "default": "false",
+          "enum_values": []
+        }
+      ],
+      "output_modes": [],
+      "interaction_mode": "unknown",
+      "mutation_effect": "unknown",
+      "async_submission": null,
+      "delivery_route": null,
+      "pagination": null,
+      "examples": []
+    },
+    {
+      "path": [
+        "nested_fixture",
+        "admin",
+        "grant-access"
+      ],
+      "summary": "Grants access to a principal.",
+      "canonical_verb": null,
+      "inputs": [
+        {
+          "name": "principal",
+          "long": "principal",
+          "value_type": "string",
+          "required": false,
+          "default": null,
+          "enum_values": []
+        }
+      ],
+      "output_modes": [],
+      "interaction_mode": "unknown",
+      "mutation_effect": "unknown",
+      "async_submission": null,
+      "delivery_route": null,
+      "pagination": null,
+      "examples": []
+    },
+    {
+      "path": [
+        "nested_fixture",
+        "greet"
+      ],
+      "summary": "Greets a named recipient.",
+      "canonical_verb": null,
+      "inputs": [
+        {
+          "name": "is_excited",
+          "long": "is-excited",
+          "value_type": "bool",
+          "required": false,
+          "default": "false",
+          "enum_values": []
+        },
+        {
+          "name": "recipient",
+          "long": "recipient",
+          "value_type": "string",
+          "required": false,
+          "default": "String::from(\"World\")",
+          "enum_values": []
+        }
+      ],
+      "output_modes": [],
+      "interaction_mode": "unknown",
+      "mutation_effect": "unknown",
+      "async_submission": null,
+      "delivery_route": null,
+      "pagination": null,
+      "examples": []
+    },
+    {
+      "path": [
+        "nested_fixture",
+        "version"
+      ],
+      "summary": "Prints version information.",
+      "canonical_verb": null,
+      "inputs": [],
+      "output_modes": [],
+      "interaction_mode": "unknown",
+      "mutation_effect": "unknown",
+      "async_submission": null,
+      "delivery_route": null,
+      "pagination": null,
+      "examples": []
+    }
+  ],
+  "profiles": {
+    "supported": false
+  },
+  "feedback": {
+    "supported": false
+  },
+  "policy": {
+    "agent_native": "warn"
+  },
+  "skill_manifests": []
+}

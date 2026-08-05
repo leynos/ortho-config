@@ -1,5 +1,6 @@
 ---
 source: cargo-orthohelp/tests/golden/agent_context_tests.rs
+assertion_line: 30
 expression: snapshot
 ---
 {
@@ -27,7 +28,7 @@ expression: snapshot
           "long": "host",
           "value_type": "string",
           "required": false,
-          "default": "String :: from(\"localhost\")",
+          "default": "String::from(\"localhost\")",
           "enum_values": []
         },
         {
@@ -51,7 +52,7 @@ expression: snapshot
           "long": "log-level",
           "value_type": "enum",
           "required": false,
-          "default": "LogLevel :: Info",
+          "default": "LogLevel::Info",
           "enum_values": [
             "Debug",
             "Info",

@@ -36,6 +36,14 @@ use std::io::Write;
 use std::str::FromStr;
 use tracing_subscriber::EnvFilter;
 
+/// Run-scoped inputs borrowed by the output-generation phases.
+struct GenerationContext<'a> {
+    selection: &'a PackageSelection,
+    doc_metadata: &'a DocMetadata,
+    out_dir: &'a Utf8PathBuf,
+    en_us_localizer: Option<&'a (LanguageIdentifier, FluentLocalizer)>,
+}
+
 fn main() -> Result<(), OrthohelpError> {
     init_tracing();
     let cli = match parse_cli() {
@@ -114,7 +122,14 @@ fn run(cli: Cli) -> Result<(), OrthohelpError> {
     let should_generate_localized_docs =
         should_generate_ir || should_generate_man || should_generate_ps;
 
-    generate_agent_context_if_requested(&args, &selection, &doc_metadata, &out_dir)?;
+    let en_us_localizer = build_agent_context_localizer_if_requested(&args, &selection);
+    let generation_context = GenerationContext {
+        selection: &selection,
+        doc_metadata: &doc_metadata,
+        out_dir: &out_dir,
+        en_us_localizer: en_us_localizer.as_ref(),
+    };
+    generate_agent_context_if_requested(&args, &generation_context)?;
 
     let locales = if should_generate_localized_docs {
         locale::resolve_locales(&args, &selection)?
@@ -124,8 +139,7 @@ fn run(cli: Cli) -> Result<(), OrthohelpError> {
 
     let localized_docs = localize_docs_if_requested(
         should_generate_localized_docs,
-        &selection,
-        &doc_metadata,
+        &generation_context,
         &locales,
     )?;
 
@@ -147,19 +161,47 @@ fn run(cli: Cli) -> Result<(), OrthohelpError> {
 
 fn generate_agent_context_if_requested(
     args: &Args,
-    selection: &PackageSelection,
-    doc_metadata: &DocMetadata,
-    out_dir: &Utf8PathBuf,
+    context: &GenerationContext<'_>,
 ) -> Result<(), OrthohelpError> {
-    if !matches!(args.format, OutputFormat::AgentContext) {
+    if !matches!(args.format, OutputFormat::AgentContext | OutputFormat::All) {
         tracing::debug!(
-            package = %selection.package_name,
+            package = %context.selection.package_name,
             format = ?args.format,
             "agent-context generation skipped for requested format",
         );
         return Ok(());
     }
-    let en_us_localizer = match build_en_us_localizer(&selection.package_root) {
+    tracing::debug!(
+        package = %context.selection.package_name,
+        format = "agent-context",
+        "starting agent-context transformation",
+    );
+    let summary_localizer = context
+        .en_us_localizer
+        .map(|(_, resolved_localizer)| resolved_localizer as &dyn Localizer);
+    let agent_context = agent_context::bridge_ir_to_agent_context(
+        context.doc_metadata,
+        &context.selection.package_name,
+        summary_localizer,
+    );
+    tracing::debug!(
+        package = %agent_context.package,
+        command_count = agent_context.commands.len(),
+        "agent-context transformation complete",
+    );
+    output::write_agent_context(context.out_dir.as_path(), &agent_context)?;
+    Ok(())
+}
+
+/// Builds the optional en-US localizer shared by agent-context and localized output.
+fn build_agent_context_localizer_if_requested(
+    args: &Args,
+    selection: &PackageSelection,
+) -> Option<(LanguageIdentifier, FluentLocalizer)> {
+    if !matches!(args.format, OutputFormat::AgentContext | OutputFormat::All) {
+        return None;
+    }
+    match build_en_us_localizer(&selection.package_root) {
         Ok(localizer) => Some(localizer),
         Err(error) => {
             tracing::warn!(
@@ -168,47 +210,34 @@ fn generate_agent_context_if_requested(
             );
             None
         }
-    };
-    tracing::debug!(
-        package = %selection.package_name,
-        format = "agent-context",
-        "starting agent-context transformation",
-    );
-    let summary_localizer = en_us_localizer
-        .as_ref()
-        .map(|resolved_localizer| resolved_localizer as &dyn Localizer);
-    let context = agent_context::bridge_ir_to_agent_context(
-        doc_metadata,
-        &selection.package_name,
-        summary_localizer,
-    );
-    tracing::debug!(
-        package = %selection.package_name,
-        command_count = context.commands.len(),
-        "agent-context transformation complete",
-    );
-    output::write_agent_context(out_dir.as_path(), &context)?;
-    Ok(())
+    }
 }
 
-fn build_en_us_localizer(package_root: &Utf8PathBuf) -> Result<FluentLocalizer, OrthohelpError> {
+fn build_en_us_localizer(
+    package_root: &Utf8PathBuf,
+) -> Result<(LanguageIdentifier, FluentLocalizer), OrthohelpError> {
     let locale =
         LanguageIdentifier::from_str("en-US").map_err(|err| OrthohelpError::InvalidLocale {
             value: "en-US".to_owned(),
             message: err.to_string(),
         })?;
     let resources = locale::load_consumer_resources(package_root, &locale)?;
-    locale::build_localizer(&locale, resources)
+    let localizer = locale::build_localizer(&locale, resources)?;
+    Ok((locale, localizer))
 }
 
 fn localize_docs_if_requested(
     should_generate_localized_docs: bool,
-    selection: &PackageSelection,
-    doc_metadata: &DocMetadata,
+    context: &GenerationContext<'_>,
     locales: &[ortho_config::LanguageIdentifier],
 ) -> Result<Vec<ir::LocalizedDocMetadata>, OrthohelpError> {
     if should_generate_localized_docs {
-        localize_docs(&selection.package_root, doc_metadata, locales)
+        localize_docs(
+            &context.selection.package_root,
+            context.doc_metadata,
+            locales,
+            context.en_us_localizer,
+        )
     } else {
         Ok(Vec::new())
     }
@@ -218,9 +247,16 @@ fn localize_docs(
     package_root: &Utf8PathBuf,
     doc_metadata: &DocMetadata,
     locales: &[ortho_config::LanguageIdentifier],
+    en_us_localizer: Option<&(LanguageIdentifier, FluentLocalizer)>,
 ) -> Result<Vec<ir::LocalizedDocMetadata>, OrthohelpError> {
     let mut localized_docs = Vec::new();
     for locale in locales {
+        if let Some((cached_locale, cached_localizer)) = en_us_localizer
+            && locale == cached_locale
+        {
+            localized_docs.push(ir::localize_doc(doc_metadata, locale, cached_localizer));
+            continue;
+        }
         let resources = locale::load_consumer_resources(package_root, locale)?;
         let doc_localizer = locale::build_localizer(locale, resources)?;
         localized_docs.push(ir::localize_doc(doc_metadata, locale, &doc_localizer));

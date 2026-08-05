@@ -21,6 +21,23 @@ pub enum LogLevel {
     Error,
 }
 
+/// Minimal flat configuration schema for simple agent-context golden tests.
+#[derive(Debug, Clone, PartialEq, Eq, Parser, Deserialize, Serialize, OrthoConfig)]
+#[ortho_config(prefix = "SIMPLE_FIXTURE")]
+pub struct SimpleFixtureConfig {
+    /// Endpoint host used by the simple fixture.
+    #[ortho_config(default = String::from("localhost"))]
+    pub host: String,
+
+    /// Retry count for simple fixture requests.
+    #[ortho_config(default = 3)]
+    pub retries: u8,
+
+    /// Run without applying changes.
+    #[ortho_config(default = false)]
+    pub is_dry_run: bool,
+}
+
 /// Configuration schema for IR and man page generation tests.
 ///
 /// This struct exercises various `OrthoConfig` features:
