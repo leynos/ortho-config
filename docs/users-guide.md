@@ -292,8 +292,13 @@ do not understand so newer producers can add optional metadata without breaking
 older consumers.
 
 `AgentInput.default` is display-only. The generator removes unstable whitespace
-around Rust `::` path separators while preserving string and character literal
-contents verbatim. The v1 contract also standardizes enum wire strings as
+around Rust `::` path separators only outside literals; the contents of
+ordinary string, byte string, raw string, and character literals are preserved
+verbatim. Lifetime syntax such as `'a` is not treated as a path separator or as
+the start of a character literal, so it too is preserved unchanged. Consumers
+must not treat this value as source-code-preserving formatter output: it is a
+normalized rendering intended for display, not a faithful reproduction of the
+original expression. The v1 contract also standardizes enum wire strings as
 `snake_case`; pre-1.0 consumers must read the mutation effect as `read_only`
 rather than `read-only`.
 
