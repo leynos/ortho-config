@@ -1297,12 +1297,11 @@ points settled there, and this document is updated to match.
   The deciding factor was not extensibility but object safety. A method
   returning `impl Iterator` would be return-position `impl Trait` in traits
   (RPITIT) and make the trait unusable behind a trait object, forcing
-  `ConfigDiscovery<S>` generics to leak through the
-  derive-generated `load()` and every call site; returning owned values keeps
-  the trait object-safe. `Arc` rather than `Box` keeps `ConfigDiscovery`'s
-  `Clone` derivable. The enum remains viable, but the crate is pre-1.0 with a
-  single consumer, and a trait leaves room for layered or fallback sources
-  without a breaking change.
+  `ConfigDiscovery<S>` generics to leak through the derive-generated `load()`
+  and every call site; returning owned values keeps the trait object-safe.
+  `Arc` rather than `Box` keeps `ConfigDiscovery`'s `Clone` derivable. The enum
+  remains viable, but the crate is pre-1.0 with a single consumer, and a trait
+  leaves room for layered or fallback sources without a breaking change.
 
 - **No enumeration method, and that is load-bearing.** The implementation
   initially carried an `iter_prefixed` method for the `CsvEnv` layer. It was

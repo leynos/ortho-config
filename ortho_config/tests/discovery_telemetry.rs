@@ -337,7 +337,14 @@ fn a_selector_candidate_failure_is_labelled_selector() {
         capture_support::write_fixture_with(dir.path(), "broken.toml", "this is not toml = = =\n")
             .expect("fixture should be written");
 
-    let discovery = discovery_with(MapEnv::new().with_var("DEMO_CONFIG", &path));
+    // XDG_CONFIG_DIRS pins the base-directory search to the fixture
+    // directory, isolating the test from any real /etc/xdg configuration on
+    // the host while leaving the selector parse-failure path untouched.
+    let discovery = discovery_with(
+        MapEnv::new()
+            .with_var("DEMO_CONFIG", &path)
+            .with_var("XDG_CONFIG_DIRS", dir.path()),
+    );
     let events = capture(|| discovery.load_first());
 
     let candidate = only(&events, "discovery.candidate");
@@ -391,6 +398,65 @@ mod metrics_facade {
                 _ => None,
             })
             .collect()
+    }
+
+    /// Count one counter, requiring every listed label on the same key.
+    ///
+    /// The single-label helper above is deliberately loose for the shared
+    /// outcome counter; candidate failures carry three labels that must all
+    /// belong to one metric key, and accepting any-one-matches would let a
+    /// mislabelled emission pass.
+    fn counter_with_labels(
+        entries: &[(metrics_util::CompositeKey, u64)],
+        name: &str,
+        labels: &[(&str, &str)],
+    ) -> u64 {
+        entries
+            .iter()
+            .filter(|(key, _)| {
+                key.key().name() == name
+                    && labels.iter().all(|(label, value)| {
+                        key.key()
+                            .labels()
+                            .any(|found| found.key() == *label && found.value() == *value)
+                    })
+            })
+            .map(|(_, count)| *count)
+            .sum()
+    }
+
+    /// A failed candidate increments the labelled failure counter exactly once.
+    #[test]
+    fn a_candidate_failure_increments_the_labelled_counter() {
+        use ortho_config::ConfigDiscovery;
+        use std::sync::Arc;
+
+        let recorder = DebuggingRecorder::new();
+        let snapshotter = recorder.snapshotter();
+
+        metrics::with_local_recorder(&recorder, || {
+            let discovery = ConfigDiscovery::builder("demo")
+                .clear_project_roots()
+                .add_required_path("/nonexistent/required.toml")
+                .env_source(Arc::new(MapEnv::new()))
+                .build();
+            drop(discovery.load_first_partitioned());
+        });
+
+        let entries = counters(snapshotter.snapshot());
+        assert_eq!(
+            counter_with_labels(
+                &entries,
+                "ortho_config.discovery.candidate_failures",
+                &[
+                    ("operation", "discover_first"),
+                    ("source", "required_explicit"),
+                    ("category", "file"),
+                ],
+            ),
+            1,
+            "exactly one fully-labelled candidate failure should be counted, got {entries:?}"
+        );
     }
 
     #[test]

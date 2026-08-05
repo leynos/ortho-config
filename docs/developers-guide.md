@@ -387,18 +387,31 @@ contract stays discoverable.
 events, and it is written so that a leak is a compile-time impossibility rather
 than a review responsibility.
 
-| Event                       | Fields                                                                                  | Emitted from                |
-| --------------------------- | --------------------------------------------------------------------------------------- | --------------------------- |
-| `discovery.source_selected` | `source`: `process`, `injected`                                                         | `builder::build`            |
-| `discovery.selector`        | `state`: `not_configured`, `unset`, `empty`, `accepted`                                 | `candidates::push_selector` |
-| `discovery.xdg`             | `config_home` and `dirs`: `absent`, `empty`, `present`; `resolution`: `default`, `list` | `candidates::push_xdg`      |
-| `discovery.home`            | `source`: `home`, `userprofile`, `fallback`, `none`                                     | `candidates::push_home`     |
-| `discovery.attempt`         | `operation`: `discover_first`, `compose_layers`                                         | `load`                      |
-| `discovery.candidate`       | `operation`; `outcome`: `optional_failure`, `required_failure`; `required`              | `load`                      |
-| `discovery.load`            | `operation`; `outcome`: `success`, `not_found`                                          | `load`                      |
+| Event                       | Fields                                                                                                                                                                                                                                           | Emitted from                |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------- |
+| `discovery.source_selected` | `source`: `process`, `injected`                                                                                                                                                                                                                  | `builder::build`            |
+| `discovery.selector`        | `state`: `not_configured`, `unset`, `empty`, `accepted`                                                                                                                                                                                          | `candidates::push_selector` |
+| `discovery.xdg`             | `config_home` and `dirs`: `absent`, `empty`, `present`; `resolution`: `default`, `list`                                                                                                                                                          | `candidates::push_xdg`      |
+| `discovery.home`            | `source`: `home`, `userprofile`, `fallback`, `none`                                                                                                                                                                                              | `candidates::push_home`     |
+| `discovery.attempt`         | `operation`: `discover_first`, `compose_layers`                                                                                                                                                                                                  | `load`                      |
+| `discovery.candidate`       | `operation`; `outcome`: `optional_failure`, `required_failure`; `required`; `source`: `required_explicit`, `explicit`, `selector`, `xdg`, `windows`, `home`, `project`; `category`: `file`, `cyclic_extends`, `gathering`, `validation`, `other` | `load`                      |
+| `discovery.project_root`    | `state`: `cwd_unavailable`                                                                                                                                                                                                                       | `builder::build`            |
+| `discovery.load`            | `operation`; `outcome`: `success`, `not_found`                                                                                                                                                                                                   | `load`                      |
 
 Table: Structured events emitted during configuration discovery, with the
 closed field vocabulary each carries and the module that emits it.
+
+Behind the optional `metrics` feature, discovery also increments three counter
+families using the same bounded labels:
+
+| Metric                                      | Labels                            |
+| ------------------------------------------- | --------------------------------- |
+| `ortho_config.discovery.attempts`           | `operation`                       |
+| `ortho_config.discovery.outcomes`           | `operation`, `outcome`            |
+| `ortho_config.discovery.candidate_failures` | `operation`, `source`, `category` |
+
+Table: `metrics`-feature counter families and their bounded labels, mirroring
+the `tracing` event fields above.
 
 Rules for extending this set:
 

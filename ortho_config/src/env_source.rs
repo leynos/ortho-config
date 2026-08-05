@@ -105,7 +105,7 @@ impl EnvSource for ProcessEnv {
 /// assert_eq!(env.get("APP_HOST").as_deref(), Some("localhost".as_ref()));
 /// assert!(env.get("MISSING").is_none());
 /// ```
-#[derive(Debug, Default, Clone)]
+#[derive(Default, Clone)]
 pub struct MapEnv {
     // `BTreeMap` rather than `HashMap` so iteration is deterministic, keeping
     // any ordered output built from this source reproducible.
@@ -134,6 +134,20 @@ impl MapEnv {
     /// Remove one variable, so lookups report it as unset.
     pub fn remove(&mut self, key: &str) {
         self.vars.remove(key);
+    }
+}
+
+/// Debug output deliberately reveals structure only.
+///
+/// A `MapEnv` frequently holds secret-shaped fixtures, and `EnvSource`
+/// requires `Debug`, so a derived implementation would print every key and
+/// value wherever a holder is logged or unwrapped. The count is enough to
+/// distinguish "empty" from "populated" in a failure message.
+impl fmt::Debug for MapEnv {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("MapEnv")
+            .field("vars", &self.vars.len())
+            .finish_non_exhaustive()
     }
 }
 

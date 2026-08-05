@@ -26,6 +26,16 @@ fn windows_normalized_key(path: &Path) -> String {
 
 use super::candidate_set::{CandidateAccumulator, CandidateDecisions, CandidateSet};
 
+/// A configured selector's value, classified.
+enum SelectorValue {
+    /// The variable is configured but unset in the environment.
+    Unset,
+    /// The variable is set to an empty value, which discovery ignores.
+    Empty,
+    /// The variable names a path, preserved as read.
+    Accepted(std::ffi::OsString),
+}
+
 impl ConfigDiscovery {
     pub(super) fn dedup_key(path: &Path) -> String {
         #[cfg(windows)]
@@ -205,22 +215,37 @@ impl ConfigDiscovery {
 
     /// Push the configuration-path selector, reporting how it resolved.
     ///
-    /// The three non-accepting states are kept distinct because they call for
-    /// different action: no selector was configured at all, one was configured
-    /// but the operator has not set it, or it is set to an empty value — the
-    /// last being a likely mistake that discovery deliberately ignores.
+    /// Owns only the not-configured case and the accumulator side effect;
+    /// the value classification lives in [`ConfigDiscovery::classify_selector`]
+    /// so the three-way rule can be read (and changed) in one place.
     fn push_selector(&self, acc: &mut CandidateAccumulator) -> &'static str {
         let Some(env_var) = self.env_var.as_ref() else {
             return telemetry::SELECTOR_NOT_CONFIGURED;
         };
 
-        match self.env_source.get(env_var) {
-            None => telemetry::SELECTOR_UNSET,
-            Some(value) if value.is_empty() => telemetry::SELECTOR_EMPTY,
-            Some(value) => {
+        match self.classify_selector(env_var) {
+            SelectorValue::Unset => telemetry::SELECTOR_UNSET,
+            SelectorValue::Empty => telemetry::SELECTOR_EMPTY,
+            SelectorValue::Accepted(value) => {
                 let _ = acc.push_unique(PathBuf::from(value), telemetry::CANDIDATE_SELECTOR);
                 telemetry::SELECTOR_ACCEPTED
             }
+        }
+    }
+
+    /// Classify the configured selector's lookup result.
+    ///
+    /// The three non-accepting states are kept distinct because they call for
+    /// different action: no selector was configured at all (handled by the
+    /// caller), one was configured but the operator has not set it, or it is
+    /// set to an empty value — the last being a likely mistake that discovery
+    /// deliberately ignores. An accepted value keeps its `OsString` so the
+    /// caller can convert it to a path without a lossy round trip.
+    fn classify_selector(&self, env_var: &str) -> SelectorValue {
+        match self.env_source.get(env_var) {
+            None => SelectorValue::Unset,
+            Some(value) if value.is_empty() => SelectorValue::Empty,
+            Some(value) => SelectorValue::Accepted(value),
         }
     }
 

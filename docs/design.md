@@ -319,6 +319,62 @@ callers can surface them together. If no candidates exist, the function returns
 crate and allows downstream binaries to continue using their existing
 `From<Arc<OrthoError>>` implementations.
 
+Discovery reads the named environment variables it needs — the
+configuration-path selector, the XDG base directories, the Windows
+application-data variables, and the user's home directory — through the
+injectable `EnvSource` boundary (`ortho_config/src/env_source.rs`). The trait
+is object-safe and offers lookup by name only; it deliberately has no
+enumeration method, because a process holding many unrelated secrets must never
+have its environment scanned, copied, or logged. `ProcessEnv` is the default
+and preserves existing behaviour exactly; `MapEnv` supplies a fixed,
+deterministic set of values for tests and for embedding `OrthoConfig` in
+another tool. This boundary applies only to configuration-file discovery: the
+`CsvEnv` merge layer and the `APP_*` environment provider still read the
+process environment directly and remain out of scope, tracked by
+[issue #412](https://github.com/leynos/ortho-config/issues/412).
+
+Default project-root resolution is a distinct boundary.
+`ConfigDiscoveryBuilder` stores a private resolver closure that defaults to
+`std::env::current_dir` (see `discovery/builder.rs`). When no explicit project
+roots are configured and that resolver fails, discovery does not fail: it omits
+only the implicit default project root and emits the bounded
+`discovery.project_root` event with `state = "cwd_unavailable"`. Configuring
+one or more explicit project roots suppresses the resolver entirely, since a
+caller who names roots has taken responsibility for them.
+
+### Discovery telemetry and metrics
+
+Configuration discovery emits structured `tracing` events drawn from a closed
+vocabulary declared in `ortho_config/src/discovery/telemetry.rs`:
+
+- `discovery.source_selected` — `source`: `process` or `injected`.
+- `discovery.selector` — `state`: `not_configured`, `unset`, `empty`, or
+  `accepted`.
+- `discovery.xdg` — `config_home` and `dirs`: `absent`, `empty`, or `present`;
+  `resolution`: `default` or `list`.
+- `discovery.home` — `source`: `home`, `userprofile`, `fallback`, or `none`.
+- `discovery.attempt` — `operation`: `discover_first` or `compose_layers`.
+- `discovery.candidate` — `operation`; `outcome`: `required_failure` or
+  `optional_failure`; `required`: `bool`; `source`: `required_explicit`,
+  `explicit`, `selector`, `xdg`, `windows`, `home`, or `project`; `category`:
+  `file`, `cyclic_extends`, `gathering`, `validation`, or `other`.
+- `discovery.project_root` — `state = "cwd_unavailable"`, emitted only when
+  the default project-root resolver fails.
+- `discovery.load` — `operation`; `outcome`: `success` or `not_found`.
+
+Behind the optional `metrics` feature, discovery also increments three counter
+families using the same bounded labels:
+
+- `ortho_config.discovery.attempts`, labelled `operation`.
+- `ortho_config.discovery.outcomes`, labelled `operation` and `outcome`.
+- `ortho_config.discovery.candidate_failures`, labelled `operation`, `source`,
+  and `category`.
+
+Every field is a `&'static str` drawn from a closed set declared in
+`telemetry.rs`, or a `bool`. Neither the events nor the metric labels ever
+carry an environment variable's value, a resolved filesystem path, a
+configuration value, file contents, or a raw error string.
+
 ### Aggregated errors
 
 To surface multiple failures at once, `OrthoError::aggregate<I, E>(errors)`

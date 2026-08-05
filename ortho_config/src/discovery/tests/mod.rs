@@ -7,3 +7,4 @@ mod candidates;
 mod fixtures;
 mod loading;
 mod platform;
+mod project_root;
