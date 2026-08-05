@@ -1295,8 +1295,9 @@ points settled there, and this document is updated to match.
   trait held as `Arc<dyn EnvSource>`.
 
   The deciding factor was not extensibility but object safety. A method
-  returning `impl Iterator` would be RPITIT and make the trait unusable behind
-  a trait object, forcing `ConfigDiscovery<S>` generics to leak through the
+  returning `impl Iterator` would be return-position `impl Trait` in traits
+  (RPITIT) and make the trait unusable behind a trait object, forcing
+  `ConfigDiscovery<S>` generics to leak through the
   derive-generated `load()` and every call site; returning owned values keeps
   the trait object-safe. `Arc` rather than `Box` keeps `ConfigDiscovery`'s
   `Clone` derivable. The enum remains viable, but the crate is pre-1.0 with a

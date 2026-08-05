@@ -21,8 +21,9 @@ pub struct Captured {
 }
 
 impl Captured {
-    /// Read a field, or the empty string when the event did not record it.
-    /// Every recorded field, for assertions that scan the whole event.
+    /// Iterate over every recorded `(name, value)` field pair.
+    ///
+    /// For assertions that inspect the whole event rather than one field.
     pub fn fields(&self) -> impl Iterator<Item = (&str, &str)> {
         self.fields.iter().map(|(k, v)| (k.as_str(), v.as_str()))
     }
