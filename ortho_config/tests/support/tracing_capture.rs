@@ -111,7 +111,10 @@ pub fn capture<R>(f: impl FnOnce() -> R) -> Vec<Captured> {
 }
 
 /// Every captured event carrying the given `event` name.
-pub fn named<'a>(events: &'a [Captured], name: &str) -> Vec<&'a Captured> {
+///
+/// Private: only [`only`] consumes it; a public helper with no external
+/// caller reads as dead surface.
+fn named<'a>(events: &'a [Captured], name: &str) -> Vec<&'a Captured> {
     events
         .iter()
         .filter(|event| event.field("event") == name)
