@@ -17,10 +17,16 @@ use tracing_subscriber::{Layer, Registry};
 /// One captured `tracing` event, reduced to its recorded fields.
 #[derive(Debug, Default)]
 pub struct Captured {
-    pub fields: BTreeMap<String, String>,
+    fields: BTreeMap<String, String>,
 }
 
 impl Captured {
+    /// Read a field, or the empty string when the event did not record it.
+    /// Every recorded field, for assertions that scan the whole event.
+    pub fn fields(&self) -> impl Iterator<Item = (&str, &str)> {
+        self.fields.iter().map(|(k, v)| (k.as_str(), v.as_str()))
+    }
+
     /// Read a field, or the empty string when the event did not record it.
     pub fn field(&self, name: &str) -> &str {
         self.fields.get(name).map_or("", String::as_str)
@@ -28,7 +34,7 @@ impl Captured {
 }
 
 #[derive(Default)]
-pub struct Events(Mutex<Vec<Captured>>);
+struct Events(Mutex<Vec<Captured>>);
 
 impl Events {
     fn lock(&self) -> MutexGuard<'_, Vec<Captured>> {
@@ -36,7 +42,7 @@ impl Events {
     }
 }
 
-pub struct CaptureLayer(Arc<Events>);
+struct CaptureLayer(Arc<Events>);
 
 impl<S> Layer<S> for CaptureLayer
 where
@@ -51,7 +57,7 @@ where
     }
 }
 
-pub struct FieldVisitor<'fields> {
+struct FieldVisitor<'fields> {
     fields: &'fields mut BTreeMap<String, String>,
 }
 
@@ -85,7 +91,7 @@ impl Visit for FieldVisitor<'_> {
 /// default, so no thread can lower it out from under another. It is deliberately
 /// never installed as the default subscriber: each test still captures through
 /// its own thread-local one.
-pub fn pin_global_max_level() {
+fn pin_global_max_level() {
     static PINNED: OnceLock<tracing::Dispatch> = OnceLock::new();
     let _ = PINNED.get_or_init(|| tracing::Dispatch::new(Registry::default()));
 }

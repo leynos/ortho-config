@@ -496,8 +496,11 @@ candidates = [primary aliases in author order]
            ++ [fallback aliases in author order]
 
 for name in candidates:
-    raw = source.get(name)        # reads ONLY this declared name
-    if raw is None: continue      # unset: try next candidate
+    os_raw = source.get(name)     # reads ONLY this declared name; OsString
+    if os_raw is None: continue   # unset: try next candidate
+    raw = to_utf8(os_raw)         # FALLIBLE, not lossy
+    if raw is Err:                # present but undecodable
+        record Validation(name); stop          # do NOT fall through
     if raw.trim() is empty:       # trimmed, to match CsvEnv
         match empty_policy:
             Ignore: continue                       # treat as unset

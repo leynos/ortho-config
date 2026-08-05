@@ -281,7 +281,7 @@ fn no_event_field_carries_an_environment_value_or_path() {
     );
 
     for event in &events {
-        for (name, value) in &event.fields {
+        for (name, value) in event.fields() {
             for secret in SECRETS {
                 assert!(
                     !value.contains(secret),
