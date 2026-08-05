@@ -958,6 +958,7 @@ per `AGENTS.md`):
 
 ```bash
 # bash
+set -euo pipefail
 BRANCH_SLUG=$(git branch --show-current | tr '/:' '__')
 ACTION=test; LOG="/tmp/${ACTION}-ortho-config-${BRANCH_SLUG}.out"
 make check-fmt 2>&1 | tee "/tmp/check-fmt-ortho-config-${BRANCH_SLUG}.out"
