@@ -112,6 +112,8 @@
   doctests.
 - [Rust testing with rstest fixtures](rust-testing-with-rstest-fixtures.md):
   structure shared fixtures and parameterized Rust tests.
+- [Whitaker user's guide](whitaker-users-guide.md):
+  usage of the Whitaker lint suite
 
 ## Execution plans
 
