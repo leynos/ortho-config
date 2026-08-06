@@ -57,8 +57,8 @@ load-bearing decisions about the *exact* v1 shape are therefore recorded under
   so it calls `<RootType as OrthoConfigDocs>::get_doc_metadata()`. The
   agent-context generator transforms this bridge IR.
 - **Generator / transform**:
-  `cargo_orthohelp::agent_context::bridge_ir_to_agent_context`,
-  the adapter that turns bridge IR into an `AgentContext`.
+  `cargo_orthohelp::agent_context::bridge_ir_to_agent_context`, the adapter
+  that turns bridge IR into an `AgentContext`.
 - **Golden / snapshot test**: a test that compares produced output against a
   committed reference file using `insta`. A change to output fails the test
   until a human reviews and re-blesses the snapshot.
@@ -159,10 +159,10 @@ These decide the exact v1 wire shape that this plan ossifies.
    - If normalization proves to need derive-macro changes beyond a localized
      string transform, that trips Tolerance 3 → escalate.
 3. **Include agent-context in `--format all` (D3).**
-   `OutputFormat::AgentContext`
-   is currently "Excluded from `--format all` until schema versioning is locked
-   in 6.2.2" (`docs/developers-guide.md:177`; `cargo-orthohelp/src/main.rs:154`
-   special-cases it). 6.2.2 locks the versioning.
+   `OutputFormat::AgentContext` is currently "Excluded from `--format all`
+   until schema versioning is locked in 6.2.2" (`docs/developers-guide.md:177`;
+   `cargo-orthohelp/src/main.rs:154` special-cases it). 6.2.2 locks the
+   versioning.
    - Decision: **include agent-context in `--format all`**, fulfilling the
      promise. This is additive to `all` (it writes an extra `agent-context.json`
      and does not alter existing outputs), is the one externally visible
@@ -600,13 +600,12 @@ cleared before the next milestone. Commit after each green milestone.
   reusable nested fixture and established the multi-root-per-crate convention;
   see the next entry.
 - Decision: Use three golden *root types* within the existing
-  `orthohelp_fixture`
-  crate, selected via `--root-type`, rather than new fixture crates: add a
-  minimal `SimpleFixtureConfig` (flat, scalars only, no enum) for the simple
-  case; reuse the existing `FixtureConfig` (the crate's default root, which has
-  the `LogLevel` enum and an existing agent-context golden) for the enum case;
-  reuse 6.1.2's `NestedFixtureConfig` for the nested case. Rationale: 6.1.2
-  established the multi-root pattern
+  `orthohelp_fixture` crate, selected via `--root-type`, rather than new
+  fixture crates: add a minimal `SimpleFixtureConfig` (flat, scalars only, no
+  enum) for the simple case; reuse the existing `FixtureConfig` (the crate's
+  default root, which has the `LogLevel` enum and an existing agent-context
+  golden) for the enum case; reuse 6.1.2's `NestedFixtureConfig` for the nested
+  case. Rationale: 6.1.2 established the multi-root pattern
   (`--root-type orthohelp_fixture::NestedFixtureConfig`) and already ships a
   real nested tree, so authoring new crates would duplicate it and add
   workspace build cost for no benefit. Reusing root types keeps the three
@@ -758,9 +757,8 @@ Red → Green → Refactor for each addition:
    actually guards a rename such as `non_interactive` → `noninteractive` or a
    casing change on a variant not used by the snapshot.
 3. **Version + kind pin.** Keep
-   `agent_context_version_is_independent_from_docs_ir`.
-   Extend it (or add a sibling) to assert
-   `ORTHO_AGENT_CONTEXT_SCHEMA_VERSION == "1"`,
+   `agent_context_version_is_independent_from_docs_ir`. Extend it (or add a
+   sibling) to assert `ORTHO_AGENT_CONTEXT_SCHEMA_VERSION == "1"`,
    `AGENT_CONTEXT_KIND_SUFFIX == "agent_context"`, and that
    `AgentContext::new(pkg).kind` ends with the suffix. Add a doc-comment
    checklist on the snapshot test: "If this snapshot changed: (1) is the change
@@ -833,13 +831,12 @@ reusing the existing `orthohelp_fixture` crate and 6.1.2's nested fixture
 rather than authoring new crates.
 
 1. **Add one minimal root type** to
-   `tests/fixtures/orthohelp_fixture/src/lib.rs`:
-   `SimpleFixtureConfig`, a flat struct with two or three scalar fields
-   (string, integer, bool), no enum, no subcommands. This is the only new
-   fixture code; no new crate, no `Cargo.toml` or workspace `members` change is
-   needed. Add the matching Fluent message keys to the crate's
-   `locales/*/messages.ftl` as 6.1.2 did for its nested commands. The other two
-   roots already exist:
+   `tests/fixtures/orthohelp_fixture/src/lib.rs`: `SimpleFixtureConfig`, a flat
+   struct with two or three scalar fields (string, integer, bool), no enum, no
+   subcommands. This is the only new fixture code; no new crate, no
+   `Cargo.toml` or workspace `members` change is needed. Add the matching
+   Fluent message keys to the crate's `locales/*/messages.ftl` as 6.1.2 did for
+   its nested commands. The other two roots already exist:
    - **enum**: `FixtureConfig` — the crate's default `root_type`, which carries
      the `LogLevel` enum and already has a committed agent-context golden.
    - **nested**: `NestedFixtureConfig` — 6.1.2's two-level tree, selected with
@@ -1068,9 +1065,8 @@ Recommended new/changed files (final shape may refine during implementation):
   nested scenario.
 - `cargo-orthohelp/src/main.rs` (+ `all` coverage) — Milestone 4 (if D3).
 - `docs/agent-native-cli-design.md`, `docs/adr-003-...md`,
-  `docs/users-guide.md`,
-  `docs/developers-guide.md`, `docs/cargo-orthohelp-design.md` (if applicable),
-  `docs/roadmap.md`.
+  `docs/users-guide.md`, `docs/developers-guide.md`,
+  `docs/cargo-orthohelp-design.md` (if applicable), `docs/roadmap.md`.
 
 ## Interfaces and dependencies
 
