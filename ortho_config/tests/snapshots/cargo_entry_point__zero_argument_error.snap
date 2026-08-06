@@ -1,0 +1,10 @@
+---
+source: ortho_config/tests/cargo_entry_point.rs
+expression: rendered
+---
+error: 'cargo' requires a subcommand but one was not provided
+  [subcommands: demo, help]
+
+Usage: cargo <COMMAND>
+
+For more information, try '--help'.
