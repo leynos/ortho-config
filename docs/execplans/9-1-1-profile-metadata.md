@@ -286,7 +286,7 @@ D11–D15 added after the Logisphere design-review panel (see Decision log).
   first milestone-2 commit verifies both crates build cleanly under `make lint`
   (Whitaker at `-D warnings`) and rustc 1.89 before any test depends on them;
   failure escalates per tolerance 1. Whitaker's assertion-related lints (notably
-  `no_expect_outside_tests`) do not always recognise helper functions as test
+  `no_expect_outside_tests`) do not always recognize helper functions as test
   code, so consult `docs/whitaker-users-guide.md` for the configuration options
   before suppressing anything. Rejected: continuing with bare `assert_eq!` for
   new tests.
