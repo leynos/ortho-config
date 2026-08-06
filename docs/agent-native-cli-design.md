@@ -697,8 +697,8 @@ in warning mode before enforcing it in CI.
 
 ### 8.2 Agent-context schema compatibility policy
 
-The agent-context schema is versioned independently of the documentation IR
-as recorded in
+The agent-context schema is versioned independently of the documentation IR as
+recorded in
 [ADR-003](adr-003-define-schema-ownership-for-agent-native-contracts.md).
 `ORTHO_AGENT_CONTEXT_SCHEMA_VERSION` is a major-version string for the compact
 wire shape emitted by `cargo orthohelp --format agent-context` and by
@@ -710,9 +710,9 @@ previously `null` optional field with data that already has a defined meaning.
 They may add enum variants only when the contract defines and tests an
 unknown-variant fallback that preserves the documented legacy default for
 strict deserializers. Readers must ignore unknown object fields, and schema
-types must not add `deny_unknown_fields` while retaining the same major version.
-Absent fields use the realized-field defaults recorded in §8.1; validation
-never mutates payloads to populate those defaults.
+types must not add `deny_unknown_fields` while retaining the same major
+version. Absent fields use the realized-field defaults recorded in §8.1;
+validation never mutates payloads to populate those defaults.
 
 Breaking changes require bumping `ORTHO_AGENT_CONTEXT_SCHEMA_VERSION`. Breaking
 changes include renaming or removing fields, changing enum wire strings,
@@ -741,8 +741,8 @@ unchanged.
 
 The contract is pinned by a byte-exact snapshot and variant-exhaustive
 wire-value tests for every enum. When the version is bumped, retain the prior
-version's frozen wire fixture and a round-trip or compatibility test, so overlap
-compatibility is demonstrable. JSON Schema emission remains a deferred
+version's frozen wire fixture and a round-trip or compatibility test, so
+overlap compatibility is demonstrable. JSON Schema emission remains a deferred
 enhancement; if it is added, it belongs in dev tooling or behind a non-default
 feature, not in the runtime schema path.
 

@@ -1,9 +1,8 @@
 # Version and validate the agent-context schema (6.2.2)
 
-This ExecPlan (execution plan) is a living document. The sections
-`Constraints`, `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`,
-`Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
-proceeds.
+This ExecPlan (execution plan) is a living document. The sections `Constraints`,
+`Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
+and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
 Status: COMPLETE (implementation started 2026-06-24 and completed 2026-07-22;
 revised after roadmap 6.1.2 landed on `main`; see the revision notes at the end)
@@ -15,11 +14,11 @@ that automated agents can learn how to invoke a command-line interface (CLI)
 without scraping help text. Roadmap item 6.2.1 shipped the schema types in
 `ortho_config::agent_context`, the `cargo orthohelp --format agent-context`
 generator, and a single golden snapshot. This change adds the contract that
-makes the schema *safe to depend on*: tests that fail loudly when the wire shape
-changes by accident, golden fixtures that prove the generator behaves across
-the shapes downstream consumers will meet (a flat CLI, a CLI with enum values,
-and a nested command tree), and a written compatibility policy that tells a
-maintainer when they must bump `ORTHO_AGENT_CONTEXT_SCHEMA_VERSION`.
+makes the schema *safe to depend on*: tests that fail loudly when the wire
+shape changes by accident, golden fixtures that prove the generator behaves
+across the shapes downstream consumers will meet (a flat CLI, a CLI with enum
+values, and a nested command tree), and a written compatibility policy that
+tells a maintainer when they must bump `ORTHO_AGENT_CONTEXT_SCHEMA_VERSION`.
 
 After this change a maintainer can observe success directly:
 
@@ -28,10 +27,10 @@ After this change a maintainer can observe success directly:
    a named test fail (see `Validation and acceptance`).
 2. `cargo orthohelp --format agent-context` produces JSON that matches a
    committed golden snapshot for each of three command-tree shapes, all rooted
-   in the existing `orthohelp_fixture` crate and selected with `--root-type`:
-   a simple flat CLI (a new minimal `SimpleFixtureConfig`), a CLI with enum
-   values (the existing `FixtureConfig`, the crate's default root), and a nested
-   command tree (the `NestedFixtureConfig` added by roadmap 6.1.2).
+   in the existing `orthohelp_fixture` crate and selected with `--root-type`: a
+   simple flat CLI (a new minimal `SimpleFixtureConfig`), a CLI with enum
+   values (the existing `FixtureConfig`, the crate's default root), and a
+   nested command tree (the `NestedFixtureConfig` added by roadmap 6.1.2).
 3. `docs/agent-native-cli-design.md` §8.2 states, in plain rules, what changes
    are additive (no version bump) versus breaking (version bump required), and
    `docs/developers-guide.md` tells a contributor how to evolve the schema.
@@ -57,7 +56,8 @@ load-bearing decisions about the *exact* v1 shape are therefore recorded under
   target package by generating an ephemeral crate, compiling it, and running it
   so it calls `<RootType as OrthoConfigDocs>::get_doc_metadata()`. The
   agent-context generator transforms this bridge IR.
-- **Generator / transform**: `cargo_orthohelp::agent_context::bridge_ir_to_agent_context`,
+- **Generator / transform**:
+  `cargo_orthohelp::agent_context::bridge_ir_to_agent_context`,
   the adapter that turns bridge IR into an `AgentContext`.
 - **Golden / snapshot test**: a test that compares produced output against a
   committed reference file using `insta`. A change to output fails the test
@@ -82,8 +82,8 @@ Hard invariants. Violation requires escalation, not a workaround.
    `cargo-orthohelp`.
 2. **No contract duplication across the boundary.** `cargo-orthohelp` tests
    must consume `ortho_config`'s version constant rather than re-hardcoding
-   `"1"`, and must assert *transform* behaviour, not re-assert schema invariants
-   that are `ortho_config`'s job.
+   `"1"`, and must assert *transform* behaviour, not re-assert schema
+   invariants that are `ortho_config`'s job.
 3. **No crate dependency cycles.** Fixture crates depend on `ortho_config`
    (and its derive). `cargo-orthohelp` must not gain a compile-time dependency
    on any fixture crate; it discovers fixtures via the ephemeral bridge at test
@@ -158,7 +158,8 @@ These decide the exact v1 wire shape that this plan ossifies.
      goldens stable without redesigning how defaults are captured.
    - If normalization proves to need derive-macro changes beyond a localized
      string transform, that trips Tolerance 3 → escalate.
-3. **Include agent-context in `--format all` (D3).** `OutputFormat::AgentContext`
+3. **Include agent-context in `--format all` (D3).**
+   `OutputFormat::AgentContext`
    is currently "Excluded from `--format all` until schema versioning is locked
    in 6.2.2" (`docs/developers-guide.md:177`; `cargo-orthohelp/src/main.rs:154`
    special-cases it). 6.2.2 locks the versioning.
@@ -197,13 +198,14 @@ These decide the exact v1 wire shape that this plan ossifies.
 ## Risks
 
 1. Risk: 6.2.2 is the first to run the *agent-context transform*
-   (`bridge_ir_to_agent_context`, with its `walk`/`command_path` recursion) over
-   a nested command tree. Roadmap 6.1.2 (now merged) validated the recursive
-   `DocMetadata.subcommands` IR and its roff/PowerShell/man rendering thoroughly,
-   but explicitly *not* the agent-context format. So the recursion is sound at
-   the IR layer; the residual risk is confined to the agent-context projection of
-   that tree (for example root-vs-child `bin_name`/`app_name` handling in
-   `command_path`, summary localization per node, and command/input sort order).
+   (`bridge_ir_to_agent_context`, with its `walk`/`command_path` recursion)
+   over a nested command tree. Roadmap 6.1.2 (now merged) validated the
+   recursive `DocMetadata.subcommands` IR and its roff/PowerShell/man rendering
+   thoroughly, but explicitly *not* the agent-context format. So the recursion
+   is sound at the IR layer; the residual risk is confined to the agent-context
+   projection of that tree (for example root-vs-child `bin_name`/`app_name`
+   handling in `command_path`, summary localization per node, and command/input
+   sort order).
    - Severity: low-medium (narrowed by 6.1.2). Likelihood: low-medium.
    - Mitigation: Milestone 2 adds an in-process structural assertion on the
      agent-context projection of a nested tree (expected paths, ordering) that
@@ -301,8 +303,8 @@ cleared before the next milestone. Commit after each green milestone.
 ## Surprises & discoveries
 
 - Observation: Most of the "version-pin / shape-guard" scaffolding the roadmap
-  asks for already exists from 6.2.1.
-  Evidence: `ortho_config/src/agent_context/tests.rs` already contains a
+  asks for already exists from 6.2.1. Evidence:
+  `ortho_config/src/agent_context/tests.rs` already contains a
   version-independence test, a wire-contract snapshot, required-field
   deserialization guards, and a per-variant `MutationEffect` wire-value test.
   Impact: 6.2.2 is mostly *extending* existing modules, not greenfield work;
@@ -315,72 +317,70 @@ cleared before the next milestone. Commit after each green milestone.
   (`define_nested_fixture!` / `LocalizedDocMetadata` in
   `cargo-orthohelp/src/test_support/nested_fixture.rs`), behavioural nested IR
   fixtures in `ortho_config/tests/rstest_bdd/`, and roff/PowerShell/IR nested
-  golden snapshots.
-  Evidence: `git show 5073b6d --stat`; `tests/fixtures/orthohelp_fixture/src/lib.rs`
-  now defines `NestedFixtureConfig` alongside the original flat `FixtureConfig`;
+  golden snapshots. Evidence: `git show 5073b6d --stat`;
+  `tests/fixtures/orthohelp_fixture/src/lib.rs` now defines
+  `NestedFixtureConfig` alongside the original flat `FixtureConfig`;
   `cargo-orthohelp/tests/nested_subcommand_end_to_end.rs` drives the binary with
-  `--root-type orthohelp_fixture::NestedFixtureConfig`.
-  Impact: this plan no longer needs to author new fixture crates. It reuses
-  `NestedFixtureConfig` for the nested golden via `--root-type`, reuses the flat
-  `FixtureConfig` (the crate's default root) for the enum golden, and adds only
-  a minimal `SimpleFixtureConfig` root for the simple golden. See the revised
-  Decision Log and Milestone 3.
+  `--root-type orthohelp_fixture::NestedFixtureConfig`. Impact: this plan no
+  longer needs to author new fixture crates. It reuses `NestedFixtureConfig`
+  for the nested golden via `--root-type`, reuses the flat `FixtureConfig` (the
+  crate's default root) for the enum golden, and adds only a minimal
+  `SimpleFixtureConfig` root for the simple golden. See the revised Decision
+  Log and Milestone 3.
 - Observation: 6.1.2 covers the nested tree only for IR, roff, and PowerShell —
-  *not* the agent-context format.
-  Evidence: `nested_subcommand_end_to_end.rs` and
-  `tests/golden/nested_subcommand_snapshots.rs` invoke `--format ir|man|ps`
+  *not* the agent-context format. Evidence: `nested_subcommand_end_to_end.rs`
+  and `tests/golden/nested_subcommand_snapshots.rs` invoke `--format ir|man|ps`
   only; no nested test calls `bridge_ir_to_agent_context` or
-  `--format agent-context`.
-  Impact: 6.2.2 is still the first to exercise the agent-context transform over
-  a nested tree, but the underlying recursion is now well-tested, narrowing
-  Risk 1.
+  `--format agent-context`. Impact: 6.2.2 is still the first to exercise the
+  agent-context transform over a nested tree, but the underlying recursion is
+  now well-tested, narrowing Risk 1.
 - Observation: Implementation began on 2026-06-24 from branch
   `6-2-2-version-and-validate-the-agent-context-schema`, tracking
-  `origin/6-2-2-version-and-validate-the-agent-context-schema`.
-  Evidence: `git status --short --branch` reported a clean branch tracking
-  origin before edits; PR #349 title was updated to
+  `origin/6-2-2-version-and-validate-the-agent-context-schema`. Evidence:
+  `git status --short --branch` reported a clean branch tracking origin before
+  edits; PR #349 title was updated to
   `Version and validate the agent-context schema (6.2.2)`; Lody session
-  `b88005e0-6d82-4ef3-bd6c-998039c3c514` was renamed to the same title.
-  Impact: the plan has moved from approval to execution; subsequent entries
-  record implementation progress and validation evidence.
+  `b88005e0-6d82-4ef3-bd6c-998039c3c514` was renamed to the same title. Impact:
+  the plan has moved from approval to execution; subsequent entries record
+  implementation progress and validation evidence.
 - Observation: Milestone 1 extended the existing schema guard module rather
-  than adding parallel tests.
-  Evidence: `ortho_config/src/agent_context/tests.rs` now widens the inline
-  wire snapshot, pins `AGENT_CONTEXT_KIND_SUFFIX`, proves unknown top-level
-  fields deserialize, checks absent optional fields serialize as documented
-  `null`s except for omitted `summary`, and adds variant-exhaustive tests for
-  `AsyncSubmissionMode`, `InteractionMode`, `PolicyMode`, and
-  `MutationEffect`.
+  than adding parallel tests. Evidence:
+  `ortho_config/src/agent_context/tests.rs` now widens the inline wire
+  snapshot, pins `AGENT_CONTEXT_KIND_SUFFIX`, proves unknown top-level fields
+  deserialize, checks absent optional fields serialize as documented `null`s
+  except for omitted `summary`, and adds variant-exhaustive tests for
+  `AsyncSubmissionMode`, `InteractionMode`, `PolicyMode`, and `MutationEffect`.
   Impact: the guard suite now directly covers the approved D1 and D4 wire-shape
   decisions.
 - Observation: D4's only visible current wire change is
-  `MutationEffect::ReadOnly`, which now serializes as `read_only`.
-  Evidence: the first focused red run,
+  `MutationEffect::ReadOnly`, which now serializes as `read_only`. Evidence:
+  the first focused red run,
   `/tmp/test-red-m1-ortho-config-6-2-2-version-and-validate-the-agent-context-schema.out`,
-  failed on `read-only` versus `read_only`; after changing
-  `MutationEffect` to `#[serde(rename_all = "snake_case")]`, the focused green
-  run passed 27 `agent_context` tests.
-  Impact: the 6.2.1 schema snapshot and downstream goldens must be re-baselined
-  once during later milestones, as approved in D4.
+  failed on `read-only` versus `read_only`; after changing `MutationEffect` to
+  `#[serde(rename_all = "snake_case")]`, the focused green run passed 27
+  `agent_context` tests. Impact: the 6.2.1 schema snapshot and downstream
+  goldens must be re-baselined once during later milestones, as approved in D4.
 - Observation: The explicit red proofs for field and version drift passed.
   Evidence:
   `/tmp/test-red-field-m1-ortho-config-6-2-2-version-and-validate-the-agent-context-schema.out`
   shows the snapshot failing when `canonical_verb` temporarily serialized as
-  `verb`; `/tmp/test-red-version-m1-ortho-config-6-2-2-version-and-validate-the-agent-context-schema.out`
+  `verb`;
+  `/tmp/test-red-version-m1-ortho-config-6-2-2-version-and-validate-the-agent-context-schema.out`
   shows the version pin failing when `ORTHO_AGENT_CONTEXT_SCHEMA_VERSION` was
   temporarily changed to `"2"`. Both temporary mutations were reverted before
-  the final focused green run.
-  Impact: the Milestone 1 Red-Green-Refactor evidence required by this plan is
-  captured in `/tmp` logs.
+  the final focused green run. Impact: the Milestone 1 Red-Green-Refactor
+  evidence required by this plan is captured in `/tmp` logs.
 - Observation: Milestone 1 passed all deterministic gates and CodeRabbit review.
   Evidence: `make check-fmt`, `make typecheck`, `make lint`, and `make test`
-  passed with logs in `/tmp/check-fmt-ortho-config-6-2-2-version-and-validate-the-agent-context-schema.out`,
+  passed with logs in
+  `/tmp/check-fmt-ortho-config-6-2-2-version-and-validate-the-agent-context-schema.out`,
   `/tmp/typecheck-ortho-config-6-2-2-version-and-validate-the-agent-context-schema.out`,
   `/tmp/lint-ortho-config-6-2-2-version-and-validate-the-agent-context-schema.out`,
-  and `/tmp/test-ortho-config-6-2-2-version-and-validate-the-agent-context-schema.out`.
-  `coderabbit review --agent` initially hit a rate limit, the required `vsleep`
-  backoff ran for 63 minutes, and the retry completed with `findings: 0`.
-  Impact: Milestone 2 may begin after the Milestone 1 commit.
+  and
+  `/tmp/test-ortho-config-6-2-2-version-and-validate-the-agent-context-schema.out`.
+  `coderabbit review --agent` initially hit a rate limit, the required
+  `vsleep` backoff ran for 63 minutes, and the retry completed with
+  `findings: 0`. Impact: Milestone 2 may begin after the Milestone 1 commit.
 - Observation: Milestone 2 used a hand-built nested `DocMetadata` for the
   in-process structural test rather than the 6.1.2 localized nested fixture.
   Evidence: `cargo-orthohelp/src/test_support/nested_fixture.rs` produces
@@ -388,51 +388,48 @@ cleared before the next milestone. Commit after each green milestone.
   `DocMetadata`; no reverse bridge-IR view exists. The test now pins the
   `fixture admin audit` and `fixture admin grant-access` paths, root/child
   inputs, sorted command order, and sorted input order directly against
-  `DocMetadata`.
-  Impact: the test remains on the adapter boundary under review and avoids
-  adding conversion code solely for tests.
+  `DocMetadata`. Impact: the test remains on the adapter boundary under review
+  and avoids adding conversion code solely for tests.
 - Observation: D2 default-display normalization deliberately re-baselines the
-  existing end-to-end agent-context golden.
-  Evidence: the focused red run
+  existing end-to-end agent-context golden. Evidence: the focused red run
   `/tmp/test-red-m2-agent-context-ortho-config-6-2-2-version-and-validate-the-agent-context-schema.out`
   failed on `String :: from("localhost")`, `LogLevel :: Info`, and equivalent
   nested fixture defaults. After adding generator-side `::` spacing
   normalization and accepting the reviewed snapshot, the focused green run
   `/tmp/test-green-m2-agent-context-ortho-config-6-2-2-version-and-validate-the-agent-context-schema.out`
-  passed all `agent_context`-filtered tests.
-  Impact: Milestone 3 starts from the normalized default-display contract, so
-  new simple/enum/nested goldens should use tight `::` defaults.
+  passed all `agent_context`-filtered tests. Impact: Milestone 3 starts from
+  the normalized default-display contract, so new simple/enum/nested goldens
+  should use tight `::` defaults.
 - Observation: The first Milestone 2 red command did not use `set -o pipefail`,
   so the shell returned the `tee` exit status even though Cargo reported test
-  failures.
-  Evidence: the log named above contains failing tests despite the command
-  wrapper reporting exit code 0.
-  Impact: subsequent piped validation commands include `set -o pipefail` so
-  command status reflects Cargo failures.
+  failures. Evidence: the log named above contains failing tests despite the
+  command wrapper reporting exit code 0. Impact: subsequent piped validation
+  commands include `set -o pipefail` so command status reflects Cargo failures.
 - Observation: Milestone 2 deterministic gates passed after refactoring the
-  nested structural test into helper fixtures.
-  Evidence: the first `make lint` run,
+  nested structural test into helper fixtures. Evidence: the first `make lint`
+  run,
   `/tmp/lint-m2-ortho-config-6-2-2-version-and-validate-the-agent-context-schema.out`,
-  rejected the long nested test with `clippy::too_many_lines`. After extracting
-  named nested fixture and expected-summary helpers, `make check-fmt`,
-  `make typecheck`, `make lint`, `make test`, and `make markdownlint` passed
-  with logs in `/tmp/check-fmt-m2-ortho-config-6-2-2-version-and-validate-the-agent-context-schema.out`,
+  rejected the long nested test with `clippy::too_many_lines`. After
+  extracting named nested fixture and expected-summary helpers,
+  `make check-fmt`, `make typecheck`, `make lint`, `make test`, and
+  `make markdownlint` passed with logs in
+  `/tmp/check-fmt-m2-ortho-config-6-2-2-version-and-validate-the-agent-context-schema.out`,
   `/tmp/typecheck-m2-ortho-config-6-2-2-version-and-validate-the-agent-context-schema.out`,
   `/tmp/lint-m2-ortho-config-6-2-2-version-and-validate-the-agent-context-schema.out`,
   `/tmp/test-m2-ortho-config-6-2-2-version-and-validate-the-agent-context-schema.out`,
-  and `/tmp/markdownlint-m2-ortho-config-6-2-2-version-and-validate-the-agent-context-schema.out`.
-  Impact: CodeRabbit review can be requested for Milestone 2 with deterministic
-  issues already cleared.
+  and
+  `/tmp/markdownlint-m2-ortho-config-6-2-2-version-and-validate-the-agent-context-schema.out`.
+  Impact: CodeRabbit review can be requested for Milestone 2 with
+  deterministic issues already cleared.
 - Observation: Milestone 2 CodeRabbit review passed with no concerns after two
-  rate-limit backoffs.
-  Evidence: `coderabbit review --agent` was rate-limited twice; the requested
-  random `vsleep` backoffs ran for 64 minutes and 48 minutes. The third review
-  attempt completed with `findings: 0`, logged at
+  rate-limit backoffs. Evidence: `coderabbit review --agent` was rate-limited
+  twice; the requested random `vsleep` backoffs ran for 64 minutes and 48
+  minutes. The third review attempt completed with `findings: 0`, logged at
   `/tmp/coderabbit-m2-retry2-ortho-config-6-2-2-version-and-validate-the-agent-context-schema.out`.
   Impact: Milestone 3 may begin after committing the Milestone 2 changes.
 - Observation: Milestone 3 expands the agent-context golden matrix without
-  adding a new fixture crate.
-  Evidence: `tests/fixtures/orthohelp_fixture/src/lib.rs` now defines
+  adding a new fixture crate. Evidence:
+  `tests/fixtures/orthohelp_fixture/src/lib.rs` now defines
   `SimpleFixtureConfig`; `FixtureConfig` remains the enum-bearing default root;
   `NestedFixtureConfig` is selected with `--root-type`. The focused red golden
   run
@@ -440,38 +437,38 @@ cleared before the next milestone. Commit after each green milestone.
   showed the default enum root still passing, the simple root failing because
   it did not exist yet, and the nested root producing a reviewed `.snap.new`.
   After adding the simple root and accepting the reviewed simple and nested
-  snapshots, `/tmp/test-green-m3-agent-context-goldens-ortho-config-6-2-2-version-and-validate-the-agent-context-schema.out`
-  passed all three agent-context golden cases.
-  Impact: end-to-end agent-context generation is now covered for flat scalar,
-  enum-bearing, and nested command-tree shapes.
+  snapshots,
+  `/tmp/test-green-m3-agent-context-goldens-ortho-config-6-2-2-version-and-validate-the-agent-context-schema.out`
+  passed all three agent-context golden cases. Impact: end-to-end
+  agent-context generation is now covered for flat scalar, enum-bearing, and
+  nested command-tree shapes.
 - Observation: The new nested BDD scenario required recompiling the BDD harness
-  before it appeared in the generated test list.
-  Evidence: the first focused BDD run
+  before it appeared in the generated test list. Evidence: the first focused
+  BDD run
   `/tmp/test-red-m3-agent-context-bdd-ortho-config-6-2-2-version-and-validate-the-agent-context-schema.out`
   selected only the pre-existing flat scenario after only the feature file
-  changed. Once step definitions changed, `cargo test -p cargo-orthohelp --test
-  rstest_bdd -- --list` showed the new
+  changed. Once step definitions changed,
+  `cargo test -p cargo-orthohelp --test rstest_bdd -- --list` showed the new
   `orthohelp_agent_context_generate_nested_agent_context_json_from_the_fixture`
   scenario, and
   `/tmp/test-green-m3-agent-context-bdd-ortho-config-6-2-2-version-and-validate-the-agent-context-schema.out`
-  passed both agent-context scenarios.
-  Impact: the BDD layer now asserts the externally observable nested path
-  `["nested_fixture", "admin", "audit"]` rather than merely checking that JSON
-  exists.
+  passed both agent-context scenarios. Impact: the BDD layer now asserts the
+  externally observable nested path `["nested_fixture", "admin", "audit"]`
+  rather than merely checking that JSON exists.
 - Observation: Milestone 3 deterministic gates passed after fixing one clippy
-  shadowing finding.
-  Evidence: the first `make lint` run,
+  shadowing finding. Evidence: the first `make lint` run,
   `/tmp/lint-m3-ortho-config-6-2-2-version-and-validate-the-agent-context-schema.out`,
-  rejected an inner `root_type` binding in the parametrized golden helper. After
-  renaming it, `make check-fmt`, `make typecheck`, `make lint`, `make test`, and
-  `make markdownlint` passed with logs in
+  rejected an inner `root_type` binding in the parametrized golden helper.
+  After renaming it, `make check-fmt`, `make typecheck`, `make lint`,
+  `make test`, and `make markdownlint` passed with logs in
   `/tmp/check-fmt-m3-ortho-config-6-2-2-version-and-validate-the-agent-context-schema.out`,
   `/tmp/typecheck-m3-ortho-config-6-2-2-version-and-validate-the-agent-context-schema.out`,
   `/tmp/lint-m3-ortho-config-6-2-2-version-and-validate-the-agent-context-schema.out`,
   `/tmp/test-m3-ortho-config-6-2-2-version-and-validate-the-agent-context-schema.out`,
-  and `/tmp/markdownlint-m3-ortho-config-6-2-2-version-and-validate-the-agent-context-schema.out`.
-  Impact: CodeRabbit review can be requested for Milestone 3 with deterministic
-  issues already cleared.
+  and
+  `/tmp/markdownlint-m3-ortho-config-6-2-2-version-and-validate-the-agent-context-schema.out`.
+  Impact: CodeRabbit review can be requested for Milestone 3 with
+  deterministic issues already cleared.
 - Observation: Milestone 3 CodeRabbit review passed with no concerns.
   Evidence: `coderabbit review --agent` completed with `findings: 0`, logged at
   `/tmp/coderabbit-m3-ortho-config-6-2-2-version-and-validate-the-agent-context-schema.out`.
@@ -484,10 +481,10 @@ cleared before the next milestone. Commit after each green milestone.
   `generate_agent_context_if_requested` to accept `OutputFormat::All`, the
   focused green run
   `/tmp/test-green-m4-format-all-agent-context-ortho-config-6-2-2-version-and-validate-the-agent-context-schema.out`
-  passed the same `orthohelp_roff_generate_all_formats` scenario.
-  Impact: D3 is implemented as an additive `all` output: the existing scenario
-  still checks localized IR, man page, and PowerShell module outputs, and now
-  also checks the agent-context file.
+  passed the same `orthohelp_roff_generate_all_formats` scenario. Impact: D3
+  is implemented as an additive `all` output: the existing scenario still
+  checks localized IR, man page, and PowerShell module outputs, and now also
+  checks the agent-context file.
 - Observation: Milestone 4 deterministic gates passed.
   Evidence: `make check-fmt`, `make typecheck`, `make lint`, `make test`, and
   `make markdownlint` passed with logs in
@@ -495,27 +492,28 @@ cleared before the next milestone. Commit after each green milestone.
   `/tmp/typecheck-m4-ortho-config-6-2-2-version-and-validate-the-agent-context-schema.out`,
   `/tmp/lint-m4-ortho-config-6-2-2-version-and-validate-the-agent-context-schema.out`,
   `/tmp/test-m4-ortho-config-6-2-2-version-and-validate-the-agent-context-schema.out`,
-  and `/tmp/markdownlint-m4-ortho-config-6-2-2-version-and-validate-the-agent-context-schema.out`.
-  Impact: CodeRabbit review can be requested for Milestone 4 with deterministic
-  issues already cleared.
+  and
+  `/tmp/markdownlint-m4-ortho-config-6-2-2-version-and-validate-the-agent-context-schema.out`.
+  Impact: CodeRabbit review can be requested for Milestone 4 with
+  deterministic issues already cleared.
 - Observation: Milestone 4 CodeRabbit review passed with no concerns.
   Evidence: `coderabbit review --agent` completed with `findings: 0`, logged at
   `/tmp/coderabbit-m4-ortho-config-6-2-2-version-and-validate-the-agent-context-schema.out`.
   Impact: Milestone 5 documentation work may begin after committing the
   Milestone 4 changes.
 - Observation: Milestone 5 documentation now records the locked schema
-  contract in all relevant user and contributor surfaces.
-  Evidence: `docs/agent-native-cli-design.md` §8.1 distinguishes realized v1
-  fields from planned fields, and §8.2 records the compatibility policy:
-  integer-valued version string, additive versus breaking changes,
-  forward-compatible unknown-field handling, byte-exact snapshot review,
-  prior-version fixture retention on bumps, snake_case enum strings,
-  `summary` omission, and display-only `AgentInput.default`. ADR-003 now points
-  to §8.2 for the mechanism; `docs/cargo-orthohelp-design.md`,
-  `docs/developers-guide.md`, and `docs/users-guide.md` all state that
-  `--format all` writes `agent-context.json`; `docs/roadmap.md` ticks 6.2.2.
-  Impact: remaining Milestone 5 work is validation, CodeRabbit review, commit,
-  and push rather than additional design work.
+  contract in all relevant user and contributor surfaces. Evidence:
+  `docs/agent-native-cli-design.md` §8.1 distinguishes realized v1 fields from
+  planned fields, and §8.2 records the compatibility policy: integer-valued
+  version string, additive versus breaking changes, forward-compatible
+  unknown-field handling, byte-exact snapshot review, prior-version fixture
+  retention on bumps, snake_case enum strings, `summary` omission, and
+  display-only `AgentInput.default`. ADR-003 now points to §8.2 for the
+  mechanism; `docs/cargo-orthohelp-design.md`, `docs/developers-guide.md`, and
+  `docs/users-guide.md` all state that `--format all` writes
+  `agent-context.json`; `docs/roadmap.md` ticks 6.2.2. Impact: remaining
+  Milestone 5 work is validation, CodeRabbit review, commit, and push rather
+  than additional design work.
 - Observation: Milestone 5 deterministic gates and CodeRabbit review passed.
   Evidence: `make check-fmt`, `make typecheck`, `make lint`, `make test`,
   `make markdownlint`, and `make nixie` passed with logs in
@@ -532,34 +530,31 @@ cleared before the next milestone. Commit after each green milestone.
   final PR-body refresh, final validation/review, and reporting.
 - Observation: Replaying the branch over the latest `main` crossed upstream
   test-module extraction work and silently dropped several test attributes even
-  after textual conflicts were resolved.
-  Evidence: the first post-rebase validation exposed missing `#[test]`,
-  `#[rstest]`, and `#[case]` attributes in agent-context tests. Restoring those
-  attributes and retaining upstream support modules recovered the intended test
-  matrix. The final workspace test suite passed.
-  Impact: conflict-free files still require behavioural validation after a
-  rebase; successful textual replay alone does not prove that test registration
-  survived.
+  after textual conflicts were resolved. Evidence: the first post-rebase
+  validation exposed missing `#[test]`, `#[rstest]`, and `#[case]` attributes
+  in agent-context tests. Restoring those attributes and retaining upstream
+  support modules recovered the intended test matrix. The final workspace test
+  suite passed. Impact: conflict-free files still require behavioural
+  validation after a rebase; successful textual replay alone does not prove
+  that test registration survived.
 - Observation: The CodeScene refactors exposed a module-size constraint after
-  assertion helpers were extracted.
-  Evidence: Whitaker rejected `ortho_config/src/agent_context/tests.rs` after it
-  exceeded 400 lines. Assertion support moved to
-  `tests_contract_support.rs`, round-trip property tests moved to
-  `tests_round_trip.rs`, and nested generator support moved to
+  assertion helpers were extracted. Evidence: Whitaker rejected
+  `ortho_config/src/agent_context/tests.rs` after it exceeded 400 lines.
+  Assertion support moved to `tests_contract_support.rs`, round-trip property
+  tests moved to `tests_round_trip.rs`, and nested generator support moved to
   `tests_nested_support.rs`; all affected test names and assertions remain.
   Impact: test helpers are now grouped by concern, the original coverage is
   preserved, and all source modules comply with the repository size policy.
 - Observation: The final documentation gate found a duplicate localized-IR
-  section introduced during rebase reconciliation.
-  Evidence: `make markdownlint` reported duplicate headings and consecutive
-  blank lines in `docs/cargo-orthohelp-design.md`. Removing the identical extra
-  section and correcting three ExecPlan spelling findings made both
-  `make markdownlint` and `make nixie` pass.
-  Impact: the completed branch now passes both code and documentation gates.
+  section introduced during rebase reconciliation. Evidence:
+  `make markdownlint` reported duplicate headings and consecutive blank lines in
+  `docs/cargo-orthohelp-design.md`. Removing the identical extra section and
+  correcting three ExecPlan spelling findings made both `make markdownlint` and
+  `make nixie` pass. Impact: the completed branch now passes both code and
+  documentation gates.
 - Observation: The original D2 character-level normalizer could not distinguish
-  Rust path separators from `::` inside string literals.
-  Evidence: the focused red test transformed
-  `String :: from("left :: right")` into
+  Rust path separators from `::` inside string literals. Evidence: the focused
+  red test transformed `String :: from("left :: right")` into
   `String::from("left::right")`. Quote-aware scanning made that test green, and
   parametrized cases cover escaped quotes and hash-delimited raw byte strings.
   Impact: default displays remain stable without corrupting human-readable
@@ -569,32 +564,30 @@ cleared before the next milestone. Commit after each green milestone.
   Evidence: focused cases now cover an escaped quote character followed by a
   second Rust path and a `'static` lifetime. By contrast, D1, the serde
   attribute, §8.2, and `command_summary_serializes_only_when_present` all pin
-  absent `summary` as omitted rather than `null`.
-  Impact: literal-boundary coverage is complete without making an unapproved
-  breaking wire-contract change.
+  absent `summary` as omitted rather than `null`. Impact: literal-boundary
+  coverage is complete without making an unapproved breaking wire-contract
+  change.
 - Observation: The final full CodeRabbit review found genuine property-coverage
   gaps but repeated the previously rejected absent-`summary` recommendation.
   Evidence: `any_agent_command` fixed all nested fields to empty values, and no
   property generated separator-like literal contents. D1, the serde attribute,
-  and focused omission tests still lock absent `summary` as omitted.
-  Impact: the property domains now cover nested metadata and literal boundaries
-  while preserving the approved schema-v1 wire contract.
+  and focused omission tests still lock absent `summary` as omitted. Impact:
+  the property domains now cover nested metadata and literal boundaries while
+  preserving the approved schema-v1 wire contract.
 - Observation: Moving the wire-contract JSON out of Rust source exposed it to
-  Git's platform-specific checkout conversion.
-  Evidence: Windows CI read CRLF bytes through `include_str!`, while
-  `serde_json::to_string_pretty` produced LF bytes, causing the byte-exact
-  assertion to fail even though the JSON values matched.
-  Impact: a fixture-specific `.gitattributes` rule now pins LF at checkout and
-  preserves one canonical wire-contract expectation across platforms.
+  Git's platform-specific checkout conversion. Evidence: Windows CI read CRLF
+  bytes through `include_str!`, while `serde_json::to_string_pretty` produced
+  LF bytes, causing the byte-exact assertion to fail even though the JSON
+  values matched. Impact: a fixture-specific `.gitattributes` rule now pins LF
+  at checkout and preserves one canonical wire-contract expectation across
+  platforms.
 - Observation: `--format all` built and leaked the en-US consumer resources for
   agent-context, then repeated the same filesystem read and allocation while
-  localizing documentation.
-  Evidence: `generate_agent_context_if_requested` called
-  `build_en_us_localizer`, while `localize_docs` independently called
+  localizing documentation. Evidence: `generate_agent_context_if_requested`
+  called `build_en_us_localizer`, while `localize_docs` independently called
   `load_consumer_resources` and `build_localizer` for every requested locale.
-  After the change, a cached `--format all` run under
-  `strace -e trace=%file` showed one actual en-US consumer-resource read after
-  metadata fingerprinting.
+  After the change, a cached `--format all` run under `strace -e trace=%file`
+  showed one actual en-US consumer-resource read after metadata fingerprinting.
   Impact: `run` now retains a successfully built en-US localizer and lends it
   to both phases. A failed agent-context localizer remains uncached, preserving
   the existing warning followed by localized-output error behaviour.
@@ -603,60 +596,59 @@ cleared before the next milestone. Commit after each green milestone.
 
 - Decision (SUPERSEDED 2026-06-15): originally, three *new* minimal fixture
   crates (`orthohelp_simple_fixture`, `orthohelp_enum_fixture`,
-  `orthohelp_nested_fixture`). Superseded because roadmap 6.1.2 landed a reusable
-  nested fixture and established the multi-root-per-crate convention; see the next
-  entry.
-- Decision: Use three golden *root types* within the existing `orthohelp_fixture`
+  `orthohelp_nested_fixture`). Superseded because roadmap 6.1.2 landed a
+  reusable nested fixture and established the multi-root-per-crate convention;
+  see the next entry.
+- Decision: Use three golden *root types* within the existing
+  `orthohelp_fixture`
   crate, selected via `--root-type`, rather than new fixture crates: add a
   minimal `SimpleFixtureConfig` (flat, scalars only, no enum) for the simple
   case; reuse the existing `FixtureConfig` (the crate's default root, which has
   the `LogLevel` enum and an existing agent-context golden) for the enum case;
-  reuse 6.1.2's `NestedFixtureConfig` for the nested case.
-  Rationale: 6.1.2 established the multi-root pattern
-  (`--root-type orthohelp_fixture::NestedFixtureConfig`) and already ships a real
-  nested tree, so authoring new crates would duplicate it and add workspace build
-  cost for no benefit. Reusing root types keeps the three golden shapes isolated
-  (each is a distinct root) while matching the now-canonical convention. The
-  simple case still needs a *new* minimal root because `FixtureConfig` carries an
-  enum and many fields and is not "simple"; adding one small struct to an existing
-  crate is far cheaper than a new crate and needs no `Cargo.toml`/`members`
-  change.
-  Date/Author: 2026-06-15, planning (revised after 6.1.2 rebase).
+  reuse 6.1.2's `NestedFixtureConfig` for the nested case. Rationale: 6.1.2
+  established the multi-root pattern
+  (`--root-type orthohelp_fixture::NestedFixtureConfig`) and already ships a
+  real nested tree, so authoring new crates would duplicate it and add
+  workspace build cost for no benefit. Reusing root types keeps the three
+  golden shapes isolated (each is a distinct root) while matching the
+  now-canonical convention. The simple case still needs a *new* minimal root
+  because `FixtureConfig` carries an enum and many fields and is not "simple";
+  adding one small struct to an existing crate is far cheaper than a new crate
+  and needs no `Cargo.toml`/`members` change. Date/Author: 2026-06-15, planning
+  (revised after 6.1.2 rebase).
 - Decision: Dependency-free shape guard (insta snapshot + variant-exhaustive
-  wire-value tests + version pin); no `schemars`.
-  Rationale: a byte-exact snapshot is strictly stronger than a permissive JSON
-  Schema diff for detecting accidental shape changes (it catches null-vs-absent
-  and enum-string renames). schemars' real value is a *publishable* artefact,
-  which is a different, deferred requirement; ADR-003 calls JSON Schema prior
-  art, not a compatibility target. Avoids Tolerance 1.
-  Date/Author: 2026-06-14, planning.
+  wire-value tests + version pin); no `schemars`. Rationale: a byte-exact
+  snapshot is strictly stronger than a permissive JSON Schema diff for
+  detecting accidental shape changes (it catches null-vs-absent and enum-string
+  renames). schemars' real value is a *publishable* artefact, which is a
+  different, deferred requirement; ADR-003 calls JSON Schema prior art, not a
+  compatibility target. Avoids Tolerance 1. Date/Author: 2026-06-14, planning.
 - Decision: Compatibility policy's primary guarantee is *forward* compatibility
   for pinned consumers; consumers must ignore unknown fields; producers must
-  never add `#[serde(deny_unknown_fields)]` within a major version.
-  Rationale: OrthoConfig (producer) is upgraded before agents (consumers); the
-  risky path is an old consumer reading newer producer output. Confluent's
-  compatibility-type framing maps this to forward compatibility. The types today
-  correctly omit `deny_unknown_fields`.
-  Date/Author: 2026-06-14, planning.
+  never add `#[serde(deny_unknown_fields)]` within a major version. Rationale:
+  OrthoConfig (producer) is upgraded before agents (consumers); the risky path
+  is an old consumer reading newer producer output. Confluent's
+  compatibility-type framing maps this to forward compatibility. The types
+  today correctly omit `deny_unknown_fields`. Date/Author: 2026-06-14, planning.
 - Decision: Accept D1, D2, D3, and D5 as recommended, and choose D4's clean
   pre-1.0 enum casing change: all agent-context enums are standardized to
-  `snake_case` before the v1 contract is locked.
-  Rationale: D1, D2, D3, and D5 preserve the intended compact payload,
-  stabilize default displays, fulfil the documented `--format all` deferral, and
-  clarify realized versus future defaulting fields. For D4, a deliberate
-  pre-1.0 re-baseline is less risky than freezing mixed enum casing and asking
-  future maintainers to remember that the inconsistency is contractual.
-  Date/Author: 2026-06-24, reviewer direction.
+  `snake_case` before the v1 contract is locked. Rationale: D1, D2, D3, and D5
+  preserve the intended compact payload, stabilize default displays, fulfil the
+  documented `--format all` deferral, and clarify realized versus future
+  defaulting fields. For D4, a deliberate pre-1.0 re-baseline is less risky
+  than freezing mixed enum casing and asking future maintainers to remember
+  that the inconsistency is contractual. Date/Author: 2026-06-24, reviewer
+  direction.
 - Decision: Preserve upstream test-module extraction during the final rebase
   and place branch-specific test support in adjacent private modules rather
-  than folding helpers back into the parent test modules.
-  Rationale: this retains `main`'s module-size and ownership improvements while
-  preserving every branch assertion, property test, and nested fixture. It also
-  satisfies the 400-line source-file limit without lint suppressions.
-  Date/Author: 2026-07-22, implementation.
+  than folding helpers back into the parent test modules. Rationale: this
+  retains `main`'s module-size and ownership improvements while preserving
+  every branch assertion, property test, and nested fixture. It also satisfies
+  the 400-line source-file limit without lint suppressions. Date/Author:
+  2026-07-22, implementation.
 - Decision: Normalize `::` only in Rust code regions of default-display strings;
-  preserve ordinary, byte, and raw string literal contents verbatim.
-  Rationale: token-spacing stabilization must not alter values embedded in the
+  preserve ordinary, byte, and raw string literal contents verbatim. Rationale:
+  token-spacing stabilization must not alter values embedded in the
   human-readable expression. A small lexical state machine handles escapes and
   raw-string hash delimiters without adding a runtime parsing dependency.
   Date/Author: 2026-07-22, review follow-up.
@@ -668,42 +660,41 @@ A reader new to this repository needs these anchors.
 The workspace (`Cargo.toml`) contains `ortho_config` (the library that owns the
 schema), `ortho_config_macros` (the derive macro), `cargo-orthohelp` (the CLI
 tool / adapter that generates output), `test_helpers`, the
-`examples/hello_world` crate, and `tests/fixtures/orthohelp_fixture` (the single
-existing fixture crate). This plan adds *no* new workspace member: the three
-golden roots all live in `orthohelp_fixture`.
+`examples/hello_world` crate, and `tests/fixtures/orthohelp_fixture` (the
+single existing fixture crate). This plan adds *no* new workspace member: the
+three golden roots all live in `orthohelp_fixture`.
 
-Nested fixtures (added by roadmap 6.1.2, PR #340): the `orthohelp_fixture` crate
-now defines a real nested clap tree, `NestedFixtureConfig`
+Nested fixtures (added by roadmap 6.1.2, PR #340): the `orthohelp_fixture`
+crate now defines a real nested clap tree, `NestedFixtureConfig`
 (`tests/fixtures/orthohelp_fixture/src/lib.rs`), alongside the original flat
 `FixtureConfig`. The tree is `nested-app` → `greet` / `version` / `admin`, with
-`admin` → `audit` / `grant-access` (a two-level tree with a leaf command that has
-no subcommands). It is selected at generation time with
+`admin` → `audit` / `grant-access` (a two-level tree with a leaf command that
+has no subcommands). It is selected at generation time with
 `--root-type orthohelp_fixture::NestedFixtureConfig`. The crate's default root
 (`[package.metadata.ortho_config] root_type`) is
-`orthohelp_fixture::FixtureConfig`, so the existing agent-context golden already
-covers the enum-bearing flat tree. For cheap in-process tests,
+`orthohelp_fixture::FixtureConfig`, so the existing agent-context golden
+already covers the enum-bearing flat tree. For cheap in-process tests,
 `cargo-orthohelp/src/test_support/nested_fixture.rs` exposes a `pub(crate)`
-`define_nested_fixture!` macro producing a `LocalizedDocMetadata` value; note the
-agent-context transform takes `&DocMetadata`, so an in-process nested test either
-converts from that helper or hand-builds a small nested `DocMetadata` (as the
-existing proptests do via their `doc()` helper). 6.1.2 covers the nested tree for
-IR, roff, and PowerShell only — not agent-context.
+`define_nested_fixture!` macro producing a `LocalizedDocMetadata` value; note
+the agent-context transform takes `&DocMetadata`, so an in-process nested test
+either converts from that helper or hand-builds a small nested `DocMetadata`
+(as the existing proptests do via their `doc()` helper). 6.1.2 covers the
+nested tree for IR, roff, and PowerShell only — not agent-context.
 
-Schema types and the version constant:
-`ortho_config/src/agent_context/mod.rs` defines `AgentContext`,
-`AgentCommand`, `AgentInput`, `AgentExample`, `AsyncSubmission`,
-`DeliveryRoute`, `PaginationContract`, `SupportDeclaration`, `AgentPolicy`, and
-the enums `AsyncSubmissionMode`, `PolicyMode`, `InteractionMode`,
-`MutationEffect`, plus `ORTHO_AGENT_CONTEXT_SCHEMA_VERSION` (`"1"`) and
-`AGENT_CONTEXT_KIND_SUFFIX` (`"agent_context"`). Existing tests are in
-`ortho_config/src/agent_context/tests.rs`.
+Schema types and the version constant: `ortho_config/src/agent_context/mod.rs`
+defines `AgentContext`, `AgentCommand`, `AgentInput`, `AgentExample`,
+`AsyncSubmission`, `DeliveryRoute`, `PaginationContract`, `SupportDeclaration`,
+`AgentPolicy`, and the enums `AsyncSubmissionMode`, `PolicyMode`,
+`InteractionMode`, `MutationEffect`, plus `ORTHO_AGENT_CONTEXT_SCHEMA_VERSION`
+(`"1"`) and `AGENT_CONTEXT_KIND_SUFFIX` (`"agent_context"`). Existing tests are
+in `ortho_config/src/agent_context/tests.rs`.
 
 Generator (adapter): `cargo-orthohelp/src/agent_context/mod.rs` defines
-`bridge_ir_to_agent_context(meta, package, localizer)` and the recursive
-`walk`/`command_path` helpers. Its unit tests are in
+`bridge_ir_to_agent_context(meta, package, localizer)` and the recursive `walk`/
+`command_path` helpers. Its unit tests are in
 `cargo-orthohelp/src/agent_context/tests.rs`; its property tests in
-`cargo-orthohelp/src/agent_context/proptests.rs` (already covering unique paths,
-path sort, input sort, hidden-field omission).
+`cargo-orthohelp/src/agent_context/proptests.rs` (already covering unique
+paths, path sort, input sort, hidden-field omission).
 
 Generation pipeline: `cargo-orthohelp/src/main.rs` parses CLI
 (`cargo-orthohelp/src/cli.rs`, `OutputFormat::AgentContext`), loads cargo
@@ -713,8 +704,9 @@ and writes `<out>/agent-context.json` atomically (`output.rs`,
 `write_agent_context`). Before Milestone 4, `--format all` did *not* include
 agent-context; the completed implementation now includes it.
 
-Existing end-to-end golden: `cargo-orthohelp/tests/golden/agent_context_tests.rs`
-runs the built binary against `--package orthohelp_fixture` and snapshots
+Existing end-to-end golden:
+`cargo-orthohelp/tests/golden/agent_context_tests.rs` runs the built binary
+against `--package orthohelp_fixture` and snapshots
 `cargo-orthohelp/tests/golden/agent_context__fixture.json.snap`. Behavioural
 test: `cargo-orthohelp/tests/features/orthohelp_agent_context.feature` with
 steps in `cargo-orthohelp/tests/rstest_bdd/behaviour/steps_agent_context.rs`.
@@ -728,12 +720,12 @@ Default rendering: defaults are turned into display strings in
 `expr.to_token_stream().to_string()` (the source of the space-separated `::`
 strings).
 
-Documentation homes: `docs/agent-native-cli-design.md` (§3.2 schema purpose,
-§8 versioning/compatibility, §8.1 legacy defaulting), ADR-003
+Documentation homes: `docs/agent-native-cli-design.md` (§3.2 schema purpose, §8
+versioning/compatibility, §8.1 legacy defaulting), ADR-003
 (`docs/adr-003-define-schema-ownership-for-agent-native-contracts.md`),
 `docs/users-guide.md` (consumer-facing note ~lines 204, 1297),
-`docs/developers-guide.md` (schema ownership ~line 107, agent-context generation
-~line 114, Public API ~line 137).
+`docs/developers-guide.md` (schema ownership ~line 107, agent-context
+generation ~line 114, Public API ~line 137).
 
 ## Plan of work
 
@@ -765,14 +757,16 @@ Red → Green → Refactor for each addition:
    existing `mutation_effect_serializes_canonical_wire_values`. This is what
    actually guards a rename such as `non_interactive` → `noninteractive` or a
    casing change on a variant not used by the snapshot.
-3. **Version + kind pin.** Keep `agent_context_version_is_independent_from_docs_ir`.
-   Extend it (or add a sibling) to assert `ORTHO_AGENT_CONTEXT_SCHEMA_VERSION
-   == "1"`, `AGENT_CONTEXT_KIND_SUFFIX == "agent_context"`, and that
+3. **Version + kind pin.** Keep
+   `agent_context_version_is_independent_from_docs_ir`.
+   Extend it (or add a sibling) to assert
+   `ORTHO_AGENT_CONTEXT_SCHEMA_VERSION == "1"`,
+   `AGENT_CONTEXT_KIND_SUFFIX == "agent_context"`, and that
    `AgentContext::new(pkg).kind` ends with the suffix. Add a doc-comment
    checklist on the snapshot test: "If this snapshot changed: (1) is the change
    additive-only? If not, bump `ORTHO_AGENT_CONTEXT_SCHEMA_VERSION` and add a
-   §8.2 history row; (2) update the §8.1 realized-fields annotation;
-   (3) confirm no `deny_unknown_fields` was added."
+   §8.2 history row; (2) update the §8.1 realized-fields annotation; (3)
+   confirm no `deny_unknown_fields` was added."
 4. **Forward-compat tolerance test.** Add a test proving an agent-context
    payload with an *unexpected extra* top-level key still deserializes
    successfully (locks the "consumers ignore unknown fields" guarantee and
@@ -781,8 +775,8 @@ Red → Green → Refactor for each addition:
 5. **Apply D4 before locking.** Standardize every agent-context enum to
    `snake_case`, then re-baseline the 6.2.1 wire snapshot and golden fixtures
    once, intentionally. D1 remains locked as the current `summary`
-   omitted-when-absent asymmetry. Variant-exhaustive tests pin every enum's wire
-   strings after the re-baseline.
+   omitted-when-absent asymmetry. Variant-exhaustive tests pin every enum's
+   wire strings after the re-baseline.
 6. **Feature gating.** Confirm the new tests are reachable under the same
    features as the existing `agent_context::tests` and run under default
    features.
@@ -799,33 +793,33 @@ stabilize default rendering. Work in
 `cargo-orthohelp/src/agent_context/{proptests.rs,tests.rs}` and the generator.
 
 1. **Determinism property (proptest).** Add a property: transforming the *same*
-   arbitrary `DocMetadata` tree twice yields byte-identical pretty-printed JSON.
-   This guards the generator's promised sort/normalization (the existing
+   arbitrary `DocMetadata` tree twice yields byte-identical pretty-printed
+   JSON. This guards the generator's promised sort/normalization (the existing
    round-trip-style property is trivial for a serde type and is not added).
    Existing properties (unique paths, sorted commands/inputs, hidden-field
    omission) stay.
 2. **Nested structural assertions (in-process, the Red gate for Milestone 3).**
    Add rstest unit tests that drive `bridge_ir_to_agent_context` over a *nested*
-   `DocMetadata` (root with subcommands, one two-level branch, one leaf with no
-   subcommands, one enum field) and assert the resulting `AgentContext`: expected
-   `commands[].path` values (including a two-segment path), canonical verbs,
-   per-command inputs, and that commands/inputs are sorted. Prefer reusing
-   6.1.2's in-crate nested fixture
+   `DocMetadata` (root with subcommands, one two-level branch, one leaf with
+   no subcommands, one enum field) and assert the resulting `AgentContext`:
+   expected `commands[].path` values (including a two-segment path), canonical
+   verbs, per-command inputs, and that commands/inputs are sorted. Prefer
+   reusing 6.1.2's in-crate nested fixture
    (`cargo-orthohelp/src/test_support/nested_fixture.rs`,
-   `define_nested_fixture!` → `LocalizedDocMetadata`) if a `DocMetadata` view is
-   available; otherwise hand-build a small nested `DocMetadata` as the existing
-   proptests do (`proptests.rs` `doc()` helper). These must pass before any
-   nested golden is blessed; if they cannot be made to pass, that indicates a bug
-   in the agent-context transform's recursion (Risk 1 / Tolerance 3) — note that
-   6.1.2 already validated the IR-level recursion, so any failure is likely
-   specific to `walk`/`command_path`.
+   `define_nested_fixture!` → `LocalizedDocMetadata`) if a `DocMetadata` view
+   is available; otherwise hand-build a small nested `DocMetadata` as the
+   existing proptests do (`proptests.rs` `doc()` helper). These must pass
+   before any nested golden is blessed; if they cannot be made to pass, that
+   indicates a bug in the agent-context transform's recursion (Risk 1 /
+   Tolerance 3) — note that 6.1.2 already validated the IR-level recursion, so
+   any failure is likely specific to `walk`/`command_path`.
 3. **Default-display normalization (D2).** Add a normalization step so the
    rendered `AgentInput.default` display is insensitive to `proc_macro2` token
    spacing (for example collapse the spaced `::` separator to a tight `::`),
-   with a focused unit test
-   asserting the normalized form. Document the field as non-normative display
-   (text lands in Milestone 5). Keep this a localized string transform; if it
-   would require derive-macro restructuring, escalate (Tolerance 3).
+   with a focused unit test asserting the normalized form. Document the field
+   as non-normative display (text lands in Milestone 5). Keep this a localized
+   string transform; if it would require derive-macro restructuring, escalate
+   (Tolerance 3).
 
 Validation: `cargo test -p cargo-orthohelp agent_context` passes; Red proof for
 the determinism property is inherently satisfied by construction, so instead
@@ -835,15 +829,17 @@ passes against the nested tree.
 ### Milestone 3 — golden roots (simple / enum / nested)
 
 Goal: prove end-to-end generation across the three shapes the roadmap names,
-reusing the existing `orthohelp_fixture` crate and 6.1.2's nested fixture rather
-than authoring new crates.
+reusing the existing `orthohelp_fixture` crate and 6.1.2's nested fixture
+rather than authoring new crates.
 
-1. **Add one minimal root type** to `tests/fixtures/orthohelp_fixture/src/lib.rs`:
-   `SimpleFixtureConfig`, a flat struct with two or three scalar fields (string,
-   integer, bool), no enum, no subcommands. This is the only new fixture code;
-   no new crate, no `Cargo.toml` or workspace `members` change is needed. Add the
-   matching Fluent message keys to the crate's `locales/*/messages.ftl` as 6.1.2
-   did for its nested commands. The other two roots already exist:
+1. **Add one minimal root type** to
+   `tests/fixtures/orthohelp_fixture/src/lib.rs`:
+   `SimpleFixtureConfig`, a flat struct with two or three scalar fields
+   (string, integer, bool), no enum, no subcommands. This is the only new
+   fixture code; no new crate, no `Cargo.toml` or workspace `members` change is
+   needed. Add the matching Fluent message keys to the crate's
+   `locales/*/messages.ftl` as 6.1.2 did for its nested commands. The other two
+   roots already exist:
    - **enum**: `FixtureConfig` — the crate's default `root_type`, which carries
      the `LogLevel` enum and already has a committed agent-context golden.
    - **nested**: `NestedFixtureConfig` — 6.1.2's two-level tree, selected with
@@ -852,10 +848,10 @@ than authoring new crates.
    `cargo-orthohelp/tests/golden/agent_context_tests.rs` into an rstest
    `#[case]` test over `(root_type, snapshot_name)` (snapshot name explicitly
    coupled to the root, not case index), covering the three roots. Each commits
-   its own `.snap`. The simple and nested cases pass `--root-type`; the enum case
-   uses the crate default (or passes `--root-type orthohelp_fixture::FixtureConfig`
-   explicitly for clarity). Keep the existing default-root golden so it is not
-   orphaned.
+   its own `.snap`. The simple and nested cases pass `--root-type`; the enum
+   case uses the crate default (or passes
+   `--root-type orthohelp_fixture::FixtureConfig` explicitly for clarity). Keep
+   the existing default-root golden so it is not orphaned.
    - Red gate: the Milestone 2 in-process nested structural test must already be
      green. Generate the nested golden, then review the diff line-by-line
      (paths, default strings, ordering) before committing — never blind-bless.
@@ -867,8 +863,8 @@ than authoring new crates.
    `cargo-orthohelp/tests/features/orthohelp_agent_context.feature` (+ steps)
    that runs agent-context generation over `NestedFixtureConfig` (via
    `--root-type`) and asserts a *two-segment* command path is present in
-   `commands[].path`, so the behaviour layer distinguishes nested from flat (not
-   merely "JSON exists").
+   `commands[].path`, so the behaviour layer distinguishes nested from flat
+   (not merely "JSON exists").
 
 Validation: `make test` passes; the three goldens exist and match; the nested
 BDD scenario fails before its step assertions/generation are added and passes
@@ -1001,19 +997,19 @@ cargo insta review                                          # accept consciously
 
 Acceptance is behavioural and observable:
 
-1. **Shape guard works (Red proof).** With the schema unchanged, `cargo test -p
-   ortho_config agent_context` passes. Temporarily rename one field
-   (for example `canonical_verb` → `verb`) and one enum wire string (for example
-   `MutationEffect::ReadOnly`'s `"read-only"` → `"readonly"`); rerun and observe
-   the comprehensive snapshot test and the relevant variant-exhaustive test
-   fail. Revert; rerun; pass.
+1. **Shape guard works (Red proof).** With the schema unchanged,
+   `cargo test -p ortho_config agent_context` passes. Temporarily rename one
+   field (for example `canonical_verb` → `verb`) and one enum wire string (for
+   example `MutationEffect::ReadOnly`'s `"read-only"` → `"readonly"`); rerun
+   and observe the comprehensive snapshot test and the relevant
+   variant-exhaustive test fail. Revert; rerun; pass.
 2. **Version pin works.** Temporarily change
    `ORTHO_AGENT_CONTEXT_SCHEMA_VERSION` to `"2"`; observe the pin test fail.
    Revert.
 3. **Three goldens.** Generating agent-context for each of the three roots
    (`SimpleFixtureConfig`, `FixtureConfig`, `NestedFixtureConfig`) via
-   `--root-type` produces JSON matching the committed `.snap`. The nested golden
-   contains at least one two-segment `commands[].path`.
+   `--root-type` produces JSON matching the committed `.snap`. The nested
+   golden contains at least one two-segment `commands[].path`.
 4. **Forward compatibility.** The unknown-extra-key deserialization test passes,
    proving consumers tolerate unknown fields.
 5. **Determinism.** The proptest proving identical JSON across two transforms of
@@ -1042,11 +1038,11 @@ each milestone, plus the explicit Red proofs in items 1-2.
 - All steps are re-runnable. `cargo insta` snapshots are only re-blessed by an
   explicit `cargo insta review`; never auto-accept.
 - Adding the `SimpleFixtureConfig` root type is additive and lives in the
-  existing `orthohelp_fixture` crate; no `Cargo.toml`/`members` change is needed.
-  If a `--root-type` fails to resolve, the most common cause is a missing or
-  mistyped fully-qualified path (`orthohelp_fixture::SimpleFixtureConfig`) or a
-  missing Fluent message key; cross-check against how `NestedFixtureConfig` is
-  declared and localized.
+  existing `orthohelp_fixture` crate; no `Cargo.toml`/`members` change is
+  needed. If a `--root-type` fails to resolve, the most common cause is a
+  missing or mistyped fully-qualified path
+  (`orthohelp_fixture::SimpleFixtureConfig`) or a missing Fluent message key;
+  cross-check against how `NestedFixtureConfig` is declared and localized.
 - If a milestone's gates fail, fix forward within tolerances; if blocked, the
   work is committed per milestone so `git` provides clean rollback points.
 - Leave `/tmp` logs in place for review; they do not pollute the work tree.
@@ -1071,7 +1067,8 @@ Recommended new/changed files (final shape may refine during implementation):
 - `cargo-orthohelp/tests/features/orthohelp_agent_context.feature` + steps —
   nested scenario.
 - `cargo-orthohelp/src/main.rs` (+ `all` coverage) — Milestone 4 (if D3).
-- `docs/agent-native-cli-design.md`, `docs/adr-003-...md`, `docs/users-guide.md`,
+- `docs/agent-native-cli-design.md`, `docs/adr-003-...md`,
+  `docs/users-guide.md`,
   `docs/developers-guide.md`, `docs/cargo-orthohelp-design.md` (if applicable),
   `docs/roadmap.md`.
 
@@ -1094,8 +1091,8 @@ pub fn bridge_ir_to_agent_context(
 ```
 
 `ortho_config` gains no new runtime dependency (Tolerance 1). Any default-
-display normalization is internal to the generator path. No new fixture crate is
-added; the new `SimpleFixtureConfig` root reuses the existing
+display normalization is internal to the generator path. No new fixture crate
+is added; the new `SimpleFixtureConfig` root reuses the existing
 `orthohelp_fixture` crate's dependencies (`ortho_config` + derive, `clap`,
 `serde`).
 
@@ -1123,8 +1120,8 @@ added; the new `SimpleFixtureConfig` root reuses the existing
 Skills to load during implementation: `rust-router` first, then
 `rust-unit-testing` (assertion/fixture shape, `serial_test` if needed),
 `proptest` (determinism property), `nextest` (running/filtering tests),
-`arch-crate-design` (fixture root-type boundaries), `arch-decision-records` (the
-ADR-003 cross-reference judgement), `leta` (navigation/refactor), and
+`arch-crate-design` (fixture root-type boundaries), `arch-decision-records`
+(the ADR-003 cross-reference judgement), `leta` (navigation/refactor), and
 `execplans` (keeping this document current). Use `rstest-bdd` guidance for the
 behavioural scenario. Study how 6.1.2 (PR #340) wired `NestedFixtureConfig` and
 its `--root-type` selection before adding `SimpleFixtureConfig`.
@@ -1142,25 +1139,28 @@ Documentation to consult: `docs/agent-native-cli-design.md` (§3.2, §8, §8.1),
 ## Outcomes & retrospective
 
 Roadmap item 6.2.2 is complete. The reusable schema now has an independently
-pinned version, a byte-exact wire-contract guard, variant-exhaustive enum tests,
-forward-compatible deserialization coverage, and documented additive versus
-breaking change rules. All enum wire strings are consistently `snake_case`,
-including the deliberate pre-1.0 `read-only` to `read_only` change.
+pinned version, a byte-exact wire-contract guard, variant-exhaustive enum
+tests, forward-compatible deserialization coverage, and documented additive
+versus breaking change rules. All enum wire strings are consistently
+`snake_case`, including the deliberate pre-1.0 `read-only` to `read_only`
+change.
 
 The generator is covered at three observable levels: property tests establish
 determinism, in-process tests verify nested projection and ordering, and golden
-plus BDD tests cover simple, enum-bearing, and nested fixture roots. Running the
-6.1.2 nested tree through the transform confirmed that recursive command paths
-remain correct; no production recursion change was required. `--format all`
-now includes the same `agent-context.json` artefact as the dedicated format.
+plus BDD tests cover simple, enum-bearing, and nested fixture roots. Running
+the 6.1.2 nested tree through the transform confirmed that recursive command
+paths remain correct; no production recursion change was required.
+`--format all` now includes the same `agent-context.json` artefact as the
+dedicated format.
 
 The main implementation lesson is that schema locking needs both semantic and
 byte-level checks. Property and structural tests explain invariants, while the
 wire snapshot catches details such as null-versus-omitted fields and enum
-strings. The final rebase also showed that test registration can be lost without
-a textual conflict, so the full workspace gates remain mandatory after history
-rewrites. Roadmap 6.2.3 can rely on the locked downstream naming convention,
-and 6.3 can add skill-manifest links additively under the documented policy.
+strings. The final rebase also showed that test registration can be lost
+without a textual conflict, so the full workspace gates remain mandatory after
+history rewrites. Roadmap 6.2.3 can rely on the locked downstream naming
+convention, and 6.3 can add skill-manifest links additively under the
+documented policy.
 
 ## Revision note
 

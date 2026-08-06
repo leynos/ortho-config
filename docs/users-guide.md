@@ -1353,8 +1353,8 @@ JSON status output are added beside those formats rather than changing them.
 
 For a fixed `schema_version`, agent-context consumers may rely on field
 meanings, enum strings, and the documented null-versus-omitted behaviour.
-Consumers must ignore unknown object fields; a version bump signals a
-breaking wire-shape change that must be reviewed before accepting the payload.
+Consumers must ignore unknown object fields; a version bump signals a breaking
+wire-shape change that must be reviewed before accepting the payload.
 
 Crates that only consume human-facing documentation do not need to adopt
 agent-context metadata. A package that installs generated man pages or
