@@ -49,6 +49,16 @@ use std::sync::Arc;
 /// trait whose other users must not scan.
 pub trait EnvSource: fmt::Debug + Send + Sync {
     /// Return the value of `key`, or `None` when it is unset.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use ortho_config::{EnvSource, MapEnv};
+    ///
+    /// let env = MapEnv::new().with_var("APP_HOST", "localhost");
+    /// assert_eq!(env.get("APP_HOST").as_deref(), Some("localhost".as_ref()));
+    /// assert!(env.get("APP_PORT").is_none());
+    /// ```
     fn get(&self, key: &str) -> Option<OsString>;
 
     /// Return the user's home directory when the environment does not name one.
@@ -61,7 +71,16 @@ pub trait EnvSource: fmt::Debug + Send + Sync {
     ///
     /// The default returns `None`, which is correct for any source that models
     /// a closed set of variables. [`ProcessEnv`] overrides it to preserve the
-    /// existing platform fallback.
+    /// existing platform fallback, and custom sources may override it too.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use ortho_config::{EnvSource, MapEnv};
+    ///
+    /// // A closed-set source keeps the default: no host home leaks in.
+    /// assert!(MapEnv::new().home_fallback().is_none());
+    /// ```
     fn home_fallback(&self) -> Option<std::path::PathBuf> {
         None
     }
@@ -120,6 +139,15 @@ impl MapEnv {
     }
 
     /// Add one variable, consuming and returning `self` for chaining.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use ortho_config::{EnvSource, MapEnv};
+    ///
+    /// let env = MapEnv::new().with_var("APP_PORT", "8080");
+    /// assert_eq!(env.get("APP_PORT").as_deref(), Some("8080".as_ref()));
+    /// ```
     #[must_use]
     pub fn with_var(mut self, key: impl Into<String>, value: impl AsRef<OsStr>) -> Self {
         self.vars.insert(key.into(), value.as_ref().to_os_string());
@@ -127,11 +155,31 @@ impl MapEnv {
     }
 
     /// Add one variable in place.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use ortho_config::{EnvSource, MapEnv};
+    ///
+    /// let mut env = MapEnv::new();
+    /// env.insert("APP_HOST", "localhost");
+    /// assert_eq!(env.get("APP_HOST").as_deref(), Some("localhost".as_ref()));
+    /// ```
     pub fn insert(&mut self, key: impl Into<String>, value: impl AsRef<OsStr>) {
         self.vars.insert(key.into(), value.as_ref().to_os_string());
     }
 
     /// Remove one variable, so lookups report it as unset.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use ortho_config::{EnvSource, MapEnv};
+    ///
+    /// let mut env = MapEnv::new().with_var("APP_HOST", "localhost");
+    /// env.remove("APP_HOST");
+    /// assert!(env.get("APP_HOST").is_none());
+    /// ```
     pub fn remove(&mut self, key: &str) {
         self.vars.remove(key);
     }
@@ -172,6 +220,17 @@ where
 }
 
 /// Return the default process-backed environment source.
+///
+/// # Examples
+///
+/// ```rust
+/// use ortho_config::process_env_source;
+///
+/// // Reads flow through to the live process environment; PATH is set on
+/// // every host that can run this doctest.
+/// let source = process_env_source();
+/// assert!(source.get("PATH").is_some());
+/// ```
 #[must_use]
 pub fn process_env_source() -> SharedEnvSource {
     Arc::new(ProcessEnv)

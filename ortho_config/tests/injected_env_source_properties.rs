@@ -59,7 +59,7 @@ fn unrelated_key() -> impl Strategy<Value = String> {
 
 /// A single path segment: no separator, no empty string, no `.` or `..`.
 fn path_segment() -> impl Strategy<Value = String> {
-    "[a-z][a-z0-9-]{0,7}".prop_map(|segment| segment)
+    "[a-z][a-z0-9-]{0,7}"
 }
 
 proptest! {

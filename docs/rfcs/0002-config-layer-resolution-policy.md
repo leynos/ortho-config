@@ -212,8 +212,11 @@ resolved without mutating the process environment.
 
 This matters for the delivery plan below. Step 2's acceptance criteria call for
 environment snapshotting and for "a test mutating the environment between a
-peek and a replay"; with an injected source that test needs no mutation at all,
-and the whole suite stays free of a serializing lock. Whichever type ultimately
+peek and a replay"; with an injected source that test needs no mutation at
+all, removing process-environment mutation from the policy snapshot test
+itself. (The generated-loader compatibility substrate still reads `figment`
+process-environment data and keeps its shared serial guard until issue #412
+lands.) Whichever type ultimately
 owns the selector chain must therefore carry the `EnvSource` through to the
 point of the read.
 

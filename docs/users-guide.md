@@ -751,11 +751,15 @@ The consequence is worth stating plainly: the telemetry reports that the
 selector was accepted, not which path it named. Pair it with
 `ConfigDiscovery::candidates()` when a specific path is required.
 
-Enabling the optional `metrics` feature additionally emits three counters —
-`ortho_config.discovery.attempts`, `ortho_config.discovery.outcomes`, and
-`ortho_config.discovery.candidate_failures` (labelled with the operation, the
-candidate's bounded source, and its error category) — through the
-[`metrics`](https://docs.rs/metrics) facade:
+Enabling the optional `metrics` feature additionally emits three counters
+through the [`metrics`](https://docs.rs/metrics) facade, each with its own
+label set:
+
+- `ortho_config.discovery.attempts` — labelled with the `operation`;
+- `ortho_config.discovery.outcomes` — labelled with the `operation` and the
+  `outcome`;
+- `ortho_config.discovery.candidate_failures` — labelled with the
+  `operation`, the candidate's bounded `source`, and its error `category`.
 
 ```toml
 [dependencies]

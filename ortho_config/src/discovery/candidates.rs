@@ -36,6 +36,13 @@ enum SelectorValue {
     Accepted(std::ffi::OsString),
 }
 
+/// The three bounded XDG labels, named so a call site cannot transpose them.
+struct XdgDecisions {
+    config_home: &'static str,
+    dirs: &'static str,
+    resolution: &'static str,
+}
+
 impl ConfigDiscovery {
     pub(super) fn dedup_key(path: &Path) -> String {
         #[cfg(windows)]
@@ -99,10 +106,7 @@ impl ConfigDiscovery {
         }
     }
 
-    fn push_xdg(
-        &self,
-        acc: &mut CandidateAccumulator,
-    ) -> (&'static str, &'static str, &'static str) {
+    fn push_xdg(&self, acc: &mut CandidateAccumulator) -> XdgDecisions {
         // An empty value must not contribute a base. `PathBuf::from("")` joined
         // with the app name yields a *relative* candidate such as
         // `demo/config.toml`, which would be resolved against the process's
@@ -123,7 +127,11 @@ impl ConfigDiscovery {
         let dirs_state = telemetry::presence(dirs.as_ref());
         let resolution = self.push_xdg_dirs(dirs.as_ref(), acc);
 
-        (config_home_state, dirs_state, resolution)
+        XdgDecisions {
+            config_home: config_home_state,
+            dirs: dirs_state,
+            resolution,
+        }
     }
 
     /// Push the `XDG_CONFIG_DIRS` bases, reporting which source supplied them.
@@ -295,9 +303,11 @@ impl ConfigDiscovery {
         clippy::missing_const_for_fn,
         reason = "signature must match the Unix variant which is not const"
     )]
-    fn push_default_xdg(&self, _acc: &mut CandidateAccumulator) {
-        _ = self;
-    }
+    #[expect(
+        clippy::unused_self,
+        reason = "signature must match the Unix variant, which reads self"
+    )]
+    fn push_default_xdg(&self, _acc: &mut CandidateAccumulator) {}
 
     /// Returns the ordered configuration candidates.
     ///
@@ -328,7 +338,7 @@ impl ConfigDiscovery {
         }
 
         let selector = self.push_selector(&mut acc);
-        let (xdg_config_home, xdg_dirs, xdg_resolution) = self.push_xdg(&mut acc);
+        let xdg = self.push_xdg(&mut acc);
         self.push_windows(&mut acc);
         let home = self.push_home(&mut acc);
         self.push_projects(&mut acc);
@@ -338,9 +348,9 @@ impl ConfigDiscovery {
             required_bound,
             decisions: CandidateDecisions {
                 selector,
-                xdg_config_home,
-                xdg_dirs,
-                xdg_resolution,
+                xdg_config_home: xdg.config_home,
+                xdg_dirs: xdg.dirs,
+                xdg_resolution: xdg.resolution,
                 home,
             },
         }

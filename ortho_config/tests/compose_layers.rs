@@ -34,10 +34,18 @@ mod discovery_compose_layers {
     }
 
     /// Discovery reading nothing but the paths a test hands it.
+    ///
+    /// `XDG_CONFIG_DIRS` is pinned to a base that holds no configuration:
+    /// with the variable absent (or separator-only), the Unix XDG rung falls
+    /// back to `/etc/xdg`, and a host carrying `/etc/xdg/<name>/config.toml`
+    /// would load it ahead of the fixtures. `discovery_telemetry.rs` applies
+    /// the same guard.
     fn isolated_builder(name: &str) -> ortho_config::ConfigDiscoveryBuilder {
         ConfigDiscovery::builder(name)
             .clear_project_roots()
-            .env_source(Arc::new(MapEnv::new()))
+            .env_source(Arc::new(
+                MapEnv::new().with_var("XDG_CONFIG_DIRS", "/nonexistent/ortho-config-test-xdg"),
+            ))
     }
 
     fn layer_file_names(layers: &[ortho_config::MergeLayer<'static>]) -> Vec<String> {

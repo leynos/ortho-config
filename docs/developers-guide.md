@@ -466,11 +466,13 @@ environment. `ProcessEnv` is the default and preserves the historical behaviour;
   scan. Until then, `CsvEnv` injection is out of scope and a consumer needing
   to control `APP_*` configuration-value variables must still set them in the
   process.
-- **Owned returns, deliberately.** An `impl Iterator` return would be RPITIT and
-  make the trait unusable behind a trait object, forcing `ConfigDiscovery<S>`
+- **Owned returns, deliberately.** An `impl Iterator` return would be
+  return-position `impl Trait` in traits (RPITIT) and make the trait unusable
+  behind a trait object, forcing `ConfigDiscovery<S>`
   generics to leak through the derive-generated `load()` and every call site.
   Configuration resolves once per process, so the allocation is immaterial.
-- **`home_fallback` defaults to `None`.** Only `ProcessEnv` overrides it. See
+- **`home_fallback` defaults to `None`.** `ProcessEnv` overrides it by
+  default, and custom sources may too. See
   the users' guide for why an injected source must be able to suppress the
   platform lookup.
 
