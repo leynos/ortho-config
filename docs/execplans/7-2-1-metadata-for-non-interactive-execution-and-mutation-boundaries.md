@@ -67,7 +67,9 @@ escalation, not workarounds.
   `ortho_config` → `cargo-orthohelp`. The `ortho_config::docs` module must not
   depend on `ortho_config::agent_context` or vice versa (ADR-003 ownership
   split); the bridge transform in `cargo-orthohelp` is the only place the two
-  meet. No new circular dependency between crates under any circumstances.
+  meet. Schema types owned by `cargo_orthohelp::policy` must not gain a `clap`
+  derive; the CLI layer defines its own value enums. No new circular dependency
+  between crates under any circumstances.
 - Undeclared behaviour must remain undeclared. The derive and the bridge must
   never infer interaction or mutation semantics from command names, verbs, or
   flags (design doc §8.1: "Read/write/delete boundaries must not be inferred
@@ -77,13 +79,15 @@ escalation, not workarounds.
   dependencies (`rstest`, `rstest-bdd`, `insta`, `proptest`, `trybuild`,
   `googletest`, `pretty_assertions`).
 - All commit gates (`make check-fmt`, `make typecheck`, `make lint`,
-  `make test`) must pass at every commit. Note the standing repo caveat in
-  memory: `make lint` may be red on `main` itself for files outside this diff;
-  check that any lint failure cites files this plan touches before treating it
-  as ours.
-- British English (en-GB Oxford spelling) in all prose and identifiers exposed
-  to users (`behaviour`, not `behavior`), matching the existing documentation
-  corpus.
+  `make test`) must pass at every commit. Red test states are demonstrated and
+  recorded transiently within a milestone but are never committed; each
+  milestone's commit lands red tests and the code that turns them green
+  together. Note the standing repo caveat: `make lint` may be red on `main`
+  itself for files outside this diff; check that any lint failure cites files
+  this plan touches before treating it as ours.
+- British English (en-GB Oxford spelling) in all prose and identifiers
+  exposed to users (`behaviour`, not `behavior`), matching the existing
+  documentation corpus.
 
 ## Tolerances (exception triggers)
 
@@ -108,27 +112,34 @@ escalation, not workarounds.
   both files in the same commit, and the golden bridge tests exercise
   deserialization of IR produced by the real derive, so drift fails tests
   immediately.
-- Risk: bumping `ORTHO_DOCS_IR_VERSION` from `"1.1"` to `"1.2"` invalidates
-  many golden snapshots at once, making the review diff noisy. Severity: low.
-  Likelihood: high. Mitigation: isolate the version bump and its snapshot churn
-  in a dedicated commit so behavioural changes remain reviewable.
+- Risk: bumping `ORTHO_DOCS_IR_VERSION` from `"1.1"` to `"1.2"` and adding
+  the two explicit-null agent-context fields each invalidate many golden
+  snapshots at once, making the review diff noisy. Severity: low. Likelihood:
+  high. Mitigation: isolate each mechanical churn — the IR version bump and the
+  new-null-fields snapshot refresh — in its own commit so behavioural changes
+  remain reviewable.
 - Risk: the lint's exit-code behaviour pre-empts the exit-code taxonomy work
   scheduled for 7.2.5. Severity: low. Likelihood: medium. Mitigation: use exit
-  code 1 for deny-mode findings, document it as provisional in the developers'
-  guide, and record the decision so 7.2.5 can supersede it.
+  code 3 for deny-mode findings (distinct from 1 for runtime errors and 2 for
+  clap usage errors), document it as provisional in the developers' guide, and
+  record the decision so 7.2.5 can supersede it.
 - Risk: the attribute surface chosen here constrains later phase-7 items
-  (7.2.2 dual renderer, 7.2.3 structured output) that will add more behaviour
-  metadata. Severity: medium. Likelihood: medium. Mitigation: use one nested
-  `behaviour(...)` attribute group so later items add keys rather than new
-  top-level attributes; record the shape in ADR-008.
+  (7.2.2 dual renderer, 7.2.3 structured output) that will add more metadata.
+  Severity: medium. Likelihood: medium. Mitigation: use one nested
+  `behaviour(...)` attribute group scoped to runtime execution semantics only,
+  with the admission criterion recorded in ADR-008 (output-contract metadata
+  gets sibling groups such as `output(...)` in later items).
 - Risk: `#[ortho_config(...)]` parsing silently discards unknown keys at
   struct and field level (`discard_unknown` in
   `ortho_config_macros/src/derive/parse/mod.rs`), so a typo such as
-  `behavior(...)` would be swallowed rather than rejected. Severity: medium.
-  Likelihood: high (it is a natural en-US typo). Mitigation: inside the
-  recognized `behaviour(...)` group, unknown nested keys and invalid values are
-  hard `syn::Error`s with spans; additionally, reject the exact key `behavior`
-  at top level with a spelling hint. Covered by trybuild compile-fail tests.
+  `behavior(...)`, or `behaviour(...)` placed on a field, would be swallowed
+  rather than rejected. Severity: medium. Likelihood: high (en-US spelling and
+  field placement are both natural mistakes). Mitigation: inside the recognized
+  `behaviour(...)` group, unknown nested keys and invalid values are hard
+  `syn::Error`s with spans; the exact key `behavior` is rejected at struct
+  level with a spelling hint; both `behaviour` and `behavior` are rejected at
+  field level with "behaviour(…) is a struct-level attribute". All four paths
+  get trybuild compile-fail fixtures.
 
 ## Progress
 
@@ -136,12 +147,12 @@ escalation, not workarounds.
   completed (three read-only survey passes plus web research on MCP tool
   annotations and clig.dev).
 - [x] (2026-08-06 14:40Z) ExecPlan drafted.
-- [ ] Community-of-experts design review of this plan; revisions applied.
+- [x] (2026-08-06 17:30Z) Community-of-experts design review completed (six
+  Logisphere lenses across three reviewer panels); revisions applied — see the
+  revision note at the bottom of this document.
 - [ ] Plan approved by the user. Implementation must not begin before this.
-- [ ] Milestone A: red tests for IR `behaviour` block and agent-context
-  `bypass_flag`/`dry_run` fields.
-- [ ] Milestone B: IR and agent-context schema types implemented; goldens
-  updated; gates green; CodeRabbit clear.
+- [ ] Milestone B: IR and agent-context schema types implemented red-first;
+  goldens updated; gates green; CodeRabbit clear.
 - [ ] Milestone C: derive attribute surface (`behaviour(...)`) parsed,
   validated, emitted; trybuild fixtures; gates green; CodeRabbit clear.
 - [ ] Milestone D: bridge population and fixture/example updates; BDD
@@ -154,78 +165,186 @@ escalation, not workarounds.
 
 ## Surprises & discoveries
 
-- Observation: agent-context schema v1 already reserves `interaction_mode` and
-  `mutation_effect` as realized v1 fields defaulting to `"unknown"` (design doc
-  §8.1 table), and the Rust enums already exist with the exact variants the
+- Observation: agent-context schema v1 already reserves `interaction_mode`
+  and `mutation_effect` as realized v1 fields defaulting to `"unknown"` (design
+  doc §8.1 table), and the Rust enums already exist with the exact variants the
   roadmap asks for. Evidence: `ortho_config/src/agent_context/mod.rs` defines
   `InteractionMode { Unknown, NonInteractive, Interactive }` and
   `MutationEffect { Unknown, ReadOnly, Write, Delete, Submit }`; the bridge
   hardcodes both to default in `cargo-orthohelp/src/agent_context/mod.rs`
-  (`walk`). Impact: 7.2.1 is a wiring task plus one new optional field, not a
+  (`walk`). Impact: 7.2.1 is a wiring task plus two new optional fields, not a
   schema redesign. No agent-context version bump is needed.
-- Observation: the design doc's §3.3 policy-report example flattens `file` and
-  `range` onto each result, but the implemented `PolicyResult` nests them under
-  `location`. Evidence: `cargo-orthohelp/src/policy/mod.rs` versus design doc
-  lines 248–288. Impact: milestone E follows the implemented Rust types (the
-  schema owner per ADR-003) and milestone F corrects the design-doc example to
-  match.
+- Observation: the design doc's §3.3 policy-report example flattens `file`
+  and `range` onto each result, but the implemented `PolicyResult` nests them
+  under `location`. Evidence: `cargo-orthohelp/src/policy/mod.rs` versus design
+  doc lines 248–288. Impact: milestone E follows the implemented Rust types
+  (the schema owner per ADR-003) and milestone F corrects the design-doc
+  example to match.
+- Observation: `init_tracing` in `cargo-orthohelp/src/main.rs` uses the
+  `tracing_subscriber::fmt()` default writer, which is stdout, and the codebase
+  emits `tracing::debug!` on the main path. Evidence:
+  `cargo-orthohelp/src/main.rs` (`init_tracing`, no
+  `.with_writer(std::io::stderr)`), found during the expert review. Impact: any
+  `RUST_LOG` run would interleave log lines with the stdout JSON policy report.
+  Milestone E step 1 redirects tracing to stderr as a prerequisite of the
+  stdout report contract.
+- Observation: `ORTHO_DOCS_IR_VERSION` is stamped from the constant by the
+  derive, but the literal `"1.1"` is also hard-coded in several test fixtures
+  and a doctest, none of which validate against the constant. Evidence:
+  `cargo-orthohelp/src/powershell/test_fixtures.rs`,
+  `cargo-orthohelp/src/agent_context/proptests.rs`,
+  `cargo-orthohelp/src/roff/mod.rs` (test module),
+  `cargo-orthohelp/src/agent_context/tests_support.rs`, and the doctest in
+  `cargo-orthohelp/src/agent_context/mod.rs`. Impact: milestone B replaces the
+  literals with the constant so the version bump cannot leave stale fixtures
+  silently green.
 
 ## Decision log
 
 - Decision: populate the existing schema v1 fields rather than introduce new
-  ones for interaction and mutation; add only `bypass_flag` and `dry_run` as
-  new optional `AgentCommand` fields. Rationale: §8.1 reserved the fields for
-  exactly this task; §8.2 classifies populating them and adding optional fields
-  as additive within version "1". Date/Author: 2026-08-06, planning session.
+  ones for interaction and mutation; add only `bypass_flag` and `dry_run_flag`
+  as new optional `AgentCommand` fields, placed adjacent to `mutation_effect`.
+  Rationale: §8.1 reserved the fields for exactly this task; §8.2 classifies
+  populating them and adding optional fields as additive within version "1"
+  (verified against the §8.2 text during review). Placement is deliberate
+  because key order is part of the byte-exact snapshot contract. Date/Author:
+  2026-08-06, planning session.
 - Decision: authors declare behaviour with a single nested struct-level
   attribute group `#[ortho_config(behaviour(...))]` on the command's arguments
-  struct, not on subcommand enum variants. Rationale: struct-level attributes
-  already flow through the `StructAttrs`/`DocStructAttrs` parse path and reach
-  subcommand metadata via the ADR-005 companion-trait delegation
-  (`metadata_expr` calls the inner struct's `get_doc_metadata`). Variant-level
-  attributes have no parse path today and would duplicate state between the
-  variant and its argument struct. A nested group leaves room for 7.2.2+ keys.
-  Recorded as ADR-008. Date/Author: 2026-08-06, planning session.
-- Decision: represent "needs a bypass flag" as `interaction = "interactive"`
-  plus a declared `bypass` flag, rather than adding a third `InteractionMode`
-  variant. Rationale: §6.1 treats the bypass flag as a property ("which flag
-  bypasses prompting"), not a distinct mode; adding an enum variant to a v1
-  wire enum needs an unknown-variant fallback contract and buys nothing the
-  pair does not already express. The lint distinguishes the cases without a new
-  variant. This mirrors the MCP annotation style of orthogonal hints.
-  Date/Author: 2026-08-06, planning session.
+  struct, not on subcommand enum variants. The group is scoped to runtime
+  execution semantics only; later roadmap items add sibling groups (for example
+  `output(...)`) rather than growing this one indefinitely. Rationale:
+  struct-level attributes already flow through the `StructAttrs`/
+  `DocStructAttrs` parse path and reach subcommand metadata via the ADR-005
+  companion-trait delegation (`metadata_expr` overwrites only `app_name` and
+  `about_id`, verified in review). Variant-level attributes have no parse path
+  today and would duplicate state. The admission criterion is recorded in
+  ADR-008. Date/Author: 2026-08-06, planning session; scope rule added after
+  expert review.
+- Decision: represent §6.1's three states ("non-interactive, may prompt, or
+  requires a bypass flag") as the pair `interaction` × `bypass`:
+  `non_interactive`; `interactive` with no bypass (lint fires); `interactive`
+  with a declared bypass. No third `InteractionMode` variant. Rationale: §6.1
+  treats the bypass flag as a property ("which flag bypasses prompting"), not a
+  distinct mode; adding a v1 wire-enum variant needs an unknown-variant
+  fallback contract for no expressive gain. This mirrors the MCP annotation
+  style of orthogonal hints. ADR-008 records the explicit mapping so the choice
+  is not reopened. Date/Author: 2026-08-06, planning session; confirmed by
+  expert review.
+- Decision: the derive rejects `interaction = "non_interactive"` combined
+  with `bypass = ...` as a contradictory declaration (compile error), and the
+  destructive-bypass lint exempts commands declared `non_interactive`.
+  Rationale: a bypass flag exists to skip a confirmation prompt; a command that
+  never prompts has nothing to bypass (clig.dev). A declared non-interactive
+  destructive command is the "equivalent approved metadata" the roadmap allows
+  in place of `--force`. This resolves both cells of the interaction × bypass
+  matrix the first draft left open. Date/Author: 2026-08-06, added after expert
+  review.
 - Decision: bump `ORTHO_DOCS_IR_VERSION` from `"1.1"` to `"1.2"` for the new
   optional `behaviour` block, and record the IR compatibility reasoning in
-  ADR-008. Rationale: prior execplans treat IR schema additions as requiring an
-  IR version bump plus an ADR; the design doc has no explicit additive-change
-  policy for the IR (unlike §8.2 for agent context), so the conservative
-  precedent stands. Date/Author: 2026-08-06, planning session.
-- Decision: the lint ships three rules under a new `behaviour` category:
+  ADR-008, including the skew contract: an older reader given 1.2 IR ignores
+  `behaviour` (no `deny_unknown_fields`); a newer reader given 1.1 IR gets
+  `behaviour: None` via `#[serde(default)]`. Rationale: prior execplans treat
+  IR schema additions as requiring an IR version bump plus an ADR; the design
+  doc has no explicit additive-change policy for the IR (unlike §8.2 for agent
+  context), so the conservative precedent stands. Date/Author: 2026-08-06,
+  planning session; skew contract added after expert review.
+- Decision: the lint ships four rules under a new `behaviour` category:
   `agent-native.behaviour.destructive-bypass` (code
   `destructive_bypass_missing`), `agent-native.behaviour.prompt-bypass` (code
-  `prompt_bypass_missing`), and `agent-native.behaviour.undeclared` (codes
-  `interaction_unknown`, `mutation_unknown`). Rationale: the roadmap names the
-  destructive check; §6.1 names the prompt-without-bypass check; §8.1 requires
-  omitted metadata that blocks an agent-native guarantee to warn. Rule
+  `prompt_bypass_missing`), `agent-native.behaviour.bypass-unknown` (code
+  `bypass_flag_unknown`, fired when a declared bypass flag does not match any
+  declared input's long flag — contradiction detection between two
+  declarations, not name inference), and `agent-native.behaviour.undeclared`
+  (codes `interaction_unknown`, `mutation_unknown`). Severity mapping follows
+  §8.1: in `warn` mode every finding is `warn`; in `deny` mode every finding,
+  including `undeclared`, is `deny` ("the same omitted fields fail CI"). Rule
   identifiers follow the existing fixture convention
-  `agent-native.<category>.<check>`. Date/Author: 2026-08-06, planning session.
-- Decision: `--check-agent-native` takes an optional mode value
-  (`warn` default; `deny` escalates findings to a non-zero exit; `off`
-  short-circuits), because the 7.1.1 policy configuration file does not exist
-  yet. Rationale: 7.2.1 requires only step 6.2; blocking on 7.1.1 would invert
-  the roadmap order. When 7.1.1 lands, the flag becomes an override of the
-  configured mode. Date/Author: 2026-08-06, planning session.
-- Decision: include `dry_run` declaration in scope as passive metadata (no
-  lint on it yet). Rationale: §6.4 groups dry-run declaration with mutation
-  boundaries and no later roadmap item covers it; adding the field now avoids a
-  second IR bump. Date/Author: 2026-08-06, planning session.
+  `agent-native.<category>.<check>`. Rationale: the roadmap names the
+  destructive check; §6.1 names the prompt-without-bypass check; §8.1 mandates
+  that omitted metadata warns in warn mode and fails in deny mode — the first
+  draft's "undeclared stays warn in deny mode" contradicted §8.1 and was
+  corrected during review. The bypass cross-check was added on review advice
+  because the bridge already populates `AgentInput.long`, making it nearly
+  free. Date/Author: 2026-08-06, revised after expert review.
+- Decision: the CLI takes `--check-agent-native[=off|warn|deny]` via a new
+  CLI-layer value enum `CheckMode` with
+  `From<CheckMode> for cargo_orthohelp::policy::PolicyMode`, using
+  `require_equals = true` and `default_missing_value = "warn"`. The schema type
+  `PolicyMode` gains no clap derive. `check_behaviour` takes and reports
+  `cargo_orthohelp::policy::PolicyMode` (not the distinct
+  `ortho_config::agent_context::PolicyMode`). Rationale: the 7.1.1 policy
+  configuration file does not exist yet, so the flag carries the mode; when
+  7.1.1 lands the flag becomes an override. Keeping clap out of the policy
+  module preserves the ADR-003 ownership split and matches the existing
+  `OutputFormat` precedent; `require_equals` avoids the optional-value
+  ambiguity footgun. Date/Author: 2026-08-06, revised after expert review.
+- Decision: `check_behaviour` is a total function: for `PolicyMode::Off` it
+  returns `PolicyReport::empty(Off)` without evaluating rules; `main.rs` may
+  additionally skip the call entirely. The report and exit behaviour: the
+  policy report is written to stdout as exactly one JSON document, the
+  human-readable summary goes to stderr, and the process exits 3 when the
+  report contains at least one `deny` finding (0 otherwise). Runtime errors
+  keep exit 1 and clap usage errors keep exit 2, so CI can distinguish "policy
+  violation" from "tool failure" by exit code, and additionally by the presence
+  of a well-formed report on stdout. On bridge failure the lint emits no report
+  at all — an empty report would misread as "clean". Writing the report to
+  `<out_dir>/policy-report.json` like the format generators was considered and
+  rejected: a check is a question, and its answer belongs on stdout for CI
+  pipelines; §3.3 requires a machine-stable report "when JSON output is
+  requested". 7.2.3 may formalize the stream tier; the interim contract is
+  recorded in the developers' guide. Date/Author: 2026-08-06, revised after
+  expert review.
+- Decision: when `--check-agent-native` is present and `--format` was not
+  explicitly provided (detected via clap's value source), the run skips
+  artefact generation entirely: the bridge still compiles the target crate to
+  obtain IR, but no IR/man/PowerShell files are written. An explicit `--format`
+  composes normally with the check (artefacts to `out_dir`, report to stdout).
+  Rationale: `--format` defaults to `ir`, so a lint-only CI run would otherwise
+  localize and write artefacts nobody asked for. The streams do not conflict
+  because format generators write files, never stdout. Date/Author: 2026-08-06,
+  added after expert review.
+- Decision: the agent-context `policy.agent_native` field keeps its default
+  (`warn`) regardless of the `--check-agent-native` mode used in a given run;
+  threading the run mode into the emitted context is deferred to 7.1.1, which
+  owns per-project policy declaration. Rationale: the emitted context describes
+  the project's declared policy, not one invocation's flag; conflating them
+  would make the context unstable across CI runs. Recorded here so the mismatch
+  is not mistaken for a bug. Date/Author: 2026-08-06, added after expert review.
+- Decision: dry-run support is declared as a flag name, not a boolean:
+  attribute key `dry_run = "--dry-run"`, IR field `dry_run: Option<String>`,
+  agent-context field `dry_run_flag: Option<String>`. Rationale: §6.1's escape
+  hatch ("if a project chooses a different convention, it must configure that
+  convention once and expose it in agent context") applies to preview flags
+  exactly as it does to bypass flags, and §8.2 makes a later bool-to-string
+  migration a breaking change — so the string shape must be chosen now.
+  Trade-off accepted: the tri-state bool's "declared absent" state is lost;
+  absence of declaration means unknown, and an explicit declared-absent marker
+  is deferred until a consumer needs it (recorded in ADR-008). Date/Author:
+  2026-08-06, revised after expert review (two review lenses disagreed;
+  symmetry and §8.2 irreversibility decided it).
+- Decision: `mutation = "submit"` neither requires nor implies the existing
+  `async_submission` contract on `AgentCommand`; 7.2.1 does not couple them and
+  the lint does not cross-check them. Recorded in ADR-008 so 7.2.3 inherits a
+  stated position rather than an ambiguity. Date/Author: 2026-08-06, added
+  after expert review.
+- Decision: the declared bypass grammar is pinned: a bypass value must match
+  `--[a-z0-9]+(-[a-z0-9]+)*`. The same grammar applies to `dry_run` values.
+  Rationale: "plausible long flag" is unreviewable; a pinned grammar goes in
+  ADR-008 and the trybuild `.stderr` goldens. Date/Author: 2026-08-06, added
+  after expert review.
 - Decision: use `proptest` for serde round-trip invariants of the new types
-  and skip `kani`/`verus`. Rationale: the only invariants over an input range
-  are serialization round-trips and the total lint classification function;
-  both are shallow data-shape properties with no unsafe code, no state machine,
-  and no arithmetic — bounded model checking or deductive proof would restate
-  the property without adding assurance. Date/Author: 2026-08-06, planning
-  session.
+  and the totality/severity-monotonicity of `check_behaviour`; skip `kani`/
+  `verus`. Rationale: the invariants are shallow data-shape and classification
+  properties with no unsafe code, no state machine, and no arithmetic — bounded
+  model checking or deductive proof would restate the property without adding
+  assurance. Date/Author: 2026-08-06, planning session.
+- Decision: deferred items recorded for later phases: per-code counts in
+  `PolicySummary` (additive, revisit when the report has consumers); advisory
+  contradiction detection between an inferred `canonical_verb` of `delete` and
+  a declared non-delete mutation (7.1 policy work); threading source spans into
+  `PolicyResult.location` (7.1). Date/Author: 2026-08-06, added after expert
+  review.
 
 ## Outcomes & retrospective
 
@@ -255,28 +374,42 @@ agent-native CLI documentation. The relevant crates:
   `ortho_config_macros/src/derive/generate/docs/mod.rs`, delegating to builders
   in `generate/docs/sections.rs`. The subcommand derive is
   `ortho_config_macros/src/subcommand_docs.rs`; it delegates each variant to
-  the inner struct's `get_doc_metadata`, so struct-level metadata reaches
-  subcommands automatically. Errors are `syn::Error` with spans, surfaced as
-  compile errors; compile-fail coverage uses `trybuild` fixtures in
-  `ortho_config/tests/ui/*.rs` with `*.stderr` goldens.
+  the inner struct's `get_doc_metadata` (overwriting only `app_name` and
+  `about_id`), so struct-level metadata reaches subcommands automatically.
+  Errors are `syn::Error` with spans, surfaced as compile errors; compile-fail
+  coverage uses `trybuild` fixtures in `ortho_config/tests/ui/*.rs` with
+  `*.stderr` goldens.
 - `cargo-orthohelp/` — the `cargo orthohelp` tool. It keeps a hand-maintained
   mirror of the IR in `cargo-orthohelp/src/schema/mod.rs` ("Keep this in sync
-  with `ortho_config::docs`"). `cargo-orthohelp/src/agent_context/mod.rs`
-  contains `bridge_ir_to_agent_context`, whose internal `walk` currently sets
+  with `ortho_config::docs`"); a test in
+  `cargo-orthohelp/src/schema/tests/mod.rs` pins the mirrored version constant.
+  `cargo-orthohelp/src/agent_context/mod.rs` contains
+  `bridge_ir_to_agent_context`, whose internal `walk` currently sets
   `interaction_mode: InteractionMode::default()` and
   `mutation_effect: MutationEffect::default()` unconditionally — the wiring gap
   this plan closes. `cargo-orthohelp/src/policy/mod.rs` defines the
   policy-report schema (`PolicyReport`, `PolicyResult`,
   `PolicyMode { Off, Warn, Deny }`, `ORTHO_POLICY_REPORT_SCHEMA_VERSION = "1"`)
   but no rule or runner exists yet. The CLI (`cargo-orthohelp/src/cli/mod.rs`)
-  has `--format <ir|man|ps|all|agent-context>`; dispatch lives in
-  `cargo-orthohelp/src/main.rs` (`run`, `generate_agent_context_if_requested`).
+  has `--format <ir|man|ps|all|agent-context>` (defaulting to `ir`); dispatch
+  lives in `cargo-orthohelp/src/main.rs` (`run`): the bridge compile
+  (`bridge::load_or_build_ir`) runs once per invocation before any format
+  branching, and `bridge_ir_to_agent_context` is a pure in-memory transform
+  over the resulting `DocMetadata` — so the lint re-runs the transform, not the
+  bridge. Format generators write files to `out_dir`; nothing currently writes
+  to stdout.
 - `tests/fixtures/orthohelp_fixture/` — a fixture crate compiled by
   cargo-orthohelp's ephemeral bridge during tests (`SimpleFixtureConfig`,
   `FixtureConfig`, `NestedFixtureConfig` with a three-level subcommand tree
   including `admin` → `audit`/`grant-access`).
 - `examples/hello_world/` — a downstream-style example with its own
   agent-context BDD feature and insta snapshot.
+
+The BDD harness for cargo-orthohelp shells out to the real binary via
+`std::process::Command`
+(`cargo-orthohelp/tests/rstest_bdd/behaviour/ steps_cmd.rs`, `run_orthohelp`)
+and stores the resulting `std::process::Output`, so process exit codes and
+stdout are directly assertable in scenarios.
 
 Terms: "IR" is the localized documentation intermediate representation (JSON).
 "Agent context" is the compact machine-oriented JSON summary
@@ -292,8 +425,8 @@ destructive bypass flag is `--force`."), §6.4 ("Mutating commands should
 declare whether they are read-only, write, delete, or submit asynchronous work.
 Destructive commands should declare their confirmation bypass flag.
 Consequential commands should declare whether `--dry-run` exists."), §3.3
-(policy modes and report fields), §8.1 (defaults for legacy derives), §8.2
-(schema v1 compatibility policy).
+(policy modes and report fields), §8.1 (defaults for legacy derives, and the
+warn/deny handling of omitted metadata), §8.2 (schema v1 compatibility policy).
 
 Relevant skills for implementers: `rust-router` (entry point),
 `rust-types-and-apis` (attribute and enum shape), `rust-unit-testing`
@@ -309,34 +442,32 @@ not carry Fluent identifiers into agent context), and
 
 ## Plan of work
 
-The work proceeds in six milestones, A–F. Every milestone ends with the full
-gate sequence run by the `scrutineer` subagent (`make check-fmt`,
-`make typecheck`, `make lint`, `make test`), a commit, and — for B through F — a
+The work proceeds in five milestones, B–F (the former standalone red-test
+milestone A was folded into B during review: committing non-compiling tests
+would violate the gates-green constraint, so each milestone demonstrates its
+red state transiently — run the new tests, record the expected failure — and
+commits red tests and implementation together once green). Every milestone ends
+with the full gate sequence run by the `scrutineer` subagent (`make check-fmt`,
+`make typecheck`, `make lint`, `make test`), one or more commits, and a
 `coderabbit review --agent` pass whose concerns are cleared before the next
-milestone. Tests are written red-first within each milestone.
-
-### Milestone A — red tests for the new data shapes
-
-Add failing unit tests describing the target schema before touching production
-types.
-
-In `ortho_config/src/docs/` tests (alongside existing IR tests in
-`ortho_config/tests/docs_ir.rs`): a test asserting that `DocMetadata`
-deserializes a JSON document containing a `behaviour` object with `interaction`,
-`mutation`, `bypass`, and `dry_run` keys, and that a document without the key
-deserializes with `behaviour: None`.
-
-In `ortho_config/src/agent_context/tests_json.rs` (and the wire-contract
-snapshot test in `tests.rs`): assertions that `AgentCommand` serializes
-`bypass_flag` and `dry_run` as explicit `null` when absent, matching the
-existing optional-field convention (only `summary` is omitted when absent), and
-round-trips declared values.
-
-These tests fail to compile until milestone B adds the types; per the execplans
-convention, the red state is demonstrated by running the focused tests and
-observing the expected compile/assert failure before implementing.
+milestone.
 
 ### Milestone B — IR and agent-context schema types
+
+Red first: write the unit tests below, run them, and record the expected
+failures; then implement and commit tests plus implementation together.
+
+Red tests: in `ortho_config/tests/docs_ir.rs`, a test asserting that
+`DocMetadata` deserializes a JSON document containing a `behaviour` object with
+`interaction`, `mutation`, `bypass`, and `dry_run` keys, and that a document
+without the key deserializes with `behaviour: None`. In
+`ortho_config/src/agent_context/tests_json.rs` (and the wire-contract snapshot
+test), assertions that `AgentCommand` serializes `bypass_flag` and
+`dry_run_flag` as explicit `null` when absent — matching the existing
+convention in which only `summary` is omitted when absent — and round-trips
+declared values.
+
+Implementation:
 
 1. `ortho_config/src/docs/ir.rs`: add
 
@@ -353,9 +484,10 @@ observing the expected compile/assert failure before implementing.
        /// Confirmation/prompt bypass flag, for example `--force`.
        #[serde(default)]
        pub bypass: Option<String>,
-       /// Whether the command offers `--dry-run`.
+       /// Dry-run flag name, for example `--dry-run`; `None` means
+       /// undeclared.
        #[serde(default)]
-       pub dry_run: Option<bool>,
+       pub dry_run: Option<String>,
    }
    ```
 
@@ -366,24 +498,27 @@ observing the expected compile/assert failure before implementing.
    `HeadingIds::commands` precedent. The IR enums deliberately have no
    `Unknown` variant: undeclared is represented by `None` at the IR layer, and
    only the agent-context layer has `Unknown`.
-
 2. `ortho_config/src/docs/mod.rs`: bump `ORTHO_DOCS_IR_VERSION` to `"1.2"`.
-
-3. Mirror both changes in `cargo-orthohelp/src/schema/mod.rs`.
-
-4. `ortho_config/src/agent_context/mod.rs`: add to `AgentCommand`
-   `#[serde(default)] pub bypass_flag: Option<String>` and
-   `#[serde(default)] pub dry_run: Option<bool>` (explicit null when absent).
-
+   Replace hard-coded `"1.1"` literals with the constant where fixtures and
+   doctests currently embed it
+   (`cargo-orthohelp/src/powershell/ test_fixtures.rs`,
+   `cargo-orthohelp/src/agent_context/proptests.rs`,
+   `cargo-orthohelp/src/roff/mod.rs` test module,
+   `cargo-orthohelp/src/agent_context/tests_support.rs`, doctest in
+   `cargo-orthohelp/src/agent_context/mod.rs`).
+3. Mirror the IR changes in `cargo-orthohelp/src/schema/mod.rs` (same
+   commit as step 1).
+4. `ortho_config/src/agent_context/mod.rs`: add to `AgentCommand`, directly
+   after `mutation_effect`: `#[serde(default)] pub bypass_flag: Option<String>`
+   and `#[serde(default)] pub dry_run_flag: Option<String>` (explicit null when
+   absent).
 5. Update the wire-contract snapshot, the three golden agent-context
    snapshots under `cargo-orthohelp/tests/golden/`, the hello_world snapshot,
-   and any IR snapshots that embed `ir_version`. Keep the version-bump snapshot
-   churn in its own commit.
-
-6. Add proptest round-trip properties (in the existing proptest homes:
-   `ortho_config` dev-deps and
-   `cargo-orthohelp/src/agent_context/proptests.rs`) asserting
-   serialize→deserialize identity for `BehaviourMetadata` and for
+   and any IR snapshots that embed `ir_version`. Keep the two mechanical churns
+   — the IR version bump and the new-null-fields refresh — in separate commits
+   from the type changes.
+6. Add proptest round-trip properties (in the existing proptest homes)
+   asserting serialize→deserialize identity for `BehaviourMetadata` and for
    `AgentCommand` values covering the new fields.
 
 ### Milestone C — derive attribute surface
@@ -397,12 +532,17 @@ Follow the documented end-to-end pattern for a new struct-level key (the
    match arm in `apply_struct_doc_attr` and a `parse_behaviour_meta` helper.
    Valid keys: `interaction` (string, one of `non_interactive`, `interactive`),
    `mutation` (string, one of `read_only`, `write`, `delete`, `submit`),
-   `bypass` (string, must begin with `--` and be a plausible long flag),
-   `dry_run` (bool). Unknown nested keys and invalid values are `syn::Error`s
-   with the offending span. At the top level of `parse_struct_attrs`/
-   `apply_struct_doc_attr`, explicitly reject the key `behavior` with the
-   message "unknown attribute `behavior`; use the en-GB spelling `behaviour`"
-   so the silent `discard_unknown` path cannot swallow the likely typo.
+   `bypass` (string matching `--[a-z0-9]+(-[a-z0-9]+)*`), `dry_run` (string,
+   same grammar). Unknown nested keys and invalid values are `syn::Error`s with
+   the offending span. Cross-key validation: `interaction = "non_interactive"`
+   combined with `bypass` is a compile error (contradictory declaration). At
+   struct level, explicitly reject the key `behavior` with "unknown attribute
+   `behavior`; use the en-GB spelling `behaviour`". At field level
+   (`parse_field_attrs`/`apply_field_doc_attr`), explicitly reject both
+   `behaviour` and `behavior` with "behaviour(…) is a struct-level attribute"
+   so the silent `discard_unknown` path cannot swallow the misplacement.
+   Refresh the stale doc comment on `parse_struct_attrs` ("Only the `prefix`
+   key is currently recognised") while in the file.
 3. `ortho_config_macros/src/derive/generate/docs/sections.rs` (or a small
    sibling): `build_behaviour_metadata` emitting the
    `Option<BehaviourMetadata>` token stream; wire it into the `quote!` block of
@@ -411,12 +551,22 @@ Follow the documented end-to-end pattern for a new struct-level key (the
    `ortho_config_macros/src/derive/parse/tests/`; IR-shape tests in
    `ortho_config/tests/docs_ir.rs` and
    `ortho_config/tests/docs_ir_subcommands.rs` proving behaviour metadata flows
-   through the ADR-005 subcommand delegation unchanged; trybuild compile-fail
-   fixtures `ortho_config/tests/ui/behaviour_invalid_interaction.rs`,
-   `behaviour_invalid_mutation.rs`, `behaviour_bad_bypass.rs`, and
-   `behaviour_en_us_spelling.rs` with `.stderr` goldens.
-5. Extend the doctest example in `ortho_config/src/docs/mod.rs` minimally, or
-   add a new one, following `docs/rust-doctest-dry-guide.md`.
+   through the ADR-005 subcommand delegation unchanged, including a test
+   pinning that an args struct reused as both root and subcommand carries
+   identical behaviour in both positions (correct by design; the test stops
+   anyone "fixing" it later). Trybuild compile-fail fixtures with `.stderr`
+   goldens: `ortho_config/tests/ui/behaviour_invalid_interaction.rs`,
+   `behaviour_invalid_mutation.rs`, `behaviour_bad_bypass.rs`,
+   `behaviour_unknown_nested_key.rs` (for example
+   `behaviour(interation = ...)`), `behaviour_noninteractive_bypass.rs` (the
+   contradiction), `behaviour_en_us_spelling.rs`, and `behaviour_on_field.rs`.
+5. Extend the doctest example in `ortho_config/src/docs/mod.rs` minimally,
+   or add a new one, following `docs/rust-doctest-dry-guide.md`.
+
+Red first within the milestone: the parser unit tests and IR-shape tests are
+written and run before the parse/emit code exists, with failures recorded;
+trybuild fixtures are red-by-construction until the errors they expect are
+implemented.
 
 ### Milestone D — bridge population and fixtures
 
@@ -425,19 +575,22 @@ Follow the documented end-to-end pattern for a new struct-level key (the
    `InteractionMode::NonInteractive`, `Some(Interactive)` →
    `InteractionMode::Interactive`, `None` → `Unknown`; likewise for
    `MutationKind` → `MutationEffect`; copy `bypass` → `bypass_flag` and
-   `dry_run` → `dry_run`. No inference, no defaults beyond `Unknown`.
-
-2. Annotate the fixture crate: give `NestedAdminSubcommand`'s destructive
-   variant's argument struct (or add a `purge`-style struct if none is
-   naturally destructive)
-   `behaviour(interaction = "interactive", mutation = "delete", bypass = "--force")`,
-   one read-only command
-   `behaviour( interaction = "non_interactive", mutation = "read_only")`, and
-   leave at least one command unannotated to lock the `unknown` passthrough.
-
-3. Update golden snapshots and the hello_world example (annotate one command
-   there and refresh its snapshot).
-
+   `dry_run` → `dry_run_flag`. No inference, no defaults beyond `Unknown`.
+2. Annotate the fixture crate with all the states later milestones need:
+   one fully declared destructive command
+   (`behaviour(interaction =
+   "interactive", mutation = "delete", bypass = "--force")`,
+   for example on the `grant-access` args struct or a new `purge` subcommand),
+   one *declared destructive command without a bypass* (for example a new
+   `admin prune` subcommand declaring only `mutation = "delete"` — this is the
+   command milestone E's `destructive_bypass_missing` scenarios lint), one
+   read-only non-interactive command
+   (`behaviour(interaction = "non_interactive", mutation = "read_only")`), and
+   at least one command left unannotated to lock the `unknown` passthrough.
+   These annotations appear in milestone D's golden snapshots — that is
+   intended and keeps milestone E fixture-neutral.
+3. Update golden snapshots and the hello_world example (annotate one
+   command there and refresh its snapshot).
 4. BDD: extend
    `cargo-orthohelp/tests/features/orthohelp_agent_context.feature` with a
    scenario, for example:
@@ -456,82 +609,127 @@ Follow the documented end-to-end pattern for a new struct-level key (the
    with steps in the adjacent rstest-bdd harness, using `googletest` assertions
    and `pretty_assertions` for diffs, per `docs/rstest-bdd-users-guide.md`.
 
+Red first: the BDD scenario and bridge unit tests are written against the
+annotated fixture before the `walk` mapping exists, and fail with `unknown`
+values; the mapping turns them green.
+
 ### Milestone E — the `--check-agent-native` lint
 
-1. `cargo-orthohelp/src/cli/mod.rs`: add a new optional flag to `Args`
-   (reusing `PolicyMode` from the policy module as the value enum):
+1. Prerequisite: point `init_tracing` in `cargo-orthohelp/src/main.rs` at
+   stderr (`.with_writer(std::io::stderr)`), so tracing output can never
+   interleave with the stdout JSON report. This is a behaviour fix in its own
+   right and lands as the milestone's first commit.
+2. `cargo-orthohelp/src/cli/mod.rs`: add a CLI-layer value enum and flag:
 
    ```rust
+   #[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+   pub enum CheckMode {
+       Off,
+       Warn,
+       Deny,
+   }
+
    #[arg(long = "check-agent-native", value_enum, num_args = 0..=1,
-         default_missing_value = "warn")]
-   pub check_agent_native: Option<PolicyMode>,
+         require_equals = true, default_missing_value = "warn")]
+   pub check_agent_native: Option<CheckMode>,
    ```
 
-2. New module `cargo-orthohelp/src/policy/rules/behaviour.rs`: a pure
-   function
-   `fn check_behaviour(context: &AgentContext, mode: PolicyMode) -> PolicyReport`
-   implementing the three rules from the Decision Log. Each `PolicyResult`
-   carries `rule_id`, `code`, `severity`, `message` naming the command path and
-   the canonical remedy (for the destructive rule, the message recommends
-   `--force` per §6.1), and `location: None` (source spans are unavailable from
-   agent context; noted as a documented limitation until the policy work of 7.1
-   threads spans through). Severity mapping: in `warn` mode every finding is
-   `warn`; in `deny` mode `destructive-bypass` and `prompt-bypass` findings are
-   `deny` while `undeclared` findings stay `warn`; in `off` mode the check does
-   not run.
-
-3. `cargo-orthohelp/src/main.rs`: after the agent context is built (build it
-   on demand if the run did not already), run the check when the flag is
-   present; serialize the `PolicyReport` as JSON to stdout; write a
-   human-readable summary to stderr; exit non-zero (code 1) only if the report
-   contains at least one `deny`-severity result.
-
-4. Tests: rstest unit tests for `check_behaviour` covering happy paths (fully
-   declared tree yields an empty report), each rule firing, mode mapping, and
-   the edge cases (declared `bypass` on a non-destructive command produces no
-   finding; `submit` and `write` commands do not trigger the destructive rule;
-   empty command list). An insta snapshot locks the JSON policy report for the
-   fixture tree in warn mode (multivariant output consistency). A new BDD
-   feature `cargo-orthohelp/tests/features/orthohelp_policy.feature`:
+   with `From<CheckMode> for cargo_orthohelp::policy::PolicyMode`. The schema
+   `PolicyMode` gains no clap derive.
+3. New module `cargo-orthohelp/src/policy/rules/behaviour.rs`: a pure,
+   total function
+   `fn check_behaviour(context: &AgentContext, mode:
+   PolicyMode) -> PolicyReport`
+   implementing the four rules and the severity mapping from the Decision Log
+   (`Off` returns `PolicyReport::empty(Off)` without evaluating rules). Each
+   `PolicyResult` carries `rule_id`, `code`, `severity`, and a `message` that
+   is the entire operator experience (source spans are unavailable from agent
+   context, so `location: None`): the message names the command path *and* the
+   exact remedy as an annotation snippet, for example: "command `admin prune`
+   is destructive but declares no bypass flag; add
+   `behaviour(bypass = \"--force\")` to its arguments struct". The exact
+   wording is locked by an insta snapshot. The destructive rule exempts
+   commands declared `non_interactive` (see Decision Log).
+4. `cargo-orthohelp/src/main.rs`: after the bridge IR is loaded, when the
+   flag is present, run the transform (not a second bridge build) to obtain the
+   `AgentContext`, run the check, serialize the `PolicyReport` as exactly one
+   JSON document to stdout, write a human-readable summary to stderr, and exit
+   3 if and only if the report contains at least one `deny` finding. Skip
+   default-format artefact generation when `--format` was not explicitly given
+   (clap value source); compose normally when it was. On bridge failure, emit
+   no report (existing error path, exit 1).
+5. Tests: rstest unit tests for `check_behaviour` covering happy paths
+   (fully declared tree yields an empty report), each of the four rules firing,
+   the severity mapping per mode, and edge cases (declared `bypass` on a
+   non-destructive command produces no finding; `submit` and `write` commands
+   do not trigger the destructive rule; a `non_interactive` destructive command
+   without bypass produces no `destructive_bypass_missing` finding; empty
+   command list; `Off` returns an empty report). An insta snapshot locks the
+   JSON policy report for the fixture tree in warn mode (multivariant
+   output-format consistency). A new BDD feature
+   `cargo-orthohelp/tests/features/orthohelp_policy.feature`:
 
    ```gherkin
    Scenario: destructive command without a bypass flag fails deny mode
-     Given a fixture command tree with an undeclared destructive command
-     When I run cargo orthohelp with check-agent-native in "deny" mode
-     Then the policy report contains code "destructive_bypass_missing"
-     And the process exit code is 1
+     Given the nested fixture workspace
+     When I run cargo orthohelp with --check-agent-native=deny
+     Then the policy report on stdout contains code "destructive_bypass_missing"
+     And the process exit code is 3
 
    Scenario: warn mode reports findings without failing
-     Given a fixture command tree with an undeclared destructive command
-     When I run cargo orthohelp with check-agent-native in "warn" mode
-     Then the policy report contains code "destructive_bypass_missing"
+     Given the nested fixture workspace
+     When I run cargo orthohelp with --check-agent-native=warn
+     Then the policy report on stdout contains code "destructive_bypass_missing"
      And the process exit code is 0
+
+   Scenario: the check composes with agent-context generation
+     Given the nested fixture workspace
+     When I run cargo orthohelp with --format=agent-context and --check-agent-native=warn
+     Then the agent context file is written to the output directory
+     And the policy report on stdout is valid JSON
    ```
 
-   These end-to-end scenarios exercise the real binary path because the lint is
-   an externally observable CLI contract.
+   Step implementations read stdout from the harness's stored
+   `std::process::Output` (`last_output`), assert `code() == Some(3)` rather
+   than merely "not success", and always pair the exit-code assertion with a
+   well-formed-report assertion so a crash exiting with a different code cannot
+   false-pass. These scenarios exercise the real binary because the lint is an
+   externally observable CLI contract.
+6. Proptest: properties over arbitrary `AgentCommand` vectors asserting
+   `check_behaviour` is total, that a report never contains `deny` severity
+   when the mode is `warn` or `off`, and that `off` always yields an empty
+   result list.
 
-5. Proptest: a property over arbitrary `AgentCommand` vectors asserting the
-   classification function is total and that a report never contains a `deny`
-   severity when the mode is `warn` or `off`.
+Red first: the unit tests and BDD scenarios are written before the rule module
+and flag exist; the flag's absence makes the scenarios fail with a clap usage
+error, recorded as the red evidence.
 
 ### Milestone F — documentation and closure
 
-1. `docs/agent-native-cli-design.md`: add `bypass_flag` and `dry_run` rows
-   (status v1, default `null`) to the §8.1 table; correct the §3.3 example to
-   the implemented `location` nesting; note in §6.1/§6.4 that the metadata is
-   now realized.
+1. `docs/agent-native-cli-design.md`: add `bypass_flag` and `dry_run_flag`
+   rows (status v1, default `null`) to the §8.1 table; correct the §3.3 example
+   to the implemented `location` nesting; note in §6.1/§6.4 that the metadata
+   is now realized.
 2. New `docs/adr-008-behavioural-metadata-attribute-surface.md` (per
-   `docs/documentation-style-guide.md`): records the attribute shape, the
-   IR-version bump policy applied, the no-inference rule, and the
-   interactive-plus-bypass representation; referenced from `docs/design.md`'s
-   decision log.
+   `docs/documentation-style-guide.md`): records the attribute shape and its
+   admission criterion (runtime execution semantics only), the §6.1 three-state
+   mapping onto the interaction × bypass pair, the non-interactive/bypass
+   contradiction rule, the pinned bypass/dry-run flag grammar, the dry-run
+   string-not-bool trade-off, the `mutation = "submit"` versus
+   `async_submission` non-coupling, the IR-version bump policy applied and the
+   version-skew contract, and the no-inference rule; referenced from
+   `docs/design.md`'s decision log.
 3. `docs/users-guide.md`: extend the "Documentation and agent contracts"
    section and the `OrthoConfigDocs` worked examples with `behaviour(...)`;
-   document the lint flag and the report shape.
+   document the lint flag, the report shape, the exit codes, and — up front —
+   that a first run over an unannotated CLI will report `undeclared` findings
+   for every command: annotate incrementally, starting with destructive
+   commands. Note the current no-source-location limitation where users will
+   look for it.
 4. `docs/developers-guide.md`: update schema-ownership and
    agent-context-surface sections with the new fields, the rule-id convention,
-   and the provisional exit-code decision.
+   the stdout/stderr stream contract, and the provisional exit-code decision (3
+   = policy findings; superseded by 7.2.5).
 5. `docs/roadmap.md`: mark 7.2.1 and its three sub-bullets done.
 6. Final full gate run via `scrutineer`, final `coderabbit review --agent`,
    final commit.
@@ -543,17 +741,18 @@ to `/tmp/$ACTION-$(get-project)-$(git branch --show-current).out` per
 repository convention; gate runs are delegated to the `scrutineer` subagent,
 which does this automatically.
 
-Branch setup (already applicable at plan time):
+Branch setup (done at plan time):
 
 ```bash
 git branch -m 7-2-1-metadata-for-non-interactive-execution-and-mutation-boundaries
 git push -u origin 7-2-1-metadata-for-non-interactive-execution-and-mutation-boundaries
 ```
 
-Red evidence, milestone A (expected to fail before milestone B):
+Red evidence, per milestone (run before implementing, record the failure, do
+not commit the red state):
 
 ```bash
-cargo test -p ortho_config docs_ir -- behaviour 2>&1 | tee /tmp/red-a.out
+cargo test -p ortho_config docs_ir 2>&1 | tee /tmp/red-b.out
 # expect: compile error naming BehaviourMetadata / missing field `behaviour`
 ```
 
@@ -583,38 +782,44 @@ Acceptance is behavioural:
 
 1. Annotating a fixture command with
    `behaviour(interaction = "interactive", mutation = "delete", bypass = "--force")`
-   and running the bridge yields
-   agent-context JSON in which that command reports
-   `"interaction_mode": "interactive"`, `"mutation_effect": "delete"`,
+   and running the bridge yields agent-context JSON in which that command
+   reports `"interaction_mode": "interactive"`, `"mutation_effect": "delete"`,
    `"bypass_flag": "--force"`, while an unannotated command still reports
    `"unknown"` for both enums and `null` for the new fields. Proven by the
    golden snapshots and the `orthohelp_agent_context.feature` scenario above.
-2. `cargo orthohelp --check-agent-native` (warn) on the fixture tree prints a
-   JSON `PolicyReport` (schema version "1") to stdout listing
-   `destructive_bypass_missing` for an undeclared destructive command and exits
-   0; the same invocation in `deny` mode exits 1. Proven by the
-   `orthohelp_policy.feature` scenarios.
+2. `cargo orthohelp --check-agent-native` (warn) on the fixture tree prints
+   exactly one JSON `PolicyReport` (schema version "1") to stdout listing
+   `destructive_bypass_missing` for the fixture's declared-destructive,
+   bypass-less command and exits 0; `--check-agent-native=deny` exits 3. Proven
+   by the `orthohelp_policy.feature` scenarios.
 3. Misdeclarations fail to compile: `behaviour(interaction = "sometimes")`,
-   `behaviour(mutation = "destroy")`, `behaviour(bypass = "force")`, and
-   `behavior(...)` each produce the trybuild-goldened compile error.
+   `behaviour(mutation = "destroy")`, `behaviour(bypass = "force")`,
+   `behaviour(interation = ...)`,
+   `behaviour(interaction = "non_interactive", bypass = "--force")`,
+   `behavior(...)` at struct level, and `behaviour(...)` on a field each
+   produce their trybuild-goldened compile error.
 4. `ORTHO_AGENT_CONTEXT_SCHEMA_VERSION` still equals `"1"`;
    `ORTHO_DOCS_IR_VERSION` equals `"1.2"`; asserted by existing and new unit
    tests.
 5. Red-Green-Refactor evidence is recorded per milestone in `Progress` and
    `Artefacts and notes`: the red command and its expected failure, the green
-   run, and the post-refactor gate run.
+   run, and the post-refactor gate run. Red states are demonstrated transiently
+   and never committed (see Constraints).
 
-Quality criteria: all four make gates pass; CodeRabbit concerns cleared at each
-milestone; no new dependencies; snapshot diffs reviewed rather than blindly
-accepted.
+Quality criteria: all four make gates pass at every commit; CodeRabbit concerns
+cleared at each milestone; no new dependencies; snapshot diffs reviewed rather
+than blindly accepted.
 
 ## Idempotence and recovery
 
-Every milestone is an ordinary commit on the task branch; recovery is
+Every milestone is one or more ordinary commits on the task branch; recovery is
 `git revert` or resetting to the previous milestone commit. Snapshot
 regeneration (`cargo insta`) is idempotent. The IR version bump commit is
-isolated so it can be reverted independently. No step touches state outside the
-repository except `/tmp` logs.
+isolated so it can be reverted independently while milestone B is in flight;
+once milestone C lands, later work depends on `"1.2"` (snapshots and the bridge
+cache key embed `ir_version`), so rollback from that point is by reverting
+ranges, not the single commit. No step touches state outside the repository
+except `/tmp` logs.
 
 ## Artefacts and notes
 
@@ -625,10 +830,10 @@ Prior-art evidence gathered during planning:
   be untrusted unless they come from trusted servers." The declared-hint (not
   proven) stance matches this plan's no-inference constraint: OrthoConfig
   transports declarations, it does not verify runtime behaviour.
-- clig.dev: "Never require a prompt… If `--no-input` is passed, don't prompt
-  or do anything interactive"; "-f, --force… doing something destructive that
-  usually requires user confirmation"; `-n, --dry-run` as the standard dry-run
-  flag. These are the canonical flag names §6.1 already adopted.
+- clig.dev: "Never require a prompt… If `--no-input` is passed, don't
+  prompt or do anything interactive"; "-f, --force… doing something destructive
+  that usually requires user confirmation"; `-n, --dry-run` as the standard
+  dry-run flag. These are the canonical flag names §6.1 already adopted.
 
 Implementation transcripts will be appended here per milestone.
 
@@ -641,15 +846,69 @@ At the end of the work these items exist:
   `DocMetadata::behaviour: Option<BehaviourMetadata>`;
   `ORTHO_DOCS_IR_VERSION == "1.2"`.
 - `ortho_config::agent_context::AgentCommand::bypass_flag: Option<String>`
-  and `::dry_run: Option<bool>`; `ORTHO_AGENT_CONTEXT_SCHEMA_VERSION == "1"`
-  unchanged.
+  and `::dry_run_flag: Option<String>`, placed directly after `mutation_effect`;
+  `ORTHO_AGENT_CONTEXT_SCHEMA_VERSION == "1"` unchanged.
 - Derive support for `#[ortho_config(behaviour(...))]` with the keys
   `interaction`, `mutation`, `bypass`, and `dry_run` on structs deriving the
   docs metadata, flowing through `OrthoConfigSubcommandDocs` unchanged.
 - `check_behaviour(&AgentContext, PolicyMode) -> PolicyReport` in
-  `cargo_orthohelp::policy::rules::behaviour`, and the CLI flag
-  `cargo orthohelp --check-agent-native[=off|warn|deny]`.
+  `cargo_orthohelp::policy::rules::behaviour`, the CLI enum
+  `cargo_orthohelp::cli::CheckMode`, and the flag
+  `cargo orthohelp --check-agent-native[=off|warn|deny]` (exit 3 on deny
+  findings; tracing on stderr).
 - `docs/adr-008-behavioural-metadata-attribute-surface.md`, updated design
   doc, users' guide, developers' guide, and a ticked roadmap entry 7.2.1.
 
 No new external dependencies.
+
+## Revision note (2026-08-06)
+
+Revised after the community-of-experts review (six Logisphere lenses across
+three panels). What changed and why:
+
+- Folded the former Milestone A into Milestone B and made red states
+  explicitly transient: committing non-compiling tests contradicted the
+  gates-green-at-every-commit constraint (blocker, two panels).
+- Corrected the deny-mode severity mapping: `undeclared` findings now
+  escalate to `deny` in deny mode, as §8.1 requires; the draft's "stays warn"
+  contradicted the design doc (blocker).
+- Resolved the Milestone D/E fixture contradiction by adding a
+  declared-destructive-without-bypass command (`admin prune`) to the fixture
+  tree in D, so E's scenarios have a real target (blocker).
+- Added the tracing-to-stderr prerequisite: the fmt subscriber currently
+  writes to stdout and would corrupt the stdout JSON report (blocker).
+- Switched the lint exit code from 1 to 3 to avoid colliding with runtime
+  errors (1) and clap usage errors (2); BDD asserts the exact code plus a
+  well-formed report.
+- Replaced direct reuse of the schema `PolicyMode` in clap with a CLI-layer
+  `CheckMode` value enum plus `From` impl, keeping clap out of the ADR-003
+  schema type; added `require_equals = true`.
+- Changed `dry_run` from `Option<bool>` to a flag-name string
+  (`dry_run_flag: Option<String>`), symmetrical with `bypass`, because §8.2
+  makes a later bool-to-string migration breaking.
+- Decided the interaction × bypass matrix: `non_interactive` + `bypass` is
+  a compile error; `non_interactive` destructive commands are exempt from the
+  destructive-bypass rule as declared "approved metadata".
+- Added a fourth lint rule (`bypass_flag_unknown`) cross-checking the
+  declared bypass against declared inputs; pinned the bypass/dry-run flag
+  grammar; specified the finding message format (command path plus exact
+  annotation snippet) and locked it with a snapshot.
+- Defined `check_behaviour` as total (`Off` → empty report), specified
+  lint-only runs skip default-format artefact generation, recorded that the
+  emitted context's `policy.agent_native` stays at its default until 7.1.1, and
+  stated the bridge-failure contract (no report emitted).
+- Widened the IR-version work to replace hard-coded `"1.1"` literals with
+  the constant; documented the version-skew contract for ADR-008; isolated the
+  two snapshot-churn sources in separate commits; softened the
+  independent-revert claim.
+- Added trybuild fixtures for the unknown-nested-key, contradiction, and
+  field-placement cases; field-level `behaviour`/`behavior` now errors instead
+  of being silently discarded.
+- Expanded Milestone F documentation duties (first-run `undeclared` noise
+  warning in the users' guide; stream and exit-code contract in the developers'
+  guide) and the ADR-008 contents list; recorded deferred items (per-code
+  summary counts, verb/mutation contradiction advisory, source spans).
+
+Effect on remaining work: milestone count drops to five (B–F); Milestone E
+grows by the tracing prerequisite and the artefact-skip logic; everything else
+is clarification rather than new scope.
