@@ -69,6 +69,10 @@ pub(super) fn capture_events<R>(f: impl FnOnce() -> R) -> Vec<CapturedEvent> {
     let events = Arc::new(Mutex::new(Vec::new()));
     let subscriber = Registry::default().with(CaptureLayer(Arc::clone(&events)));
     tracing::subscriber::with_default(subscriber, f);
-    let collected = events.lock().map(|guard| guard.clone());
-    collected.unwrap_or_default()
+    // Moved out rather than cloned, matching the integration harness: the
+    // subscriber is gone, so nothing else can observe the vector again.
+    events
+        .lock()
+        .map(|mut guard| std::mem::take(&mut *guard))
+        .unwrap_or_default()
 }

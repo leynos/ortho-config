@@ -275,6 +275,44 @@ mod tests {
 
     use super::*;
 
+    /// Every `OrthoError` variant maps to its closed-set category.
+    ///
+    /// The integration suites drive only the `file` category, so a wrong arm
+    /// for the others would go unnoticed without this table: each variant is
+    /// constructed and checked against the label consumers key dashboards on.
+    #[test]
+    fn error_category_covers_every_variant() {
+        use crate::OrthoError;
+
+        let file = OrthoError::File {
+            path: std::path::PathBuf::from("demo.toml"),
+            source: Box::new(std::io::Error::new(std::io::ErrorKind::NotFound, "gone")),
+        };
+        assert_eq!(error_category(&file), CATEGORY_FILE);
+
+        let cyclic = OrthoError::CyclicExtends {
+            cycle: String::from("a -> b -> a"),
+        };
+        assert_eq!(error_category(&cyclic), CATEGORY_CYCLIC_EXTENDS);
+
+        let gathering = OrthoError::Gathering(Box::new(figment::Error::from(String::from(
+            "gathering failed",
+        ))));
+        assert_eq!(error_category(&gathering), CATEGORY_GATHERING);
+
+        let validation = OrthoError::Validation {
+            key: String::from("port"),
+            message: String::from("out of range"),
+        };
+        assert_eq!(error_category(&validation), CATEGORY_VALIDATION);
+
+        let other = OrthoError::CliParsing(Box::new(clap::Error::raw(
+            clap::error::ErrorKind::InvalidValue,
+            "bad flag",
+        )));
+        assert_eq!(error_category(&other), CATEGORY_OTHER);
+    }
+
     #[test]
     fn presence_distinguishes_absent_empty_and_present() {
         assert_eq!(presence(None), PRESENCE_ABSENT);
