@@ -541,8 +541,8 @@ Follow the documented end-to-end pattern for a new struct-level key (the
    (`parse_field_attrs`/`apply_field_doc_attr`), explicitly reject both
    `behaviour` and `behavior` with "behaviour(…) is a struct-level attribute"
    so the silent `discard_unknown` path cannot swallow the misplacement.
-   Refresh the stale doc comment on `parse_struct_attrs` ("Only the `prefix`
-   key is currently recognised") while in the file.
+   Refresh the stale doc comment on `parse_struct_attrs` (it still claims
+   only the `prefix` key is supported) while in the file.
 3. `ortho_config_macros/src/derive/generate/docs/sections.rs` (or a small
    sibling): `build_behaviour_metadata` emitting the
    `Option<BehaviourMetadata>` token stream; wire it into the `quote!` block of
