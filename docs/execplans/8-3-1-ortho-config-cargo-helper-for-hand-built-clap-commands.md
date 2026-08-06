@@ -5,7 +5,7 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
 proceeds.
 
-Status: DRAFT
+Status: IN PROGRESS (user approved implementation on 2026-08-06)
 
 ## Purpose / big picture
 
@@ -176,8 +176,9 @@ Stop and escalate (do not work around) when any of these is reached.
       external prior art) and initial draft.
 - [x] (2026-08-06) Milestone 0b: community-of-experts design review (five
       lenses) and plan revision; see the Decision Log and the revision note.
-- [ ] Milestone 0c: user approval of this plan. **Hard gate: no
-      implementation before approval.**
+- [x] (2026-08-06) Milestone 0c: user approval of this plan. **Hard gate: no
+      implementation before approval.** Approved by the task instruction to
+      proceed with implementation.
 - [ ] Milestone 1: red tests written and their failure transcripts captured;
       helper implemented; unit, snapshot, and behavioural tests green; gates
       pass; single commit (see D-8).
@@ -231,6 +232,54 @@ under `/tmp` and returns a bounded report.
   found independently by two design-review lenses.
   Impact: drives the corrected plumbing in D-2 and the rendered-version
   assertion in the test matrix.
+- Observation (implementation, 2026-08-06): `clap` is locked at 4.6.1 but its
+  builder dependency is `clap_builder` 4.6.0; the vendored `clap_builder-4.6.0`
+  sources were re-verified for every pinned fact (Tolerance 7) and all held:
+  `name` takes `impl Into<Str>` while `bin_name`/`display_name` take
+  `impl IntoResettable<String>` (`None` resets); `_build_subcommand`
+  unconditionally overwrites the subcommand `bin_name` in the parse-descent
+  path and derives `display_name` as `{parent_display_name}-{name}` only when
+  unset; `_render_version` prints `{display_name} {version}\n` with fallback
+  to the command name; `get_flag`/`subcommand_matches` take `&str`;
+  `Command::is_subcommand_required_set`, `find_subcommand(&self, ..)`,
+  `render_help(&mut self)`, and `get_display_name`/`get_bin_name` all exist.
+  Impact: no plan changes needed.
+- Observation (implementation, 2026-08-06): `clap_builder::Str` implements
+  `From<&'static str>`, `From<String>`, and `From<&String>` (with the
+  `string` feature), but **not** `From<&str>` for non-static references;
+  `Id` likewise implements `From<String>` and `From<&'static str>`.
+  Impact: the BDD step code must pass owned `String`s (or `&String`) to
+  `Arg::new`/`Arg::long` rather than borrowed slices.
+- Observation (implementation, 2026-08-06): the plan's code sketch wrote
+  `.bin_name(None)` to reset the inner `bin_name`, but clap_builder 4.6.0
+  has **no** `impl IntoResettable<String> for Option<String>` (only
+  `char`/`usize`/`ArgAction`/`ValueHint`/`ValueParser`/`&'static str`
+  Options reset); String-typed setters reset through
+  `impl IntoResettable<T> for Resettable<T>` instead.
+  Impact: the helper passes `clap::builder::Resettable::Reset`; observable
+  behaviour is unchanged from the plan (the inner `bin_name` is reset), so
+  this is recorded as a sketch correction under Tolerance 7 rather than an
+  escalation. Fact list item 1 amended accordingly.
+- Observation (implementation, 2026-08-06): workspace lints deny
+  `str_to_string` and `indexing_slicing` on all targets including tests, and
+  `clippy.toml` sets `allow-expect-in-tests = true`, so test code uses
+  `.to_owned()` instead of `.to_string()` on string slices, iterator access
+  instead of `slice[i]`, and `.expect(...)` freely. `rstest-bdd` step
+  functions receive placeholder captures with their surrounding quotes
+  intact, so steps normalize captured values with the shared
+  `value_parsing` helpers, and step-parameter names must match the
+  `{placeholder}` names in the step pattern exactly.
+  Impact: test and step style follows these constraints; no plan changes.
+- Observation (implementation, 2026-08-06): clap 4.6's
+  `ArgMatches::subcommand_matches(name)` **panics** when `name` is not among
+  the subcommands matched by that parse (clap's own "not a name of a
+  subcommand" assertion); it does not return `None` for unmatched names.
+  Evidence: `clap_builder` 4.6.0, `arg_matches.rs` (`get_subcommand` wraps
+  `MatchesError::unwrap`).
+  Impact: the rename unit test checks `Command::find_subcommand` instead of
+  querying unmatched names on `ArgMatches`; the documented adoption shape is
+  unaffected because `subcommand_required(true)` guarantees the injected
+  subcommand is always the one matched on success.
 
 ## Decision log
 
@@ -431,7 +480,9 @@ Verified clap 4.6 facts this plan relies on (checked against the vendored
 `clap_builder` sources; re-verify per Tolerance 7 if behaviour differs):
 
 1. `Command::name` takes `impl Into<clap::builder::Str>`; `bin_name` and
-   `display_name` take `impl IntoResettable<String>` (so `None` resets them).
+   `display_name` take `impl IntoResettable<String>`; resetting a
+   String-typed setter uses `clap::builder::Resettable::Reset` (clap 4.6.0
+   has no `IntoResettable<String>` impl for `Option<String>`).
 2. Usage lines render from `bin_name`; subcommand usage joins the parent
    `bin_name` with the subcommand name (`cargo demo`).
 3. A subcommand's unset `display_name` derives as
@@ -625,11 +676,15 @@ Implementation:
            .subcommand(
                command
                    .name(name)
-                   .bin_name(None)
+                   .bin_name(clap::builder::Resettable::Reset)
                    .display_name(installed),
            )
    }
    ```
+
+   `Resettable::Reset` replaces the draft's `.bin_name(None)`: clap 4.6.0
+   provides no `IntoResettable<String>` conversion for `Option<String>`;
+   see Surprises & discoveries.
 
    Parameter types follow their sinks (`display_name` takes
    `IntoResettable<String>`, so the installed name is `impl Into<String>`;
