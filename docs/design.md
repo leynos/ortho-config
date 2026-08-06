@@ -323,9 +323,14 @@ Discovery reads the named environment variables it needs — the
 configuration-path selector, the XDG base directories, the Windows
 application-data variables, and the user's home directory — through the
 injectable `EnvSource` boundary (`ortho_config/src/env_source.rs`). The trait
-is object-safe and offers lookup by name only; it deliberately has no
-enumeration method, because a process holding many unrelated secrets must never
-have its environment scanned, copied, or logged. `ProcessEnv` is the default
+carries two distinct capabilities: `get` performs name-based
+environment-variable lookup, and the separate `home_fallback` supplies the
+platform home-directory fallback consulted only when neither `HOME` nor
+`USERPROFILE` is set — an injected source can suppress it so a test's
+candidate list stays machine-independent. The trait is object-safe and offers
+lookup by name only; it deliberately has no enumeration method because a
+process holding many unrelated secrets must never have its environment
+scanned, copied, or logged. `ProcessEnv` is the default
 and preserves existing behaviour exactly; `MapEnv` supplies a fixed,
 deterministic set of values for tests and for embedding `OrthoConfig` in
 another tool. This boundary applies only to configuration-file discovery: the

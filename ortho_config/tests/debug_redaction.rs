@@ -10,18 +10,20 @@
 use std::sync::Arc;
 
 use ortho_config::{ConfigDiscovery, MapEnv};
+use rstest::{fixture, rstest};
 
 const SECRET_KEY: &str = "SEKRIT_DEBUG_KEY_7f3a";
 const SECRET_VALUE: &str = "sekrit-debug-value-1c9e";
 const SECRET_PATH: &str = "/sekrit/debug/path-55d1";
 
+#[fixture]
 fn secret_env() -> MapEnv {
     MapEnv::new().with_var(SECRET_KEY, SECRET_VALUE)
 }
 
-#[test]
-fn map_env_debug_reveals_neither_keys_nor_values() {
-    let rendered = format!("{:?}", secret_env());
+#[rstest]
+fn map_env_debug_reveals_neither_keys_nor_values(secret_env: MapEnv) {
+    let rendered = format!("{secret_env:?}");
     assert!(
         !rendered.contains(SECRET_KEY),
         "MapEnv debug output leaked the key: {rendered}"
@@ -36,12 +38,12 @@ fn map_env_debug_reveals_neither_keys_nor_values() {
     );
 }
 
-#[test]
-fn builder_debug_reveals_no_secrets() {
+#[rstest]
+fn builder_debug_reveals_no_secrets(secret_env: MapEnv) {
     let builder = ConfigDiscovery::builder("demo")
         .env_var(SECRET_KEY)
         .add_explicit_path(SECRET_PATH)
-        .env_source(Arc::new(secret_env()));
+        .env_source(Arc::new(secret_env));
     let rendered = format!("{builder:?}");
     assert!(
         !rendered.contains(SECRET_VALUE),
@@ -53,12 +55,12 @@ fn builder_debug_reveals_no_secrets() {
     );
 }
 
-#[test]
-fn discovery_debug_reveals_no_secrets() {
+#[rstest]
+fn discovery_debug_reveals_no_secrets(secret_env: MapEnv) {
     let discovery = ConfigDiscovery::builder("demo")
         .env_var(SECRET_KEY)
         .add_explicit_path(SECRET_PATH)
-        .env_source(Arc::new(secret_env()))
+        .env_source(Arc::new(secret_env))
         .build();
     let rendered = format!("{discovery:?}");
     assert!(
