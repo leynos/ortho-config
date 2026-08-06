@@ -16,6 +16,14 @@ accepted = [
 
 [patterns]
 ignore = [
+  # TEMPORARY HOLD, not a policy position. The shared en-GB-oxendict base
+  # deliberately dropped this exclusion on 2026-08-07 so that inline code is
+  # spellchecked. This repository is not yet ready: identifiers such as
+  # `color` (an external API name) and `localised_help` (a Rust test name)
+  # would fail across existing documents. Pinning it here keeps the gate
+  # meaningful until those are reworded or added to `[words] accepted`.
+  # Retire this entry — do not refresh it away — once that sweep is done.
+  "`[^`\\n]+`",
   "rust-analyzer",
   "GitHub\\s+Flavored\\s+Markdown",
   "## Artifacts and [Nn]otes",
