@@ -22,3 +22,4 @@ pub mod nested_docs_steps;
 #[cfg(feature = "serde_json")]
 pub mod subcommand_steps;
 mod value_parsing;
+pub mod cargo_steps;
