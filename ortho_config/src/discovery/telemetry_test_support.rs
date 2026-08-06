@@ -14,7 +14,7 @@ use tracing_subscriber::prelude::*;
 use tracing_subscriber::{Layer, Registry};
 
 /// One captured event, reduced to its recorded fields.
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default)]
 pub(super) struct CapturedEvent {
     fields: BTreeMap<String, String>,
 }

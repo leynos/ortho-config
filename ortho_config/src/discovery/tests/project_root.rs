@@ -36,20 +36,32 @@ fn an_injected_resolution_becomes_the_default_project_root() {
 }
 
 /// An injected failure omits the default root and reports the bounded state.
+///
+/// The candidate list is pinned exactly: it must equal the list a succeeding
+/// resolver produces minus that resolver's root-derived entries, so no
+/// fallback root of any kind can slip in unnoticed.
 #[test]
 fn a_failed_resolution_omits_the_root_and_reports_it() {
+    let succeeding = isolated_builder()
+        .with_project_root_resolver(Arc::new(|| Ok(PathBuf::from("/resolved/root"))))
+        .build();
+    let expected: Vec<PathBuf> = succeeding
+        .candidates()
+        .iter()
+        .filter(|path| !path.starts_with("/resolved/root"))
+        .cloned()
+        .collect();
+
     let events = capture_events(|| {
         let discovery = isolated_builder()
             .with_project_root_resolver(Arc::new(|| {
                 Err(io::Error::new(io::ErrorKind::NotFound, "gone"))
             }))
             .build();
-        assert!(
-            !discovery
-                .candidates()
-                .iter()
-                .any(|path| path.ends_with(".demo.toml") && !path.starts_with("/")),
-            "no default project root should be added"
+        assert_eq!(
+            discovery.candidates(),
+            expected,
+            "a failed resolution must yield exactly the non-root candidates"
         );
     });
 

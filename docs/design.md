@@ -326,7 +326,7 @@ injectable `EnvSource` boundary (`ortho_config/src/env_source.rs`). The trait
 carries two distinct capabilities: `get` performs name-based
 environment-variable lookup, and the separate `home_fallback` supplies the
 platform home-directory fallback consulted only when neither `HOME` nor
-`USERPROFILE` is set — an injected source can suppress it so a test's
+`USERPROFILE` is set — an injected source can suppress it, so a test's
 candidate list stays machine-independent. The trait is object-safe and offers
 lookup by name only; it deliberately has no enumeration method because a
 process holding many unrelated secrets must never have its environment

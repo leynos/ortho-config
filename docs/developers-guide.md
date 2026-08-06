@@ -380,7 +380,6 @@ as additional metric families or span fields used across crates, should be
 mentioned in the relevant design or component architecture document, so the
 contract stays discoverable.
 
-
 ### Discovery telemetry
 
 `discovery/telemetry.rs` is the only place configuration discovery emits

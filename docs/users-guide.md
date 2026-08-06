@@ -681,7 +681,6 @@ Supplying only the keys you need lets you rename the CLI flag without altering
 file discovery, or vice versa. When the attribute is omitted, the defaults
 described in [Config path override](#config-path-override) continue to apply.
 
-
 ### Injecting the environment for discovery
 
 `ConfigDiscovery` reads several environment variables: the configuration-path
@@ -706,7 +705,6 @@ let discovery = ConfigDiscovery::builder("demo")
 
 Implement `EnvSource` directly for anything richer than a fixed map; it is
 object-safe and held as `Arc<dyn EnvSource>`.
-
 
 #### What it does and does not cover
 
@@ -733,7 +731,6 @@ That difference is deliberate. Were the fallback to apply to an injected
 source, a test supplying no home would still pick up the host's, and the
 candidate list would vary between machines. Implement `home_fallback` if a
 custom source should provide one.
-
 
 #### Seeing why a file was chosen
 
