@@ -389,6 +389,24 @@ fn main() -> Result<(), String> {
   files for persistent settings).
 - **Clear Precedence:** Predictable configuration resolution.
 
+## Migration notes for v0.9.0
+
+Use these notes when upgrading from v0.8.x to v0.9.0. For full examples and
+background, see the [v0.9.0 migration guide](docs/v0-9-0-migration-guide.md).
+
+- Update every `ortho_config` and `ortho_config_macros` dependency to
+  `0.9.0`. No other changes are required for existing `ConfigDiscovery`
+  usage.
+- Configuration discovery now reads the environment through an injectable
+  `EnvSource` rather than ambient `std::env` calls. The default,
+  `process_env_source()`, preserves existing behaviour exactly.
+- Inject `MapEnv` via `ConfigDiscoveryBuilder::env_source(...)` for hermetic,
+  lock-free discovery tests, instead of mutating the process environment.
+- Discovery now emits `tracing` events at `DEBUG` level describing each
+  decision (never the underlying paths or values); enable the optional
+  `metrics` feature for `attempts`, `outcomes`, and `candidate_failures`
+  counters via the `metrics` facade.
+
 ## Migration notes for v0.8.0
 
 Use these notes when upgrading from v0.7.x to v0.8.0:

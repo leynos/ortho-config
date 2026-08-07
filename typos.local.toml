@@ -16,6 +16,9 @@ accepted = [
 
 [patterns]
 ignore = [
+  # Inline code spans quote identifiers (localised_help, set_color) whose
+  # spelling is owned by the code or a third-party API, not the prose.
+  "`[^`\\n]+`",
   "rust-analyzer",
   "GitHub\\s+Flavored\\s+Markdown",
   "## Artifacts and [Nn]otes",

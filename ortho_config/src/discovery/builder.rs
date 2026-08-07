@@ -5,8 +5,19 @@
 //! drives the search order.
 
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
+
+use crate::env_source::{SharedEnvSource, process_env_source};
 
 use super::ConfigDiscovery;
+use super::telemetry;
+
+/// Resolver supplying the default project root when none is configured.
+///
+/// A stored closure rather than a trait: one call site, one signature, and
+/// tests only need to substitute a fixed result. `Arc` keeps the builder
+/// `Clone`.
+type ProjectRootResolver = Arc<dyn Fn() -> std::io::Result<PathBuf> + Send + Sync>;
 
 /// Builder for [`ConfigDiscovery`].
 ///
@@ -31,7 +42,7 @@ use super::ConfigDiscovery;
 /// # Ok(())
 /// # }
 /// ```
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct ConfigDiscoveryBuilder {
     env_var: Option<String>,
     app_name: String,
@@ -41,6 +52,32 @@ pub struct ConfigDiscoveryBuilder {
     project_roots: Vec<PathBuf>,
     explicit_paths: Vec<PathBuf>,
     required_explicit_paths: Vec<PathBuf>,
+    env_source: Option<SharedEnvSource>,
+    project_root_resolver: ProjectRootResolver,
+}
+
+/// Debug output omits the environment source and every path.
+///
+/// The source may hold secret-shaped values, and this project treats paths
+/// as sensitive in diagnostics, so only names, counts, and the injected/
+/// process distinction are printed.
+impl std::fmt::Debug for ConfigDiscoveryBuilder {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ConfigDiscoveryBuilder")
+            .field("env_var", &self.env_var)
+            .field("app_name", &self.app_name)
+            .field("config_file_name", &self.config_file_name)
+            .field("custom_dotfile_name", &self.custom_dotfile_name)
+            .field("custom_project_file_name", &self.custom_project_file_name)
+            .field("project_roots", &self.project_roots.len())
+            .field("explicit_paths", &self.explicit_paths.len())
+            .field(
+                "required_explicit_paths",
+                &self.required_explicit_paths.len(),
+            )
+            .field("env_source_injected", &self.env_source.is_some())
+            .finish_non_exhaustive()
+    }
 }
 
 impl ConfigDiscoveryBuilder {
@@ -60,7 +97,47 @@ impl ConfigDiscoveryBuilder {
             project_roots: Vec::new(),
             explicit_paths: Vec::new(),
             required_explicit_paths: Vec::new(),
+            env_source: None,
+            project_root_resolver: Arc::new(std::env::current_dir),
         }
+    }
+
+    /// Substitute the default project-root resolver, for deterministic tests.
+    ///
+    /// Crate-private: the public contract is behavioural (a missing working
+    /// directory is survivable and omits only the implicit project root), and
+    /// embedders needing a specific root already have
+    /// [`ConfigDiscoveryBuilder::add_project_root`].
+    #[cfg(test)]
+    pub(crate) fn with_project_root_resolver(mut self, resolver: ProjectRootResolver) -> Self {
+        self.project_root_resolver = resolver;
+        self
+    }
+
+    /// Supplies the environment source consulted during discovery.
+    ///
+    /// Discovery otherwise reads the live process environment. Injecting a
+    /// source lets tests drive the configuration-path selector and the
+    /// platform base directories without mutating global state, so they need
+    /// no serializing lock and may run concurrently.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use ortho_config::{ConfigDiscovery, MapEnv};
+    /// use std::sync::Arc;
+    ///
+    /// let env = Arc::new(MapEnv::new().with_var("DEMO_CONFIG", "/etc/demo.toml"));
+    /// let discovery = ConfigDiscovery::builder("demo")
+    ///     .env_var("DEMO_CONFIG")
+    ///     .env_source(env)
+    ///     .build();
+    /// assert!(discovery.candidates().iter().any(|p| p.ends_with("demo.toml")));
+    /// ```
+    #[must_use]
+    pub fn env_source(mut self, env_source: SharedEnvSource) -> Self {
+        self.env_source = Some(env_source);
+        self
     }
 
     /// Sets the environment variable consulted for an explicit configuration path.
@@ -179,14 +256,25 @@ impl ConfigDiscoveryBuilder {
             .custom_project_file_name
             .unwrap_or_else(|| dotfile_name.clone());
 
-        let mut project_roots = self.project_roots;
-        let default_dir = if project_roots.is_empty() {
-            std::env::current_dir().ok()
+        telemetry::source_selected(if self.env_source.is_some() {
+            telemetry::SOURCE_INJECTED
         } else {
-            None
-        };
-        if let Some(dir) = default_dir {
-            project_roots.push(dir);
+            telemetry::SOURCE_PROCESS
+        });
+
+        let mut project_roots = self.project_roots;
+        // Explicit roots suppress the resolver entirely: a caller who named
+        // roots has taken responsibility for them, and invoking the resolver
+        // anyway would reintroduce the ambient read the seam exists to avoid.
+        if project_roots.is_empty() {
+            // A missing working directory (deleted cwd, permission denial) is
+            // survivable — discovery simply has no default project root — but
+            // it must not be survivable *silently*, so the decision is
+            // recorded in bounded telemetry rather than discarded with `.ok()`.
+            match (self.project_root_resolver)() {
+                Ok(dir) => project_roots.push(dir),
+                Err(_) => telemetry::project_root_cwd_unavailable(),
+            }
         }
 
         ConfigDiscovery {
@@ -198,6 +286,7 @@ impl ConfigDiscoveryBuilder {
             dotfile_name,
             project_file_name,
             project_roots,
+            env_source: self.env_source.unwrap_or_else(process_env_source),
         }
     }
 }

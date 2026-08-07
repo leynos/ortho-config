@@ -380,6 +380,102 @@ as additional metric families or span fields used across crates, should be
 mentioned in the relevant design or component architecture document, so the
 contract stays discoverable.
 
+### Discovery telemetry
+
+`discovery/telemetry.rs` is the only place configuration discovery emits
+events, and it is written so that a leak is a compile-time impossibility rather
+than a review responsibility.
+
+| Event                       | Fields                                                                                                                                                                                                                                           | Emitted from                |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------- |
+| `discovery.source_selected` | `source`: `process`, `injected`                                                                                                                                                                                                                  | `builder::build`            |
+| `discovery.selector`        | `state`: `not_configured`, `unset`, `empty`, `accepted`                                                                                                                                                                                          | `candidates::push_selector` |
+| `discovery.xdg`             | `config_home` and `dirs`: `absent`, `empty`, `present`; `resolution`: `default`, `list`                                                                                                                                                          | `candidates::push_xdg`      |
+| `discovery.home`            | `source`: `home`, `userprofile`, `fallback`, `none`                                                                                                                                                                                              | `candidates::push_home`     |
+| `discovery.attempt`         | `operation`: `discover_first`, `compose_layers`                                                                                                                                                                                                  | `load`                      |
+| `discovery.candidate`       | `operation`; `outcome`: `optional_failure`, `required_failure`; `required`; `source`: `required_explicit`, `explicit`, `selector`, `xdg`, `windows`, `home`, `project`; `category`: `file`, `cyclic_extends`, `gathering`, `validation`, `other` | `load`                      |
+| `discovery.project_root`    | `state`: `cwd_unavailable`                                                                                                                                                                                                                       | `builder::build`            |
+| `discovery.load`            | `operation`; `outcome`: `success`, `not_found`; `source` (success only): `required_explicit`, `explicit`, `selector`, `xdg`, `windows`, `home`, `project`                                                                                        | `load`                      |
+
+Table: Structured events emitted during configuration discovery, with the
+closed field vocabulary each carries and the module that emits it.
+
+Behind the optional `metrics` feature, discovery also increments three counter
+families using the same bounded labels:
+
+| Metric                                      | Labels                            |
+| ------------------------------------------- | --------------------------------- |
+| `ortho_config.discovery.attempts`           | `operation`                       |
+| `ortho_config.discovery.outcomes`           | `operation`, `outcome`            |
+| `ortho_config.discovery.candidate_failures` | `operation`, `source`, `category` |
+
+Table: `metrics`-feature counter families and their bounded labels, mirroring
+the `tracing` event fields above.
+
+Rules for extending this set:
+
+- **Every field is a `&'static str` from a constant declared in
+  `telemetry.rs`, or a `bool`.** Discovery's inputs and outputs — variable
+  values, resolved paths, file contents — are exactly what must not reach a
+  log, and callers cannot pass one through a function that accepts only the
+  closed vocabulary. The same property keeps the `metrics` labels bounded; an
+  unbounded label here becomes an unbounded time-series in a consumer's
+  monitoring system.
+- **`tests/discovery_telemetry.rs` enforces it.** The suite feeds discovery
+  distinctive values and asserts no captured field contains any of them. Adding
+  a field that formats a path fails that test rather than shipping.
+- **Counters go behind the optional `metrics` feature**, per the library
+  and application boundary above. The `tracing` events are unconditional.
+
+One trap worth recording: `tracing`'s global maximum level is recomputed as
+dispatchers register and drop, so concurrent tests each installing a
+thread-local subscriber can drop the maximum out from under one another and
+silently lose events. `pin_global_max_level` in that test file holds one
+dispatcher for the lifetime of the binary. This was an observed intermittent
+failure, not a precaution.
+
+## Environment access boundary
+
+`EnvSource` (`ortho_config/src/env_source.rs`) is the crate's injectable
+environment. `ProcessEnv` is the default and preserves the historical behaviour;
+`MapEnv` models a closed set of variables for tests.
+
+### Ownership and permitted call sites
+
+- `EnvSource` is owned by the discovery subsystem. `ConfigDiscovery` holds one
+  as `Arc<dyn EnvSource>`, supplied through
+  `ConfigDiscoveryBuilder::env_source` and defaulting to `ProcessEnv`.
+- `discovery/candidates.rs` is the only module that reads through it, and holds
+  no `std::env::var_os` call of its own.
+- It is **not** a general environment service. Adding readers elsewhere in the
+  crate requires a decision about scope, not a call site.
+
+### Composition rules
+
+- **Lookup by name only.** There is deliberately no enumeration method. RFC 0001
+  makes "the crate never scans the whole process environment" a safety property
+  of environment access: a process holding unrelated secrets must never have
+  them enumerated, copied, or logged. An enumeration method here would void
+  that guarantee for every holder of an `EnvSource`, however careful individual
+  callers were.
+- **The merge layer needs a different abstraction.** `CsvEnv` legitimately scans
+  a prefix because `figment::providers::Env` does. When it gains an injectable
+  source ([#412](https://github.com/leynos/ortho-config/issues/412)) it must
+  take a separate, explicitly named type, so the scanning capability is visible
+  in the signature rather than latent in a trait whose other users must not
+  scan. Until then, `CsvEnv` injection is out of scope and a consumer needing
+  to control `APP_*` configuration-value variables must still set them in the
+  process.
+- **Owned returns, deliberately.** An `impl Iterator` return would be
+  return-position `impl Trait` in traits (RPITIT) and make the trait unusable
+  behind a trait object, forcing `ConfigDiscovery<S>`
+  generics to leak through the derive-generated `load()` and every call site.
+  Configuration resolves once per process, so the allocation is immaterial.
+- **`home_fallback` defaults to `None`.** `ProcessEnv` overrides it by
+  default, and custom sources may too. See
+  the users' guide for why an injected source must be able to suppress the
+  platform lookup.
+
 ## Dependency management
 
 Cargo dependencies in this workspace follow strict version pinning rules so

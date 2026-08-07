@@ -681,6 +681,108 @@ Supplying only the keys you need lets you rename the CLI flag without altering
 file discovery, or vice versa. When the attribute is omitted, the defaults
 described in [Config path override](#config-path-override) continue to apply.
 
+### Injecting the environment for discovery
+
+`ConfigDiscovery` reads several environment variables: the configuration-path
+selector named by `env_var`, the XDG base directories, the Windows
+application-data folders, and `HOME`/`USERPROFILE`. By default these come from
+the live process.
+
+`env_source` supplies them instead, which lets tests drive discovery without
+mutating global state — so they need no serializing lock and may run
+concurrently.
+
+```rust,no_run
+use ortho_config::{ConfigDiscovery, MapEnv};
+use std::sync::Arc;
+
+let env = Arc::new(MapEnv::new().with_var("DEMO_CONFIG", "/etc/demo.toml"));
+let discovery = ConfigDiscovery::builder("demo")
+    .env_var("DEMO_CONFIG")
+    .env_source(env)
+    .build();
+```
+
+Implement `EnvSource` directly for anything richer than a fixed map; it is
+object-safe and held as `Arc<dyn EnvSource>`.
+
+#### What it does and does not cover
+
+> [!IMPORTANT]
+> An injected source controls **file discovery only**. It does not make a full
+> `OrthoConfig` load independent of the process environment.
+
+- **Covered:** the `env_var` selector, XDG and Windows base directories, and
+  home resolution.
+- **Not covered:** the `APP_*` configuration-value merge layer, which
+  `CsvEnv` (wrapping `figment`'s `Env` provider) reads from the process.
+  Injecting that source is out of scope here and is tracked separately by
+  [issue #412](https://github.com/leynos/ortho-config/issues/412). Until it
+  lands, a consumer needing to control `APP_*` configuration-value variables
+  must still set them in the process.
+
+#### Home fallback
+
+When neither `HOME` nor `USERPROFILE` is set, the default `ProcessEnv` falls
+back to a platform home lookup that consults the real user database. A custom
+source does **not**, because `EnvSource::home_fallback` defaults to `None`.
+
+That difference is deliberate. Were the fallback to apply to an injected
+source, a test supplying no home would still pick up the host's, and the
+candidate list would vary between machines. Implement `home_fallback` if a
+custom source should provide one.
+
+#### Seeing why a file was chosen
+
+Discovery consults a dozen locations and returns only the winner, so "why did
+it load _that_ file?" is otherwise unanswerable. It emits a `tracing` event at
+each decision point: which environment source was used, how the selector
+resolved, which variables supplied the base directories, and the outcome of
+each load attempt. Attach any `tracing` subscriber at `DEBUG` level to see them.
+
+> [!IMPORTANT]
+> The fields OrthoConfig attaches to these events never carry environment
+> variable values, resolved paths, or file contents. Every such field is
+> drawn from a fixed vocabulary such as `accepted`, `empty`, `unset`, or
+> `not_found`. OrthoConfig's fields describe the _decision_, never the datum
+> it was made from. A subscriber may still add span context, request IDs, or
+> other attributes OrthoConfig does not control; those remain subject to the
+> subscriber's own redaction policy before the record is forwarded.
+
+The consequence is worth stating plainly: the telemetry reports that the
+selector was accepted, not which path it named. Pair it with
+`ConfigDiscovery::candidates()` when a specific path is required.
+
+A successful `discovery.load` event additionally carries `source`, naming the
+rung that produced the winning candidate: `required_explicit`, `explicit`,
+`selector`, `xdg`, `windows`, `home`, or `project`. An unsuccessful outcome
+has no winning candidate, so it carries no `source`. Like every other field,
+`source` names the kind of location, not the path itself; reach for
+`ConfigDiscovery::candidates()` when an actual path is needed. It is a
+`tracing` field only — the `outcomes` counter below stays keyed on
+`operation` and `outcome`, since adding `source` there would multiply that
+series to record a fact the event already carries.
+
+Enabling the optional `metrics` feature additionally emits three counters
+through the [`metrics`](https://docs.rs/metrics) facade, each with its own
+label set:
+
+- `ortho_config.discovery.attempts` — labelled with the `operation`;
+- `ortho_config.discovery.outcomes` — labelled with the `operation` and the
+  `outcome`;
+- `ortho_config.discovery.candidate_failures` — labelled with the
+  `operation`, the candidate's bounded `source`, and its error `category`.
+
+```toml
+[dependencies]
+ortho_config = { version = "0.8", features = ["metrics"] }
+```
+
+The feature is off by default. A library should not choose a metrics backend
+for the application embedding it, and the facade records nothing until that
+application installs a recorder — OrthoConfig never installs one. The `tracing`
+events above are emitted either way.
+
 ## Loading configuration and precedence rules
 
 ### How loading works

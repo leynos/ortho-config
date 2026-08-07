@@ -175,3 +175,34 @@ fn project_roots_replaces_existing_entries(env_guards: EnvScope) -> Result<()> {
     );
     Ok(())
 }
+
+/// Two candidates differing only in a non-UTF-8 byte both survive dedup.
+///
+/// Lossy keying mapped every invalid byte to U+FFFD, so these two paths
+/// produced one key and discovery silently dropped the second candidate.
+#[cfg(unix)]
+#[test]
+fn non_utf8_candidates_stay_distinct() {
+    use std::ffi::OsString;
+    use std::os::unix::ffi::OsStringExt;
+    use std::path::PathBuf;
+
+    let first = PathBuf::from(OsString::from_vec(b"/tmp/demo-\xff.toml".to_vec()));
+    let second = PathBuf::from(OsString::from_vec(b"/tmp/demo-\xfe.toml".to_vec()));
+
+    let discovery = crate::discovery::ConfigDiscovery::builder("demo")
+        .clear_project_roots()
+        .env_source(std::sync::Arc::new(crate::MapEnv::new()))
+        .add_explicit_path(&first)
+        .add_explicit_path(&second)
+        .build();
+
+    let candidates = discovery.candidates();
+    assert!(
+        candidates.contains(&first) && candidates.contains(&second),
+        "both non-UTF-8 candidates must survive deduplication: {candidates:?}"
+    );
+    let first_pos = candidates.iter().position(|path| path == &first);
+    let second_pos = candidates.iter().position(|path| path == &second);
+    assert!(first_pos < second_pos, "explicit order must be preserved");
+}

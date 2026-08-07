@@ -8,17 +8,20 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use crate::env_source::SharedEnvSource;
 use crate::{MergeLayer, OrthoError};
 
 mod builder;
+mod candidate_set;
 mod candidates;
 mod load;
 mod outcome;
+mod telemetry;
 
 pub use builder::ConfigDiscoveryBuilder;
 
 /// Cross-platform configuration discovery helper mirroring the `hello_world` example.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct ConfigDiscovery {
     env_var: Option<String>,
     explicit_paths: Vec<PathBuf>,
@@ -28,6 +31,29 @@ pub struct ConfigDiscovery {
     dotfile_name: String,
     project_file_name: String,
     project_roots: Vec<PathBuf>,
+    env_source: SharedEnvSource,
+}
+
+/// Debug output omits the environment source and every path.
+///
+/// The source may hold secret-shaped values, and this project treats paths
+/// as sensitive in diagnostics, so only names and counts are printed.
+impl std::fmt::Debug for ConfigDiscovery {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ConfigDiscovery")
+            .field("env_var", &self.env_var)
+            .field("app_name", &self.app_name)
+            .field("config_file_name", &self.config_file_name)
+            .field("dotfile_name", &self.dotfile_name)
+            .field("project_file_name", &self.project_file_name)
+            .field("explicit_paths", &self.explicit_paths.len())
+            .field(
+                "required_explicit_paths",
+                &self.required_explicit_paths.len(),
+            )
+            .field("project_roots", &self.project_roots.len())
+            .finish_non_exhaustive()
+    }
 }
 
 /// Result of a discovery attempt that keeps required and optional errors separate.
@@ -93,6 +119,8 @@ impl ConfigDiscovery {
     }
 }
 
+#[cfg(test)]
+mod telemetry_test_support;
 #[cfg(test)]
 mod tests;
 

@@ -71,12 +71,30 @@ fn load_first_partitioned_dedups_required_paths() {
 #[test]
 fn normalized_key_lowercases_ascii_and_backslashes() {
     let key = ConfigDiscovery::normalized_key(Path::new("C:/Config/FILE.TOML"));
-    assert_eq!(key, "c:\\config\\file.toml");
+    let expected: Vec<u16> = "c:\\config\\file.toml".encode_utf16().collect();
+    assert_eq!(key, expected);
 }
 
 #[cfg(windows)]
 #[test]
 fn normalized_key_preserves_non_ascii_case() {
     let key = ConfigDiscovery::normalized_key(Path::new("C:/Temp/CAFÉ.toml"));
-    assert_eq!(key, "c:\\temp\\cafÉ.toml");
+    let expected: Vec<u16> = "c:\\temp\\cafÉ.toml".encode_utf16().collect();
+    assert_eq!(key, expected);
+}
+
+/// Unpaired surrogate units survive keying, so two native paths that a
+/// lossy `String` conversion would both map to U+FFFD stay distinct.
+#[cfg(windows)]
+#[test]
+fn normalized_key_keeps_unpaired_surrogates_distinct() {
+    use std::ffi::OsString;
+    use std::os::windows::ffi::OsStringExt;
+
+    let first = OsString::from_wide(&[0x63, 0x3A, 0x5C, 0xD800]);
+    let second = OsString::from_wide(&[0x63, 0x3A, 0x5C, 0xD801]);
+    assert_ne!(
+        ConfigDiscovery::normalized_key(Path::new(&first)),
+        ConfigDiscovery::normalized_key(Path::new(&second)),
+    );
 }

@@ -42,9 +42,14 @@ Netsuke is such an application. Its policy has four distinct behaviours that
 the current primitives cannot express directly:
 
 1. **Ordered explicit selection.** The precedence is `--config`, then
-   `NETSUKE_CONFIG`, then the legacy `NETSUKE_CONFIG_PATH`, then automatic
-   discovery. The current builder accepts only one environment variable, so an
-   ordered "first non-empty of three sources" chain cannot be described.
+   `NETSUKE_CONFIG`, then automatic discovery. When this RFC was drafted the
+   chain also carried a legacy `NETSUKE_CONFIG_PATH` alias; Netsuke removed it
+   in [netsuke#427][netsuke-427] and [ADR-004][netsuke-adr-004] now records
+   `NETSUKE_CONFIG` as its **only** environment selector, pinned by a
+   `legacy_config_path_variable_is_not_a_selector` test. The limitation is
+   unchanged by that removal: the current builder accepts only one environment
+   variable, so even a two-source ordered chain cannot be described, and the
+   retirement itself had to be done by hand rather than declared.
 2. **Fail-closed explicit selection.** A selected file that is missing or
    malformed must report that selected-file error and must _not_ fall through
    to automatic discovery. The current `add_required_path` records an error for
@@ -116,14 +121,14 @@ primitives above. The relevant shapes (paraphrased from the current source) are:
 
 ```rust,no_run
 const CONFIG_ENV_VAR: &str = "NETSUKE_CONFIG";
-const CONFIG_ENV_VAR_LEGACY: &str = "NETSUKE_CONFIG_PATH";
+// A second, legacy `NETSUKE_CONFIG_PATH` selector sat here until
+// netsuke#427 retired it; the `.or_else` rung below went with it.
 
 // Ordered, fail-closed explicit selection.
 fn explicit_config_path(cli: &Cli) -> Option<PathBuf> {
     cli.config
         .clone()
         .or_else(|| env_config_path(CONFIG_ENV_VAR))
-        .or_else(|| env_config_path(CONFIG_ENV_VAR_LEGACY))
 }
 
 // Either load the selected file exclusively, or discover and stack scopes.
@@ -195,6 +200,25 @@ caller; no literal an application would choose appears in OrthoConfig.
 
 All new items are additive and live in `ortho_config::discovery`. No existing
 signature changes.
+
+### Environment access through an injected source
+
+`ConfigPathSelector::env(..)` must resolve its variable through the `EnvSource`
+added in [ortho-config#411][oc-411], not through `std::env` directly. That
+change routed discovery's six ambient reads — the selector, `XDG_CONFIG_HOME`,
+`XDG_CONFIG_DIRS`, `APPDATA`, `LOCALAPPDATA`, and `HOME`/`USERPROFILE`, plus
+the platform home fallback — through an injectable seam, so a policy can be
+resolved without mutating the process environment.
+
+This matters for the delivery plan below. Step 2's acceptance criteria call for
+environment snapshotting and for "a test mutating the environment between a
+peek and a replay"; with an injected source that test needs no mutation at
+all, removing process-environment mutation from the policy snapshot test
+itself. (The generated-loader compatibility substrate still reads `figment`
+process-environment data and keeps its shared serial guard until issue #412
+lands.) Whichever type ultimately
+owns the selector chain must therefore carry the `EnvSource` through to the
+point of the read.
 
 ### Ordered explicit selector chain
 
@@ -520,11 +544,15 @@ loader and never enumerates the automatic generators at all; the gate lives at
 candidate generation, not after it, so a required path can no longer
 mechanically coexist with later discovered layers. A failure then yields a
 single terminal `selected_error` that carries the winning `ResolvedSelection`,
-and `into_merge_result` returns that one error rather than an aggregate —
-matching Netsuke's "report that error" contract, and naming the selector (for
-example, the deprecated `NETSUKE_CONFIG_PATH`) that chose the file. The legacy
-`compose_layers()` keeps its current non-suppressing behaviour; suppression is
-reached only through the new policy.
+naming the selector that chose the file — including, where an application still
+carries one, a deprecated alias. It is the _sole file-discovery error_: the
+partitioning happens at discovery, so `FileLayerOutcome` drains one error
+rather than an aggregate of candidate failures, matching Netsuke's "report that
+error" contract. That is a claim about discovery only.
+`LayerComposition::into_merge_result` may still aggregate it with later
+environment, CLI, or merge failures, which belong to a separate stage. The
+legacy `compose_layers()` keeps its current non-suppressing behaviour;
+suppression is reached only through the new policy.
 
 ### Behaviour mapping
 
@@ -540,6 +568,11 @@ fn policy(cli: &Cli) -> ConfigFilePolicy {
         .selectors([
             ConfigPathSelector::cli(cli.config.clone()).label("--config"),
             ConfigPathSelector::env("NETSUKE_CONFIG"),
+            // Netsuke retired its legacy alias in netsuke#427, so its live
+            // chain stops here. The rung is retained in this worked example
+            // because it is the clearest demonstration of `legacy_alias()`,
+            // and because Netsuke's hand-rolled retirement is precisely the
+            // work this API would have made declarative.
             ConfigPathSelector::env("NETSUKE_CONFIG_PATH").legacy_alias(),
         ])
         .explicit_mode(ExplicitMode::RequiredExclusive)
@@ -622,6 +655,8 @@ behaviours, while preserving the existing defaults exactly.
     app_name = "netsuke",
     config_cli_long = "config",
     config_cli_visible = true,
+    // Two entries shown to exercise the alias grammar; Netsuke's live
+    // configuration declares only `NETSUKE_CONFIG` (netsuke#427, ADR-004).
     env_vars = ["NETSUKE_CONFIG", "NETSUKE_CONFIG_PATH"],
     explicit_mode = "required_exclusive",
     automatic_mode = "stack_scopes",
@@ -887,9 +922,12 @@ roadmap entry. Each step is additive and individually mergeable.
    unchanged and green; and a test mutating the environment between a peek and
    a replay of one outcome asserts identical file provenance.
 3. **Add the explicit selector chain.** Add the ordered selector resolution and
-   the `--config` then `NETSUKE_CONFIG` then `NETSUKE_CONFIG_PATH` shape, named
-   only by the caller. Acceptance: first present selector wins and suppresses
-   the rest.
+   the `--config` then `NETSUKE_CONFIG` shape, named only by the caller, with a
+   third legacy rung exercised by a synthetic case rather than by Netsuke.
+   Acceptance: first present selector wins and suppresses the rest; a legacy
+   alias emits its deprecation signal; and Netsuke's own migration adds no
+   second environment selector, so its
+   `legacy_config_path_variable_is_not_a_selector` test still passes unmodified.
 4. **Add derive attributes.** Once the runtime API has settled, surface
    `env_vars`, `explicit_mode`, `automatic_mode`, `scope_order`,
    `project_root_from`, and `policy_hook`, with the compile-time validations.
@@ -907,3 +945,40 @@ roadmap entry. Each step is additive and individually mergeable.
    `origins` trace, project root from a CLI field, the aggregation collapse,
    and the SemVer additivity guard. (The back-compat lift fixture lands in step
    1.)
+
+______________________________________________________________________
+
+## Document history
+
+### 2026-08-01 — selector chain corrected; environment access made injectable
+
+- **Netsuke's live selector ladder is two selectors, not three.** The RFC was
+  drafted against `--config` > `NETSUKE_CONFIG` > `NETSUKE_CONFIG_PATH`.
+  Netsuke retired the legacy alias in [netsuke#427][netsuke-427], and
+  [ADR-004][netsuke-adr-004] records `NETSUKE_CONFIG` as its only environment
+  selector, pinned by a `legacy_config_path_variable_is_not_a_selector` test.
+  The problem statement, the "current source" excerpt, and delivery step 3 are
+  corrected accordingly.
+
+  The `legacy_alias()` capability is **retained**, and the worked examples
+  still show a third rung, now labelled as illustrative. The motivation is in
+  fact strengthened by the removal: Netsuke retired that alias by hand, across
+  several files and an ADR, which is exactly the work a declarative deprecation
+  would have absorbed.
+
+- **`ConfigPathSelector::env(..)` resolves through `EnvSource`.** A new
+  subsection under "Proposed design" records that discovery's environment reads
+  now go through the injectable seam added in [ortho-config#411][oc-411], and
+  that the selector chain must carry it through. This simplifies step 2's
+  snapshotting acceptance criteria, which no longer need environment mutation.
+
+- **Note on scope partitioning.** `DiscoveryScope` partitions the same candidate
+  generators that #411 rewired. The two changes are compatible — ordering and
+  membership are untouched — but they edit the same code and should not be
+  built independently.
+
+[netsuke-427]: https://github.com/leynos/netsuke/pull/427
+
+[netsuke-adr-004]: https://github.com/leynos/netsuke/blob/main/docs/adr-004-explicit-config-selection-outside-orthoconfig.md
+
+[oc-411]: https://github.com/leynos/ortho-config/pull/411
