@@ -267,7 +267,7 @@ mod tests {
 
     fn minimal_metadata() -> LocalizedDocMetadata {
         LocalizedDocMetadata {
-            ir_version: "1.1".to_owned(),
+            ir_version: crate::schema::ORTHO_DOCS_IR_VERSION.to_owned(),
             locale: "en-US".to_owned(),
             app_name: "test-app".to_owned(),
             bin_name: None,
