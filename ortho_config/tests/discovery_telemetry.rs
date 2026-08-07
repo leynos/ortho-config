@@ -23,6 +23,15 @@ use rstest::rstest;
 use std::path::Path;
 use std::sync::Arc;
 
+/// The winning-rung cases for a successful `discovery.load`.
+///
+/// Carried in a submodule of this suite rather than a suite of its own: they
+/// share `discovery_with` and the capture harness, and a second top-level test
+/// file would compile a second copy of both. The split is only to keep each
+/// file inside the repository's 400-line limit.
+#[path = "support/load_source.rs"]
+mod load_source;
+
 fn discovery_with(env: MapEnv) -> ConfigDiscovery {
     ConfigDiscovery::builder("demo")
         .env_var("DEMO_CONFIG")
@@ -188,7 +197,9 @@ fn a_loaded_candidate_reports_success() {
     let events = capture(|| discovery.load_first());
 
     let load = only(&events, "discovery.load");
+    assert_eq!(load.field("operation"), "discover_first");
     assert_eq!(load.field("outcome"), "success");
+    assert_eq!(load.field("source"), "selector");
 }
 
 /// A missing required candidate is reported as a required failure.

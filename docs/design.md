@@ -365,7 +365,10 @@ vocabulary declared in `ortho_config/src/discovery/telemetry.rs`:
   `file`, `cyclic_extends`, `gathering`, `validation`, or `other`.
 - `discovery.project_root` — `state = "cwd_unavailable"`, emitted only when
   the default project-root resolver fails.
-- `discovery.load` — `operation`; `outcome`: `success` or `not_found`.
+- `discovery.load` — `operation`; `outcome`: `success` or `not_found`; on
+  success only, `source`: `required_explicit`, `explicit`, `selector`, `xdg`,
+  `windows`, `home`, or `project`, naming the rung that produced the winning
+  candidate.
 
 Behind the optional `metrics` feature, discovery also increments three counter
 families using the same bounded labels:

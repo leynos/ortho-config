@@ -112,7 +112,7 @@ impl ConfigDiscovery {
             let required = Self::is_required_candidate(idx, set.required_bound);
             match try_one(&candidate.path, required) {
                 Ok(Some(value)) => {
-                    telemetry::load_outcome(operation, telemetry::OUTCOME_SUCCESS);
+                    telemetry::load_success(operation, candidate.source);
                     return (Some(value), errors);
                 }
                 Ok(None) => {}

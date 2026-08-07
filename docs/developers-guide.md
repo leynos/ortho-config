@@ -395,7 +395,7 @@ than a review responsibility.
 | `discovery.attempt`         | `operation`: `discover_first`, `compose_layers`                                                                                                                                                                                                  | `load`                      |
 | `discovery.candidate`       | `operation`; `outcome`: `optional_failure`, `required_failure`; `required`; `source`: `required_explicit`, `explicit`, `selector`, `xdg`, `windows`, `home`, `project`; `category`: `file`, `cyclic_extends`, `gathering`, `validation`, `other` | `load`                      |
 | `discovery.project_root`    | `state`: `cwd_unavailable`                                                                                                                                                                                                                       | `builder::build`            |
-| `discovery.load`            | `operation`; `outcome`: `success`, `not_found`                                                                                                                                                                                                   | `load`                      |
+| `discovery.load`            | `operation`; `outcome`: `success`, `not_found`; `source` (success only): `required_explicit`, `explicit`, `selector`, `xdg`, `windows`, `home`, `project`                                                                                        | `load`                      |
 
 Table: Structured events emitted during configuration discovery, with the
 closed field vocabulary each carries and the module that emits it.

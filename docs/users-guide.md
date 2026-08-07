@@ -753,6 +753,16 @@ The consequence is worth stating plainly: the telemetry reports that the
 selector was accepted, not which path it named. Pair it with
 `ConfigDiscovery::candidates()` when a specific path is required.
 
+A successful `discovery.load` event additionally carries `source`, naming the
+rung that produced the winning candidate: `required_explicit`, `explicit`,
+`selector`, `xdg`, `windows`, `home`, or `project`. An unsuccessful outcome
+has no winning candidate, so it carries no `source`. Like every other field,
+`source` names the kind of location, not the path itself; reach for
+`ConfigDiscovery::candidates()` when an actual path is needed. It is a
+`tracing` field only — the `outcomes` counter below stays keyed on
+`operation` and `outcome`, since adding `source` there would multiply that
+series to record a fact the event already carries.
+
 Enabling the optional `metrics` feature additionally emits three counters
 through the [`metrics`](https://docs.rs/metrics) facade, each with its own
 label set:
