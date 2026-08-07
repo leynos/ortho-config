@@ -53,6 +53,7 @@ const CANONICAL_VERBS: &[&str] = &[
 ///     fields: Vec::new(),
 ///     subcommands: Vec::new(),
 ///     windows: None,
+///     behaviour: None,
 /// };
 ///
 /// let context = bridge_ir_to_agent_context(&metadata, "example", None);
@@ -110,6 +111,8 @@ fn walk(
         output_modes: Vec::new(),
         interaction_mode: InteractionMode::default(),
         mutation_effect: MutationEffect::default(),
+        bypass_flag: None,
+        dry_run_flag: None,
         async_submission: None,
         delivery_route: None,
         pagination: None,
