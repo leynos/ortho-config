@@ -16,6 +16,14 @@ const SECRET_KEY: &str = "SEKRIT_DEBUG_KEY_7f3a";
 const SECRET_VALUE: &str = "sekrit-debug-value-1c9e";
 const SECRET_PATH: &str = "/sekrit/debug/path-55d1";
 
+/// The config-path selector name, kept distinct from [`SECRET_KEY`].
+///
+/// Discovery prints the selector name deliberately: it is a caller-chosen
+/// identifier, not a datum read from the environment. Separating it from the
+/// injected source's key lets the tests below assert that no key belonging to
+/// the source reaches the rendered output.
+const SELECTOR_VAR: &str = "DEMO_CONFIG_PATH";
+
 #[fixture]
 fn secret_env() -> MapEnv {
     MapEnv::new().with_var(SECRET_KEY, SECRET_VALUE)
@@ -41,10 +49,14 @@ fn map_env_debug_reveals_neither_keys_nor_values(secret_env: MapEnv) {
 #[rstest]
 fn builder_debug_reveals_no_secrets(secret_env: MapEnv) {
     let builder = ConfigDiscovery::builder("demo")
-        .env_var(SECRET_KEY)
+        .env_var(SELECTOR_VAR)
         .add_explicit_path(SECRET_PATH)
         .env_source(Arc::new(secret_env));
     let rendered = format!("{builder:?}");
+    assert!(
+        !rendered.contains(SECRET_KEY),
+        "builder debug output leaked an environment key: {rendered}"
+    );
     assert!(
         !rendered.contains(SECRET_VALUE),
         "builder debug output leaked an environment value: {rendered}"
@@ -58,11 +70,15 @@ fn builder_debug_reveals_no_secrets(secret_env: MapEnv) {
 #[rstest]
 fn discovery_debug_reveals_no_secrets(secret_env: MapEnv) {
     let discovery = ConfigDiscovery::builder("demo")
-        .env_var(SECRET_KEY)
+        .env_var(SELECTOR_VAR)
         .add_explicit_path(SECRET_PATH)
         .env_source(Arc::new(secret_env))
         .build();
     let rendered = format!("{discovery:?}");
+    assert!(
+        !rendered.contains(SECRET_KEY),
+        "discovery debug output leaked an environment key: {rendered}"
+    );
     assert!(
         !rendered.contains(SECRET_VALUE),
         "discovery debug output leaked an environment value: {rendered}"

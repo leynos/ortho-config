@@ -741,11 +741,13 @@ resolved, which variables supplied the base directories, and the outcome of
 each load attempt. Attach any `tracing` subscriber at `DEBUG` level to see them.
 
 > [!IMPORTANT]
-> These events never carry environment variable values, resolved paths, or
-> file contents. Every field is drawn from a fixed vocabulary such as
-> `accepted`, `empty`, `unset`, or `not_found`. The events describe the
-> _decision_, never the datum it was made from, so they are safe to ship to
-> a log aggregator from a process holding secrets in its environment.
+> The fields OrthoConfig attaches to these events never carry environment
+> variable values, resolved paths, or file contents. Every such field is
+> drawn from a fixed vocabulary such as `accepted`, `empty`, `unset`, or
+> `not_found`. OrthoConfig's fields describe the _decision_, never the datum
+> it was made from. A subscriber may still add span context, request IDs, or
+> other attributes OrthoConfig does not control; those remain subject to the
+> subscriber's own redaction policy before the record is forwarded.
 
 The consequence is worth stating plainly: the telemetry reports that the
 selector was accepted, not which path it named. Pair it with
