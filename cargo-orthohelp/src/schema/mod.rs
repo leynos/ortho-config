@@ -6,7 +6,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Current IR schema version.
-pub const ORTHO_DOCS_IR_VERSION: &str = "1.1";
+pub const ORTHO_DOCS_IR_VERSION: &str = "1.2";
 
 /// Top-level documentation metadata for a configuration command.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
