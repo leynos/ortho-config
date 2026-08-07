@@ -4,10 +4,61 @@
 //! produces each stay within the repository's 400-line module ceiling.
 
 use std::collections::HashSet;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use super::ConfigDiscovery;
 use super::telemetry;
+
+#[cfg(windows)]
+/// Normalizes a path according to Windows' case-insensitive comparison rules by
+/// lowercasing ASCII code points on the original wide path representation and
+/// replacing forward slashes with backslashes.
+fn windows_normalized_key(path: &Path) -> String {
+    use std::os::windows::ffi::OsStrExt;
+
+    let normalized: Vec<u16> = path
+        .as_os_str()
+        .encode_wide()
+        .map(|unit| match unit {
+            65..=90 => unit + 32,
+            47 => 92,
+            _ => unit,
+        })
+        .collect();
+    String::from_utf16_lossy(&normalized)
+}
+
+impl ConfigDiscovery {
+    pub(super) fn dedup_key(path: &Path) -> DedupKey {
+        #[cfg(windows)]
+        {
+            windows_normalized_key(path)
+        }
+
+        #[cfg(not(windows))]
+        {
+            // The native `OsString`, not a lossy `String`: lossy conversion
+            // maps every invalid byte to U+FFFD, so two distinct non-UTF-8
+            // paths would collide and discovery would silently drop one.
+            path.as_os_str().to_os_string()
+        }
+    }
+
+    #[cfg(all(test, windows))]
+    pub(super) fn normalized_key(path: &Path) -> DedupKey {
+        Self::dedup_key(path)
+    }
+}
+
+/// Platform-shaped deduplication key.
+///
+/// Windows normalizes to a `String` (see `windows_normalized_key`); every
+/// other platform keys on the native `OsString` so non-UTF-8 paths stay
+/// distinct.
+#[cfg(windows)]
+pub(super) type DedupKey = String;
+#[cfg(not(windows))]
+pub(super) type DedupKey = std::ffi::OsString;
 
 /// One candidate path with the bounded label of the rung that produced it.
 ///
@@ -23,7 +74,7 @@ pub(super) struct Candidate {
 #[derive(Default)]
 pub(super) struct CandidateAccumulator {
     pub(super) candidates: Vec<Candidate>,
-    seen: HashSet<String>,
+    seen: HashSet<DedupKey>,
 }
 
 impl CandidateAccumulator {

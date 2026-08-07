@@ -5,25 +5,6 @@ use std::path::{Path, PathBuf};
 use super::ConfigDiscovery;
 use super::telemetry;
 
-#[cfg(windows)]
-/// Normalizes a path according to Windows' case-insensitive comparison rules by
-/// lowercasing ASCII code points on the original wide path representation and
-/// replacing forward slashes with backslashes.
-fn windows_normalized_key(path: &Path) -> String {
-    use std::os::windows::ffi::OsStrExt;
-
-    let normalized: Vec<u16> = path
-        .as_os_str()
-        .encode_wide()
-        .map(|unit| match unit {
-            65..=90 => unit + 32,
-            47 => 92,
-            _ => unit,
-        })
-        .collect();
-    String::from_utf16_lossy(&normalized)
-}
-
 use super::candidate_set::{CandidateAccumulator, CandidateDecisions, CandidateSet};
 
 /// A configured selector's value, classified.
@@ -44,23 +25,6 @@ struct XdgDecisions {
 }
 
 impl ConfigDiscovery {
-    pub(super) fn dedup_key(path: &Path) -> String {
-        #[cfg(windows)]
-        {
-            windows_normalized_key(path)
-        }
-
-        #[cfg(not(windows))]
-        {
-            path.to_string_lossy().into_owned()
-        }
-    }
-
-    #[cfg(all(test, windows))]
-    pub(super) fn normalized_key(path: &Path) -> String {
-        Self::dedup_key(path)
-    }
-
     fn candidates_for_base(&self, base_path: &Path) -> Vec<PathBuf> {
         let nested = if self.app_name.is_empty() {
             base_path.to_path_buf()
@@ -314,6 +278,29 @@ impl ConfigDiscovery {
     /// This is a pure query: assembling the list emits no telemetry. The
     /// assembly decisions are recorded alongside the list and emitted only by
     /// the discovery operations that act on it.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use std::path::PathBuf;
+    /// use std::sync::Arc;
+    ///
+    /// use ortho_config::{ConfigDiscovery, MapEnv};
+    ///
+    /// // An empty injected source and no project roots make the head of
+    /// // the list deterministic: the explicit path always comes first.
+    /// let discovery = ConfigDiscovery::builder("demo")
+    ///     .clear_project_roots()
+    ///     .env_source(Arc::new(MapEnv::new()))
+    ///     .add_explicit_path("/srv/demo/config.toml")
+    ///     .build();
+    ///
+    /// let candidates = discovery.candidates();
+    /// // Later entries follow the platform defaults (the XDG bases on
+    /// // Unix-likes, `%APPDATA%` on Windows, then the home dotfile), so
+    /// // only the explicit head is asserted here.
+    /// assert_eq!(candidates[0], PathBuf::from("/srv/demo/config.toml"));
+    /// ```
     #[must_use]
     pub fn candidates(&self) -> Vec<PathBuf> {
         self.candidate_set()

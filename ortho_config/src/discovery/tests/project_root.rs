@@ -10,19 +10,25 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
+use rstest::{fixture, rstest};
+
 use crate::MapEnv;
 use crate::discovery::ConfigDiscovery;
 
 use super::super::telemetry_test_support::capture_events;
 
+/// A builder isolated from the ambient environment via an empty `MapEnv`.
+#[fixture]
 fn isolated_builder() -> crate::ConfigDiscoveryBuilder {
     ConfigDiscovery::builder("demo").env_source(Arc::new(MapEnv::new()))
 }
 
 /// An injected successful resolver supplies the default project root.
-#[test]
-fn an_injected_resolution_becomes_the_default_project_root() {
-    let discovery = isolated_builder()
+#[rstest]
+fn an_injected_resolution_becomes_the_default_project_root(
+    isolated_builder: crate::ConfigDiscoveryBuilder,
+) {
+    let discovery = isolated_builder
         .with_project_root_resolver(Arc::new(|| Ok(PathBuf::from("/injected/root"))))
         .build();
 
@@ -40,9 +46,12 @@ fn an_injected_resolution_becomes_the_default_project_root() {
 /// The candidate list is pinned exactly: it must equal the list a succeeding
 /// resolver produces minus that resolver's root-derived entries, so no
 /// fallback root of any kind can slip in unnoticed.
-#[test]
-fn a_failed_resolution_omits_the_root_and_reports_it() {
-    let succeeding = isolated_builder()
+#[rstest]
+fn a_failed_resolution_omits_the_root_and_reports_it(
+    #[from(isolated_builder)] succeeding_builder: crate::ConfigDiscoveryBuilder,
+    #[from(isolated_builder)] failing_builder: crate::ConfigDiscoveryBuilder,
+) {
+    let succeeding = succeeding_builder
         .with_project_root_resolver(Arc::new(|| Ok(PathBuf::from("/resolved/root"))))
         .build();
     let expected: Vec<PathBuf> = succeeding
@@ -53,7 +62,7 @@ fn a_failed_resolution_omits_the_root_and_reports_it() {
         .collect();
 
     let events = capture_events(|| {
-        let discovery = isolated_builder()
+        let discovery = failing_builder
             .with_project_root_resolver(Arc::new(|| {
                 Err(io::Error::new(io::ErrorKind::NotFound, "gone"))
             }))
@@ -78,12 +87,12 @@ fn a_failed_resolution_omits_the_root_and_reports_it() {
 }
 
 /// Explicit project roots suppress the resolver entirely.
-#[test]
-fn explicit_roots_suppress_the_resolver() {
+#[rstest]
+fn explicit_roots_suppress_the_resolver(isolated_builder: crate::ConfigDiscoveryBuilder) {
     let invoked = Arc::new(AtomicBool::new(false));
     let flag = Arc::clone(&invoked);
 
-    let discovery = isolated_builder()
+    let discovery = isolated_builder
         .add_project_root("/explicit/root")
         .with_project_root_resolver(Arc::new(move || {
             flag.store(true, Ordering::SeqCst);

@@ -133,6 +133,15 @@ pub struct MapEnv {
 
 impl MapEnv {
     /// Create an empty source, in which every variable is unset.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use ortho_config::{EnvSource, MapEnv};
+    ///
+    /// let env = MapEnv::new();
+    /// assert!(env.get("ANYTHING").is_none());
+    /// ```
     #[must_use]
     pub fn new() -> Self {
         Self::default()
@@ -226,10 +235,10 @@ where
 /// ```rust
 /// use ortho_config::process_env_source;
 ///
-/// // Reads flow through to the live process environment; PATH is set on
-/// // every host that can run this doctest.
+/// // Reads flow through to the live process environment, so the source
+/// // answers exactly what the process itself sees.
 /// let source = process_env_source();
-/// assert!(source.get("PATH").is_some());
+/// assert_eq!(source.get("PATH"), std::env::var_os("PATH"));
 /// ```
 #[must_use]
 pub fn process_env_source() -> SharedEnvSource {

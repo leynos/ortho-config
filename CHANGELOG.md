@@ -32,6 +32,23 @@ All notable changes to this project will be documented in this file.
   parse arguments with localized command metadata and parse errors.
 - Add the public `parse_localized_command` helper for applications that need
   to parse an already-localized `clap::Command` with a custom message-id base.
+- Introduce the `EnvSource` trait so configuration discovery reads the
+  environment through an injectable seam instead of ambient `std::env` calls;
+  add `MapEnv` and `process_env_source()`, and the
+  `ConfigDiscoveryBuilder::env_source(...)` method to inject a source. The
+  default remains the live process environment, so existing callers are
+  unaffected (closes #410).
+- Emit structured `tracing` events at each configuration-discovery decision
+  point (source selection, selector resolution, XDG/Windows/home resolution,
+  attempt/candidate/outcome), drawn from a closed vocabulary that never
+  carries environment values, paths, or file contents.
+- Add the optional `metrics` feature, emitting
+  `ortho_config.discovery.attempts`, `ortho_config.discovery.outcomes`, and
+  `ortho_config.discovery.candidate_failures` counters through the `metrics`
+  facade. The feature is off by default and installs no recorder.
+- Add the [v0.9.0 migration guide](docs/v0-9-0-migration-guide.md) covering
+  the injectable environment source, discovery telemetry, and the `metrics`
+  feature.
 
 ### Changed
 

@@ -34,20 +34,19 @@ pub fn base_group(directory: impl AsRef<Path>) -> Vec<PathBuf> {
     let base = directory.as_ref();
     let nested = base.join(APP);
 
-    let mut group = vec![nested.join("config.toml"), base.join(DOTFILE)];
-
-    #[cfg(feature = "json5")]
-    {
-        group.push(nested.join("config.json"));
-        group.push(nested.join("config.json5"));
-    }
-    #[cfg(feature = "yaml")]
-    {
-        group.push(nested.join("config.yaml"));
-        group.push(nested.join("config.yml"));
-    }
-
-    group
+    // Built from cfg-gated element groups rather than pushed onto a `mut`
+    // vector: with both format features disabled the pushes vanish and an
+    // unused `mut` fails builds under denied warnings.
+    [
+        vec![nested.join("config.toml"), base.join(DOTFILE)],
+        #[cfg(feature = "json5")]
+        vec![nested.join("config.json"), nested.join("config.json5")],
+        #[cfg(feature = "yaml")]
+        vec![nested.join("config.yaml"), nested.join("config.yml")],
+    ]
+    .into_iter()
+    .flatten()
+    .collect()
 }
 
 /// The candidates contributed by a home directory: `.config` group, then dotfile.
