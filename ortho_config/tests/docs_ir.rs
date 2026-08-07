@@ -419,15 +419,24 @@ fn minimal_doc_json() -> Value {
     })
 }
 
+/// Attaches a `behaviour` block to the minimal document JSON object.
+fn doc_json_with_behaviour(behaviour: Value) -> Result<Value> {
+    let mut document = minimal_doc_json();
+    document
+        .as_object_mut()
+        .ok_or_else(|| anyhow!("minimal document should be a JSON object"))?
+        .insert("behaviour".to_owned(), behaviour);
+    Ok(document)
+}
+
 #[rstest]
 fn test_behaviour_block_deserializes_when_fully_declared() -> Result<()> {
-    let mut document = minimal_doc_json();
-    document["behaviour"] = json!({
+    let document = doc_json_with_behaviour(json!({
         "interaction": "interactive",
         "mutation": "delete",
         "bypass": "--force",
         "dry_run": "--dry-run"
-    });
+    }))?;
 
     let metadata: DocMetadata = serde_json::from_value(document)?;
     let behaviour = metadata
@@ -471,10 +480,9 @@ fn test_behaviour_block_is_none_when_absent() -> Result<()> {
 
 #[rstest]
 fn test_behaviour_block_treats_partial_declarations_as_undeclared() -> Result<()> {
-    let mut document = minimal_doc_json();
-    document["behaviour"] = json!({
+    let document = doc_json_with_behaviour(json!({
         "mutation": "read_only"
-    });
+    }))?;
 
     let metadata: DocMetadata = serde_json::from_value(document)?;
     let behaviour = metadata
@@ -499,14 +507,12 @@ fn test_behaviour_block_treats_partial_declarations_as_undeclared() -> Result<()
 
 #[rstest]
 fn test_behaviour_metadata_serializes_snake_case_wire_values() -> Result<()> {
-    let metadata = DocsConfig::get_doc_metadata();
-    let mut value = serde_json::to_value(&metadata)?;
-    value["behaviour"] = json!({
+    let document = doc_json_with_behaviour(json!({
         "interaction": "non_interactive",
         "mutation": "submit"
-    });
+    }))?;
 
-    let decoded: DocMetadata = serde_json::from_value(value.clone())?;
+    let decoded: DocMetadata = serde_json::from_value(document)?;
     let behaviour = decoded
         .behaviour
         .as_ref()
@@ -521,8 +527,11 @@ fn test_behaviour_metadata_serializes_snake_case_wire_values() -> Result<()> {
     );
 
     let round_trip = serde_json::to_value(&decoded)?;
+    let round_behaviour = round_trip
+        .get("behaviour")
+        .ok_or_else(|| anyhow!("expected behaviour in round-trip JSON"))?;
     ensure!(
-        round_trip["behaviour"]
+        *round_behaviour
             == json!({
                 "interaction": "non_interactive",
                 "mutation": "submit",
