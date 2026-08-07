@@ -4,7 +4,7 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
 and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
-Status: DRAFT
+Status: IN PROGRESS
 
 ## Purpose / big picture
 
@@ -150,7 +150,7 @@ escalation, not workarounds.
 - [x] (2026-08-06 17:30Z) Community-of-experts design review completed (six
   Logisphere lenses across three reviewer panels); revisions applied — see the
   revision note at the bottom of this document.
-- [ ] Plan approved by the user. Implementation must not begin before this.
+- [x] (2026-08-07) Plan approved by the user; implementation begun.
 - [ ] Milestone B: IR and agent-context schema types implemented red-first;
   goldens updated; gates green; CodeRabbit clear.
 - [ ] Milestone C: derive attribute surface (`behaviour(...)`) parsed,
@@ -836,6 +836,38 @@ Prior-art evidence gathered during planning:
   dry-run flag. These are the canonical flag names §6.1 already adopted.
 
 Implementation transcripts will be appended here per milestone.
+
+### Milestone B transcript (2026-08-07)
+
+Red evidence (types absent): `cargo test -p ortho_config --test docs_ir
+behaviour` failed with E0432 (no `InteractionKind`/`MutationKind` in
+`ortho_config::docs`) and E0609 (no field `behaviour` on `DocMetadata`);
+`cargo test -p ortho_config --lib agent_context` failed with E0609 (no
+`bypass_flag`/`dry_run_flag` on `AgentCommand`). Logs:
+`/tmp/red-b-docs-ir-ortho-config-<branch>.out`,
+`/tmp/red-b-agent-context-ortho-config-<branch>.out`.
+
+Green evidence: after adding `BehaviourMetadata`/`InteractionKind`/
+`MutationKind` plus `DocMetadata::behaviour` (IR and cargo-orthohelp mirror),
+`AgentCommand::bypass_flag`/`dry_run_flag`, the derive emitting
+`behaviour: None`, and the bridge defaulting both flags to `None`, the full
+workspace suite passes (61 `test result: ok` lines, 0 failures; log
+`/tmp/test-b-workspace-<branch>.out`). One red-to-green iteration: the
+snake-case wire-value test initially compared against the partial input JSON,
+but `BehaviourMetadata` serializes absent keys as explicit `null` (matching
+the IR convention), so the expectation was corrected to the explicit-null
+form.
+
+Snapshot churn reviewed and accepted (diffs limited to the two new explicit
+nulls after `mutation_effect`, plus insta `assertion_line` metadata):
+`cargo-orthohelp/tests/golden/agent_context__{fixture,nested_fixture,simple_fixture}.json.snap`
+and `examples/hello_world/tests/snapshots/agent_context_snapshot__context_agent_context_json.snap`.
+The wire-contract fixture gained the same two nulls. No `.snap` file embeds
+`ir_version`, so the IR version bump (next commit) churns no snapshots.
+
+Commit structure: schema types and their snapshot churn land first; the
+`ORTHO_DOCS_IR_VERSION` bump from `"1.1"` to `"1.2"` and the replacement of
+hard-coded `"1.1"` literals with the constant land in a separate commit.
 
 ## Interfaces and dependencies
 
