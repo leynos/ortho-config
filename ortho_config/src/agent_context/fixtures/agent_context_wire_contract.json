@@ -27,6 +27,8 @@
       ],
       "interaction_mode": "non_interactive",
       "mutation_effect": "read_only",
+      "bypass_flag": null,
+      "dry_run_flag": null,
       "async_submission": {
         "mode": "submit",
         "noun": "job"

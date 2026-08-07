@@ -11,7 +11,7 @@ pub const ORTHO_DOCS_IR_VERSION: &str = "1.1";
 /// Top-level documentation metadata for a configuration command.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct DocMetadata {
-    /// IR schema version string (for example, "1.1").
+    /// IR schema version string (for example, "1.2").
     pub ir_version: String,
     /// Application name used for display and identifier generation.
     pub app_name: String,
@@ -29,6 +29,66 @@ pub struct DocMetadata {
     pub subcommands: Vec<DocMetadata>,
     /// Optional Windows metadata for `PowerShell` help output.
     pub windows: Option<WindowsMetadata>,
+    /// Optional declared execution behaviour for agent-native consumers.
+    ///
+    /// Absent (`None`) means the author made no declaration; consumers must
+    /// treat the command as unknown rather than inferring semantics from
+    /// names or flags.
+    #[serde(default)]
+    pub behaviour: Option<BehaviourMetadata>,
+}
+
+/// Declared execution behaviour for a command (agent-native metadata).
+///
+/// Every field is optional: a present [`BehaviourMetadata`] with all fields
+/// `None` is equivalent to no declaration at all. Undeclared aspects stay
+/// undeclared; the agent-context layer maps them to its `unknown` state.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BehaviourMetadata {
+    /// Interaction declaration; `None` means undeclared.
+    #[serde(default)]
+    pub interaction: Option<InteractionKind>,
+    /// Mutation boundary declaration; `None` means undeclared.
+    #[serde(default)]
+    pub mutation: Option<MutationKind>,
+    /// Confirmation/prompt bypass flag, for example `--force`.
+    #[serde(default)]
+    pub bypass: Option<String>,
+    /// Dry-run flag name, for example `--dry-run`; `None` means undeclared.
+    #[serde(default)]
+    pub dry_run: Option<String>,
+}
+
+/// Declared interaction behaviour for a command in the documentation IR.
+///
+/// The IR has no `Unknown` variant on purpose: absence of a declaration is
+/// represented by [`BehaviourMetadata::interaction`] being `None`, and only
+/// the agent-context layer models the `unknown` wire state.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum InteractionKind {
+    /// Command does not prompt and can run unattended.
+    NonInteractive,
+    /// Command may require operator interaction.
+    Interactive,
+}
+
+/// Declared mutation boundary for a command in the documentation IR.
+///
+/// Absence of a declaration is represented by
+/// [`BehaviourMetadata::mutation`] being `None`; see [`InteractionKind`] for
+/// why there is no `Unknown` variant at this layer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MutationKind {
+    /// Read-only command.
+    ReadOnly,
+    /// Command may write local or remote state.
+    Write,
+    /// Command may delete local or remote state.
+    Delete,
+    /// Command submits asynchronous work.
+    Submit,
 }
 
 /// Section-level metadata and supporting content.
