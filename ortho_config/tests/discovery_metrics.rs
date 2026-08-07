@@ -1,4 +1,3 @@
-#![cfg(feature = "metrics")]
 //! Counter emission through the `metrics` facade.
 //!
 //! Split from `discovery_telemetry.rs` to keep that file within the 400-line
@@ -6,6 +5,8 @@
 //! not globally: a global recorder can be set only once per process, which
 //! would make these tests order-dependent and mutually exclusive — the same
 //! trap the injected environment source exists to avoid.
+
+#![cfg(feature = "metrics")]
 
 use ortho_config::{ConfigDiscovery, MapEnv};
 use std::path::Path;
