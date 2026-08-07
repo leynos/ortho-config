@@ -136,7 +136,7 @@ fn field_name(prefix: &'static str) -> impl Strategy<Value = String> {
 
 fn doc(app_name: &str, bin_name: Option<&str>, subcommands: Vec<DocMetadata>) -> DocMetadata {
     DocMetadata {
-        ir_version: "1.1".to_owned(),
+        ir_version: crate::schema::ORTHO_DOCS_IR_VERSION.to_owned(),
         app_name: app_name.to_owned(),
         bin_name: bin_name.map(str::to_owned),
         about_id: format!("{app_name}.about"),
@@ -145,6 +145,7 @@ fn doc(app_name: &str, bin_name: Option<&str>, subcommands: Vec<DocMetadata>) ->
         fields: Vec::new(),
         subcommands,
         windows: None,
+        behaviour: None,
     }
 }
 

@@ -5,10 +5,14 @@
 
 mod ir;
 
+#[cfg(test)]
+mod proptests;
+
 pub use ir::{
-    CliMetadata, ConfigDiscoveryMeta, ConfigFormat, DefaultValue, Deprecation, DocMetadata,
-    EnvMetadata, Example, FieldMetadata, FileMetadata, HeadingIds, Link, Note, PathPattern,
-    PrecedenceMeta, SectionsMetadata, SourceKind, ValueType, WindowsMetadata,
+    BehaviourMetadata, CliMetadata, ConfigDiscoveryMeta, ConfigFormat, DefaultValue, Deprecation,
+    DocMetadata, EnvMetadata, Example, FieldMetadata, FileMetadata, HeadingIds, InteractionKind,
+    Link, MutationKind, Note, PathPattern, PrecedenceMeta, SectionsMetadata, SourceKind, ValueType,
+    WindowsMetadata,
 };
 
 /// Current IR schema version.
