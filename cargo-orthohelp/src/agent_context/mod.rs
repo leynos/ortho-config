@@ -22,10 +22,12 @@ const CANONICAL_VERBS: &[&str] = &[
 ///
 /// ```rust
 /// use cargo_orthohelp::agent_context::bridge_ir_to_agent_context;
-/// use cargo_orthohelp::schema::{DocMetadata, HeadingIds, SectionsMetadata};
+/// use cargo_orthohelp::schema::{
+///     DocMetadata, HeadingIds, ORTHO_DOCS_IR_VERSION, SectionsMetadata,
+/// };
 ///
 /// let metadata = DocMetadata {
-///     ir_version: "1.1".to_owned(),
+///     ir_version: ORTHO_DOCS_IR_VERSION.to_owned(),
 ///     app_name: "example".to_owned(),
 ///     bin_name: None,
 ///     about_id: "example.about".to_owned(),
