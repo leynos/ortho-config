@@ -141,3 +141,27 @@ fn a_failed_resolution_event_renders_exactly(isolated_builder: crate::ConfigDisc
          \"state\": \"cwd_unavailable\"} }"
     );
 }
+
+/// Pin the complete redacted `Debug` rendering of `ConfigDiscovery`.
+///
+/// The project root is injected as a fixed relative path, so the counted
+/// `project_roots: 1` is deterministic by construction rather than
+/// borrowed from the host's working directory; every shown value is a
+/// developer-chosen constant and the rendering stays path-free.
+#[rstest]
+fn discovery_debug_snapshot() {
+    let discovery = ConfigDiscovery::builder("demo")
+        .clear_project_roots()
+        .env_source(Arc::new(
+            MapEnv::new().with_var("SEKRIT_DEBUG_KEY_7f3a", "sekrit-debug-value-1c9e"),
+        ))
+        .with_project_root_resolver(Arc::new(|| Ok(PathBuf::from("fixture-root"))))
+        .build();
+    assert_eq!(
+        format!("{discovery:?}"),
+        "ConfigDiscovery { env_var: None, app_name: \"demo\", \
+         config_file_name: \"config.toml\", dotfile_name: \".demo.toml\", \
+         project_file_name: \".demo.toml\", explicit_paths: 0, \
+         required_explicit_paths: 0, project_roots: 1, .. }"
+    );
+}
