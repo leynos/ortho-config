@@ -1,6 +1,6 @@
 ---
 source: cargo-orthohelp/tests/golden/agent_context_tests.rs
-assertion_line: 30
+assertion_line: 43
 expression: snapshot
 ---
 {
@@ -88,6 +88,8 @@ expression: snapshot
       "output_modes": [],
       "interaction_mode": "unknown",
       "mutation_effect": "unknown",
+      "bypass_flag": null,
+      "dry_run_flag": null,
       "async_submission": null,
       "delivery_route": null,
       "pagination": null,
