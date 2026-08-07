@@ -30,6 +30,8 @@ environment through an injectable [`EnvSource`], rather than always reading
 | Observability | New `tracing` events at `DEBUG` level describe every discovery decision. | [4](#4-observe-discovery-telemetry) |
 | Optional dependency | The new `metrics` feature is off by default and adds the `metrics` crate as an optional dependency. | [5](#5-enable-the-optional-metrics-feature) |
 
+_Table 1: Summary of v0.9.0 changes and where to read more._
+
 ## 1. Update crate versions
 
 ### Before: v0.8.0 dependencies
@@ -92,7 +94,7 @@ risks exposing unrelated variables a test fixture happens to hold.
 
 Two points are easy to miss when adopting this:
 
-- **Scope.** An injected source controls file *discovery* only — the
+- **Scope.** An injected source controls file _discovery_ only — the
   `env_var` selector, XDG/Windows base directories, and home resolution. It
   does not affect the `APP_*` configuration-value merge layer (`CsvEnv`,
   wrapping `figment`'s `Env` provider), which still reads the process
@@ -121,7 +123,7 @@ directory was resolved (`discovery.home`), when an operation starts
 them; no configuration is required to enable emission.
 
 This is purely additive — no existing behaviour changes — but it is useful
-context when diagnosing "why did discovery load *that* file" during an
+context when diagnosing "why did discovery load _that_ file" during an
 upgrade. See the [redaction contract](#6-redaction-contract-for-upgraders)
 below for what these events do and do not carry.
 
@@ -153,15 +155,18 @@ Both the `tracing` events and the `metrics` labels are drawn from a closed,
 fixed vocabulary — values such as `accepted`, `empty`, `unset`, `not_found`,
 or bounded source/category names. They never carry environment variable
 values, resolved filesystem paths, or file contents; the events describe the
-*decision*, never the datum it was made from. `Debug` output for
+_decision_, never the datum it was made from. `Debug` output for
 `ConfigDiscoveryBuilder` and `MapEnv` follows the same discipline: it reports
 counts (for example, how many variables a `MapEnv` holds, or how many project
 roots a builder has) and the injected-versus-process distinction, never the
 underlying paths or values.
 
-If your application logs discovery diagnostics or forwards `tracing` events
-to an aggregator, no redaction step is needed on your side — these events are
-already safe to ship from a process holding secrets in its environment. Pair
+This guarantee covers OrthoConfig's own event fields: they exclude
+environment values, resolved paths, and file contents, so forwarding them
+unmodified from a process holding secrets in its environment needs no extra
+redaction step. It does not extend to fields a subscriber adds afterwards —
+span context, request identifiers, or other attributes attached before
+forwarding remain subject to the subscriber's normal redaction policy. Pair
 telemetry with `ConfigDiscovery::candidates()` when a specific path is
 required for debugging, since the telemetry itself will not name it.
 

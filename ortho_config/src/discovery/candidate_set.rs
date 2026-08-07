@@ -9,23 +9,25 @@ use std::path::{Path, PathBuf};
 use super::ConfigDiscovery;
 use super::telemetry;
 
-#[cfg(windows)]
 /// Normalizes a path according to Windows' case-insensitive comparison rules by
 /// lowercasing ASCII code points on the original wide path representation and
 /// replacing forward slashes with backslashes.
-fn windows_normalized_key(path: &Path) -> String {
+///
+/// The key stays a raw `Vec<u16>`: converting to `String` would map every
+/// unpaired surrogate to U+FFFD, so two distinct native paths could share a
+/// key and deduplication would silently drop a valid candidate.
+#[cfg(windows)]
+fn windows_normalized_key(path: &Path) -> Vec<u16> {
     use std::os::windows::ffi::OsStrExt;
 
-    let normalized: Vec<u16> = path
-        .as_os_str()
+    path.as_os_str()
         .encode_wide()
         .map(|unit| match unit {
             65..=90 => unit + 32,
             47 => 92,
             _ => unit,
         })
-        .collect();
-    String::from_utf16_lossy(&normalized)
+        .collect()
 }
 
 impl ConfigDiscovery {
@@ -52,11 +54,11 @@ impl ConfigDiscovery {
 
 /// Platform-shaped deduplication key.
 ///
-/// Windows normalizes to a `String` (see `windows_normalized_key`); every
-/// other platform keys on the native `OsString` so non-UTF-8 paths stay
-/// distinct.
+/// Windows normalizes to the raw UTF-16 units (see `windows_normalized_key`);
+/// every other platform keys on the native `OsString`. Both shapes preserve
+/// paths that are not valid Unicode, so no two distinct paths share a key.
 #[cfg(windows)]
-pub(super) type DedupKey = String;
+pub(super) type DedupKey = Vec<u16>;
 #[cfg(not(windows))]
 pub(super) type DedupKey = std::ffi::OsString;
 
