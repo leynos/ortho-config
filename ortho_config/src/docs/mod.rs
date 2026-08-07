@@ -16,7 +16,7 @@ pub use ir::{
 };
 
 /// Current IR schema version.
-pub const ORTHO_DOCS_IR_VERSION: &str = "1.1";
+pub const ORTHO_DOCS_IR_VERSION: &str = "1.2";
 
 /// Trait implemented for configs that can emit documentation metadata.
 pub trait OrthoConfigDocs {
