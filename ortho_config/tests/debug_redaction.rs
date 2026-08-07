@@ -72,3 +72,35 @@ fn discovery_debug_reveals_no_secrets(secret_env: MapEnv) {
         "discovery debug output leaked a path: {rendered}"
     );
 }
+
+/// Pin the complete redacted `Debug` rendering of `MapEnv`.
+///
+/// The exact-string snapshot complements the secret-exclusion assertions
+/// above: any new field added to the output must be reviewed here, so a
+/// leak cannot arrive silently alongside a legitimate change.
+#[rstest]
+fn map_env_debug_snapshot(secret_env: MapEnv) {
+    assert_eq!(format!("{secret_env:?}"), "MapEnv { vars: 1, .. }");
+}
+
+/// Pin the complete redacted `Debug` rendering of `ConfigDiscovery`.
+///
+/// Every shown value is a developer-chosen constant; paths and environment
+/// values must never join them. The snapshot is path-free by construction,
+/// so it is stable on every host.
+#[rstest]
+fn discovery_debug_snapshot(secret_env: MapEnv) {
+    let discovery = ConfigDiscovery::builder("demo")
+        .clear_project_roots()
+        .env_source(Arc::new(secret_env))
+        .build();
+    // `project_roots: 1` is the default resolver's current directory, which
+    // is counted but never printed; the rendering stays path-free.
+    assert_eq!(
+        format!("{discovery:?}"),
+        "ConfigDiscovery { env_var: None, app_name: \"demo\", \
+         config_file_name: \"config.toml\", dotfile_name: \".demo.toml\", \
+         project_file_name: \".demo.toml\", explicit_paths: 0, \
+         required_explicit_paths: 0, project_roots: 1, .. }"
+    );
+}

@@ -104,8 +104,8 @@ Two points are easy to miss when adopting this:
   `MapEnv` supplying neither `HOME` nor `USERPROFILE` yields no home
   candidate at all, rather than falling back to the host's real home
   directory. This keeps a test's candidate list independent of the machine it
-  runs on. Implement `home_fallback` on a custom `EnvSource` if you need a
-  fallback for that source.
+  runs on. Implement `home_fallback` on a custom `EnvSource` for a
+  source-specific fallback.
 
 Implement `EnvSource` directly (it is object-safe, `fmt::Debug + Send +
 Sync`) for anything richer than a fixed map.

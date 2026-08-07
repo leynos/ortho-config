@@ -112,3 +112,32 @@ fn explicit_roots_suppress_the_resolver(isolated_builder: crate::ConfigDiscovery
         "the resolver must not run when explicit roots exist"
     );
 }
+
+/// Pin the complete rendering of a representative telemetry event.
+///
+/// The captured field map is fully injected and path-free, so the exact
+/// `Debug` snapshot is stable on every host; any new field must be
+/// reviewed here before it can ship, keeping values out of events.
+#[rstest]
+fn a_failed_resolution_event_renders_exactly(isolated_builder: crate::ConfigDiscoveryBuilder) {
+    let events = capture_events(|| {
+        let discovery = isolated_builder
+            .with_project_root_resolver(Arc::new(|| {
+                Err(io::Error::new(io::ErrorKind::NotFound, "gone"))
+            }))
+            .build();
+        drop(discovery.candidates());
+    });
+
+    let event = events
+        .iter()
+        .find(|event| event.field("event") == "discovery.project_root")
+        .expect("the project-root event should be captured");
+    assert_eq!(
+        format!("{event:?}"),
+        "CapturedEvent { fields: {\
+         \"event\": \"discovery.project_root\", \
+         \"message\": \"working directory unavailable; no default project root added\", \
+         \"state\": \"cwd_unavailable\"} }"
+    );
+}

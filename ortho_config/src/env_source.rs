@@ -25,7 +25,7 @@
 //! assert!(discovery.candidates().iter().any(|p| p.ends_with("demo.toml")));
 //! ```
 
-use std::collections::BTreeMap;
+use std::collections::HashMap;
 use std::ffi::{OsStr, OsString};
 use std::fmt;
 use std::sync::Arc;
@@ -126,9 +126,9 @@ impl EnvSource for ProcessEnv {
 /// ```
 #[derive(Default, Clone)]
 pub struct MapEnv {
-    // `BTreeMap` rather than `HashMap` so iteration is deterministic, keeping
-    // any ordered output built from this source reproducible.
-    vars: BTreeMap<String, OsString>,
+    // `HashMap`: lookups are name-only and nothing iterates the map, so
+    // ordering would buy determinism no output consumes at O(log n) cost.
+    vars: HashMap<String, OsString>,
 }
 
 impl MapEnv {
