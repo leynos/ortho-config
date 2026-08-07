@@ -215,40 +215,41 @@ pub(super) fn project_root_cwd_unavailable() {
     );
 }
 
-/// Record a discovery operation succeeding, naming the rung that won.
+/// Record the terminal outcome of a discovery operation.
 ///
-/// Success is the one terminal outcome with a winning candidate, and "which
-/// location did this configuration come from?" is the question an operator
-/// actually asks. `source` answers it from the closed `CANDIDATE_*` vocabulary,
-/// so the event names the rung without naming the file.
+/// `source` is the rung that produced the winning candidate, drawn from the
+/// closed `CANDIDATE_*` vocabulary, and answers the question an operator
+/// actually asks: "which location did this configuration come from?" It is
+/// `None` for the outcomes that have no winner, and the field is then omitted
+/// rather than rendered empty — an absent field cannot be mistaken for a rung.
+/// That is why the two branches below exist: a `tracing` event's fields are
+/// fixed at the macro call, so a conditional field means a conditional call.
 ///
 /// The metric is deliberately left alone: `count_outcome` keeps its existing
 /// `operation`/`outcome` label pair. `source` would multiply that series by the
 /// number of rungs to record a fact the event already carries, and the label
 /// set is part of the contract a consumer's dashboards are built against.
-pub(super) fn load_success(operation: &'static str, source: &'static str) {
-    tracing::debug!(
-        event = "discovery.load",
-        operation,
-        outcome = OUTCOME_SUCCESS,
-        source,
-        "configuration discovery finished"
-    );
-    count_outcome(operation, OUTCOME_SUCCESS);
-}
-
-/// Record a terminal outcome that has no winning candidate.
-///
-/// Use [`load_success`] when a candidate was returned; this reports the
-/// outcomes — `not_found` and its kin — where no rung won and so no `source`
-/// field would be meaningful.
-pub(super) fn load_outcome(operation: &'static str, outcome: &'static str) {
-    tracing::debug!(
-        event = "discovery.load",
-        operation,
-        outcome,
-        "configuration discovery finished"
-    );
+pub(super) fn load_outcome(
+    operation: &'static str,
+    outcome: &'static str,
+    source: Option<&'static str>,
+) {
+    if let Some(rung) = source {
+        tracing::debug!(
+            event = "discovery.load",
+            operation,
+            outcome,
+            source = rung,
+            "configuration discovery finished"
+        );
+    } else {
+        tracing::debug!(
+            event = "discovery.load",
+            operation,
+            outcome,
+            "configuration discovery finished"
+        );
+    }
     count_outcome(operation, outcome);
 }
 
