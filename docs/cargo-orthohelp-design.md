@@ -166,14 +166,16 @@ Key choices:
   `ortho_config::agent_context`, and policy reports in
   `cargo_orthohelp::policy` until a later extraction is approved.
 
-## 2. Documentation IR (schema v1.1)
+## 2. Documentation IR (schema v1.2)
+
+## 2. Documentation IR (schema v1.2)
 
 ### 2.1 Top-level metadata
 
 ```rust
 #[derive(Debug, Serialize)]
 pub struct DocMetadata {
-    pub ir_version: String,            // e.g., "1.1"
+    pub ir_version: String,            // e.g., "1.2"
     pub app_name: String,              // binary or display name
     pub bin_name: Option<String>,      // override for man page or wrapper name
     pub about_id: String,              // Fluent ID for app description
@@ -182,6 +184,7 @@ pub struct DocMetadata {
     pub fields: Vec<FieldMetadata>,    // flattened fields for this command
     pub subcommands: Vec<DocMetadata>, // recursively the same schema
     pub windows: Option<WindowsMetadata>, // Windows-only generator hints
+    pub behaviour: Option<BehaviourMetadata>, // declared execution behaviour
 }
 ```
 
@@ -867,7 +870,7 @@ sentinel so generators can surface gaps during development.
 
 ```json
 {
-  "ir_version": "1.1",
+  "ir_version": "1.2",
   "locale": "en-US",
   "app_name": "my-app",
   "bin_name": "my-app",
@@ -1082,8 +1085,9 @@ installs the executable in a different location.
 
 ## 12. Versioning and compatibility
 
-- IR: `ir_version = "1.1"` (Windows metadata added). Future breaking schema
-  changes bump the major version.
+- IR: `ir_version = "1.2"` (optional `behaviour` metadata added; `1.1` added
+  Windows metadata). Additive optional fields bump the minor version; future
+  breaking schema changes bump the major version.
 - Tooling: `cargo-orthohelp` tracks the IR major.
 - Runtime: `clap` v4.x unchanged; PowerShell targets 5.1+ and 7+.
 
@@ -1140,11 +1144,12 @@ variant with `#[serde(other)]`. Two consequences are part of the contract:
 
 ## 13. Worked example (abridged)
 
-### 13.1 IR JSON (excerpt, 1.1)
+
+### 13.1 IR JSON (excerpt, 1.2)
 
 ```json
 {
-  "ir_version": "1.1",
+  "ir_version": "1.2",
   "app_name": "my-app",
   "bin_name": "my-app",
   "about_id": "my-app.about",
@@ -1191,14 +1196,91 @@ variant with `#[serde(other)]`. Two consequences are part of the contract:
   },
   "subcommands": [
     {
-      "ir_version": "1.1",
+      "ir_version": "1.2",
       "app_name": "run",
       "about_id": "run.about",
       "fields": [],
       "windows": null,
       "subcommands": [
         {
-          "ir_version": "1.1",
+          "ir_version": "1.2",
+          "app_name": "audit",
+          "about_id": "audit.about",
+          "fields": [],
+          "windows": {
+            "module_name": "MyAppAdmin",
+            "export_aliases": ["my-app-audit"],
+            "include_common_parameters": false,
+            "split_subcommands_into_functions": true,
+            "help_info_uri": null
+          },
+          "subcommands": []
+        }
+      ]
+    }
+  ]
+}
+```
+
+### 13.1 IR JSON (excerpt, 1.2)
+
+```json
+{
+  "ir_version": "1.2",
+  "app_name": "my-app",
+  "bin_name": "my-app",
+  "about_id": "my-app.about",
+  "sections": {
+    "headings_ids": {
+      "name": "ortho.headings.name",
+      "synopsis": "ortho.headings.synopsis",
+      "description": "ortho.headings.description",
+      "options": "ortho.headings.options",
+      "environment": "ortho.headings.environment",
+      "files": "ortho.headings.files",
+      "precedence": "ortho.headings.precedence",
+      "exit_status": "ortho.headings.exit_status",
+      "examples": "ortho.headings.examples",
+      "see_also": "ortho.headings.see_also"
+    }
+  },
+  "fields": [
+    {
+      "name": "port",
+      "help_id": "my-app.fields.port.help",
+      "value": {"Integer": {"bits": 16, "signed": false}},
+      "default": {"display": "8080"},
+      "required": false,
+      "cli": {
+        "long": "port",
+        "short": "p",
+        "value_name": "NUM",
+        "multiple": false,
+        "takes_value": true,
+        "possible_values": [],
+        "hide_in_help": false
+      },
+      "env": {"var_name": "MY_APP_PORT"},
+      "file": {"key_path": "port"}
+    }
+  ],
+  "windows": {
+    "module_name": "MyApp",
+    "export_aliases": [],
+    "include_common_parameters": true,
+    "split_subcommands_into_functions": false,
+    "help_info_uri": null
+  },
+  "subcommands": [
+    {
+      "ir_version": "1.2",
+      "app_name": "run",
+      "about_id": "run.about",
+      "fields": [],
+      "windows": null,
+      "subcommands": [
+        {
+          "ir_version": "1.2",
           "app_name": "audit",
           "about_id": "audit.about",
           "fields": [],

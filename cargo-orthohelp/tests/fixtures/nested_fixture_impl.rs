@@ -123,7 +123,7 @@ macro_rules! define_nested_fixture {
 
         fn command(app_name: &str, about: &str) -> LocalizedDocMetadata {
             LocalizedDocMetadata {
-                ir_version: "1.1".to_owned(),
+                ir_version: ORTHO_DOCS_IR_VERSION.to_owned(),
                 locale: "en-US".to_owned(),
                 app_name: app_name.to_owned(),
                 bin_name: None,
