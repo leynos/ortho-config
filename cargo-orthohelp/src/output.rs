@@ -8,16 +8,19 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::error::OrthohelpError;
 use crate::ir::LocalizedDocMetadata;
+use crate::policy::PolicyReport;
 use ortho_config::AgentContext;
 
-// Process-wide suffix for agent-context temp names. `Relaxed` ordering is
-// sufficient because the atomic only needs to hand out distinct values; the
-// filesystem `create_new` and rename operations provide the actual
-// synchronisation. A `u64` wrap would require reusing one process for
-// 2^64 writes, so any collision remains a hard failure at temp-file creation.
-static AGENT_CONTEXT_TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
+// Process-wide suffix for atomic JSON artefact temp names. `Relaxed` ordering
+// hands out distinct values; the `create_new` and rename operations provide
+// the actual synchronisation, so any collision is a hard failure.
+static JSON_ARTEFACT_TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 /// Writes the localized IR JSON for a single locale.
+///
+/// # Errors
+/// Returns an I/O error when preparing or writing the file, or a JSON error
+/// on serialization.
 pub fn write_localized_ir(
     out_dir: &Utf8Path,
     locale: &str,
@@ -57,6 +60,9 @@ pub fn write_localized_ir(
 }
 
 /// Writes the compact agent-context JSON document.
+///
+/// # Errors
+/// Returns a JSON error on serialization or an I/O error on the atomic write.
 pub fn write_agent_context(
     out_dir: &Utf8Path,
     payload: &AgentContext,
@@ -66,77 +72,85 @@ pub fn write_agent_context(
         out_dir = %out_dir,
         "starting agent-context write",
     );
-    let target = AgentContextWriteTarget::new(out_dir);
-    let dir = ensure_dir(out_dir).map_err(|error| {
-        tracing::debug!(
-            package = %payload.package,
-            path = %out_dir,
-            error = %error,
-            "failed to prepare agent-context output directory",
-        );
-        error
-    })?;
-    let mut file = open_agent_context_temp_file(
-        &dir,
-        &target.temp_filename,
-        &target.temp_path,
-        &payload.package,
-    )?;
-
     let content = serde_json::to_string_pretty(payload).map_err(|error| {
         tracing::debug!(
             package = %payload.package,
-            path = %target.path,
+            path = %out_dir,
             error = %error,
             "failed to serialize agent-context JSON",
         );
         OrthohelpError::IrJson(error)
     })?;
+    let path = write_atomic_json(out_dir, "agent-context.json", &content, "agent-context")?;
     tracing::debug!(
         package = %payload.package,
-        path = %target.path,
-        bytes = content.len(),
-        "writing agent-context JSON",
-    );
-    write_and_sync_agent_context_temp_file(
-        &mut file,
-        &target.temp_path,
-        &content,
-        &payload.package,
-    )?;
-    drop(file);
-
-    replace_agent_context_file(&dir, &target, &payload.package)?;
-    sync_parent_dir(&dir, out_dir).map_err(|error| {
-        tracing::debug!(
-            package = %payload.package,
-            path = %out_dir,
-            error = %error,
-            "failed to sync agent-context output directory",
-        );
-        error
-    })?;
-    tracing::debug!(
-        package = %payload.package,
-        path = %target.path,
+        path = %path,
         bytes = content.len(),
         "agent-context JSON written successfully",
     );
+    Ok(path)
+}
+
+/// Writes the machine-readable policy-report JSON document.
+///
+/// # Errors
+/// Returns a JSON error on serialization or an I/O error on the atomic write.
+pub fn write_policy_report(
+    out_dir: &Utf8Path,
+    payload: &PolicyReport,
+) -> Result<Utf8PathBuf, OrthohelpError> {
+    let content = serde_json::to_string_pretty(payload).map_err(OrthohelpError::IrJson)?;
+    write_atomic_json(out_dir, "policy-report.json", &content, "policy-report")
+}
+
+/// Atomically writes one JSON artefact via temp file, rename, and fsync,
+/// satisfying Decision D5's atomicity requirement for `policy-report.json`.
+fn write_atomic_json(
+    out_dir: &Utf8Path,
+    filename: &'static str,
+    content: &str,
+    artefact: &str,
+) -> Result<Utf8PathBuf, OrthohelpError> {
+    tracing::debug!(artefact, out_dir = %out_dir, "starting atomic JSON write");
+    let target = JsonArtefactWriteTarget::new(out_dir, filename);
+    let dir = ensure_dir(out_dir).map_err(|error| {
+        tracing::debug!(
+            artefact,
+            path = %out_dir,
+            error = %error,
+            "failed to prepare JSON output directory",
+        );
+        error
+    })?;
+    let mut file = open_json_temp_file(&dir, &target, artefact)?;
+    write_and_sync_json_temp_file(&mut file, &target, content, artefact)?;
+    drop(file);
+
+    replace_json_file(&dir, &target, artefact)?;
+    sync_parent_dir(&dir, out_dir).map_err(|error| {
+        tracing::debug!(
+            artefact,
+            path = %out_dir,
+            error = %error,
+            "failed to sync JSON output directory",
+        );
+        error
+    })?;
+    tracing::debug!(artefact, path = %target.path, bytes = content.len(), "atomic JSON write complete");
 
     Ok(target.path)
 }
 
-struct AgentContextWriteTarget {
+struct JsonArtefactWriteTarget {
     filename: &'static str,
     path: Utf8PathBuf,
     temp_filename: String,
     temp_path: Utf8PathBuf,
 }
 
-impl AgentContextWriteTarget {
-    fn new(out_dir: &Utf8Path) -> Self {
-        let filename = "agent-context.json";
-        let temp_id = AGENT_CONTEXT_TEMP_COUNTER.fetch_add(1, Ordering::Relaxed);
+impl JsonArtefactWriteTarget {
+    fn new(out_dir: &Utf8Path, filename: &'static str) -> Self {
+        let temp_id = JSON_ARTEFACT_TEMP_COUNTER.fetch_add(1, Ordering::Relaxed);
         let temp_filename = format!("{filename}.{}.{}.tmp", std::process::id(), temp_id);
         Self {
             filename,
@@ -147,90 +161,89 @@ impl AgentContextWriteTarget {
     }
 }
 
-fn open_agent_context_temp_file(
+fn open_json_temp_file(
     dir: &Dir,
-    temp_filename: &str,
-    temp_target: &Utf8Path,
-    package: &str,
+    target: &JsonArtefactWriteTarget,
+    artefact: &str,
 ) -> Result<File, OrthohelpError> {
     dir.open_with(
-        temp_filename,
+        &target.temp_filename,
         OpenOptions::new().write(true).create_new(true),
     )
     .map_err(|io_err| {
         tracing::debug!(
-            package = %package,
-            path = %temp_target,
+            artefact,
+            path = %target.temp_path,
             error = %io_err,
-            "failed to open agent-context JSON for writing",
+            "failed to open JSON artefact for writing",
         );
         OrthohelpError::Io {
-            path: temp_target.to_path_buf(),
+            path: target.temp_path.to_path_buf(),
             source: io_err,
         }
     })
 }
 
-fn write_and_sync_agent_context_temp_file(
+fn write_and_sync_json_temp_file(
     file: &mut File,
-    temp_target: &Utf8Path,
+    target: &JsonArtefactWriteTarget,
     content: &str,
-    package: &str,
+    artefact: &str,
 ) -> Result<(), OrthohelpError> {
     file.write_all(content.as_bytes()).map_err(|io_err| {
         tracing::debug!(
-            package = %package,
-            path = %temp_target,
+            artefact,
+            path = %target.temp_path,
             bytes = content.len(),
             error = %io_err,
-            "failed to write agent-context JSON",
+            "failed to write JSON artefact",
         );
         OrthohelpError::Io {
-            path: temp_target.to_path_buf(),
+            path: target.temp_path.to_path_buf(),
             source: io_err,
         }
     })?;
     file.flush().map_err(|io_err| {
         tracing::debug!(
-            package = %package,
-            path = %temp_target,
+            artefact,
+            path = %target.temp_path,
             bytes = content.len(),
             error = %io_err,
-            "failed to flush agent-context JSON",
+            "failed to flush JSON artefact",
         );
         OrthohelpError::Io {
-            path: temp_target.to_path_buf(),
+            path: target.temp_path.to_path_buf(),
             source: io_err,
         }
     })?;
     file.sync_all().map_err(|io_err| {
         tracing::debug!(
-            package = %package,
-            path = %temp_target,
+            artefact,
+            path = %target.temp_path,
             bytes = content.len(),
             error = %io_err,
-            "failed to sync agent-context JSON",
+            "failed to sync JSON artefact",
         );
         OrthohelpError::Io {
-            path: temp_target.to_path_buf(),
+            path: target.temp_path.to_path_buf(),
             source: io_err,
         }
     })
 }
 
-fn replace_agent_context_file(
+fn replace_json_file(
     dir: &Dir,
-    target: &AgentContextWriteTarget,
-    package: &str,
+    target: &JsonArtefactWriteTarget,
+    artefact: &str,
 ) -> Result<(), OrthohelpError> {
     dir.rename(&target.temp_filename, dir, target.filename)
         .map_err(|io_err| {
             tracing::debug!(
-                package = %package,
+                artefact,
                 source = %target.temp_path,
                 destination = %target.path,
                 error = %io_err,
-                "failed to replace agent-context JSON",
+                "failed to replace JSON artefact",
             );
             OrthohelpError::Io {
                 path: target.path.clone(),
@@ -285,7 +298,7 @@ fn ensure_dir(path: &Utf8Path) -> Result<Dir, OrthohelpError> {
 
 #[cfg(test)]
 mod tests {
-    //! Unit tests for output-path handling and file writing.
+    //! Unit tests for atomic JSON artefact writing.
 
     use super::*;
     use camino::Utf8Path;
@@ -322,17 +335,16 @@ mod tests {
         let temp_dir = TempDir::new().expect("create temporary output directory");
         let out_dir = Utf8Path::from_path(temp_dir.path()).expect("temporary path is UTF-8");
         let dir = ensure_dir(out_dir).expect("open output directory");
-        let temp_filename = "agent-context.json.collision.tmp";
-        let temp_path = out_dir.join(temp_filename);
+        let target = JsonArtefactWriteTarget::new(out_dir, "agent-context.json");
 
         // The first `create_new` open succeeds and leaves the temp file in place.
-        let _first = open_agent_context_temp_file(&dir, temp_filename, &temp_path, "test-package")
+        let _first = open_json_temp_file(&dir, &target, "agent-context")
             .expect("first temp file creation should succeed");
 
-        // A second open with the same name must fail hard: `create_new(true)`
+        // A second open with the same temp name must fail hard: `create_new(true)`
         // refuses to clobber an existing temp file, preserving atomicity even
         // when a stale file lingers from a crashed run with a reused PID.
-        let second = open_agent_context_temp_file(&dir, temp_filename, &temp_path, "test-package");
+        let second = open_json_temp_file(&dir, &target, "agent-context");
         assert!(
             matches!(
                 &second,
@@ -350,18 +362,18 @@ mod tests {
 
         // `Dir` and `ambient_authority` are in scope via `use super::*`.
         // `open_ambient_dir` requires `AsRef<Utf8Path>`, so the `Utf8Path`
-        // `out_dir` is passed directly rather than via `as_std_path()`, which
-        // would yield a `std::path::Path` and fail the bound.
+        // `out_dir` is passed directly rather than via `as_std_path()`.
         let dir = Dir::open_ambient_dir(out_dir, ambient_authority()).expect("open temp dir");
 
         std::fs::File::create(out_dir.join("collision.tmp")).expect("pre-create collision file");
+        let target = JsonArtefactWriteTarget {
+            filename: "agent-context.json",
+            path: out_dir.join("agent-context.json"),
+            temp_filename: "collision.tmp".to_owned(),
+            temp_path: out_dir.join("collision.tmp"),
+        };
 
-        let result = open_agent_context_temp_file(
-            &dir,
-            "collision.tmp",
-            &out_dir.join("collision.tmp"),
-            "test-package",
-        );
+        let result = open_json_temp_file(&dir, &target, "agent-context");
         assert!(
             matches!(
                 &result,
@@ -378,7 +390,7 @@ mod tests {
         let out_dir = Utf8Path::from_path(temp_dir.path()).expect("temporary path is UTF-8");
 
         let temp_filenames = (0..8)
-            .map(|_| AgentContextWriteTarget::new(out_dir).temp_filename)
+            .map(|_| JsonArtefactWriteTarget::new(out_dir, "agent-context.json").temp_filename)
             .collect::<Vec<_>>();
         let unique_temp_filenames = temp_filenames.iter().collect::<HashSet<_>>();
 
