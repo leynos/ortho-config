@@ -2,11 +2,15 @@
 
 ## Status
 
-Proposed.
+Accepted (2026-08-09): profiles are named `[profile.<name>]` config overlays
+selected statelessly via an opt-in `--profile`/`<PREFIX>PROFILE` selector,
+merged as first-class per-file layers between files and environment, and
+surfaced through additive agent-context and documentation-IR metadata. The text
+is verified against the approved execution plan.
 
 ## Date
 
-2026-08-07.
+2026-08-07 (created); 2026-08-09 (accepted).
 
 ## Context and problem statement
 
