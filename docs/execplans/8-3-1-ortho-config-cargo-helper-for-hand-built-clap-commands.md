@@ -5,7 +5,8 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
 proceeds.
 
-Status: IN PROGRESS (user approved implementation on 2026-08-06)
+Status: COMPLETE (all milestones delivered 2026-08-09; PR #419 ready for
+review)
 
 ## Purpose / big picture
 
@@ -191,8 +192,11 @@ Stop and escalate (do not work around) when any of these is reached.
       `04d548f`. The four edits were authored by the `scribe` subagent from
       the Stage C brief and accepted unchanged after review; all six gates
       passed in a single `scrutineer` run (see Stage C notes).
-- [ ] Milestone 3: CodeRabbit review clean; roadmap 8.3.1 marked done (with
-      the D-2 annotation per Risk 5); final gates; PR ready for review.
+- [x] (2026-08-09) Milestone 3: CodeRabbit review clean (0 findings across
+      17 files, no `preparing_sandbox` stall and no rate limit — the first
+      clean completion in this environment since the 11.1.x stalls); roadmap
+      8.3.1 marked done with the D-2 annotation per Risk 5; final gates
+      green; PR ready for review.
 
 Each milestone ends with the gates run sequentially (never in parallel,
 because the environment relies on build caching) and a commit. Prefer
@@ -447,7 +451,52 @@ under `/tmp` and returns a bounded report.
 
 ## Outcomes & retrospective
 
-To be completed at delivery.
+Delivered: `ortho_config::cargo::external_subcommand` ships in the crate with
+unit, snapshot, and behavioural coverage, the public documentation is
+reconciled with the shipped shape, the roadmap is ticked, and the PR is ready
+for review.
+
+What went well:
+
+- The plan's clap 4.6 fact list held without revision during implementation
+  (Tolerance 7 was not triggered), and the two benign sketch corrections
+  (`Resettable::Reset` for the inner `bin_name` reset; owned `String`s in BDD
+  step code) were recorded as observations rather than escalations.
+- The red-evidence discipline (D-8) worked as designed: transcripts captured
+  the compile failures against the missing module, and the first commit landed
+  green with tests and implementation together.
+- The `scrutineer` delegation kept full gate output out of the planning
+  context; every milestone gate run came back green on the first attempt.
+- CodeRabbit completed clean on the first 8.3.1 attempt — 0 findings across
+  17 files, no `preparing_sandbox` stall and no rate limit — the first clean
+  completion recorded in this environment since the 11.1.x stalls, so Risk 4
+  did not materialize.
+- The `scribe` delegation for the Milestone 2 doc sweep produced all four
+  edits to the Stage C brief, accepted unchanged after review, and every
+  Markdown gate passed on the first run.
+
+Costs and frictions:
+
+- The documentation sweep is the largest single effort in this task measured
+  in prose, not code: the helper is ~120 lines of production code, but the
+  plan's documentation obligations (users' guide section with hint snippet,
+  design sketch reconciliation, ADR amendment, developers' guide) are where
+  the deliverable's discoverability lives.
+- The `typos.local.toml` inline-code exclusion pin (commit `41f2a53`) is a
+  temporary hold inherited from the upstream spelling-dictionary change; it
+  remains flagged as a marked hold and should be revisited when the shared
+  base restores or accepts the inline-code behaviour.
+
+Deferred to follow-up items (all recorded in the plan body):
+
+- 8.3.2 owns the derive template documentation and the README half of
+  design.md §4.17's documentation obligation (recorded in the users' guide).
+- 8.3.4 owns the shared on-`PATH` regression fixtures; `cargo-orthohelp`'s
+  existing `cli_dispatch.rs` already proves real Cargo dispatch for the
+  nested shape.
+- The helper's top-level `--version` divergence from the derive reference
+  (Risk 6) is pinned in tests and documented in the users' guide for 8.3.2 to
+  reconcile.
 
 ## Context and orientation
 
@@ -1022,5 +1071,13 @@ scaling waived as inapplicable to a pure function). Material changes:
    configuration" cross-reference, and the roadmap-tick annotation for the
    D-2 deviation.
 
-Status remains DRAFT; no implementation may begin until the user approves
-the plan.
+The plan was approved on 2026-08-06 (Milestone 0c) and is now COMPLETE; see
+the status line at the top of the document.
+
+Revision 2 (2026-08-09): implementation complete. Milestones 1–3 all
+delivered; this revision records the delivery in `Progress`, replaces the
+placeholder `Outcomes & retrospective` with the delivery retrospective, and
+updates the status line. The plan body (Decisions D-1–D-9, Constraints,
+Tolerances) was unchanged throughout implementation — no deviation required
+escalation under Tolerance 6 or 7; the two benign clap facts recorded as
+implementation observations amended the verified-fact list only.
