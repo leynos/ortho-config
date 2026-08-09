@@ -151,7 +151,28 @@ escalation, not workarounds.
     shared `agent_context` module needs `policy` declared in *both* the
     lib (`src/lib.rs`) and the binary (`src/main.rs`). `main.rs` gained
     `pub mod policy;`.
-- [ ] Milestone 2: policy configuration model and Cargo metadata parsing.
+  - Gates green on commit `bd2aff8` (scrutineer run; `make lint` was red
+    once on a `non_modrs_mods` violation — the module moved to
+    `vocabulary/mod.rs` — then green). CodeRabbit review on `bd2aff8`:
+    0 findings across all 7 reviewed files.
+- [x] Milestone 2: policy configuration model and Cargo metadata parsing.
+  - `cargo-orthohelp/src/policy/config.rs` adds `PolicyConfig`,
+    `PolicyConfigMetadata` (strict `deny_unknown_fields`), `PolicyException`,
+    `ExceptionKind` (wire `verb`/`flag`), `PolicyInputs`
+    (`#[non_exhaustive]`), the `From` conversions to `PolicyConfig`, and
+    `PolicyConfigMetadata::from_package_metadata` (reads the optional
+    `ortho_config.policy` table from the package metadata JSON value —
+    `cargo_metadata` 0.18 exposes `Package.metadata` as a `serde_json::Value`,
+    not a `BTreeMap`). 15 rstest + 2 proptest cases green
+    (`cargo test -p cargo-orthohelp policy::config`).
+  - Re-scoped from the plan: the `OrthoConfigMetadata.policy` /
+    `PackageSelection.policy` metadata extension is deferred to Milestone 4,
+    where the agent-context generation actually consumes it. Milestone 3 uses
+    `PolicyConfigMetadata::from_package_metadata` directly, so introducing the
+    extension field in M2 would have produced `dead_code` warnings (the field
+    is unread until M4). `select_policy_package` (the light package resolver
+    for the check) is likewise deferred to Milestone 3, when `check.rs` calls
+    it. The config model itself is self-contained and fully exercised here.
 - [ ] Milestone 3: `--check-agent-native` CLI wiring, report emission, and
   deny-mode exit path.
 - [ ] Milestone 4: policy visibility in agent-context output.
