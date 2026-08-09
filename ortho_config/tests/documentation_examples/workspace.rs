@@ -188,7 +188,15 @@ impl ExampleWorkspace {
 }
 
 fn manifest(DependencyAlias(dependency_name): DependencyAlias<'_>) -> String {
-    let crate_path = env!("CARGO_MANIFEST_DIR");
+    let crate_path = env!("CARGO_MANIFEST_DIR").replace('\\', "/");
+    render_manifest(dependency_name, &crate_path)
+}
+
+/// Render the generated manifest from a TOML-safe Cargo dependency path.
+///
+/// This stays private to the documentation workspace and its path regression
+/// test; callers must normalize host path separators before using it.
+fn render_manifest(dependency_name: &str, crate_path: &str) -> String {
     format!(
         concat!(
             "[package]\n",
@@ -203,4 +211,23 @@ fn manifest(DependencyAlias(dependency_name): DependencyAlias<'_>) -> String {
         ),
         dependency_name, crate_path,
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::render_manifest;
+
+    #[test]
+    fn windows_dependency_path_produces_valid_toml() {
+        let windows_path = r"D:\a\ortho-config\ortho-config\ortho_config";
+        let normalized_path = windows_path.replace('\\', "/");
+
+        assert_eq!(
+            normalized_path,
+            "D:/a/ortho-config/ortho-config/ortho_config"
+        );
+        let generated = render_manifest("ortho_config", &normalized_path);
+        toml::from_str::<toml::Value>(&generated)
+            .expect("normalized documentation manifest should parse as TOML");
+    }
 }
