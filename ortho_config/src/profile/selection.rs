@@ -48,8 +48,8 @@ impl SelectedProfile {
     ///
     /// # Errors
     ///
-    /// Returns [`OrthoError::InvalidProfileName`] when the winning value
-    /// fails the name grammar.
+    /// Returns [`crate::OrthoError::InvalidProfileName`] when the winning
+    /// value fails the name grammar.
     pub fn resolve(flag: Option<&str>, env: Option<&str>) -> OrthoResult<Option<Self>> {
         if let Some(value) = flag {
             if unset(value) {
