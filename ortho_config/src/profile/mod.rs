@@ -14,10 +14,12 @@
 
 mod extract;
 mod name;
+mod outcome;
 mod selection;
 
 pub use extract::extract_profile_layers;
 pub use name::{AvailableProfileNames, ProfileName};
+pub use outcome::ProfileLoadOutcome;
 pub use selection::{ProfileSource, SelectedProfile};
 
 #[cfg(test)]
@@ -26,5 +28,7 @@ mod tests_errors;
 mod tests_extraction;
 #[cfg(test)]
 mod tests_names;
+#[cfg(test)]
+mod tests_precedence;
 #[cfg(test)]
 mod tests_selection;

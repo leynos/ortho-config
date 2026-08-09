@@ -26,6 +26,17 @@ pub(crate) fn compute_config_env_var(struct_attrs: &StructAttrs) -> String {
     )
 }
 
+/// The selector environment variable name for profile support (decision D8).
+///
+/// Derived from the existing `prefix` exactly as other environment keys are:
+/// prefix `APP_` gives `APP_PROFILE`; no prefix gives `PROFILE`.
+pub(crate) fn compute_profile_env_var(struct_attrs: &StructAttrs) -> String {
+    struct_attrs.prefix.as_deref().map_or_else(
+        || String::from("PROFILE"),
+        |prefix| format!("{prefix}PROFILE"),
+    )
+}
+
 pub(crate) fn build_config_env_var(struct_attrs: &StructAttrs) -> proc_macro2::TokenStream {
     let var = compute_config_env_var(struct_attrs);
     quote! { #var }

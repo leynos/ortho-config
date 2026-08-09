@@ -45,6 +45,7 @@ fn make_doc_metadata(spec: DocMetadataSpec<'_>) -> ortho_docs::DocMetadata {
         fields: vec![sample_field()],
         subcommands: spec.subcommands,
         windows: spec.windows,
+        profiles: None,
     }
 }
 
