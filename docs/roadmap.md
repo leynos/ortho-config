@@ -416,17 +416,17 @@ helpers, while downstream applications own domain behaviour.
 
 ### 9.1. Profile contracts
 
-- [ ] 9.1.1. Design and implement optional profile metadata.
+- [x] 9.1.1. Design and implement optional profile metadata.
   - Requires step 6.2.
   - See agent-native-cli-design.md §6.7.
   - See [ADR-008](adr-008-profile-selection-and-layering.md) for the
     approved design: named overlays inside configuration files, stateless
     `--profile` selection, and the five-tier merge order.
-  - [ ] Standardize `--profile <name>` as the root selection flag.
-  - [ ] Document the precedence
+  - [x] Standardize `--profile <name>` as the root selection flag.
+  - [x] Document the precedence
     `built-in defaults < config files < selected profile < environment <
     flags`.
-  - [ ] Expose profile support, profile listing commands, and selected-profile
+  - [x] Expose profile support, profile listing commands, and selected-profile
     semantics in agent context. The `list_command` contract field ships in
     9.1.1; populating it waits on the 9.1.3 store helpers.
 
