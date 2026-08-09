@@ -424,6 +424,23 @@ D11–D15 added after the Logisphere design-review panel (see Decision log).
 - [ ] Milestone 2: profile merge layer in the composer (red → green →
       refactor), including the generated provenance-label code and dev-dep
       verification (D9).
+      - [x] (2026-08-09) D9 dev-dep verification commit: googletest 0.14.3
+            and pretty_assertions 1.4.1 build clean under `-D warnings` on
+            the MSRV 1.89 and Whitaker toolchains; the profile test-module
+            skeleton (four files) passes.
+      - [x] (2026-08-09) Red: focused tests fail to compile with the
+            expected missing `push_profile`/`MergeProvenance::Profile`/
+            `MergeLayer::profile` errors; BDD feature extended with a
+            profile-layer scenario. See Artefacts and notes.
+      - [x] (2026-08-09) Green: `MergeProvenance::Profile`,
+            `MergeLayer::profile(value, path)`, `MergeComposer::push_profile`,
+            guards.rs label + fixture updated; all focused tests pass.
+      - [x] (2026-08-09) Refactor: `MergeLayer::value()` borrowing accessor
+            finalized as the extraction value-access mechanism (see decision
+            log); constructor plumbing already minimal.
+- [ ] Milestone 2: profile merge layer in the composer (red → green →
+      refactor), including the generated provenance-label code and dev-dep
+      verification (D9).
 - [ ] Milestone 3: profile extraction, selection resolution, validation, and
       structured error paths in `ortho_config`.
 - [ ] Milestone 4: derive-macro opt-in, generated `--profile` flag, selector
@@ -541,6 +558,16 @@ Progress entries from milestone 1 onward must carry timestamps.
   (`make markdownlint`, `make nixie`) plus a CodeRabbit review pass clean.
   Rationale: constraint 6's documentation-first requirement is now satisfied;
   behavioural work (milestone 2) may begin. Date/Author: 2026-08-09,
+  implementing agent.
+- Decision: the milestone-2 refactor finalizes the `MergeLayer` value-access
+  mechanism as a borrowing `value()` accessor rather than the `into_parts()`/
+  `map_value` candidates named in the plan. Rationale: the milestone-3/4
+  extraction helper must read a file layer's value while the layer is still
+  pushed as a file layer, so a non-consuming accessor is the minimal seam;
+  `value()` is the borrowing counterpart to the existing `into_value()`, and
+  `map_value` would add a combinator no call site needs yet. The composer's
+  `push_*` wrappers were already one-liners over `push_layer`, so no
+  constructor plumbing needed deduplication. Date/Author: 2026-08-09,
   implementing agent.
 
 ## Outcomes & retrospective
@@ -902,6 +929,49 @@ rollback story (removing the opt-in attribute) is recorded in ADR-008
 
 Populated during implementation with focused transcripts (red failures, green
 passes, gate summaries, fixture diffs).
+
+### Milestone 2, red (2026-08-09)
+
+Focused tests fail to compile exactly as expected — the new API does not exist
+yet:
+
+```text
+$ cargo test -p ortho_config --lib tests_profile_layer
+error[E0599]: no method named `push_profile` found for struct `MergeComposer`
+error[E0599]: no variant or associated item named `Profile` found for enum
+             `MergeProvenance`
+error[E0599]: no function or associated item named `profile` found for struct
+             `MergeLayer`
+
+$ cargo test -p ortho_config --test rstest_bdd
+error[E0599]: no method named `push_profile` found for struct `MergeComposer`
+error[E0599]: no variant or associated item named `Profile` found for enum
+             `MergeProvenance`
+```
+
+Test placement notes: the derive macro cannot be invoked inside the library
+crate (its generated code names the consumer crate), so the declarative unit
+tests use a hand-written `DeclarativeMerge` state machine (as in the trait's
+doc example) and the generated-label diagnostics test lives in
+`ortho_config/tests/declarative_merge.rs` where a derived struct exists.
+
+### Milestone 2, green (2026-08-09)
+
+Focused tests pass after adding the API:
+
+```text
+$ cargo test -p ortho_config --lib tests_profile_layer
+test result: ok. 5 passed   # ordering, merge precedence, accessors, borrow
+
+$ cargo test -p ortho_config --test declarative_merge
+test result: ok. 22 passed  # incl. merge_layers_label_profile_provenance_in_diagnostics
+
+$ cargo test -p ortho_config --test rstest_bdd
+test result: ok. 57 passed  # incl. the profile-layer composer scenario
+
+$ cargo test -p ortho_config_macros
+test result: ok. 123 passed  # guards.rs + expected_merge_impl_empty.rs.txt updated
+```
 
 ## Interfaces and dependencies
 

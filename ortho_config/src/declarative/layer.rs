@@ -13,6 +13,8 @@ pub enum MergeProvenance {
     Defaults,
     /// Values loaded from configuration files.
     File,
+    /// Values overlayed by a selected profile (roadmap 9.1.1).
+    Profile,
     /// Values collected from environment variables.
     Environment,
     /// Values supplied on the command line.
@@ -48,6 +50,16 @@ impl<'a> MergeLayer<'a> {
         }
     }
 
+    /// Construct a layer originating from a selected profile table.
+    #[must_use]
+    pub const fn profile(value: Cow<'a, Value>, path: Option<Utf8PathBuf>) -> Self {
+        Self {
+            provenance: MergeProvenance::Profile,
+            value,
+            path,
+        }
+    }
+
     /// Construct a layer originating from environment variables.
     #[must_use]
     pub const fn environment(value: Cow<'a, Value>) -> Self {
@@ -78,6 +90,17 @@ impl<'a> MergeLayer<'a> {
     #[must_use]
     pub fn path(&self) -> Option<&Utf8Path> {
         self.path.as_deref()
+    }
+
+    /// Borrows the JSON value carried by the layer.
+    ///
+    /// Unlike [`MergeLayer::into_value`], this does not consume the layer, so
+    /// extraction helpers can read a layer's value and still push the layer
+    /// itself. Profile-table extraction (roadmap 9.1.1) uses this to derive
+    /// profile layers from file layers without cloning the file value.
+    #[must_use]
+    pub fn value(&self) -> &Value {
+        &self.value
     }
 
     /// Returns an owned JSON value representing the layer.
