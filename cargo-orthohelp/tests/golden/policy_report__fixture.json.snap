@@ -1,0 +1,41 @@
+---
+source: cargo-orthohelp/tests/golden/policy_report_tests.rs
+assertion_line: 31
+expression: snapshot
+---
+{
+  "version": "1",
+  "tool": "cargo-orthohelp",
+  "mode": "off",
+  "results": [],
+  "summary": {
+    "off": 0,
+    "warn": 0,
+    "deny": 0,
+    "total": 0
+  },
+  "exceptions": [],
+  "vocabulary": {
+    "verbs": [
+      "get",
+      "list",
+      "create",
+      "update",
+      "delete",
+      "jobs",
+      "profile",
+      "feedback"
+    ],
+    "flags": [
+      "--json",
+      "--no-input",
+      "--force",
+      "--dry-run",
+      "--limit",
+      "--cursor",
+      "--wait",
+      "--profile",
+      "--deliver"
+    ]
+  }
+}

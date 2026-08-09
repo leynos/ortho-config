@@ -293,6 +293,8 @@ mod tests {
                 help_info_uri: None,
                 should_ensure_en_us: true,
             },
+            check_agent_native: false,
+            policy_mode: None,
         }
     }
 

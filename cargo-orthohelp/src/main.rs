@@ -2,10 +2,7 @@
 //!
 //! The binary accepts Cargo's external-subcommand dispatch shape through
 //! [`cli::Cli`], then delegates to the metadata, locale, cache, bridge, and
-//! output modules to build localized documentation artefacts. `main` keeps the
-//! process boundary thin by forwarding all fallible work through `run`, where
-//! parsed `orthohelp` arguments are converted into package selection, bridge
-//! configuration, localized IR, and renderer-specific outputs.
+//! output modules to build localized documentation artefacts.
 
 pub mod agent_context;
 mod bridge;
@@ -32,7 +29,8 @@ use crate::error::OrthohelpError;
 use crate::metadata::PackageSelection;
 use crate::schema::{DocMetadata, ORTHO_DOCS_IR_VERSION};
 use camino::Utf8PathBuf;
-use clap::{Error as ClapError, Parser, error::ErrorKind};
+use clap::parser::ValueSource;
+use clap::{CommandFactory, Error as ClapError, FromArgMatches, error::ErrorKind};
 use ortho_config::{FluentLocalizer, LanguageIdentifier, Localizer};
 use std::io::Write;
 use std::str::FromStr;
@@ -48,11 +46,11 @@ struct GenerationContext<'a> {
 
 fn main() -> Result<(), OrthohelpError> {
     init_tracing();
-    let cli = match parse_cli() {
-        Ok(cli) => cli,
+    let (cli, format_was_explicit) = match parse_cli() {
+        Ok(parsed) => parsed,
         Err(error) => exit_for_clap_error(&error),
     };
-    run(cli)
+    run(cli, format_was_explicit)
 }
 
 fn init_tracing() {
@@ -61,8 +59,13 @@ fn init_tracing() {
         .try_init();
 }
 
-fn parse_cli() -> Result<Cli, ClapError> {
-    Cli::try_parse()
+fn parse_cli() -> Result<(Cli, bool), ClapError> {
+    let matches = Cli::command().try_get_matches()?;
+    let cli = Cli::from_arg_matches(&matches)?;
+    let format_was_explicit = matches
+        .subcommand_matches("orthohelp")
+        .is_some_and(|sub| sub.value_source("format") == Some(ValueSource::CommandLine));
+    Ok((cli, format_was_explicit))
 }
 
 fn exit_for_clap_error(error: &ClapError) -> ! {
@@ -87,15 +90,35 @@ fn write_augmented_clap_error(error: &ClapError) -> std::io::Result<()> {
     )
 }
 
-fn run(cli: Cli) -> Result<(), OrthohelpError> {
+/// Runs the agent-native policy check when requested and reports whether the
+/// generator pipeline should be skipped (Decision D11's `--format` rule).
+fn run_policy_check_if_requested(
+    args: &Args,
+    metadata: &cargo_metadata::Metadata,
+    format_was_explicit: bool,
+) -> Result<bool, OrthohelpError> {
+    if !args.check_agent_native {
+        return Ok(false);
+    }
+    let out_dir = args
+        .out_dir
+        .clone()
+        .unwrap_or_else(|| metadata.target_directory.join("orthohelp").join("out"));
+    let package = metadata::select_policy_package(metadata, args)?;
+    policy::check::run_policy_check(package, args.policy_mode, &out_dir)?;
+    Ok(!format_was_explicit)
+}
+
+fn run(cli: Cli, format_was_explicit: bool) -> Result<(), OrthohelpError> {
     let Cli {
         command: CargoSubcommand::Orthohelp(args),
     } = cli;
-    tracing::debug!(
-        "cargo-orthohelp dispatched via Cargo external-subcommand (orthohelp token present)"
-    );
+    tracing::debug!("cargo-orthohelp dispatched via Cargo external-subcommand");
 
     let metadata = metadata::load_metadata()?;
+    if run_policy_check_if_requested(&args, &metadata, format_was_explicit)? {
+        return Ok(());
+    }
     let selection = metadata::select_package(&metadata, &args)?;
 
     let out_dir = resolve_out_dir(args.out_dir.clone(), &selection);
@@ -206,10 +229,7 @@ fn build_agent_context_localizer_if_requested(
     match build_en_us_localizer(&selection.package_root) {
         Ok(localizer) => Some(localizer),
         Err(error) => {
-            tracing::warn!(
-                error = %error,
-                "no en-US localizer available; agent-context summaries will be omitted",
-            );
+            tracing::warn!(error = %error, "no en-US localizer; agent-context summaries omitted");
             None
         }
     }
@@ -362,8 +382,7 @@ fn generate_powershell(
     localized_docs: &[ir::LocalizedDocMetadata],
     ps_config: &powershell::PowerShellConfig,
 ) -> Result<(), OrthohelpError> {
-    // Keep the generated artefact list available for future CLI reporting while
-    // the command currently only signals success/failure via exit status.
+    // Keep the generated artefact list binding for future CLI reporting.
     let _generated_output = powershell::generate(localized_docs, ps_config)?;
     Ok(())
 }
