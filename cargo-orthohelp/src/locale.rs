@@ -310,6 +310,7 @@ mod tests {
             root_type: "demo::Config".to_owned(),
             locales,
             windows: None,
+            policy: None,
             ortho_config_dependency: crate::metadata::OrthoConfigDependency {
                 requirement: "^0.7.0".to_owned(),
                 path: None,

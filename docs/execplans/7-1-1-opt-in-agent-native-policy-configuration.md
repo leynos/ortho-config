@@ -207,7 +207,36 @@ escalation, not workarounds.
   - `metadata.rs` gains `select_policy_package` (light resolver used by
     `main.rs`). `locale.rs` test fixture updated for the two new `Args`
     fields.
-- [ ] Milestone 4: policy visibility in agent-context output.
+  - Gates green on commit `5a02687` (scrutineer run; lint was red twice:
+    once on rustdoc redundant-explicit-link + clippy (mod.rs layout for
+    `check`/`evaluate`, `missing_errors_doc` on the now-lib-public output
+    writers, `clone_on_copy`, `indexing_slicing`, `option_if_let_else`,
+    `cognitive_complexity`/`too_many_lines` on `main::run`) — all fixed,
+    `main.rs` trimmed to 400 lines, `output.rs` to 399). CodeRabbit review
+    on `5a02687`: 0 findings across all 19 reviewed files.
+- [x] Milestone 4: policy visibility in agent-context output.
+  - `ortho_config::agent_context::AgentPolicy` gains the additive
+    `exceptions: Vec<PolicyException>` (serde-defaulted, serialized
+    unconditionally); `PolicyException` carries string-typed `kind`,
+    `name`, and optional `command_path` — no `reason` (Decision D12).
+    Wire-contract fixture, proptest round-trip strategy, legacy-default
+    assertions, and a forward-tolerance test (unrecognized `kind` survives
+    round-tripping) all updated; 48 agent-context tests green.
+  - `cargo-orthohelp` adapter gains the single-point D12 conversions
+    (`From<PolicyMode>` and `From<&PolicyException>` for the wire mirrors)
+    and `apply_policy_to_context` honouring D9 (advertised `warn` default
+    when no policy table; configured mode + exceptions when one exists;
+    never the `--policy-mode` override). `metadata.rs` gains
+    `OrthoConfigMetadata.policy` and `PackageSelection.policy` (used by
+    the agent-context generation); `locale.rs` fixture updated.
+  - Existing `orthohelp_fixture` agent-context snapshots changed only by
+    the additive empty `exceptions` field (reviewed deliberately); the
+    D10 fixtures `orthohelp_policy_warn_fixture` and
+    `orthohelp_policy_deny_fixture` were added earlier than the plan's
+    M5a so the M4 golden test can run against the warn fixture. New
+    golden `agent_context__policy_warn_fixture.json.snap` shows
+    `policy.agent_native = "warn"` and the two configured exceptions
+    (kind, name, scope — no reasons). 17 golden tests green.
 - [ ] Milestone 5a: behavioural tests and policy fixture packages.
 - [ ] Milestone 5b: documentation, ADR-008, CHANGELOG, roadmap tick.
 

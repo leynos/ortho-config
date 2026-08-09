@@ -1,6 +1,5 @@
 ---
 source: cargo-orthohelp/tests/golden/agent_context_tests.rs
-assertion_line: 43
 expression: snapshot
 ---
 {
@@ -166,7 +165,8 @@ expression: snapshot
     "supported": false
   },
   "policy": {
-    "agent_native": "warn"
+    "agent_native": "warn",
+    "exceptions": []
   },
   "skill_manifests": []
 }

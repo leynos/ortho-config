@@ -199,18 +199,43 @@ pub struct SupportDeclaration {
 }
 
 /// Agent-native policy mode advertised by a command surface.
+///
+/// The `exceptions` list records the invocation-shape exceptions the project
+/// has committed to. It carries only the exception's identity (`kind`, `name`,
+/// scope); the human-facing `reason` published in `policy-report.json` is
+/// deliberately not copied into this agent-distributed artefact.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct AgentPolicy {
     /// `off`, `warn`, or `deny`.
     pub agent_native: PolicyMode,
+    /// Explicit project exceptions committed to by the command surface.
+    #[serde(default)]
+    pub exceptions: Vec<PolicyException>,
 }
 
 impl Default for AgentPolicy {
     fn default() -> Self {
         Self {
             agent_native: PolicyMode::Warn,
+            exceptions: Vec::new(),
         }
     }
+}
+
+/// One policy exception advertised in agent context.
+///
+/// `kind` is string-typed on the wire for forward tolerance: a consumer that
+/// does not recognize a future kind ignores it rather than failing. There is
+/// no `reason` field here (see [`AgentPolicy`]).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct PolicyException {
+    /// Whether the exception names a verb or a flag.
+    pub kind: String,
+    /// Verb or flag name, written the way it appears on the command line.
+    pub name: String,
+    /// Optional command path the exception is scoped to.
+    #[serde(default)]
+    pub command_path: Option<String>,
 }
 
 /// Enforcement mode for agent-native policy.
