@@ -6,6 +6,7 @@
 
 use serde::{Deserialize, Serialize};
 
+pub mod config;
 pub mod vocabulary;
 
 /// Current policy-report schema version.
