@@ -173,8 +173,40 @@ escalation, not workarounds.
     is unread until M4). `select_policy_package` (the light package resolver
     for the check) is likewise deferred to Milestone 3, when `check.rs` calls
     it. The config model itself is self-contained and fully exercised here.
-- [ ] Milestone 3: `--check-agent-native` CLI wiring, report emission, and
+  - Gates green on commit `b53589c` (scrutineer run; `make lint` was red once
+    on three clippy/rustdoc findings in the new `config*` files — a broken
+    intra-doc link to the future `evaluate` module, `self_named_module_files`
+    on `config.rs`, and two clippy findings in `config/tests.rs` — then
+    green). CodeRabbit review on `b53589c`: 0 findings across all 4 reviewed
+    files.
+- [x] Milestone 3: `--check-agent-native` CLI wiring, report emission, and
   deny-mode exit path.
+  - CLI: `--check-agent-native` and `--policy-mode` (`requires =
+    "check_agent_native"`) on `Args`; clap `ValueEnum` + `Display` added to
+    `PolicyMode`; rstest cases in `src/cli/policy_tests.rs`.
+  - `policy/evaluate.rs` implements the D7 sanity findings
+    (`malformed_exception` deny, `redundant_exception` warn,
+    `duplicate_exception` warn) with the exact boundary cases under test;
+    `PolicyReport` gains the additive `exceptions` and `vocabulary` fields
+    plus `with_details`; `policy/check.rs` implements `run_policy_check`
+    (light package resolution, atomic report write, loud off-mode summary,
+    deny `PolicyViolation` return); `error.rs` gains the `PolicyViolation`
+    variant; `output.rs` refactors the atomic writer into a shared
+    `write_atomic_json` + `write_policy_report` (file stays under the
+    400-line cap); `lib.rs` gains `pub mod output;` so the shared check
+    module compiles in both crates.
+  - `main.rs`: `parse_cli` returns `(Cli, format_was_explicit)` via
+    `ValueSource::CommandLine` on the `orthohelp` subcommand matches; the
+    check runs first and the generator pipeline is skipped when `--format`
+    was not explicit (D11). Manual smoke tests confirmed: off-mode report
+    (vocabulary block, zero findings), warn-mode findings, deny-mode exit 1
+    with the report written, `--policy-mode deny` override, and
+    `--check-agent-native` alone writing only `policy-report.json`.
+  - Golden: `tests/golden/policy_report_tests.rs` snapshots the complete
+    off-mode wire contract (`policy_report__fixture.json.snap`).
+  - `metadata.rs` gains `select_policy_package` (light resolver used by
+    `main.rs`). `locale.rs` test fixture updated for the two new `Args`
+    fields.
 - [ ] Milestone 4: policy visibility in agent-context output.
 - [ ] Milestone 5a: behavioural tests and policy fixture packages.
 - [ ] Milestone 5b: documentation, ADR-008, CHANGELOG, roadmap tick.

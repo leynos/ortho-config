@@ -100,6 +100,15 @@ pub enum OrthohelpError {
         source: std::io::Error,
     },
 
+    /// Deny-mode policy findings caused the check to fail.
+    #[error("policy violation: {deny_count} deny finding(s); report: {report_path}")]
+    PolicyViolation {
+        /// Number of deny-level findings.
+        deny_count: usize,
+        /// Path of the written policy report.
+        report_path: String,
+    },
+
     /// A generic error message.
     #[error("{0}")]
     Message(String),
