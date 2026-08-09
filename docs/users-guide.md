@@ -417,6 +417,118 @@ environment values. Because `ParseOnlyArgs` does not derive `OrthoConfig`, it
 has no `load_and_merge` or source-aware merge API. Use the `OrthoConfig`-derived
 `ServeConfig` above when a command needs configuration layering.
 
+
+## Cargo external-subcommand entry points
+
+Cargo runs `cargo <name> [OPTIONS]` by locating a binary named `cargo-<name>`
+on `PATH` and executing it with the subcommand name injected as the second
+argument: argv becomes `["<path>/cargo-<name>", "<name>", OPTIONS...]`. A
+parser that models only `cargo-<name> [OPTIONS]` rejects that injected `<name>`
+token before any application logic can run.
+
+`ortho_config::cargo::external_subcommand` wraps a hand-built `clap::Command`
+in the standard wrapper shape: a synthetic `cargo` parent that requires a
+single subcommand carrying the tool's real options. The worked example below
+parses the Cargo-injected argv all the way to the option value:
+
+```rust
+use ortho_config::cargo::external_subcommand;
+
+let args_command = clap::Command::new("demo")
+    .version("1.2.3")
+    .arg(
+        clap::Arg::new("verbose")
+            .long("verbose")
+            .action(clap::ArgAction::SetTrue),
+    );
+let cli = external_subcommand("cargo-demo", "demo", args_command);
+let matches = cli
+    .try_get_matches_from(["cargo-demo", "demo", "--verbose"])
+    .expect("both invocation forms parse");
+let demo = matches
+    .subcommand_matches("demo")
+    .expect("subcommand_required guarantees a subcommand");
+assert!(demo.get_flag("verbose"));
+```
+
+The returned command accepts both invocation forms with the same inner options
+and no duplicated parser setup:
+
+- `cargo demo --verbose` (Cargo dispatch: argv `['cargo-demo', 'demo',
+  '--verbose']`), and
+- `cargo-demo demo --verbose` (direct invocation with the same injected
+  token).
+
+The adoption cost is that options move one level down: callers read them
+through `subcommand_matches("demo")` on the parsed matches rather than from
+the top-level matches.
+
+The wrapper is CLI entry-point structure, not configuration loading. It does
+not change `OrthoConfig`'s merge precedence (defaults → files → environment →
+explicit command-line arguments) and it does not add a second
+configuration-loading pathway.
+
+Derive-based callers do not need the helper. Wrap the `Args` struct in a
+single-variant `#[command(subcommand)]` enum, as `cargo-orthohelp` does in
+`cargo-orthohelp/src/cli/mod.rs`; the [Generating IR with
+cargo-orthohelp](#generating-help-from-the-same-metadata) section above is the
+in-repo reference for that derive path.
+
+
+### Binary-level obligations
+
+The helper leaves the following binary-level obligations with the caller:
+
+- **Version.** The version belongs on the inner command, where the caller
+  controls it. The synthetic parent is version-less, so a top-level
+  `cargo-demo --version` intentionally errors with `UnknownArgument` rather
+  than printing a version. This diverges from the derive path, where
+  `cargo-orthohelp` sets `#[command(version)]` on its parent and
+  `cargo-orthohelp --version` works.
+- **Invocation hints.** Cargo-facing binaries should augment the
+  `MissingSubcommand` and `UnknownArgument` errors with a hint naming the
+  `cargo <name>` invocation form. The following pair of functions mirrors
+  `exit_for_clap_error` and `write_augmented_clap_error` from
+  `cargo-orthohelp/src/main.rs`:
+
+  ```rust
+  use std::io::Write;
+
+  fn exit_for_clap_error(error: &clap::Error) -> ! {
+      let kind = error.kind();
+      let exit_code = error.exit_code();
+      if matches!(
+          kind,
+          clap::error::ErrorKind::UnknownArgument | clap::error::ErrorKind::MissingSubcommand
+      ) {
+          drop(write_augmented_clap_error(error));
+          std::process::exit(exit_code);
+      }
+      error.exit();
+  }
+
+  fn write_augmented_clap_error(error: &clap::Error) -> std::io::Result<()> {
+      let mut stderr = std::io::stderr().lock();
+      write!(stderr, "{error}")?;
+      writeln!(
+          stderr,
+          "note: invoke this tool via `cargo <name>` or as `cargo-<name> <name> [OPTIONS]`"
+      )
+  }
+  ```
+
+- **Tracing.** Per ADR-004, Cargo-facing binaries should initialize a tracing
+  subscriber before parsing and emit a debug event at the dispatch boundary
+  once the injected token is accepted. `cargo-orthohelp/src/main.rs` is the
+  reference implementation: `init_tracing` installs a
+  `tracing_subscriber::fmt` subscriber from the default environment filter,
+  and a `tracing::debug!` event records the dispatch once parsing succeeds.
+  The library helper does not and must not install a subscriber; libraries must
+  not install global recorders.
+
+The README half of design.md §4.17's documentation obligation is deferred to
+roadmap item 8.3.2, which owns the user-guide and README examples.
+
 ## Handle errors at the application boundary
 
 Library APIs return `OrthoResult<T>`, whose error is an `Arc<OrthoError>`.

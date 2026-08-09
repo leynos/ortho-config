@@ -845,19 +845,27 @@ binaries, but it should not move Cargo dispatch semantics into the
 belongs at the command boundary; configuration precedence remains defaults →
 files → environment → explicit command-line arguments.
 
-The near-term API should be a small `ortho_config::cargo` helper for callers
-that build clap commands by hand. A function such as
-`external_subcommand("cargo-orthohelp", "orthohelp", args_command)` should
-produce the standard wrapper:
+The near-term API is a small `ortho_config::cargo` helper for callers that
+build clap commands by hand. A function such as
+`external_subcommand("cargo-orthohelp", "orthohelp", args_command)` produces
+the standard wrapper:
 
 ```rust
 clap::Command::new("cargo")
-    .bin_name("cargo-orthohelp")
+    .bin_name("cargo")
+    .subcommand_required(true)
     .subcommand(
         clap::Command::new("orthohelp")
-            // existing options live here
+            .bin_name(clap::builder::Resettable::Reset)
+            .display_name("cargo-orthohelp")
+        // existing options live here
     )
 ```
+
+The helper shipped in 8.3.1 as `ortho_config::cargo::external_subcommand`.
+Usage renders the Cargo dispatch form (`Usage: cargo <name> [OPTIONS]`) while
+the installed binary name is carried as the inner command's display name, so
+`--version` output names the installed binary; see the ADR-004 amendment.
 
 The helper must preserve the inner command's existing options rather than
 introducing a second source of configuration semantics. Its success criterion
