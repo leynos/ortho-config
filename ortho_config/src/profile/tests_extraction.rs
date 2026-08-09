@@ -8,6 +8,7 @@ use serde_json::{Value, json};
 use std::borrow::Cow;
 
 use crate::OrthoError;
+use crate::OrthoResult;
 use crate::declarative::{MergeLayer, MergeProvenance};
 use crate::profile::{ProfileName, ProfileSource, SelectedProfile, extract_profile_layers};
 
@@ -15,11 +16,13 @@ fn file_layer(value: Value, path: &str) -> MergeLayer<'static> {
     MergeLayer::file(Cow::Owned(value), Some(Utf8PathBuf::from(path)))
 }
 
-fn selection(name: &str) -> SelectedProfile {
-    SelectedProfile {
-        name: ProfileName::new(name).expect("valid name"),
+/// Builds a flag-selected profile; call sites unwrap inside `#[test]`
+/// functions so Whitaker's `no_expect_outside_tests` stays satisfied.
+fn selection(name: &str) -> OrthoResult<SelectedProfile> {
+    Ok(SelectedProfile {
+        name: ProfileName::new(name)?,
         source: ProfileSource::Flag,
-    }
+    })
 }
 
 #[test]
@@ -34,8 +37,8 @@ fn extracts_one_profile_layer_per_file_in_chain_order() {
             "app.toml",
         ),
     ];
-    let outcome =
-        extract_profile_layers(layers, Some(&selection("ci"))).expect("extraction succeeds");
+    let outcome = extract_profile_layers(layers, Some(&selection("ci").expect("valid test name")))
+        .expect("extraction succeeds");
     assert_eq!(outcome.profile_layers.len(), 2);
     let provenances: Vec<MergeProvenance> = outcome
         .profile_layers
@@ -93,8 +96,8 @@ fn inherits_key_inside_profile_body_is_forbidden() {
         json!({ "profile": { "ci": { "inherits": "base", "retries": 7 } } }),
         "app.toml",
     )];
-    let err =
-        extract_profile_layers(layers, Some(&selection("ci"))).expect_err("inherits is reserved");
+    let err = extract_profile_layers(layers, Some(&selection("ci").expect("valid test name")))
+        .expect_err("inherits is reserved");
     assert!(matches!(
         *err,
         OrthoError::ProfileForbiddenKey { ref profile, ref key }
@@ -108,8 +111,8 @@ fn cmds_key_inside_profile_body_is_forbidden() {
         json!({ "profile": { "ci": { "cmds": { "run": {} } } } }),
         "app.toml",
     )];
-    let err =
-        extract_profile_layers(layers, Some(&selection("ci"))).expect_err("cmds is forbidden");
+    let err = extract_profile_layers(layers, Some(&selection("ci").expect("valid test name")))
+        .expect_err("cmds is forbidden");
     assert!(matches!(
         *err,
         OrthoError::ProfileForbiddenKey { ref profile, ref key }
@@ -123,8 +126,11 @@ fn unknown_profile_reports_structured_payload() {
         json!({ "profile": { "local": {}, "ci": { "retries": 7 } } }),
         "app.toml",
     )];
-    let err = extract_profile_layers(layers, Some(&selection("staging")))
-        .expect_err("unknown profile must error");
+    let err = extract_profile_layers(
+        layers,
+        Some(&selection("staging").expect("valid test name")),
+    )
+    .expect_err("unknown profile must error");
     match *err {
         OrthoError::UnknownProfile {
             ref selected,
@@ -142,7 +148,7 @@ fn unknown_profile_reports_structured_payload() {
 
 #[test]
 fn no_files_discovered_reports_clear_error() {
-    let err = extract_profile_layers(Vec::new(), Some(&selection("ci")))
+    let err = extract_profile_layers(Vec::new(), Some(&selection("ci").expect("valid test name")))
         .expect_err("unknown profile with no files must error");
     let message = err.to_string();
     assert_that!(message, contains_substring("ci"));
@@ -161,8 +167,8 @@ fn unknown_profile_body_keys_flow_through_to_merge() {
         }),
         "app.toml",
     )];
-    let outcome =
-        extract_profile_layers(layers, Some(&selection("ci"))).expect("extraction succeeds");
+    let outcome = extract_profile_layers(layers, Some(&selection("ci").expect("valid test name")))
+        .expect("extraction succeeds");
     let profile_value = outcome
         .profile_layers
         .first()
@@ -180,8 +186,8 @@ fn empty_profile_table_is_a_valid_noop() {
         json!({ "retries": 3, "profile": { "ci": {} } }),
         "app.toml",
     )];
-    let outcome =
-        extract_profile_layers(layers, Some(&selection("ci"))).expect("extraction succeeds");
+    let outcome = extract_profile_layers(layers, Some(&selection("ci").expect("valid test name")))
+        .expect("extraction succeeds");
     let profile_value = outcome
         .profile_layers
         .first()
@@ -197,8 +203,11 @@ fn available_list_display_caps_at_sixteen() {
         profiles.insert(format!("profile_{i}"), json!({}));
     }
     let layers = vec![file_layer(json!({ "profile": profiles }), "app.toml")];
-    let err = extract_profile_layers(layers, Some(&selection("staging")))
-        .expect_err("unknown profile must error");
+    let err = extract_profile_layers(
+        layers,
+        Some(&selection("staging").expect("valid test name")),
+    )
+    .expect_err("unknown profile must error");
     let message = err.to_string();
     assert_that!(message, contains_substring("and 4 more"));
     assert_that!(message, contains_substring("profile_0"));

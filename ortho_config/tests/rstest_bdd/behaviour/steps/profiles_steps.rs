@@ -3,15 +3,15 @@
 //! The scenarios drive the library profile helpers directly — resolution,
 //! extraction, and merge — because the derived `--profile` flag arrives with
 //! the opt-in derive in milestone 4. The `APP_` prefix gives the `APP_PROFILE`
-//! selector and `APP_RETRIES` environment key.
+//! selector and `APP_RETRIES` environment key. Assertion steps live in the
+//! sibling `profiles_steps_assertions` module.
 
 use crate::scenario_state::{ProfilesConfig, ProfilesContext};
-use anyhow::{Result, anyhow, ensure};
+use anyhow::{Result, ensure};
 use ortho_config::{
-    MergeComposer, OrthoError, OrthoResult, ProfileSource, SelectedProfile,
-    profile::extract_profile_layers,
+    MergeComposer, OrthoError, OrthoResult, SelectedProfile, profile::extract_profile_layers,
 };
-use rstest_bdd_macros::{given, then, when};
+use rstest_bdd_macros::{given, when};
 use serde_json::{Map, Value, json};
 use std::borrow::Cow;
 
@@ -150,165 +150,6 @@ fn profiles_load(profiles_context: &ProfilesContext) -> Result<()> {
         .set(profile_load(profiles_context, &[]));
     Ok(())
 }
-
-/// Asserts the merged value of a key.
-#[then("the merged value of {key} is {value}")]
-fn merged_value_is(profiles_context: &ProfilesContext, key: String, value: String) -> Result<()> {
-    let result = profiles_context
-        .result
-        .take()
-        .ok_or_else(|| anyhow!("profile load result unavailable"))?;
-    let config = result.map_err(anyhow::Error::from)?;
-    let expected = normalize_scalar(&value);
-    match normalize_scalar(&key).as_str() {
-        "retries" => ensure!(
-            config.retries.to_string() == expected,
-            "unexpected retries {}; expected {expected}",
-            config.retries
-        ),
-        other => {
-            return Err(anyhow!(
-                "unsupported key {other:?} in merged-value assertion"
-            ));
-        }
-    }
-    Ok(())
-}
-
-/// Asserts the winning selection and its source.
-#[then("the selected profile is {profile} with source {source}")]
-fn selected_profile_is(
-    profiles_context: &ProfilesContext,
-    profile: String,
-    source: String,
-) -> Result<()> {
-    let selection = profiles_context
-        .selection
-        .take()
-        .ok_or_else(|| anyhow!("selection unavailable"))?;
-    let selected = selection
-        .first()
-        .ok_or_else(|| anyhow!("expected a selected profile, got none"))?;
-    ensure!(
-        selected.name.as_str() == normalize_scalar(&profile),
-        "unexpected selected profile {:?}; expected {profile}",
-        selected.name
-    );
-    ensure!(
-        selected.source == parse_source(&source),
-        "unexpected selection source {:?}; expected {source}",
-        selected.source
-    );
-    Ok(())
-}
-
-/// Asserts a failed load names the profile and its flag selection source.
-#[then("loading fails naming {profile} from source {source}")]
-fn loading_fails_naming(
-    profiles_context: &ProfilesContext,
-    profile: String,
-    source: String,
-) -> Result<()> {
-    let selected = profiles_context
-        .error_selected
-        .take()
-        .ok_or_else(|| anyhow!("unknown-profile error not recorded"))?;
-    let error_source = profiles_context
-        .error_source
-        .take()
-        .ok_or_else(|| anyhow!("unknown-profile error source not recorded"))?;
-    ensure!(
-        selected == normalize_scalar(&profile),
-        "unexpected unknown profile {selected:?}; expected {profile}"
-    );
-    ensure!(
-        error_source == parse_source(&source),
-        "unexpected selection source {error_source:?}; expected {source}"
-    );
-    Ok(())
-}
-
-/// Asserts a failed load names the profile and the selector environment source.
-#[then("loading fails naming {profile} from the selector environment variable")]
-fn loading_fails_naming_env(profiles_context: &ProfilesContext, profile: String) -> Result<()> {
-    let selected = profiles_context
-        .error_selected
-        .take()
-        .ok_or_else(|| anyhow!("unknown-profile error not recorded"))?;
-    let error_source = profiles_context
-        .error_source
-        .take()
-        .ok_or_else(|| anyhow!("unknown-profile error source not recorded"))?;
-    ensure!(
-        selected == normalize_scalar(&profile),
-        "unexpected unknown profile {selected:?}; expected {profile}"
-    );
-    ensure!(
-        error_source == ProfileSource::Environment,
-        "expected the selector environment variable as the source, got {error_source:?}"
-    );
-    Ok(())
-}
-
-/// Asserts the unknown-profile error lists the available profiles.
-#[then("the error lists available profiles {first} and {second}")]
-fn error_lists_available(
-    profiles_context: &ProfilesContext,
-    first: String,
-    second: String,
-) -> Result<()> {
-    let available = profiles_context
-        .error_available
-        .take()
-        .ok_or_else(|| anyhow!("unknown-profile error not recorded"))?;
-    let expected = vec![normalize_scalar(&first), normalize_scalar(&second)];
-    ensure!(
-        available == expected,
-        "unexpected available profiles {available:?}; expected {expected:?}"
-    );
-    Ok(())
-}
-
-/// Asserts the load failed because no configuration files were found.
-#[then("the error states that no configuration files were found")]
-fn error_states_no_files(profiles_context: &ProfilesContext) -> Result<()> {
-    let message = profiles_context
-        .error_message
-        .take()
-        .ok_or_else(|| anyhow!("load error message not recorded"))?;
-    ensure!(
-        message.contains("no configuration files were found"),
-        "error should state that no configuration files were found: {message}"
-    );
-    Ok(())
-}
-
-/// Asserts the load failed identifying the forbidden key in a profile.
-#[then("loading fails identifying the forbidden {key} key in {profile}")]
-fn loading_fails_forbidden_key(
-    profiles_context: &ProfilesContext,
-    key: String,
-    profile: String,
-) -> Result<()> {
-    let offending = profiles_context
-        .error_profile
-        .take()
-        .ok_or_else(|| anyhow!("forbidden-key error not recorded"))?;
-    let offending_key = profiles_context
-        .error_key
-        .take()
-        .ok_or_else(|| anyhow!("forbidden-key error not recorded"))?;
-    ensure!(
-        offending == normalize_scalar(&profile),
-        "unexpected profile {offending:?}; expected {profile}"
-    );
-    ensure!(
-        offending_key == normalize_scalar(&key),
-        "unexpected key {offending_key:?}; expected {key}"
-    );
-    Ok(())
-}
-
 /// Records the structured fields of a load error for later assertions.
 fn record_load_error(profiles_context: &ProfilesContext, err: &OrthoError) {
     profiles_context.error_message.set(err.to_string());
@@ -368,7 +209,7 @@ fn profile_load(
     let defaults = profiles_context.struct_default.get();
     match normalize_scalar(defaults.as_deref().unwrap_or("")).as_str() {
         "" => composer.push_defaults(json!({})),
-        value => composer.push_defaults(json!({ "retries": parse_u32(value) })),
+        value => composer.push_defaults(json!({ "retries": parse_u32(value)? })),
     }
     for layer in outcome.file_layers {
         composer.push_layer(layer);
@@ -379,10 +220,10 @@ fn profile_load(
 
     let env_keys = profiles_context.env_keys.get().unwrap_or_default();
     if let Some((_, retries)) = env_keys.iter().find(|(key, _)| key == "retries") {
-        composer.push_environment(json!({ "retries": parse_u32(retries) }));
+        composer.push_environment(json!({ "retries": parse_u32(retries)? }));
     }
     if let Some(retries) = flag_value(flags, "retries") {
-        composer.push_cli(json!({ "retries": parse_u32(retries) }));
+        composer.push_cli(json!({ "retries": parse_u32(retries)? }));
     }
 
     ProfilesConfig::merge_from_layers(composer.layers())
@@ -449,17 +290,12 @@ fn scalar_value(value: &str) -> Value {
     Value::String(value.to_owned())
 }
 
-/// Parses a numeric placeholder as `u32`, panicking on a malformed scenario.
-fn parse_u32(value: &str) -> u32 {
-    unquote(value)
-        .parse()
-        .expect("retries placeholder parses as u32")
-}
-
-/// Maps a step source word to the typed selection source.
-fn parse_source(source: &str) -> ProfileSource {
-    match normalize_scalar(source).as_str() {
-        "flag" => ProfileSource::Flag,
-        _ => ProfileSource::Environment,
-    }
+/// Parses a numeric placeholder as `u32`, reporting a validation error.
+fn parse_u32(value: &str) -> OrthoResult<u32> {
+    unquote(value).parse::<u32>().map_err(|_| {
+        std::sync::Arc::new(OrthoError::Validation {
+            key: "retries".to_owned(),
+            message: format!("invalid retries value {value:?}"),
+        })
+    })
 }
