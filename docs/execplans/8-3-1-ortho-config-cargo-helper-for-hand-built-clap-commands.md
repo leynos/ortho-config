@@ -76,8 +76,10 @@ escalation, not a workaround.
    verbatim. It must not add, remove, rename, or re-parse any inner argument,
    and it must not introduce a second configuration-loading pathway. The only
    inner properties the helper touches are the command's `name` (set to the
-   injected subcommand name — that is its job) and its `bin_name` (reset so
-   clap derives consistent `cargo <name>` usage; see D-2 and Risk 2).
+   injected subcommand name — that is its job), its `bin_name` (reset so
+   clap derives consistent `cargo <name>` usage; see D-2 and Risk 2), and its
+   `display_name` (set to the installed binary name so version output renders
+   it; see D-2).
 3. No new external dependency. clap 4.6 (locked at clap 4.6.1 in `Cargo.lock`;
    `derive` and `string` features) is already a dependency of `ortho_config`.
    In particular, do not add `clap-cargo` for styling; styling stays out of
@@ -502,8 +504,8 @@ Deferred to follow-up items (all recorded in the plan body):
 
 ## Context and orientation
 
-You are working in the `ortho_config` workspace (Rust, edition 2024, workspace
-version 0.8.0). Workspace members: `ortho_config` (the library),
+The `ortho_config` workspace uses Rust edition 2024 and workspace version
+0.8.0. Workspace members: `ortho_config` (the library),
 `ortho_config_macros`, `cargo-orthohelp` (the reference CLI binary),
 `examples/hello_world`, `test_helpers`, and
 `tests/fixtures/orthohelp_fixture`. The gates are `make check-fmt`,
@@ -805,8 +807,9 @@ recorded in `Artefacts`.
 5. `docs/contents.md`: no new document is added, so only touch it if a listed
    summary becomes inaccurate.
 
-Go/no-go: `make markdownlint` and `make nixie` green in addition to the code
-gates. Commit.
+Go/no-go: run `make fmt` after the documentation changes, then require
+`make markdownlint` and `make nixie` green in addition to the code gates,
+recording the formatting result. Commit.
 
 ### Stage D — review, roadmap, delivery (Milestone 3)
 
