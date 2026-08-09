@@ -193,8 +193,53 @@ impl ExampleWorkspace {
         command
             .current_dir(self.root.path())
             .env("CARGO_TARGET_DIR", self.root.path().join("target"));
+        #[cfg(all(windows, target_env = "msvc", target_arch = "x86_64"))]
+        configure_msvc_linker(&mut command);
         command
     }
+}
+
+#[cfg(all(windows, target_env = "msvc", target_arch = "x86_64"))]
+fn configure_msvc_linker(command: &mut Command) {
+    if let Some(linker) = find_msvc_linker() {
+        command.env("CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER", linker);
+    }
+}
+
+#[cfg(all(windows, target_env = "msvc", target_arch = "x86_64"))]
+fn find_msvc_linker() -> Option<std::ffi::OsString> {
+    let program_files =
+        std::env::var_os("ProgramFiles(x86)").or_else(|| std::env::var_os("ProgramFiles"))?;
+    let vswhere = Path::new(&program_files)
+        .join("Microsoft Visual Studio")
+        .join("Installer")
+        .join("vswhere.exe");
+    let output = Command::new(&vswhere)
+        .args([
+            "-latest",
+            "-products",
+            "*",
+            "-requires",
+            "Microsoft.VisualStudio.Component.VC.Tools.x86.x64",
+            "-find",
+            r"VC\Tools\MSVC\**\bin\Hostx64\x64\link.exe",
+            "-utf8",
+        ])
+        .output()
+        .ok()?;
+    output
+        .status
+        .success()
+        .then(|| first_output_line(&output.stdout).map(OsStr::to_os_string))
+        .flatten()
+}
+
+fn first_output_line(output: &[u8]) -> Option<&OsStr> {
+    let decoded_output = std::str::from_utf8(output).ok()?;
+    decoded_output
+        .lines()
+        .find(|line| !line.trim().is_empty())
+        .map(OsStr::new)
 }
 
 fn manifest(DependencyAlias(dependency_name): DependencyAlias<'_>) -> String {
@@ -227,7 +272,7 @@ fn render_manifest(dependency_name: &str, serialized_crate_path: &str) -> String
 mod tests {
     //! Regression coverage for generated workspace manifests.
 
-    use super::{CARGO_ENV_ALLOWLIST, render_manifest};
+    use super::{CARGO_ENV_ALLOWLIST, first_output_line, render_manifest};
 
     #[test]
     fn cargo_environment_preserves_msvc_linker_context() {
@@ -248,6 +293,15 @@ mod tests {
                 "Cargo subprocess should inherit {name} on Windows"
             );
         }
+    }
+
+    #[test]
+    fn visual_studio_discovery_uses_the_first_reported_linker() {
+        let output = b"C:\\Visual Studio\\link.exe\r\nC:\\Other\\link.exe\r\n";
+        assert_eq!(
+            first_output_line(output),
+            Some(std::ffi::OsStr::new(r"C:\Visual Studio\link.exe"))
+        );
     }
 
     #[test]
