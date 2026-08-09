@@ -54,6 +54,7 @@ pub struct ExtendsContext {
 pub struct ComposerContext {
     pub layers: Slot<Vec<MergeLayer<'static>>>,
     pub config: Slot<RulesConfig>,
+    pub profile_value: Slot<String>,
 }
 
 /// Scenario state for aggregated error reporting scenarios.
