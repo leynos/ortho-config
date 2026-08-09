@@ -1,0 +1,7 @@
+error: duplicate `cli_long` value 'profile' conflicts with the generated profile flag
+ --> tests/ui/profile_long_flag_collision.rs:4:34
+  |
+4 | #[derive(Deserialize, Serialize, OrthoConfig)]
+  |                                  ^^^^^^^^^^^
+  |
+  = note: this error originates in the derive macro `OrthoConfig` (in Nightly builds, run with -Z macro-backtrace for more info)

@@ -26,7 +26,7 @@ mod type_utils;
 
 pub(crate) use clap_attrs::{
     ClapDefaultValue, ClapInferredDefault, clap_arg_id, clap_arg_id_from_attribute,
-    clap_default_value, clap_field_is_subcommand, clap_variant_name,
+    clap_default_value, clap_field_env, clap_field_is_subcommand, clap_variant_name,
     reject_subcommand_ortho_config_attrs,
 };
 use doc_attrs::{apply_field_doc_attr, apply_struct_doc_attr};
@@ -56,6 +56,10 @@ pub(crate) struct StructAttrs {
     pub prefix: Option<String>,
     pub discovery: Option<DiscoveryAttrs>,
     pub post_merge_hook: bool,
+    /// Opts the struct into profile support (roadmap 9.1.1): the generated
+    /// `--profile` flag, the `<PREFIX>PROFILE` selector, the profile merge
+    /// layer, and `profiles.supported = true` in agent context.
+    pub profiles: bool,
     pub doc: DocStructAttrs,
     /// Overrides the generated crate path for dependency aliasing.
     ///
@@ -254,6 +258,16 @@ pub(crate) fn parse_struct_attrs(attrs: &[Attribute]) -> Result<StructAttrs, syn
                     true
                 };
                 out.post_merge_hook = v;
+                Ok(())
+            }
+            Some("profiles") => {
+                // Accept both `profiles` and `profiles = true`
+                let v = if meta.input.peek(Token![=]) {
+                    meta.value()?.parse::<syn::LitBool>()?.value
+                } else {
+                    true
+                };
+                out.profiles = v;
                 Ok(())
             }
             Some("crate") => {

@@ -6,6 +6,7 @@
 use crate::CliFieldInfo;
 use crate::derive::build::{
     CliFieldMetadata, build_cli_field_metadata, build_cli_struct_fields, build_config_flag_field,
+    build_profile_flag_field,
 };
 use crate::derive::parse::{SerdeRenameAll, clap_arg_id, serde_serialized_field_key};
 
@@ -73,6 +74,18 @@ pub(crate) fn build_cli_struct_tokens(
             &cli_struct.field_names,
         )?;
         cli_struct.fields.push(config_field);
+    }
+    if let Some(profile_field) = build_profile_flag_field(
+        struct_attrs,
+        fields,
+        field_attrs,
+        serde_rename_all,
+        &cli_struct.used_longs,
+        &cli_struct.field_names,
+    )? {
+        cli_struct.fields.push(profile_field);
+        cli_struct.used_longs.insert(String::from("profile"));
+        cli_struct.field_names.insert(String::from("profile"));
     }
 
     let metadata = build_cli_field_metadata(fields, field_attrs)?;
