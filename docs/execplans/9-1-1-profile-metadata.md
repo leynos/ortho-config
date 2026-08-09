@@ -457,8 +457,14 @@ D11–D15 added after the Logisphere design-review panel (see Decision log).
       fixtures, the bounded precedence proptest, and the BDD scenarios
       through the real derived CLI all land together; full gates and
       CodeRabbit review clean. See Artefacts and notes.
-- [ ] Milestone 5: agent-context schema retype (D7), `ProfileLoadOutcome`
-      surfacing (D14), `cargo-orthohelp` bridge, and the full fixture set.
+- [x] (2026-08-09) Milestone 5: agent-context schema retype (D7),
+      `ProfileLoadOutcome` surfacing (D14, landed with milestone 4),
+      `cargo-orthohelp` bridge, and the full fixture set. `ProfilesDeclaration`
+      and `ProfileSelectionContract` replace the `SupportDeclaration` field
+      with byte-identical unsupported serialization; the bridge maps
+      `DocMetadata.profiles` into the declaration; a profile-enabled golden
+      fixture and byte-identity + round-trip coverage land. Full gates and
+      CodeRabbit review clean. See Artefacts and notes.
 - [ ] Milestone 6: user-facing and contributor documentation, roadmap tick,
       retrospective.
 
@@ -1074,6 +1080,32 @@ fix gates the CLI push on `differs_from_defaults || explicitly_provided` so a
 clap `default_value_t` that differs from the ortho default keeps its current
 behaviour; the clap `env` feature was added to the ortho_config dependency to
 support the generated `env = "<PREFIX>PROFILE"` attribute (D3).
+
+### Milestone 5, green (2026-08-09)
+
+The `AgentContext.profiles` retype lands without disturbing the wire contract:
+
+```text
+$ cargo test -p ortho_config --lib agent_context
+test result: ok. 48 passed  # incl. the byte-identity test proving the
+                            # unsupported serialization is unchanged
+
+$ cargo test -p cargo-orthohelp --test golden_tests
+test result: ok. 16 passed  # new agent_context__profile_fixture.json.snap
+                            # shows supported + selection; legacy goldens
+                            # byte-identical
+
+$ cargo test -p hello_world
+test result: ok. 67 passed  # all three agent-context surfaces unchanged
+```
+
+Design notes: the retype is a pre-approved Rust-level break (D7) with
+constructors; the wire contract is additive because the optional fields are
+omitted when absent. The fixture-builder refactor (extract one helper to build
+agent-context fixtures across crates) is deferred: the wire change is additive
+so no fixture family gained fields, and the profile golden reuses the existing
+`doc()`/`sample_agent_context()` builders. The cross-crate extraction can ride
+along with 9.1.2's `redaction` field if fixture sprawl materializes.
 
 ## Interfaces and dependencies
 
