@@ -443,8 +443,12 @@ D11–D15 added after the Logisphere design-review panel (see Decision log).
 - [ ] Milestone 2: profile merge layer in the composer (red → green →
       refactor), including the generated provenance-label code and dev-dep
       verification (D9).
-- [ ] Milestone 3: profile extraction, selection resolution, validation, and
-      structured error paths in `ortho_config`.
+- [x] (2026-08-09) Milestone 3: profile extraction, selection resolution,
+      validation, and structured error paths in `ortho_config`. The
+      `profile/` module (name, selection, extract submodules), the four
+      `OrthoError` variants plus localizer IDs, the unit test modules, and
+      `profiles.feature` land together; full gates and CodeRabbit review
+      clean. See Artefacts and notes.
 - [ ] Milestone 4: derive-macro opt-in, generated `--profile` flag, selector
       leakage stripping, the flag-equals-default fix, docs-IR emission
       (D15), and end-to-end precedence behaviour.
@@ -571,6 +575,18 @@ Progress entries from milestone 1 onward must carry timestamps.
   `push_*` wrappers were already one-liners over `push_layer`, so no
   constructor plumbing needed deduplication. Date/Author: 2026-08-09,
   implementing agent.
+- Decision: the `UnknownProfile` error field is named `selection_source`
+  rather than the plan's `source`. Rationale: thiserror reserves the field name
+  `source` for the error source chain and requires it to implement
+  `std::error::Error`; `ProfileSource` is a plain runtime type (D14) that must
+  not become an error type. The codebase's other `source` fields are all real
+  error sources, so the rename is consistent with existing semantics.
+  Date/Author: 2026-08-09, implementing agent.
+- Decision: the `AvailableProfileNames` display renders "no configuration
+  files were found" when the list is empty. The rare "files discovered but none
+  define profile tables" case renders the same message; this is a documented
+  edge case, not a correctness issue. Date/Author: 2026-08-09, implementing
+  agent.
 
 ## Outcomes & retrospective
 
@@ -974,6 +990,41 @@ test result: ok. 57 passed  # incl. the profile-layer composer scenario
 $ cargo test -p ortho_config_macros
 test result: ok. 123 passed  # guards.rs + expected_merge_impl_empty.rs.txt updated
 ```
+
+### Milestone 3, red (2026-08-09)
+
+The pre-planned unit test modules fail to compile — the profile types and
+`OrthoError` variants do not exist yet:
+
+```text
+$ cargo test -p ortho_config --lib profile
+error[E0432]: unresolved imports `crate::profile::ProfileName`,
+             `crate::profile::ProfileSource`, `crate::profile::SelectedProfile`,
+             `crate::profile::extract_profile_layers`
+error[E0599]: no variant named `UnknownProfile` / `InvalidProfileName` /
+             `ReservedProfileName` / `ProfileForbiddenKey` found for
+             `error::types::OrthoError`
+```
+
+### Milestone 3, green (2026-08-09)
+
+Focused tests pass after implementing the module:
+
+```text
+$ cargo test -p ortho_config --lib profile
+test result: ok. 37 passed   # grammar + property, selection, extraction, errors
+
+$ cargo test -p ortho_config --test rstest_bdd
+test result: ok. 64 passed   # incl. seven profiles.feature scenarios
+
+$ cargo test -p ortho_config --lib
+test result: ok. 187 passed
+```
+
+BDD step notes: `rstest-bdd` binds step placeholder arguments positionally, and
+the `{flags}` placeholder captures surrounding quotes, so the step layer
+normalizes the raw flag string before parsing. The `Slot::with_mut` helper is a
+no-op on an empty slot, so accumulation steps use `get_or_insert_with`.
 
 ## Interfaces and dependencies
 
