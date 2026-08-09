@@ -18,6 +18,12 @@ struct Cursor {
     line_index: usize,
 }
 
+#[derive(Clone, Copy, Eq, PartialEq)]
+struct Fence {
+    delimiter: u8,
+    length: usize,
+}
+
 impl Cursor {
     fn error(self, message: &str) -> String {
         format!("{}:{} {message}", self.source, self.line_index + 1)
@@ -136,7 +142,7 @@ fn reject_invalid_example_line(cursor: &Cursor, line: &str) -> Result<()> {
         cursor.error("tested-example identifier must not be empty")
     );
     ensure!(
-        !line.starts_with("```"),
+        parse_fence(line).is_none(),
         "{}",
         cursor.error("fence is missing a tested-example marker")
     );
@@ -155,15 +161,14 @@ fn read_marked_example<'a>(
         source: cursor.source,
         line_index: fence_index,
     };
-    let language = fence
-        .strip_prefix("```")
+    let (opening_fence, language) = parse_fence(fence)
         .with_context(|| fence_cursor.error("expected an opening fence after marker"))?;
     ensure!(
         !language.is_empty(),
         "{}",
         fence_cursor.error("fence should declare a language")
     );
-    let body = read_fence_body(cursor.source, fence_index, lines)?;
+    let body = read_fence_body(cursor.source, fence_index, opening_fence, lines)?;
     Ok(DocumentedExample {
         id: id.to_owned(),
         language: language.to_owned(),
@@ -178,14 +183,35 @@ fn parse_marker(line: &str) -> Option<&str> {
         .and_then(|value| value.strip_suffix(MARKER_SUFFIX))
 }
 
+fn parse_fence(line: &str) -> Option<(Fence, &str)> {
+    let delimiter = *line.as_bytes().first()?;
+    if !matches!(delimiter, b'`' | b'~') {
+        return None;
+    }
+    let length = line
+        .bytes()
+        .take_while(|candidate| *candidate == delimiter)
+        .count();
+    let language = line.get(length..)?;
+    (length >= 3).then_some((Fence { delimiter, length }, language))
+}
+
+fn is_matching_closing_fence(line: &str, opening_fence: Fence) -> bool {
+    matches!(
+        parse_fence(line),
+        Some((closing_fence, "")) if closing_fence == opening_fence
+    )
+}
+
 fn read_fence_body<'a>(
-    source: &str,
+    source: &'static str,
     fence_index: usize,
+    opening_fence: Fence,
     lines: &mut impl Iterator<Item = (usize, &'a str)>,
 ) -> Result<String> {
     let mut body = String::new();
     for (_, line) in lines {
-        if line == "```" {
+        if is_matching_closing_fence(line, opening_fence) {
             return Ok(body);
         }
         body.push_str(line);

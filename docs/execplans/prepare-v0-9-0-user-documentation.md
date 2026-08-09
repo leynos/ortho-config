@@ -400,8 +400,8 @@ The strict marker form adapted from Netsuke is:
 <!-- tested-example: guide-first-layered-cli -->
 ```
 
-The marker applies to the next non-empty fenced block. Identifiers are unique
-across both public documents.
+The marker applies to the immediately following fenced block, with no
+intervening blank line. Identifiers are unique across both public documents.
 
 ## Interfaces and dependencies
 

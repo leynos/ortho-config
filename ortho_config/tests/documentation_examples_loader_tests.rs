@@ -32,6 +32,7 @@ fn public_loader_queries_are_callable() -> Result<()> {
     "tested-example identifier must not be empty"
 )]
 #[case("```toml\nport = 8080\n```\n", "missing a tested-example marker")]
+#[case("~~~toml\nport = 8080\n~~~\n", "missing a tested-example marker")]
 #[case(
     "<!-- tested-example: sample -->\n```toml\nport = 8080\n",
     "fence is not terminated"
@@ -50,6 +51,14 @@ fn public_loader_queries_are_callable() -> Result<()> {
     "fence should declare a language"
 )]
 #[case(
+    "<!-- tested-example: sample -->\n~~~toml\nport = 8080\n```\n",
+    "fence is not terminated"
+)]
+#[case(
+    "<!-- tested-example: sample -->\n~~~~toml\nport = 8080\n~~~\n",
+    "fence is not terminated"
+)]
+#[case(
     concat!(
         "<!-- tested-example: repeated -->\n```toml\nport = 8080\n```\n",
         "<!-- tested-example: repeated -->\n```bash\ncargo run\n```\n"
@@ -65,6 +74,23 @@ fn malformed_documented_examples_are_rejected(
     ensure!(
         error.to_string().contains(expected_message),
         "expected '{expected_message}' in '{error}'"
+    );
+    Ok(())
+}
+
+#[test]
+fn marked_tilde_fence_is_loaded() -> Result<()> {
+    let examples = parse_document(
+        "fixture.md",
+        "<!-- tested-example: sample -->\n~~~toml\nport = 8080\n~~~\n",
+    )?;
+    let [example] = examples.as_slice() else {
+        anyhow::bail!("expected one tilde-fenced example, got {examples:?}");
+    };
+    ensure!(example.language == "toml", "language should be preserved");
+    ensure!(
+        example.body == "port = 8080\n",
+        "fence body should be preserved"
     );
     Ok(())
 }
