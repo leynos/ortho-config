@@ -208,20 +208,20 @@ fn configure_msvc_linker(command: &mut Command) {
 #[cfg(all(windows, target_env = "msvc", target_arch = "x86_64"))]
 fn find_msvc_toolchain() -> Option<(std::ffi::OsString, Vec<(String, String)>)> {
     let vswhere = vswhere_path()?;
-    let installation = run_vswhere(&vswhere, &["-property", "installationPath"])?;
-    let linker = run_vswhere(
+    let installation_output = run_vswhere(&vswhere, &["-property", "installationPath"])?;
+    let linker_output = run_vswhere(
         &vswhere,
         &["-find", r"VC\Tools\MSVC\**\bin\Hostx64\x64\link.exe"],
     )?;
-    let installation = first_output_line(&installation)?.to_str()?;
-    let linker = first_output_line(&linker)?.to_os_string();
-    let vcvars = Path::new(installation)
+    let installation_path = first_output_line(&installation_output)?.to_str()?;
+    let linker_path = first_output_line(&linker_output)?.to_os_string();
+    let vcvars = Path::new(installation_path)
         .join("VC")
         .join("Auxiliary")
         .join("Build")
         .join("vcvars64.bat");
     let environment = vcvars_environment(&vcvars)?;
-    Some((linker, environment))
+    Some((linker_path, environment))
 }
 #[cfg(all(windows, target_env = "msvc", target_arch = "x86_64"))]
 fn vswhere_path() -> Option<std::path::PathBuf> {
@@ -253,7 +253,6 @@ fn run_vswhere(vswhere: &Path, query: &[&str]) -> Option<Vec<u8>> {
         .ok()?;
     output.status.success().then_some(output.stdout)
 }
-
 #[cfg(all(windows, target_env = "msvc", target_arch = "x86_64"))]
 fn vcvars_environment(vcvars: &Path) -> Option<Vec<(String, String)>> {
     let command_line = format!(r#"call "{}" >nul && set"#, vcvars.display());
@@ -267,13 +266,15 @@ fn vcvars_environment(vcvars: &Path) -> Option<Vec<(String, String)>> {
         .then(|| decode_utf16le(&output.stdout))??;
     Some(allowed_environment(&environment))
 }
-
 #[cfg(all(windows, target_env = "msvc", target_arch = "x86_64"))]
 fn decode_utf16le(output: &[u8]) -> Option<String> {
     let mut chunks = output.chunks_exact(2);
     let code_units = chunks
         .by_ref()
-        .map(|pair| u16::from_le_bytes([pair[0], pair[1]]))
+        .filter_map(|pair| match pair {
+            [low, high] => Some(u16::from(*low) | (u16::from(*high) << 8)),
+            _ => None,
+        })
         .collect::<Vec<_>>();
     chunks
         .remainder()
