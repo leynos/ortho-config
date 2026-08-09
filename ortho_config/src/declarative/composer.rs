@@ -86,6 +86,11 @@ impl MergeComposer {
         self.push_layer(MergeLayer::file(Cow::Owned(value), path));
     }
 
+    /// Push a selected-profile layer.
+    pub fn push_profile(&mut self, value: Value, path: Option<Utf8PathBuf>) {
+        self.push_layer(MergeLayer::profile(Cow::Owned(value), path));
+    }
+
     /// Push an environment layer.
     pub fn push_environment(&mut self, value: Value) {
         self.push_layer(MergeLayer::environment(Cow::Owned(value)));
