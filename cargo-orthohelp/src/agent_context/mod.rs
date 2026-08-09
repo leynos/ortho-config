@@ -56,6 +56,7 @@ pub use policy::apply_policy_to_context;
 ///     subcommands: Vec::new(),
 ///     windows: None,
 ///     behaviour: None,
+///     profiles: None,
 /// };
 ///
 /// let context = bridge_ir_to_agent_context(&metadata, "example", None);

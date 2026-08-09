@@ -47,6 +47,7 @@ fn make_doc_metadata(spec: DocMetadataSpec<'_>) -> ortho_docs::DocMetadata {
         subcommands: spec.subcommands,
         windows: spec.windows,
         behaviour: spec.behaviour,
+        profiles: None,
     }
 }
 

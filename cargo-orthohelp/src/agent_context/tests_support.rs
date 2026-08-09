@@ -130,6 +130,7 @@ pub(super) fn doc(spec: DocSpec) -> DocMetadata {
         subcommands: spec.subcommands,
         windows: None,
         behaviour: spec.behaviour,
+        profiles: None,
     }
 }
 

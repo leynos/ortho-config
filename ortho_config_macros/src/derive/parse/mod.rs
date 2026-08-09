@@ -32,7 +32,7 @@ mod type_utils;
 
 pub(crate) use behaviour_attrs::parse_behaviour_meta;
 pub(crate) use clap_attrs::{
-    clap_arg_id_from_attribute, clap_arg_id_or_field_name, clap_field_is_flattened,
+    clap_arg_id_from_attribute, clap_arg_id_or_field_name, clap_field_env, clap_field_is_flattened,
     clap_field_is_subcommand, clap_variant_name, reject_subcommand_ortho_config_attrs,
 };
 pub(crate) use clap_defaults::{ClapDefaultValue, ClapInferredDefault, clap_default_value};
@@ -68,6 +68,10 @@ pub(crate) struct StructAttrs {
     pub post_merge_hook: bool,
     /// Fluent catalogue root as a dotted path (D-5); falls back to docs app name.
     pub localization_base: Option<String>,
+    /// Opts the struct into profile support (roadmap 9.1.1): the generated
+    /// `--profile` flag, the `<PREFIX>PROFILE` selector, the profile merge
+    /// layer, and `profiles.supported = true` in agent context.
+    pub profiles: bool,
     pub doc: DocStructAttrs,
     /// Overrides the generated crate path for dependency aliasing.
     ///
@@ -259,6 +263,16 @@ pub(crate) fn parse_struct_attrs(attrs: &[Attribute]) -> Result<StructAttrs, syn
                     true
                 };
                 out.post_merge_hook = v;
+                Ok(())
+            }
+            Some("profiles") => {
+                // Accept both `profiles` and `profiles = true`
+                let v = if meta.input.peek(Token![=]) {
+                    meta.value()?.parse::<syn::LitBool>()?.value
+                } else {
+                    true
+                };
+                out.profiles = v;
                 Ok(())
             }
             Some("crate") => {

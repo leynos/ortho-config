@@ -10,9 +10,9 @@ mod proptests;
 
 pub use ir::{
     BehaviourMetadata, CliMetadata, ConfigDiscoveryMeta, ConfigFormat, DefaultValue, Deprecation,
-    DocMetadata, EnvMetadata, Example, FieldMetadata, FileMetadata, HeadingIds, InteractionKind,
-    Link, MutationKind, Note, PathPattern, PrecedenceMeta, SectionsMetadata, SourceKind, ValueType,
-    WindowsMetadata,
+    DocMetadata, DocProfilesMeta, EnvMetadata, Example, FieldMetadata, FileMetadata, HeadingIds,
+    InteractionKind, Link, MutationKind, Note, PathPattern, PrecedenceMeta, SectionsMetadata,
+    SourceKind, ValueType, WindowsMetadata,
 };
 
 /// Current IR schema version.

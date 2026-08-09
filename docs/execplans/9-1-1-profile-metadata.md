@@ -449,9 +449,14 @@ D11–D15 added after the Logisphere design-review panel (see Decision log).
       `OrthoError` variants plus localizer IDs, the unit test modules, and
       `profiles.feature` land together; full gates and CodeRabbit review
       clean (verified 2026-08-09). See Artefacts and notes.
-- [ ] Milestone 4: derive-macro opt-in, generated `--profile` flag, selector
-      leakage stripping, the flag-equals-default fix, docs-IR emission
-      (D15), and end-to-end precedence behaviour.
+- [x] (2026-08-09) Milestone 4: derive-macro opt-in, generated `--profile`
+      flag, selector leakage stripping, the flag-equals-default fix, docs-IR
+      emission (D15), and end-to-end precedence behaviour. The
+      `#[ortho_config(profiles)]` opt-in, the collision guards, the
+      ProfileLoadOutcome entry points, the docs-IR field, the trybuild
+      fixtures, the bounded precedence proptest, and the BDD scenarios
+      through the real derived CLI all land together; full gates and
+      CodeRabbit review clean. See Artefacts and notes.
 - [ ] Milestone 5: agent-context schema retype (D7), `ProfileLoadOutcome`
       surfacing (D14), `cargo-orthohelp` bridge, and the full fixture set.
 - [ ] Milestone 6: user-facing and contributor documentation, roadmap tick,
@@ -587,6 +592,22 @@ Progress entries from milestone 1 onward must carry timestamps.
   define profile tables" case renders the same message; this is a documented
   edge case, not a correctness issue. Date/Author: 2026-08-09, implementing
   agent.
+- Decision: milestone 4 attributes the selection source via clap's
+  `ArgMatches::value_source` rather than reading the CLI struct's `profile`
+  field directly. Rationale: clap fills the field from the `env` fallback too,
+  so a naive read would mislabel an environment selection as a flag; the
+  value-source gate keeps the D3 attribution honest. When clap parsing fails,
+  the environment is read directly so selection errors never mask parse errors
+  (D4). Date/Author: 2026-08-09, implementing agent.
+- Decision: the flag-equals-default fix gates the CLI push on
+  `differs_from_defaults || explicitly_provided` rather than value-source
+  alone. Rationale: a clap `default_value_t` that differs from the ortho
+  default currently pushes via `differs_from_defaults`; a pure replacement
+  would silently change that opted-in behaviour. The OR changes behaviour only
+  in the target case (sanitized CLI equals defaults but a field was explicitly
+  provided). The clap `env` feature was added to ortho_config's dependency to
+  support the generated `env = "<PREFIX>PROFILE"` attribute (D3). Date/Author:
+  2026-08-09, implementing agent.
 
 ## Outcomes & retrospective
 
@@ -1025,6 +1046,34 @@ BDD step notes: `rstest-bdd` binds step placeholder arguments positionally, and
 the `{flags}` placeholder captures surrounding quotes, so the step layer
 normalizes the raw flag string before parsing. The `Slot::with_mut` helper is a
 no-op on an empty slot, so accumulation steps use `get_or_insert_with`.
+
+### Milestone 4, green (2026-08-09)
+
+The derive opt-in works end to end — the BDD scenarios now run through the real
+derived CLI (`ProfilesConfig::load_with_profile_from_iter`) against a jailed
+`.app.toml` and `APP_` environment:
+
+```text
+$ cargo test -p ortho_config --test rstest_bdd
+test result: ok. 66 passed  # nine profiles.feature scenarios incl.
+                            # flag-equals-default and selector-never-leaks
+
+$ cargo test -p ortho_config --test compile_fail
+test result: ok. 1 passed   # three profile collision trybuild fixtures
+
+$ cargo test -p ortho_config --lib
+test result: ok. 188 passed # incl. the bounded five-tier precedence proptest
+$ cargo test -p ortho_config_macros --lib
+test result: ok. 132 passed # incl. profiles parse + profile-flag token tests
+```
+
+Design notes: the selector source is attributed via clap's
+`ArgMatches::value_source` (a flag counts only on a command-line origin, so an
+env-filled value stays attributed to the environment); the flag-equals-default
+fix gates the CLI push on `differs_from_defaults || explicitly_provided` so a
+clap `default_value_t` that differs from the ortho default keeps its current
+behaviour; the clap `env` feature was added to the ortho_config dependency to
+support the generated `env = "<PREFIX>PROFILE"` attribute (D3).
 
 ## Interfaces and dependencies
 

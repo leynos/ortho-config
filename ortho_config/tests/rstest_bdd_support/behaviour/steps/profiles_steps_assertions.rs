@@ -19,7 +19,8 @@ fn merged_value_is(profiles_context: &ProfilesContext, key: String, value: Strin
         .result
         .take()
         .ok_or_else(|| anyhow!("profile load result unavailable"))?;
-    let config = result.map_err(anyhow::Error::from)?;
+    let outcome = result.map_err(anyhow::Error::from)?;
+    let config = outcome.config();
     let expected = normalize_scalar(&value);
     match normalize_scalar(&key).as_str() {
         "retries" => ensure!(
@@ -174,4 +175,22 @@ fn parse_source(source: &str) -> ProfileSource {
         "flag" => ProfileSource::Flag,
         _ => ProfileSource::Environment,
     }
+}
+
+/// Asserts no composed layer leaks the reserved selector key.
+#[then("no composed layer contains a {key} key")]
+fn no_layer_contains_key(profiles_context: &ProfilesContext, key: String) -> Result<()> {
+    let layers = profiles_context
+        .layers
+        .take()
+        .ok_or_else(|| anyhow!("composed layers not recorded"))?;
+    let key = normalize_scalar(&key);
+    for layer in layers {
+        ensure!(
+            layer.value().get(&key).is_none(),
+            "layer {:?} leaks the reserved key {key:?}",
+            layer.value()
+        );
+    }
+    Ok(())
 }

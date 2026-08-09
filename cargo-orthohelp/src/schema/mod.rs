@@ -36,6 +36,9 @@ pub struct DocMetadata {
     /// names or flags.
     #[serde(default)]
     pub behaviour: Option<BehaviourMetadata>,
+    /// Profile selection metadata for opted-in structs (roadmap 9.1.1).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub profiles: Option<DocProfilesMeta>,
 }
 
 /// Declared execution behaviour for a command (agent-native metadata).
@@ -89,6 +92,15 @@ pub enum MutationKind {
     Delete,
     /// Command submits asynchronous work.
     Submit,
+}
+
+/// Profile selection metadata (decision D15).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct DocProfilesMeta {
+    /// The generated flag name (no leading `--`).
+    pub flag: String,
+    /// The selector environment variable name.
+    pub env_var: String,
 }
 
 /// Section-level metadata and supporting content.
