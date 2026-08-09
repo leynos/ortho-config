@@ -287,7 +287,13 @@ effectively read-only infrastructure.
 Keep richer fixture families isolated. For example, `NestedDocsConfig` and
 `NestedDocsContext` back `docs_ir_nested.feature`, and their steps live in a
 fixture-specific `tests/rstest_bdd/behaviour/steps/nested_docs_steps.rs` module
-rather than expanding unrelated step files.
+rather than expanding unrelated step files. Likewise, `CargoContext` and its
+`#[fixture]` provider plus the `cargo` steps live in
+`tests/rstest_bdd/behaviour/steps/cargo_steps.rs`, backing
+`cargo_entry_point.feature` (scenarios: Cargo dispatch parses the inner
+options; bare invocation without the injected token is rejected), also
+isolated in a fixture-specific steps module. Future contributors should extend
+the existing fixture families rather than duplicate them.
 
 ### Public documentation examples
 
