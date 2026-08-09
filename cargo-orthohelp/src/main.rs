@@ -17,6 +17,7 @@ mod ir;
 mod locale;
 mod metadata;
 mod output;
+pub mod policy;
 pub mod powershell;
 pub mod roff;
 mod rustflags;
