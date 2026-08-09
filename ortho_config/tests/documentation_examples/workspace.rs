@@ -215,6 +215,8 @@ fn render_manifest(dependency_name: &str, crate_path: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    //! Regression coverage for generated workspace manifests.
+
     use super::render_manifest;
 
     #[test]
