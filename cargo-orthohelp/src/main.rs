@@ -203,11 +203,17 @@ fn generate_agent_context_if_requested(
     let summary_localizer = context
         .en_us_localizer
         .map(|(_, resolved_localizer)| resolved_localizer as &dyn Localizer);
-    let agent_context = agent_context::bridge_ir_to_agent_context(
+    let mut agent_context = agent_context::bridge_ir_to_agent_context(
         context.doc_metadata,
         &context.selection.package_name,
         summary_localizer,
     );
+    let policy_config = context
+        .selection
+        .policy
+        .as_ref()
+        .map(crate::policy::config::PolicyConfig::from);
+    agent_context::apply_policy_to_context(&mut agent_context, policy_config.as_ref());
     tracing::debug!(
         package = %agent_context.package,
         command_count = agent_context.commands.len(),

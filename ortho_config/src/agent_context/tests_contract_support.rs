@@ -1,11 +1,13 @@
 //! Assertion helpers and expected JSON for agent-context schema tests.
 
-use super::{field, first_array_item};
 use crate::agent_context::{
-    AGENT_CONTEXT_KIND_SUFFIX, AgentCommand, AgentContext, InteractionMode, MutationEffect,
-    ORTHO_AGENT_CONTEXT_SCHEMA_VERSION, PolicyMode,
+    AGENT_CONTEXT_KIND_SUFFIX, AgentCommand, AgentContext, AgentExample, AgentInput, AgentPolicy,
+    AsyncSubmission, AsyncSubmissionMode, DeliveryRoute, InteractionMode, MutationEffect,
+    ORTHO_AGENT_CONTEXT_SCHEMA_VERSION, PaginationContract, PolicyException, PolicyMode,
+    SkillCommandRef, SkillManifest, SupportDeclaration,
 };
 use crate::docs::ORTHO_DOCS_IR_VERSION;
+use camino::Utf8PathBuf;
 use serde_json::Value;
 
 /// Asserts the schema identity constants and their independence from the
@@ -54,6 +56,7 @@ fn assert_legacy_default_support_declarations(context: &AgentContext) {
 
 fn assert_legacy_default_policy_and_skills(context: &AgentContext) {
     assert_eq!(context.policy.agent_native, PolicyMode::Warn);
+    assert!(context.policy.exceptions.is_empty());
     assert!(context.skill_manifests.is_empty());
 }
 
@@ -117,9 +120,88 @@ fn assert_legacy_context_support_defaults(context: &AgentContext) {
 
 fn assert_legacy_context_policy_defaults(context: &AgentContext) {
     assert_eq!(context.policy.agent_native, PolicyMode::Warn);
+    assert!(context.policy.exceptions.is_empty());
     assert!(context.skill_manifests.is_empty());
 }
 
 /// Canonical pretty-printed schema-v1 JSON used by the wire-contract test.
 pub(super) const AGENT_CONTEXT_WIRE_CONTRACT_JSON: &str =
     include_str!("fixtures/agent_context_wire_contract.json").trim_ascii_end();
+
+/// Returns a required object field for schema assertions, failing with the
+/// field name when the fixture is malformed.
+pub(super) fn field<'a>(value: &'a Value, name: &str) -> &'a Value {
+    let Some(field) = value.get(name) else {
+        panic!("JSON object should contain `{name}`");
+    };
+    field
+}
+
+/// Returns the first array item required by a schema assertion.
+pub(super) fn first_array_item(value: &Value) -> &Value {
+    let Some(item) = value.as_array().and_then(|items| items.first()) else {
+        panic!("JSON value should be a non-empty array");
+    };
+    item
+}
+
+/// Builds a fully populated context used by serialization and round-trip
+/// contract tests.
+pub(super) fn sample_agent_context() -> AgentContext {
+    AgentContext {
+        schema_version: ORTHO_AGENT_CONTEXT_SCHEMA_VERSION.to_owned(),
+        kind: "example-cli.agent_context".to_owned(),
+        package: "example-cli".to_owned(),
+        commands: vec![AgentCommand {
+            path: vec!["example-cli".to_owned(), "list".to_owned()],
+            summary: Some("List configured resources.".to_owned()),
+            canonical_verb: Some("list".to_owned()),
+            inputs: vec![AgentInput {
+                name: "format".to_owned(),
+                long: Some("format".to_owned()),
+                value_type: Some("string".to_owned()),
+                required: false,
+                default: Some("json".to_owned()),
+                enum_values: vec!["json".to_owned()],
+            }],
+            output_modes: vec!["json".to_owned()],
+            interaction_mode: InteractionMode::NonInteractive,
+            mutation_effect: MutationEffect::ReadOnly,
+            async_submission: Some(AsyncSubmission {
+                mode: AsyncSubmissionMode::Submit,
+                noun: Some("job".to_owned()),
+            }),
+            delivery_route: Some(DeliveryRoute {
+                supported: true,
+                target: Some("file".to_owned()),
+            }),
+            pagination: Some(PaginationContract {
+                limit_input: Some("limit".to_owned()),
+                cursor_input: Some("cursor".to_owned()),
+            }),
+            examples: vec![AgentExample {
+                command: "example-cli list --format json".to_owned(),
+                output_mode: Some("json".to_owned()),
+            }],
+        }],
+        profiles: SupportDeclaration { supported: false },
+        feedback: SupportDeclaration { supported: false },
+        policy: AgentPolicy {
+            agent_native: PolicyMode::Warn,
+            exceptions: vec![PolicyException {
+                kind: "flag".to_owned(),
+                name: "--json".to_owned(),
+                command_path: None,
+            }],
+        },
+        skill_manifests: vec![SkillManifest {
+            id: "example-list".to_owned(),
+            path: Utf8PathBuf::from("skills/example-list.md"),
+            manifest_schema_version: "v1".to_owned(),
+            commands: vec![SkillCommandRef {
+                path: vec!["example-cli".to_owned(), "list".to_owned()],
+                flags: vec!["format".to_owned()],
+            }],
+        }],
+    }
+}

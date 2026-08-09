@@ -1403,6 +1403,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "orthohelp_policy_deny_fixture"
+version = "0.8.0"
+dependencies = [
+ "clap",
+ "ortho_config",
+ "serde",
+]
+
+[[package]]
+name = "orthohelp_policy_warn_fixture"
+version = "0.8.0"
+dependencies = [
+ "clap",
+ "ortho_config",
+ "serde",
+]
+
+[[package]]
 name = "owo-colors"
 version = "4.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
