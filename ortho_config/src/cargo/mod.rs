@@ -108,6 +108,11 @@ pub fn external_subcommand(
     let installed = installed_bin_name.into();
     let name = subcommand_name.into();
     debug_assert!(!name.as_str().is_empty(), "subcommand name is empty");
+    debug_assert_ne!(
+        name.as_str(),
+        "help",
+        "subcommand name must not be clap's reserved help command",
+    );
     debug_assert_eq!(
         installed,
         format!("cargo-{name}"),

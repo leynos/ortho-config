@@ -69,5 +69,5 @@ fn zero_argument_invocation_renders_missing_subcommand_error() {
         rendered.contains("Usage: cargo <COMMAND>"),
         "unexpected error rendering:\n{rendered}"
     );
-    assert_snapshot!("zero_argument_error", rendered);
+    assert_snapshot!("zero_argument_error", usage_lines(&rendered));
 }

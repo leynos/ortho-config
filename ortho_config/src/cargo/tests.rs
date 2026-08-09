@@ -304,3 +304,14 @@ fn empty_subcommand_name_trips_debug_assertion() {
         "an empty subcommand name must trip the debug assertion"
     );
 }
+
+#[test]
+fn reserved_help_name_trips_debug_assertion() {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        external_subcommand("cargo-help", "help", Command::new("demo"))
+    }));
+    assert!(
+        result.is_err(),
+        "the reserved 'help' name must trip the debug assertion"
+    );
+}

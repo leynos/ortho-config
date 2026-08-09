@@ -70,7 +70,7 @@ fn wrap_command(cargo_context: &CargoContext, installed_binary: String) -> Resul
     let inner_command = cargo_context
         .inner_command
         .take()
-        .ok_or_else(|| anyhow!("inner command not initialised"))?;
+        .ok_or_else(|| anyhow!("inner command not initialized"))?;
     let wrapper = external_subcommand(installed_binary.clone(), subcommand_name, inner_command);
     cargo_context.installed_binary.set(installed_binary);
     cargo_context.wrapper.set(wrapper);
@@ -82,13 +82,13 @@ fn parse_wrapper_arguments(cargo_context: &CargoContext, arguments: &str) -> Res
     let installed_binary = cargo_context
         .installed_binary
         .with_ref(Clone::clone)
-        .ok_or_else(|| anyhow!("wrapper not initialised"))?;
+        .ok_or_else(|| anyhow!("wrapper not initialized"))?;
     let mut argv = vec![installed_binary];
     argv.extend(arguments.split_whitespace().map(str::to_owned));
     let wrapper = cargo_context
         .wrapper
         .take()
-        .ok_or_else(|| anyhow!("wrapper not initialised"))?;
+        .ok_or_else(|| anyhow!("wrapper not initialized"))?;
     let result = wrapper.try_get_matches_from(argv);
     cargo_context.parse_result.set(result);
     Ok(())
