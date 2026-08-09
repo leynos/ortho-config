@@ -113,10 +113,14 @@ ______________________________________________________________________
 file inheritance to subcommands, Fluent localization, generated help, recursive
 command metadata, and compact agent context.
 
-**Next:** skill manifests will be checked against real commands. After that,
-the roadmap moves through agent-native policy, structured and atomic
-`cargo-orthohelp` output, reusable workflow contracts, and a broader
-localization lifecycle.
+**Next:** make agent-driven CLIs harder to misunderstand and safer to operate.
+Skill manifests will be checked against the real command tree, while opt-in
+policy flags inconsistent vocabulary, missing machine-readable results, unsafe
+mutation surfaces, and unbounded list commands. `cargo-orthohelp` will dogfood
+those contracts with structured results, actionable errors, and atomic output;
+later metadata will describe profiles, delivery targets, and long-running jobs
+so agents can reuse predictable workflows instead of inventing integration
+glue.
 
 See the [completed v0.8.0 roadmap][archived-roadmap] for the foundation and the
 [active roadmap][roadmap] for the detailed sequence.
