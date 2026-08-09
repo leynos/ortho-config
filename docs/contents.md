@@ -48,6 +48,9 @@
 - [ADR-007: Downstream context command naming](adr-007-downstream-context-command-naming.md):
   review the accepted `context --json` downstream command convention and `kind`
   discriminator rule for agent-context payloads.
+- [ADR-008: Profile selection and layering](adr-008-profile-selection-and-layering.md):
+  review the decision for optional profile overlays, the five-tier merge order,
+  stateless selection, and the opt-in profile contract.
 - [Archived v0.8.0 roadmap](archive/v0-8-0-roadmap.md): review completed
   phases, steps, and tasks from the roadmap that preceded the active
   agent-native plan.
@@ -152,6 +155,8 @@
   - [Skill manifest metadata](execplans/6-3-1-skill-manifest-metadata.md):
     plan for roadmap item 6.3.1 and the additive agent-context types that
     model downstream skill manifests.
+  - [Profile metadata](execplans/9-1-1-profile-metadata.md): plan for roadmap
+    item 9.1.1, optional profile selection and layering.
   - [Adopt rstest-bdd v0.5.0](execplans/adopt-rstest-bdd-v0-5-0.md): plan for
     the behavioural testing migration.
   - [Prepare the v0.9.0 user documentation](execplans/prepare-v0-9-0-user-documentation.md):

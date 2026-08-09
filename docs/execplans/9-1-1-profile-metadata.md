@@ -4,8 +4,7 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Tolerances`, `Risks`, `Progress`, `Surprises & discoveries`, `Decision log`,
 and `Outcomes & retrospective` must be kept up to date as work proceeds.
 
-Status: DRAFT (revised after the Logisphere design-review panel; awaiting
-approval; no implementation may begin before the plan is explicitly approved)
+Status: APPROVED (2026-08-07); implementation in progress
 
 ## Purpose / big picture
 
@@ -411,11 +410,14 @@ D11–D15 added after the Logisphere design-review panel (see Decision log).
       folded into this revision (see Decision log and revision note).
 - [x] (2026-08-07) Rebased onto `origin/main`; upstream Whitaker guide,
       toolchain, and formatter changes absorbed. Gates green.
-- [ ] Stage A: plan submitted for approval as a draft pull request.
+- [x] (2026-08-07) Stage A: plan submitted as draft pull request #418 and
+      approved by the maintainer; implementation started.
 - [ ] Optional before approval: run the scaling and operational-cost review
       lens that did not complete.
 - [ ] Milestone 1: ADR-008 and design documentation, including the
       `extends` spike (D12) and the §8.2 asymmetry amendment.
+      - [x] (2026-08-07) D12 spike (read-only): confirmed. See Surprises &
+            discoveries.
 - [ ] Milestone 2: profile merge layer in the composer (red → green →
       refactor), including the generated provenance-label code and dev-dep
       verification (D9).
@@ -476,6 +478,15 @@ Progress entries from milestone 1 onward must carry timestamps.
   that reformatting. Impact: this plan was reformatted to match, and the
   `Concrete steps` section now tells implementers to run `make fmt` before
   committing documentation.
+- Observation (2026-08-07, D12 spike): per-file values survive `extends`
+  resolution as distinct, ordered layers. Evidence: `load_config_file_as_chain`
+  (`ortho_config/src/file/loader.rs`) returns a `FileLayerChain` whose `values`
+  are documented as ancestor-first ("The first entry is the root ancestor; the
+  last is the directly-loaded file"), and `ConfigDiscovery::compose_layers`
+  (`ortho_config/src/discovery/load.rs`) maps each `(value, path)` entry to its
+  own `MergeLayer::file` with the source path attached. Impact: D12's rule is
+  implementable directly against `DiscoveryLayersOutcome.value`; no escalation
+  per tolerance 6 was needed, and ADR-008 records the confirmed chain order.
 
 ## Decision log
 
@@ -506,7 +517,12 @@ Progress entries from milestone 1 onward must carry timestamps.
   reformat this document with the adopted formatter. Rationale: the plan must
   stay executable against `main` as it actually is; a stale lint caveat would
   invite a future implementer to dismiss a genuine regression as inherited
-  noise. Date/Author: 2026-08-07, planning agent.
+  noise. Date/Author: **********, planning agent.
+- Decision: plan approved by the maintainer and implementation started. The
+  D12 `extends` spike (read-only) confirmed per-file values survive `extends`
+  resolution as distinct, ancestor-first layers, so no tolerance-6 escalation
+  was needed. Status moved to APPROVED; milestone work proceeds per the plan.
+  Date/Author: 2026-08-07, implementing agent.
 
 ## Outcomes & retrospective
 
