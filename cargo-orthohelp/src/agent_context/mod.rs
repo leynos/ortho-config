@@ -10,6 +10,9 @@ use ortho_config::{
 use crate::policy::vocabulary::CANONICAL_VERBS;
 use crate::schema::{DocMetadata, FieldMetadata, ValueType};
 
+mod policy;
+pub use policy::apply_policy_to_context;
+
 /// Builds an agent-context document from bridge documentation metadata.
 ///
 /// The transform is deterministic: command paths and command inputs are sorted

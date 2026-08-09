@@ -16,18 +16,41 @@ proptest! {
 }
 
 fn any_agent_context() -> impl Strategy<Value = AgentContext> {
-    (package_name(), vec(any_agent_command(), 0..4)).prop_map(|(package, commands)| AgentContext {
-        schema_version: ORTHO_AGENT_CONTEXT_SCHEMA_VERSION.to_owned(),
-        kind: crate::agent_context_kind(&package),
-        package,
-        commands,
-        profiles: SupportDeclaration { supported: false },
-        feedback: SupportDeclaration { supported: false },
-        policy: AgentPolicy {
-            agent_native: PolicyMode::Warn,
-        },
-        skill_manifests: Vec::new(),
-    })
+    (
+        package_name(),
+        vec(any_agent_command(), 0..4),
+        vec(any_policy_exception(), 0..3),
+    )
+        .prop_map(|(package, commands, exceptions)| AgentContext {
+            schema_version: ORTHO_AGENT_CONTEXT_SCHEMA_VERSION.to_owned(),
+            kind: crate::agent_context_kind(&package),
+            package,
+            commands,
+            profiles: SupportDeclaration { supported: false },
+            feedback: SupportDeclaration { supported: false },
+            policy: AgentPolicy {
+                agent_native: PolicyMode::Warn,
+                exceptions,
+            },
+            skill_manifests: Vec::new(),
+        })
+}
+
+fn any_policy_exception() -> impl Strategy<Value = PolicyException> {
+    (
+        prop_oneof![
+            Just("verb".to_owned()),
+            Just("flag".to_owned()),
+            Just("future_kind".to_owned()),
+        ],
+        command_segment(),
+        option::of(command_segment()),
+    )
+        .prop_map(|(kind, name, command_path)| PolicyException {
+            kind,
+            name,
+            command_path,
+        })
 }
 
 fn any_agent_command() -> impl Strategy<Value = AgentCommand> {
