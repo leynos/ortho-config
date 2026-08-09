@@ -179,9 +179,12 @@ Stop and escalate (do not work around) when any of these is reached.
 - [x] (2026-08-06) Milestone 0c: user approval of this plan. **Hard gate: no
       implementation before approval.** Approved by the task instruction to
       proceed with implementation.
-- [ ] Milestone 1: red tests written and their failure transcripts captured;
-      helper implemented; unit, snapshot, and behavioural tests green; gates
-      pass; single commit (see D-8).
+- [x] (2026-08-07) Milestone 1: red tests written and their failure
+      transcripts captured; helper implemented; unit, snapshot, and
+      behavioural tests green; gates pass; single commit `25be87a`
+      (see D-8; transcripts in Artefacts). The branch was then rebased onto
+      `origin/main` and the commit re-landed with two lint fixes folded in
+      (clippy `doc_markdown` backticks, `shadow_unrelated` rename).
 - [ ] Milestone 2: documentation sweep (users' guide, design doc, ADR-004
       amendment, developers' guide); `make markdownlint` and `make nixie`
       green in addition to the code gates; commit.
@@ -280,6 +283,15 @@ under `/tmp` and returns a bounded report.
   querying unmatched names on `ArgMatches`; the documented adoption shape is
   unaffected because `subcommand_required(true)` guarantees the injected
   subcommand is always the one matched on success.
+- Observation (implementation, 2026-08-07): adding `CargoContext` and its
+  `#[fixture]` provider to the shared `scenario_state` module pushed that
+  file towards the repository's 400-line module cap enforced by the Whitaker
+  gate, so both were relocated into
+  `tests/rstest_bdd/behaviour/steps/cargo_steps.rs`, beside the steps that
+  consume them (`scenarios.rs` imports them from there).
+  Impact: this matches the developers' guide's isolation guidance for
+  fixture-specific step modules; Milestone 2's developers'-guide wording
+  should describe the state as shipped.
 
 ## Decision log
 
@@ -851,8 +863,72 @@ migrations, no external side effects.
 
 ## Artefacts and notes
 
-To be filled with red/green transcripts and the final diff summary as work
-proceeds.
+### Stage B red transcripts (per D-8, evidence rather than a failing commit)
+
+Both red runs fail to compile because the module did not exist yet.
+
+`cargo test -p ortho_config --test cargo_entry_point`
+(log: `/tmp/red-cargo-entry-point.out`):
+
+```plaintext
+error[E0432]: unresolved import `ortho_config::cargo`
+  --> ortho_config/tests/cargo_entry_point.rs:11:19
+   |
+11 | use ortho_config::cargo::external_subcommand;
+   |                   ^^^^^ could not find `cargo` in `ortho_config`
+
+error: could not compile `ortho_config` (test "cargo_entry_point") due to 1 previous error
+```
+
+`cargo test -p ortho_config --test rstest_bdd`
+(log: `/tmp/red-cargo-bdd.out`):
+
+```plaintext
+error[E0432]: unresolved import `ortho_config::cargo`
+  --> ortho_config/tests/rstest_bdd/behaviour/steps/cargo_steps.rs:13:19
+   |
+13 | use ortho_config::cargo::external_subcommand;
+   |                   ^^^^^ could not find `cargo` in `ortho_config`
+
+error: could not compile `ortho_config` (test "rstest_bdd") due to 1 previous error
+```
+
+### Stage B green transcripts
+
+- `cargo test -p ortho_config --lib cargo::`
+  (log: `/tmp/green-cargo-unit.out`):
+
+  ```plaintext
+  test result: ok. 20 passed; 0 failed; 0 ignored; 0 measured; 154 filtered out
+  ```
+
+- `INSTA_UPDATE=always cargo test -p ortho_config --test cargo_entry_point`
+  (log: `/tmp/green-cargo-entry-point.out`) created the three baselines under
+  `ortho_config/tests/snapshots/` (`cargo_entry_point__top_level_help_usage`,
+  `cargo_entry_point__subcommand_help_usage`,
+  `cargo_entry_point__zero_argument_error`); no `.snap.new` or
+  `.pending-snap` files remained. Subsequent runs without `INSTA_UPDATE`
+  pass against the committed baselines:
+
+  ```plaintext
+  test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+  ```
+
+- `cargo test -p ortho_config --test rstest_bdd`
+  (log: `/tmp/green-cargo-bdd.out`) runs both new scenarios
+  (`cargo_entry_point_cargo_dispatch_invocation_parses_the_inner_options`,
+  `cargo_entry_point_bare_invocation_without_the_injected_token_is_rejected`)
+  plus the existing suite:
+
+  ```plaintext
+  test result: ok. 58 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+  ```
+
+### Delivery notes
+
+- Milestone 1 shipped as commit `25be87a` on top of the rebased branch
+  (rebased onto `origin/main` on 2026-08-07); the maintenance pass folded in
+  the two clippy fixes and the `CargoContext` relocation recorded above.
 
 ## Interfaces and dependencies
 
