@@ -182,14 +182,14 @@ Stop and escalate (do not work around) when any of these is reached.
       proceed with implementation.
 - [x] (2026-08-07) Milestone 1: red tests written and their failure
       transcripts captured; helper implemented; unit, snapshot, and
-      behavioural tests green; gates pass; single commit `25be87a`
+      behavioural tests green; gates pass; single commit `9ca4adb`
       (see D-8; transcripts in Artefacts). The branch was then rebased onto
       `origin/main` and the commit re-landed with two lint fixes folded in
       (clippy `doc_markdown` backticks, `shadow_unrelated` rename).
 - [x] (2026-08-09) Milestone 2: documentation sweep (users' guide, design
       doc, ADR-004 amendment, developers' guide); `make markdownlint` and
       `make nixie` green in addition to the code gates; committed as
-      `04d548f`. The four edits were authored by the `scribe` subagent from
+      `6286f1c`. The four edits were authored by the `scribe` subagent from
       the Stage C brief and accepted unchanged after review; all six gates
       passed in a single `scrutineer` run (see Stage C notes).
 - [x] (2026-08-09) Milestone 3: CodeRabbit review clean (0 findings across
@@ -482,10 +482,12 @@ Costs and frictions:
   plan's documentation obligations (users' guide section with hint snippet,
   design sketch reconciliation, ADR amendment, developers' guide) are where
   the deliverable's discoverability lives.
-- The `typos.local.toml` inline-code exclusion pin (commit `41f2a53`) is a
-  temporary hold inherited from the upstream spelling-dictionary change; it
-  remains flagged as a marked hold and should be revisited when the shared
-  base restores or accepts the inline-code behaviour.
+- The `typos.local.toml` inline-code exclusion was originally landed on this
+  branch as a temporary hold (pre-rebase commit `41f2a53`) inherited from the
+  upstream spelling-dictionary change. The 2026-08-09 rebase dropped that
+  commit as empty because main's `d3c9bdf` had meanwhile re-added the same
+  pattern as a policy position; the pattern now comes from main, so the
+  temporary-hold framing is superseded.
 
 Deferred to follow-up items (all recorded in the plan body):
 
@@ -978,15 +980,25 @@ error: could not compile `ortho_config` (test "rstest_bdd") due to 1 previous er
 
 ### Delivery notes
 
-- Milestone 1 shipped as commit `25be87a` on top of the rebased branch
+- Milestone 1 shipped as commit `9ca4adb` on top of the rebased branch
   (rebased onto `origin/main` on 2026-08-07); the maintenance pass folded in
   the two clippy fixes and the `CargoContext` relocation recorded above.
-- Milestone 2 shipped as commit `04d548f` (2026-08-09): the documentation
+- Milestone 2 shipped as commit `6286f1c` (2026-08-09): the documentation
   sweep across `docs/users-guide.md`, `docs/design.md` §4.17,
   `docs/adr-004-cargo-external-subcommand-entry-point.md`, and
   `docs/developers-guide.md`, drafted by the `scribe` subagent. Gate logs:
   `/tmp/{check-fmt,typecheck,lint,test,markdownlint,nixie}-ortho-config-8-3-1-ortho-config-cargo-helper-for-hand-built-clap-commands.out`
   — all six green in one `scrutineer` run.
+- The branch was rebased onto `origin/main` again on 2026-08-09 to pick up
+  the injectable environment-source feature (#410/#411) and the proc-macro2
+  bump (#406). The post-rebase commit hashes listed above supersede the
+  pre-rebase ones (`25be87a`, `04d548f`). The one-line conflict was
+  `typos.local.toml`: main's `d3c9bdf` had already added the same inline-code
+  exclusion pattern as a policy position, so the branch's separate
+  "Pin the inline-code spelling exclusion locally" commit was dropped as
+  empty after resolution and the pattern now comes from main. Two
+  double-blank-line artefacts in `docs/users-guide.md` from the weave merge
+  were fixed in the rebase-validation commit.
 
 ## Interfaces and dependencies
 
