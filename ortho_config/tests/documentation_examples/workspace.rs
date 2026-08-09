@@ -198,40 +198,101 @@ impl ExampleWorkspace {
         command
     }
 }
-
 #[cfg(all(windows, target_env = "msvc", target_arch = "x86_64"))]
 fn configure_msvc_linker(command: &mut Command) {
-    if let Some(linker) = find_msvc_linker() {
+    if let Some((linker, environment)) = find_msvc_toolchain() {
+        command.envs(environment);
         command.env("CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER", linker);
     }
 }
-
 #[cfg(all(windows, target_env = "msvc", target_arch = "x86_64"))]
-fn find_msvc_linker() -> Option<std::ffi::OsString> {
+fn find_msvc_toolchain() -> Option<(std::ffi::OsString, Vec<(String, String)>)> {
+    let vswhere = vswhere_path()?;
+    let installation = run_vswhere(&vswhere, &["-property", "installationPath"])?;
+    let linker = run_vswhere(
+        &vswhere,
+        &["-find", r"VC\Tools\MSVC\**\bin\Hostx64\x64\link.exe"],
+    )?;
+    let installation = first_output_line(&installation)?.to_str()?;
+    let linker = first_output_line(&linker)?.to_os_string();
+    let vcvars = Path::new(installation)
+        .join("VC")
+        .join("Auxiliary")
+        .join("Build")
+        .join("vcvars64.bat");
+    let environment = vcvars_environment(&vcvars)?;
+    Some((linker, environment))
+}
+#[cfg(all(windows, target_env = "msvc", target_arch = "x86_64"))]
+fn vswhere_path() -> Option<std::path::PathBuf> {
     let program_files =
         std::env::var_os("ProgramFiles(x86)").or_else(|| std::env::var_os("ProgramFiles"))?;
-    let vswhere = Path::new(&program_files)
-        .join("Microsoft Visual Studio")
-        .join("Installer")
-        .join("vswhere.exe");
-    let output = Command::new(&vswhere)
-        .args([
-            "-latest",
-            "-products",
-            "*",
-            "-requires",
-            "Microsoft.VisualStudio.Component.VC.Tools.x86.x64",
-            "-find",
-            r"VC\Tools\MSVC\**\bin\Hostx64\x64\link.exe",
-            "-utf8",
-        ])
+    Some(
+        Path::new(&program_files)
+            .join("Microsoft Visual Studio")
+            .join("Installer")
+            .join("vswhere.exe"),
+    )
+}
+#[cfg(all(windows, target_env = "msvc", target_arch = "x86_64"))]
+fn run_vswhere(vswhere: &Path, query: &[&str]) -> Option<Vec<u8>> {
+    let output = Command::new(vswhere)
+        .args(
+            [
+                "-latest",
+                "-products",
+                "*",
+                "-requires",
+                "Microsoft.VisualStudio.Component.VC.Tools.x86.x64",
+            ]
+            .into_iter()
+            .chain(query.iter().copied())
+            .chain(["-utf8"]),
+        )
         .output()
         .ok()?;
-    output
+    output.status.success().then_some(output.stdout)
+}
+
+#[cfg(all(windows, target_env = "msvc", target_arch = "x86_64"))]
+fn vcvars_environment(vcvars: &Path) -> Option<Vec<(String, String)>> {
+    let command_line = format!(r#"call "{}" >nul && set"#, vcvars.display());
+    let output = Command::new("cmd.exe")
+        .args(["/d", "/u", "/s", "/c", &command_line])
+        .output()
+        .ok()?;
+    let environment = output
         .status
         .success()
-        .then(|| first_output_line(&output.stdout).map(OsStr::to_os_string))
+        .then(|| decode_utf16le(&output.stdout))??;
+    Some(allowed_environment(&environment))
+}
+
+#[cfg(all(windows, target_env = "msvc", target_arch = "x86_64"))]
+fn decode_utf16le(output: &[u8]) -> Option<String> {
+    let mut chunks = output.chunks_exact(2);
+    let code_units = chunks
+        .by_ref()
+        .map(|pair| u16::from_le_bytes([pair[0], pair[1]]))
+        .collect::<Vec<_>>();
+    chunks
+        .remainder()
+        .is_empty()
+        .then(|| String::from_utf16(&code_units).ok())
         .flatten()
+}
+
+fn allowed_environment(environment: &str) -> Vec<(String, String)> {
+    environment
+        .lines()
+        .filter_map(|line| line.split_once('='))
+        .filter_map(|(name, value)| {
+            CARGO_ENV_ALLOWLIST
+                .iter()
+                .find(|allowed| allowed.eq_ignore_ascii_case(name))
+                .map(|allowed| ((*allowed).to_owned(), value.to_owned()))
+        })
+        .collect()
 }
 
 fn first_output_line(output: &[u8]) -> Option<&OsStr> {
@@ -272,7 +333,7 @@ fn render_manifest(dependency_name: &str, serialized_crate_path: &str) -> String
 mod tests {
     //! Regression coverage for generated workspace manifests.
 
-    use super::{CARGO_ENV_ALLOWLIST, first_output_line, render_manifest};
+    use super::{CARGO_ENV_ALLOWLIST, allowed_environment, first_output_line, render_manifest};
 
     #[test]
     fn cargo_environment_preserves_msvc_linker_context() {
@@ -301,6 +362,22 @@ mod tests {
         assert_eq!(
             first_output_line(output),
             Some(std::ffi::OsStr::new(r"C:\Visual Studio\link.exe"))
+        );
+    }
+
+    #[test]
+    fn visual_studio_environment_keeps_only_build_variables() {
+        let environment = concat!(
+            "LIB=C:\\Windows Kits\\Lib\r\n",
+            "Path=C:\\Visual Studio\\bin\r\n",
+            "SECRET=do-not-copy\r\n",
+        );
+        assert_eq!(
+            allowed_environment(environment),
+            vec![
+                ("LIB".to_owned(), r"C:\Windows Kits\Lib".to_owned()),
+                ("PATH".to_owned(), r"C:\Visual Studio\bin".to_owned()),
+            ]
         );
     }
 
