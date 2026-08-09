@@ -18,6 +18,7 @@ It gives an application:
   `log_level`;
 - typed parsing and validation through `clap` and Serde;
 - configuration-file discovery without application-specific glue;
+- man page and Windows PowerShell help generation with `cargo-orthohelp`;
 - generated human and agent-oriented configuration documentation; and
 - opt-in localization, tracing, and metrics for production CLIs.
 
