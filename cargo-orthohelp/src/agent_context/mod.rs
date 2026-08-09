@@ -7,11 +7,8 @@ use ortho_config::{
     AgentCommand, AgentContext, AgentInput, InteractionMode, Localizer, MutationEffect,
 };
 
+use crate::policy::vocabulary::CANONICAL_VERBS;
 use crate::schema::{DocMetadata, FieldMetadata, ValueType};
-
-const CANONICAL_VERBS: &[&str] = &[
-    "get", "list", "create", "update", "delete", "jobs", "profile", "feedback",
-];
 
 /// Builds an agent-context document from bridge documentation metadata.
 ///
