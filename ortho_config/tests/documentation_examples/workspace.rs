@@ -3,10 +3,23 @@
 use anyhow::{Context, Result, ensure};
 use cap_std::{ambient_authority, fs::Dir};
 use std::ffi::OsStr;
+use std::path::Path;
 use std::process::{Command, Output};
 use tempfile::TempDir;
 
 use super::documentation_examples::DocumentedExample;
+
+/// A Cargo dependency alias used by the generated example package.
+pub(super) struct DependencyAlias<'a>(pub(super) &'a str);
+
+/// The identifier attached to a documented example.
+pub(super) struct ExampleId<'a>(pub(super) &'a str);
+
+/// A fixture file relative to one documented example's run directory.
+pub(super) struct RunFile<'a> {
+    pub(super) path: &'a Path,
+    pub(super) contents: &'a str,
+}
 
 /// An isolated package whose binary sources are exact Markdown fence bodies.
 pub struct ExampleWorkspace {
@@ -15,8 +28,8 @@ pub struct ExampleWorkspace {
 }
 
 impl ExampleWorkspace {
-    /// Create a package using `dependency_name` for the local `OrthoConfig` crate.
-    pub fn new(dependency_name: &str) -> Result<Self> {
+    /// Create a package using `dependency_alias` for the local `OrthoConfig` crate.
+    pub fn new(dependency_alias: DependencyAlias<'_>) -> Result<Self> {
         let root = tempfile::tempdir().context("create documentation example workspace")?;
         let directory = Dir::open_ambient_dir(root.path(), ambient_authority())
             .context("open documentation example workspace")?;
@@ -24,7 +37,7 @@ impl ExampleWorkspace {
             .create_dir_all("src/bin")
             .context("create bin directory")?;
         directory
-            .write("Cargo.toml", manifest(dependency_name))
+            .write("Cargo.toml", manifest(dependency_alias))
             .context("write example manifest")?;
         Ok(Self { root, directory })
     }
@@ -52,7 +65,7 @@ impl ExampleWorkspace {
     }
 
     /// Run a built example in its own deterministic working directory.
-    pub fn run<I, S>(&self, id: &str, args: I) -> Result<Output>
+    pub fn run<I, S>(&self, ExampleId(id): ExampleId<'_>, args: I) -> Result<Output>
     where
         I: IntoIterator<Item = S>,
         S: AsRef<OsStr>,
@@ -83,11 +96,15 @@ impl ExampleWorkspace {
     }
 
     /// Write a file in one binary's deterministic working directory.
-    pub fn write_run_file(&self, id: &str, name: &str, contents: &str) -> Result<()> {
+    pub fn write_run_file(
+        &self,
+        ExampleId(id): ExampleId<'_>,
+        RunFile { path, contents }: RunFile<'_>,
+    ) -> Result<()> {
         let run_dir_name = format!("run-{id}");
         self.directory.create_dir_all(&run_dir_name)?;
         let run_dir = self.directory.open_dir(&run_dir_name)?;
-        run_dir.write(name, contents)?;
+        run_dir.write(path, contents)?;
         Ok(())
     }
 
@@ -100,7 +117,7 @@ impl ExampleWorkspace {
     }
 }
 
-fn manifest(dependency_name: &str) -> String {
+fn manifest(DependencyAlias(dependency_name): DependencyAlias<'_>) -> String {
     let crate_path = env!("CARGO_MANIFEST_DIR");
     format!(
         concat!(

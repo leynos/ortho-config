@@ -6,7 +6,8 @@ mod workspace;
 
 use anyhow::{Context, Result, ensure};
 use documentation_examples::documented_example;
-use workspace::ExampleWorkspace;
+use std::path::Path;
+use workspace::{DependencyAlias, ExampleId, ExampleWorkspace, RunFile};
 
 const STANDARD_RUST_EXAMPLES: &[&str] = &[
     "readme-main",
@@ -22,7 +23,7 @@ const STANDARD_RUST_EXAMPLES: &[&str] = &[
 
 #[test]
 fn documented_rust_compiles_and_runs() -> Result<()> {
-    let workspace = ExampleWorkspace::new("ortho_config")?;
+    let workspace = ExampleWorkspace::new(DependencyAlias("ortho_config"))?;
     for id in STANDARD_RUST_EXAMPLES {
         workspace.add_binary(&documented_example(id)?)?;
     }
@@ -30,13 +31,13 @@ fn documented_rust_compiles_and_runs() -> Result<()> {
 
     assert_run(
         &workspace,
-        "readme-main",
+        ExampleId("readme-main"),
         ["--host", "0.0.0.0", "--port", "3000"],
         "Listening on 0.0.0.0:3000\n",
     )?;
     assert_run(
         &workspace,
-        "guide-first-cli",
+        ExampleId("guide-first-cli"),
         [
             "--host",
             "0.0.0.0",
@@ -47,19 +48,19 @@ fn documented_rust_compiles_and_runs() -> Result<()> {
         ],
         "host=0.0.0.0 port=3000 log_level=debug\n",
     )?;
-    assert_run(&workspace, "guide-discovery", [], "port=8080\n")?;
-    assert_run(&workspace, "guide-hermetic-discovery", [], "")?;
+    assert_run(&workspace, ExampleId("guide-discovery"), [], "port=8080\n")?;
+    assert_run(&workspace, ExampleId("guide-hermetic-discovery"), [], "")?;
     assert_run(
         &workspace,
-        "guide-subcommand",
+        ExampleId("guide-subcommand"),
         ["serve", "--port", "3000"],
         "port=Some(3000)\n",
     )?;
-    assert_run(&workspace, "guide-localization", [], "")?;
-    assert_run(&workspace, "guide-tracing", [], "port=8080\n")?;
-    assert_run(&workspace, "guide-orthohelp-metadata", [], "")?;
+    assert_run(&workspace, ExampleId("guide-localization"), [], "")?;
+    assert_run(&workspace, ExampleId("guide-tracing"), [], "port=8080\n")?;
+    assert_run(&workspace, ExampleId("guide-orthohelp-metadata"), [], "")?;
 
-    let error_output = workspace.run("guide-errors", std::iter::empty::<&str>())?;
+    let error_output = workspace.run(ExampleId("guide-errors"), std::iter::empty::<&str>())?;
     ensure!(
         error_output.status.success(),
         "guide-errors should handle its error"
@@ -74,10 +75,10 @@ fn documented_rust_compiles_and_runs() -> Result<()> {
 
 #[test]
 fn aliased_dependency_example_compiles_and_runs() -> Result<()> {
-    let workspace = ExampleWorkspace::new("config_layer")?;
+    let workspace = ExampleWorkspace::new(DependencyAlias("config_layer"))?;
     workspace.add_binary(&documented_example("guide-alias-derive")?)?;
     workspace.build()?;
-    assert_run(&workspace, "guide-alias-derive", [], "")
+    assert_run(&workspace, ExampleId("guide-alias-derive"), [], "")
 }
 
 fn assert_console_flows(workspace: &ExampleWorkspace) -> Result<()> {
@@ -89,8 +90,14 @@ fn assert_console_flows(workspace: &ExampleWorkspace) -> Result<()> {
     );
 
     let config_file = documented_example("guide-file")?;
-    workspace.write_run_file("guide-first-cli", ".acme.toml", &config_file.body)?;
-    let output = workspace.run("guide-first-cli", ["--port", "3000"])?;
+    workspace.write_run_file(
+        ExampleId("guide-first-cli"),
+        RunFile {
+            path: Path::new(".acme.toml"),
+            contents: &config_file.body,
+        },
+    )?;
+    let output = workspace.run(ExampleId("guide-first-cli"), ["--port", "3000"])?;
     ensure!(
         output.status.success(),
         "file-backed guide command should succeed"
@@ -111,11 +118,11 @@ fn assert_console_flows(workspace: &ExampleWorkspace) -> Result<()> {
 
 fn assert_run<const N: usize>(
     workspace: &ExampleWorkspace,
-    id: &str,
+    ExampleId(id): ExampleId<'_>,
     args: [&str; N],
     expected_stdout: &str,
 ) -> Result<()> {
-    let output = workspace.run(id, args)?;
+    let output = workspace.run(ExampleId(id), args)?;
     ensure!(
         output.status.success(),
         "{id} failed:\n{}",
