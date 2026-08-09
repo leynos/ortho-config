@@ -5,6 +5,7 @@
 
 use ortho_config::{
     AgentCommand, AgentContext, AgentInput, InteractionMode, Localizer, MutationEffect,
+    ProfileSelectionContract, ProfilesDeclaration,
 };
 
 use crate::schema::{DocMetadata, FieldMetadata, ValueType};
@@ -72,6 +73,12 @@ pub fn bridge_ir_to_agent_context(
         "starting bridge IR to agent-context transformation",
     );
     let mut context = AgentContext::new(package);
+    if let Some(profiles) = &meta.profiles {
+        context.profiles = ProfilesDeclaration::supported(ProfileSelectionContract {
+            flag: profiles.flag.clone(),
+            env_var: profiles.env_var.clone(),
+        });
+    }
     walk(meta, &[], &mut context.commands, localizer);
     context
         .commands

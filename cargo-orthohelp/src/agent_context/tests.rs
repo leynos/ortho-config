@@ -255,3 +255,31 @@ use support::*;
 #[path = "tests_nested_support.rs"]
 mod nested_support;
 use nested_support::*;
+
+/// The bridge maps profile-enabled IR into a supported `ProfilesDeclaration`.
+#[test]
+fn transform_maps_profile_metadata_into_supported_declaration() {
+    let mut metadata = doc(DocSpec::root_without_fields());
+    metadata.profiles = Some(crate::schema::DocProfilesMeta {
+        flag: String::from("profile"),
+        env_var: String::from("APP_PROFILE"),
+    });
+    let context = bridge_ir_to_agent_context(&metadata, "demo_pkg", None);
+    assert!(context.profiles.supported);
+    let selection = context
+        .profiles
+        .selection
+        .as_ref()
+        .expect("selection contract");
+    assert_eq!(selection.flag, "profile");
+    assert_eq!(selection.env_var, "APP_PROFILE");
+}
+
+/// The bridge leaves the declaration unsupported for legacy IR.
+#[test]
+fn transform_leaves_declaration_unsupported_for_legacy_ir() {
+    let metadata = doc(DocSpec::root_without_fields());
+    let context = bridge_ir_to_agent_context(&metadata, "demo_pkg", None);
+    assert!(!context.profiles.supported);
+    assert!(context.profiles.selection.is_none());
+}

@@ -1,11 +1,10 @@
 //! JSON serialization tests for the compact agent-context schema.
-
-use super::{field, first_array_item, sample_agent_context};
+use anyhow::{Result, ensure};
 use crate::agent_context::{AGENT_CONTEXT_KIND_SUFFIX, AgentContext};
 use crate::{serialize_agent_context, serialize_agent_context_pretty};
-use anyhow::{Result, ensure};
 use rstest::rstest;
-use serde_json::Value;
+use serde_json::{Value, json};
+use super::{field, first_array_item, sample_agent_context};
 
 #[rstest]
 fn to_json_is_valid_parseable_json() {
@@ -116,4 +115,27 @@ fn assert_localization_fields_are_absent(value: &Value, command: &Value) -> Resu
         "compact command must not carry `help_id`"
     );
     Ok(())
+}
+
+/// The unsupported profiles declaration serializes byte-identically to the
+/// legacy `{ "supported": false }` (decision D7).
+#[test]
+fn unsupported_profiles_serialize_byte_identically_to_legacy() {
+    let context = sample_agent_context();
+    let json = serialize_agent_context(&context).expect("serialize compact agent context");
+    let value: Value = serde_json::from_str(&json).expect("parse compact agent context JSON");
+    let profiles = value.get("profiles").expect("profiles key present");
+    assert_eq!(
+        profiles,
+        &json!({ "supported": false }),
+        "unsupported profiles must serialize byte-identically to the legacy shape"
+    );
+    assert!(
+        profiles.get("selection").is_none(),
+        "the selection field must be omitted when absent"
+    );
+    assert!(
+        profiles.get("list_command").is_none(),
+        "the list_command field must be omitted when absent"
+    );
 }
