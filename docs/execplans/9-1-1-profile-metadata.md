@@ -4,7 +4,7 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Tolerances`, `Risks`, `Progress`, `Surprises & discoveries`, `Decision log`,
 and `Outcomes & retrospective` must be kept up to date as work proceeds.
 
-Status: APPROVED (2026-08-07); implementation in progress
+Status: COMPLETE (2026-08-09)
 
 ## Purpose / big picture
 
@@ -465,8 +465,12 @@ D11–D15 added after the Logisphere design-review panel (see Decision log).
       `DocMetadata.profiles` into the declaration; a profile-enabled golden
       fixture and byte-identity + round-trip coverage land. Full gates and
       CodeRabbit review clean. See Artefacts and notes.
-- [ ] Milestone 6: user-facing and contributor documentation, roadmap tick,
-      retrospective.
+- [x] (2026-08-09) Milestone 6: user-facing and contributor documentation,
+      roadmap tick, and retrospective. `users-guide.md` gains the profiles
+      subsection and the agent-contract profile metadata; `developers-guide.md`
+      records the schema ownership and the D9 testing convention; the
+      changelog records the D7 break; the roadmap ticks 9.1.1; the
+      retrospective is below. Final gates and CodeRabbit review clean.
 
 Progress entries from milestone 1 onward must carry timestamps.
 
@@ -614,10 +618,40 @@ Progress entries from milestone 1 onward must carry timestamps.
   provided). The clap `env` feature was added to ortho_config's dependency to
   support the generated `env = "<PREFIX>PROFILE"` attribute (D3). Date/Author:
   2026-08-09, implementing agent.
+- Decision: milestone 6 completes the plan and the status moves to COMPLETE.
+  The users' guide, developers' guide, changelog, and roadmap are updated; the
+  retrospective records the deferrals (fixture-builder extraction riding along
+  with 9.1.2, the unfinished scaling lens, D11/D5/9.1.3) and the friction
+  points (thiserror `source` reservation, Whitaker module caps, rstest-bdd slot
+  semantics). Date/Author: 2026-08-09, implementing agent.
 
 ## Outcomes & retrospective
 
-To be completed at milestone boundaries and on completion.
+All six milestones completed on 2026-08-09. The feature ships: opt-in
+`#[ortho_config(profiles)]` with the generated `--profile` flag and
+`<PREFIX>PROFILE` selector, the first-class profile merge layer, the
+extraction/validation/error machinery, the flag-equals-default fix, the
+`ProfileLoadOutcome` runtime surfacing, the additive agent-context and docs-IR
+exposure, and the users'/developers' documentation. Every milestone boundary
+passed the four commit gates and a clean CodeRabbit review.
+
+What went well: the milestone-1 documentation-first order (constraint 6) made
+later decisions cheap; the BDD scenarios built on the library helpers in
+milestone 3 transferred cleanly to the real derived CLI in milestone 4; the
+byte-identity property of the agent-context retype meant the wire-contract
+fixtures needed no re-baselining.
+
+What cost time: thiserror's `source` field-name reservation forced the
+`selection_source` rename; Whitaker's `module_max_lines` and
+`no_expect_outside_tests` required several mid-milestone module splits and
+helper-signature changes; `rstest-bdd`'s positional placeholder binding and
+`Slot::with_mut` no-op-on-empty semantics each hid a bug that took a debug
+print to surface.
+
+Deferred (recorded, not accidental): the fixture-builder extraction across
+agent-context test families (ride along with 9.1.2's `redaction` field); the
+scaling and operational-cost design-review lens; profile-aware subcommand
+loading (D11); `inherits` semantics (D5); the 9.1.3 store helpers.
 
 ## Context and orientation
 
@@ -996,7 +1030,7 @@ error[E0599]: no variant or associated item named `Profile` found for enum
 
 Test placement notes: the derive macro cannot be invoked inside the library
 crate (its generated code names the consumer crate), so the declarative unit
-tests use a hand-written `DeclarativeMerge` state machine (as in the trait's
+tests use a handwritten `DeclarativeMerge` state machine (as in the trait's
 doc example) and the generated-label diagnostics test lives in
 `ortho_config/tests/declarative_merge.rs` where a derived struct exists.
 
