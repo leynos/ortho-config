@@ -76,9 +76,10 @@ Values are merged from lowest to highest precedence:
 This means a checked-in file can provide team defaults, an environment variable
 can adapt them for a deployment, and a one-off CLI option can override both.
 
-## Put durable settings in a file
+## See the configuration surface
 
-For the first example, create `.acme.toml` in the current directory:
+Different sources suit different moments. Start with durable team settings in
+`.acme.toml`:
 
 <!-- tested-example: guide-file -->
 ```toml
@@ -87,13 +88,23 @@ port = 9000
 log_level = "debug"
 ```
 
-Running without options loads the file. Adding `--port` changes only that field:
+At deployment time, an environment variable can change the host without
+rewriting the file. For a one-off run, a CLI option can change the port again:
 
 <!-- tested-example: guide-file-run -->
 ```console
-$ cargo run -- --port 3000
-host=0.0.0.0 port=3000 log_level=debug
+$ ACME_HOST=api.internal cargo run -- --port 3000
+host=api.internal port=3000 log_level=debug
 ```
+
+The result shows all three surfaces working together: `log_level` comes from
+TOML, `ACME_HOST` supplies `host`, and `--port` wins for `port`. The command uses
+POSIX shell syntax; in PowerShell, set `$env:ACME_HOST = "api.internal"` before
+running the same Cargo command.
+
+TOML is available by default. Enable the `yaml` or `json5` crate feature when
+those formats are a better fit for your users; the
+[file-format section](#enable-another-file-format) covers the details.
 
 By default, discovery checks an explicit `--config-path`, the
 `ACME_CONFIG_PATH` environment variable, project and home dotfiles, and the

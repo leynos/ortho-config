@@ -15,6 +15,12 @@ pub(super) struct DependencyAlias<'a>(pub(super) &'a str);
 /// The identifier attached to a documented example.
 pub(super) struct ExampleId<'a>(pub(super) &'a str);
 
+/// One environment-variable override for a documented example process.
+pub(super) struct EnvironmentVariable<'a> {
+    pub(super) name: &'a str,
+    pub(super) value: &'a str,
+}
+
 /// A fixture file relative to one documented example's run directory.
 pub(super) struct RunFile<'a> {
     pub(super) path: &'a Path,
@@ -70,6 +76,25 @@ impl ExampleWorkspace {
         I: IntoIterator<Item = S>,
         S: AsRef<OsStr>,
     {
+        self.run_with_environment(
+            ExampleId(id),
+            args,
+            std::iter::empty::<EnvironmentVariable<'_>>(),
+        )
+    }
+
+    /// Run a built example with explicit environment-variable overrides.
+    pub fn run_with_environment<'a, I, S, E>(
+        &self,
+        ExampleId(id): ExampleId<'_>,
+        args: I,
+        environment: E,
+    ) -> Result<Output>
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<OsStr>,
+        E: IntoIterator<Item = EnvironmentVariable<'a>>,
+    {
         let run_dir_name = format!("run-{id}");
         self.directory
             .create_dir_all(&run_dir_name)
@@ -91,6 +116,11 @@ impl ExampleWorkspace {
             .env_remove("ACME_LOG_LEVEL")
             .env_remove("HELLO_HOST")
             .env_remove("HELLO_PORT")
+            .envs(
+                environment
+                    .into_iter()
+                    .map(|EnvironmentVariable { name, value }| (name, value)),
+            )
             .output()
             .with_context(|| format!("run documented binary {id}"))
     }

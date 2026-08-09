@@ -7,7 +7,7 @@ mod workspace;
 use anyhow::{Context, Result, ensure};
 use documentation_examples::documented_example;
 use std::path::Path;
-use workspace::{DependencyAlias, ExampleId, ExampleWorkspace, RunFile};
+use workspace::{DependencyAlias, EnvironmentVariable, ExampleId, ExampleWorkspace, RunFile};
 
 const STANDARD_RUST_EXAMPLES: &[&str] = &[
     "readme-main",
@@ -97,20 +97,30 @@ fn assert_console_flows(workspace: &ExampleWorkspace) -> Result<()> {
             contents: &config_file.body,
         },
     )?;
-    let output = workspace.run(ExampleId("guide-first-cli"), ["--port", "3000"])?;
+    let output = workspace.run_with_environment(
+        ExampleId("guide-first-cli"),
+        ["--port", "3000"],
+        [EnvironmentVariable {
+            name: "ACME_HOST",
+            value: "api.internal",
+        }],
+    )?;
     ensure!(
         output.status.success(),
         "file-backed guide command should succeed"
     );
     let stdout = String::from_utf8(output.stdout).context("guide output should be UTF-8")?;
     ensure!(
-        stdout == "host=0.0.0.0 port=3000 log_level=debug\n",
+        stdout == "host=api.internal port=3000 log_level=debug\n",
         "file-backed guide output differed: {stdout:?}"
     );
     let guide_console = documented_example("guide-file-run")?;
     ensure!(
         guide_console.body
-            == "$ cargo run -- --port 3000\nhost=0.0.0.0 port=3000 log_level=debug\n",
+            == concat!(
+                "$ ACME_HOST=api.internal cargo run -- --port 3000\n",
+                "host=api.internal port=3000 log_level=debug\n",
+            ),
         "user's-guide command contract drifted"
     );
     Ok(())
