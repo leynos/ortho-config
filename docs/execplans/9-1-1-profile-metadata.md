@@ -421,9 +421,11 @@ D11–D15 added after the Logisphere design-review panel (see Decision log).
       confirmed; docs gates and CodeRabbit review clean.
       - [x] (2026-08-07) D12 spike (read-only): confirmed. See Surprises &
             discoveries.
-- [ ] Milestone 2: profile merge layer in the composer (red → green →
-      refactor), including the generated provenance-label code and dev-dep
-      verification (D9).
+- [x] (2026-08-09) Milestone 2: profile merge layer in the composer.
+      `MergeProvenance::Profile`, `MergeLayer::profile(value, path)`, and
+      `MergeComposer::push_profile` landed with the generated provenance-label
+      update and its fixture; the red→green→refactor cycle and the D9 dev-dep
+      verification are recorded below; full gates and CodeRabbit review clean.
       - [x] (2026-08-09) D9 dev-dep verification commit: googletest 0.14.3
             and pretty_assertions 1.4.1 build clean under `-D warnings` on
             the MSRV 1.89 and Whitaker toolchains; the profile test-module
