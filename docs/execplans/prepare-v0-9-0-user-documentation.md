@@ -4,7 +4,7 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Tolerances`, `Risks`, `Progress`, `Surprises & discoveries`, `Decision log`,
 and `Outcomes & retrospective` must be kept up to date as work proceeds.
 
-Status: DRAFT
+Status: IN PROGRESS
 
 ## Purpose / big picture
 
@@ -118,12 +118,22 @@ repository's formatting, lint, test, spelling, Markdown, and Mermaid gates.
   parser failure tests, behaviour checks, and end-to-end tests.
 - [x] (2026-08-09 15:10Z) Drafted this ExecPlan and stopped at its approval
   gate.
-- [ ] Obtain explicit approval and change status to `IN PROGRESS`.
-- [ ] Add the failing documentation-example loader and registry tests.
-- [ ] Rewrite and mark every README and user's-guide example.
-- [ ] Complete the v0.9.0 migration inventory and worked migrations.
-- [ ] Update the documentation index and developer test convention.
-- [ ] Pass focused tests and repository documentation gates.
+- [x] (2026-08-09 15:39Z) Obtained explicit approval and changed status to
+  `IN PROGRESS`.
+- [x] (2026-08-09 16:17Z) Added the strict documentation-example loader,
+  malformed-input tests, closed registry, and the expected red failure on the
+  first unmarked README fence.
+- [x] (2026-08-09 16:17Z) Rewrote the README and user's guide around 21 marked,
+  behaviourally checked examples.
+- [x] (2026-08-09 16:17Z) Completed the v0.9.0 impact inventory and worked
+  migrations.
+- [x] (2026-08-09 16:17Z) Updated the documentation index and recorded the
+  documentation-test helper's ownership and reuse boundary.
+- [x] (2026-08-09 16:17Z) Passed focused default/all-feature example tests,
+  formatting, Markdown lint, spelling, Mermaid, Makefile validation, and
+  `git diff --check`.
+- [x] (2026-08-09 16:32Z) Passed rustdoc, Clippy, Whitaker, the complete
+  all-target/all-feature Rust suite, and the Python test suite.
 - [ ] Commit, run the scrutineer gate suite, push, and create or update the
   draft pull request.
 
@@ -189,12 +199,22 @@ repository's formatting, lint, test, spelling, Markdown, and Mermaid gates.
   evidence. GrepAI remained healthy and supplied the intent-based navigation
   requested by the user. Date/Author: 2026-08-09 15:10Z / Codex.
 
+- Decision: execute the approved plan without applying the interrupted wyvern
+  stash wholesale. Rationale: the user explicitly approved the planned refresh.
+  The stash contains incomplete and self-identified invalid code, so fresh
+  edits preserve the plan's test-first sequence and evidence standard.
+  Date/Author: 2026-08-09 15:39Z / Codex.
+
 ## Outcomes & retrospective
 
-No implementation outcome exists yet. This section will compare the final
-documents and executable example registry with the purpose above, record the
-number and kinds of examples exercised, and identify any release surface that
-remains deliberately delegated to specialist guides.
+The public surface now has three distinct levels: an 87-line README for first
+contact, a task-oriented user's guide, and an impact-labelled migration guide.
+The strict registry covers 21 fences: ten Rust programs, six TOML manifests or
+configuration files, three console flows, one JSON document, and one YAML file.
+Rust programs compile and run unchanged, console flows execute their underlying
+commands, and data formats use their production parsers. Detailed API
+signatures remain delegated to rustdoc, while the full multi-module composition
+remains delegated to `examples/hello_world`.
 
 ## Context and orientation
 
@@ -383,10 +403,10 @@ across both public documents.
 ## Interfaces and dependencies
 
 The shared test module in `ortho_config/tests/documentation_examples/mod.rs`
-owns Markdown loading, marker parsing, example lookup, temporary-project
-assembly, and success diagnostics. Only documentation-example integration test
-binaries may call it. It must not become a production API or a general Markdown
-parser.
+owns Markdown loading, marker parsing, example lookup, and source diagnostics.
+`documentation_examples/workspace.rs` owns temporary-project assembly. Only
+documentation-example integration test binaries may call them. They must not
+become production APIs or general Markdown tooling.
 
 Define a `DocumentedExample` query value containing `id`, `language`, `body`,
 and source location. Define `load_documented_examples()` and
@@ -399,5 +419,7 @@ for marker/parser invariants, `tempfile` for isolated workspaces, and
 already available to `ortho_config` tests; no production dependency changes are
 permitted.
 
-Revision note: initial draft created from the v0.8.0-to-HEAD audit and Netsuke
-precedent. Implementation remains blocked on the required approval gate.
+Revision note: the user approved the plan on 2026-08-09. The implementation
+then replaced the three public documents, added the strict executable example
+contract, and passed focused and documentation gates. Full Rust gates,
+independent scrutineer verification, commit, push, and pull request remain.
