@@ -448,7 +448,7 @@ D11–D15 added after the Logisphere design-review panel (see Decision log).
       `profile/` module (name, selection, extract submodules), the four
       `OrthoError` variants plus localizer IDs, the unit test modules, and
       `profiles.feature` land together; full gates and CodeRabbit review
-      clean. See Artefacts and notes.
+      clean (verified 2026-08-09). See Artefacts and notes.
 - [ ] Milestone 4: derive-macro opt-in, generated `--profile` flag, selector
       leakage stripping, the flag-equals-default fix, docs-IR emission
       (D15), and end-to-end precedence behaviour.
