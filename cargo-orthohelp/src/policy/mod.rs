@@ -6,6 +6,8 @@
 
 use serde::{Deserialize, Serialize};
 
+pub mod vocabulary;
+
 /// Current policy-report schema version.
 pub const ORTHO_POLICY_REPORT_SCHEMA_VERSION: &str = "1";
 
