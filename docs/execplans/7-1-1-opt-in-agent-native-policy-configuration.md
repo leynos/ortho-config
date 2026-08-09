@@ -128,9 +128,29 @@ escalation, not workarounds.
 
 ## Progress
 
-- [ ] Milestone 0: baseline gates recorded; branch prepared.
-- [ ] Milestone 1: canonical vocabulary defaults module (red, green,
+- [x] Milestone 0: baseline gates recorded; branch prepared.
+  Run 2026-08-09 via `scrutineer` on the clean tree (all gate logs under
+  `/tmp`): `make check-fmt` PASS, `make typecheck` PASS, `make lint` PASS
+  (Whitaker suite green on this baseline), `make test` PASS (55 Rust
+  suites + pytest 106 passed/1 skipped), `make markdownlint` PASS (typos
+  config regen: no drift), `make nixie` PASS. Verdict: green, no
+  pre-existing failures. PR #416 title updated (removed the "Plan: "
+  prefix); Lody session renamed to match.
+- [x] Milestone 1: canonical vocabulary defaults module (red, green,
   refactor).
+  - `cargo-orthohelp/src/policy/vocabulary.rs` added with
+    `CANONICAL_VERBS`, `CANONICAL_FLAGS`, `is_canonical_verb`, and
+    `is_canonical_flag`; 27 rstest cases green
+    (`cargo test -p cargo-orthohelp policy::vocabulary`).
+  - Refactor: `agent_context/mod.rs` now imports
+    `crate::policy::vocabulary::CANONICAL_VERBS`; the local constant is
+    removed. Agent-context unit and golden suites pass unchanged
+    (snapshot-neutral).
+  - Architecture discovery recorded in `Surprises & Discoveries`: the
+    binary crate (`src/main.rs`) re-declares its own module tree, so the
+    shared `agent_context` module needs `policy` declared in *both* the
+    lib (`src/lib.rs`) and the binary (`src/main.rs`). `main.rs` gained
+    `pub mod policy;`.
 - [ ] Milestone 2: policy configuration model and Cargo metadata parsing.
 - [ ] Milestone 3: `--check-agent-native` CLI wiring, report emission, and
   deny-mode exit path.
@@ -160,6 +180,28 @@ escalation, not workarounds.
   Evidence: both modules define the enum independently.
   Impact: Milestone 4 needs an explicit, single-point conversion
   (Decision D12 names it) so the mirrors cannot drift silently.
+- Observation: the `cargo-orthohelp` *binary* crate (`src/main.rs`)
+  re-declares its own module tree (`pub mod agent_context; mod bridge;
+  mod cli; ...`) rather than using the library crate's modules. Files
+  under `src/` such as `agent_context/mod.rs` are therefore compiled
+  twice — once in `cargo_orthohelp` (lib) and once in `cargo-orthohelp`
+  (bin) — and may only reference modules present in *both* crates.
+  Evidence: `src/main.rs` module declarations versus `src/lib.rs`;
+  `rustc` E0433 when `agent_context/mod.rs` first tried
+  `use cargo_orthohelp::policy::vocabulary::CANONICAL_VERBS` (the lib
+  cannot self-reference by crate name) and when it used `crate::policy`
+  (the bin had no `policy` module).
+  Impact: `main.rs` must declare `pub mod policy;` so shared policy
+  files (`config.rs`, `evaluate.rs`, `check.rs`, `vocabulary.rs`) resolve
+  `crate::policy::*` in both crates. `check.rs` may not reference the
+  bin-only `cli`/`metadata` modules; its `run_policy_check` signature
+  takes `&cargo_metadata::Package` and `Option<PolicyMode>` instead of
+  the bin's `Args`, and the policy table is read via a shared helper on
+  `PolicyConfigMetadata` rather than through `crate::metadata`. The lib
+  will gain `pub mod output;` so `check.rs` can call
+  `output::write_policy_report` in both crates. This obeys the plan's
+  interface list (`cargo_orthohelp::policy::check::run_policy_check` and
+  `output::write_policy_report`) without a bin/lib `Args` type mismatch.
 
 ## Decision log
 
