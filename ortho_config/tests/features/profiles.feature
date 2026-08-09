@@ -41,3 +41,17 @@ Feature: Profile selection and precedence
     Given a config file defining profile "ci" containing a "cmds" table
     When the CLI loads with "--profile ci"
     Then loading fails identifying the forbidden "cmds" key in "ci"
+
+  Scenario: An explicit flag beats the environment for the merged value
+    Given a config file defining profile "ci" with "retries" set to "7"
+    And the environment sets the "retries" key to "9"
+    When the CLI loads with "--profile ci --retries 11"
+    Then the merged value of "retries" is "11"
+
+  Scenario: The profile selector never leaks into composed layers
+    Given a config file with key "retries" set to "3"
+    And the same file defines profile "ci" with "retries" set to "7"
+    And the selector environment variable names profile "ci"
+    When the CLI loads
+    Then the merged value of "retries" is "7"
+    And no composed layer contains a "profile" key

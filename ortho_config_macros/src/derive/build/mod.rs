@@ -14,15 +14,17 @@ mod env;
 mod r#override;
 #[cfg(test)]
 mod override_tests;
+mod profile_flag;
 
 pub(crate) use cli::{CliFieldMetadata, build_cli_field_metadata, build_cli_struct_fields};
 pub(crate) use config_flag::build_config_flag_field;
 pub(crate) use defaults::{build_default_struct_fields, build_default_struct_init};
 pub(crate) use env::{
     build_config_env_var, build_env_provider, compute_config_env_var, compute_dotfile_name,
-    default_app_name,
+    compute_profile_env_var, default_app_name,
 };
 pub(crate) use r#override::{CollectionStrategies, collect_collection_strategies};
+pub(crate) use profile_flag::build_profile_flag_field;
 
 #[cfg(test)]
 #[expect(
