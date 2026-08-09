@@ -8,6 +8,53 @@ command-line arguments.
 This guide starts with a small working CLI and grows it one practical task at a
 time. Stop as soon as the application has what it needs.
 
+
+### Profiles
+
+Profiles are named bundles of configuration values defined inside the resolved
+configuration file. A configuration file may declare `[profile.<name>]` tables
+(TOML shown; JSON5 and YAML use the equivalent `profile.<name>` key path).
+Running the CLI with `--profile <name>` — or the `<PREFIX>PROFILE` environment
+variable, where `<PREFIX>` is the struct's `prefix` attribute (`APP_` gives
+`APP_PROFILE`) — overlays that profile's values on the file layer. The flag
+always beats the environment variable when both are present.
+
+Profile support is strictly opt-in via the struct-level derive attribute
+`#[ortho_config(profiles)]`. Structs that do not opt in keep the four-layer
+precedence, gain no `--profile` flag, and treat a `[profile.*]` table in a
+shared file like any other unknown key.
+
+With profile support enabled, precedence from lowest to highest is:
+
+1. **Application‑defined defaults**
+2. **Configuration file**
+3. **Selected profile** – one overlay layer per file in the resolved chain
+   that defines the selected profile, in chain order (base first)
+4. **Environment variables**
+5. **Command‑line arguments**
+
+An explicitly provided flag beats the selected profile even when the flag value
+equals the built-in default. The selector is never merged into the
+configuration value: the `profile` root key is extracted from file tables, the
+selector environment variable is stripped from the environment layer, and the
+generated flag is excluded from the serialized CLI layer. A downstream field
+that claims the `profile` key, the `--profile` flag, or the `<PREFIX>PROFILE`
+binding on an opted-in struct is a compile-time error.
+
+Profile names are case-sensitive and validated against `[A-Za-z0-9_-]+`
+(non-empty). The name `default` is reserved: defining `[profile.default]` is an
+error, and selecting `default` is equivalent to selecting no profile. The keys
+`inherits` and `cmds` are reserved inside profile bodies — `inherits` for
+future single-parent inheritance, and `cmds` because subcommand loading ignores
+profiles. Selecting an unknown profile fails with a structured error that names
+the profile, states whether it came from the flag or the selector environment
+variable, and lists the available names.
+
+Opted-in structs gain a `load_with_profile()` entry point (and
+`load_with_profile_from_iter`) returning `ProfileLoadOutcome` with the loaded
+configuration and the selected profile. Downstream `context --json` commands
+render the selection as `{"name": "<name>", "source": "flag" | "environment"}`.
+
 ## Install OrthoConfig
 
 OrthoConfig needs Serde to turn merged values into the application's
@@ -573,3 +620,36 @@ pieces in a larger layout. The
 changes for existing v0.8.0 users, and the
 [API documentation](https://docs.rs/ortho_config) is the source for complete
 type and method signatures.
+
+#### Profile metadata
+
+Opted-in applications advertise profile support in agent context. The
+unsupported case serializes byte-identically to the legacy
+`{ "supported": false }`; the `selection` and `list_command` fields are omitted
+when absent. A profile-enabled CLI emits:
+
+```json
+{
+  "profiles": {
+    "supported": true,
+    "selection": {
+      "flag": "profile",
+      "env_var": "APP_PROFILE"
+    }
+  }
+}
+```
+
+The `list_command` field (a command path matching the agent-context `path`
+convention) is carried by the schema but populated by roadmap 9.1.3's profile
+store helpers. Which profile is active right now is a runtime concern: opted-in
+structs report it through `load_with_profile()`'s `ProfileLoadOutcome`, and
+downstream `context --json` commands embed the selection as
+`{"name": "<name>", "source": "flag"}` or
+`{"name": "<name>", "source": "environment"}`.
+
+Compatibility caveats: retyping `profiles` from the old
+`{ "supported": false }` shape to `ProfilesDeclaration` is a Rust-level change
+for struct-literal construction (mitigated by the `unsupported()`/`supported()`
+constructors), but the wire JSON for non-opted-in applications is unchanged.
+Consumers should ignore unknown fields.
