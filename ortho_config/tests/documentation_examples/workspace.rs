@@ -13,13 +13,21 @@ const CHILD_ENV_ALLOWLIST: &[&str] = &["SYSTEMROOT", "WINDIR"];
 const CARGO_ENV_ALLOWLIST: &[&str] = &[
     "CARGO_HOME",
     "HOME",
+    "INCLUDE",
+    "LIB",
+    "LIBPATH",
     "PATH",
     "RUSTUP_HOME",
     "RUSTUP_TOOLCHAIN",
     "SYSTEMROOT",
     "TMPDIR",
     "USERPROFILE",
+    "VCINSTALLDIR",
+    "VSCMD_ARG_TGT_ARCH",
+    "VSINSTALLDIR",
     "WINDIR",
+    "WindowsSDKVersion",
+    "WindowsSdkDir",
 ];
 
 /// A Cargo dependency alias used by the generated example package.
@@ -217,7 +225,26 @@ fn render_manifest(dependency_name: &str, serialized_crate_path: &str) -> String
 mod tests {
     //! Regression coverage for generated workspace manifests.
 
-    use super::render_manifest;
+    use super::{CARGO_ENV_ALLOWLIST, render_manifest};
+
+    #[test]
+    fn cargo_environment_preserves_msvc_linker_context() {
+        for name in [
+            "INCLUDE",
+            "LIB",
+            "LIBPATH",
+            "VCINSTALLDIR",
+            "VSCMD_ARG_TGT_ARCH",
+            "VSINSTALLDIR",
+            "WindowsSDKVersion",
+            "WindowsSdkDir",
+        ] {
+            assert!(
+                CARGO_ENV_ALLOWLIST.contains(&name),
+                "Cargo subprocess should inherit {name} on Windows"
+            );
+        }
+    }
 
     #[test]
     fn windows_dependency_path_produces_valid_toml() {
