@@ -414,8 +414,11 @@ D11–D15 added after the Logisphere design-review panel (see Decision log).
       approved by the maintainer; implementation started.
 - [ ] Optional before approval: run the scaling and operational-cost review
       lens that did not complete.
-- [ ] Milestone 1: ADR-008 and design documentation, including the
-      `extends` spike (D12) and the §8.2 asymmetry amendment.
+- [x] (2026-08-09) Milestone 1: ADR-008 and design documentation. ADR-008
+      drafted and accepted; `design.md` precedence statements (§3, §4.3,
+      §4.10, §4.17), `agent-native-cli-design.md` §6.7/§8.1/§8.2,
+      `contents.md`, and `roadmap.md` 9.1.1 updated; the D12 `extends` spike
+      confirmed; docs gates and CodeRabbit review clean.
       - [x] (2026-08-07) D12 spike (read-only): confirmed. See Surprises &
             discoveries.
 - [ ] Milestone 2: profile merge layer in the composer (red → green →
@@ -487,6 +490,14 @@ Progress entries from milestone 1 onward must carry timestamps.
   own `MergeLayer::file` with the source path attached. Impact: D12's rule is
   implementable directly against `DiscoveryLayersOutcome.value`; no escalation
   per tolerance 6 was needed, and ADR-008 records the confirmed chain order.
+- Observation (2026-08-09, milestone 1): the `markdownlint` gate embeds the
+  `typos` spelling gate, whose first run over the milestone-1 diff flagged
+  `recognise` in this plan (Oxford spelling requires `-ize`). Evidence:
+  `make markdownlint` failed with `error: 'recognise' should be 'recognize'`
+  until the plan was reworded. Impact: subsequent docs commits must run
+  `make spellcheck` (or the full `make markdownlint`) locally before review; the
+  `typos.local.toml` inline-code exclusion remains pinned as a temporary hold
+  pending an identifier sweep (see commits 27260d3, 41d2554).
 
 ## Decision log
 
@@ -523,6 +534,14 @@ Progress entries from milestone 1 onward must carry timestamps.
   resolution as distinct, ancestor-first layers, so no tolerance-6 escalation
   was needed. Status moved to APPROVED; milestone work proceeds per the plan.
   Date/Author: 2026-08-07, implementing agent.
+- Decision: milestone 1 (ADR-008 and design documentation) completed and the
+  ADR flipped to Accepted. ADR-008 was verified against the approved plan —
+  decisions D1–D8 and D11–D15, the five-tier merge order, the reserved selector
+  projections, the migration and rollback stories — and the docs gates
+  (`make markdownlint`, `make nixie`) plus a CodeRabbit review pass clean.
+  Rationale: constraint 6's documentation-first requirement is now satisfied;
+  behavioural work (milestone 2) may begin. Date/Author: 2026-08-09,
+  implementing agent.
 
 ## Outcomes & retrospective
 
