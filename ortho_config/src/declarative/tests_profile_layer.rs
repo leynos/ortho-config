@@ -3,7 +3,7 @@
 //! Pins the five-tier ordering contract from decision D2 of execplan 9-1-1:
 //! a layer pushed via `push_profile` merges above the file layer and below
 //! the environment layer and reports `MergeProvenance::Profile`. The merge
-//! steps use a hand-written [`DeclarativeMerge`] state machine because the
+//! steps use a handwritten [`DeclarativeMerge`] state machine because the
 //! derive macro cannot be invoked inside this crate (its generated code
 //! references the consumer crate by name).
 
