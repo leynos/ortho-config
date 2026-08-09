@@ -22,6 +22,9 @@ pub mod nested_docs_steps;
 
 #[cfg(feature = "serde_json")]
 pub mod profiles_steps;
+
+#[cfg(feature = "serde_json")]
+pub mod profiles_steps_assertions;
 #[cfg(feature = "serde_json")]
 pub mod subcommand_steps;
 mod value_parsing;
