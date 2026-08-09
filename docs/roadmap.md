@@ -352,17 +352,21 @@ trait. The outcome informs future `cargo-*` tools and keeps `cargo-orthohelp`
 from carrying a bespoke pattern that other crates copy by hand. See
 `docs/design.md` §4.17.
 
-- [ ] 8.3.1. Add a small `ortho_config::cargo` helper for hand-built clap
+- [x] 8.3.1. Add a small `ortho_config::cargo` helper for hand-built clap
   commands.
   - See design.md §4.17 and adr-004-cargo-external-subcommand-entry-point.md.
-  - [ ] Provide an `external_subcommand` helper that accepts the installed
+  - [x] Provide an `external_subcommand` helper that accepts the installed
     binary name, injected Cargo subcommand name, and an existing
     `clap::Command`.
-  - [ ] Return the standard `Command::new("cargo")` shape with
-    `bin_name("cargo-<name>")` and a `<name>` subcommand.
-  - [ ] Preserve the existing options on the inner command rather than
+  - [x] Return the standard `Command::new("cargo")` shape with a `<name>`
+    subcommand. Usage renders the Cargo dispatch form (parent
+    `bin_name("cargo")`); the installed binary name is carried as the inner
+    command's `display_name`. This deviates from the literal
+    `bin_name("cargo-<name>")` wording here; see the ADR-004 amendment
+    (2026-08-09).
+  - [x] Preserve the existing options on the inner command rather than
     introducing another configuration-loading pathway.
-  - [ ] Success: a hand-built `clap::Command` can support both
+  - [x] Success: a hand-built `clap::Command` can support both
     `cargo <name> [OPTIONS]` and `cargo-<name> <name> [OPTIONS]` without
     duplicating parser setup.
 
