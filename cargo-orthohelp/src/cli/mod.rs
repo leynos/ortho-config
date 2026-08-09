@@ -12,6 +12,8 @@
 use camino::Utf8PathBuf;
 use clap::{ArgAction, Args as ClapArgs, Parser, Subcommand, ValueEnum};
 
+use crate::policy::PolicyMode;
+
 /// Output formats supported by `cargo-orthohelp`.
 #[derive(Debug, Clone, Copy, ValueEnum)]
 pub enum OutputFormat {
@@ -82,6 +84,12 @@ pub struct Args {
     /// `PowerShell` generation arguments.
     #[command(flatten)]
     pub powershell: PowerShellArgs,
+    /// Run the agent-native policy check and write `policy-report.json`.
+    #[arg(long = "check-agent-native")]
+    pub check_agent_native: bool,
+    /// Enforcement-mode override for the policy check.
+    #[arg(long = "policy-mode", value_enum, requires = "check_agent_native")]
+    pub policy_mode: Option<PolicyMode>,
 }
 
 /// Bridge cache behaviour flags.
@@ -376,6 +384,9 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+mod policy_tests;
 
 #[cfg(test)]
 mod reserved_agent_context_tests;

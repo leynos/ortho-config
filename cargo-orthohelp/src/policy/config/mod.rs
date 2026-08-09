@@ -98,7 +98,7 @@ impl From<PolicyConfigMetadata> for PolicyConfig {
 impl From<&PolicyConfigMetadata> for PolicyConfig {
     fn from(metadata: &PolicyConfigMetadata) -> Self {
         Self {
-            mode: metadata.mode.clone(),
+            mode: metadata.mode,
             exceptions: metadata.exceptions.clone(),
         }
     }
