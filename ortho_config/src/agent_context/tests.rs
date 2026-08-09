@@ -371,7 +371,7 @@ pub(super) fn sample_agent_context() -> AgentContext {
                 output_mode: Some("json".to_owned()),
             }],
         }],
-        profiles: SupportDeclaration { supported: false },
+        profiles: ProfilesDeclaration::unsupported(),
         feedback: SupportDeclaration { supported: false },
         policy: AgentPolicy {
             agent_native: PolicyMode::Warn,
