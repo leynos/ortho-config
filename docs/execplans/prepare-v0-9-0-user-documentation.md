@@ -4,7 +4,7 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Tolerances`, `Risks`, `Progress`, `Surprises & discoveries`, `Decision log`,
 and `Outcomes & retrospective` must be kept up to date as work proceeds.
 
-Status: IN PROGRESS
+Status: COMPLETE
 
 ## Purpose / big picture
 
@@ -134,8 +134,9 @@ repository's formatting, lint, test, spelling, Markdown, and Mermaid gates.
   `git diff --check`.
 - [x] (2026-08-09 16:32Z) Passed rustdoc, Clippy, Whitaker, the complete
   all-target/all-feature Rust suite, and the Python test suite.
-- [ ] Commit, run the scrutineer gate suite, push, and create or update the
-  draft pull request.
+- [x] (2026-08-09 17:16Z) Committed the implementation, received a green
+  independent scrutineer report, pushed the branch, and opened draft pull
+  request [#422](https://github.com/leynos/ortho-config/pull/422).
 
 ## Surprises & discoveries
 
@@ -214,7 +215,9 @@ configuration files, three console flows, one JSON document, and one YAML file.
 Rust programs compile and run unchanged, console flows execute their underlying
 commands, and data formats use their production parsers. Detailed API
 signatures remain delegated to rustdoc, while the full multi-module composition
-remains delegated to `examples/hello_world`.
+remains delegated to `examples/hello_world`. The independent scrutineer reran
+every required gate against the staged implementation and reported no findings.
+Draft pull request #422 contains the approved plan and completed change.
 
 ## Context and orientation
 
@@ -421,5 +424,5 @@ permitted.
 
 Revision note: the user approved the plan on 2026-08-09. The implementation
 then replaced the three public documents, added the strict executable example
-contract, and passed focused and documentation gates. Full Rust gates,
-independent scrutineer verification, commit, push, and pull request remain.
+contract, passed all required gates, and opened draft pull request #422. The
+plan is complete.
