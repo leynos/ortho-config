@@ -68,6 +68,22 @@ Listening on 0.0.0.0:3000
 That is the whole integration. OrthoConfig adds the source-specific naming and
 merging behaviour around the struct you already use in your application.
 
+## Now and next
+
+**Now:** OrthoConfig provides typed, layered configuration with file
+inheritance, collection merging, cross-platform discovery, subcommand support,
+Fluent localization, and generated human documentation. More recently, it has
+added recursive command metadata, compact agent-context output, and skill
+manifest metadata.
+
+**Next:** The immediate work is to validate skill manifests against real
+commands. The active roadmap then develops agent-native policy, structured and
+atomic `cargo-orthohelp` output, reusable profile and workflow contracts, and a
+broader localization lifecycle and derive surface.
+
+See the [completed v0.8.0 roadmap](docs/archive/v0-8-0-roadmap.md) for the
+foundation and the [active roadmap](docs/roadmap.md) for the detailed sequence.
+
 ## Where to go next
 
 - Follow the [user's guide](docs/users-guide.md) for worked examples covering
