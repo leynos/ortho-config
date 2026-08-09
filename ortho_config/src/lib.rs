@@ -56,6 +56,7 @@ mod localizer;
 mod merge;
 mod merge_telemetry;
 mod post_merge;
+pub mod profile;
 mod result_ext;
 pub mod subcommand;
 #[cfg(feature = "serde_json")]
