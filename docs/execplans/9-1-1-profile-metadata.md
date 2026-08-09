@@ -4,8 +4,7 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Tolerances`, `Risks`, `Progress`, `Surprises & discoveries`, `Decision log`,
 and `Outcomes & retrospective` must be kept up to date as work proceeds.
 
-Status: DRAFT (revised after the Logisphere design-review panel; awaiting
-approval; no implementation may begin before the plan is explicitly approved)
+Status: APPROVED (2026-08-07); implementation in progress
 
 ## Purpose / big picture
 
@@ -321,7 +320,7 @@ D11–D15 added after the Logisphere design-review panel (see Decision log).
   Proposed): profile extraction is specified as a consumer of "the ordered
   post-`extends` file values", which is exactly the seam RFC 0002 names
   `FileLayerOutcome`. This plan implements extraction against today's discovery
-  output; ADR-008 records as a design obligation that if RFC 0002 lands,
+  output; ADR-009 records as a design obligation that if RFC 0002 lands,
   `FileLayerOutcome` must expose the ordered file values profile extraction
   needs, and the extraction helper is written against a minimal internal
   interface (ordered `(path, value)` pairs) so it can be re-seated without
@@ -388,7 +387,7 @@ D11–D15 added after the Logisphere design-review panel (see Decision log).
 - Risk: RFC 0002 later restructures file-layer assembly underneath profile
   extraction. Severity: medium. Likelihood: medium. Mitigation: D13 —
   extraction written against a minimal ordered `(path, value)` interface;
-  ADR-008 records the `FileLayerOutcome` obligation.
+  ADR-009 records the `FileLayerOutcome` obligation.
 - Risk: fixture sprawl — one schema field touches the wire-contract JSON,
   contract-support helpers, round-trip property strategy, the agent-context
   insta snapshot, three `cargo-orthohelp` goldens, and the three
@@ -411,11 +410,14 @@ D11–D15 added after the Logisphere design-review panel (see Decision log).
       folded into this revision (see Decision log and revision note).
 - [x] (2026-08-07) Rebased onto `origin/main`; upstream Whitaker guide,
       toolchain, and formatter changes absorbed. Gates green.
-- [ ] Stage A: plan submitted for approval as a draft pull request.
+- [x] (2026-08-07) Stage A: plan submitted as draft pull request #418 and
+      approved by the maintainer; implementation started.
 - [ ] Optional before approval: run the scaling and operational-cost review
       lens that did not complete.
-- [ ] Milestone 1: ADR-008 and design documentation, including the
+- [ ] Milestone 1: ADR-009 and design documentation, including the
       `extends` spike (D12) and the §8.2 asymmetry amendment.
+      - [x] (2026-08-07) D12 spike (read-only): confirmed. See Surprises &
+            discoveries.
 - [ ] Milestone 2: profile merge layer in the composer (red → green →
       refactor), including the generated provenance-label code and dev-dep
       verification (D9).
@@ -476,6 +478,15 @@ Progress entries from milestone 1 onward must carry timestamps.
   that reformatting. Impact: this plan was reformatted to match, and the
   `Concrete steps` section now tells implementers to run `make fmt` before
   committing documentation.
+- Observation (2026-08-07, D12 spike): per-file values survive `extends`
+  resolution as distinct, ordered layers. Evidence: `load_config_file_as_chain`
+  (`ortho_config/src/file/loader.rs`) returns a `FileLayerChain` whose `values`
+  are documented as ancestor-first ("The first entry is the root ancestor; the
+  last is the directly-loaded file"), and `ConfigDiscovery::compose_layers`
+  (`ortho_config/src/discovery/load.rs`) maps each `(value, path)` entry to its
+  own `MergeLayer::file` with the source path attached. Impact: D12's rule is
+  implementable directly against `DiscoveryLayersOutcome.value`; no escalation
+  per tolerance 6 was needed, and ADR-009 records the confirmed chain order.
 
 ## Decision log
 
@@ -506,7 +517,12 @@ Progress entries from milestone 1 onward must carry timestamps.
   reformat this document with the adopted formatter. Rationale: the plan must
   stay executable against `main` as it actually is; a stale lint caveat would
   invite a future implementer to dismiss a genuine regression as inherited
-  noise. Date/Author: 2026-08-07, planning agent.
+  noise. Date/Author: **********, planning agent.
+- Decision: plan approved by the maintainer and implementation started. The
+  D12 `extends` spike (read-only) confirmed per-file values survive `extends`
+  resolution as distinct, ancestor-first layers, so no tolerance-6 escalation
+  was needed. Status moved to APPROVED; milestone work proceeds per the plan.
+  Date/Author: 2026-08-07, implementing agent.
 
 ## Outcomes & retrospective
 
@@ -580,7 +596,7 @@ First, run the D12 spike (read-only): confirm in `ortho_config/src/discovery/`
 and the generated layer code that per-file values survive `extends` resolution
 as distinct layers. If not, stop (tolerance 6).
 
-Then write `docs/adr-008-profile-selection-and-layering.md` following the ADR
+Then write `docs/adr-009-profile-selection-and-layering.md` following the ADR
 template in `docs/documentation-style-guide.md`. Author it as Proposed in the
 first commit; flip to Accepted in the same milestone once its text is verified
 against the approved plan. It must capture D1–D8 and D11–D15, including: the
@@ -860,7 +876,7 @@ Every milestone is an ordinary commit on `9-1-1-profile-metadata`; recovery is
 `git revert` or resetting to the previous milestone commit. Snapshot updates go
 through `cargo insta review` so accidental acceptance is visible in the diff.
 No step mutates state outside the worktree except `/tmp` logs. The downstream
-rollback story (removing the opt-in attribute) is recorded in ADR-008
+rollback story (removing the opt-in attribute) is recorded in ADR-009
 (milestone 1).
 
 ## Artefacts and notes
@@ -953,7 +969,7 @@ Skills to load during implementation: `leta` (navigation/refactoring),
 `rust-router` then `rust-types-and-apis` (newtype and schema shapes),
 `rust-errors` (new error variants), `rust-unit-testing` (rstest/googletest/
 insta discipline), `proptest` (precedence invariant), `arch-crate-design`
-(boundary checks), `arch-decision-records` (ADR-008),
+(boundary checks), `arch-decision-records` (ADR-009),
 `addressing-whitaker-findings` (if the lint gate reports findings),
 `commit-message`, `comenq-coderabbit` (review loop), and `rebase` if `main`
 moves.
