@@ -11,7 +11,7 @@ use syn::Ident;
 use crate::derive::build::DefaultStructInit;
 
 mod cli;
-use cli::{build_cli_layer_tokens, build_cli_parse_tokens};
+use cli::{build_cli_layer_tokens, build_cli_parse_tokens, build_profile_cli_layer_tokens};
 
 mod source;
 use source::{
@@ -55,6 +55,14 @@ pub(crate) struct LoadImplArgs<'a> {
     pub idents: LoadImplIdents<'a>,
     pub tokens: LoadImplTokens<'a>,
     pub has_config_path: bool,
+    /// Whether the struct opts into profile support (`#[ortho_config(profiles)]`).
+    pub profiles: bool,
+    /// The selector environment variable name (for example `APP_PROFILE`).
+    pub profile_env_var: String,
+    /// Clap argument IDs of the config fields (excluding the generated
+    /// `profile` and `config_path` fields), used for value-source gating of
+    /// the CLI layer push.
+    pub cli_arg_ids: Vec<String>,
 }
 
 /// CLI parsing is performed outside the generated method.
@@ -223,6 +231,8 @@ fn build_compose_layers_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStrea
         idents,
         tokens,
         has_config_path,
+        profiles,
+        ..
     } = args;
     let defaults_ident = idents.defaults_ident;
     let default_struct_init = tokens.default_struct_init;
@@ -235,17 +245,96 @@ fn build_compose_layers_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStrea
     let cli_parse = build_cli_parse_tokens();
     let cli_layer = build_cli_layer_tokens(krate, cli_default_as_absent_fields);
 
+    if *profiles {
+        build_profile_compose_layers_impl(args, &file_discovery, &env_section)
+    } else {
+        quote! {
+            use clap::{CommandFactory as _, FromArgMatches as _, Parser as _};
+            // Keep this path anchored under the resolved crate so derive users
+            // do not need a direct `figment` dependency for macro-generated code.
+            use #krate::figment::Figment;
+            use #krate::OrthoMergeExt as _;
+
+            let mut errors: Vec<std::sync::Arc<#krate::OrthoError>> = Vec::new();
+            #cli_parse
+
+            let mut composer = #krate::MergeComposer::with_capacity(4);
+            #(#default_resolutions)*
+            let defaults = #defaults_ident { #( #default_fields, )* };
+            let mut defaults_value = None;
+            match #krate::sanitize_value(&defaults) {
+                Ok(value) => {
+                    defaults_value = Some(value.clone());
+                    composer.push_defaults(value);
+                }
+                Err(err) => errors.push(err),
+            }
+
+            let file_layers = #file_discovery;
+            for layer in file_layers {
+                composer.push_layer(layer);
+            }
+
+            #env_section
+            match Figment::from(env_provider.clone())
+                .extract::<#krate::serde_json::Value>()
+                .into_ortho_merge()
+            {
+                Ok(value) => composer.push_environment(value),
+                Err(err) => errors.push(err),
+            }
+
+            #cli_layer
+
+            #krate::declarative::LayerComposition::new(composer.layers(), errors)
+        }
+    }
+}
+
+/// Build the profile-enabled compose body.
+///
+/// Opted-in structs resolve the selection from the parsed CLI (or directly
+/// from the environment when clap parsing failed), extract profile tables from
+/// the same discovered layers, strip the selector from the environment and CLI
+/// layers, and gate the CLI push on clap value-source information so an
+/// explicit flag equal to the default still beats the profile (risk 3).
+#[expect(
+    clippy::too_many_lines,
+    reason = "The generated compose body is a single flat sequence; splitting it would obscure the precedence order"
+)]
+fn build_profile_compose_layers_impl(
+    args: &LoadImplArgs<'_>,
+    file_discovery: &proc_macro2::TokenStream,
+    env_section: &proc_macro2::TokenStream,
+) -> proc_macro2::TokenStream {
+    let LoadImplArgs {
+        idents,
+        tokens,
+        profile_env_var,
+        cli_arg_ids,
+        ..
+    } = args;
+    let defaults_ident = idents.defaults_ident;
+    let default_struct_init = tokens.default_struct_init;
+    let default_resolutions = &default_struct_init.resolutions;
+    let default_fields = &default_struct_init.fields;
+    let cli_default_as_absent_fields = &default_struct_init.cli_default_as_absent_fields;
+    let krate = tokens.krate;
+    let parse_setup = build_profile_parse_setup(krate);
+    let selection = build_profile_selection(krate, profile_env_var);
+    let cli_push = build_profile_cli_layer_tokens(krate, cli_arg_ids, cli_default_as_absent_fields);
+
     quote! {
-        use clap::{CommandFactory as _, FromArgMatches as _, Parser as _};
         // Keep this path anchored under the resolved crate so derive users
         // do not need a direct `figment` dependency for macro-generated code.
         use #krate::figment::Figment;
         use #krate::OrthoMergeExt as _;
 
-        let mut errors: Vec<std::sync::Arc<#krate::OrthoError>> = Vec::new();
-        #cli_parse
+        #parse_setup
 
-        let mut composer = #krate::MergeComposer::with_capacity(4);
+        #selection
+
+        let mut composer = #krate::MergeComposer::with_capacity(5);
         #(#default_resolutions)*
         let defaults = #defaults_ident { #( #default_fields, )* };
         let mut defaults_value = None;
@@ -258,8 +347,16 @@ fn build_compose_layers_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStrea
         }
 
         let file_layers = #file_discovery;
-        for layer in file_layers {
-            composer.push_layer(layer);
+        match #krate::profile::extract_profile_layers(file_layers, selected.as_ref()) {
+            Ok(outcome) => {
+                for layer in outcome.file_layers {
+                    composer.push_layer(layer);
+                }
+                for layer in outcome.profile_layers {
+                    composer.push_layer(layer);
+                }
+            }
+            Err(err) => errors.push(err),
         }
 
         #env_section
@@ -267,13 +364,88 @@ fn build_compose_layers_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStrea
             .extract::<#krate::serde_json::Value>()
             .into_ortho_merge()
         {
-            Ok(value) => composer.push_environment(value),
+            Ok(mut value) => {
+                // The selector must never leak into the merged value.
+                if let Some(object) = value.as_object_mut() {
+                    object.remove("profile");
+                }
+                composer.push_environment(value);
+            }
             Err(err) => errors.push(err),
         }
 
-        #cli_layer
+        #cli_push
 
-        #krate::declarative::LayerComposition::new(composer.layers(), errors)
+        let selection_vec: Vec<#krate::SelectedProfile> = selected.into_iter().collect();
+        (
+            #krate::declarative::LayerComposition::new(composer.layers(), errors),
+            selection_vec,
+        )
+    }
+}
+
+/// Build the clap parse setup used by the profile-enabled compose body.
+///
+/// The `matches` value is retained so the selection can attribute the
+/// `--profile` flag to the command line only, and so the CLI push can consult
+/// per-field value sources.
+fn build_profile_parse_setup(krate: &proc_macro2::TokenStream) -> proc_macro2::TokenStream {
+    quote! {
+        use clap::{CommandFactory as _, FromArgMatches as _, Parser as _};
+
+        let mut errors: Vec<std::sync::Arc<#krate::OrthoError>> = Vec::new();
+        let args: Vec<std::ffi::OsString> = iter.into_iter().map(Into::into).collect();
+        let matches = match Self::command().try_get_matches_from(args) {
+            Ok(matches) => Some(matches),
+            Err(err) => {
+                errors.push(std::sync::Arc::new(err.into()));
+                None
+            }
+        };
+        let cli = match &matches {
+            Some(matches) => match Self::from_arg_matches(matches) {
+                Ok(cli) => Some(cli),
+                Err(err) => {
+                    errors.push(std::sync::Arc::new(err.into()));
+                    None
+                }
+            },
+            None => None,
+        };
+    }
+}
+
+/// Build the selection resolution for the profile-enabled compose body.
+///
+/// The flag counts only when clap reports a command-line origin, so an
+/// env-filled value stays attributed to the environment variable; when clap
+/// parsing failed the environment is read directly so selection errors never
+/// mask parse errors.
+fn build_profile_selection(
+    krate: &proc_macro2::TokenStream,
+    profile_env_var: &str,
+) -> proc_macro2::TokenStream {
+    let selector_env = syn::LitStr::new(profile_env_var, proc_macro2::Span::call_site());
+    quote! {
+        let selected = {
+            let flag_value = matches.as_ref().and_then(|m| {
+                if m.value_source("profile")
+                    == Some(clap::parser::ValueSource::CommandLine)
+                {
+                    cli.as_ref().and_then(|c| c.profile.as_deref())
+                } else {
+                    None
+                }
+            });
+            let env_value = std::env::var(#selector_env).ok();
+            match #krate::SelectedProfile::resolve(flag_value, env_value.as_deref()) {
+                Ok(selection) => selection,
+                Err(err) => {
+                    errors.push(err);
+                    None
+                }
+            }
+        };
     }
 }
 
@@ -302,6 +474,10 @@ fn build_config_impl_delegates(
 }
 
 /// Assemble the final `load_from_iter` method using the helper snippets.
+#[expect(
+    clippy::too_many_lines,
+    reason = "The generated impl block enumerates the public entry points; splitting would obscure the surface"
+)]
 pub(crate) fn build_load_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStream {
     let idents = &args.idents;
     let krate = args.tokens.krate;
@@ -319,64 +495,158 @@ pub(crate) fn build_load_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStre
         build_load_from_iter_with_sources_impl(config_ident, krate);
     let config_impl = build_config_impl_delegates(krate, cli_ident, config_ident);
 
+    let source_aware_methods = quote! {
+        /// Compose layers from arguments and explicit discovery and merge sources.
+        ///
+        /// Generated code keeps the two source capabilities separate so a
+        /// lookup-only discovery source cannot accidentally enumerate the
+        /// environment layer.
+        #[allow(dead_code, reason = "Generated method may not be used in all builds")]
+        pub fn compose_layers_from_iter_with_sources<I, T>(
+            iter: I,
+            discovery_source: #krate::SharedEnvSource,
+            merge_source: #krate::SharedScanEnvSource,
+        ) -> #krate::declarative::LayerComposition
+        where
+            I: IntoIterator<Item = T>,
+            T: Into<std::ffi::OsString> + Clone,
+        {
+            #source_aware_compose_layers_impl
+        }
+
+        /// Load configuration from arguments and explicit environment sources.
+        ///
+        /// The generated implementation records only bounded merge telemetry:
+        /// it never serialises source values, keys, paths, or raw errors.
+        pub fn load_from_iter_with_sources<I, T>(
+            iter: I,
+            discovery_source: #krate::SharedEnvSource,
+            merge_source: #krate::SharedScanEnvSource,
+        ) -> #krate::OrthoResult<#config_ident>
+        where
+            I: IntoIterator<Item = T>,
+            T: Into<std::ffi::OsString> + Clone,
+        {
+            #load_from_iter_with_sources_impl
+        }
+    };
+
+    if args.profiles {
+        let config_profile_impl = build_config_profile_delegates(krate, cli_ident, config_ident);
+        quote! {
+            impl #cli_ident {
+                #[allow(dead_code, reason = "Generated method may not be used in all builds")]
+                pub fn compose_layers_from_iter<I, T>(iter: I) -> #krate::declarative::LayerComposition
+                where
+                    I: IntoIterator<Item = T>,
+                    T: Into<std::ffi::OsString> + Clone,
+                {
+                    Self::compose_layers_with_selection_from_iter(iter).0
+                }
+
+                #source_aware_methods
+
+                #[allow(dead_code, reason = "Generated method may not be used in all builds")]
+                pub fn compose_layers() -> #krate::declarative::LayerComposition {
+                    Self::compose_layers_from_iter(std::env::args_os())
+                }
+
+                pub fn load_from_iter<I, T>(iter: I) -> #krate::OrthoResult<#config_ident>
+                where
+                    I: IntoIterator<Item = T>,
+                    T: Into<std::ffi::OsString> + Clone,
+                {
+                    #load_from_iter_impl
+                }
+
+                /// Compose layers and the resolved selection in one pass.
+                fn compose_layers_with_selection_from_iter<I, T>(iter: I) -> (
+                    #krate::declarative::LayerComposition,
+                    Vec<#krate::SelectedProfile>,
+                )
+                where
+                    I: IntoIterator<Item = T>,
+                    T: Into<std::ffi::OsString> + Clone,
+                {
+                    #compose_layers_impl
+                }
+
+                /// Load configuration and report the selected profile.
+                pub fn load_with_profile_from_iter<I, T>(iter: I) -> #krate::OrthoResult<#krate::profile::ProfileLoadOutcome<#config_ident>>
+                where
+                    I: IntoIterator<Item = T>,
+                    T: Into<std::ffi::OsString> + Clone,
+                {
+                    let (composition, selection) =
+                        Self::compose_layers_with_selection_from_iter(iter);
+                    composition
+                        .into_merge_result(|layers| #config_ident::merge_from_layers(layers))
+                        .map(|config| #krate::profile::ProfileLoadOutcome::new(config, selection))
+                }
+
+                /// Load configuration using the current process arguments and
+                /// report the selected profile.
+                pub fn load_with_profile() -> #krate::OrthoResult<#krate::profile::ProfileLoadOutcome<#config_ident>> {
+                    Self::load_with_profile_from_iter(std::env::args_os())
+                }
+            }
+            #config_impl
+            #config_profile_impl
+        }
+    } else {
+        quote! {
+            impl #cli_ident {
+                #[allow(dead_code, reason = "Generated method may not be used in all builds")]
+                pub fn compose_layers_from_iter<I, T>(iter: I) -> #krate::declarative::LayerComposition
+                where
+                    I: IntoIterator<Item = T>,
+                    T: Into<std::ffi::OsString> + Clone,
+                {
+                    #compose_layers_impl
+                }
+
+                #source_aware_methods
+
+                #[allow(dead_code, reason = "Generated method may not be used in all builds")]
+                pub fn compose_layers() -> #krate::declarative::LayerComposition {
+                    Self::compose_layers_from_iter(std::env::args_os())
+                }
+
+                pub fn load_from_iter<I, T>(iter: I) -> #krate::OrthoResult<#config_ident>
+                where
+                    I: IntoIterator<Item = T>,
+                    T: Into<std::ffi::OsString> + Clone,
+                {
+                    #load_from_iter_impl
+                }
+            }
+            #config_impl
+        }
+    }
+}
+
+/// The profile-enabled config-struct entry points (decision D14).
+fn build_config_profile_delegates(
+    krate: &proc_macro2::TokenStream,
+    cli_ident: &Ident,
+    config_ident: &Ident,
+) -> proc_macro2::TokenStream {
     quote! {
-        impl #cli_ident {
-            #[allow(dead_code, reason = "Generated method may not be used in all builds")]
-            pub fn compose_layers_from_iter<I, T>(iter: I) -> #krate::declarative::LayerComposition
+        impl #config_ident {
+            /// Load configuration and report the selected profile.
+            pub fn load_with_profile_from_iter<I, T>(iter: I) -> #krate::OrthoResult<#krate::profile::ProfileLoadOutcome<Self>>
             where
                 I: IntoIterator<Item = T>,
                 T: Into<std::ffi::OsString> + Clone,
             {
-                #compose_layers_impl
+                #cli_ident::load_with_profile_from_iter(iter)
             }
 
-            /// Compose layers from arguments and explicit discovery and merge sources.
-            ///
-            /// Generated code keeps the two source capabilities separate so a
-            /// lookup-only discovery source cannot accidentally enumerate the
-            /// environment layer.
-            #[allow(dead_code, reason = "Generated method may not be used in all builds")]
-            pub fn compose_layers_from_iter_with_sources<I, T>(
-                iter: I,
-                discovery_source: #krate::SharedEnvSource,
-                merge_source: #krate::SharedScanEnvSource,
-            ) -> #krate::declarative::LayerComposition
-            where
-                I: IntoIterator<Item = T>,
-                T: Into<std::ffi::OsString> + Clone,
-            {
-                #source_aware_compose_layers_impl
-            }
-
-            #[allow(dead_code, reason = "Generated method may not be used in all builds")]
-            pub fn compose_layers() -> #krate::declarative::LayerComposition {
-                Self::compose_layers_from_iter(std::env::args_os())
-            }
-
-            pub fn load_from_iter<I, T>(iter: I) -> #krate::OrthoResult<#config_ident>
-            where
-                I: IntoIterator<Item = T>,
-                T: Into<std::ffi::OsString> + Clone,
-            {
-                #load_from_iter_impl
-            }
-
-            /// Load configuration from arguments and explicit environment sources.
-            ///
-            /// The generated implementation records only bounded merge telemetry:
-            /// it never serialises source values, keys, paths, or raw errors.
-            pub fn load_from_iter_with_sources<I, T>(
-                iter: I,
-                discovery_source: #krate::SharedEnvSource,
-                merge_source: #krate::SharedScanEnvSource,
-            ) -> #krate::OrthoResult<#config_ident>
-            where
-                I: IntoIterator<Item = T>,
-                T: Into<std::ffi::OsString> + Clone,
-            {
-                #load_from_iter_with_sources_impl
+            /// Load configuration using the current process arguments and
+            /// report the selected profile.
+            pub fn load_with_profile() -> #krate::OrthoResult<#krate::profile::ProfileLoadOutcome<Self>> {
+                #cli_ident::load_with_profile()
             }
         }
-        #config_impl
     }
 }

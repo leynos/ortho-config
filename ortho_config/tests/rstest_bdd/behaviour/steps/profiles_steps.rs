@@ -1,19 +1,17 @@
 //! Steps for profile selection and layering scenarios (`profiles.feature`).
 //!
-//! The scenarios drive the library profile helpers directly — resolution,
-//! extraction, and merge — because the derived `--profile` flag arrives with
-//! the opt-in derive in milestone 4. The `APP_` prefix gives the `APP_PROFILE`
-//! selector and `APP_RETRIES` environment key. Assertion steps live in the
-//! sibling `profiles_steps_assertions` module.
+//! The scenarios exercise the generated entry point
+//! `ProfilesConfig::load_with_profile_from_iter` against a jailed config file
+//! and environment: the `--profile` flag, the `APP_PROFILE` selector, the
+//! profile merge layer, and the flag-equals-default fix all run through the
+//! derived CLI. Assertion steps live in the sibling
+//! `profiles_steps_assertions` module.
 
 use crate::scenario_state::{ProfilesConfig, ProfilesContext};
 use anyhow::{Result, ensure};
-use ortho_config::{
-    MergeComposer, OrthoError, OrthoResult, SelectedProfile, profile::extract_profile_layers,
-};
+use ortho_config::{OrthoError, OrthoResult};
 use rstest_bdd_macros::{given, when};
-use serde_json::{Map, Value, json};
-use std::borrow::Cow;
+use serde_json::{Map, Value};
 
 use super::value_parsing::{normalize_scalar, unquote};
 
@@ -92,6 +90,9 @@ fn config_file_forbidden_key(
 }
 
 /// Records the struct default for the flag-equals-default scenario.
+///
+/// `ProfilesConfig` bakes its `retries` default in at compile time, so the
+/// recorded value must match it for the scenario to be meaningful.
 #[given("a struct default of {value} for {key}")]
 fn struct_default(profiles_context: &ProfilesContext, value: String, key: String) -> Result<()> {
     ensure!(
@@ -101,6 +102,10 @@ fn struct_default(profiles_context: &ProfilesContext, value: String, key: String
     ensure!(
         profiles_context.struct_default.is_empty(),
         "struct default already initialised"
+    );
+    ensure!(
+        normalize_scalar(&value) == "3",
+        "ProfilesConfig retries default is baked in at compile time; expected 3, got {value:?}"
     );
     profiles_context.struct_default.set(value);
     Ok(())
@@ -173,60 +178,65 @@ fn record_load_error(profiles_context: &ProfilesContext, err: &OrthoError) {
     }
 }
 
-/// Runs the profile-aware load: resolve the selection, extract the profile
-/// tables, and merge into a `ProfilesConfig`, recording the selection for
-/// later assertions.
+/// Runs the profile-aware load through the generated entry point.
+///
+/// Writes the scenario's config file and environment into a jail, then calls
+/// `ProfilesConfig::load_with_profile_from_iter` so the scenarios exercise the
+/// real derived CLI: the `--profile` flag, the `APP_PROFILE` selector, the
+/// profile merge layer, and the flag-equals-default fix.
 fn profile_load(
     profiles_context: &ProfilesContext,
     flags: &[(String, String)],
-) -> OrthoResult<ProfilesConfig> {
-    let flag_profile = flag_value(flags, "profile");
-    let env_profile = profiles_context.selector_env.get();
-    let selection = SelectedProfile::resolve(flag_profile, env_profile.as_deref())?;
-    profiles_context
-        .selection
-        .set(selection.clone().into_iter().collect());
-
-    let file_layers: Vec<ortho_config::MergeLayer<'static>> =
-        if profiles_context.no_files.is_empty() {
-            vec![ortho_config::MergeLayer::file(
-                Cow::Owned(build_file_value(profiles_context)),
-                None,
-            )]
-        } else {
-            Vec::new()
-        };
-
-    let outcome = match extract_profile_layers(file_layers, selection.as_ref()) {
-        Ok(outcome) => outcome,
-        Err(err) => {
-            record_load_error(profiles_context, &err);
-            return Err(err);
-        }
+) -> OrthoResult<ortho_config::ProfileLoadOutcome<ProfilesConfig>> {
+    let args = build_cli_args(flags);
+    let selector = profiles_context.selector_env.get();
+    let env_keys = profiles_context.env_keys.get().unwrap_or_default();
+    let file_value = if profiles_context.no_files.is_empty() {
+        Some(build_file_value(profiles_context))
+    } else {
+        None
     };
 
-    let mut composer = MergeComposer::new();
-    let defaults = profiles_context.struct_default.get();
-    match normalize_scalar(defaults.as_deref().unwrap_or("")).as_str() {
-        "" => composer.push_defaults(json!({})),
-        value => composer.push_defaults(json!({ "retries": parse_u32(value)? })),
-    }
-    for layer in outcome.file_layers {
-        composer.push_layer(layer);
-    }
-    for layer in outcome.profile_layers {
-        composer.push_layer(layer);
-    }
+    let result = test_helpers::figment::with_jail(|j| {
+        if let Some(value) = selector.as_ref() {
+            j.set_env("APP_PROFILE", value);
+        }
+        for (key, value) in &env_keys {
+            j.set_env(format!("APP_{}", key.to_ascii_uppercase()), value);
+        }
+        if let Some(value) = file_value.as_ref() {
+            let content = ortho_config::toml::to_string(value)
+                .map_err(|err| figment::error::Error::from(err.to_string()))?;
+            j.create_file(".app.toml", &content)?;
+        }
+        let composition = ProfilesConfig::compose_layers_from_iter(args.clone());
+        profiles_context.layers.set(composition.into_parts().0);
+        Ok(ProfilesConfig::load_with_profile_from_iter(args.clone()))
+    })
+    .map_err(|err| {
+        std::sync::Arc::new(OrthoError::Validation {
+            key: "jail".to_owned(),
+            message: format!("profile scenario jail setup failed: {err}"),
+        })
+    })?;
 
-    let env_keys = profiles_context.env_keys.get().unwrap_or_default();
-    if let Some((_, retries)) = env_keys.iter().find(|(key, _)| key == "retries") {
-        composer.push_environment(json!({ "retries": parse_u32(retries)? }));
+    match &result {
+        Ok(outcome) => {
+            profiles_context.selection.set(outcome.selection().to_vec());
+        }
+        Err(err) => record_load_error(profiles_context, err),
     }
-    if let Some(retries) = flag_value(flags, "retries") {
-        composer.push_cli(json!({ "retries": parse_u32(retries)? }));
-    }
+    result
+}
 
-    ProfilesConfig::merge_from_layers(composer.layers())
+/// Builds the CLI argument vector from the parsed `--flag value` pairs.
+fn build_cli_args(flags: &[(String, String)]) -> Vec<String> {
+    let mut args = vec!["profile-cli".to_owned()];
+    for (flag, value) in flags {
+        args.push(format!("--{flag}"));
+        args.push(value.clone());
+    }
+    args
 }
 
 /// Builds the file value from the accumulated base keys and profile tables.
@@ -273,14 +283,6 @@ fn parse_flags(flags: &str) -> Vec<(String, String)> {
         .collect()
 }
 
-/// Returns the value for `flag` from a parsed flag list, if present.
-fn flag_value<'a>(flags: &'a [(String, String)], flag: &str) -> Option<&'a str> {
-    flags
-        .iter()
-        .find(|(name, _)| name == flag)
-        .map(|(_, value)| value.as_str())
-}
-
 /// Converts a scalar placeholder to a JSON value, preserving numbers.
 fn scalar_value(value: &str) -> Value {
     let value = unquote(value);
@@ -288,14 +290,4 @@ fn scalar_value(value: &str) -> Value {
         return Value::from(number);
     }
     Value::String(value.to_owned())
-}
-
-/// Parses a numeric placeholder as `u32`, reporting a validation error.
-fn parse_u32(value: &str) -> OrthoResult<u32> {
-    unquote(value).parse::<u32>().map_err(|_| {
-        std::sync::Arc::new(OrthoError::Validation {
-            key: "retries".to_owned(),
-            message: format!("invalid retries value {value:?}"),
-        })
-    })
 }

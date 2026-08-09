@@ -39,8 +39,19 @@ pub(crate) fn build_source_aware_compose_layers_impl(
             krate: args.tokens.krate,
         },
         has_config_path: args.has_config_path,
+        profiles: args.profiles,
+        profile_env_var: args.profile_env_var.clone(),
+        cli_arg_ids: args.cli_arg_ids.clone(),
     };
-    build_compose_layers_impl(&source_aware_args)
+    let composition = build_compose_layers_impl(&source_aware_args);
+    if args.profiles {
+        // The profile compose body opens with `use` items, which only a block
+        // can contain, so the tuple's composition half is projected via a
+        // braced block rather than a parenthesised expression.
+        quote! {{ #composition }.0 }
+    } else {
+        composition
+    }
 }
 
 /// Build a generated load method that calls its selected composition method.

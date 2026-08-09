@@ -3,7 +3,7 @@
 //! Split from `scenario_state` so each module stays beneath the 400-line
 //! cap. The steps import the state via the `scenario_state` re-exports.
 
-use ortho_config::{OrthoConfig, ProfileSource, SelectedProfile};
+use ortho_config::{MergeLayer, OrthoConfig, ProfileLoadOutcome, ProfileSource, SelectedProfile};
 use rstest::fixture;
 use rstest_bdd::Slot;
 use rstest_bdd_macros::ScenarioState;
@@ -27,7 +27,9 @@ pub struct ProfilesContext {
     /// Whether no config file should be discoverable.
     pub no_files: Slot<()>,
     /// Load result.
-    pub result: Slot<ortho_config::OrthoResult<ProfilesConfig>>,
+    pub result: Slot<ortho_config::OrthoResult<ProfileLoadOutcome<ProfilesConfig>>>,
+    /// Composed layers recorded for the selector-never-leaks assertion.
+    pub layers: Slot<Vec<MergeLayer<'static>>>,
     /// Selection result.
     pub selection: Slot<Vec<SelectedProfile>>,
     /// Structured fields of the last `UnknownProfile` error.
@@ -49,12 +51,14 @@ pub fn profiles_context() -> ProfilesContext {
 
 /// Configuration struct used by profile BDD scenarios.
 ///
-/// The `APP_` prefix gives the `APP_PROFILE` selector variable. The derive is
-/// not profile-opted-in; the profile steps drive the library helpers directly
-/// until the opt-in derive lands (milestone 4).
+/// The `APP_` prefix gives the `APP_PROFILE` selector variable. The struct is
+/// profile-opted-in so the scenarios exercise the generated `--profile` flag
+/// and `load_with_profile` entry point. The `retries` default of 3 drives the
+/// flag-equals-default scenario: an explicit `--retries 3` equals the default
+/// and must still beat the profile.
 #[derive(Debug, Deserialize, Serialize, OrthoConfig, Default)]
-#[ortho_config(prefix = "APP_")]
+#[ortho_config(prefix = "APP_", profiles)]
 pub struct ProfilesConfig {
-    #[serde(default)]
+    #[ortho_config(default = 3)]
     pub retries: u32,
 }
