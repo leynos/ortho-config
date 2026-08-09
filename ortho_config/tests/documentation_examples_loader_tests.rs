@@ -8,9 +8,18 @@ use proptest::prelude::*;
 use rstest::rstest;
 
 #[test]
-fn public_loader_queries_are_callable() {
-    let _all_examples_result = load_documented_examples();
-    let _missing_example_result = documented_example("deliberately-missing");
+fn public_loader_queries_are_callable() -> Result<()> {
+    let examples = load_documented_examples()?;
+    ensure!(
+        !examples.is_empty(),
+        "documented registry should not be empty"
+    );
+    let known = documented_example("readme-main")?;
+    ensure!(
+        known.id == "readme-main",
+        "known example lookup should succeed"
+    );
+    Ok(())
 }
 
 #[rstest]
@@ -28,6 +37,14 @@ fn public_loader_queries_are_callable() {
     "fence is not terminated"
 )]
 #[case("<!-- tested-example: sample -->\n", "marker has no fence")]
+#[case(
+    "<!-- tested-example: sample -->\n\n```toml\nport = 8080\n```\n",
+    "expected an opening fence after marker"
+)]
+#[case(
+    "<!-- tested-example: ../escape -->\n```toml\nport = 8080\n```\n",
+    "tested-example identifier must use lowercase letters, digits, and single hyphens"
+)]
 #[case(
     "<!-- tested-example: sample -->\n```\nport = 8080\n```\n",
     "fence should declare a language"
@@ -55,7 +72,7 @@ fn malformed_documented_examples_are_rejected(
 proptest! {
     #[test]
     fn marked_fence_round_trips(
-        id in "[a-z][a-z0-9-]{0,20}",
+        id in "[a-z][a-z0-9]{0,10}(-[a-z0-9]+){0,2}",
         language in "[a-z]{1,8}",
         body_lines in prop::collection::vec("[A-Za-z0-9 .,/_=-]{0,40}", 0..8),
     ) {
@@ -83,7 +100,7 @@ proptest! {
 
     #[test]
     fn duplicate_identifiers_are_rejected(
-        id in "[a-z][a-z0-9-]{0,20}",
+        id in "[a-z][a-z0-9]{0,10}(-[a-z0-9]+){0,2}",
         first_body in "[A-Za-z0-9 .,/_=-]{0,40}",
         second_body in "[A-Za-z0-9 .,/_=-]{0,40}",
     ) {

@@ -14,6 +14,7 @@ const STANDARD_RUST_EXAMPLES: &[&str] = &[
     "guide-first-cli",
     "guide-discovery",
     "guide-hermetic-discovery",
+    "guide-load-first-outcomes",
     "guide-subcommand",
     "guide-errors",
     "guide-localization",
@@ -57,7 +58,7 @@ fn documented_rust_compiles_and_runs() -> Result<()> {
         "port=Some(3000)\n",
     )?;
     assert_run(&workspace, ExampleId("guide-localization"), [], "")?;
-    assert_run(&workspace, ExampleId("guide-tracing"), [], "port=8080\n")?;
+    assert_tracing_flow(&workspace)?;
     assert_run(&workspace, ExampleId("guide-orthohelp-metadata"), [], "")?;
 
     let error_output = workspace.run(ExampleId("guide-errors"), std::iter::empty::<&str>())?;
@@ -73,12 +74,55 @@ fn documented_rust_compiles_and_runs() -> Result<()> {
     assert_console_flows(&workspace)
 }
 
+fn assert_tracing_flow(workspace: &ExampleWorkspace) -> Result<()> {
+    let output = workspace.run(ExampleId("guide-tracing"), std::iter::empty::<&str>())?;
+    ensure!(output.status.success(), "guide-tracing should succeed");
+    ensure!(
+        output.stdout == b"port=8080\n",
+        "guide-tracing stdout should stay clean"
+    );
+    ensure!(
+        String::from_utf8_lossy(&output.stderr).contains("discovery.attempt"),
+        "guide-tracing should emit debug discovery diagnostics"
+    );
+    Ok(())
+}
+
 #[test]
 fn aliased_dependency_example_compiles_and_runs() -> Result<()> {
     let workspace = ExampleWorkspace::new(DependencyAlias("config_layer"))?;
     workspace.add_binary(&documented_example("guide-alias-derive")?)?;
     workspace.build()?;
     assert_run(&workspace, ExampleId("guide-alias-derive"), [], "")
+}
+
+#[test]
+fn workspace_rejects_paths_outside_an_example_directory() -> Result<()> {
+    let workspace = ExampleWorkspace::new(DependencyAlias("ortho_config"))?;
+
+    let id_error = workspace
+        .run(ExampleId("../escape"), std::iter::empty::<&str>())
+        .expect_err("path-like example identifiers should be rejected");
+    ensure!(
+        id_error
+            .to_string()
+            .contains("not a safe documented example identifier"),
+        "unexpected identifier error: {id_error}"
+    );
+
+    for path in [Path::new(""), Path::new("../escape")] {
+        let path_error = workspace
+            .write_run_file(ExampleId("readme-main"), RunFile { path, contents: "" })
+            .expect_err("unsafe run-file paths should be rejected");
+        ensure!(
+            path_error
+                .to_string()
+                .contains("must stay within the example directory"),
+            "unexpected run-file error: {path_error}"
+        );
+    }
+
+    Ok(())
 }
 
 fn assert_console_flows(workspace: &ExampleWorkspace) -> Result<()> {

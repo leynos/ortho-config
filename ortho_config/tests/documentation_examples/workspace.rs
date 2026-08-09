@@ -3,11 +3,24 @@
 use anyhow::{Context, Result, ensure};
 use cap_std::{ambient_authority, fs::Dir};
 use std::ffi::OsStr;
-use std::path::Path;
+use std::path::{Component, Path};
 use std::process::{Command, Output};
 use tempfile::TempDir;
 
-use super::documentation_examples::DocumentedExample;
+use super::documentation_examples::{DocumentedExample, is_valid_example_id};
+
+const CHILD_ENV_ALLOWLIST: &[&str] = &["SYSTEMROOT", "WINDIR"];
+const CARGO_ENV_ALLOWLIST: &[&str] = &[
+    "CARGO_HOME",
+    "HOME",
+    "PATH",
+    "RUSTUP_HOME",
+    "RUSTUP_TOOLCHAIN",
+    "SYSTEMROOT",
+    "TMPDIR",
+    "USERPROFILE",
+    "WINDIR",
+];
 
 /// A Cargo dependency alias used by the generated example package.
 pub(super) struct DependencyAlias<'a>(pub(super) &'a str);
@@ -51,6 +64,11 @@ impl ExampleWorkspace {
     /// Add an example as a binary without altering its published source.
     pub fn add_binary(&self, example: &DocumentedExample) -> Result<()> {
         ensure!(example.language == "rust", "{} is not Rust", example.id);
+        ensure!(
+            is_valid_example_id(&example.id),
+            "{} is not a safe documented example identifier",
+            example.id
+        );
         self.directory
             .write(format!("src/bin/{}.rs", example.id), &example.body)
             .with_context(|| format!("write {} binary", example.id))
@@ -95,6 +113,10 @@ impl ExampleWorkspace {
         S: AsRef<OsStr>,
         E: IntoIterator<Item = EnvironmentVariable<'a>>,
     {
+        ensure!(
+            is_valid_example_id(id),
+            "{id} is not a safe documented example identifier"
+        );
         let run_dir_name = format!("run-{id}");
         self.directory
             .create_dir_all(&run_dir_name)
@@ -105,17 +127,18 @@ impl ExampleWorkspace {
             .path()
             .join("target/debug")
             .join(format!("{id}{}", std::env::consts::EXE_SUFFIX));
-        Command::new(binary)
+        let mut command = Command::new(binary);
+        command.env_clear();
+        for name in CHILD_ENV_ALLOWLIST {
+            if let Some(value) = std::env::var_os(name) {
+                command.env(name, value);
+            }
+        }
+        command
             .args(args)
             .current_dir(&run_dir)
             .env("HOME", &run_dir)
             .env("XDG_CONFIG_HOME", run_dir.join("xdg"))
-            .env_remove("ACME_CONFIG_PATH")
-            .env_remove("ACME_HOST")
-            .env_remove("ACME_PORT")
-            .env_remove("ACME_LOG_LEVEL")
-            .env_remove("HELLO_HOST")
-            .env_remove("HELLO_PORT")
             .envs(
                 environment
                     .into_iter()
@@ -131,6 +154,17 @@ impl ExampleWorkspace {
         ExampleId(id): ExampleId<'_>,
         RunFile { path, contents }: RunFile<'_>,
     ) -> Result<()> {
+        ensure!(
+            is_valid_example_id(id),
+            "{id} is not a safe documented example identifier"
+        );
+        ensure!(
+            !path.as_os_str().is_empty()
+                && path
+                    .components()
+                    .all(|component| matches!(component, Component::Normal(_))),
+            "run file path must stay within the example directory"
+        );
         let run_dir_name = format!("run-{id}");
         self.directory.create_dir_all(&run_dir_name)?;
         let run_dir = self.directory.open_dir(&run_dir_name)?;
@@ -140,6 +174,12 @@ impl ExampleWorkspace {
 
     fn cargo_command(&self) -> Command {
         let mut command = Command::new("cargo");
+        command.env_clear();
+        for name in CARGO_ENV_ALLOWLIST {
+            if let Some(value) = std::env::var_os(name) {
+                command.env(name, value);
+            }
+        }
         command
             .current_dir(self.root.path())
             .env("CARGO_TARGET_DIR", self.root.path().join("target"));

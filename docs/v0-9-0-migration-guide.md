@@ -10,7 +10,7 @@ runtime contracts need review:
 - YAML files use YAML 1.2 parsing and reject duplicate keys.
 
 Everything else is additive or removes integration work. The sections below
-separate required changes from improvements you can adopt when useful.
+separate required changes from improvements that can be adopted when useful.
 
 ## Impact at a glance
 
@@ -54,8 +54,8 @@ application source does not import `ortho_config_macros` directly, remove that
 dependency rather than carrying two version requirements.
 
 Format features now flow from `ortho_config` to `ortho_config_macros`, so keep
-`toml`, `json5`, and `yaml` on the runtime dependency. You no longer need to
-coordinate equivalent feature selections on a direct macro dependency.
+`toml`, `json5`, and `yaml` on the runtime dependency. Equivalent feature
+selections no longer need coordination on a direct macro dependency.
 
 ## 2. Handle failed discovery explicitly
 
@@ -149,10 +149,10 @@ OrthoConfig's file-loading APIs.
 Missing `extends` targets now report the resolved absolute path and the file
 that referenced it. This changes error text, not the success path.
 
-Update snapshot or approval tests that assert the v0.8.0 message. If your code
-parses human-readable error strings, replace that parsing with matching on the
-public error type or with an application-owned error mapping. The more precise
-message is intended for people and is not a stable machine protocol.
+Update snapshot or approval tests that assert the v0.8.0 message. Replace any
+parsing of human-readable error strings with matching on the public error type
+or with an application-owned error mapping. The more precise message is
+intended for people and is not a stable machine protocol.
 
 ## 5. Adopt hermetic discovery tests
 
@@ -236,13 +236,14 @@ Derive `OrthoConfigSubcommandDocs` on the enum stored in a
 `#[command(subcommand)]` field:
 
 ```rust
-use clap::{Parser, Subcommand};
+use clap::{Args, Parser, Subcommand};
 use ortho_config::{OrthoConfig, OrthoConfigSubcommandDocs};
 use serde::{Deserialize, Serialize};
 
-#[derive(Parser, OrthoConfig)]
+#[derive(Parser, Deserialize, Serialize, OrthoConfig)]
 #[ortho_config(prefix = "ACME_")]
 struct Cli {
+    #[serde(skip)]
     #[command(subcommand)]
     command: Commands,
 }
@@ -252,7 +253,13 @@ enum Commands {
     Serve(ServeConfig),
 }
 
-#[derive(Default, Parser, Deserialize, Serialize, OrthoConfig)]
+impl Default for Commands {
+    fn default() -> Self {
+        Self::Serve(ServeConfig::default())
+    }
+}
+
+#[derive(Default, Args, Deserialize, Serialize, OrthoConfig)]
 #[ortho_config(prefix = "ACME_SERVE_")]
 struct ServeConfig {
     #[arg(long)]
@@ -388,10 +395,10 @@ compact contract. `--format all` now includes agent context. Consumers should
 use the `schema_version` and `kind` fields when validating the document.
 
 `AgentContext.skill_manifests` contains structured descriptors, not bare paths,
-and defaults to an empty list during deserialization. If you implemented an
-earlier design draft using `skill_manifest_paths`, rename that field and map
-entries to `SkillManifest`. That design name was not a v0.8.0 runtime API, so
-published v0.8.0 users have no required code change.
+and defaults to an empty list during deserialization. Applications with an
+earlier design draft using `skill_manifest_paths` should rename that field and
+map entries to `SkillManifest`. That design name was not a v0.8.0 runtime API,
+so published v0.8.0 users have no required code change.
 
 ## 12. Do not depend on proposed errors
 

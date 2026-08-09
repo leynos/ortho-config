@@ -208,7 +208,7 @@ repository's formatting, lint, test, spelling, Markdown, and Mermaid gates.
 
 ## Outcomes & retrospective
 
-The public surface now has three distinct levels: an 87-line README for first
+The public surface now has three distinct levels: a concise README for first
 contact, a task-oriented user's guide, and an impact-labelled migration guide.
 The strict registry covers 21 fences: ten Rust programs, six TOML manifests or
 configuration files, three console flows, one JSON document, and one YAML file.

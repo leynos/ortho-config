@@ -118,30 +118,34 @@ the roadmap moves through agent-native policy, structured and atomic
 `cargo-orthohelp` output, reusable workflow contracts, and a broader
 localization lifecycle.
 
-See the [completed v0.8.0 roadmap](docs/archive/v0-8-0-roadmap.md) for the
-foundation and the [active roadmap](docs/roadmap.md) for the detailed sequence.
+See the [completed v0.8.0 roadmap][archived-roadmap] for the foundation and the
+[active roadmap][roadmap] for the detailed sequence.
 
 ______________________________________________________________________
 
 ## Learn more
 
-- [User's guide](docs/users-guide.md) — build a real CLI one practical task at
-  a time, with worked examples.
-- [v0.9.0 migration guide](docs/v0-9-0-migration-guide.md) — separate required
-  migrations from improvements you can adopt when useful.
-- [Hello World application](examples/hello_world/) — explore a complete,
+- [User's guide][users-guide] — build a real CLI one practical task at a time,
+  with worked examples.
+- [v0.9.0 migration guide][migration-guide] — separate required migrations
+  from improvements that can be adopted when useful.
+- [Hello World application][hello-world] — explore a complete,
   multi-module example with localization and generated help.
 - [API documentation](https://docs.rs/ortho_config) — look up individual
   traits, attributes, and types.
-- [Developer's guide](docs/developers-guide.md) — build, test, and contribute
-  to OrthoConfig.
-- [Roadmap](docs/roadmap.md) — see what has landed and what comes next.
+- [Developer's guide][developers-guide] — build, test, and contribute to
+  OrthoConfig.
+- [Changelog][changelog] — review released features, fixes, and compatibility
+  notes.
+- [Design document][design] — understand the architecture and guiding
+  decisions.
+- [Roadmap][roadmap] — see what has landed and what comes next.
 
 ______________________________________________________________________
 
 ## Licence
 
-OrthoConfig is distributed under the [ISC licence](LICENSE).
+OrthoConfig is distributed under the [ISC licence][licence].
 
 ______________________________________________________________________
 
@@ -149,10 +153,20 @@ ______________________________________________________________________
 
 Found a rough edge, a missing example, or an idea that would make configuration
 less of a chore? Contributions are welcome. Start with the
-[developer's guide](docs/developers-guide.md) and the repository's
-[contributor guidance](AGENTS.md).
+[developer's guide][developers-guide] and the repository's
+[contributor guidance][contributor-guidance].
 
+[archived-roadmap]: https://github.com/leynos/ortho-config/blob/main/docs/archive/v0-8-0-roadmap.md
+[changelog]: https://github.com/leynos/ortho-config/blob/main/CHANGELOG.md
+[contributor-guidance]: https://github.com/leynos/ortho-config/blob/main/AGENTS.md
 [cr]: https://img.shields.io/crates/v/ortho_config "crates.io package"
 [cr-url]: https://crates.io/crates/ortho_config
+[design]: https://github.com/leynos/ortho-config/blob/main/docs/design.md
+[developers-guide]: https://github.com/leynos/ortho-config/blob/main/docs/developers-guide.md
 [dw]: https://deepwiki.com/badge.svg
 [dw-url]: https://deepwiki.com/leynos/ortho-config
+[hello-world]: https://github.com/leynos/ortho-config/tree/main/examples/hello_world
+[licence]: https://github.com/leynos/ortho-config/blob/main/LICENSE
+[migration-guide]: https://github.com/leynos/ortho-config/blob/main/docs/v0-9-0-migration-guide.md
+[roadmap]: https://github.com/leynos/ortho-config/blob/main/docs/roadmap.md
+[users-guide]: https://github.com/leynos/ortho-config/blob/main/docs/users-guide.md

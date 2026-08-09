@@ -22,17 +22,31 @@ const EXPECTED_EXAMPLE_IDS: &[&str] = &[
     "guide-first-cli",
     "guide-hermetic-discovery",
     "guide-install",
+    "guide-load-first-outcomes",
     "guide-localization",
     "guide-metrics-install",
     "guide-orthohelp-command",
     "guide-orthohelp-metadata",
     "guide-subcommand",
     "guide-tracing",
+    "guide-tracing-install",
     "guide-yaml",
     "readme-install",
     "readme-main",
     "readme-run",
 ];
+
+#[test]
+fn published_crate_readme_matches_repository_readme() -> Result<()> {
+    let repository = Dir::open_ambient_dir(repository_root(), ambient_authority())?;
+    let repository_readme = repository.read_to_string("README.md")?;
+    let crate_readme = repository.read_to_string("ortho_config/README.md")?;
+    ensure!(
+        crate_readme == repository_readme,
+        "the packaged ortho_config README should match the repository README"
+    );
+    Ok(())
+}
 
 #[test]
 fn every_documented_fence_has_a_known_unique_identifier() -> Result<()> {
@@ -61,7 +75,20 @@ fn installation_manifests_select_the_documented_release() -> Result<()> {
     let guide = parse_toml("guide-install")?;
     assert_dependency_version(&guide, "ortho_config", "0.9.0")?;
     assert_dependency_version(&guide, "clap", "4.5")?;
-    assert_dependency_version(&guide, "serde", "1.0")
+    assert_dependency_version(&guide, "serde", "1.0")?;
+
+    let tracing = parse_toml("guide-tracing-install")?;
+    let subscriber = dependency(&tracing, "tracing-subscriber")?;
+    ensure!(subscriber["version"].as_str() == Some("0.3"));
+    ensure!(
+        subscriber["features"]
+            .as_array()
+            .is_some_and(|features| features
+                .iter()
+                .any(|value| value.as_str() == Some("env-filter"))),
+        "tracing-subscriber manifest should enable env-filter"
+    );
+    Ok(())
 }
 
 #[test]

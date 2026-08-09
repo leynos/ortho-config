@@ -1,17 +1,18 @@
 # OrthoConfig user's guide
 
 Configuration should not be the hardest part of writing a command-line
-application. OrthoConfig lets you describe settings as a Rust struct, then
-loads that struct from defaults, a configuration file, environment variables,
-and command-line arguments.
+application. OrthoConfig describes settings as a Rust struct, then loads that
+struct from defaults, a configuration file, environment variables, and
+command-line arguments.
 
 This guide starts with a small working CLI and grows it one practical task at a
-time. You can stop as soon as your application has what it needs.
+time. Stop as soon as the application has what it needs.
 
 ## Install OrthoConfig
 
-OrthoConfig needs Serde to turn merged values into your configuration type. Add
-`clap` when your application defines its own command or subcommand parser:
+OrthoConfig needs Serde to turn merged values into the application's
+configuration type. Add `clap` when the application defines its own command or
+subcommand parser:
 
 <!-- tested-example: guide-install -->
 ```toml
@@ -24,7 +25,7 @@ serde = { version = "1.0", features = ["derive"] }
 The default features support TOML and the JSON-backed merge machinery used by
 the derive. Optional `json5`, `yaml`, and `metrics` features are covered later.
 
-## Build your first layered CLI
+## Build the first layered CLI
 
 Start with one struct. The `prefix` is used for environment variables and for
 the default file-discovery names. A trailing underscore is conventional and
@@ -66,6 +67,8 @@ That one definition provides three spellings for each field:
 | `port`      | `--port` or `-p` | `ACME_PORT`      | `port`      |
 | `log_level` | `--log-level`    | `ACME_LOG_LEVEL` | `log_level` |
 
+_Table 1: Rust fields and their command-line, environment, and TOML names._
+
 Values are merged from lowest to highest precedence:
 
 1. `#[ortho_config(default = ...)]` values;
@@ -103,7 +106,7 @@ POSIX shell syntax; in PowerShell, set `$env:ACME_HOST = "api.internal"` before
 running the same Cargo command.
 
 TOML is available by default. Enable the `yaml` or `json5` crate feature when
-those formats are a better fit for your users; the
+those formats are a better fit for application users; the
 [file-format section](#enable-another-file-format) covers the details.
 
 By default, discovery checks an explicit `--config-path`, the
@@ -140,11 +143,11 @@ resolved from the file that declares them, and parent layers are merged before
 the child. OrthoConfig reports a missing parent with its absolute path and the
 referencing file so the failure is actionable.
 
-## Make discovery match your application
+## Make discovery match the application
 
-You do not need to rename your application around OrthoConfig's defaults. Put
-the discovery contract beside the struct when the public flag or filenames are
-part of your CLI design:
+Application names do not need to bend around OrthoConfig's defaults. Put the
+discovery contract beside the struct when the public flag or filenames are part
+of the CLI design:
 
 <!-- tested-example: guide-discovery -->
 ```rust
@@ -180,6 +183,37 @@ This application accepts `--config` and `-c`, reads `ACME_CONFIG_PATH`, looks
 for `.acme-server.toml` in project locations, and uses `server.toml` in
 platform configuration directories. Keeping these choices in the derive also
 exposes them through `OrthoConfigDocs`.
+
+### Handle every `load_first` outcome
+
+`ConfigDiscovery::load_first` distinguishes three outcomes. `Ok(Some(...))`
+contains the first successfully parsed candidate. `Ok(None)` means discovery
+had no candidates to try. `Err(...)` means candidates existed but none loaded
+successfully; surface or map that error rather than treating it as absence:
+
+<!-- tested-example: guide-load-first-outcomes -->
+```rust
+use ortho_config::{ConfigDiscovery, OrthoResult};
+
+fn load_discovered_config(discovery: &ConfigDiscovery) -> OrthoResult<()> {
+    match discovery.load_first() {
+        Ok(Some(_config)) => {
+            // Merge or deserialize the discovered Figment value.
+            Ok(())
+        }
+        Ok(None) => {
+            // Continue with application defaults.
+            Ok(())
+        }
+        Err(error) => Err(error),
+    }
+}
+
+fn main() -> OrthoResult<()> {
+    let discovery = ConfigDiscovery::builder("acme").build();
+    load_discovered_config(&discovery)
+}
+```
 
 ## Test discovery without changing the process environment
 
@@ -268,7 +302,7 @@ variable.
 ## Handle errors at the application boundary
 
 Library APIs return `OrthoResult<T>`, whose error is an `Arc<OrthoError>`.
-Propagate it while loading, then render or map it where your application owns
+Propagate it while loading, then render or map it where the application owns
 the user experience:
 
 <!-- tested-example: guide-errors -->
@@ -336,8 +370,15 @@ root rather than the binary name. Missing translations fall back to the original
 ## Add production diagnostics
 
 OrthoConfig emits structured `tracing` events for discovery attempts, selected
-files, skips, and failures. The library does not install a subscriber; your
-binary should do that once during start-up:
+files, skips, and failures. The library does not install a subscriber; the
+binary should do that once during start-up. Add the subscriber with its
+environment-filter support:
+
+<!-- tested-example: guide-tracing-install -->
+```toml
+[dependencies]
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+```
 
 <!-- tested-example: guide-tracing -->
 ```rust
@@ -352,7 +393,8 @@ struct Config {
 
 fn main() -> OrthoResult<()> {
     tracing_subscriber::fmt()
-        .with_env_filter("ortho_config=info")
+        .with_env_filter("ortho_config=debug")
+        .with_writer(std::io::stderr)
         .try_init()
         .ok();
 
@@ -386,7 +428,7 @@ records fields, source names, precedence, discovery, defaults, and nested
 subcommands. Derive `OrthoConfigSubcommandDocs` on a `clap::Subcommand` enum so
 the generated tree includes every variant.
 
-You can inspect the metadata in code:
+Inspect the metadata in code:
 
 <!-- tested-example: guide-orthohelp-metadata -->
 ```rust
@@ -509,12 +551,12 @@ deploying.
 
 ## A practical path from here
 
-For a new CLI, begin with the first layered struct and add only the sections
-you need. A typical progression is:
+For a new CLI, begin with the first layered struct and add only the required
+sections. A typical progression is:
 
 1. choose stable CLI and environment names;
 2. add a project file for durable settings;
-3. customize discovery if the defaults are not part of your public interface;
+3. customize discovery if the defaults are not part of the public interface;
 4. split independent commands into subcommand configurations;
 5. localize help and initialize tracing at the application boundary; and
 6. generate human and agent documentation once the command surface stabilizes.

@@ -78,6 +78,19 @@ pub fn documented_example(id: &str) -> Result<DocumentedExample> {
         .with_context(|| format!("documented example '{id}' should exist"))
 }
 
+/// Return whether an identifier is safe for documentation-workspace paths.
+///
+/// This grammar is shared only by the documentation parser and its temporary
+/// workspace. Validate before interpolating an identifier into any path.
+pub(super) fn is_valid_example_id(id: &str) -> bool {
+    id.as_bytes().first().is_some_and(u8::is_ascii_lowercase)
+        && !id.ends_with('-')
+        && !id.contains("--")
+        && id
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
+}
+
 pub(crate) fn parse_document(
     source: &'static str,
     contents: &str,
@@ -93,6 +106,13 @@ pub(crate) fn parse_document(
                 !id.trim().is_empty(),
                 "{}",
                 cursor.error("tested-example identifier must not be empty")
+            );
+            ensure!(
+                is_valid_example_id(id),
+                "{}",
+                cursor.error(
+                    "tested-example identifier must use lowercase letters, digits, and single hyphens"
+                )
             );
             ensure!(ids.insert(id), "duplicate tested-example identifier '{id}'");
             examples.push(read_marked_example(&cursor, id, &mut lines)?);
@@ -129,7 +149,7 @@ fn read_marked_example<'a>(
     lines: &mut impl Iterator<Item = (usize, &'a str)>,
 ) -> Result<DocumentedExample> {
     let (fence_index, fence) = lines
-        .find(|(_, line)| !line.is_empty())
+        .next()
         .with_context(|| cursor.error("marker has no fence"))?;
     let fence_cursor = Cursor {
         source: cursor.source,
