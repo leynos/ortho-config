@@ -185,9 +185,12 @@ Stop and escalate (do not work around) when any of these is reached.
       (see D-8; transcripts in Artefacts). The branch was then rebased onto
       `origin/main` and the commit re-landed with two lint fixes folded in
       (clippy `doc_markdown` backticks, `shadow_unrelated` rename).
-- [ ] Milestone 2: documentation sweep (users' guide, design doc, ADR-004
-      amendment, developers' guide); `make markdownlint` and `make nixie`
-      green in addition to the code gates; commit.
+- [x] (2026-08-09) Milestone 2: documentation sweep (users' guide, design
+      doc, ADR-004 amendment, developers' guide); `make markdownlint` and
+      `make nixie` green in addition to the code gates; committed as
+      `04d548f`. The four edits were authored by the `scribe` subagent from
+      the Stage C brief and accepted unchanged after review; all six gates
+      passed in a single `scrutineer` run (see Stage C notes).
 - [ ] Milestone 3: CodeRabbit review clean; roadmap 8.3.1 marked done (with
       the D-2 annotation per Risk 5); final gates; PR ready for review.
 
@@ -929,6 +932,12 @@ error: could not compile `ortho_config` (test "rstest_bdd") due to 1 previous er
 - Milestone 1 shipped as commit `25be87a` on top of the rebased branch
   (rebased onto `origin/main` on 2026-08-07); the maintenance pass folded in
   the two clippy fixes and the `CargoContext` relocation recorded above.
+- Milestone 2 shipped as commit `04d548f` (2026-08-09): the documentation
+  sweep across `docs/users-guide.md`, `docs/design.md` §4.17,
+  `docs/adr-004-cargo-external-subcommand-entry-point.md`, and
+  `docs/developers-guide.md`, drafted by the `scribe` subagent. Gate logs:
+  `/tmp/{check-fmt,typecheck,lint,test,markdownlint,nixie}-ortho-config-8-3-1-ortho-config-cargo-helper-for-hand-built-clap-commands.out`
+  — all six green in one `scrutineer` run.
 
 ## Interfaces and dependencies
 
