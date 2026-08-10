@@ -312,11 +312,13 @@ Rust examples. Reuse it only from documentation tests that compile an exact
 fence body. It may add the dependencies needed to compile a published example,
 but it must not rewrite that source. Keep the expected identifier registry
 closed so adding an example without choosing its behavioural contract fails a
-test. Run Cargo and child binaries with cleared environments. Cargo receives
-only the toolchain and platform paths it needs; binaries receive only the
-non-sensitive Windows runtime variables named by the workspace allow-list and
-deliberate scenario overrides. Run-file paths must contain normal relative
-components only.
+test. `documentation_examples/cargo_runner.rs` owns isolated Cargo process
+setup for these documentation tests; reuse it only when executing a documented
+Cargo workflow with a caller-owned temporary state directory. Run Cargo and
+child binaries with cleared environments. Cargo receives only the toolchain and
+platform paths it needs; binaries receive only the non-sensitive Windows
+runtime variables named by the workspace allow-list and deliberate scenario
+overrides. Run-file paths must contain normal relative components only.
 
 ## Snapshot tests
 

@@ -9,28 +9,9 @@ use tempfile::TempDir;
 
 use super::documentation_examples::{DocumentedExample, is_valid_example_id};
 
+pub(super) mod cargo_runner;
+
 const CHILD_ENV_ALLOWLIST: &[&str] = &["SYSTEMROOT", "WINDIR"];
-const CARGO_ENV_ALLOWLIST: &[&str] = &[
-    "CARGO_HOME",
-    "HOME",
-    "INCLUDE",
-    "LIB",
-    "LIBPATH",
-    "PATH",
-    "ProgramFiles",
-    "ProgramFiles(x86)",
-    "RUSTUP_HOME",
-    "RUSTUP_TOOLCHAIN",
-    "SYSTEMROOT",
-    "TMPDIR",
-    "USERPROFILE",
-    "VCINSTALLDIR",
-    "VSCMD_ARG_TGT_ARCH",
-    "VSINSTALLDIR",
-    "WINDIR",
-    "WindowsSDKVersion",
-    "WindowsSdkDir",
-];
 
 /// A Cargo dependency alias used by the generated example package.
 pub(super) struct DependencyAlias<'a>(pub(super) &'a str);
@@ -58,6 +39,14 @@ pub struct ExampleWorkspace {
 
 impl ExampleWorkspace {
     /// Create a package using `dependency_alias` for the local `OrthoConfig` crate.
+    ///
+    /// The returned workspace contains a generated manifest and an empty binary
+    /// source directory.
+    ///
+    /// ```no_run
+    /// let workspace = ExampleWorkspace::new(DependencyAlias("ortho_config"))?;
+    /// # Ok::<(), anyhow::Error>(())
+    /// ```
     pub fn new(dependency_alias: DependencyAlias<'_>) -> Result<Self> {
         let root = tempfile::tempdir().context("create documentation example workspace")?;
         let directory = Dir::open_ambient_dir(root.path(), ambient_authority())
@@ -72,6 +61,15 @@ impl ExampleWorkspace {
     }
 
     /// Add an example as a binary without altering its published source.
+    ///
+    /// A successful result writes the exact fence body to `src/bin/<id>.rs`.
+    ///
+    /// ```no_run
+    /// let workspace = ExampleWorkspace::new(DependencyAlias("ortho_config"))?;
+    /// let example = documented_example("readme-main")?;
+    /// workspace.add_binary(&example)?;
+    /// # Ok::<(), anyhow::Error>(())
+    /// ```
     pub fn add_binary(&self, example: &DocumentedExample) -> Result<()> {
         ensure!(example.language == "rust", "{} is not Rust", example.id);
         ensure!(
@@ -85,6 +83,16 @@ impl ExampleWorkspace {
     }
 
     /// Build every documented binary in the package.
+    ///
+    /// `Ok(())` means every added binary compiled successfully in the isolated
+    /// target directory.
+    ///
+    /// ```no_run
+    /// # let workspace = ExampleWorkspace::new(DependencyAlias("ortho_config"))?;
+    /// # workspace.add_binary(&documented_example("readme-main")?)?;
+    /// workspace.build()?;
+    /// # Ok::<(), anyhow::Error>(())
+    /// ```
     pub fn build(&self) -> Result<()> {
         let output = self
             .cargo_command()
@@ -99,6 +107,16 @@ impl ExampleWorkspace {
     }
 
     /// Run a built example in its own deterministic working directory.
+    ///
+    /// The returned [`std::process::Output`] contains the binary's exit status
+    /// and captured standard streams.
+    ///
+    /// ```no_run
+    /// # let workspace = ExampleWorkspace::new(DependencyAlias("ortho_config"))?;
+    /// let output = workspace.run(ExampleId("readme-main"), ["--port", "3000"])?;
+    /// assert!(output.status.success());
+    /// # Ok::<(), anyhow::Error>(())
+    /// ```
     pub fn run<I, S>(&self, ExampleId(id): ExampleId<'_>, args: I) -> Result<Output>
     where
         I: IntoIterator<Item = S>,
@@ -112,6 +130,20 @@ impl ExampleWorkspace {
     }
 
     /// Run a built example with explicit environment-variable overrides.
+    ///
+    /// Overrides are visible to the child alongside the deterministic home
+    /// directories; unrelated host variables remain absent.
+    ///
+    /// ```no_run
+    /// # let workspace = ExampleWorkspace::new(DependencyAlias("ortho_config"))?;
+    /// let output = workspace.run_with_environment(
+    ///     ExampleId("guide-first-cli"),
+    ///     ["--port", "3000"],
+    ///     [EnvironmentVariable { name: "ACME_HOST", value: "api.internal" }],
+    /// )?;
+    /// assert!(output.status.success());
+    /// # Ok::<(), anyhow::Error>(())
+    /// ```
     pub fn run_with_environment<'a, I, S, E>(
         &self,
         ExampleId(id): ExampleId<'_>,
@@ -138,12 +170,7 @@ impl ExampleWorkspace {
             .join("target/debug")
             .join(format!("{id}{}", std::env::consts::EXE_SUFFIX));
         let mut command = Command::new(binary);
-        command.env_clear();
-        for name in CHILD_ENV_ALLOWLIST {
-            if let Some(value) = std::env::var_os(name) {
-                command.env(name, value);
-            }
-        }
+        cargo_runner::sanitize_environment(&mut command, CHILD_ENV_ALLOWLIST);
         command
             .args(args)
             .current_dir(&run_dir)
@@ -159,6 +186,18 @@ impl ExampleWorkspace {
     }
 
     /// Write a file in one binary's deterministic working directory.
+    ///
+    /// A successful result creates the run directory when necessary and writes
+    /// the requested relative file within it.
+    ///
+    /// ```no_run
+    /// # let workspace = ExampleWorkspace::new(DependencyAlias("ortho_config"))?;
+    /// workspace.write_run_file(
+    ///     ExampleId("guide-first-cli"),
+    ///     RunFile { path: Path::new(".acme.toml"), contents: "port = 3000\n" },
+    /// )?;
+    /// # Ok::<(), anyhow::Error>(())
+    /// ```
     pub fn write_run_file(
         &self,
         ExampleId(id): ExampleId<'_>,
@@ -183,133 +222,8 @@ impl ExampleWorkspace {
     }
 
     fn cargo_command(&self) -> Command {
-        let mut command = Command::new("cargo");
-        command.env_clear();
-        for name in CARGO_ENV_ALLOWLIST {
-            if let Some(value) = std::env::var_os(name) {
-                command.env(name, value);
-            }
-        }
-        command
-            .current_dir(self.root.path())
-            .env("CARGO_TARGET_DIR", self.root.path().join("target"));
-        #[cfg(all(windows, target_env = "msvc", target_arch = "x86_64"))]
-        configure_msvc_linker(&mut command, &self.directory, self.root.path());
-        command
+        cargo_runner::cargo_command(self.root.path(), self.root.path())
     }
-}
-#[cfg(all(windows, target_env = "msvc", target_arch = "x86_64"))]
-fn configure_msvc_linker(command: &mut Command, directory: &Dir, root: &Path) {
-    if let Some((linker, vcvars)) = find_msvc_toolchain() {
-        command.env("CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER", linker);
-        if let Some(environment) = vcvars_environment(directory, root, &vcvars) {
-            command.envs(environment);
-        }
-    }
-}
-#[cfg(all(windows, target_env = "msvc", target_arch = "x86_64"))]
-fn find_msvc_toolchain() -> Option<(std::ffi::OsString, std::path::PathBuf)> {
-    let vswhere = vswhere_path()?;
-    let installation_output = run_vswhere(&vswhere, &["-property", "installationPath"])?;
-    let linker_output = run_vswhere(
-        &vswhere,
-        &["-find", r"VC\Tools\MSVC\**\bin\Hostx64\x64\link.exe"],
-    )?;
-    let installation_path = first_output_line(&installation_output)?.to_str()?;
-    let linker_path = first_output_line(&linker_output)?.to_os_string();
-    let vcvars = Path::new(installation_path)
-        .join("VC")
-        .join("Auxiliary")
-        .join("Build")
-        .join("vcvars64.bat");
-    Some((linker_path, vcvars))
-}
-#[cfg(all(windows, target_env = "msvc", target_arch = "x86_64"))]
-fn vswhere_path() -> Option<std::path::PathBuf> {
-    let program_files =
-        std::env::var_os("ProgramFiles(x86)").or_else(|| std::env::var_os("ProgramFiles"))?;
-    Some(
-        Path::new(&program_files)
-            .join("Microsoft Visual Studio")
-            .join("Installer")
-            .join("vswhere.exe"),
-    )
-}
-#[cfg(all(windows, target_env = "msvc", target_arch = "x86_64"))]
-fn run_vswhere(vswhere: &Path, query: &[&str]) -> Option<Vec<u8>> {
-    let output = Command::new(vswhere)
-        .args(
-            [
-                "-latest",
-                "-products",
-                "*",
-                "-requires",
-                "Microsoft.VisualStudio.Component.VC.Tools.x86.x64",
-            ]
-            .into_iter()
-            .chain(query.iter().copied())
-            .chain(["-utf8"]),
-        )
-        .output()
-        .ok()?;
-    output.status.success().then_some(output.stdout)
-}
-#[cfg(all(windows, target_env = "msvc", target_arch = "x86_64"))]
-fn vcvars_environment(
-    directory: &Dir,
-    root: &Path,
-    vcvars: &Path,
-) -> Option<Vec<(String, String)>> {
-    let script_name = "msvc-environment.cmd";
-    let script = format!("@call \"{}\" >nul\r\n@set\r\n", vcvars.display());
-    directory.write(script_name, script).ok()?;
-    let output = Command::new("cmd.exe")
-        .args(["/d", "/u", "/c"])
-        .arg(root.join(script_name))
-        .output()
-        .ok()?;
-    let environment = output
-        .status
-        .success()
-        .then(|| decode_utf16le(&output.stdout))??;
-    Some(allowed_environment(&environment))
-}
-#[cfg(all(windows, target_env = "msvc", target_arch = "x86_64"))]
-fn decode_utf16le(output: &[u8]) -> Option<String> {
-    let mut chunks = output.chunks_exact(2);
-    let code_units = chunks
-        .by_ref()
-        .filter_map(|pair| match pair {
-            [low, high] => Some(u16::from(*low) | (u16::from(*high) << 8)),
-            _ => None,
-        })
-        .collect::<Vec<_>>();
-    chunks
-        .remainder()
-        .is_empty()
-        .then(|| String::from_utf16(&code_units).ok())
-        .flatten()
-}
-
-fn allowed_environment(environment: &str) -> Vec<(String, String)> {
-    environment
-        .lines()
-        .filter_map(|line| line.split_once('='))
-        .filter_map(|(name, value)| {
-            CARGO_ENV_ALLOWLIST
-                .iter()
-                .find(|allowed| allowed.eq_ignore_ascii_case(name))
-                .map(|allowed| ((*allowed).to_owned(), value.to_owned()))
-        })
-        .collect()
-}
-
-fn first_output_line(output: &[u8]) -> Option<&OsStr> {
-    let decoded_output = std::str::from_utf8(output).ok()?;
-    decoded_output
-        .lines()
-        .find(|line| !line.trim().is_empty())
-        .map(OsStr::new)
 }
 
 fn manifest(DependencyAlias(dependency_name): DependencyAlias<'_>) -> String {
@@ -342,32 +256,7 @@ fn render_manifest(dependency_name: &str, serialized_crate_path: &str) -> String
 mod tests {
     //! Regression coverage for generated workspace manifests.
 
-    use super::{allowed_environment, first_output_line, render_manifest};
-
-    #[test]
-    fn visual_studio_discovery_uses_the_first_reported_linker() {
-        let output = b"C:\\Visual Studio\\link.exe\r\nC:\\Other\\link.exe\r\n";
-        assert_eq!(
-            first_output_line(output),
-            Some(std::ffi::OsStr::new(r"C:\Visual Studio\link.exe"))
-        );
-    }
-
-    #[test]
-    fn visual_studio_environment_keeps_only_build_variables() {
-        let environment = concat!(
-            "LIB=C:\\Windows Kits\\Lib\r\n",
-            "Path=C:\\Visual Studio\\bin\r\n",
-            "SECRET=do-not-copy\r\n",
-        );
-        assert_eq!(
-            allowed_environment(environment),
-            vec![
-                ("LIB".to_owned(), r"C:\Windows Kits\Lib".to_owned()),
-                ("PATH".to_owned(), r"C:\Visual Studio\bin".to_owned()),
-            ]
-        );
-    }
+    use super::render_manifest;
 
     #[test]
     fn windows_dependency_path_produces_valid_toml() {

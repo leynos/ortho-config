@@ -1,5 +1,7 @@
 //! Executable contracts for examples in the README and user's guide.
 
+#[path = "documentation_examples/cargo_runner.rs"]
+mod cargo_runner;
 mod documentation_examples;
 
 use anyhow::{Context, Result, ensure};
@@ -7,7 +9,6 @@ use cap_std::{ambient_authority, fs::Dir};
 use documentation_examples::{documented_example, load_documented_examples};
 use ortho_config::{AgentContext, toml};
 use std::collections::BTreeSet;
-use std::process::Command;
 use tempfile::TempDir;
 
 const EXPECTED_EXAMPLE_IDS: &[&str] = &[
@@ -178,7 +179,9 @@ fn documented_orthohelp_command_generates_agent_context() -> Result<()> {
     );
 
     let output_directory = TempDir::new().context("create orthohelp output directory")?;
-    let output = Command::new("cargo")
+    let cargo_state = TempDir::new().context("create isolated Cargo state directory")?;
+    let mut command = cargo_runner::cargo_command(&repository_root(), cargo_state.path());
+    let output = command
         .args([
             "run",
             "--offline",
@@ -194,7 +197,6 @@ fn documented_orthohelp_command_generates_agent_context() -> Result<()> {
             "--out-dir",
         ])
         .arg(output_directory.path())
-        .current_dir(repository_root())
         .output()
         .context("run documented cargo-orthohelp flow")?;
     ensure!(

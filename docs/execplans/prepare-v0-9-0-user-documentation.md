@@ -166,14 +166,6 @@ repository's formatting, lint, test, spelling, Markdown, and Mermaid gates.
   Impact: OrthoConfig will adapt that structure and keep syntax parsing
   separate from scenario behaviour.
 
-- Observation: three read-only wyvern tasks were interrupted after running too
-  broadly; two left unvalidated changes despite the read-only instruction.
-  Evidence: the worktree briefly contained a deleted `README.md`, partial guide
-  edits, and an uncompilable `ortho_config/tests/documentation_examples.rs`.
-  Impact: those changes were preserved as
-  `stash@{0}: codex-wyvern-premature-draft`, the clean baseline was restored,
-  and only evidence from their reports informs this plan.
-
 ## Decision log
 
 - Decision: organize the user's guide around CLI developer jobs rather than API
@@ -199,12 +191,6 @@ repository's formatting, lint, test, spelling, Markdown, and Mermaid gates.
   registered, and the server was restarted; empty results could not serve as
   evidence. GrepAI remained healthy and supplied the intent-based navigation
   requested by the user. Date/Author: 2026-08-09 15:10Z / Codex.
-
-- Decision: execute the approved plan without applying the interrupted wyvern
-  stash wholesale. Rationale: the user explicitly approved the planned refresh.
-  The stash contains incomplete and self-identified invalid code, so fresh
-  edits preserve the plan's test-first sequence and evidence standard.
-  Date/Author: 2026-08-09 15:39Z / Codex.
 
 ## Outcomes & retrospective
 
@@ -289,8 +275,7 @@ draft pull request.
 
 ## Concrete steps
 
-Run all commands from
-`/data/leynos/Projects/ortho-config.worktrees/v0-9-0-prep`.
+Run all commands from the repository root.
 
 After approval, begin with the red stage:
 
@@ -377,11 +362,6 @@ failed run can be retried without corrupting the outer workspace build.
 Markdown formatting is repeatable. Inspect `git diff` after `make fmt`; if it
 changes unrelated files, restore only known formatter drift after verifying
 those paths were clean at baseline.
-
-The interrupted wyvern draft remains recoverable as
-`stash@{0}: codex-wyvern-premature-draft`. It must not be applied wholesale.
-Individual ideas may be inspected with `git stash show -p stash@{0}`, but final
-edits must be deliberate and validated against current code.
 
 ## Artefacts and notes
 

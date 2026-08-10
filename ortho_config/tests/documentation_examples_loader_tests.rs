@@ -33,6 +33,8 @@ fn public_loader_queries_are_callable() -> Result<()> {
 )]
 #[case("```toml\nport = 8080\n```\n", "missing a tested-example marker")]
 #[case("~~~toml\nport = 8080\n~~~\n", "missing a tested-example marker")]
+#[case::indented_backtick(" ```toml\nport = 8080\n ```\n", "missing a tested-example marker")]
+#[case::indented_tilde("   ~~~toml\nport = 8080\n   ~~~\n", "missing a tested-example marker")]
 #[case(
     "<!-- tested-example: sample -->\n```toml\nport = 8080\n",
     "fence is not terminated"
@@ -78,19 +80,31 @@ fn malformed_documented_examples_are_rejected(
     Ok(())
 }
 
-#[test]
-fn marked_tilde_fence_is_loaded() -> Result<()> {
+#[rstest]
+#[case::backtick(" ```toml\nport = 8080\n ```\n")]
+#[case::tilde("   ~~~toml\nport = 8080\n   ~~~\n")]
+fn marked_indented_fence_is_loaded(#[case] fence: &str) -> Result<()> {
     let examples = parse_document(
         "fixture.md",
-        "<!-- tested-example: sample -->\n~~~toml\nport = 8080\n~~~\n",
+        &format!("<!-- tested-example: sample -->\n{fence}"),
     )?;
     let [example] = examples.as_slice() else {
-        anyhow::bail!("expected one tilde-fenced example, got {examples:?}");
+        anyhow::bail!("expected one indented fenced example, got {examples:?}");
     };
     ensure!(example.language == "toml", "language should be preserved");
     ensure!(
         example.body == "port = 8080\n",
         "fence body should be preserved"
+    );
+    Ok(())
+}
+
+#[test]
+fn four_space_indented_code_block_is_not_a_fence() -> Result<()> {
+    let examples = parse_document("fixture.md", "    ```toml\n    port = 8080\n    ```\n")?;
+    ensure!(
+        examples.is_empty(),
+        "four-space code blocks should not be parsed as fences"
     );
     Ok(())
 }

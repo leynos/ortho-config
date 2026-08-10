@@ -184,15 +184,20 @@ fn parse_marker(line: &str) -> Option<&str> {
 }
 
 fn parse_fence(line: &str) -> Option<(Fence, &str)> {
-    let delimiter = *line.as_bytes().first()?;
+    let indentation = line.bytes().take_while(|byte| *byte == b' ').count();
+    if indentation > 3 {
+        return None;
+    }
+    let remainder = line.get(indentation..)?;
+    let delimiter = *remainder.as_bytes().first()?;
     if !matches!(delimiter, b'`' | b'~') {
         return None;
     }
-    let length = line
+    let length = remainder
         .bytes()
         .take_while(|candidate| *candidate == delimiter)
         .count();
-    let language = line.get(length..)?;
+    let language = remainder.get(length..)?;
     (length >= 3).then_some((Fence { delimiter, length }, language))
 }
 
