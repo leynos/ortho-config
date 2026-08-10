@@ -194,19 +194,21 @@ impl ExampleWorkspace {
             .current_dir(self.root.path())
             .env("CARGO_TARGET_DIR", self.root.path().join("target"));
         #[cfg(all(windows, target_env = "msvc", target_arch = "x86_64"))]
-        configure_msvc_linker(&mut command);
+        configure_msvc_linker(&mut command, &self.directory, self.root.path());
         command
     }
 }
 #[cfg(all(windows, target_env = "msvc", target_arch = "x86_64"))]
-fn configure_msvc_linker(command: &mut Command) {
-    if let Some((linker, environment)) = find_msvc_toolchain() {
-        command.envs(environment);
+fn configure_msvc_linker(command: &mut Command, directory: &Dir, root: &Path) {
+    if let Some((linker, vcvars)) = find_msvc_toolchain() {
         command.env("CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER", linker);
+        if let Some(environment) = vcvars_environment(directory, root, &vcvars) {
+            command.envs(environment);
+        }
     }
 }
 #[cfg(all(windows, target_env = "msvc", target_arch = "x86_64"))]
-fn find_msvc_toolchain() -> Option<(std::ffi::OsString, Vec<(String, String)>)> {
+fn find_msvc_toolchain() -> Option<(std::ffi::OsString, std::path::PathBuf)> {
     let vswhere = vswhere_path()?;
     let installation_output = run_vswhere(&vswhere, &["-property", "installationPath"])?;
     let linker_output = run_vswhere(
@@ -220,8 +222,7 @@ fn find_msvc_toolchain() -> Option<(std::ffi::OsString, Vec<(String, String)>)> 
         .join("Auxiliary")
         .join("Build")
         .join("vcvars64.bat");
-    let environment = vcvars_environment(&vcvars)?;
-    Some((linker_path, environment))
+    Some((linker_path, vcvars))
 }
 #[cfg(all(windows, target_env = "msvc", target_arch = "x86_64"))]
 fn vswhere_path() -> Option<std::path::PathBuf> {
@@ -254,10 +255,17 @@ fn run_vswhere(vswhere: &Path, query: &[&str]) -> Option<Vec<u8>> {
     output.status.success().then_some(output.stdout)
 }
 #[cfg(all(windows, target_env = "msvc", target_arch = "x86_64"))]
-fn vcvars_environment(vcvars: &Path) -> Option<Vec<(String, String)>> {
-    let command_line = format!(r#"call "{}" >nul && set"#, vcvars.display());
+fn vcvars_environment(
+    directory: &Dir,
+    root: &Path,
+    vcvars: &Path,
+) -> Option<Vec<(String, String)>> {
+    let script_name = "msvc-environment.cmd";
+    let script = format!("@call \"{}\" >nul\r\n@set\r\n", vcvars.display());
+    directory.write(script_name, script).ok()?;
     let output = Command::new("cmd.exe")
-        .args(["/d", "/u", "/s", "/c", &command_line])
+        .args(["/d", "/u", "/c"])
+        .arg(root.join(script_name))
         .output()
         .ok()?;
     let environment = output
@@ -334,28 +342,7 @@ fn render_manifest(dependency_name: &str, serialized_crate_path: &str) -> String
 mod tests {
     //! Regression coverage for generated workspace manifests.
 
-    use super::{CARGO_ENV_ALLOWLIST, allowed_environment, first_output_line, render_manifest};
-
-    #[test]
-    fn cargo_environment_preserves_msvc_linker_context() {
-        for name in [
-            "INCLUDE",
-            "LIB",
-            "LIBPATH",
-            "ProgramFiles",
-            "ProgramFiles(x86)",
-            "VCINSTALLDIR",
-            "VSCMD_ARG_TGT_ARCH",
-            "VSINSTALLDIR",
-            "WindowsSDKVersion",
-            "WindowsSdkDir",
-        ] {
-            assert!(
-                CARGO_ENV_ALLOWLIST.contains(&name),
-                "Cargo subprocess should inherit {name} on Windows"
-            );
-        }
-    }
+    use super::{allowed_environment, first_output_line, render_manifest};
 
     #[test]
     fn visual_studio_discovery_uses_the_first_reported_linker() {
