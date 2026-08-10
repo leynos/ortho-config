@@ -15,6 +15,15 @@ fn public_loader_queries_are_callable() -> Result<()> {
         "documented registry should not be empty"
     );
     let known = documented_example("readme-main")?;
+    let repeated = load_documented_examples()?;
+    ensure!(
+        std::ptr::eq(examples.as_ptr(), repeated.as_ptr()),
+        "documented registry should be cached per test target"
+    );
+    ensure!(
+        examples.iter().any(|example| std::ptr::eq(example, known)),
+        "identifier lookup should borrow from the cached registry"
+    );
     ensure!(
         known.id == "readme-main",
         "known example lookup should succeed"

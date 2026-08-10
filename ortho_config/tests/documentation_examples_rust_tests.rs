@@ -26,8 +26,9 @@ const STANDARD_RUST_EXAMPLES: &[&str] = &[
 fn documented_rust_compiles_and_runs() -> Result<()> {
     let workspace = ExampleWorkspace::new(DependencyAlias("ortho_config"))?;
     for id in STANDARD_RUST_EXAMPLES {
-        workspace.add_binary(&documented_example(id)?)?;
+        workspace.add_binary(documented_example(id)?)?;
     }
+    workspace.add_binary(&environment_probe())?;
     workspace.build()?;
 
     assert_run(
@@ -60,6 +61,7 @@ fn documented_rust_compiles_and_runs() -> Result<()> {
     assert_run(&workspace, ExampleId("guide-localization"), [], "")?;
     assert_tracing_flow(&workspace)?;
     assert_run(&workspace, ExampleId("guide-orthohelp-metadata"), [], "")?;
+    assert_sanitized_binary_environment(&workspace)?;
 
     let error_output = workspace.run(ExampleId("guide-errors"), std::iter::empty::<&str>())?;
     ensure!(
@@ -91,7 +93,7 @@ fn assert_tracing_flow(workspace: &ExampleWorkspace) -> Result<()> {
 #[test]
 fn aliased_dependency_example_compiles_and_runs() -> Result<()> {
     let workspace = ExampleWorkspace::new(DependencyAlias("config_layer"))?;
-    workspace.add_binary(&documented_example("guide-alias-derive")?)?;
+    workspace.add_binary(documented_example("guide-alias-derive")?)?;
     workspace.build()?;
     assert_run(&workspace, ExampleId("guide-alias-derive"), [], "")
 }
@@ -125,14 +127,8 @@ fn workspace_rejects_paths_outside_an_example_directory() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn workspace_sanitizes_the_documented_binary_environment() -> Result<()> {
-    ensure!(
-        std::env::var_os("PATH").is_some(),
-        "the parent test process should provide PATH"
-    );
-    let workspace = ExampleWorkspace::new(DependencyAlias("ortho_config"))?;
-    workspace.add_binary(&DocumentedExample {
+fn environment_probe() -> DocumentedExample {
+    DocumentedExample {
         id: "environment-probe".to_owned(),
         language: "rust".to_owned(),
         body: concat!(
@@ -149,9 +145,14 @@ fn workspace_sanitizes_the_documented_binary_environment() -> Result<()> {
         .to_owned(),
         source: "environment probe",
         line: 1,
-    })?;
-    workspace.build()?;
+    }
+}
 
+fn assert_sanitized_binary_environment(workspace: &ExampleWorkspace) -> Result<()> {
+    ensure!(
+        std::env::var_os("PATH").is_some(),
+        "the parent test process should provide PATH"
+    );
     let output = workspace.run(ExampleId("environment-probe"), std::iter::empty::<&str>())?;
     ensure!(output.status.success(), "environment probe should succeed");
     let stdout = String::from_utf8(output.stdout).context("environment probe output is UTF-8")?;

@@ -67,7 +67,7 @@ impl ExampleWorkspace {
     /// ```no_run
     /// let workspace = ExampleWorkspace::new(DependencyAlias("ortho_config"))?;
     /// let example = documented_example("readme-main")?;
-    /// workspace.add_binary(&example)?;
+    /// workspace.add_binary(example)?;
     /// # Ok::<(), anyhow::Error>(())
     /// ```
     pub fn add_binary(&self, example: &DocumentedExample) -> Result<()> {
@@ -89,7 +89,7 @@ impl ExampleWorkspace {
     ///
     /// ```no_run
     /// # let workspace = ExampleWorkspace::new(DependencyAlias("ortho_config"))?;
-    /// # workspace.add_binary(&documented_example("readme-main")?)?;
+    /// # workspace.add_binary(documented_example("readme-main")?)?;
     /// workspace.build()?;
     /// # Ok::<(), anyhow::Error>(())
     /// ```

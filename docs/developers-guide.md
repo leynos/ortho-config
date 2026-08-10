@@ -297,15 +297,17 @@ immediately preceding line. `ortho_config/tests/documentation_examples/mod.rs`
 owns parsing and lookup for these examples. It is test infrastructure only;
 production code, other crates, and examples must not depend on it.
 
-The loader is shared by the documentation integration-test targets. Keep its
-scope limited to loading exact fence bodies, rejecting unmarked or malformed
-fences, and querying stable identifiers. Put scenario policy in the test target
-that consumes it: compile and run Rust, parse data formats, execute documented
-commands, and compare observable output. Do not copy a fence into a fixture,
-because the copied text can pass after the published example has drifted.
-Identifiers use a closed filename-safe grammar: start with a lowercase ASCII
-letter, then use lowercase ASCII letters, digits, or single hyphens. The parser
-and temporary workspace both enforce this boundary before constructing paths.
+The loader is shared by the documentation integration-test targets. Each target
+loads and parses the documents once, then borrows examples from its cached
+registry. Keep its scope limited to loading exact fence bodies, rejecting
+unmarked or malformed fences, and querying stable identifiers. Put scenario
+policy in the test target that consumes it: compile and run Rust, parse data
+formats, execute documented commands, and compare observable output. Do not
+copy a fence into a fixture, because the copied text can pass after the
+published example has drifted. Identifiers use a closed filename-safe grammar:
+start with a lowercase ASCII letter, then use lowercase ASCII letters, digits,
+or single hyphens. The parser and temporary workspace both enforce this
+boundary before constructing paths.
 
 `documentation_examples/workspace.rs` owns temporary Cargo package assembly for
 Rust examples. Reuse it only from documentation tests that compile an exact

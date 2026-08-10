@@ -7,10 +7,14 @@
 use anyhow::{Context, Result, ensure};
 use cap_std::{ambient_authority, fs::Dir};
 use std::collections::HashSet;
+use std::sync::LazyLock;
 
 const DOCUMENT_PATHS: &[&str] = &["README.md", "docs/users-guide.md"];
 const MARKER_PREFIX: &str = "<!-- tested-example: ";
 const MARKER_SUFFIX: &str = " -->";
+
+static DOCUMENTED_EXAMPLES: LazyLock<Result<Vec<DocumentedExample>, String>> =
+    LazyLock::new(|| read_documented_examples().map_err(|error| format!("{error:#}")));
 
 #[derive(Clone, Copy)]
 struct Cursor {
@@ -45,13 +49,20 @@ pub struct DocumentedExample {
     pub line: usize,
 }
 
-/// Load every public example and reject unmarked or duplicate fences.
+/// Load every public example once and return the cached registry.
 ///
 /// # Errors
 ///
 /// Returns an error when a document cannot be read, a marker is malformed, a
 /// fence is unmarked or unterminated, or an identifier is duplicated.
-pub fn load_documented_examples() -> Result<Vec<DocumentedExample>> {
+pub fn load_documented_examples() -> Result<&'static [DocumentedExample]> {
+    DOCUMENTED_EXAMPLES
+        .as_ref()
+        .map(Vec::as_slice)
+        .map_err(|message| anyhow::anyhow!(message.clone()))
+}
+
+fn read_documented_examples() -> Result<Vec<DocumentedExample>> {
     let repository = repository_directory()?;
     let mut examples = Vec::new();
     for path in DOCUMENT_PATHS {
@@ -72,14 +83,14 @@ pub fn load_documented_examples() -> Result<Vec<DocumentedExample>> {
     Ok(examples)
 }
 
-/// Load the documented example identified by `id`.
+/// Borrow the cached documented example identified by `id`.
 ///
 /// # Errors
 ///
 /// Returns an error when the documents are invalid or `id` is absent.
-pub fn documented_example(id: &str) -> Result<DocumentedExample> {
+pub fn documented_example(id: &str) -> Result<&'static DocumentedExample> {
     load_documented_examples()?
-        .into_iter()
+        .iter()
         .find(|example| example.id == id)
         .with_context(|| format!("documented example '{id}' should exist"))
 }
