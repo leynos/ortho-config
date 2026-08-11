@@ -101,9 +101,9 @@ host=api.internal port=3000 log_level=debug
 ```
 
 The result shows all three surfaces working together: `log_level` comes from
-TOML, `ACME_HOST` supplies `host`, and `--port` wins for `port`. The command uses
-POSIX shell syntax; in PowerShell, set `$env:ACME_HOST = "api.internal"` before
-running the same Cargo command.
+TOML, `ACME_HOST` supplies `host`, and `--port` wins for `port`. The command
+uses POSIX shell syntax; in PowerShell, set `$env:ACME_HOST = "api.internal"`
+before running the same Cargo command.
 
 TOML is available by default. Enable the `yaml` or `json5` crate feature when
 those formats are a better fit for application users; the
@@ -199,10 +199,12 @@ fn load_discovered_config(discovery: &ConfigDiscovery) -> OrthoResult<()> {
     match discovery.load_first() {
         Ok(Some(_config)) => {
             // Merge or deserialize the discovered Figment value.
+            println!("discovery=loaded");
             Ok(())
         }
         Ok(None) => {
             // Continue with application defaults.
+            println!("discovery=absent");
             Ok(())
         }
         Err(error) => Err(error),
@@ -243,6 +245,7 @@ fn main() {
         discovery.candidates().first().map(|path| path.as_path()),
         Some(std::path::Path::new("/srv/acme/server.toml"))
     );
+    println!("candidate=/srv/acme/server.toml");
 }
 ```
 
@@ -358,6 +361,7 @@ fn main() -> Result<(), clap::Error> {
         &localizer,
     )?;
     assert!(cli.verbose);
+    println!("verbose={}", cli.verbose);
     Ok(())
 }
 ```
@@ -447,6 +451,7 @@ fn main() {
     let metadata = Config::get_doc_metadata();
     assert_eq!(metadata.fields.len(), 1);
     assert_eq!(metadata.fields[0].name, "host");
+    println!("field={}", metadata.fields[0].name);
 }
 ```
 
@@ -522,6 +527,7 @@ struct Config {
 fn main() -> OrthoResult<()> {
     let config = Config::load_from_iter(["acme"])?;
     assert_eq!(config.port, 8080);
+    println!("port={}", config.port);
     Ok(())
 }
 ```

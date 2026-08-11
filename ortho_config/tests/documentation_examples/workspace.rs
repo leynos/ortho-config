@@ -95,7 +95,7 @@ impl ExampleWorkspace {
     /// ```
     pub fn build(&self) -> Result<()> {
         let output = self
-            .cargo_command()
+            .cargo_command()?
             .args(["build", "--offline", "--bins"])
             .output()?;
         ensure!(
@@ -221,8 +221,8 @@ impl ExampleWorkspace {
         Ok(())
     }
 
-    fn cargo_command(&self) -> Command {
-        cargo_runner::cargo_command(self.root.path(), self.root.path())
+    fn cargo_command(&self) -> Result<Command> {
+        cargo_runner::prepare_cargo_command(self.root.path(), self.root.path())
     }
 }
 

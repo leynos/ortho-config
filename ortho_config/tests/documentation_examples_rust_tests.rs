@@ -51,16 +51,37 @@ fn documented_rust_compiles_and_runs() -> Result<()> {
         "host=0.0.0.0 port=3000 log_level=debug\n",
     )?;
     assert_run(&workspace, ExampleId("guide-discovery"), [], "port=8080\n")?;
-    assert_run(&workspace, ExampleId("guide-hermetic-discovery"), [], "")?;
+    assert_run(
+        &workspace,
+        ExampleId("guide-hermetic-discovery"),
+        [],
+        "candidate=/srv/acme/server.toml\n",
+    )?;
+    assert_run(
+        &workspace,
+        ExampleId("guide-load-first-outcomes"),
+        [],
+        "discovery=absent\n",
+    )?;
     assert_run(
         &workspace,
         ExampleId("guide-subcommand"),
         ["serve", "--port", "3000"],
         "port=Some(3000)\n",
     )?;
-    assert_run(&workspace, ExampleId("guide-localization"), [], "")?;
+    assert_run(
+        &workspace,
+        ExampleId("guide-localization"),
+        [],
+        "verbose=true\n",
+    )?;
     assert_tracing_flow(&workspace)?;
-    assert_run(&workspace, ExampleId("guide-orthohelp-metadata"), [], "")?;
+    assert_run(
+        &workspace,
+        ExampleId("guide-orthohelp-metadata"),
+        [],
+        "field=host\n",
+    )?;
     assert_sanitized_binary_environment(&workspace)?;
 
     let error_output = workspace.run(ExampleId("guide-errors"), std::iter::empty::<&str>())?;
@@ -95,7 +116,12 @@ fn aliased_dependency_example_compiles_and_runs() -> Result<()> {
     let workspace = ExampleWorkspace::new(DependencyAlias("config_layer"))?;
     workspace.add_binary(documented_example("guide-alias-derive")?)?;
     workspace.build()?;
-    assert_run(&workspace, ExampleId("guide-alias-derive"), [], "")
+    assert_run(
+        &workspace,
+        ExampleId("guide-alias-derive"),
+        [],
+        "port=8080\n",
+    )
 }
 
 #[test]

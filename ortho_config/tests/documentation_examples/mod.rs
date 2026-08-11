@@ -3,6 +3,8 @@
 //! Every fence in either document must be preceded by a stable
 //! `tested-example` marker. Tests query the exact published text through this
 //! module so copied fixtures cannot drift away from the documentation.
+//! The registry is initialized once per integration-test process, then remains
+//! immutable for that process's lifetime; callers cannot reset or replace it.
 
 use anyhow::{Context, Result, ensure};
 use cap_std::{ambient_authority, fs::Dir};

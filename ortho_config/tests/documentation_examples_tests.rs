@@ -180,7 +180,7 @@ fn documented_orthohelp_command_generates_agent_context() -> Result<()> {
 
     let output_directory = TempDir::new().context("create orthohelp output directory")?;
     let cargo_state = TempDir::new().context("create isolated Cargo state directory")?;
-    let mut command = cargo_runner::cargo_command(&repository_root(), cargo_state.path());
+    let mut command = cargo_runner::prepare_cargo_command(&repository_root(), cargo_state.path())?;
     let output = command
         .args([
             "run",

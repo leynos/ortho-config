@@ -320,7 +320,10 @@ Cargo workflow with a caller-owned temporary state directory. Run Cargo and
 child binaries with cleared environments. Cargo receives only the toolchain and
 platform paths it needs; binaries receive only the non-sensitive Windows
 runtime variables named by the workspace allow-list and deliberate scenario
-overrides. Run-file paths must contain normal relative components only.
+overrides. Keep fallible host-tool discovery and environment preparation at the
+runner boundary; command construction consumes the prepared values without
+starting subprocesses or writing files. Run-file paths must contain normal
+relative components only.
 
 ## Snapshot tests
 

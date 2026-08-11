@@ -6,13 +6,41 @@ use anyhow::{Result, ensure};
 use documentation_examples::{documented_example, load_documented_examples, parse_document};
 use proptest::prelude::*;
 use rstest::rstest;
+use std::sync::{Arc, Barrier};
 
 #[test]
 fn public_loader_queries_are_callable() -> Result<()> {
+    const READER_COUNT: usize = 8;
+    let barrier = Arc::new(Barrier::new(READER_COUNT));
+    let registry_pointers = std::thread::scope(|scope| {
+        let readers = (0..READER_COUNT)
+            .map(|_| {
+                let reader_barrier = Arc::clone(&barrier);
+                scope.spawn(move || {
+                    reader_barrier.wait();
+                    load_documented_examples().map(|examples| examples.as_ptr() as usize)
+                })
+            })
+            .collect::<Vec<_>>();
+        readers
+            .into_iter()
+            .map(|reader| {
+                reader
+                    .join()
+                    .expect("concurrent registry loading should not panic")
+            })
+            .collect::<Result<Vec<_>>>()
+    })?;
     let examples = load_documented_examples()?;
     ensure!(
         !examples.is_empty(),
         "documented registry should not be empty"
+    );
+    ensure!(
+        registry_pointers
+            .iter()
+            .all(|pointer| *pointer == examples.as_ptr() as usize),
+        "concurrent first loads should share the immutable registry"
     );
     let known = documented_example("readme-main")?;
     let repeated = load_documented_examples()?;
