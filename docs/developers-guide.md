@@ -380,7 +380,6 @@ as additional metric families or span fields used across crates, should be
 mentioned in the relevant design or component architecture document, so the
 contract stays discoverable.
 
-
 ## Digest rendering
 
 `cargo-orthohelp` hashes cache inputs with SHA-256 and renders the digest as 64
