@@ -1,5 +1,4 @@
 //! Scenario state structs and `rstest` fixture providers for the BDD scaffolding.
-
 use anyhow::Error;
 use clap::{Args, Parser, Subcommand};
 use ortho_config::{Localizer, MergeLayer, OrthoConfig, OrthoConfigSubcommandDocs};
@@ -118,6 +117,9 @@ impl LocalizerContext {
         slot
     }
 
+    /// Drains the captured formatting-issue identifiers, recovering a poisoned
+    /// lock rather than propagating it: the mutex only guards a `Vec` of pushed
+    /// identifiers, so a panic held elsewhere cannot leave it torn.
     #[must_use]
     pub fn take_issues(&self) -> Vec<String> {
         if let Some(issues) = self.issues.take() {
