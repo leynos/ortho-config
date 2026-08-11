@@ -241,7 +241,9 @@ fn parse_fence(line: &str) -> Option<(Fence, &str)> {
 fn is_matching_closing_fence(line: &str, opening_fence: Fence) -> bool {
     matches!(
         parse_fence(line),
-        Some((closing_fence, "")) if closing_fence == opening_fence
+        Some((closing_fence, suffix))
+            if closing_fence == opening_fence
+                && suffix.bytes().all(|byte| matches!(byte, b' ' | b'\t'))
     )
 }
 

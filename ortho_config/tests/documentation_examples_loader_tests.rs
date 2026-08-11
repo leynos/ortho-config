@@ -136,6 +136,31 @@ fn marked_indented_fence_is_loaded(#[case] fence: &str) -> Result<()> {
     Ok(())
 }
 
+#[rstest]
+#[case::spaces("   ")]
+#[case::tabs("\t\t")]
+fn matching_closing_fence_allows_horizontal_whitespace(#[case] suffix: &str) -> Result<()> {
+    let contents = format!("<!-- tested-example: sample -->\n```toml\nport = 8080\n```{suffix}\n");
+    let examples = parse_document("fixture.md", &contents)?;
+    let [example] = examples.as_slice() else {
+        anyhow::bail!("expected one fenced example, got {examples:?}");
+    };
+    ensure!(example.body == "port = 8080\n", "body should be preserved");
+    Ok(())
+}
+
+#[test]
+fn matching_closing_fence_rejects_non_whitespace_suffix() -> Result<()> {
+    let contents = "<!-- tested-example: sample -->\n```toml\nport = 8080\n```toml\n";
+    let error = parse_document("fixture.md", contents)
+        .expect_err("closing-fence text should leave the fence unterminated");
+    ensure!(
+        error.to_string().contains("fence is not terminated"),
+        "unexpected closing-fence error: {error}"
+    );
+    Ok(())
+}
+
 #[test]
 fn four_space_indented_code_block_is_not_a_fence() -> Result<()> {
     let examples = parse_document("fixture.md", "    ```toml\n    port = 8080\n    ```\n")?;
