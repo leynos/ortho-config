@@ -55,6 +55,15 @@ pub struct DocumentedExample {
 ///
 /// Returns an error when a document cannot be read, a marker is malformed, a
 /// fence is unmarked or unterminated, or an identifier is duplicated.
+///
+/// # Examples
+///
+/// ```no_run
+/// let examples = load_documented_examples()?;
+/// let example_ids = examples.iter().map(|example| example.id.as_str());
+/// # let _ = example_ids;
+/// # Ok::<(), anyhow::Error>(())
+/// ```
 pub fn load_documented_examples() -> Result<&'static [DocumentedExample]> {
     DOCUMENTED_EXAMPLES
         .as_ref()
@@ -88,6 +97,21 @@ fn read_documented_examples() -> Result<Vec<DocumentedExample>> {
 /// # Errors
 ///
 /// Returns an error when the documents are invalid or `id` is absent.
+///
+/// # Examples
+///
+/// ```no_run
+/// let example = documented_example("guide-install")?;
+/// assert_eq!(example.id, "guide-install");
+///
+/// let error = documented_example("absent-example")
+///     .expect_err("an absent identifier should return an error");
+/// assert_eq!(
+///     error.to_string(),
+///     "documented example 'absent-example' should exist",
+/// );
+/// # Ok::<(), anyhow::Error>(())
+/// ```
 pub fn documented_example(id: &str) -> Result<&'static DocumentedExample> {
     load_documented_examples()?
         .iter()

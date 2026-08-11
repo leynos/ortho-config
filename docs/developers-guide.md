@@ -303,7 +303,7 @@ registry. Keep its scope limited to loading exact fence bodies, rejecting
 unmarked or malformed fences, and querying stable identifiers. Put scenario
 policy in the test target that consumes it: compile and run Rust, parse data
 formats, execute documented commands, and compare observable output. Do not
-copy a fence into a fixture, because the copied text can pass after the
+copy a fence into a fixture because the copied text can pass after the
 published example has drifted. Identifiers use a closed filename-safe grammar:
 start with a lowercase ASCII letter, then use lowercase ASCII letters, digits,
 or single hyphens. The parser and temporary workspace both enforce this
