@@ -123,8 +123,9 @@ repository's formatting, lint, test, spelling, Markdown, and Mermaid gates.
 - [x] (2026-08-09 16:17Z) Added the strict documentation-example loader,
   malformed-input tests, closed registry, and the expected red failure on the
   first unmarked README fence.
-- [x] (2026-08-09 16:17Z) Rewrote the README and user's guide around 21 marked,
-  behaviourally checked examples.
+- [x] (2026-08-09 16:17Z) Rewrote the README and user's guide around 23 marked,
+  behaviourally checked examples: 11 Rust, 7 TOML, 3 console, 1 JSON, and 1
+  YAML.
 - [x] (2026-08-09 16:17Z) Completed the v0.9.0 impact inventory and worked
   migrations.
 - [x] (2026-08-09 16:17Z) Updated the documentation index and recorded the
@@ -137,7 +138,7 @@ repository's formatting, lint, test, spelling, Markdown, and Mermaid gates.
 - [x] (2026-08-09 17:16Z) Committed the implementation, received a green
   independent scrutineer report, pushed the branch, and opened draft pull
   request [#422](https://github.com/leynos/ortho-config/pull/422).
-- [x] (2026-08-11 20:16Z) Reconciled the completed registry inventory at 23
+- [x] (2026-08-11 20:16Z) Validated the completed registry inventory at 23
   examples: 11 Rust, 7 TOML, 3 console, 1 JSON, and 1 YAML.
 
 ## Surprises & discoveries
@@ -408,6 +409,6 @@ permitted.
 Revision note: the user approved the plan on 2026-08-09. The implementation
 then replaced the three public documents, added the strict executable example
 contract, passed all required gates, and opened draft pull request #422. The
-plan is complete. On 2026-08-11, the completed inventory was corrected from 21
-to 23 after two further examples joined the registry; this changes the recorded
-outcome, not the plan's status or remaining work.
+plan is complete. On 2026-08-11, the completed inventory was confirmed at 23
+examples and synchronized across the progress and outcome sections; this
+changes the recorded counts, not the plan's status or remaining work.
