@@ -31,7 +31,7 @@ fn documented_rust_compiles_and_runs() -> Result<()> {
     workspace.add_binary(&environment_probe())?;
     workspace.build()?;
 
-    assert_standard_flows(&mut workspace)?;
+    assert_standard_example_runs(&mut workspace)?;
     assert_tracing_flow(&mut workspace)?;
     assert_run(
         &mut workspace,
@@ -41,20 +41,12 @@ fn documented_rust_compiles_and_runs() -> Result<()> {
     )?;
     assert_sanitized_binary_environment(&mut workspace)?;
 
-    let error_output = workspace.run(ExampleId("guide-errors"), std::iter::empty::<&str>())?;
-    ensure!(
-        error_output.status.success(),
-        "guide-errors should handle its error"
-    );
-    ensure!(
-        String::from_utf8_lossy(&error_output.stderr).contains("invalid value"),
-        "guide-errors should render clap's parse failure"
-    );
+    assert_error_flow(&mut workspace)?;
 
     assert_console_flows(&mut workspace)
 }
 
-fn assert_standard_flows(workspace: &mut ExampleWorkspace) -> Result<()> {
+fn assert_standard_example_runs(workspace: &mut ExampleWorkspace) -> Result<()> {
     assert_run(
         workspace,
         ExampleId("readme-main"),
@@ -99,6 +91,19 @@ fn assert_standard_flows(workspace: &mut ExampleWorkspace) -> Result<()> {
         [],
         "verbose=true\n",
     )
+}
+
+fn assert_error_flow(workspace: &mut ExampleWorkspace) -> Result<()> {
+    let output = workspace.run(ExampleId("guide-errors"), std::iter::empty::<&str>())?;
+    ensure!(
+        output.status.success(),
+        "guide-errors should handle its error"
+    );
+    ensure!(
+        String::from_utf8_lossy(&output.stderr).contains("invalid value"),
+        "guide-errors should render clap's parse failure"
+    );
+    Ok(())
 }
 
 fn assert_tracing_flow(workspace: &mut ExampleWorkspace) -> Result<()> {
