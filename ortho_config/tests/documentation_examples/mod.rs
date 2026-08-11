@@ -60,8 +60,8 @@ pub struct DocumentedExample {
 ///
 /// ```no_run
 /// let examples = load_documented_examples()?;
-/// let example_ids = examples.iter().map(|example| example.id.as_str());
-/// # let _ = example_ids;
+/// let example_ids: Vec<_> = examples.iter().map(|example| example.id.as_str()).collect();
+/// assert!(!example_ids.is_empty());
 /// # Ok::<(), anyhow::Error>(())
 /// ```
 pub fn load_documented_examples() -> Result<&'static [DocumentedExample]> {
