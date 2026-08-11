@@ -24,65 +24,22 @@ const STANDARD_RUST_EXAMPLES: &[&str] = &[
 
 #[test]
 fn documented_rust_compiles_and_runs() -> Result<()> {
-    let workspace = ExampleWorkspace::new(DependencyAlias("ortho_config"))?;
+    let mut workspace = ExampleWorkspace::new(DependencyAlias("ortho_config"))?;
     for id in STANDARD_RUST_EXAMPLES {
         workspace.add_binary(documented_example(id)?)?;
     }
     workspace.add_binary(&environment_probe())?;
     workspace.build()?;
 
+    assert_standard_flows(&mut workspace)?;
+    assert_tracing_flow(&mut workspace)?;
     assert_run(
-        &workspace,
-        ExampleId("readme-main"),
-        ["--host", "0.0.0.0", "--port", "3000"],
-        "Listening on 0.0.0.0:3000\n",
-    )?;
-    assert_run(
-        &workspace,
-        ExampleId("guide-first-cli"),
-        [
-            "--host",
-            "0.0.0.0",
-            "--port",
-            "3000",
-            "--log-level",
-            "debug",
-        ],
-        "host=0.0.0.0 port=3000 log_level=debug\n",
-    )?;
-    assert_run(&workspace, ExampleId("guide-discovery"), [], "port=8080\n")?;
-    assert_run(
-        &workspace,
-        ExampleId("guide-hermetic-discovery"),
-        [],
-        "candidate=/srv/acme/server.toml\n",
-    )?;
-    assert_run(
-        &workspace,
-        ExampleId("guide-load-first-outcomes"),
-        [],
-        "discovery=absent\n",
-    )?;
-    assert_run(
-        &workspace,
-        ExampleId("guide-subcommand"),
-        ["serve", "--port", "3000"],
-        "port=Some(3000)\n",
-    )?;
-    assert_run(
-        &workspace,
-        ExampleId("guide-localization"),
-        [],
-        "verbose=true\n",
-    )?;
-    assert_tracing_flow(&workspace)?;
-    assert_run(
-        &workspace,
+        &mut workspace,
         ExampleId("guide-orthohelp-metadata"),
         [],
         "field=host\n",
     )?;
-    assert_sanitized_binary_environment(&workspace)?;
+    assert_sanitized_binary_environment(&mut workspace)?;
 
     let error_output = workspace.run(ExampleId("guide-errors"), std::iter::empty::<&str>())?;
     ensure!(
@@ -94,10 +51,57 @@ fn documented_rust_compiles_and_runs() -> Result<()> {
         "guide-errors should render clap's parse failure"
     );
 
-    assert_console_flows(&workspace)
+    assert_console_flows(&mut workspace)
 }
 
-fn assert_tracing_flow(workspace: &ExampleWorkspace) -> Result<()> {
+fn assert_standard_flows(workspace: &mut ExampleWorkspace) -> Result<()> {
+    assert_run(
+        workspace,
+        ExampleId("readme-main"),
+        ["--host", "0.0.0.0", "--port", "3000"],
+        "Listening on 0.0.0.0:3000\n",
+    )?;
+    assert_run(
+        workspace,
+        ExampleId("guide-first-cli"),
+        [
+            "--host",
+            "0.0.0.0",
+            "--port",
+            "3000",
+            "--log-level",
+            "debug",
+        ],
+        "host=0.0.0.0 port=3000 log_level=debug\n",
+    )?;
+    assert_run(workspace, ExampleId("guide-discovery"), [], "port=8080\n")?;
+    assert_run(
+        workspace,
+        ExampleId("guide-hermetic-discovery"),
+        [],
+        "candidate=/srv/acme/server.toml\n",
+    )?;
+    assert_run(
+        workspace,
+        ExampleId("guide-load-first-outcomes"),
+        [],
+        "discovery=absent\n",
+    )?;
+    assert_run(
+        workspace,
+        ExampleId("guide-subcommand"),
+        ["serve", "--port", "3000"],
+        "port=Some(3000)\n",
+    )?;
+    assert_run(
+        workspace,
+        ExampleId("guide-localization"),
+        [],
+        "verbose=true\n",
+    )
+}
+
+fn assert_tracing_flow(workspace: &mut ExampleWorkspace) -> Result<()> {
     let output = workspace.run(ExampleId("guide-tracing"), std::iter::empty::<&str>())?;
     ensure!(output.status.success(), "guide-tracing should succeed");
     ensure!(
@@ -113,11 +117,11 @@ fn assert_tracing_flow(workspace: &ExampleWorkspace) -> Result<()> {
 
 #[test]
 fn aliased_dependency_example_compiles_and_runs() -> Result<()> {
-    let workspace = ExampleWorkspace::new(DependencyAlias("config_layer"))?;
+    let mut workspace = ExampleWorkspace::new(DependencyAlias("config_layer"))?;
     workspace.add_binary(documented_example("guide-alias-derive")?)?;
     workspace.build()?;
     assert_run(
-        &workspace,
+        &mut workspace,
         ExampleId("guide-alias-derive"),
         [],
         "port=8080\n",
@@ -126,7 +130,7 @@ fn aliased_dependency_example_compiles_and_runs() -> Result<()> {
 
 #[test]
 fn workspace_rejects_paths_outside_an_example_directory() -> Result<()> {
-    let workspace = ExampleWorkspace::new(DependencyAlias("ortho_config"))?;
+    let mut workspace = ExampleWorkspace::new(DependencyAlias("ortho_config"))?;
 
     let id_error = workspace
         .run(ExampleId("../escape"), std::iter::empty::<&str>())
@@ -174,7 +178,7 @@ fn environment_probe() -> DocumentedExample {
     }
 }
 
-fn assert_sanitized_binary_environment(workspace: &ExampleWorkspace) -> Result<()> {
+fn assert_sanitized_binary_environment(workspace: &mut ExampleWorkspace) -> Result<()> {
     ensure!(
         std::env::var_os("PATH").is_some(),
         "the parent test process should provide PATH"
@@ -199,7 +203,7 @@ fn assert_sanitized_binary_environment(workspace: &ExampleWorkspace) -> Result<(
     Ok(())
 }
 
-fn assert_console_flows(workspace: &ExampleWorkspace) -> Result<()> {
+fn assert_console_flows(workspace: &mut ExampleWorkspace) -> Result<()> {
     let readme_console = documented_example("readme-run")?;
     ensure!(
         readme_console.body
@@ -245,7 +249,7 @@ fn assert_console_flows(workspace: &ExampleWorkspace) -> Result<()> {
 }
 
 fn assert_run<const N: usize>(
-    workspace: &ExampleWorkspace,
+    workspace: &mut ExampleWorkspace,
     ExampleId(id): ExampleId<'_>,
     args: [&str; N],
     expected_stdout: &str,

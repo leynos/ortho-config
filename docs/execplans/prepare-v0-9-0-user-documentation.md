@@ -137,6 +137,8 @@ repository's formatting, lint, test, spelling, Markdown, and Mermaid gates.
 - [x] (2026-08-09 17:16Z) Committed the implementation, received a green
   independent scrutineer report, pushed the branch, and opened draft pull
   request [#422](https://github.com/leynos/ortho-config/pull/422).
+- [x] (2026-08-11 20:16Z) Reconciled the completed registry inventory at 23
+  examples: 11 Rust, 7 TOML, 3 console, 1 JSON, and 1 YAML.
 
 ## Surprises & discoveries
 
@@ -196,14 +198,15 @@ repository's formatting, lint, test, spelling, Markdown, and Mermaid gates.
 
 The public surface now has three distinct levels: a concise README for first
 contact, a task-oriented user's guide, and an impact-labelled migration guide.
-The strict registry covers 21 fences: ten Rust programs, six TOML manifests or
-configuration files, three console flows, one JSON document, and one YAML file.
-Rust programs compile and run unchanged, console flows execute their underlying
-commands, and data formats use their production parsers. Detailed API
-signatures remain delegated to rustdoc, while the full multi-module composition
-remains delegated to `examples/hello_world`. The independent scrutineer reran
-every required gate against the staged implementation and reported no findings.
-Draft pull request #422 contains the approved plan and completed change.
+The strict registry covers 23 fences: eleven Rust programs, seven TOML
+manifests or configuration files, three console flows, one JSON document, and
+one YAML file. Rust programs compile and run unchanged, console flows execute
+their underlying commands, and data formats use their production parsers.
+Detailed API signatures remain delegated to rustdoc, while the full
+multi-module composition remains delegated to `examples/hello_world`. The
+independent scrutineer reran every required gate against the staged
+implementation and reported no findings. Draft pull request #422 contains the
+approved plan and completed change.
 
 ## Context and orientation
 
@@ -405,4 +408,6 @@ permitted.
 Revision note: the user approved the plan on 2026-08-09. The implementation
 then replaced the three public documents, added the strict executable example
 contract, passed all required gates, and opened draft pull request #422. The
-plan is complete.
+plan is complete. On 2026-08-11, the completed inventory was corrected from 21
+to 23 after two further examples joined the registry; this changes the recorded
+outcome, not the plan's status or remaining work.

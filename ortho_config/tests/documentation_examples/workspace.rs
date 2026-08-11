@@ -70,7 +70,7 @@ impl ExampleWorkspace {
     /// workspace.add_binary(example)?;
     /// # Ok::<(), anyhow::Error>(())
     /// ```
-    pub fn add_binary(&self, example: &DocumentedExample) -> Result<()> {
+    pub fn add_binary(&mut self, example: &DocumentedExample) -> Result<()> {
         ensure!(example.language == "rust", "{} is not Rust", example.id);
         ensure!(
             is_valid_example_id(&example.id),
@@ -88,12 +88,12 @@ impl ExampleWorkspace {
     /// target directory.
     ///
     /// ```no_run
-    /// # let workspace = ExampleWorkspace::new(DependencyAlias("ortho_config"))?;
+    /// # let mut workspace = ExampleWorkspace::new(DependencyAlias("ortho_config"))?;
     /// # workspace.add_binary(documented_example("readme-main")?)?;
     /// workspace.build()?;
     /// # Ok::<(), anyhow::Error>(())
     /// ```
-    pub fn build(&self) -> Result<()> {
+    pub fn build(&mut self) -> Result<()> {
         let output = self
             .cargo_command()?
             .args(["build", "--offline", "--bins"])
@@ -112,12 +112,12 @@ impl ExampleWorkspace {
     /// and captured standard streams.
     ///
     /// ```no_run
-    /// # let workspace = ExampleWorkspace::new(DependencyAlias("ortho_config"))?;
+    /// # let mut workspace = ExampleWorkspace::new(DependencyAlias("ortho_config"))?;
     /// let output = workspace.run(ExampleId("readme-main"), ["--port", "3000"])?;
     /// assert!(output.status.success());
     /// # Ok::<(), anyhow::Error>(())
     /// ```
-    pub fn run<I, S>(&self, ExampleId(id): ExampleId<'_>, args: I) -> Result<Output>
+    pub fn run<I, S>(&mut self, ExampleId(id): ExampleId<'_>, args: I) -> Result<Output>
     where
         I: IntoIterator<Item = S>,
         S: AsRef<OsStr>,
@@ -135,7 +135,7 @@ impl ExampleWorkspace {
     /// directories; unrelated host variables remain absent.
     ///
     /// ```no_run
-    /// # let workspace = ExampleWorkspace::new(DependencyAlias("ortho_config"))?;
+    /// # let mut workspace = ExampleWorkspace::new(DependencyAlias("ortho_config"))?;
     /// let output = workspace.run_with_environment(
     ///     ExampleId("guide-first-cli"),
     ///     ["--port", "3000"],
@@ -145,7 +145,7 @@ impl ExampleWorkspace {
     /// # Ok::<(), anyhow::Error>(())
     /// ```
     pub fn run_with_environment<'a, I, S, E>(
-        &self,
+        &mut self,
         ExampleId(id): ExampleId<'_>,
         args: I,
         environment: E,
@@ -191,7 +191,7 @@ impl ExampleWorkspace {
     /// the requested relative file within it.
     ///
     /// ```no_run
-    /// # let workspace = ExampleWorkspace::new(DependencyAlias("ortho_config"))?;
+    /// # let mut workspace = ExampleWorkspace::new(DependencyAlias("ortho_config"))?;
     /// workspace.write_run_file(
     ///     ExampleId("guide-first-cli"),
     ///     RunFile { path: Path::new(".acme.toml"), contents: "port = 3000\n" },
@@ -199,7 +199,7 @@ impl ExampleWorkspace {
     /// # Ok::<(), anyhow::Error>(())
     /// ```
     pub fn write_run_file(
-        &self,
+        &mut self,
         ExampleId(id): ExampleId<'_>,
         RunFile { path, contents }: RunFile<'_>,
     ) -> Result<()> {
@@ -221,7 +221,7 @@ impl ExampleWorkspace {
         Ok(())
     }
 
-    fn cargo_command(&self) -> Result<Command> {
+    fn cargo_command(&mut self) -> Result<Command> {
         cargo_runner::prepare_cargo_command(self.root.path(), self.root.path())
     }
 }
@@ -256,7 +256,11 @@ fn render_manifest(dependency_name: &str, serialized_crate_path: &str) -> String
 mod tests {
     //! Regression coverage for generated workspace manifests.
 
-    use super::render_manifest;
+    use super::{
+        DependencyAlias, DocumentedExample, ExampleId, ExampleWorkspace, RunFile, render_manifest,
+    };
+    use anyhow::{Context, Result, ensure};
+    use std::path::Path;
 
     #[test]
     fn windows_dependency_path_produces_valid_toml() {
@@ -271,5 +275,67 @@ mod tests {
             .and_then(|dependency| dependency.get("path"))
             .and_then(toml::Value::as_str);
         assert_eq!(parsed_path, Some(windows_path));
+    }
+
+    #[test]
+    fn independently_owned_workspaces_support_concurrent_interleavings() -> Result<()> {
+        std::thread::scope(|scope| {
+            let first = scope.spawn(|| exercise_workspace_interleavings("first", "updated-first"));
+            let second =
+                scope.spawn(|| exercise_workspace_interleavings("second", "updated-second"));
+
+            first
+                .join()
+                .map_err(|_| anyhow::anyhow!("first workspace thread panicked"))??;
+            second
+                .join()
+                .map_err(|_| anyhow::anyhow!("second workspace thread panicked"))??;
+            Ok(())
+        })
+    }
+
+    fn exercise_workspace_interleavings(initial: &str, updated: &str) -> Result<()> {
+        let mut workspace = ExampleWorkspace::new(DependencyAlias("ortho_config"))?;
+        workspace.add_binary(&file_probe())?;
+        workspace.build()?;
+
+        write_probe_value(&mut workspace, initial)?;
+        assert_probe_output(&mut workspace, initial)?;
+        write_probe_value(&mut workspace, updated)?;
+        assert_probe_output(&mut workspace, updated)
+    }
+
+    fn file_probe() -> DocumentedExample {
+        DocumentedExample {
+            id: "workspace-probe".to_owned(),
+            language: "rust".to_owned(),
+            body: concat!(
+                "fn main() -> std::io::Result<()> {\n",
+                "    print!(\"{}\", std::fs::read_to_string(\"value.txt\")?);\n",
+                "    Ok(())\n",
+                "}\n",
+            )
+            .to_owned(),
+            source: "workspace ownership probe",
+            line: 1,
+        }
+    }
+
+    fn write_probe_value(workspace: &mut ExampleWorkspace, contents: &str) -> Result<()> {
+        workspace.write_run_file(
+            ExampleId("workspace-probe"),
+            RunFile {
+                path: Path::new("value.txt"),
+                contents,
+            },
+        )
+    }
+
+    fn assert_probe_output(workspace: &mut ExampleWorkspace, expected: &str) -> Result<()> {
+        let output = workspace.run(ExampleId("workspace-probe"), std::iter::empty::<&str>())?;
+        ensure!(output.status.success(), "workspace probe should succeed");
+        let stdout = String::from_utf8(output.stdout).context("workspace probe output is UTF-8")?;
+        ensure!(stdout == expected, "workspace probe output differed");
+        Ok(())
     }
 }
