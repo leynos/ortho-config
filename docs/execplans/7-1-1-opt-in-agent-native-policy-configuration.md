@@ -5,7 +5,7 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
 proceeds.
 
-Status: DRAFT
+Status: COMPLETE
 
 ## Purpose / big picture
 
@@ -237,8 +237,34 @@ escalation, not workarounds.
     golden `agent_context__policy_warn_fixture.json.snap` shows
     `policy.agent_native = "warn"` and the two configured exceptions
     (kind, name, scope — no reasons). 17 golden tests green.
-- [ ] Milestone 5a: behavioural tests and policy fixture packages.
-- [ ] Milestone 5b: documentation, ADR-008, CHANGELOG, roadmap tick.
+- [x] Milestone 5a: behavioural tests and policy fixture packages.
+  - `cargo-orthohelp/tests/features/orthohelp_policy.feature` added with the
+    four scenarios from the plan (warn, deny, off, mode override); step
+    module `tests/rstest_bdd/behaviour/steps_policy.rs` (given/when/then)
+    wired into `scenarios.rs` and `behaviour/mod.rs`; `OrthoHelpContext` gains
+    a `policy_package` slot. The three fixture packages already existed from
+    M4 (D10). 4 rstest-bdd scenarios green on commit `5736d89`
+    (`cargo test -p cargo-orthohelp --test rstest_bdd -- policy`), full BDD
+    suite 14/14 green, `cargo test -p cargo-orthohelp` green, and
+    `make check-fmt` plus `cargo clippy` (pedantic) clean after removing the
+    unnecessary `Result` wraps from the three infallible `given` steps
+    (`unnecessary_wraps`).
+- [x] Milestone 5b: documentation, ADR-008, CHANGELOG, roadmap tick.
+  - `docs/adr-008-agent-native-policy-configuration.md` added (house template;
+    records D1, D3/D12, D5/D6, D7, D9, D11, D13, D14) and listed in
+    `docs/contents.md`. `docs/agent-native-cli-design.md` §3.3 reconciled per
+    D4 (always-write report wording; nested `location` example shape;
+    configuration surface, two defaults, exceptions visibility).
+    `docs/cargo-orthohelp-design.md` gained §6.3.2 (policy pipeline stage) and
+    a §12 note on policy-report additive fields. `docs/users-guide.md`
+    replaced the "future command surface" paragraph with the command,
+    configuration table, modes, exceptions, CI recipe, and reason confinement
+    note. `docs/developers-guide.md` records D2/D8/D10 policy test layout.
+    `CHANGELOG.md` Unreleased entries added; `docs/roadmap.md` 7.1.1 and its
+    three sub-bullets ticked. All gates green: `make check-fmt`, `make
+    typecheck`, `make lint` (rustdoc, clippy, Whitaker), `make test`
+    (56 Rust suites + pytest 106 passed/1 skipped), `make markdownlint`, and
+    `make nixie`. ExecPlan living sections marked COMPLETE.
 
 ## Surprises & discoveries
 
