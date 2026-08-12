@@ -157,10 +157,9 @@ escalation, not workarounds.
   #417) returned 0 findings across 33 reviewed files; pass clear. A follow-up
   spelling fix (`normalisation` -> `normalization`) landed and all gates
   re-verified green.
-- [ ] Milestone C: derive attribute surface (`behaviour(...)`) parsed, started
-  2026-08-12: parse/emit scaffolding complete except intentional red-first
-  tests (see Surprises & discoveries: pre-existing broken edits discarded).
-  validated, emitted; trybuild fixtures; gates green; CodeRabbit clear.
+- [x] (2026-08-12) Milestone C: derive attribute surface (`behaviour(...)`)
+  parsed, validated, emitted; trybuild fixtures; gates green; committed
+  (`a2ee0e5`); CodeRabbit pass pending.
 - [ ] Milestone D: bridge population and fixture/example updates; BDD
   scenario green; gates green; CodeRabbit clear.
 - [ ] Milestone E: `--check-agent-native` lint with policy report; BDD
@@ -919,6 +918,85 @@ moved to a sibling `default_display` module, and `mod.rs` re-exports
 `normalize_default_display` so the unit and property tests' `use super::...`
 call-sites are unchanged. This is a behaviour-neutral split; the agent-context
 unit and property tests still pass unchanged.
+
+### Milestone C transcript (2026-08-12)
+
+Red evidence (attribute surface absent): the new parser unit tests
+(`ortho_config_macros/src/derive/parse/tests/behaviour_attrs.rs`, 10 cases)
+failed to compile with E0412 (`BehaviourAttrs` missing) and E0609 (no
+`behaviour` field on `DocStructAttrs`) before the parse types existed. Logs:
+`/tmp/red-c-macros-7-2-1.out`, `/tmp/red-c-macros-7-2-1b.out`.
+
+Green evidence: after adding `BehaviourAttrs` (parse) plus the `behaviour`
+match arms, the grammar/contradiction checks, the generate-side
+`build_behaviour_metadata`, and the emission wiring in `generate_docs_impl`,
+all 10 parser unit tests pass and the full `ortho_config_macros` lib suite is
+green (133 passed). The integration tests in `ortho_config/tests/docs_ir.rs`
+(3 new derive-emission cases) and `docs_ir_subcommands.rs` (3 new ADR-005
+delegation cases, including the reused-args pinning test) pass. Full workspace
+`make test` reports 902 passed / 0 failed (up from 886 in Milestone B).
+
+Two implementation adaptations worth recording:
+
+- The `lit_str(...)?.value()` pattern cannot reuse `nested.value()?.span()` for
+  the error branch afterwards (input already consumed); the functions capture
+  the `LitStr` span once and report errors against it. Without this, invalid
+  values surfaced as a confusing "expected `=`" parse error.
+- The flag grammar requires the `--` prefix: `strip_prefix("--").unwrap_or(...)`
+  would accept a bare word. `unwrap_or("")` makes `force` invalid and
+  `--force` valid, matching ADR-008's pinned grammar.
+
+Trybuild compile-fail fixtures (7) added under `ortho_config/tests/ui/` with
+`.stderr` goldens: `behaviour_invalid_interaction.rs`,
+`behaviour_invalid_mutation.rs`, `behaviour_bad_bypass.rs`,
+`behaviour_unknown_nested_key.rs`, `behaviour_noninteractive_bypass.rs`,
+`behaviour_en_us_spelling.rs`, `behaviour_on_field.rs`. Each `.stderr` locks
+the exact span-bearing error text.
+
+The derive doctest example on `OrthoConfigSubcommandDocs` in
+`ortho_config/src/docs/mod.rs` gained a `behaviour(...)` declaration on the
+`RunArgs` struct.
+
+Gate state at milestone commit: `make check-fmt`, `make typecheck`,
+`make lint` (rustdoc, clippy, Whitaker), and `make test` all green. CodeRabbit
+pass for the milestone is run after this update is committed (see Progress).
+
+Note: when Milestone C work began, the working tree already held incomplete,
+non-compiling edits to the parse files from before this session; these were
+discarded (see Surprises & discoveries) and the milestone was implemented
+cleanly from the committed tree.
+
+### Milestone C transcript (2026-08-12)
+
+The `#[ortho_config(behaviour(...))]` surface is parsed, validated, and
+emitted by the derive, committed as `a2ee0e5` and pushed.
+
+- Parser (`ortho_config_macros/src/derive/parse/behaviour_attrs.rs`):
+  nested keys `interaction`, `mutation`, `bypass`, `dry_run`; hard `syn::Error`
+  with spans for unknown nested keys and invalid values; the pinned
+  `--[a-z0-9]+(-[a-z0-9]+)*` flag grammar for `bypass`/`dry_run`; the
+  `non_interactive` + `bypass` contradiction rejection; struct-level `behavior`
+  en-GB spelling hint and field-level rejection of both spellings.
+- Emitter (`ortho_config_macros/src/derive/generate/docs/behaviour.rs`):
+  builds the `Option<BehaviourMetadata>` token stream, mapping validated
+  strings onto `InteractionKind`/`MutationKind`; undeclared stays `None`
+  (no inference). Replaces the Milestone B `behaviour: None` placeholder in
+  `generate/docs/mod.rs`. `unreachable!` arms were replaced with total
+  `None`-mapping matches during gate fixing (clippy denies `unreachable`).
+- Tests: rstest parser tests (`parse/tests/behaviour_attrs.rs`), derive
+  emission tests in `ortho_config/tests/docs_ir.rs`, ADR-005 subcommand
+  delegation tests in `docs_ir_subcommands.rs`, seven trybuild compile-fail
+  fixtures (`tests/ui/behaviour_*.rs` + `.stderr`), and an extended doctest in
+  `ortho_config/src/docs/mod.rs`.
+- Gates: full sequence green on the committed tree (`make check-fmt`,
+  `make typecheck`, `make lint`, `make test`, `make markdownlint`,
+  `make nixie`). Logs: `/tmp/lint-salvage-ortho-config-7-2-1.out`,
+  `/tmp/test-salvage-ortho-config-7-2-1.out`,
+  `/tmp/md-salvage-ortho-config-7-2-1.out`.
+- Provenance note: the working tree was shared with a concurrent session; the
+  Milestone C implementation and tests were verified, the clippy `unreachable`
+  finding fixed, formatted, and committed as a single atomic commit to avoid
+  losing the verified work. CodeRabbit for Milestone C is still to be run.
 
 ## Interfaces and dependencies
 
