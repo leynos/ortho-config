@@ -6,6 +6,20 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- Add an opt-in agent-native policy configuration
+  (`cargo orthohelp --check-agent-native`, roadmap 7.1.1):
+  `[package.metadata.ortho_config.policy]` metadata table with `off`, `warn`,
+  and `deny` modes and explicit project exceptions; a machine-stable
+  `policy-report.json` (schema version 1) carrying `mode`, `results`, `summary`,
+  `exceptions`, and a canonical `vocabulary` block; and the `--policy-mode`
+  report override (requires `--check-agent-native`).
+- Add the canonical agent-native vocabulary defaults
+  (`cargo_orthohelp::policy::vocabulary`) as a single source of truth shared by
+  the agent-context verb mapper and the 7.1.2 lint seam.
+- Add the additive `exceptions` field to the agent-context `AgentPolicy` wire
+  schema (serde-defaulted; carries kind, name, and optional command scope, not
+  reasons).
+
 - Support dependency aliasing via `#[ortho_config(crate = "...")]`
   attribute on `OrthoConfig` and `SelectedSubcommandMerge` derive macros
   (closes #291).

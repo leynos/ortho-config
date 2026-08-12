@@ -48,6 +48,9 @@
 - [ADR-007: Downstream context command naming](adr-007-downstream-context-command-naming.md):
   review the accepted `context --json` downstream command convention and `kind`
   discriminator rule for agent-context payloads.
+- [ADR-008: Opt-in agent-native policy configuration](adr-008-agent-native-policy-configuration.md):
+  review the accepted 7.1.1 policy configuration surface, the enforcement and
+  advertisement defaults, the report contract, and the reserved 7.1.2 seam.
 - [Archived v0.8.0 roadmap](archive/v0-8-0-roadmap.md): review completed
   phases, steps, and tasks from the roadmap that preceded the active
   agent-native plan.
