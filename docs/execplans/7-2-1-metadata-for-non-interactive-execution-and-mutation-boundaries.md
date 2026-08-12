@@ -151,8 +151,10 @@ escalation, not workarounds.
   Logisphere lenses across three reviewer panels); revisions applied — see the
   revision note at the bottom of this document.
 - [x] (2026-08-07) Plan approved by the user; implementation begun.
-- [ ] Milestone B: IR and agent-context schema types implemented red-first;
-  goldens updated; gates green; CodeRabbit clear.
+- [x] (2026-08-12) Milestone B: IR and agent-context schema types implemented
+  red-first; goldens updated; all gates green (check-fmt, typecheck, lint,
+  test, markdownlint); CodeRabbit pass for the milestone is run after this
+  update is committed.
 - [ ] Milestone C: derive attribute surface (`behaviour(...)`) parsed,
   validated, emitted; trybuild fixtures; gates green; CodeRabbit clear.
 - [ ] Milestone D: bridge population and fixture/example updates; BDD
@@ -541,8 +543,8 @@ Follow the documented end-to-end pattern for a new struct-level key (the
    (`parse_field_attrs`/`apply_field_doc_attr`), explicitly reject both
    `behaviour` and `behavior` with "behaviour(…) is a struct-level attribute"
    so the silent `discard_unknown` path cannot swallow the misplacement.
-   Refresh the stale doc comment on `parse_struct_attrs` (it still claims
-   only the `prefix` key is supported) while in the file.
+   Refresh the stale doc comment on `parse_struct_attrs` (it still claims only
+   the `prefix` key is supported) while in the file.
 3. `ortho_config_macros/src/derive/generate/docs/sections.rs` (or a small
    sibling): `build_behaviour_metadata` emitting the
    `Option<BehaviourMetadata>` token stream; wire it into the `quote!` block of
@@ -839,11 +841,11 @@ Implementation transcripts will be appended here per milestone.
 
 ### Milestone B transcript (2026-08-07)
 
-Red evidence (types absent): `cargo test -p ortho_config --test docs_ir
-behaviour` failed with E0432 (no `InteractionKind`/`MutationKind` in
-`ortho_config::docs`) and E0609 (no field `behaviour` on `DocMetadata`);
-`cargo test -p ortho_config --lib agent_context` failed with E0609 (no
-`bypass_flag`/`dry_run_flag` on `AgentCommand`). Logs:
+Red evidence (types absent):
+`cargo test -p ortho_config --test docs_ir behaviour` failed with E0432 (no
+`InteractionKind`/`MutationKind` in `ortho_config::docs`) and E0609 (no field
+`behaviour` on `DocMetadata`); `cargo test -p ortho_config --lib agent_context`
+failed with E0609 (no `bypass_flag`/`dry_run_flag` on `AgentCommand`). Logs:
 `/tmp/red-b-docs-ir-ortho-config-<branch>.out`,
 `/tmp/red-b-agent-context-ortho-config-<branch>.out`.
 
@@ -854,14 +856,14 @@ Green evidence: after adding `BehaviourMetadata`/`InteractionKind`/
 workspace suite passes (61 `test result: ok` lines, 0 failures; log
 `/tmp/test-b-workspace-<branch>.out`). One red-to-green iteration: the
 snake-case wire-value test initially compared against the partial input JSON,
-but `BehaviourMetadata` serializes absent keys as explicit `null` (matching
-the IR convention), so the expectation was corrected to the explicit-null
-form.
+but `BehaviourMetadata` serializes absent keys as explicit `null` (matching the
+IR convention), so the expectation was corrected to the explicit-null form.
 
 Snapshot churn reviewed and accepted (diffs limited to the two new explicit
 nulls after `mutation_effect`, plus insta `assertion_line` metadata):
 `cargo-orthohelp/tests/golden/agent_context__{fixture,nested_fixture,simple_fixture}.json.snap`
-and `examples/hello_world/tests/snapshots/agent_context_snapshot__context_agent_context_json.snap`.
+and
+`examples/hello_world/tests/snapshots/agent_context_snapshot__context_agent_context_json.snap`.
 The wire-contract fixture gained the same two nulls. No `.snap` file embeds
 `ir_version`, so the IR version bump (next commit) churns no snapshots.
 
@@ -872,24 +874,41 @@ hard-coded `"1.1"` literals with the constant land in a separate commit.
 Additional literal sites found during the bump (not in the original list):
 
 - `ortho_config/tests/features/docs_ir.feature` names the version literally
-  (`Then the IR version is 1.1` → `1.2`); the `scenarios!` macro embeds
-  feature files at compile time, so cargo does not rebuild on feature edits
-  alone — touch the scenario source to force it.
+  (`Then the IR version is 1.1` → `1.2`); the `scenarios!` macro embeds feature
+  files at compile time, so cargo does not rebuild on feature edits alone —
+  touch the scenario source to force it.
 - `cargo-orthohelp/tests/fixtures/nested_fixture_impl.rs` is a shared macro
   expanded in both the lib test-support tree (`crate::schema`) and the
   integration-test tree (`cargo_orthohelp::schema`); it now references the
   unqualified constant and each call site imports it.
 - `docs/cargo-orthohelp-design.md` records the IR version in §2, §6.4.1,
-  §12, and §13.1; refreshed alongside the bump (Milestone F's doc list did
-  not include this file, so the version references were updated here).
+  §12, and §13.1; refreshed alongside the bump (Milestone F's doc list did not
+  include this file, so the version references were updated here).
 
 Red-to-green notes for the bump commit: the first workspace run after the
-constant change failed on the `docs_ir` BDD scenario (expected 1.1, got
-1.2), fixed by the feature-file update above. Clippy then denied four
-`indexing_slicing` uses of `value["behaviour"]` in the new `docs_ir.rs`
-tests; the tests were rewritten to use `as_object_mut().insert` and
-`.get(...)` with `anyhow` errors instead. Final state: 61 `test result: ok`
-groups, clippy clean.
+constant change failed on the `docs_ir` BDD scenario (expected 1.1, got 1.2),
+fixed by the feature-file update above. Clippy then denied four
+`indexing_slicing` uses of `value["behaviour"]` in the new `docs_ir.rs` tests;
+the tests were rewritten to use `as_object_mut().insert` and `.get(...)` with
+`anyhow` errors instead. Final state: 61 `test result: ok` groups, clippy clean.
+
+Milestone B closure (2026-08-12): all deterministic gates are green on the
+schema-type commits plus the IR version bump: `make check-fmt`,
+`make typecheck`, `make lint` (rustdoc, clippy, Whitaker), `make test` (886
+Rust tests plus 106 pytest cases pass, 0 failures), and `make markdownlint` all
+exit 0.
+
+One gate finding was ours and fixed during closure: the Whitaker
+`module_max_lines` rule flagged `cargo-orthohelp/src/agent_context/mod.rs` at
+402 lines (> 400). The branch base (including 6.2.2) already sat at 397 lines;
+the milestone's two construction lines and the doctest addition pushed it over
+the ceiling. The fix is a separate atomic refactor commit: the self-contained
+Rust-literal/path display normalisation block (quote and raw-string state
+tracking, character-literal detection, path-separator rewriting — 152 lines)
+moved to a sibling `default_display` module, and `mod.rs` re-exports
+`normalize_default_display` so the unit and property tests' `use super::...`
+call-sites are unchanged. This is a behaviour-neutral split; the agent-context
+unit and property tests still pass unchanged.
 
 ## Interfaces and dependencies
 
