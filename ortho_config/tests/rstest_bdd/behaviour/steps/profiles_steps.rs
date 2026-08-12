@@ -25,6 +25,18 @@ fn config_file_key(profiles_context: &ProfilesContext, key: String, value: Strin
     Ok(())
 }
 
+/// Records one normalized profile key for the active scenario.
+fn record_profile_key(profiles_context: &ProfilesContext, profile: &str, key: &str, value: &str) {
+    profiles_context
+        .profile_keys
+        .get_or_insert_with(Vec::new)
+        .push((
+            normalize_scalar(profile),
+            normalize_scalar(key),
+            normalize_scalar(value),
+        ));
+}
+
 /// Records a profile table key for the same configuration file.
 #[given("the same file defines profile {profile} with {key} set to {value}")]
 fn same_file_profile_key(
@@ -33,14 +45,7 @@ fn same_file_profile_key(
     key: String,
     value: String,
 ) -> Result<()> {
-    profiles_context
-        .profile_keys
-        .get_or_insert_with(Vec::new)
-        .push((
-            normalize_scalar(&profile),
-            normalize_scalar(&key),
-            normalize_scalar(&value),
-        ));
+    record_profile_key(profiles_context, &profile, &key, &value);
     Ok(())
 }
 
@@ -63,10 +68,7 @@ fn config_file_profiles(
     second: String,
 ) -> Result<()> {
     for profile in [first, second] {
-        profiles_context
-            .profile_keys
-            .get_or_insert_with(Vec::new)
-            .push((normalize_scalar(&profile), String::new(), String::new()));
+        record_profile_key(profiles_context, &profile, "", "");
     }
     Ok(())
 }
@@ -78,14 +80,7 @@ fn config_file_forbidden_key(
     profile: String,
     key: String,
 ) -> Result<()> {
-    profiles_context
-        .profile_keys
-        .get_or_insert_with(Vec::new)
-        .push((
-            normalize_scalar(&profile),
-            normalize_scalar(&key),
-            "__table__".to_owned(),
-        ));
+    record_profile_key(profiles_context, &profile, &key, "__table__");
     Ok(())
 }
 
