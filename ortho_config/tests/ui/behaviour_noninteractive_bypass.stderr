@@ -1,0 +1,5 @@
+error: contradictory behaviour: interaction = "non_interactive" combined with bypass; a non-interactive command never prompts, so there is nothing to bypass
+ --> tests/ui/behaviour_noninteractive_bypass.rs:7:16
+  |
+7 | #[ortho_config(behaviour(
+  |                ^^^^^^^^^

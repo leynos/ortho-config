@@ -553,3 +553,106 @@ fn field_by_name<'a>(
         .find(|field| field.name == name)
         .ok_or_else(|| anyhow!("missing field {name}"))
 }
+
+// ---------------------------------------------------------------------------
+// Behaviour-block emission from the derive attribute surface (Milestone C).
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Deserialize, Serialize, OrthoConfig)]
+#[ortho_config(
+    prefix = "APP",
+    behaviour(
+        interaction = "interactive",
+        mutation = "delete",
+        bypass = "--force",
+        dry_run = "--dry-run"
+    )
+)]
+struct DeclaredBehaviourConfig {
+    value: u8,
+}
+
+#[derive(Debug, Deserialize, Serialize, OrthoConfig)]
+#[ortho_config(prefix = "APP")]
+struct UndeclaredBehaviourConfig {
+    value: u8,
+}
+
+#[derive(Debug, Deserialize, Serialize, OrthoConfig)]
+#[ortho_config(
+    prefix = "APP",
+    behaviour(interaction = "non_interactive", mutation = "read_only")
+)]
+struct ReadOnlyNonInteractiveConfig {
+    value: u8,
+}
+
+#[rstest]
+fn test_derive_emits_declared_behaviour_block() -> Result<()> {
+    let metadata = DeclaredBehaviourConfig::get_doc_metadata();
+    let behaviour = metadata
+        .behaviour
+        .as_ref()
+        .ok_or_else(|| anyhow!("expected declared behaviour block"))?;
+
+    ensure!(
+        behaviour.interaction == Some(InteractionKind::Interactive),
+        "expected interactive, got {:?}",
+        behaviour.interaction
+    );
+    ensure!(
+        behaviour.mutation == Some(MutationKind::Delete),
+        "expected delete, got {:?}",
+        behaviour.mutation
+    );
+    ensure!(
+        behaviour.bypass.as_deref() == Some("--force"),
+        "expected --force bypass, got {:?}",
+        behaviour.bypass
+    );
+    ensure!(
+        behaviour.dry_run.as_deref() == Some("--dry-run"),
+        "expected --dry-run, got {:?}",
+        behaviour.dry_run
+    );
+    Ok(())
+}
+
+#[rstest]
+fn test_derive_keeps_behaviour_none_when_undeclared() -> Result<()> {
+    let metadata = UndeclaredBehaviourConfig::get_doc_metadata();
+    ensure!(
+        metadata.behaviour.is_none(),
+        "expected no behaviour block for undeclared config"
+    );
+    Ok(())
+}
+
+#[rstest]
+fn test_derive_emits_partial_behaviour_block() -> Result<()> {
+    let metadata = ReadOnlyNonInteractiveConfig::get_doc_metadata();
+    let behaviour = metadata
+        .behaviour
+        .as_ref()
+        .ok_or_else(|| anyhow!("expected declared behaviour block"))?;
+
+    ensure!(
+        behaviour.interaction == Some(InteractionKind::NonInteractive),
+        "expected non_interactive, got {:?}",
+        behaviour.interaction
+    );
+    ensure!(
+        behaviour.mutation == Some(MutationKind::ReadOnly),
+        "expected read_only, got {:?}",
+        behaviour.mutation
+    );
+    ensure!(
+        behaviour.bypass.is_none(),
+        "expected no bypass in partial declaration"
+    );
+    ensure!(
+        behaviour.dry_run.is_none(),
+        "expected no dry_run in partial declaration"
+    );
+    Ok(())
+}
