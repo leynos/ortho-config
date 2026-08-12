@@ -100,6 +100,9 @@ ______________________________________________________________________
   base files, and choose how collections merge.
 - **CLI-shaped configuration:** support subcommands, localized help, and rich
   source-aware errors without building a second settings model.
+- **Cargo external subcommands:** wrap a hand-built `clap::Command` with
+  `ortho_config::cargo::external_subcommand` for Cargo's injected subcommand
+  argument; see the [user's guide][cargo-external-subcommands].
 - **Documentation from code:** generate man pages, Windows PowerShell help,
   human documentation, and compact agent context with `cargo-orthohelp`.
 - **Production-friendly instrumentation:** opt into structured tracing and
@@ -133,6 +136,8 @@ ______________________________________________________________________
   with worked examples.
 - [v0.9.0 migration guide][migration-guide] — separate required migrations
   from improvements that can be adopted when useful.
+- [v0.10.0 migration guide][migration-guide-v0-10] — adopt the Cargo
+  external-subcommand helper when upgrading from v0.9.0.
 - [Hello World application][hello-world] — explore a complete,
   multi-module example with localization and generated help.
 - [API documentation](https://docs.rs/ortho_config) — look up individual
@@ -166,11 +171,13 @@ less of a chore? Contributions are welcome. Start with the
 [cr]: https://img.shields.io/crates/v/ortho_config "crates.io package"
 [cr-url]: https://crates.io/crates/ortho_config
 [design]: https://github.com/leynos/ortho-config/blob/main/docs/design.md
+[cargo-external-subcommands]: https://github.com/leynos/ortho-config/blob/main/docs/users-guide.md#cargo-external-subcommand-entry-points
 [developers-guide]: https://github.com/leynos/ortho-config/blob/main/docs/developers-guide.md
 [dw]: https://deepwiki.com/badge.svg
 [dw-url]: https://deepwiki.com/leynos/ortho-config
 [hello-world]: https://github.com/leynos/ortho-config/tree/main/examples/hello_world
 [licence]: https://github.com/leynos/ortho-config/blob/main/LICENSE
 [migration-guide]: https://github.com/leynos/ortho-config/blob/main/docs/v0-9-0-migration-guide.md
+[migration-guide-v0-10]: https://github.com/leynos/ortho-config/blob/main/docs/v0-10-0-migration-guide.md
 [roadmap]: https://github.com/leynos/ortho-config/blob/main/docs/roadmap.md
 [users-guide]: https://github.com/leynos/ortho-config/blob/main/docs/users-guide.md

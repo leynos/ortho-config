@@ -431,6 +431,7 @@ in the standard wrapper shape: a synthetic `cargo` parent that requires a
 single subcommand carrying the tool's real options. The worked example below
 parses the Cargo-injected argv all the way to the option value:
 
+<!-- tested-example: guide-cargo-external-subcommand -->
 ```rust
 use ortho_config::cargo::external_subcommand;
 
@@ -470,10 +471,9 @@ configuration-loading pathway.
 
 Derive-based callers do not need the helper. Wrap the `Args` struct in a
 single-variant `#[command(subcommand)]` enum, as `cargo-orthohelp` does in
-`cargo-orthohelp/src/cli/mod.rs`; the [Generating IR with
-cargo-orthohelp](#generating-help-from-the-same-metadata) section above is the
-in-repo reference for that derive path.
-
+`cargo-orthohelp/src/cli/mod.rs`; the [Generate help from the same
+metadata](#generate-help-from-the-same-metadata) section above is the in-repo
+reference for that derive path.
 
 ### Binary-level obligations
 
@@ -491,31 +491,32 @@ The helper leaves the following binary-level obligations with the caller:
   `exit_for_clap_error` and `write_augmented_clap_error` from
   `cargo-orthohelp/src/main.rs`:
 
-  ```rust
-  use std::io::Write;
+<!-- tested-example: guide-cargo-error-hints -->
+```rust
+use std::io::Write;
 
-  fn exit_for_clap_error(error: &clap::Error) -> ! {
-      let kind = error.kind();
-      let exit_code = error.exit_code();
-      if matches!(
-          kind,
-          clap::error::ErrorKind::UnknownArgument | clap::error::ErrorKind::MissingSubcommand
-      ) {
-          drop(write_augmented_clap_error(error));
-          std::process::exit(exit_code);
-      }
-      error.exit();
-  }
+fn exit_for_clap_error(error: &clap::Error) -> ! {
+    let kind = error.kind();
+    let exit_code = error.exit_code();
+    if matches!(
+        kind,
+        clap::error::ErrorKind::UnknownArgument | clap::error::ErrorKind::MissingSubcommand
+    ) {
+        drop(write_augmented_clap_error(error));
+        std::process::exit(exit_code);
+    }
+    error.exit();
+}
 
-  fn write_augmented_clap_error(error: &clap::Error) -> std::io::Result<()> {
-      let mut stderr = std::io::stderr().lock();
-      write!(stderr, "{error}")?;
-      writeln!(
-          stderr,
-          "note: invoke this tool via `cargo <name>` or as `cargo-<name> <name> [OPTIONS]`"
-      )
-  }
-  ```
+fn write_augmented_clap_error(error: &clap::Error) -> std::io::Result<()> {
+    let mut stderr = std::io::stderr().lock();
+    write!(stderr, "{error}")?;
+    writeln!(
+        stderr,
+        "note: invoke this tool via `cargo <name>` or as `cargo-<name> <name> [OPTIONS]`"
+    )
+}
+```
 
 - **Tracing.** Per ADR-004, Cargo-facing binaries should initialize a tracing
   subscriber before parsing and emit a debug event at the dispatch boundary
@@ -526,8 +527,8 @@ The helper leaves the following binary-level obligations with the caller:
   The library helper does not and must not install a subscriber; libraries must
   not install global recorders.
 
-The README half of design.md §4.17's documentation obligation is deferred to
-roadmap item 8.3.2, which owns the user-guide and README examples.
+The README now signposts the shipped helper. Full derive-template examples
+remain deferred to roadmap item 8.3.2.
 
 ## Handle errors at the application boundary
 
