@@ -4,7 +4,7 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
 and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
-Status: DRAFT
+Status: IN PROGRESS
 
 ## Purpose / big picture
 
@@ -204,6 +204,34 @@ review's findings are folded into the Decision Log and milestones below.
   delegates to `<SubTy>::get_subcommand_doc_metadata()`. Impact: Decision D-9
   scopes subcommand IR ids out of this task's reconciliation and records the
   follow-up.
+- Observation (Milestone 0): `apply_command_metadata` requests every
+  command-level suffix — `about`, `long_about`, `usage`, `version`,
+  `long_version`, `after_help`, and `after_long_help` — for *every* node in the
+  tree, not just the root. `localize_command` recurses through subcommands and
+  calls `apply_command_metadata` at each node with that node's path. Evidence:
+  `apply_command_metadata` and the recursion in `localize_command`
+  (`ortho_config/src/localizer/clap_command/mod.rs`), and the recorded hit set
+  in `parse_localized_command_uses_translated_metadata_on_success`
+  (`ortho_config/tests/localized_parse.rs`) which lists both
+  `custom-fixture-usage` and `custom-fixture-greet-usage`. Impact: confirms
+  Decision D-7's widened trait; `USAGE_ID` (and the other command-level
+  constants) must exist per node, so the flat-fixture equality test in
+  Milestone 3 can assert full-set equality on a tree with subcommands only if
+  the subcommand-node constants are accounted for. A flat struct (no
+  subcommands) has exactly one node, so equality is direct there.
+- Observation (Milestone 0): the existing derive has *no* handling of
+  `#[command(flatten)]` / `#[clap(flatten)]` fields at all. A repository-wide
+  search of `ortho_config_macros/src/` finds no reference to flatten;
+  `build_cli_struct_fields` (`derive/build/cli/cli_flags.rs`) processes every
+  non-subcommand, non-`skip_cli` field uniformly, so a flatten field would be
+  emitted as a single `#[arg(long, short)]` over the flattened struct type
+  rather than expanded into its constituent arguments. No workspace struct that
+  derives `OrthoConfig` currently uses flatten (the only flatten uses —
+  `CommandLine` in `examples/hello_world` and `FlatArgs` in the rstest-bdd
+  fixtures — derive `Parser`/`Args` only, not `OrthoConfig`). Impact: for
+  D-12 the derive must add explicit flatten *detection* (mirroring
+  `clap_field_is_subcommand`) and exclude those fields from `ARG_IDS`; there is
+  no existing flatten semantics to preserve, and no current consumer regresses.
 
 ## Decision log
 
