@@ -468,6 +468,13 @@ D11–D15 added after the Logisphere design-review panel (see Decision log).
       records the schema ownership and the D9 testing convention; the
       changelog records the D7 break; the roadmap ticks 9.1.1; the
       retrospective is below. Final gates and CodeRabbit review clean.
+- [x] (2026-08-12) Post-completion review follow-up: behaviour-preserving
+      private helpers now share the profile-selection, profile-key recording,
+      forbidden-key assertion, and unknown-profile assertion seams without
+      merging the distinct BDD entry points or named reserved-key tests. The
+      full commit gates, Markdown gates, and focused profile BDD suite are
+      green at the current pull-request head; a refreshed CodeScene analysis
+      remains requested for its stale duplication and nesting findings.
 
 Progress entries from milestone 1 onward must carry timestamps.
 
@@ -526,13 +533,20 @@ Progress entries from milestone 1 onward must carry timestamps.
   implementable directly against `DiscoveryLayersOutcome.value`; no escalation
   per tolerance 6 was needed, and ADR-008 records the confirmed chain order.
 - Observation (2026-08-09, milestone 1): the `markdownlint` gate embeds the
-  `typos` spelling gate, whose first run over the milestone-1 diff flagged
-  `recognise` in this plan (Oxford spelling requires `-ize`). Evidence:
-  `make markdownlint` failed with `error: 'recognise' should be 'recognize'`
-  until the plan was reworded. Impact: subsequent docs commits must run
-  `make spellcheck` (or the full `make markdownlint`) locally before review; the
-  `typos.local.toml` inline-code exclusion remains pinned as a temporary hold
-  pending an identifier sweep (see commits 27260d3, 41d2554).
+      `typos` spelling gate, whose first run over the milestone-1 diff flagged
+      `recognise` in this plan (Oxford spelling requires `-ize`). Evidence:
+      `make markdownlint` failed with `error: 'recognise' should be 'recognize'`
+      until the plan was reworded. Impact: subsequent docs commits must run
+      `make spellcheck` (or the full `make markdownlint`) locally before
+      review; the `typos.local.toml` inline-code exclusion remains pinned as a
+      temporary hold pending an identifier sweep (see commits 27260d3, 41d2554).
+- Observation (2026-08-12, post-completion review): CodeScene findings for
+      nested selection logic and duplicated profile-test setup targeted an
+      earlier revision. Evidence: `SelectedProfile::resolve` selects the flag
+      pair before the environment pair and delegates to `from_value`; the BDD
+      steps and extraction tests use their respective private helpers while
+      retaining their separate framework contracts. Impact: no suppression is
+      justified; CodeScene must reanalyse the current pull-request head.
 
 ## Decision log
 
@@ -616,11 +630,17 @@ Progress entries from milestone 1 onward must carry timestamps.
   support the generated `env = "<PREFIX>PROFILE"` attribute (D3). Date/Author:
   2026-08-09, implementing agent.
 - Decision: milestone 6 completes the plan and the status moves to COMPLETE.
-  The users' guide, developers' guide, changelog, and roadmap are updated; the
-  retrospective records the deferrals (fixture-builder extraction riding along
-  with 9.1.2, the unfinished scaling lens, D11/D5/9.1.3) and the friction
-  points (thiserror `source` reservation, Whitaker module caps, rstest-bdd slot
-  semantics). Date/Author: 2026-08-09, implementing agent.
+      The users' guide, developers' guide, changelog, and roadmap are updated; the
+      retrospective records the deferrals (fixture-builder extraction riding along
+      with 9.1.2, the unfinished scaling lens, D11/D5/9.1.3) and the friction
+      points (thiserror `source` reservation, Whitaker module caps, rstest-bdd slot
+      semantics). Date/Author: 2026-08-09, implementing agent.
+- Decision: retain separate rstest-bdd entry points and the two named
+      reserved-key tests while extracting only private assertion and fixture
+      helpers. Rationale: the framework attributes and test names are part of
+      the behavioural and diagnostic contracts; the helpers remove repeated
+      setup without reducing coverage or changing public behaviour. Date/Author:
+      2026-08-12, implementing agent.
 
 ## Outcomes & retrospective
 
@@ -649,6 +669,13 @@ Deferred (recorded, not accidental): the fixture-builder extraction across
 agent-context test families (ride along with 9.1.2's `redaction` field); the
 scaling and operational-cost design-review lens; profile-aware subcommand
 loading (D11); `inherits` semantics (D5); the 9.1.3 store helpers.
+
+Post-completion review left the delivered profile contract unchanged while
+consolidating repeated test setup and assertions. The current pull-request head
+still satisfies the completed roadmap task, with the focused profile BDD suite,
+full commit gates, and Markdown gates green. CodeScene's reported duplication
+and nesting findings require reanalysis against this revision rather than a
+diagnostic suppression.
 
 ## Context and orientation
 
@@ -1261,3 +1288,10 @@ Constraint 8 was tightened: the full gate suite was observed green at the
 rebase base, so a red gate is this branch's regression by default rather than
 inherited noise. No design decision changed; the plan's shape and status are
 unaffected.
+
+2026-08-12: recorded the completed post-implementation review follow-up. The
+review retained the profile contract and its distinct BDD and named-test
+surfaces while extracting private helpers for repeated setup and assertions.
+The progress, discoveries, decision log, and retrospective now cite the current
+validation state and request a CodeScene reanalysis rather than a suppression.
+The roadmap already marks task 9.1.1 complete, so it required no change.
