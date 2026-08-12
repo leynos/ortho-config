@@ -475,6 +475,11 @@ D11–D15 added after the Logisphere design-review panel (see Decision log).
       full commit gates, Markdown gates, and focused profile BDD suite are
       green at the current pull-request head; a refreshed CodeScene analysis
       remains requested for its stale duplication and nesting findings.
+- [x] (2026-08-12) D4 error-payload correction: `AvailableProfileNames` now
+      retains only the first 16 sorted names and their omitted-name count, so
+      `UnknownProfile.available.as_slice()` cannot expose an unbounded list.
+      The 20-profile extraction test verifies both the 16-name payload and the
+      unchanged `and 4 more` display suffix.
 
 Progress entries from milestone 1 onward must carry timestamps.
 
@@ -547,6 +552,12 @@ Progress entries from milestone 1 onward must carry timestamps.
       steps and extraction tests use their respective private helpers while
       retaining their separate framework contracts. Impact: no suppression is
       justified; CodeScene must reanalyse the current pull-request head.
+- Observation (2026-08-12, D4 review): `AvailableProfileNames::new` sorted
+      every name, while only `Display` applied the 16-name cap. Evidence: a
+      new 20-profile extraction assertion observed `available.as_slice().len()`
+      as 20 before the correction. Impact: programmatic consumers of
+      `OrthoError::UnknownProfile` could receive unbounded configuration
+      metadata despite D4's stated cap.
 
 ## Decision log
 
@@ -641,6 +652,12 @@ Progress entries from milestone 1 onward must carry timestamps.
       the behavioural and diagnostic contracts; the helpers remove repeated
       setup without reducing coverage or changing public behaviour. Date/Author:
       2026-08-12, implementing agent.
+- Decision: apply D4's 16-name limit when constructing
+      `AvailableProfileNames`, retaining the omitted-name count alongside the
+      capped, sorted payload. Rationale: enforcing the bound at the structured
+      error boundary protects programmatic consumers as well as display output,
+      while the count preserves the existing `and N more` diagnostic. Date/Author:
+      2026-08-12, implementing agent.
 
 ## Outcomes & retrospective
 
@@ -676,6 +693,11 @@ still satisfies the completed roadmap task, with the focused profile BDD suite,
 full commit gates, and Markdown gates green. CodeScene's reported duplication
 and nesting findings require reanalysis against this revision rather than a
 diagnostic suppression.
+
+The D4 review correction now enforces the documented cap for the structured
+unknown-profile payload as well as its display text. The 20-profile extraction
+test keeps both the 16-name payload bound and the omitted-count diagnostic
+observable.
 
 ## Context and orientation
 
@@ -1295,3 +1317,8 @@ surfaces while extracting private helpers for repeated setup and assertions.
 The progress, discoveries, decision log, and retrospective now cite the current
 validation state and request a CodeScene reanalysis rather than a suppression.
 The roadmap already marks task 9.1.1 complete, so it required no change.
+
+2026-08-12: corrected D4's implementation record after review found the 16-name
+cap applied only to display text. `AvailableProfileNames` now stores the capped
+sorted payload and an omitted-name count, and the extraction test observes both
+that payload bound and the existing `and 4 more` suffix.

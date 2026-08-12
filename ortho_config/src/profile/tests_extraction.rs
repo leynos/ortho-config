@@ -216,6 +216,10 @@ fn available_list_display_caps_at_sixteen() {
         Some(&selection("staging").expect("valid test name")),
     )
     .expect_err("unknown profile must error");
+    let OrthoError::UnknownProfile { ref available, .. } = *err else {
+        panic!("expected UnknownProfile error");
+    };
+    assert_eq!(available.as_slice().len(), 16);
     let message = err.to_string();
     assert_that!(message, contains_substring("and 4 more"));
     assert_that!(message, contains_substring("profile_0"));
