@@ -493,8 +493,8 @@ Costs and frictions:
 
 Deferred to follow-up items (all recorded in the plan body):
 
-- 8.3.2 owns the derive template documentation and the README half of
-  design.md §4.17's documentation obligation (recorded in the users' guide).
+- 8.3.2 owns the derive template documentation and full README examples; the
+  README now signposts the shipped helper.
 - 8.3.4 owns the shared on-`PATH` regression fixtures; `cargo-orthohelp`'s
   existing `cli_dispatch.rs` already proves real Cargo dispatch for the
   nested shape.
@@ -790,9 +790,8 @@ recorded in `Artefacts`.
    from `cargo-orthohelp/src/main.rs`, and the tracing expectation per
    ADR-004 (D-4). Add a one-line cross-reference from the existing
    "Subcommand configuration" section, where Cargo-tool authors will look
-   first. Record explicitly that the README half of design.md §4.17's
-   documentation obligation is deferred to 8.3.2, which owns the user-guide
-   and README examples.
+   first. The README now signposts the shipped helper; full derive-template
+   examples remain deferred to 8.3.2.
 2. `docs/design.md` §4.17: update the code sketch to the shipped shape
    (parent `bin_name("cargo")`, inner `display_name`, per D-2) and note that
    the helper shipped in 8.3.1; keep the section's constraint prose intact.
@@ -804,8 +803,8 @@ recorded in `Artefacts`.
    (the paragraph about keeping richer fixture families isolated is the
    natural insertion point) with the new feature file and steps module, so
    future contributors extend rather than duplicate.
-5. `docs/contents.md`: no new document is added, so only touch it if a listed
-   summary becomes inaccurate.
+5. `docs/contents.md`: index this ExecPlan alongside the other execution
+   plans.
 
 Go/no-go: run `make fmt` after the documentation changes, then require
 `make markdownlint` and `make nixie` green in addition to the code gates,
@@ -989,9 +988,8 @@ error: could not compile `ortho_config` (test "rstest_bdd") due to 1 previous er
 - Milestone 2 shipped as commit `6286f1c` (2026-08-09): the documentation
   sweep across `docs/users-guide.md`, `docs/design.md` §4.17,
   `docs/adr-004-cargo-external-subcommand-entry-point.md`, and
-  `docs/developers-guide.md`, drafted by the `scribe` subagent. Gate logs:
-  `/tmp/{check-fmt,typecheck,lint,test,markdownlint,nixie}-ortho-config-8-3-1-ortho-config-cargo-helper-for-hand-built-clap-commands.out`
-  — all six green in one `scrutineer` run.
+  `docs/developers-guide.md`, drafted by the `scribe` subagent. The
+  `scrutineer` recorded all six green gate logs under `/tmp`.
 - The branch was rebased onto `origin/main` again on 2026-08-09 to pick up
   the injectable environment-source feature (#410/#411) and the proc-macro2
   bump (#406). The post-rebase commit hashes listed above supersede the

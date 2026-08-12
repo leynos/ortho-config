@@ -18,6 +18,8 @@ const EXPECTED_EXAMPLE_IDS: &[&str] = &[
     "guide-agent-context",
     "guide-alias-derive",
     "guide-alias-install",
+    "guide-cargo-error-hints",
+    "guide-cargo-external-subcommand",
     "guide-collection-file",
     "guide-discovery",
     "guide-errors",

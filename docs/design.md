@@ -1020,11 +1020,12 @@ flags on top of the derive macro while keeping the application logic explicit.
   `cargo-orthohelp` dogfooding are the next product focus. See
   [agent-native-cli-design.md](agent-native-cli-design.md) and
   [roadmap.md](roadmap.md).
-- **Cargo external-subcommand ergonomics:** OrthoConfig should provide a small
-  clap helper, documented derive template, optional macro investigation, and
-  regression fixture for Cargo-dispatched binaries. This work belongs at the
-  CLI entry-point boundary rather than in `OrthoConfig::load`; see
-  [roadmap.md](roadmap.md) §8.3.
+- **Cargo external-subcommand ergonomics:** roadmap item 8.3.1 shipped the
+  `ortho_config::cargo::external_subcommand` helper for hand-built clap
+  commands. The documented derive template, optional macro investigation, and
+  regression fixture for Cargo-dispatched binaries remain future work. This
+  work belongs at the CLI entry-point boundary rather than in
+  `OrthoConfig::load`; see [roadmap.md](roadmap.md) §8.3.
 - **Consumer application alignment:** Weaver and Netsuke requirements should be
   pushed left into OrthoConfig when they describe reusable command contracts,
   not when they describe semantic execution. Examples include renderer
