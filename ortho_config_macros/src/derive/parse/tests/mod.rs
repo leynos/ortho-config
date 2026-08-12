@@ -1,5 +1,6 @@
 //! Test suite for the `derive::parse` module.
 
+mod behaviour_attrs;
 mod clap_attrs;
 mod lit;
 mod ortho_attrs;

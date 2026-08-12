@@ -51,7 +51,10 @@ pub trait OrthoConfigDocs {
 /// }
 ///
 /// #[derive(Parser, Serialize, Deserialize, Default, OrthoConfig)]
-/// #[ortho_config(prefix = "APP_")]
+/// #[ortho_config(
+///     prefix = "APP_",
+///     behaviour(interaction = "interactive", mutation = "read_only")
+/// )]
 /// struct RunArgs {
 ///     #[arg(long)]
 ///     name: String,
