@@ -159,9 +159,10 @@ escalation, not workarounds.
   re-verified green.
 - [x] (2026-08-12) Milestone C: derive attribute surface (`behaviour(...)`)
   parsed, validated, emitted; trybuild fixtures; gates green; committed
-  (`a2ee0e5`); CodeRabbit pass pending.
+  (`a2ee0e5`); CodeRabbit review (`coderabbit review --agent`) returned 0
+  findings across the full branch diff (Milestones B+C); pass clear.
 - [ ] Milestone D: bridge population and fixture/example updates; BDD
-  scenario green; gates green; CodeRabbit clear.
+  scenario green; gates green; CodeRabbit clear. (in progress)
 - [ ] Milestone E: `--check-agent-native` lint with policy report; BDD
   scenarios; gates green; CodeRabbit clear.
 - [ ] Milestone F: documentation (design doc §8.1 rows, users' guide,
@@ -209,6 +210,15 @@ escalation, not workarounds.
   `cargo-orthohelp/src/agent_context/mod.rs`. Impact: milestone B replaces the
   literals with the constant so the version bump cannot leave stale fixtures
   silently green.
+- Observation: sub-agent spawning (the `agent` delegation tool) is not
+  available in the build environment — attempts are denied by the active tool
+  policy. Impact: the execplan's instruction to delegate gate runs and
+  CodeRabbit to a `scrutineer` sub-agent cannot be followed literally; the
+  build agent runs the full gate sequence and `coderabbit review --agent`
+  directly, treating that as the scrutineer role. Evidence: `agent spawn`
+  returned "Blocked by policy"; no alternative agent-type is exposed. The
+  quality bar is unchanged: every gate and a CodeRabbit review still precede
+  each milestone's declaration of done.
 
 ## Decision log
 
@@ -966,7 +976,7 @@ non-compiling edits to the parse files from before this session; these were
 discarded (see Surprises & discoveries) and the milestone was implemented
 cleanly from the committed tree.
 
-### Milestone C transcript (2026-08-12)
+### Milestone C closure (2026-08-12)
 
 The `#[ortho_config(behaviour(...))]` surface is parsed, validated, and
 emitted by the derive, committed as `a2ee0e5` and pushed.
@@ -993,10 +1003,14 @@ emitted by the derive, committed as `a2ee0e5` and pushed.
   `make nixie`). Logs: `/tmp/lint-salvage-ortho-config-7-2-1.out`,
   `/tmp/test-salvage-ortho-config-7-2-1.out`,
   `/tmp/md-salvage-ortho-config-7-2-1.out`.
+- CodeRabbit pass: `coderabbit review --agent` returned 0 findings across
+  the full branch diff (Milestones B+C), reviewed through the
+  `7-2-1-metadata-...` worktree (session `05f1f271`); pass clear. Log:
+  `/tmp/scrut-mc-coderabbit.out`.
 - Provenance note: the working tree was shared with a concurrent session; the
   Milestone C implementation and tests were verified, the clippy `unreachable`
   finding fixed, formatted, and committed as a single atomic commit to avoid
-  losing the verified work. CodeRabbit for Milestone C is still to be run.
+  losing the verified work.
 
 ## Interfaces and dependencies
 
