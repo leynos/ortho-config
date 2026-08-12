@@ -12,6 +12,8 @@
 //!   schema version, missing-cache failure).
 //! - [`steps_ir`] — `then` steps that assert IR JSON content and locale
 //!   correctness.
+//! - [`steps_policy`] — `given`/`when`/`then` steps for the agent-native
+//!   policy check.
 //! - [`roff_steps`] — `when`/`then` steps for roff man-page generation.
 //! - [`powershell_steps`] — `when`/`then` steps for `PowerShell` help
 //!   generation.
@@ -28,3 +30,4 @@ mod steps_agent_context;
 mod steps_cache;
 mod steps_cmd;
 mod steps_ir;
+mod steps_policy;
