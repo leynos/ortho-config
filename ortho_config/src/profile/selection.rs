@@ -51,27 +51,26 @@ impl SelectedProfile {
     /// Returns [`crate::OrthoError::InvalidProfileName`] when the winning
     /// value fails the name grammar.
     pub fn resolve(flag: Option<&str>, env: Option<&str>) -> OrthoResult<Option<Self>> {
-        if let Some(value) = flag {
-            if unset(value) {
-                return Ok(None);
-            }
-            let name = ProfileName::new(value)?;
-            return Ok(Some(Self {
-                name,
-                source: ProfileSource::Flag,
-            }));
+        let Some((value, source)) = flag
+            .map(|value| (value, ProfileSource::Flag))
+            .or_else(|| env.map(|value| (value, ProfileSource::Environment)))
+        else {
+            return Ok(None);
+        };
+        Self::from_value(value, source)
+    }
+
+    /// Build a selection from a raw selector value.
+    ///
+    /// An empty value and the reserved name `default` both mean "no
+    /// selection"; any other value is validated against the profile-name
+    /// grammar.
+    fn from_value(value: &str, source: ProfileSource) -> OrthoResult<Option<Self>> {
+        if unset(value) {
+            return Ok(None);
         }
-        if let Some(value) = env {
-            if unset(value) {
-                return Ok(None);
-            }
-            let name = ProfileName::new(value)?;
-            return Ok(Some(Self {
-                name,
-                source: ProfileSource::Environment,
-            }));
-        }
-        Ok(None)
+        let name = ProfileName::new(value)?;
+        Ok(Some(Self { name, source }))
     }
 }
 
