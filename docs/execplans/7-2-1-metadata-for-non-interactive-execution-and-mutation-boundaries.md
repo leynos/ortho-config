@@ -903,7 +903,7 @@ One gate finding was ours and fixed during closure: the Whitaker
 402 lines (> 400). The branch base (including 6.2.2) already sat at 397 lines;
 the milestone's two construction lines and the doctest addition pushed it over
 the ceiling. The fix is a separate atomic refactor commit: the self-contained
-Rust-literal/path display normalisation block (quote and raw-string state
+Rust-literal/path display normalization block (quote and raw-string state
 tracking, character-literal detection, path-separator rewriting — 152 lines)
 moved to a sibling `default_display` module, and `mod.rs` re-exports
 `normalize_default_display` so the unit and property tests' `use super::...`
