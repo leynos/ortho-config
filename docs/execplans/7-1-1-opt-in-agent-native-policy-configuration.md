@@ -580,8 +580,8 @@ Retrospective notes for future phases:
 - Vocabulary growth (7.1.3) only needs the slice constants extended; the
   predicates and the report `vocabulary` block read from the same source of
   truth. 7.1.2 can plug rules into the reserved `rules` key and the
-  `PolicyInputs` seam additively. A branch-wide final CodeRabbit review is
-  the outstanding step before the PR is marked ready.
+  `PolicyInputs` seam additively. The branch-wide final CodeRabbit review
+  (all 60 changed files against `main`) completed with zero findings.
 
 ## Context and orientation
 
@@ -967,5 +967,6 @@ found two design flaws (default collision; vocabulary promised but not
 delivered) and several contract details that were cheap to fix before
 implementation and costly after. Effect on remaining work: milestone
 count grows by one; scope tolerance raised from 15 files/1,200 lines to
-18 files/1,400 lines to cover the two fixture packages. The plan remains
-DRAFT pending user approval.
+18 files/1,400 lines to cover the two fixture packages. The maintainer's
+2026-08-12 implementation brief approved the plan; execution completed and
+this document is marked COMPLETE.
