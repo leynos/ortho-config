@@ -10,6 +10,7 @@ use anyhow::{Context, Result, ensure};
 use cap_std::{ambient_authority, fs::Dir};
 use documentation_examples::{documented_example, load_documented_examples};
 use ortho_config::{AgentContext, toml};
+use process_runner::Operation;
 use std::collections::BTreeSet;
 use tempfile::TempDir;
 
@@ -199,7 +200,10 @@ fn documented_orthohelp_command_generates_agent_context() -> Result<()> {
             "--out-dir",
         ])
         .arg(output_directory.path());
-    let output = process_runner::run_command(&mut command, "run documented cargo-orthohelp flow")?;
+    let output = process_runner::run_command(
+        &mut command,
+        Operation("run documented cargo-orthohelp flow"),
+    )?;
     ensure!(
         output.status.success(),
         "cargo-orthohelp failed:\n{}",

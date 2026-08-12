@@ -14,6 +14,24 @@ const DEFAULT_TIMEOUT: Duration = Duration::from_secs(600);
 const DEFAULT_OUTPUT_BYTES: usize = 1024 * 1024;
 
 #[derive(Clone, Copy)]
+pub(super) struct Operation<'a>(pub(super) &'a str);
+
+#[derive(Clone, Copy)]
+enum OutputStream {
+    Stdout,
+    Stderr,
+}
+
+impl OutputStream {
+    const fn name(self) -> &'static str {
+        match self {
+            Self::Stdout => "stdout",
+            Self::Stderr => "stderr",
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
 struct ProcessLimits {
     timeout: Duration,
     output_bytes: usize,
@@ -29,21 +47,22 @@ impl Default for ProcessLimits {
 }
 
 /// Run a command with the documentation-test timeout and output limits.
-pub(super) fn run_command(command: &mut Command, operation: &str) -> Result<Output> {
+pub(super) fn run_command(command: &mut Command, operation: Operation<'_>) -> Result<Output> {
     run_command_with_limits(command, operation, ProcessLimits::default())
 }
 
 fn run_command_with_limits(
     command: &mut Command,
-    operation: &str,
+    operation: Operation<'_>,
     limits: ProcessLimits,
 ) -> Result<Output> {
+    let Operation(operation_name) = operation;
     let mut child = command
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
-        .with_context(|| format!("{operation}: start subprocess"))?;
+        .with_context(|| format!("{operation_name}: start subprocess"))?;
     let stdout_pipe = take_stdout(&mut child, operation)?;
     let stderr_pipe = take_stderr(&mut child, operation)?;
     let stdout_reader = spawn_bounded_reader(stdout_pipe, limits.output_bytes);
@@ -53,8 +72,8 @@ fn run_command_with_limits(
     if status.is_err() {
         terminate_child(&mut child, operation)?;
     }
-    let captured_stdout = join_reader(stdout_reader, operation, "stdout")?;
-    let captured_stderr = join_reader(stderr_reader, operation, "stderr")?;
+    let captured_stdout = join_reader(stdout_reader, operation, OutputStream::Stdout)?;
+    let captured_stderr = join_reader(stderr_reader, operation, OutputStream::Stderr)?;
 
     Ok(Output {
         status: status?,
@@ -63,14 +82,20 @@ fn run_command_with_limits(
     })
 }
 
-fn take_stdout(child: &mut Child, operation: &str) -> Result<std::process::ChildStdout> {
+fn take_stdout(
+    child: &mut Child,
+    Operation(operation): Operation<'_>,
+) -> Result<std::process::ChildStdout> {
     child
         .stdout
         .take()
         .ok_or_else(|| anyhow!("{operation}: capture subprocess stdout"))
 }
 
-fn take_stderr(child: &mut Child, operation: &str) -> Result<std::process::ChildStderr> {
+fn take_stderr(
+    child: &mut Child,
+    Operation(operation): Operation<'_>,
+) -> Result<std::process::ChildStderr> {
     child
         .stderr
         .take()
@@ -96,7 +121,11 @@ fn spawn_bounded_reader(
     })
 }
 
-fn wait_for_exit(child: &mut Child, operation: &str, timeout: Duration) -> Result<ExitStatus> {
+fn wait_for_exit(
+    child: &mut Child,
+    Operation(operation): Operation<'_>,
+    timeout: Duration,
+) -> Result<ExitStatus> {
     child
         .wait_timeout(timeout)
         .with_context(|| format!("{operation}: wait for subprocess"))?
@@ -108,7 +137,7 @@ fn wait_for_exit(child: &mut Child, operation: &str, timeout: Duration) -> Resul
         })
 }
 
-fn terminate_child(child: &mut Child, operation: &str) -> Result<()> {
+fn terminate_child(child: &mut Child, Operation(operation): Operation<'_>) -> Result<()> {
     if child
         .try_wait()
         .with_context(|| format!("{operation}: poll timed-out subprocess"))?
@@ -127,19 +156,21 @@ fn terminate_child(child: &mut Child, operation: &str) -> Result<()> {
 
 fn join_reader(
     reader: JoinHandle<Result<Vec<u8>>>,
-    operation: &str,
-    stream: &str,
+    Operation(operation): Operation<'_>,
+    stream: OutputStream,
 ) -> Result<Vec<u8>> {
+    let stream_name = stream.name();
     reader
         .join()
-        .map_err(|_| anyhow!("{operation}: {stream} reader thread panicked"))?
+        .map_err(|_| anyhow!("{operation}: {stream_name} reader thread panicked"))?
 }
 
 #[cfg(test)]
 mod tests {
     //! Regression coverage for subprocess output and duration bounds.
 
-    use super::{ProcessLimits, run_command_with_limits};
+    use super::{Operation, OutputStream, ProcessLimits, join_reader, run_command_with_limits};
+    use rstest::rstest;
     use std::io::Write;
     use std::process::Command;
     use std::time::Duration;
@@ -149,7 +180,7 @@ mod tests {
         let mut command = probe_command("bounded_output_probe");
         let output = run_command_with_limits(
             &mut command,
-            "capture bounded output",
+            Operation("capture bounded output"),
             ProcessLimits {
                 timeout: Duration::from_secs(5),
                 output_bytes: 256,
@@ -166,7 +197,7 @@ mod tests {
         let mut command = probe_command("bounded_timeout_probe");
         let error = run_command_with_limits(
             &mut command,
-            "run timeout probe",
+            Operation("run timeout probe"),
             ProcessLimits {
                 timeout: Duration::from_millis(100),
                 output_bytes: 256,
@@ -174,6 +205,21 @@ mod tests {
         )
         .expect_err("stalled probe should time out");
         assert!(format!("{error:#}").contains("run timeout probe: subprocess timed out"));
+    }
+
+    #[rstest]
+    #[case::stdout(OutputStream::Stdout, "read probe: stdout reader thread panicked")]
+    #[case::stderr(OutputStream::Stderr, "read probe: stderr reader thread panicked")]
+    fn reader_thread_diagnostic_names_the_stream(
+        #[case] stream: OutputStream,
+        #[case] expected: &str,
+    ) {
+        let reader = std::thread::spawn(|| -> anyhow::Result<Vec<u8>> {
+            panic!("deliberate reader-thread failure")
+        });
+        let error = join_reader(reader, Operation("read probe"), stream)
+            .expect_err("panicked reader thread should return an error");
+        assert_eq!(format!("{error:#}"), expected);
     }
 
     fn probe_command(test_name: &str) -> Command {

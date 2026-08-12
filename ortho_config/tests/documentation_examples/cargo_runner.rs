@@ -9,7 +9,7 @@ use std::ffi::{OsStr, OsString};
 use std::path::Path;
 use std::process::{Command, Output};
 
-use crate::process_runner;
+use crate::process_runner::{self, Operation};
 
 const CARGO_ENV_ALLOWLIST: &[&str] = &[
     "CARGO_HOME",
@@ -157,7 +157,7 @@ fn run_vswhere(vswhere: &Path, query: &[&str]) -> Result<Vec<u8>> {
         .chain(query.iter().copied())
         .chain(["-utf8"]),
     );
-    Ok(run_process(&mut command, "discover the MSVC toolchain")?.stdout)
+    Ok(run_process(&mut command, Operation("discover the MSVC toolchain"))?.stdout)
 }
 
 #[cfg(all(windows, target_env = "msvc", target_arch = "x86_64"))]
@@ -173,7 +173,7 @@ fn vcvars_environment(state_directory: &Path, vcvars: &Path) -> Result<Vec<(Stri
     command
         .args(["/d", "/u", "/c"])
         .arg(state_directory.join(script_name));
-    let output = run_process(&mut command, "prepare the MSVC environment")?;
+    let output = run_process(&mut command, Operation("prepare the MSVC environment"))?;
     let environment = decode_utf16le(&output.stdout)?;
     Ok(allowed_environment(&environment))
 }
@@ -195,11 +195,12 @@ fn decode_utf16le(output: &[u8]) -> Result<String> {
     String::from_utf16(&code_units).context("MSVC environment output should be valid UTF-16")
 }
 
-fn run_process(command: &mut Command, operation: &str) -> Result<Output> {
+fn run_process(command: &mut Command, operation: Operation<'_>) -> Result<Output> {
     let output = process_runner::run_command(command, operation)?;
+    let Operation(operation_name) = operation;
     ensure!(
         output.status.success(),
-        "{operation}: subprocess failed with {}\n{}",
+        "{operation_name}: subprocess failed with {}\n{}",
         output.status,
         String::from_utf8_lossy(&output.stderr),
     );
@@ -235,7 +236,7 @@ mod tests {
         CARGO_ENV_ALLOWLIST, allowed_environment, first_output_line, prepare_cargo_command,
         run_process, sanitize_environment,
     };
-    use crate::process_runner;
+    use crate::process_runner::{self, Operation};
     use anyhow::ensure;
     use std::ffi::OsStr;
     use std::process::Command;
@@ -254,8 +255,9 @@ mod tests {
             "--nocapture",
             "cargo_environment_sanitizer_probe",
         ]);
-        let output = process_runner::run_command(&mut command, "run inherited-environment probe")
-            .expect("the inherited-environment probe should run");
+        let output =
+            process_runner::run_command(&mut command, Operation("run inherited-environment probe"))
+                .expect("the inherited-environment probe should run");
         assert!(
             output.status.success(),
             "inherited-environment probe failed: {output:?}"
@@ -275,8 +277,9 @@ mod tests {
         );
         sanitize_environment(&mut command, CARGO_ENV_ALLOWLIST);
         command.args(["--ignored", "--nocapture", "cargo_environment_probe"]);
-        let output = process_runner::run_command(&mut command, "run sanitized environment probe")
-            .expect("the sanitized environment probe should run");
+        let output =
+            process_runner::run_command(&mut command, Operation("run sanitized environment probe"))
+                .expect("the sanitized environment probe should run");
         assert!(
             output.status.success(),
             "sanitized environment probe failed: {output:?}"
@@ -300,7 +303,7 @@ mod tests {
     #[test]
     fn discovery_process_start_failures_are_reported() {
         let mut command = Command::new("ortho-config-documentation-command-that-does-not-exist");
-        let error = run_process(&mut command, "discover the MSVC toolchain")
+        let error = run_process(&mut command, Operation("discover the MSVC toolchain"))
             .expect_err("a missing discovery command should return an error");
         let message = format!("{error:#}");
         assert!(message.contains("discover the MSVC toolchain: start subprocess"));
@@ -312,7 +315,7 @@ mod tests {
             std::env::current_exe().expect("the integration-test executable should have a path"),
         );
         command.args(["--ignored", "--nocapture", "process_failure_probe"]);
-        let error = run_process(&mut command, "prepare the MSVC environment")
+        let error = run_process(&mut command, Operation("prepare the MSVC environment"))
             .expect_err("a failed preparation command should return an error");
         let message = format!("{error:#}");
         assert!(message.contains("prepare the MSVC environment: subprocess failed"));
