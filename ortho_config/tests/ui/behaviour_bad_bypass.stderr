@@ -1,0 +1,5 @@
+error: invalid flag 'force'; flags must match --[a-z0-9]+(-[a-z0-9]+)* (for example "--force" or "--no-input")
+ --> tests/ui/behaviour_bad_bypass.rs:7:35
+  |
+7 | #[ortho_config(behaviour(bypass = "force"))]
+  |                                   ^^^^^^^
