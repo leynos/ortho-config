@@ -8,6 +8,7 @@ use std::process::{Command, Output};
 use tempfile::TempDir;
 
 use super::documentation_examples::{DocumentedExample, is_valid_example_id};
+use crate::process_runner;
 
 pub(super) mod cargo_runner;
 
@@ -94,10 +95,9 @@ impl ExampleWorkspace {
     /// # Ok::<(), anyhow::Error>(())
     /// ```
     pub fn build(&mut self) -> Result<()> {
-        let output = self
-            .cargo_command()?
-            .args(["build", "--offline", "--bins"])
-            .output()?;
+        let mut command = self.cargo_command()?;
+        command.args(["build", "--offline", "--bins"]);
+        let output = process_runner::run_command(&mut command, "build documented Rust")?;
         ensure!(
             output.status.success(),
             "documented Rust failed to compile:\n{}",
@@ -180,9 +180,8 @@ impl ExampleWorkspace {
                 environment
                     .into_iter()
                     .map(|EnvironmentVariable { name, value }| (name, value)),
-            )
-            .output()
-            .with_context(|| format!("run documented binary {id}"))
+            );
+        process_runner::run_command(&mut command, &format!("run documented binary {id}"))
     }
 
     /// Write a file in one binary's deterministic working directory.

@@ -9,6 +9,8 @@ use std::ffi::{OsStr, OsString};
 use std::path::Path;
 use std::process::{Command, Output};
 
+use crate::process_runner;
+
 const CARGO_ENV_ALLOWLIST: &[&str] = &[
     "CARGO_HOME",
     "HOME",
@@ -194,9 +196,7 @@ fn decode_utf16le(output: &[u8]) -> Result<String> {
 }
 
 fn run_process(command: &mut Command, operation: &str) -> Result<Output> {
-    let output = command
-        .output()
-        .with_context(|| format!("{operation}: start subprocess"))?;
+    let output = process_runner::run_command(command, operation)?;
     ensure!(
         output.status.success(),
         "{operation}: subprocess failed with {}\n{}",
@@ -235,6 +235,7 @@ mod tests {
         CARGO_ENV_ALLOWLIST, allowed_environment, first_output_line, prepare_cargo_command,
         run_process, sanitize_environment,
     };
+    use crate::process_runner;
     use anyhow::ensure;
     use std::ffi::OsStr;
     use std::process::Command;
@@ -248,13 +249,12 @@ mod tests {
             std::env::current_exe().expect("the integration-test executable should have a path"),
         );
         command.env(SECRET_NAME, "must-not-leak");
-        let output = command
-            .args([
-                "--ignored",
-                "--nocapture",
-                "cargo_environment_sanitizer_probe",
-            ])
-            .output()
+        command.args([
+            "--ignored",
+            "--nocapture",
+            "cargo_environment_sanitizer_probe",
+        ]);
+        let output = process_runner::run_command(&mut command, "run inherited-environment probe")
             .expect("the inherited-environment probe should run");
         assert!(
             output.status.success(),
@@ -274,9 +274,8 @@ mod tests {
             std::env::current_exe().expect("the integration-test executable should have a path"),
         );
         sanitize_environment(&mut command, CARGO_ENV_ALLOWLIST);
-        let output = command
-            .args(["--ignored", "--nocapture", "cargo_environment_probe"])
-            .output()
+        command.args(["--ignored", "--nocapture", "cargo_environment_probe"]);
+        let output = process_runner::run_command(&mut command, "run sanitized environment probe")
             .expect("the sanitized environment probe should run");
         assert!(
             output.status.success(),

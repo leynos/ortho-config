@@ -3,6 +3,8 @@
 #[path = "documentation_examples/cargo_runner.rs"]
 mod cargo_runner;
 mod documentation_examples;
+#[path = "documentation_examples/process_runner.rs"]
+mod process_runner;
 
 use anyhow::{Context, Result, ensure};
 use cap_std::{ambient_authority, fs::Dir};
@@ -181,7 +183,7 @@ fn documented_orthohelp_command_generates_agent_context() -> Result<()> {
     let output_directory = TempDir::new().context("create orthohelp output directory")?;
     let cargo_state = TempDir::new().context("create isolated Cargo state directory")?;
     let mut command = cargo_runner::prepare_cargo_command(&repository_root(), cargo_state.path())?;
-    let output = command
+    command
         .args([
             "run",
             "--offline",
@@ -196,9 +198,8 @@ fn documented_orthohelp_command_generates_agent_context() -> Result<()> {
             "agent-context",
             "--out-dir",
         ])
-        .arg(output_directory.path())
-        .output()
-        .context("run documented cargo-orthohelp flow")?;
+        .arg(output_directory.path());
+    let output = process_runner::run_command(&mut command, "run documented cargo-orthohelp flow")?;
     ensure!(
         output.status.success(),
         "cargo-orthohelp failed:\n{}",

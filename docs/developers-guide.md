@@ -328,8 +328,11 @@ platform paths it needs; binaries receive only the non-sensitive Windows
 runtime variables named by the workspace allow-list and deliberate scenario
 overrides. Keep fallible host-tool discovery and environment preparation at the
 runner boundary; command construction consumes the prepared values without
-starting subprocesses or writing files. Run-file paths must contain normal
-relative components only.
+starting subprocesses or writing files. The sibling `process_runner.rs` owns
+bounded execution for these documentation tests only: route Cargo, host-tool,
+and documented-binary commands through it, while keeping command construction
+and exit-status policy with their existing owners. Run-file paths must contain
+normal relative components only.
 
 ## Snapshot tests
 

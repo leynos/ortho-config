@@ -1,6 +1,8 @@
 //! Compile-and-run contracts for Rust and console examples in public docs.
 
 mod documentation_examples;
+#[path = "documentation_examples/process_runner.rs"]
+mod process_runner;
 #[path = "documentation_examples/workspace.rs"]
 mod workspace;
 
