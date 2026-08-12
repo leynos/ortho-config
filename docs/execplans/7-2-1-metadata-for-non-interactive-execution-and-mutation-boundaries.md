@@ -869,6 +869,28 @@ Commit structure: schema types and their snapshot churn land first; the
 `ORTHO_DOCS_IR_VERSION` bump from `"1.1"` to `"1.2"` and the replacement of
 hard-coded `"1.1"` literals with the constant land in a separate commit.
 
+Additional literal sites found during the bump (not in the original list):
+
+- `ortho_config/tests/features/docs_ir.feature` names the version literally
+  (`Then the IR version is 1.1` → `1.2`); the `scenarios!` macro embeds
+  feature files at compile time, so cargo does not rebuild on feature edits
+  alone — touch the scenario source to force it.
+- `cargo-orthohelp/tests/fixtures/nested_fixture_impl.rs` is a shared macro
+  expanded in both the lib test-support tree (`crate::schema`) and the
+  integration-test tree (`cargo_orthohelp::schema`); it now references the
+  unqualified constant and each call site imports it.
+- `docs/cargo-orthohelp-design.md` records the IR version in §2, §6.4.1,
+  §12, and §13.1; refreshed alongside the bump (Milestone F's doc list did
+  not include this file, so the version references were updated here).
+
+Red-to-green notes for the bump commit: the first workspace run after the
+constant change failed on the `docs_ir` BDD scenario (expected 1.1, got
+1.2), fixed by the feature-file update above. Clippy then denied four
+`indexing_slicing` uses of `value["behaviour"]` in the new `docs_ir.rs`
+tests; the tests were rewritten to use `as_object_mut().insert` and
+`.get(...)` with `anyhow` errors instead. Final state: 61 `test result: ok`
+groups, clippy clean.
+
 ## Interfaces and dependencies
 
 At the end of the work these items exist:
