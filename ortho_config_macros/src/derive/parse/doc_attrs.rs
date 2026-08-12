@@ -9,7 +9,7 @@ use super::doc_types::{
     PrecedenceAttrs, WindowsAttrs,
 };
 use super::literals::{lit_char, lit_str};
-use super::{FieldAttrs, discard_unknown};
+use super::{FieldAttrs, discard_unknown, parse_behaviour_meta};
 
 pub(crate) fn apply_struct_doc_attr(
     meta: &ParseNestedMeta,
@@ -62,6 +62,19 @@ pub(crate) fn apply_struct_doc_attr(
             out.windows = Some(windows);
             Ok(true)
         }
+        "behaviour" => {
+            let mut behaviour = out.behaviour.take().unwrap_or_default();
+            parse_behaviour_meta(meta, &mut behaviour)?;
+            out.behaviour = Some(behaviour);
+            Ok(true)
+        }
+        "behavior" => Err(syn::Error::new(
+            meta.path.span(),
+            concat!(
+                "unknown attribute `behavior`; use the en-GB spelling `behaviour` ",
+                "(declares non-interactive execution and mutation-boundary metadata)"
+            ),
+        )),
         _ => Ok(false),
     }
 }
@@ -118,6 +131,10 @@ pub(crate) fn apply_field_doc_attr(
             out.doc.notes.push(parse_note_meta(meta)?);
             Ok(true)
         }
+        "behaviour" | "behavior" => Err(syn::Error::new(
+            meta.path.span(),
+            "behaviour(...) is a struct-level attribute",
+        )),
         _ => Ok(false),
     }
 }

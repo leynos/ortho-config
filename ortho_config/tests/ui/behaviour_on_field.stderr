@@ -1,0 +1,5 @@
+error: behaviour(...) is a struct-level attribute
+ --> tests/ui/behaviour_on_field.rs:9:20
+  |
+9 |     #[ortho_config(behaviour(mutation = "write"))]
+  |                    ^^^^^^^^^
