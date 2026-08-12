@@ -1,10 +1,10 @@
 //! JSON serialization tests for the compact agent-context schema.
-use anyhow::{Result, ensure};
+use super::{field, first_array_item, sample_agent_context};
 use crate::agent_context::{AGENT_CONTEXT_KIND_SUFFIX, AgentContext};
 use crate::{serialize_agent_context, serialize_agent_context_pretty};
+use anyhow::{Result, ensure};
 use rstest::rstest;
 use serde_json::{Value, json};
-use super::{field, first_array_item, sample_agent_context};
 
 #[rstest]
 fn to_json_is_valid_parseable_json() {

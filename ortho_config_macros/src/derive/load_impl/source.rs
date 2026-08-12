@@ -1,7 +1,8 @@
 //! Source-aware fragments for generated configuration loading.
 
-use quote::quote;
 use super::{LoadImplArgs, LoadImplIdents, LoadImplTokens, build_compose_layers_impl};
+use quote::quote;
+use syn::Ident;
 
 /// Runtime names used by a generated source-aware loading method.
 pub(crate) struct LoadSourceTokens<'a> {

@@ -60,7 +60,6 @@ All notable changes to this project will be documented in this file.
 - Add `ProfilesDeclaration` and `ProfileSelectionContract` to the
   agent-context schema and the matching `DocMetadata.profiles` IR field.
 
-
 ### Breaking
 
 - Retype `AgentContext.profiles` from `SupportDeclaration` to

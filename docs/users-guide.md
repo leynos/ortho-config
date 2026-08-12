@@ -8,8 +8,7 @@ command-line arguments.
 This guide starts with a small working CLI and grows it one practical task at a
 time. Stop as soon as the application has what it needs.
 
-
-### Profiles
+## Profiles
 
 Profiles are named bundles of configuration values defined inside the resolved
 configuration file. A configuration file may declare `[profile.<name>]` tables
@@ -737,13 +736,14 @@ changes for existing v0.8.0 users, and the
 type and method signatures.
 
 
-#### Profile metadata
+### Profile metadata
 
 Opted-in applications advertise profile support in agent context. The
 unsupported case serializes byte-identically to the legacy
 `{ "supported": false }`; the `selection` and `list_command` fields are omitted
 when absent. A profile-enabled CLI emits:
 
+<!-- tested-example: guide-profile-metadata -->
 ```json
 {
   "profiles": {
