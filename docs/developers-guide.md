@@ -15,7 +15,6 @@ The workspace runs one unified test workflow via Make targets:
 These are required quality gates for code changes. Behavioural coverage runs
 inside the standard Rust test harness, not a bespoke test runner.
 
-
 ### Scoped use of `googletest` and `pretty_assertions`
 
 The `googletest` and `pretty_assertions` dev dependencies (decision D9 of
