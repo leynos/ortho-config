@@ -25,6 +25,32 @@ fn selection(name: &str) -> OrthoResult<SelectedProfile> {
     })
 }
 
+fn assert_profile_body_key_is_forbidden(expected_key: &str, body: Value) -> OrthoResult<()> {
+    let mut profiles = serde_json::Map::new();
+    profiles.insert("ci".to_owned(), body);
+    let layers = vec![file_layer(json!({ "profile": profiles }), "app.toml")];
+    let selected = selection("ci")?;
+    let Some(err) = extract_profile_layers(layers, Some(&selected)).err() else {
+        return Err(std::sync::Arc::new(OrthoError::Validation {
+            key: "profile".to_owned(),
+            message: "profile body key unexpectedly succeeded".to_owned(),
+        }));
+    };
+    let OrthoError::ProfileForbiddenKey { profile, key } = err.as_ref() else {
+        return Err(err);
+    };
+    if profile == "ci" && key == expected_key {
+        Ok(())
+    } else {
+        Err(std::sync::Arc::new(OrthoError::Validation {
+            key: "profile".to_owned(),
+            message: format!(
+                "expected forbidden profile key {expected_key:?} for ci, got {key:?} for {profile:?}"
+            ),
+        }))
+    }
+}
+
 #[test]
 fn extracts_one_profile_layer_per_file_in_chain_order() {
     let layers = vec![
@@ -92,32 +118,14 @@ fn defining_default_profile_is_an_error() {
 
 #[test]
 fn inherits_key_inside_profile_body_is_forbidden() {
-    let layers = vec![file_layer(
-        json!({ "profile": { "ci": { "inherits": "base", "retries": 7 } } }),
-        "app.toml",
-    )];
-    let err = extract_profile_layers(layers, Some(&selection("ci").expect("valid test name")))
-        .expect_err("inherits is reserved");
-    assert!(matches!(
-        *err,
-        OrthoError::ProfileForbiddenKey { ref profile, ref key }
-            if profile == "ci" && key == "inherits"
-    ));
+    assert_profile_body_key_is_forbidden("inherits", json!({ "inherits": "base", "retries": 7 }))
+        .expect("inherits profile body key is forbidden");
 }
 
 #[test]
 fn cmds_key_inside_profile_body_is_forbidden() {
-    let layers = vec![file_layer(
-        json!({ "profile": { "ci": { "cmds": { "run": {} } } } }),
-        "app.toml",
-    )];
-    let err = extract_profile_layers(layers, Some(&selection("ci").expect("valid test name")))
-        .expect_err("cmds is forbidden");
-    assert!(matches!(
-        *err,
-        OrthoError::ProfileForbiddenKey { ref profile, ref key }
-            if profile == "ci" && key == "cmds"
-    ));
+    assert_profile_body_key_is_forbidden("cmds", json!({ "cmds": { "run": {} } }))
+        .expect("cmds profile body key is forbidden");
 }
 
 #[test]
