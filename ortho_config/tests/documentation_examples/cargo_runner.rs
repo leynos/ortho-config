@@ -80,7 +80,7 @@ fn prepare_cargo_environment(state_directory: &Path) -> Result<PreparedCargoEnvi
         .context("open isolated Cargo state directory")?;
     #[cfg(all(windows, target_env = "msvc", target_arch = "x86_64"))]
     {
-        return prepare_msvc_environment(state_directory);
+        prepare_msvc_environment(state_directory)
     }
     #[cfg(not(all(windows, target_env = "msvc", target_arch = "x86_64")))]
     Ok(PreparedCargoEnvironment::default())

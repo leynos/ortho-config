@@ -136,6 +136,20 @@ fn marked_indented_fence_is_loaded(#[case] fence: &str) -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn crlf_fence_body_is_normalized_to_lf() -> Result<()> {
+    let contents = "<!-- tested-example: sample -->\r\n```toml\r\nport = 8080\r\n```\r\n";
+    let examples = parse_document("fixture.md", contents)?;
+    let [example] = examples.as_slice() else {
+        anyhow::bail!("expected one CRLF fenced example, got {examples:?}");
+    };
+    ensure!(
+        example.body == "port = 8080\n",
+        "fence bodies should use canonical LF terminators"
+    );
+    Ok(())
+}
+
 #[rstest]
 #[case::spaces("   ")]
 #[case::tabs("\t\t")]

@@ -138,6 +138,8 @@ pub(crate) fn parse_document(
     source: &'static str,
     contents: &str,
 ) -> Result<Vec<DocumentedExample>> {
+    // The registry uses LF as its canonical representation. `lines()` removes
+    // source terminators, and `read_fence_body` restores one LF per body line.
     let mut lines = contents.lines().enumerate();
     let mut examples = Vec::new();
     let mut ids = HashSet::new();
