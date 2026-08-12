@@ -540,7 +540,48 @@ the revision note at the end of this document).
 
 ## Outcomes & retrospective
 
-To be completed at milestones and at the end of the work.
+Roadmap item 7.1.1 is complete. `cargo orthohelp --check-agent-native` now
+runs an opt-in agent-native policy check with `off`, `warn`, and `deny` modes,
+canonical verb and flag defaults, and explicit project exceptions visible in
+both the policy report and the generated agent context.
+
+Delivered surface (verified by the acceptance suite in `Validation and
+acceptance`):
+
+- `cargo_orthohelp::policy::vocabulary` (canonical constants plus predicate
+  helpers), `PolicyConfig`/`PolicyException`/`ExceptionKind`/`PolicyInputs`
+  and the `evaluate` seam, the additive `exceptions`/`vocabulary` report
+  fields, the atomic `output::write_policy_report`, the D6
+  `PolicyViolation` exit path, and the `--check-agent-native`/`--policy-mode`
+  CLI surface per D11.
+- `ortho_config::agent_context::AgentPolicy.exceptions` (additive,
+  serde-defaulted, reason-confined) with the single-point D12 conversions and
+  the D9 advertisement-versus-enforcement default split.
+- Dedicated D10 fixture packages, the four-scenario
+  `orthohelp_policy.feature` behavioural suite, golden policy-report and
+  agent-context snapshots, and unit/property coverage per milestone.
+- ADR-008, design updates (§3.3, §6.3.2, §12), users'- and developers'-guide
+  updates, the Unreleased changelog entries, and the roadmap 7.1.1 tick.
+
+The rounds went to plan: each milestone ended with green gates (recorded per
+commit in `Progress`), and CodeRabbit reviews on the earlier milestones
+(`bd2aff8`, `b53589c`, `5a02687`) returned zero findings. The planning-time
+design review paid off — decisions D9-D14 (especially the two-default split,
+the reserved `rules` key, reason confinement, and the additive evaluator
+seam) meant no schema version bump and no incompatible signature change was
+needed during implementation.
+
+Retrospective notes for future phases:
+
+- The binary/lib module-tree duplication (`main.rs` re-declares its module
+  tree) forced `pub mod policy;` in both crates and shaped the shared
+  `check.rs` signature; revisit the duplication when the binary grows, rather
+  than adding more shared modules that must be declared twice.
+- Vocabulary growth (7.1.3) only needs the slice constants extended; the
+  predicates and the report `vocabulary` block read from the same source of
+  truth. 7.1.2 can plug rules into the reserved `rules` key and the
+  `PolicyInputs` seam additively. A branch-wide final CodeRabbit review is
+  the outstanding step before the PR is marked ready.
 
 ## Context and orientation
 
