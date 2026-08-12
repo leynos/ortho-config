@@ -563,7 +563,7 @@ Progress entries from milestone 1 onward must carry timestamps.
   reformat this document with the adopted formatter. Rationale: the plan must
   stay executable against `main` as it actually is; a stale lint caveat would
   invite a future implementer to dismiss a genuine regression as inherited
-  noise. Date/Author: **********, planning agent.
+  noise. Date/Author: 2026-08-07, leynos.
 - Decision: plan approved by the maintainer and implementation started. The
   D12 `extends` spike (read-only) confirmed per-file values survive `extends`
   resolution as distinct, ancestor-first layers, so no tolerance-6 escalation
