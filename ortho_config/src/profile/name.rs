@@ -62,49 +62,51 @@ impl fmt::Display for ProfileName {
     }
 }
 
-/// Sorted list of profile names a file chain defines.
+/// Sorted, capped list of profile names a file chain defines.
 ///
-/// Renders the names comma-joined, capped at [`AvailableProfileNames::DISPLAY_CAP`]
-/// entries with a trailing "and N more", and reports explicitly when no
+/// Renders the names comma-joined with a trailing "and N more" for omitted
+/// entries, and reports explicitly when no
 /// configuration files were found instead of an empty list — the classic
 /// leaked-`<PREFIX>PROFILE` incident reads as "no configuration files were
 /// found", not as a bare colon.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
-pub struct AvailableProfileNames(Vec<String>);
+pub struct AvailableProfileNames {
+    names: Vec<String>,
+    omitted_count: usize,
+}
 
 impl AvailableProfileNames {
-    /// Number of names rendered before the display appends "and N more".
+    /// Maximum number of names retained in the structured error payload.
     pub const DISPLAY_CAP: usize = 16;
 
-    /// Build the list from `names`, sorted for a stable display.
+    /// Build a sorted, capped list from `names`.
     #[must_use]
     pub fn new(mut names: Vec<String>) -> Self {
         names.sort();
-        Self(names)
+        let omitted_count = names.len().saturating_sub(Self::DISPLAY_CAP);
+        names.truncate(Self::DISPLAY_CAP);
+        Self {
+            names,
+            omitted_count,
+        }
     }
 
-    /// The names in sorted order.
+    /// The retained names in sorted order.
     #[must_use]
     pub fn as_slice(&self) -> &[String] {
-        &self.0
+        &self.names
     }
 }
 
 impl fmt::Display for AvailableProfileNames {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.0.is_empty() {
+        if self.names.is_empty() {
             return f.write_str("no configuration files were found");
         }
-        let head = self
-            .0
-            .iter()
-            .take(Self::DISPLAY_CAP)
-            .cloned()
-            .collect::<Vec<_>>()
-            .join(", ");
-        if self.0.len() <= Self::DISPLAY_CAP {
+        let head = self.names.join(", ");
+        if self.omitted_count == 0 {
             return f.write_str(&head);
         }
-        write!(f, "{head}, and {} more", self.0.len() - Self::DISPLAY_CAP)
+        write!(f, "{head}, and {} more", self.omitted_count)
     }
 }
