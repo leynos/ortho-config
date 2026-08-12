@@ -292,7 +292,7 @@ dependencies = [
 
 [[package]]
 name = "cargo-orthohelp"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "camino",
  "cap-std 4.0.2",
@@ -941,7 +941,7 @@ checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
 
 [[package]]
 name = "hello_world"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -1329,7 +1329,7 @@ dependencies = [
 
 [[package]]
 name = "ortho_config"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "camino",
@@ -1371,7 +1371,7 @@ dependencies = [
 
 [[package]]
 name = "ortho_config_macros"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "figment",
@@ -1385,7 +1385,7 @@ dependencies = [
 
 [[package]]
 name = "ortho_config_test_helpers"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "camino",
@@ -1395,7 +1395,7 @@ dependencies = [
 
 [[package]]
 name = "orthohelp_fixture"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "clap",
  "ortho_config",
