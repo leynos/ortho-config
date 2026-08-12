@@ -153,9 +153,13 @@ escalation, not workarounds.
 - [x] (2026-08-07) Plan approved by the user; implementation begun.
 - [x] (2026-08-12) Milestone B: IR and agent-context schema types implemented
   red-first; goldens updated; all gates green (check-fmt, typecheck, lint,
-  test, markdownlint); CodeRabbit pass for the milestone is run after this
-  update is committed.
-- [ ] Milestone C: derive attribute surface (`behaviour(...)`) parsed,
+  test, markdownlint); CodeRabbit review (`coderabbit review --agent`, PR
+  #417) returned 0 findings across 33 reviewed files; pass clear. A follow-up
+  spelling fix (`normalisation` -> `normalization`) landed and all gates
+  re-verified green.
+- [ ] Milestone C: derive attribute surface (`behaviour(...)`) parsed, started
+  2026-08-12: parse/emit scaffolding complete except intentional red-first
+  tests (see Surprises & discoveries: pre-existing broken edits discarded).
   validated, emitted; trybuild fixtures; gates green; CodeRabbit clear.
 - [ ] Milestone D: bridge population and fixture/example updates; BDD
   scenario green; gates green; CodeRabbit clear.
@@ -190,6 +194,12 @@ escalation, not workarounds.
   `RUST_LOG` run would interleave log lines with the stdout JSON policy report.
   Milestone E step 1 redirects tracing to stderr as a prerequisite of the
   stdout report contract.
+- Observation: when Milestone C work began, the working tree already
+  contained incomplete, non-compiling edits to
+  `ortho_config_macros/src/derive/parse/doc_attrs.rs` and `doc_types.rs`
+  (mtimes before this session; an unclosed delimiter broke the build). These
+  predated the session and matched no commit, so they were discarded and the
+  milestone is being implemented cleanly from the committed tree.
 - Observation: `ORTHO_DOCS_IR_VERSION` is stamped from the constant by the
   derive, but the literal `"1.1"` is also hard-coded in several test fixtures
   and a doctest, none of which validate against the constant. Evidence:
