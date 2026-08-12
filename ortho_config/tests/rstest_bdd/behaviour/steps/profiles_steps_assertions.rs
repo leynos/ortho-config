@@ -71,28 +71,27 @@ fn loading_fails_naming(
     profile: String,
     source: String,
 ) -> Result<()> {
-    let selected = profiles_context
-        .error_selected
-        .take()
-        .ok_or_else(|| anyhow!("unknown-profile error not recorded"))?;
-    let error_source = profiles_context
-        .error_source
-        .take()
-        .ok_or_else(|| anyhow!("unknown-profile error source not recorded"))?;
-    ensure!(
-        selected == normalize_scalar(&profile),
-        "unexpected unknown profile {selected:?}; expected {profile}"
-    );
-    ensure!(
-        error_source == parse_source(&source),
-        "unexpected selection source {error_source:?}; expected {source}"
-    );
-    Ok(())
+    assert_unknown_profile(profiles_context, &profile, parse_source(&source), &source)
 }
 
 /// Asserts a failed load names the profile and the selector environment source.
 #[then("loading fails naming {profile} from the selector environment variable")]
 fn loading_fails_naming_env(profiles_context: &ProfilesContext, profile: String) -> Result<()> {
+    assert_unknown_profile(
+        profiles_context,
+        &profile,
+        ProfileSource::Environment,
+        "the selector environment variable",
+    )
+}
+
+/// Asserts the structured payload of an unknown-profile error.
+fn assert_unknown_profile(
+    profiles_context: &ProfilesContext,
+    profile: &str,
+    expected_source: ProfileSource,
+    expected_source_description: &str,
+) -> Result<()> {
     let selected = profiles_context
         .error_selected
         .take()
@@ -102,12 +101,12 @@ fn loading_fails_naming_env(profiles_context: &ProfilesContext, profile: String)
         .take()
         .ok_or_else(|| anyhow!("unknown-profile error source not recorded"))?;
     ensure!(
-        selected == normalize_scalar(&profile),
+        selected == normalize_scalar(profile),
         "unexpected unknown profile {selected:?}; expected {profile}"
     );
     ensure!(
-        error_source == ProfileSource::Environment,
-        "expected the selector environment variable as the source, got {error_source:?}"
+        error_source == expected_source,
+        "expected {expected_source_description} as the source, got {error_source:?}"
     );
     Ok(())
 }
