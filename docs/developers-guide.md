@@ -289,6 +289,51 @@ Keep richer fixture families isolated. For example, `NestedDocsConfig` and
 fixture-specific `tests/rstest_bdd/behaviour/steps/nested_docs_steps.rs` module
 rather than expanding unrelated step files.
 
+### Public documentation examples
+
+The root README and `docs/users-guide.md` are executable documentation. Every
+fenced block in either file must have a unique `tested-example` marker on the
+immediately preceding line. `ortho_config/tests/documentation_examples/mod.rs`
+owns parsing and lookup for these examples. It is test infrastructure only;
+production code, other crates, and examples must not depend on it.
+
+The loader is shared by the documentation integration-test targets. Each target
+loads and parses the documents once, then borrows examples from its cached
+registry. The cache is immutable and has no reset operation within an
+integration-test process. Tests that need fresh input should call the pure
+parser with owned text or use a separate integration-test target. Keep the
+loader's scope limited to loading exact fence bodies, rejecting unmarked or
+malformed fences, and querying stable identifiers. Put scenario policy in the
+test target that consumes it: compile and run Rust, parse data formats, execute
+documented commands, and compare observable output. Do not copy a fence into a
+fixture because the copied text can pass after the published example has
+drifted. Identifiers use a closed filename-safe grammar: start with a lowercase
+ASCII letter, then use lowercase ASCII letters, digits, or single hyphens. The
+parser and temporary workspace both enforce this boundary before constructing
+paths.
+
+`documentation_examples/workspace.rs` owns temporary Cargo package assembly for
+Rust examples. Reuse it only from documentation tests that compile an exact
+fence body. A workspace has one owner: operations that add, build, run, or
+write require an exclusive mutable borrow. Concurrent scenarios must create an
+independent workspace per thread rather than share one workspace. The helper
+may add the dependencies needed to compile a published example, but it must not
+rewrite that source. Keep the expected identifier registry closed so adding an
+example without choosing its behavioural contract fails a test.
+`documentation_examples/cargo_runner.rs` owns isolated Cargo process setup for
+these documentation tests; reuse it only when executing a documented Cargo
+workflow with a caller-owned temporary state directory. Run Cargo and child
+binaries with cleared environments. Cargo receives only the toolchain and
+platform paths it needs; binaries receive only the non-sensitive Windows
+runtime variables named by the workspace allow-list and deliberate scenario
+overrides. Keep fallible host-tool discovery and environment preparation at the
+runner boundary; command construction consumes the prepared values without
+starting subprocesses or writing files. The sibling `process_runner.rs` owns
+bounded execution for these documentation tests only: route Cargo, host-tool,
+and documented-binary commands through it, while keeping command construction
+and exit-status policy with their existing owners. Run-file paths must contain
+normal relative components only.
+
 ## Snapshot tests
 
 Use `insta` for renderer golden coverage that would be noisy as handwritten
@@ -468,13 +513,12 @@ environment. `ProcessEnv` is the default and preserves the historical behaviour;
   process.
 - **Owned returns, deliberately.** An `impl Iterator` return would be
   return-position `impl Trait` in traits (RPITIT) and make the trait unusable
-  behind a trait object, forcing `ConfigDiscovery<S>`
-  generics to leak through the derive-generated `load()` and every call site.
-  Configuration resolves once per process, so the allocation is immaterial.
+  behind a trait object, forcing `ConfigDiscovery<S>` generics to leak through
+  the derive-generated `load()` and every call site. Configuration resolves
+  once per process, so the allocation is immaterial.
 - **`home_fallback` defaults to `None`.** `ProcessEnv` overrides it by
-  default, and custom sources may too. See
-  the users' guide for why an injected source must be able to suppress the
-  platform lookup.
+  default, and custom sources may too. See the users' guide for why an injected
+  source must be able to suppress the platform lookup.
 
 ## Dependency management
 

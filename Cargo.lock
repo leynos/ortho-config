@@ -1365,6 +1365,7 @@ dependencies = [
  "trybuild",
  "uncased",
  "unic-langid",
+ "wait-timeout",
  "xdg",
 ]
 

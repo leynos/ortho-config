@@ -83,6 +83,8 @@
   v0.6.0 changes.
 - [v0.7.0 migration guide](v0-7-0-migration-guide.md): migrate through the
   v0.7.0 changes.
+- [v0.9.0 migration guide](v0-9-0-migration-guide.md): identify required,
+  recommended, and optional changes when upgrading from v0.8.0.
 
 ## Testing and documentation references
 
@@ -152,5 +154,7 @@
     model downstream skill manifests.
   - [Adopt rstest-bdd v0.5.0](execplans/adopt-rstest-bdd-v0-5-0.md): plan for
     the behavioural testing migration.
+  - [Prepare the v0.9.0 user documentation](execplans/prepare-v0-9-0-user-documentation.md):
+    plan for the public guides and executable documentation-example contract.
   - [Ortho agent CLI roadmap](execplans/ortho-agent-cli-roadmap.md): plan for
     the agent-native documentation and roadmap overhaul.
