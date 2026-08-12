@@ -440,9 +440,6 @@ D11–D15 added after the Logisphere design-review panel (see Decision log).
       - [x] (2026-08-09) Refactor: `MergeLayer::value()` borrowing accessor
             finalized as the extraction value-access mechanism (see decision
             log); constructor plumbing already minimal.
-- [ ] Milestone 2: profile merge layer in the composer (red → green →
-      refactor), including the generated provenance-label code and dev-dep
-      verification (D9).
 - [x] (2026-08-09) Milestone 3: profile extraction, selection resolution,
       validation, and structured error paths in `ortho_config`. The
       `profile/` module (name, selection, extract submodules), the four
@@ -1030,8 +1027,8 @@ error[E0599]: no variant or associated item named `Profile` found for enum
 
 Test placement notes: the derive macro cannot be invoked inside the library
 crate (its generated code names the consumer crate), so the declarative unit
-tests use a handwritten `DeclarativeMerge` state machine (as in the trait's
-doc example) and the generated-label diagnostics test lives in
+tests use a handwritten `DeclarativeMerge` state machine (as in the trait's doc
+example) and the generated-label diagnostics test lives in
 `ortho_config/tests/declarative_merge.rs` where a derived struct exists.
 
 ### Milestone 2, green (2026-08-09)
