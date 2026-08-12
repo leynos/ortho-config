@@ -41,3 +41,10 @@ fn invalid_flag_name_is_rejected() {
         .expect_err("an invalid name must be rejected");
     assert!(matches!(*err, crate::OrthoError::InvalidProfileName { .. }));
 }
+
+#[test]
+fn invalid_environment_name_is_rejected() {
+    let err = SelectedProfile::resolve(None, Some("bad name"))
+        .expect_err("an invalid name must be rejected");
+    assert!(matches!(*err, crate::OrthoError::InvalidProfileName { .. }));
+}
