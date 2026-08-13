@@ -22,6 +22,9 @@ pub(super) enum JsonField {
     Path,
     Summary,
     Inputs,
+    InteractionMode,
+    MutationEffect,
+    BypassFlag,
 }
 
 impl JsonField {
@@ -33,6 +36,9 @@ impl JsonField {
             Self::Path => "path",
             Self::Summary => "summary",
             Self::Inputs => "inputs",
+            Self::InteractionMode => "interaction_mode",
+            Self::MutationEffect => "mutation_effect",
+            Self::BypassFlag => "bypass_flag",
         }
     }
 }
@@ -208,4 +214,108 @@ fn string_array_field(value: &Value, field: JsonField) -> StepResult<Vec<String>
                 .ok_or_else(|| format!("{field} item should be a string").into())
         })
         .collect()
+}
+
+fn command_by_path<'a>(value: &'a Value, path_segments: &[&str]) -> Option<&'a Value> {
+    value
+        .get(JsonField::Commands.as_str())
+        .and_then(Value::as_array)?
+        .iter()
+        .find(|command| {
+            command
+                .get(JsonField::Path.as_str())
+                .and_then(Value::as_array)
+                .is_some_and(|path| {
+                    path.iter()
+                        .filter_map(Value::as_str)
+                        .eq(path_segments.iter().copied())
+                })
+        })
+}
+
+fn assert_command_string_field(
+    orthohelp_context: &mut OrthoHelpContext,
+    path: &[&str],
+    field: JsonField,
+    expected: &str,
+) -> StepResult<()> {
+    let json = read_agent_context(orthohelp_context)?;
+    let command =
+        command_by_path(&json, path).ok_or_else(|| format!("command path {path:?} missing"))?;
+    let actual = string_field(command, field)?;
+    if actual == expected {
+        Ok(())
+    } else {
+        Err(format!("command {path:?} {field} should be {expected}, got {actual}").into())
+    }
+}
+
+#[then("the command admin purge reports interaction mode interactive")]
+fn admin_purge_interaction_interactive(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
+    assert_command_string_field(
+        orthohelp_context,
+        &["nested_fixture", "admin", "purge"],
+        JsonField::InteractionMode,
+        "interactive",
+    )
+}
+
+#[then("the command admin purge reports mutation effect delete")]
+fn admin_purge_mutation_delete(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
+    assert_command_string_field(
+        orthohelp_context,
+        &["nested_fixture", "admin", "purge"],
+        JsonField::MutationEffect,
+        "delete",
+    )
+}
+
+#[then("the command admin purge reports bypass flag --force")]
+fn admin_purge_bypass_force(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
+    assert_command_string_field(
+        orthohelp_context,
+        &["nested_fixture", "admin", "purge"],
+        JsonField::BypassFlag,
+        "--force",
+    )
+}
+
+#[then("the command admin prune reports mutation effect delete")]
+fn admin_prune_mutation_delete(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
+    assert_command_string_field(
+        orthohelp_context,
+        &["nested_fixture", "admin", "prune"],
+        JsonField::MutationEffect,
+        "delete",
+    )
+}
+
+#[then("the command greet reports interaction mode non_interactive")]
+fn greet_interaction_non_interactive(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
+    assert_command_string_field(
+        orthohelp_context,
+        &["nested_fixture", "greet"],
+        JsonField::InteractionMode,
+        "non_interactive",
+    )
+}
+
+#[then("the command greet reports mutation effect read_only")]
+fn greet_mutation_read_only(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
+    assert_command_string_field(
+        orthohelp_context,
+        &["nested_fixture", "greet"],
+        JsonField::MutationEffect,
+        "read_only",
+    )
+}
+
+#[then("the command version reports interaction mode unknown")]
+fn version_interaction_unknown(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
+    assert_command_string_field(
+        orthohelp_context,
+        &["nested_fixture", "version"],
+        JsonField::InteractionMode,
+        "unknown",
+    )
 }
