@@ -488,8 +488,25 @@ fn derived_constant_set<T: OrthoConfigLocalization>() -> BTreeSet<String> {
     set
 }
 
+/// Looks up an `ARG_IDS` entry by clap id and asserts its three identifiers
+/// equal the §4.1 messages the runtime walker would request.
+fn assert_arg_ids_match_message_id_for(arg: &ArgLocalizationIds, base: &[&str]) {
+    assert_eq!(
+        arg.help_id,
+        message_id_for(base, &format!("args.{}.help", arg.name))
+    );
+    assert_eq!(
+        arg.long_help_id,
+        message_id_for(base, &format!("args.{}.long_help", arg.name))
+    );
+    assert_eq!(
+        arg.value_name_id,
+        message_id_for(base, &format!("args.{}.value_name", arg.name))
+    );
+}
+
 #[test]
-fn flat_derived_constants_equal_message_id_for() {
+fn flat_command_constants_equal_message_id_for() {
     let base = FlatCli::LOCALIZATION_BASE.split('.').collect::<Vec<_>>();
     assert_eq!(FlatCli::ABOUT_ID, message_id_for(&base, "about"));
     assert_eq!(FlatCli::LONG_ABOUT_ID, message_id_for(&base, "long_about"));
@@ -504,25 +521,21 @@ fn flat_derived_constants_equal_message_id_for() {
         FlatCli::AFTER_LONG_HELP_ID,
         message_id_for(&base, "after_long_help")
     );
+}
 
+#[test]
+fn flat_argument_constants_equal_message_id_for() {
+    let base = FlatCli::LOCALIZATION_BASE.split('.').collect::<Vec<_>>();
     let config = FlatCli::ARG_IDS
         .iter()
         .find(|arg| arg.name == "config")
         .expect("flat fixture should carry a config argument");
-    assert_eq!(config.help_id, message_id_for(&base, "args.config.help"));
-    assert_eq!(
-        config.long_help_id,
-        message_id_for(&base, "args.config.long_help")
-    );
-    assert_eq!(
-        config.value_name_id,
-        message_id_for(&base, "args.config.value_name")
-    );
+    assert_arg_ids_match_message_id_for(config, &base);
     let verbose = FlatCli::ARG_IDS
         .iter()
         .find(|arg| arg.name == "verbose")
         .expect("flat fixture should carry a verbose argument");
-    assert_eq!(verbose.help_id, message_id_for(&base, "args.verbose.help"));
+    assert_arg_ids_match_message_id_for(verbose, &base);
 }
 
 #[test]
