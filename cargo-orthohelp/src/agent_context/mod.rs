@@ -7,7 +7,7 @@ use ortho_config::{
     AgentCommand, AgentContext, AgentInput, InteractionMode, Localizer, MutationEffect,
 };
 
-use crate::schema::{DocMetadata, FieldMetadata, ValueType};
+use crate::schema::{DocMetadata, FieldMetadata, InteractionKind, MutationKind, ValueType};
 
 const CANONICAL_VERBS: &[&str] = &[
     "get", "list", "create", "update", "delete", "jobs", "profile", "feedback",
@@ -111,10 +111,16 @@ fn walk(
         canonical_verb: last_segment.and_then(canonical_verb_for),
         inputs: meta.fields.iter().filter_map(build_input).collect(),
         output_modes: Vec::new(),
-        interaction_mode: InteractionMode::default(),
-        mutation_effect: MutationEffect::default(),
-        bypass_flag: None,
-        dry_run_flag: None,
+        interaction_mode: map_interaction(meta.behaviour.as_ref()),
+        mutation_effect: map_mutation(meta.behaviour.as_ref()),
+        bypass_flag: meta
+            .behaviour
+            .as_ref()
+            .and_then(|behaviour| behaviour.bypass.clone()),
+        dry_run_flag: meta
+            .behaviour
+            .as_ref()
+            .and_then(|behaviour| behaviour.dry_run.clone()),
         async_submission: None,
         delivery_route: None,
         pagination: None,
@@ -154,6 +160,32 @@ fn canonical_verb_for(last_segment: &str) -> Option<String> {
     CANONICAL_VERBS
         .contains(&last_segment)
         .then(|| last_segment.to_owned())
+}
+
+/// Maps a declared behaviour block onto the agent-context interaction mode.
+///
+/// Absent or partially-declared behaviour stays `Unknown`: the bridge never
+/// infers semantics from command names, verbs, or flags.
+fn map_interaction(behaviour: Option<&crate::schema::BehaviourMetadata>) -> InteractionMode {
+    match behaviour.and_then(|meta| meta.interaction) {
+        Some(InteractionKind::NonInteractive) => InteractionMode::NonInteractive,
+        Some(InteractionKind::Interactive) => InteractionMode::Interactive,
+        None => InteractionMode::Unknown,
+    }
+}
+
+/// Maps a declared behaviour block onto the agent-context mutation effect.
+///
+/// Absent or partially-declared behaviour stays `Unknown`; see
+/// [`map_interaction`].
+fn map_mutation(behaviour: Option<&crate::schema::BehaviourMetadata>) -> MutationEffect {
+    match behaviour.and_then(|meta| meta.mutation) {
+        Some(MutationKind::ReadOnly) => MutationEffect::ReadOnly,
+        Some(MutationKind::Write) => MutationEffect::Write,
+        Some(MutationKind::Delete) => MutationEffect::Delete,
+        Some(MutationKind::Submit) => MutationEffect::Submit,
+        None => MutationEffect::Unknown,
+    }
 }
 
 /// Maps CLI-visible field metadata into an agent input.
