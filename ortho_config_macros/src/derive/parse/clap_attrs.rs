@@ -121,6 +121,32 @@ pub(crate) fn clap_field_is_subcommand(field: &syn::Field) -> syn::Result<bool> 
     Ok(is_subcommand)
 }
 
+/// Detect whether a struct field is a flattened clap args group.
+///
+/// Mirrors [`clap_field_is_subcommand`] so flattened groups are recognised
+/// from both `#[command(flatten)]` and `#[clap(flatten)]`. Flattened fields
+/// surface their arguments under the parent command at runtime but cannot be
+/// enumerated by the parent derive, so they are excluded from generated
+/// `ARG_IDS` (Decision D-12) and are expected to carry their own
+/// `OrthoConfigLocalization` implementation.
+pub(crate) fn clap_field_is_flattened(field: &syn::Field) -> syn::Result<bool> {
+    let mut is_flattened = false;
+    for attr in field
+        .attrs
+        .iter()
+        .filter(|attr| is_clap_command_attribute(attr))
+    {
+        attr.parse_nested_meta(|meta| {
+            if meta.path.is_ident("flatten") {
+                is_flattened = true;
+                return Ok(());
+            }
+            consume_unknown_meta(&meta)
+        })?;
+    }
+    Ok(is_flattened)
+}
+
 #[derive(Clone)]
 pub(crate) enum ClapInferredDefault {
     Value(Expr),

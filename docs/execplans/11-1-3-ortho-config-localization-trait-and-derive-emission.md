@@ -170,7 +170,15 @@ review's findings are folded into the Decision Log and milestones below.
     through a `FluentLocalizer`; a doc example demonstrates
     `with_base(T::LOCALIZATION_BASE)`; trybuild `localization_public_paths.rs`
     locks the public crate-root paths.
-- [ ] Milestone 2: macro-side identifier generation and collision detection.
+- [x] Milestone 2: macro-side identifier generation and collision detection.
+  - `generate/localization/` (identifier twin, model pass, collision detection)
+    with the `NORMALIZATION-RULES-VERSION` twin gate, the dev-dependency cycle,
+    `clap_field_is_flattened` detection (D-12) and `localization_base` parsing
+    plus `localized_default` rejection (D-4).
+  - Derive emission of `OrthoConfigLocalization` is wired in (`emit_localization_impl`),
+    so the model is consumed by production code (Milestone 3 fold-in): this
+    avoids a dead-code stage while making all existing derive consumers emit
+    compiled constants (verified by the full workspace test suite).
 - [ ] Milestone 3: derive emission of `OrthoConfigLocalization` impls plus
   cross-crate agreement tests.
 - [ ] Milestone 3a: migrate `examples/hello_world` to the derived constants.

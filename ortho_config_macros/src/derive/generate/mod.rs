@@ -6,6 +6,7 @@
 
 pub(crate) mod declarative;
 pub(crate) mod docs;
+pub(crate) mod localization;
 pub(crate) mod ortho_impl;
 pub(crate) mod structs;
 
