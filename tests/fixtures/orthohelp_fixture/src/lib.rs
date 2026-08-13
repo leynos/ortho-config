@@ -145,7 +145,10 @@ impl Default for NestedFixtureCommand {
 
 /// Options for the nested fixture greet command.
 #[derive(Debug, Default, Clone, PartialEq, Eq, Parser, Deserialize, Serialize, OrthoConfig)]
-#[ortho_config(prefix = "NESTED_FIXTURE")]
+#[ortho_config(
+    prefix = "NESTED_FIXTURE",
+    behaviour(interaction = "non_interactive", mutation = "read_only")
+)]
 pub struct NestedGreetCommand {
     /// Recipient to greet.
     #[ortho_config(default = String::from("World"))]
@@ -198,6 +201,12 @@ pub enum NestedAdminSubcommand {
     /// Grants access to a principal.
     #[command(name = "grant-access")]
     GrantAccess(NestedGrantAccessCommand),
+    /// Permanently deletes a principal's records.
+    #[command(name = "purge")]
+    Purge(NestedPurgeCommand),
+    /// Removes expired records under an explicit policy.
+    #[command(name = "prune")]
+    Prune(NestedPruneCommand),
 }
 
 impl Default for NestedAdminSubcommand {
@@ -221,4 +230,24 @@ pub struct NestedAuditCommand {
 pub struct NestedGrantAccessCommand {
     /// Principal receiving access.
     pub principal: Option<String>,
+}
+
+/// Options for the nested fixture purge command.
+#[derive(Debug, Default, Clone, PartialEq, Eq, Parser, Deserialize, Serialize, OrthoConfig)]
+#[ortho_config(
+    prefix = "NESTED_FIXTURE",
+    behaviour(interaction = "interactive", mutation = "delete", bypass = "--force")
+)]
+pub struct NestedPurgeCommand {
+    /// Target of the destructive purge.
+    pub target: Option<String>,
+}
+
+/// Options for the nested fixture prune command.
+#[derive(Debug, Default, Clone, PartialEq, Eq, Parser, Deserialize, Serialize, OrthoConfig)]
+#[ortho_config(prefix = "NESTED_FIXTURE", behaviour(mutation = "delete"))]
+pub struct NestedPruneCommand {
+    /// Expiry threshold interpreted as a number of days.
+    #[ortho_config(default = 30)]
+    pub older_than_days: u32,
 }

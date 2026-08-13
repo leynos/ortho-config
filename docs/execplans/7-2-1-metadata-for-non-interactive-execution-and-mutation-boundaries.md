@@ -161,8 +161,12 @@ escalation, not workarounds.
   parsed, validated, emitted; trybuild fixtures; gates green; committed
   (`a2ee0e5`); CodeRabbit review (`coderabbit review --agent`) returned 0
   findings across the full branch diff (Milestones B+C); pass clear.
-- [ ] Milestone D: bridge population and fixture/example updates; BDD
-  scenario green; gates green; CodeRabbit clear. (in progress)
+- [x] (2026-08-12/13) Milestone D: bridge population (IR `behaviour` block
+  mapped onto `interaction_mode`, `mutation_effect`, `bypass_flag`,
+  `dry_run_flag` with no inference), fixture annotations (`admin purge`,
+  `admin prune`, `greet`), golden snapshot refreshed, BDD scenario and steps
+  added, all gates green (check-fmt, typecheck, lint, test, markdownlint);
+  CodeRabbit pass pending.
 - [ ] Milestone E: `--check-agent-native` lint with policy report; BDD
   scenarios; gates green; CodeRabbit clear.
 - [ ] Milestone F: documentation (design doc §8.1 rows, users' guide,
@@ -171,6 +175,14 @@ escalation, not workarounds.
 
 ## Surprises & discoveries
 
+- Observation: the Milestone D plan step "annotate one hello_world command and
+  refresh its snapshot" does not apply: `examples/hello_world/src/cli/context.rs`
+  hand-authors `AgentCommand` values directly (setting
+  `InteractionMode::NonInteractive`/`MutationEffect::ReadOnly` literally) and
+  never passes through the derive IR or the bridge, so there is no
+  `behaviour(...)` annotation or golden refresh to perform there. The plan's
+  fixture-annotation and BDD work in `orthohelp_fixture` exercises the real
+  derive-to-bridge path.
 - Observation: agent-context schema v1 already reserves `interaction_mode`
   and `mutation_effect` as realized v1 fields defaulting to `"unknown"` (design
   doc §8.1 table), and the Rust enums already exist with the exact variants the
@@ -1011,6 +1023,37 @@ emitted by the derive, committed as `a2ee0e5` and pushed.
   Milestone C implementation and tests were verified, the clippy `unreachable`
   finding fixed, formatted, and committed as a single atomic commit to avoid
   losing the verified work.
+
+### Milestone D transcript (2026-08-13)
+
+The bridge now populates the agent-context behaviour fields from the IR
+`behaviour` block; the fixture tree declares all four target states; and the
+BDD scenario asserts them end to end through the real binary.
+
+- Bridge (`cargo-orthohelp/src/agent_context/mod.rs`): `walk` maps
+  `meta.behaviour` through `map_interaction`/`map_mutation` (total match arms
+  covering both IR enums; absent stays `Unknown`) and copies `bypass` and
+  `dry_run` verbatim. No inference, no defaults beyond `Unknown`.
+- Fixture (`tests/fixtures/orthohelp_fixture/src/lib.rs`): `admin purge`
+  declared `interactive`/`delete`/`--force`; `admin prune` declared
+  `mutation = "delete"` (the milestone-E `destructive_bypass_missing` target);
+  `greet` declared `non_interactive`/`read_only`; `version` and the remaining
+  commands left unannotated to lock the `unknown` passthrough.
+- Golden snapshot `agent_context__nested_fixture.json.snap` refreshed; the diff
+  was reviewed field-by-field (purge/prune entries added; greet now
+  non_interactive/read_only) before accepting.
+- BDD: `orthohelp_agent_context.feature` gained the "agent context reports
+  declared behaviour metadata" scenario with dedicated steps in
+  `steps_agent_context.rs` (rstest-bdd placeholders capture single tokens, so
+  multi-segment command paths use literal per-command step text backed by a
+  shared `assert_command_string_field` helper).
+- `nested_subcommand_end_to_end.rs` updated: the IR admin subcommand list now
+  includes `purge`/`prune`, and the admin man page assertions cover `.SS purge`
+  and `.SS prune`.
+- hello_world: no change needed (hand-authored agent context; see Surprises).
+- Gates: `make check-fmt`, `make typecheck`, `make lint`, `make test`,
+  `make markdownlint` all green. CodeRabbit pass pending (recorded in
+  Progress). Logs: `/tmp/scrut-md-*.out`.
 
 ## Interfaces and dependencies
 
