@@ -5,7 +5,7 @@
 
 use ortho_config::{ArgLocalizationIds, OrthoConfigLocalization};
 
-/// Verifies the root re-exports compile for hand-written implementations.
+/// Verifies the root re-exports compile for handwritten implementations.
 struct Cli;
 
 impl OrthoConfigLocalization for Cli {
