@@ -38,3 +38,6 @@ scripts/.venv/
 .uv-tools/
 .typos-oxendict-base.json
 .typos-oxendict-base.toml
+.vtcode/
+*.swp
+*.swo
