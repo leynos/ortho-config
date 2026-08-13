@@ -2,10 +2,11 @@
 
 use clap::{CommandFactory, Parser};
 use ortho_config::{
-    LocalizationArgs, LocalizeCmd, LocalizedParse, Localizer, NoOpLocalizer, langid,
-    message_id_for, parse_localized_command,
+    ArgLocalizationIds, LocalizationArgs, LocalizeCmd, LocalizedParse, Localizer, NoOpLocalizer,
+    OrthoConfig, OrthoConfigLocalization, langid, message_id_for, parse_localized_command,
 };
 use rstest::{fixture, rstest};
+use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -396,4 +397,191 @@ fn fluent_unsafe_identifier_panics() {
         ["123-fixture", "--bad", "value"],
         &NoOpLocalizer::new(),
     ));
+}
+
+/// Flat derived CLI (no subcommands, no flatten) used for the cross-crate
+/// agreement lock: its derived `OrthoConfigLocalization` constants must equal
+/// the runtime walker's recorded identifiers exactly.
+#[derive(Debug, PartialEq, Parser, Serialize, Deserialize, OrthoConfig)]
+#[command(name = "flat", bin_name = "flat")]
+#[ortho_config(localization_base = "flatcli")]
+struct FlatCli {
+    #[arg(long)]
+    config: Option<String>,
+    #[arg(long)]
+    verbose: Option<String>,
+}
+
+/// Derived CLI with a subcommand and a flattened group. The parent surface's
+/// `ARG_IDS` excludes the subcommand selector and the flattened field; the
+/// runtime walker still records subcommand-node and flattened-argument ids,
+/// which the test accounts for as a documented remainder (D-9, D-12).
+#[derive(Debug, PartialEq, Parser)]
+#[command(name = "tree", bin_name = "tree")]
+struct TreeCli {
+    #[arg(long)]
+    config: Option<String>,
+    #[command(subcommand)]
+    command: TreeCommand,
+    #[command(flatten)]
+    extra: ExtraArgs,
+}
+
+#[derive(Debug, PartialEq, clap::Subcommand)]
+enum TreeCommand {
+    Greet(TreeGreetArgs),
+}
+
+#[derive(Debug, PartialEq, clap::Args)]
+struct TreeGreetArgs {
+    #[arg(long)]
+    name: Option<String>,
+}
+
+/// The flattened group type. The runtime mounts flattened fields under the
+/// parent command's `args.` namespace; the parent surface's `ARG_IDS` (here a
+/// handwritten `OrthoConfigLocalization` impl) deliberately excludes them
+/// (D-12).
+#[derive(Debug, PartialEq, clap::Args)]
+struct ExtraArgs {
+    #[arg(long)]
+    extra: Option<String>,
+}
+
+/// Handwritten `OrthoConfigLocalization` for `TreeCli`, modelling what the
+/// derive would emit for a parent surface: `ARG_IDS` covers the parent's own
+/// fields (`config`) and excludes the flattened group (`extra`) and the
+/// subcommand selector (D-9, D-12).
+impl OrthoConfigLocalization for TreeCli {
+    const LOCALIZATION_BASE: &'static str = "treecli";
+    const ABOUT_ID: &'static str = "treecli-about";
+    const LONG_ABOUT_ID: &'static str = "treecli-long_about";
+    const USAGE_ID: &'static str = "treecli-usage";
+    const VERSION_ID: &'static str = "treecli-version";
+    const LONG_VERSION_ID: &'static str = "treecli-long_version";
+    const AFTER_HELP_ID: &'static str = "treecli-after_help";
+    const AFTER_LONG_HELP_ID: &'static str = "treecli-after_long_help";
+    const ARG_IDS: &'static [ArgLocalizationIds] = &[ArgLocalizationIds {
+        name: "config",
+        help_id: "treecli-args-config-help",
+        long_help_id: "treecli-args-config-long_help",
+        value_name_id: "treecli-args-config-value_name",
+    }];
+}
+
+/// Collects every command-level constant plus the `ARG_IDS` entries of a
+/// derived surface into one set.
+fn derived_constant_set<T: OrthoConfigLocalization>() -> BTreeSet<String> {
+    let mut set = BTreeSet::new();
+    set.insert(T::ABOUT_ID.to_owned());
+    set.insert(T::LONG_ABOUT_ID.to_owned());
+    set.insert(T::USAGE_ID.to_owned());
+    set.insert(T::VERSION_ID.to_owned());
+    set.insert(T::LONG_VERSION_ID.to_owned());
+    set.insert(T::AFTER_HELP_ID.to_owned());
+    set.insert(T::AFTER_LONG_HELP_ID.to_owned());
+    for arg in T::ARG_IDS {
+        set.insert(arg.help_id.to_owned());
+        set.insert(arg.long_help_id.to_owned());
+        set.insert(arg.value_name_id.to_owned());
+    }
+    set
+}
+
+#[test]
+fn flat_derived_constants_equal_message_id_for() {
+    let base = FlatCli::LOCALIZATION_BASE.split('.').collect::<Vec<_>>();
+    assert_eq!(FlatCli::ABOUT_ID, message_id_for(&base, "about"));
+    assert_eq!(FlatCli::LONG_ABOUT_ID, message_id_for(&base, "long_about"));
+    assert_eq!(FlatCli::USAGE_ID, message_id_for(&base, "usage"));
+    assert_eq!(FlatCli::VERSION_ID, message_id_for(&base, "version"));
+    assert_eq!(
+        FlatCli::LONG_VERSION_ID,
+        message_id_for(&base, "long_version")
+    );
+    assert_eq!(FlatCli::AFTER_HELP_ID, message_id_for(&base, "after_help"));
+    assert_eq!(
+        FlatCli::AFTER_LONG_HELP_ID,
+        message_id_for(&base, "after_long_help")
+    );
+
+    let config = FlatCli::ARG_IDS
+        .iter()
+        .find(|arg| arg.name == "config")
+        .expect("flat fixture should carry a config argument");
+    assert_eq!(config.help_id, message_id_for(&base, "args.config.help"));
+    assert_eq!(
+        config.long_help_id,
+        message_id_for(&base, "args.config.long_help")
+    );
+    assert_eq!(
+        config.value_name_id,
+        message_id_for(&base, "args.config.value_name")
+    );
+    let verbose = FlatCli::ARG_IDS
+        .iter()
+        .find(|arg| arg.name == "verbose")
+        .expect("flat fixture should carry a verbose argument");
+    assert_eq!(verbose.help_id, message_id_for(&base, "args.verbose.help"));
+}
+
+#[test]
+fn flat_walker_coverage_equals_derived_constants() {
+    let localizer = RecordingLocalizer::default();
+    drop(
+        FlatCli::command()
+            .with_base(FlatCli::LOCALIZATION_BASE)
+            .localize(&localizer),
+    );
+
+    let expected = derived_constant_set::<FlatCli>();
+    assert_eq!(localizer.recorded_ids(), expected);
+}
+
+#[test]
+fn subcommand_flatten_constants_are_subset_with_documented_remainder() {
+    let localizer = RecordingLocalizer::default();
+    drop(
+        TreeCli::command()
+            .with_base(TreeCli::LOCALIZATION_BASE)
+            .localize(&localizer),
+    );
+
+    let constants = derived_constant_set::<TreeCli>();
+    let recorded = localizer.recorded_ids();
+    assert!(
+        constants.is_subset(&recorded),
+        "derived constants must be a subset of the runtime walker coverage"
+    );
+
+    let remainder = recorded
+        .difference(&constants)
+        .cloned()
+        .collect::<BTreeSet<_>>();
+    let base = TreeCli::LOCALIZATION_BASE.split('.').collect::<Vec<_>>();
+    let mut expected_remainder = BTreeSet::new();
+    // Subcommand node (D-9): every command-level suffix plus its argument ids.
+    for suffix in [
+        "about",
+        "long_about",
+        "usage",
+        "version",
+        "long_version",
+        "after_help",
+        "after_long_help",
+    ] {
+        expected_remainder.insert(message_id_for(&["treecli", "greet"], suffix));
+    }
+    for suffix in ["help", "long_help", "value_name"] {
+        expected_remainder.insert(message_id_for(
+            &["treecli", "greet"],
+            &format!("args.name.{suffix}"),
+        ));
+    }
+    // Flattened argument (D-12): mounted under the parent command's `args.`.
+    for suffix in ["help", "long_help", "value_name"] {
+        expected_remainder.insert(message_id_for(&base, &format!("args.extra.{suffix}")));
+    }
+
+    assert_eq!(remainder, expected_remainder);
 }
