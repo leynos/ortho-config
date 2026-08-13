@@ -16,6 +16,13 @@ accepted = [
 
 [patterns]
 ignore = [
+  # "mold" names the linker (https://github.com/rui314/mold) in these
+  # contexts only; the mould correction stays active elsewhere.
+  "-fuse-ld=mold",
+  "mold linker",
+  "Cranelift \\+ mold",
+  "Cranelift and mold",
+  "`mold`",
   # Inline code spans quote identifiers (localised_help, set_color) whose
   # spelling is owned by the code or a third-party API, not the prose.
   "`[^`\\n]+`",
