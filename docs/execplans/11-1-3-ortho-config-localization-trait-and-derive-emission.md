@@ -156,8 +156,20 @@ review's findings are folded into the Decision Log and milestones below.
 
 ## Progress
 
-- [ ] Milestone 0: baseline gates and orientation.
-- [ ] Milestone 1: `OrthoConfigLocalization` trait in `ortho_config`.
+- [x] Milestone 0: baseline gates and orientation.
+  Baseline gates green on branch tip 66b3bf2: `make check-fmt`, `make typecheck`,
+  `make lint` (rustdoc + clippy -D warnings + Whitaker), and `make test` (all
+  workspace targets, Python suite 106 passed / 1 skipped). The Whitaker suite is
+  green on this baseline (no outside-diff failures to quarantine). Verification
+  findings for `usage`-per-node and flatten handling are recorded above.
+- [x] Milestone 1: `OrthoConfigLocalization` trait in `ortho_config`.
+  - `ortho_config/src/localizer/localization_ids.rs` defines `ArgLocalizationIds`
+    and `OrthoConfigLocalization` (D-7 surface), re-exported at the crate root and
+    from `localizer::`.
+  - Unit tests assert the constants agree with `message_id_for` and round-trip
+    through a `FluentLocalizer`; a doc example demonstrates
+    `with_base(T::LOCALIZATION_BASE)`; trybuild `localization_public_paths.rs`
+    locks the public crate-root paths.
 - [ ] Milestone 2: macro-side identifier generation and collision detection.
 - [ ] Milestone 3: derive emission of `OrthoConfigLocalization` impls plus
   cross-crate agreement tests.
@@ -845,6 +857,14 @@ fragment writes are atomic (temp-then-rename) and the merge is a deterministic,
 pruning fold. No step mutates state outside the repository and `/tmp` logs.
 
 ## Artefacts and notes
+
+Milestone 0 baseline (2026-08-13): all four gates green on branch tip
+66b3bf2. Logs: `/tmp/ms0-checkfmt-*.out` (fmt), `/tmp/ms0-typecheck-*.out`,
+`/tmp/ms0-lint-*.out`, `/tmp/ms0-test-*.out`. Both Milestone 0 verification
+facts confirmed: (a) `apply_command_metadata` resolves the `usage` suffix for
+every node via `localize_command` recursion; (b) `ortho_config_macros/src` has
+zero references to `flatten` (grep sweep 2026-08-13), so D-12 flatten exclusion
+is additive, not behaviour-preserving.
 
 (To be populated during implementation: red/green transcripts, the collision
 diagnostic as rendered, a sample `cli-identifiers.json`, e2e cold/warm
