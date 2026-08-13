@@ -120,6 +120,60 @@ expression: snapshot
     {
       "path": [
         "nested_fixture",
+        "admin",
+        "prune"
+      ],
+      "canonical_verb": null,
+      "inputs": [
+        {
+          "name": "older_than_days",
+          "long": "older-than-days",
+          "value_type": "integer",
+          "required": false,
+          "default": "30",
+          "enum_values": []
+        }
+      ],
+      "output_modes": [],
+      "interaction_mode": "unknown",
+      "mutation_effect": "delete",
+      "bypass_flag": null,
+      "dry_run_flag": null,
+      "async_submission": null,
+      "delivery_route": null,
+      "pagination": null,
+      "examples": []
+    },
+    {
+      "path": [
+        "nested_fixture",
+        "admin",
+        "purge"
+      ],
+      "canonical_verb": null,
+      "inputs": [
+        {
+          "name": "target",
+          "long": "target",
+          "value_type": "string",
+          "required": false,
+          "default": null,
+          "enum_values": []
+        }
+      ],
+      "output_modes": [],
+      "interaction_mode": "interactive",
+      "mutation_effect": "delete",
+      "bypass_flag": "--force",
+      "dry_run_flag": null,
+      "async_submission": null,
+      "delivery_route": null,
+      "pagination": null,
+      "examples": []
+    },
+    {
+      "path": [
+        "nested_fixture",
         "greet"
       ],
       "summary": "Greets a named recipient.",
@@ -143,8 +197,8 @@ expression: snapshot
         }
       ],
       "output_modes": [],
-      "interaction_mode": "unknown",
-      "mutation_effect": "unknown",
+      "interaction_mode": "non_interactive",
+      "mutation_effect": "read_only",
       "bypass_flag": null,
       "dry_run_flag": null,
       "async_submission": null,
