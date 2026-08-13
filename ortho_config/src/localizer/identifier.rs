@@ -3,6 +3,14 @@
 //! The helpers in this module turn clap command paths and metadata suffixes
 //! into Fluent message identifiers. They are intentionally strict because an
 //! invalid identifier is a command declaration bug, not a runtime locale issue.
+//!
+//! This module is the runtime twin of
+//! `ortho_config_macros::derive::generate::localization::identifier`; the two
+//! share the §4.1 identifier convention and must not drift. The marker comment
+//! below gate both: a test in each crate fails when the numbers differ
+//! (Decision D-8).
+//!
+//! NORMALIZATION-RULES-VERSION: 1
 
 /// Builds the Fluent identifier for a command path and suffix.
 ///

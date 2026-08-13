@@ -5,7 +5,7 @@
 
 mod behaviour;
 mod fields;
-mod sections;
+pub(crate) mod sections;
 mod types;
 
 pub(crate) use types::AppName;

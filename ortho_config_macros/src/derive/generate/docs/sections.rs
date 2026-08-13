@@ -26,7 +26,7 @@ fn default_headings() -> HeadingOverrides {
     }
 }
 
-pub(super) fn resolve_app_name(struct_attrs: &StructAttrs, ident: &Ident) -> String {
+pub(crate) fn resolve_app_name(struct_attrs: &StructAttrs, ident: &Ident) -> String {
     struct_attrs
         .discovery
         .as_ref()
