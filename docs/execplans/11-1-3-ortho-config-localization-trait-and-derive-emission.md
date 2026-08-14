@@ -179,8 +179,28 @@ review's findings are folded into the Decision Log and milestones below.
     so the model is consumed by production code (Milestone 3 fold-in): this
     avoids a dead-code stage while making all existing derive consumers emit
     compiled constants (verified by the full workspace test suite).
-- [ ] Milestone 3: derive emission of `OrthoConfigLocalization` impls plus
+- [x] Milestone 3: derive emission of `OrthoConfigLocalization` impls plus
   cross-crate agreement tests.
+  - Derive emission is wired and all existing derive consumers compile
+    (verified by the full workspace test suite).
+  - Flat derived fixture: `FlatCli` in `ortho_config/tests/localized_parse.rs`,
+    with `flat_command_constants_equal_message_id_for`,
+    `flat_argument_constants_equal_message_id_for`, and
+    `flat_walker_coverage_equals_derived_constants` green (the last proves a
+    flat derived tree's constants equal the runtime walker's recorded set).
+  - Subcommand+flatten fixture: derived `TreeCli` (replacing a handwritten
+    impl) with `subcommand_flatten_constants_are_subset_with_documented_remainder`
+    green, accounting for subcommand-node ids (D-9) and flattened-arg ids (D-12).
+  - Collision trybuild: `ortho_config/tests/ui/localization_id_collision.rs`
+    with the pinned message contract and `first defined here` note.
+  - rstest-bdd Fluent-localizer scenario added (`localizer.feature` +
+    `localizer_steps.rs`): the given step keys a `FluentLocalizer` catalogue on
+    the derived constants (`LOCALIZATION_BASE`, `ABOUT_ID`, `ARG_IDS`), the
+    when step builds `LocalizedDemoArgs::command().with_base(...).localize(...)`
+    and runs `parse_localized_command`, and the then step asserts the about
+    text resolves. Verified: `rstest_bdd` 57 passed 0 failed.
+  - Remaining: run the Milestones 1-3 `coderabbit review --agent` unit (after
+    the full gate set is green).
 - [ ] Milestone 3a: migrate `examples/hello_world` to the derived constants.
 - [ ] Milestone 4: docs IR delegation to the localization identifiers.
 - [ ] Milestone 5: opt-in build-time identifier artefact.
@@ -252,6 +272,21 @@ review's findings are folded into the Decision Log and milestones below.
   D-12 the derive must add explicit flatten *detection* (mirroring
   `clap_field_is_subcommand`) and exclude those fields from `ARG_IDS`; there is
   no existing flatten semantics to preserve, and no current consumer regresses.
+
+- Observation (Milestone 3): a derived fixture can combine a subcommand and a
+  flattened struct by marking the flattened field `#[command(flatten)]` plus
+  `#[ortho_config(skip_cli)]`. The derive's CLI builder skips the field via
+  `skip_cli` (it has no flatten awareness in `cli_flags.rs`), so the flattened
+  type itself must supply the clap `Args` semantics it already does, and the
+  runtime walker (built from the clap `Parser` tree) still surfaces the
+  flattened arguments under the parent's `args.` namespace. Verified
+  empirically with a throwaway crate: a derived `ProbeCli` emitted
+  `ARG_IDS = [config]` (flatten `extra` excluded by `clap_field_is_flattened`)
+  while the walker recorded `probe-args-extra-help`/`long_help`/`value_name`
+  plus the full subcommand-node set. This confirms the D-12 subset contract is
+  achievable *with a genuine derive* on a tree that has both a subcommand and
+  a flattened group, so the Milestone 3 fixture does not need the handwritten
+  impl fallback.
 
 ## Decision log
 
