@@ -10,6 +10,11 @@
     },
     "MD029": { "style": "ordered" }
   },
-  "ignores": ["**/.venv/**", "**/node_modules/**", "**/target/**", "**/.git/**"]
+  "ignores": [
+    "**/.venv/**",
+    "**/node_modules/**",
+    "**/target/**",
+    "**/.git/**",
+    "**/.vtcode/**"
+  ]
 }
-
