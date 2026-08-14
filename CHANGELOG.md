@@ -52,6 +52,23 @@ All notable changes to this project will be documented in this file.
   the injectable environment source, discovery telemetry, and the `metrics`
   feature.
 
+- Add opt-in profile support (`#[ortho_config(profiles)]`, roadmap 9.1.1):
+  `[profile.<name>]` config tables, a first-class profile merge layer between
+  the file and environment tiers, stateless `--profile`/`<PREFIX>PROFILE`
+  selection, structured unknown/invalid/reserved profile errors, and the
+  `load_with_profile()` entry point returning `ProfileLoadOutcome`.
+- Add `ProfilesDeclaration` and `ProfileSelectionContract` to the
+  agent-context schema and the matching `DocMetadata.profiles` IR field.
+
+### Breaking
+
+- Retype `AgentContext.profiles` from `SupportDeclaration` to
+  `ProfilesDeclaration` (decision D7 of execplan 9-1-1). Consumers that
+  construct or match `AgentContext` by struct literal must use the
+  `ProfilesDeclaration::unsupported()`/`supported()` constructors. The wire
+  JSON for non-opted-in applications is unchanged: the unsupported case still
+  serializes as `{ "supported": false }`.
+
 ### Changed
 
 - Clarify that `OrthoError::MissingRequiredValues` is proposed future work, not

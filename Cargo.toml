@@ -24,6 +24,11 @@ categories = ["config", "command-line-interface"]
 [workspace.dependencies]
 rstest-bdd = "0.5.0"
 rstest-bdd-macros = "0.5.0"
+# Test-only matcher crates for the new profile test modules (decision D9 of
+# docs/execplans/9-1-1-profile-metadata.md). Scoped to orthogonal_config's
+# dev-dependencies; not an invitation to migrate existing tests.
+googletest = "0.14.3"
+pretty_assertions = "1.4.1"
 
 # `cargo clippy` lints configuration
 [workspace.lints.clippy]

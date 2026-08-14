@@ -363,3 +363,29 @@ fn merge_layers_reject_non_object_values() -> Result<()> {
     );
     Ok(())
 }
+
+#[test]
+fn merge_layers_label_profile_provenance_in_diagnostics() -> Result<()> {
+    let mut composer = MergeComposer::new();
+    composer.push_defaults(json!({ "name": "default", "count": 1, "flag": false }));
+    composer.push_profile(json!([1, 2, 3]), Some(Utf8PathBuf::from("config.json")));
+
+    let error = match DeclarativeSample::merge_from_layers(composer.layers()) {
+        Ok(config) => return Err(anyhow!("expected merge failure, got config {config:?}")),
+        Err(err) => err,
+    };
+    let message = error.to_string();
+    ensure!(
+        message.contains("expects JSON objects"),
+        "unexpected error message: {message}"
+    );
+    ensure!(
+        message.contains("profile layer supplied an array"),
+        "profile provenance not labelled in diagnostics: {message}"
+    );
+    ensure!(
+        message.contains("Source: config.json"),
+        "profile layer path missing from diagnostics: {message}"
+    );
+    Ok(())
+}

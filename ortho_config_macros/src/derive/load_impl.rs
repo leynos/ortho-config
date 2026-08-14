@@ -2,8 +2,16 @@
 //!
 //! These functions assemble the configuration loading logic by piecing together
 //! CLI parsing, file discovery, environment provider setup, and final merging
-//! according to the order described in the design document. See
-//! [`docs/design.md`](../../docs/design.md) for the high-level architecture.
+//! according to the order described in the design document. The profile-enabled
+//! compose body lives in the sibling [`load_impl_profiles`] module and the
+//! entry-point assembly in [`load_impl_entry`].
+
+#[path = "load_impl_entry.rs"]
+mod load_impl_entry;
+#[path = "load_impl_profiles.rs"]
+mod load_impl_profiles;
+
+pub(crate) use load_impl_entry::build_load_impl;
 
 use quote::quote;
 use syn::Ident;
@@ -44,6 +52,14 @@ pub(crate) struct LoadImplArgs<'a> {
     pub idents: LoadImplIdents<'a>,
     pub tokens: LoadImplTokens<'a>,
     pub has_config_path: bool,
+    /// Whether the struct opts into profile support (`#[ortho_config(profiles)]`).
+    pub profiles: bool,
+    /// The selector environment variable name (for example `APP_PROFILE`).
+    pub profile_env_var: String,
+    /// Clap argument IDs of the config fields (excluding the generated
+    /// `profile` and `config_path` fields), used for value-source gating of
+    /// the CLI layer push.
+    pub cli_arg_ids: Vec<String>,
 }
 
 /// CLI parsing is performed outside the generated method.
@@ -204,6 +220,8 @@ fn build_compose_layers_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStrea
         idents,
         tokens,
         has_config_path,
+        profiles,
+        ..
     } = args;
     let defaults_ident = idents.defaults_ident;
     let default_struct_init = tokens.default_struct_init;
@@ -211,133 +229,65 @@ fn build_compose_layers_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStrea
     let file_discovery = build_file_discovery(tokens, *has_config_path);
     let env_section = build_env_section(tokens);
 
-    quote! {
-        use clap::Parser as _;
-        // Keep this path anchored under the resolved crate so derive users
-        // do not need a direct `figment` dependency for macro-generated code.
-        use #krate::figment::Figment;
-        use #krate::OrthoMergeExt as _;
+    if *profiles {
+        load_impl_profiles::build_profile_compose_layers_impl(args, &file_discovery, &env_section)
+    } else {
+        quote! {
+            use clap::Parser as _;
+            // Keep this path anchored under the resolved crate so derive users
+            // do not need a direct `figment` dependency for macro-generated code.
+            use #krate::figment::Figment;
+            use #krate::OrthoMergeExt as _;
 
-        let mut errors: Vec<std::sync::Arc<#krate::OrthoError>> = Vec::new();
-        let cli = match Self::try_parse_from(iter) {
-            Ok(c) => Some(c),
-            Err(e) => {
-                errors.push(std::sync::Arc::new(e.into()));
-                None
-            }
-        };
+            let mut errors: Vec<std::sync::Arc<#krate::OrthoError>> = Vec::new();
+            let cli = match Self::try_parse_from(iter) {
+                Ok(c) => Some(c),
+                Err(e) => {
+                    errors.push(std::sync::Arc::new(e.into()));
+                    None
+                }
+            };
 
-        let mut composer = #krate::MergeComposer::with_capacity(4);
-        let defaults = #defaults_ident { #( #default_struct_init, )* };
-        let mut defaults_value = None;
-        match #krate::sanitize_value(&defaults) {
-            Ok(value) => {
-                defaults_value = Some(value.clone());
-                composer.push_defaults(value);
-            }
-            Err(err) => errors.push(err),
-        }
-
-        let file_layers = #file_discovery;
-        for layer in file_layers {
-            composer.push_layer(layer);
-        }
-
-        #env_section
-        match Figment::from(env_provider.clone())
-            .extract::<#krate::serde_json::Value>()
-            .into_ortho_merge()
-        {
-            Ok(value) => composer.push_environment(value),
-            Err(err) => errors.push(err),
-        }
-
-        if let Some(ref cli) = cli {
-            match #krate::sanitize_value(cli) {
+            let mut composer = #krate::MergeComposer::with_capacity(4);
+            let defaults = #defaults_ident { #( #default_struct_init, )* };
+            let mut defaults_value = None;
+            match #krate::sanitize_value(&defaults) {
                 Ok(value) => {
-                    let differs_from_defaults = defaults_value
-                        .as_ref()
-                        .map_or(true, |defaults| defaults != &value);
-                    if differs_from_defaults {
-                        composer.push_cli(value);
-                    }
+                    defaults_value = Some(value.clone());
+                    composer.push_defaults(value);
                 }
                 Err(err) => errors.push(err),
             }
-        }
 
-        #krate::declarative::LayerComposition::new(composer.layers(), errors)
-    }
-}
-
-fn build_load_from_iter_impl(config_ident: &Ident) -> proc_macro2::TokenStream {
-    quote! {
-        let composition = Self::compose_layers_from_iter(iter);
-        composition.into_merge_result(|layers| #config_ident::merge_from_layers(layers))
-    }
-}
-
-fn build_config_impl_delegates(
-    krate: &proc_macro2::TokenStream,
-    cli_ident: &Ident,
-    config_ident: &Ident,
-) -> proc_macro2::TokenStream {
-    quote! {
-        impl #config_ident {
-            /// Compose merge layers using the current process arguments.
-            pub fn compose_layers() -> #krate::declarative::LayerComposition {
-                #cli_ident::compose_layers()
+            let file_layers = #file_discovery;
+            for layer in file_layers {
+                composer.push_layer(layer);
             }
 
-            /// Compose merge layers from an iterator of command-line arguments.
-            pub fn compose_layers_from_iter<I, T>(iter: I) -> #krate::declarative::LayerComposition
-            where
-                I: IntoIterator<Item = T>,
-                T: Into<std::ffi::OsString> + Clone,
+            #env_section
+            match Figment::from(env_provider.clone())
+                .extract::<#krate::serde_json::Value>()
+                .into_ortho_merge()
             {
-                #cli_ident::compose_layers_from_iter(iter)
+                Ok(value) => composer.push_environment(value),
+                Err(err) => errors.push(err),
             }
+
+            if let Some(ref cli) = cli {
+                match #krate::sanitize_value(cli) {
+                    Ok(value) => {
+                        let differs_from_defaults = defaults_value
+                            .as_ref()
+                            .map_or(true, |defaults| defaults != &value);
+                        if differs_from_defaults {
+                            composer.push_cli(value);
+                        }
+                    }
+                    Err(err) => errors.push(err),
+                }
+            }
+
+            #krate::declarative::LayerComposition::new(composer.layers(), errors)
         }
-    }
-}
-
-/// Assemble the final `load_from_iter` method using the helper snippets.
-pub(crate) fn build_load_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStream {
-    let idents = &args.idents;
-    let krate = args.tokens.krate;
-    let LoadImplIdents {
-        cli_ident,
-        config_ident,
-        ..
-    } = idents;
-    let compose_layers_impl = build_compose_layers_impl(args);
-    let load_from_iter_impl = build_load_from_iter_impl(config_ident);
-    let config_impl = build_config_impl_delegates(krate, cli_ident, config_ident);
-
-    quote! {
-        impl #cli_ident {
-            #[expect(dead_code, reason = "Generated method may not be used in all builds")]
-            pub fn compose_layers_from_iter<I, T>(iter: I) -> #krate::declarative::LayerComposition
-            where
-                I: IntoIterator<Item = T>,
-                T: Into<std::ffi::OsString> + Clone,
-            {
-                #compose_layers_impl
-            }
-
-            #[expect(dead_code, reason = "Generated method may not be used in all builds")]
-            pub fn compose_layers() -> #krate::declarative::LayerComposition {
-                Self::compose_layers_from_iter(std::env::args_os())
-            }
-
-            pub fn load_from_iter<I, T>(iter: I) -> #krate::OrthoResult<#config_ident>
-            where
-                I: IntoIterator<Item = T>,
-                T: Into<std::ffi::OsString> + Clone,
-            {
-                #load_from_iter_impl
-            }
-        }
-        #config_impl
     }
 }

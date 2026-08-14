@@ -10,15 +10,16 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, PoisonError};
-
+#[path = "scenario_state_profiles.rs"]
+mod scenario_state_profiles;
 #[cfg(test)]
 #[path = "scenario_state_tests.rs"]
 mod scenario_state_tests;
-
 /// Re-exported so BDD merge-error steps can reference the sample config
 /// struct without reaching into the shared fixtures module directly.
 pub use super::fixtures::merge_fixtures::MergeErrorSample;
 pub use super::nested_docs_fixture::*;
+pub use scenario_state_profiles::{ProfilesConfig, ProfilesContext, profiles_context};
 
 /// Scenario state for rules-oriented precedence scenarios (CLI, env, config path, ignore).
 #[derive(Debug, Default, ScenarioState)]
@@ -54,6 +55,7 @@ pub struct ExtendsContext {
 pub struct ComposerContext {
     pub layers: Slot<Vec<MergeLayer<'static>>>,
     pub config: Slot<RulesConfig>,
+    pub profile_value: Slot<String>,
 }
 
 /// Scenario state for aggregated error reporting scenarios.
