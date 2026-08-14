@@ -183,19 +183,6 @@ pub fn localizer_context() -> LocalizerContext {
         ..LocalizerContext::default()
     }
 }
-
-/// Flat derived configuration struct used to prove that Fluent help text
-/// resolves through the derive-generated identifier constants (Milestone 3's
-/// behavioural contract: `LOCALIZATION_BASE`, `ABOUT_ID`, and the per-argument
-/// ids drive the runtime localizer).
-#[derive(Debug, Parser, Deserialize, Serialize, OrthoConfig)]
-#[command(name = "localized-demo", bin_name = "localized-demo")]
-#[ortho_config(prefix = "L10N", localization_base = "l10n.demo")]
-pub struct LocalizedDemoArgs {
-    /// Recipient of the localised greeting.
-    #[arg(long)]
-    pub recipient: Option<String>,
-}
 /// Provides the localizer scenario context under the generic name used by steps.
 #[fixture]
 pub fn context(localizer_context: LocalizerContext) -> LocalizerContext {
