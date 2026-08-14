@@ -176,8 +176,9 @@ escalation, not workarounds.
   rstest unit tests, insta snapshot, BDD feature `orthohelp_policy.feature`
   with 3 scenarios, and proptests for totality, no-deny-in-warn/off, and
   empty-off. All gates green (check-fmt, lint, typecheck, markdownlint),
-  lib tests 112/112, BDD 14/14. CodeRabbit review pending on this milestone's
-  final diff.
+  lib tests 112/112, BDD 14/14. CodeRabbit review (`coderabbit review
+  --agent --committed --base origin/main`) returned 0 findings across 79
+  reviewed files (Milestones B through E), pass clear.
 - [ ] Milestone F: documentation (design doc §8.1 rows, users' guide,
   developers' guide, ADR-008), roadmap ticked, final gates, final CodeRabbit
   pass.
