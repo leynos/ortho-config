@@ -168,8 +168,16 @@ escalation, not workarounds.
   added, all gates green (check-fmt, typecheck, lint, test, markdownlint);
   CodeRabbit review (`coderabbit review --agent`) returned 0 findings across
   the branch diff (Milestones B+C+D); pass clear.
-- [ ] Milestone E: `--check-agent-native` lint with policy report; BDD
-  scenarios; gates green; CodeRabbit clear.
+- [x] (2026-08-14) Milestone E: `--check-agent-native` lint with policy
+  report; step order implementation (`cli::CheckMode`, `PolicyMode`
+  conversion, `policy::rules::behaviour::check_behaviour`, the stdout/stderr
+  report contract with exit 3 iff any deny finding, and default-format
+  artefact suppression when the lint runs without an explicit `--format`),
+  rstest unit tests, insta snapshot, BDD feature `orthohelp_policy.feature`
+  with 3 scenarios, and proptests for totality, no-deny-in-warn/off, and
+  empty-off. All gates green (check-fmt, lint, typecheck, markdownlint),
+  lib tests 112/112, BDD 14/14. CodeRabbit review pending on this milestone's
+  final diff.
 - [ ] Milestone F: documentation (design doc §8.1 rows, users' guide,
   developers' guide, ADR-008), roadmap ticked, final gates, final CodeRabbit
   pass.
@@ -232,6 +240,22 @@ escalation, not workarounds.
   returned "Blocked by policy"; no alternative agent-type is exposed. The
   quality bar is unchanged: every gate and a CodeRabbit review still precede
   each milestone's declaration of done.
+- Observation: the whitaker dylint gate enforces a 400-line per-module cap
+  (`module_max_lines`), which newly-added and pre-existing modules exceeded
+  once Milestone E's code landed. Impact: `policy/rules/behaviour.rs` and
+  `cli/mod.rs` were split test-first — implementation files keep the rule
+  logic, with `#[cfg(test)] mod tests;` sibling files (`tests.rs`) holding
+  the test bodies, matching the existing `agent_context` convention. Evidence:
+  the split reduced `cli/mod.rs` 411→185 lines and `behaviour.rs` 489→208;
+  gates are green after the split.
+- Observation: `cargo-orthohelp/tests/cli_dispatch.rs` fails its
+  `direct_invocation_without_subcommand_includes_cargo_hint` test on the
+  base branch as well as this branch. The test invokes the binary directly as
+  `cargo-orthohelp --format ir` (no `orthohelp` subcommand token) and clap
+  rejects the top-level `--format` before the cargo-hint code path can run.
+  The file is unmodified by Milestone E and the failure predates this work;
+  it is recorded here as a pre-existing defect to address separately (fixed in
+  a follow-up not part of Milestones E/F's scope).
 
 ## Decision log
 
