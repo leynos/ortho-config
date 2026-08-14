@@ -49,17 +49,7 @@ pub(crate) fn build_profile_flag_field(
             "generated profile field conflicts with user-defined field 'profile'",
         ));
     }
-    for (field, attrs) in fields.iter().zip(field_attrs) {
-        if attrs.is_subcommand {
-            continue;
-        }
-        if serde_serialized_field_key(field, serde_rename_all)? == "profile" {
-            return Err(syn::Error::new_spanned(
-                field,
-                "generated profile field conflicts with a field serialized as 'profile'",
-            ));
-        }
-    }
+    validate_profile_serialized_key(fields, field_attrs, serde_rename_all)?;
 
     // Projection (b): the `--profile` long flag.
     validate_cli_long(&name, "profile")?;
@@ -72,6 +62,40 @@ pub(crate) fn build_profile_flag_field(
 
     // Projection (c): the `<PREFIX>PROFILE` environment binding.
     let selector_env = compute_profile_env_var(struct_attrs);
+    validate_profile_environment_binding(fields, &selector_env)?;
+
+    let env_lit = syn::LitStr::new(&selector_env, proc_macro2::Span::call_site());
+    let span = name.span();
+    Ok(Some(quote_spanned! { span =>
+        #[arg(long = "profile", global = true, env = #env_lit, value_name = "NAME", hide = true)]
+        #[serde(skip)]
+        pub profile: Option<String>
+    }))
+}
+
+fn validate_profile_serialized_key(
+    fields: &[syn::Field],
+    field_attrs: &[FieldAttrs],
+    serde_rename_all: Option<SerdeRenameAll>,
+) -> syn::Result<()> {
+    for (field, attrs) in fields.iter().zip(field_attrs) {
+        if attrs.is_subcommand {
+            continue;
+        }
+        if serde_serialized_field_key(field, serde_rename_all)? == "profile" {
+            return Err(syn::Error::new_spanned(
+                field,
+                "generated profile field conflicts with a field serialized as 'profile'",
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn validate_profile_environment_binding(
+    fields: &[syn::Field],
+    selector_env: &str,
+) -> syn::Result<()> {
     for field in fields {
         if clap_field_env(field)?.is_some_and(|env| env == selector_env) {
             return Err(syn::Error::new_spanned(
@@ -82,15 +106,9 @@ pub(crate) fn build_profile_flag_field(
             ));
         }
     }
-
-    let env_lit = syn::LitStr::new(&selector_env, proc_macro2::Span::call_site());
-    let span = name.span();
-    Ok(Some(quote_spanned! { span =>
-        #[arg(long = "profile", global = true, env = #env_lit, value_name = "NAME", hide = true)]
-        #[serde(skip)]
-        pub profile: Option<String>
-    }))
+    Ok(())
 }
+
 #[cfg(test)]
 mod tests {
     //! Unit tests for profile flag token generation.
@@ -169,6 +187,24 @@ mod tests {
         ensure!(
             err.to_string()
                 .contains("conflicts with user-defined field 'profile'"),
+            "unexpected error: {err}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn serialized_profile_key_collision_is_rejected() -> Result<()> {
+        let input: syn::DeriveInput = syn::parse_quote! {
+            #[ortho_config(profiles)]
+            struct Demo {
+                #[serde(rename = "profile")]
+                selected_profile: Option<String>,
+            }
+        };
+        let err = build(&input)?.expect_err("collision must error");
+        ensure!(
+            err.to_string()
+                .contains("conflicts with a field serialized as 'profile'"),
             "unexpected error: {err}"
         );
         Ok(())
