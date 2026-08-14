@@ -206,7 +206,22 @@ review's findings are folded into the Decision Log and milestones below.
     response" before tool execution (recorded infra failure per Tolerances);
     the review was run directly with the authenticated local `coderabbit`
     CLI instead.
-- [ ] Milestone 3a: migrate `examples/hello_world` to the derived constants.
+- [x] Milestone 3a: migrate `examples/hello_world` to the derived constants.
+  - `CommandLine` now derives `OrthoConfig` with
+    `#[ortho_config(prefix = "HELLO_WORLD", localization_base = "hello_world.cli")]`;
+    the flattened `globals` field is marked `#[ortho_config(skip_cli)]` (D-12)
+    and the subcommand selector `#[serde(skip)]`; `Commands` gained
+    `Deserialize`/`Serialize` so `CommandLine: DeserializeOwned` holds.
+  - `localizer.rs` constants (`CLI_BASE_MESSAGE_ID`, `CLI_ABOUT_MESSAGE_ID`,
+    `CLI_LONG_ABOUT_MESSAGE_ID`, `CLI_USAGE_MESSAGE_ID`) are now aliases of the
+    derived `CommandLine::LOCALIZATION_BASE` / `ABOUT_ID` / `LONG_ABOUT_ID` /
+    `USAGE_ID` — no hand-built strings remain.
+  - Every `.with_base("hello_world.cli")` replaced with
+    `.with_base(CommandLine::LOCALIZATION_BASE)` (main.rs, doc example,
+    cli/tests/localisation.rs, tests/localised_help.rs). Insta snapshots stay
+    byte-identical; hello_world 67 lib tests + integration + snapshot tests
+    pass, clippy `-D warnings` clean. `CommandLine` derives `Parser` and
+    `OrthoConfig` simultaneously without conflict (verified empirically).
 - [ ] Milestone 4: docs IR delegation to the localization identifiers.
 - [ ] Milestone 5: opt-in build-time identifier artefact.
 - [ ] Milestone 6: documentation, ADR-008, roadmap completion, final gates.
