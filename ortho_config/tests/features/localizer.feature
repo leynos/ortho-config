@@ -47,3 +47,8 @@ Feature: Localizer trait
     Given a noop localizer
     When I parse a demo command missing an argument
     Then the localized text matches the baseline clap output
+
+  Scenario: Help text resolves through derive-generated identifiers
+    Given a derived configuration struct with a localization catalogue
+    When the command line is parsed with a Fluent localizer
+    Then the help text resolves through the derive-generated identifiers
