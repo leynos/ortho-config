@@ -10,6 +10,8 @@
 //!   generation.
 //! - `tests/features/orthohelp_agent_context.feature` — agent-context JSON
 //!   generation.
+//! - `tests/features/orthohelp_policy.feature` — the `--check-agent-native`
+//!   policy report contract.
 //!
 //! The `fixtures = [orthohelp_context: OrthoHelpContext]` binding tells the
 //! framework to call [`orthohelp_context`] once per scenario to produce the
@@ -34,5 +36,9 @@ scenarios!(
 );
 scenarios!(
     "tests/features/orthohelp_agent_context.feature",
+    fixtures = [orthohelp_context: OrthoHelpContext]
+);
+scenarios!(
+    "tests/features/orthohelp_policy.feature",
     fixtures = [orthohelp_context: OrthoHelpContext]
 );

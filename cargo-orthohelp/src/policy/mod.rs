@@ -4,6 +4,8 @@
 //! and hard failures. It is owned by this tool until a later design decision
 //! extracts a reusable report model into a lower crate.
 
+pub mod rules;
+
 use serde::{Deserialize, Serialize};
 
 /// Current policy-report schema version.
