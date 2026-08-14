@@ -16,8 +16,12 @@ accepted = [
 
 [patterns]
 ignore = [
-  # Inline code spans quote identifiers (localised_help, set_color) whose
-  # spelling is owned by the code or a third-party API, not the prose.
+  # TEMPORARY HOLD, not a policy position. The shared en-GB-oxendict base
+  # deliberately dropped this exclusion on 2026-08-07 so that inline code is
+  # spellchecked. This repository is not yet ready: identifiers inside code
+  # spans would fail across existing documents. Pinning it here keeps the
+  # gate meaningful until those are reworded or added to `[words] accepted`.
+  # Retire this entry — do not refresh it away — once that sweep is done.
   "`[^`\\n]+`",
   "rust-analyzer",
   "GitHub\\s+Flavored\\s+Markdown",
