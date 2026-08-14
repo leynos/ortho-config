@@ -222,6 +222,8 @@ review's findings are folded into the Decision Log and milestones below.
     byte-identical; hello_world 67 lib tests + integration + snapshot tests
     pass, clippy `-D warnings` clean. `CommandLine` derives `Parser` and
     `OrthoConfig` simultaneously without conflict (verified empirically).
+  - CodeRabbit (`coderabbit review --agent --base-commit 40e5aa6`): 0
+    findings across the 6 changed files.
 - [ ] Milestone 4: docs IR delegation to the localization identifiers.
 - [ ] Milestone 5: opt-in build-time identifier artefact.
 - [ ] Milestone 6: documentation, ADR-008, roadmap completion, final gates.
