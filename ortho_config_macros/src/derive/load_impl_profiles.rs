@@ -13,30 +13,24 @@ use syn::Ident;
 use crate::derive::load_impl::LoadImplArgs;
 use crate::derive::load_impl::cli::build_profile_cli_layer_tokens;
 
-#[expect(
-    clippy::too_many_lines,
-    reason = "The generated compose body is a single flat sequence; splitting it would obscure the precedence order"
-)]
 pub(crate) fn build_profile_compose_layers_impl(
     args: &LoadImplArgs<'_>,
     file_discovery: &proc_macro2::TokenStream,
     env_section: &proc_macro2::TokenStream,
 ) -> proc_macro2::TokenStream {
     let LoadImplArgs {
-        idents,
         tokens,
         profile_env_var,
         cli_arg_ids,
         ..
     } = args;
-    let defaults_ident = idents.defaults_ident;
-    let default_struct_init = tokens.default_struct_init;
-    let default_resolutions = &default_struct_init.resolutions;
-    let default_fields = &default_struct_init.fields;
-    let cli_default_as_absent_fields = &default_struct_init.cli_default_as_absent_fields;
     let krate = tokens.krate;
+    let cli_default_as_absent_fields = &tokens.default_struct_init.cli_default_as_absent_fields;
     let parse_setup = build_profile_parse_setup(krate);
     let selection = build_profile_selection(krate, profile_env_var);
+    let defaults = build_profile_defaults(args);
+    let file_layers = build_profile_file_layers(krate, file_discovery);
+    let environment_layer = build_profile_environment_layer(krate, env_section);
     let cli_push = build_profile_cli_layer_tokens(krate, cli_arg_ids, cli_default_as_absent_fields);
 
     quote! {
@@ -46,48 +40,10 @@ pub(crate) fn build_profile_compose_layers_impl(
         use #krate::OrthoMergeExt as _;
 
         #parse_setup
-
         #selection
-
-        let mut composer = #krate::MergeComposer::with_capacity(5);
-        #(#default_resolutions)*
-        let defaults = #defaults_ident { #( #default_fields, )* };
-        let mut defaults_value = None;
-        match #krate::sanitize_value(&defaults) {
-            Ok(value) => {
-                defaults_value = Some(value.clone());
-                composer.push_defaults(value);
-            }
-            Err(err) => errors.push(err),
-        }
-
-        let file_layers = #file_discovery;
-        match #krate::profile::extract_profile_layers(file_layers, selected.as_ref()) {
-            Ok(outcome) => {
-                for layer in outcome.file_layers {
-                    composer.push_layer(layer);
-                }
-                for layer in outcome.profile_layers {
-                    composer.push_layer(layer);
-                }
-            }
-            Err(err) => errors.push(err),
-        }
-
-        #env_section
-        match Figment::from(env_provider.clone())
-            .extract::<#krate::serde_json::Value>()
-            .into_ortho_merge()
-        {
-            Ok(mut value) => {
-                // The selector must never leak into the merged value.
-                if let Some(object) = value.as_object_mut() {
-                    object.remove("profile");
-                }
-                composer.push_environment(value);
-            }
-            Err(err) => errors.push(err),
-        }
+        #defaults
+        #file_layers
+        #environment_layer
 
         #cli_push
 
@@ -142,6 +98,10 @@ fn build_profile_selection(
 ) -> proc_macro2::TokenStream {
     let selector_env = syn::LitStr::new(profile_env_var, proc_macro2::Span::call_site());
     quote! {
+        // Resolve the selection. The flag counts only when clap reports a
+        // command-line origin, so an env-filled value stays attributed to the
+        // environment variable; when clap parsing failed the environment is
+        // read directly so selection errors never mask parse errors.
         let selected = {
             let flag_value = matches.as_ref().and_then(|m| {
                 if m.value_source("profile")
@@ -161,6 +121,75 @@ fn build_profile_selection(
                 }
             }
         };
+    }
+}
+
+/// Build the defaults layer for the profile-enabled compose body.
+///
+/// Fallible `cli_default_as_absent` resolutions run before the defaults struct
+/// is built, so an inferred clap default is replayed through the parser rather
+/// than substituted directly for the field value.
+fn build_profile_defaults(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStream {
+    let LoadImplArgs { idents, tokens, .. } = args;
+    let defaults_ident = idents.defaults_ident;
+    let default_struct_init = tokens.default_struct_init;
+    let default_resolutions = &default_struct_init.resolutions;
+    let default_fields = &default_struct_init.fields;
+    let krate = tokens.krate;
+    quote! {
+        let mut composer = #krate::MergeComposer::with_capacity(5);
+        #(#default_resolutions)*
+        let defaults = #defaults_ident { #( #default_fields, )* };
+        let mut defaults_value = None;
+        match #krate::sanitize_value(&defaults) {
+            Ok(value) => {
+                defaults_value = Some(value.clone());
+                composer.push_defaults(value);
+            }
+            Err(err) => errors.push(err),
+        }
+    }
+}
+
+fn build_profile_file_layers(
+    krate: &proc_macro2::TokenStream,
+    file_discovery: &proc_macro2::TokenStream,
+) -> proc_macro2::TokenStream {
+    quote! {
+        let file_layers = #file_discovery;
+        match #krate::profile::extract_profile_layers(file_layers, selected.as_ref()) {
+            Ok(outcome) => {
+                for layer in outcome.file_layers {
+                    composer.push_layer(layer);
+                }
+                for layer in outcome.profile_layers {
+                    composer.push_layer(layer);
+                }
+            }
+            Err(err) => errors.push(err),
+        }
+    }
+}
+
+fn build_profile_environment_layer(
+    krate: &proc_macro2::TokenStream,
+    env_section: &proc_macro2::TokenStream,
+) -> proc_macro2::TokenStream {
+    quote! {
+        #env_section
+        match Figment::from(env_provider.clone())
+            .extract::<#krate::serde_json::Value>()
+            .into_ortho_merge()
+        {
+            Ok(mut value) => {
+                // The selector must never leak into the merged value.
+                if let Some(object) = value.as_object_mut() {
+                    object.remove("profile");
+                }
+                composer.push_environment(value);
+            }
+            Err(err) => errors.push(err),
+        }
     }
 }
 
