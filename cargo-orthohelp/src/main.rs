@@ -107,7 +107,7 @@ fn init_tracing() {
 }
 
 fn parse_cli() -> Result<(Cli, bool), ClapError> {
-    let matches = Cli::command().get_matches();
+    let matches = Cli::command().try_get_matches()?;
     let cli = Cli::from_arg_matches(&matches)?;
     let format_was_explicit = matches
         .subcommand()
