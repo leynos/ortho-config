@@ -41,6 +41,13 @@ fn run_check_warn_composed(orthohelp_context: &mut OrthoHelpContext) -> StepResu
     run_policy_check(orthohelp_context, &args)
 }
 
+#[when("I run cargo orthohelp with format agent-context and --check-agent-native=deny")]
+fn run_check_deny_composed(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
+    let mut args = Vec::from(["--format", "agent-context"]);
+    args.push("--check-agent-native=deny");
+    run_policy_check(orthohelp_context, &args)
+}
+
 fn run_policy_check(orthohelp_context: &mut OrthoHelpContext, extra: &[&str]) -> StepResult<()> {
     let mut args = Vec::from(NESTED_FIXTURE_ARGS);
     args.extend(extra.iter().copied());

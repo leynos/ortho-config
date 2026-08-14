@@ -179,6 +179,19 @@ escalation, not workarounds.
   lib tests 112/112, BDD 14/14. CodeRabbit review (`coderabbit review
   --agent --committed --base origin/main`) returned 0 findings across 79
   reviewed files (Milestones B through E), pass clear.
+- [x] (2026-08-14) Post-E P1 fix: explicitly requested output generation is
+  preserved in deny mode. `run_agent_native_check` no longer calls
+  `std::process::exit(3)` mid-run; it returns whether the report contains any
+  deny finding, and `run` defers the exit-code-3 decision until after the
+  `GenerationPlan`-gated artefact generators complete. BDD scenario "deny mode
+  still writes explicitly requested output" added to
+  `orthohelp_policy.feature` and passes (exit 3 plus `agent-context.json`
+  written).
+- [x] (2026-08-14) Post-E P1 fix: the `non_interactive` + `bypass`
+  contradiction is now validated against the merged `BehaviourAttrs` state, so
+  the declaration split across repeated `#[ortho_config(behaviour(...))]`
+  groups is rejected. Parser unit tests cover both group orders; trybuild
+  fixture `behaviour_noninteractive_bypass_split.rs` (+ `.stderr`) added.
 - [ ] Milestone F: documentation (design doc §8.1 rows, users' guide,
   developers' guide, ADR-008), roadmap ticked, final gates, final CodeRabbit
   pass.
@@ -257,6 +270,22 @@ escalation, not workarounds.
   The file is unmodified by Milestone E and the failure predates this work;
   it is recorded here as a pre-existing defect to address separately (fixed in
   a follow-up not part of Milestones E/F's scope).
+- Observation: Milestone E's deny-mode implementation called
+  `std::process::exit(3)` from inside `run_agent_native_check`, which ran
+  before `GenerationPlan::for_run` and the generation phases. Any explicit
+  `--format` was therefore never generated when the lint found deny-level
+  findings — `cargo orthohelp --format=agent-context --check-agent-native=deny`
+  produced no `agent-context.json`. This is a post-milestone P1 defect fixed by
+  deferring the exit decision to the end of `run`; the BDD scenario proves the
+  composition contract.
+- Observation: `parse_behaviour_meta` validated the contradiction against only
+  the keys parsed within one `behaviour(...)` group. Because `apply_struct_doc_attr`
+  merges repeated groups into one `BehaviourAttrs` (via the `out.behaviour.take()`
+  pattern), a declaration split across two attributes
+  (`behaviour(interaction = "non_interactive")` plus
+  `behaviour(bypass = "--force")`) slipped past validation. The check now runs
+  on the merged state after each group parses, so both spellings in either
+  order are rejected with the same span-bearing error.
 
 ## Decision log
 
