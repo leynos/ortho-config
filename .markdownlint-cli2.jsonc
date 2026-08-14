@@ -16,6 +16,7 @@
     "**/target/**",
     "**/.git/**",
     ".vtcode/**",
+    "**/.vtcode/**",
     ".terraform/**",
     "**/.uv-cache/**",
     "**/.uv-tools/**",
@@ -23,4 +24,3 @@
     "CRUSH.md"
   ]
 }
-
