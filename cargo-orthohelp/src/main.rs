@@ -170,11 +170,12 @@ fn run(cli: Cli, format_was_explicit: bool) -> Result<(), OrthohelpError> {
     let doc_metadata: DocMetadata = serde_json::from_str(&ir_json)?;
 
     let check_flag_present = args.check_agent_native.is_some();
+    let mut check_has_deny_findings = false;
     if let Some(mode) = args
         .check_agent_native
         .map(cargo_orthohelp::policy::PolicyMode::from)
     {
-        run_agent_native_check(&doc_metadata, &selection, mode, &out_dir)?;
+        check_has_deny_findings = run_agent_native_check(&doc_metadata, &selection, mode)?;
     }
 
     let plan = GenerationPlan::for_run(&args, check_flag_present, format_was_explicit);
@@ -215,6 +216,15 @@ fn run(cli: Cli, format_was_explicit: bool) -> Result<(), OrthohelpError> {
         generate_powershell(&localized_docs, &ps_config)?;
     }
 
+    // The lint's report is emitted before generation so a CI pipeline can
+    // parse it regardless of the exit path. The failure exit for deny-level
+    // findings must not pre-empt explicitly requested artefact generation
+    // (milestone E composition contract): when `--format` is explicit, the
+    // command still writes its artefacts and only then exits 3.
+    if check_has_deny_findings {
+        std::process::exit(3);
+    }
+
     Ok(())
 }
 
@@ -252,18 +262,20 @@ fn generate_agent_context_if_requested(
     Ok(())
 }
 
-/// Runs the agent-native behaviour lint and emits its report.
+/// Runs the agent-native behaviour lint, emits its report, and reports whether
+/// deny-level findings are present.
 ///
 /// The policy report is written to stdout as exactly one JSON document, a
-/// human-readable summary goes to stderr, and the process exits with code 3
-/// if and only if the report contains at least one `deny` finding. Runtime
-/// errors keep exit code 1; clap usage errors keep exit code 2.
+/// human-readable summary goes to stderr, and the returned boolean is `true`
+/// if and only if the report contains at least one `deny` finding. The caller
+/// (`run`) delays the exit-code-3 decision until after explicitly requested
+/// artefact generation completes. Runtime errors keep exit code 1; clap usage
+/// errors keep exit code 2.
 fn run_agent_native_check(
     doc_metadata: &DocMetadata,
     selection: &metadata::PackageSelection,
     mode: cargo_orthohelp::policy::PolicyMode,
-    out_dir: &Utf8PathBuf,
-) -> Result<(), OrthohelpError> {
+) -> Result<bool, OrthohelpError> {
     let maybe_localizer = build_en_us_localizer(&selection.package_root)
         .ok()
         .map(|(_, localizer)| localizer);
@@ -297,11 +309,7 @@ fn run_agent_native_check(
             source,
         })?;
     }
-    if report.summary.deny > 0 {
-        std::process::exit(3);
-    }
-    let _ = out_dir;
-    Ok(())
+    Ok(report.summary.deny > 0)
 }
 /// Builds the optional en-US localizer shared by agent-context and localized output.
 fn build_agent_context_localizer_if_requested(
