@@ -156,6 +156,21 @@ review's findings are folded into the Decision Log and milestones below.
 
 ## Progress
 
+> PENDING DECISION (Milestone 4, Ambiguity tolerance): the pinned mapping table
+> says `FieldMetadata.help_id`/`long_help_id` defaults become the canonical
+> per-argument values, while D-9 says subcommand IR ids keep their current
+> shape. Subcommand payload structs (e.g. `RunArgs`, `NestedAuditArgs`,
+> `GreetCommand`) derive docs through the *same* `build_field` path, so
+> canonicalizing field help ids would change `dry_run.help_id` from
+> `audit.fields.dry_run.help` to a canonical base-joined id — a subcommand
+> metadata diff that `nested_docs_ir.rs` pins. The docs derive cannot
+> distinguish a root struct from a subcommand payload at expansion time.
+> Evidence: `ortho_config/tests/nested_docs_ir.rs`
+> `nested_admin_audit_has_inherited_fluent_id_pattern`,
+> `ortho_config/tests/docs_ir_subcommands.rs`, and the cargo-orthohelp
+> agent-context goldens. Resolution options are recorded below the Progress
+> section; implementation is paused pending direction.
+
 - [x] Milestone 0: baseline gates and orientation.
   Baseline gates green on branch tip 66b3bf2: `make check-fmt`, `make typecheck`,
   `make lint` (rustdoc + clippy -D warnings + Whitaker), and `make test` (all
