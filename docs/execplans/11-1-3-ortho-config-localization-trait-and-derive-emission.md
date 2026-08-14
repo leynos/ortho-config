@@ -199,8 +199,13 @@ review's findings are folded into the Decision Log and milestones below.
     when step builds `LocalizedDemoArgs::command().with_base(...).localize(...)`
     and runs `parse_localized_command`, and the then step asserts the about
     text resolves. Verified: `rstest_bdd` 57 passed 0 failed.
-  - Remaining: run the Milestones 1-3 `coderabbit review --agent` unit (after
-    the full gate set is green).
+  - Full gate set green (fmt, typecheck, lint incl. Whitaker, test) before
+    review; `coderabbit review --agent --committed` (Milestones 1-3 scope,
+    compared against `main`) completed with 0 findings across 31 files.
+    Note: the `scrutineer` sub-agent harness failed twice at "parse planner
+    response" before tool execution (recorded infra failure per Tolerances);
+    the review was run directly with the authenticated local `coderabbit`
+    CLI instead.
 - [ ] Milestone 3a: migrate `examples/hello_world` to the derived constants.
 - [ ] Milestone 4: docs IR delegation to the localization identifiers.
 - [ ] Milestone 5: opt-in build-time identifier artefact.
