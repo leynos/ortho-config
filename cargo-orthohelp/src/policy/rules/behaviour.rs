@@ -53,8 +53,7 @@ pub fn check_behaviour(context: &AgentContext, mode: PolicyMode) -> PolicyReport
 
     let mut results = Vec::new();
     for command in &context.commands {
-        check_destructive_bypass(command, severity, &mut results);
-        check_prompt_bypass(command, severity, &mut results);
+        check_bypass_requirements(command, severity, &mut results);
         check_bypass_known(command, severity, &mut results);
         check_undeclared(command, severity, &mut results);
     }
@@ -105,52 +104,37 @@ fn finding(rule: &Rule, severity: RuleSeverity, message: String, out: &mut Vec<P
 ///
 /// A command declared `non_interactive` is exempt: it cannot prompt, so the
 /// declaration itself is the approved non-interactive path (decision log).
-fn check_destructive_bypass(
+fn check_bypass_requirements(
     command: &AgentCommand,
     severity: RuleSeverity,
     out: &mut Vec<PolicyResult>,
 ) {
-    if command.mutation_effect != MutationEffect::Delete {
-        return;
-    }
-    if command.interaction_mode == InteractionMode::NonInteractive {
-        return;
-    }
     if command.bypass_flag.is_some() {
         return;
     }
-    finding(
-        &Rule::DESTRUCTIVE_BYPASS,
-        severity,
-        format!(
-            "command `{}` is destructive but declares no bypass flag; add `behaviour(bypass = \"--force\")` to its arguments struct",
-            command.path.join(" ")
-        ),
-        out,
-    );
-}
-
-/// `prompt_bypass_missing`: an interactive command must declare a bypass.
-fn check_prompt_bypass(
-    command: &AgentCommand,
-    severity: RuleSeverity,
-    out: &mut Vec<PolicyResult>,
-) {
-    if command.interaction_mode != InteractionMode::Interactive {
-        return;
+    let path = command.path.join(" ");
+    if command.mutation_effect == MutationEffect::Delete
+        && command.interaction_mode != InteractionMode::NonInteractive
+    {
+        finding(
+            &Rule::DESTRUCTIVE_BYPASS,
+            severity,
+            format!(
+                "command `{path}` is destructive but declares no bypass flag; add `behaviour(bypass = \"--force\")` to its arguments struct"
+            ),
+            out,
+        );
     }
-    if command.bypass_flag.is_some() {
-        return;
+    if command.interaction_mode == InteractionMode::Interactive {
+        finding(
+            &Rule::PROMPT_BYPASS,
+            severity,
+            format!(
+                "command `{path}` may prompt but declares no bypass flag; add `behaviour(bypass = \"--force\")` to its arguments struct"
+            ),
+            out,
+        );
     }
-    finding(
-        &Rule::PROMPT_BYPASS,
-        severity,
-        format!(
-            "command `{}` may prompt but declares no bypass flag; add `behaviour(bypass = \"--force\")` to its arguments struct",
-            command.path.join(" ")
-        ),
-        out,
-    );
 }
 
 /// `bypass_flag_unknown`: a declared bypass must match a declared input's long

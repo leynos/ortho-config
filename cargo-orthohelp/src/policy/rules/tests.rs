@@ -91,6 +91,21 @@ fn interactive_without_bypass_triggers_prompt_bypass_missing() {
 }
 
 #[test]
+fn interactive_destructive_command_without_bypass_preserves_finding_order() {
+    let context = ctx_for_command(command(
+        &["admin", "purge"],
+        InteractionMode::Interactive,
+        MutationEffect::Delete,
+    ));
+
+    let report = check_behaviour(&context, PolicyMode::Warn);
+    assert_eq!(
+        codes(&report),
+        ["destructive_bypass_missing", "prompt_bypass_missing"]
+    );
+}
+
+#[test]
 fn declared_bypass_not_matching_an_input_triggers_bypass_flag_unknown() {
     let mut cmd = command(
         &["purge"],
