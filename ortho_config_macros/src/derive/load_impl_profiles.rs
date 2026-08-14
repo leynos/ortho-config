@@ -12,26 +12,23 @@ use syn::Ident;
 
 use crate::derive::load_impl::LoadImplArgs;
 
-#[expect(
-    clippy::too_many_lines,
-    reason = "The generated compose body is a single flat sequence; splitting it would obscure the precedence order"
-)]
 pub(crate) fn build_profile_compose_layers_impl(
     args: &LoadImplArgs<'_>,
     file_discovery: &proc_macro2::TokenStream,
     env_section: &proc_macro2::TokenStream,
 ) -> proc_macro2::TokenStream {
     let LoadImplArgs {
-        idents,
         tokens,
         profile_env_var,
         cli_arg_ids,
         ..
     } = args;
-    let defaults_ident = idents.defaults_ident;
-    let default_struct_init = tokens.default_struct_init;
     let krate = tokens.krate;
-    let selector_env = syn::LitStr::new(profile_env_var, proc_macro2::Span::call_site());
+    let parse_setup = build_profile_parse_setup(krate);
+    let selection = build_profile_selection(krate, profile_env_var);
+    let defaults = build_profile_defaults(args);
+    let file_layers = build_profile_file_layers(krate, file_discovery);
+    let environment_layer = build_profile_environment_layer(krate, env_section);
     let cli_push = build_profile_cli_push(krate, cli_arg_ids);
 
     quote! {
@@ -43,6 +40,24 @@ pub(crate) fn build_profile_compose_layers_impl(
         use #krate::figment::Figment;
         use #krate::OrthoMergeExt as _;
 
+        #parse_setup
+        #selection
+        #defaults
+        #file_layers
+        #environment_layer
+
+        #cli_push
+
+        let selection_vec: Vec<#krate::SelectedProfile> = selected.into_iter().collect();
+        (
+            #krate::declarative::LayerComposition::new(composer.layers(), errors),
+            selection_vec,
+        )
+    }
+}
+
+fn build_profile_parse_setup(krate: &proc_macro2::TokenStream) -> proc_macro2::TokenStream {
+    quote! {
         let mut errors: Vec<std::sync::Arc<#krate::OrthoError>> = Vec::new();
         let args: Vec<std::ffi::OsString> = iter.into_iter().map(Into::into).collect();
         let matches = match Self::command().try_get_matches_from(args) {
@@ -62,7 +77,15 @@ pub(crate) fn build_profile_compose_layers_impl(
             },
             None => None,
         };
+    }
+}
 
+fn build_profile_selection(
+    krate: &proc_macro2::TokenStream,
+    profile_env_var: &str,
+) -> proc_macro2::TokenStream {
+    let selector_env = syn::LitStr::new(profile_env_var, proc_macro2::Span::call_site());
+    quote! {
         // Resolve the selection. The flag counts only when clap reports a
         // command-line origin, so an env-filled value stays attributed to the
         // environment variable; when clap parsing failed the environment is
@@ -86,7 +109,15 @@ pub(crate) fn build_profile_compose_layers_impl(
                 }
             }
         };
+    }
+}
 
+fn build_profile_defaults(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStream {
+    let LoadImplArgs { idents, tokens, .. } = args;
+    let defaults_ident = idents.defaults_ident;
+    let default_struct_init = tokens.default_struct_init;
+    let krate = tokens.krate;
+    quote! {
         let mut composer = #krate::MergeComposer::with_capacity(5);
         let defaults = #defaults_ident { #( #default_struct_init, )* };
         let mut defaults_value = None;
@@ -97,7 +128,14 @@ pub(crate) fn build_profile_compose_layers_impl(
             }
             Err(err) => errors.push(err),
         }
+    }
+}
 
+fn build_profile_file_layers(
+    krate: &proc_macro2::TokenStream,
+    file_discovery: &proc_macro2::TokenStream,
+) -> proc_macro2::TokenStream {
+    quote! {
         let file_layers = #file_discovery;
         match #krate::profile::extract_profile_layers(file_layers, selected.as_ref()) {
             Ok(outcome) => {
@@ -110,7 +148,14 @@ pub(crate) fn build_profile_compose_layers_impl(
             }
             Err(err) => errors.push(err),
         }
+    }
+}
 
+fn build_profile_environment_layer(
+    krate: &proc_macro2::TokenStream,
+    env_section: &proc_macro2::TokenStream,
+) -> proc_macro2::TokenStream {
+    quote! {
         #env_section
         match Figment::from(env_provider.clone())
             .extract::<#krate::serde_json::Value>()
@@ -125,14 +170,6 @@ pub(crate) fn build_profile_compose_layers_impl(
             }
             Err(err) => errors.push(err),
         }
-
-        #cli_push
-
-        let selection_vec: Vec<#krate::SelectedProfile> = selected.into_iter().collect();
-        (
-            #krate::declarative::LayerComposition::new(composer.layers(), errors),
-            selection_vec,
-        )
     }
 }
 
