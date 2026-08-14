@@ -166,7 +166,8 @@ escalation, not workarounds.
   `dry_run_flag` with no inference), fixture annotations (`admin purge`,
   `admin prune`, `greet`), golden snapshot refreshed, BDD scenario and steps
   added, all gates green (check-fmt, typecheck, lint, test, markdownlint);
-  CodeRabbit pass pending.
+  CodeRabbit review (`coderabbit review --agent`) returned 0 findings across
+  the branch diff (Milestones B+C+D); pass clear.
 - [ ] Milestone E: `--check-agent-native` lint with policy report; BDD
   scenarios; gates green; CodeRabbit clear.
 - [ ] Milestone F: documentation (design doc §8.1 rows, users' guide,
@@ -1052,8 +1053,11 @@ BDD scenario asserts them end to end through the real binary.
   and `.SS prune`.
 - hello_world: no change needed (hand-authored agent context; see Surprises).
 - Gates: `make check-fmt`, `make typecheck`, `make lint`, `make test`,
-  `make markdownlint` all green. CodeRabbit pass pending (recorded in
-  Progress). Logs: `/tmp/scrut-md-*.out`.
+  `make markdownlint` all green.
+- CodeRabbit pass: `coderabbit review --agent` returned 0 findings across the
+  branch diff (Milestones B+C+D), run by the build agent as scrutineer (the
+  `agent` tool is denied by policy; see Surprises). Pass clear. Log:
+  `/tmp/scrut-md-coderabbit.out`.
 
 ## Interfaces and dependencies
 
