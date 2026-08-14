@@ -612,10 +612,12 @@ Generic Oxford stems and corrections belong in the shared dictionary maintained
 by `leynos/agent-helper-scripts`. Keep local entries narrow: this repository's
 overlay preserves its library names, non-English fixtures, tool and standards
 names, and ExecPlan headings. Quoted APIs keep US spelling per the
-documentation style guide, so put them in backticks rather than adding
-word-level exceptions. The helper tests cover dictionary validation,
-source-scoped HTTP validators, freshness decisions, offline fallback,
-deterministic rendering, and generated configuration drift.
+documentation style guide. Inline code is spellchecked, so add a narrowly
+backtick-bound pattern to `typos.local.toml` for an upstream API or identifier
+rather than adding a word-level exception. Fenced code blocks remain ignored.
+The helper tests cover dictionary validation, source-scoped HTTP validators,
+freshness decisions, offline fallback, deterministic rendering, and generated
+configuration drift.
 
 `scripts/typos_rollout_http.py` owns shared-cache freshness, HTTPS transport
 security and persistence coordination. Only `scripts/typos_rollout.py` may
