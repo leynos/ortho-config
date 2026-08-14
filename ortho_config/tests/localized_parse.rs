@@ -1,9 +1,10 @@
 //! Integration coverage for localised clap parsing helpers.
 
-use clap::{CommandFactory, Parser};
+use clap::{Args, CommandFactory, Parser, Subcommand};
 use ortho_config::{
     ArgLocalizationIds, LocalizationArgs, LocalizeCmd, LocalizedParse, Localizer, NoOpLocalizer,
-    OrthoConfig, OrthoConfigLocalization, langid, message_id_for, parse_localized_command,
+    OrthoConfig, OrthoConfigLocalization, OrthoConfigSubcommandDocs, langid, message_id_for,
+    parse_localized_command,
 };
 use rstest::{fixture, rstest};
 use serde::{Deserialize, Serialize};
@@ -416,57 +417,45 @@ struct FlatCli {
 /// `ARG_IDS` excludes the subcommand selector and the flattened field; the
 /// runtime walker still records subcommand-node and flattened-argument ids,
 /// which the test accounts for as a documented remainder (D-9, D-12).
-#[derive(Debug, PartialEq, Parser)]
+#[derive(Debug, PartialEq, Parser, Deserialize, Serialize, OrthoConfig)]
 #[command(name = "tree", bin_name = "tree")]
+#[ortho_config(localization_base = "treecli")]
 struct TreeCli {
     #[arg(long)]
     config: Option<String>,
+    #[serde(skip)]
     #[command(subcommand)]
     command: TreeCommand,
     #[command(flatten)]
+    #[ortho_config(skip_cli)]
     extra: ExtraArgs,
 }
 
-#[derive(Debug, PartialEq, clap::Subcommand)]
+#[derive(Debug, PartialEq, Deserialize, Serialize, Subcommand, OrthoConfigSubcommandDocs)]
 enum TreeCommand {
     Greet(TreeGreetArgs),
 }
 
-#[derive(Debug, PartialEq, clap::Args)]
+impl Default for TreeCommand {
+    fn default() -> Self {
+        Self::Greet(TreeGreetArgs::default())
+    }
+}
+
+#[derive(Debug, Default, PartialEq, Args, Deserialize, Serialize, OrthoConfig)]
+#[ortho_config(prefix = "TREE")]
 struct TreeGreetArgs {
     #[arg(long)]
     name: Option<String>,
 }
 
 /// The flattened group type. The runtime mounts flattened fields under the
-/// parent command's `args.` namespace; the parent surface's `ARG_IDS` (here a
-/// handwritten `OrthoConfigLocalization` impl) deliberately excludes them
-/// (D-12).
-#[derive(Debug, PartialEq, clap::Args)]
+/// parent command's `args.` namespace; the derived parent surface's `ARG_IDS`
+/// deliberately excludes them via `clap_field_is_flattened` (D-12).
+#[derive(Debug, Default, PartialEq, Args, Deserialize, Serialize)]
 struct ExtraArgs {
     #[arg(long)]
     extra: Option<String>,
-}
-
-/// Handwritten `OrthoConfigLocalization` for `TreeCli`, modelling what the
-/// derive would emit for a parent surface: `ARG_IDS` covers the parent's own
-/// fields (`config`) and excludes the flattened group (`extra`) and the
-/// subcommand selector (D-9, D-12).
-impl OrthoConfigLocalization for TreeCli {
-    const LOCALIZATION_BASE: &'static str = "treecli";
-    const ABOUT_ID: &'static str = "treecli-about";
-    const LONG_ABOUT_ID: &'static str = "treecli-long_about";
-    const USAGE_ID: &'static str = "treecli-usage";
-    const VERSION_ID: &'static str = "treecli-version";
-    const LONG_VERSION_ID: &'static str = "treecli-long_version";
-    const AFTER_HELP_ID: &'static str = "treecli-after_help";
-    const AFTER_LONG_HELP_ID: &'static str = "treecli-after_long_help";
-    const ARG_IDS: &'static [ArgLocalizationIds] = &[ArgLocalizationIds {
-        name: "config",
-        help_id: "treecli-args-config-help",
-        long_help_id: "treecli-args-config-long_help",
-        value_name_id: "treecli-args-config-value_name",
-    }];
 }
 
 /// Collects every command-level constant plus the `ARG_IDS` entries of a
