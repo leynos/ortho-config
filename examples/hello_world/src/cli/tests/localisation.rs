@@ -4,7 +4,10 @@ use super::super::{CommandLine, Commands, LocalizeCmd};
 use crate::localizer::DemoLocalizer;
 use anyhow::{Context, Result, anyhow, ensure};
 use clap::CommandFactory;
-use ortho_config::{FluentLocalizerError, LanguageIdentifier, langid, parse_localized_command};
+use ortho_config::{
+    FluentLocalizerError, LanguageIdentifier, OrthoConfigLocalization, langid,
+    parse_localized_command,
+};
 use rstest::{fixture, rstest};
 
 #[fixture]
@@ -16,7 +19,7 @@ fn demo_localizer(
 
 fn assert_expected_copy(demo_localizer: &DemoLocalizer) -> Result<()> {
     let command = CommandLine::command()
-        .with_base("hello_world.cli")
+        .with_base(CommandLine::LOCALIZATION_BASE)
         .localize(demo_localizer);
     let about_text = command
         .get_about()
@@ -40,7 +43,7 @@ fn assert_expected_copy(demo_localizer: &DemoLocalizer) -> Result<()> {
 
 fn assert_localized_tree(demo_localizer: &DemoLocalizer) -> Result<()> {
     let command = CommandLine::command()
-        .with_base("hello_world.cli")
+        .with_base(CommandLine::LOCALIZATION_BASE)
         .localize(demo_localizer);
     let greet = command
         .get_subcommands()
@@ -60,7 +63,7 @@ fn assert_localized_tree(demo_localizer: &DemoLocalizer) -> Result<()> {
 fn assert_cli_builds(demo_localizer: &DemoLocalizer) -> Result<()> {
     let args = ["hello-world", "greet"];
     let command = CommandLine::command()
-        .with_base("hello_world.cli")
+        .with_base(CommandLine::LOCALIZATION_BASE)
         .localize(demo_localizer);
     let (cli, _matches) =
         parse_localized_command::<CommandLine, _, _>(command, args, demo_localizer)
@@ -74,7 +77,7 @@ fn assert_cli_builds(demo_localizer: &DemoLocalizer) -> Result<()> {
 
 fn assert_localized_error(demo_localizer: &DemoLocalizer) -> Result<()> {
     let command = CommandLine::command()
-        .with_base("hello_world.cli")
+        .with_base(CommandLine::LOCALIZATION_BASE)
         .localize(demo_localizer);
     let err =
         parse_localized_command::<CommandLine, _, _>(command, ["hello-world"], demo_localizer)
@@ -143,7 +146,7 @@ fn noop_localizer_keeps_stock_error_messages() {
 
     let noop_localizer = DemoLocalizer::noop();
     let command = CommandLine::command()
-        .with_base("hello_world.cli")
+        .with_base(CommandLine::LOCALIZATION_BASE)
         .localize(&noop_localizer);
     let err =
         parse_localized_command::<CommandLine, _, _>(command, ["hello-world"], &noop_localizer)
@@ -162,7 +165,7 @@ fn command_with_noop_localizer_uses_stock_clap_strings() {
 
     let noop_localizer = DemoLocalizer::noop();
     let mut noop_localized_command = CommandLine::command()
-        .with_base("hello_world.cli")
+        .with_base(CommandLine::LOCALIZATION_BASE)
         .localize(&noop_localizer);
 
     let default_about = default_command

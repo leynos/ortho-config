@@ -10,6 +10,7 @@ use hello_world::localizer::DemoLocalizer;
 use insta::assert_snapshot;
 use ortho_config::LanguageIdentifier;
 use ortho_config::NoOpLocalizer;
+use ortho_config::OrthoConfigLocalization;
 use ortho_config::langid;
 use rstest::rstest;
 
@@ -97,7 +98,7 @@ fn assert_display_request_succeeds(locale: &str, args: &[&str]) {
 
 fn render_localized_long_help(localizer: &dyn ortho_config::Localizer) -> String {
     let mut command = CommandLine::command()
-        .with_base("hello_world.cli")
+        .with_base(CommandLine::LOCALIZATION_BASE)
         .localize(localizer);
     command.render_long_help().to_string()
 }
