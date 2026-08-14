@@ -497,13 +497,14 @@ Fill `AgentCommand` entries only with claims the executable honours.
 replace command validation or grant an agent capabilities that the CLI does not
 have.
 
-#### Agent-native policy checking
+### Agent-native policy checking
 
 `cargo orthohelp --check-agent-native` runs an opt-in agent-native policy check
 against a target package. It does not build the bridge crate or require
 `root_type`, a library target, or an `ortho_config` dependency, so it works for
 packages still adopting the toolchain:
 
+<!-- tested-example: guide-policy-check -->
 ```console
 cargo orthohelp --check-agent-native --package my-cli --out-dir out
 ```
@@ -523,6 +524,7 @@ target package's `Cargo.toml`:
 
 For example:
 
+<!-- tested-example: guide-policy-config -->
 ```toml
 [package.metadata.ortho_config.policy]
 mode = "warn"
@@ -556,6 +558,7 @@ Because a misspelt table _name_ still resolves to `off`, gate on the mode
 rather than assuming the check ran. The loud off-mode summary ("nothing was
 checked") is one signal; a `jq`-based assertion is a stronger CI recipe:
 
+<!-- tested-example: guide-policy-ci -->
 ```console
 cargo orthohelp --check-agent-native --out-dir out
 jq -e '.mode != "off"' out/policy-report.json
@@ -563,6 +566,7 @@ jq -e '.mode != "off"' out/policy-report.json
 
 or use the override as a "fail if unconfigured" pattern:
 
+<!-- tested-example: guide-policy-mode-override -->
 ```console
 cargo orthohelp --check-agent-native --policy-mode deny --out-dir out
 ```
