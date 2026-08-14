@@ -32,6 +32,17 @@ fn command(path: &[&str], interaction: InteractionMode, mutation: MutationEffect
     }
 }
 
+fn input(name: &str, value_type: &str) -> AgentInput {
+    AgentInput {
+        name: name.to_owned(),
+        long: Some(name.to_owned()),
+        value_type: Some(value_type.to_owned()),
+        required: false,
+        default: None,
+        enum_values: Vec::new(),
+    }
+}
+
 fn ctx_for_command(command: AgentCommand) -> AgentContext {
     context_with(command)
 }
@@ -48,14 +59,7 @@ fn fully_declared_destructive_tree_yields_empty_report_in_warn_mode() {
         MutationEffect::Delete,
     );
     cmd.bypass_flag = Some("--force".to_owned());
-    cmd.inputs.push(AgentInput {
-        name: "force".to_owned(),
-        long: Some("force".to_owned()),
-        value_type: Some("bool".to_owned()),
-        required: false,
-        default: None,
-        enum_values: Vec::new(),
-    });
+    cmd.inputs.push(input("force", "bool"));
     let context = ctx_for_command(cmd);
 
     let report = check_behaviour(&context, PolicyMode::Warn);
@@ -113,14 +117,7 @@ fn declared_bypass_not_matching_an_input_triggers_bypass_flag_unknown() {
         MutationEffect::Delete,
     );
     cmd.bypass_flag = Some("--force".to_owned());
-    cmd.inputs.push(AgentInput {
-        name: "recipient".to_owned(),
-        long: Some("recipient".to_owned()),
-        value_type: Some("string".to_owned()),
-        required: false,
-        default: None,
-        enum_values: Vec::new(),
-    });
+    cmd.inputs.push(input("recipient", "string"));
     let context = ctx_for_command(cmd);
 
     let report = check_behaviour(&context, PolicyMode::Warn);
@@ -148,14 +145,7 @@ fn bypass_on_non_destructive_command_produces_no_finding() {
         MutationEffect::ReadOnly,
     );
     cmd.bypass_flag = Some("--force".to_owned());
-    cmd.inputs.push(AgentInput {
-        name: "force".to_owned(),
-        long: Some("force".to_owned()),
-        value_type: Some("bool".to_owned()),
-        required: false,
-        default: None,
-        enum_values: Vec::new(),
-    });
+    cmd.inputs.push(input("force", "bool"));
     let context = ctx_for_command(cmd);
 
     let report = check_behaviour(&context, PolicyMode::Warn);
@@ -213,39 +203,32 @@ fn off_mode_returns_empty_report_without_evaluating_rules() {
     assert_eq!(report.mode, PolicyMode::Off);
 }
 
-#[test]
-fn warn_mode_reports_every_finding_as_warn() {
+#[rstest]
+#[case::warn(PolicyMode::Warn, PolicySeverity::Warn)]
+#[case::deny(PolicyMode::Deny, PolicySeverity::Deny)]
+fn policy_mode_assigns_the_expected_severity_to_every_finding(
+    #[case] mode: PolicyMode,
+    #[case] expected_severity: PolicySeverity,
+) {
     let context = ctx_for_command(command(
         &["prune"],
         InteractionMode::Unknown,
         MutationEffect::Unknown,
     ));
-    let report = check_behaviour(&context, PolicyMode::Warn);
+    let is_warn = mode == PolicyMode::Warn;
+    let report = check_behaviour(&context, mode);
     assert!(
         report
             .results
             .iter()
-            .all(|r| r.severity == PolicySeverity::Warn)
+            .all(|r| r.severity == expected_severity)
     );
-    assert_eq!(report.summary.warn, report.results.len());
-    assert_eq!(report.summary.deny, 0);
-}
-
-#[test]
-fn deny_mode_reports_every_finding_as_deny() {
-    let context = ctx_for_command(command(
-        &["prune"],
-        InteractionMode::Unknown,
-        MutationEffect::Unknown,
-    ));
-    let report = check_behaviour(&context, PolicyMode::Deny);
-    assert!(
-        report
-            .results
-            .iter()
-            .all(|r| r.severity == PolicySeverity::Deny)
-    );
-    assert_eq!(report.summary.deny, report.results.len());
+    if is_warn {
+        assert_eq!(report.summary.warn, report.results.len());
+        assert_eq!(report.summary.deny, 0);
+    } else {
+        assert_eq!(report.summary.deny, report.results.len());
+    }
 }
 
 #[test]
