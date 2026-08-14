@@ -198,3 +198,39 @@ fn rejects_non_interactive_with_bypass() -> Result<()> {
     );
     Ok(())
 }
+
+#[test]
+fn rejects_non_interactive_with_bypass_split_across_groups() -> Result<()> {
+    let input: DeriveInput = parse_quote! {
+        #[ortho_config(behaviour(interaction = "non_interactive"))]
+        #[ortho_config(behaviour(bypass = "--force"))]
+        struct Demo {
+            value: u8,
+        }
+    };
+    let err = parse_input(&input).err().expect("expected rejection");
+    let msg = err.to_string();
+    ensure!(
+        msg.contains("contradictory behaviour"),
+        "unexpected message: {msg}"
+    );
+    Ok(())
+}
+
+#[test]
+fn rejects_non_interactive_with_bypass_split_across_groups_reversed() -> Result<()> {
+    let input: DeriveInput = parse_quote! {
+        #[ortho_config(behaviour(bypass = "--force"))]
+        #[ortho_config(behaviour(interaction = "non_interactive"))]
+        struct Demo {
+            value: u8,
+        }
+    };
+    let err = parse_input(&input).err().expect("expected rejection");
+    let msg = err.to_string();
+    ensure!(
+        msg.contains("contradictory behaviour"),
+        "unexpected message: {msg}"
+    );
+    Ok(())
+}
