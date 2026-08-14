@@ -41,7 +41,6 @@ pub(crate) fn parse_behaviour_meta(
     meta: &ParseNestedMeta,
     behaviour: &mut BehaviourAttrs,
 ) -> syn::Result<()> {
-    let mut declared_interaction = None;
     meta.parse_nested_meta(|nested| {
         if nested.path.is_ident("interaction") {
             let value_lit = lit_str(&nested, "interaction")?;
@@ -58,7 +57,6 @@ pub(crate) fn parse_behaviour_meta(
                     ));
                 }
             };
-            declared_interaction = Some(validated);
             behaviour.interaction = Some(validated.to_owned());
             return Ok(());
         }
@@ -98,8 +96,10 @@ pub(crate) fn parse_behaviour_meta(
     })?;
     // A bypass flag exists to skip a confirmation prompt; a command declared
     // non-interactive never prompts, so the combination is contradictory
-    // (see ADR-008).
-    if declared_interaction == Some("non_interactive") && behaviour.bypass.is_some() {
+    // (see ADR-008). The check runs against the merged state so a
+    // non-interactive declaration and a bypass split across repeated
+    // `behaviour(...)` groups is still rejected.
+    if behaviour.interaction.as_deref() == Some("non_interactive") && behaviour.bypass.is_some() {
         return Err(syn::Error::new(
             meta.path.span(),
             "contradictory behaviour: interaction = \"non_interactive\" combined with bypass; a non-interactive command never prompts, so there is nothing to bypass",
