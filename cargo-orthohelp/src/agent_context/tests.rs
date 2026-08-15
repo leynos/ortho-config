@@ -251,53 +251,57 @@ fn transform_omits_missing_or_blank_summaries(
     assert_eq!(summary, expected);
 }
 
-#[test]
-fn transform_maps_declared_interactive_destructive_behaviour() {
-    let metadata = doc(DocSpec {
-        app_name: "purge",
-        bin_name: None,
-        about_id: "cmd.purge",
-        fields: Vec::new(),
-        subcommands: Vec::new(),
-        behaviour: Some(declared_behaviour(
-            InteractionKind::Interactive,
-            MutationKind::Delete,
-            Some("--force"),
-            None,
-        )),
-    });
-
-    let context = bridge_ir_to_agent_context(&metadata, "demo_pkg", None);
-    let command = context
-        .commands
-        .first()
-        .expect("purge command should be generated");
-
-    assert_eq!(
-        command.interaction_mode,
-        ortho_config::InteractionMode::Interactive
-    );
-    assert_eq!(
-        command.mutation_effect,
-        ortho_config::MutationEffect::Delete
-    );
-    assert_eq!(command.bypass_flag.as_deref(), Some("--force"));
-    assert_eq!(command.dry_run_flag, None);
+/// Carries one declared-behaviour scenario for [`transform_maps_declared_behaviour`].
+struct DeclaredBehaviourCase {
+    app_name: &'static str,
+    about_id: &'static str,
+    interaction: InteractionKind,
+    mutation: MutationKind,
+    declared_bypass: Option<&'static str>,
+    declared_dry_run: Option<&'static str>,
+    expected_interaction: ortho_config::InteractionMode,
+    expected_mutation: ortho_config::MutationEffect,
+    expected_bypass: Option<&'static str>,
+    expected_dry_run: Option<&'static str>,
 }
 
-#[test]
-fn transform_maps_declared_non_interactive_read_only_behaviour() {
+#[rstest]
+#[case::interactive_destructive(DeclaredBehaviourCase {
+    app_name: "purge",
+    about_id: "cmd.purge",
+    interaction: InteractionKind::Interactive,
+    mutation: MutationKind::Delete,
+    declared_bypass: Some("--force"),
+    declared_dry_run: None,
+    expected_interaction: ortho_config::InteractionMode::Interactive,
+    expected_mutation: ortho_config::MutationEffect::Delete,
+    expected_bypass: Some("--force"),
+    expected_dry_run: None,
+})]
+#[case::non_interactive_read_only(DeclaredBehaviourCase {
+    app_name: "inspect",
+    about_id: "cmd.inspect",
+    interaction: InteractionKind::NonInteractive,
+    mutation: MutationKind::ReadOnly,
+    declared_bypass: None,
+    declared_dry_run: Some("--dry-run"),
+    expected_interaction: ortho_config::InteractionMode::NonInteractive,
+    expected_mutation: ortho_config::MutationEffect::ReadOnly,
+    expected_bypass: None,
+    expected_dry_run: Some("--dry-run"),
+})]
+fn transform_maps_declared_behaviour(#[case] case: DeclaredBehaviourCase) {
     let metadata = doc(DocSpec {
-        app_name: "inspect",
+        app_name: case.app_name,
         bin_name: None,
-        about_id: "cmd.inspect",
+        about_id: case.about_id,
         fields: Vec::new(),
         subcommands: Vec::new(),
         behaviour: Some(declared_behaviour(
-            InteractionKind::NonInteractive,
-            MutationKind::ReadOnly,
-            None,
-            Some("--dry-run"),
+            case.interaction,
+            case.mutation,
+            case.declared_bypass,
+            case.declared_dry_run,
         )),
     });
 
@@ -305,18 +309,12 @@ fn transform_maps_declared_non_interactive_read_only_behaviour() {
     let command = context
         .commands
         .first()
-        .expect("inspect command should be generated");
+        .expect("command should be generated");
 
-    assert_eq!(
-        command.interaction_mode,
-        ortho_config::InteractionMode::NonInteractive
-    );
-    assert_eq!(
-        command.mutation_effect,
-        ortho_config::MutationEffect::ReadOnly
-    );
-    assert_eq!(command.bypass_flag, None);
-    assert_eq!(command.dry_run_flag.as_deref(), Some("--dry-run"));
+    assert_eq!(command.interaction_mode, case.expected_interaction);
+    assert_eq!(command.mutation_effect, case.expected_mutation);
+    assert_eq!(command.bypass_flag.as_deref(), case.expected_bypass);
+    assert_eq!(command.dry_run_flag.as_deref(), case.expected_dry_run);
 }
 
 #[test]

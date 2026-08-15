@@ -256,15 +256,17 @@ without changing the machine contract.
       "severity": "warn",
       "code": "canonical_flag_missing",
       "message": "Use --json for structured output instead of --format=json.",
-      "file": "Cargo.toml",
-      "range": {
-        "start": {
-          "line": 12,
-          "column": 1
-        },
-        "end": {
-          "line": 12,
-          "column": 20
+      "location": {
+        "file": "Cargo.toml",
+        "range": {
+          "start": {
+            "line": 12,
+            "column": 1
+          },
+          "end": {
+            "line": 12,
+            "column": 20
+          }
         }
       }
     }
@@ -403,6 +405,12 @@ The preferred non-interactive flag is `--no-input`. The preferred destructive
 bypass flag is `--force`. If a project chooses a different convention, it must
 configure that convention once and expose it in agent context.
 
+This is realized in the derive attribute surface as
+`behaviour(interaction = ...)` with the optional `behaviour(bypass = ...)`
+flag, and in agent context as `interaction_mode` plus `bypass_flag`. See
+[ADR-008](adr-008-behavioural-metadata-attribute-surface.md) and the §8.1
+table below for the defaulting and compatibility contract.
+
 ### 6.2 Structured output
 
 Data-returning commands should support `--json`. Structured data belongs on
@@ -495,6 +503,12 @@ Mutating commands should declare whether they are read-only, write, delete, or
 submit asynchronous work. Destructive commands should declare their
 confirmation bypass flag. Consequential commands should declare whether
 `--dry-run` exists.
+
+This is realized in the derive attribute surface as
+`behaviour(mutation = ...)` with the optional `behaviour(dry_run = ...)` flag,
+and in agent context as `mutation_effect` plus `dry_run_flag`. See
+[ADR-008](adr-008-behavioural-metadata-attribute-surface.md) for the attribute
+grammar and the no-inference rule.
 
 Create-like commands should prefer idempotency tokens or natural keys where the
 application domain supports them. OrthoConfig should model and lint the
@@ -638,25 +652,27 @@ forward-looking fields planned for later schema versions. Readers for schema v1
 apply defaults only to realized fields; planned rows record the intended future
 contract and do not imply that those fields exist today.
 
-| Field                  | Default                  | Status  | Rationale                                                                  |
-| ---------------------- | ------------------------ | ------- | -------------------------------------------------------------------------- |
-| `canonical_verb`       | `null`                   | v1      | Legacy command metadata did not classify verbs.                            |
-| `supports_json`        | `false`                  | planned | Structured output must be declared before tools rely on it.                |
-| `json_stdout_contract` | `null`                   | planned | No JSON stream invariant exists until the command opts in.                 |
-| `json_stderr_contract` | `null`                   | planned | Diagnostics remain unspecified for legacy commands.                        |
-| `exit_classes`         | `[]`                     | planned | Exit-code semantics are unavailable unless documented.                     |
-| `interaction_mode`     | `"unknown"`              | v1      | Legacy derives cannot prove whether a command prompts.                     |
-| `mutation_effect`      | `"unknown"`              | v1      | Read/write/delete boundaries must not be inferred from names.              |
-| `pagination`           | `null`                   | v1      | List bounds and cursors require explicit command metadata.                 |
-| `profiles.supported`   | `false`                  | v1      | Profiles are opt-in persistent state.                                      |
-| `delivery_route`       | `null`                   | v1      | Delivery sinks change artefact routing and must be explicit.               |
-| `feedback.supported`   | `false`                  | v1      | Feedback storage or upload must be explicitly available.                   |
-| `execution_ledger`     | `{ "supported": false }` | planned | Jobs, runs, or tasks require application-owned execution state.            |
-| `skill_manifests`      | `[]`                     | v1      | Skill manifests are absent until declared; validation lands in 6.3.2.      |
-| `capability_id`        | `null`                   | planned | Capability routing is optional downstream metadata.                        |
-| `provider_provenance`  | `{ "reported": false }`  | planned | Provider names are not emitted unless the application declares provenance. |
-| `renderer.human`       | `{ "supported": true }`  | planned | Existing documentation IR already supports human help material.            |
-| `renderer.machine`     | `{ "supported": false }` | planned | Machine renderer support must be declared before agents depend on it.      |
+| Field                  | Default                  | Status  | Rationale                                                                   |
+| ---------------------- | ------------------------ | ------- | --------------------------------------------------------------------------- |
+| `canonical_verb`       | `null`                   | v1      | Legacy command metadata did not classify verbs.                             |
+| `supports_json`        | `false`                  | planned | Structured output must be declared before tools rely on it.                 |
+| `json_stdout_contract` | `null`                   | planned | No JSON stream invariant exists until the command opts in.                  |
+| `json_stderr_contract` | `null`                   | planned | Diagnostics remain unspecified for legacy commands.                         |
+| `exit_classes`         | `[]`                     | planned | Exit-code semantics are unavailable unless documented.                      |
+| `interaction_mode`     | `"unknown"`              | v1      | Legacy derives cannot prove whether a command prompts.                      |
+| `mutation_effect`      | `"unknown"`              | v1      | Read/write/delete boundaries must not be inferred from names.               |
+| `bypass_flag`          | `null`                   | v1      | Confirmation/prompt bypass flag declared via `behaviour(...)`; not guessed. |
+| `dry_run_flag`         | `null`                   | v1      | Dry-run flag name declared via `behaviour(...)`; not guessed.               |
+| `pagination`           | `null`                   | v1      | List bounds and cursors require explicit command metadata.                  |
+| `profiles.supported`   | `false`                  | v1      | Profiles are opt-in persistent state.                                       |
+| `delivery_route`       | `null`                   | v1      | Delivery sinks change artefact routing and must be explicit.                |
+| `feedback.supported`   | `false`                  | v1      | Feedback storage or upload must be explicitly available.                    |
+| `execution_ledger`     | `{ "supported": false }` | planned | Jobs, runs, or tasks require application-owned execution state.             |
+| `skill_manifests`      | `[]`                     | v1      | Skill manifests are absent until declared; validation lands in 6.3.2.       |
+| `capability_id`        | `null`                   | planned | Capability routing is optional downstream metadata.                         |
+| `provider_provenance`  | `{ "reported": false }`  | planned | Provider names are not emitted unless the application declares provenance.  |
+| `renderer.human`       | `{ "supported": true }`  | planned | Existing documentation IR already supports human help material.             |
+| `renderer.machine`     | `{ "supported": false }` | planned | Machine renderer support must be declared before agents depend on it.       |
 
 Lint behaviour for omitted metadata follows the selected mode. In `off` mode,
 the check is not run. In `warn` mode, omitted fields that block an agent-native
