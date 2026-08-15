@@ -16,9 +16,22 @@ accepted = [
 
 [patterns]
 ignore = [
-  # Inline code spans quote identifiers (localised_help, set_color) whose
-  # spelling is owned by the code or a third-party API, not the prose.
-  "`[^`\\n]+`",
+  # These code spans name external APIs, identifiers, or deliberate spelling
+  # fixtures. Keep inline-code spelling enabled for every other span.
+  "`--color auto\\|always\\|never`",
+  "`artifact_path`",
+  "`color`",
+  "`behavior`",
+  "`analyzed`",
+  "`env\\(allias = …\\)`",
+  "`#\\[tokio::test\\(flavor = \"current_thread\"\\)\\]`",
+  "`Invoke-ScriptAnalyzer`",
+  "`PSScriptAnalyzer`",
+  "`[^`\\n]*localised_help[^`\\n]*`",
+  "`Artifacts`",
+  "`[^`\\n]*normalises_unicode_identifiers[^`\\n]*`",
+  "`[^`\\n]*cli::tests::localisation[^`\\n]*`",
+  "`skill_manifest_serialises_with_camino_path`",
   "rust-analyzer",
   "GitHub\\s+Flavored\\s+Markdown",
   "## Artifacts and [Nn]otes",

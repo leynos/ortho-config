@@ -329,9 +329,10 @@ project:
   deliberate fixtures in the overlay, then regenerate with
   `uv run scripts/generate_typos_config.py`. See the spelling gate section of
   `docs/developers-guide.md` for details.
-- Quoted APIs and identifiers keep their upstream spelling; put them in
-  backticks or fenced code blocks, which the spelling gate ignores, rather than
-  adding word-level exceptions.
+- Quoted APIs and identifiers keep their upstream spelling. Fenced code blocks
+  are ignored, but inline code is spellchecked. Add a narrowly backtick-bound
+  pattern to `typos.local.toml` for an upstream API or identifier, regenerate,
+  and avoid word-level exceptions.
 - Run `make fmt` after any documentation changes to format all Markdown
   files and fix table markup.
 - Validate Mermaid diagrams in Markdown files by running `make nixie`.
