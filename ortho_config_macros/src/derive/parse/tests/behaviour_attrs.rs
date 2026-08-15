@@ -121,18 +121,6 @@ struct InvalidBehaviourCase {
     "#,
     expected_substring: "unknown behaviour attribute",
 })]
-#[case::non_interactive_with_bypass(InvalidBehaviourCase {
-    source: r#"
-        #[ortho_config(behaviour(
-            interaction = "non_interactive",
-            bypass = "--force"
-        ))]
-        struct Demo {
-            value: u8,
-        }
-    "#,
-    expected_substring: "contradictory behaviour",
-})]
 fn rejects_invalid_behaviour_declarations(#[case] case: InvalidBehaviourCase) -> Result<()> {
     let input: DeriveInput = syn::parse_str(case.source).context("failed to parse test input")?;
     let error = parse_input(&input)
@@ -176,7 +164,27 @@ fn rejects_bad_bypass_grammar(#[case] bypass: &str) -> Result<()> {
 }
 
 #[test]
-fn rejects_non_interactive_with_bypass_split_across_groups() -> Result<()> {
+fn rejects_non_interactive_with_bypass() -> Result<()> {
+    let input: DeriveInput = parse_quote! {
+        #[ortho_config(behaviour(
+            interaction = "non_interactive",
+            bypass = "--force"
+        ))]
+        struct Demo {
+            value: u8,
+        }
+    };
+    let err = parse_input(&input).err().expect("expected rejection");
+    let msg = err.to_string();
+    ensure!(
+        msg.contains("contradictory behaviour"),
+        "unexpected message: {msg}"
+    );
+    Ok(())
+}
+
+#[test]
+fn rejects_non_interactive_with_bypass_across_behaviour_groups() -> Result<()> {
     let input: DeriveInput = parse_quote! {
         #[ortho_config(behaviour(interaction = "non_interactive"))]
         #[ortho_config(behaviour(bypass = "--force"))]
