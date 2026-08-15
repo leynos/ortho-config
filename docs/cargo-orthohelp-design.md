@@ -599,6 +599,14 @@ Crate fingerprints hash `Cargo.toml`, `build.rs` (when present), `src/`, and
 `locales/` so changes to configuration schemas or translations invalidate the
 cache.
 
+Digests are SHA-256 and are rendered as 64 lowercase hexadecimal digits by the
+crate-internal `cargo-orthohelp/src/hex.rs` helper. `sha2` 0.11 returns
+`hybrid_array::Array<u8, _>` from `finalize`, and that type does not implement
+`core::fmt::LowerHex`, so the previous `{:x}` formatting no longer compiles. The
+helper keeps the rendered form byte-for-byte identical to the earlier output, so
+existing cache directories remain addressable. See the digest-rendering section
+of [developers' guide](developers-guide.md) for the helper's re-use policy.
+
 ### 6.3.1 Agent-context pipeline additions
 
 Agent-context generation reuses the same bridge output, then transforms the

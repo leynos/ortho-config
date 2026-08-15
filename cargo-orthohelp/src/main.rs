@@ -13,6 +13,7 @@ mod cache;
 mod cli;
 mod error;
 mod fs_helpers;
+mod hex;
 mod ir;
 mod locale;
 mod metadata;

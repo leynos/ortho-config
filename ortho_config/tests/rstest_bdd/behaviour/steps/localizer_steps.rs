@@ -263,6 +263,11 @@ fn localized_text_includes_argument(context: &LocalizerContext) -> Result<()> {
     })
 }
 
+/// Builds a Fluent localizer over `resources` and installs it into `context`.
+///
+/// Arrangement is fallible, so the builder error propagates to the calling step
+/// rather than panicking here: this helper is not a test, and a failure to build
+/// the localizer is a setup fault the step should report.
 fn install_fluent_localizer(
     context: &LocalizerContext,
     resources: &[&'static str],
