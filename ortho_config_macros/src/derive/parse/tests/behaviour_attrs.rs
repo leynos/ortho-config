@@ -2,6 +2,7 @@
 
 use super::super::*;
 use anyhow::{Context, Result, ensure};
+use rstest::rstest;
 use syn::{DeriveInput, parse_quote};
 
 /// Parse a struct carrying only the given `behaviour(...)` declaration.
@@ -58,130 +59,70 @@ fn parses_partial_behaviour() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn rejects_en_us_spelling_at_struct_level() -> Result<()> {
-    let input: DeriveInput = parse_quote! {
+/// A rejection scenario for invalid `behaviour(...)` declarations.
+struct InvalidBehaviourCase {
+    source: &'static str,
+    expected_substring: &'static str,
+}
+
+#[rstest]
+#[case::behaviour_en_us_spelling(InvalidBehaviourCase {
+    source: r#"
         #[ortho_config(behavior(interaction = "interactive"))]
         struct Demo {
             value: u8,
         }
-    };
-    let err = parse_input(&input).err().expect("expected rejection");
-    let msg = err.to_string();
-    ensure!(
-        msg.contains("en-GB spelling `behaviour`"),
-        "unexpected message: {msg}"
-    );
-    Ok(())
-}
-
-#[test]
-fn rejects_behaviour_at_field_level() -> Result<()> {
-    let input: DeriveInput = parse_quote! {
+    "#,
+    expected_substring: "en-GB spelling `behaviour`",
+})]
+#[case::behaviour_on_field(InvalidBehaviourCase {
+    source: r#"
         #[ortho_config(prefix = "X")]
         struct Demo {
             #[ortho_config(behaviour(mutation = "write"))]
             value: u8,
         }
-    };
-    let err = parse_input(&input).err().expect("expected rejection");
-    let msg = err.to_string();
-    ensure!(
-        msg.contains("struct-level attribute"),
-        "unexpected message: {msg}"
-    );
-    Ok(())
-}
-
-#[test]
-fn rejects_invalid_interaction_value() -> Result<()> {
-    let input: DeriveInput = parse_quote! {
+    "#,
+    expected_substring: "struct-level attribute",
+})]
+#[case::invalid_interaction(InvalidBehaviourCase {
+    source: r#"
         #[ortho_config(behaviour(interaction = "sometimes"))]
         struct Demo {
             value: u8,
         }
-    };
-    let err = parse_input(&input).err().expect("expected rejection");
-    let msg = err.to_string();
-    ensure!(
-        msg.contains("unknown interaction 'sometimes'"),
-        "unexpected message: {msg}"
-    );
-    Ok(())
-}
-
-#[test]
-fn rejects_invalid_mutation_value() -> Result<()> {
-    let input: DeriveInput = parse_quote! {
+    "#,
+    expected_substring: "unknown interaction 'sometimes'",
+})]
+#[case::invalid_mutation(InvalidBehaviourCase {
+    source: r#"
         #[ortho_config(behaviour(mutation = "destroy"))]
         struct Demo {
             value: u8,
         }
-    };
-    let err = parse_input(&input).err().expect("expected rejection");
-    let msg = err.to_string();
-    ensure!(
-        msg.contains("unknown mutation 'destroy'"),
-        "unexpected message: {msg}"
-    );
-    Ok(())
-}
-
-#[test]
-fn rejects_bad_bypass_grammar() -> Result<()> {
-    for bad in ["force", "--Force", "--force!", "--force--", "x --force"] {
-        let input: DeriveInput = parse_quote! {
-            #[ortho_config(behaviour(bypass = "force"))]
-            struct Demo {
-                value: u8,
-            }
-        };
-        let err = parse_input(&input).err().expect("expected rejection");
-        ensure!(
-            err.to_string()
-                .contains("flags must match --[a-z0-9]+(-[a-z0-9]+)*"),
-            "bad bypass value {bad:?} gave: {err}"
-        );
-    }
-    Ok(())
-}
-
-#[test]
-fn rejects_bad_dry_run_grammar() -> Result<()> {
-    let input: DeriveInput = parse_quote! {
+    "#,
+    expected_substring: "unknown mutation 'destroy'",
+})]
+#[case::bad_dry_run(InvalidBehaviourCase {
+    source: r#"
         #[ortho_config(behaviour(dry_run = "dry_run"))]
         struct Demo {
             value: u8,
         }
-    };
-    let err = parse_input(&input).err().expect("expected rejection");
-    ensure!(
-        err.to_string().contains("flags must match"),
-        "unexpected message: {err}"
-    );
-    Ok(())
-}
-
-#[test]
-fn rejects_unknown_nested_key() -> Result<()> {
-    let input: DeriveInput = parse_quote! {
+    "#,
+    expected_substring: "flags must match",
+})]
+#[case::unknown_nested_key(InvalidBehaviourCase {
+    source: r#"
         #[ortho_config(behaviour(interation = "interactive"))]
         struct Demo {
             value: u8,
         }
-    };
-    let err = parse_input(&input).err().expect("expected rejection");
-    let msg = err.to_string();
-    ensure!(
-        msg.contains("unknown behaviour attribute"),
-        "unexpected message: {msg}"
-    );
-    Ok(())
-}
-
-#[test]
-fn rejects_non_interactive_with_bypass() -> Result<()> {
-    let input: DeriveInput = parse_quote! {
+    "#,
+    expected_substring: "unknown behaviour attribute",
+})]
+#[case::non_interactive_with_bypass(InvalidBehaviourCase {
+    source: r#"
         #[ortho_config(behaviour(
             interaction = "non_interactive",
             bypass = "--force"
@@ -189,12 +130,47 @@ fn rejects_non_interactive_with_bypass() -> Result<()> {
         struct Demo {
             value: u8,
         }
-    };
-    let err = parse_input(&input).err().expect("expected rejection");
-    let msg = err.to_string();
+    "#,
+    expected_substring: "contradictory behaviour",
+})]
+fn rejects_invalid_behaviour_declarations(#[case] case: InvalidBehaviourCase) -> Result<()> {
+    let input: DeriveInput = syn::parse_str(case.source).context("failed to parse test input")?;
+    let error = parse_input(&input)
+        .err()
+        .ok_or_else(|| anyhow::anyhow!("expected rejection; source: {}", case.source))?;
+    let message = error.to_string();
     ensure!(
-        msg.contains("contradictory behaviour"),
-        "unexpected message: {msg}"
+        message.contains(case.expected_substring),
+        "expected substring {:?} not found in: {message}",
+        case.expected_substring
+    );
+    Ok(())
+}
+
+#[rstest]
+#[case("force")]
+#[case("--Force")]
+#[case("--force!")]
+#[case("--force--")]
+#[case("x --force")]
+fn rejects_bad_bypass_grammar(#[case] bypass: &str) -> Result<()> {
+    let source = format!(
+        r#"
+        #[ortho_config(behaviour(bypass = "{bypass}"))]
+        struct Demo {{
+            value: u8,
+        }}
+        "#
+    );
+    let input: DeriveInput = syn::parse_str(&source).context("failed to parse test input")?;
+    let error = parse_input(&input).err().ok_or_else(|| {
+        anyhow::anyhow!("expected rejection for bypass {bypass:?}; source: {source}")
+    })?;
+    ensure!(
+        error
+            .to_string()
+            .contains("flags must match --[a-z0-9]+(-[a-z0-9]+)*"),
+        "bad bypass value {bypass:?} gave: {error}"
     );
     Ok(())
 }
