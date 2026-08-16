@@ -7,9 +7,10 @@ mod documentation_examples;
 mod process_runner;
 
 use anyhow::{Context, Result, ensure};
+use camino::Utf8PathBuf;
 use cap_std::{ambient_authority, fs::Dir};
 use documentation_examples::{documented_example, load_documented_examples};
-use ortho_config::{AgentContext, toml};
+use ortho_config::{AgentContext, cargo::external_subcommand, toml};
 use process_runner::Operation;
 use std::collections::BTreeSet;
 use tempfile::TempDir;
@@ -47,7 +48,7 @@ const EXPECTED_EXAMPLE_IDS: &[&str] = &[
 
 #[test]
 fn published_crate_readme_matches_repository_readme() -> Result<()> {
-    let repository = Dir::open_ambient_dir(repository_root(), ambient_authority())?;
+    let repository = Dir::open_ambient_dir(repository_root().as_std_path(), ambient_authority())?;
     let repository_readme = repository.read_to_string("README.md")?;
     let crate_readme = repository.read_to_string("ortho_config/README.md")?;
     ensure!(
@@ -75,6 +76,35 @@ fn every_documented_fence_has_a_known_unique_identifier() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn documented_cargo_external_subcommand_parses_both_invocation_forms() -> Result<()> {
+    let example = documented_example("guide-cargo-external-subcommand")?;
+    ensure!(example.language == "rust");
+    ensure!(example.body.contains("clap::ArgAction::SetTrue"));
+
+    for argv in [
+        ["cargo-demo", "demo", "--verbose"],
+        ["./target/debug/cargo-demo", "demo", "--verbose"],
+    ] {
+        let args_command = clap::Command::new("demo").arg(
+            clap::Arg::new("verbose")
+                .long("verbose")
+                .action(clap::ArgAction::SetTrue),
+        );
+        let matches = external_subcommand("cargo-demo", "demo", args_command)
+            .try_get_matches_from(argv)
+            .context("documented Cargo invocation should parse")?;
+        let demo = matches
+            .subcommand_matches("demo")
+            .context("documented wrapper should capture the demo subcommand")?;
+        ensure!(
+            demo.get_flag("verbose"),
+            "documented invocation should set the verbose flag"
+        );
+    }
+
+    Ok(())
+}
 #[test]
 fn installation_manifests_select_the_documented_release() -> Result<()> {
     let readme = parse_toml("readme-install")?;
@@ -188,7 +218,9 @@ fn documented_orthohelp_command_generates_agent_context() -> Result<()> {
 
     let output_directory = TempDir::new().context("create orthohelp output directory")?;
     let cargo_state = TempDir::new().context("create isolated Cargo state directory")?;
-    let mut command = cargo_runner::prepare_cargo_command(&repository_root(), cargo_state.path())?;
+    let repository_root = repository_root();
+    let mut command =
+        cargo_runner::prepare_cargo_command(repository_root.as_std_path(), cargo_state.path())?;
     command
         .args([
             "run",
@@ -252,8 +284,8 @@ fn assert_dependency_version(manifest: &toml::Value, name: &str, version: &str) 
     Ok(())
 }
 
-fn repository_root() -> std::path::PathBuf {
-    std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("..")
+fn repository_root() -> Utf8PathBuf {
+    Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..")
 }
 
 fn serde_json_value_as_str(value: &ortho_config::serde_json::Value) -> Option<&str> {

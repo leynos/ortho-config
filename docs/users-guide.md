@@ -417,6 +417,9 @@ environment values. Because `ParseOnlyArgs` does not derive `OrthoConfig`, it
 has no `load_and_merge` or source-aware merge API. Use the `OrthoConfig`-derived
 `ServeConfig` above when a command needs configuration layering.
 
+For a hand-built Cargo external-subcommand parser, see the
+[Cargo external-subcommand entry points](#cargo-external-subcommand-entry-points)
+section.
 
 ## Cargo external-subcommand entry points
 

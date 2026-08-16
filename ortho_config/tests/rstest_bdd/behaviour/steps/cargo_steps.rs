@@ -61,6 +61,14 @@ impl FromStr for InstalledBinaryName {
             installed_binary.starts_with("cargo-"),
             "installed binary {installed_binary:?} lacks the cargo- prefix"
         );
+        ensure!(
+            installed_binary != "cargo-",
+            "installed binary {installed_binary:?} has an empty subcommand"
+        );
+        ensure!(
+            installed_binary != "cargo-help",
+            "installed binary {installed_binary:?} uses clap's reserved help subcommand"
+        );
         Ok(Self(installed_binary))
     }
 }

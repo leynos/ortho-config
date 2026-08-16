@@ -76,7 +76,11 @@ Wrap the existing command at the entry-point boundary:
 use ortho_config::cargo::external_subcommand;
 
 let args_command = clap::Command::new("demo")
-    .arg(clap::Arg::new("verbose").long("verbose"));
+    .arg(
+        clap::Arg::new("verbose")
+            .long("verbose")
+            .action(clap::ArgAction::SetTrue),
+    );
 let cli = external_subcommand("cargo-demo", "demo", args_command);
 let matches = cli
     .try_get_matches_from(["cargo-demo", "demo", "--verbose"])
@@ -84,7 +88,7 @@ let matches = cli
 let demo = matches
     .subcommand_matches("demo")
     .expect("the wrapped command requires the subcommand");
-assert!(demo.contains_id("verbose"));
+assert!(demo.get_flag("verbose"));
 ```
 
 The returned command accepts both Cargo dispatch and direct invocation with the
