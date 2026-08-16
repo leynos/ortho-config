@@ -5,8 +5,8 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
 proceeds.
 
-Status: COMPLETE (all milestones delivered 2026-08-09; PR #419 ready for
-review)
+Status: COMPLETE (implementation, documentation, and review follow-ups
+delivered through 2026-08-16; PR #419 ready for review)
 
 ## Purpose / big picture
 
@@ -199,6 +199,18 @@ Stop and escalate (do not work around) when any of these is reached.
       clean completion in this environment since the 11.1.x stalls); roadmap
       8.3.1 marked done with the D-2 annotation per Risk 5; final gates
       green; PR ready for review.
+- [x] (2026-08-12) Review follow-up: six CodeRabbit findings were addressed
+      in commit `2685895`, covering the reserved `help` name, stable error
+      snapshotting, spelling, the workspace introduction, the `display_name`
+      constraint, and the Markdown-formatting gate.
+- [x] (2026-08-12) Executable-documentation follow-up: commit `11f3300`
+      typed Cargo BDD captures at their boundary, added the v0.10.0 migration
+      guide and README/contents signposts, and restored package-README parity.
+- [x] (2026-08-16) Final review verification: preserved the completed roadmap
+      item and applied only still-valid follow-ups: boolean-flag documentation,
+      slash-safe gate logs, the v0.9.0 workspace record, the users'-guide
+      cross-reference, stricter BDD installed-binary validation, and direct
+      executable documentation coverage of both supported argv forms.
 
 Each milestone ends with the gates run sequentially (never in parallel,
 because the environment relies on build caching) and a commit. Prefer
@@ -301,6 +313,19 @@ under `/tmp` and returns a bounded report.
   Impact: this matches the developers' guide's isolation guidance for
   fixture-specific step modules; Milestone 2's developers'-guide wording
   should describe the state as shipped.
+- Observation (review follow-up, 2026-08-12): raw rstest-bdd captures allowed
+  command names, flags, installed binary names, and argument lists to lose
+  their meaning between parsing and use. `cargo_steps.rs` now validates and
+  normalizes those captures into private boundary types, deriving the
+  subcommand name from the validated installed binary name.
+  Impact: the BDD state preserves each capture's role without repeated
+  normalization, while the production helper and its public API remain
+  unchanged.
+- Observation (final review, 2026-08-16): `cargo-` has no subcommand and
+  `cargo-help` conflicts with clap's built-in help subcommand. The BDD capture
+  boundary now rejects both before deriving `CargoSubcommandName`.
+  Impact: invalid feature fixtures fail at their capture boundary rather than
+  reaching command construction; production behaviour is unchanged.
 
 ## Decision log
 
@@ -451,6 +476,24 @@ under `/tmp` and returns a bounded report.
   without disturbing `external_subcommand`. Date/Author: 2026-08-06, panel
   review (alternatives lens).
 
+- Decision (D-10): **Validate Cargo BDD captures at the step boundary with
+  private newtypes.** `CommandName`, `LongFlagName`, `InstalledBinaryName`,
+  `CargoSubcommandName`, and `CargoArguments` implement `FromStr` in the test
+  step module; normalization and prefix validation happen once before values
+  enter `CargoContext`. Rationale: typed captures prevent a command name,
+  option name, binary name, or argument list from being accidentally reused in
+  the wrong role, and keep the production helper free of test-only parsing
+  concerns. The types are deliberately local to the BDD fixture and are not a
+  general crate abstraction. Date/Author: 2026-08-12, review follow-up.
+
+- Decision (D-11): **Keep executable documentation checks at the documented
+  public boundary.** The `guide-cargo-external-subcommand` fence is loaded by
+  its marker and exercised with Cargo-dispatched and direct argv forms, in
+  addition to the existing wrapper-definition tests. Rationale: registry
+  membership alone cannot prove that the documented parser contract remains
+  usable. Repository-root handling remains UTF-8 (`Utf8PathBuf`) until the two
+  standard-path API boundaries. Date/Author: 2026-08-16, final review.
+
 ## Outcomes & retrospective
 
 Delivered: `ortho_config::cargo::external_subcommand` ships in the crate with
@@ -469,10 +512,9 @@ What went well:
   green with tests and implementation together.
 - The `scrutineer` delegation kept full gate output out of the planning
   context; every milestone gate run came back green on the first attempt.
-- CodeRabbit completed clean on the first 8.3.1 attempt — 0 findings across
-  17 files, no `preparing_sandbox` stall and no rate limit — the first clean
-  completion recorded in this environment since the 11.1.x stalls, so Risk 4
-  did not materialize.
+- CodeRabbit's first 8.3.1 review returned six findings. They were addressed
+  in commit `2685895`; no review finding remains unaddressed in the current
+  branch.
 - The `scribe` delegation for the Milestone 2 doc sweep produced all four
   edits to the Stage C brief, accepted unchanged after review, and every
   Markdown gate passed on the first run.
@@ -505,7 +547,7 @@ Deferred to follow-up items (all recorded in the plan body):
 ## Context and orientation
 
 The `ortho_config` workspace uses Rust edition 2024 and workspace version
-0.8.0. Workspace members: `ortho_config` (the library),
+0.9.0. Workspace members: `ortho_config` (the library),
 `ortho_config_macros`, `cargo-orthohelp` (the reference CLI binary),
 `examples/hello_world`, `test_helpers`, and
 `tests/fixtures/orthohelp_fixture`. The gates are `make check-fmt`,
@@ -789,7 +831,8 @@ recorded in `Artefacts`.
    snippet mirroring `exit_for_clap_error` and `write_augmented_clap_error`
    from `cargo-orthohelp/src/main.rs`, and the tracing expectation per
    ADR-004 (D-4). Add a one-line cross-reference from the existing
-   "Subcommand configuration" section, where Cargo-tool authors will look
+   "Give each subcommand its own settings" section, where Cargo-tool authors
+   will look
    first. The README now signposts the shipped helper; full derive-template
    examples remain deferred to 8.3.2.
 2. `docs/design.md` §4.17: update the code sketch to the shipped shape
@@ -831,10 +874,12 @@ Run from the worktree root. Use `tee` so truncated output stays reviewable:
 
 ```bash
 # Gate template (run each sequentially, never in parallel):
-make check-fmt 2>&1 | tee "/tmp/check-fmt-ortho-config-$(git branch --show-current).out"
-make typecheck 2>&1 | tee "/tmp/typecheck-ortho-config-$(git branch --show-current).out"
-make lint      2>&1 | tee "/tmp/lint-ortho-config-$(git branch --show-current).out"
-make test      2>&1 | tee "/tmp/test-ortho-config-$(git branch --show-current).out"
+set -euo pipefail
+BRANCH_SLUG="$(git branch --show-current | sed 's/[^[:alnum:]_.-]/_/g')"
+make check-fmt 2>&1 | tee "/tmp/check-fmt-ortho-config-${BRANCH_SLUG}.out"
+make typecheck 2>&1 | tee "/tmp/typecheck-ortho-config-${BRANCH_SLUG}.out"
+make lint      2>&1 | tee "/tmp/lint-ortho-config-${BRANCH_SLUG}.out"
+make test      2>&1 | tee "/tmp/test-ortho-config-${BRANCH_SLUG}.out"
 ```
 
 Focused runs during red/green:

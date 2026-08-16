@@ -302,6 +302,10 @@ entry point small. Add `#[ortho_config(cli_default_as_absent)]` to a field when
 a `clap` default should not override a value supplied by a file or environment
 variable.
 
+For a hand-built Cargo external-subcommand parser, see the
+[Cargo external-subcommand entry points](#cargo-external-subcommand-entry-points)
+section.
+
 ## Cargo external-subcommand entry points
 
 Cargo runs `cargo <name> [OPTIONS]` by locating a binary named `cargo-<name>`
