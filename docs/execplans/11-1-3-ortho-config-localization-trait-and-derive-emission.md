@@ -32,20 +32,28 @@ After this change:
   panicking at runtime. This discharges (for derived argument identifiers) the
   derive-time guard promised in ADR-006.
 - The documentation intermediate representation (IR) emitted by the derive
-  (`OrthoConfigDocs::get_doc_metadata`) reports the same identifiers as the
-  localization trait for the deriving struct's own arguments, so the docs
-  pipeline, the runtime localizer, and application code agree byte-for-byte.
-- When explicitly requested, the derive emits a build-time inventory of every
-  generated identifier at `${OUT_DIR}/ortho-config/cli-identifiers.json` (split
-  across capped files for large trees) for consumption by `cargo-orthohelp` and
-  translator tooling.
+  (`OrthoConfigDocs::get_doc_metadata`) reports root defaults equal to the
+  localization trait constants and nested command/argument defaults equal to
+  the runtime ids for their mounted command paths. The docs pipeline and
+  runtime localizer therefore agree byte-for-byte for every field represented in
+  `ARG_IDS` throughout a derive-generated tree. Docs-only, `skip_cli`, and
+  flattened fields have no corresponding runtime argument id and retain their
+  existing docs identifier defaults.
+- When explicitly requested, the derive emits a build-time declaration and
+  source-span inventory at `${OUT_DIR}/ortho-config/cli-identifiers.json`
+  (split across capped files for large crates). Entries are explicitly marked
+  as standalone per-struct identifiers; future `cargo-orthohelp` translator
+  tooling combines those spans with the path-aware compiled docs IR rather than
+  treating the JSON alone as a mounted-tree inventory (Decision D-3).
 
 Observable success: the fixture and example crates compile with derived
 identifier constants; `ortho_config/tests/localized_parse.rs` proves the
 derived constants match `message_id_for` output over a real
 `#[derive(OrthoConfig)]` tree; a trybuild compile-fail test shows the collision
 diagnostic; and an end-to-end test drives `cargo build` on a fixture crate and
-inspects the emitted JSON artefact.
+inspects the emitted JSON artefact. The nested docs fixture proves that root,
+first-level, second-level, and renamed-subcommand ids match the runtime-mounted
+paths.
 
 This is roadmap item 11.1.3 (`docs/roadmap.md`, "Promote and widen the CLI
 localization surface"). The governing design is
@@ -72,6 +80,11 @@ review's findings are folded into the Decision Log and milestones below.
 - The runtime localization surface shipped by 11.1.1 and 11.1.2
   (`LocalizeCmd`, `LocalizedParse`, `parse_localized_command`,
   `message_id_for`) must remain source-compatible. Additive changes only.
+- The existing `OrthoConfigDocs::get_doc_metadata` and
+  `OrthoConfigSubcommandDocs::get_subcommand_doc_metadata` signatures remain
+  intact. Milestone 4 may add provided, path-aware methods to those traits and
+  override them in derive-generated implementations (Decision D-9); changing or
+  removing the existing entry points is not authorized.
 - The derive must not write to the filesystem during ambient builds. Artefact
   emission is opt-in (Decision D-3): it requires both `OUT_DIR` to be present
   and an explicit environment opt-in. Unconditional proc-macro filesystem
@@ -94,12 +107,12 @@ review's findings are folded into the Decision Log and milestones below.
   documentation) requires changes to more than 25 files or more than ~2,500 net
   lines, stop and escalate.
 - Interface: if any *existing* public API signature must change (as opposed
-  to additive surface), stop and escalate. The docs IR content change in
-  Milestone 4 is pre-authorized by this plan (Decision D-2 as narrowed by D-9):
-  only the *values* of existing identifier-valued fields for the deriving
-  struct's own metadata, plus the IR version string, may change. Any change to
-  field semantics (for example `CliMetadata.value_name`, which is display text,
-  not an identifier) is out of bounds.
+  to the additive, provided path-aware methods authorized by D-9), stop and
+  escalate. The docs IR content change in Milestone 4 is pre-authorized by this
+  plan: only the *values* of existing identifier-valued fields throughout a
+  derive-generated command tree, plus the IR version string, may change. Any
+  change to field semantics (for example `CliMetadata.value_name`, which is
+  display text, not an identifier) is out of bounds.
 - Dependencies: adding `serde`/`serde_json` as unconditional dependencies of
   `ortho_config_macros`, and `ortho_config` as a *dev*-dependency of
   `ortho_config_macros`, are pre-authorized. Any other new external dependency:
@@ -134,6 +147,26 @@ review's findings are folded into the Decision Log and milestones below.
   Mitigation: bump `ORTHO_DOCS_IR_VERSION` to "2.0" (Decision D-2), update all
   pinned snapshots in one commit, and write a migration note in `CHANGELOG.md`
   and the users' guide mapping old id shapes to new.
+- Risk: recursive docs generation loses, duplicates, or misorders a command
+  path, yielding identifiers that are syntactically canonical but do not match
+  the runtime walker's lookups. Severity: high. Likelihood: medium. Mitigation:
+  make the accumulated command path an explicit parameter of the generated docs
+  methods; append the clap-resolved variant label exactly once in
+  `OrthoConfigSubcommandDocs`; and lock root, first-level, second-level, and
+  renamed-variant paths against `message_id_for` and the recording localizer.
+- Risk: handwritten implementations of the docs traits inherit the provided
+  path-aware fallback and therefore retain their existing context-free metadata
+  rather than gaining derive-only path rewriting. Severity: low. Likelihood:
+  low. Mitigation: state that Milestone 4 guarantees path-aware identifiers for
+  derive-generated trees, document how handwritten impls can override the new
+  method, and add a compatibility test proving their existing methods continue
+  to compile and return unchanged metadata.
+- Risk: a future tool mistakes the build-time JSON's standalone per-struct ids
+  for mounted command-tree ids. Severity: high. Likelihood: medium. Mitigation:
+  include `path_scope: "standalone"` in every entry, describe the limitation in
+  ADR-008 and the schema documentation, and require roadmap 11.5.2 to obtain
+  mounted ids from the path-aware compiled docs IR before exposing translator
+  output.
 - Risk: artefact emission interacts badly with incremental compilation —
   the opt-in environment variable is invisible to Cargo's rebuild fingerprint,
   so setting it against a warm `target/` re-expands nothing and writes nothing;
@@ -156,29 +189,27 @@ review's findings are folded into the Decision Log and milestones below.
 
 ## Progress
 
-> PENDING DECISION (Milestone 4, Ambiguity tolerance): the pinned mapping table
-> says `FieldMetadata.help_id`/`long_help_id` defaults become the canonical
-> per-argument values, while D-9 says subcommand IR ids keep their current
-> shape. Subcommand payload structs (e.g. `RunArgs`, `NestedAuditArgs`,
-> `GreetCommand`) derive docs through the *same* `build_field` path, so
-> canonicalizing field help ids would change `dry_run.help_id` from
-> `audit.fields.dry_run.help` to a canonical base-joined id — a subcommand
-> metadata diff that `nested_docs_ir.rs` pins. The docs derive cannot
-> distinguish a root struct from a subcommand payload at expansion time.
-> Evidence: `ortho_config/tests/nested_docs_ir.rs`
-> `nested_admin_audit_has_inherited_fluent_id_pattern`,
-> `ortho_config/tests/docs_ir_subcommands.rs`, and the cargo-orthohelp
-> agent-context goldens. Resolution options are recorded below the Progress
-> section; implementation is paused pending direction.
+> DECISION RESOLVED (2026-08-17): the user selected the path-aware redesign.
+> Milestone 4 will pass the accumulated command path through derive-generated
+> docs methods, append clap-resolved subcommand labels during recursion, and
+> derive every non-overridden identifier from that mounted path. Reading A was
+> rejected because root versus payload is a use-site property and a marker
+> would drift; dropping field reconciliation would miss the milestone's core
+> outcome. Reading B was rejected because a payload's standalone base can
+> produce a canonical-looking id that differs from the runtime-mounted path.
+> Decision D-9 and the Milestone 4 acceptance criteria now encode the approved
+> redesign; implementation may resume.
 
 - [x] Milestone 0: baseline gates and orientation.
-  Baseline gates green on branch tip 66b3bf2: `make check-fmt`, `make typecheck`,
-  `make lint` (rustdoc + clippy -D warnings + Whitaker), and `make test` (all
-  workspace targets, Python suite 106 passed / 1 skipped). The Whitaker suite is
-  green on this baseline (no outside-diff failures to quarantine). Verification
-  findings for `usage`-per-node and flatten handling are recorded above.
+  Baseline gates green on branch tip 66b3bf2: `make check-fmt`,
+  `make typecheck`, `make lint` (rustdoc + clippy -D warnings + Whitaker), and
+  `make test` (all workspace targets, Python suite 106 passed / 1 skipped). The
+  Whitaker suite is green on this baseline (no outside-diff failures to
+  quarantine). Verification findings for `usage`-per-node and flatten handling
+  are recorded above.
 - [x] Milestone 1: `OrthoConfigLocalization` trait in `ortho_config`.
-  - `ortho_config/src/localizer/localization_ids.rs` defines `ArgLocalizationIds`
+  - `ortho_config/src/localizer/localization_ids.rs` defines
+    `ArgLocalizationIds`
     and `OrthoConfigLocalization` (D-7 surface), re-exported at the crate root and
     from `localizer::`.
   - Unit tests assert the constants agree with `message_id_for` and round-trip
@@ -190,7 +221,8 @@ review's findings are folded into the Decision Log and milestones below.
     with the `NORMALIZATION-RULES-VERSION` twin gate, the dev-dependency cycle,
     `clap_field_is_flattened` detection (D-12) and `localization_base` parsing
     plus `localized_default` rejection (D-4).
-  - Derive emission of `OrthoConfigLocalization` is wired in (`emit_localization_impl`),
+  - Derive emission of `OrthoConfigLocalization` is wired in
+    (`emit_localization_impl`),
     so the model is consumed by production code (Milestone 3 fold-in): this
     avoids a dead-code stage while making all existing derive consumers emit
     compiled constants (verified by the full workspace test suite).
@@ -239,7 +271,8 @@ review's findings are folded into the Decision Log and milestones below.
     `OrthoConfig` simultaneously without conflict (verified empirically).
   - CodeRabbit (`coderabbit review --agent --base-commit 40e5aa6`): 0
     findings across the 6 changed files.
-- [ ] Milestone 4: docs IR delegation to the localization identifiers.
+- [ ] Milestone 4: path-aware docs IR delegation to the localization
+  identifiers (redesign approved 2026-08-17).
 - [ ] Milestone 5: opt-in build-time identifier artefact.
 - [ ] Milestone 6: documentation, ADR-008, roadmap completion, final gates.
 
@@ -278,9 +311,10 @@ review's findings are folded into the Decision Log and milestones below.
   `SubcommandDocs` derive with no knowledge of the parent command path, so
   path-dependent canonical ids for subcommand arguments cannot be produced
   context-free. Evidence: `ortho_config_macros/src/derive/generate/docs/mod.rs`
-  delegates to `<SubTy>::get_subcommand_doc_metadata()`. Impact: Decision D-9
-  scopes subcommand IR ids out of this task's reconciliation and records the
-  follow-up.
+  delegates to `<SubTy>::get_subcommand_doc_metadata()`. Impact: the original
+  D-9 scoped subcommand IR ids out, but the accepted 2026-08-17 revision now
+  adds path-aware generated methods and carries the parent path through this
+  delegation.
 - Observation (Milestone 0): `apply_command_metadata` requests every
   command-level suffix — `about`, `long_about`, `usage`, `version`,
   `long_version`, `after_help`, and `after_long_help` — for *every* node in the
@@ -305,8 +339,8 @@ review's findings are folded into the Decision Log and milestones below.
   rather than expanded into its constituent arguments. No workspace struct that
   derives `OrthoConfig` currently uses flatten (the only flatten uses —
   `CommandLine` in `examples/hello_world` and `FlatArgs` in the rstest-bdd
-  fixtures — derive `Parser`/`Args` only, not `OrthoConfig`). Impact: for
-  D-12 the derive must add explicit flatten *detection* (mirroring
+  fixtures — derive `Parser`/`Args` only, not `OrthoConfig`). Impact: for D-12
+  the derive must add explicit flatten *detection* (mirroring
   `clap_field_is_subcommand`) and exclude those fields from `ARG_IDS`; there is
   no existing flatten semantics to preserve, and no current consumer regresses.
 
@@ -321,9 +355,20 @@ review's findings are folded into the Decision Log and milestones below.
   `ARG_IDS = [config]` (flatten `extra` excluded by `clap_field_is_flattened`)
   while the walker recorded `probe-args-extra-help`/`long_help`/`value_name`
   plus the full subcommand-node set. This confirms the D-12 subset contract is
-  achievable *with a genuine derive* on a tree that has both a subcommand and
-  a flattened group, so the Milestone 3 fixture does not need the handwritten
+  achievable *with a genuine derive* on a tree that has both a subcommand and a
+  flattened group, so the Milestone 3 fixture does not need the handwritten
   impl fallback.
+- Observation (Milestone 4): canonicalizing every deriving struct from its own
+  `localization_base` does not canonicalize a mounted command tree. For
+  example, a standalone payload base can yield `audit-args-dry_run-help`, while
+  the runtime walker mounted below the root requests
+  `nested-app-admin-audit-args-dry_run-help`. The existing
+  `OrthoConfigSubcommandDocs` implementation obtains already-materialized
+  payload metadata and then overwrites only `app_name` and `about_id`; at that
+  point it cannot distinguish defaults from explicit field overrides. Impact:
+  the command path must be threaded into metadata construction before field ids
+  are materialized. This resolved the Ambiguity tolerance through revised
+  Decision D-9 rather than by changing pinned assertions alone.
 
 ## Decision log
 
@@ -338,42 +383,51 @@ contracts, alternatives, scaling, failure modes, viability).
   impls under coherence rules, and `get_doc_metadata` requires per-field data
   that associated constants cannot supply (`OrthoConfigDocs` has no constants
   today; it is a single-method trait). Instead, the derive's docs generator
-  populates identifier defaults from the same generation pass that produces the
-  trait constants, guaranteeing agreement by construction. The roadmap intent
-  ("the docs IR picks up the same identifiers") is met exactly. Milestone 6
-  amends the stale blanket-impl sentence in design §8.1 as well as §8.2.
-  Date/Author: 2026-08-06, planning session.
-- Decision D-2: the docs IR identifier values for the deriving struct's own
-  metadata change from the dotted `{app}.fields.{field}.help` form to the
-  canonical `message_id_for` form (`{app}-args-{field}-help`), and
-  `ORTHO_DOCS_IR_VERSION` bumps from "1.1" to "2.0". Explicit `help_id`/
-  `long_help_id`/`about_id` attribute overrides keep working unchanged.
-  Rationale: two identifier conventions for the same strings is precisely the
-  defect this roadmap item exists to remove. The bump is to "2.0", not "1.2":
-  existing id values change meaning for consumers keyed on the old shapes,
-  which is a major-flavoured change and the version string should say so. Scope
-  is narrowed by D-9 (subcommand metadata is untouched) and the mapping is
-  pinned by the Milestone 4 table. Date/Author: 2026-08-06, planning session;
-  revised same day after review.
+  emits delegation that uses the same identifier rules as the localization
+  model. For standalone metadata it starts from `LOCALIZATION_BASE`; for
+  mounted subcommands it uses the accumulated path supplied by D-9. The roadmap
+  intent ("the docs IR picks up the same identifiers") is met without a
+  conflicting blanket implementation. Milestone 6 amends the stale blanket-impl
+  sentence in design §8.1 as well as §8.2. Date/Author: 2026-08-06, planning
+  session; revised 2026-08-17 after the Milestone 4 ambiguity decision.
+- Decision D-2: command identifiers and localization-eligible field identifiers
+  throughout a derive-generated command tree change from the dotted
+  `{app}.fields.{field}.help` form to the canonical `message_id_for` form
+  (`{mounted-path}-args-{field}-help`), and `ORTHO_DOCS_IR_VERSION` bumps from
+  "1.1" to "2.0". Explicit `help_id`/ `long_help_id`/`about_id`/`synopsis_id`
+  attribute overrides keep working unchanged. Rationale: two identifier
+  conventions for the same strings is precisely the defect this roadmap item
+  exists to remove. The bump is to "2.0", not "1.2": existing id values change
+  meaning for consumers keyed on the old shapes, which is a major-flavoured
+  change and the version string should say so. Decision D-9 defines how nested
+  metadata obtains the mounted command path, and the mapping is pinned by the
+  Milestone 4 table. Fields excluded from `ARG_IDS` by `skip_cli` or flatten
+  handling have no runtime localization id to delegate to and retain their
+  existing docs defaults. Date/Author: 2026-08-06, planning session; revised
+  2026-08-17 after the Milestone 4 ambiguity decision.
 - Decision D-3: the `${OUT_DIR}/ortho-config/cli-identifiers.json` artefact
   is emitted only when both (a) `OUT_DIR` is present in the environment at
   expansion time and (b) `ORTHO_CONFIG_EMIT_IDENTIFIERS` is set to exactly `1`.
   Any other value (including `0`, empty, or unset) disables emission. Ambient
-  `cargo build`/`cargo check`/rust-analyzer runs never write. The authoritative
-  consumption path for `cargo-orthohelp` (§11 of the design, a later roadmap
-  item) is the compiled-in constants via its existing bridge shim; the JSON
-  artefact exists because span data is only available at expansion time and
-  translators need it. The artefact schema is *provisional until its first
-  consumer lands (roadmap 11.5.x)*; a consumer may force a schema revision,
-  which the `schema_version` envelope (D-11) makes cheap. Rationale: prior art
-  (sqlx's `cargo sqlx prepare` gating, uniffi's extract-from-binary model) and
-  Cargo team guidance both reject ambient proc-macro writes; an env-gated write
-  neutralizes the docs.rs, rust-analyzer, and expansion-cache failure modes
-  while still honouring the design document's artefact contract. Recorded as
-  ADR-008 in Milestone 6, together with the guidance that the variable is set
-  per-invocation and never exported in shell profiles or CI-wide environment
-  blocks. Date/Author: 2026-08-06, planning session; revised same day after
-  review.
+  `cargo build`/`cargo check`/rust-analyzer runs never write. A proc-macro
+  expansion knows a struct's standalone base but not every parent path where
+  that type may be mounted. Each JSON entry therefore carries
+  `path_scope: "standalone"`; it is a declaration and source-span inventory,
+  not an authoritative mounted-tree inventory. The authoritative consumption
+  path for future `cargo-orthohelp` translator tooling (§11 of the design) is
+  the path-aware compiled docs IR through the existing bridge, joined to JSON
+  entries for source spans. The artefact schema is *provisional until its first
+  consumer lands (roadmap 11.5.x)*; that consumer may add the stable join key
+  or relationship data its implementation proves necessary. The
+  `schema_version` envelope (D-11) makes this revision explicit. Rationale:
+  prior art (sqlx's `cargo sqlx prepare` gating, uniffi's extract-from-binary
+  model) and Cargo team guidance both reject ambient proc-macro writes; an
+  env-gated write neutralizes the docs.rs, rust-analyzer, and expansion-cache
+  failure modes while still honouring the design document's artefact contract.
+  Recorded as ADR-008 in Milestone 6, together with the guidance that the
+  variable is set per-invocation and never exported in shell profiles or
+  CI-wide environment blocks. Date/Author: 2026-08-06, planning session;
+  revised 2026-08-17 after D-9 made mounted docs identifiers path-aware.
 - Decision D-4: `localized_default` embedding (design §8.2, second bullet)
   is out of scope. The roadmap checklist for 11.1.3 does not include it; the
   artefact schema reserves an `embedded_default` field that this task always
@@ -434,25 +488,37 @@ contracts, alternatives, scaling, failure modes, viability).
   `#[doc(hidden)] pub` re-export from the macro crate is impossible —
   `proc-macro = true` crates may only export macros — and is withdrawn.
   Date/Author: 2026-08-06, post-review revision.
-- Decision D-9: subcommand docs IR identifiers are out of scope for the
-  Milestone 4 reconciliation. The `SubcommandDocs` derive generates metadata
-  context-free and cannot know the parent command path that the canonical §4.1
-  subcommand-argument id requires. Subcommand IR ids keep their current shape
-  in IR "2.0"; the parent struct's own metadata is reconciled. The residual
-  split brain for subcommand metadata is recorded in the design document and as
-  a proposed follow-up roadmap item (path-aware subcommand identifier
-  delegation) when ticking 11.1.3. Equally, derive-time collision detection
-  covers argument identifiers within one deriving struct;
-  sibling-subcommand-name collisions remain a runtime panic per ADR-006, and
-  the ADR-006 amendment must say precisely that rather than overclaiming.
-  Date/Author: 2026-08-06, post-review revision.
-- Decision D-10: the docs generator emits identifier *literals* (produced
-  by the same Milestone 2 pass), not references to
-  `<Self as OrthoConfigLocalization>` constants. Rationale: per-argument
-  constant references would require const slice indexing (denied lint, awkward
-  codegen); both forms come from the same pass, so literals are equally correct
-  by construction, and the cross-crate agreement tests are the guarantee either
-  way. Date/Author: 2026-08-06, post-review revision.
+- Decision D-9 (revised): Milestone 4 makes derive-generated docs metadata
+  path-aware instead of excluding subcommands. Add provided methods
+  `OrthoConfigDocs::get_doc_metadata_for_path(command_path: &[String])` and
+  `OrthoConfigSubcommandDocs::get_subcommand_doc_metadata_for_path(
+  parent_path: &[String])`,
+  without changing the existing method signatures. Generated
+  `get_doc_metadata()` starts from `LOCALIZATION_BASE` and delegates to the
+  path-aware method. Generated subcommand code appends the clap-resolved
+  variant label exactly once, then asks the payload for metadata at that child
+  path; nested payloads repeat the same operation. The existing methods remain
+  the source-compatible entry points, and their provided path-aware fallbacks
+  preserve handwritten implementations. Explicit id overrides are emitted
+  literally and are never rebased; defaults use the accumulated mounted path.
+  This design was chosen because root versus subcommand payload is a use-site
+  property: a marker cannot model type reuse, and uniform per-struct
+  canonicalization produces ids based on a standalone base rather than the
+  runtime-mounted path. Derive-time collision detection still covers argument
+  identifiers within one deriving struct; sibling-subcommand-name collisions
+  remain a runtime panic per ADR-006. Date/Author: 2026-08-06, post-review
+  revision; replaced by explicit user decision on 2026-08-17 after the
+  Ambiguity tolerance was reached.
+- Decision D-10 (revised): context-free localization constants and explicit
+  docs overrides remain identifier literals produced by the Milestone 2 pass.
+  Mounted default ids cannot be literals because the parent path is a use-site
+  input; generated path-aware docs methods therefore call
+  `ortho_config::message_id_for` with the accumulated path and the fixed
+  suffix. This avoids const slice indexing, preserves overrides byte-for-byte,
+  and makes the runtime function the final authority for mounted ids. Agreement
+  is locked by the path-aware nested tests and the existing cross-crate
+  property tests. Date/Author: 2026-08-06, post-review revision; revised
+  2026-08-17 after D-9 changed.
 - Decision D-11: artefact robustness contract. Fragment files are named
   `<TypeIdent>-<hash>.json` where `<hash>` hashes the expansion-site source
   path (two same-named types in different modules must not collide; a proc
@@ -478,7 +544,7 @@ contracts, alternatives, scaling, failure modes, viability).
   documented remainder). Rationale: flattened arguments surface at runtime
   under the parent command, but the parent derive cannot enumerate another
   type's fields; erroring on flatten would regress existing derive users. A
-  follow-up is recorded alongside D-9's when ticking the roadmap. Before
+  flatten support follow-up is recorded when ticking the roadmap. Before
   implementing, Milestone 2 verifies how the existing derive treats flattened
   fields and records the finding here. Date/Author: 2026-08-06, post-review
   revision.
@@ -549,6 +615,91 @@ the test work), `execplans` (this document's maintenance), `commit-message`,
 `docs/rust-doctest-dry-guide.md`,
 `docs/reliable-testing-in-rust-via-dependency-injection.md`, and
 `docs/complexity-antipatterns-and-refactoring-strategies.md`.
+
+## Conformance basis
+
+The upstream requirement is `docs/roadmap.md` item 11.1.3: derive localization
+constants, make docs IR use the same identifiers, emit an identifier artefact,
+and reject collisions at compile time. The governing design is
+`docs/cli-localization-design.md` §4.1 (path-based identifier grammar), §8.1
+(trait ownership), and §8.2 (derive behaviour). ADR-006 governs which invalid
+or colliding identifiers fail at derive time and which hand-built command-tree
+cases may still panic at runtime.
+
+Traceability for the revised work is:
+
+- roadmap 11.1.3 docs-delegation requirement → Decisions D-1, D-2, D-9, and
+  D-10 → Milestone 4 → `nested_docs_ir.rs` path assertions and the docs IR
+  snapshot sweep;
+- design §4.1 mounted-path grammar → Decision D-9 → Milestone 4 → agreement
+  with `message_id_for` and the runtime recording localizer;
+- explicit-override compatibility → Decisions D-2 and D-9 → Milestone 4 →
+  root and nested override regression tests;
+- IR consumer migration → Decision D-2 → Milestones 4 and 6 → IR version
+  "2.0", reviewed snapshots, changelog, and users' guide migration note.
+
+The approved deviation from the current design text is generated, path-aware
+delegation rather than the impossible blanket implementation. The design, ADR,
+and roadmap are reconciled in Milestone 6 before this plan can be marked
+complete.
+
+## Verification plan
+
+Milestone 4 introduces one state variable: the accumulated command path used
+while recursively assembling docs metadata. Its obligations are:
+
+- **V-M4-1 — mounted-path agreement.** Every default `about_id` and
+  `synopsis_id`, plus each `help_id` and `long_help_id` for a field represented
+  in `ARG_IDS`, equals `message_id_for` over the root localization base
+  followed by each clap-resolved subcommand label. Docs-only, `skip_cli`, and
+  flattened fields retain their pre-2.0 docs defaults because no corresponding
+  runtime argument id exists. A focused integration test in
+  `ortho_config/tests/nested_docs_ir.rs` covers root, first-level,
+  second-level, and `#[command(name = "…")]` paths. The test must first fail on
+  the existing dotted or standalone-base values, then pass after the generated
+  path methods are wired. A negative assertion rejects
+  `audit-args-dry_run-help`, proving that the test would catch Reading B rather
+  than merely checking valid syntax.
+- **V-M4-2 — append exactly once.** Each subcommand label occurs once, in
+  declaration order, and sibling or nested traversal does not leak path state.
+  Parameterized assertions cover two siblings and a two-level branch; expected
+  ids are calculated independently with `message_id_for`. The witnesses are the
+  existing `greet`, `admin audit`, and renamed `grant-access` fixture branches.
+- **V-M4-3 — override preservation.** Explicit `about_id`, `synopsis_id`,
+  `help_id`, and `long_help_id` values remain byte-for-byte unchanged at root
+  and nested levels. Add one nested fixture override and assert both the
+  override and a neighbouring generated default, preventing a vacuous test that
+  exercises only one resolution branch. Assert a `skip_cli` or flattened field
+  keeps its prior dotted default, proving that absence from `ARG_IDS` does not
+  fabricate a runtime localization id.
+- **V-M4-4 — compatibility entry points.** Existing handwritten
+  `OrthoConfigDocs` and `OrthoConfigSubcommandDocs` implementations compile
+  without defining the new provided methods and retain their current return
+  values. A trybuild pass case or ordinary integration fixture discharges this
+  source-compatibility obligation.
+- **V-M4-5 — consumer coherence.** The complete snapshot and golden-file sweep
+  changes only the IR version and identifier-valued defaults. A diff containing
+  display text, field semantics, ordering, or an explicit override is a
+  failure, even if tests can be regenerated to accept it.
+
+The non-trivial external axiom is that `clap_variant_name` returns the same
+effective variant label that clap mounts in the runtime command tree. Existing
+renamed-variant tests exercise that boundary against real clap derives. The
+implementation calls the already property-tested `message_id_for`; it does not
+attempt to re-prove that function's normalization internally. No Kani or Verus
+harness is warranted: the new risk is deterministic path threading through a
+finite generated tree, covered directly by integration tests, while the
+unbounded normalization invariant remains under the existing proptest suite.
+
+The remaining plan-wide obligations are unchanged: the macro and runtime
+normalizers agree for generated valid segment lists (Milestone 2 proptest and
+marker-version gate); normalized field ids are unique within a deriving struct
+(trybuild collision test with a known colliding witness); and artefact output
+is opt-in, deterministic, atomic, round-trippable across split files, capped at
+1 MiB except for one indivisible oversized entry, and explicitly standalone in
+scope (Milestone 5 unit, property, snapshot, and end-to-end tests). The
+artefact's `path_scope` assertion is the negative control against treating a
+context-free proc-macro fragment as a mounted-tree inventory.
 
 ## Plan of work
 
@@ -646,8 +797,8 @@ New module `ortho_config_macros/src/derive/generate/localization/` with:
   and both field names, and carries the remediation hint "rename the field or
   set `#[arg(id = \"…\")]`"; the note at the earlier field reads "first defined
   here". The trybuild `.stderr` review checks against this contract, not taste.
-  Scope: argument ids within the deriving struct (Decision D-9 records what
-  stays a runtime panic).
+  Scope: argument ids within the deriving struct; Decision D-9 records that
+  sibling-subcommand-name collisions remain runtime checks.
 - Attribute parsing: extend `StructAttrs` and `parse_struct_attrs`
   (`derive/parse/mod.rs`) with `localization_base: Option<String>`, validated
   at parse time (each dotted segment must normalize cleanly; errors are spanned
@@ -716,41 +867,111 @@ constants and `with_base(CommandLine::LOCALIZATION_BASE)` (adding
 insta snapshots green — identifier *values* do not change, so any snapshot diff
 is a defect. Validation: full gate set. Commit.
 
-### Milestone 4: docs IR delegation
+### Milestone 4: path-aware docs IR delegation
 
-Per Decisions D-1, D-2, D-9, and D-10: change the docs generator
-(`ortho_config_macros/src/derive/generate/docs/`) so that *default* identifier
-values for the deriving struct's own metadata are the canonical localization
-identifiers, emitted as literals from the Milestone 2 pass. Explicit attribute
-overrides (`help_id`, `long_help_id`, `about_id`, heading ids) are untouched,
-as is all subcommand metadata (D-9).
+Per Decisions D-1, D-2, D-9, and D-10, make docs metadata construction carry
+the mounted command path before identifier defaults are materialized. This is
+one atomic architecture change: do not first canonicalize every struct from its
+standalone base and then attempt to repair nested metadata afterwards, because
+post-processing cannot distinguish generated defaults from explicit overrides.
 
-Pinned mapping (verify against `ortho_config/src/docs/ir.rs` before editing;
-mismatch triggers the Ambiguity tolerance):
+Add provided path-aware methods without changing the existing signatures:
 
-- `DocMetadata.about_id` default ← the `ABOUT_ID` value.
-- `DocMetadata.synopsis_id` default ← the `USAGE_ID` value, *only if*
-  inspection confirms `synopsis_id` is an identifier looked up in catalogues
-  (if it has divergent semantics, leave it and record why).
-- `FieldMetadata.help_id` / `long_help_id` defaults ← the per-argument
-  `help_id` / `long_help_id` values.
-- `CliMetadata.value_name` is display text, not an identifier: untouched.
-- No new IR fields are added in this task.
+```rust
+pub trait OrthoConfigDocs {
+    fn get_doc_metadata() -> DocMetadata;
+
+    fn get_doc_metadata_for_path(_command_path: &[String]) -> DocMetadata {
+        Self::get_doc_metadata()
+    }
+}
+
+pub trait OrthoConfigSubcommandDocs {
+    fn get_subcommand_doc_metadata() -> Vec<DocMetadata>;
+
+    fn get_subcommand_doc_metadata_for_path(
+        _parent_path: &[String],
+    ) -> Vec<DocMetadata> {
+        Self::get_subcommand_doc_metadata()
+    }
+}
+```
+
+Exact rustdoc wording may improve during implementation, but the signatures and
+fallback semantics are the approved interface. The defaults preserve
+handwritten implementations. The derives override both path-aware methods:
+
+1. Generated `OrthoConfigDocs::get_doc_metadata()` splits
+   `OrthoConfigLocalization::LOCALIZATION_BASE` into owned path segments and
+   delegates to `get_doc_metadata_for_path`.
+2. Generated `get_doc_metadata_for_path` constructs the current node's
+   metadata. Default identifiers call `message_id_for(command_path, suffix)`;
+   explicit attributes remain literal. Its subcommand field calls
+   `get_subcommand_doc_metadata_for_path(command_path)`.
+3. Generated `OrthoConfigSubcommandDocs::get_subcommand_doc_metadata()` calls
+   its path-aware counterpart with an empty parent path, giving direct enum
+   callers a deterministic standalone tree rooted at each variant label.
+4. Generated `get_subcommand_doc_metadata_for_path` clones the parent path,
+   appends the clap-resolved variant label exactly once, and calls the payload
+   type's `get_doc_metadata_for_path` with that child path. It then sets the
+   returned metadata's display `app_name` to the variant label without
+   rewriting any identifier. Recursive payloads repeat the same operation.
+
+The pinned mapping applies at every node in a derive-generated tree:
+
+- default `DocMetadata.about_id` ← `message_id_for(path, "about")`;
+- default `DocMetadata.synopsis_id` ←
+  `Some(message_id_for(path, "usage"))`. Inspection confirmed this is a
+  catalogue identifier: `cargo-orthohelp/src/ir.rs` resolves it through the
+  localizer;
+- default `FieldMetadata.help_id` / `long_help_id` ←
+  `message_id_for(path, "args.<clap-id>.help")` and
+  `message_id_for(path, "args.<clap-id>.long_help")` for fields represented in
+  the localization model's `ARG_IDS`;
+- docs-only, `skip_cli`, and flattened fields that are absent from `ARG_IDS`
+  retain their existing dotted docs defaults;
+- explicit `help_id`, `long_help_id`, `about_id`, `synopsis_id`, and heading
+  ids are untouched;
+- `CliMetadata.value_name` is display text, not an identifier, and remains
+  untouched;
+- no IR fields are added.
 
 Bump `ORTHO_DOCS_IR_VERSION` to "2.0" in `ortho_config/src/docs/mod.rs` (D-2).
 
-Red: update one docs IR test first (`ortho_config/tests/docs_ir.rs`) to expect
-the new identifier shape and version — it fails — then implement, then sweep
-the remaining pinned expectations: `docs_ir_subcommands.rs`,
-`nested_docs_ir.rs`, `subcommand_docs.rs`, the `cargo-orthohelp` golden files
-(`cargo-orthohelp/tests/golden/`, `tests/snapshots/`), agent-context snapshots
-(`ortho_config/src/agent_context/snapshots/`), and the `hello_world` snapshots,
-regenerating insta snapshots deliberately (inspect every diff; only
-own-metadata identifier values and the version string may change — subcommand
-metadata diffs indicate a D-9 violation).
+Red-Green-Refactor sequence:
 
-Validation: full gate set; `coderabbit review --agent`; the Tolerances check
-above. Commit.
+1. Red: change `ortho_config/tests/nested_docs_ir.rs` to require the full
+   mounted ids for `greet`, `admin audit`, and renamed `admin grant-access`,
+   plus a negative assertion rejecting the standalone `audit-args-dry_run-help`
+   shape. Add nested explicit overrides and assert they remain literal. Run the
+   focused test and record the expected dotted-id mismatch.
+2. Green: add the provided trait methods, thread path arguments through
+   `generate/docs/`, and update `subcommand_docs.rs` to append the resolved
+   label. Pass the existing localization model into docs generation so field
+   suffixes use the same clap ids and eligibility rules as `ARG_IDS`, with
+   existing defaults retained for excluded fields. Run the focused test until
+   it passes.
+3. Refactor: isolate path construction and identifier token generation only if
+   repository sweeps confirm no equivalent helper exists; document any new
+   helper's ownership and reuse policy in `docs/developers-guide.md` as
+   required by the repository abstraction policy. Re-run the focused test.
+4. Add the handwritten-implementation compatibility test from V-M4-4, then
+   update `ortho_config/tests/docs_ir.rs` and the IR-version assertion.
+5. Sweep `docs_ir_subcommands.rs`, `subcommand_docs.rs`, the
+   `cargo-orthohelp` golden files (`cargo-orthohelp/tests/golden/` and
+   `tests/snapshots/`), agent-context snapshots
+   (`ortho_config/src/agent_context/snapshots/`), and `hello_world` snapshots.
+   Regenerate snapshots deliberately and inspect every diff. Only the version
+   and non-overridden identifier values may change; display text, ordering,
+   field semantics, or explicit overrides changing is a defect.
+
+Acceptance evidence: V-M4-1 through V-M4-5 are discharged; a nested IR tree's
+generated command ids and localization-eligible field ids equal independently
+computed `message_id_for` values for their mounted paths; the recording
+localizer requests the same ids; excluded-field defaults and explicit overrides
+remain unchanged; IR version is "2.0"; and handwritten implementations retain
+source compatibility. Run the full gate set and `coderabbit review --agent`,
+perform the Tolerances and Conformance basis checks, then commit.
 
 ### Milestone 5: opt-in build-time identifier artefact
 
@@ -768,9 +989,12 @@ New module `ortho_config_macros/src/derive/generate/localization/artefact.rs`
   `id`, `kind` (`about`/`long_about`/`usage`/`version`/`long_version`/
   `after_help`/`after_long_help`/`help`/`long_help`/`value_name`), `type`
   (`CARGO_CRATE_NAME` plus the deriving type's ident — the module path is not
-  visible to a proc macro, D-11), `field`, `source` (file, line, column — from
-  `proc_macro2::Span`), `embedded_default` (always `null`; D-4). Serialization
-  via `serde_json` (promoted to an unconditional macro-crate dependency).
+  visible to a proc macro, D-11), `field`, `path_scope` (always `"standalone"`,
+  D-3), `source` (file, line, column — from `proc_macro2::Span`), and
+  `embedded_default` (always `null`; D-4). Serialization uses `serde_json`
+  (promoted to an unconditional macro-crate dependency). Do not claim that
+  these per-struct entries enumerate mounted subcommand paths; roadmap 11.5.2
+  joins them to the compiled docs IR.
 - A thin filesystem shell: runs only when `OUT_DIR` is set and
   `ORTHO_CONFIG_EMIT_IDENTIFIERS` equals exactly `1` (D-3). Each derive
   expansion writes a fragment
@@ -785,13 +1009,13 @@ New module `ortho_config_macros/src/derive/generate/localization/artefact.rs`
 Red tests, in order:
 
 1. rstest unit tests on the pure core: schema shape including
-   `schema_version` (locked with an `insta` JSON snapshot), the 1 MiB cap
-   boundary (one byte under stays single-file; one byte over splits),
-   deterministic ordering, and fragment pruning against a synthetic
-   missing-source entry. (Sizing arithmetic from the review: ~800 bytes per
-   field-equivalent means the cap engages near ~1,300 fields — far beyond
-   realistic trees — so the boundary test plus the round-trip property below is
-   the correct minimum; do not elaborate further.)
+   `schema_version` and `path_scope: "standalone"` (locked with an `insta` JSON
+   snapshot), the 1 MiB cap boundary (one byte under stays single-file; one
+   byte over splits), deterministic ordering, and fragment pruning against a
+   synthetic missing-source entry. (Sizing arithmetic from the review: ~800
+   bytes per field-equivalent means the cap engages near ~1,300 fields — far
+   beyond realistic trees — so the boundary test plus the round-trip property
+   below is the correct minimum; do not elaborate further.)
 2. A `proptest` property: for any generated entry set, merging the split
    output reproduces exactly the input entries, and every emitted file except a
    single oversized entry respects the cap.
@@ -806,7 +1030,8 @@ Red tests, in order:
    - Fresh build with `ORTHO_CONFIG_EMIT_IDENTIFIERS=1`
      (`--message-format=json` to locate `OUT_DIR`): assert the artefact is
      absent beforehand, exists afterwards, parses, carries
-     `schema_version`, and contains the fixture's derived identifiers.
+     `schema_version`, marks every entry with `path_scope: "standalone"`, and
+     contains the fixture's derived identifiers.
    - Warm-cache case: rebuild *without* the variable (no write, artefact
      from the previous case untouched), then demonstrate the documented
      forced-recompile invocation
@@ -828,32 +1053,36 @@ Validation: full gate set; `coderabbit review --agent`. Commit.
   rejected; env-gated emission chosen (exact-`1` semantics, per-invocation-only
   guidance); the forced-recompile workflow and expansion-cache caveat; the
   clean-build freshness contract and residual staleness acceptance;
-  `schema_version` and provisional-schema status; alternatives (unconditional
-  write, extract-from-binary, source-parsing CLI, shared normalizer crate)
-  recorded with the evidence from the research pass. Index it in
-  `docs/contents.md`.
+  `schema_version`, `path_scope: "standalone"`, the provisional-schema status,
+  and the rule that future translator tooling takes mounted ids from the
+  path-aware compiled docs IR; alternatives (unconditional write,
+  extract-from-binary, source-parsing CLI, shared normalizer crate) recorded
+  with the evidence from the research pass. Index it in `docs/contents.md`.
 - Amend `docs/cli-localization-design.md`: §8.1 (widened trait surface and
   named `ArgLocalizationIds` per D-7, `LOCALIZATION_BASE` per D-5, and replace
   the impossible blanket-impl sentence with the generated delegation of D-1);
   §8.2 (artefact emission is opt-in, reference ADR-008; mark the
-  `localized_default` bullet deferred per D-4; record D-9's subcommand scope
-  and D-12's flatten exclusion). Update ADR-006's known-risk paragraph to state
-  precisely which collisions moved to compile time (argument ids within a
-  deriving struct) and which remain runtime panics (hand-built trees; sibling
-  subcommand names).
+  `localized_default` bullet deferred per D-4; specify D-9's path-aware nested
+  docs generation and D-12's flatten exclusion). Update ADR-006's known-risk
+  paragraph to state precisely which collisions moved to compile time (argument
+  ids within a deriving struct) and which remain runtime panics (hand-built
+  trees; sibling subcommand names).
 - `docs/users-guide.md` ("Localizing CLI copy" section): document the
   trait, the derived constants, `localization_base` and the
   `with_base(T::LOCALIZATION_BASE)` pattern *including the drift hazard it
   prevents*, the collision compile error, the flatten exclusion, and the
   artefact opt-in with the exact forced-recompile invocation and a warning
-  never to export the variable in shell profiles or CI-wide blocks. Include the
-  IR "1.1" → "2.0" migration note mapping old dotted ids to new dashed ids.
+  never to export the variable in shell profiles or CI-wide blocks. Explain
+  that JSON ids have standalone scope and that mounted ids come from docs IR.
+  Include the IR "1.1" → "2.0" migration note mapping old dotted ids to new
+  dashed ids.
 - `docs/developers-guide.md` ("Schema ownership" area): document the
   twin-normalizer rule (both implementations, the marker-comment version gate,
   the dev-dep-cycle property test, and the agreement tests as the lock), the
-  docs-IR delegation, and the artefact fragment/merge design. Update the
-  paragraph that says runtime panic tests remain "until derive-emitted
-  identifiers move validation to compile time".
+  path-aware docs-IR delegation and its handwritten-implementation fallback,
+  and the artefact fragment/merge design. Update the paragraph that says
+  runtime panic tests remain "until derive-emitted identifiers move validation
+  to compile time".
 - `CHANGELOG.md`: entries for the new trait, the collision diagnostic,
   the IR identifier change (with the "2.0" bump and migration pointer), and the
   artefact opt-in.
@@ -861,8 +1090,8 @@ Validation: full gate set; `coderabbit review --agent`. Commit.
   with Decision/Finding notes mirroring this plan's Decision Log — in
   particular that the "blanket impl" bullet was realized as generated
   delegation (D-1), that the artefact schema is provisional until its first
-  consumer (D-3), and proposed follow-up items for path-aware subcommand
-  identifier delegation (D-9) and flatten support (D-12).
+  consumer (D-3), that nested docs identifiers use the mounted command path
+  (D-9), and a proposed follow-up item for flatten support (D-12).
 - Final full gate run (`make check-fmt`, `make typecheck`, `make lint`,
   `make test`, `make markdownlint`, `make nixie`) via `scrutineer`; final
   `coderabbit review --agent`; clear all findings.
@@ -919,10 +1148,12 @@ Acceptance is behavioural:
    produces `${OUT_DIR}/ortho-config/cli-identifiers.json` with
    `schema_version` and the fixture's identifiers; the same build *without* the
    variable writes nothing.
-4. `cargo run -p hello_world --bin emit_docs` (docs IR) reports
-   own-metadata identifiers equal to the `OrthoConfigLocalization` constants
-   and IR version "2.0"; subcommand metadata is unchanged from the previous
-   release (D-9).
+4. `cargo run -p hello_world --bin emit_docs` (docs IR) reports root metadata
+   identifiers equal to the `OrthoConfigLocalization` constants and IR version
+   "2.0". Every nested command id and localization-eligible field id equals
+   `message_id_for` over its mounted command path, including the two-level and
+   renamed-variant fixtures; excluded-field defaults and explicit overrides
+   remain byte-identical (D-9 and D-12).
 5. `make check-fmt`, `make typecheck`, `make lint`, `make markdownlint`,
    and `make nixie` all pass; CodeRabbit findings are cleared.
 
@@ -938,8 +1169,8 @@ pruning fold. No step mutates state outside the repository and `/tmp` logs.
 
 ## Artefacts and notes
 
-Milestone 0 baseline (2026-08-13): all four gates green on branch tip
-66b3bf2. Logs: `/tmp/ms0-checkfmt-*.out` (fmt), `/tmp/ms0-typecheck-*.out`,
+Milestone 0 baseline (2026-08-13): all four gates green on branch tip 66b3bf2.
+Logs: `/tmp/ms0-checkfmt-*.out` (fmt), `/tmp/ms0-typecheck-*.out`,
 `/tmp/ms0-lint-*.out`, `/tmp/ms0-test-*.out`. Both Milestone 0 verification
 facts confirmed: (a) `apply_command_metadata` resolves the `usage` suffix for
 every node via `localize_command` recursion; (b) `ortho_config_macros/src` has
@@ -966,10 +1197,14 @@ At completion the following exist:
   normalizer (`syn::Result`-based twin of `normalize_segment`, marker version
   comment), identifier model, collision detection with the pinned message
   contract, artefact core and shell.
-- Docs IR own-metadata defaults delegate to the localization identifiers;
-  `ORTHO_DOCS_IR_VERSION == "2.0"`.
+- `OrthoConfigDocs` and `OrthoConfigSubcommandDocs` retain their existing
+  methods and gain the provided path-aware methods specified in Milestone 4.
+  Derive-generated implementations override them so command defaults and
+  localization-eligible field defaults across a mounted tree use
+  `message_id_for`; `ORTHO_DOCS_IR_VERSION == "2.0"`.
 - Opt-in artefact under `${OUT_DIR}/ortho-config/` as specified in
-  Milestone 5, with `schema_version` and atomic writes.
+  Milestone 5, with `schema_version`, `path_scope: "standalone"`, and atomic
+  writes. Mounted-tree ids remain owned by the path-aware docs IR.
 - New unconditional macro-crate dependencies: `serde`, `serde_json`
   (already in the workspace dependency set); new macro-crate *dev*-dependency:
   `ortho_config`. No other dependency changes.
@@ -990,3 +1225,15 @@ D-11); scoped flattened fields out with a recorded policy (D-12); pinned the
 collision-message contract; and split the `hello_world` migration into
 Milestone 3a. Remaining work is unchanged in intent: trait, derive emission,
 docs delegation, artefact, collision guard, documentation.
+
+2026-08-17: revised after the Milestone 4 Ambiguity tolerance was reached and
+the user selected the redesign option. Replaced D-9's context-free subcommand
+exclusion with additive path-aware methods on the docs traits; updated D-1,
+D-2, and D-10 to distinguish standalone constants from mounted defaults;
+expanded Milestone 4 into a Red-Green-Refactor path-threading change; added
+mounted-path, append-once, override, compatibility, and snapshot verification
+obligations; and updated risks, acceptance, interfaces, and Milestone 6
+documentation work. The downstream artefact contract now marks JSON entries as
+standalone declaration ids and makes compiled docs IR authoritative for mounted
+paths, avoiding a second context-free overclaim. Remaining Milestone 4 work now
+includes subcommand metadata rather than deferring it to a follow-up.
