@@ -4,7 +4,7 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
 and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
-Status: IN PROGRESS
+Status: COMPLETE
 
 ## Purpose / big picture
 
@@ -192,9 +192,25 @@ escalation, not workarounds.
   the declaration split across repeated `#[ortho_config(behaviour(...))]`
   groups is rejected. Parser unit tests cover both group orders; trybuild
   fixture `behaviour_noninteractive_bypass_split.rs` (+ `.stderr`) added.
-- [ ] Milestone F: documentation (design doc §8.1 rows, users' guide,
+- [x] Milestone F: documentation (design doc §8.1 rows, users' guide,
   developers' guide, ADR-008), roadmap ticked, final gates, final CodeRabbit
   pass.
+- [x] (2026-08-16) Milestone F closure: users' guide gained
+  `behaviour(...)` and `--check-agent-native[=off|warn|deny]` sections (report
+  shape, exit code 3, incremental annotation, `location: null`); developers'
+  guide gained the four `AgentCommand` behaviour fields, the stable
+  `agent-native.behaviour.*` rule IDs/codes, and the stdout JSON / stderr
+  summary / provisional exit-code-3 contract; `cargo-orthohelp-design.md`
+  corrected to state that `--check-agent-native` is implemented; roadmap 7.2.1
+  and its three sub-bullets ticked complete. New user-guide fences are marked
+  with `tested-example` markers and registered in the golden
+  `EXPECTED_EXAMPLE_IDS` list; all docs gates pass.
+- [x] (2026-08-16) Final evidence: full gate sequence green on the Milestone F
+  closure — `make check-fmt`, `make typecheck`, `make lint` (rustdoc, clippy,
+  Whitaker), `make test` (all test binaries 0 failures incl. the docs-loader
+  and golden-ID contract tests), and `make markdownlint` (incl. Oxford-spelling
+  gate) all exit 0. Final `coderabbit review --agent --committed --base
+  origin/main` returned 0 findings. Log: `/tmp/codereview_final.out`.
 
 ## Surprises & discoveries
 

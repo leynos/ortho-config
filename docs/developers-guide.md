@@ -108,6 +108,26 @@ identifiers, finding codes, severities, and source locations machine-stable.
 Extract the report model into `ortho_config` only after a new ADR approves
 shared ownership.
 
+The `--check-agent-native[=off|warn|deny]` lint runs over the compiled agent
+context and emits exactly one JSON `PolicyReport` document to stdout plus a
+one-line human-readable summary to stderr. The stable behaviour rule IDs live
+under `agent-native.behaviour.*` and their machine codes are stable across
+runs:
+
+- `agent-native.behaviour.destructive-bypass` / `destructive_bypass_missing`;
+- `agent-native.behaviour.prompt-bypass` / `prompt_bypass_missing`;
+- `agent-native.behaviour.bypass-unknown` / `bypass_flag_unknown`;
+- `agent-native.behaviour.undeclared` / `interaction_unknown` and
+  `mutation_unknown`.
+
+Each `PolicyResult.location` is currently `null` because agent context carries
+no source spans; keep the `message` self-contained (command path plus the exact
+annotation to add). The process exits with code `3` if and only if the report
+contains at least one deny-level finding. Runtime errors keep exit code `1`
+and clap usage errors keep exit code `2`; this `3 = policy findings` contract
+is provisional and is scheduled to be superseded by the exit-code taxonomy in
+roadmap item 7.2.5.
+
 Use `rstest` for schema unit tests. Add `rstest-bdd` behavioural scenarios and
 end-to-end tests when a change affects observable CLI behaviour, generated
 artefacts, persisted output, integration contracts, stdout, stderr, or exit
@@ -162,6 +182,20 @@ ownership decision.
 
 Treat `AgentInput.default` as display-only. It is normalized for stable
 goldens, but it is not executable or machine-parseable.
+
+`AgentCommand` carries the declared behaviour surface populated by the bridge
+from the documentation IR `behaviour` block:
+
+- `interaction_mode` — `InteractionMode::Unknown` when undeclared;
+- `mutation_effect` — `MutationEffect::Unknown` when undeclared;
+- `bypass_flag` — `Option<String>`, explicit `null` when absent;
+- `dry_run_flag` — `Option<String>`, explicit `null` when absent.
+
+The bridge maps IR `InteractionKind`/`MutationKind` onto the agent-context
+enums, copying `bypass` and `dry_run` verbatim. It never infers these values
+from command names, verbs, or flags: absence stays `unknown`/`null` (design
+doc §8.1). The derive-side keys and grammar are recorded in
+[ADR-008](adr-008-behavioural-metadata-attribute-surface.md).
 
 Evolve the schema through the compatibility policy in
 [agent-native-cli-design.md](agent-native-cli-design.md) §8.2. Bump
