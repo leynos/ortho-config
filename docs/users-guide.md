@@ -497,6 +497,104 @@ Fill `AgentCommand` entries only with claims the executable honours.
 replace command validation or grant an agent capabilities that the CLI does not
 have.
 
+## Declare behaviour metadata for agents
+
+Commands that prompt or mutate state should declare that behaviour so agents
+can decide whether an invocation is safe before running it. Add a struct-level
+`behaviour(...)` attribute to the command's arguments struct:
+
+<!-- tested-example: guide-behaviour-metadata -->
+```rust
+#[derive(OrthoConfig)]
+#[ortho_config(
+    prefix = "APP",
+    behaviour(
+        interaction = "interactive",
+        mutation = "delete",
+        bypass = "--force",
+        dry_run = "--dry-run"
+    )
+)]
+struct PurgeArgs {
+    /* ... */
+}
+```
+
+Supported keys and values:
+
+- `interaction = "non_interactive"` or `"interactive"` — whether the command
+  can prompt;
+- `mutation = "read_only"`, `"write"`, `"delete"`, or `"submit"` — the
+  mutation boundary;
+- `bypass = "--force"` — the confirmation/prompt bypass flag (must match
+  `--[a-z0-9]+(-[a-z0-9]+)*`);
+- `dry_run = "--dry-run"` — the dry-run flag name (must match the same
+  grammar).
+
+The declaration flows into the generated documentation IR and, through the
+`cargo-orthohelp` bridge, into agent context as `interaction_mode`,
+`mutation_effect`, `bypass_flag`, and `dry_run_flag`. Commands left
+unannotated report `"unknown"` for the two enums and `null` for the two flags;
+the tool never infers these facts from command names or flags.
+
+`interaction = "non_interactive"` combined with a `bypass` declaration is a
+compile error: a command that never prompts has nothing to bypass.
+
+## Lint the declared behaviour
+
+`cargo orthohelp --check-agent-native[=off|warn|deny]` runs the agent-native
+behaviour lint over the compiled command tree and writes a machine-stable JSON
+policy report to stdout (a human-readable one-line summary goes to stderr).
+The mode defaults to `warn` when the flag is given without `=...`.
+
+For example, a first run over a CLI that declares no behaviour reports every
+command as undeclared:
+
+<!-- tested-example: guide-check-command -->
+```console
+cargo orthohelp --check-agent-native=warn
+```
+
+The report is exactly one JSON document on stdout:
+
+<!-- tested-example: guide-check-report -->
+```json
+{
+  "version": "1",
+  "tool": "cargo-orthohelp",
+  "mode": "warn",
+  "results": [
+    {
+      "rule_id": "agent-native.behaviour.undeclared",
+      "code": "interaction_unknown",
+      "severity": "warn",
+      "message": "command `purge` has undeclared interaction; add `behaviour(interaction = \"interactive\")`",
+      "location": null
+    }
+  ],
+  "summary": { "off": 0, "warn": 1, "deny": 0, "total": 1 }
+}
+```
+
+Each result carries a stable `rule_id` and `code`. `location` is always `null`
+for now: the check runs on agent context, which has no source spans, so the
+`message` is the entire operator experience and names the command path plus
+the exact annotation to add. Annotate incrementally, starting with destructive
+commands:
+
+1. Run `--check-agent-native=warn` and read the findings.
+2. Add `behaviour(mutation = "delete", bypass = "--force", ...)` to each
+   destructive command's arguments struct.
+3. Add `interaction` and other `mutation` declarations as the command surface
+   stabilizes.
+4. Move to `--check-agent-native=deny` in CI once findings are resolved.
+
+In `deny` mode any finding makes the process exit with code 3 (after writing
+any explicitly requested `--format` artefacts); run failures keep exit code 1
+and clap usage errors keep exit code 2. `off` disables the check. The
+provisional exit-code-3 contract is scheduled to be superseded by the
+exit-code taxonomy in roadmap item 7.2.5.
+
 ## Use an aliased dependency
 
 Cargo permits dependency aliases. In v0.9.0 the derive macros can generate
