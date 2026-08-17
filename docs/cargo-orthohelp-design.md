@@ -524,13 +524,18 @@ cargo orthohelp \
 
 `ir`, `man`, `ps`, `agent-context`, and `all` are the currently implemented
 formats. The current default is `ir`; unsupported format values fail during
-Clap parsing before generation begins. `--json` and `--check-agent-native` are
-planned agent-native additions. Until they are implemented, generated artefacts
-continue to report success or failure through process exit status. When
-`--json` is provided in a future migration, success must emit exactly one JSON
-result document to stdout and nothing to stderr. Failure must emit no stdout,
-unless a non-JSON artefact was explicitly delivered earlier, and exactly one
-JSON diagnostic document to stderr.
+Clap parsing before generation begins. `--check-agent-native[=off|warn|deny]`
+is implemented: it runs the agent-native behaviour lint over the compiled
+agent context, writes exactly one JSON policy report to stdout and a one-line
+human-readable summary to stderr, and exits `3` when the report contains a
+deny-level finding (after writing any explicitly requested `--format`
+artefacts). The `--json` result mode remains a planned agent-native addition.
+Until it is implemented, generated artefacts continue to report success or
+failure through process exit status. When `--json` is provided in a future
+migration, success must emit exactly one JSON result document to stdout and
+nothing to stderr. Failure must emit no stdout, unless a non-JSON artefact was
+explicitly delivered earlier, and exactly one JSON diagnostic document to
+stderr.
 
 The existing format behaviours are compatibility contracts until a versioned
 migration is explicitly approved:

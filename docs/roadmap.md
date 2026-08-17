@@ -226,14 +226,14 @@ unsafe mutation surfaces before release.
 
 ### 7.2. Model behavioural semantics
 
-- [ ] 7.2.1. Add metadata for non-interactive execution and mutation
+- [x] 7.2.1. Add metadata for non-interactive execution and mutation
   boundaries.
   - Requires step 6.2.
   - See agent-native-cli-design.md §6.1 and §6.4.
-  - [ ] Represent whether a command is non-interactive, may prompt, or needs a
+  - [x] Represent whether a command is non-interactive, may prompt, or needs a
     bypass flag.
-  - [ ] Represent whether a command reads, writes, deletes, or submits work.
-  - [ ] Lint destructive commands that lack `--force` or equivalent approved
+  - [x] Represent whether a command reads, writes, deletes, or submits work.
+  - [x] Lint destructive commands that lack `--force` or equivalent approved
     metadata.
 
 - [ ] 7.2.2. Add dual-renderer metadata.
