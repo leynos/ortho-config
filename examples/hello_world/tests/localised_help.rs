@@ -220,24 +220,6 @@ fn help_en_us() {
     assert_snapshot!(output);
 }
 
-#[test]
-fn greet_help_en_us() {
-    let output = run_with_locale("en_US.UTF-8", &["greet", "--help"]);
-    assert_snapshot!(output);
-}
-
-#[test]
-fn take_leave_help_en_us() {
-    let output = run_with_locale("en_US.UTF-8", &["take-leave", "--help"]);
-    assert_snapshot!(output);
-}
-
-#[test]
-fn missing_subcommand_error_en_us() {
-    let output = run_with_locale("en_US.UTF-8", &[]);
-    assert_snapshot!(output);
-}
-
 // =============================================================================
 // Japanese (ja) help output tests
 // =============================================================================
@@ -250,22 +232,49 @@ fn help_ja() {
     assert_snapshot!(output);
 }
 
-#[test]
-fn greet_help_ja() {
-    let output = run_with_locale("ja_JP.UTF-8", &["greet", "--help"]);
-    assert_snapshot!(output);
+// =============================================================================
+// Per-subcommand help snapshots across locales
+// =============================================================================
+
+/// Runs the binary under `locale` and compares the output with the snapshot
+/// recorded under `snapshot_name`.
+///
+/// `rstest` wraps a parameterised test in a module named after the test
+/// function, and insta would otherwise fold that module name into the
+/// generated snapshot file name. Suppressing the module prefix and passing the
+/// full historical name keeps the committed `.snap` files stable.
+fn assert_locale_help_snapshot(snapshot_name: &str, locale: &str, args: &[&str]) {
+    let output = run_with_locale(locale, args);
+    insta::with_settings!({prepend_module_to_snapshot => false}, {
+        assert_snapshot!(format!("localised_help__{snapshot_name}"), output);
+    });
 }
 
-#[test]
-fn take_leave_help_ja() {
-    let output = run_with_locale("ja_JP.UTF-8", &["take-leave", "--help"]);
-    assert_snapshot!(output);
-}
-
-#[test]
-fn missing_subcommand_error_ja() {
-    let output = run_with_locale("ja_JP.UTF-8", &[]);
-    assert_snapshot!(output);
+#[rstest]
+#[case::greet_help_en_us("greet_help_en_us", "en_US.UTF-8", &["greet", "--help"])]
+#[case::take_leave_help_en_us(
+    "take_leave_help_en_us",
+    "en_US.UTF-8",
+    &["take-leave", "--help"]
+)]
+#[case::missing_subcommand_error_en_us(
+    "missing_subcommand_error_en_us",
+    "en_US.UTF-8",
+    &[] as &[&str]
+)]
+#[case::greet_help_ja("greet_help_ja", "ja_JP.UTF-8", &["greet", "--help"])]
+#[case::take_leave_help_ja("take_leave_help_ja", "ja_JP.UTF-8", &["take-leave", "--help"])]
+#[case::missing_subcommand_error_ja(
+    "missing_subcommand_error_ja",
+    "ja_JP.UTF-8",
+    &[] as &[&str]
+)]
+fn subcommand_help_matches_locale_snapshot(
+    #[case] snapshot_name: &str,
+    #[case] locale: &str,
+    #[case] args: &[&str],
+) {
+    assert_locale_help_snapshot(snapshot_name, locale, args);
 }
 
 // =============================================================================

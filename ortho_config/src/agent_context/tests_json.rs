@@ -3,6 +3,7 @@
 use super::{field, first_array_item, sample_agent_context};
 use crate::agent_context::{AGENT_CONTEXT_KIND_SUFFIX, AgentContext};
 use crate::{serialize_agent_context, serialize_agent_context_pretty};
+use anyhow::{Result, ensure};
 use rstest::rstest;
 use serde_json::Value;
 
@@ -40,14 +41,13 @@ fn to_json_includes_kind_and_schema_version() {
     let json = serialize_agent_context(&context).expect("serialize compact agent context");
     let value: Value = serde_json::from_str(&json).expect("parse compact agent context JSON");
 
-    assert_eq!(
-        field(&value, "schema_version"),
-        crate::ORTHO_AGENT_CONTEXT_SCHEMA_VERSION
-    );
+    let schema_version =
+        field(&value, "schema_version").expect("serialized context should carry a schema version");
+    let kind = field(&value, "kind").expect("serialized context should carry a kind");
+    assert_eq!(schema_version, crate::ORTHO_AGENT_CONTEXT_SCHEMA_VERSION);
     assert!(
-        field(&value, "kind")
-            .as_str()
-            .is_some_and(|kind| kind.ends_with(AGENT_CONTEXT_KIND_SUFFIX))
+        kind.as_str()
+            .is_some_and(|kind_text| kind_text.ends_with(AGENT_CONTEXT_KIND_SUFFIX))
     );
 }
 
@@ -70,30 +70,50 @@ fn pretty_json_is_indented_without_a_trailing_newline() {
 }
 
 #[test]
-fn compact_context_serialization_excludes_localization_fields() {
+fn compact_context_serialization_excludes_localization_fields() -> Result<()> {
     let context = sample_agent_context();
 
     let value = serde_json::to_value(context).expect("serialize agent context");
-    assert_context_identity_fields(&value);
-    let command = first_array_item(field(&value, "commands"));
-    assert_command_policy_fields(command);
-    assert_localization_fields_are_absent(&value, command);
+    assert_context_identity_fields(&value)?;
+    let command = first_array_item(field(&value, "commands")?)?;
+    assert_command_policy_fields(command)?;
+    assert_localization_fields_are_absent(&value, command)
 }
 
-fn assert_context_identity_fields(value: &Value) {
-    assert_eq!(field(value, "schema_version"), "1");
-    assert_eq!(field(value, "kind"), "example-cli.agent_context");
+/// Ensures the named field serializes to the expected wire string.
+fn ensure_field_eq(value: &Value, name: &str, expected: &str) -> Result<()> {
+    let actual = field(value, name)?;
+    ensure!(
+        actual == expected,
+        "`{name}` should serialize as {expected:?}, got {actual}"
+    );
+    Ok(())
 }
 
-fn assert_command_policy_fields(command: &Value) {
-    assert_eq!(field(command, "interaction_mode"), "non_interactive");
-    assert_eq!(field(command, "mutation_effect"), "read_only");
-    assert_eq!(field(field(command, "async_submission"), "mode"), "submit");
-    assert_eq!(field(field(command, "delivery_route"), "target"), "file");
+fn assert_context_identity_fields(value: &Value) -> Result<()> {
+    ensure_field_eq(value, "schema_version", "1")?;
+    ensure_field_eq(value, "kind", "example-cli.agent_context")
 }
 
-fn assert_localization_fields_are_absent(value: &Value, command: &Value) {
-    assert!(value.get("about_id").is_none());
-    assert!(value.get("headings_ids").is_none());
-    assert!(command.get("help_id").is_none());
+fn assert_command_policy_fields(command: &Value) -> Result<()> {
+    ensure_field_eq(command, "interaction_mode", "non_interactive")?;
+    ensure_field_eq(command, "mutation_effect", "read_only")?;
+    ensure_field_eq(field(command, "async_submission")?, "mode", "submit")?;
+    ensure_field_eq(field(command, "delivery_route")?, "target", "file")
+}
+
+fn assert_localization_fields_are_absent(value: &Value, command: &Value) -> Result<()> {
+    ensure!(
+        value.get("about_id").is_none(),
+        "compact context must not carry `about_id`"
+    );
+    ensure!(
+        value.get("headings_ids").is_none(),
+        "compact context must not carry `headings_ids`"
+    );
+    ensure!(
+        command.get("help_id").is_none(),
+        "compact command must not carry `help_id`"
+    );
+    Ok(())
 }

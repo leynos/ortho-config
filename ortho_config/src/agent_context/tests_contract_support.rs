@@ -1,5 +1,7 @@
 //! Assertion helpers and expected JSON for agent-context schema tests.
 
+use anyhow::{Result, ensure};
+
 use super::{field, first_array_item};
 use crate::agent_context::{
     AGENT_CONTEXT_KIND_SUFFIX, AgentCommand, AgentContext, InteractionMode, MutationEffect,
@@ -59,30 +61,42 @@ fn assert_legacy_default_policy_and_skills(context: &AgentContext) {
 
 /// Asserts the schema-v1 serialization contract for absent optional command,
 /// input, and example fields.
-pub(super) fn assert_optional_command_fields_are_null(value: &Value) {
-    let serialized_command = first_array_item(field(value, "commands"));
-    let input = first_array_item(field(serialized_command, "inputs"));
-    let example = first_array_item(field(serialized_command, "examples"));
+pub(super) fn assert_optional_command_fields_are_null(value: &Value) -> Result<()> {
+    let serialized_command = first_array_item(field(value, "commands")?)?;
+    let input = first_array_item(field(serialized_command, "inputs")?)?;
+    let example = first_array_item(field(serialized_command, "examples")?)?;
 
-    assert_optional_command_presence_fields_are_null(serialized_command);
-    assert_optional_command_route_fields_are_null(serialized_command);
-    assert_optional_command_nested_fields_are_null(input, example);
+    assert_optional_command_presence_fields_are_null(serialized_command)?;
+    assert_optional_command_route_fields_are_null(serialized_command)?;
+    assert_optional_command_nested_fields_are_null(input, example)
 }
 
-fn assert_optional_command_presence_fields_are_null(serialized_command: &Value) {
-    assert!(serialized_command.get("summary").is_none());
-    assert!(field(serialized_command, "canonical_verb").is_null());
-    assert!(field(serialized_command, "async_submission").is_null());
+/// Ensures the named field is serialized as an explicit JSON null.
+fn ensure_field_is_null(value: &Value, name: &str) -> Result<()> {
+    ensure!(
+        field(value, name)?.is_null(),
+        "`{name}` should serialize as null when absent"
+    );
+    Ok(())
 }
 
-fn assert_optional_command_route_fields_are_null(serialized_command: &Value) {
-    assert!(field(serialized_command, "delivery_route").is_null());
-    assert!(field(serialized_command, "pagination").is_null());
+fn assert_optional_command_presence_fields_are_null(serialized_command: &Value) -> Result<()> {
+    ensure!(
+        serialized_command.get("summary").is_none(),
+        "`summary` should be omitted entirely when absent"
+    );
+    ensure_field_is_null(serialized_command, "canonical_verb")?;
+    ensure_field_is_null(serialized_command, "async_submission")
 }
 
-fn assert_optional_command_nested_fields_are_null(input: &Value, example: &Value) {
-    assert!(field(input, "default").is_null());
-    assert!(field(example, "output_mode").is_null());
+fn assert_optional_command_route_fields_are_null(serialized_command: &Value) -> Result<()> {
+    ensure_field_is_null(serialized_command, "delivery_route")?;
+    ensure_field_is_null(serialized_command, "pagination")
+}
+
+fn assert_optional_command_nested_fields_are_null(input: &Value, example: &Value) -> Result<()> {
+    ensure_field_is_null(input, "default")?;
+    ensure_field_is_null(example, "output_mode")
 }
 
 /// Asserts the schema-v1 defaults applied when legacy JSON omits optional
