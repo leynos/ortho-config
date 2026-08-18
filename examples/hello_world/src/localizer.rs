@@ -212,6 +212,7 @@ mod tests {
     //! Unit tests for the demo localizer.
 
     use super::*;
+    use rstest::rstest;
     use std::collections::HashMap;
 
     #[test]
@@ -279,9 +280,15 @@ mod tests {
         );
     }
 
-    #[test]
-    fn demo_localiser_translates_clap_errors() {
-        assert_clap_error_translation(langid!("en-US"), "Pick a workflow");
+    /// Confirms each bundled catalogue translates the clap error copy.
+    #[rstest]
+    #[case::english(langid!("en-US"), "Pick a workflow")]
+    #[case::japanese(langid!("ja"), "ワークフロー")]
+    fn localiser_translates_clap_errors(
+        #[case] locale: LanguageIdentifier,
+        #[case] expected_substring: &str,
+    ) {
+        assert_clap_error_translation(locale, expected_substring);
     }
 
     #[test]
@@ -294,38 +301,18 @@ mod tests {
         assert!(about.contains("挨拶"));
     }
 
-    #[test]
-    fn japanese_localiser_translates_clap_errors() {
-        assert_clap_error_translation(langid!("ja"), "ワークフロー");
-    }
-
-    #[test]
-    fn parse_posix_locale_handles_utf8_suffix() {
-        let locale = parse_posix_locale("ja_JP.UTF-8").expect("should parse");
-        assert_eq!(locale.language.as_str(), "ja");
-    }
-
-    #[test]
-    fn parse_posix_locale_handles_bare_language() {
-        let locale = parse_posix_locale("en").expect("should parse");
-        assert_eq!(locale.language.as_str(), "en");
-    }
-
-    #[test]
-    fn parse_posix_locale_handles_c_locale() {
-        let locale = parse_posix_locale("C").expect("should parse");
-        assert_eq!(locale, langid!("en-US"));
-    }
-
-    #[test]
-    fn parse_posix_locale_handles_posix_locale() {
-        let locale = parse_posix_locale("POSIX").expect("should parse");
-        assert_eq!(locale, langid!("en-US"));
-    }
-
-    #[test]
-    fn parse_posix_locale_returns_none_for_empty() {
-        assert!(parse_posix_locale("").is_none());
-        assert!(parse_posix_locale("   ").is_none());
+    /// Checks POSIX locale parsing across encodings, special values, and blanks.
+    #[rstest]
+    #[case::utf8_suffix("ja_JP.UTF-8", Some(langid!("ja-JP")))]
+    #[case::bare_language("en", Some(langid!("en")))]
+    #[case::c_locale("C", Some(langid!("en-US")))]
+    #[case::posix_locale("POSIX", Some(langid!("en-US")))]
+    #[case::empty_string("", None)]
+    #[case::whitespace_only("   ", None)]
+    fn parse_posix_locale_maps_input_to_locale(
+        #[case] input: &str,
+        #[case] expected: Option<LanguageIdentifier>,
+    ) {
+        assert_eq!(parse_posix_locale(input), expected);
     }
 }

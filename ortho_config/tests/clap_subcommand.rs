@@ -18,6 +18,7 @@
 
 use clap::{Parser, Subcommand};
 use ortho_config::{OrthoConfig, ResultIntoFigment, SubcmdConfigMerge};
+use rstest::rstest;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Parser)]
@@ -41,59 +42,90 @@ struct RunArgs {
     count: Option<u32>,
 }
 
-#[test]
-fn merge_works_for_subcommand() {
+/// Configuration file contents supplying `option` from the file layer.
+const OPTION_FROM_FILE: &str = "[cmds.run]\noption = \"file\"";
+
+/// Describes the sources a jailed test should stage before merging.
+struct JailSetup {
+    /// Contents written to `.app.toml`, when the file layer participates.
+    file: Option<&'static str>,
+    /// Environment variable name and value, when the environment participates.
+    env: Option<(&'static str, &'static str)>,
+    /// Strips the inherited environment so file fallback stays deterministic.
+    clear_env: bool,
+}
+
+impl JailSetup {
+    /// Stages the described sources inside `jail`.
+    ///
+    /// Boxes the error to keep the `Err` variant small for
+    /// `clippy::result_large_err`; the jail closure unboxes on propagation.
+    fn apply(&self, jail: &mut figment::Jail) -> Result<(), Box<figment::Error>> {
+        if self.clear_env {
+            jail.clear_env();
+        }
+        if let Some(contents) = self.file {
+            jail.create_file(".app.toml", contents)?;
+        }
+        if let Some((key, value)) = self.env {
+            jail.set_env(key, value);
+        }
+        Ok(())
+    }
+}
+
+/// A successful merge scenario and the `option` value it should yield.
+struct MergeCase {
+    setup: JailSetup,
+    cli_args: &'static [&'static str],
+    expected: &'static str,
+}
+
+#[rstest]
+#[case::cli_overrides_file(MergeCase {
+    setup: JailSetup { file: Some(OPTION_FROM_FILE), env: None, clear_env: false },
+    cli_args: &["prog", "run", "--option", "cli"],
+    expected: "cli",
+})]
+#[case::env_when_cli_none(MergeCase {
+    setup: JailSetup {
+        file: None,
+        env: Some(("APP_CMDS_RUN_OPTION", "env")),
+        clear_env: false,
+    },
+    cli_args: &["prog", "run"],
+    expected: "env",
+})]
+#[case::file_when_cli_none(MergeCase {
+    setup: JailSetup { file: Some(OPTION_FROM_FILE), env: None, clear_env: true },
+    cli_args: &["prog", "run"],
+    expected: "file",
+})]
+fn merge_resolves_option_from_expected_layer(#[case] case: MergeCase) {
     figment::Jail::expect_with(|j| {
-        j.create_file(".app.toml", "[cmds.run]\noption = \"file\"")?;
-        let cli = Cli::parse_from(["prog", "run", "--option", "cli"]);
+        case.setup.apply(j).map_err(|error| *error)?;
+        let cli = Cli::parse_from(case.cli_args.iter().copied());
         let Commands::Run(args) = cli.cmd;
         let cfg = args.load_and_merge().to_figment()?;
-        assert_eq!(cfg.option.as_deref(), Some("cli"));
+        assert_eq!(cfg.option.as_deref(), Some(case.expected));
         Ok(())
     });
 }
 
-#[test]
-fn merge_falls_back_to_env_when_cli_none() {
+#[rstest]
+#[case::invalid_file(JailSetup {
+    file: Some("[cmds.run]\noption = 5"),
+    env: None,
+    clear_env: false,
+})]
+#[case::invalid_env(JailSetup {
+    file: None,
+    env: Some(("APP_CMDS_RUN_COUNT", "not-a-number")),
+    clear_env: false,
+})]
+fn merge_errors_on_malformed_source(#[case] setup: JailSetup) {
     figment::Jail::expect_with(|j| {
-        j.set_env("APP_CMDS_RUN_OPTION", "env");
-        let cli = Cli::parse_from(["prog", "run"]);
-        let Commands::Run(args) = cli.cmd;
-        let cfg = args.load_and_merge().to_figment()?;
-        assert_eq!(cfg.option.as_deref(), Some("env"));
-        Ok(())
-    });
-}
-
-#[test]
-fn merge_falls_back_to_file_when_cli_none() {
-    figment::Jail::expect_with(|j| {
-        // Strip all env vars so file fallback is deterministic.
-        j.clear_env();
-        j.create_file(".app.toml", "[cmds.run]\noption = \"file\"")?;
-        let cli = Cli::parse_from(["prog", "run"]);
-        let Commands::Run(args) = cli.cmd;
-        let cfg = args.load_and_merge().to_figment()?;
-        assert_eq!(cfg.option.as_deref(), Some("file"));
-        Ok(())
-    });
-}
-
-#[test]
-fn merge_errors_on_invalid_file() {
-    figment::Jail::expect_with(|j| {
-        j.create_file(".app.toml", "[cmds.run]\noption = 5")?;
-        let cli = Cli::parse_from(["prog", "run"]);
-        let Commands::Run(args) = cli.cmd;
-        assert!(args.load_and_merge().is_err());
-        Ok(())
-    });
-}
-
-#[test]
-fn merge_errors_on_invalid_env() {
-    figment::Jail::expect_with(|j| {
-        j.set_env("APP_CMDS_RUN_COUNT", "not-a-number");
+        setup.apply(j).map_err(|error| *error)?;
         let cli = Cli::parse_from(["prog", "run"]);
         let Commands::Run(args) = cli.cmd;
         assert!(args.load_and_merge().is_err());
