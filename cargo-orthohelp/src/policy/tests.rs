@@ -21,19 +21,25 @@ fn report_serializes_stable_machine_fields() {
     let report = sample_policy_report();
 
     let value = serde_json::to_value(report).expect("serialize policy report");
-    assert_eq!(field(&value, "version"), "1");
-    assert_eq!(field(&value, "tool"), "cargo-orthohelp");
-    assert_eq!(field(&value, "mode"), "warn");
-    let serialized_result = first_array_item(field(&value, "results"));
-    assert_eq!(
-        field(serialized_result, "rule_id"),
-        "agent-native.vocabulary.canonical-flag"
-    );
-    assert_eq!(field(serialized_result, "code"), "canonical_flag_missing");
-    assert_eq!(field(serialized_result, "severity"), "warn");
-    let summary = field(&value, "summary");
-    assert_eq!(field(summary, "warn"), 1);
-    assert_eq!(field(summary, "total"), 1);
+    let version = field(&value, "version").expect("version field");
+    assert_eq!(version, "1");
+    let tool = field(&value, "tool").expect("tool field");
+    assert_eq!(tool, "cargo-orthohelp");
+    let mode = field(&value, "mode").expect("mode field");
+    assert_eq!(mode, "warn");
+    let results = field(&value, "results").expect("results field");
+    let serialized_result = first_array_item(results).expect("results should be non-empty");
+    let rule_id = field(serialized_result, "rule_id").expect("rule_id field");
+    assert_eq!(rule_id, "agent-native.vocabulary.canonical-flag");
+    let code = field(serialized_result, "code").expect("code field");
+    assert_eq!(code, "canonical_flag_missing");
+    let severity = field(serialized_result, "severity").expect("severity field");
+    assert_eq!(severity, "warn");
+    let summary = field(&value, "summary").expect("summary field");
+    let warn = field(summary, "warn").expect("warn field");
+    assert_eq!(warn, 1);
+    let total = field(summary, "total").expect("total field");
+    assert_eq!(total, 1);
 }
 
 #[rstest]
@@ -116,18 +122,17 @@ fn missing_required_report_fields_fail_deserialization(#[case] payload: Value) {
     );
 }
 
-fn field<'a>(value: &'a Value, name: &str) -> &'a Value {
-    let Some(field) = value.get(name) else {
-        panic!("JSON object should contain `{name}`");
-    };
-    field
+fn field<'a>(value: &'a Value, name: &str) -> Result<&'a Value, String> {
+    value
+        .get(name)
+        .ok_or_else(|| format!("JSON object should contain `{name}`"))
 }
 
-fn first_array_item(value: &Value) -> &Value {
-    let Some(item) = value.as_array().and_then(|items| items.first()) else {
-        panic!("JSON value should be a non-empty array");
-    };
-    item
+fn first_array_item(value: &Value) -> Result<&Value, String> {
+    value
+        .as_array()
+        .and_then(|items| items.first())
+        .ok_or_else(|| "JSON value should be a non-empty array".to_owned())
 }
 
 fn sample_policy_report() -> PolicyReport {
