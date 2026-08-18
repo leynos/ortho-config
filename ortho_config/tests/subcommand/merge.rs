@@ -1,10 +1,11 @@
 //! Tests for merge helpers in subcommand flows.
 
-use anyhow::{Result, anyhow, ensure};
+use anyhow::{Result, ensure};
 use clap::Parser;
 use ortho_config::OrthoConfig;
 use serde::{Deserialize, Serialize};
 
+use super::to_anyhow::ToAnyhow as _;
 use super::util::{with_merged_subcommand_cli, with_merged_subcommand_cli_for};
 
 #[derive(Debug, Deserialize, Serialize, Default, PartialEq, Parser)]
@@ -38,7 +39,7 @@ fn merge_helper_combines_defaults_and_cli() -> Result<()> {
         },
         &cli,
     )
-    .map_err(|err| anyhow!(err))?;
+    .to_anyhow()?;
     ensure!(
         merged.foo.as_deref() == Some("cli"),
         "expected cli, got {:?}",
@@ -68,7 +69,7 @@ fn merge_wrapper_respects_prefix() -> Result<()> {
         },
         &cli,
     )
-    .map_err(|err| anyhow!(err))?;
+    .to_anyhow()?;
     ensure!(
         merged.foo.as_deref() == Some("file"),
         "expected file, got {:?}",

@@ -1,10 +1,11 @@
 //! Prefix-handling tests for subcommand wrappers.
 
-use anyhow::{Result, anyhow, ensure};
+use anyhow::{Result, ensure};
 use clap::Parser;
 use ortho_config::OrthoConfig;
 use serde::{Deserialize, Serialize};
 
+use super::to_anyhow::ToAnyhow as _;
 use super::util::with_merged_subcommand_cli_for;
 
 #[derive(Debug, Deserialize, Serialize, Parser, OrthoConfig, Default, PartialEq)]
@@ -24,7 +25,7 @@ fn wrapper_uses_struct_prefix() -> Result<()> {
         },
         &PrefixedCfg::default(),
     )
-    .map_err(|err| anyhow!(err))?;
+    .to_anyhow()?;
     ensure!(
         cfg.foo.as_deref() == Some("env"),
         "expected env, got {:?}",

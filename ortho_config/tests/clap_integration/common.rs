@@ -1,28 +1,24 @@
 //! Shared types and helpers for the CLI integration tests.
 
 use anyhow::{Result, anyhow, ensure};
-use ortho_config::{OrthoConfig, OrthoError, OrthoResult};
+use ortho_config::OrthoResult;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
+pub(crate) use ortho_config::{OrthoConfig, OrthoError};
+
 #[path = "../test_utils.rs"]
 mod test_utils;
-use test_utils::with_jail;
+pub(crate) use test_utils::with_jail;
 
 #[path = "../clap_test_utils.rs"]
 mod clap_test_utils;
 use clap_test_utils::ConfigValueAssertions;
 pub(crate) use clap_test_utils::assert_config_values;
 
-pub(crate) trait OrthoResultExt<T> {
-    fn to_anyhow(self) -> Result<T>;
-}
-
-impl<T> OrthoResultExt<T> for ortho_config::OrthoResult<T> {
-    fn to_anyhow(self) -> Result<T> {
-        self.map_err(|err| anyhow!(err))
-    }
-}
+#[path = "../support/to_anyhow.rs"]
+mod to_anyhow;
+pub(crate) use to_anyhow::ToAnyhow;
 
 pub(crate) const DEFAULT_RECIPIENT: &str = "World";
 pub(crate) const DEFAULT_SALUTATIONS: &[&str] = &["Hello"];
@@ -108,13 +104,6 @@ impl Default for ExpectedConfig {
     }
 }
 
-pub(crate) fn load_from_iter<I>(args: I) -> OrthoResult<TestConfig>
-where
-    I: IntoIterator<Item = &'static str>,
-{
-    TestConfig::load_from_iter(args)
-}
-
 pub(crate) fn run_config_case<T, F>(
     files: &[(&str, &str)],
     env: &[(&str, &str)],
@@ -132,7 +121,7 @@ where
         for (key, value) in env {
             j.set_env(key, value);
         }
-        let config = T::load_from_iter(cli_args.iter().copied()).map_err(|err| anyhow!(err))?;
+        let config = T::load_from_iter(cli_args.iter().copied()).to_anyhow()?;
         validate(&config)?;
         Ok(config)
     })
@@ -149,22 +138,19 @@ where
 {
     match result {
         Ok(value) => Err(anyhow!(
-            "expected {expected_variant} error, got success: {:?}",
-            value
+            "expected {expected_variant} error, got success: {value:?}"
         )),
         Err(err) => {
             ensure!(
                 predicate(err.as_ref()),
-                "expected {expected_variant} error, got {err:?}",
-                expected_variant = expected_variant,
-                err = err
+                "expected {expected_variant} error, got {err:?}"
             );
             Ok(())
         }
     }
 }
 
-fn validation_mismatch<T>(key: &str, expected: String, actual: T) -> OrthoResult<()>
+fn validation_mismatch<T>(key: &str, expected: &str, actual: T) -> OrthoResult<()>
 where
     T: fmt::Debug,
 {
@@ -177,18 +163,14 @@ where
 
 pub(crate) fn assert_config_eq(config: &TestConfig, expected: &ExpectedConfig) -> OrthoResult<()> {
     if config.recipient != expected.recipient {
-        return validation_mismatch(
-            "recipient",
-            expected.recipient.to_owned(),
-            &config.recipient,
-        );
+        return validation_mismatch("recipient", expected.recipient, &config.recipient);
     }
 
     let actual_salutations: Vec<&str> = config.salutations.iter().map(String::as_str).collect();
     if actual_salutations.as_slice() != expected.salutations {
         return validation_mismatch(
             "salutations",
-            format!("{:?}", expected.salutations),
+            &format!("{:?}", expected.salutations),
             actual_salutations,
         );
     }
@@ -196,19 +178,19 @@ pub(crate) fn assert_config_eq(config: &TestConfig, expected: &ExpectedConfig) -
     if config.is_excited != expected.is_excited {
         return validation_mismatch(
             "is_excited",
-            expected.is_excited.to_string(),
+            &expected.is_excited.to_string(),
             config.is_excited,
         );
     }
 
     if config.is_quiet != expected.is_quiet {
-        return validation_mismatch("is_quiet", expected.is_quiet.to_string(), config.is_quiet);
+        return validation_mismatch("is_quiet", &expected.is_quiet.to_string(), config.is_quiet);
     }
 
     if config.sample_value.as_deref() != expected.sample_value {
         return validation_mismatch(
             "sample_value",
-            format!("{:?}", expected.sample_value),
+            &format!("{:?}", expected.sample_value),
             config.sample_value.as_deref(),
         );
     }
@@ -216,7 +198,7 @@ pub(crate) fn assert_config_eq(config: &TestConfig, expected: &ExpectedConfig) -
     if config.other.as_deref() != expected.other {
         return validation_mismatch(
             "other",
-            format!("{:?}", expected.other),
+            &format!("{:?}", expected.other),
             config.other.as_deref(),
         );
     }
@@ -248,5 +230,3 @@ pub(crate) struct RenamedPathConfig {
     #[ortho_config(cli_long = "config")]
     pub(crate) config_path: Option<std::path::PathBuf>,
 }
-
-pub(crate) use ortho_config::OrthoError;

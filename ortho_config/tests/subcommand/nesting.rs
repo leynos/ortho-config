@@ -1,9 +1,10 @@
 //! Nested environment-key mapping tests for subcommand loading.
 
-use anyhow::{Result, anyhow, ensure};
+use anyhow::{Result, ensure};
 use clap::Parser;
 use serde::{Deserialize, Serialize};
 
+use super::to_anyhow::ToAnyhow as _;
 use super::util::with_merged_subcommand_cli;
 
 #[derive(Debug, Deserialize, Serialize, Default, PartialEq, Parser)]
@@ -67,7 +68,7 @@ fn env_values_support_nesting_cases(
         },
         &NestedCfg::default(),
     )
-    .map_err(|err| anyhow!(err))?;
+    .to_anyhow()?;
     ensure!(
         cfg.nested.host.as_deref() == expect_host,
         "expected host {:?}, got {:?}",
@@ -110,7 +111,7 @@ fn env_values_support_deeper_nesting(
         },
         &DeepNestedCfg::default(),
     )
-    .map_err(|err| anyhow!(err))?;
+    .to_anyhow()?;
     ensure!(
         cfg.deep.nest.host.as_deref() == expect_host,
         "expected host {:?}, got {:?}",
