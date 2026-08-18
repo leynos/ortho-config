@@ -14,12 +14,12 @@
 
 use std::path::{Path, PathBuf};
 
-/// The application name used across the injected-discovery suites.
-pub const APP: &str = "demo";
-/// The selector variable name used across the injected-discovery suites.
-pub const SELECTOR: &str = "DEMO_CONFIG";
-/// The single deterministic project root used across the suites.
-pub const PROJECT_ROOT: &str = "/workspace";
+// The suite identity lives beside the builder these expectations describe, so
+// the two cannot disagree about which application is being discovered.
+// Includers must therefore declare `mod discovery_builder;` alongside this
+// module.
+use super::discovery_builder::{APP, PROJECT_ROOT};
+
 /// The dotfile `ConfigDiscoveryBuilder` derives for [`APP`].
 pub const DOTFILE: &str = ".demo.toml";
 

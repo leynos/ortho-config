@@ -38,7 +38,7 @@ struct RuleCfg {
 ///         ("b".into(), RuleCfg { enabled: false }),
 ///     ]),
 /// };
-/// assert_basic_rules(&cfg).unwrap();
+/// assert_basic_rules(&cfg).expect("the fixture defines rules 'a' and 'b'");
 /// ```
 fn assert_basic_rules(cfg: &TableConfig) -> Result<()> {
     ensure!(

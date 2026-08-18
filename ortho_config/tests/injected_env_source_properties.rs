@@ -10,18 +10,20 @@
 //! the whole suite behind a lock, and a thousand serialized cases is not a
 //! property test anyone runs.
 
-use ortho_config::{ConfigDiscovery, MapEnv};
+use ortho_config::MapEnv;
 use proptest::collection::vec;
 use proptest::prelude::*;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 
+#[path = "support/discovery_builder.rs"]
+mod discovery_builder;
 #[path = "support/discovery_expect.rs"]
 mod expect;
 
+use discovery_builder::{PROJECT_ROOT, SELECTOR, discovery_with};
 use expect::{
-    APP, DOTFILE, PROJECT_ROOT, SELECTOR, assert_contains_run, assert_precedes, base_group,
-    default_xdg_group, home_group, project_group, sequence,
+    DOTFILE, assert_contains_run, assert_precedes, base_group, default_xdg_group, home_group,
+    project_group, sequence,
 };
 
 /// Every variable discovery consults. A generated key must avoid all of them,
@@ -35,15 +37,6 @@ const CONSULTED: &[&str] = &[
     "HOME",
     "USERPROFILE",
 ];
-
-fn discovery_with(env: MapEnv) -> ConfigDiscovery {
-    ConfigDiscovery::builder(APP)
-        .env_var(SELECTOR)
-        .clear_project_roots()
-        .add_project_root(Path::new(PROJECT_ROOT))
-        .env_source(Arc::new(env))
-        .build()
-}
 
 /// The candidate list when the source supplies nothing at all.
 fn baseline() -> Vec<PathBuf> {

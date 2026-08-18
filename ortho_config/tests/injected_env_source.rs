@@ -16,27 +16,20 @@
 
 use anyhow::Context as _;
 use cap_std::{ambient_authority, fs::Dir};
-use ortho_config::{ConfigDiscovery, EnvSource, MapEnv};
+use ortho_config::{EnvSource, MapEnv};
 use rstest::rstest;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 
+#[path = "support/discovery_builder.rs"]
+mod discovery_builder;
 #[path = "support/discovery_expect.rs"]
 mod expect;
 
+use discovery_builder::{APP, PROJECT_ROOT, SELECTOR, discovery_with};
 use expect::{
-    APP, DOTFILE, PROJECT_ROOT, SELECTOR, assert_contains_run, assert_precedes, base_group,
-    default_xdg_group, home_group, project_group, sequence,
+    DOTFILE, assert_contains_run, assert_precedes, base_group, default_xdg_group, home_group,
+    project_group, sequence,
 };
-
-fn discovery_with(env: MapEnv) -> ConfigDiscovery {
-    ConfigDiscovery::builder(APP)
-        .env_var(SELECTOR)
-        .clear_project_roots()
-        .add_project_root(Path::new(PROJECT_ROOT))
-        .env_source(Arc::new(env))
-        .build()
-}
 
 fn candidates_for(pairs: &[(&str, &str)]) -> Vec<PathBuf> {
     discovery_with(pairs.iter().copied().collect()).candidates()

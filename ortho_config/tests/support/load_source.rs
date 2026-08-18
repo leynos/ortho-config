@@ -10,7 +10,7 @@
 //! environment and no case depends on another's state.
 
 use super::capture_support::{capture, only, write_fixture};
-use super::discovery_with;
+use super::discovery_builder::discovery_with;
 use cap_std::{ambient_authority, fs::Dir};
 use ortho_config::{ConfigDiscovery, MapEnv};
 use std::path::{Path, PathBuf};
