@@ -1,5 +1,6 @@
 //! Steps verifying CLI precedence over environment variables and files.
 
+use super::common::SlotTakeOrExt;
 use super::value_parsing::normalize_scalar;
 use crate::scenario_state::{RulesConfig, RulesContext};
 use anyhow::{Result, anyhow, ensure};
@@ -56,8 +57,7 @@ fn loaded_rules(rules_context: &RulesContext, expected: String) -> Result<()> {
     let expected = normalize_scalar(&expected);
     let result = rules_context
         .result
-        .take()
-        .ok_or_else(|| anyhow!("configuration result unavailable"))?;
+        .take_or("configuration result unavailable")?;
     let cfg = result.map_err(anyhow::Error::from)?;
     let rule = cfg
         .rules
