@@ -207,47 +207,62 @@ mod tests {
     const ABC_SHA256: &str = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
 
     #[rstest]
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Assertions report fingerprint mismatches more clearly than errors"
+    )]
     fn fingerprint_changes_on_file_update(
         temp_root: Result<(tempfile::TempDir, Utf8PathBuf, Dir), CacheTestError>,
-    ) {
-        let (_tempdir, root, dir) = temp_root.expect("temp root fixture should build");
-        dir.create_dir_all("src").expect("create src directory");
+    ) -> Result<(), CacheTestError> {
+        let (_tempdir, root, dir) = temp_root?;
+        dir.create_dir_all("src")?;
 
-        write_file(&dir, "Cargo.toml", "[package]\nname = \"demo\"\n").expect("write Cargo.toml");
-        write_file(&dir, "src/lib.rs", "pub fn demo() -> u32 { 1 }\n").expect("write src/lib.rs");
+        write_file(&dir, "Cargo.toml", "[package]\nname = \"demo\"\n")?;
+        write_file(&dir, "src/lib.rs", "pub fn demo() -> u32 { 1 }\n")?;
 
-        let first = fingerprint_package(&root).expect("fingerprint initial package");
-        write_file(&dir, "src/lib.rs", "pub fn demo() -> u32 { 2 }\n").expect("rewrite src/lib.rs");
-        let second = fingerprint_package(&root).expect("fingerprint updated package");
+        let first = fingerprint_package(&root)?;
+        write_file(&dir, "src/lib.rs", "pub fn demo() -> u32 { 2 }\n")?;
+        let second = fingerprint_package(&root)?;
 
         assert_ne!(first, second, "fingerprint should change when files change");
         assert!(
             is_sha256_hex(&first),
             "package fingerprint should render as lowercase hex: {first}"
         );
+        Ok(())
     }
 
     #[rstest]
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Assertions report fingerprint mismatches more clearly than errors"
+    )]
     fn lockfile_fingerprint_matches_known_digest_vector(
         temp_root: Result<(tempfile::TempDir, Utf8PathBuf, Dir), CacheTestError>,
-    ) {
-        let (_tempdir, root, dir) = temp_root.expect("temp root fixture should build");
-        write_file(&dir, "Cargo.lock", "abc").expect("write Cargo.lock");
+    ) -> Result<(), CacheTestError> {
+        let (_tempdir, root, dir) = temp_root?;
+        write_file(&dir, "Cargo.lock", "abc")?;
 
-        let fingerprint = lockfile_fingerprint(&root).expect("fingerprint lockfile");
+        let fingerprint = lockfile_fingerprint(&root)?;
 
         assert_eq!(fingerprint.as_deref(), Some(ABC_SHA256));
+        Ok(())
     }
 
     #[rstest]
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Assertions report fingerprint mismatches more clearly than errors"
+    )]
     fn lockfile_fingerprint_is_absent_without_a_lockfile(
         temp_root: Result<(tempfile::TempDir, Utf8PathBuf, Dir), CacheTestError>,
-    ) {
-        let (_tempdir, root, _dir) = temp_root.expect("temp root fixture should build");
+    ) -> Result<(), CacheTestError> {
+        let (_tempdir, root, _dir) = temp_root?;
 
-        let fingerprint = lockfile_fingerprint(&root).expect("fingerprint without lockfile");
+        let fingerprint = lockfile_fingerprint(&root)?;
 
         assert_eq!(fingerprint, None, "absent lockfile should not fingerprint");
+        Ok(())
     }
 
     #[rstest]

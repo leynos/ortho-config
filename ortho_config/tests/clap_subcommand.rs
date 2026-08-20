@@ -60,6 +60,22 @@ impl JailSetup {
     ///
     /// Boxes the error to keep the `Err` variant small for
     /// `clippy::result_large_err`; the jail closure unboxes on propagation.
+    /// The process environment is cleared first when `clear_env` is `true`,
+    /// then `.app.toml` is written when `file` is `Some`, then the named
+    /// variable is set when `env` is `Some`.
+    ///
+    /// # Examples
+    /// ```
+    /// figment::Jail::expect_with(|jail| {
+    ///     let setup = JailSetup {
+    ///         file: Some("[cmds.run]\noption = \"file\""),
+    ///         env: None,
+    ///         clear_env: true,
+    ///     };
+    ///     setup.apply(jail).map_err(|error| *error)?;
+    ///     Ok(())
+    /// });
+    /// ```
     fn apply(&self, jail: &mut figment::Jail) -> Result<(), Box<figment::Error>> {
         if self.clear_env {
             jail.clear_env();
@@ -101,15 +117,22 @@ struct MergeCase {
     cli_args: &["prog", "run"],
     expected: "file",
 })]
-fn merge_resolves_option_from_expected_layer(#[case] case: MergeCase) {
-    figment::Jail::expect_with(|j| {
+fn merge_resolves_option_from_expected_layer(#[case] case: MergeCase) -> anyhow::Result<()> {
+    figment::Jail::try_with(|j| {
         case.setup.apply(j).map_err(|error| *error)?;
         let cli = Cli::parse_from(case.cli_args.iter().copied());
         let Commands::Run(args) = cli.cmd;
         let cfg = args.load_and_merge().to_figment()?;
-        assert_eq!(cfg.option.as_deref(), Some(case.expected));
+        if cfg.option.as_deref() != Some(case.expected) {
+            return Err(figment::Error::from(format!(
+                "expected option {:?} from the staged layer, got {:?}",
+                case.expected,
+                cfg.option.as_deref()
+            )));
+        }
         Ok(())
-    });
+    })?;
+    Ok(())
 }
 
 #[rstest]
@@ -123,12 +146,17 @@ fn merge_resolves_option_from_expected_layer(#[case] case: MergeCase) {
     env: Some(("APP_CMDS_RUN_COUNT", "not-a-number")),
     clear_env: false,
 })]
-fn merge_errors_on_malformed_source(#[case] setup: JailSetup) {
-    figment::Jail::expect_with(|j| {
+fn merge_errors_on_malformed_source(#[case] setup: JailSetup) -> anyhow::Result<()> {
+    figment::Jail::try_with(|j| {
         setup.apply(j).map_err(|error| *error)?;
         let cli = Cli::parse_from(["prog", "run"]);
         let Commands::Run(args) = cli.cmd;
-        assert!(args.load_and_merge().is_err());
+        if args.load_and_merge().is_ok() {
+            return Err(figment::Error::from(
+                "expected the malformed source to fail the merge".to_owned(),
+            ));
+        }
         Ok(())
-    });
+    })?;
+    Ok(())
 }

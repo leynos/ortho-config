@@ -1,4 +1,4 @@
-//! Snapshot tests for localised help output across different locales.
+//! Snapshot tests for localized help output across different locales.
 //!
 //! Uses `assert_cmd` to run the compiled binary with different `LANG`
 //! environment settings and `insta` to snapshot the `--help` output.
@@ -149,7 +149,7 @@ fn normalise_rust_src_paths(output: &str) -> String {
 // Direct command-tree localization snapshots
 // =============================================================================
 
-/// Renders the localised command tree for `locale` and compares it with the
+/// Renders the localized command tree for `locale` and compares it with the
 /// snapshot recorded under `snapshot_name`.
 ///
 /// `rstest` wraps a parameterised test in a module named after the test

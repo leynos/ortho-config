@@ -16,6 +16,13 @@ pub trait ToAnyhow<T> {
     /// # Errors
     ///
     /// Propagates the original `OrthoError` wrapped in an [`anyhow::Error`].
+    ///
+    /// # Examples
+    /// ```
+    /// let result: OrthoResult<u32> = Ok(42);
+    /// let converted: anyhow::Result<u32> = result.to_anyhow();
+    /// assert_eq!(converted.expect("value"), 42);
+    /// ```
     fn to_anyhow(self) -> anyhow::Result<T>;
 }
 

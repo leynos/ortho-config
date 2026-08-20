@@ -28,7 +28,15 @@ pub const PROJECT_ROOT: &str = "/workspace";
 ///
 /// `clear_project_roots` is what makes the result deterministic: without it the
 /// discovered roots depend on the working directory of whichever process ran
-/// the test.
+/// the test. The returned `ConfigDiscovery` reads only the supplied `MapEnv`
+/// — never the process environment — and resolves its sole project root to
+/// `/workspace` (the [`PROJECT_ROOT`] constant).
+///
+/// # Examples
+/// ```
+/// let env = MapEnv::new().with_var(SELECTOR, "candidate");
+/// let discovery = discovery_with(env);
+/// ```
 #[must_use]
 pub fn discovery_with(env: MapEnv) -> ConfigDiscovery {
     ConfigDiscovery::builder(APP)

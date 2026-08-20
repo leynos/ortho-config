@@ -158,7 +158,10 @@ mod tests {
         fn try_new(source: &str) -> Result<Self> {
             let dir = TempDir::new().context("create test binary dir")?;
             let src_path = dir.path().join("main.rs");
-            std::fs::write(&src_path, source).context("write test binary source")?;
+            cap_std::fs::Dir::open_ambient_dir(dir.path(), cap_std::ambient_authority())
+                .context("open test binary dir")?
+                .write("main.rs", source)
+                .context("write test binary source")?;
             let bin_path = dir.path().join("bin");
             let status = Command::new("rustc")
                 .arg("--edition=2021")
