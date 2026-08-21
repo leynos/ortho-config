@@ -50,7 +50,18 @@ fn command_tree() -> Command {
         .subcommand(Command::new("greet").about("stock greet about"))
 }
 
+/// Looks up an argument by identifier, leaving the presence assertion to the
+/// caller.
+fn find_argument<'a>(command: &'a Command, id: &str) -> Option<&'a Arg> {
+    command.get_arguments().find(|arg| arg.get_id() == id)
+}
+
 fn assert_root_command_metadata(command: &mut Command) {
+    assert_root_command_text(command);
+    assert_root_usage_is_localized(command);
+}
+
+fn assert_root_command_text(command: &Command) {
     assert_eq!(
         command.get_about().map(ToString::to_string).as_deref(),
         Some("demo-cli-about:localized")
@@ -75,7 +86,9 @@ fn assert_root_command_metadata(command: &mut Command) {
             .as_deref(),
         Some("demo-cli-after_long_help:localized")
     );
+}
 
+fn assert_root_usage_is_localized(command: &mut Command) {
     let help = command.render_long_help().to_string();
     assert!(
         help.contains("demo-cli-usage:localized"),
@@ -83,10 +96,7 @@ fn assert_root_command_metadata(command: &mut Command) {
     );
 }
 
-fn assert_config_arg(command: &Command) {
-    let Some(config) = command.get_arguments().find(|arg| arg.get_id() == "config") else {
-        panic!("config argument should exist");
-    };
+fn assert_config_arg(config: &Arg) {
     assert_eq!(
         config.get_help().map(ToString::to_string).as_deref(),
         Some("demo-cli-args-config-help:localized")
@@ -105,13 +115,7 @@ fn assert_config_arg(command: &Command) {
     );
 }
 
-fn assert_verbose_arg(command: &Command) {
-    let Some(verbose) = command
-        .get_arguments()
-        .find(|arg| arg.get_id() == "verbose")
-    else {
-        panic!("verbose argument should exist");
-    };
+fn assert_verbose_arg(verbose: &Arg) {
     assert!(matches!(verbose.get_action(), ArgAction::SetTrue));
     assert!(verbose.get_value_names().is_none());
     assert_eq!(
@@ -120,10 +124,7 @@ fn assert_verbose_arg(command: &Command) {
     );
 }
 
-fn assert_greet_subcommand(command: &Command) {
-    let Some(greet) = command.find_subcommand("greet") else {
-        panic!("greet subcommand should exist");
-    };
+fn assert_greet_subcommand(greet: &Command) {
     assert_eq!(
         greet.get_about().map(ToString::to_string).as_deref(),
         Some("demo-cli-greet-about:localized")
@@ -151,9 +152,15 @@ fn localize_rewrites_command_tree_without_corrupting_flags() {
     let mut command = command_tree().with_base("demo.cli").localize(&localizer);
 
     assert_root_command_metadata(&mut command);
-    assert_config_arg(&command);
-    assert_verbose_arg(&command);
-    assert_greet_subcommand(&command);
+
+    let config = find_argument(&command, "config").expect("config argument should exist");
+    assert_config_arg(config);
+    let verbose = find_argument(&command, "verbose").expect("verbose argument should exist");
+    assert_verbose_arg(verbose);
+    let greet = command
+        .find_subcommand("greet")
+        .expect("greet subcommand should exist");
+    assert_greet_subcommand(greet);
 }
 
 #[rstest]
@@ -168,9 +175,9 @@ fn localize_self_does_not_recurse_into_subcommands() {
         command.get_about().map(ToString::to_string).as_deref(),
         Some("demo-cli-about:localized")
     );
-    let Some(greet) = command.find_subcommand("greet") else {
-        panic!("greet subcommand should exist");
-    };
+    let greet = command
+        .find_subcommand("greet")
+        .expect("greet subcommand should exist");
     assert_eq!(
         greet.get_about().map(ToString::to_string).as_deref(),
         Some("stock greet about")

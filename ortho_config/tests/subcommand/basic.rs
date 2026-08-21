@@ -1,11 +1,12 @@
 //! Baseline loading behaviour for subcommand configuration.
 
-use anyhow::{Result, anyhow, ensure};
+use anyhow::{Result, ensure};
 use clap::Parser;
 #[cfg(any(unix, target_os = "redox"))]
 use figment::Error as FigmentError;
 use serde::{Deserialize, Serialize};
 
+use super::to_anyhow::ToAnyhow as _;
 use super::util::{path_to_utf8_string, with_merged_subcommand_cli};
 
 #[derive(Debug, Serialize, Deserialize, Default, PartialEq, Parser)]
@@ -29,7 +30,7 @@ fn file_and_env_loading() -> Result<()> {
         },
         &CmdCfg::default(),
     )
-    .map_err(|err| anyhow!(err))?;
+    .to_anyhow()?;
     ensure!(
         cfg.foo.as_deref() == Some("env"),
         "expected env, got {:?}",
@@ -53,7 +54,7 @@ fn loads_from_home() -> Result<()> {
         },
         &CmdCfg::default(),
     )
-    .map_err(|err| anyhow!(err))?;
+    .to_anyhow()?;
     ensure!(
         cfg.foo.as_deref() == Some("home"),
         "expected home, got {:?}",
@@ -77,7 +78,7 @@ fn local_overrides_home() -> Result<()> {
         },
         &CmdCfg::default(),
     )
-    .map_err(|err| anyhow!(err))?;
+    .to_anyhow()?;
     ensure!(
         cfg.foo.as_deref() == Some("local"),
         "expected local, got {:?}",
@@ -103,7 +104,7 @@ fn loads_from_xdg_config() -> Result<()> {
         },
         &CmdCfg::default(),
     )
-    .map_err(|err| anyhow!(err))?;
+    .to_anyhow()?;
     ensure!(
         cfg.foo.as_deref() == Some("xdg"),
         "expected xdg, got {:?}",
@@ -122,7 +123,7 @@ fn loads_yaml_file() -> Result<()> {
         },
         &CmdCfg::default(),
     )
-    .map_err(|err| anyhow!(err))?;
+    .to_anyhow()?;
     ensure!(
         cfg.foo.as_deref() == Some("yaml"),
         "expected yaml, got {:?}",

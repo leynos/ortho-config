@@ -263,8 +263,10 @@ mod tests {
     use camino::Utf8PathBuf;
     use cap_std::ambient_authority;
     use cap_std::fs_utf8::Dir;
+    use rstest::{fixture, rstest};
     use std::io::Read;
 
+    #[fixture]
     fn minimal_metadata() -> LocalizedDocMetadata {
         LocalizedDocMetadata {
             ir_version: "1.1".to_owned(),
@@ -299,9 +301,9 @@ mod tests {
         }
     }
 
-    #[test]
-    fn generate_to_string_produces_valid_roff() {
-        let metadata = minimal_metadata();
+    #[rstest]
+    fn generate_to_string_produces_valid_roff(minimal_metadata: LocalizedDocMetadata) {
+        let metadata = minimal_metadata;
         let config = RoffConfig::default();
         let result = generate_to_string(&metadata, &config);
 

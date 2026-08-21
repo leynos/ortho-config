@@ -1,7 +1,8 @@
 //! Error handling scenarios for CLI parsing.
 
 use super::common::{
-    OptionConfig, OrthoError, RequiredConfig, TestConfig, assert_ortho_error, with_jail,
+    OptionConfig, OrthoConfig, OrthoError, RequiredConfig, TestConfig, assert_ortho_error,
+    with_jail,
 };
 use anyhow::Result;
 use rstest::rstest;

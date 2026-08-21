@@ -39,7 +39,7 @@ struct ConfigPathCase {
 })]
 fn resolves_config_path_priorities(#[case] case: ConfigPathCase) -> Result<()> {
     run_config_case::<TestConfig, _>(case.files, case.env, case.cli_args, |cfg| {
-        assert_config_values(&cfg, case.expected_sample, case.expected_other)
+        assert_config_values(cfg, case.expected_sample, case.expected_other)
     })?;
     Ok(())
 }

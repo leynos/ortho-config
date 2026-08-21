@@ -1,6 +1,7 @@
 //! Tests for the compact agent-context schema.
 
 use super::*;
+use anyhow::{Result, anyhow};
 use camino::Utf8PathBuf;
 use insta::assert_snapshot;
 use rstest::rstest;
@@ -61,11 +62,14 @@ fn command_summary_serializes_only_when_present(
         .summary = summary.map(str::to_owned);
 
     let value = serde_json::to_value(context).expect("serialize agent context");
-    let command = first_array_item(field(&value, "commands"));
+    let commands = field(&value, "commands").expect("serialized context should list commands");
+    let command = first_array_item(commands).expect("serialized context should list one command");
 
     assert_eq!(command.get("summary").is_some(), should_include_summary);
     if let Some(expected) = summary {
-        assert_eq!(field(command, "summary"), expected);
+        let serialized_summary =
+            field(command, "summary").expect("present summary should be serialized");
+        assert_eq!(serialized_summary, expected);
     }
 }
 
@@ -120,7 +124,8 @@ fn skill_manifest_serialises_with_camino_path() {
     };
 
     let value = serde_json::to_value(&manifest).expect("serialize skill manifest");
-    assert_eq!(field(&value, "path"), "skills/rename.md");
+    let serialized_path = field(&value, "path").expect("skill manifest should serialize a path");
+    assert_eq!(serialized_path, "skills/rename.md");
     let json = serde_json::to_string_pretty(&manifest).expect("serialize skill manifest snapshot");
 
     assert_snapshot!(json, @r###"
@@ -188,7 +193,7 @@ fn agent_context_json_snapshot_covers_wire_contract() {
 }
 
 #[rstest]
-fn absent_optional_fields_serialize_with_documented_nulls() {
+fn absent_optional_fields_serialize_with_documented_nulls() -> Result<()> {
     let mut context = sample_agent_context();
     let mutable_command = context
         .commands
@@ -211,7 +216,7 @@ fn absent_optional_fields_serialize_with_documented_nulls() {
         .output_mode = None;
 
     let value = serde_json::to_value(context).expect("serialize agent context");
-    assert_optional_command_fields_are_null(&value);
+    assert_optional_command_fields_are_null(&value)
 }
 
 #[rstest]
@@ -315,21 +320,20 @@ fn mutation_effect_serializes_canonical_wire_values(
     assert_eq!(value, expected);
 }
 
-/// Returns a required object field for schema assertions, failing with the
-/// field name when the fixture is malformed.
-pub(super) fn field<'a>(value: &'a Value, name: &str) -> &'a Value {
-    let Some(field) = value.get(name) else {
-        panic!("JSON object should contain `{name}`");
-    };
-    field
+/// Returns a required object field for schema assertions, reporting the field
+/// name when the fixture is malformed.
+pub(super) fn field<'a>(value: &'a Value, name: &str) -> Result<&'a Value> {
+    value
+        .get(name)
+        .ok_or_else(|| anyhow!("JSON object should contain `{name}`"))
 }
 
 /// Returns the first array item required by a schema assertion.
-pub(super) fn first_array_item(value: &Value) -> &Value {
-    let Some(item) = value.as_array().and_then(|items| items.first()) else {
-        panic!("JSON value should be a non-empty array");
-    };
-    item
+pub(super) fn first_array_item(value: &Value) -> Result<&Value> {
+    value
+        .as_array()
+        .and_then(|items| items.first())
+        .ok_or_else(|| anyhow!("JSON value should be a non-empty array"))
 }
 
 /// Builds a fully populated context used by serialization and round-trip

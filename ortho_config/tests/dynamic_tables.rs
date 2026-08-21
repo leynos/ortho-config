@@ -25,21 +25,6 @@ struct RuleCfg {
 }
 
 /// Asserts that `TableConfig` contains two rules, `a` enabled and `b` disabled.
-///
-/// # Examples
-///
-/// ```
-/// use std::collections::BTreeMap;
-/// use crate::{RuleCfg, TableConfig};
-///
-/// let cfg = TableConfig {
-///     rules: BTreeMap::from([
-///         ("a".into(), RuleCfg { enabled: true }),
-///         ("b".into(), RuleCfg { enabled: false }),
-///     ]),
-/// };
-/// assert_basic_rules(&cfg).unwrap();
-/// ```
 fn assert_basic_rules(cfg: &TableConfig) -> Result<()> {
     ensure!(
         cfg.rules.get("a").is_some_and(|r| r.enabled),

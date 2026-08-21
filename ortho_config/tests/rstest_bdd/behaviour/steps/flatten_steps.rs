@@ -1,5 +1,6 @@
 //! Steps for scenarios involving flattened CLI structures.
 
+use super::common::{SlotTakeOrExt, set_scalar_once};
 use super::value_parsing::normalize_scalar;
 use crate::scenario_state::{FlatArgs, FlattenContext};
 use anyhow::{Result, anyhow, ensure};
@@ -31,12 +32,11 @@ fn load_flat(file: Option<String>, args: &[&str]) -> Result<OrthoResult<FlatArgs
 
 /// Helper to initialise flat_file with given content.
 fn set_flat_file(flatten_context: &FlattenContext, content: impl Into<String>) -> Result<()> {
-    ensure!(
-        flatten_context.flat_file.is_empty(),
-        "flattened configuration already initialised"
-    );
-    flatten_context.flat_file.set(content.into());
-    Ok(())
+    set_scalar_once(
+        &flatten_context.flat_file,
+        content,
+        "flattened configuration",
+    )
 }
 
 #[given("the flattened configuration file has value {value}")]
@@ -80,8 +80,7 @@ fn check_flattened(flatten_context: &FlattenContext, expected: String) -> Result
     let expected = normalize_scalar(&expected);
     let result = flatten_context
         .flat_result
-        .take()
-        .ok_or_else(|| anyhow!("flattened configuration result unavailable"))?;
+        .take_or("flattened configuration result unavailable")?;
     let cfg = result?;
     let nested = cfg
         .nested
@@ -99,8 +98,7 @@ fn check_flattened(flatten_context: &FlattenContext, expected: String) -> Result
 fn flattening_fails(flatten_context: &FlattenContext) -> Result<()> {
     let result = flatten_context
         .flat_result
-        .take()
-        .ok_or_else(|| anyhow!("flattened configuration result unavailable"))?;
+        .take_or("flattened configuration result unavailable")?;
     match result {
         Ok(_) => Err(anyhow!("expected merge error but configuration succeeded")),
         Err(err) => {

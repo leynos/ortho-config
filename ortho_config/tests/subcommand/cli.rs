@@ -1,11 +1,12 @@
 //! CLI precedence and required-value behaviour tests.
 
-use anyhow::{Result, anyhow, ensure};
+use anyhow::{Result, ensure};
 use clap::Parser;
 use rstest::{fixture, rstest};
 use serde::Deserialize;
 use test_helpers::env;
 
+use super::to_anyhow::ToAnyhow as _;
 use super::util::with_merged_subcommand_cli;
 
 #[derive(Debug, Deserialize, serde::Serialize, Parser, Default, PartialEq)]
@@ -38,8 +39,7 @@ fn env_scope() -> env::EnvScope {
 
 #[rstest]
 fn cli_only_values_are_accepted(cli_ref_id: RequiredCli) -> Result<()> {
-    let merged: RequiredCli =
-        with_merged_subcommand_cli(|_j| Ok(()), &cli_ref_id).map_err(|err| anyhow!(err))?;
+    let merged: RequiredCli = with_merged_subcommand_cli(|_j| Ok(()), &cli_ref_id).to_anyhow()?;
     ensure!(
         merged.ref_id.as_deref() == Some("cli"),
         "expected cli, got {:?}",
@@ -71,7 +71,7 @@ fn conflicting_values_cli_takes_precedence(
         },
         &cli_ref_id,
     )
-    .map_err(|err| anyhow!(err))?;
+    .to_anyhow()?;
     ensure!(
         merged.ref_id.as_deref() == Some("cli"),
         "expected cli, got {:?}",
@@ -91,7 +91,7 @@ fn env_value_used_when_cli_missing(env_scope: env::EnvScope) -> Result<()> {
         },
         &cli,
     )
-    .map_err(|err| anyhow!(err))?;
+    .to_anyhow()?;
     ensure!(
         merged.ref_id.as_deref() == Some("from-env"),
         "expected from-env, got {:?}",

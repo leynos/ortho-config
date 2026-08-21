@@ -1,5 +1,6 @@
 //! Steps covering collection merge strategy scenarios.
 
+use super::common::{SlotTakeOrExt, set_scalar_once};
 use crate::scenario_state::{CollectionContext, RulesConfig};
 use anyhow::{Result, anyhow, ensure};
 use ortho_config::OrthoConfig;
@@ -8,13 +9,12 @@ use test_helpers::figment as figment_helpers;
 
 #[given("the dynamic rules config enables {rule_name} via the configuration file")]
 fn dynamic_rules_file(collection_context: &CollectionContext, rule_name: String) -> Result<()> {
-    ensure!(
-        collection_context.dynamic_rules_file.is_empty(),
-        "dynamic rules file already initialised"
-    );
     let section = format!("[dynamic_rules.{rule_name}]\nenabled = true\n");
-    collection_context.dynamic_rules_file.set(section);
-    Ok(())
+    set_scalar_once(
+        &collection_context.dynamic_rules_file,
+        section,
+        "dynamic rules file",
+    )
 }
 
 #[given("the environment defines dynamic rule {rule_name} as {state}")]
@@ -67,8 +67,7 @@ fn load_replace_map(collection_context: &CollectionContext) -> Result<()> {
 fn assert_only_rule(collection_context: &CollectionContext, rule_name: String) -> Result<()> {
     let result = collection_context
         .result
-        .take()
-        .ok_or_else(|| anyhow!("configuration result unavailable"))?;
+        .take_or("configuration result unavailable")?;
     let cfg = result?;
     ensure!(
         cfg.dynamic_rules.len() == 1,

@@ -1,5 +1,6 @@
 //! Steps verifying merge error routing to `OrthoError::Merge`.
 
+use super::common::SlotTakeOrExt;
 use super::value_parsing::unquote;
 use crate::scenario_state::{MergeErrorContext, MergeErrorSample};
 use anyhow::{Context, Result, anyhow, ensure};
@@ -32,8 +33,7 @@ fn layer_with_port(merge_error_context: &MergeErrorContext, value: String) -> Re
 fn merge_layers(merge_error_context: &MergeErrorContext) -> Result<()> {
     let layers = merge_error_context
         .layers
-        .take()
-        .ok_or_else(|| anyhow!("layers not initialised"))?;
+        .take_or("layers not initialised")?;
     let result = MergeErrorSample::merge_from_layers(layers);
     merge_error_context.result.set(result);
     Ok(())
@@ -43,8 +43,7 @@ fn merge_layers(merge_error_context: &MergeErrorContext) -> Result<()> {
 fn expect_merge_error(merge_error_context: &MergeErrorContext) -> Result<()> {
     let result = merge_error_context
         .result
-        .take()
-        .ok_or_else(|| anyhow!("merge result unavailable"))?;
+        .take_or("merge result unavailable")?;
     let err = result.err().ok_or_else(|| anyhow!("expected error"))?;
 
     ensure!(
@@ -58,8 +57,7 @@ fn expect_merge_error(merge_error_context: &MergeErrorContext) -> Result<()> {
 fn expect_port(merge_error_context: &MergeErrorContext, expected: u16) -> Result<()> {
     let result = merge_error_context
         .result
-        .take()
-        .ok_or_else(|| anyhow!("merge result unavailable"))?;
+        .take_or("merge result unavailable")?;
     let config = result.context("merge failed")?;
 
     ensure!(

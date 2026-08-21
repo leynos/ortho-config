@@ -1,5 +1,6 @@
 //! Steps verifying aggregated error reporting.
 
+use super::common::{SlotTakeOrExt, set_nonblank_scalar_once, set_scalar_once};
 use super::value_parsing::{is_cli_parsing_error, normalize_scalar};
 use crate::scenario_state::{ErrorConfig, ErrorContext};
 use anyhow::{Result, anyhow, ensure};
@@ -9,27 +10,17 @@ use test_helpers::figment as figment_helpers;
 
 #[given("an invalid configuration file")]
 fn invalid_file(error_context: &ErrorContext) -> Result<()> {
-    ensure!(
-        error_context.file_value.is_empty(),
-        "invalid configuration file already initialised"
-    );
-    error_context.file_value.set("port = ".into());
-    Ok(())
+    set_scalar_once(
+        &error_context.file_value,
+        "port = ",
+        "invalid configuration file",
+    )
 }
 
 #[given("the environment variable DDLINT_PORT is {value}")]
 fn env_port(error_context: &ErrorContext, value: String) -> Result<()> {
     let value = normalize_scalar(&value);
-    ensure!(
-        !value.trim().is_empty(),
-        "environment port value must not be empty"
-    );
-    ensure!(
-        error_context.env_value.is_empty(),
-        "environment port already initialised"
-    );
-    error_context.env_value.set(value);
-    Ok(())
+    set_nonblank_scalar_once(&error_context.env_value, value, "environment port value")
 }
 
 #[when("the config is loaded with an invalid CLI argument")]
@@ -56,8 +47,7 @@ fn load_invalid_cli(error_context: &ErrorContext) -> Result<()> {
 fn cli_file_env_errors(error_context: &ErrorContext) -> Result<()> {
     let result = error_context
         .agg_result
-        .take()
-        .ok_or_else(|| anyhow!("aggregated result unavailable"))?;
+        .take_or("aggregated result unavailable")?;
     let err = result
         .err()
         .ok_or_else(|| anyhow!("expected aggregated error"))?;
@@ -88,8 +78,7 @@ fn cli_file_env_errors(error_context: &ErrorContext) -> Result<()> {
 fn cli_error_only(error_context: &ErrorContext) -> Result<()> {
     let result = error_context
         .agg_result
-        .take()
-        .ok_or_else(|| anyhow!("aggregated result unavailable"))?;
+        .take_or("aggregated result unavailable")?;
     let err = result
         .err()
         .ok_or_else(|| anyhow!("expected CLI parsing error"))?;

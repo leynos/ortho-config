@@ -1,20 +1,20 @@
 //! Steps for testing ignore pattern list handling.
 
+use super::common::{SlotTakeOrExt, set_scalar_once};
 use super::value_parsing::{normalize_scalar, parse_csv_values};
 use crate::scenario_state::{RulesConfig, RulesContext};
-use anyhow::{Result, anyhow, ensure};
+use anyhow::{Result, ensure};
 use rstest_bdd_macros::{given, then, when};
 use test_helpers::figment as figment_helpers;
 
 #[given("the environment variable DDLINT_IGNORE_PATTERNS is {value}")]
 fn set_ignore_env(rules_context: &RulesContext, value: String) -> Result<()> {
     let value = normalize_scalar(&value);
-    ensure!(
-        rules_context.env_value.is_empty(),
-        "ignore patterns environment value already initialised"
-    );
-    rules_context.env_value.set(value);
-    Ok(())
+    set_scalar_once(
+        &rules_context.env_value,
+        value,
+        "ignore patterns environment value",
+    )
 }
 
 #[when("the config is loaded with CLI ignore {cli}")]
@@ -47,8 +47,7 @@ fn load_ignore(rules_context: &RulesContext, cli: String) -> Result<()> {
 fn check_ignore(rules_context: &RulesContext, patterns: String) -> Result<()> {
     let result = rules_context
         .result
-        .take()
-        .ok_or_else(|| anyhow!("configuration result unavailable"))?;
+        .take_or("configuration result unavailable")?;
     let cfg = result.map_err(anyhow::Error::from)?;
     let want = parse_csv_values(&patterns);
     ensure!(

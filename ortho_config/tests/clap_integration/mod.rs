@@ -4,10 +4,10 @@
 //! encourage parameterised coverage via `rstest` cases.
 
 mod common;
-mod parsing;
+mod config_path;
 mod error_cases;
 mod option_cases;
-mod config_path;
+mod parsing;
 
 #[cfg(any(unix, target_os = "redox"))]
 mod xdg;

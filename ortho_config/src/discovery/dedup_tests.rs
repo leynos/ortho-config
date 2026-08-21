@@ -4,6 +4,7 @@ use std::io::Write as _;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use anyhow::{Result, anyhow, ensure};
 use camino::Utf8Path;
 use cap_std::{ambient_authority, fs_utf8::Dir as Utf8Dir};
 use tempfile::tempdir;
@@ -24,19 +25,29 @@ fn canonicalish(path: &Path) -> PathBuf {
     path.to_path_buf()
 }
 
-fn assert_first_error_path(errors: &[Arc<OrthoError>], expected: &Path) {
-    let Some(err) = errors.first() else {
-        panic!("expected at least one error when asserting path");
-    };
-    let path = match err.as_ref() {
-        OrthoError::File { path, .. } => path,
-        other => panic!("expected OrthoError::File, got {other:?}"),
-    };
-    assert_eq!(canonicalish(path), canonicalish(expected));
+/// Extracts the path reported by the first error, describing the mismatch
+/// rather than panicking when the errors do not have the expected shape.
+fn first_error_path(errors: &[Arc<OrthoError>]) -> Result<&Path> {
+    let err = errors
+        .first()
+        .ok_or_else(|| anyhow!("expected at least one error when asserting path"))?;
+    match err.as_ref() {
+        OrthoError::File { path, .. } => Ok(path.as_path()),
+        other => Err(anyhow!("expected OrthoError::File, got {other:?}")),
+    }
+}
+
+fn assert_first_error_path(errors: &[Arc<OrthoError>], expected: &Path) -> Result<()> {
+    let path = first_error_path(errors)?;
+    ensure!(
+        canonicalish(path) == canonicalish(expected),
+        "expected first error path {expected:?}, got {path:?}"
+    );
+    Ok(())
 }
 
 #[test]
-fn load_first_partitioned_dedups_required_paths() {
+fn load_first_partitioned_dedups_required_paths() -> Result<()> {
     let dir = tempdir().expect("create tempdir");
     let required = dir.path().join("missing.toml");
     let optional = dir.path().join("optional.toml");
@@ -59,12 +70,23 @@ fn load_first_partitioned_dedups_required_paths() {
         .build();
 
     let outcome = discovery.load_first_partitioned();
-    assert!(outcome.figment.is_none());
-    assert_eq!(outcome.required_errors.len(), 1);
-    assert_eq!(outcome.optional_errors.len(), 1);
+    ensure!(
+        outcome.figment.is_none(),
+        "discovery should not yield a figment when every candidate fails"
+    );
+    ensure!(
+        outcome.required_errors.len() == 1,
+        "duplicate required paths should collapse to one error, got {}",
+        outcome.required_errors.len()
+    );
+    ensure!(
+        outcome.optional_errors.len() == 1,
+        "the single optional path should yield one error, got {}",
+        outcome.optional_errors.len()
+    );
 
-    assert_first_error_path(&outcome.required_errors, &required);
-    assert_first_error_path(&outcome.optional_errors, &optional);
+    assert_first_error_path(&outcome.required_errors, &required)?;
+    assert_first_error_path(&outcome.optional_errors, &optional)
 }
 
 #[cfg(windows)]

@@ -2,6 +2,7 @@
 
 use super::super::{CommandLine, Commands, LocalizeCmd};
 use crate::localizer::DemoLocalizer;
+use anyhow::{Context, Result, anyhow, ensure};
 use clap::CommandFactory;
 use ortho_config::{FluentLocalizerError, LanguageIdentifier, langid, parse_localized_command};
 use rstest::{fixture, rstest};
@@ -13,115 +14,114 @@ fn demo_localizer(
     DemoLocalizer::try_for_locale(locale)
 }
 
-#[track_caller]
-fn assert_expected_copy(demo_localizer: &DemoLocalizer) {
+fn assert_expected_copy(demo_localizer: &DemoLocalizer) -> Result<()> {
     let command = CommandLine::command()
         .with_base("hello_world.cli")
         .localize(demo_localizer);
-    let optional_about = command.get_about();
-    assert!(optional_about.is_some(), "about text should be set");
-    let about_text = optional_about.map(ToString::to_string).unwrap_or_default();
-    assert!(
+    let about_text = command
+        .get_about()
+        .ok_or_else(|| anyhow!("about text should be set"))?
+        .to_string();
+    ensure!(
         about_text.contains("localised"),
-        "expected demo copy in about"
+        "expected demo copy in about: {about_text}"
     );
 
-    let optional_long_about = command.get_long_about();
-    assert!(
-        optional_long_about.is_some(),
-        "long about text should be set"
+    let long_about_text = command
+        .get_long_about()
+        .ok_or_else(|| anyhow!("long about text should be set"))?
+        .to_string();
+    ensure!(
+        long_about_text.contains(command.get_name()),
+        "expected the command name in the long about: {long_about_text}"
     );
-    let long_about_text = optional_long_about
-        .map(ToString::to_string)
-        .unwrap_or_default();
-    assert!(long_about_text.contains(command.get_name()));
+    Ok(())
 }
 
-#[track_caller]
-fn assert_localized_tree(demo_localizer: &DemoLocalizer) {
+fn assert_localized_tree(demo_localizer: &DemoLocalizer) -> Result<()> {
     let command = CommandLine::command()
         .with_base("hello_world.cli")
         .localize(demo_localizer);
     let greet = command
         .get_subcommands()
-        .find(|sub| sub.get_name() == "greet");
-    assert!(greet.is_some(), "greet subcommand must exist");
-    let optional_about = greet.and_then(clap::Command::get_about);
-    assert!(optional_about.is_some(), "greet about should be localized");
-    let about_text = optional_about.map(ToString::to_string).unwrap_or_default();
-    assert!(about_text.contains("friendly greeting"));
+        .find(|sub| sub.get_name() == "greet")
+        .ok_or_else(|| anyhow!("greet subcommand must exist"))?;
+    let about_text = greet
+        .get_about()
+        .ok_or_else(|| anyhow!("greet about should be localized"))?
+        .to_string();
+    ensure!(
+        about_text.contains("friendly greeting"),
+        "expected demo copy in the greet about: {about_text}"
+    );
+    Ok(())
 }
 
-#[track_caller]
-fn assert_cli_builds(demo_localizer: &DemoLocalizer) {
+fn assert_cli_builds(demo_localizer: &DemoLocalizer) -> Result<()> {
     let args = ["hello-world", "greet"];
     let command = CommandLine::command()
         .with_base("hello_world.cli")
         .localize(demo_localizer);
-    let parsed = parse_localized_command::<CommandLine, _, _>(command, args, demo_localizer);
-    assert!(parsed.is_ok(), "expected to parse args");
-    let Ok((cli, _matches)) = parsed else {
-        return;
-    };
-    assert!(matches!(cli.command, Commands::Greet(_)));
+    let (cli, _matches) =
+        parse_localized_command::<CommandLine, _, _>(command, args, demo_localizer)
+            .context("CLI should parse after localization")?;
+    ensure!(
+        matches!(cli.command, Commands::Greet(_)),
+        "expected the greet subcommand to be selected"
+    );
+    Ok(())
 }
 
-#[track_caller]
-fn assert_localized_error(demo_localizer: &DemoLocalizer) {
+fn assert_localized_error(demo_localizer: &DemoLocalizer) -> Result<()> {
     let command = CommandLine::command()
         .with_base("hello_world.cli")
         .localize(demo_localizer);
-    let parsed =
-        parse_localized_command::<CommandLine, _, _>(command, ["hello-world"], demo_localizer);
-    assert!(parsed.is_err(), "missing subcommand should be reported");
-    let Err(err) = parsed else {
-        return;
-    };
+    let err =
+        parse_localized_command::<CommandLine, _, _>(command, ["hello-world"], demo_localizer)
+            .err()
+            .ok_or_else(|| anyhow!("missing subcommand should be reported"))?;
     let rendered = err.to_string();
-    assert!(
+    ensure!(
         rendered.contains("Pick a workflow"),
         "expected consumer translation in error output: {rendered}"
     );
-    assert!(
+    ensure!(
         rendered.contains("greet") && rendered.contains("take-leave"),
         "expected available subcommands to flow into translation: {rendered}"
     );
+    Ok(())
 }
 
 #[rstest]
 fn command_with_localizer_overrides_copy(
     #[from(demo_localizer)] localizer_result: Result<DemoLocalizer, FluentLocalizerError>,
-) -> Result<(), FluentLocalizerError> {
+) -> Result<()> {
     let demo_localizer = localizer_result?;
-    assert_expected_copy(&demo_localizer);
-    Ok(())
+    assert_expected_copy(&demo_localizer)
 }
 
 #[rstest]
 fn localizes_subcommand_tree(
     #[from(demo_localizer)] localizer_result: Result<DemoLocalizer, FluentLocalizerError>,
-) -> Result<(), FluentLocalizerError> {
+) -> Result<()> {
     let demo_localizer = localizer_result?;
-    assert_localized_tree(&demo_localizer);
-    Ok(())
+    assert_localized_tree(&demo_localizer)
 }
 
 #[rstest]
 fn try_parse_with_localizer_builds_cli(
     #[from(demo_localizer)] localizer_result: Result<DemoLocalizer, FluentLocalizerError>,
-) -> Result<(), FluentLocalizerError> {
+) -> Result<()> {
     let demo_localizer = localizer_result?;
-    assert_cli_builds(&demo_localizer);
-    Ok(())
+    assert_cli_builds(&demo_localizer)
 }
 
 #[rstest]
 fn try_parse_with_localizer_localises_errors(
     #[from(demo_localizer)] localizer_result: Result<DemoLocalizer, FluentLocalizerError>,
-) -> Result<(), FluentLocalizerError> {
+) -> Result<()> {
     let demo_localizer = localizer_result?;
-    assert_localized_error(&demo_localizer);
-    Ok(())
+    assert_localized_error(&demo_localizer)
 }
 
 #[rstest]

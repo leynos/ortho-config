@@ -3,9 +3,10 @@
 //! This module verifies the precedence of CLI, environment, and configuration
 //! file sources when loading subcommand inputs.
 
+use super::common::SlotTakeOrExt;
 use super::value_parsing::normalize_scalar;
 use crate::scenario_state::{PrArgs, SubcommandContext, SubcommandSources};
-use anyhow::{Result, anyhow, ensure};
+use anyhow::{Result, ensure};
 use clap::Parser;
 use ortho_config::SubcmdConfigMerge;
 use rstest_bdd_macros::{given, then, when};
@@ -135,8 +136,7 @@ fn check_ref(subcommand_context: &SubcommandContext, expected: String) -> Result
     let expected = normalize_scalar(&expected);
     let result = subcommand_context
         .result
-        .take()
-        .ok_or_else(|| anyhow!("subcommand result unavailable"))?;
+        .take_or("subcommand result unavailable")?;
     let cfg = result?;
     ensure!(
         cfg.reference.as_deref() == Some(expected.as_str()),
@@ -151,8 +151,7 @@ fn check_ref(subcommand_context: &SubcommandContext, expected: String) -> Result
 fn sub_error(subcommand_context: &SubcommandContext) -> Result<()> {
     let result = subcommand_context
         .result
-        .take()
-        .ok_or_else(|| anyhow!("subcommand result unavailable"))?;
+        .take_or("subcommand result unavailable")?;
     ensure!(result.is_err(), "expected subcommand load to fail");
     Ok(())
 }
