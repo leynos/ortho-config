@@ -7,6 +7,7 @@ mod documentation_examples;
 mod process_runner;
 
 use anyhow::{Context, Result, ensure};
+use camino::Utf8PathBuf;
 use cap_std::{ambient_authority, fs::Dir};
 use documentation_examples::{documented_example, load_documented_examples};
 use ortho_config::{AgentContext, toml};
@@ -18,6 +19,8 @@ const EXPECTED_EXAMPLE_IDS: &[&str] = &[
     "guide-agent-context",
     "guide-alias-derive",
     "guide-alias-install",
+    "guide-cargo-error-hints",
+    "guide-cargo-external-subcommand",
     "guide-collection-file",
     "guide-discovery",
     "guide-errors",
@@ -42,7 +45,7 @@ const EXPECTED_EXAMPLE_IDS: &[&str] = &[
 
 #[test]
 fn published_crate_readme_matches_repository_readme() -> Result<()> {
-    let repository = Dir::open_ambient_dir(repository_root(), ambient_authority())?;
+    let repository = Dir::open_ambient_dir(repository_root().as_std_path(), ambient_authority())?;
     let repository_readme = repository.read_to_string("README.md")?;
     let crate_readme = repository.read_to_string("ortho_config/README.md")?;
     ensure!(
@@ -183,7 +186,9 @@ fn documented_orthohelp_command_generates_agent_context() -> Result<()> {
 
     let output_directory = TempDir::new().context("create orthohelp output directory")?;
     let cargo_state = TempDir::new().context("create isolated Cargo state directory")?;
-    let mut command = cargo_runner::prepare_cargo_command(&repository_root(), cargo_state.path())?;
+    let repository_root = repository_root();
+    let mut command =
+        cargo_runner::prepare_cargo_command(repository_root.as_std_path(), cargo_state.path())?;
     command
         .args([
             "run",
@@ -247,8 +252,8 @@ fn assert_dependency_version(manifest: &toml::Value, name: &str, version: &str) 
     Ok(())
 }
 
-fn repository_root() -> std::path::PathBuf {
-    std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("..")
+fn repository_root() -> Utf8PathBuf {
+    Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..")
 }
 
 fn serde_json_value_as_str(value: &ortho_config::serde_json::Value) -> Option<&str> {
