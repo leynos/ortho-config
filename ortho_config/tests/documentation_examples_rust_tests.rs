@@ -48,6 +48,70 @@ fn documented_rust_compiles_and_runs() -> Result<()> {
     assert_console_flows(&mut workspace)
 }
 
+#[test]
+fn documented_cargo_external_subcommand_parses_both_invocation_forms() -> Result<()> {
+    let example = documented_example("guide-cargo-external-subcommand")?;
+    let mut workspace = ExampleWorkspace::new(DependencyAlias("ortho_config"))?;
+    workspace.add_binary_as("cargo-demo", example)?;
+    workspace.build()?;
+
+    let direct_success = workspace.run(ExampleId("cargo-demo"), ["demo", "--verbose"])?;
+    ensure!(
+        direct_success.status.success(),
+        "direct documented Cargo helper invocation should succeed:\n{}",
+        String::from_utf8_lossy(&direct_success.stderr)
+    );
+
+    let cargo_success = workspace.run_cargo_subcommand("demo", ["--verbose"])?;
+    ensure!(
+        cargo_success.status.success(),
+        "Cargo-dispatched documented helper invocation should succeed:\n{}",
+        String::from_utf8_lossy(&cargo_success.stderr)
+    );
+
+    let direct_help = workspace.run(ExampleId("cargo-demo"), ["--help"])?;
+    ensure!(
+        direct_help.status.success(),
+        "direct helper help should succeed"
+    );
+    ensure!(
+        String::from_utf8_lossy(&direct_help.stdout).contains("Usage: cargo <COMMAND>"),
+        "direct helper help should render Cargo dispatch usage"
+    );
+
+    let cargo_help = workspace.run_cargo_subcommand("demo", ["--help"])?;
+    ensure!(
+        cargo_help.status.success(),
+        "Cargo-dispatched helper help should succeed"
+    );
+    ensure!(
+        String::from_utf8_lossy(&cargo_help.stdout).contains("Usage: cargo demo [OPTIONS]"),
+        "Cargo-dispatched helper help should render subcommand usage"
+    );
+
+    let direct_failure = workspace.run(ExampleId("cargo-demo"), std::iter::empty::<&str>())?;
+    ensure!(
+        !direct_failure.status.success(),
+        "direct helper should require a subcommand"
+    );
+    ensure!(
+        String::from_utf8_lossy(&direct_failure.stderr).contains("Usage: cargo <COMMAND>"),
+        "direct helper failure should render top-level usage"
+    );
+
+    let cargo_failure = workspace.run_cargo_subcommand("demo", ["--unknown"])?;
+    ensure!(
+        !cargo_failure.status.success(),
+        "Cargo-dispatched helper should reject an unknown option"
+    );
+    ensure!(
+        String::from_utf8_lossy(&cargo_failure.stderr).contains("Usage: cargo demo [OPTIONS]"),
+        "Cargo-dispatched helper failure should render subcommand usage"
+    );
+
+    Ok(())
+}
+
 fn assert_standard_example_runs(workspace: &mut ExampleWorkspace) -> Result<()> {
     assert_run(
         workspace,

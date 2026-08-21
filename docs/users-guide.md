@@ -323,21 +323,24 @@ parses the Cargo-injected argv all the way to the option value:
 ```rust
 use ortho_config::cargo::external_subcommand;
 
-let args_command = clap::Command::new("demo")
-    .version("1.2.3")
-    .arg(
-        clap::Arg::new("verbose")
-            .long("verbose")
-            .action(clap::ArgAction::SetTrue),
-    );
-let cli = external_subcommand("cargo-demo", "demo", args_command);
-let matches = cli
-    .try_get_matches_from(["cargo-demo", "demo", "--verbose"])
-    .expect("both invocation forms parse");
-let demo = matches
-    .subcommand_matches("demo")
-    .expect("subcommand_required guarantees a subcommand");
-assert!(demo.get_flag("verbose"));
+fn main() {
+    let args_command = clap::Command::new("demo")
+        .version("1.2.3")
+        .arg(
+            clap::Arg::new("verbose")
+                .long("verbose")
+                .action(clap::ArgAction::SetTrue),
+        );
+    let cli = external_subcommand("cargo-demo", "demo", args_command);
+    let matches = match cli.try_get_matches_from(std::env::args()) {
+        Ok(matches) => matches,
+        Err(error) => error.exit(),
+    };
+    let demo = matches
+        .subcommand_matches("demo")
+        .expect("subcommand_required guarantees a subcommand");
+    assert!(demo.get_flag("verbose"));
+}
 ```
 
 The returned command accepts both invocation forms with the same inner options

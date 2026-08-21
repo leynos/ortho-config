@@ -211,6 +211,10 @@ Stop and escalate (do not work around) when any of these is reached.
       slash-safe gate logs, the v0.9.0 workspace record, the users'-guide
       cross-reference, stricter BDD installed-binary validation, and direct
       executable documentation coverage of both supported argv forms.
+- [x] (2026-08-21) CodeRabbit follow-up: made the marked Cargo helper fence a
+      verbatim executable fixture and exercised direct and real Cargo PATH
+      dispatch success, help, and failure paths; the final gate run remains
+      pending.
 
 Each milestone ends with the gates run sequentially (never in parallel,
 because the environment relies on build caching) and a commit. Prefer
@@ -326,6 +330,12 @@ under `/tmp` and returns a bounded report.
   boundary now rejects both before deriving `CargoSubcommandName`.
   Impact: invalid feature fixtures fail at their capture boundary rather than
   reaching command construction; production behaviour is unchanged.
+- Observation (CodeRabbit follow-up, 2026-08-21): parser-unit coverage does
+  not prove that a Cargo-discoverable binary receives the injected token. The
+  documentation workspace now builds the exact marked fence as `cargo-demo`
+  and prepends its isolated target directory to the child `PATH`.
+  Impact: the guide's direct and Cargo-dispatched contracts are tested without
+  changing the production helper or relying on a host-installed binary.
 
 ## Decision log
 
@@ -493,6 +503,13 @@ under `/tmp` and returns a bounded report.
   membership alone cannot prove that the documented parser contract remains
   usable. Repository-root handling remains UTF-8 (`Utf8PathBuf`) until the two
   standard-path API boundaries. Date/Author: 2026-08-16, final review.
+
+- Decision (D-12): **Test the documented Cargo entry point through real Cargo
+  dispatch.** The test workspace writes the marked Rust fence verbatim as the
+  `cargo-demo` fixture and runs it directly and through Cargo with an isolated
+  `PATH`. Rationale: this covers the process boundary that clap unit tests
+  cannot observe while keeping the fixture local to documentation validation.
+  Date/Author: 2026-08-21, CodeRabbit follow-up.
 
 ## Outcomes & retrospective
 

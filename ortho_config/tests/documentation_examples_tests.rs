@@ -10,7 +10,7 @@ use anyhow::{Context, Result, ensure};
 use camino::Utf8PathBuf;
 use cap_std::{ambient_authority, fs::Dir};
 use documentation_examples::{documented_example, load_documented_examples};
-use ortho_config::{AgentContext, cargo::external_subcommand, toml};
+use ortho_config::{AgentContext, toml};
 use process_runner::Operation;
 use std::collections::BTreeSet;
 use tempfile::TempDir;
@@ -70,36 +70,6 @@ fn every_documented_fence_has_a_known_unique_identifier() -> Result<()> {
         actual == expected,
         "documented example registry drifted\nexpected: {expected:#?}\nactual: {actual:#?}"
     );
-    Ok(())
-}
-
-#[test]
-fn documented_cargo_external_subcommand_parses_both_invocation_forms() -> Result<()> {
-    let example = documented_example("guide-cargo-external-subcommand")?;
-    ensure!(example.language == "rust");
-    ensure!(example.body.contains("clap::ArgAction::SetTrue"));
-
-    for argv in [
-        ["cargo-demo", "demo", "--verbose"],
-        ["./target/debug/cargo-demo", "demo", "--verbose"],
-    ] {
-        let args_command = clap::Command::new("demo").arg(
-            clap::Arg::new("verbose")
-                .long("verbose")
-                .action(clap::ArgAction::SetTrue),
-        );
-        let matches = external_subcommand("cargo-demo", "demo", args_command)
-            .try_get_matches_from(argv)
-            .context("documented Cargo invocation should parse")?;
-        let demo = matches
-            .subcommand_matches("demo")
-            .context("documented wrapper should capture the demo subcommand")?;
-        ensure!(
-            demo.get_flag("verbose"),
-            "documented invocation should set the verbose flag"
-        );
-    }
-
     Ok(())
 }
 
