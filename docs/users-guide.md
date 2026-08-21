@@ -438,7 +438,7 @@ parses the Cargo-injected argv all the way to the option value:
 ```rust
 use ortho_config::cargo::external_subcommand;
 
-fn main() {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args_command = clap::Command::new("demo")
         .version("1.2.3")
         .arg(
@@ -453,8 +453,9 @@ fn main() {
     };
     let demo = matches
         .subcommand_matches("demo")
-        .expect("subcommand_required guarantees a subcommand");
+        .ok_or_else(|| std::io::Error::other("subcommand_required guarantees a subcommand"))?;
     assert!(demo.get_flag("verbose"));
+    Ok(())
 }
 ```
 
