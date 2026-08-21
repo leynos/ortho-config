@@ -7,7 +7,7 @@ use ortho_config::{
     AgentCommand, AgentContext, AgentInput, InteractionMode, Localizer, MutationEffect,
 };
 
-use crate::schema::{DocMetadata, FieldMetadata, ValueType};
+use crate::schema::{DocMetadata, FieldMetadata, InteractionKind, MutationKind, ValueType};
 
 const CANONICAL_VERBS: &[&str] = &[
     "get", "list", "create", "update", "delete", "jobs", "profile", "feedback",
@@ -22,10 +22,12 @@ const CANONICAL_VERBS: &[&str] = &[
 ///
 /// ```rust
 /// use cargo_orthohelp::agent_context::bridge_ir_to_agent_context;
-/// use cargo_orthohelp::schema::{DocMetadata, HeadingIds, SectionsMetadata};
+/// use cargo_orthohelp::schema::{
+///     DocMetadata, HeadingIds, ORTHO_DOCS_IR_VERSION, SectionsMetadata,
+/// };
 ///
 /// let metadata = DocMetadata {
-///     ir_version: "1.1".to_owned(),
+///     ir_version: ORTHO_DOCS_IR_VERSION.to_owned(),
 ///     app_name: "example".to_owned(),
 ///     bin_name: None,
 ///     about_id: "example.about".to_owned(),
@@ -53,6 +55,7 @@ const CANONICAL_VERBS: &[&str] = &[
 ///     fields: Vec::new(),
 ///     subcommands: Vec::new(),
 ///     windows: None,
+///     behaviour: None,
 /// };
 ///
 /// let context = bridge_ir_to_agent_context(&metadata, "example", None);
@@ -108,8 +111,16 @@ fn walk(
         canonical_verb: last_segment.and_then(canonical_verb_for),
         inputs: meta.fields.iter().filter_map(build_input).collect(),
         output_modes: Vec::new(),
-        interaction_mode: InteractionMode::default(),
-        mutation_effect: MutationEffect::default(),
+        interaction_mode: map_interaction(meta.behaviour.as_ref()),
+        mutation_effect: map_mutation(meta.behaviour.as_ref()),
+        bypass_flag: meta
+            .behaviour
+            .as_ref()
+            .and_then(|behaviour| behaviour.bypass.clone()),
+        dry_run_flag: meta
+            .behaviour
+            .as_ref()
+            .and_then(|behaviour| behaviour.dry_run.clone()),
         async_submission: None,
         delivery_route: None,
         pagination: None,
@@ -149,6 +160,32 @@ fn canonical_verb_for(last_segment: &str) -> Option<String> {
     CANONICAL_VERBS
         .contains(&last_segment)
         .then(|| last_segment.to_owned())
+}
+
+/// Maps a declared behaviour block onto the agent-context interaction mode.
+///
+/// Absent or partially-declared behaviour stays `Unknown`: the bridge never
+/// infers semantics from command names, verbs, or flags.
+fn map_interaction(behaviour: Option<&crate::schema::BehaviourMetadata>) -> InteractionMode {
+    match behaviour.and_then(|meta| meta.interaction) {
+        Some(InteractionKind::NonInteractive) => InteractionMode::NonInteractive,
+        Some(InteractionKind::Interactive) => InteractionMode::Interactive,
+        None => InteractionMode::Unknown,
+    }
+}
+
+/// Maps a declared behaviour block onto the agent-context mutation effect.
+///
+/// Absent or partially-declared behaviour stays `Unknown`; see
+/// [`map_interaction`].
+fn map_mutation(behaviour: Option<&crate::schema::BehaviourMetadata>) -> MutationEffect {
+    match behaviour.and_then(|meta| meta.mutation) {
+        Some(MutationKind::ReadOnly) => MutationEffect::ReadOnly,
+        Some(MutationKind::Write) => MutationEffect::Write,
+        Some(MutationKind::Delete) => MutationEffect::Delete,
+        Some(MutationKind::Submit) => MutationEffect::Submit,
+        None => MutationEffect::Unknown,
+    }
 }
 
 /// Maps CLI-visible field metadata into an agent input.
@@ -237,158 +274,9 @@ fn enum_values(field: &FieldMetadata) -> Vec<String> {
     }
 }
 
-/// Normalizes displayed Rust paths while preserving all literal contents.
-fn normalize_default_display(display: &str) -> String {
-    let mut normalized = String::with_capacity(display.len());
-    let mut chars = display.chars().peekable();
-    let mut literal = LiteralState::default();
+pub use default_display::normalize_default_display;
 
-    while let Some(character) = chars.next() {
-        if literal.copy_character(character, &mut normalized, &mut chars) {
-            continue;
-        }
-        if character == '"' {
-            literal.start_string(&normalized);
-            normalized.push(character);
-        } else if character == '\'' && starts_character_literal(&chars) {
-            literal.start_character();
-            normalized.push(character);
-        } else if character == ':' && chars.peek() == Some(&':') {
-            normalize_path_separator(&mut normalized, &mut chars);
-        } else {
-            normalized.push(character);
-        }
-    }
-
-    normalized
-}
-
-#[derive(Default)]
-struct LiteralState {
-    quote: Option<char>,
-    is_escaped: bool,
-    raw_hashes: Option<usize>,
-}
-
-impl LiteralState {
-    /// Enters a quoted or raw string based on its opening prefix.
-    fn start_string(&mut self, prefix: &str) {
-        self.raw_hashes = raw_string_hash_count(prefix);
-        self.quote = self.raw_hashes.is_none().then_some('"');
-    }
-
-    /// Enters a character literal at its opening quote.
-    const fn start_character(&mut self) {
-        self.quote = Some('\'');
-    }
-
-    /// Copies a literal character and reports whether it was consumed.
-    fn copy_character(
-        &mut self,
-        character: char,
-        normalized: &mut String,
-        chars: &mut std::iter::Peekable<std::str::Chars<'_>>,
-    ) -> bool {
-        if let Some(hash_count) = self.raw_hashes {
-            normalized.push(character);
-            if character == '"' && next_chars_are_hashes(chars, hash_count) {
-                copy_hashes(normalized, chars, hash_count);
-                self.raw_hashes = None;
-            }
-            return true;
-        }
-        let Some(quote) = self.quote else {
-            return false;
-        };
-
-        normalized.push(character);
-        if self.is_escaped {
-            self.is_escaped = false;
-        } else if character == '\\' {
-            self.is_escaped = true;
-        } else if character == quote {
-            self.quote = None;
-        }
-        true
-    }
-}
-
-/// Distinguishes a complete character literal from lifetime syntax.
-fn starts_character_literal(chars: &std::iter::Peekable<std::str::Chars<'_>>) -> bool {
-    let mut lookahead = chars.clone();
-    match lookahead.next() {
-        Some('\\') => escaped_character_has_closing_quote(&mut lookahead),
-        Some('\'' | '\n' | '\r') | None => false,
-        Some(_) => lookahead.next() == Some('\''),
-    }
-}
-
-/// Checks that an escaped character sequence ends with a closing quote.
-fn escaped_character_has_closing_quote(chars: &mut impl Iterator<Item = char>) -> bool {
-    match chars.next() {
-        Some('x') => chars.nth(2) == Some('\''),
-        Some('u') if chars.next() == Some('{') => {
-            chars.any(|character| character == '}') && chars.next() == Some('\'')
-        }
-        Some(_) => chars.next() == Some('\''),
-        None => false,
-    }
-}
-
-/// Returns the delimiter width for a valid raw-string prefix.
-fn raw_string_hash_count(prefix: &str) -> Option<usize> {
-    let hash_count = prefix.chars().rev().take_while(|char| *char == '#').count();
-    let before_hashes = prefix.trim_end_matches('#');
-    let before_marker = ["br", "cr", "r"]
-        .into_iter()
-        .find_map(|marker| before_hashes.strip_suffix(marker))?;
-
-    (!before_marker
-        .chars()
-        .next_back()
-        .is_some_and(|char| char == '_' || char.is_alphanumeric()))
-    .then_some(hash_count)
-}
-
-/// Checks whether the next `hash_count` characters close a raw string.
-fn next_chars_are_hashes(
-    chars: &std::iter::Peekable<std::str::Chars<'_>>,
-    hash_count: usize,
-) -> bool {
-    chars.clone().take(hash_count).all(|char| char == '#')
-}
-
-/// Copies a raw string's closing hashes into the normalized output.
-fn copy_hashes(
-    normalized: &mut String,
-    chars: &mut std::iter::Peekable<std::str::Chars<'_>>,
-    hash_count: usize,
-) {
-    for _ in 0..hash_count {
-        if let Some(hash) = chars.next() {
-            normalized.push(hash);
-        }
-    }
-}
-
-/// Replaces a path separator and its surrounding whitespace with `::`.
-fn normalize_path_separator(
-    normalized: &mut String,
-    chars: &mut std::iter::Peekable<std::str::Chars<'_>>,
-) {
-    while normalized
-        .chars()
-        .next_back()
-        .is_some_and(char::is_whitespace)
-    {
-        normalized.pop();
-    }
-    normalized.push_str("::");
-    chars.next();
-    while chars.peek().is_some_and(|next| next.is_whitespace()) {
-        chars.next();
-    }
-}
+mod default_display;
 
 #[cfg(test)]
 mod proptests;

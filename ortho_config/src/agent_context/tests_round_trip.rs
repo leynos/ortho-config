@@ -39,6 +39,9 @@ fn any_agent_command() -> impl Strategy<Value = AgentCommand> {
         vec(output_mode(), 0..4),
         interaction_mode(),
         mutation_effect(),
+        // proptest strategies only tuple up to twelve elements, so the two
+        // flag-name strategies share one slot.
+        (option::of(flag_name()), option::of(flag_name())),
         option::of(async_submission()),
         option::of(delivery_route()),
         option::of(pagination_contract()),
@@ -53,6 +56,7 @@ fn any_agent_command() -> impl Strategy<Value = AgentCommand> {
                 output_modes,
                 interaction_mode,
                 mutation_effect,
+                (bypass_flag, dry_run_flag),
                 async_submission,
                 delivery_route,
                 pagination,
@@ -65,6 +69,8 @@ fn any_agent_command() -> impl Strategy<Value = AgentCommand> {
                 output_modes,
                 interaction_mode,
                 mutation_effect,
+                bypass_flag,
+                dry_run_flag,
                 async_submission,
                 delivery_route,
                 pagination,
@@ -164,6 +170,10 @@ fn package_name() -> impl Strategy<Value = String> {
 
 fn command_segment() -> impl Strategy<Value = String> {
     "[a-z][a-z0-9-]{0,12}"
+}
+
+fn flag_name() -> impl Strategy<Value = String> {
+    "--[a-z0-9]+(-[a-z0-9]+)*"
 }
 
 fn summary() -> impl Strategy<Value = String> {

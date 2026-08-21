@@ -4,7 +4,8 @@ use ortho_config::{LocalizationArgs, Localizer};
 use std::collections::BTreeMap;
 
 use crate::schema::{
-    CliMetadata, DefaultValue, DocMetadata, FieldMetadata, HeadingIds, SectionsMetadata, ValueType,
+    BehaviourMetadata, CliMetadata, DefaultValue, DocMetadata, FieldMetadata, HeadingIds,
+    InteractionKind, MutationKind, SectionsMetadata, ValueType,
 };
 
 /// Projects a generated command into the path, canonical verb, and summary
@@ -27,6 +28,7 @@ pub(super) fn metadata_with_subcommands(subcommands: Vec<DocMetadata>) -> DocMet
         about_id: "root.about",
         fields: Vec::new(),
         subcommands,
+        behaviour: None,
     })
 }
 
@@ -85,6 +87,7 @@ pub(super) struct DocSpec {
     pub(super) about_id: &'static str,
     pub(super) fields: Vec<FieldMetadata>,
     pub(super) subcommands: Vec<DocMetadata>,
+    pub(super) behaviour: Option<BehaviourMetadata>,
 }
 
 impl DocSpec {
@@ -97,6 +100,7 @@ impl DocSpec {
             about_id,
             fields: Vec::new(),
             subcommands: Vec::new(),
+            behaviour: None,
         }
     }
 
@@ -108,6 +112,7 @@ impl DocSpec {
             about_id: "root.about",
             fields: Vec::new(),
             subcommands: Vec::new(),
+            behaviour: None,
         }
     }
 }
@@ -115,7 +120,7 @@ impl DocSpec {
 /// Expands a compact test specification into documentation metadata.
 pub(super) fn doc(spec: DocSpec) -> DocMetadata {
     DocMetadata {
-        ir_version: "1.1".to_owned(),
+        ir_version: crate::schema::ORTHO_DOCS_IR_VERSION.to_owned(),
         app_name: spec.app_name.to_owned(),
         bin_name: spec.bin_name.map(str::to_owned),
         about_id: spec.about_id.to_owned(),
@@ -124,6 +129,7 @@ pub(super) fn doc(spec: DocSpec) -> DocMetadata {
         fields: spec.fields,
         subcommands: spec.subcommands,
         windows: None,
+        behaviour: spec.behaviour,
     }
 }
 
@@ -226,6 +232,21 @@ pub(super) fn field(parts: FieldParts<'_>) -> FieldMetadata {
         examples: Vec::new(),
         links: Vec::new(),
         notes: Vec::new(),
+    }
+}
+
+/// Builds a fully declared behaviour block for bridge test fixtures.
+pub(super) fn declared_behaviour(
+    interaction: InteractionKind,
+    mutation: MutationKind,
+    bypass: Option<&str>,
+    dry_run: Option<&str>,
+) -> BehaviourMetadata {
+    BehaviourMetadata {
+        interaction: Some(interaction),
+        mutation: Some(mutation),
+        bypass: bypass.map(str::to_owned),
+        dry_run: dry_run.map(str::to_owned),
     }
 }
 

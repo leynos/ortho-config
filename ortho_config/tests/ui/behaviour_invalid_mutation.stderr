@@ -1,0 +1,5 @@
+error: unknown mutation 'destroy'; expected one of "read_only", "write", "delete", or "submit"
+ --> tests/ui/behaviour_invalid_mutation.rs:7:37
+  |
+7 | #[ortho_config(behaviour(mutation = "destroy"))]
+  |                                     ^^^^^^^^^

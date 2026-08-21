@@ -76,6 +76,8 @@ fn assert_optional_command_presence_fields_are_null(serialized_command: &Value) 
 }
 
 fn assert_optional_command_route_fields_are_null(serialized_command: &Value) {
+    assert!(field(serialized_command, "bypass_flag").is_null());
+    assert!(field(serialized_command, "dry_run_flag").is_null());
     assert!(field(serialized_command, "delivery_route").is_null());
     assert!(field(serialized_command, "pagination").is_null());
 }
@@ -102,6 +104,8 @@ fn assert_legacy_command_modes(command: &AgentCommand) {
 
 fn assert_legacy_command_optional_metadata(command: &AgentCommand) {
     assert!(command.summary.is_none());
+    assert!(command.bypass_flag.is_none());
+    assert!(command.dry_run_flag.is_none());
     assert!(command.async_submission.is_none());
     assert!(command.delivery_route.is_none());
 }
