@@ -293,6 +293,30 @@ fn interaction_mode_serializes_canonical_wire_values(
 }
 
 #[rstest]
+fn unrecognized_exception_kind_survives_round_trip() {
+    let context: AgentContext = serde_json::from_value(json!({
+        "schema_version": "1",
+        "kind": "future-cli.agent_context",
+        "package": "future-cli",
+        "commands": [],
+        "policy": { "agent_native": "warn",
+            "exceptions": [{ "kind": "resource-kind", "name": "remote" }] }
+    }))
+    .expect("unrecognized exception kind should deserialize");
+
+    let exception = context
+        .policy
+        .exceptions
+        .first()
+        .expect("exception should survive");
+    assert_eq!(exception.kind, "resource-kind");
+
+    let value = serde_json::to_value(&context).expect("serialize context");
+    let round_tripped = first_array_item(field(field(&value, "policy"), "exceptions"));
+    assert_eq!(field(round_tripped, "kind"), "resource-kind");
+}
+
+#[rstest]
 #[case(PolicyMode::Off, "off")]
 #[case(PolicyMode::Warn, "warn")]
 #[case(PolicyMode::Deny, "deny")]
@@ -313,77 +337,4 @@ fn mutation_effect_serializes_canonical_wire_values(
 ) {
     let value = serde_json::to_value(effect).expect("serialize mutation effect");
     assert_eq!(value, expected);
-}
-
-/// Returns a required object field for schema assertions, failing with the
-/// field name when the fixture is malformed.
-pub(super) fn field<'a>(value: &'a Value, name: &str) -> &'a Value {
-    let Some(field) = value.get(name) else {
-        panic!("JSON object should contain `{name}`");
-    };
-    field
-}
-
-/// Returns the first array item required by a schema assertion.
-pub(super) fn first_array_item(value: &Value) -> &Value {
-    let Some(item) = value.as_array().and_then(|items| items.first()) else {
-        panic!("JSON value should be a non-empty array");
-    };
-    item
-}
-
-/// Builds a fully populated context used by serialization and round-trip
-/// contract tests.
-pub(super) fn sample_agent_context() -> AgentContext {
-    AgentContext {
-        schema_version: ORTHO_AGENT_CONTEXT_SCHEMA_VERSION.to_owned(),
-        kind: "example-cli.agent_context".to_owned(),
-        package: "example-cli".to_owned(),
-        commands: vec![AgentCommand {
-            path: vec!["example-cli".to_owned(), "list".to_owned()],
-            summary: Some("List configured resources.".to_owned()),
-            canonical_verb: Some("list".to_owned()),
-            inputs: vec![AgentInput {
-                name: "format".to_owned(),
-                long: Some("format".to_owned()),
-                value_type: Some("string".to_owned()),
-                required: false,
-                default: Some("json".to_owned()),
-                enum_values: vec!["json".to_owned()],
-            }],
-            output_modes: vec!["json".to_owned()],
-            interaction_mode: InteractionMode::NonInteractive,
-            mutation_effect: MutationEffect::ReadOnly,
-            async_submission: Some(AsyncSubmission {
-                mode: AsyncSubmissionMode::Submit,
-                noun: Some("job".to_owned()),
-            }),
-            delivery_route: Some(DeliveryRoute {
-                supported: true,
-                target: Some("file".to_owned()),
-            }),
-            pagination: Some(PaginationContract {
-                limit_input: Some("limit".to_owned()),
-                cursor_input: Some("cursor".to_owned()),
-            }),
-            examples: vec![AgentExample {
-                command: "example-cli list --format json".to_owned(),
-                output_mode: Some("json".to_owned()),
-            }],
-        }],
-        profiles: SupportDeclaration { supported: false },
-        feedback: SupportDeclaration { supported: false },
-        policy: AgentPolicy {
-            agent_native: PolicyMode::Warn,
-        },
-        skill_manifests: vec![SkillManifest {
-            id: "example-list".to_owned(),
-            path: Utf8PathBuf::from("skills/example-list.md"),
-            manifest_schema_version: "v1".to_owned(),
-            commands: vec![SkillCommandRef {
-                path: vec!["example-cli".to_owned(), "list".to_owned()],
-                flags: vec!["format".to_owned()],
-            }],
-        }],
-    }
 }

@@ -6,6 +6,7 @@ use serde::Deserialize;
 
 use crate::cli::Args;
 use crate::error::OrthohelpError;
+use crate::policy::config::PolicyConfigMetadata;
 use crate::powershell::{ExportAlias, HelpInfoUri, ModuleName};
 use crate::schema::WindowsMetadata;
 
@@ -19,6 +20,9 @@ pub struct OrthoConfigMetadata {
     /// Optional Windows settings for `PowerShell` output.
     #[serde(default)]
     pub windows: Option<WindowsMetadataOverrides>,
+    /// Optional policy configuration from `[package.metadata.ortho_config.policy]`.
+    #[serde(default)]
+    pub policy: Option<PolicyConfigMetadata>,
 }
 
 /// Captures the `ortho_config` dependency requirements for the target crate.
@@ -47,6 +51,8 @@ pub struct PackageSelection {
     pub locales: Option<Vec<String>>,
     /// Windows metadata overrides from Cargo.toml, if any.
     pub windows: Option<WindowsMetadataOverrides>,
+    /// Policy configuration from `[package.metadata.ortho_config.policy]`, if any.
+    pub policy: Option<PolicyConfigMetadata>,
     /// Resolved `ortho_config` dependency metadata.
     pub ortho_config_dependency: OrthoConfigDependency,
 }
@@ -204,8 +210,29 @@ pub fn select_package(
         root_type,
         locales: metadata_defaults.locales,
         windows: metadata_defaults.windows,
+        policy: metadata_defaults.policy,
         ortho_config_dependency,
     })
+}
+
+/// Selects the target package for a policy check without generator
+/// preconditions.
+///
+/// The policy check (Decision D11) must work for packages still adopting the
+/// toolchain, so this resolves the package only — no `root_type`, library
+/// target, or `ortho_config` dependency requirement.
+pub fn select_policy_package<'a>(
+    metadata: &'a Metadata,
+    args: &Args,
+) -> Result<&'a Package, OrthohelpError> {
+    args.package.as_ref().map_or_else(
+        || {
+            metadata
+                .root_package()
+                .ok_or(OrthohelpError::WorkspaceRootMissing)
+        },
+        |name| find_package(metadata, name),
+    )
 }
 
 fn find_package<'a>(metadata: &'a Metadata, name: &str) -> Result<&'a Package, OrthohelpError> {

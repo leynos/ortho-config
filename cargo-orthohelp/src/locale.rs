@@ -292,6 +292,8 @@ mod tests {
                 help_info_uri: None,
                 should_ensure_en_us: true,
             },
+            check_agent_native: false,
+            policy_mode: None,
         }
     }
 
@@ -307,6 +309,7 @@ mod tests {
             root_type: "demo::Config".to_owned(),
             locales,
             windows: None,
+            policy: None,
             ortho_config_dependency: crate::metadata::OrthoConfigDependency {
                 requirement: "^0.7.0".to_owned(),
                 path: None,
