@@ -2,7 +2,7 @@
 
 use anyhow::{Context, Result, ensure};
 use cap_std::{ambient_authority, fs::Dir};
-use std::ffi::OsStr;
+use std::ffi::{OsStr, OsString};
 use std::path::{Component, Path};
 use std::process::{Command, Output};
 use tempfile::TempDir;
@@ -79,6 +79,21 @@ impl ExampleWorkspace {
     ///
     /// A successful result writes the exact fence body to
     /// `src/bin/<binary_name>.rs`.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # let mut workspace = ExampleWorkspace::new(DependencyAlias("ortho_config"))?;
+    /// # let example = documented_example("guide-cargo-external-subcommand")?;
+    /// workspace.add_binary_as("cargo-demo", example)?;
+    /// // The example body is now `src/bin/cargo-demo.rs`.
+    /// # Ok::<(), anyhow::Error>(())
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the example is not Rust, the binary name is
+    /// unsafe, or the fixture source cannot be written.
     pub fn add_binary_as(&mut self, binary_name: &str, example: &DocumentedExample) -> Result<()> {
         ensure!(example.language == "rust", "{} is not Rust", example.id);
         ensure!(
@@ -197,6 +212,23 @@ impl ExampleWorkspace {
     /// The workspace's `target/debug` directory is prepended to the child
     /// `PATH`, so Cargo discovers only the fixture binary added to this
     /// workspace before any host installation.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # let mut workspace = ExampleWorkspace::new(DependencyAlias("ortho_config"))?;
+    /// # let example = documented_example("guide-cargo-external-subcommand")?;
+    /// # workspace.add_binary_as("cargo-demo", example)?;
+    /// # workspace.build()?;
+    /// let output = workspace.run_cargo_subcommand("demo", ["--verbose"])?;
+    /// assert!(output.status.success());
+    /// # Ok::<(), anyhow::Error>(())
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the subcommand name is unsafe, the dispatch
+    /// path cannot be constructed, or Cargo cannot run the fixture.
     pub fn run_cargo_subcommand<I, S>(&mut self, subcommand: &str, args: I) -> Result<Output>
     where
         I: IntoIterator<Item = S>,
@@ -206,12 +238,9 @@ impl ExampleWorkspace {
             is_valid_example_id(subcommand),
             "{subcommand} is not a safe Cargo subcommand name"
         );
-        let inherited_path = std::env::var_os("PATH").context("read PATH for Cargo dispatch")?;
         let fixture_bin_dir = self.root.path().join("target/debug");
-        let path = std::env::join_paths(
-            std::iter::once(fixture_bin_dir).chain(std::env::split_paths(&inherited_path)),
-        )
-        .context("construct PATH for Cargo dispatch")?;
+        let inherited_path = std::env::var_os("PATH");
+        let path = cargo_dispatch_path(&fixture_bin_dir, inherited_path.as_deref())?;
         let mut command = self.cargo_command()?;
         command.env("PATH", path).arg(subcommand).args(args);
         let operation = format!("run Cargo-dispatched documented binary {subcommand}");
@@ -259,6 +288,14 @@ impl ExampleWorkspace {
     }
 }
 
+fn cargo_dispatch_path(fixture_bin_dir: &Path, inherited_path: Option<&OsStr>) -> Result<OsString> {
+    std::env::join_paths(
+        std::iter::once(fixture_bin_dir.to_path_buf())
+            .chain(inherited_path.into_iter().flat_map(std::env::split_paths)),
+    )
+    .context("construct PATH for Cargo dispatch")
+}
+
 fn manifest(DependencyAlias(dependency_name): DependencyAlias<'_>) -> String {
     let crate_path = toml::Value::String(env!("CARGO_MANIFEST_DIR").to_owned()).to_string();
     render_manifest(dependency_name, &crate_path)
@@ -286,89 +323,5 @@ fn render_manifest(dependency_name: &str, serialized_crate_path: &str) -> String
 }
 
 #[cfg(test)]
-mod tests {
-    //! Regression coverage for generated workspace manifests.
-
-    use super::{
-        DependencyAlias, DocumentedExample, ExampleId, ExampleWorkspace, RunFile, render_manifest,
-    };
-    use anyhow::{Context, Result, ensure};
-    use std::path::Path;
-
-    #[test]
-    fn windows_dependency_path_produces_valid_toml() {
-        let windows_path = r#"D:\a\"quoted\"\ortho-config\ortho_config"#;
-        let serialized_path = toml::Value::String(windows_path.to_owned()).to_string();
-        let generated = render_manifest("ortho_config", &serialized_path);
-        let parsed = toml::from_str::<toml::Value>(&generated)
-            .expect("serialized documentation manifest should parse as TOML");
-        let parsed_path = parsed
-            .get("dependencies")
-            .and_then(|dependencies| dependencies.get("ortho_config"))
-            .and_then(|dependency| dependency.get("path"))
-            .and_then(toml::Value::as_str);
-        assert_eq!(parsed_path, Some(windows_path));
-    }
-
-    #[test]
-    fn independently_owned_workspaces_support_concurrent_interleavings() -> Result<()> {
-        std::thread::scope(|scope| {
-            let first = scope.spawn(|| exercise_workspace_interleavings("first", "updated-first"));
-            let second =
-                scope.spawn(|| exercise_workspace_interleavings("second", "updated-second"));
-
-            first
-                .join()
-                .map_err(|_| anyhow::anyhow!("first workspace thread panicked"))??;
-            second
-                .join()
-                .map_err(|_| anyhow::anyhow!("second workspace thread panicked"))??;
-            Ok(())
-        })
-    }
-
-    fn exercise_workspace_interleavings(initial: &str, updated: &str) -> Result<()> {
-        let mut workspace = ExampleWorkspace::new(DependencyAlias("ortho_config"))?;
-        workspace.add_binary(&file_probe())?;
-        workspace.build()?;
-
-        write_probe_value(&mut workspace, initial)?;
-        assert_probe_output(&mut workspace, initial)?;
-        write_probe_value(&mut workspace, updated)?;
-        assert_probe_output(&mut workspace, updated)
-    }
-
-    fn file_probe() -> DocumentedExample {
-        DocumentedExample {
-            id: "workspace-probe".to_owned(),
-            language: "rust".to_owned(),
-            body: concat!(
-                "fn main() -> std::io::Result<()> {\n",
-                "    print!(\"{}\", std::fs::read_to_string(\"value.txt\")?);\n",
-                "    Ok(())\n",
-                "}\n",
-            )
-            .to_owned(),
-            source: "workspace ownership probe",
-            line: 1,
-        }
-    }
-
-    fn write_probe_value(workspace: &mut ExampleWorkspace, contents: &str) -> Result<()> {
-        workspace.write_run_file(
-            ExampleId("workspace-probe"),
-            RunFile {
-                path: Path::new("value.txt"),
-                contents,
-            },
-        )
-    }
-
-    fn assert_probe_output(workspace: &mut ExampleWorkspace, expected: &str) -> Result<()> {
-        let output = workspace.run(ExampleId("workspace-probe"), std::iter::empty::<&str>())?;
-        ensure!(output.status.success(), "workspace probe should succeed");
-        let stdout = String::from_utf8(output.stdout).context("workspace probe output is UTF-8")?;
-        ensure!(stdout == expected, "workspace probe output differed");
-        Ok(())
-    }
-}
+#[path = "workspace_tests.rs"]
+mod tests;

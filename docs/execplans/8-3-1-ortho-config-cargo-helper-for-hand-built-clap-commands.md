@@ -213,8 +213,9 @@ Stop and escalate (do not work around) when any of these is reached.
       executable documentation coverage of both supported argv forms.
 - [x] (2026-08-21) CodeRabbit follow-up: made the marked Cargo helper fence a
       verbatim executable fixture and exercised direct and real Cargo PATH
-      dispatch success, help, and failure paths; the final gate run remains
-      pending.
+      dispatch success, help, and failure paths; all six final gates passed
+      successfully (`make check-fmt`, `make typecheck`, `make lint`,
+      `make test`, `make markdownlint`, and `make nixie`).
 
 Each milestone ends with the gates run sequentially (never in parallel,
 because the environment relies on build caching) and a commit. Prefer
@@ -336,6 +337,11 @@ under `/tmp` and returns a bounded report.
   and prepends its isolated target directory to the child `PATH`.
   Impact: the guide's direct and Cargo-dispatched contracts are tested without
   changing the production helper or relying on a host-installed binary.
+- Observation (coverage follow-up, 2026-08-22): argv-equivalence coverage now
+  generates supported leaf-command configurations together with correlated
+  valid argument tails. The bounded property compares wrapped and unwrapped
+  matches, while focused examples retain representative cases; this records
+  the helper invariant without claiming gate results.
 
 ## Decision log
 
@@ -424,19 +430,21 @@ under `/tmp` and returns a bounded report.
   no-arguments error rendering (insta is retained over bare substring asserts
   to match the `cli_dispatch.rs` house precedent; the substring alternative
   was considered); an rstest-bdd feature exercises the consumer-visible happy
-  and unhappy paths; argv-equivalence is covered by table-driven
-  `#[rstest] #[case]` parameterized cases rather than a property test. The
-  first draft proposed a proptest for "wrapped parse equals unwrapped parse
-  for arbitrary option values"; the panel cut it: the helper never touches
-  argument values, so the property holds by construction and would exercise
-  clap's subcommand dispatch, not this crate's code — exactly the
-  non-substantive-invariant case `docs/developers-guide.md` says property
-  tooling must not be added for. No end-to-end process-spawning tests here:
+  and unhappy paths; argv-equivalence is covered by a bounded `proptest` that
+  generates supported leaf-command configurations and correlated valid
+  argument tails, then compares wrapped and unwrapped matches. Focused
+  `#[rstest] #[case]` examples remain for representative tails. Amendment
+  (2026-08-22): this supersedes the earlier panel decision to omit property
+  coverage; varying command shape and valid tail correlation makes the bounded
+  property test exercise the helper invariant rather than only clap's
+  rejection paths.
+  No end-to-end process-spawning tests here:
   roadmap item 8.3.4 owns the shared on-`PATH` regression fixtures, and
   `cargo-orthohelp`'s existing `cli_dispatch.rs` already proves real Cargo
   dispatch works for the nested shape. No `kani`/`verus`: the helper contains
   no unsafe code, no state machine, and no arithmetic lemma. Date/Author:
-  2026-08-06, planning session, amended after panel review.
+  2026-08-06, planning session, amended after panel review; amended 2026-08-22
+  by the coverage follow-up.
 
 - Decision (D-6): **Assertion style follows the house style.** The task brief
   asks for `googletest` and `pretty_assertions`; neither is used anywhere in
@@ -733,12 +741,11 @@ Red tests:
    - `preserves_required_inner_arguments`: an inner command with a required
      argument errors cleanly through the wrapper when the argument is
      missing and parses when present.
-   - Argv-equivalence table (replaces the first draft's proptest, per D-5):
-     `#[rstest]`-parameterized cases asserting that for representative argv
-     tails (flags, options with values, positionals), the wrapped parse of
-     `["cargo-demo", "demo", tail...]` yields the same option values via
-     `subcommand_matches("demo")` as the unwrapped inner command parsing
-     `["demo", tail...]`.
+   - Argv-equivalence property: a bounded `proptest` generates supported
+     leaf-command configurations and correlated valid argv tails, then
+     compares the wrapped parse of `["cargo-demo", "demo", tail...]` with the
+     unwrapped inner parse of `["demo", tail...]`. Focused `#[rstest]` cases
+     retain representative flags, options with values, and positionals.
 2. Snapshot tests in `ortho_config/tests/cargo_entry_point.rs` using `insta`,
    asserting the load-bearing renderings only (D-5):
    - top-level help contains `Usage: cargo <COMMAND>`;
@@ -1156,3 +1163,9 @@ updates the status line. The plan body (Decisions D-1–D-9, Constraints,
 Tolerances) was unchanged throughout implementation — no deviation required
 escalation under Tolerance 6 or 7; the two benign clap facts recorded as
 implementation observations amended the verified-fact list only.
+
+Revision 3 (2026-08-22): revisited D-5's argv-equivalence coverage. The
+bounded proptest now generates supported leaf-command configurations and
+correlated valid argument tails, then compares wrapped and unwrapped matches;
+the earlier table-driven cases remain as focused examples. This records the
+coverage decision only; no gate result is implied.

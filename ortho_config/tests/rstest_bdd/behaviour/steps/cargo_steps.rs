@@ -21,7 +21,7 @@ struct CommandName(String);
 #[derive(Debug)]
 struct LongFlagName(String);
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 struct InstalledBinaryName(String);
 
 #[derive(Debug)]
@@ -141,7 +141,11 @@ fn wrap_command(cargo_context: &CargoContext, installed_binary: InstalledBinaryN
         .inner_command
         .take()
         .ok_or_else(|| anyhow!("inner command not initialized"))?;
-    let wrapper = external_subcommand(installed_binary.0.clone(), subcommand_name.0, inner_command);
+    let wrapper = external_subcommand(
+        installed_binary.0.as_str(),
+        subcommand_name.0,
+        inner_command,
+    );
     cargo_context.installed_binary.set(installed_binary);
     cargo_context.wrapper.set(wrapper);
     Ok(())
@@ -150,7 +154,7 @@ fn wrap_command(cargo_context: &CargoContext, installed_binary: InstalledBinaryN
 fn parse_wrapper_arguments(cargo_context: &CargoContext, arguments: CargoArguments) -> Result<()> {
     let installed_binary = cargo_context
         .installed_binary
-        .with_ref(Clone::clone)
+        .take()
         .ok_or_else(|| anyhow!("wrapper not initialized"))?;
     let mut argv = vec![installed_binary.0];
     argv.extend(arguments.0);

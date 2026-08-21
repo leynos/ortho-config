@@ -51,6 +51,8 @@
 //! ```
 
 #[cfg(test)]
+mod proptests;
+#[cfg(test)]
 mod tests;
 
 /// Wraps a hand-built `clap::Command` in the standard Cargo
