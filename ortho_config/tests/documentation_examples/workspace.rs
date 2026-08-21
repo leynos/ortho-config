@@ -72,15 +72,22 @@ impl ExampleWorkspace {
     /// # Ok::<(), anyhow::Error>(())
     /// ```
     pub fn add_binary(&mut self, example: &DocumentedExample) -> Result<()> {
+        self.add_binary_as(&example.id, example)
+    }
+
+    /// Add an example as a binary with a Cargo-dispatchable name.
+    ///
+    /// A successful result writes the exact fence body to
+    /// `src/bin/<binary_name>.rs`.
+    pub fn add_binary_as(&mut self, binary_name: &str, example: &DocumentedExample) -> Result<()> {
         ensure!(example.language == "rust", "{} is not Rust", example.id);
         ensure!(
-            is_valid_example_id(&example.id),
-            "{} is not a safe documented example identifier",
-            example.id
+            is_valid_example_id(binary_name),
+            "{binary_name} is not a safe documented binary name"
         );
         self.directory
-            .write(format!("src/bin/{}.rs", example.id), &example.body)
-            .with_context(|| format!("write {} binary", example.id))
+            .write(format!("src/bin/{binary_name}.rs"), &example.body)
+            .with_context(|| format!("write {binary_name} binary"))
     }
 
     /// Build every documented binary in the package.
@@ -182,6 +189,32 @@ impl ExampleWorkspace {
                     .map(|EnvironmentVariable { name, value }| (name, value)),
             );
         let operation = format!("run documented binary {id}");
+        process_runner::run_command(&mut command, Operation(&operation))
+    }
+
+    /// Run a built `cargo-<subcommand>` binary through Cargo dispatch.
+    ///
+    /// The workspace's `target/debug` directory is prepended to the child
+    /// `PATH`, so Cargo discovers only the fixture binary added to this
+    /// workspace before any host installation.
+    pub fn run_cargo_subcommand<I, S>(&mut self, subcommand: &str, args: I) -> Result<Output>
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<OsStr>,
+    {
+        ensure!(
+            is_valid_example_id(subcommand),
+            "{subcommand} is not a safe Cargo subcommand name"
+        );
+        let inherited_path = std::env::var_os("PATH").context("read PATH for Cargo dispatch")?;
+        let fixture_bin_dir = self.root.path().join("target/debug");
+        let path = std::env::join_paths(
+            std::iter::once(fixture_bin_dir).chain(std::env::split_paths(&inherited_path)),
+        )
+        .context("construct PATH for Cargo dispatch")?;
+        let mut command = self.cargo_command()?;
+        command.env("PATH", path).arg(subcommand).args(args);
+        let operation = format!("run Cargo-dispatched documented binary {subcommand}");
         process_runner::run_command(&mut command, Operation(&operation))
     }
 
