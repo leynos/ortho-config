@@ -48,7 +48,7 @@ read them through `subcommand_matches("<name>")` rather than from the
 top-level matches. Every example in the rustdoc and the users' guide must run
 all the way to extracting an option value, not stop at construction.
 
-You can observe success three ways. First, integration tests parse both argv
+Success can be verified three ways. First, integration tests parse both argv
 forms through the wrapper and assert the inner option values match a parse of
 the unwrapped command. Second, help output renders the Cargo dispatch shape
 (`Usage: cargo <COMMAND>` at the top level and `Usage: cargo demo [OPTIONS]`
