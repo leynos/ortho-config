@@ -149,5 +149,19 @@ knowing how the recursive tree was generated.
 
 - Decide in a later roadmap item whether the IR should grow explicit fields
   for hidden, aliased, and deprecated subcommands.
-- Decide in a later additive change how unit variants should produce minimal
-  `DocMetadata` values.
+
+## Subsequent amendments
+
+The first-implementation non-goal "support unit subcommand variants" and the
+matching named-field restriction are superseded. Rejecting those two variant
+shapes excludes ordinary command surfaces — a service CLI built from unit
+variants, and the `Variant { #[command(subcommand)] … }` idiom that clap
+documents for nested command trees — so both are in scope as additive
+extensions to the same companion trait.
+
+The widened variant contract is specified in
+[cargo-orthohelp-design.md](cargo-orthohelp-design.md) §3.1 and sequenced in
+[roadmap.md](roadmap.md) step 12.1. The decision recorded here is unchanged:
+`OrthoConfigSubcommandDocs` remains the companion trait, and the widening adds
+variant shapes to its derive rather than altering the trait contract or the IR
+envelope.

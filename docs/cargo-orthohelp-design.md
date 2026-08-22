@@ -1,4 +1,4 @@
-# OrthoConfig IR documentation design for cargo-orthohelp (v3)
+# OrthoConfig IR documentation design for cargo-orthohelp (v4)
 
 This document defines the intermediate representation (IR) emitted by the
 `OrthoConfig` derive macro and consumed by `cargo-orthohelp` to generate
@@ -11,7 +11,7 @@ agent-facing invocation contract is defined in
 agent-native command-contract and boundary document. It should be emitted as a
 sibling output, not as localized documentation prose.
 
-- Status: Revision 3 (agent-native relationship and reference CLI amendments
+- Status: Revision 4 (clap coverage and contract-evolution amendments
   integrated).
 - Audience: OrthoConfig maintainers and consumers.
 - Goal: Generate fully localized UNIX man pages and PowerShell external help
@@ -28,7 +28,33 @@ schema version to determine compatibility, regardless of document revision.
 
 ## 0. Changelog
 
-### 0.1 Revision 3
+### 0.1 Revision 4
+
+Revision 4 closes the gap between the IR contract and the ordinary `clap`
+vocabulary, and states the evolution rules the published types must obey. None
+of these amendments change what an existing consumer already reads; every one
+of them widens what the pipeline can describe.
+
+1. The documentation derive must cover the whole ordinary `clap` variant
+   vocabulary. Unit variants (`enum Cmd { Start, Stop, Status }`) and
+   named-field variants (`Cmd::Remote { #[command(subcommand)] action: … }`)
+   are in scope, not deferred. See §3.1.
+2. Positional arguments are modelled as first-class CLI surface. `CliMetadata`
+   grows optional positional metadata and the derive stops asserting that every
+   documented field is a long flag. See §2.2.
+3. `OrthoConfigDocs` becomes independently derivable. Documenting a type must
+   not require making it loadable from configuration layers. See §3.1.
+4. Public IR and agent-context types are `#[non_exhaustive]` and reachable
+   through constructors that stamp the schema version, so upstream can add
+   metadata without a breaking release and no consumer hand-writes
+   `ir_version`. See §3.6 and §12.
+5. Enums that carry an `Unknown` variant for forward compatibility wire that
+   variant up as the unknown-value fallback, so a reader tolerates the payloads
+   the compatibility policy already promises it will tolerate. See §12.
+6. The library ships a localizable default heading catalogue rather than
+   relying on hardcoded English constants inside the generator. See §4.2.
+
+### 0.2 Revision 3
 
 Revision 3 keeps the human documentation IR intact and adds the agent-native
 roadmap boundary:
@@ -55,7 +81,7 @@ roadmap boundary:
 The existing `ir`, `man`, `ps`, and `all` format compatibility surfaces remain
 unchanged by the consumer dependency tier.
 
-### 0.2 Revision 2
+### 0.3 Revision 2
 
 PowerShell and Windows amendments (no change to the IR-first philosophy):
 
@@ -188,8 +214,14 @@ pub struct HeadingIds {
     pub exit_status: String,
     pub examples: String,
     pub see_also: String,
+    pub commands: Option<String>, // inline subcommand listing
 }
 ```
+
+Every identifier in `HeadingIds` resolves against the library heading catalogue
+described in §4.2. A consumer that ships no Fluent catalogue of its own still
+renders complete headings; a consumer that ships one overrides only the
+headings it cares about.
 
 ### 2.2 Field-level metadata
 
@@ -215,13 +247,21 @@ pub struct FieldMetadata {
 ```rust
 #[derive(Debug, Serialize)]
 pub struct CliMetadata {
-    pub long: Option<String>,          // "port"
+    pub long: Option<String>,          // "port"; None for positionals
     pub short: Option<char>,           // 'p'
     pub value_name: Option<String>,    // e.g., "NUM"
     pub multiple: bool,                // repeats allowed
     pub takes_value: bool,             // false for switches
     pub possible_values: Vec<String>,  // for enums
     pub hide_in_help: bool,            // excluded from OPTIONS section
+    pub positional: Option<PositionalMetadata>, // set for positional arguments
+}
+
+#[derive(Debug, Serialize)]
+pub struct PositionalMetadata {
+    pub index: u16,        // 1-based clap argument index
+    pub variadic: bool,    // accepts one or more trailing values
+    pub trailing: bool,    // captures everything after `--`
 }
 
 #[derive(Debug, Serialize)]
@@ -234,6 +274,24 @@ pub struct FileMetadata {
     pub key_path: String, // e.g., "database.host"
 }
 ```
+
+A field is positional when `positional` is `Some`. Positional arguments are
+ordinary CLI surface — `git clone <url>` and `cp <src> <dst>` are the common
+shape — and they must be representable without special-casing. Three rules
+follow:
+
+- `long` and `short` are both `None` for a positional argument. The derive must
+  not emit a synthesized long flag to keep the field addressable.
+- Generators order positionals by `index` in SYNOPSIS output and in the
+  PowerShell `position` attribute, and they render `value_name` rather than a
+  flag spelling.
+- A field with CLI metadata, no flag spelling, and no `positional` entry is not
+  invocable from the command line. It is configuration surface exposed through
+  environment variables or files, and agent-facing output omits it.
+
+Adding `positional` is an additive optional field: it bumps the IR minor
+version and leaves existing `ir`, `man`, and `ps` output unchanged for command
+surfaces that use only flags.
 
 ### 2.3 Value typing and defaults
 
@@ -368,6 +426,26 @@ pub trait OrthoConfigDocs {
 The `#[derive(OrthoConfig)]` macro emits this implementation alongside runtime
 loaders, filling all IR fields from the same parsed metadata.
 
+`OrthoConfigDocs` is also derivable on its own through
+`#[derive(OrthoConfigDocs)]`. Documentation and configuration loading are
+separate concerns: most argument structs in a subcommand tree are `clap`-only
+and are never merged from configuration layers. Requiring `OrthoConfig` in
+order to document a type would force those structs to satisfy
+`DeserializeOwned` and to carry a `Default` implementation that lies about
+required fields, purely to obtain documentation.
+
+The standalone derive therefore:
+
+- emits the same `OrthoConfigDocs` implementation from the same field-metadata
+  pipeline as `#[derive(OrthoConfig)]`;
+- emits no runtime loaders, no `Deserialize` bound assertion, and no merge
+  machinery;
+- applies to any `#[derive(clap::Args)]` or `#[derive(clap::Parser)]` struct,
+  including one with required fields and no `Default`;
+- is mutually exclusive with `#[derive(OrthoConfig)]` on the same type. Both on
+  one type is a macro-time error naming the duplicate rather than a confusing
+  conflicting-implementation error from the compiler.
+
 Subcommand enums use a companion trait:
 
 ```rust
@@ -377,10 +455,28 @@ pub trait OrthoConfigSubcommandDocs {
 }
 ```
 
-The `OrthoConfigSubcommandDocs` derive is applied to `clap::Subcommand` enums.
-Each single-field tuple variant delegates to its inner argument struct's
-`OrthoConfigDocs` implementation, overrides `app_name` with the clap command
-label, regenerates `about_id`, and preserves enum declaration order.
+The `OrthoConfigSubcommandDocs` derive is applied to `clap::Subcommand` enums
+and preserves enum declaration order. It covers the whole ordinary `clap`
+variant vocabulary:
+
+- **Single-field tuple variants** (`Run(RunArgs)`) delegate to the inner
+  argument struct's `OrthoConfigDocs` implementation, override `app_name` with
+  the clap command label, and regenerate `about_id`.
+- **Unit variants** (`Start`, `Stop`, `Status`) emit a minimal `DocMetadata`
+  node: command label, generated `about_id`, default heading identifiers, and
+  empty `fields` and `subcommands`. A service or daemon CLI is built from
+  these, so rejecting them excludes an entire ordinary class of command surface.
+- **Named-field variants** (`Remote { #[command(subcommand)] action: … }`)
+  build their node from the variant's own fields. A `#[command(subcommand)]`
+  field recurses through the nested selector enum to produce grandchild nodes;
+  remaining fields run through the same field-metadata pipeline as struct
+  fields. This is the canonical clap idiom for three-level command trees, and a
+  feature whose purpose is recursive subcommand metadata has to describe it.
+
+Variants that mix a nested `#[command(subcommand)]` selector with ordinary
+argument fields are supported: the selector populates `subcommands` and the
+remaining fields populate `fields`. More than one `#[command(subcommand)]`
+field in a single variant is a macro-time error, matching clap's own constraint.
 
 ### 3.2 Attributes (doc-related)
 
@@ -454,6 +550,48 @@ Deterministic IDs when omitted:
 - Renderer regressions on populated nested trees are gated by targeted tests
   and `insta` snapshots in
   `cargo-orthohelp/tests/golden/nested_subcommand_snapshots.rs`.
+- CLI metadata emits `long` only for fields that actually have a long flag.
+  Positional fields emit `positional` instead; see §2.2.
+
+### 3.6 Constructors and additive evolution
+
+The IR types are a published contract that both the derive and hand-writing
+consumers assemble. Two properties keep that contract evolvable.
+
+**Every public IR and agent-context type is `#[non_exhaustive]`.** The sibling
+modules in the same crate — `subcommand::selected`, `declarative::layer`, and
+`error::types` — already take this position, and the documentation IR is the
+surface most likely to grow fields as agent-native metadata lands. Without it,
+adding one optional field to `FieldMetadata` breaks every struct-literal
+consumer and therefore requires a major release, which in practice means the
+field never gets added.
+
+**Every type is constructible without a struct literal.** `#[non_exhaustive]`
+alone would leave hand-assembling consumers with no way to build a value at
+all, so each type provides a constructor taking its required arguments, with
+optional metadata applied through `with_*` methods or field assignment on the
+returned value:
+
+```rust
+let mut meta = DocMetadata::new("my-app", "my-app.about");
+meta.bin_name = Some("my-app".into());
+meta.fields.push(
+    FieldMetadata::new("port", "my-app.fields.port.help")
+        .with_cli(CliMetadata::flag("port").with_short('p'))
+        .with_env(EnvMetadata::new("MY_APP_PORT")),
+);
+```
+
+`DocMetadata::new` stamps `ir_version` from `ORTHO_DOCS_IR_VERSION`. This is
+the point of the constructor rather than a convenience: a bare public version
+constant that consumers read and copy into their own output lets any consumer
+claim conformance to a schema version it has not implemented. Stamping the
+version at construction means the value in the payload is always the version of
+the library that built it. The constant remains public for comparison and
+compatibility checks; it stops being the supported way to populate the field.
+
+`HeadingIds::defaults()` returns the standard `ortho.headings.*` identifier set
+so no consumer enumerates eleven identifiers by hand.
 
 ## 4. Localization model
 
@@ -475,6 +613,25 @@ locales/
 PowerShell note: always emit `en-US` help XML. If generating another locale
 only (for example, `en-GB`), copy it to `en-US` as a fallback because
 PowerShell culture probing strongly prefers `en-US` presence.
+
+#### 4.2.1 Default heading catalogue
+
+`ortho_config` ships the complete `ortho.headings.*` catalogue in its own
+locale directory. A consumer that has authored no Fluent catalogue renders
+correct headings from the first generator run; a consumer that adds a locale
+translates the headings it wants and inherits the rest.
+
+The catalogue is the fallback of record. `cargo-orthohelp` currently carries a
+hardcoded English table for the standard heading identifiers, which keeps raw
+identifiers out of output but makes the headings the one part of a generated
+man page that cannot be translated without the consumer reimplementing them.
+Moving those strings into the library catalogue means the resolver layering in
+§4.1 — consumer bundle, then library defaults, then English — does the work,
+and the generator holds no locale content of its own.
+
+Requiring each adopter to author eleven heading identifiers before any output
+renders is pure onboarding tax, and it is identical for every adopter, which is
+what makes it the library's job.
 
 ## 5. Naming and flattening
 
@@ -602,10 +759,11 @@ cache.
 Digests are SHA-256 and are rendered as 64 lowercase hexadecimal digits by the
 crate-internal `cargo-orthohelp/src/hex.rs` helper. `sha2` 0.11 returns
 `hybrid_array::Array<u8, _>` from `finalize`, and that type does not implement
-`core::fmt::LowerHex`, so the previous `{:x}` formatting no longer compiles. The
-helper keeps the rendered form byte-for-byte identical to the earlier output, so
-existing cache directories remain addressable. See the digest-rendering section
-of [developers' guide](developers-guide.md) for the helper's re-use policy.
+`core::fmt::LowerHex`, so the previous `{:x}` formatting no longer compiles.
+The helper keeps the rendered form byte-for-byte identical to the earlier
+output, so existing cache directories remain addressable. See the
+digest-rendering section of [developers' guide](developers-guide.md) for the
+helper's re-use policy.
 
 ### 6.3.1 Agent-context pipeline additions
 
@@ -916,6 +1074,43 @@ PowerShell artefacts without adopting agent-context metadata. Consumers that
 parse localized IR directly should tolerate additive optional fields and should
 not require future agent-context or policy-report fields unless they opt into
 those formats.
+
+### 12.1 Rust API compatibility
+
+The wire contract and the Rust API evolve under separate rules. A field that is
+additive on the wire is still breaking in Rust if consumers build the type with
+a struct literal. The published types therefore follow §3.6:
+`#[non_exhaustive]` plus constructors. With both in place, adding an optional
+metadata field is a minor release for the crate as well as an additive change
+to the schema.
+
+Applying `#[non_exhaustive]` is itself a breaking change for any consumer that
+currently writes struct literals. It ships together with the constructors, in
+one release, with a migration note; splitting them would leave a release in
+which the types cannot be constructed outwith the crate.
+
+### 12.2 Unknown-variant tolerance
+
+§8.2 of [agent-native-cli-design.md](agent-native-cli-design.md) permits adding
+enum variants within a major version "only when the contract defines and tests
+an unknown-variant fallback that preserves the documented legacy default for
+strict deserializers". `InteractionMode` and `MutationEffect` each ship an
+`Unknown` variant for exactly this purpose, but nothing routes unrecognized
+wire strings to it, so a v1 reader hard-errors on the v2 payload it was
+designed to tolerate.
+
+Enums whose `Unknown` variant exists to absorb future values annotate that
+variant with `#[serde(other)]`. Two consequences are part of the contract:
+
+- An unrecognized value deserializes to `Unknown` and re-serializes as
+  `"unknown"`. Round-tripping a payload through an older reader is lossy for
+  that field. This is the intended trade: the alternative is a hard error.
+- The fallback applies only to enums that document forward compatibility as
+  their purpose. It is not applied to enums that model closed operator input,
+  where an unrecognized value is a mistake the user should see. `PolicyMode`
+  (`off`, `warn`, `deny`) is such an enum: a misspelled mode must fail loudly
+  rather than silently degrade, so it keeps strict deserialization and gains no
+  `Unknown` variant.
 
 ## 13. Worked example (abridged)
 

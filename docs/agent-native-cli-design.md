@@ -767,6 +767,30 @@ The design and roadmap updates must address these known gaps:
   delivery, feedback, execution ledger, mutation, and pagination metadata are
   not yet modelled as first-class contracts.
 
+The following gaps block ordinary `clap` command surfaces from being described
+at all, and are therefore prerequisites rather than enhancements. See
+[cargo-orthohelp-design.md](cargo-orthohelp-design.md) §§2.2, 3.1, 3.6, 4.2.1,
+and 12 for the intended contracts:
+
+- unit subcommand variants and named-field subcommand variants are rejected by
+  the documentation derive, which excludes both service-style command sets and
+  the canonical clap idiom for three-level command trees;
+- positional arguments are unrepresentable: the IR models only long and short
+  flags, so `<url>`-style and `<src> <dst>`-style commands cannot be described
+  or emitted into agent context;
+- `OrthoConfigDocs` cannot be derived independently of `OrthoConfig`, so
+  documenting a type also requires making it loadable from configuration
+  layers, which excludes most subcommand argument structs;
+- the documentation IR and agent-context types are neither `#[non_exhaustive]`
+  nor constructible without struct literals, so no metadata field can be added
+  without a breaking release;
+- `Unknown` enum variants exist for forward compatibility but no unknown-value
+  fallback is wired to them, so §8.2's additive-variant allowance cannot be
+  used;
+- no default heading catalogue ships with the library, so every adopter
+  reimplements the same eleven identifiers before generated documentation is
+  translatable.
+
 ## 10. Deferred extensions
 
 The following ideas are useful but must not block the core agent-native work:
