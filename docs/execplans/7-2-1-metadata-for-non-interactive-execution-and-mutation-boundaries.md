@@ -211,6 +211,11 @@ escalation, not workarounds.
   and golden-ID contract tests), and `make markdownlint` (incl. Oxford-spelling
   gate) all exit 0. Final `coderabbit review --agent --committed --base
   origin/main` returned 0 findings. Log: `/tmp/codereview_final.out`.
+- [x] (2026-08-24) Post-closure review: `make markdownlint` re-run green after
+  the Revision 3 stale-statement fix in `docs/cargo-orthohelp-design.md`
+  (commit `aedb9d1`). The design doc now consistently states that
+  `--check-agent-native[=off|warn|deny]` is implemented; future work is scoped
+  to explicitly deferred policy extensions only.
 
 ## Surprises & discoveries
 
@@ -302,6 +307,15 @@ escalation, not workarounds.
   `behaviour(bypass = "--force")`) slipped past validation. The check now runs
   on the merged state after each group parses, so both spellings in either
   order are rejected with the same span-bearing error.
+- Observation: a post-closure docs review found `docs/cargo-orthohelp-design.md`
+  Revision 3 still described agent-native linting as a *future*
+  `cargo-orthohelp` responsibility, contradicting the Milestone F §8.1 rows and
+  the implemented `--check-agent-native` surface. Impact: the stale statement
+  was corrected to state that the flag is implemented (stdout JSON policy
+  report, one-line stderr summary, exit 3 after an explicitly requested
+  `--format` generation), with only explicitly deferred policy extensions left
+  as future work. The `make markdownlint` gate was re-run green on the fix
+  (commit `aedb9d1`).
 
 ## Decision log
 
