@@ -2,9 +2,12 @@
 
 #[path = "documentation_examples/cargo_runner.rs"]
 mod cargo_runner;
+
 mod documentation_examples;
+
 #[path = "documentation_examples/format_all.rs"]
 mod format_all;
+
 #[path = "documentation_examples/process_runner.rs"]
 mod process_runner;
 
@@ -18,6 +21,10 @@ use std::collections::BTreeSet;
 use tempfile::TempDir;
 
 const EXPECTED_EXAMPLE_IDS: &[&str] = &[
+    "api-guide-agent-context-constructor",
+    "api-guide-agent-context-json",
+    "api-guide-policy-report-constructors",
+    "api-guide-policy-report-json",
     "guide-agent-context",
     "guide-alias-derive",
     "guide-alias-install",
@@ -91,6 +98,7 @@ fn every_documented_fence_has_a_known_unique_identifier() -> Result<()> {
     );
     Ok(())
 }
+
 #[test]
 fn installation_manifests_select_the_documented_release() -> Result<()> {
     let readme = parse_toml("readme-install")?;

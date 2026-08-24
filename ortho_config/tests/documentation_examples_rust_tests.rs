@@ -1,10 +1,13 @@
 //! Compile-and-run contracts for Rust and console examples in public docs.
 
 mod documentation_examples;
+
 #[path = "documentation_examples/env_alias_chain.rs"]
 mod env_alias_chain;
+
 #[path = "documentation_examples/process_runner.rs"]
 mod process_runner;
+
 #[path = "documentation_examples/workspace.rs"]
 mod workspace;
 
@@ -29,6 +32,8 @@ const STANDARD_RUST_EXAMPLES: &[&str] = &[
     "guide-tracing",
     "guide-orthohelp-metadata",
     "guide-scoped-discovery",
+    "api-guide-policy-report-json",
+    "api-guide-agent-context-json",
 ];
 
 /// Verifies the public Rust examples compile and behave as documented.
@@ -49,6 +54,16 @@ fn documented_rust_compiles_and_runs() -> Result<()> {
         ExampleId("guide-orthohelp-metadata"),
         [],
         "field=host\n",
+    )?;
+    assert_serialized_json(
+        &mut workspace,
+        ExampleId("api-guide-policy-report-json"),
+        "version",
+    )?;
+    assert_serialized_json(
+        &mut workspace,
+        ExampleId("api-guide-agent-context-json"),
+        "schema_version",
     )?;
     assert_sanitized_binary_environment(&mut workspace)?;
 
@@ -367,3 +382,25 @@ fn assert_run<const N: usize>(
     );
     Ok(())
 }
+
+fn assert_serialized_json(
+    workspace: &mut ExampleWorkspace,
+    ExampleId(id): ExampleId<'_>,
+    version_field: &str,
+) -> Result<()> {
+    let output = workspace.run(ExampleId(id), std::iter::empty::<&str>())?;
+    ensure!(
+        output.status.success(),
+        "{id} failed:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let payload: ortho_config::serde_json::Value =
+        ortho_config::serde_json::from_slice(&output.stdout)
+            .with_context(|| format!("{id} should print JSON"))?;
+    ensure!(
+        payload.get(version_field).is_some(),
+        "{id} JSON should contain {version_field}"
+    );
+    Ok(())
+}
+// weave: run 'weave explain ortho_config/tests/documentation_examples_rust_tests.rs' for per-hunk detail, 'weave check' to verify your resolution
