@@ -12,9 +12,11 @@
 
 use syn::meta::ParseNestedMeta;
 use syn::parenthesized;
+use syn::punctuated::Punctuated;
 use syn::{Attribute, Expr, Lit, LitStr, Token};
 
 mod clap_attrs;
+mod discovery_attrs;
 mod doc_attrs;
 mod doc_types;
 mod input;
@@ -28,6 +30,7 @@ pub(crate) use clap_attrs::{
     ClapInferredDefault, clap_arg_id, clap_arg_id_from_attribute, clap_default_value,
     clap_field_is_subcommand, clap_variant_name, reject_subcommand_ortho_config_attrs,
 };
+pub(crate) use discovery_attrs::{DiscoveryAttrs, MergeStrategy, parse_prefix};
 use doc_attrs::{apply_field_doc_attr, apply_struct_doc_attr};
 pub(crate) use doc_types::{
     DocExampleAttr, DocFieldAttrs, DocLinkAttr, DocNoteAttr, DocStructAttrs, HeadingOverrides,
@@ -90,41 +93,6 @@ pub(crate) struct FieldAttrs {
     pub doc: DocFieldAttrs,
 }
 
-#[derive(Default, Clone)]
-pub(crate) struct DiscoveryAttrs {
-    pub app_name: Option<String>,
-    pub env_var: Option<String>,
-    pub config_file_name: Option<String>,
-    pub dotfile_name: Option<String>,
-    pub project_file_name: Option<String>,
-    pub config_cli_long: Option<String>,
-    pub config_cli_short: Option<char>,
-    pub config_cli_visible: Option<bool>,
-}
-
-#[derive(Clone, Copy, PartialEq)]
-pub(crate) enum MergeStrategy {
-    Append,
-    Replace,
-    Keyed,
-}
-
-impl MergeStrategy {
-    pub(crate) fn parse(s: &str, span: proc_macro2::Span) -> Result<Self, syn::Error> {
-        match s {
-            "append" => Ok(Self::Append),
-            "replace" => Ok(Self::Replace),
-            "keyed" => Ok(Self::Keyed),
-            _ => Err(syn::Error::new(
-                span,
-                format!(
-                    "unknown merge_strategy '{s}'; expected one of \"append\", \"replace\", or \"keyed\""
-                ),
-            )),
-        }
-    }
-}
-
 /// Iterate all `#[ortho_config(...)]` attributes once and apply a callback.
 fn parse_ortho_config<F>(attrs: &[Attribute], mut f: F) -> syn::Result<()>
 where
@@ -137,7 +105,7 @@ where
 }
 
 /// Consumes an unrecognised key-value or list without recording it.
-fn discard_unknown(meta: &syn::meta::ParseNestedMeta) -> syn::Result<()> {
+pub(super) fn discard_unknown(meta: &syn::meta::ParseNestedMeta) -> syn::Result<()> {
     if meta.input.peek(Token![=]) {
         meta.value()?.parse::<proc_macro2::TokenStream>()?;
     } else if meta.input.peek(syn::token::Paren) {
@@ -146,20 +114,6 @@ fn discard_unknown(meta: &syn::meta::ParseNestedMeta) -> syn::Result<()> {
         content.parse::<proc_macro2::TokenStream>()?;
     }
     Ok(())
-}
-
-fn parse_prefix(meta: &ParseNestedMeta) -> syn::Result<String> {
-    let lit = meta.value()?.parse::<Lit>()?;
-    match lit {
-        Lit::Str(s) => {
-            let mut value = s.value();
-            if !value.is_empty() && !value.ends_with('_') {
-                value.push('_');
-            }
-            Ok(value)
-        }
-        other => Err(syn::Error::new(other.span(), "prefix must be a string")),
-    }
 }
 
 fn parse_discovery_meta(meta: &ParseNestedMeta, discovery: &mut DiscoveryAttrs) -> syn::Result<()> {
@@ -177,6 +131,15 @@ fn handle_discovery_nested(
     match ident.as_str() {
         "app_name" => assign_str(&mut discovery.app_name, nested, "app_name"),
         "env_var" => assign_str(&mut discovery.env_var, nested, "env_var"),
+        "env_vars" => assign_string_list(&mut discovery.env_vars, nested, "env_vars"),
+        "explicit_mode" => assign_str(&mut discovery.explicit_mode, nested, "explicit_mode"),
+        "automatic_mode" => assign_str(&mut discovery.automatic_mode, nested, "automatic_mode"),
+        "scope_order" => assign_string_list(&mut discovery.scope_order, nested, "scope_order"),
+        "project_root_from" => assign_str(
+            &mut discovery.project_root_from,
+            nested,
+            "project_root_from",
+        ),
         "config_file_name" => {
             assign_str(&mut discovery.config_file_name, nested, "config_file_name")
         }
@@ -197,6 +160,39 @@ fn handle_discovery_nested(
         ),
         _ => discard_unknown(nested),
     }
+}
+
+fn assign_string_list(
+    target: &mut Vec<String>,
+    nested: &ParseNestedMeta,
+    key: &str,
+) -> syn::Result<()> {
+    let values = if nested.input.peek(Token![=]) {
+        let array = nested.value()?.parse::<syn::ExprArray>()?;
+        array
+            .elems
+            .into_iter()
+            .map(|expression| match expression {
+                Expr::Lit(syn::ExprLit {
+                    lit: Lit::Str(value),
+                    ..
+                }) => Ok(value.value()),
+                other => Err(syn::Error::new_spanned(
+                    other,
+                    format!("{key} must contain strings"),
+                )),
+            })
+            .collect::<syn::Result<Vec<_>>>()?
+    } else {
+        let content;
+        parenthesized!(content in nested.input);
+        Punctuated::<LitStr, Token![,]>::parse_terminated(&content)?
+            .into_iter()
+            .map(|value| value.value())
+            .collect()
+    };
+    *target = values;
+    Ok(())
 }
 
 fn assign_str(target: &mut Option<String>, nested: &ParseNestedMeta, key: &str) -> syn::Result<()> {
@@ -270,7 +266,21 @@ pub(crate) fn parse_struct_attrs(attrs: &[Attribute]) -> Result<StructAttrs, syn
             }
         }
     })?;
+    if out
+        .discovery
+        .as_ref()
+        .is_some_and(has_conflicting_env_selectors)
+    {
+        return Err(syn::Error::new(
+            proc_macro2::Span::call_site(),
+            "`env_var` and `env_vars` are mutually exclusive",
+        ));
+    }
     Ok(out)
+}
+
+const fn has_conflicting_env_selectors(discovery: &DiscoveryAttrs) -> bool {
+    discovery.env_var.is_some() && !discovery.env_vars.is_empty()
 }
 
 /// Applies a recognised field attribute, returning `true` if handled.

@@ -115,8 +115,9 @@ pub use csv_env::CsvEnv;
 #[cfg_attr(docsrs, doc(cfg(feature = "serde_json")))]
 pub use declarative::{DeclarativeMerge, MergeComposer, MergeLayer, MergeProvenance};
 pub use discovery::{
-    ConfigDiscovery, ConfigDiscoveryBuilder, DiscoveryLayersOutcome, DiscoveryLoadOutcome,
-    LayerDiscoveryOutcome,
+    AutomaticMode, ConfigDiscovery, ConfigDiscoveryBuilder, ConfigFilePolicy, ConfigPathSelector,
+    DiscoveryLayersOutcome, DiscoveryLoadOutcome, DiscoveryScope, ExplicitMode, FileLayerOutcome,
+    LayerDiscoveryOutcome, ResolvedSelection,
 };
 pub use env_source::{EnvSource, MapEnv, ProcessEnv, SharedEnvSource, process_env_source};
 pub use error::{OrthoError, is_display_request};
