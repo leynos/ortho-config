@@ -518,18 +518,23 @@ cargo orthohelp \
   [--ps-module-name <Name>] [--ps-split-subcommands <BOOL>] \
   [--ps-include-common-parameters <BOOL>] [--ps-help-info-uri <URI>] \
   [--ensure-en-us <BOOL>] [--check-agent-native] \
+  [--policy-mode off|warn|deny] \
   [--cache] [--no-build]
 ```
 
 `ir`, `man`, `ps`, `agent-context`, and `all` are the currently implemented
 formats. The current default is `ir`; unsupported format values fail during
-Clap parsing before generation begins. `--json` and `--check-agent-native` are
-planned agent-native additions. Until they are implemented, generated artefacts
-continue to report success or failure through process exit status. When
-`--json` is provided in a future migration, success must emit exactly one JSON
-result document to stdout and nothing to stderr. Failure must emit no stdout,
-unless a non-JSON artefact was explicitly delivered earlier, and exactly one
-JSON diagnostic document to stderr.
+Clap parsing before generation begins. `--check-agent-native` is an independent
+policy-check surface rather than an output format. It accepts
+`--policy-mode <off|warn|deny>`, which defaults to `warn`, and emits one compact
+`PolicyReport` JSON document to stdout followed by a newline. `off` suppresses
+policy evaluation and emits an empty report, `warn` emits findings and exits
+successfully, and `deny` exits with a validation-class failure when a
+deny-level finding is present. The separate `--json` result-document mode
+remains a planned addition; when implemented, success must emit exactly one
+JSON result document to stdout and nothing to stderr. Failure must emit no
+stdout, unless a non-JSON artefact was explicitly delivered earlier, and
+exactly one JSON diagnostic document to stderr.
 
 The existing format behaviours are compatibility contracts until a versioned
 migration is explicitly approved:
@@ -549,9 +554,9 @@ migration is explicitly approved:
   PowerShell artefacts in a single invocation. It reports success or failure
   through process exit status.
 
-Agent-context output is added beside the human documentation formats. Policy
-output and JSON status output must also be added beside these contracts when
-implemented. They may not change the accepted `ir`, `man`, `ps`,
+Agent-context output is added beside the human documentation formats, while
+`--check-agent-native` emits its policy report directly to stdout. These
+surfaces may not change the accepted `ir`, `man`, `ps`,
 `agent-context`, or `all` spellings, the default format, the generated file
 paths, or the process success/failure contract without a separate approved
 migration.
