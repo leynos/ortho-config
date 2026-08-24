@@ -157,3 +157,30 @@ fn summary_counts_severities_across_findings() {
     assert_eq!(report.summary.warn, 1);
     assert_eq!(report.summary.total, 2);
 }
+
+#[rstest]
+fn findings_are_ordered_malformed_then_redundant_then_duplicate() {
+    let report = evaluate(
+        &config_with(vec![
+            exception(ExceptionKind::Flag, ""),
+            exception(ExceptionKind::Verb, "get"),
+            exception(ExceptionKind::Flag, "--format"),
+            exception(ExceptionKind::Flag, "--format"),
+        ]),
+        &PolicyInputs::default(),
+    );
+
+    let codes = report
+        .results
+        .iter()
+        .map(|result| result.code.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        codes,
+        vec![
+            "malformed_exception",
+            "redundant_exception",
+            "duplicate_exception"
+        ]
+    );
+}
