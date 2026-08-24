@@ -75,6 +75,55 @@ fn test_cli_default_as_absent_infers_default_values_t(prefix: Prefix) -> Result<
     Ok(())
 }
 
+/// Verifies string clap list defaults are parsed through clap and treated as
+/// absent during layered merging.
+#[derive(Debug, Parser, Serialize, Deserialize, OrthoConfig, PartialEq)]
+#[command(name = "string-tags")]
+#[ortho_config(prefix = "APP_")]
+struct StringTagsArgs {
+    #[arg(long, default_value = "alpha")]
+    #[ortho_config(cli_default_as_absent)]
+    tags: Vec<String>,
+}
+
+impl Default for StringTagsArgs {
+    fn default() -> Self {
+        Self {
+            tags: vec![String::from("alpha")],
+        }
+    }
+}
+
+#[rstest]
+#[serial]
+fn test_cli_default_as_absent_infers_default_value_for_vec(prefix: Prefix) -> Result<()> {
+    let (_temp_dir, _cwd_guard) = config_dir("[cmds.string-tags]\ntags = [\"file\"]\n")?;
+
+    let matches = StringTagsArgs::command().get_matches_from(["string-tags"]);
+    let args = StringTagsArgs::from_arg_matches(&matches).context("parse string tag defaults")?;
+    let merged = load_and_merge_subcommand_with_matches(&prefix, &args, &matches)
+        .context("merge string tag defaults")?;
+    ensure!(
+        merged.tags == vec!["file"],
+        "expected file tags, got {:?}",
+        merged.tags
+    );
+
+    let explicit_matches =
+        StringTagsArgs::command().get_matches_from(["string-tags", "--tags", "cli"]);
+    let explicit_args = StringTagsArgs::from_arg_matches(&explicit_matches)
+        .context("parse explicit string tags")?;
+    let explicit_merged =
+        load_and_merge_subcommand_with_matches(&prefix, &explicit_args, &explicit_matches)
+            .context("merge explicit string tags")?;
+    ensure!(
+        explicit_merged.tags == vec!["cli"],
+        "expected cli tags, got {:?}",
+        explicit_merged.tags
+    );
+    Ok(())
+}
+
 /// Verifies numeric typed defaults preserve literal inference when inferred from
 /// clap's `default_value_t`.
 #[derive(Debug, Parser, Serialize, Deserialize, OrthoConfig, PartialEq)]

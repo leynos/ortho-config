@@ -25,7 +25,7 @@ mod subcommand_docs;
 
 use derive::build::cli_tokens::build_cli_struct_tokens;
 use derive::build::{
-    CollectionStrategies, build_config_env_var, build_default_struct_fields,
+    CollectionStrategies, DefaultStructInit, build_config_env_var, build_default_struct_fields,
     build_default_struct_init, build_env_provider, collect_collection_strategies,
     compute_config_env_var, compute_dotfile_name, default_app_name,
 };
@@ -176,7 +176,7 @@ struct MacroComponents {
 #[derive(Clone, Copy)]
 struct LoadTokenRefs<'a> {
     env_provider: &'a proc_macro2::TokenStream,
-    default_struct_init: &'a [proc_macro2::TokenStream],
+    default_struct_init: &'a DefaultStructInit,
     config_env_var: &'a proc_macro2::TokenStream,
     dotfile_name: &'a syn::LitStr,
 }
@@ -308,7 +308,7 @@ fn build_macro_components(args: &MacroComponentArgs<'_>) -> syn::Result<MacroCom
     let cli_ident = format_ident!("__{}Cli", ident);
     let cli_build_result =
         build_cli_struct_tokens(fields, field_attrs, struct_attrs, *serde_rename_all)?;
-    let default_struct_init = build_default_struct_init(fields, field_attrs);
+    let default_struct_init = build_default_struct_init(fields, field_attrs, krate);
     let env_provider = build_env_provider(struct_attrs, krate);
     let config_env_var = build_config_env_var(struct_attrs);
     let dotfile_name_string = compute_dotfile_name(struct_attrs);

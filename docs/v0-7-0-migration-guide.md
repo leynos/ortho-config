@@ -22,11 +22,11 @@ testing setup.
 
 ## At-a-glance breaking changes
 
-| Area              | Impact                                                                                                             | Section                                  |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------ | ---------------------------------------- |
-| Core API          | No mandatory breaking changes; v0.7.0 is additive for typical usage.                                               | N/A                                      |
-| CLI defaults      | `cli_default_as_absent` is opt-in and changes precedence for `default_value_t` fields when used with `ArgMatches`. | [5](#5-treat-clap-defaults-as-absent)    |
-| Behavioural tests | The `hello_world` behavioural suite now uses `rstest-bdd` instead of `cucumber-rs`.                                | [6](#6-refresh-error-handling-and-tests) |
+| Area              | Impact                                                                                                  | Section                                  |
+| ----------------- | ------------------------------------------------------------------------------------------------------- | ---------------------------------------- |
+| Core API          | No mandatory breaking changes; v0.7.0 is additive for typical usage.                                    | N/A                                      |
+| CLI defaults      | `cli_default_as_absent` is opt-in and changes precedence for clap defaults when used with `ArgMatches`. | [5](#5-treat-clap-defaults-as-absent)    |
+| Behavioural tests | The `hello_world` behavioural suite now uses `rstest-bdd` instead of `cucumber-rs`.                     | [6](#6-refresh-error-handling-and-tests) |
 
 ## 1. Update crate versions and feature flags
 
@@ -145,14 +145,19 @@ structs, which previously forced the CLI to override file and environment
 values. Add `#[ortho_config(cli_default_as_absent)]` to treat clap defaults as
 absent unless the user provides a value explicitly.
 
-The derive macro infers struct defaults from typed clap defaults
-(`default_value_t` and `default_values_t`) when `cli_default_as_absent` is
-enabled, so a duplicate `#[ortho_config(default = ...)]` is no longer required
-in those cases.
+The derive macro infers struct defaults from clap defaults when
+`cli_default_as_absent` is enabled, so a duplicate
+`#[ortho_config(default = ...)]` is no longer required. Typed `default_value_t`
+and `default_values_t` retain their existing direct inference. String
+`default_value` is replayed through clap's value parser at load time,
+preserving clap parsing semantics and reporting conversion failures as
+`OrthoError::DefaultValueConversion` rather than panicking.
 
-`default_value` inference remains unsupported for now; prefer `default_value_t`
-or an explicit `#[ortho_config(default = ...)]`. Parser-faithful
-`default_value` inference is planned as a day-2 follow-up.
+String-default inference supports scalar fields, `Option<T>`, and `Vec<T>`
+fields, including primitive and standard types, `ValueEnum` fields, and fields
+with `#[arg(value_parser = ...)]`. Nested `Option`/`Vec` wrappers and map
+fields are rejected at compile time; use an explicit
+`#[ortho_config(default = ...)]` for those shapes.
 
 When you use this attribute, pass `ArgMatches` so `value_source()` can detect
 which fields were truly provided:
