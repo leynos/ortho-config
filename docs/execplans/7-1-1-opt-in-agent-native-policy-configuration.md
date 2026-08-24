@@ -214,8 +214,8 @@ escalation, not workarounds.
     `cognitive_complexity`/`too_many_lines` on `main::run`) — all fixed,
     `main.rs` trimmed to 400 lines, `output.rs` to 399). Final
     reconciliation before readiness moved the generation-phase helpers
-    (agent-context, localisation, per-format artefact writers, out-dir
-    resolution) into a new `generation` module so `main.rs` sits at 191
+    (agent-context, localization, per-format artefact writers, out-dir
+    resolution) into a new `generation` module so `main.rs` sits at 188
     lines, comfortably under the hard 400-line cap. CodeRabbit review on
     `5a02687`: 0 findings across all 19 reviewed files.
 - [x] Milestone 4: policy visibility in agent-context output.
