@@ -103,9 +103,13 @@ fn policy_tokens(
     discovery: &DiscoveryTokens,
     krate: &proc_macro2::TokenStream,
 ) -> syn::Result<PolicyLoadingTokens> {
-    let project_root = discovery.project_root_from.as_ref().map(|field_name| {
+    let project_root = discovery.project_root_from.as_ref().map(|(field_name, is_optional)| {
         let field = syn::Ident::new(field_name, proc_macro2::Span::call_site());
-        quote! { if let Some(ref cli) = cli { if let Some(ref root) = cli.#field { policy = policy.project_root(root.clone()); } } }
+        if *is_optional {
+            quote! { if let Some(ref cli) = cli { if let Some(ref root) = cli.#field { policy = policy.project_root(root.clone()); } } }
+        } else {
+            quote! { if let Some(ref cli) = cli { policy = policy.project_root(cli.#field.clone()); } }
+        }
     });
     Ok(PolicyLoadingTokens {
         builder_steps: policy_builder_steps(discovery),
