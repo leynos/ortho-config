@@ -3,7 +3,7 @@
 ## Preamble
 
 - **RFC number:** 0002
-- **Status:** Proposed
+- **Status:** Implemented
 - **Created:** 2026-06-18
 
 ## Summary

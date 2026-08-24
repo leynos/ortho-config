@@ -2,8 +2,8 @@
 
 use std::path::{Path, PathBuf};
 
-use super::ConfigDiscovery;
 use super::telemetry;
+use super::{ConfigDiscovery, DiscoveryScope};
 
 use super::candidate_set::{CandidateAccumulator, CandidateDecisions, CandidateSet};
 
@@ -22,6 +22,19 @@ struct XdgDecisions {
     config_home: &'static str,
     dirs: &'static str,
     resolution: &'static str,
+}
+
+/// Bounded telemetry label and automatic scope for generated candidates.
+#[derive(Clone, Copy)]
+struct CandidateOrigin {
+    source: &'static str,
+    scope: DiscoveryScope,
+}
+
+impl CandidateOrigin {
+    const fn new(source: &'static str, scope: DiscoveryScope) -> Self {
+        Self { source, scope }
+    }
 }
 
 impl ConfigDiscovery {
@@ -57,7 +70,7 @@ impl ConfigDiscovery {
         candidates
     }
 
-    fn push_for_bases<I>(&self, bases: I, acc: &mut CandidateAccumulator, source: &'static str)
+    fn push_for_bases<I>(&self, bases: I, acc: &mut CandidateAccumulator, origin: CandidateOrigin)
     where
         I: IntoIterator,
         I::Item: Into<PathBuf>,
@@ -65,7 +78,7 @@ impl ConfigDiscovery {
         for base in bases {
             let base_path: PathBuf = base.into();
             for candidate in self.candidates_for_base(base_path.as_path()) {
-                let _ = acc.push_unique(candidate, source);
+                let _ = acc.push_unique(candidate, origin.source, Some(origin.scope));
             }
         }
     }
@@ -83,7 +96,7 @@ impl ConfigDiscovery {
             self.push_for_bases(
                 std::iter::once(PathBuf::from(dir)),
                 acc,
-                telemetry::CANDIDATE_XDG,
+                CandidateOrigin::new(telemetry::CANDIDATE_XDG, DiscoveryScope::User),
             );
         }
 
@@ -122,7 +135,11 @@ impl ConfigDiscovery {
             return telemetry::XDG_RESOLUTION_DEFAULT;
         }
 
-        self.push_for_bases(xdg_dirs, acc, telemetry::CANDIDATE_XDG);
+        self.push_for_bases(
+            xdg_dirs,
+            acc,
+            CandidateOrigin::new(telemetry::CANDIDATE_XDG, DiscoveryScope::System),
+        );
         telemetry::XDG_RESOLUTION_LIST
     }
 
@@ -133,7 +150,11 @@ impl ConfigDiscovery {
                 .filter(|value| !value.is_empty())
                 .map(PathBuf::from)
         });
-        self.push_for_bases(dirs, acc, telemetry::CANDIDATE_WINDOWS);
+        self.push_for_bases(
+            dirs,
+            acc,
+            CandidateOrigin::new(telemetry::CANDIDATE_WINDOWS, DiscoveryScope::User),
+        );
     }
 
     /// Read `key`, treating an empty value as unset.
@@ -176,10 +197,15 @@ impl ConfigDiscovery {
         let (home, source) = self.resolve_home();
         if let Some(home_path) = home {
             let config_dir = home_path.join(".config");
-            self.push_for_bases(std::iter::once(config_dir), acc, telemetry::CANDIDATE_HOME);
+            self.push_for_bases(
+                std::iter::once(config_dir),
+                acc,
+                CandidateOrigin::new(telemetry::CANDIDATE_HOME, DiscoveryScope::User),
+            );
             let _ = acc.push_unique(
                 home_path.join(&self.dotfile_name),
                 telemetry::CANDIDATE_HOME,
+                Some(DiscoveryScope::User),
             );
         }
         source
@@ -199,7 +225,7 @@ impl ConfigDiscovery {
             SelectorValue::Unset => telemetry::SELECTOR_UNSET,
             SelectorValue::Empty => telemetry::SELECTOR_EMPTY,
             SelectorValue::Accepted(value) => {
-                let _ = acc.push_unique(PathBuf::from(value), telemetry::CANDIDATE_SELECTOR);
+                let _ = acc.push_unique(PathBuf::from(value), telemetry::CANDIDATE_SELECTOR, None);
                 telemetry::SELECTOR_ACCEPTED
             }
         }
@@ -226,6 +252,7 @@ impl ConfigDiscovery {
             let _ = acc.push_unique(
                 root.join(&self.project_file_name),
                 telemetry::CANDIDATE_PROJECT,
+                Some(DiscoveryScope::Project),
             );
         }
     }
@@ -258,7 +285,7 @@ impl ConfigDiscovery {
         self.push_for_bases(
             std::iter::once(PathBuf::from("/etc/xdg")),
             acc,
-            telemetry::CANDIDATE_XDG,
+            CandidateOrigin::new(telemetry::CANDIDATE_XDG, DiscoveryScope::System),
         );
     }
 
@@ -315,13 +342,13 @@ impl ConfigDiscovery {
         let mut required_bound = 0;
 
         for path in &self.required_explicit_paths {
-            if acc.push_unique(path.clone(), telemetry::CANDIDATE_REQUIRED_EXPLICIT) {
+            if acc.push_unique(path.clone(), telemetry::CANDIDATE_REQUIRED_EXPLICIT, None) {
                 required_bound += 1;
             }
         }
 
         for path in &self.explicit_paths {
-            let _ = acc.push_unique(path.clone(), telemetry::CANDIDATE_EXPLICIT);
+            let _ = acc.push_unique(path.clone(), telemetry::CANDIDATE_EXPLICIT, None);
         }
 
         let selector = self.push_selector(&mut acc);
