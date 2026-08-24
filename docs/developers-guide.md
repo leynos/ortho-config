@@ -346,6 +346,45 @@ implementations use their provided fallback. The optional identifier artefact
 uses per-expansion fragments and a deterministic merge below `OUT_DIR`; its
 schema has standalone scope until a downstream consumer joins it to docs IR.
 
+## CLI localization surface
+
+Phase 11 promotes the localization helpers from the example into the public
+crate surface. `LocalizeCmd`, `LocalizedParse`, and `parse_localized_command`
+are implemented; `#[derive(OrthoConfig)]` also emits the public
+`OrthoConfigLocalization` contract and supports opt-in identifier artefacts.
+Their current contracts are documented above. `localized_default` is recognized
+by the derive but rejected with a deferral diagnostic; embedded defaults remain
+future work.
+
+The remaining proposals belong at clear ownership boundaries: locale lifecycle,
+Clap coverage, and translation interfaces in the core localizer; identifier
+generation in `ortho_config_macros`; and aggregate translation reports in
+`cargo-orthohelp`. These proposals are not available crate APIs yet:
+
+- `BootLocalizer` / `BootHandle` define the boot-to-final typestate lifecycle.
+- `FluentEmbedLocalizer` adapts an application-owned loader. No
+  `i18n-embed-bridge` feature currently exists; the design proposes a dedicated
+  optional feature for this adapter and dependency.
+- `ClapErrorCoverage` and the exhaustive error-kind count gate remain proposed.
+  The count must be tied to the explicitly supported resolved `clap_builder`
+  identity and checked against the compiled `clap` facade re-export before a
+  `const_assert_eq!` against the matrix length is mechanical. See
+  [design §6.1.1](cli-localization-design.md#611-proposed-coverage-gate) and
+  §6.2 for the contract.
+- `MissingTranslationReporter` / `MissingTranslationEvent` and
+  `cargo-orthohelp` translation coverage reports remain roadmap work.
+
+The proposed lifecycle treats each parse as a locale snapshot: parsing uses
+`BootHandle<Boot>`, and finalization consumes it to produce `BootHandle<Final>`
+after configuration is merged. Finalization does not swap the locale of a
+running service. A long-lived service that supports locale changes must own a
+swap primitive (the design's baseline is `arc_swap::ArcSwap<dyn Localizer>`)
+and load the current snapshot at each request boundary. See
+[the design](cli-localization-design.md), §§5.2–5.3 and §12. Translator
+diagnostics and aggregation are specified in
+[design §9](cli-localization-design.md#9-translator-diagnostics) and roadmap
+§11.
+
 Add agent-native warning and hard-failure report fields to
 `cargo_orthohelp::policy` while `cargo-orthohelp` is the only emitter. Use
 `ORTHO_POLICY_REPORT_SCHEMA_VERSION` for compatibility and keep rule
