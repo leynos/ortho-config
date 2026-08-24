@@ -280,6 +280,8 @@ mod tests {
                 should_skip_build: false,
             },
             format: crate::cli::OutputFormat::Ir,
+            should_check_agent_native: false,
+            policy_mode: crate::cli::PolicyModeArg::Warn,
             man: crate::cli::ManArgs {
                 section: 1,
                 date: None,

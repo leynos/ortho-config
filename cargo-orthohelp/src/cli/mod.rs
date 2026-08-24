@@ -10,6 +10,7 @@
 //! metadata, localization, and output pipeline.
 
 use camino::Utf8PathBuf;
+use cargo_orthohelp::policy::PolicyMode;
 use clap::{ArgAction, Args as ClapArgs, Parser, Subcommand, ValueEnum};
 
 /// Output formats supported by `cargo-orthohelp`.
@@ -25,6 +26,27 @@ pub enum OutputFormat {
     All,
     /// Emit compact agent-context JSON output.
     AgentContext,
+}
+
+/// Policy enforcement modes supported by `--check-agent-native`.
+#[derive(Debug, Clone, Copy, ValueEnum, PartialEq, Eq)]
+pub enum PolicyModeArg {
+    /// Do not evaluate policy rules.
+    Off,
+    /// Emit policy findings without failing the command.
+    Warn,
+    /// Fail the command when a deny-level finding is emitted.
+    Deny,
+}
+
+impl From<PolicyModeArg> for PolicyMode {
+    fn from(value: PolicyModeArg) -> Self {
+        match value {
+            PolicyModeArg::Off => Self::Off,
+            PolicyModeArg::Warn => Self::Warn,
+            PolicyModeArg::Deny => Self::Deny,
+        }
+    }
 }
 
 /// Parsed Cargo external-subcommand entrypoint for `cargo-orthohelp`.
@@ -76,6 +98,12 @@ pub struct Args {
     /// Output format selection.
     #[arg(long, value_enum, default_value_t = OutputFormat::Ir)]
     pub format: OutputFormat,
+    /// Evaluate the minimal agent-native policy and emit a JSON report to stdout.
+    #[arg(long = "check-agent-native")]
+    pub should_check_agent_native: bool,
+    /// Enforcement mode for `--check-agent-native`.
+    #[arg(long, value_enum, default_value_t = PolicyModeArg::Warn)]
+    pub policy_mode: PolicyModeArg,
     /// Man page generation arguments.
     #[command(flatten)]
     pub man: ManArgs,
@@ -156,7 +184,8 @@ mod tests {
     use proptest::prelude::*;
     use rstest::rstest;
 
-    use super::{CargoSubcommand, Cli, OutputFormat};
+    use super::{CargoSubcommand, Cli, OutputFormat, PolicyModeArg};
+    use cargo_orthohelp::policy::PolicyMode;
 
     #[test]
     fn format_defaults_to_ir() {
@@ -187,6 +216,32 @@ mod tests {
         let CargoSubcommand::Orthohelp(args) = cli.command;
 
         assert!(matches!(args.format, OutputFormat::AgentContext));
+    }
+
+    #[rstest]
+    #[case("off", PolicyMode::Off)]
+    #[case("warn", PolicyMode::Warn)]
+    #[case("deny", PolicyMode::Deny)]
+    fn policy_mode_maps_to_the_policy_contract(#[case] value: &str, #[case] expected: PolicyMode) {
+        let cli = Cli::parse_from([
+            "cargo-orthohelp",
+            "orthohelp",
+            "--check-agent-native",
+            "--policy-mode",
+            value,
+        ]);
+        let CargoSubcommand::Orthohelp(args) = cli.command;
+
+        assert!(args.should_check_agent_native);
+        assert_eq!(PolicyMode::from(args.policy_mode), expected);
+    }
+
+    #[test]
+    fn policy_mode_defaults_to_warn() {
+        let cli = Cli::parse_from(["cargo-orthohelp", "orthohelp"]);
+        let CargoSubcommand::Orthohelp(args) = cli.command;
+
+        assert_eq!(args.policy_mode, PolicyModeArg::Warn);
     }
 
     #[test]
@@ -280,6 +335,8 @@ mod tests {
             should_cache in any::<bool>(),
             should_skip_build in any::<bool>(),
             should_split_man_subcommands in any::<bool>(),
+            should_check_agent_native in any::<bool>(),
+            policy_mode in prop::sample::select(vec!["off", "warn", "deny"]),
             format in prop::sample::select(vec!["ir", "man", "ps", "all", "agent-context"]),
             man_section in 1_u8..=8,
             should_split_ps_subcommands in prop::option::of(any::<bool>()),
@@ -291,6 +348,8 @@ mod tests {
                 "orthohelp".to_owned(),
                 "--format".to_owned(),
                 format.to_owned(),
+                "--policy-mode".to_owned(),
+                policy_mode.to_owned(),
                 "--man-section".to_owned(),
                 man_section.to_string(),
                 "--ensure-en-us".to_owned(),
@@ -305,6 +364,7 @@ mod tests {
             push_bool_flag(&mut argv, "--cache", should_cache);
             push_bool_flag(&mut argv, "--no-build", should_skip_build);
             push_bool_flag(&mut argv, "--man-split-subcommands", should_split_man_subcommands);
+            push_bool_flag(&mut argv, "--check-agent-native", should_check_agent_native);
             push_optional_bool_arg(
                 &mut argv,
                 "--ps-split-subcommands",
@@ -330,6 +390,14 @@ mod tests {
             prop_assert_eq!(args.locale, locales);
             prop_assert_eq!(args.should_use_all_locales, should_use_all_locales);
             prop_assert_eq!(args.cache.should_cache, should_cache);
+            prop_assert_eq!(args.should_check_agent_native, should_check_agent_native);
+            let expected_policy_mode = match policy_mode {
+                "off" => PolicyMode::Off,
+                "warn" => PolicyMode::Warn,
+                "deny" => PolicyMode::Deny,
+                _ => unreachable!("policy mode strategy only yields supported values"),
+            };
+            prop_assert_eq!(PolicyMode::from(args.policy_mode), expected_policy_mode);
             prop_assert_eq!(args.cache.should_skip_build, should_skip_build);
             prop_assert_eq!(args.man.section, man_section);
             prop_assert_eq!(

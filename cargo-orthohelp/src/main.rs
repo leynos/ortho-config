@@ -31,6 +31,7 @@ use crate::error::OrthohelpError;
 use crate::metadata::PackageSelection;
 use crate::schema::{DocMetadata, ORTHO_DOCS_IR_VERSION};
 use camino::Utf8PathBuf;
+use cargo_orthohelp::policy::{PolicyMode, PolicyReport, evaluate_agent_native};
 use clap::{Error as ClapError, Parser, error::ErrorKind};
 use ortho_config::{FluentLocalizer, LanguageIdentifier, Localizer};
 use std::io::Write;
@@ -117,6 +118,10 @@ fn run(cli: Cli) -> Result<(), OrthohelpError> {
     let ir_json = bridge::load_or_build_ir(&config, &paths, should_use_cache, should_skip_build)?;
     let doc_metadata: DocMetadata = serde_json::from_str(&ir_json)?;
 
+    if args.should_check_agent_native {
+        return check_agent_native_policy(&args, &selection, &doc_metadata);
+    }
+
     let should_generate_ir = matches!(args.format, OutputFormat::Ir | OutputFormat::All);
     let should_generate_man = matches!(args.format, OutputFormat::Man | OutputFormat::All);
     let should_generate_ps = matches!(args.format, OutputFormat::Ps | OutputFormat::All);
@@ -157,6 +162,36 @@ fn run(cli: Cli) -> Result<(), OrthohelpError> {
         generate_powershell(&localized_docs, &ps_config)?;
     }
 
+    Ok(())
+}
+
+fn check_agent_native_policy(
+    args: &Args,
+    selection: &PackageSelection,
+    doc_metadata: &DocMetadata,
+) -> Result<(), OrthohelpError> {
+    let mode = PolicyMode::from(args.policy_mode);
+    let report = if matches!(args.policy_mode, cli::PolicyModeArg::Off) {
+        PolicyReport::empty(mode)
+    } else {
+        let context =
+            agent_context::bridge_ir_to_agent_context(doc_metadata, &selection.package_name, None);
+        PolicyReport::with_results(mode.clone(), evaluate_agent_native(&context, &mode))
+    };
+    let has_denials = report.summary.deny > 0;
+    emit_policy_report(&report)?;
+    if has_denials {
+        Err(OrthohelpError::AgentNativePolicyDenied)
+    } else {
+        Ok(())
+    }
+}
+
+fn emit_policy_report(report: &PolicyReport) -> Result<(), OrthohelpError> {
+    let stdout = std::io::stdout();
+    let mut output = stdout.lock();
+    serde_json::to_writer(&mut output, report)?;
+    writeln!(output)?;
     Ok(())
 }
 
