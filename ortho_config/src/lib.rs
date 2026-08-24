@@ -88,7 +88,10 @@ pub use subcommand::{
 #[cfg_attr(docsrs, doc(cfg(feature = "serde_json")))]
 pub use subcommand::{
     load_and_merge_subcommand, load_and_merge_subcommand_for,
-    load_and_merge_subcommand_for_with_matches, load_and_merge_subcommand_with_matches,
+    load_and_merge_subcommand_for_with_matches,
+    load_and_merge_subcommand_for_with_matches_with_sources,
+    load_and_merge_subcommand_for_with_sources, load_and_merge_subcommand_with_matches,
+    load_and_merge_subcommand_with_matches_with_sources, load_and_merge_subcommand_with_sources,
 };
 
 /// Normalize a prefix by trimming trailing underscores and converting
@@ -198,6 +201,36 @@ pub trait OrthoConfig: Sized + serde::de::DeserializeOwned {
     where
         I: IntoIterator<Item = T>,
         T: Into<std::ffi::OsString> + Clone;
+
+    /// Loads configuration using injected discovery and merge environment
+    /// sources.
+    ///
+    /// The discovery source resolves named configuration-path and platform
+    /// directory variables. The merge source enumerates the application
+    /// variables that form the environment layer. A single [`MapEnv`] can back
+    /// both: coerce separate `Arc` clones to [`SharedEnvSource`] and
+    /// [`SharedScanEnvSource`].
+    ///
+    /// Manual implementations retain process-backed behaviour unless they
+    /// override this method. Derived implementations use both sources for the
+    /// complete configuration resolution.
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`crate::OrthoError`] if parsing command-line arguments,
+    /// reading files, or deserializing configuration fails.
+    fn load_from_iter_with_sources<I, T>(
+        iter: I,
+        discovery: SharedEnvSource,
+        merge: SharedScanEnvSource,
+    ) -> OrthoResult<Self>
+    where
+        I: IntoIterator<Item = T>,
+        T: Into<std::ffi::OsString> + Clone,
+    {
+        let _ = (discovery, merge);
+        Self::load_from_iter(iter)
+    }
 
     /// Prefix used for environment variables and subcommand configuration.
     #[must_use]

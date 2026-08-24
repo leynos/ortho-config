@@ -8,6 +8,11 @@
 use quote::quote;
 use syn::Ident;
 
+mod source;
+use source::{
+    LoadSourceTokens, build_load_from_iter_impl, build_load_from_iter_with_sources_impl,
+    build_source_aware_compose_layers_impl,
+};
 /// Identifiers used when generating the load implementation.
 #[expect(
     clippy::struct_field_names,
@@ -18,7 +23,6 @@ pub(crate) struct LoadImplIdents<'a> {
     pub config_ident: &'a Ident,
     pub defaults_ident: &'a Ident,
 }
-
 /// Token collections used by the load implementation helpers.
 pub(crate) struct LoadImplTokens<'a> {
     pub env_provider: &'a proc_macro2::TokenStream,
@@ -27,6 +31,8 @@ pub(crate) struct LoadImplTokens<'a> {
     pub dotfile_name: &'a syn::LitStr,
     pub legacy_app_name: String,
     pub discovery: Option<&'a DiscoveryTokens>,
+    /// Runtime source tokens for the source-aware generated entry points.
+    pub sources: Option<LoadSourceTokens<'a>>,
     /// Resolved crate path for generated code references.
     pub krate: &'a proc_macro2::TokenStream,
 }
@@ -127,6 +133,7 @@ fn build_discovery_based_loading(
     krate: &proc_macro2::TokenStream,
     discovery: &DiscoveryTokens,
     has_config_path: bool,
+    source_tokens: Option<&LoadSourceTokens<'_>>,
 ) -> proc_macro2::TokenStream {
     let app_name = syn::LitStr::new(&discovery.app_name, proc_macro2::Span::call_site());
     let env_var = syn::LitStr::new(&discovery.env_var, proc_macro2::Span::call_site());
@@ -143,6 +150,10 @@ fn build_discovery_based_loading(
     let cli_chain = build_cli_chain_tokens(has_config_path);
     let builder_init = quote! { #krate::ConfigDiscovery::builder(#app_name) };
     let mut builder_steps = vec![quote! { builder = builder.env_var(#env_var); }];
+    if let Some(injected_sources) = source_tokens {
+        let discovery_source = injected_sources.discovery;
+        builder_steps.push(quote! { builder = builder.env_source(#discovery_source); });
+    }
     if let Some(stmt) = config_file_stmt {
         builder_steps.push(stmt);
     }
@@ -160,6 +171,7 @@ pub(crate) fn build_file_discovery(
     has_config_path: bool,
 ) -> proc_macro2::TokenStream {
     let krate = tokens.krate;
+    let source_tokens = tokens.sources.as_ref();
     tokens.discovery.map_or_else(
         || {
             let app_name =
@@ -168,13 +180,17 @@ pub(crate) fn build_file_discovery(
             let dotfile_name = tokens.dotfile_name.clone();
             let cli_chain = build_cli_chain_tokens(has_config_path);
             let builder_init = quote! { #krate::ConfigDiscovery::builder(#app_name) };
-            let builder_steps = vec![
+            let mut builder_steps = vec![
                 quote! { builder = builder.env_var(#config_env_var); },
                 quote! { builder = builder.dotfile_name(#dotfile_name); },
             ];
+            if let Some(injected_sources) = source_tokens {
+                let discovery_source = injected_sources.discovery;
+                builder_steps.push(quote! { builder = builder.env_source(#discovery_source); });
+            }
             build_discovery_loading_block(krate, &builder_init, &builder_steps, &cli_chain)
         },
-        |discovery| build_discovery_based_loading(krate, discovery, has_config_path),
+        |discovery| build_discovery_based_loading(krate, discovery, has_config_path, source_tokens),
     )
 }
 
@@ -185,16 +201,14 @@ pub(crate) fn build_file_discovery(
 /// flow" and "The `OrthoConfig` Trait" sections in the design document.
 pub(crate) fn build_env_section(tokens: &LoadImplTokens<'_>) -> proc_macro2::TokenStream {
     let env_provider = tokens.env_provider;
-    let krate = tokens.krate;
+    let merge_source = tokens.sources.as_ref().map(|source_tokens| {
+        let injected_source = source_tokens.merge;
+        quote! { .with_source(#injected_source) }
+    });
     quote! {
         let env_provider = {
             #env_provider
-                // Use runtime re-exports so generated code only requires
-                // the crate under its configured name.
-                .map(|k| #krate::uncased::Uncased::new(
-                    k.as_str().to_ascii_uppercase(),
-                ))
-                .split("__")
+                #merge_source
         };
     }
 }
@@ -270,13 +284,6 @@ fn build_compose_layers_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStrea
     }
 }
 
-fn build_load_from_iter_impl(config_ident: &Ident) -> proc_macro2::TokenStream {
-    quote! {
-        let composition = Self::compose_layers_from_iter(iter);
-        composition.into_merge_result(|layers| #config_ident::merge_from_layers(layers))
-    }
-}
-
 fn build_config_impl_delegates(
     krate: &proc_macro2::TokenStream,
     cli_ident: &Ident,
@@ -311,7 +318,11 @@ pub(crate) fn build_load_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStre
         ..
     } = idents;
     let compose_layers_impl = build_compose_layers_impl(args);
-    let load_from_iter_impl = build_load_from_iter_impl(config_ident);
+    let source_aware_compose_layers_impl = build_source_aware_compose_layers_impl(args);
+    let compose_layers_from_iter =
+        syn::Ident::new("compose_layers_from_iter", proc_macro2::Span::call_site());
+    let load_from_iter_impl = build_load_from_iter_impl(config_ident, &compose_layers_from_iter);
+    let load_from_iter_with_sources_impl = build_load_from_iter_with_sources_impl(config_ident);
     let config_impl = build_config_impl_delegates(krate, cli_ident, config_ident);
 
     quote! {
@@ -326,6 +337,19 @@ pub(crate) fn build_load_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStre
             }
 
             #[expect(dead_code, reason = "Generated method may not be used in all builds")]
+            pub fn compose_layers_from_iter_with_sources<I, T>(
+                iter: I,
+                discovery_source: #krate::SharedEnvSource,
+                merge_source: #krate::SharedScanEnvSource,
+            ) -> #krate::declarative::LayerComposition
+            where
+                I: IntoIterator<Item = T>,
+                T: Into<std::ffi::OsString> + Clone,
+            {
+                #source_aware_compose_layers_impl
+            }
+
+            #[expect(dead_code, reason = "Generated method may not be used in all builds")]
             pub fn compose_layers() -> #krate::declarative::LayerComposition {
                 Self::compose_layers_from_iter(std::env::args_os())
             }
@@ -336,6 +360,18 @@ pub(crate) fn build_load_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStre
                 T: Into<std::ffi::OsString> + Clone,
             {
                 #load_from_iter_impl
+            }
+
+            pub fn load_from_iter_with_sources<I, T>(
+                iter: I,
+                discovery_source: #krate::SharedEnvSource,
+                merge_source: #krate::SharedScanEnvSource,
+            ) -> #krate::OrthoResult<#config_ident>
+            where
+                I: IntoIterator<Item = T>,
+                T: Into<std::ffi::OsString> + Clone,
+            {
+                #load_from_iter_with_sources_impl
             }
         }
         #config_impl

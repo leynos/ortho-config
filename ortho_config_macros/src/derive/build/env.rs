@@ -14,8 +14,8 @@ pub(crate) fn build_env_provider(
     krate: &proc_macro2::TokenStream,
 ) -> proc_macro2::TokenStream {
     struct_attrs.prefix.as_ref().map_or_else(
-        || quote! { #krate::CsvEnv::raw() },
-        |prefix| quote! { #krate::CsvEnv::prefixed(#prefix) },
+        || quote! { #krate::CsvEnv::raw().uppercase(true).split("__") },
+        |prefix| quote! { #krate::CsvEnv::prefixed(#prefix).uppercase(true).split("__") },
     )
 }
 
@@ -83,7 +83,8 @@ mod tests {
         let krate = quote! { ortho_config };
         let ts = build_env_provider(&struct_attrs, &krate);
         ensure!(
-            ts.to_string() == "ortho_config :: CsvEnv :: prefixed (\"CFG_\")",
+            ts.to_string()
+                == "ortho_config :: CsvEnv :: prefixed (\"CFG_\") . uppercase (true) . split (\"__\")",
             "unexpected env provider tokens"
         );
         Ok(())
