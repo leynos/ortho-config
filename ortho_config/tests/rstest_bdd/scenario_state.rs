@@ -10,6 +10,7 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, PoisonError};
 
+use crate::cli_default_mode::CliDefaultMode;
 #[cfg(test)]
 #[path = "scenario_state_tests.rs"]
 mod scenario_state_tests;
@@ -18,7 +19,6 @@ mod scenario_state_tests;
 /// struct without reaching into the shared fixtures module directly.
 pub use super::fixtures::merge_fixtures::MergeErrorSample;
 pub use super::nested_docs_fixture::*;
-
 /// Scenario state for rules-oriented precedence scenarios (CLI, env, config path, ignore).
 #[derive(Debug, Default, ScenarioState)]
 pub struct RulesContext {
@@ -26,7 +26,6 @@ pub struct RulesContext {
     pub file_value: Slot<String>,
     pub result: Slot<ortho_config::OrthoResult<RulesConfig>>,
 }
-
 /// Scenario state for collection merge scenarios.
 #[derive(Debug, Default, ScenarioState)]
 pub struct CollectionContext {
@@ -350,13 +349,14 @@ pub struct CliDefaultContext {
 #[ortho_config(prefix = "APP_")]
 pub struct CliDefaultArgs {
     /// Punctuation at the end of the greeting.
-    #[arg(
-        long,
-        id = "punctuation",
-        default_value_t = crate::default_punct::default_punct()
-    )]
-    #[ortho_config(default = crate::default_punct::default_punct(), cli_default_as_absent)]
+    #[arg(long, id = "punctuation", default_value = "!")]
+    #[ortho_config(cli_default_as_absent)]
     pub punctuation: String,
+
+    /// Output mode used to exercise clap `ValueEnum` default inference.
+    #[arg(long, default_value = "fast", value_enum)]
+    #[ortho_config(cli_default_as_absent)]
+    pub mode: CliDefaultMode,
 }
 
 /// Provides a clean merge error context for error routing scenarios.

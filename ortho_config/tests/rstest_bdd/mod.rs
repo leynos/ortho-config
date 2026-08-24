@@ -32,11 +32,9 @@
 #[path = "../fixtures/mod.rs"]
 pub mod fixtures;
 
-#[path = "../support/default_punct.rs"]
-mod default_punct;
-
 mod behaviour;
 mod canary;
 mod canary_steps;
+mod cli_default_mode;
 mod nested_docs_fixture;
 mod scenario_state;

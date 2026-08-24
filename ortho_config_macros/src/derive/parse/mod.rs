@@ -25,8 +25,9 @@ mod tests;
 mod type_utils;
 
 pub(crate) use clap_attrs::{
-    ClapInferredDefault, clap_arg_id, clap_arg_id_from_attribute, clap_default_value,
-    clap_field_is_subcommand, clap_variant_name, reject_subcommand_ortho_config_attrs,
+    ClapDefaultValue, ClapInferredDefault, clap_arg_id, clap_arg_id_from_attribute,
+    clap_default_value, clap_field_is_subcommand, clap_variant_name,
+    reject_subcommand_ortho_config_attrs,
 };
 use doc_attrs::{apply_field_doc_attr, apply_struct_doc_attr};
 pub(crate) use doc_types::{
@@ -41,7 +42,9 @@ pub(crate) use serde_attrs::{
     SerdeRenameAll, serde_field_rename, serde_has_default, serde_rename_all,
     serde_serialized_field_key,
 };
-pub(crate) use type_utils::{btree_map_inner, hash_map_inner, option_inner, vec_inner};
+pub(crate) use type_utils::{
+    ClapDefaultValueShape, btree_map_inner, hash_map_inner, option_inner, vec_inner,
+};
 
 const _: fn(&Attribute, &mut Option<LitStr>) -> syn::Result<()> = clap_arg_id_from_attribute;
 const _: fn(&syn::Field) -> syn::Result<bool> = clap_field_is_subcommand;
@@ -75,7 +78,8 @@ pub(crate) struct StructAttrs {
 /// - `is_subcommand` marks a clap subcommand selector, which is excluded from
 ///   configuration-field generation.
 /// - `inferred_clap_default` stores the default inferred from clap's
-///   `default_value_t`/`default_values_t` when `cli_default_as_absent` is
+///   `default_value`, `default_value_t`, or `default_values_t` when
+///   `cli_default_as_absent` is
 ///   active and no explicit `#[ortho_config(default = ...)]` is provided.
 #[derive(Default, Clone)]
 pub(crate) struct FieldAttrs {
@@ -348,9 +352,9 @@ fn apply_field_attr(
 /// validation can insert a manual `compile_error!` guard.
 ///
 /// When `cli_default_as_absent` is active and no explicit `default` is
-/// provided, this function attempts to infer a default from clap's
-/// `default_value_t` or `default_values_t`. Inference from the untyped
-/// `default_value` is rejected with a compile-time error.
+/// provided, this function attempts to infer a default from clap's default
+/// attributes. String defaults retain the field parser metadata so generated
+/// code can reproduce clap's conversion at runtime.
 ///
 /// Used internally by the derive macro to extract configuration metadata
 /// from field-level attributes.
@@ -374,17 +378,6 @@ pub(crate) fn parse_field_attrs(field: &syn::Field) -> Result<FieldAttrs, syn::E
     })?;
     if out.cli_default_as_absent && out.default.is_none() {
         out.inferred_clap_default = clap_default_value(field)?;
-        if let Some(ClapInferredDefault::Value(_)) = out.inferred_clap_default {
-            return Err(syn::Error::new_spanned(
-                field,
-                concat!(
-                    "inferring defaults from clap `default_value` is not yet supported for ",
-                    "`cli_default_as_absent`; use `default_value_t`/`default_values_t` or ",
-                    "add `#[ortho_config(default = ...)]`. Parser-faithful `default_value` ",
-                    "inference is planned as a day-2 follow-up."
-                ),
-            ));
-        }
     }
     Ok(out)
 }
