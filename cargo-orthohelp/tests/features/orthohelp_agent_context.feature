@@ -6,6 +6,12 @@ Feature: cargo-orthohelp agent-context generation
     When I run cargo-orthohelp with format agent-context for the fixture
     Then the output contains agent-context JSON for the fixture
 
+  Scenario: Generate agent-context JSON from the simple fixture
+    Given a temporary output directory
+    And the orthohelp cache is empty
+    When I run cargo-orthohelp with format agent-context for the simple fixture
+    Then the output contains agent-context JSON for the simple fixture
+
   Scenario: Generate nested agent-context JSON from the fixture
     Given a temporary output directory
     And the orthohelp cache is empty
