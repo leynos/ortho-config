@@ -21,6 +21,13 @@ Feature: Agent-native policy check
     And the policy report records mode off and no findings
     And standard error notes that nothing was checked
 
+  Scenario: Explicit off mode suppresses findings from a configured table
+    Given the policy off fixture package
+    When cargo orthohelp runs with --check-agent-native
+    Then the command succeeds
+    And the policy report records mode off and no findings
+    And standard error notes that nothing was checked
+
   Scenario: Command-line mode override wins for the report
     Given the policy warn fixture package
     When cargo orthohelp runs with --check-agent-native --policy-mode deny
