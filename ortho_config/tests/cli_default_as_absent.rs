@@ -17,14 +17,14 @@ use cap_std::{ambient_authority, fs::Dir};
 use clap::{CommandFactory, FromArgMatches, Parser};
 use ortho_config::subcommand::Prefix;
 use ortho_config::{
-    CliValueExtractor, OrthoConfig, load_and_merge_subcommand,
-    load_and_merge_subcommand_with_matches,
+    CliValueExtractor, MapEnv, OrthoConfig, load_and_merge_subcommand_with_matches_with_sources,
+    load_and_merge_subcommand_with_sources,
 };
 use rstest::{fixture, rstest};
 use serde::{Deserialize, Serialize};
-use serial_test::serial;
+use std::sync::Arc;
 use tempfile::TempDir;
-use test_helpers::{cwd, env};
+use test_helpers::cwd;
 
 /// Subcommand with `cli_default_as_absent` attribute on a non-Option field.
 #[derive(Debug, Parser, Serialize, Deserialize, OrthoConfig, PartialEq)]
@@ -113,12 +113,11 @@ struct GreetPrecedenceCase {
         expected_punctuation: "!!!",
     },
 )]
-#[serial]
 fn test_cli_default_as_absent_precedence(#[case] case: GreetPrecedenceCase) -> Result<()> {
     let (_temp_dir, _cwd_guard) = config_dir(case.config_content)?;
-    let _guard = case
-        .env_val
-        .map(|val| env::set_var("APP_CMDS_GREET_PUNCTUATION", val));
+    let source = case.env_val.map_or_else(MapEnv::new, |value| {
+        MapEnv::new().with_var("APP_CMDS_GREET_PUNCTUATION", value)
+    });
 
     let punctuation_on_cli = case.cli_args.contains(&"--punctuation");
     let matches = GreetArgs::command().get_matches_from(case.cli_args);
@@ -136,8 +135,13 @@ fn test_cli_default_as_absent_precedence(#[case] case: GreetPrecedenceCase) -> R
     }
     let args = GreetArgs::from_arg_matches(&matches).context("parse CLI args")?;
     let prefix = Prefix::new("APP_");
-    let merged = load_and_merge_subcommand_with_matches(&prefix, &args, &matches)
-        .context("merge greet args")?;
+    let merged = load_and_merge_subcommand_with_matches_with_sources(
+        &prefix,
+        &args,
+        &matches,
+        Arc::new(source),
+    )
+    .context("merge greet args")?;
 
     ensure!(
         merged.punctuation == case.expected_punctuation,
@@ -150,14 +154,14 @@ fn test_cli_default_as_absent_precedence(#[case] case: GreetPrecedenceCase) -> R
 
 /// Test that `load_and_merge_subcommand` keeps clap defaults over file configuration.
 #[test]
-#[serial]
 fn test_load_and_merge_subcommand_keeps_clap_default() -> Result<()> {
     let (_temp_dir, _cwd_guard) = config_dir("[cmds.greet]\npunctuation = \"?\"\n")?;
 
     let matches = GreetArgs::command().get_matches_from(["greet"]);
     let args = GreetArgs::from_arg_matches(&matches).context("parse greet args")?;
     let prefix = Prefix::new("APP_");
-    let merged = load_and_merge_subcommand(&prefix, &args).context("merge greet args")?;
+    let merged = load_and_merge_subcommand_with_sources(&prefix, &args, Arc::new(MapEnv::new()))
+        .context("merge greet args")?;
 
     ensure!(
         merged.punctuation == default_punct::default_punct(),

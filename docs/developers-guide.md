@@ -578,6 +578,9 @@ environment. `ProcessEnv` is the default and preserves the historical behaviour;
 - `EnvSource` is owned by the discovery subsystem. `ConfigDiscovery` holds one
   as `Arc<dyn EnvSource>`, supplied through
   `ConfigDiscoveryBuilder::env_source` and defaulting to `ProcessEnv`.
+- `ScanEnvSource` is owned by the merge boundary. `CsvEnv` accepts one through
+  `with_source`, and the derived loader receives it through
+  `OrthoConfig::load_from_iter_with_sources`.
 - `discovery/candidates.rs` is the only module that reads through it, and holds
   no `std::env::var_os` call of its own.
 - It is **not** a general environment service. Adding readers elsewhere in the
@@ -591,14 +594,13 @@ environment. `ProcessEnv` is the default and preserves the historical behaviour;
   them enumerated, copied, or logged. An enumeration method here would void
   that guarantee for every holder of an `EnvSource`, however careful individual
   callers were.
-- **The merge layer needs a different abstraction.** `CsvEnv` legitimately scans
-  a prefix because `figment::providers::Env` does. When it gains an injectable
-  source ([#412](https://github.com/leynos/ortho-config/issues/412)) it must
-  take a separate, explicitly named type, so the scanning capability is visible
-  in the signature rather than latent in a trait whose other users must not
-  scan. Until then, `CsvEnv` injection is out of scope and a consumer needing
-  to control `APP_*` configuration-value variables must still set them in the
-  process.
+- **The merge layer uses a different abstraction.** `CsvEnv` legitimately scans
+  a prefix because `figment::providers::Env` does, so its injectable path takes
+  `ScanEnvSource`, a separate explicitly named type. The scanning capability is
+  visible in the signature rather than latent in a trait whose other users must
+  not scan. Callers can use one `Arc<MapEnv>` by coercing cloned `Arc`s to
+  `SharedEnvSource` and `SharedScanEnvSource`;
+  [#412](https://github.com/leynos/ortho-config/issues/412) completed this path.
 - **Owned returns, deliberately.** An `impl Iterator` return would be
   return-position `impl Trait` in traits (RPITIT) and make the trait unusable
   behind a trait object, forcing `ConfigDiscovery<S>` generics to leak through

@@ -7,9 +7,9 @@
 //! the whole suite behind a lock and rules out property-based testing.
 //!
 //! [`EnvSource`] abstracts lookup during discovery, while [`ScanEnvSource`]
-//! makes the separate merge-layer scanning capability explicit. [`ProcessEnv`]
-//! is the default and preserves existing behaviour exactly; [`MapEnv`] supplies
-//! a fixed set of values for tests and embedding.
+//! is the separate, explicit merge-layer scanning capability completed by
+//! issue #412. [`ProcessEnv`] is the default and preserves existing behaviour
+//! exactly; [`MapEnv`] supplies a fixed set of values for tests and embedding.
 //!
 //! # Examples
 //!

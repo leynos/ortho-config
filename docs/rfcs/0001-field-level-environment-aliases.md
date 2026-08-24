@@ -535,9 +535,9 @@ undirected one that scoops up whatever the deployment happens to export.
 Protecting a named value remains the caller's responsibility, and is why the
 discovery telemetry records decisions rather than values. The `CsvEnv`
 compatibility substrate does scan a prefix, because that is what
-`figment::providers::Env` does; when it gains an injectable source (
-[ortho-config#412][oc-412]) that scanning capability must live on a separate,
-explicitly-named abstraction, so it stays visible in the type rather than
+`figment::providers::Env` does. [ortho-config#412][oc-412] supplies its
+injectable path through `ScanEnvSource`, a separate explicitly named
+abstraction, so the scanning capability stays visible in the type rather than
 latent in a trait whose other users must not scan.
 
 `EnvSource::get` returns `Option<OsString>`, not `Option<String>`, because
@@ -550,10 +550,9 @@ variable, never a silent fallthrough to the next candidate, since a
 present-but-undecodable value at the highest-priority present source is the
 same class of definite user mistake as `empty = "error"`.
 
-Note that this seam covers the resolver's own unit tests; the generated
-loader's compatibility substrate (§5.4) still reads the real process
-environment through `figment`, so the negative test in §8.2 mutates the real
-environment under a shared serial guard.
+The same `MapEnv` can now back the resolver and the generated loader: callers
+coerce separate `Arc` clones to `SharedEnvSource` and `SharedScanEnvSource`.
+Merge-layer tests therefore need no process mutation or shared serial guard.
 
 `resolve` reuses `CsvEnv` rather than re-implementing it: value typing calls
 `CsvEnv::parse_value` (whose visibility widens to `pub(crate)` or a thin public
@@ -586,7 +585,7 @@ attribute — including nested, flattened, and map-typed fields whose keys are
 arbitrary — the generated code keeps the existing prefix-scoped scan as a
 *substrate*, and merges projection values on top of it. The substrate is the
 **exact** current provider chain, including the upper-casing key map:
-`CsvEnv::prefixed(prefix).map(uppercase).split("__")`. A future
+`CsvEnv::prefixed(prefix).uppercase(true).split("__")`. A future
 "simplification" to `CsvEnv::raw()` would break prefix-scoping and is
 explicitly forbidden.
 
@@ -876,7 +875,7 @@ the target stay with the application.
   is composed; no field contributes more than one environment value, so
   collection merge strategies are unaffected.
 - Value typing reuses `CsvEnv::parse_value`; the compatibility substrate reuses
-  the existing `CsvEnv::prefixed(prefix).map(uppercase).split("__")` chain
+  the existing `CsvEnv::prefixed(prefix).uppercase(true).split("__")` chain
   verbatim; projection values combine with the substrate by recursive object
   merge with leaf replacement (`merge_value` semantics).
 - The generated code calls `composer.push_environment` exactly once and appends
@@ -1322,9 +1321,13 @@ points settled there, and this document is updated to match.
   than falling through to the next candidate — consistent with the existing
   `empty = "error"` reasoning.
 
-The §8.2 caveat is unchanged: the compatibility substrate still reads the real
-process environment through `figment`, so that negative test continues to
-mutate under a serial guard until [ortho-config#412][oc-412] lands.
+### 2026-08-24 — injectable merge source completed
+
+[ortho-config#412][oc-412] completed the merge half with `ScanEnvSource`.
+`EnvSource` remains lookup-only, while `CsvEnv` accepts a separate scanning
+source and replays its declarative transforms. The generated loader and
+subcommand helpers accept the injected merge source, so tests no longer need a
+shared serial guard for merge-layer variables.
 
 [oc-411]: https://github.com/leynos/ortho-config/pull/411
 
