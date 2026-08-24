@@ -118,7 +118,10 @@ pub use discovery::{
     ConfigDiscovery, ConfigDiscoveryBuilder, DiscoveryLayersOutcome, DiscoveryLoadOutcome,
     LayerDiscoveryOutcome,
 };
-pub use env_source::{EnvSource, MapEnv, ProcessEnv, SharedEnvSource, process_env_source};
+pub use env_source::{
+    EnvSource, MapEnv, ProcessEnv, ScanEnvSource, SharedEnvSource, SharedScanEnvSource,
+    process_env_source, process_scan_env_source,
+};
 pub use error::{OrthoError, is_display_request};
 pub use file::{FileLayerChain, load_config_file, load_config_file_as_chain};
 pub use localizer::{

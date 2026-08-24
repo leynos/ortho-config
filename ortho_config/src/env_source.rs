@@ -6,9 +6,10 @@
 //! a test can only influence discovery by mutating global state, which forces
 //! the whole suite behind a lock and rules out property-based testing.
 //!
-//! [`EnvSource`] abstracts that access. [`ProcessEnv`] is the default and
-//! preserves existing behaviour exactly; [`MapEnv`] supplies a fixed set of
-//! values for tests and embedding.
+//! [`EnvSource`] abstracts lookup during discovery, while [`ScanEnvSource`]
+//! makes the separate merge-layer scanning capability explicit. [`ProcessEnv`]
+//! is the default and preserves existing behaviour exactly; [`MapEnv`] supplies
+//! a fixed set of values for tests and embedding.
 //!
 //! # Examples
 //!
@@ -43,10 +44,9 @@ use std::sync::Arc;
 /// every holder of an `EnvSource`, however carefully individual callers behaved.
 ///
 /// The `CsvEnv` merge layer does legitimately scan a prefix, because that is
-/// what `figment::providers::Env` does. When that layer gains an injectable
-/// source (#412) it should take a separate, explicitly-named abstraction, so
-/// that the scanning capability is visible in the type rather than latent in a
-/// trait whose other users must not scan.
+/// what `figment::providers::Env` does. Its injectable path is represented by
+/// [`ScanEnvSource`], so the scanning operation stays visible in the type
+/// rather than latent in a trait whose other users must not scan.
 pub trait EnvSource: fmt::Debug + Send + Sync {
     /// Return the value of `key`, or `None` when it is unset.
     ///
@@ -86,8 +86,24 @@ pub trait EnvSource: fmt::Debug + Send + Sync {
     }
 }
 
+/// Enumerate variables for a configuration merge layer.
+///
+/// This trait is deliberately separate from [`EnvSource`]. RFC 0001 §5.3
+/// makes the absence of enumeration from `EnvSource` a safety property: a
+/// discovery caller cannot accidentally scan unrelated process secrets.
+/// [`crate::CsvEnv`] must scan a prefix to preserve
+/// [`figment::providers::Env`] semantics, so its callers opt into that broader
+/// capability explicitly with `ScanEnvSource`.
+pub trait ScanEnvSource: fmt::Debug + Send + Sync {
+    /// Return every variable as an owned native key/value pair.
+    fn scan(&self) -> Vec<(OsString, OsString)>;
+}
+
 /// Shorthand for a shared environment source.
 pub type SharedEnvSource = Arc<dyn EnvSource>;
+
+/// Shorthand for a shared environment source that permits enumeration.
+pub type SharedScanEnvSource = Arc<dyn ScanEnvSource>;
 
 /// Environment source backed by the live process environment.
 ///
@@ -103,6 +119,12 @@ impl EnvSource for ProcessEnv {
 
     fn home_fallback(&self) -> Option<std::path::PathBuf> {
         dirs::home_dir()
+    }
+}
+
+impl ScanEnvSource for ProcessEnv {
+    fn scan(&self) -> Vec<(OsString, OsString)> {
+        std::env::vars_os().collect()
     }
 }
 
@@ -214,6 +236,15 @@ impl EnvSource for MapEnv {
     }
 }
 
+impl ScanEnvSource for MapEnv {
+    fn scan(&self) -> Vec<(OsString, OsString)> {
+        self.vars
+            .iter()
+            .map(|(key, value)| (OsString::from(key), value.clone()))
+            .collect()
+    }
+}
+
 impl<K, V> FromIterator<(K, V)> for MapEnv
 where
     K: Into<String>,
@@ -242,6 +273,21 @@ where
 /// ```
 #[must_use]
 pub fn process_env_source() -> SharedEnvSource {
+    Arc::new(ProcessEnv)
+}
+
+/// Return the default process-backed scanning environment source.
+///
+/// # Examples
+///
+/// ```rust
+/// use ortho_config::process_scan_env_source;
+///
+/// let source = process_scan_env_source();
+/// assert!(source.scan().iter().any(|(key, _)| key == "PATH"));
+/// ```
+#[must_use]
+pub fn process_scan_env_source() -> SharedScanEnvSource {
     Arc::new(ProcessEnv)
 }
 
