@@ -212,8 +212,12 @@ escalation, not workarounds.
     `check`/`evaluate`, `missing_errors_doc` on the now-lib-public output
     writers, `clone_on_copy`, `indexing_slicing`, `option_if_let_else`,
     `cognitive_complexity`/`too_many_lines` on `main::run`) — all fixed,
-    `main.rs` trimmed to 400 lines, `output.rs` to 399). CodeRabbit review
-    on `5a02687`: 0 findings across all 19 reviewed files.
+    `main.rs` trimmed to 400 lines, `output.rs` to 399). Final
+    reconciliation before readiness moved the generation-phase helpers
+    (agent-context, localisation, per-format artefact writers, out-dir
+    resolution) into a new `generation` module so `main.rs` sits at 191
+    lines, comfortably under the hard 400-line cap. CodeRabbit review on
+    `5a02687`: 0 findings across all 19 reviewed files.
 - [x] Milestone 4: policy visibility in agent-context output.
   - `ortho_config::agent_context::AgentPolicy` gains the additive
     `exceptions: Vec<PolicyException>` (serde-defaulted, serialized
@@ -582,6 +586,16 @@ Retrospective notes for future phases:
   truth. 7.1.2 can plug rules into the reserved `rules` key and the
   `PolicyInputs` seam additively. The branch-wide final CodeRabbit review
   (all 60 changed files against `main`) completed with zero findings.
+- Reconciliation after the branch-wide review closed three gaps: `PolicyMode`
+  from an explicit `mode = "off"` table now suppresses *all* evaluation (the
+  evaluator returns zero findings for off), with unit and behavioural
+  coverage via a dedicated `orthohelp_policy_off_fixture` package containing
+  malformed, redundant, and duplicate exceptions; the required public API
+  (`PolicyConfig`, `PolicyException`, `ExceptionKind`, `PolicyInputs`,
+  `evaluate`) is now re-exported from `cargo_orthohelp::policy` as the plan's
+  interface contract specified; and the generation-phase helpers moved into a
+  new `generation` module, bringing `main.rs` from 406 to 191 lines and
+  restoring the 400-line hard-cap invariant.
 
 ## Context and orientation
 

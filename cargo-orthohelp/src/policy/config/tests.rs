@@ -96,8 +96,8 @@ fn parses_exception_without_command_path() {
 }
 
 #[rstest]
-fn missing_reason_is_an_error() {
-    let error = parse_policy(&json!({
+#[case(
+    json!({
         "ortho_config": {
             "policy": {
                 "exceptions": [
@@ -105,36 +105,22 @@ fn missing_reason_is_an_error() {
                 ]
             }
         }
-    }))
-    .expect_err("missing reason should fail deserialization");
-
-    assert!(
-        error.is_data() || error.is_syntax(),
-        "expected a data or syntax error, got {error}"
-    );
-}
-
-#[rstest]
-fn unknown_policy_table_key_is_an_error() {
-    let error = parse_policy(&json!({
+    }),
+    "exception without reason"
+)]
+#[case(
+    json!({
         "ortho_config": {
             "policy": {
                 "mode": "warn",
                 "tolerance": "high"
             }
         }
-    }))
-    .expect_err("unknown policy key should fail deserialization");
-
-    assert!(
-        error.is_data() || error.is_syntax(),
-        "expected a data or syntax error, got {error}"
-    );
-}
-
-#[rstest]
-fn unknown_exception_key_is_an_error() {
-    let error = parse_policy(&json!({
+    }),
+    "unknown policy table key"
+)]
+#[case(
+    json!({
         "ortho_config": {
             "policy": {
                 "exceptions": [
@@ -142,12 +128,16 @@ fn unknown_exception_key_is_an_error() {
                 ]
             }
         }
-    }))
-    .expect_err("unknown exception key should fail deserialization");
+    }),
+    "unknown exception key"
+)]
+fn invalid_policy_metadata_is_an_error(#[case] metadata: Value, #[case] description: &str) {
+    let error =
+        parse_policy(&metadata).expect_err("invalid policy metadata should fail deserialization");
 
     assert!(
         error.is_data() || error.is_syntax(),
-        "expected a data or syntax error, got {error}"
+        "expected a data or syntax error for '{description}', got {error}"
     );
 }
 

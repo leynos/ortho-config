@@ -6,6 +6,7 @@ members = [
     "ortho_config_macros",
     "test_helpers",
     "tests/fixtures/orthohelp_fixture",
+    "tests/fixtures/orthohelp_policy_off_fixture",
     "tests/fixtures/orthohelp_policy_warn_fixture",
     "tests/fixtures/orthohelp_policy_deny_fixture"
 ]

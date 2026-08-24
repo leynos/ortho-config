@@ -24,6 +24,7 @@ use super::steps::{OrthoHelpContext, StepResult, get_out_dir, run_orthohelp};
 /// Package name fixtures used by the policy scenarios.
 const WARN_FIXTURE: &str = "orthohelp_policy_warn_fixture";
 const DENY_FIXTURE: &str = "orthohelp_policy_deny_fixture";
+const OFF_FIXTURE: &str = "orthohelp_policy_off_fixture";
 const NO_POLICY_FIXTURE: &str = "orthohelp_fixture";
 
 #[given("the policy warn fixture package")]
@@ -38,6 +39,11 @@ fn policy_deny_fixture_package(orthohelp_context: &mut OrthoHelpContext) {
     orthohelp_context
         .policy_package
         .set(DENY_FIXTURE.to_owned());
+}
+
+#[given("the policy off fixture package")]
+fn policy_off_fixture_package(orthohelp_context: &mut OrthoHelpContext) {
+    orthohelp_context.policy_package.set(OFF_FIXTURE.to_owned());
 }
 
 #[given("a fixture package with no policy table")]
