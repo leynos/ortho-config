@@ -35,8 +35,10 @@ pub(super) fn default_tokens(attrs: &FieldAttrs, krate: &TokenStream) -> TokenSt
                 .inferred_clap_default
                 .as_ref()
                 .map(|inferred| match inferred {
-                    crate::derive::parse::ClapInferredDefault::Value(expr)
-                    | crate::derive::parse::ClapInferredDefault::ValueT(expr)
+                    crate::derive::parse::ClapInferredDefault::Value(default) => {
+                        default.value.to_token_stream().to_string()
+                    }
+                    crate::derive::parse::ClapInferredDefault::ValueT(expr)
                     | crate::derive::parse::ClapInferredDefault::ValuesT(expr) => {
                         expr.to_token_stream().to_string()
                     }

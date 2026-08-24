@@ -42,3 +42,8 @@ Feature: CLI default as absent
     Given an explicit CLI punctuation "!!!"
     When CLI values are extracted
     Then punctuation is present in extracted values
+
+  Scenario: value enum clap default is inferred
+    Given a clap default punctuation "!"
+    When the subcommand configuration is merged
+    Then the resolved mode is fast

@@ -3,7 +3,9 @@
 //! These helpers extract metadata from `#[arg(...)]` and `#[clap(...)]`
 //! attributes without taking a dependency on clap itself.
 
-use syn::Expr;
+use syn::{Expr, Type};
+
+use super::type_utils::{ClapDefaultValueShape, clap_default_value_type};
 
 /// Returns `true` when the attribute is `#[arg(...)]` or `#[clap(...)]`.
 pub(crate) fn is_clap_attribute(attr: &syn::Attribute) -> bool {
@@ -123,9 +125,25 @@ pub(crate) fn clap_field_is_subcommand(field: &syn::Field) -> syn::Result<bool> 
 
 #[derive(Clone)]
 pub(crate) enum ClapInferredDefault {
-    Value(Expr),
+    Value(Box<ClapDefaultValue>),
     ValueT(Expr),
     ValuesT(Expr),
+}
+
+/// Parser metadata retained for a clap `default_value` expression.
+#[derive(Clone)]
+pub(crate) struct ClapDefaultValue {
+    pub value: Expr,
+    pub value_parser: Option<Expr>,
+    pub value_enum: bool,
+    pub leaf_type: Type,
+    pub shape: ClapDefaultValueShape,
+}
+
+#[derive(Default)]
+struct ClapDefaultHints {
+    value_parser: Option<Expr>,
+    value_enum: bool,
 }
 
 #[derive(Clone, Copy)]
@@ -169,7 +187,13 @@ fn parse_default_expr(
     kind: ClapDefaultKind,
 ) -> syn::Result<Option<ClapInferredDefault>> {
     let parsed = match kind {
-        ClapDefaultKind::Value => ClapInferredDefault::Value(meta.value()?.parse::<Expr>()?),
+        ClapDefaultKind::Value => ClapInferredDefault::Value(Box::new(ClapDefaultValue {
+            value: meta.value()?.parse::<Expr>()?,
+            value_parser: None,
+            value_enum: false,
+            leaf_type: syn::parse_quote! { () },
+            shape: ClapDefaultValueShape::Scalar,
+        })),
         ClapDefaultKind::ValueT => ClapInferredDefault::ValueT(meta.value()?.parse::<Expr>()?),
         ClapDefaultKind::ValuesT => ClapInferredDefault::ValuesT(meta.value()?.parse::<Expr>()?),
         ClapDefaultKind::Other => return Ok(None),
@@ -186,12 +210,22 @@ fn parse_default_expr(
 /// - `default_values_t = <expr>`
 ///
 /// Duplicate defaults (including mixed forms) produce a compile-time error.
-pub(crate) fn parse_default_from_meta(
+fn parse_default_from_meta(
     meta: &syn::meta::ParseNestedMeta<'_>,
     existing_default: &mut Option<ClapInferredDefault>,
+    hints: &mut ClapDefaultHints,
 ) -> syn::Result<()> {
     if let Some(parsed) = parse_default_expr(meta, classify_default_kind(meta))? {
         return assign_default_expr(meta, existing_default, parsed);
+    }
+
+    if meta.path.is_ident("value_parser") {
+        hints.value_parser = Some(meta.value()?.parse()?);
+        return Ok(());
+    }
+    if meta.path.is_ident("value_enum") {
+        hints.value_enum = true;
+        return Ok(());
     }
 
     if meta.input.peek(syn::Token![=]) {
@@ -205,15 +239,16 @@ pub(crate) fn parse_default_from_meta(
     Ok(())
 }
 
-pub(crate) fn clap_default_value_from_attribute(
+fn clap_default_value_from_attribute(
     attr: &syn::Attribute,
     existing_default: &mut Option<ClapInferredDefault>,
+    hints: &mut ClapDefaultHints,
 ) -> syn::Result<()> {
     let syn::Meta::List(list) = &attr.meta else {
         return Ok(());
     };
 
-    list.parse_nested_meta(|meta| parse_default_from_meta(&meta, existing_default))
+    list.parse_nested_meta(|meta| parse_default_from_meta(&meta, existing_default, hints))
 }
 
 /// Returns the typed default expression inferred from clap attributes, if any.
@@ -222,8 +257,23 @@ pub(crate) fn clap_default_value_from_attribute(
 /// materializes field-level defaults during code generation.
 pub(crate) fn clap_default_value(field: &syn::Field) -> syn::Result<Option<ClapInferredDefault>> {
     let mut default_expr: Option<ClapInferredDefault> = None;
+    let mut hints = ClapDefaultHints::default();
     for attr in field.attrs.iter().filter(|attr| is_clap_attribute(attr)) {
-        clap_default_value_from_attribute(attr, &mut default_expr)?;
+        clap_default_value_from_attribute(attr, &mut default_expr, &mut hints)?;
+    }
+    if let Some(ClapInferredDefault::Value(default)) = default_expr.as_mut() {
+        let inferred_type = clap_default_value_type(&field.ty).map_err(|unsupported| {
+            syn::Error::new_spanned(
+                field,
+                format!(
+                    "clap `default_value` inference for `cli_default_as_absent` does not support {unsupported}; use a scalar, `Option<T>`, or `Vec<T>`, or provide `#[ortho_config(default = ...)]`"
+                ),
+            )
+        })?;
+        default.value_parser = hints.value_parser;
+        default.value_enum = hints.value_enum;
+        default.leaf_type = inferred_type.leaf;
+        default.shape = inferred_type.shape;
     }
     Ok(default_expr)
 }
