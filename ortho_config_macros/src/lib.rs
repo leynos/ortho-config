@@ -19,6 +19,7 @@ mod derive {
     pub(crate) mod generate;
     pub(crate) mod load_impl;
     pub(crate) mod parse;
+    pub(crate) mod policy_impl;
 }
 mod selected_subcommand_merge;
 mod subcommand_docs;
@@ -209,6 +210,12 @@ fn build_discovery_tokens(
             config_file_name: attrs.config_file_name.clone(),
             dotfile_name: attrs.dotfile_name.clone(),
             project_file_name: attrs.project_file_name.clone(),
+            policy_enabled: attrs.uses_policy(),
+            env_vars: attrs.env_vars.clone(),
+            explicit_mode: attrs.explicit_mode.clone(),
+            automatic_mode: attrs.automatic_mode.clone(),
+            scope_order: attrs.scope_order.clone(),
+            project_root_from: attrs.project_root_from.clone(),
         })
 }
 
