@@ -54,7 +54,7 @@ pub(crate) struct DiscoveryTokens {
     pub explicit_mode: Option<String>,
     pub automatic_mode: Option<String>,
     pub scope_order: Vec<String>,
-    pub project_root_from: Option<String>,
+    pub project_root_from: Option<(String, bool)>,
 }
 
 /// Convenience wrapper for passing identifiers and tokens together.
