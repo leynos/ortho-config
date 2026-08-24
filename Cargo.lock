@@ -1475,6 +1475,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "orthohelp_policy_off_fixture"
+version = "0.9.0"
+dependencies = [
+ "clap",
+ "ortho_config",
+ "serde",
+]
+
+[[package]]
 name = "orthohelp_policy_warn_fixture"
 version = "0.9.0"
 dependencies = [

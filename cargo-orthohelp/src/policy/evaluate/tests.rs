@@ -45,6 +45,28 @@ fn empty_config_produces_empty_report_with_vocabulary() {
 }
 
 #[rstest]
+fn explicit_off_mode_suppresses_all_findings() {
+    let config = PolicyConfig {
+        mode: crate::policy::PolicyMode::Off,
+        exceptions: vec![
+            exception(ExceptionKind::Flag, ""),
+            exception(ExceptionKind::Verb, "get"),
+            exception(ExceptionKind::Flag, "--format"),
+            exception(ExceptionKind::Flag, "--format"),
+        ],
+    };
+    let report = evaluate(&config, &PolicyInputs::default());
+
+    assert_eq!(report.mode, crate::policy::PolicyMode::Off);
+    assert!(
+        report.results.is_empty(),
+        "off mode must suppress malformed, redundant, and duplicate findings"
+    );
+    assert_eq!(report.summary.total, 0);
+    assert_eq!(report.exceptions.len(), 4);
+}
+
+#[rstest]
 fn report_attaches_configured_exceptions() {
     let report = evaluate(
         &config_with(vec![exception(ExceptionKind::Verb, "get")]),

@@ -4,14 +4,17 @@
 //! a [`PolicyReport`]. In 7.1.1 the inputs are empty and the evaluator emits
 //! configuration-sanity findings only (Decision D7): malformed exceptions
 //! (severity `deny`), redundant exceptions (severity `warn`), and duplicate
-//! exceptions (severity `warn`). Roadmap 7.1.2 adds vocabulary lint rules on
-//! the bridge IR passed through [`PolicyInputs`].
+//! exceptions (severity `warn`). An explicit `mode = "off"` configuration
+//! suppresses evaluation entirely — the report carries zero findings while
+//! still advertising the configured exceptions and the canonical vocabulary.
+//! Roadmap 7.1.2 adds vocabulary lint rules on the bridge IR passed through
+//! [`PolicyInputs`].
 
 use crate::policy::config::{ExceptionKind, PolicyConfig, PolicyException, PolicyInputs};
 use crate::policy::vocabulary::{
     CANONICAL_FLAGS, CANONICAL_VERBS, is_canonical_flag, is_canonical_verb,
 };
-use crate::policy::{PolicyReport, PolicyResult, PolicySeverity, Vocabulary};
+use crate::policy::{PolicyMode, PolicyReport, PolicyResult, PolicySeverity, Vocabulary};
 
 /// Evaluates a policy configuration and produces a report.
 ///
@@ -32,10 +35,15 @@ use crate::policy::{PolicyReport, PolicyResult, PolicySeverity, Vocabulary};
 /// ```
 #[must_use]
 pub fn evaluate(config: &PolicyConfig, _inputs: &PolicyInputs) -> PolicyReport {
-    let mut results = Vec::new();
-    results.extend(malformed_results(&config.exceptions));
-    results.extend(redundant_results(&config.exceptions));
-    results.extend(duplicate_results(&config.exceptions));
+    let results = if config.mode == PolicyMode::Off {
+        Vec::new()
+    } else {
+        let mut results = Vec::new();
+        results.extend(malformed_results(&config.exceptions));
+        results.extend(redundant_results(&config.exceptions));
+        results.extend(duplicate_results(&config.exceptions));
+        results
+    };
     PolicyReport::with_details(
         config.mode,
         results,
@@ -46,24 +54,40 @@ pub fn evaluate(config: &PolicyConfig, _inputs: &PolicyInputs) -> PolicyReport {
 
 /// Collects a `malformed_exception` finding for every malformed exception.
 fn malformed_results(exceptions: &[PolicyException]) -> Vec<PolicyResult> {
-    let mut results = Vec::new();
-    for exception in exceptions {
-        if is_malformed(exception) {
-            results.push(malformed_result(exception));
-        }
-    }
-    results
+    exceptions
+        .iter()
+        .filter(|exception| is_malformed(exception))
+        .map(|exception| {
+            exception_result(
+                "agent-native.config.malformed-exception",
+                "malformed_exception",
+                PolicySeverity::Deny,
+                format!(
+                    "malformed {} exception '{}': a {} name must be a single non-empty token",
+                    exception.kind, exception.name, exception.kind
+                ),
+            )
+        })
+        .collect()
 }
 
 /// Collects a `redundant_exception` finding for every canonical exception.
 fn redundant_results(exceptions: &[PolicyException]) -> Vec<PolicyResult> {
-    let mut results = Vec::new();
-    for exception in exceptions {
-        if is_redundant(exception) {
-            results.push(redundant_result(exception));
-        }
-    }
-    results
+    exceptions
+        .iter()
+        .filter(|exception| is_redundant(exception))
+        .map(|exception| {
+            exception_result(
+                "agent-native.config.redundant-exception",
+                "redundant_exception",
+                PolicySeverity::Warn,
+                format!(
+                    "exception for {} '{}' is redundant: the item is already canonical",
+                    exception.kind, exception.name
+                ),
+            )
+        })
+        .collect()
 }
 
 /// Collects a `duplicate_exception` finding for every exception repeated by a
@@ -76,7 +100,15 @@ fn duplicate_results(exceptions: &[PolicyException]) -> Vec<PolicyResult> {
             .take(index)
             .any(|previous| same_scope(previous, exception))
         {
-            results.push(duplicate_result(exception));
+            results.push(exception_result(
+                "agent-native.config.duplicate-exception",
+                "duplicate_exception",
+                PolicySeverity::Warn,
+                format!(
+                    "duplicate {} exception '{}' with the same scope",
+                    exception.kind, exception.name
+                ),
+            ));
         }
     }
     results
@@ -114,41 +146,18 @@ fn same_scope(left: &PolicyException, right: &PolicyException) -> bool {
     left.kind == right.kind && left.name == right.name && left.command_path == right.command_path
 }
 
-fn malformed_result(exception: &PolicyException) -> PolicyResult {
+/// Constructs a [`PolicyResult`] from its primitive parts.
+fn exception_result(
+    rule_id: &str,
+    code: &str,
+    severity: PolicySeverity,
+    message: String,
+) -> PolicyResult {
     PolicyResult {
-        rule_id: "agent-native.config.malformed-exception".to_owned(),
-        code: "malformed_exception".to_owned(),
-        severity: PolicySeverity::Deny,
-        message: format!(
-            "malformed {} exception '{}': a {} name must be a single non-empty token",
-            exception.kind, exception.name, exception.kind
-        ),
-        location: None,
-    }
-}
-
-fn redundant_result(exception: &PolicyException) -> PolicyResult {
-    PolicyResult {
-        rule_id: "agent-native.config.redundant-exception".to_owned(),
-        code: "redundant_exception".to_owned(),
-        severity: PolicySeverity::Warn,
-        message: format!(
-            "exception for {} '{}' is redundant: the item is already canonical",
-            exception.kind, exception.name
-        ),
-        location: None,
-    }
-}
-
-fn duplicate_result(exception: &PolicyException) -> PolicyResult {
-    PolicyResult {
-        rule_id: "agent-native.config.duplicate-exception".to_owned(),
-        code: "duplicate_exception".to_owned(),
-        severity: PolicySeverity::Warn,
-        message: format!(
-            "duplicate {} exception '{}' with the same scope",
-            exception.kind, exception.name
-        ),
+        rule_id: rule_id.to_owned(),
+        code: code.to_owned(),
+        severity,
+        message,
         location: None,
     }
 }

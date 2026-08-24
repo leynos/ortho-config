@@ -14,6 +14,9 @@ pub mod config;
 pub mod evaluate;
 pub mod vocabulary;
 
+pub use config::{ExceptionKind, PolicyConfig, PolicyException, PolicyInputs};
+pub use evaluate::evaluate;
+
 /// Current policy-report schema version.
 pub const ORTHO_POLICY_REPORT_SCHEMA_VERSION: &str = "1";
 
