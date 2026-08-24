@@ -15,6 +15,10 @@ use std::collections::BTreeSet;
 use tempfile::TempDir;
 
 const EXPECTED_EXAMPLE_IDS: &[&str] = &[
+    "api-guide-agent-context-constructor",
+    "api-guide-agent-context-json",
+    "api-guide-policy-report-constructors",
+    "api-guide-policy-report-json",
     "guide-agent-context",
     "guide-alias-derive",
     "guide-alias-install",

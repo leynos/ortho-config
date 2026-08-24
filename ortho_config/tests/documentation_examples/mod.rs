@@ -1,6 +1,6 @@
-//! Loads fenced examples from the public README and user's guide.
+//! Loads fenced examples from public documentation.
 //!
-//! Every fence in either document must be preceded by a stable
+//! Every fence in a registered document must be preceded by a stable
 //! `tested-example` marker. Tests query the exact published text through this
 //! module so copied fixtures cannot drift away from the documentation.
 //! The registry is initialized once per integration-test process, then remains
@@ -11,7 +11,11 @@ use cap_std::{ambient_authority, fs::Dir};
 use std::collections::HashSet;
 use std::sync::LazyLock;
 
-const DOCUMENT_PATHS: &[&str] = &["README.md", "docs/users-guide.md"];
+const DOCUMENT_PATHS: &[&str] = &[
+    "README.md",
+    "docs/users-guide.md",
+    "docs/cargo-orthohelp-api-guide.md",
+];
 const MARKER_PREFIX: &str = "<!-- tested-example: ";
 const MARKER_SUFFIX: &str = " -->";
 

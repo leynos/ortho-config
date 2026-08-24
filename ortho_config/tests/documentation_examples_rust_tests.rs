@@ -22,6 +22,8 @@ const STANDARD_RUST_EXAMPLES: &[&str] = &[
     "guide-localization",
     "guide-tracing",
     "guide-orthohelp-metadata",
+    "api-guide-policy-report-json",
+    "api-guide-agent-context-json",
 ];
 
 #[test]
@@ -40,6 +42,16 @@ fn documented_rust_compiles_and_runs() -> Result<()> {
         ExampleId("guide-orthohelp-metadata"),
         [],
         "field=host\n",
+    )?;
+    assert_serialized_json(
+        &mut workspace,
+        ExampleId("api-guide-policy-report-json"),
+        "version",
+    )?;
+    assert_serialized_json(
+        &mut workspace,
+        ExampleId("api-guide-agent-context-json"),
+        "schema_version",
     )?;
     assert_sanitized_binary_environment(&mut workspace)?;
 
@@ -272,6 +284,27 @@ fn assert_run<const N: usize>(
     ensure!(
         stdout == expected_stdout,
         "{id} stdout differed: expected {expected_stdout:?}, got {stdout:?}"
+    );
+    Ok(())
+}
+
+fn assert_serialized_json(
+    workspace: &mut ExampleWorkspace,
+    ExampleId(id): ExampleId<'_>,
+    version_field: &str,
+) -> Result<()> {
+    let output = workspace.run(ExampleId(id), std::iter::empty::<&str>())?;
+    ensure!(
+        output.status.success(),
+        "{id} failed:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let payload: ortho_config::serde_json::Value =
+        ortho_config::serde_json::from_slice(&output.stdout)
+            .with_context(|| format!("{id} should print JSON"))?;
+    ensure!(
+        payload.get(version_field).is_some(),
+        "{id} JSON should contain {version_field}"
     );
     Ok(())
 }
