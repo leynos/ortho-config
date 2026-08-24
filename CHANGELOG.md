@@ -86,6 +86,12 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- Generate `compose_layers` and `compose_layers_from_iter` with
+  `#[allow(dead_code, ...)]` rather than `#[expect(dead_code, ...)]`, so
+  downstream `build.rs` files no longer need to allow
+  `unfulfilled_lint_expectations`. See
+  [the clap-mangen to cargo-orthohelp migration guide](docs/clap-mangen-cargo-orthohelp-migration-guide.md)
+  for removing the remaining build-script suppressions (closes #273).
 - Skip YAML-specific `hello_world` `rstest-bdd` scenarios unless the `yaml`
   feature is enabled, so feature-disabled test runs no longer invoke YAML
   parsing.

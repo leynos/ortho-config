@@ -316,7 +316,7 @@ pub(crate) fn build_load_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStre
 
     quote! {
         impl #cli_ident {
-            #[expect(dead_code, reason = "Generated method may not be used in all builds")]
+            #[allow(dead_code, reason = "Generated method may not be used in all builds")]
             pub fn compose_layers_from_iter<I, T>(iter: I) -> #krate::declarative::LayerComposition
             where
                 I: IntoIterator<Item = T>,
@@ -325,7 +325,7 @@ pub(crate) fn build_load_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStre
                 #compose_layers_impl
             }
 
-            #[expect(dead_code, reason = "Generated method may not be used in all builds")]
+            #[allow(dead_code, reason = "Generated method may not be used in all builds")]
             pub fn compose_layers() -> #krate::declarative::LayerComposition {
                 Self::compose_layers_from_iter(std::env::args_os())
             }
