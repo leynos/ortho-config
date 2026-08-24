@@ -233,13 +233,13 @@ fn expect_summary(report: &Value, expected: (usize, usize, usize, usize)) -> Ste
         (JsonField::Deny, expected.2),
         (JsonField::Total, expected.3),
     ] {
-        let actual = summary
+        let actual_json_count = summary
             .get(field.as_str())
             .and_then(Value::as_u64)
             .ok_or_else(|| format!("{field} should be an unsigned number"))?;
-        let actual = usize::try_from(actual)?;
-        if actual != expected_count {
-            return Err(format!("{field} should be {expected_count}, got {actual}").into());
+        let actual_count = usize::try_from(actual_json_count)?;
+        if actual_count != expected_count {
+            return Err(format!("{field} should be {expected_count}, got {actual_count}").into());
         }
     }
     Ok(())

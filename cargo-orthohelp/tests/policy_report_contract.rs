@@ -16,36 +16,57 @@ type TestResult<T = ()> = Result<T, Box<dyn Error + Send + Sync>>;
 const CANONICAL_FLAG_RULE_ID: &str = "agent-native.vocabulary.canonical-flag";
 const NON_CANONICAL_FLAG_CODE: &str = "non_canonical_flag";
 
-#[rstest]
-#[case::warn_clean(
-    "warn",
-    Some("orthohelp_fixture::SimpleFixtureConfig"),
-    true,
-    None,
-    (0, 0, 0, 0)
-)]
-#[case::warn_finding("warn", None, true, Some("warn"), (0, 1, 0, 1))]
-#[case::deny_finding("deny", None, false, Some("deny"), (0, 0, 1, 1))]
-#[case::off_suppresses_finding("off", None, true, None, (0, 0, 0, 0))]
-fn emitted_policy_report_has_stable_contract(
-    #[case] mode: &str,
-    #[case] root_type: Option<&str>,
-    #[case] should_succeed: bool,
-    #[case] expected_severity: Option<&str>,
-    #[case] expected_summary: (usize, usize, usize, usize),
-) -> TestResult {
-    let output = run_policy_check(mode, root_type)?;
+#[derive(Debug, Clone, Copy)]
+struct PolicyReportCase {
+    mode: &'static str,
+    root_type: Option<&'static str>,
+    should_succeed: bool,
+    expected_severity: Option<&'static str>,
+    expected_summary: (usize, usize, usize, usize),
+}
 
-    assert_exit_status(&output, should_succeed)?;
+#[rstest]
+#[case::warn_clean(PolicyReportCase {
+    mode: "warn",
+    root_type: Some("orthohelp_fixture::SimpleFixtureConfig"),
+    should_succeed: true,
+    expected_severity: None,
+    expected_summary: (0, 0, 0, 0),
+})]
+#[case::warn_finding(PolicyReportCase {
+    mode: "warn",
+    root_type: None,
+    should_succeed: true,
+    expected_severity: Some("warn"),
+    expected_summary: (0, 1, 0, 1),
+})]
+#[case::deny_finding(PolicyReportCase {
+    mode: "deny",
+    root_type: None,
+    should_succeed: false,
+    expected_severity: Some("deny"),
+    expected_summary: (0, 0, 1, 1),
+})]
+#[case::off_suppresses_finding(PolicyReportCase {
+    mode: "off",
+    root_type: None,
+    should_succeed: true,
+    expected_severity: None,
+    expected_summary: (0, 0, 0, 0),
+})]
+fn emitted_policy_report_has_stable_contract(#[case] case: PolicyReportCase) -> TestResult {
+    let output = run_policy_check(case.mode, case.root_type)?;
+
+    assert_exit_status(&output, case.should_succeed)?;
     if !output.stdout.ends_with(b"\n") {
         return Err("policy report should have a trailing newline".into());
     }
     let report: Value = serde_json::from_slice(&output.stdout)?;
     assert_string_field(&report, "version", ORTHO_POLICY_REPORT_SCHEMA_VERSION)?;
     assert_string_field(&report, "tool", "cargo-orthohelp")?;
-    assert_string_field(&report, "mode", mode)?;
-    assert_results(&report, expected_severity)?;
-    assert_summary(&report, expected_summary)
+    assert_string_field(&report, "mode", case.mode)?;
+    assert_results(&report, case.expected_severity)?;
+    assert_summary(&report, case.expected_summary)
 }
 
 fn run_policy_check(mode: &str, root_type: Option<&str>) -> TestResult<Output> {
@@ -118,13 +139,15 @@ fn assert_summary(report: &Value, expected: (usize, usize, usize, usize)) -> Tes
         ("deny", expected.2),
         ("total", expected.3),
     ] {
-        let actual = summary
+        let actual_json_count = summary
             .get(field)
             .and_then(Value::as_u64)
             .ok_or_else(|| format!("summary {field} should be an unsigned number"))?;
-        let actual = usize::try_from(actual)?;
-        if actual != expected_count {
-            return Err(format!("summary {field} should be {expected_count}, got {actual}").into());
+        let actual_count = usize::try_from(actual_json_count)?;
+        if actual_count != expected_count {
+            return Err(
+                format!("summary {field} should be {expected_count}, got {actual_count}").into(),
+            );
         }
     }
     Ok(())

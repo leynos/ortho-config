@@ -86,10 +86,13 @@ mod tests {
         match expected_severity {
             Some(severity) => {
                 assert_eq!(results.len(), 1);
-                assert_eq!(results[0].rule_id, CANONICAL_FLAG_RULE_ID);
-                assert_eq!(results[0].code, NON_CANONICAL_FLAG_CODE);
-                assert_eq!(results[0].severity, severity);
-                assert!(results[0].location.is_none());
+                let result = results
+                    .first()
+                    .expect("a non-off policy mode should produce one finding");
+                assert_eq!(result.rule_id, CANONICAL_FLAG_RULE_ID);
+                assert_eq!(result.code, NON_CANONICAL_FLAG_CODE);
+                assert_eq!(result.severity, severity);
+                assert!(result.location.is_none());
             }
             None => assert!(results.is_empty()),
         }
