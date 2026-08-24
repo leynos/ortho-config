@@ -33,19 +33,45 @@ use crate::policy::{PolicyReport, PolicyResult, PolicySeverity, Vocabulary};
 #[must_use]
 pub fn evaluate(config: &PolicyConfig, _inputs: &PolicyInputs) -> PolicyReport {
     let mut results = Vec::new();
-    for exception in &config.exceptions {
+    results.extend(malformed_results(&config.exceptions));
+    results.extend(redundant_results(&config.exceptions));
+    results.extend(duplicate_results(&config.exceptions));
+    PolicyReport::with_details(
+        config.mode,
+        results,
+        config.exceptions.clone(),
+        canonical_vocabulary(),
+    )
+}
+
+/// Collects a `malformed_exception` finding for every malformed exception.
+fn malformed_results(exceptions: &[PolicyException]) -> Vec<PolicyResult> {
+    let mut results = Vec::new();
+    for exception in exceptions {
         if is_malformed(exception) {
             results.push(malformed_result(exception));
         }
     }
-    for exception in &config.exceptions {
+    results
+}
+
+/// Collects a `redundant_exception` finding for every canonical exception.
+fn redundant_results(exceptions: &[PolicyException]) -> Vec<PolicyResult> {
+    let mut results = Vec::new();
+    for exception in exceptions {
         if is_redundant(exception) {
             results.push(redundant_result(exception));
         }
     }
-    for (index, exception) in config.exceptions.iter().enumerate() {
-        if config
-            .exceptions
+    results
+}
+
+/// Collects a `duplicate_exception` finding for every exception repeated by a
+/// preceding exception with the same scope.
+fn duplicate_results(exceptions: &[PolicyException]) -> Vec<PolicyResult> {
+    let mut results = Vec::new();
+    for (index, exception) in exceptions.iter().enumerate() {
+        if exceptions
             .iter()
             .take(index)
             .any(|previous| same_scope(previous, exception))
@@ -53,12 +79,7 @@ pub fn evaluate(config: &PolicyConfig, _inputs: &PolicyInputs) -> PolicyReport {
             results.push(duplicate_result(exception));
         }
     }
-    PolicyReport::with_details(
-        config.mode,
-        results,
-        config.exceptions.clone(),
-        canonical_vocabulary(),
-    )
+    results
 }
 
 /// Returns whether an exception's name cannot match its kind's shape.
