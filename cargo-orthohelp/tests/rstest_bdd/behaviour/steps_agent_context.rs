@@ -55,6 +55,15 @@ fn run_with_format_agent_context(orthohelp_context: &mut OrthoHelpContext) -> St
     run_with_agent_context_args(orthohelp_context, &BASE_AGENT_CONTEXT_ARGS)
 }
 
+#[when("I run cargo-orthohelp with format agent-context for the simple fixture")]
+fn run_with_format_agent_context_simple(
+    orthohelp_context: &mut OrthoHelpContext,
+) -> StepResult<()> {
+    let mut args = Vec::from(BASE_AGENT_CONTEXT_ARGS);
+    args.extend(["--root-type", "orthohelp_fixture::SimpleFixtureConfig"]);
+    run_with_agent_context_args(orthohelp_context, &args)
+}
+
 #[when("I run cargo-orthohelp with format agent-context for the nested fixture")]
 fn run_with_format_agent_context_nested(
     orthohelp_context: &mut OrthoHelpContext,
@@ -82,50 +91,47 @@ fn run_with_agent_context_args(
 
 #[then("the output contains agent-context JSON for the fixture")]
 fn output_contains_agent_context(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
-    let output_succeeded = orthohelp_context
-        .last_output
-        .with_ref(|output| output.status.success())
-        .ok_or("last_output should be set")?;
-    if !output_succeeded {
-        return Err("cargo-orthohelp should succeed".into());
-    }
-
     let json = read_agent_context(orthohelp_context)?;
-    expect_str_field(&json, JsonField::SchemaVersion, "1")?;
-    expect_str_field(&json, JsonField::Kind, "orthohelp_fixture.agent_context")?;
-    let command = json
-        .get(JsonField::Commands.as_str())
-        .and_then(Value::as_array)
-        .and_then(|commands| commands.first())
-        .ok_or("first command missing")?;
-    expect_string_array_field(command, JsonField::Path, &["fixture"])?;
-    expect_str_field(
-        command,
-        JsonField::Summary,
-        "Orthohelp fixture configuration.",
-    )?;
-    expect_non_empty_array(command, JsonField::Inputs)?;
-    Ok(())
+    assert_agent_context_contract(&json, &["fixture"], "Orthohelp fixture configuration.")
+}
+
+#[then("the output contains agent-context JSON for the simple fixture")]
+fn output_contains_simple_agent_context(
+    orthohelp_context: &mut OrthoHelpContext,
+) -> StepResult<()> {
+    let json = read_agent_context(orthohelp_context)?;
+    assert_agent_context_contract(&json, &["simple_fixture"], "Simple fixture configuration.")
 }
 
 #[then("the output contains nested agent-context command paths for the fixture")]
 fn output_contains_nested_agent_context_paths(
     orthohelp_context: &mut OrthoHelpContext,
 ) -> StepResult<()> {
-    let output_succeeded = orthohelp_context
-        .last_output
-        .with_ref(|output| output.status.success())
-        .ok_or("last_output should be set")?;
-    if !output_succeeded {
-        return Err("cargo-orthohelp should succeed".into());
-    }
-
     let json = read_agent_context(orthohelp_context)?;
-    expect_str_field(&json, JsonField::SchemaVersion, "1")?;
-    expect_str_field(&json, JsonField::Kind, "orthohelp_fixture.agent_context")?;
+    assert_agent_context_contract(&json, &["nested_fixture"], "Nested fixture command tree.")?;
     expect_command_path(&json, &["nested_fixture", "greet"])?;
     expect_command_path(&json, &["nested_fixture", "admin", "audit"])?;
     Ok(())
+}
+
+fn assert_agent_context_contract(
+    json: &Value,
+    expected_path: &[&str],
+    expected_summary: &str,
+) -> StepResult<()> {
+    expect_str_field(json, JsonField::SchemaVersion, "1")?;
+    let kind = string_field(json, JsonField::Kind)?;
+    if !kind.ends_with(".agent_context") {
+        return Err(format!("kind should end with .agent_context, got {kind}").into());
+    }
+    let command = json
+        .get(JsonField::Commands.as_str())
+        .and_then(Value::as_array)
+        .and_then(|commands| commands.first())
+        .ok_or("first command missing")?;
+    expect_string_array_field(command, JsonField::Path, expected_path)?;
+    expect_str_field(command, JsonField::Summary, expected_summary)?;
+    expect_non_empty_array(command, JsonField::Inputs)
 }
 
 fn read_agent_context(orthohelp_context: &mut OrthoHelpContext) -> StepResult<Value> {
