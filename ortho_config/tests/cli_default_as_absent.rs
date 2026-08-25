@@ -173,7 +173,7 @@ struct DefaultParityArgs {
     #[ortho_config(cli_default_as_absent)]
     count: u16,
 
-    #[arg(long, default_value = "fast", value_enum)]
+    #[arg(long, default_value = "FAST", value_enum, ignore_case = true)]
     #[ortho_config(cli_default_as_absent)]
     mode: Mode,
 
@@ -200,6 +200,33 @@ impl Default for DefaultParityArgs {
 #[rstest]
 #[serial]
 fn inferred_default_value_preserves_clap_parsers() -> Result<()> {
+    {
+        let no_file_dir = tempfile::tempdir().context("create no-file config dir")?;
+        let _cwd_guard = cwd::set_dir(no_file_dir.path())?;
+        let inferred = DefaultParityArgs::load_from_iter(["default-parity"])
+            .context("load inferred clap defaults")?;
+        ensure!(
+            inferred.count == 8,
+            "expected inferred count, got {}",
+            inferred.count
+        );
+        ensure!(
+            inferred.mode == Mode::Fast,
+            "expected inferred fast mode, got {:?}",
+            inferred.mode
+        );
+        ensure!(
+            inferred.port == 7,
+            "expected inferred port, got {}",
+            inferred.port
+        );
+        ensure!(
+            inferred.label.as_deref() == Some("default"),
+            "expected inferred label, got {:?}",
+            inferred.label,
+        );
+    }
+
     let (_temp_dir, _cwd_guard) = config_dir(
         "[cmds.default-parity]\ncount = 5\nmode = \"safe\"\nport = 6\nlabel = \"file\"\n",
     )?;

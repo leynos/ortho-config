@@ -75,7 +75,7 @@ impl Default for TagsArgs {
 #[command(name = "string-tags")]
 #[ortho_config(prefix = "APP_")]
 struct StringTagsArgs {
-    #[arg(long, default_value = "alpha")]
+    #[arg(long, default_value = "alpha,beta", value_delimiter = ',')]
     #[ortho_config(cli_default_as_absent)]
     tags: Vec<String>,
 }
@@ -83,7 +83,7 @@ struct StringTagsArgs {
 impl Default for StringTagsArgs {
     fn default() -> Self {
         Self {
-            tags: vec![String::from("alpha")],
+            tags: vec![String::from("alpha"), String::from("beta")],
         }
     }
 }
@@ -139,5 +139,28 @@ fn test_cli_default_as_absent_collection_defaults(prefix: Prefix) -> Result<()> 
         ensure!(explicit.count == 9);
     }
 
+    Ok(())
+}
+
+/// Verifies generated defaults replay clap parsing without a config file or CLI override.
+#[rstest]
+#[serial]
+fn generated_collection_defaults_match_clap() -> Result<()> {
+    let no_file_dir = tempfile::tempdir().context("create no-file config dir")?;
+    let _cwd_guard = cwd::set_dir(no_file_dir.path())?;
+
+    let tags = TagsArgs::load_from_iter(["tags"]).context("load typed tag defaults")?;
+    ensure!(tags.tags == vec!["alpha", "beta"], "got {:?}", tags.tags);
+
+    let string_tags = StringTagsArgs::load_from_iter(["string-tags"])
+        .context("load delimiter-separated tag defaults")?;
+    ensure!(
+        string_tags.tags == vec!["alpha", "beta"],
+        "got {:?}",
+        string_tags.tags
+    );
+
+    let retry = RetryArgs::load_from_iter(["retry"]).context("load retry defaults")?;
+    ensure!(retry.count == 8, "got {}", retry.count);
     Ok(())
 }

@@ -169,6 +169,49 @@ fn captures_value_enum_marker_for_default_value() -> Result<()> {
 }
 
 #[test]
+fn captures_replay_settings_for_default_value() -> Result<()> {
+    let input: DeriveInput = parse_quote! {
+        struct Demo {
+            #[arg(default_value = "alpha,beta", value_delimiter = ',')]
+            #[ortho_config(cli_default_as_absent)]
+            tags: Vec<String>,
+        }
+    };
+
+    let attrs = parse_first_field_attrs(&input)?;
+    let Some(ClapInferredDefault::Value(default)) = attrs.inferred_clap_default else {
+        return Err(anyhow!("expected inferred default_value metadata"));
+    };
+    ensure!(
+        default
+            .value_delimiter
+            .as_ref()
+            .is_some_and(|delimiter| expr_tokens(delimiter) == "','"),
+        "expected value delimiter metadata",
+    );
+
+    let enum_input: DeriveInput = parse_quote! {
+        struct Demo {
+            #[arg(default_value = "FAST", value_enum, ignore_case = true)]
+            #[ortho_config(cli_default_as_absent)]
+            mode: Mode,
+        }
+    };
+    let enum_attrs = parse_first_field_attrs(&enum_input)?;
+    let Some(ClapInferredDefault::Value(enum_default)) = enum_attrs.inferred_clap_default else {
+        return Err(anyhow!("expected inferred enum default metadata"));
+    };
+    ensure!(
+        enum_default
+            .ignore_case
+            .as_ref()
+            .is_some_and(|ignore_case| expr_tokens(ignore_case) == "true"),
+        "expected ignore-case metadata",
+    );
+    Ok(())
+}
+
+#[test]
 fn rejects_nested_default_value_shape() -> Result<()> {
     let input: DeriveInput = parse_quote! {
         struct Demo {
