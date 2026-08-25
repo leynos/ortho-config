@@ -86,7 +86,7 @@
 - [v0.9.0 migration guide](v0-9-0-migration-guide.md): identify required,
   recommended, and optional changes when upgrading from v0.8.0.
 - [v0.10.0 migration guide](v0-10-0-migration-guide.md): adopt injected
-  environment sources while preserving process-backed defaults.
+  environment sources and parser-faithful clap defaults.
 
 ## Testing and documentation references
 

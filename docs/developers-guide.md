@@ -15,6 +15,41 @@ The workspace runs one unified test workflow via Make targets:
 These are required quality gates for code changes. Behavioural coverage runs
 inside the standard Rust test harness, not a bespoke test runner.
 
+## Clap default inference
+
+The `cli_default_as_absent` default path is split between parse-time metadata
+and generated loader code. `ortho_config_macros/src/derive/parse/clap_attrs.rs`
+retains the raw `default_value`, the leaf type and field shape, and parser
+hints such as `value_parser`, `value_enum`, delimiters, and enum case handling.
+Keep this metadata in the parse intermediate representation (IR); do not
+reconstruct it from generated tokens later in the pipeline.
+The parser-faithful approach is recorded in the
+[design decision log](design.md#9-decision-log).
+
+The parse layer accepts scalar, `Option<T>`, and `Vec<T>` fields. It rejects
+nested wrappers and map fields when their clap string default cannot be
+replayed faithfully. Unsupported shapes should receive a focused compile-time
+diagnostic that points to an explicit `#[ortho_config(default = ...)]`
+alternative. Parser settings that change tokenization or accepted spelling
+must either be retained in the IR and applied to the synthetic argument, or
+cause the shape to be rejected during parsing.
+
+`ortho_config_macros/src/derive/build/defaults.rs` owns the replay boundary.
+`DefaultStructInit` keeps fallible default resolutions separate from the
+infallible defaults struct fields: generated code builds a one-argument clap
+command, parses the captured default, and then supplies the resolved value to
+the defaults layer. A conversion failure is appended to the existing error
+accumulator as `OrthoError::DefaultValueConversion`; it must not be handled by
+`unwrap`, `expect`, or a panic in generated code. Explicit
+`#[ortho_config(default = ...)]` remains higher precedence than inferred clap
+metadata.
+
+When changing this path, update parse-IR tests, generated-loader integration
+tests, and compile-fail coverage for unsupported shapes. Include cases where a
+file or environment value overrides the inferred default, while an explicit
+CLI value still wins. Run the standard quality gates before requesting a
+CodeRabbit review.
+
 ### Nextest test-group serialization
 
 `.config/nextest.toml` assigns two test binaries to single-threaded groups:
