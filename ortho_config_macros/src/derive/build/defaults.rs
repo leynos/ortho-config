@@ -78,6 +78,12 @@ pub(crate) fn build_default_struct_init(
                         let #resolution_ident = match #value_expr {
                             Ok(value) => Some(value),
                             Err(source) => {
+                                #krate::tracing::warn!(
+                                    operation = "clap_default_value_replay",
+                                    field = #field_key,
+                                    error_category = "conversion_failed",
+                                    "failed to convert inferred clap default",
+                                );
                                 errors.push(#krate::OrthoError::default_value_conversion_arc(
                                     #field_key,
                                     source,
@@ -121,17 +127,36 @@ fn clap_value_default_expr(default: &ClapDefaultValue) -> proc_macro2::TokenStre
         },
         |value_parser| quote! { #value_parser },
     );
+    let value_delimiter = default
+        .value_delimiter
+        .as_ref()
+        .map(|delimiter| quote! { .value_delimiter(#delimiter) });
+    let ignore_case = default
+        .ignore_case
+        .as_ref()
+        .map(|ignore_case| quote! { .ignore_case(#ignore_case) });
     let extraction = match default.shape {
         ClapDefaultValueShape::Scalar | ClapDefaultValueShape::Option => quote! {
             matches
-                .get_one::<#leaf_type>("value")
-                .cloned()
+                .try_remove_one::<#leaf_type>("value")
+                .map_err(|error| {
+                    ::clap::Error::raw(
+                        ::clap::error::ErrorKind::InvalidValue,
+                        error.to_string(),
+                    )
+                })?
                 .ok_or_else(|| missing_clap_default_error())
         },
         ClapDefaultValueShape::Vec => quote! {
             matches
-                .get_many::<#leaf_type>("value")
-                .map(|values| values.cloned().collect::<::std::vec::Vec<_>>())
+                .try_remove_many::<#leaf_type>("value")
+                .map_err(|error| {
+                    ::clap::Error::raw(
+                        ::clap::error::ErrorKind::InvalidValue,
+                        error.to_string(),
+                    )
+                })?
+                .map(|values| values.collect::<::std::vec::Vec<_>>())
                 .ok_or_else(|| missing_clap_default_error())
         },
     };
@@ -143,9 +168,11 @@ fn clap_value_default_expr(default: &ClapDefaultValue) -> proc_macro2::TokenStre
                     ::clap::Arg::new("value")
                         .action(::clap::ArgAction::Append)
                         .default_value(#value)
-                        .value_parser(#parser),
+                        .value_parser(#parser)
+                        #value_delimiter
+                        #ignore_case,
                 );
-            let matches = command.try_get_matches_from_mut(["ortho-config-default"])?;
+            let mut matches = command.try_get_matches_from_mut(["ortho-config-default"])?;
             let missing_clap_default_error = || {
                 ::clap::Error::raw(
                     ::clap::error::ErrorKind::InvalidValue,

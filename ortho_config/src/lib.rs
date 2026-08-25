@@ -30,6 +30,8 @@ pub use serde_saphyr;
 #[cfg(feature = "toml")]
 #[cfg_attr(docsrs, doc(cfg(feature = "toml")))]
 pub use toml;
+/// Re-export for tracing events emitted by derive-generated configuration loaders.
+pub use tracing;
 /// Re-export used by derive-generated environment-key normalization via
 /// `ortho_config::uncased::Uncased`.
 pub use uncased;

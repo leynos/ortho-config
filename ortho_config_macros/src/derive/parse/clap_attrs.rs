@@ -136,6 +136,8 @@ pub(crate) struct ClapDefaultValue {
     pub value: Expr,
     pub value_parser: Option<Expr>,
     pub value_enum: bool,
+    pub value_delimiter: Option<Expr>,
+    pub ignore_case: Option<Expr>,
     pub leaf_type: Type,
     pub shape: ClapDefaultValueShape,
 }
@@ -144,6 +146,8 @@ pub(crate) struct ClapDefaultValue {
 struct ClapDefaultHints {
     value_parser: Option<Expr>,
     value_enum: bool,
+    value_delimiter: Option<Expr>,
+    ignore_case: Option<Expr>,
 }
 
 #[derive(Clone, Copy)]
@@ -191,6 +195,8 @@ fn parse_default_expr(
             value: meta.value()?.parse::<Expr>()?,
             value_parser: None,
             value_enum: false,
+            value_delimiter: None,
+            ignore_case: None,
             leaf_type: syn::parse_quote! { () },
             shape: ClapDefaultValueShape::Scalar,
         })),
@@ -225,6 +231,14 @@ fn parse_default_from_meta(
     }
     if meta.path.is_ident("value_enum") {
         hints.value_enum = true;
+        return Ok(());
+    }
+    if meta.path.is_ident("value_delimiter") {
+        hints.value_delimiter = Some(meta.value()?.parse()?);
+        return Ok(());
+    }
+    if meta.path.is_ident("ignore_case") {
+        hints.ignore_case = Some(meta.value()?.parse()?);
         return Ok(());
     }
 
@@ -272,6 +286,8 @@ pub(crate) fn clap_default_value(field: &syn::Field) -> syn::Result<Option<ClapI
         })?;
         default.value_parser = hints.value_parser;
         default.value_enum = hints.value_enum;
+        default.value_delimiter = hints.value_delimiter;
+        default.ignore_case = hints.ignore_case;
         default.leaf_type = inferred_type.leaf;
         default.shape = inferred_type.shape;
     }

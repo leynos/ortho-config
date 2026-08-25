@@ -2,10 +2,11 @@
 
 ## Who should read this
 
-Read this guide when adopting source-aware environment merging or the Cargo
-external-subcommand helper. Existing callers can upgrade without changing their
-loading code: process-backed behaviour remains the default, and applications
-that do not provide Cargo external subcommands require no changes.
+Read this guide when adopting source-aware environment merging,
+parser-faithful clap string defaults, or the Cargo external-subcommand helper.
+Existing callers can upgrade without changing their loading code:
+process-backed behaviour remains the default, and applications that do not use
+the Cargo helper require no changes.
 
 ## Keep the default process behaviour
 
@@ -65,6 +66,58 @@ This injects the subcommand environment layer while retaining the existing
 command-line precedence. A clap-only argument type that does not derive
 `OrthoConfig` remains parse-only and does not support source-aware merge APIs.
 
+
+## Infer parser-faithful string defaults
+
+Enable `cli_default_as_absent` on a field whose clap default should remain
+below configuration-file and environment values:
+
+```rust
+#[derive(clap::Parser, serde::Deserialize, ortho_config::OrthoConfig)]
+struct Args {
+    #[arg(long, default_value = "8080")]
+    #[ortho_config(cli_default_as_absent)]
+    port: u16,
+}
+```
+
+When no explicit CLI value is supplied, the default is placed in the generated
+defaults layer. An explicit CLI value still wins according to the existing
+merge precedence. `default_value_t` and `default_values_t` keep their existing
+inference paths.
+
+String `default_value` is parsed by a synthetic clap argument using the same
+field parser metadata captured from the derive input. This preserves behaviour
+for:
+
+- scalar primitive and standard-library types;
+- `Option<T>` and `Vec<T>` fields;
+- `ValueEnum` fields; and
+- fields with a custom `#[arg(value_parser = ...)]` parser.
+
+Parser settings that affect the result, such as a value delimiter or
+case-insensitive enum parsing, are replayed with the generated argument. An
+explicit `#[ortho_config(default = ...)]` always takes precedence over an
+inferred clap default.
+
+
+## Review unsupported shapes and errors
+
+Nested `Option`/`Vec` wrappers and map fields are rejected at compile time when
+combined with inferred `default_value`, because their shape cannot be
+reconstructed faithfully by the generated loader. Use an explicit
+`#[ortho_config(default = ...)]` for those fields.
+
+If clap cannot parse a supported field's default, loading returns
+`OrthoError::DefaultValueConversion` through the normal accumulated error path.
+The generated code does not panic while resolving the default. Applications
+that inspect `OrthoError` should handle this variant alongside other load
+failures when they need field-specific diagnostics.
+
+No migration is required for fields using only typed defaults. For fields that
+duplicated a string default in both clap and `#[ortho_config(default = ...)]`,
+the duplicate can be removed after confirming that the field shape and parser
+are supported by this guide.
 ## Adopt the Cargo external-subcommand helper
 
 Cargo invokes `cargo <name>` by executing `cargo-<name>` with `<name>` injected
