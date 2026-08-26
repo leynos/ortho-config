@@ -12,6 +12,8 @@
   repository, including build, test, lint, release, and contribution workflows.
 - [Repository layout](repository-layout.md): understand where source code,
   tests, fixtures, generated artefacts, plans, and long-lived references live.
+- [Netsuke release-admission canary](netsuke-release-canary.md): review the
+  pinned v0.1.0 mixed-tool downstream canary and helper boundaries.
 
 ## Product and architecture
 

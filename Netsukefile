@@ -1,0 +1,29 @@
+netsuke_version: "1.0.0"
+
+actions:
+  - name: check-fmt
+    command: "cargo fmt --all -- --check"
+  - name: lint
+    command:
+      - "RUSTDOCFLAGS='-D warnings' cargo doc --workspace --no-deps"
+      - "cargo clippy --all-targets --all-features -- -D warnings"
+      - "RUSTFLAGS='-D warnings' whitaker --all -- --all-targets --all-features"
+  - name: lint-clippy
+    command:
+      - "RUSTDOCFLAGS='-D warnings' cargo doc --workspace --no-deps"
+      - "cargo clippy --all-targets --all-features -- -D warnings"
+  - name: test
+    command:
+      - "RUSTFLAGS='-D warnings' cargo test --all-targets --all-features"
+      - "uv run --python 3.13 --with-requirements scripts/requirements-test.txt --module pytest --doctest-modules scripts/bump_version.py scripts/tests -q"
+  - name: markdownlint
+    command: "markdownlint-cli2 '**/*.md'"
+  - name: generated-config
+    command: "uv run scripts/generate_typos_config.py && git diff --exit-code -- typos.toml"
+  - name: powershell-wrapper-validate
+    description: Validate generated wrapper output on a native Windows runner.
+    command: "pwsh -File scripts/validate_powershell_wrapper.ps1"
+
+defaults: [check-fmt, lint, test, markdownlint, generated-config]
+
+targets: []
