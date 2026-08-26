@@ -819,7 +819,8 @@ These are prerequisites rather than enhancements. Whole-CLI introspection
 command tree, yet three of the most common shapes in the clap vocabulary are
 currently unrepresentable. Every task in this phase is additive to the IR
 envelope and leaves existing `--format ir`, `--format man`, and `--format ps`
-output unchanged for command surfaces already covered.
+output unchanged for command surfaces already covered, apart from `ir_version`,
+which the minor bump in 12.2.1 changes.
 
 ### 12.1. Cover the clap variant vocabulary the docs derive rejects
 
@@ -890,16 +891,22 @@ cargo-orthohelp-design.md §2.2.
 - [ ] 12.2.1. Add positional metadata to the documentation IR and derive.
   - See cargo-orthohelp-design.md §2.2 and §12.
   - [ ] Add `CliMetadata.positional: Option<PositionalMetadata>` carrying
-    `index`, `variadic`, and `trailing`.
+    `index`, `variadic`, `var_arg`, and `last`.
   - [ ] Stop emitting `long` unconditionally; derive positional metadata from
-    `#[arg(index = …)]`, from the absence of `long` and `short`, and from
-    `trailing_var_arg` and `num_args` where clap exposes them.
+    `#[arg(index = …)]`, from the absence of `long` and `short`, from
+    `num_args` for `variadic`, from `Arg::trailing_var_arg` for `var_arg`, and
+    from `Arg::last` for `last`.
   - [ ] Bump the IR minor version and record the additive change in the design
     document's versioning section.
+  - [ ] Skip-serialize `CliMetadata.positional` when absent, using
+    `#[serde(skip_serializing_if = "Option::is_none")]` in both
+    hand-maintained copies of the type, `ortho_config/src/docs/ir.rs` and
+    `cargo-orthohelp/src/schema/mod.rs`, so flags-only IR omits the
+    `positional` key rather than emitting `null`.
   - [ ] Success: `git clone <url>` and `cp <src> <dst>` shapes round-trip
     through `--format ir` with correct indices, while a flags-only command
-    surface produces IR identical to the previous version apart from the
-    version string.
+    surface produces IR byte-identical to the previous version apart from the
+    version string, with no `positional` key emitted.
 
 - [ ] 12.2.2. Render positionals in man and PowerShell output.
   - Requires 12.2.1.
@@ -918,9 +925,9 @@ cargo-orthohelp-design.md §2.2.
     cargo-orthohelp-design.md §6.3.1.
   - [ ] Extend `AgentInput` with positional metadata and stop discarding
     flagless inputs that carry it.
-  - [ ] Keep discarding flagless, non-positional inputs; those are
-    configuration surface rather than invocation surface, and the existing
-    warning stays for that case.
+  - [ ] Keep discarding flagless, non-positional inputs; those are part of the
+    configuration surface rather than the invocation surface, and the
+    existing warning stays for that case.
   - [ ] Confirm the change is additive under the agent-context compatibility
     policy and update the frozen wire snapshot deliberately.
   - [ ] Success: an agent reading context for a `cp`-shaped command can
@@ -940,11 +947,20 @@ cargo-orthohelp-design.md §3.1.
   - See cargo-orthohelp-design.md §3.1.
   - [ ] Export `#[derive(OrthoConfigDocs)]` from `ortho_config_macros`, sharing
     the existing field-metadata pipeline rather than forking it.
+  - [ ] Add a docs-only mode to that pipeline which reads clap's declared
+    argument attributes — `long`, `short`, `index`, `value_name`, and the
+    positional settings — rather than synthesizing a kebab-cased long flag from
+    the field identifier in `resolve_cli_field`, and which never invents the
+    short flag that `resolve_short_flag` derives from the field name.
+  - [ ] Emit environment and file metadata only where explicitly declared,
+    replacing the unconditional `env: Some(..), file: Some(..)` that
+    `render_io_block` produces today.
   - [ ] Emit no runtime loaders, no `DeserializeOwned` bound assertion, and no
     merge machinery.
   - [ ] Success: a `#[derive(clap::Args)]` struct with required fields, no
     `Default`, and no `Deserialize` derives documentation metadata and appears
-    in generated IR.
+    in generated IR, and a field declared `#[arg(long = "endpoint")]` documents
+    that flag with no short flag and no environment or file source.
 
 - [ ] 12.3.2. Route `OrthoConfig` docs generation through the standalone path.
   - Requires 12.3.1.
@@ -996,10 +1012,12 @@ cargo-orthohelp-design.md §3.6 and §12.1.
   - [ ] Provide `DocMetadata::new`, `FieldMetadata::new`, `CliMetadata::flag`,
     `CliMetadata::positional`, `HeadingIds::defaults`, and equivalents for the
     remaining published types, with optional metadata applied through `with_*`
-    methods or field assignment.
-  - [ ] Stamp `ir_version` inside `DocMetadata::new` from
-    `ORTHO_DOCS_IR_VERSION` so no consumer writes the version by hand and none
-    can claim conformance to a schema version it has not implemented.
+    methods or field assignment; field assignment applies only to optional
+    metadata, never to `ir_version`.
+  - [ ] Make `DocMetadata.ir_version` a private field, initialized only by
+    `DocMetadata::new` from `ORTHO_DOCS_IR_VERSION` and exposed through a
+    read-only accessor, so no consumer writes the version by hand and none can
+    claim conformance to a schema version it has not implemented.
   - [ ] Keep `ORTHO_DOCS_IR_VERSION` public for comparison while documenting
     the constructor as the only supported way to populate the field.
   - [ ] Success: the derive and the `cargo-orthohelp` fixtures build IR through
@@ -1057,10 +1075,16 @@ cargo-orthohelp-design.md §12.2.
   - [ ] Add a frozen fixture representing a future payload, carrying unknown
     enum strings and unknown object fields on every type that promises
     tolerance.
-  - [ ] Assert that strict deserializers read it without error and that the
-    resulting values match the §8.1 defaulting table.
+  - [ ] Assert that tolerant types — those that promise forward compatibility,
+    such as `InteractionMode` and `MutationEffect`, which ship an `Unknown`
+    variant — accept the unknown fields and unknown enum values and resolve
+    them per the §8.1 defaulting table.
+  - [ ] Assert that closed types, such as `PolicyMode` (`Off | Warn | Deny`,
+    with no `Unknown` variant, by deliberate design for strict operator
+    input), reject unsupported input.
   - [ ] Success: the compatibility policy is enforced by a test rather than by
-    prose, so a future `deny_unknown_fields` or a missing fallback fails CI.
+    prose, so CI fails on a regression in either direction — a tolerant type
+    losing its fallback, or a closed type silently accepting unknown input.
 
 ### 13.3. Remove the heading-catalogue onboarding tax
 

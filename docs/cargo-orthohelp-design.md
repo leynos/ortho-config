@@ -44,10 +44,10 @@ of them widens what the pipeline can describe.
    documented field is a long flag. See §2.2.
 3. `OrthoConfigDocs` becomes independently derivable. Documenting a type must
    not require making it loadable from configuration layers. See §3.1.
-4. Public IR and agent-context types are `#[non_exhaustive]` and reachable
-   through constructors that stamp the schema version, so upstream can add
-   metadata without a breaking release and no consumer hand-writes
-   `ir_version`. See §3.6 and §12.
+4. Public IR and agent-context types become `#[non_exhaustive]` and reachable
+   through constructors that stamp the schema version, in one coordinated
+   breaking release; every subsequent optional metadata addition is then a
+   minor release, and no consumer hand-writes `ir_version`. See §3.6 and §12.
 5. Enums that carry an `Unknown` variant for forward compatibility wire that
    variant up as the unknown-value fallback, so a reader tolerates the payloads
    the compatibility policy already promises it will tolerate. See §12.
@@ -260,8 +260,10 @@ pub struct CliMetadata {
 #[derive(Debug, Serialize)]
 pub struct PositionalMetadata {
     pub index: u16,        // 1-based clap argument index
-    pub variadic: bool,    // accepts one or more trailing values
-    pub trailing: bool,    // captures everything after `--`
+    pub variadic: bool,    // accepts more than one value
+    pub var_arg: bool,     // clap `Arg::trailing_var_arg`: consumes the remaining arguments,
+                           // including hyphenated ones, without requiring `--`
+    pub last: bool,        // clap `Arg::last`: reachable only through `--`
 }
 
 #[derive(Debug, Serialize)]
@@ -275,6 +277,10 @@ pub struct FileMetadata {
 }
 ```
 
+`var_arg` and `last` model orthogonal clap settings and must not be conflated:
+a field may set either, both, or neither, and the generated syntax must
+represent whichever combination the field actually declares.
+
 A field is positional when `positional` is `Some`. Positional arguments are
 ordinary CLI surface — `git clone <url>` and `cp <src> <dst>` are the common
 shape — and they must be representable without special-casing. Three rules
@@ -282,12 +288,15 @@ follow:
 
 - `long` and `short` are both `None` for a positional argument. The derive must
   not emit a synthesized long flag to keep the field addressable.
-- Generators order positionals by `index` in SYNOPSIS output and in the
-  PowerShell `position` attribute, and they render `value_name` rather than a
-  flag spelling.
-- A field with CLI metadata, no flag spelling, and no `positional` entry is not
-  invocable from the command line. It is configuration surface exposed through
-  environment variables or files, and agent-facing output omits it.
+- Generators order positionals by `index` in SYNOPSIS output, and by
+  `index - 1` in the PowerShell `position` attribute, because clap `index` is
+  1-based while PowerShell `Position` is 0-based; they render `value_name`
+  rather than a flag spelling.
+- The agent-context contract emits a positional input only when `positional`
+  is `Some`, ordering emitted positional inputs by the positional metadata's
+  `index`. A field with CLI metadata, no flag spelling, and no `positional`
+  entry is configuration surface exposed through environment variables or files
+  rather than invocation surface, and agent-facing output omits it.
 
 Adding `positional` is an additive optional field: it bumps the IR minor
 version and leaves existing `ir`, `man`, and `ps` output unchanged for command
@@ -436,8 +445,12 @@ required fields, purely to obtain documentation.
 
 The standalone derive therefore:
 
-- emits the same `OrthoConfigDocs` implementation from the same field-metadata
-  pipeline as `#[derive(OrthoConfig)]`;
+- shares the `#[derive(OrthoConfig)]` field-metadata pipeline, but drives it
+  through a docs-only mode that reads clap's actual argument attributes —
+  `long`, `short`, `index`, `value_name`, and the positional settings — instead
+  of synthesizing a flag spelling from the field identifier, never invents a
+  short flag the type does not declare, and emits environment and file metadata
+  only where explicitly declared;
 - emits no runtime loaders, no `Deserialize` bound assertion, and no merge
   machinery;
 - applies to any `#[derive(clap::Args)]` or `#[derive(clap::Parser)]` struct,
