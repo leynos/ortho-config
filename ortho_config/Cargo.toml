@@ -63,7 +63,7 @@ rstest = "0.26.1"
 rstest-bdd.workspace = true
 rstest-bdd-macros.workspace = true
 insta = "1"
-serial_test = "3"
+serial_test = "4"
 tempfile = "3"
 test_helpers = { package = "ortho_config_test_helpers", path = "../test_helpers", version = "0.9.0" }
 anyhow = "1"
