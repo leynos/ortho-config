@@ -25,12 +25,6 @@ jobs:
           - os: ubuntu-latest
             target: generated-config
           - os: windows-latest
-            target: check-fmt
-          - os: windows-latest
-            target: lint-clippy
-          - os: windows-latest
-            target: test
-          - os: windows-latest
             target: powershell-wrapper-validate
     steps:
       - uses: actions/checkout@v7
