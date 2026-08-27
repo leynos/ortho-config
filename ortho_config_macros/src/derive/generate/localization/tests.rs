@@ -13,10 +13,94 @@ fn model_for(input: &syn::DeriveInput) -> Result<LocalizationIds> {
         .map_err(|err| anyhow!(err))
 }
 
+fn assert_only_visible_arg(input: &syn::DeriveInput, context: &str) -> Result<()> {
+    let model = model_for(input)?;
+    ensure!(
+        model.args.len() == 1,
+        "{context}: expected 1 arg model, got {}",
+        model.args.len()
+    );
+    let visible = model
+        .args
+        .first()
+        .ok_or_else(|| anyhow!("{context}: args length was checked above"))?;
+    ensure!(
+        visible.name.as_ref() == "visible",
+        "{context}: only the visible field should be in ARG_IDS"
+    );
+    Ok(())
+}
+
 fn expect_model_error(input: &syn::DeriveInput) -> String {
     model_for(input)
         .expect_err("model should reject this input")
         .to_string()
+}
+
+#[test]
+fn dotted_localization_base_normalizes_to_fluent_segments() -> Result<()> {
+    let base = LocalizationBase("Acme.CLI".to_owned());
+    let id = base
+        .normalize(proc_macro2::Span::call_site())?
+        .join(proc_macro2::Span::call_site())?;
+    ensure!(
+        id.as_ref() == "acme-cli",
+        "dotted localization base should normalise per segment: {}",
+        id.as_ref()
+    );
+    Ok(())
+}
+
+#[test]
+fn dotted_clap_arg_id_normalizes_to_fluent_segments() -> Result<()> {
+    let arg_id = ClapArgId("Kebab.TAIL".to_owned());
+    let id = arg_id
+        .normalize(proc_macro2::Span::call_site())?
+        .join(proc_macro2::Span::call_site())?;
+    ensure!(
+        id.as_ref() == "kebab-tail",
+        "dotted clap id should normalise per segment: {}",
+        id.as_ref()
+    );
+    Ok(())
+}
+
+#[test]
+fn message_suffixes_convert_to_their_fluent_segments() -> Result<()> {
+    ensure!(
+        String::from(MessageSuffix::LongAbout) == "long_about",
+        "long-about suffix conversion changed"
+    );
+    ensure!(
+        MessageSuffix::ValueName.as_ref() == "value_name",
+        "value-name suffix conversion changed"
+    );
+    Ok(())
+}
+
+#[test]
+fn domain_types_preserve_invalid_segment_and_root_diagnostics() -> Result<()> {
+    let invalid = LocalizationBase("acme..cli".to_owned())
+        .normalize(proc_macro2::Span::call_site())
+        .err()
+        .ok_or_else(|| anyhow!("empty localization-base segment must fail"))?;
+    ensure!(
+        invalid.to_string() == "invalid Fluent identifier segment: segment must not be empty",
+        "invalid segment diagnostic changed: {invalid}"
+    );
+
+    let segments = LocalizationBase("123".to_owned()).normalize(proc_macro2::Span::call_site())?;
+    let invalid_root = segments
+        .ensure_leading_ascii_letter(proc_macro2::Span::call_site())
+        .err()
+        .ok_or_else(|| anyhow!("numeric localization root must fail"))?;
+    ensure!(
+        invalid_root
+            .to_string()
+            .contains("Fluent identifier must start with an ASCII letter: \"123\""),
+        "non-letter root diagnostic changed: {invalid_root}"
+    );
+    Ok(())
 }
 
 #[test]
@@ -29,25 +113,29 @@ fn explicit_localization_base_is_used_verbatim() -> Result<()> {
     };
     let model = model_for(&input)?;
     ensure!(
-        model.base == "hello_world.cli",
+        model.base.as_ref() == "hello_world.cli",
         "base mismatch: {}",
-        model.base
+        model.base.as_ref()
     );
     ensure!(
-        model.command.about_id == "hello_world-cli-about",
+        model.command.about_id.as_ref() == "hello_world-cli-about",
         "about id mismatch: {}",
-        model.command.about_id
+        model.command.about_id.as_ref()
     );
     ensure!(model.args.len() == 1, "expected 1 arg model");
     let arg = model
         .args
         .first()
         .expect("args length was checked above: recipient");
-    ensure!(arg.name == "recipient", "arg name mismatch: {}", arg.name);
     ensure!(
-        arg.help_id == "hello_world-cli-args-recipient-help",
+        arg.name.as_ref() == "recipient",
+        "arg name mismatch: {}",
+        arg.name.as_ref()
+    );
+    ensure!(
+        arg.help_id.as_ref() == "hello_world-cli-args-recipient-help",
         "help id mismatch: {}",
-        arg.help_id
+        arg.help_id.as_ref()
     );
     Ok(())
 }
@@ -61,14 +149,14 @@ fn default_base_resolves_to_kebab_struct_name() -> Result<()> {
     };
     let model = model_for(&input)?;
     ensure!(
-        model.base == "app_config",
+        model.base.as_ref() == "app_config",
         "default base should be kebabed struct name, got {}",
-        model.base
+        model.base.as_ref()
     );
     ensure!(
-        model.command.about_id == "app_config-about",
+        model.command.about_id.as_ref() == "app_config-about",
         "about id mismatch: {}",
-        model.command.about_id
+        model.command.about_id.as_ref()
     );
     Ok(())
 }
@@ -85,21 +173,7 @@ fn subcommand_and_skip_cli_fields_are_excluded() -> Result<()> {
             visible: String,
         }
     };
-    let model = model_for(&input)?;
-    ensure!(
-        model.args.len() == 1,
-        "expected 1 arg model, got {}",
-        model.args.len()
-    );
-    let visible = model
-        .args
-        .first()
-        .expect("args length was checked above: visible");
-    ensure!(
-        visible.name == "visible",
-        "only the visible field should be in ARG_IDS"
-    );
-    Ok(())
+    assert_only_visible_arg(&input, "skip_cli and subcommand fields")
 }
 
 #[test]
@@ -112,21 +186,7 @@ fn flattened_fields_are_excluded() -> Result<()> {
             visible: String,
         }
     };
-    let model = model_for(&input)?;
-    ensure!(
-        model.args.len() == 1,
-        "expected 1 arg model, got {}",
-        model.args.len()
-    );
-    let visible = model
-        .args
-        .first()
-        .expect("args length was checked above: visible");
-    ensure!(
-        visible.name == "visible",
-        "flattened field must be excluded from ARG_IDS"
-    );
-    Ok(())
+    assert_only_visible_arg(&input, "flattened field")
 }
 
 #[test]
@@ -170,9 +230,9 @@ fn dotted_arg_id_is_normalised_per_segment() -> Result<()> {
     let model = model_for(&input)?;
     let arg = model.args.first().ok_or_else(|| anyhow!("missing arg"))?;
     ensure!(
-        arg.help_id == "acme-cli-args-kebab-tail-help",
+        arg.help_id.as_ref() == "acme-cli-args-kebab-tail-help",
         "dotted arg id must be normalised per segment: {}",
-        arg.help_id
+        arg.help_id.as_ref()
     );
     Ok(())
 }

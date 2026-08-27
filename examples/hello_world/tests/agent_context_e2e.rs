@@ -1,13 +1,12 @@
 //! End-to-end tests for the `hello_world context --json` surface.
 
-use assert_cmd::Command;
+use assert_cmd::{Command, cargo::cargo_bin_cmd};
 use ortho_config::serde_json::{self, Value};
 use rstest::{fixture, rstest};
 
 #[fixture]
 fn hello_world_command() -> Command {
-    #[expect(clippy::expect_used, reason = "test panics are acceptable")]
-    Command::cargo_bin("hello_world").expect("binary should exist")
+    cargo_bin_cmd!("hello_world")
 }
 
 #[rstest]
