@@ -1,5 +1,4 @@
 //! Scenario state structs and `rstest` fixture providers for the BDD scaffolding.
-
 use anyhow::Error;
 use clap::{Args, Parser, Subcommand};
 use ortho_config::{Localizer, MergeLayer, OrthoConfig, OrthoConfigSubcommandDocs};

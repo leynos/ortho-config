@@ -28,10 +28,6 @@ scenarios!(
 #[when("I run the hello world example with arguments {arguments}")]
 fn run_with_args(agent_context_state: &AgentContextState, arguments: String) -> Result<()> {
     let normalized_arguments = normalize_scalar(&arguments);
-    #[expect(
-        deprecated,
-        reason = "cargo_bin is the standard assert_cmd API in this test suite"
-    )]
     let mut command = AssertCommand::cargo_bin("hello_world")?;
     let args = shlex::split(&normalized_arguments).ok_or_else(|| {
         anyhow::anyhow!("failed to split scenario arguments: {normalized_arguments:?}")
