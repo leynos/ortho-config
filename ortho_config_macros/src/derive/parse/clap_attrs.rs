@@ -119,8 +119,8 @@ impl ClapFieldMarker {
     /// `#[clap(...)]`.
     const fn ident(self) -> &'static str {
         match self {
-            ClapFieldMarker::Subcommand => "subcommand",
-            ClapFieldMarker::Flatten => "flatten",
+            Self::Subcommand => "subcommand",
+            Self::Flatten => "flatten",
         }
     }
 }
