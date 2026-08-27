@@ -539,8 +539,8 @@ Progress entries from milestone 1 onward must carry timestamps.
   per tolerance 6 was needed, and ADR-008 records the confirmed chain order.
 - Observation (2026-08-09, milestone 1): the `markdownlint` gate embeds the
       `typos` spelling gate, whose first run over the milestone-1 diff flagged
-      `recognise` in this plan (Oxford spelling requires `-ize`). Evidence:
-      `make markdownlint` failed with `error: 'recognise' should be 'recognize'`
+      `recognize` in this plan (Oxford spelling requires `-ize`). Evidence:
+      `make markdownlint` failed with `error: 'recognize' should be 'recognize'`
       until the plan was reworded. Impact: subsequent docs commits must run
       `make spellcheck` (or the full `make markdownlint`) locally before
       review; the `typos.local.toml` inline-code exclusion remains pinned as a
