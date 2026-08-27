@@ -289,6 +289,29 @@ Keep richer fixture families isolated. For example, `NestedDocsConfig` and
 fixture-specific `tests/rstest_bdd/behaviour/steps/nested_docs_steps.rs` module
 rather than expanding unrelated step files.
 
+### Integration test targets
+
+`ortho_config` also carries plain `rstest` integration suites that are
+distinct from the behavioural (`rstest-bdd`) suites above. Each directory-style
+suite needs its own `[[test]]` stanza in `ortho_config/Cargo.toml`; a suite
+without a stanza is not compiled or run by Cargo:
+
+- `ortho_config/tests/subcommand/mod.rs` (cargo target `subcommand`) — tests
+  for subcommand configuration helpers, covering `basic`, `cli`, `merge`,
+  `nesting`, and `prefix` submodules. It shares `../util.rs` and
+  `../support/to_anyhow.rs` via `#[path]` includes.
+- `ortho_config/tests/clap_integration/mod.rs` (cargo target
+  `clap_integration`) — integration tests for CLI parsing across multiple
+  configuration sources, covering `common`, `config_path`, `error_cases`,
+  `option_cases`, `parsing`, and (on Unix and Redox only) `xdg`.
+
+Run either suite on its own for focused debugging:
+
+```bash
+cargo test -p ortho_config --test subcommand
+cargo test -p ortho_config --test clap_integration
+```
+
 ### Public documentation examples
 
 The root README and `docs/users-guide.md` are executable documentation. Every
@@ -729,4 +752,13 @@ For targeted behavioural debugging:
 ```bash
 cargo test -p ortho_config --tests
 cargo test -p hello_world --tests --all-features
+```
+
+For a single `ortho_config` integration target, for example the subcommand or
+clap-parsing suites described in
+[Integration test targets](#integration-test-targets):
+
+```bash
+cargo test -p ortho_config --test subcommand
+cargo test -p ortho_config --test clap_integration
 ```

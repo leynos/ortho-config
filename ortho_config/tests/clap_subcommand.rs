@@ -105,7 +105,7 @@ struct MergeCase {
 })]
 #[case::env_when_cli_none(MergeCase {
     setup: JailSetup {
-        file: None,
+        file: Some(OPTION_FROM_FILE),
         env: Some(("APP_CMDS_RUN_OPTION", "env")),
         clear_env: false,
     },

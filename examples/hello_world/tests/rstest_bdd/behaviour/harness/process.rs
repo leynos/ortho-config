@@ -141,6 +141,8 @@ fn handle_timeout(child: &mut Child) -> Result<ExitStatus> {
 
 #[cfg(test)]
 mod tests {
+    //! Tests for the `Harness` process helpers that spawn and supervise the
+    //! example binary, covering timeouts, spawn errors, and failure statuses.
     use super::*;
     use anyhow::Result;
     use camino::Utf8PathBuf;
