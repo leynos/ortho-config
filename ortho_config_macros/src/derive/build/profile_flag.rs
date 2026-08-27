@@ -117,6 +117,7 @@ mod tests {
     use crate::derive::build::build_cli_struct_fields;
     use crate::derive::parse::parse_input;
     use anyhow::{Result, anyhow, ensure};
+    use rstest::rstest;
 
     fn build(input: &syn::DeriveInput) -> Result<syn::Result<Option<proc_macro2::TokenStream>>> {
         let (_, fields, struct_attrs, field_attrs) =
@@ -177,70 +178,51 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    fn profile_field_name_collision_is_rejected() -> Result<()> {
-        let input: syn::DeriveInput = syn::parse_quote! {
+    #[rstest]
+    #[case::field_name(
+        syn::parse_quote! {
             #[ortho_config(profiles)]
             struct Demo { profile: Option<String> }
-        };
-        let err = build(&input)?.expect_err("collision must error");
-        ensure!(
-            err.to_string()
-                .contains("conflicts with user-defined field 'profile'"),
-            "unexpected error: {err}"
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn serialized_profile_key_collision_is_rejected() -> Result<()> {
-        let input: syn::DeriveInput = syn::parse_quote! {
+        },
+        "conflicts with user-defined field 'profile'"
+    )]
+    #[case::serialized_key(
+        syn::parse_quote! {
             #[ortho_config(profiles)]
             struct Demo {
                 #[serde(rename = "profile")]
                 selected_profile: Option<String>,
             }
-        };
-        let err = build(&input)?.expect_err("collision must error");
-        ensure!(
-            err.to_string()
-                .contains("conflicts with a field serialized as 'profile'"),
-            "unexpected error: {err}"
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn profile_long_flag_collision_is_rejected() -> Result<()> {
-        let input: syn::DeriveInput = syn::parse_quote! {
+        },
+        "conflicts with a field serialized as 'profile'"
+    )]
+    #[case::long_flag(
+        syn::parse_quote! {
             #[ortho_config(profiles)]
             struct Demo {
                 #[ortho_config(cli_long = "profile")]
                 thing: Option<String>,
             }
-        };
-        let err = build(&input)?.expect_err("collision must error");
-        ensure!(
-            err.to_string()
-                .contains("duplicate `cli_long` value 'profile'"),
-            "unexpected error: {err}"
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn profile_env_binding_collision_is_rejected() -> Result<()> {
-        let input: syn::DeriveInput = syn::parse_quote! {
+        },
+        "duplicate `cli_long` value 'profile'"
+    )]
+    #[case::environment_binding(
+        syn::parse_quote! {
             #[ortho_config(prefix = "APP_", profiles)]
             struct Demo {
                 #[arg(env = "APP_PROFILE")]
                 thing: Option<String>,
             }
-        };
+        },
+        "duplicate `env` value 'APP_PROFILE'"
+    )]
+    fn profile_collision_is_rejected(
+        #[case] input: syn::DeriveInput,
+        #[case] expected_error: &str,
+    ) -> anyhow::Result<()> {
         let err = build(&input)?.expect_err("collision must error");
         ensure!(
-            err.to_string()
-                .contains("duplicate `env` value 'APP_PROFILE'"),
+            err.to_string().contains(expected_error),
             "unexpected error: {err}"
         );
         Ok(())
