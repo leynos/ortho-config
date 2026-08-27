@@ -1,7 +1,7 @@
 //! BDD coverage for the `hello_world context` command.
 
 use anyhow::{Result, ensure};
-use assert_cmd::Command as AssertCommand;
+use assert_cmd::cargo::cargo_bin_cmd;
 use ortho_config::serde_json::{self, Value};
 use rstest::fixture;
 use rstest_bdd::Slot;
@@ -28,7 +28,7 @@ scenarios!(
 #[when("I run the hello world example with arguments {arguments}")]
 fn run_with_args(agent_context_state: &AgentContextState, arguments: String) -> Result<()> {
     let normalized_arguments = normalize_scalar(&arguments);
-    let mut command = AssertCommand::cargo_bin("hello_world")?;
+    let mut command = cargo_bin_cmd!("hello_world");
     let args = shlex::split(&normalized_arguments).ok_or_else(|| {
         anyhow::anyhow!("failed to split scenario arguments: {normalized_arguments:?}")
     })?;

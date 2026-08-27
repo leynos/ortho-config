@@ -2,7 +2,8 @@
 
 use super::super::parse_input;
 use crate::derive::parse::{
-    ClapInferredDefault, FieldAttrs, clap_field_is_subcommand, clap_variant_name,
+    ClapInferredDefault, FieldAttrs, clap_field_is_flattened, clap_field_is_subcommand,
+    clap_variant_name,
 };
 use anyhow::{Result, anyhow, ensure};
 use quote::ToTokens;
@@ -267,6 +268,38 @@ fn clap_field_is_subcommand_cases() -> Result<()> {
         ensure!(
             actual == *expected,
             "input `{tokens}`: expected subcommand={expected}, got {actual}",
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn clap_field_is_flattened_cases() -> Result<()> {
+    use proc_macro2::TokenStream;
+    use quote::quote;
+
+    let cases: &[(TokenStream, bool)] = &[
+        (
+            quote! { struct Cli { #[command(flatten)] common: CommonArgs, } },
+            true,
+        ),
+        (
+            quote! { struct Cli { #[clap(flatten)] common: CommonArgs, } },
+            true,
+        ),
+        (
+            quote! { struct Cli { #[command(flatten, help = "common")] common: CommonArgs, } },
+            true,
+        ),
+        (quote! { struct Cli { #[arg(long)] name: String, } }, false),
+    ];
+
+    for (tokens, expected) in cases {
+        let input: DeriveInput = syn::parse2(tokens.clone())?;
+        let actual = clap_field_is_flattened(first_field(&input)?)?;
+        ensure!(
+            actual == *expected,
+            "input `{tokens}`: expected flattened={expected}, got {actual}",
         );
     }
     Ok(())

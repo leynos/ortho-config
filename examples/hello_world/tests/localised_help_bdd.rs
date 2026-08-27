@@ -1,7 +1,7 @@
 //! BDD coverage for localised help rendering in the `hello_world` example.
 
 use anyhow::{Result, ensure};
-use assert_cmd::Command as AssertCommand;
+use assert_cmd::cargo::cargo_bin_cmd;
 use rstest::fixture;
 use rstest_bdd::Slot;
 use rstest_bdd_macros::{ScenarioState, given, scenarios, then, when};
@@ -41,7 +41,7 @@ fn render_long_help(help_state: &HelpState) -> Result<()> {
         .with_ref(Clone::clone)
         .unwrap_or_else(|| String::from("en_US.UTF-8"));
 
-    let mut command = AssertCommand::cargo_bin("hello_world")?;
+    let mut command = cargo_bin_cmd!("hello_world");
     command
         .env_remove("LC_ALL")
         .env_remove("LC_MESSAGES")
