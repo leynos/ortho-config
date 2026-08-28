@@ -33,9 +33,24 @@ pub const PROJECT_ROOT: &str = "/workspace";
 /// `/workspace` (the [`PROJECT_ROOT`] constant).
 ///
 /// # Examples
-/// ```
-/// let env = MapEnv::new().with_var(SELECTOR, "candidate");
-/// let discovery = discovery_with(env);
+///
+/// ```rust
+/// use std::path::PathBuf;
+///
+/// use ortho_config::MapEnv;
+///
+/// #[path = "support/discovery_builder.rs"]
+/// mod discovery_builder;
+/// use discovery_builder::{PROJECT_ROOT, SELECTOR, discovery_with};
+///
+/// let env = MapEnv::new().with_var(SELECTOR, "/srv/demo/config.toml");
+/// let candidates = discovery_with(env).candidates();
+///
+/// // The injected selector names the head of the list.
+/// assert_eq!(candidates[0], PathBuf::from("/srv/demo/config.toml"));
+/// // The sole project root is `PROJECT_ROOT`, not the caller's directory,
+/// // and contributes its dotfile to the tail of the list.
+/// assert!(candidates.contains(&PathBuf::from(PROJECT_ROOT).join(".demo.toml")));
 /// ```
 #[must_use]
 pub fn discovery_with(env: MapEnv) -> ConfigDiscovery {
