@@ -15,10 +15,14 @@
 
 use ortho_config::{ConfigDiscovery, MapEnv};
 
+#[path = "support/discovery_builder.rs"]
+mod discovery_builder;
+
 #[path = "support/tracing_capture.rs"]
 mod capture_support;
 
 use capture_support::{capture, only, write_fixture};
+use discovery_builder::discovery_with;
 use rstest::rstest;
 use std::path::Path;
 use std::sync::Arc;
@@ -26,20 +30,11 @@ use std::sync::Arc;
 /// The winning-rung cases for a successful `discovery.load`.
 ///
 /// Carried in a submodule of this suite rather than a suite of its own: they
-/// share `discovery_with` and the capture harness, and a second top-level test
-/// file would compile a second copy of both. The split is only to keep each
-/// file inside the repository's 400-line limit.
+/// share this suite's capture harness, and a second top-level test file would
+/// compile a second copy of it. The split is only to keep each file inside the
+/// repository's 400-line limit.
 #[path = "support/load_source.rs"]
 mod load_source;
-
-fn discovery_with(env: MapEnv) -> ConfigDiscovery {
-    ConfigDiscovery::builder("demo")
-        .env_var("DEMO_CONFIG")
-        .clear_project_roots()
-        .add_project_root(Path::new("/workspace"))
-        .env_source(Arc::new(env))
-        .build()
-}
 
 #[test]
 fn building_with_an_injected_source_is_reported() {

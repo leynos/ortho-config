@@ -3,6 +3,7 @@
 //! Provides BDD steps for setting environment variables, loading configuration
 //! using [`CsvEnv`], and verifying parsed results.
 
+use super::common::{SlotTakeOrExt, set_nonblank_scalar_once};
 use super::value_parsing::{normalize_scalar, parse_csv_values};
 use crate::scenario_state::{RulesConfig, RulesContext};
 use anyhow::{Context, Result, anyhow, ensure};
@@ -14,16 +15,7 @@ use test_helpers::figment as figment_helpers;
 #[given("the environment variable DDLINT_RULES is {value}")]
 fn set_env(rules_context: &RulesContext, value: String) -> Result<()> {
     let value = normalize_scalar(&value);
-    ensure!(
-        !value.trim().is_empty(),
-        "environment rule value must not be empty"
-    );
-    ensure!(
-        rules_context.env_value.is_empty(),
-        "environment rule value already initialised"
-    );
-    rules_context.env_value.set(value);
-    Ok(())
+    set_nonblank_scalar_once(&rules_context.env_value, value, "environment rule value")
 }
 
 /// Loads configuration solely from the `DDLINT_RULES` environment value.
@@ -47,8 +39,7 @@ fn load_config(rules_context: &RulesContext) -> Result<()> {
 fn check_rules(rules_context: &RulesContext, rules: String) -> Result<()> {
     let result = rules_context
         .result
-        .take()
-        .ok_or_else(|| anyhow!("configuration result unavailable"))?;
+        .take_or("configuration result unavailable")?;
     let cfg = result.context("failed to parse rules configuration")?;
     let want = parse_csv_values(&rules);
     ensure!(

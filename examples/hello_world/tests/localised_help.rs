@@ -1,4 +1,4 @@
-//! Snapshot tests for localised help output across different locales.
+//! Snapshot tests for localized help output across different locales.
 //!
 //! Uses `assert_cmd` to run the compiled binary with different `LANG`
 //! environment settings and `insta` to snapshot the `--help` output.
@@ -8,6 +8,7 @@ use clap::CommandFactory;
 use hello_world::cli::{CommandLine, LocalizeCmd};
 use hello_world::localizer::DemoLocalizer;
 use insta::assert_snapshot;
+use ortho_config::LanguageIdentifier;
 use ortho_config::NoOpLocalizer;
 use ortho_config::langid;
 use rstest::rstest;
@@ -148,20 +149,33 @@ fn normalise_rust_src_paths(output: &str) -> String {
 // Direct command-tree localization snapshots
 // =============================================================================
 
-#[test]
-fn command_tree_long_help_en_us() {
-    let localizer =
-        DemoLocalizer::try_for_locale(langid!("en-US")).expect("en-US demo localizer should build");
+/// Renders the localized command tree for `locale` and compares it with the
+/// snapshot recorded under `snapshot_name`.
+///
+/// `rstest` wraps a parameterised test in a module named after the test
+/// function, and insta would otherwise fold that module name into the
+/// generated snapshot file name. Suppressing the module prefix and passing the
+/// full historical name keeps the committed `.snap` files stable.
+fn assert_command_tree_snapshot(snapshot_name: &str, locale: LanguageIdentifier) {
+    let locale_name = locale.to_string();
+    let localizer = match DemoLocalizer::try_for_locale(locale) {
+        Ok(localizer) => localizer,
+        Err(error) => panic!("{locale_name} demo localizer should build: {error}"),
+    };
     let output = render_localized_long_help(&localizer);
-    assert_snapshot!("command_tree_long_help_en_us", output);
+    insta::with_settings!({prepend_module_to_snapshot => false}, {
+        assert_snapshot!(format!("localised_help__{snapshot_name}"), output);
+    });
 }
 
-#[test]
-fn command_tree_long_help_ja() {
-    let localizer =
-        DemoLocalizer::try_for_locale(langid!("ja")).expect("ja demo localizer should build");
-    let output = render_localized_long_help(&localizer);
-    assert_snapshot!("command_tree_long_help_ja", output);
+#[rstest]
+#[case::en_us("command_tree_long_help_en_us", langid!("en-US"))]
+#[case::ja("command_tree_long_help_ja", langid!("ja"))]
+fn command_tree_long_help_matches_locale_snapshot(
+    #[case] snapshot_name: &str,
+    #[case] locale: LanguageIdentifier,
+) {
+    assert_command_tree_snapshot(snapshot_name, locale);
 }
 
 #[test]
@@ -220,24 +234,6 @@ fn help_en_us() {
     assert_snapshot!(output);
 }
 
-#[test]
-fn greet_help_en_us() {
-    let output = run_with_locale("en_US.UTF-8", &["greet", "--help"]);
-    assert_snapshot!(output);
-}
-
-#[test]
-fn take_leave_help_en_us() {
-    let output = run_with_locale("en_US.UTF-8", &["take-leave", "--help"]);
-    assert_snapshot!(output);
-}
-
-#[test]
-fn missing_subcommand_error_en_us() {
-    let output = run_with_locale("en_US.UTF-8", &[]);
-    assert_snapshot!(output);
-}
-
 // =============================================================================
 // Japanese (ja) help output tests
 // =============================================================================
@@ -250,22 +246,49 @@ fn help_ja() {
     assert_snapshot!(output);
 }
 
-#[test]
-fn greet_help_ja() {
-    let output = run_with_locale("ja_JP.UTF-8", &["greet", "--help"]);
-    assert_snapshot!(output);
+// =============================================================================
+// Per-subcommand help snapshots across locales
+// =============================================================================
+
+/// Runs the binary under `locale` and compares the output with the snapshot
+/// recorded under `snapshot_name`.
+///
+/// `rstest` wraps a parameterised test in a module named after the test
+/// function, and insta would otherwise fold that module name into the
+/// generated snapshot file name. Suppressing the module prefix and passing the
+/// full historical name keeps the committed `.snap` files stable.
+fn assert_locale_help_snapshot(snapshot_name: &str, locale: &str, args: &[&str]) {
+    let output = run_with_locale(locale, args);
+    insta::with_settings!({prepend_module_to_snapshot => false}, {
+        assert_snapshot!(format!("localised_help__{snapshot_name}"), output);
+    });
 }
 
-#[test]
-fn take_leave_help_ja() {
-    let output = run_with_locale("ja_JP.UTF-8", &["take-leave", "--help"]);
-    assert_snapshot!(output);
-}
-
-#[test]
-fn missing_subcommand_error_ja() {
-    let output = run_with_locale("ja_JP.UTF-8", &[]);
-    assert_snapshot!(output);
+#[rstest]
+#[case::greet_help_en_us("greet_help_en_us", "en_US.UTF-8", &["greet", "--help"])]
+#[case::take_leave_help_en_us(
+    "take_leave_help_en_us",
+    "en_US.UTF-8",
+    &["take-leave", "--help"]
+)]
+#[case::missing_subcommand_error_en_us(
+    "missing_subcommand_error_en_us",
+    "en_US.UTF-8",
+    &[] as &[&str]
+)]
+#[case::greet_help_ja("greet_help_ja", "ja_JP.UTF-8", &["greet", "--help"])]
+#[case::take_leave_help_ja("take_leave_help_ja", "ja_JP.UTF-8", &["take-leave", "--help"])]
+#[case::missing_subcommand_error_ja(
+    "missing_subcommand_error_ja",
+    "ja_JP.UTF-8",
+    &[] as &[&str]
+)]
+fn subcommand_help_matches_locale_snapshot(
+    #[case] snapshot_name: &str,
+    #[case] locale: &str,
+    #[case] args: &[&str],
+) {
+    assert_locale_help_snapshot(snapshot_name, locale, args);
 }
 
 // =============================================================================
@@ -296,23 +319,15 @@ fn fallback_to_english_for_unknown_locale() {
     );
 }
 
-#[test]
-fn c_locale_uses_english() {
-    // C locale should be treated as English
-    let output = run_with_locale("C", &["--help"]);
+/// The `C` and `POSIX` locales should both be treated as English.
+#[rstest]
+#[case::c_locale("C")]
+#[case::posix_locale("POSIX")]
+fn portable_locale_uses_english(#[case] locale: &str) {
+    let output = run_with_locale(locale, &["--help"]);
     assert!(
         output.contains("layered greetings"),
-        "expected English text for C locale: {output}"
-    );
-}
-
-#[test]
-fn posix_locale_uses_english() {
-    // POSIX locale should be treated as English
-    let output = run_with_locale("POSIX", &["--help"]);
-    assert!(
-        output.contains("layered greetings"),
-        "expected English text for POSIX locale: {output}"
+        "expected English text for {locale} locale: {output}"
     );
 }
 
@@ -334,39 +349,34 @@ fn assert_locale_precedence(
     );
 }
 
-#[test]
-fn lc_all_takes_precedence_over_lang() {
-    // LC_ALL should override LANG
-    // Output should be Japanese (from LC_ALL) even though LANG is en_US
-    assert_locale_precedence(
-        &[("LC_ALL", "ja_JP.UTF-8"), ("LANG", "en_US.UTF-8")],
-        "挨拶",
-        "expected Japanese text when LC_ALL=ja",
-    );
-}
-
-#[test]
-fn lc_messages_takes_precedence_over_lang() {
-    // LC_MESSAGES should override LANG (when LC_ALL is not set)
-    // Output should be Japanese (from LC_MESSAGES) even though LANG is en_US
-    assert_locale_precedence(
-        &[("LC_MESSAGES", "ja_JP.UTF-8"), ("LANG", "en_US.UTF-8")],
-        "挨拶",
-        "expected Japanese text when LC_MESSAGES=ja",
-    );
-}
-
-#[test]
-fn lc_all_takes_precedence_over_lc_messages() {
-    // LC_ALL should override both LC_MESSAGES and LANG
-    // Output should be English (from LC_ALL) even though LC_MESSAGES and LANG are Japanese
-    assert_locale_precedence(
-        &[
-            ("LC_ALL", "en_US.UTF-8"),
-            ("LC_MESSAGES", "ja_JP.UTF-8"),
-            ("LANG", "ja_JP.UTF-8"),
-        ],
-        "layered greetings",
-        "expected English text when LC_ALL=en",
-    );
+/// `LC_ALL` outranks `LC_MESSAGES`, which in turn outranks `LANG`.
+#[rstest]
+// Output should be Japanese (from LC_ALL) even though LANG is en_US.
+#[case::lc_all_over_lang(
+    &[("LC_ALL", "ja_JP.UTF-8"), ("LANG", "en_US.UTF-8")],
+    "挨拶",
+    "expected Japanese text when LC_ALL=ja"
+)]
+// LC_MESSAGES should override LANG when LC_ALL is not set.
+#[case::lc_messages_over_lang(
+    &[("LC_MESSAGES", "ja_JP.UTF-8"), ("LANG", "en_US.UTF-8")],
+    "挨拶",
+    "expected Japanese text when LC_MESSAGES=ja"
+)]
+// LC_ALL should override both LC_MESSAGES and LANG.
+#[case::lc_all_over_lc_messages(
+    &[
+        ("LC_ALL", "en_US.UTF-8"),
+        ("LC_MESSAGES", "ja_JP.UTF-8"),
+        ("LANG", "ja_JP.UTF-8"),
+    ],
+    "layered greetings",
+    "expected English text when LC_ALL=en"
+)]
+fn locale_env_vars_follow_precedence(
+    #[case] env_vars: &[(&str, &str)],
+    #[case] expected_substring: &str,
+    #[case] description: &str,
+) {
+    assert_locale_precedence(env_vars, expected_substring, description);
 }

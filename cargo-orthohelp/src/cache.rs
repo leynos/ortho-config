@@ -194,8 +194,12 @@ mod tests {
 
     use super::*;
     use cap_std::fs_utf8::OpenOptions;
-    use rstest::rstest;
+    use rstest::{fixture, rstest};
     use std::io::Write;
+
+    /// Error type for cache test helpers; kept generic since these helpers
+    /// only surface diagnostics for test failures, not production callers.
+    type CacheTestError = Box<dyn std::error::Error>;
 
     /// Well-known SHA-256 digest of `b"abc"`. Pinning a canonical vector keeps
     /// the digest rendering honest: a self-consistent but wrongly ordered or
@@ -203,41 +207,62 @@ mod tests {
     const ABC_SHA256: &str = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
 
     #[rstest]
-    fn fingerprint_changes_on_file_update() {
-        let (_tempdir, root, dir) = temp_root();
-        dir.create_dir_all("src").expect("create src directory");
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Assertions report fingerprint mismatches more clearly than errors"
+    )]
+    fn fingerprint_changes_on_file_update(
+        temp_root: Result<(tempfile::TempDir, Utf8PathBuf, Dir), CacheTestError>,
+    ) -> Result<(), CacheTestError> {
+        let (_tempdir, root, dir) = temp_root?;
+        dir.create_dir_all("src")?;
 
-        write_file(&dir, "Cargo.toml", "[package]\nname = \"demo\"\n");
-        write_file(&dir, "src/lib.rs", "pub fn demo() -> u32 { 1 }\n");
+        write_file(&dir, "Cargo.toml", "[package]\nname = \"demo\"\n")?;
+        write_file(&dir, "src/lib.rs", "pub fn demo() -> u32 { 1 }\n")?;
 
-        let first = fingerprint_package(&root).expect("fingerprint");
-        write_file(&dir, "src/lib.rs", "pub fn demo() -> u32 { 2 }\n");
-        let second = fingerprint_package(&root).expect("fingerprint after update");
+        let first = fingerprint_package(&root)?;
+        write_file(&dir, "src/lib.rs", "pub fn demo() -> u32 { 2 }\n")?;
+        let second = fingerprint_package(&root)?;
 
         assert_ne!(first, second, "fingerprint should change when files change");
         assert!(
             is_sha256_hex(&first),
             "package fingerprint should render as lowercase hex: {first}"
         );
+        Ok(())
     }
 
     #[rstest]
-    fn lockfile_fingerprint_matches_known_digest_vector() {
-        let (_tempdir, root, dir) = temp_root();
-        write_file(&dir, "Cargo.lock", "abc");
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Assertions report fingerprint mismatches more clearly than errors"
+    )]
+    fn lockfile_fingerprint_matches_known_digest_vector(
+        temp_root: Result<(tempfile::TempDir, Utf8PathBuf, Dir), CacheTestError>,
+    ) -> Result<(), CacheTestError> {
+        let (_tempdir, root, dir) = temp_root?;
+        write_file(&dir, "Cargo.lock", "abc")?;
 
-        let fingerprint = lockfile_fingerprint(&root).expect("fingerprint lockfile");
+        let fingerprint = lockfile_fingerprint(&root)?;
 
         assert_eq!(fingerprint.as_deref(), Some(ABC_SHA256));
+        Ok(())
     }
 
     #[rstest]
-    fn lockfile_fingerprint_is_absent_without_a_lockfile() {
-        let (_tempdir, root, _dir) = temp_root();
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Assertions report fingerprint mismatches more clearly than errors"
+    )]
+    fn lockfile_fingerprint_is_absent_without_a_lockfile(
+        temp_root: Result<(tempfile::TempDir, Utf8PathBuf, Dir), CacheTestError>,
+    ) -> Result<(), CacheTestError> {
+        let (_tempdir, root, _dir) = temp_root?;
 
-        let fingerprint = lockfile_fingerprint(&root).expect("fingerprint missing lockfile");
+        let fingerprint = lockfile_fingerprint(&root)?;
 
         assert_eq!(fingerprint, None, "absent lockfile should not fingerprint");
+        Ok(())
     }
 
     #[rstest]
@@ -285,33 +310,21 @@ mod tests {
                 .all(|digit| digit.is_ascii_digit() || (b'a'..=b'f').contains(&digit))
     }
 
-    fn temp_root() -> (tempfile::TempDir, Utf8PathBuf, Dir) {
-        let tempdir = match tempfile::tempdir() {
-            Ok(tempdir) => tempdir,
-            Err(err) => panic!("create temp dir: {err}"),
-        };
-        let root = match Utf8PathBuf::from_path_buf(tempdir.path().to_path_buf()) {
-            Ok(root) => root,
-            Err(path) => panic!("tempdir path is not UTF-8: {}", path.display()),
-        };
-        let dir = match Dir::open_ambient_dir(&root, ambient_authority()) {
-            Ok(dir) => dir,
-            Err(err) => panic!("open temp dir {root}: {err}"),
-        };
-        (tempdir, root, dir)
+    #[fixture]
+    fn temp_root() -> Result<(tempfile::TempDir, Utf8PathBuf, Dir), CacheTestError> {
+        let tempdir = tempfile::tempdir()?;
+        let root = Utf8PathBuf::from_path_buf(tempdir.path().to_path_buf())
+            .map_err(|path| format!("tempdir path is not UTF-8: {}", path.display()))?;
+        let dir = Dir::open_ambient_dir(&root, ambient_authority())?;
+        Ok((tempdir, root, dir))
     }
 
-    fn write_file(dir: &Dir, path: &str, contents: &str) {
-        let opened = dir.open_with(
+    fn write_file(dir: &Dir, path: &str, contents: &str) -> Result<(), CacheTestError> {
+        let mut file = dir.open_with(
             path,
             OpenOptions::new().write(true).create(true).truncate(true),
-        );
-        let mut file = match opened {
-            Ok(file) => file,
-            Err(err) => panic!("open file {path}: {err}"),
-        };
-        if let Err(err) = file.write_all(contents.as_bytes()) {
-            panic!("write file {path}: {err}");
-        }
+        )?;
+        file.write_all(contents.as_bytes())?;
+        Ok(())
     }
 }

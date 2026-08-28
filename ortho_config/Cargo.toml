@@ -81,3 +81,11 @@ test = true
 [[test]]
 name = "rstest_bdd"
 path = "tests/rstest_bdd/mod.rs"
+
+[[test]]
+name = "subcommand"
+path = "tests/subcommand/mod.rs"
+
+[[test]]
+name = "clap_integration"
+path = "tests/clap_integration/mod.rs"

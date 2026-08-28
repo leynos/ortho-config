@@ -4,6 +4,7 @@
 pub mod cli_default_as_absent_steps;
 pub mod cli_steps;
 pub mod collection_steps;
+mod common;
 pub mod config_path_steps;
 pub mod docs_steps;
 pub mod env_steps;

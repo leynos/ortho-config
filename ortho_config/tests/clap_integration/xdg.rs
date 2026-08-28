@@ -1,7 +1,7 @@
 //! XDG configuration discovery tests (Unix platforms only).
 
-use super::common::{assert_config_values, with_jail, OrthoResultExt, TestConfig};
-use anyhow::{anyhow, Result};
+use super::common::{OrthoConfig, TestConfig, ToAnyhow, assert_config_values, with_jail};
+use anyhow::{Result, anyhow};
 
 fn run_xdg_case(file_name: &str, contents: &str) -> Result<TestConfig> {
     with_jail(|j| {
@@ -10,7 +10,7 @@ fn run_xdg_case(file_name: &str, contents: &str) -> Result<TestConfig> {
         j.create_file(dir.join(file_name), contents)?;
         let dir_value = abs
             .to_str()
-            .ok_or_else(|| anyhow!("canonical path is not valid UTF-8: {:?}", abs))?
+            .ok_or_else(|| anyhow!("canonical path is not valid UTF-8: {}", abs.display()))?
             .to_owned();
         j.set_env("XDG_CONFIG_HOME", &dir_value);
         TestConfig::load_from_iter(["prog"]).to_anyhow()
@@ -19,10 +19,7 @@ fn run_xdg_case(file_name: &str, contents: &str) -> Result<TestConfig> {
 
 #[test]
 fn loads_from_xdg_config() -> Result<()> {
-    let cfg = run_xdg_case(
-        "config.toml",
-        "sample_value = \"xdg\"\nother = \"val\"",
-    )?;
+    let cfg = run_xdg_case("config.toml", "sample_value = \"xdg\"\nother = \"val\"")?;
     assert_config_values(&cfg, Some("xdg"), Some("val"))
 }
 

@@ -141,6 +141,8 @@ fn handle_timeout(child: &mut Child) -> Result<ExitStatus> {
 
 #[cfg(test)]
 mod tests {
+    //! Tests for the `Harness` process helpers that spawn and supervise the
+    //! example binary, covering timeouts, spawn errors, and failure statuses.
     use super::*;
     use anyhow::Result;
     use camino::Utf8PathBuf;
@@ -153,10 +155,15 @@ mod tests {
     }
 
     impl CompiledBinary {
-        fn new(source: &str) -> Self {
-            let dir = TempDir::new().expect("create test binary dir");
+        /// Compiles `source` into a throwaway binary, reporting setup failures
+        /// to the caller rather than panicking.
+        fn try_new(source: &str) -> Result<Self> {
+            let dir = TempDir::new().context("create test binary dir")?;
             let src_path = dir.path().join("main.rs");
-            std::fs::write(&src_path, source).expect("write test binary source");
+            cap_std::fs::Dir::open_ambient_dir(dir.path(), cap_std::ambient_authority())
+                .context("open test binary dir")?
+                .write("main.rs", source)
+                .context("write test binary source")?;
             let bin_path = dir.path().join("bin");
             let status = Command::new("rustc")
                 .arg("--edition=2021")
@@ -164,13 +171,18 @@ mod tests {
                 .arg("-o")
                 .arg(&bin_path)
                 .status()
-                .expect("compile test binary");
-            assert!(status.success(), "rustc must compile helper binary");
-            let utf8_path = Utf8PathBuf::from_path_buf(bin_path).expect("utf8 test binary");
-            Self {
+                .context("compile test binary")?;
+            if !status.success() {
+                return Err(anyhow!(
+                    "rustc must compile helper binary; exited with {status}"
+                ));
+            }
+            let utf8_path = Utf8PathBuf::from_path_buf(bin_path)
+                .map_err(|path| anyhow!("test binary path is not valid UTF-8: {path:?}"))?;
+            Ok(Self {
                 _dir: dir,
                 path: utf8_path,
-            }
+            })
         }
 
         fn path(&self) -> Utf8PathBuf {
@@ -195,13 +207,13 @@ mod tests {
         if !ensure_rustc_available() {
             return Ok(());
         }
-        let binary = CompiledBinary::new(
+        let binary = CompiledBinary::try_new(
             r"
             fn main() {
                 std::thread::sleep(std::time::Duration::from_secs(2));
             }
             ",
-        );
+        )?;
         let mut harness = Harness::for_tests()?;
         harness.set_binary_override(binary.path());
         harness.set_timeout_override(Duration::from_millis(50));
@@ -237,14 +249,14 @@ mod tests {
         if !ensure_rustc_available() {
             return Ok(());
         }
-        let binary = CompiledBinary::new(
+        let binary = CompiledBinary::try_new(
             r#"
             fn main() {
                 eprintln!("forced failure");
                 std::process::exit(42);
             }
             "#,
-        );
+        )?;
         let mut harness = Harness::for_tests()?;
         harness.set_binary_override(binary.path());
         harness.run_example(Vec::new())?;

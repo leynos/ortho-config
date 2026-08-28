@@ -1,5 +1,6 @@
 //! Steps for testing configuration inheritance.
 
+use super::common::SlotTakeOrExt;
 use crate::scenario_state::{ExtendsContext, ReplaceRulesConfig, RulesConfig};
 use anyhow::{Result, anyhow, ensure};
 use ortho_config::{OrthoConfig, OrthoResult};
@@ -221,8 +222,7 @@ fn load_non_string(extends_context: &ExtendsContext) -> Result<()> {
 fn error_occurs(extends_context: &ExtendsContext) -> Result<()> {
     let result = extends_context
         .result
-        .take()
-        .ok_or_else(|| anyhow!("configuration result unavailable"))?;
+        .take_or("configuration result unavailable")?;
     ensure!(result.is_err(), "expected configuration to fail");
     Ok(())
 }

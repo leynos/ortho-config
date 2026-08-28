@@ -1,8 +1,9 @@
 //! Steps demonstrating a renamed configuration path flag.
 
+use super::common::{SlotTakeOrExt, set_nonblank_scalar_once};
 use super::value_parsing::{is_cli_parsing_error, normalize_scalar};
 use crate::scenario_state::{RulesConfig, RulesContext};
-use anyhow::{Result, anyhow, ensure};
+use anyhow::{Result, anyhow};
 use ortho_config::OrthoConfig;
 use rstest_bdd_macros::{given, then, when};
 use test_helpers::figment as figment_helpers;
@@ -10,16 +11,7 @@ use test_helpers::figment as figment_helpers;
 #[given("an alternate config file with rule {value}")]
 fn alt_config_file(rules_context: &RulesContext, value: String) -> Result<()> {
     let value = normalize_scalar(&value);
-    ensure!(
-        !value.trim().is_empty(),
-        "alternate config rule must not be empty"
-    );
-    ensure!(
-        rules_context.file_value.is_empty(),
-        "alternate config file already initialised"
-    );
-    rules_context.file_value.set(value);
-    Ok(())
+    set_nonblank_scalar_once(&rules_context.file_value, value, "alternate config rule")
 }
 
 #[when("the config is loaded with custom flag \"{flag}\" \"{path}\"")]
@@ -28,8 +20,7 @@ fn load_with_custom_flag(rules_context: &RulesContext, flag: String, path: Strin
     let path = normalize_scalar(&path);
     let file_val = rules_context
         .file_value
-        .take()
-        .ok_or_else(|| anyhow!("alternate config file value not provided"))?;
+        .take_or("alternate config file value not provided")?;
     let config_result = figment_helpers::with_jail(|j| {
         j.create_file(&path, &format!("rules = [\"{file_val}\"]"))?;
         let args = ["prog", flag.as_str(), path.as_str()];
@@ -43,8 +34,7 @@ fn load_with_custom_flag(rules_context: &RulesContext, flag: String, path: Strin
 fn cli_error(rules_context: &RulesContext) -> Result<()> {
     let result = rules_context
         .result
-        .take()
-        .ok_or_else(|| anyhow!("configuration result unavailable"))?;
+        .take_or("configuration result unavailable")?;
     match result {
         Ok(_) => Err(anyhow!(
             "expected CLI parsing error but configuration succeeded"

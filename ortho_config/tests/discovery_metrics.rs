@@ -8,20 +8,14 @@
 
 #![cfg(feature = "metrics")]
 
-use ortho_config::{ConfigDiscovery, MapEnv};
-use std::path::Path;
-use std::sync::Arc;
+use ortho_config::MapEnv;
 
-/// Mirror of `discovery_telemetry.rs`'s builder: the same shape keeps the
-/// counter expectations comparable across the two suites.
-fn discovery_with(env: MapEnv) -> ConfigDiscovery {
-    ConfigDiscovery::builder("demo")
-        .env_var("DEMO_CONFIG")
-        .clear_project_roots()
-        .add_project_root(Path::new("/workspace"))
-        .env_source(Arc::new(env))
-        .build()
-}
+// The builder is shared with `discovery_telemetry.rs` and the injected-source
+// suites: the same shape keeps the counter expectations comparable across them.
+#[path = "support/discovery_builder.rs"]
+mod discovery_builder;
+
+use discovery_builder::discovery_with;
 use metrics_util::debugging::{DebugValue, DebuggingRecorder, Snapshot};
 
 /// Count one counter, restricted to a single label.

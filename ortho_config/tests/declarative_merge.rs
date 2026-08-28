@@ -11,6 +11,10 @@ use rstest::{fixture, rstest};
 use serde::Deserialize;
 use serde_json::json;
 
+#[path = "support/to_anyhow.rs"]
+mod to_anyhow;
+use to_anyhow::ToAnyhow as _;
+
 #[derive(Debug, Deserialize, OrthoConfig)]
 struct DeclarativeSample {
     name: String,
@@ -179,7 +183,7 @@ fn merge_layers_respect_precedence_permutations(
         composer.push_cli(cli_value);
     }
 
-    let config = to_anyhow(DeclarativeSample::merge_from_layers(composer.layers()))?;
+    let config = DeclarativeSample::merge_from_layers(composer.layers()).to_anyhow()?;
     ensure!(
         config.name.as_str() == expected.name,
         "scenario {label} expected name {} but observed {}",
@@ -201,13 +205,6 @@ fn merge_layers_respect_precedence_permutations(
     Ok(())
 }
 
-fn to_anyhow<T, E>(result: Result<T, E>) -> anyhow::Result<T>
-where
-    E: std::error::Error + Send + Sync + 'static,
-{
-    result.map_err(anyhow::Error::new)
-}
-
 #[rstest]
 #[case::cli_overrides(json!({"name": "default", "count": 1, "flag": false }), json!({}), json!({"count": 5}), 5)]
 #[case::env_over_defaults(json!({"name": "default", "count": 1, "flag": false }), json!({"count": 3}), json!({}), 3)]
@@ -218,7 +215,7 @@ fn merge_layers_respect_precedence(
     #[case] expected_count: u32,
 ) -> Result<()> {
     let layers = compose_layers(defaults, environment, Some(cli));
-    let config = to_anyhow(DeclarativeSample::merge_from_layers(layers))?;
+    let config = DeclarativeSample::merge_from_layers(layers).to_anyhow()?;
     ensure!(
         config.count == expected_count,
         "expected {expected_count}, got {}",
@@ -295,7 +292,7 @@ fn merge_layers_append_vectors() -> Result<()> {
         json!({ "values": ["env"] }),
         Some(json!({ "values": ["cli"] })),
     );
-    let config = to_anyhow(AppendSample::merge_from_layers(layers))?;
+    let config = AppendSample::merge_from_layers(layers).to_anyhow()?;
     let expected = vec![
         String::from("default"),
         String::from("env"),
@@ -313,7 +310,7 @@ fn merge_layers_append_vectors() -> Result<()> {
 #[rstest]
 fn merge_layers_respect_option_nulls() -> Result<()> {
     let layers = compose_layers(json!({ "flag": "present" }), json!({ "flag": null }), None);
-    let config = to_anyhow(OptionalSample::merge_from_layers(layers))?;
+    let config = OptionalSample::merge_from_layers(layers).to_anyhow()?;
     ensure!(
         config.flag.is_none(),
         "expected flag to be None, got {:?}",
@@ -329,7 +326,7 @@ fn merge_from_layers_accepts_file_layers() -> Result<()> {
         json!({ "name": "from_file", "count": 7, "flag": true }),
         Some(Utf8PathBuf::from("config.json")),
     );
-    let config = to_anyhow(DeclarativeSample::merge_from_layers(composer.layers()))?;
+    let config = DeclarativeSample::merge_from_layers(composer.layers()).to_anyhow()?;
     ensure!(
         config.name == "from_file",
         "expected name from_file, got {}",

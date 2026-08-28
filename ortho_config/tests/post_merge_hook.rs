@@ -11,6 +11,10 @@ use rstest::rstest;
 use serde::Deserialize;
 use serde_json::json;
 
+#[path = "support/to_anyhow.rs"]
+mod to_anyhow;
+use to_anyhow::ToAnyhow as _;
+
 /// Sample config with a post-merge hook that normalizes empty strings to None.
 #[derive(Debug, Deserialize, OrthoConfig)]
 #[ortho_config(prefix = "HOOK_TEST_", post_merge_hook)]
@@ -58,19 +62,12 @@ impl PostMergeHook for ContextAwareSample {
     }
 }
 
-fn to_anyhow<T, E>(result: Result<T, E>) -> anyhow::Result<T>
-where
-    E: std::error::Error + Send + Sync + 'static,
-{
-    result.map_err(anyhow::Error::new)
-}
-
 fn merge_hook_sample(composer: MergeComposer) -> Result<HookSample> {
-    to_anyhow(HookSample::merge_from_layers(composer.layers()))
+    HookSample::merge_from_layers(composer.layers()).to_anyhow()
 }
 
 fn merge_context_aware_sample(composer: MergeComposer) -> Result<ContextAwareSample> {
-    to_anyhow(ContextAwareSample::merge_from_layers(composer.layers()))
+    ContextAwareSample::merge_from_layers(composer.layers()).to_anyhow()
 }
 
 #[rstest]
