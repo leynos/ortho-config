@@ -455,6 +455,9 @@ The standalone derive therefore:
   machinery;
 - applies to any `#[derive(clap::Args)]` or `#[derive(clap::Parser)]` struct,
   including one with required fields and no `Default`;
+- detects `#[command(subcommand)]` fields, excludes the selector from ordinary
+  field metadata, and delegates it to `OrthoConfigSubcommandDocs`, preserving
+  the returned nodes recursively in `DocMetadata.subcommands`;
 - is mutually exclusive with `#[derive(OrthoConfig)]` on the same type. Both on
   one type is a macro-time error naming the duplicate rather than a confusing
   conflicting-implementation error from the compiler.
@@ -617,11 +620,18 @@ the target locale.
 ### 4.2 Catalogues
 
 ```plaintext
-locales/
-  en-GB/ortho_config.ftl         # default headings or boilerplate
-  en-GB/<crate>.ftl              # consumer app translations (optional)
-  fr-FR/…                      # additional locales
+ortho_config/locales/
+  en-US/messages.ftl             # canonical English library catalogue
+  ja/messages.ftl                # other shipped library catalogue
+consumer-package/locales/
+  <locale>/<crate>.ftl           # consumer app translations (optional)
 ```
+
+The library maintains its own English `en-US/messages.ftl` resource; it does
+not alias an `en-GB` catalogue, and no such library resource exists. The
+localizer matches language-only, so English tags including `en-GB` reuse the
+embedded `en-US` resources. Additional shipped library resources use their
+own locale paths, such as `ja/messages.ftl`.
 
 PowerShell note: always emit `en-US` help XML. If generating another locale
 only (for example, `en-GB`), copy it to `en-US` as a fallback because
@@ -629,10 +639,12 @@ PowerShell culture probing strongly prefers `en-US` presence.
 
 #### 4.2.1 Default heading catalogue
 
-`ortho_config` ships the complete `ortho.headings.*` catalogue in its own
-locale directory. A consumer that has authored no Fluent catalogue renders
-correct headings from the first generator run; a consumer that adds a locale
-translates the headings it wants and inherits the rest.
+`ortho_config` ships the complete `ortho.headings.*` catalogue in the canonical
+`ortho_config/locales/en-US/messages.ftl` resource. A consumer that has
+authored no Fluent catalogue renders correct headings from the first generator
+run; a consumer that adds a locale translates the headings it wants and
+inherits the rest. English locale tags such as `en-GB` use these same embedded
+`en-US` resources through language-only matching.
 
 The catalogue is the fallback of record. `cargo-orthohelp` currently carries a
 hardcoded English table for the standard heading identifiers, which keeps raw

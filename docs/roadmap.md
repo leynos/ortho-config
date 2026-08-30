@@ -913,8 +913,9 @@ cargo-orthohelp-design.md §2.2.
   - See cargo-orthohelp-design.md §7.1 and §7.2.
   - [ ] Order positionals by index in SYNOPSIS ahead of the options summary and
     render `value_name` rather than a flag spelling.
-  - [ ] Emit MAML `position` attributes and mark variadic positionals as
-    accepting remaining input.
+  - [ ] Emit MAML `position` attributes and preserve `variadic`, `var_arg`, and
+    `last` as independent attributes. Reserve “accepting remaining input” for
+    `var_arg`; `last` requires `--` and does not consume trailing input.
   - [ ] Success: golden snapshots show `cp <src> <dst>` synopsis ordering, and
     `Get-Help` reports the arguments as positional parameters rather than named
     ones.
@@ -961,6 +962,10 @@ cargo-orthohelp-design.md §3.1.
     `Default`, and no `Deserialize` derives documentation metadata and appears
     in generated IR, and a field declared `#[arg(long = "endpoint")]` documents
     that flag with no short flag and no environment or file source.
+  - [ ] Success: a standalone `#[derive(clap::Parser, OrthoConfigDocs)]` root
+    with a `#[command(subcommand)]` selector and nested variants preserves
+    nested command labels and declaration order in recursively populated
+    `DocMetadata.subcommands`.
 
 - [ ] 12.3.2. Route `OrthoConfig` docs generation through the standalone path.
   - Requires 12.3.1.
@@ -1098,8 +1103,12 @@ reimplementing all eleven identifiers. See cargo-orthohelp-design.md §4.2.1.
   - See cargo-orthohelp-design.md §4.2.1.
   - [ ] Add the full `ortho.headings.*` set — name, synopsis, description,
     options, environment, files, precedence, exit status, examples, see also,
-    and commands — to `ortho_config/locales/en-US/messages.ftl` and every other
-    shipped locale.
+    and commands — to the canonical `ortho_config/locales/en-US/messages.ftl`
+    resource and the other currently shipped resource,
+    `ortho_config/locales/ja/messages.ftl`.
+  - [ ] Keep `en-US/messages.ftl` as the library's canonical English resource;
+    there is no library `en-GB` catalogue to alias. Language-only matching
+    makes English tags including `en-GB` reuse the embedded `en-US` resources.
   - [ ] Success: every `HeadingIds::defaults()` identifier resolves against the
     library catalogue in each shipped locale, gated by a test that fails when
     an identifier is added without a translation.
