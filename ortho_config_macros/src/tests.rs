@@ -286,6 +286,7 @@ fn load_impl_uses_ortho_config_reexport_paths() -> Result<()> {
         tokens,
         has_config_path: false,
     });
+    let generated_text = generated.to_string();
     let paths = collect_paths(generated.clone())?;
     let is_anchored = has_path_prefix(&paths, &["ortho_config", "uncased"])
         && has_path_prefix(&paths, &["ortho_config", "figment"]);
@@ -301,6 +302,14 @@ fn load_impl_uses_ortho_config_reexport_paths() -> Result<()> {
     ensure!(
         !has_path_prefix(&paths, &["figment"]),
         "unexpected direct figment path (without ortho_config re-export): {generated}"
+    );
+    ensure!(
+        generated_text.matches("allow (dead_code").count() == 2,
+        "expected both generated compose helpers to allow dead code: {generated}"
+    );
+    ensure!(
+        !generated_text.contains("expect (dead_code"),
+        "generated compose helpers must not expect dead code: {generated}"
     );
     Ok(())
 }

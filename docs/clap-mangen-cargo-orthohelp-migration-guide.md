@@ -95,6 +95,36 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
+### Remove build-script lint suppressions
+
+After updating to `ortho_config` v0.9.0 or later, delete the following
+suppression from `build.rs`:
+
+```rust
+#![allow(
+    unfulfilled_lint_expectations,
+    reason = "OrthoConfig derive behaves differently in build script"
+)]
+```
+
+Version 0.9.0 changes the generated `compose_layers` and
+`compose_layers_from_iter` helpers from `#[expect(dead_code, ...)]` to
+`#[allow(dead_code, ...)]`. The generated helpers therefore remain valid when
+the build script already allows `dead_code`.
+
+The following suppressions apply only because `clap_mangen` compiles the CLI
+types inside `build.rs`:
+
+```rust
+#![allow(dead_code, reason = "CLI types unused in build script context")]
+#![allow(unused_imports, reason = "CLI module imports unused in build script")]
+```
+
+Delete `clap_mangen` man-page generation from `build.rs` and generate the
+documentation with `cargo orthohelp` instead, as described in the next section.
+This removes the build-script compilation boundary that requires both remaining
+suppressions.
+
 ## 4. Add a docs generation command to CI or packaging
 
 Create a release or packaging step that runs `cargo orthohelp`.
