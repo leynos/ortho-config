@@ -13,6 +13,20 @@ fn model_for(input: &syn::DeriveInput) -> Result<LocalizationIds> {
         .map_err(|err| anyhow!(err))
 }
 
+fn assert_fluent_message_id(
+    segments: &FluentSegments,
+    expected: &str,
+    context: &str,
+) -> Result<()> {
+    let id = segments.join(proc_macro2::Span::call_site())?;
+    ensure!(
+        id.as_ref() == expected,
+        "{context}: expected `{expected}`, got `{}`",
+        id.as_ref()
+    );
+    Ok(())
+}
+
 fn assert_only_visible_arg(input: &syn::DeriveInput, context: &str) -> Result<()> {
     let model = model_for(input)?;
     ensure!(
@@ -40,29 +54,23 @@ fn expect_model_error(input: &syn::DeriveInput) -> String {
 #[test]
 fn dotted_localization_base_normalizes_to_fluent_segments() -> Result<()> {
     let base = LocalizationBase("Acme.CLI".to_owned());
-    let id = base
-        .normalize(proc_macro2::Span::call_site())?
-        .join(proc_macro2::Span::call_site())?;
-    ensure!(
-        id.as_ref() == "acme-cli",
-        "dotted localization base should normalise per segment: {}",
-        id.as_ref()
-    );
-    Ok(())
+    let segments = base.normalize(proc_macro2::Span::call_site())?;
+    assert_fluent_message_id(
+        &segments,
+        "acme-cli",
+        "dotted localization base should normalise per segment",
+    )
 }
 
 #[test]
 fn dotted_clap_arg_id_normalizes_to_fluent_segments() -> Result<()> {
     let arg_id = ClapArgId("Kebab.TAIL".to_owned());
-    let id = arg_id
-        .normalize(proc_macro2::Span::call_site())?
-        .join(proc_macro2::Span::call_site())?;
-    ensure!(
-        id.as_ref() == "kebab-tail",
-        "dotted clap id should normalise per segment: {}",
-        id.as_ref()
-    );
-    Ok(())
+    let segments = arg_id.normalize(proc_macro2::Span::call_site())?;
+    assert_fluent_message_id(
+        &segments,
+        "kebab-tail",
+        "dotted clap id should normalise per segment",
+    )
 }
 
 #[test]
