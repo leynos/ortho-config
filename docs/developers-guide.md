@@ -289,7 +289,6 @@ Keep richer fixture families isolated. For example, `NestedDocsConfig` and
 fixture-specific `tests/rstest_bdd/behaviour/steps/nested_docs_steps.rs` module
 rather than expanding unrelated step files.
 
-
 ### Policy configuration test layout
 
 Agent-native policy configuration (roadmap 7.1.1) follows the same layout. The
