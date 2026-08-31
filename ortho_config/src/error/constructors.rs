@@ -79,6 +79,45 @@ impl OrthoError {
         }
     }
 
+    /// Construct a conversion error for an inferred clap string default.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ortho_config::OrthoError;
+    /// let source = clap::Error::raw(clap::error::ErrorKind::InvalidValue, "bad value");
+    /// let error = OrthoError::default_value_conversion("mode", source);
+    /// assert!(matches!(error, OrthoError::DefaultValueConversion { .. }));
+    /// ```
+    #[must_use]
+    pub fn default_value_conversion<E>(key: impl Into<String>, source: E) -> Self
+    where
+        E: std::error::Error + Send + Sync + 'static,
+    {
+        Self::DefaultValueConversion {
+            key: key.into(),
+            source: Box::new(source),
+        }
+    }
+
+    /// Construct a shared conversion error for an inferred clap string default.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ortho_config::OrthoError;
+    /// let source = clap::Error::raw(clap::error::ErrorKind::InvalidValue, "bad value");
+    /// let error = OrthoError::default_value_conversion_arc("mode", source);
+    /// assert!(matches!(&*error, OrthoError::DefaultValueConversion { .. }));
+    /// ```
+    #[must_use]
+    pub fn default_value_conversion_arc<E>(key: impl Into<String>, source: E) -> Arc<Self>
+    where
+        E: std::error::Error + Send + Sync + 'static,
+    {
+        Arc::new(Self::default_value_conversion(key, source))
+    }
+
     /// Construct a gathering error from a [`figment::Error`].
     ///
     /// # Examples

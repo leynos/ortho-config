@@ -12,6 +12,10 @@ fn expr_tokens(expr: &syn::Expr) -> String {
     expr.to_token_stream().to_string()
 }
 
+fn type_tokens(ty: &syn::Type) -> String {
+    ty.to_token_stream().to_string()
+}
+
 /// Parses a `DeriveInput` and returns the [`FieldAttrs`] for the first field.
 fn parse_first_field_attrs(input: &DeriveInput) -> Result<FieldAttrs> {
     let (_, _, _, attrs_vec) = parse_input(input).map_err(|err| anyhow!(err))?;
@@ -28,9 +32,8 @@ fn parse_and_extract_default(input: &DeriveInput) -> Result<syn::Expr> {
         return Err(anyhow!("missing inferred default"));
     };
     let expr = match inferred {
-        ClapInferredDefault::Value(expr)
-        | ClapInferredDefault::ValueT(expr)
-        | ClapInferredDefault::ValuesT(expr) => expr,
+        ClapInferredDefault::Value(default) => &default.value,
+        ClapInferredDefault::ValueT(expr) | ClapInferredDefault::ValuesT(expr) => expr,
     };
     Ok(expr.clone())
 }
@@ -107,26 +110,148 @@ fn infers_default_from_clap_default_values_t_when_requested() -> Result<()> {
 }
 
 #[test]
-fn infers_default_from_clap_default_value_when_requested() -> Result<()> {
+fn captures_default_value_parser_metadata_when_requested() -> Result<()> {
     let input: DeriveInput = parse_quote! {
         struct Demo {
-            #[arg(default_value = "42")]
+            #[arg(default_value = "42", value_parser = parse_number)]
             #[ortho_config(cli_default_as_absent)]
             answer: u32,
         }
     };
 
-    let err = parse_input(&input)
-        .err()
-        .ok_or_else(|| anyhow!("expected unsupported default_value error"))?;
-    let err_text = err.to_string();
+    let attrs = parse_first_field_attrs(&input)?;
+    let Some(ClapInferredDefault::Value(default)) = attrs.inferred_clap_default else {
+        return Err(anyhow!("expected inferred default_value metadata"));
+    };
     ensure!(
-        err_text.contains("default_value"),
-        "expected default_value diagnostic, got {err_text}",
+        expr_tokens(&default.value) == "\"42\"",
+        "expected raw default expression, got {}",
+        expr_tokens(&default.value),
     );
     ensure!(
-        err_text.contains("day-2"),
-        "expected day-2 follow-up note in diagnostic, got {err_text}",
+        default
+            .value_parser
+            .as_ref()
+            .is_some_and(|parser| expr_tokens(parser) == "parse_number"),
+        "expected custom value parser metadata",
+    );
+    ensure!(
+        matches!(
+            default.shape,
+            super::super::type_utils::ClapDefaultValueShape::Scalar
+        ),
+        "expected scalar field shape",
+    );
+    Ok(())
+}
+
+#[test]
+fn captures_value_enum_marker_for_default_value() -> Result<()> {
+    let input: DeriveInput = parse_quote! {
+        struct Demo {
+            #[arg(default_value = "fast", value_enum)]
+            #[ortho_config(cli_default_as_absent)]
+            mode: Mode,
+        }
+    };
+
+    let attrs = parse_first_field_attrs(&input)?;
+    let Some(ClapInferredDefault::Value(default)) = attrs.inferred_clap_default else {
+        return Err(anyhow!("expected inferred default_value metadata"));
+    };
+    ensure!(default.value_enum, "expected value_enum marker");
+    ensure!(
+        type_tokens(&default.leaf_type) == "Mode",
+        "expected leaf type Mode, got {}",
+        type_tokens(&default.leaf_type),
+    );
+    Ok(())
+}
+
+#[test]
+fn captures_replay_settings_for_default_value() -> Result<()> {
+    let input: DeriveInput = parse_quote! {
+        struct Demo {
+            #[arg(default_value = "alpha,beta", value_delimiter = ',')]
+            #[ortho_config(cli_default_as_absent)]
+            tags: Vec<String>,
+        }
+    };
+
+    let attrs = parse_first_field_attrs(&input)?;
+    let Some(ClapInferredDefault::Value(default)) = attrs.inferred_clap_default else {
+        return Err(anyhow!("expected inferred default_value metadata"));
+    };
+    ensure!(
+        default
+            .value_delimiter
+            .as_ref()
+            .is_some_and(|delimiter| expr_tokens(delimiter) == "','"),
+        "expected value delimiter metadata",
+    );
+
+    let enum_input: DeriveInput = parse_quote! {
+        struct Demo {
+            #[arg(default_value = "FAST", value_enum, ignore_case = true)]
+            #[ortho_config(cli_default_as_absent)]
+            mode: Mode,
+        }
+    };
+    let enum_attrs = parse_first_field_attrs(&enum_input)?;
+    let Some(ClapInferredDefault::Value(enum_default)) = enum_attrs.inferred_clap_default else {
+        return Err(anyhow!("expected inferred enum default metadata"));
+    };
+    ensure!(
+        enum_default
+            .ignore_case
+            .as_ref()
+            .is_some_and(|ignore_case| expr_tokens(ignore_case) == "true"),
+        "expected ignore-case metadata",
+    );
+    Ok(())
+}
+
+#[test]
+fn rejects_nested_default_value_shape() -> Result<()> {
+    let input: DeriveInput = parse_quote! {
+        struct Demo {
+            #[arg(default_value = "value")]
+            #[ortho_config(cli_default_as_absent)]
+            values: Option<Vec<String>>,
+        }
+    };
+
+    let err = parse_input(&input)
+        .err()
+        .ok_or_else(|| anyhow!("expected unsupported default_value shape error"))?;
+    let err_text = err.to_string();
+    ensure!(
+        err_text.contains("does not support nested `Option` and `Vec` wrappers"),
+        "expected unsupported-shape diagnostic, got {err_text}",
+    );
+    ensure!(
+        err_text.contains("use a scalar, `Option<T>`, or `Vec<T>`"),
+        "expected supported alternatives, got {err_text}",
+    );
+    Ok(())
+}
+
+#[test]
+fn rejects_map_default_value_shape() -> Result<()> {
+    let input: DeriveInput = parse_quote! {
+        struct Demo {
+            #[arg(default_value = "value")]
+            #[ortho_config(cli_default_as_absent)]
+            values: std::collections::BTreeMap<String, String>,
+        }
+    };
+
+    let err = parse_input(&input)
+        .err()
+        .ok_or_else(|| anyhow!("expected unsupported default_value shape error"))?;
+    ensure!(
+        err.to_string().contains("does not support map fields"),
+        "expected map-shape diagnostic, got {err}",
     );
     Ok(())
 }

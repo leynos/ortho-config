@@ -5,6 +5,7 @@
 //! environment configuration to take precedence.
 
 use super::value_parsing::normalize_scalar;
+use crate::cli_default_mode::CliDefaultMode;
 use crate::scenario_state::{CliDefaultArgs, CliDefaultContext, CliDefaultSources};
 use anyhow::{Result, anyhow, ensure};
 use clap::{CommandFactory, FromArgMatches};
@@ -173,4 +174,19 @@ fn check_punctuation_absent(cli_default_context: &CliDefaultContext) -> Result<(
 #[then("punctuation is present in extracted values")]
 fn check_punctuation_present(cli_default_context: &CliDefaultContext) -> Result<()> {
     check_punctuation_presence(cli_default_context, true)
+}
+
+#[then("the resolved mode is fast")]
+fn check_default_mode(cli_default_context: &CliDefaultContext) -> Result<()> {
+    let result = cli_default_context
+        .merge_result
+        .take()
+        .ok_or_else(|| anyhow!("merge result unavailable"))?;
+    let merged = result?;
+    ensure!(
+        merged.mode == CliDefaultMode::Fast,
+        "expected fast mode, got {:?}",
+        merged.mode
+    );
+    Ok(())
 }

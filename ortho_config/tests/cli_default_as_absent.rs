@@ -14,10 +14,10 @@ mod default_punct;
 
 use anyhow::{Context, Result, ensure};
 use cap_std::{ambient_authority, fs::Dir};
-use clap::{CommandFactory, FromArgMatches, Parser};
+use clap::{CommandFactory, FromArgMatches, Parser, ValueEnum};
 use ortho_config::subcommand::Prefix;
 use ortho_config::{
-    CliValueExtractor, OrthoConfig, load_and_merge_subcommand,
+    CliValueExtractor, OrthoConfig, OrthoError, load_and_merge_subcommand,
     load_and_merge_subcommand_with_matches,
 };
 use rstest::{fixture, rstest};
@@ -144,6 +144,223 @@ fn test_cli_default_as_absent_precedence(#[case] case: GreetPrecedenceCase) -> R
         "expected punctuation {:?}, got {:?}",
         case.expected_punctuation,
         merged.punctuation
+    );
+    Ok(())
+}
+
+/// Parser used to prove inferred string defaults reuse a field's clap parser.
+fn parse_tcp_port(value: &str) -> Result<u16, String> {
+    value
+        .strip_prefix("tcp:")
+        .ok_or_else(|| String::from("expected a tcp: port"))?
+        .parse::<u16>()
+        .map_err(|error| error.to_string())
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, ValueEnum)]
+#[serde(rename_all = "kebab-case")]
+enum Mode {
+    Fast,
+    Safe,
+}
+
+/// Subcommand that exercises parser-faithful string default inference.
+#[derive(Debug, Parser, Serialize, Deserialize, OrthoConfig, PartialEq)]
+#[command(name = "default-parity")]
+#[ortho_config(prefix = "APP_")]
+struct DefaultParityArgs {
+    #[arg(long, default_value = "8")]
+    #[ortho_config(cli_default_as_absent)]
+    count: u16,
+
+    #[arg(long, default_value = "FAST", value_enum, ignore_case = true)]
+    #[ortho_config(cli_default_as_absent)]
+    mode: Mode,
+
+    #[arg(long, default_value = "tcp:7", value_parser = parse_tcp_port)]
+    #[ortho_config(cli_default_as_absent)]
+    port: u16,
+
+    #[arg(long, default_value = "default")]
+    #[ortho_config(cli_default_as_absent)]
+    label: Option<String>,
+}
+
+impl Default for DefaultParityArgs {
+    fn default() -> Self {
+        Self {
+            count: 8,
+            mode: Mode::Fast,
+            port: 7,
+            label: Some(String::from("default")),
+        }
+    }
+}
+
+#[rstest]
+#[serial]
+fn inferred_default_value_preserves_clap_parsers() -> Result<()> {
+    {
+        let no_file_dir = tempfile::tempdir().context("create no-file config dir")?;
+        let _cwd_guard = cwd::set_dir(no_file_dir.path())?;
+        let inferred = DefaultParityArgs::load_from_iter(["default-parity"])
+            .context("load inferred clap defaults")?;
+        ensure!(
+            inferred.count == 8,
+            "expected inferred count, got {}",
+            inferred.count
+        );
+        ensure!(
+            inferred.mode == Mode::Fast,
+            "expected inferred fast mode, got {:?}",
+            inferred.mode
+        );
+        ensure!(
+            inferred.port == 7,
+            "expected inferred port, got {}",
+            inferred.port
+        );
+        ensure!(
+            inferred.label.as_deref() == Some("default"),
+            "expected inferred label, got {:?}",
+            inferred.label,
+        );
+    }
+
+    let (_temp_dir, _cwd_guard) = config_dir(
+        "[cmds.default-parity]\ncount = 5\nmode = \"safe\"\nport = 6\nlabel = \"file\"\n",
+    )?;
+    let prefix = Prefix::new("APP_");
+
+    let matches = DefaultParityArgs::command().get_matches_from(["default-parity"]);
+    let args = DefaultParityArgs::from_arg_matches(&matches).context("parse defaults")?;
+    let merged = load_and_merge_subcommand_with_matches(&prefix, &args, &matches)
+        .context("merge parser-faithful defaults")?;
+    ensure!(
+        merged.count == 5,
+        "expected file count, got {}",
+        merged.count
+    );
+    ensure!(
+        merged.mode == Mode::Safe,
+        "expected file mode, got {:?}",
+        merged.mode
+    );
+    ensure!(merged.port == 6, "expected file port, got {}", merged.port);
+    ensure!(
+        merged.label.as_deref() == Some("file"),
+        "expected file label, got {:?}",
+        merged.label,
+    );
+
+    let explicit_matches = DefaultParityArgs::command().get_matches_from([
+        "default-parity",
+        "--count",
+        "9",
+        "--mode",
+        "fast",
+        "--port",
+        "tcp:10",
+        "--label",
+        "cli",
+    ]);
+    let explicit_args =
+        DefaultParityArgs::from_arg_matches(&explicit_matches).context("parse explicit values")?;
+    let explicit =
+        load_and_merge_subcommand_with_matches(&prefix, &explicit_args, &explicit_matches)
+            .context("merge explicit values")?;
+    ensure!(
+        explicit.count == 9,
+        "expected cli count, got {}",
+        explicit.count
+    );
+    ensure!(
+        explicit.mode == Mode::Fast,
+        "expected cli mode, got {:?}",
+        explicit.mode
+    );
+    ensure!(
+        explicit.port == 10,
+        "expected cli port, got {}",
+        explicit.port
+    );
+    ensure!(
+        explicit.label.as_deref() == Some("cli"),
+        "expected cli label, got {:?}",
+        explicit.label,
+    );
+    Ok(())
+}
+
+/// Explicit `OrthoConfig` defaults continue to override inferred clap defaults.
+#[derive(Debug, Parser, Serialize, Deserialize, OrthoConfig, PartialEq)]
+#[command(name = "explicit-default")]
+#[ortho_config(prefix = "APP_")]
+struct ExplicitDefaultArgs {
+    #[arg(long, default_value = "8")]
+    #[ortho_config(default = 11, cli_default_as_absent)]
+    count: u16,
+}
+
+impl Default for ExplicitDefaultArgs {
+    fn default() -> Self {
+        Self { count: 11 }
+    }
+}
+
+#[rstest]
+#[serial]
+fn explicit_ortho_default_overrides_inferred_default_value() -> Result<()> {
+    let (_temp_dir, _cwd_guard) = config_dir("")?;
+    let prefix = Prefix::new("APP_");
+    let matches = ExplicitDefaultArgs::command().get_matches_from(["explicit-default"]);
+    let args = ExplicitDefaultArgs::from_arg_matches(&matches).context("parse defaults")?;
+    let merged = load_and_merge_subcommand_with_matches(&prefix, &args, &matches)
+        .context("merge explicit OrthoConfig default")?;
+    ensure!(
+        merged.count == 11,
+        "expected explicit default, got {}",
+        merged.count
+    );
+    Ok(())
+}
+
+/// Configuration with a clap default that its field parser rejects.
+#[derive(Debug, Parser, Serialize, Deserialize, OrthoConfig, PartialEq)]
+#[command(name = "invalid-default")]
+#[ortho_config(prefix = "APP_")]
+struct InvalidDefaultArgs {
+    #[arg(long, default_value = "udp:7", value_parser = parse_tcp_port)]
+    #[ortho_config(cli_default_as_absent)]
+    port: u16,
+}
+
+impl Default for InvalidDefaultArgs {
+    fn default() -> Self {
+        Self { port: 7 }
+    }
+}
+
+fn contains_default_value_conversion(error: &OrthoError) -> bool {
+    match error {
+        OrthoError::DefaultValueConversion { .. } => true,
+        OrthoError::Aggregate(errors) => errors
+            .iter()
+            .any(|entry| matches!(entry, OrthoError::DefaultValueConversion { .. })),
+        _ => false,
+    }
+}
+
+#[rstest]
+#[serial]
+fn invalid_inferred_default_is_reported_without_panicking() -> Result<()> {
+    let (_temp_dir, _cwd_guard) = config_dir("")?;
+    let error = InvalidDefaultArgs::load_from_iter(["invalid-default"])
+        .err()
+        .ok_or_else(|| anyhow::anyhow!("expected invalid default to fail"))?;
+    ensure!(
+        contains_default_value_conversion(error.as_ref()),
+        "expected DefaultValueConversion, got {error:?}",
     );
     Ok(())
 }

@@ -300,7 +300,12 @@ For an enum with many variants, derive `SelectedSubcommandMerge` and use
 `load_globals_and_merge_selected_subcommand`. The generated match keeps the
 entry point small. Add `#[ortho_config(cli_default_as_absent)]` to a field when
 a `clap` default should not override a value supplied by a file or environment
-variable.
+variable. The derive infers `default_value`, `default_value_t`, and
+`default_values_t` defaults, so the value need only be declared in clap.
+`default_value` is replayed through clap's parser, including `ValueEnum` and
+`#[arg(value_parser = ...)]` fields. Scalars, `Option<T>`, and `Vec<T>` are
+supported; nested wrappers and map fields require an explicit
+`#[ortho_config(default = ...)]` instead.
 
 ## Handle errors at the application boundary
 

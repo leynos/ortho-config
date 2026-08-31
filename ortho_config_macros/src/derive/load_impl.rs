@@ -8,6 +8,8 @@
 use quote::quote;
 use syn::Ident;
 
+use crate::derive::build::DefaultStructInit;
+
 /// Identifiers used when generating the load implementation.
 #[expect(
     clippy::struct_field_names,
@@ -22,7 +24,7 @@ pub(crate) struct LoadImplIdents<'a> {
 /// Token collections used by the load implementation helpers.
 pub(crate) struct LoadImplTokens<'a> {
     pub env_provider: &'a proc_macro2::TokenStream,
-    pub default_struct_init: &'a [proc_macro2::TokenStream],
+    pub default_struct_init: &'a DefaultStructInit,
     pub config_env_var: &'a proc_macro2::TokenStream,
     pub dotfile_name: &'a syn::LitStr,
     pub legacy_app_name: String,
@@ -206,7 +208,8 @@ fn build_compose_layers_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStrea
         has_config_path,
     } = args;
     let defaults_ident = idents.defaults_ident;
-    let default_struct_init = tokens.default_struct_init;
+    let default_resolutions = &tokens.default_struct_init.resolutions;
+    let default_struct_fields = &tokens.default_struct_init.fields;
     let krate = tokens.krate;
     let file_discovery = build_file_discovery(tokens, *has_config_path);
     let env_section = build_env_section(tokens);
@@ -228,7 +231,8 @@ fn build_compose_layers_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStrea
         };
 
         let mut composer = #krate::MergeComposer::with_capacity(4);
-        let defaults = #defaults_ident { #( #default_struct_init, )* };
+        #( #default_resolutions )*
+        let defaults = #defaults_ident { #( #default_struct_fields, )* };
         let mut defaults_value = None;
         match #krate::sanitize_value(&defaults) {
             Ok(value) => {

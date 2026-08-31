@@ -1100,6 +1100,17 @@ generated documentation, generated agent context, and enforceable CLI policy.
   workarounds where `[cmds.greet]` sections were ignored because clap defaults
   always populated the CLI layer.
 
+- **Replay clap string defaults through clap parsers (2026-08-24):**
+  `cli_default_as_absent` now infers supported `default_value` declarations
+  without duplicating them in `#[ortho_config(default = ...)]`. The parse IR
+  retains the raw default, leaf type, field shape, and `value_parser` or
+  `value_enum` metadata. Generated loader code resolves the value through a
+  one-argument clap command before building the defaults layer. This preserves
+  clap parser semantics for scalar, `Option<T>`, and `Vec<T>` fields while
+  routing conversion failures into `OrthoError::DefaultValueConversion` and the
+  existing error accumulator. Nested wrappers and map fields are rejected at
+  compile time because their shape cannot be reconstructed faithfully.
+
 - **Introduce post-merge hooks for custom configuration logic (2025-12-18):**
   The `PostMergeHook` trait and `#[ortho_config(post_merge_hook)]` attribute
   provide an opt-in mechanism for custom post-processing after declarative
