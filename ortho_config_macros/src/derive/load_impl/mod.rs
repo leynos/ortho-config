@@ -221,6 +221,53 @@ pub(crate) fn build_env_section(tokens: &LoadImplTokens<'_>) -> proc_macro2::Tok
     }
 }
 
+fn build_legacy_defaults(
+    krate: &proc_macro2::TokenStream,
+    defaults_ident: &Ident,
+    default_struct_init: &DefaultStructInit,
+) -> proc_macro2::TokenStream {
+    let default_resolutions = &default_struct_init.resolutions;
+    let default_fields = &default_struct_init.fields;
+    quote! {
+        let mut composer = #krate::MergeComposer::with_capacity(4);
+        #(#default_resolutions)*
+        let defaults = #defaults_ident { #( #default_fields, )* };
+        let mut defaults_value = None;
+        match #krate::sanitize_value(&defaults) {
+            Ok(value) => {
+                defaults_value = Some(value.clone());
+                composer.push_defaults(value);
+            }
+            Err(err) => errors.push(err),
+        }
+    }
+}
+
+fn build_legacy_file_layers(file_discovery: &proc_macro2::TokenStream) -> proc_macro2::TokenStream {
+    quote! {
+        let file_layers = #file_discovery;
+        for layer in file_layers {
+            composer.push_layer(layer);
+        }
+    }
+}
+
+fn build_legacy_environment_layer(
+    krate: &proc_macro2::TokenStream,
+    env_section: &proc_macro2::TokenStream,
+) -> proc_macro2::TokenStream {
+    quote! {
+        #env_section
+        match Figment::from(env_provider.clone())
+            .extract::<#krate::serde_json::Value>()
+            .into_ortho_merge()
+        {
+            Ok(value) => composer.push_environment(value),
+            Err(err) => errors.push(err),
+        }
+    }
+}
+
 fn build_compose_layers_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStream {
     let LoadImplArgs {
         idents,
@@ -231,18 +278,19 @@ fn build_compose_layers_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStrea
     } = args;
     let defaults_ident = idents.defaults_ident;
     let default_struct_init = tokens.default_struct_init;
-    let default_resolutions = &default_struct_init.resolutions;
-    let default_fields = &default_struct_init.fields;
     let cli_default_as_absent_fields = &default_struct_init.cli_default_as_absent_fields;
     let krate = tokens.krate;
     let file_discovery = build_file_discovery(tokens, *has_config_path);
     let env_section = build_env_section(tokens);
-    let cli_parse = build_cli_parse_tokens();
-    let cli_layer = build_cli_layer_tokens(krate, cli_default_as_absent_fields);
 
     if *profiles {
         load_impl_profiles::build_profile_compose_layers_impl(args, &file_discovery, &env_section)
     } else {
+        let parse_setup = build_cli_parse_tokens();
+        let defaults = build_legacy_defaults(krate, defaults_ident, default_struct_init);
+        let file_layers = build_legacy_file_layers(&file_discovery);
+        let environment_layer = build_legacy_environment_layer(krate, &env_section);
+        let cli_push = build_cli_layer_tokens(krate, cli_default_as_absent_fields);
         quote! {
             use clap::{CommandFactory as _, FromArgMatches as _, Parser as _};
             // Keep this path anchored under the resolved crate so derive users
@@ -251,35 +299,12 @@ fn build_compose_layers_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStrea
             use #krate::OrthoMergeExt as _;
 
             let mut errors: Vec<std::sync::Arc<#krate::OrthoError>> = Vec::new();
-            #cli_parse
+            #parse_setup
+            #defaults
+            #file_layers
+            #environment_layer
 
-            let mut composer = #krate::MergeComposer::with_capacity(4);
-            #(#default_resolutions)*
-            let defaults = #defaults_ident { #( #default_fields, )* };
-            let mut defaults_value = None;
-            match #krate::sanitize_value(&defaults) {
-                Ok(value) => {
-                    defaults_value = Some(value.clone());
-                    composer.push_defaults(value);
-                }
-                Err(err) => errors.push(err),
-            }
-
-            let file_layers = #file_discovery;
-            for layer in file_layers {
-                composer.push_layer(layer);
-            }
-
-            #env_section
-            match Figment::from(env_provider.clone())
-                .extract::<#krate::serde_json::Value>()
-                .into_ortho_merge()
-            {
-                Ok(value) => composer.push_environment(value),
-                Err(err) => errors.push(err),
-            }
-
-            #cli_layer
+            #cli_push
 
             #krate::declarative::LayerComposition::new(composer.layers(), errors)
         }
