@@ -851,7 +851,6 @@ output must not be scraped from rendered man pages or PowerShell help.
 Rendering surfaces may consume agent metadata for examples or warnings, but
 they are not the source of truth for agents.
 
-
 ### 6.3.2 Agent-native policy pipeline stage
 
 `--check-agent-native` runs as an early pipeline stage that does not build the
