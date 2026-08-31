@@ -46,9 +46,12 @@ extend-ignore-re = [
     "`[^`\\n]*normalises_unicode_identifiers[^`\\n]*`",
     "`analyzed`",
     "`artifact_path`",
+    "`behavior\\(\\.\\.\\.\\)`",
     "`behavior`",
+    "`behaviour\\(interation = \\.\\.\\.\\)`",
     "`color`",
     "`env\\(allias = …\\)`",
+    "`normalisation`",
     "`skill_manifest_serialises_with_camino_path`",
     "rust-analyzer",
 ]

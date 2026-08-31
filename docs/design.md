@@ -1134,6 +1134,14 @@ generated documentation, generated agent context, and enforceable CLI policy.
   recognizes a `#[command(subcommand)]` selector field, skips it as a
   configuration field, and fills `DocMetadata.subcommands` from the enum's
   per-variant metadata in declaration order.
+- **Declare non-interactive execution and mutation boundaries (2026-08-14):**
+  The `#[ortho_config(behaviour(...))]` struct-level group lets command
+  authors declare interaction, mutation, bypass, and dry-run metadata that the
+  derive carries into IR 1.2 and the agent-context bridge populates into
+  `interaction_mode`, `mutation_effect`, `bypass_flag`, and `dry_run_flag`.
+  ADR-008 records the attribute shape, the no-inference rule, the pinned
+  bypass/dry-run flag grammar, the non-interactive/bypass contradiction rule,
+  and the IR version-skew contract.
 
 [^hello-world-feedback]: `docs/feedback-from-hello-world-example.md`.
 [^behavioural-testing]: `docs/behavioural-testing-in-rust-with-cucumber.md`.

@@ -43,6 +43,8 @@ expression: snapshot
       "output_modes": [],
       "interaction_mode": "unknown",
       "mutation_effect": "unknown",
+      "bypass_flag": null,
+      "dry_run_flag": null,
       "async_submission": null,
       "delivery_route": null,
       "pagination": null,

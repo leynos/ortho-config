@@ -32,6 +32,7 @@ struct DocMetadataSpec<'a> {
     synopsis_id: Option<&'a str>,
     subcommands: Vec<ortho_docs::DocMetadata>,
     windows: Option<ortho_docs::WindowsMetadata>,
+    behaviour: Option<ortho_docs::BehaviourMetadata>,
 }
 
 fn make_doc_metadata(spec: DocMetadataSpec<'_>) -> ortho_docs::DocMetadata {
@@ -45,6 +46,7 @@ fn make_doc_metadata(spec: DocMetadataSpec<'_>) -> ortho_docs::DocMetadata {
         fields: vec![sample_field()],
         subcommands: spec.subcommands,
         windows: spec.windows,
+        behaviour: spec.behaviour,
     }
 }
 
@@ -56,7 +58,17 @@ fn sample_metadata() -> ortho_docs::DocMetadata {
         synopsis_id: Some("demo.synopsis"),
         subcommands: vec![sample_subcommand()],
         windows: Some(sample_windows()),
+        behaviour: Some(sample_behaviour()),
     })
+}
+
+fn sample_behaviour() -> ortho_docs::BehaviourMetadata {
+    ortho_docs::BehaviourMetadata {
+        interaction: Some(ortho_docs::InteractionKind::Interactive),
+        mutation: Some(ortho_docs::MutationKind::Delete),
+        bypass: Some("--force".to_owned()),
+        dry_run: Some("--dry-run".to_owned()),
+    }
 }
 
 fn sample_subcommand() -> ortho_docs::DocMetadata {
@@ -67,6 +79,7 @@ fn sample_subcommand() -> ortho_docs::DocMetadata {
         synopsis_id: None,
         subcommands: vec![sample_nested_subcommand()],
         windows: None,
+        behaviour: None,
     })
 }
 
@@ -78,6 +91,12 @@ fn sample_nested_subcommand() -> ortho_docs::DocMetadata {
         synopsis_id: None,
         subcommands: Vec::new(),
         windows: Some(sample_child_windows()),
+        behaviour: Some(ortho_docs::BehaviourMetadata {
+            interaction: Some(ortho_docs::InteractionKind::NonInteractive),
+            mutation: Some(ortho_docs::MutationKind::ReadOnly),
+            bypass: None,
+            dry_run: None,
+        }),
     })
 }
 

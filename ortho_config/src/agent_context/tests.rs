@@ -358,6 +358,8 @@ pub(super) fn sample_agent_context() -> AgentContext {
             output_modes: vec!["json".to_owned()],
             interaction_mode: InteractionMode::NonInteractive,
             mutation_effect: MutationEffect::ReadOnly,
+            bypass_flag: None,
+            dry_run_flag: None,
             async_submission: Some(AsyncSubmission {
                 mode: AsyncSubmissionMode::Submit,
                 noun: Some("job".to_owned()),

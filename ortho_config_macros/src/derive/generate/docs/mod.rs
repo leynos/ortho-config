@@ -3,6 +3,7 @@
 //! This module emits `OrthoConfigDocs` implementations that return the
 //! `DocMetadata` IR used by `cargo-orthohelp`.
 
+mod behaviour;
 mod fields;
 mod sections;
 mod types;
@@ -46,6 +47,7 @@ pub(crate) fn generate_docs_impl(args: &DocsArgs<'_>) -> syn::Result<TokenStream
         krate,
     })?;
     let subcommands = build_subcommands_metadata(args)?;
+    let behaviour = behaviour::build_behaviour_metadata(&args.struct_attrs.doc, krate);
 
     let app_name_lit = syn::LitStr::new(&app_name_value, proc_macro2::Span::call_site());
     let about_id_lit = syn::LitStr::new(&about_id, proc_macro2::Span::call_site());
@@ -67,6 +69,7 @@ pub(crate) fn generate_docs_impl(args: &DocsArgs<'_>) -> syn::Result<TokenStream
                     fields: vec![ #( #fields ),* ],
                     subcommands: #subcommands,
                     windows: #windows,
+                    behaviour: #behaviour,
                 }
             }
         }
