@@ -1,10 +1,10 @@
 //! JSON serialization tests for the compact agent-context schema.
-use anyhow::{Result, ensure};
+use super::{field, first_array_item, sample_agent_context};
 use crate::agent_context::{AGENT_CONTEXT_KIND_SUFFIX, AgentCommand, AgentContext};
 use crate::{serialize_agent_context, serialize_agent_context_pretty};
+use anyhow::{Result, ensure};
 use rstest::rstest;
 use serde_json::{Value, json};
-use super::{field, first_array_item, sample_agent_context};
 
 #[rstest]
 fn to_json_is_valid_parseable_json() {
@@ -89,6 +89,15 @@ fn ensure_field_eq(value: &Value, name: &str, expected: &str) -> Result<()> {
     Ok(())
 }
 
+/// Ensures the named field is serialized as an explicit JSON null.
+fn ensure_field_is_null(value: &Value, name: &str) -> Result<()> {
+    ensure!(
+        field(value, name)?.is_null(),
+        "`{name}` should serialize as null when absent"
+    );
+    Ok(())
+}
+
 fn assert_context_identity_fields(value: &Value) -> Result<()> {
     ensure_field_eq(value, "schema_version", "1")?;
     ensure_field_eq(value, "kind", "example-cli.agent_context")
@@ -118,7 +127,7 @@ fn assert_localization_fields_are_absent(value: &Value, command: &Value) -> Resu
 }
 
 #[rstest]
-fn absent_bypass_and_dry_run_flags_serialize_as_explicit_nulls() {
+fn absent_bypass_and_dry_run_flags_serialize_as_explicit_nulls() -> Result<()> {
     let mut context = sample_agent_context();
     let command = context
         .commands
@@ -128,10 +137,10 @@ fn absent_bypass_and_dry_run_flags_serialize_as_explicit_nulls() {
     command.dry_run_flag = None;
 
     let value = serde_json::to_value(context).expect("serialize agent context");
-    let serialized_command = first_array_item(field(&value, "commands"));
+    let serialized_command = first_array_item(field(&value, "commands")?)?;
 
-    assert!(field(serialized_command, "bypass_flag").is_null());
-    assert!(field(serialized_command, "dry_run_flag").is_null());
+    ensure_field_is_null(serialized_command, "bypass_flag")?;
+    ensure_field_is_null(serialized_command, "dry_run_flag")
 }
 
 #[rstest]
@@ -146,8 +155,14 @@ fn declared_bypass_and_dry_run_flags_round_trip() {
     command.dry_run_flag = Some("--dry-run".to_owned());
 
     let serialized = serde_json::to_value(&command).expect("serialize agent command");
-    assert_eq!(field(&serialized, "bypass_flag"), "--force");
-    assert_eq!(field(&serialized, "dry_run_flag"), "--dry-run");
+    assert_eq!(
+        field(&serialized, "bypass_flag").expect("serialized command should carry a bypass flag"),
+        "--force"
+    );
+    assert_eq!(
+        field(&serialized, "dry_run_flag").expect("serialized command should carry a dry-run flag"),
+        "--dry-run"
+    );
 
     let parsed: AgentCommand =
         serde_json::from_value(serialized).expect("parse agent command with declared flags");
