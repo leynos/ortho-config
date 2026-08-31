@@ -6,9 +6,10 @@
 use crate::CliFieldInfo;
 use crate::derive::build::{
     CliFieldMetadata, build_cli_field_metadata, build_cli_struct_fields, build_config_flag_field,
-    build_profile_flag_field,
 };
 use crate::derive::parse::{SerdeRenameAll, clap_arg_id, serde_serialized_field_key};
+
+use super::profile_flag::{ProfileFlagBuildInputs, build_profile_flag_field};
 
 /// Result of building CLI struct tokens.
 pub(crate) struct CliStructBuildResult {
@@ -77,11 +78,13 @@ pub(crate) fn build_cli_struct_tokens(
     }
     if let Some(profile_field) = build_profile_flag_field(
         struct_attrs,
-        fields,
-        field_attrs,
-        serde_rename_all,
-        &cli_struct.used_longs,
-        &cli_struct.field_names,
+        ProfileFlagBuildInputs {
+            fields,
+            field_attrs,
+            serde_rename_all,
+            used_longs: &cli_struct.used_longs,
+            field_names: &cli_struct.field_names,
+        },
     )? {
         cli_struct.fields.push(profile_field);
         cli_struct.used_longs.insert(String::from("profile"));

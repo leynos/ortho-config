@@ -19,27 +19,36 @@ use crate::derive::parse::{
 
 use super::cli::validate_cli_long;
 
+/// Borrowed inputs used to validate and generate the profile flag.
+#[derive(Clone, Copy)]
+pub(super) struct ProfileFlagBuildInputs<'a> {
+    pub(super) fields: &'a [syn::Field],
+    pub(super) field_attrs: &'a [FieldAttrs],
+    pub(super) serde_rename_all: Option<SerdeRenameAll>,
+    pub(super) used_longs: &'a HashSet<String>,
+    pub(super) field_names: &'a HashSet<String>,
+}
+
 /// Build the generated `--profile` field for an opted-in struct.
 ///
 /// Returns `None` for legacy structs so their CLI struct is byte-for-byte
 /// unchanged. For opted-in structs, returns the field tokens or a
 /// compile-time error when a user field collides on the `profile` key, the
 /// `--profile` long flag, or the `<PREFIX>PROFILE` environment binding.
-#[expect(
-    clippy::too_many_arguments,
-    reason = "Mirrors build_config_flag_field's signature; the flags are the collision-check inputs"
-)]
-pub(crate) fn build_profile_flag_field(
+pub(super) fn build_profile_flag_field(
     struct_attrs: &StructAttrs,
-    fields: &[syn::Field],
-    field_attrs: &[FieldAttrs],
-    serde_rename_all: Option<SerdeRenameAll>,
-    used_longs: &HashSet<String>,
-    field_names: &HashSet<String>,
+    inputs: ProfileFlagBuildInputs<'_>,
 ) -> syn::Result<Option<proc_macro2::TokenStream>> {
     if !struct_attrs.profiles {
         return Ok(None);
     }
+    let ProfileFlagBuildInputs {
+        fields,
+        field_attrs,
+        serde_rename_all,
+        used_longs,
+        field_names,
+    } = inputs;
     let name = Ident::new("profile", proc_macro2::Span::call_site());
 
     // Projection (a): the `profile` root key.
@@ -126,11 +135,13 @@ mod tests {
         let cli_struct = build_cli_struct_fields(&fields, &field_attrs)?;
         Ok(build_profile_flag_field(
             &struct_attrs,
-            &fields,
-            &field_attrs,
-            serde_rename_all,
-            &cli_struct.used_longs,
-            &cli_struct.field_names,
+            ProfileFlagBuildInputs {
+                fields: &fields,
+                field_attrs: &field_attrs,
+                serde_rename_all,
+                used_longs: &cli_struct.used_longs,
+                field_names: &cli_struct.field_names,
+            },
         ))
     }
 
