@@ -304,11 +304,31 @@ attribute mirrors the builder surface and lists:
 - `config_cli_long`
 - `config_cli_short`
 - `config_cli_visible`
+- `env_vars`
+- `explicit_mode`
+- `automatic_mode`
+- `scope_order`
+- `project_root_from`
 
 It retains the previous defaults when callers omit these properties.
 Behavioural tests in the `hello_world` example exercise the new `--config`/`-c`
 flags alongside the environment overrides to confirm the precedence order is
 preserved.
+
+Automatic candidates are partitioned into `System`, `User`, and `Project`
+scopes. `compose_layers()` retains its historic first-successful-file behaviour.
+Consumers that need layered configuration select `AutomaticMode::StackScopes`
+and an ordered scope list; the first successful extends chain in each requested
+scope is appended in that order, so project layers naturally override user
+layers through `MergeComposer`'s existing last-pushed-wins semantics. Canonical
+paths are de-duplicated across scopes, retaining the earliest layer.
+
+`ConfigFilePolicy` adds an ordered chain of explicit selectors above automatic
+discovery. A winning CLI or environment selector suppresses later selectors and
+automatic probing. `RequiredExclusive` reports a selected-file failure without
+falling back; `Optional` accepts an absent selected path. The policy returns a
+replayable `FileLayerOutcome`, allowing callers to inspect scalar file values
+early and then add the same layers to a `MergeComposer`.
 
 `ConfigDiscovery::load_first` delegates to `load_config_file`, short-circuiting
 once a readable file is found. Failed reads are skipped so later candidates can
@@ -329,13 +349,13 @@ platform home-directory fallback consulted only when neither `HOME` nor
 `USERPROFILE` is set — an injected source can suppress it, so a test's
 candidate list stays machine-independent. The trait is object-safe and offers
 lookup by name only; it deliberately has no enumeration method because a
-process holding many unrelated secrets must never have its environment
-scanned, copied, or logged. `ProcessEnv` is the default
-and preserves existing behaviour exactly; `MapEnv` supplies a fixed,
-deterministic set of values for tests and for embedding `OrthoConfig` in
-another tool. This boundary applies only to configuration-file discovery: the
-`CsvEnv` merge layer and the `APP_*` environment provider still read the
-process environment directly and remain out of scope, tracked by
+process holding many unrelated secrets must never have its environment scanned,
+copied, or logged. `ProcessEnv` is the default and preserves existing behaviour
+exactly; `MapEnv` supplies a fixed, deterministic set of values for tests and
+for embedding `OrthoConfig` in another tool. This boundary applies only to
+configuration-file discovery: the `CsvEnv` merge layer and the `APP_*`
+environment provider still read the process environment directly and remain out
+of scope, tracked by
 [issue #412](https://github.com/leynos/ortho-config/issues/412).
 
 Default project-root resolution is a distinct boundary.

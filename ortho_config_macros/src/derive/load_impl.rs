@@ -5,6 +5,7 @@
 //! according to the order described in the design document. See
 //! [`docs/design.md`](../../docs/design.md) for the high-level architecture.
 
+use super::policy_impl::build_policy_based_loading;
 use quote::quote;
 use syn::Ident;
 
@@ -37,6 +38,12 @@ pub(crate) struct DiscoveryTokens {
     pub config_file_name: Option<String>,
     pub dotfile_name: Option<String>,
     pub project_file_name: Option<String>,
+    pub policy_enabled: bool,
+    pub env_vars: Vec<String>,
+    pub explicit_mode: Option<String>,
+    pub automatic_mode: Option<String>,
+    pub scope_order: Vec<String>,
+    pub project_root_from: Option<(String, bool)>,
 }
 
 /// Convenience wrapper for passing identifiers and tokens together.
@@ -128,6 +135,9 @@ fn build_discovery_based_loading(
     discovery: &DiscoveryTokens,
     has_config_path: bool,
 ) -> proc_macro2::TokenStream {
+    if discovery.policy_enabled {
+        return build_policy_based_loading(krate, discovery, has_config_path);
+    }
     let app_name = syn::LitStr::new(&discovery.app_name, proc_macro2::Span::call_site());
     let env_var = syn::LitStr::new(&discovery.env_var, proc_macro2::Span::call_site());
     let config_file_stmt = build_optional_stmt(
