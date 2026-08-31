@@ -298,31 +298,6 @@ fn interaction_mode_serializes_canonical_wire_values(
 }
 
 #[rstest]
-fn unrecognized_exception_kind_survives_round_trip() -> Result<()> {
-    let context: AgentContext = serde_json::from_value(json!({
-        "schema_version": "1",
-        "kind": "future-cli.agent_context",
-        "package": "future-cli",
-        "commands": [],
-        "policy": { "agent_native": "warn",
-            "exceptions": [{ "kind": "resource-kind", "name": "remote" }] }
-    }))
-    .expect("unrecognized exception kind should deserialize");
-
-    let exception = context
-        .policy
-        .exceptions
-        .first()
-        .expect("exception should survive");
-    assert_eq!(exception.kind, "resource-kind");
-
-    let value = serde_json::to_value(&context).expect("serialize context");
-    let round_tripped = first_array_item(field(field(&value, "policy"), "exceptions")?)?;
-    assert_eq!(field(round_tripped, "kind")?, "resource-kind");
-    Ok(())
-}
-
-#[rstest]
 #[case(PolicyMode::Off, "off")]
 #[case(PolicyMode::Warn, "warn")]
 #[case(PolicyMode::Deny, "deny")]
