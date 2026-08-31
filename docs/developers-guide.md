@@ -289,6 +289,27 @@ Keep richer fixture families isolated. For example, `NestedDocsConfig` and
 fixture-specific `tests/rstest_bdd/behaviour/steps/nested_docs_steps.rs` module
 rather than expanding unrelated step files.
 
+### Policy configuration test layout
+
+Agent-native policy configuration (roadmap 7.1.1) follows the same layout. The
+canonical vocabulary is a single source of truth in
+`cargo-orthohelp/src/policy/vocabulary.rs` (Decision D2); the agent-context
+verb mapper and the 7.1.2 lint rules both import its constants, so the two
+consumers cannot drift. Assertions in new policy tests split by crate:
+`assert!`-style boolean checks in `cargo-orthohelp`, and matcher- or
+collection-shaped checks in `ortho_config` agent-context tests (Decision D8).
+
+Fixtures: `tests/fixtures/orthohelp_policy_warn_fixture/` (mode `warn`, one
+redundant exception, one scoped exception) and
+`tests/fixtures/orthohelp_policy_deny_fixture/` (mode `deny`, one malformed
+exception) back the policy golden and behavioural suites; `orthohelp_fixture`
+keeps no policy table and serves the "off by default" scenario (Decision D10).
+The CLI-level policy behaviour is exercised end-to-end by
+`cargo-orthohelp/tests/features/orthohelp_policy.feature` with steps in
+`cargo-orthohelp/tests/rstest_bdd/behaviour/steps_policy.rs`, and the report
+wire format is snapshotted in
+`cargo-orthohelp/tests/golden/policy_report_tests.rs`.
+
 ### Integration test targets
 
 `ortho_config` also carries plain `rstest` integration suites that are

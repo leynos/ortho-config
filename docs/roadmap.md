@@ -195,15 +195,15 @@ unsafe mutation surfaces before release.
 
 ### 7.1. Implement vocabulary policy
 
-- [ ] 7.1.1. Add an opt-in agent-native policy configuration.
+- [x] 7.1.1. Add an opt-in agent-native policy configuration.
   - Requires step 6.2.
   - See agent-native-cli-design.md §3.3 and §5.
-  - [ ] Support `off`, `warn`, and `deny` modes.
-  - [ ] Provide canonical defaults for verbs and flags: `get`, `list`,
+  - [x] Support `off`, `warn`, and `deny` modes.
+  - [x] Provide canonical defaults for verbs and flags: `get`, `list`,
     `create`, `update`, `delete`, `--json`, `--no-input`, `--force`,
     `--dry-run`, `--limit`, `--cursor`, `--wait`, `--profile`, and
     `--deliver`.
-  - [ ] Allow explicit project exceptions that are visible in policy output.
+  - [x] Allow explicit project exceptions that are visible in policy output.
 
 - [ ] 7.1.2. Lint off-policy verbs and flags.
   - Requires 7.1.1.

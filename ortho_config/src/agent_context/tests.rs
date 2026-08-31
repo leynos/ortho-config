@@ -379,6 +379,11 @@ pub(super) fn sample_agent_context() -> AgentContext {
         feedback: SupportDeclaration { supported: false },
         policy: AgentPolicy {
             agent_native: PolicyMode::Warn,
+            exceptions: vec![PolicyException {
+                kind: "flag".to_owned(),
+                name: "--json".to_owned(),
+                command_path: None,
+            }],
         },
         skill_manifests: vec![SkillManifest {
             id: "example-list".to_owned(),

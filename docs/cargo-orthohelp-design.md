@@ -846,11 +846,32 @@ not treated as a path separator.
 [ADR-007](adr-007-downstream-context-command-naming.md). The downstream
 application command convention is `<tool> context --json`; the `context` name
 is reserved for application surfaces, and `cargo-orthohelp` does not add a
-public `context` or `agent-context` subcommand or alias.
+public `context` or `agent-context` subcommand or alias. The agent-context
+output must not be scraped from rendered man pages or PowerShell help.
+Rendering surfaces may consume agent metadata for examples or warnings, but
+they are not the source of truth for agents.
 
-The agent-context output must not be scraped from rendered man pages or
-PowerShell help. Rendering surfaces may consume agent metadata for examples or
-warnings, but they are not the source of truth for agents.
+### 6.3.2 Agent-native policy pipeline stage
+
+`--check-agent-native` runs as an early pipeline stage that does not build the
+bridge crate (Decision D11). It resolves the target package and parses
+`[package.metadata.ortho_config]` only, applies the `--policy-mode` override to
+the report's effective mode, evaluates the resolved
+`cargo_orthohelp::policy::PolicyConfig`, writes `policy-report.json` atomically
+to the output directory, and prints a one-line summary to standard error. In
+`deny` mode, deny-level findings return a policy-violation error after the
+report has been written.
+
+The evaluation uses the `evaluate(config, inputs) -> PolicyReport` seam; in
+7.1.1 `PolicyInputs` is empty, and roadmap 7.1.2 passes the bridge IR through
+that struct additively. The report embeds the configured exceptions (full shape
+including `reason`) and the canonical vocabulary block. When a generator
+`--format` is explicitly requested in the same invocation, the check runs first
+and the generator pipeline follows; when it is not explicit, the check alone
+writes `policy-report.json` and exits. This mirrors the
+`--format agent-context` stage's placement under §6.2 without requiring
+generator preconditions (`root_type`, a library target, or an `ortho_config`
+dependency).
 
 ## 6.4 Localized IR JSON output
 
@@ -1100,6 +1121,13 @@ PowerShell artefacts without adopting agent-context metadata. Consumers that
 parse localized IR directly should tolerate additive optional fields and should
 not require future agent-context or policy-report fields unless they opt into
 those formats.
+
+The policy-report schema (`cargo_orthohelp::policy`,
+`ORTHO_POLICY_REPORT_SCHEMA_VERSION = "1"`) grows additively only. The
+`exceptions` and `vocabulary` fields added for 7.1.1 are serde-defaulted, so
+consumers that ignore unknown fields continue to work. Roadmap 7.1.2 plans
+further additive fields (`PolicyInputs` bridge-IR input and a
+`replacement: Option<String>` on results) without bumping the schema version.
 
 ### 12.1 Rust API compatibility
 

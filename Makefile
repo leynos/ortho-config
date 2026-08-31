@@ -15,7 +15,7 @@ RUFF_VERSION ?= 0.15.12
 UV_ENV = UV_CACHE_DIR=.uv-cache UV_TOOL_DIR=.uv-tools
 # Markdown file list shared by the spelling gate. markdownlint-cli2 does its
 # own globbing via .markdownlint-cli2.jsonc; typos takes an explicit list.
-MD_FILES_FIND ?= find . -type f -name '*.md' -not -path './target/*' -not -path './$(PYTHON_VENV)/*' -not -path './.git/*' -not -path './.memdb/*' -print0
+MD_FILES_FIND ?= find . -type f -name '*.md' -not -path './target/*' -not -path './$(PYTHON_VENV)/*' -not -path './.git/*' -not -path './.memdb/*' -not -path './.vtcode/*' -print0
 PUBLISH_CHECK_FLAGS ?=
 PYTHON_VENV ?= scripts/.venv
 UV ?= uv
