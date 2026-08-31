@@ -171,8 +171,6 @@ Key choices:
 
 ## 2. Documentation IR (schema v1.2)
 
-## 2. Documentation IR (schema v1.2)
-
 ### 2.1 Top-level metadata
 
 ```rust
@@ -1151,84 +1149,6 @@ variant with `#[serde(other)]`. Two consequences are part of the contract:
   `Unknown` variant.
 
 ## 13. Worked example (abridged)
-
-
-### 13.1 IR JSON (excerpt, 1.2)
-
-```json
-{
-  "ir_version": "1.2",
-  "app_name": "my-app",
-  "bin_name": "my-app",
-  "about_id": "my-app.about",
-  "sections": {
-    "headings_ids": {
-      "name": "ortho.headings.name",
-      "synopsis": "ortho.headings.synopsis",
-      "description": "ortho.headings.description",
-      "options": "ortho.headings.options",
-      "environment": "ortho.headings.environment",
-      "files": "ortho.headings.files",
-      "precedence": "ortho.headings.precedence",
-      "exit_status": "ortho.headings.exit_status",
-      "examples": "ortho.headings.examples",
-      "see_also": "ortho.headings.see_also"
-    }
-  },
-  "fields": [
-    {
-      "name": "port",
-      "help_id": "my-app.fields.port.help",
-      "value": {"Integer": {"bits": 16, "signed": false}},
-      "default": {"display": "8080"},
-      "required": false,
-      "cli": {
-        "long": "port",
-        "short": "p",
-        "value_name": "NUM",
-        "multiple": false,
-        "takes_value": true,
-        "possible_values": [],
-        "hide_in_help": false
-      },
-      "env": {"var_name": "MY_APP_PORT"},
-      "file": {"key_path": "port"}
-    }
-  ],
-  "windows": {
-    "module_name": "MyApp",
-    "export_aliases": [],
-    "include_common_parameters": true,
-    "split_subcommands_into_functions": false,
-    "help_info_uri": null
-  },
-  "subcommands": [
-    {
-      "ir_version": "1.2",
-      "app_name": "run",
-      "about_id": "run.about",
-      "fields": [],
-      "windows": null,
-      "subcommands": [
-        {
-          "ir_version": "1.2",
-          "app_name": "audit",
-          "about_id": "audit.about",
-          "fields": [],
-          "windows": {
-            "module_name": "MyAppAdmin",
-            "export_aliases": ["my-app-audit"],
-            "include_common_parameters": false,
-            "split_subcommands_into_functions": true,
-            "help_info_uri": null
-          },
-          "subcommands": []
-        }
-      ]
-    }
-  ]
-}
-```
 
 ### 13.1 IR JSON (excerpt, 1.2)
 
