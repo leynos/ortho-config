@@ -24,7 +24,6 @@ pub(crate) use env::{
     compute_profile_env_var, default_app_name,
 };
 pub(crate) use r#override::{CollectionStrategies, collect_collection_strategies};
-pub(crate) use profile_flag::build_profile_flag_field;
 
 #[cfg(test)]
 #[expect(
