@@ -43,26 +43,13 @@ fn build_config_impl_delegates(
     }
 }
 
-/// Assemble the final `load_from_iter` method using the helper snippets.
-#[expect(
-    clippy::too_many_lines,
-    reason = "The generated impl block enumerates the public entry points; splitting would obscure the surface"
-)]
-pub(crate) fn build_load_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStream {
-    let idents = &args.idents;
+fn build_source_aware_methods(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStream {
+    let LoadImplIdents { config_ident, .. } = &args.idents;
     let krate = args.tokens.krate;
-    let LoadImplIdents {
-        cli_ident,
-        config_ident,
-        ..
-    } = idents;
-    let compose_layers_impl = build_compose_layers_impl(args);
-    let source_aware_compose_layers_impl = build_source_aware_compose_layers_impl(args);
-    let load_from_iter_impl = build_load_from_iter_impl(config_ident);
-    let load_from_iter_with_sources_impl =
-        build_load_from_iter_with_sources_impl(config_ident, krate);
-    let config_impl = build_config_impl_delegates(krate, cli_ident, config_ident);
-    let source_aware_methods = quote! {
+    let compose_layers_impl = build_source_aware_compose_layers_impl(args);
+    let load_from_iter_impl = build_load_from_iter_with_sources_impl(config_ident, krate);
+
+    quote! {
         /// Compose layers from arguments and explicit discovery and merge sources.
         ///
         /// Generated code keeps the two source capabilities separate so a
@@ -78,7 +65,7 @@ pub(crate) fn build_load_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStre
             I: IntoIterator<Item = T>,
             T: Into<std::ffi::OsString> + Clone,
         {
-            #source_aware_compose_layers_impl
+            #compose_layers_impl
         }
 
         /// Load configuration from arguments and explicit environment sources.
@@ -94,100 +81,147 @@ pub(crate) fn build_load_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStre
             I: IntoIterator<Item = T>,
             T: Into<std::ffi::OsString> + Clone,
         {
-            #load_from_iter_with_sources_impl
+            #load_from_iter_impl
         }
-    };
+    }
+}
 
-    if args.profiles {
-        let config_profile_impl = build_config_profile_delegates(krate, cli_ident, config_ident);
-        quote! {
-            impl #cli_ident {
-                /// Compose layers and the resolved selection in one pass.
-                fn compose_layers_with_selection_from_iter<I, T>(iter: I) -> (
-                    #krate::declarative::LayerComposition,
-                    Vec<#krate::SelectedProfile>,
-                )
-                where
-                    I: IntoIterator<Item = T>,
-                    T: Into<std::ffi::OsString> + Clone,
-                {
-                    #compose_layers_impl
-                }
-
-                #[expect(dead_code, reason = "Generated method may not be used in all builds")]
-                pub fn compose_layers_from_iter<I, T>(iter: I) -> #krate::declarative::LayerComposition
-                where
-                    I: IntoIterator<Item = T>,
-                    T: Into<std::ffi::OsString> + Clone,
-                {
-                    Self::compose_layers_with_selection_from_iter(iter).0
-                }
-
-                #source_aware_methods
-
-                #[expect(dead_code, reason = "Generated method may not be used in all builds")]
-                pub fn compose_layers() -> #krate::declarative::LayerComposition {
-                    Self::compose_layers_from_iter(std::env::args_os())
-                }
-
-                pub fn load_from_iter<I, T>(iter: I) -> #krate::OrthoResult<#config_ident>
-                where
-                    I: IntoIterator<Item = T>,
-                    T: Into<std::ffi::OsString> + Clone,
-                {
-                    #load_from_iter_impl
-                }
-
-                /// Load configuration and report the selected profile.
-                pub fn load_with_profile_from_iter<I, T>(iter: I) -> #krate::OrthoResult<#krate::profile::ProfileLoadOutcome<#config_ident>>
-                where
-                    I: IntoIterator<Item = T>,
-                    T: Into<std::ffi::OsString> + Clone,
-                {
-                    let (composition, selection) =
-                        Self::compose_layers_with_selection_from_iter(iter);
-                    composition
-                        .into_merge_result(|layers| #config_ident::merge_from_layers(layers))
-                        .map(|config| #krate::profile::ProfileLoadOutcome::new(config, selection))
-                }
-
-                /// Load configuration using the current process arguments and
-                /// report the selected profile.
-                pub fn load_with_profile() -> #krate::OrthoResult<#krate::profile::ProfileLoadOutcome<#config_ident>> {
-                    Self::load_with_profile_from_iter(std::env::args_os())
-                }
+fn build_profile_cli_impl(
+    args: &LoadImplArgs<'_>,
+    compose_layers_impl: &proc_macro2::TokenStream,
+    load_from_iter_impl: &proc_macro2::TokenStream,
+) -> proc_macro2::TokenStream {
+    let idents = &args.idents;
+    let krate = args.tokens.krate;
+    let LoadImplIdents {
+        cli_ident,
+        config_ident,
+        ..
+    } = idents;
+    let source_aware_methods = build_source_aware_methods(args);
+    quote! {
+        impl #cli_ident {
+            /// Compose layers and the resolved selection in one pass.
+            fn compose_layers_with_selection_from_iter<I, T>(iter: I) -> (
+                #krate::declarative::LayerComposition,
+                Vec<#krate::SelectedProfile>,
+            )
+            where
+                I: IntoIterator<Item = T>,
+                T: Into<std::ffi::OsString> + Clone,
+            {
+                #compose_layers_impl
             }
-            #config_impl
-            #config_profile_impl
+
+            #[expect(dead_code, reason = "Generated method may not be used in all builds")]
+            pub fn compose_layers_from_iter<I, T>(iter: I) -> #krate::declarative::LayerComposition
+            where
+                I: IntoIterator<Item = T>,
+                T: Into<std::ffi::OsString> + Clone,
+            {
+                Self::compose_layers_with_selection_from_iter(iter).0
+            }
+
+            #source_aware_methods
+
+            #[expect(dead_code, reason = "Generated method may not be used in all builds")]
+            pub fn compose_layers() -> #krate::declarative::LayerComposition {
+                Self::compose_layers_from_iter(std::env::args_os())
+            }
+
+            pub fn load_from_iter<I, T>(iter: I) -> #krate::OrthoResult<#config_ident>
+            where
+                I: IntoIterator<Item = T>,
+                T: Into<std::ffi::OsString> + Clone,
+            {
+                #load_from_iter_impl
+            }
+
+            /// Load configuration and report the selected profile.
+            pub fn load_with_profile_from_iter<I, T>(iter: I) -> #krate::OrthoResult<#krate::profile::ProfileLoadOutcome<#config_ident>>
+            where
+                I: IntoIterator<Item = T>,
+                T: Into<std::ffi::OsString> + Clone,
+            {
+                let (composition, selection) =
+                    Self::compose_layers_with_selection_from_iter(iter);
+                composition
+                    .into_merge_result(|layers| #config_ident::merge_from_layers(layers))
+                    .map(|config| #krate::profile::ProfileLoadOutcome::new(config, selection))
+            }
+
+            /// Load configuration using the current process arguments and
+            /// report the selected profile.
+            pub fn load_with_profile() -> #krate::OrthoResult<#krate::profile::ProfileLoadOutcome<#config_ident>> {
+                Self::load_with_profile_from_iter(std::env::args_os())
+            }
         }
+    }
+}
+
+fn build_legacy_cli_impl(
+    args: &LoadImplArgs<'_>,
+    compose_layers_impl: &proc_macro2::TokenStream,
+    load_from_iter_impl: &proc_macro2::TokenStream,
+) -> proc_macro2::TokenStream {
+    let idents = &args.idents;
+    let krate = args.tokens.krate;
+    let LoadImplIdents {
+        cli_ident,
+        config_ident,
+        ..
+    } = idents;
+    let source_aware_methods = build_source_aware_methods(args);
+    quote! {
+        impl #cli_ident {
+            #[expect(dead_code, reason = "Generated method may not be used in all builds")]
+            pub fn compose_layers_from_iter<I, T>(iter: I) -> #krate::declarative::LayerComposition
+            where
+                I: IntoIterator<Item = T>,
+                T: Into<std::ffi::OsString> + Clone,
+            {
+                #compose_layers_impl
+            }
+
+            #source_aware_methods
+
+            #[expect(dead_code, reason = "Generated method may not be used in all builds")]
+            pub fn compose_layers() -> #krate::declarative::LayerComposition {
+                Self::compose_layers_from_iter(std::env::args_os())
+            }
+
+            pub fn load_from_iter<I, T>(iter: I) -> #krate::OrthoResult<#config_ident>
+            where
+                I: IntoIterator<Item = T>,
+                T: Into<std::ffi::OsString> + Clone,
+            {
+                #load_from_iter_impl
+            }
+        }
+    }
+}
+pub(crate) fn build_load_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStream {
+    let LoadImplIdents {
+        cli_ident,
+        config_ident,
+        ..
+    } = &args.idents;
+    let krate = args.tokens.krate;
+    let compose_layers_impl = build_compose_layers_impl(args);
+    let load_from_iter_impl = build_load_from_iter_impl(config_ident);
+    let cli_impl = if args.profiles {
+        build_profile_cli_impl(args, &compose_layers_impl, &load_from_iter_impl)
     } else {
-        quote! {
-            impl #cli_ident {
-                #[expect(dead_code, reason = "Generated method may not be used in all builds")]
-                pub fn compose_layers_from_iter<I, T>(iter: I) -> #krate::declarative::LayerComposition
-                where
-                    I: IntoIterator<Item = T>,
-                    T: Into<std::ffi::OsString> + Clone,
-                {
-                    #compose_layers_impl
-                }
+        build_legacy_cli_impl(args, &compose_layers_impl, &load_from_iter_impl)
+    };
+    let config_impl = build_config_impl_delegates(krate, cli_ident, config_ident);
+    let config_profile_impl = args
+        .profiles
+        .then(|| build_config_profile_delegates(krate, cli_ident, config_ident));
 
-                #source_aware_methods
-
-                #[expect(dead_code, reason = "Generated method may not be used in all builds")]
-                pub fn compose_layers() -> #krate::declarative::LayerComposition {
-                    Self::compose_layers_from_iter(std::env::args_os())
-                }
-
-                pub fn load_from_iter<I, T>(iter: I) -> #krate::OrthoResult<#config_ident>
-                where
-                    I: IntoIterator<Item = T>,
-                    T: Into<std::ffi::OsString> + Clone,
-                {
-                    #load_from_iter_impl
-                }
-            }
-            #config_impl
-        }
+    quote! {
+        #cli_impl
+        #config_impl
+        #config_profile_impl
     }
 }

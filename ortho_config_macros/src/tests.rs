@@ -255,8 +255,7 @@ fn has_path_prefix(paths: &[Vec<String>], segments: &[&str]) -> bool {
     })
 }
 
-#[rstest]
-fn load_impl_uses_ortho_config_reexport_paths() -> Result<()> {
+fn build_legacy_load_impl() -> anyhow::Result<proc_macro2::TokenStream> {
     let cli_ident = parse_str("CliStruct").context("parse CliStruct ident")?;
     let config_ident = parse_str("Config").context("parse Config ident")?;
     let defaults_ident = parse_str("Defaults").context("parse Defaults ident")?;
@@ -282,14 +281,19 @@ fn load_impl_uses_ortho_config_reexport_paths() -> Result<()> {
         sources: None,
         krate: &krate,
     };
-    let generated = build_load_impl(&LoadImplArgs {
+    Ok(build_load_impl(&LoadImplArgs {
         idents,
         tokens,
         has_config_path: false,
         profiles: false,
         profile_env_var: String::from("PROFILE"),
         cli_arg_ids: Vec::new(),
-    });
+    }))
+}
+
+#[rstest]
+fn load_impl_uses_ortho_config_reexport_paths() -> Result<()> {
+    let generated = build_legacy_load_impl()?;
     let paths = collect_paths(generated.clone())?;
     let is_anchored = has_path_prefix(&paths, &["ortho_config", "figment"]);
 
@@ -306,38 +310,7 @@ fn load_impl_uses_ortho_config_reexport_paths() -> Result<()> {
 
 #[test]
 fn legacy_load_impl_has_no_profile_surface() -> Result<()> {
-    let cli_ident = parse_str("CliStruct").context("parse CliStruct ident")?;
-    let config_ident = parse_str("Config").context("parse Config ident")?;
-    let defaults_ident = parse_str("Defaults").context("parse Defaults ident")?;
-    let krate = quote! { ortho_config };
-    let env_provider = quote! {
-        ortho_config::figment::providers::Env::prefixed("APP_")
-    };
-    let default_struct_init = vec![quote! { value: 7 }];
-    let config_env_var = quote! { "APP_CONFIG_PATH" };
-    let dotfile_name = syn::LitStr::new(".app.toml", proc_macro2::Span::call_site());
-    let idents = LoadImplIdents {
-        cli_ident: &cli_ident,
-        config_ident: &config_ident,
-        defaults_ident: &defaults_ident,
-    };
-    let tokens = LoadImplTokens {
-        env_provider: &env_provider,
-        default_struct_init: &default_struct_init,
-        config_env_var: &config_env_var,
-        dotfile_name: &dotfile_name,
-        legacy_app_name: String::from("app"),
-        discovery: None,
-        krate: &krate,
-    };
-    let generated = build_load_impl(&LoadImplArgs {
-        idents,
-        tokens,
-        has_config_path: false,
-        profiles: false,
-        profile_env_var: String::from("PROFILE"),
-        cli_arg_ids: Vec::new(),
-    });
+    let generated = build_legacy_load_impl()?;
     let rendered = generated.to_string();
     for forbidden in [
         "extract_profile_layers",
