@@ -17,7 +17,8 @@ The source documents for this roadmap are:
 - [DDLint gap analysis](ddlint-gap-analysis.md);
 - [ADR-001: Replace `serde_yaml` with `serde-saphyr`](adr-001-replace-serde-yaml-with-serde-saphyr.md);
 - [ADR-002: Replace `cucumber-rs` with `rstest-bdd`](adr-002-replace-cucumber-with-rstest-bdd.md);
-- [ADR-004: Cargo external-subcommand entry-point architecture](adr-004-cargo-external-subcommand-entry-point.md).
+- [ADR-004: Cargo external-subcommand entry-point architecture](adr-004-cargo-external-subcommand-entry-point.md);
+- [ADR-005: Subcommand docs companion trait](adr-005-subcommand-docs-companion-trait.md).
 
 The first downstream consumers for the expanded agent-native contract are
 Weaver and Netsuke. Their plans make several generic requirements explicit:
@@ -802,3 +803,323 @@ later progressively add opinion.
     `FluentEmbedLocalizer`.
   - [ ] Confirm that the bridge eliminates the duplicate FTL parse pass
     and the duplicate locale-negotiation block.
+
+## 12. Document any ordinary clap CLI
+
+Idea: if the documentation derive covers the whole ordinary clap vocabulary —
+unit variants, named-field variants, and positional arguments — and can be
+applied to a type without also making that type loadable from configuration
+layers, then any existing clap CLI can be documented as written. If it cannot,
+generated documentation stays a privilege of command surfaces that happen to be
+config-shaped, and every agent-native contract built on top of the IR inherits
+the same blind spots.
+
+These are prerequisites rather than enhancements. Whole-CLI introspection
+(phase 6) and agent-native policy (phase 7) both assume the IR can describe the
+command tree, yet three of the most common shapes in the clap vocabulary are
+currently unrepresentable. Every task in this phase is additive to the IR
+envelope and leaves existing `--format ir`, `--format man`, and `--format ps`
+output unchanged for command surfaces already covered, apart from `ir_version`,
+which the minor bump in 12.2.1 changes.
+
+### 12.1. Cover the clap variant vocabulary the docs derive rejects
+
+This step answers whether `OrthoConfigSubcommandDocs` can describe unit and
+named-field variants without changing the trait contract or the IR envelope.
+The outcome decides whether service-style command sets and three-level command
+trees can be documented at all, and it establishes how far the field-metadata
+pipeline generalizes beyond struct fields. See cargo-orthohelp-design.md §3.1
+and adr-005-subcommand-docs-companion-trait.md §Subsequent amendments.
+
+- [ ] 12.1.1. Support unit subcommand variants in `OrthoConfigSubcommandDocs`.
+  - See cargo-orthohelp-design.md §3.1;
+    adr-005-subcommand-docs-companion-trait.md.
+  - [ ] Emit a minimal `DocMetadata` node per unit variant: clap command label,
+    generated `about_id`, default heading identifiers, and empty `fields` and
+    `subcommands`.
+  - [ ] Replace the `subcommand_docs_unit_variant` compile-fail fixture with
+    passing coverage, retaining compile-fail cases for genuinely unsupported
+    shapes.
+  - [ ] Success: `enum Cmd { Start, Stop, Status }` derives, emits three child
+    nodes in declaration order, and the man and PowerShell renderers list all
+    three commands.
+
+- [ ] 12.1.2. Support named-field variants that nest a subcommand selector.
+  - Requires 12.1.1.
+  - See cargo-orthohelp-design.md §3.1.
+  - [ ] Recurse through the `#[command(subcommand)]` field's enum to populate
+    the variant node's `subcommands`.
+  - [ ] Reject more than one `#[command(subcommand)]` field per variant at
+    macro time, matching clap's own constraint.
+  - [ ] Success: `Cmd::Remote { #[command(subcommand)] action: RemoteAction }`
+    produces a three-level tree whose grandchild labels and ordering match
+    clap's own command resolution.
+
+- [ ] 12.1.3. Generate field metadata from named-variant argument fields.
+  - Requires 12.1.2.
+  - See cargo-orthohelp-design.md §3.1 and §3.2.
+  - [ ] Run variant fields through the same field-metadata pipeline as struct
+    fields, covering value typing, defaults, `env`, `file`, and extras.
+  - [ ] Support variants that mix ordinary argument fields with a nested
+    selector, populating `fields` and `subcommands` on the same node.
+  - [ ] Success: duplicate-identifier and illegal-name diagnostics fire on
+    variant fields exactly as they do on struct fields, with spans on the
+    offending variant field.
+
+- [ ] 12.1.4. Add a combinatorial variant-matrix fixture across every output
+  format.
+  - Requires 12.1.3 and 12.2.3.
+  - See cargo-orthohelp-design.md §3.1 and §10.
+  - [ ] Cover unit, tuple, and named-field variants at three nesting levels,
+    including a named-field variant that mixes arguments with a nested
+    selector and a command that carries positionals.
+  - [ ] Assert the matrix through `--format ir`, `--format man`, `--format ps`,
+    and `--format agent-context`.
+  - [ ] Success: the fixture fails when any single variant shape is dropped
+    from any one of the four outputs, so a shape cannot regress in one renderer
+    while passing in another.
+
+### 12.2. Make positional arguments representable end to end
+
+This step answers whether the IR can describe the argument shape that
+`git clone <url>` and `cp <src> <dst>` use. The derive currently emits
+`long: Some(..)` for every documented field, so positionals are unrepresentable
+— probably the single largest gap in ordinary CLI coverage. The outcome gates
+any claim that agent context describes a command's invocation surface. See
+cargo-orthohelp-design.md §2.2.
+
+- [ ] 12.2.1. Add positional metadata to the documentation IR and derive.
+  - See cargo-orthohelp-design.md §2.2 and §12.
+  - [ ] Add `CliMetadata.positional: Option<PositionalMetadata>` carrying
+    `index`, `variadic`, `var_arg`, and `last`.
+  - [ ] Stop emitting `long` unconditionally; derive positional metadata from
+    `#[arg(index = …)]`, from the absence of `long` and `short`, from
+    `num_args` for `variadic`, from `Arg::trailing_var_arg` for `var_arg`, and
+    from `Arg::last` for `last`.
+  - [ ] Bump the IR minor version and record the additive change in the design
+    document's versioning section.
+  - [ ] Skip-serialize `CliMetadata.positional` when absent, using
+    `#[serde(skip_serializing_if = "Option::is_none")]` in both
+    hand-maintained copies of the type, `ortho_config/src/docs/ir.rs` and
+    `cargo-orthohelp/src/schema/mod.rs`, so flags-only IR omits the
+    `positional` key rather than emitting `null`.
+  - [ ] Success: `git clone <url>` and `cp <src> <dst>` shapes round-trip
+    through `--format ir` with correct indices, while a flags-only command
+    surface produces IR byte-identical to the previous version apart from the
+    version string, with no `positional` key emitted.
+
+- [ ] 12.2.2. Render positionals in man and PowerShell output.
+  - Requires 12.2.1.
+  - See cargo-orthohelp-design.md §7.1 and §7.2.
+  - [ ] Order positionals by index in SYNOPSIS ahead of the options summary and
+    render `value_name` rather than a flag spelling.
+  - [ ] Emit MAML `position` attributes and preserve `variadic`, `var_arg`, and
+    `last` as independent attributes. Reserve “accepting remaining input” for
+    `var_arg`; `last` requires `--` and does not consume trailing input.
+  - [ ] Success: golden snapshots show `cp <src> <dst>` synopsis ordering, and
+    `Get-Help` reports the arguments as positional parameters rather than named
+    ones.
+
+- [ ] 12.2.3. Carry positionals into agent context.
+  - Requires 12.2.1.
+  - See agent-native-cli-design.md §3.2 and §8.2;
+    cargo-orthohelp-design.md §6.3.1.
+  - [ ] Extend `AgentInput` with positional metadata and stop discarding
+    flagless inputs that carry it.
+  - [ ] Keep discarding flagless, non-positional inputs; those are part of the
+    configuration surface rather than the invocation surface, and the
+    existing warning stays for that case.
+  - [ ] Confirm the change is additive under the agent-context compatibility
+    policy and update the frozen wire snapshot deliberately.
+  - [ ] Success: an agent reading context for a `cp`-shaped command can
+    reconstruct argument order without consulting the man page.
+
+### 12.3. Separate documenting a type from loading it
+
+This step answers whether a clap-only argument struct can be documented without
+being made loadable from configuration layers. Docs currently arrive bundled
+with `OrthoConfig`, which asserts `DeserializeOwned`, so documenting a type
+also forces a `Default` implementation that lies about required fields. Most
+subcommand argument structs in a real CLI are clap-only, so the outcome decides
+how much of a command surface the pipeline can reach. See
+cargo-orthohelp-design.md §3.1.
+
+- [ ] 12.3.1. Add a standalone `OrthoConfigDocs` derive.
+  - See cargo-orthohelp-design.md §3.1.
+  - [ ] Export `#[derive(OrthoConfigDocs)]` from `ortho_config_macros`, sharing
+    the existing field-metadata pipeline rather than forking it.
+  - [ ] Add a docs-only mode to that pipeline which reads clap's declared
+    argument attributes — `long`, `short`, `index`, `value_name`, and the
+    positional settings — rather than synthesizing a kebab-cased long flag from
+    the field identifier in `resolve_cli_field`, and which never invents the
+    short flag that `resolve_short_flag` derives from the field name.
+  - [ ] Emit environment and file metadata only where explicitly declared,
+    replacing the unconditional `env: Some(..), file: Some(..)` that
+    `render_io_block` produces today.
+  - [ ] Emit no runtime loaders, no `DeserializeOwned` bound assertion, and no
+    merge machinery.
+  - [ ] Success: a `#[derive(clap::Args)]` struct with required fields, no
+    `Default`, and no `Deserialize` derives documentation metadata and appears
+    in generated IR, and a field declared `#[arg(long = "endpoint")]` documents
+    that flag with no short flag and no environment or file source.
+  - [ ] Success: a standalone `#[derive(clap::Parser, OrthoConfigDocs)]` root
+    with a `#[command(subcommand)]` selector and nested variants preserves
+    nested command labels and declaration order in recursively populated
+    `DocMetadata.subcommands`.
+
+- [ ] 12.3.2. Route `OrthoConfig` docs generation through the standalone path.
+  - Requires 12.3.1.
+  - See cargo-orthohelp-design.md §3.1.
+  - [ ] Guarantee a single implementation strategy so the two derives cannot
+    drift.
+  - [ ] Detect both derives on one type at macro time and emit an error naming
+    the duplicate, rather than letting the compiler report conflicting trait
+    implementations.
+  - [ ] Success: existing `OrthoConfig` IR output is unchanged, and the
+    double-derive case has a compile-fail fixture with a readable message.
+
+- [ ] 12.3.3. Document the docs-only adoption path.
+  - Requires 12.3.2.
+  - See cargo-orthohelp-design.md §3.1; users-guide.md.
+  - [ ] Add a users' guide section showing a clap-only subcommand argument
+    struct documented without `OrthoConfig`.
+  - [ ] State explicitly that `Default` is no longer required on structs with
+    required fields merely to obtain documentation.
+  - [ ] Add migration guidance for consumers currently deriving `OrthoConfig`
+    solely to obtain documentation metadata.
+
+## 13. Keep the published documentation contracts evolvable
+
+Idea: if the IR and agent-context types are non-exhaustive, reachable through
+constructors that stamp the schema version, tolerant of unknown enum values,
+and backed by a shipped heading catalogue, then upstream can add metadata in a
+minor release and a new consumer renders correct output before authoring a
+single translation. If they are not, every metadata addition planned in phases
+7 and 9 costs a breaking release, and the compatibility policy already written
+in agent-native-cli-design.md §8.2 cannot be exercised.
+
+This phase compounds with phase 12. Closing the coverage gaps removes much of
+the need for hand-assembled IR; these changes make hand-assembled IR survivable
+for the consumers who still build it directly.
+
+### 13.1. Make the IR types safe to extend
+
+This step answers whether an optional metadata field can be added without a
+breaking release. `docs/` currently has no `#[non_exhaustive]` while six
+sibling modules in the same crate use it, and `ir.rs` has no `impl` blocks at
+all, so every hand-assembling consumer breaks on every field addition. The
+outcome determines the release cost of all later metadata work. See
+cargo-orthohelp-design.md §3.6 and §12.1.
+
+- [ ] 13.1.1. Add constructors for every public IR and agent-context type.
+  - Requires 12.2.1.
+  - See cargo-orthohelp-design.md §3.6.
+  - [ ] Provide `DocMetadata::new`, `FieldMetadata::new`, `CliMetadata::flag`,
+    `CliMetadata::positional`, `HeadingIds::defaults`, and equivalents for the
+    remaining published types, with optional metadata applied through `with_*`
+    methods or field assignment; field assignment applies only to optional
+    metadata, never to `ir_version`.
+  - [ ] Make `DocMetadata.ir_version` a private field, initialized only by
+    `DocMetadata::new` from `ORTHO_DOCS_IR_VERSION` and exposed through a
+    read-only accessor, so no consumer writes the version by hand and none can
+    claim conformance to a schema version it has not implemented.
+  - [ ] Keep `ORTHO_DOCS_IR_VERSION` public for comparison while documenting
+    the constructor as the only supported way to populate the field.
+  - [ ] Success: the derive and the `cargo-orthohelp` fixtures build IR through
+    constructors, and a test asserts that constructor-built metadata reports the
+    current schema version.
+
+- [ ] 13.1.2. Apply `#[non_exhaustive]` to the published IR and agent-context
+  types.
+  - Requires 13.1.1.
+  - See cargo-orthohelp-design.md §3.6 and §12.1.
+  - [ ] Match the position already taken by `subcommand::selected`,
+    `declarative::layer`, and `error::types`.
+  - [ ] Ship in the same release as the constructors; the annotation alone
+    would leave consumers unable to construct the types at all.
+  - [ ] Success: an out-of-crate struct-literal construction fails to compile
+    while the constructor path compiles, and adding an optional field to
+    `FieldMetadata` requires no consumer change.
+
+- [ ] 13.1.3. Publish the migration note for hand-assembled IR.
+  - Requires 13.1.2.
+  - See cargo-orthohelp-design.md §12.1.
+  - [ ] Record the breaking change, the constructor equivalents, and why the
+    two changes ship together.
+  - [ ] Add a `CHANGELOG.md` entry and migration-guide coverage for Weaver and
+    Netsuke, which assemble metadata directly.
+
+### 13.2. Honour the unknown-variant compatibility promise
+
+This step answers whether a reader built against the current schema survives a
+later payload. The agent-context policy already permits additive enum variants
+on condition that an unknown-value fallback exists and is tested;
+`MutationEffect`, `InteractionMode`, and their siblings declare `Unknown`
+variants for exactly that purpose, but nothing routes unrecognized wire strings
+to them, so the allowance is unusable. See agent-native-cli-design.md §8.2 and
+cargo-orthohelp-design.md §12.2.
+
+- [ ] 13.2.1. Wire unknown-value fallbacks to the forward-compatibility
+  variants.
+  - See cargo-orthohelp-design.md §12.2; agent-native-cli-design.md §8.2.
+  - [ ] Annotate `InteractionMode::Unknown` and `MutationEffect::Unknown` with
+    `#[serde(other)]`.
+  - [ ] Audit the remaining agent-context and policy enums and record, per
+    enum, whether it models forward-compatible metadata or closed operator
+    input. `PolicyMode` is closed input: a misspelled mode must fail loudly, so
+    it keeps strict deserialization and gains no `Unknown` variant.
+  - [ ] Document that an unrecognized value round-trips as `"unknown"`, and
+    that the lossiness is the intended trade against a hard error.
+  - [ ] Success: a payload carrying an enum string introduced after the current
+    schema version deserializes to the documented legacy default instead of
+    failing.
+
+- [ ] 13.2.2. Add forward-compatibility fixtures for the schema contract.
+  - Requires 13.2.1.
+  - See agent-native-cli-design.md §8.1 and §8.2.
+  - [ ] Add a frozen fixture representing a future payload, carrying unknown
+    enum strings and unknown object fields on every type that promises
+    tolerance.
+  - [ ] Assert that tolerant types — those that promise forward compatibility,
+    such as `InteractionMode` and `MutationEffect`, which ship an `Unknown`
+    variant — accept the unknown fields and unknown enum values and resolve
+    them per the §8.1 defaulting table.
+  - [ ] Assert that closed types, such as `PolicyMode` (`Off | Warn | Deny`,
+    with no `Unknown` variant, by deliberate design for strict operator
+    input), reject unsupported input.
+  - [ ] Success: the compatibility policy is enforced by a test rather than by
+    prose, so CI fails on a regression in either direction — a tolerant type
+    losing its fallback, or a closed type silently accepting unknown input.
+
+### 13.3. Remove the heading-catalogue onboarding tax
+
+This step answers what a consumer sees on its first generator run with no
+Fluent catalogue of its own. The library ships no `ortho.headings.*` entries,
+and `cargo-orthohelp` carries a hardcoded English table instead, so headings
+are the one part of a generated man page a consumer cannot translate without
+reimplementing all eleven identifiers. See cargo-orthohelp-design.md §4.2.1.
+
+- [ ] 13.3.1. Ship the default heading catalogue in the library locales.
+  - See cargo-orthohelp-design.md §4.2.1.
+  - [ ] Add the full `ortho.headings.*` set — name, synopsis, description,
+    options, environment, files, precedence, exit status, examples, see also,
+    and commands — to the canonical `ortho_config/locales/en-US/messages.ftl`
+    resource and the other currently shipped resource,
+    `ortho_config/locales/ja/messages.ftl`.
+  - [ ] Keep `en-US/messages.ftl` as the library's canonical English resource;
+    there is no library `en-GB` catalogue to alias. Language-only matching
+    makes English tags including `en-GB` reuse the embedded `en-US` resources.
+  - [ ] Success: every `HeadingIds::defaults()` identifier resolves against the
+    library catalogue in each shipped locale, gated by a test that fails when
+    an identifier is added without a translation.
+
+- [ ] 13.3.2. Resolve headings through the library catalogue instead of the
+  generator's hardcoded table.
+  - Requires 13.3.1 and 13.1.1.
+  - See cargo-orthohelp-design.md §4.1 and §4.2.1.
+  - [ ] Remove `standard_heading_fallback` from `cargo-orthohelp` and let the
+    documented layering — consumer bundle, then library defaults, then English
+    — supply the value.
+  - [ ] Success: a fixture crate with no Fluent catalogue renders a complete man
+    page in English and a complete man page in a second shipped locale, and
+    neither output contains a raw identifier.
