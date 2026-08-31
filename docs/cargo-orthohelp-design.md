@@ -827,12 +827,13 @@ context or an owner of those values.
 For the first `--format agent-context` implementation, the adapter emits an
 optional `AgentCommand.summary` from the short en-US command description. It
 does not emit Fluent identifiers, long help text, roff fragments, or PowerShell
-help structures. Positional inputs are detected from existing CLI metadata when
-an input has no `long` or `short` flag and still takes a value; the v1 schema
-represents those inputs by leaving `AgentInput.long` absent. The output is
-written as exactly one file at `<out>/agent-context.json`. `--format all`
-includes the same agent-context document beside IR, man pages, and PowerShell
-artefacts.
+help structures. The adapter emits a positional input only when
+`CliMetadata.positional` is `Some`, ordering emitted positional inputs by
+`CliMetadata.positional.index` and leaving `AgentInput.long` absent. A field
+with CLI metadata but no flag spelling or `positional` metadata is
+non-invocable configuration surface and is not emitted. The output is written
+as exactly one file at `<out>/agent-context.json`. `--format all` includes the
+same agent-context document beside IR, man pages, and PowerShell artefacts.
 
 `AgentInput.default` is a best-effort display string, not a normative or
 machine-parseable value. The generator normalizes unstable Rust token spacing
