@@ -20,6 +20,7 @@ const CORPUS: &[(&str, &str)] = &[
     ("UNRELATED", "ignored"),
 ];
 
+/// Build the corpus provider whose declarative setup mirrors generated loaders.
 fn configured_provider() -> CsvEnv {
     CsvEnv::prefixed("app_")
         .uppercase(true)
@@ -27,21 +28,56 @@ fn configured_provider() -> CsvEnv {
         .lowercase(true)
 }
 
+/// Check the shared corpus with the generated-loader transform sequence.
 fn assert_parity(pairs: &[(String, String)]) {
+    assert_provider_parity(configured_provider(), pairs);
+}
+
+/// Compare a process provider before clearing the jail with its injected replay.
+///
+/// Keeping those evaluations in separate jail states proves the injected path
+/// reads only its supplied `MapEnv`, not variables retained by Figment's jail.
+fn assert_provider_parity(provider: CsvEnv, pairs: &[(String, String)]) {
     Jail::expect_with(|jail| -> Result<(), figment::Error> {
         jail.clear_env();
         for (key, value) in pairs {
             jail.set_env(key, value);
         }
 
-        let process = configured_provider().data()?;
+        let process = provider.data()?;
         jail.clear_env();
-        let injected =
-            configured_provider().with_source(Arc::new(pairs.iter().cloned().collect::<MapEnv>()));
+        let injected = provider.with_source(Arc::new(pairs.iter().cloned().collect::<MapEnv>()));
 
         assert_eq!(process, injected.data()?);
         Ok(())
     });
+}
+
+/// Figment maps builders in declaration order rather than grouping by mapping kind.
+#[test]
+fn interleaved_key_mappings_match_the_process_backed_provider() {
+    let pairs = [(String::from("data-b"), String::from("7"))];
+
+    assert_provider_parity(
+        CsvEnv::raw().split("a").uppercase(true).lowercase(false),
+        &pairs,
+    );
+}
+
+/// Every Figment key mapping restores its default lowercase mode.
+#[test]
+fn key_mapping_resets_lowercase_like_the_process_backed_provider() {
+    let pairs = [(String::from("MIXED_CASE"), String::from("7"))];
+
+    assert_provider_parity(CsvEnv::raw().lowercase(false).split("_"), &pairs);
+}
+
+/// A later lowercase builder remains able to opt out after a key mapping reset.
+#[test]
+fn lowercase_can_be_disabled_after_a_key_mapping() {
+    let pairs = [(String::from("MIXED_CASE"), String::from("7"))];
+
+    assert_provider_parity(CsvEnv::raw().split("_").lowercase(false), &pairs);
 }
 
 /// Return the default-profile dictionary from a provider result.
@@ -68,6 +104,7 @@ fn assert_database_siblings(data: &Map<Profile, Dict>) {
     assert_eq!(database.get("port").and_then(Value::to_u128), Some(5432));
 }
 
+/// Cover nesting, scalar parsing, CSV handling, and process isolation together.
 #[test]
 fn injected_source_matches_the_process_backed_corpus() {
     assert_parity(
@@ -140,6 +177,7 @@ fn chained_split_patterns_match_the_process_backed_mapping() {
     });
 }
 
+/// Preserve a comma-containing scalar when both providers disable CSV parsing.
 #[test]
 fn csv_can_be_disabled_for_an_injected_source() {
     let pairs = [(String::from("APP_VALUES"), String::from("one,two"))];
@@ -160,6 +198,7 @@ fn csv_can_be_disabled_for_an_injected_source() {
     });
 }
 
+/// Reject unreplayable key closures before injected scanning can change semantics.
 #[test]
 fn injected_source_rejects_opaque_key_transforms() {
     let error = CsvEnv::raw()
@@ -194,6 +233,7 @@ fn injected_source_rejects_opaque_filter_map_transforms() {
 }
 
 proptest! {
+    /// Exercise generated key and value pairs without mutating process state.
     #[test]
     fn injected_source_matches_process_backed_generated_pairs(
         pairs in prop::collection::vec(

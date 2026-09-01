@@ -4,7 +4,7 @@
 //! iterator. It retains only inspectable transform state, rejecting opaque
 //! closures rather than silently changing a configuration key's nesting.
 
-use super::{CsvEnv, KeyTransform};
+use super::{CsvEnv, KeyMapping, KeyTransform};
 use figment::error::Error;
 use uncased::{Uncased, UncasedStr};
 
@@ -46,20 +46,17 @@ impl CsvEnv {
     fn transform_injected_key(&self, raw_key: &str) -> Option<String> {
         let trimmed_key = raw_key.trim();
         let stripped_key = self.strip_prefix(trimmed_key)?;
-        let uppercased_key = self
-            .options
-            .uppercase
-            .is_enabled()
-            .then(|| stripped_key.to_ascii_uppercase());
-        let split_input = uppercased_key.as_deref().unwrap_or(stripped_key);
-        let split_key = self
-            .options
-            .split_patterns
-            .iter()
-            .fold(split_input.to_owned(), |key, pattern| {
-                key.replace(pattern, ".")
-            });
-        let trimmed_split_key = split_key.trim();
+        let mapped_key = self.options.mappings.iter().fold(
+            stripped_key.to_owned(),
+            |key, mapping| match mapping {
+                KeyMapping::Uppercase(uppercase) if uppercase.is_enabled() => {
+                    key.to_ascii_uppercase()
+                }
+                KeyMapping::Uppercase(_) => key,
+                KeyMapping::Split(pattern) => key.replace(pattern, "."),
+            },
+        );
+        let trimmed_split_key = mapped_key.trim();
 
         if trimmed_split_key.split('.').any(str::is_empty) {
             return None;

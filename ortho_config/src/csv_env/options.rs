@@ -7,12 +7,10 @@ use crate::SharedScanEnvSource;
 pub(super) struct Options {
     /// Prefix removed before the remaining key transforms run.
     pub(super) prefix: Option<String>,
-    /// Literal patterns converted to dots for nested keys, in builder order.
-    pub(super) split_patterns: Vec<String>,
+    /// Key mappings replayed in the precise order in which builders added them.
+    pub(super) mappings: Vec<KeyMapping>,
     /// Whether final keys use ASCII lowercase.
     pub(super) lowercase: Lowercase,
-    /// Whether keys are uppercased before split processing.
-    pub(super) uppercase: Uppercase,
     /// Whether comma-containing scalar values become arrays.
     pub(super) csv: Csv,
     /// Whether the provider's key transform can be replayed declaratively.
@@ -30,14 +28,26 @@ impl Options {
     pub(super) fn new(prefix: Option<String>) -> Self {
         Self {
             prefix,
-            split_patterns: Vec::new(),
+            mappings: Vec::new(),
             lowercase: Lowercase::Enabled,
-            uppercase: Uppercase::Disabled,
             csv: Csv::Enabled,
             key_transform: KeyTransform::Declarative,
             source: None,
         }
     }
+}
+
+/// A replayable key transformation that Figment represents as a mapping closure.
+///
+/// Each mapping resets Figment's lowercase mode. `CsvEnv` records that reset
+/// when the builder adds the mapping, so injected replay needs only apply this
+/// sequence in order before the final case conversion.
+#[derive(Clone)]
+pub(super) enum KeyMapping {
+    /// Convert the whole key to ASCII uppercase at this point in the sequence.
+    Uppercase(Uppercase),
+    /// Replace this literal pattern with dots to create nested dictionary keys.
+    Split(String),
 }
 
 /// Whether the final replayed key is converted to ASCII lowercase.
@@ -65,12 +75,12 @@ impl Lowercase {
     }
 }
 
-/// Whether injected replay uppercases a key before it is split.
+/// Whether one replayed mapping converts a key to ASCII uppercase.
 #[derive(Clone, Copy)]
 pub(super) enum Uppercase {
-    /// Apply ASCII uppercase before the split transform.
+    /// Apply ASCII uppercase at this point in the mapping sequence.
     Enabled,
-    /// Leave the prefixed key unchanged before splitting.
+    /// Leave the key unchanged at this point in the mapping sequence.
     Disabled,
 }
 

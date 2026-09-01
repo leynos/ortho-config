@@ -27,6 +27,20 @@ struct WholeConfig {
     #[ortho_config(default = 1)]
     jobs: u8,
     from_file: String,
+    #[ortho_config(skip_cli)]
+    database: Database,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct Database {
+    host: String,
+    port: u16,
+}
+
+#[derive(Debug, Deserialize, Serialize, OrthoConfig)]
+struct UnprefixedConfig {
+    #[ortho_config(skip_cli)]
+    database: Database,
 }
 
 /// Write a selector fixture through a capability handle.
@@ -46,7 +60,9 @@ fn derived_loading_uses_one_map_for_both_environment_capabilities() -> Result<()
     let source = Arc::new(
         MapEnv::new()
             .with_var("WHOLE_CONFIG_CONFIG_PATH", &selector_path)
-            .with_var("WHOLE_CONFIG_JOBS", "7"),
+            .with_var("WHOLE_CONFIG_JOBS", "7")
+            .with_var("WHOLE_CONFIG_DATABASE__HOST", "db.prefixed.test")
+            .with_var("whole_config_database__port", "5432"),
     );
     let discovery: SharedEnvSource = source.clone();
     let merge: SharedScanEnvSource = source;
@@ -64,6 +80,33 @@ fn derived_loading_uses_one_map_for_both_environment_capabilities() -> Result<()
         config.from_file == "selected",
         "expected selected file value, got {}",
         config.from_file
+    );
+    ensure!(
+        config.database.host == "db.prefixed.test" && config.database.port == 5432,
+        "expected injected prefixed nested database values"
+    );
+    Ok(())
+}
+
+/// Generated raw providers apply the same uppercase and split replay rules.
+#[test]
+fn unprefixed_derived_loading_replays_generated_key_transforms() -> Result<()> {
+    let source = Arc::new(
+        MapEnv::new()
+            .with_var("DATABASE__HOST", "db.raw.test")
+            .with_var("database__PORT", "15432"),
+    );
+    let discovery: SharedEnvSource = source.clone();
+    let merge: SharedScanEnvSource = source;
+
+    let config =
+        UnprefixedConfig::load_from_iter_with_sources(["unprefixed-config"], discovery, merge)
+            .map_err(|error| anyhow::anyhow!(error))
+            .context("load raw derived configuration from injected sources")?;
+
+    ensure!(
+        config.database.host == "db.raw.test" && config.database.port == 15432,
+        "expected injected raw nested database values"
     );
     Ok(())
 }

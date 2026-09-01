@@ -21,7 +21,7 @@ mod merge;
 mod options;
 use crate::merge_telemetry;
 use merge::merge_dicts;
-use options::{Csv, KeyTransform, Lowercase, Options, Uppercase};
+use options::{Csv, KeyMapping, KeyTransform, Lowercase, Options, Uppercase};
 
 /// Environment provider with CSV list support.
 ///
@@ -75,7 +75,10 @@ impl CsvEnv {
     #[must_use]
     pub fn split(mut self, pattern: &str) -> Self {
         self.inner = self.inner.split(pattern);
-        self.options.split_patterns.push(pattern.into());
+        self.options
+            .mappings
+            .push(KeyMapping::Split(pattern.into()));
+        self.options.lowercase = Lowercase::Enabled;
         self
     }
 
@@ -156,7 +159,10 @@ impl CsvEnv {
                 Uncased::from(key_name)
             }
         });
-        self.options.uppercase = uppercase_transform;
+        self.options
+            .mappings
+            .push(KeyMapping::Uppercase(uppercase_transform));
+        self.options.lowercase = Lowercase::Enabled;
         self
     }
 
