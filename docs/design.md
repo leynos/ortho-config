@@ -329,13 +329,18 @@ platform home-directory fallback consulted only when neither `HOME` nor
 `USERPROFILE` is set — an injected source can suppress it, so a test's
 candidate list stays machine-independent. The trait is object-safe and offers
 lookup by name only; it deliberately has no enumeration method because a
-process holding many unrelated secrets must never have its environment scanned,
-copied, or logged. `ProcessEnv` is the default and preserves existing behaviour
-exactly; `MapEnv` supplies a fixed, deterministic set of values for tests and
-for embedding `OrthoConfig` in another tool. The environment merge layer has a
-deliberately separate `ScanEnvSource` capability: `CsvEnv::with_source`
-enumerates only through that explicit type, retaining `EnvSource`'s lookup-only
-safety property. Derived loading accepts both sources through
+process holding many unrelated secrets must never have its environment scanned
+by undirected enumeration, copied in bulk, or logged in bulk. Callers that know
+a variable name may still request, copy, or log that variable's value.
+`ProcessEnv` is the default and preserves existing behaviour exactly; `MapEnv`
+supplies a fixed, deterministic set of values for tests and for embedding
+`OrthoConfig` in another tool. The environment merge layer has a deliberately
+separate `ScanEnvSource` capability: `CsvEnv::with_source` enumerates only
+through that explicit type, retaining `EnvSource`'s lookup-only safety property.
+The injected `CsvEnv` path replays only its declarative prefix, case, split, and
+CSV transforms; arbitrary `map` and `filter_map` closures are opaque and are
+rejected when a source is injected. The process-backed path remains delegated to
+figment and keeps its existing behaviour. Source-aware derived loading uses
 `OrthoConfig::load_from_iter_with_sources`, so one `MapEnv` can drive discovery
 and `APP_*` merging without a process environment mutation. This completes
 [issue #412](https://github.com/leynos/ortho-config/issues/412).

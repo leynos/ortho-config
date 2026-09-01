@@ -293,23 +293,14 @@ rather than expanding unrelated step files.
 
 `ortho_config` also carries plain `rstest` integration suites that are
 distinct from the behavioural (`rstest-bdd`) suites above. Each directory-style
-suite needs its own `[[test]]` stanza in `ortho_config/Cargo.toml`; a suite
-without a stanza is not compiled or run by Cargo:
-
-- `ortho_config/tests/subcommand/mod.rs` (cargo target `subcommand`) — tests
-  for subcommand configuration helpers, covering `basic`, `cli`, `merge`,
-  `nesting`, and `prefix` submodules. It shares `../util.rs` and
-  `../support/to_anyhow.rs` via `#[path]` includes.
-- `ortho_config/tests/clap_integration/mod.rs` (cargo target
-  `clap_integration`) — integration tests for CLI parsing across multiple
-  configuration sources, covering `common`, `config_path`, `error_cases`,
-  `option_cases`, `parsing`, and (on Unix and Redox only) `xdg`.
+suite needs its own `[[test]]` stanza in the crate manifest; a suite without a
+stanza is not compiled or run by Cargo. The repository-layout guide records the
+current suite and module inventory.
 
 Run either suite on its own for focused debugging:
 
 ```bash
-cargo test -p ortho_config --test subcommand
-cargo test -p ortho_config --test clap_integration
+cargo test -p ortho_config --test <target>
 ```
 
 ### Public documentation examples
@@ -359,8 +350,8 @@ normal relative components only.
 
 ### Shared test-support helpers
 
-`ortho_config/tests/support/to_anyhow.rs` owns the `ToAnyhow` trait, which
-converts an `OrthoResult<T>` (`Result<T, Arc<OrthoError>>`) into an
+The shared test-support module owns the `ToAnyhow` trait, which converts an
+`OrthoResult<T>` (`Result<T, Arc<OrthoError>>`) into an
 `anyhow::Result<T>`, preserving the original error as the `anyhow` source. It
 is the single conversion point for integration-test targets that report
 failures through `anyhow`; before it existed, each suite grew its own free
@@ -369,8 +360,8 @@ on behaviour by accident rather than by construction. New local
 `to_anyhow`-style conversions are not permitted — depend on this module
 instead.
 
-`ortho_config/tests/support/discovery_builder.rs` owns `discovery_with`, a
-pure builder that returns an independent `ConfigDiscovery` wired to the
+The shared discovery-builder helper owns `discovery_with`, a pure builder that
+returns an independent `ConfigDiscovery` wired to the
 caller's `MapEnv` only; it reads no other environment variables and touches
 no filesystem, and it resolves its sole project root to `/workspace`. It is
 owned by the injected-source discovery suites — candidates, properties,
@@ -378,14 +369,13 @@ telemetry, and metrics — which need a `ConfigDiscovery` configured
 identically so that their results remain comparable. Any test needing a
 deterministic discovery over an injected environment may reuse it.
 
-`ortho_config/tests/rstest_bdd/behaviour/steps/common.rs` owns
-`set_scalar_once`, `set_nonblank_scalar_once`, and the `SlotTakeOrExt`
-extension trait's `take_or`. The first two centralize the repeated "guard,
-validate, and populate a scalar slot" shape used to fill scenario `Slot`
-state exactly once; `take_or` centralizes the repeated "take the slot's
-value or fail with a descriptive error" shape. Both are scoped to step
-modules under `behaviour/steps/`; step modules must use these helpers rather
-than re-implementing slot-guard boilerplate.
+The common behavioural-step helper module owns `set_scalar_once`,
+`set_nonblank_scalar_once`, and the `SlotTakeOrExt` extension trait's `take_or`.
+The first two centralize the repeated "guard, validate, and populate a scalar
+slot" shape used to fill scenario `Slot` state exactly once; `take_or`
+centralizes the repeated "take the slot's value or fail with a descriptive
+error" shape. Both are scoped to behavioural step modules; step modules must
+use these helpers rather than re-implementing slot-guard boilerplate.
 
 ## Snapshot tests
 

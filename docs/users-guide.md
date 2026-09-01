@@ -253,6 +253,22 @@ fn main() {
 change. `EnvSource` deliberately supports lookup by name but not enumeration;
 discovery cannot accidentally scan or log unrelated environment values.
 
+## Resolve discovery and merging without process state
+
+Tests and embedded callers can resolve the complete configuration without
+mutating the process environment. Use `ScanEnvSource` for the explicit ability
+to enumerate variables for the merge layer, and pass it to `CsvEnv::with_source`.
+The derive-generated `OrthoConfig::load_from_iter_with_sources` entry point
+accepts both the discovery `SharedEnvSource` and merge
+`SharedScanEnvSource`, so configuration-path selection, files, and the
+environment layer use the same supplied values.
+
+`MapEnv` implements both source traits. Create one `Arc<MapEnv>`, then coerce
+cloned `Arc` values to `SharedEnvSource` and `SharedScanEnvSource`; the same
+map can therefore drive discovery lookups and merge enumeration. The ordinary
+`load()` and `load_from_iter()` methods continue to use `ProcessEnv` by
+default.
+
 ## Give each subcommand its own settings
 
 Many CLIs have global options plus commands with different configuration. Derive

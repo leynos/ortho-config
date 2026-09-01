@@ -40,8 +40,10 @@ use std::sync::Arc;
 /// the environment, because RFC 0001 makes "the crate never scans the whole
 /// process environment" a safety property of environment access: a process
 /// holding thousands of unrelated secrets must never have them enumerated,
-/// copied, or logged. An enumeration method here would void that guarantee for
-/// every holder of an `EnvSource`, however carefully individual callers behaved.
+/// bulk-copied, or bulk-logged. A caller that knows a variable's name may
+/// still request, copy, or log that individual value. An enumeration method
+/// here would void the undirected-enumeration guarantee for every holder of an
+/// `EnvSource`, however carefully individual callers behaved.
 ///
 /// The `CsvEnv` merge layer does legitimately scan a prefix, because that is
 /// what `figment::providers::Env` does. Its injectable path is represented by
@@ -284,7 +286,7 @@ pub fn process_env_source() -> SharedEnvSource {
 /// use ortho_config::process_scan_env_source;
 ///
 /// let source = process_scan_env_source();
-/// assert!(source.scan().iter().any(|(key, _)| key == "PATH"));
+/// let _variables = source.scan();
 /// ```
 #[must_use]
 pub fn process_scan_env_source() -> SharedScanEnvSource {

@@ -31,10 +31,12 @@ fn assert_parity(pairs: &[(String, String)]) {
             jail.set_env(key, value);
         }
 
+        let process = configured_provider().data()?;
+        jail.clear_env();
         let injected =
             configured_provider().with_source(Arc::new(pairs.iter().cloned().collect::<MapEnv>()));
 
-        assert_eq!(configured_provider().data()?, injected.data()?);
+        assert_eq!(process, injected.data()?);
         Ok(())
     });
 }
@@ -58,11 +60,13 @@ fn csv_can_be_disabled_for_an_injected_source() {
         jail.set_env("APP_VALUES", "one,two");
 
         let process = CsvEnv::prefixed("APP_").csv(false);
+        let process_data = process.data()?;
+        jail.clear_env();
         let injected = CsvEnv::prefixed("APP_")
             .csv(false)
             .with_source(Arc::new(pairs.iter().cloned().collect::<MapEnv>()));
 
-        assert_eq!(process.data()?, injected.data()?);
+        assert_eq!(process_data, injected.data()?);
         Ok(())
     });
 }
