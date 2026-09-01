@@ -4,6 +4,20 @@ This guide documents how contributors work with tests in this repository. It
 focuses on behavioural tests because they span multiple crates and have the
 highest maintenance cost when patterns drift.
 
+## GitHub Actions runner profiles
+
+The delayed pull-request comment job runs on the shared uncached
+`namespace-profile-default` runner (Ubuntu 22.04, amd64, 4 vCPU, and 16 GB).
+Its cache volume is disabled, so this controlled initial slice does not add a
+second cache backend.
+
+The CI and coverage workflows retain their current Linux and Windows matrix
+runners. Their Linux leg carries formatting, lint, tests, coverage, and
+tooling setup in one job; migrate it only after an equivalent 8-vCPU shared
+Linux profile is available and measured. Windows remains GitHub-hosted because
+this pilot has no shared Windows Namespace profile. Reusable workflows retain
+their caller-controlled runners.
+
 ## Current testing strategy
 
 The workspace runs one unified test workflow via Make targets:
