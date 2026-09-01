@@ -4,6 +4,7 @@
 //! points select `CsvEnv` only when callers supply a scanning source.
 
 use super::{Prefix, load_file_and_env_defaults};
+use crate::merge_telemetry;
 use crate::{
     CliValueExtractor, CsvEnv, OrthoMergeExt, OrthoResult, SharedScanEnvSource, sanitized_provider,
 };
@@ -38,10 +39,15 @@ pub fn load_and_merge_subcommand_with_sources<T>(
 where
     T: serde::Serialize + DeserializeOwned + Default + CommandFactory,
 {
-    let fig = load_file_and_env_defaults::<T>(prefix, Some(merge_source))?;
-    fig.merge(sanitized_provider(cli)?)
-        .extract()
-        .into_ortho_merge()
+    merge_telemetry::source_aware_subcommand_load_started();
+    let result = (|| {
+        let fig = load_file_and_env_defaults::<T>(prefix, Some(merge_source))?;
+        fig.merge(sanitized_provider(cli)?)
+            .extract()
+            .into_ortho_merge()
+    })();
+    merge_telemetry::source_aware_subcommand_load_finished(&result);
+    result
 }
 
 /// Wrapper around [`load_and_merge_subcommand_with_sources`] using the
@@ -79,12 +85,17 @@ pub fn load_and_merge_subcommand_with_matches_with_sources<T>(
 where
     T: serde::Serialize + DeserializeOwned + Default + CommandFactory + CliValueExtractor,
 {
-    let fig = Figment::from(Serialized::defaults(T::default()))
-        .merge(load_file_and_env_defaults::<T>(prefix, Some(merge_source))?);
-    let cli_value = cli.extract_user_provided(matches)?;
-    fig.merge(Serialized::defaults(cli_value))
-        .extract()
-        .into_ortho_merge()
+    merge_telemetry::source_aware_subcommand_load_started();
+    let result = (|| {
+        let fig = Figment::from(Serialized::defaults(T::default()))
+            .merge(load_file_and_env_defaults::<T>(prefix, Some(merge_source))?);
+        let cli_value = cli.extract_user_provided(matches)?;
+        fig.merge(Serialized::defaults(cli_value))
+            .extract()
+            .into_ortho_merge()
+    })();
+    merge_telemetry::source_aware_subcommand_load_finished(&result);
+    result
 }
 
 /// Wrapper around [`load_and_merge_subcommand_with_matches_with_sources`]

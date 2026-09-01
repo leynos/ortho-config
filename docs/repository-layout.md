@@ -73,8 +73,19 @@ targets. Each directory-style suite needs its own `[[test]]` stanza in
   `config_path`, `error_cases`, `option_cases`, and `parsing` modules, plus
   `xdg` on Unix and Redox.
 
-Run either target independently with `cargo test -p ortho_config --test
-subcommand` or `cargo test -p ortho_config --test clap_integration`.
+Run either target independently with
+`cargo test -p ortho_config --test subcommand` or
+`cargo test -p ortho_config --test clap_integration`.
+
+## Behavioural test inventory
+
+Behavioural suites use crate-local integration targets. Their feature files are
+kept alongside the targets that consume them:
+
+- `ortho_config/tests/rstest_bdd/` and `ortho_config/tests/features/`
+- `cargo-orthohelp/tests/rstest_bdd/` and `cargo-orthohelp/tests/features/`
+- `examples/hello_world/tests/rstest_bdd/` and
+  `examples/hello_world/tests/features/`
 
 ## Shared test-support modules
 

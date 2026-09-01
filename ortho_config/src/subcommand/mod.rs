@@ -69,6 +69,15 @@ fn load_from_files(paths: &[PathBuf], name: &CmdName) -> OrthoResult<Figment> {
     Ok(fig)
 }
 
+/// Gather file defaults and the selected subcommand environment layer.
+///
+/// A supplied scanning source changes only the environment provider; file
+/// search remains process-independent and follows the configured prefix.
+///
+/// # Errors
+///
+/// Returns gathering errors from file loading or from the selected environment
+/// provider without exposing either source's raw values in telemetry.
 #[cfg(feature = "serde_json")]
 pub(super) fn load_file_and_env_defaults<T>(
     prefix: &Prefix,

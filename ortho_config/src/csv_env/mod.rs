@@ -16,7 +16,9 @@ use figment::{
 use std::ops::Deref;
 use uncased::{Uncased, UncasedStr};
 
+mod injected;
 mod options;
+use crate::merge_telemetry;
 use options::{Csv, KeyTransform, Lowercase, Options, Uppercase};
 
 /// Environment provider with CSV list support.
@@ -193,79 +195,23 @@ impl CsvEnv {
         self
     }
 
+    /// Delegate process-backed enumeration to Figment without replaying it.
+    ///
+    /// Retaining this delegation pins the default path to Figment's exact
+    /// semantics; only injected sources use the declarative replay below.
     fn iter(&self) -> impl Iterator<Item = (Uncased<'static>, String)> + '_ {
         self.inner.iter()
     }
 
+    /// Pair an existing Figment provider with replayable transform options.
+    ///
+    /// Providers converted through [`From<Env>`] cannot expose their transform
+    /// history, so that conversion marks the key transform opaque separately.
     fn new(inner: Env, prefix: Option<String>) -> Self {
         Self {
             inner,
             options: Options::new(prefix),
         }
-    }
-
-    fn injected_entries(&self) -> Result<Vec<(Uncased<'static>, String)>, Box<Error>> {
-        if matches!(self.options.key_transform, KeyTransform::Opaque) {
-            return Err(Box::new(Error::from(
-                "CsvEnv cannot use an injected ScanEnvSource after map or filter_map",
-            )));
-        }
-
-        let Some(source) = &self.options.source else {
-            return Ok(Vec::new());
-        };
-
-        Ok(source
-            .scan()
-            .into_iter()
-            .filter_map(|(raw_key, value)| {
-                self.transform_injected_key(&raw_key.to_string_lossy())
-                    .map(|transformed_key| {
-                        (
-                            Uncased::from(transformed_key),
-                            value.to_string_lossy().to_string(),
-                        )
-                    })
-            })
-            .collect())
-    }
-
-    fn transform_injected_key(&self, raw_key: &str) -> Option<String> {
-        let trimmed_key = raw_key.trim();
-        let stripped_key = self.strip_prefix(trimmed_key)?;
-        let uppercased_key = self
-            .options
-            .uppercase
-            .is_enabled()
-            .then(|| stripped_key.to_ascii_uppercase());
-        let split_input = uppercased_key.as_deref().unwrap_or(stripped_key);
-        let split_key = self.options.split_pattern.as_ref().map_or_else(
-            || split_input.to_owned(),
-            |pattern| split_input.replace(pattern, "."),
-        );
-        let trimmed_split_key = split_key.trim();
-
-        if trimmed_split_key.split('.').any(str::is_empty) {
-            return None;
-        }
-
-        Some(if self.options.lowercase.is_enabled() {
-            trimmed_split_key.to_ascii_lowercase()
-        } else {
-            trimmed_split_key.to_owned()
-        })
-    }
-
-    fn strip_prefix<'a>(&self, key: &'a str) -> Option<&'a str> {
-        self.options.prefix.as_deref().map_or_else(
-            || Some(key),
-            |prefix| {
-                UncasedStr::new(key)
-                    .starts_with(prefix)
-                    .then(|| key.get(prefix.len()..))
-                    .flatten()
-            },
-        )
     }
 
     /// Determine if a value should be parsed as comma-separated rather than
@@ -295,6 +241,10 @@ impl CsvEnv {
             .unwrap_or_else(|_| Value::from(trimmed.to_owned()))
     }
 
+    /// Parse a raw value according to the provider's CSV policy.
+    ///
+    /// CSV parsing intentionally happens after key transforms, so turning it
+    /// off for subcommands changes values only and never key nesting.
     fn parse_value(raw: &str, csv: bool) -> Value {
         let trimmed = raw.trim();
         if csv && Self::should_parse_as_csv(trimmed) {
@@ -307,18 +257,12 @@ impl CsvEnv {
             Self::parse_scalar(trimmed)
         }
     }
-}
 
-impl Provider for CsvEnv {
-    fn metadata(&self) -> figment::Metadata {
-        self.inner.metadata()
-    }
-
-    fn profile(&self) -> Option<Profile> {
-        Some(self.inner.profile.clone())
-    }
-
-    fn data(&self) -> Result<Map<Profile, Dict>, Error> {
+    /// Build the provider data after the caller has recorded its source choice.
+    ///
+    /// Keeping collection separate from telemetry guarantees exactly one
+    /// terminal event for either source path, including early provider errors.
+    fn collect_data(&self) -> Result<Map<Profile, Dict>, Box<Error>> {
         let mut dict = Dict::new();
         let injected_entries = self
             .options
@@ -331,9 +275,9 @@ impl Provider for CsvEnv {
         for (k, v) in entries {
             let value = Self::parse_value(&v, self.options.csv.is_enabled());
             let Some(nested) = nest(k.as_str(), value).into_dict() else {
-                return Err(Error::from(format!(
+                return Err(Box::new(Error::from(format!(
                     "environment key `{k}` produced a non-object value"
-                )));
+                ))));
             };
             dict.extend(nested);
         }
@@ -341,7 +285,48 @@ impl Provider for CsvEnv {
     }
 }
 
+impl Provider for CsvEnv {
+    /// Preserve Figment's metadata for diagnostics and provider composition.
+    fn metadata(&self) -> figment::Metadata {
+        self.inner.metadata()
+    }
+
+    /// Preserve the inner provider's profile when collecting replayed entries.
+    fn profile(&self) -> Option<Profile> {
+        Some(self.inner.profile.clone())
+    }
+
+    /// Collect process-backed or injected entries and emit bounded telemetry.
+    ///
+    /// The event records source selection and the terminal outcome, never an
+    /// environment key, value, prefix, or raw provider error.
+    fn data(&self) -> Result<Map<Profile, Dict>, Error> {
+        let is_injected = self.options.source.is_some();
+        if is_injected {
+            merge_telemetry::csv_env_injected_started();
+        } else {
+            merge_telemetry::csv_env_process_started();
+        }
+
+        let result = self.collect_data().map_err(|error| *error);
+        match &result {
+            Ok(_) if is_injected => merge_telemetry::csv_env_injected_succeeded(),
+            Ok(_) => merge_telemetry::csv_env_process_succeeded(),
+            Err(_) => merge_telemetry::csv_env_failed(
+                is_injected,
+                matches!(self.options.key_transform, KeyTransform::Opaque),
+            ),
+        }
+        result
+    }
+}
+
 impl From<Env> for CsvEnv {
+    /// Wrap a preconfigured Figment provider without assuming its transform history.
+    ///
+    /// Figment stores arbitrary key closures opaquely, so injected loading is
+    /// conservatively rejected for this conversion while process behaviour is
+    /// preserved unchanged.
     fn from(inner: Env) -> Self {
         let mut provider = Self::new(inner, None);
         provider.options.key_transform = KeyTransform::Opaque;
@@ -352,6 +337,10 @@ impl From<Env> for CsvEnv {
 impl Deref for CsvEnv {
     type Target = Env;
 
+    /// Expose the inner provider for process-backed compatibility operations.
+    ///
+    /// Callers that configure it through the dereferenced `Env` may introduce
+    /// opaque transforms, so injected use remains guarded by [`Self::with_source`].
     fn deref(&self) -> &Env {
         &self.inner
     }

@@ -7,7 +7,9 @@ use super::{LoadImplArgs, LoadImplIdents, LoadImplTokens, build_compose_layers_i
 
 /// Runtime names used by a generated source-aware loading method.
 pub(crate) struct LoadSourceTokens<'a> {
+    /// Token resolving to the lookup-only source used by discovery.
     pub discovery: &'a proc_macro2::TokenStream,
+    /// Token resolving to the scanning source used by the merge layer.
     pub merge: &'a proc_macro2::TokenStream,
 }
 
@@ -55,13 +57,17 @@ pub(crate) fn build_load_from_iter_impl(
 /// Build a generated load method that forwards both injected source types.
 pub(crate) fn build_load_from_iter_with_sources_impl(
     config_ident: &Ident,
+    krate: &proc_macro2::TokenStream,
 ) -> proc_macro2::TokenStream {
     quote! {
+        #krate::__private::source_aware_derived_load_started();
         let composition = Self::compose_layers_from_iter_with_sources(
             iter,
             discovery_source,
             merge_source,
         );
-        composition.into_merge_result(|layers| #config_ident::merge_from_layers(layers))
+        let result = composition.into_merge_result(|layers| #config_ident::merge_from_layers(layers));
+        #krate::__private::source_aware_derived_load_finished(&result);
+        result
     }
 }

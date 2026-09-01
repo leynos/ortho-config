@@ -322,7 +322,8 @@ pub(crate) fn build_load_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStre
     let compose_layers_from_iter =
         syn::Ident::new("compose_layers_from_iter", proc_macro2::Span::call_site());
     let load_from_iter_impl = build_load_from_iter_impl(config_ident, &compose_layers_from_iter);
-    let load_from_iter_with_sources_impl = build_load_from_iter_with_sources_impl(config_ident);
+    let load_from_iter_with_sources_impl =
+        build_load_from_iter_with_sources_impl(config_ident, krate);
     let config_impl = build_config_impl_delegates(krate, cli_ident, config_ident);
 
     quote! {
@@ -336,6 +337,11 @@ pub(crate) fn build_load_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStre
                 #compose_layers_impl
             }
 
+            /// Compose layers from arguments and explicit discovery and merge sources.
+            ///
+            /// Generated code keeps the two source capabilities separate so a
+            /// lookup-only discovery source cannot accidentally enumerate the
+            /// environment layer.
             #[expect(dead_code, reason = "Generated method may not be used in all builds")]
             pub fn compose_layers_from_iter_with_sources<I, T>(
                 iter: I,
@@ -362,6 +368,10 @@ pub(crate) fn build_load_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStre
                 #load_from_iter_impl
             }
 
+            /// Load configuration from arguments and explicit environment sources.
+            ///
+            /// The generated implementation records only bounded merge telemetry:
+            /// it never serialises source values, keys, paths, or raw errors.
             pub fn load_from_iter_with_sources<I, T>(
                 iter: I,
                 discovery_source: #krate::SharedEnvSource,

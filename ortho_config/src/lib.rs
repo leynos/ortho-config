@@ -53,6 +53,7 @@ mod error;
 pub mod file;
 mod localizer;
 mod merge;
+mod merge_telemetry;
 mod post_merge;
 mod result_ext;
 pub mod subcommand;
@@ -156,6 +157,24 @@ pub use merge::{CliValueExtractor, sanitize_value, sanitized_provider, value_wit
 pub use post_merge::{PostMergeContext, PostMergeHook};
 use std::sync::Arc;
 pub use unic_langid::{LanguageIdentifier, langid};
+
+#[doc(hidden)]
+pub mod __private {
+    //! Runtime hooks emitted by derive-generated source-aware loading methods.
+    //!
+    //! This boundary keeps macro expansion independent of `tracing` while
+    //! ensuring it can record only the merge layer's bounded telemetry fields.
+
+    /// Record the start of a derived configuration load using injected sources.
+    pub fn source_aware_derived_load_started() {
+        crate::merge_telemetry::source_aware_derived_load_started();
+    }
+
+    /// Record a derived injected-load result using its bounded error category.
+    pub fn source_aware_derived_load_finished<T>(result: &crate::OrthoResult<T>) {
+        crate::merge_telemetry::source_aware_derived_load_finished(result);
+    }
+}
 
 /// Trait implemented for structs that represent application configuration.
 pub trait OrthoConfig: Sized + serde::de::DeserializeOwned {
