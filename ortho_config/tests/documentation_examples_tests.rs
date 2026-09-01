@@ -31,6 +31,7 @@ const EXPECTED_EXAMPLE_IDS: &[&str] = &[
     "guide-metrics-install",
     "guide-orthohelp-command",
     "guide-orthohelp-metadata",
+    "guide-source-aware-load",
     "guide-subcommand",
     "guide-tracing",
     "guide-tracing-install",

@@ -456,6 +456,39 @@ as additional metric families or span fields used across crates, should be
 mentioned in the relevant design or component architecture document, so the
 contract stays discoverable.
 
+### Environment merge telemetry
+
+The environment merge boundary emits a `merge.layer` tracing event at the
+decision and terminal points of source-aware work. Events use only these
+bounded fields:
+
+- `operation`: `csv_env`, `derived_load`, or `subcommand_load`;
+- `source`: `process` or `injected`;
+- `outcome`: `attempt`, `success`, or `failure`; and
+- `category`: `none`, `opaque_key_transform`, `invalid_nesting`, `cli`,
+  `file`, `cyclic_extends`, `gathering`, `merge`, `validation`, or
+  `aggregate`.
+
+`CsvEnv` emits process-backed and injected events. Derive-generated loads and
+subcommand loads emit events when their source-aware entry points are used.
+The events never contain environment values, keys, paths, configuration data,
+caller-supplied prefixes, or raw error text. Error categories are reduced to
+the closed vocabulary before emission so subscribers can aggregate failures
+without receiving sensitive input.
+
+Capture tests must cover successful and failing paths for each emitting
+operation. They assert the operation, source, outcome, and category fields,
+and verify that captured events contain neither injected values nor keys or
+paths from the test inputs. The library does not install a global subscriber;
+applications attach their own capture or export layer at the boundary.
+
+With the optional `metrics` feature enabled, the same merge boundaries also
+increment `ortho_config.merge.attempts` and
+`ortho_config.merge.outcomes`. Both counter families use only the bounded
+`operation`, `source`, `outcome`, and `category` labels described above; the
+attempt counter uses `attempt` and `none` for its outcome and category. No
+metrics recorder is installed by the library.
+
 ## Digest rendering
 
 `cargo-orthohelp` hashes cache inputs with SHA-256 and renders the digest as 64

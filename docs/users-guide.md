@@ -269,6 +269,37 @@ map can therefore drive discovery lookups and merge enumeration. The ordinary
 `load()` and `load_from_iter()` methods continue to use `ProcessEnv` by
 default.
 
+For example, this complete load uses one map for the selector and merge layers:
+
+<!-- tested-example: guide-source-aware-load -->
+```rust
+use ortho_config::{
+    MapEnv, OrthoConfig, OrthoResult, SharedEnvSource, SharedScanEnvSource,
+};
+use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+
+#[derive(Debug, Deserialize, Serialize, OrthoConfig)]
+#[ortho_config(prefix = "ACME_")]
+struct Config {
+    #[ortho_config(default = 8080)]
+    port: u16,
+}
+
+fn main() -> OrthoResult<()> {
+    let environment = Arc::new(MapEnv::new().with_var("ACME_PORT", "9000"));
+    let discovery: SharedEnvSource = environment.clone();
+    let merge: SharedScanEnvSource = environment;
+
+    let config = Config::load_from_iter_with_sources(["acme"], discovery, merge)?;
+    println!("port={}", config.port);
+    Ok(())
+}
+```
+
+The example prints `port=9000`. No process variable is read: the discovery
+source handles named lookups, while the scan source supplies the merge layer.
+
 ## Give each subcommand its own settings
 
 Many CLIs have global options plus commands with different configuration. Derive
@@ -317,6 +348,19 @@ For an enum with many variants, derive `SelectedSubcommandMerge` and use
 entry point small. Add `#[ortho_config(cli_default_as_absent)]` to a field when
 a `clap` default should not override a value supplied by a file or environment
 variable.
+
+When a subcommand needs the same hermetic merge boundary, pass a
+`SharedScanEnvSource` to `load_and_merge_with_sources` instead of using the
+process-backed `load_and_merge`. For the `ServeConfig` above, the call is:
+
+Set `ACME_SERVE_CMDS_SERVE_PORT` to `9000`, then bind the map with
+`let environment = Arc::new(
+MapEnv::new().with_var("ACME_SERVE_CMDS_SERVE_PORT", "9000"));`
+and call `let config = cli.load_and_merge_with_sources(environment)?;`.
+
+This supplies the `ACME_SERVE_CMDS_SERVE_PORT` layer while preserving the
+existing CLI precedence. Import `MapEnv` and `std::sync::Arc` when using this
+pattern.
 
 ## Handle errors at the application boundary
 

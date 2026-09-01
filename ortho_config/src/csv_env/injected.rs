@@ -52,10 +52,13 @@ impl CsvEnv {
             .is_enabled()
             .then(|| stripped_key.to_ascii_uppercase());
         let split_input = uppercased_key.as_deref().unwrap_or(stripped_key);
-        let split_key = self.options.split_pattern.as_ref().map_or_else(
-            || split_input.to_owned(),
-            |pattern| split_input.replace(pattern, "."),
-        );
+        let split_key = self
+            .options
+            .split_patterns
+            .iter()
+            .fold(split_input.to_owned(), |key, pattern| {
+                key.replace(pattern, ".")
+            });
         let trimmed_split_key = split_key.trim();
 
         if trimmed_split_key.split('.').any(str::is_empty) {

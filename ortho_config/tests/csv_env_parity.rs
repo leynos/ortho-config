@@ -1,6 +1,9 @@
 //! Parity coverage for process-backed and injected `CsvEnv` providers.
 
-use figment::{Jail, Provider};
+use figment::{
+    Jail, Profile, Provider,
+    value::{Dict, Map, Value},
+};
 use ortho_config::{CsvEnv, MapEnv};
 use proptest::prelude::*;
 use std::sync::Arc;
@@ -41,6 +44,30 @@ fn assert_parity(pairs: &[(String, String)]) {
     });
 }
 
+/// Return the default-profile dictionary from a provider result.
+fn default_dict(data: &Map<Profile, Dict>) -> &Dict {
+    data.get(&Profile::Default).map_or_else(
+        || panic!("CsvEnv providers always collect into the default profile"),
+        |dictionary| dictionary,
+    )
+}
+
+/// Assert the recursively merged database value retains both sibling keys.
+fn assert_database_siblings(data: &Map<Profile, Dict>) {
+    let database = default_dict(data)
+        .get("database")
+        .and_then(Value::as_dict)
+        .map_or_else(
+            || panic!("database must be a nested dictionary"),
+            |dictionary| dictionary,
+        );
+    assert_eq!(
+        database.get("host").and_then(Value::as_str),
+        Some("db.example.test")
+    );
+    assert_eq!(database.get("port").and_then(Value::to_u128), Some(5432));
+}
+
 #[test]
 fn injected_source_matches_the_process_backed_corpus() {
     assert_parity(
@@ -49,6 +76,68 @@ fn injected_source_matches_the_process_backed_corpus() {
             .map(|(key, value)| ((*key).into(), (*value).into()))
             .collect::<Vec<_>>(),
     );
+}
+
+/// Process and injected paths recursively merge sibling nested keys alike.
+#[test]
+fn nested_siblings_are_preserved_in_both_paths() {
+    let pairs = [
+        (
+            String::from("APP_DATABASE__HOST"),
+            String::from("db.example.test"),
+        ),
+        (String::from("APP_DATABASE__PORT"), String::from("5432")),
+    ];
+
+    Jail::expect_with(|jail| -> Result<(), figment::Error> {
+        jail.clear_env();
+        for (key, value) in &pairs {
+            jail.set_env(key, value);
+        }
+
+        let process = CsvEnv::prefixed("APP_").split("__").data()?;
+        jail.clear_env();
+        let injected = CsvEnv::prefixed("APP_")
+            .split("__")
+            .with_source(Arc::new(pairs.into_iter().collect::<MapEnv>()))
+            .data()?;
+
+        assert_eq!(process, injected);
+        assert_database_siblings(&process);
+        assert_database_siblings(&injected);
+        Ok(())
+    });
+}
+
+/// Replaying split builders in call order matches Figment's chained mappings.
+#[test]
+fn chained_split_patterns_match_the_process_backed_mapping() {
+    let pairs = [(String::from("APP_A_B-C"), String::from("7"))];
+
+    Jail::expect_with(|jail| -> Result<(), figment::Error> {
+        jail.clear_env();
+        jail.set_env("APP_A_B-C", "7");
+
+        let process = CsvEnv::prefixed("APP_").split("_").split("-").data()?;
+        jail.clear_env();
+        let injected = CsvEnv::prefixed("APP_")
+            .split("_")
+            .split("-")
+            .with_source(Arc::new(pairs.into_iter().collect::<MapEnv>()))
+            .data()?;
+
+        assert_eq!(process, injected);
+        let a = default_dict(&injected)
+            .get("a")
+            .and_then(Value::as_dict)
+            .expect("first split component must be a dictionary");
+        let b = a
+            .get("b")
+            .and_then(Value::as_dict)
+            .expect("second split component must be a dictionary");
+        assert_eq!(b.get("c").and_then(Value::to_u128), Some(7));
+        Ok(())
+    });
 }
 
 #[test]
@@ -75,6 +164,23 @@ fn csv_can_be_disabled_for_an_injected_source() {
 fn injected_source_rejects_opaque_key_transforms() {
     let error = CsvEnv::raw()
         .map(|key| key.into())
+        .with_source(Arc::new(MapEnv::new().with_var("APP_HOST", "localhost")))
+        .data()
+        .expect_err("injected arbitrary key transforms must be rejected");
+
+    assert!(
+        error
+            .to_string()
+            .contains("injected ScanEnvSource after map or filter_map"),
+        "unexpected error: {error}"
+    );
+}
+
+/// An injected source also rejects a `filter_map` closure it cannot replay.
+#[test]
+fn injected_source_rejects_opaque_filter_map_transforms() {
+    let error = CsvEnv::raw()
+        .filter_map(|key| Some(key.into()))
         .with_source(Arc::new(MapEnv::new().with_var("APP_HOST", "localhost")))
         .data()
         .expect_err("injected arbitrary key transforms must be rejected");

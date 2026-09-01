@@ -7,8 +7,8 @@ use crate::SharedScanEnvSource;
 pub(super) struct Options {
     /// Prefix removed before the remaining key transforms run.
     pub(super) prefix: Option<String>,
-    /// Literal pattern converted to dots for nested configuration keys.
-    pub(super) split_pattern: Option<String>,
+    /// Literal patterns converted to dots for nested keys, in builder order.
+    pub(super) split_patterns: Vec<String>,
     /// Whether final keys use ASCII lowercase.
     pub(super) lowercase: Lowercase,
     /// Whether keys are uppercased before split processing.
@@ -30,7 +30,7 @@ impl Options {
     pub(super) fn new(prefix: Option<String>) -> Self {
         Self {
             prefix,
-            split_pattern: None,
+            split_patterns: Vec::new(),
             lowercase: Lowercase::Enabled,
             uppercase: Uppercase::Disabled,
             csv: Csv::Enabled,

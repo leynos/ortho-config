@@ -49,10 +49,10 @@ serde_json = ["dep:serde_json"]
 toml = ["figment/toml", "dep:toml"]
 json5 = ["dep:figment-json5", "dep:json5"]
 yaml = ["dep:serde_saphyr", "serde_json"]
-# Emit discovery counters through the `metrics` facade. Off by default: a
-# library must not choose a metrics backend for the application embedding it,
-# and the facade costs nothing until a recorder is installed. Structured
-# `tracing` events are emitted regardless of this feature.
+# Emit discovery and merge counters through the `metrics` facade. Off by
+# default: a library must not choose a metrics backend for the application
+# embedding it, and the facade costs nothing until a recorder is installed.
+# Structured `tracing` events are emitted regardless of this feature.
 metrics = ["dep:metrics"]
 
 [dev-dependencies]

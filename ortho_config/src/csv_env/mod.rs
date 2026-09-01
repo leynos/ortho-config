@@ -17,8 +17,10 @@ use std::ops::Deref;
 use uncased::{Uncased, UncasedStr};
 
 mod injected;
+mod merge;
 mod options;
 use crate::merge_telemetry;
+use merge::merge_dicts;
 use options::{Csv, KeyTransform, Lowercase, Options, Uppercase};
 
 /// Environment provider with CSV list support.
@@ -73,7 +75,7 @@ impl CsvEnv {
     #[must_use]
     pub fn split(mut self, pattern: &str) -> Self {
         self.inner = self.inner.split(pattern);
-        self.options.split_pattern = Some(pattern.into());
+        self.options.split_patterns.push(pattern.into());
         self
     }
 
@@ -279,7 +281,7 @@ impl CsvEnv {
                     "environment key `{k}` produced a non-object value"
                 ))));
             };
-            dict.extend(nested);
+            dict = merge_dicts(dict, nested);
         }
         Ok(self.inner.profile.collect(dict))
     }

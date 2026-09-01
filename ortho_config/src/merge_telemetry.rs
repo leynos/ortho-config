@@ -4,6 +4,10 @@
 //! and deserialisation errors. None of those data are safe event fields. This
 //! module therefore accepts no caller-controlled text: every emitted field is
 //! selected from one of the closed vocabularies below.
+//!
+//! When the optional `metrics` feature is enabled, the same closed vocabulary
+//! labels merge attempt and terminal-outcome counters. The library installs no
+//! recorder, so embedding applications retain ownership of metric export.
 
 use crate::{OrthoError, OrthoResult};
 
@@ -112,6 +116,7 @@ fn attempt(operation: &'static str, source: &'static str) {
         category = CATEGORY_NONE,
         "environment merge started"
     );
+    count_attempt(operation, source);
 }
 
 /// Emit a successful terminal event using the fixed no-error category.
@@ -124,6 +129,7 @@ fn success(operation: &'static str, source: &'static str) {
         category = CATEGORY_NONE,
         "environment merge finished"
     );
+    count_outcome(operation, source, OUTCOME_SUCCESS, CATEGORY_NONE);
 }
 
 /// Emit a failed terminal event after reducing an error to a closed category.
@@ -136,6 +142,7 @@ fn failure(operation: &'static str, source: &'static str, category: &'static str
         category,
         "environment merge failed"
     );
+    count_outcome(operation, source, OUTCOME_FAILURE, category);
 }
 
 /// Record a result while ensuring error contents never become event fields.
@@ -157,4 +164,47 @@ const fn error_category(error: &OrthoError) -> &'static str {
         OrthoError::Validation { .. } => CATEGORY_VALIDATION,
         OrthoError::Aggregate(_) => CATEGORY_AGGREGATE,
     }
+}
+
+/// Increment the optional counter for a merge operation entering its boundary.
+#[cfg(feature = "metrics")]
+fn count_attempt(operation: &'static str, source: &'static str) {
+    metrics::counter!(
+        "ortho_config.merge.attempts",
+        "operation" => operation,
+        "source" => source,
+        "outcome" => OUTCOME_ATTEMPT,
+        "category" => CATEGORY_NONE,
+    )
+    .increment(1);
+}
+
+#[cfg(not(feature = "metrics"))]
+const fn count_attempt(_operation: &'static str, _source: &'static str) {}
+
+/// Increment the optional counter for a completed merge operation.
+#[cfg(feature = "metrics")]
+fn count_outcome(
+    operation: &'static str,
+    source: &'static str,
+    outcome: &'static str,
+    category: &'static str,
+) {
+    metrics::counter!(
+        "ortho_config.merge.outcomes",
+        "operation" => operation,
+        "source" => source,
+        "outcome" => outcome,
+        "category" => category,
+    )
+    .increment(1);
+}
+
+#[cfg(not(feature = "metrics"))]
+const fn count_outcome(
+    _operation: &'static str,
+    _source: &'static str,
+    _outcome: &'static str,
+    _category: &'static str,
+) {
 }
