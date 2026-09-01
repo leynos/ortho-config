@@ -4,10 +4,10 @@ use clap::Parser;
 use rstest::{fixture, rstest};
 use serde::Deserialize;
 
-use ortho_config::MapEnv;
-use std::sync::Arc;
 use super::to_anyhow::ToAnyhow as _;
 use super::util::with_merged_subcommand_cli_with_sources;
+use ortho_config::MapEnv;
+use std::sync::Arc;
 
 #[derive(Debug, Deserialize, serde::Serialize, Parser, Default, PartialEq)]
 #[command(name = "test")]
@@ -33,12 +33,9 @@ fn cli_ref_id() -> RequiredCli {
 }
 #[rstest]
 fn cli_only_values_are_accepted(cli_ref_id: RequiredCli) -> Result<()> {
-    let merged: RequiredCli = with_merged_subcommand_cli_with_sources(
-        |_j| Ok(()),
-        &cli_ref_id,
-        Arc::new(MapEnv::new()),
-    )
-    .to_anyhow()?;
+    let merged: RequiredCli =
+        with_merged_subcommand_cli_with_sources(|_j| Ok(()), &cli_ref_id, Arc::new(MapEnv::new()))
+            .to_anyhow()?;
     ensure!(
         merged.ref_id.as_deref() == Some("cli"),
         "expected cli, got {:?}",
@@ -57,9 +54,7 @@ fn error_when_required_cli_value_missing() {
 }
 
 #[rstest]
-fn conflicting_values_cli_takes_precedence(
-    cli_ref_id: RequiredCli,
-) -> Result<()> {
+fn conflicting_values_cli_takes_precedence(cli_ref_id: RequiredCli) -> Result<()> {
     let merged: RequiredCli = with_merged_subcommand_cli_with_sources(
         |j| {
             j.create_file(".app.toml", "[cmds.test]\nref_id = \"config\"")?;
