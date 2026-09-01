@@ -7,16 +7,17 @@ highest maintenance cost when patterns drift.
 ## GitHub Actions runner profiles
 
 The delayed pull-request comment job runs on the shared uncached
-`namespace-profile-default` runner (Ubuntu 22.04, amd64, 4 vCPU, and 16 GB).
-Its cache volume is disabled, so this controlled initial slice does not add a
-second cache backend.
+`namespace-profile-default` runner. The [Namespace profile record](https://github.com/leynos/git-donkey/pull/70)
+specifies Ubuntu 22.04, amd64, 4 vCPU, and 16 GB. Its cache volume is
+disabled, so this controlled initial slice does not add a second cache backend.
 
-The CI and coverage workflows retain their current Linux and Windows matrix
-runners. Their Linux leg carries formatting, lint, tests, coverage, and
+The Continuous Integration (CI) workflow retains its current Linux and Windows
+matrix runners. Its Linux leg carries formatting, lint, tests, coverage, and
 tooling setup in one job; migrate it only after an equivalent 8-vCPU shared
-Linux profile is available and measured. Windows remains GitHub-hosted because
-this pilot has no shared Windows Namespace profile. Reusable workflows retain
-their caller-controlled runners.
+Linux profile is available and measured. The coverage-upload workflow remains
+on `ubuntu-latest`. Windows remains GitHub-hosted because this pilot has no
+shared Windows Namespace profile. Reusable workflows retain their
+caller-controlled runners.
 
 ## Current testing strategy
 

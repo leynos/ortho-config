@@ -1,4 +1,4 @@
-"""Contract-test OrthoConfig's initial Namespace runner assignment."""
+"""Validate Namespace runner assignments in GitHub Actions workflows."""
 
 from __future__ import annotations
 
@@ -25,10 +25,22 @@ def test_comment_job_uses_the_shared_uncached_namespace_profile() -> None:
     """Keep the low-risk utility-job assignment from drifting."""
     assert _job("delayed-pr-comment.yml", "delay_and_comment").get("runs-on") == (
         "namespace-profile-default"
-    )
+    ), "delayed-pr-comment.yml:delay_and_comment must use namespace-profile-default"
 
 
 def test_capacity_and_platform_sensitive_matrix_remains_unchanged() -> None:
     """Keep the current Linux and Windows matrix pending equivalent profiles."""
     build_test = _job("ci.yml", "build-test")
-    assert build_test.get("runs-on") == "${{ matrix.os }}"
+    assert build_test.get("runs-on") == "${{ matrix.os }}", (
+        "ci.yml:build-test must resolve its runner from matrix.os"
+    )
+    strategy = build_test.get("strategy")
+    assert isinstance(strategy, dict), "ci.yml:build-test must declare strategy"
+    matrix = strategy.get("matrix")
+    assert isinstance(matrix, dict), "ci.yml:build-test must declare a matrix"
+    include = matrix.get("include")
+    assert isinstance(include, list), "ci.yml:build-test matrix must declare include"
+    matrix_oses = {entry.get("os") for entry in include if isinstance(entry, dict)}
+    assert {"ubuntu-latest", "windows-latest"} <= matrix_oses, (
+        "ci.yml:build-test matrix must retain ubuntu-latest and windows-latest"
+    )

@@ -5,12 +5,17 @@ on:
       pr_number:
         description: 'PR number to comment on'
         required: true
+        type: number
       delay_minutes:
         description: 'Minutes to wait before commenting'
         required: true
+        type: number
       message:
         description: 'Comment body'
         required: true
+        type: string
+
+permissions: {}
 
 jobs:
   delay_and_comment:
@@ -20,12 +25,25 @@ jobs:
     steps:
       - name: Convert minutes to seconds
         id: calc
-        run: echo "secs=$(( ${{ github.event.inputs.delay_minutes }} * 60 ))" >> "$GITHUB_OUTPUT"
+        env:
+          DELAY_MINUTES: ${{ github.event.inputs.delay_minutes }}
+        run: |
+          case "$DELAY_MINUTES" in
+            ''|*[!0-9]*)
+              echo 'delay_minutes must be a whole number' >&2
+              exit 1
+              ;;
+          esac
+          if (( DELAY_MINUTES < 1 || DELAY_MINUTES > 1440 )); then
+            echo 'delay_minutes must be between 1 and 1440' >&2
+            exit 1
+          fi
+          echo "secs=$(( DELAY_MINUTES * 60 ))" >> "$GITHUB_OUTPUT"
       - name: Wait requested time
-        run: sleep ${{ steps.calc.outputs.secs }}
+        run: sleep "${{ steps.calc.outputs.secs }}"
         shell: bash
       - name: Comment PR
-        uses: thollander/actions-comment-pull-request@v3
+        uses: thollander/actions-comment-pull-request@24bffb9b452ba05a4f3f77933840a6a841d1b32b # v3
         with:
           pr-number: ${{ github.event.inputs.pr_number }}
           message: ${{ github.event.inputs.message }}
