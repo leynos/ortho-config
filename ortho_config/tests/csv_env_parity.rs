@@ -38,6 +38,19 @@ fn assert_parity(pairs: &[(String, String)]) {
 /// Keeping those evaluations in separate jail states proves the injected path
 /// reads only its supplied `MapEnv`, not variables retained by Figment's jail.
 fn assert_provider_parity(provider: CsvEnv, pairs: &[(String, String)]) {
+    assert_provider_parity_with(provider, pairs, |_, _| {});
+}
+
+/// Run an optional test-specific assertion after establishing provider parity.
+///
+/// The callback receives data captured from the process-backed provider before
+/// Figment's jail is cleared, then data from the injected provider after it is
+/// cleared. This ordering keeps the injected-source isolation invariant shared
+/// by every parity test in one place.
+fn assert_provider_parity_with<F>(provider: CsvEnv, pairs: &[(String, String)], check: F)
+where
+    F: FnOnce(&Map<Profile, Dict>, &Map<Profile, Dict>),
+{
     Jail::expect_with(|jail| -> Result<(), figment::Error> {
         jail.clear_env();
         for (key, value) in pairs {
@@ -48,7 +61,10 @@ fn assert_provider_parity(provider: CsvEnv, pairs: &[(String, String)]) {
         jail.clear_env();
         let injected = provider.with_source(Arc::new(pairs.iter().cloned().collect::<MapEnv>()));
 
-        assert_eq!(process, injected.data()?);
+        let injected_data = injected.data()?;
+
+        assert_eq!(process, injected_data);
+        check(&process, &injected_data);
         Ok(())
     });
 }
@@ -126,24 +142,14 @@ fn nested_siblings_are_preserved_in_both_paths() {
         (String::from("APP_DATABASE__PORT"), String::from("5432")),
     ];
 
-    Jail::expect_with(|jail| -> Result<(), figment::Error> {
-        jail.clear_env();
-        for (key, value) in &pairs {
-            jail.set_env(key, value);
-        }
-
-        let process = CsvEnv::prefixed("APP_").split("__").data()?;
-        jail.clear_env();
-        let injected = CsvEnv::prefixed("APP_")
-            .split("__")
-            .with_source(Arc::new(pairs.into_iter().collect::<MapEnv>()))
-            .data()?;
-
-        assert_eq!(process, injected);
-        assert_database_siblings(&process);
-        assert_database_siblings(&injected);
-        Ok(())
-    });
+    assert_provider_parity_with(
+        CsvEnv::prefixed("APP_").split("__"),
+        &pairs,
+        |process, injected| {
+            assert_database_siblings(process);
+            assert_database_siblings(injected);
+        },
+    );
 }
 
 /// Replaying split builders in call order matches Figment's chained mappings.
@@ -151,30 +157,21 @@ fn nested_siblings_are_preserved_in_both_paths() {
 fn chained_split_patterns_match_the_process_backed_mapping() {
     let pairs = [(String::from("APP_A_B-C"), String::from("7"))];
 
-    Jail::expect_with(|jail| -> Result<(), figment::Error> {
-        jail.clear_env();
-        jail.set_env("APP_A_B-C", "7");
-
-        let process = CsvEnv::prefixed("APP_").split("_").split("-").data()?;
-        jail.clear_env();
-        let injected = CsvEnv::prefixed("APP_")
-            .split("_")
-            .split("-")
-            .with_source(Arc::new(pairs.into_iter().collect::<MapEnv>()))
-            .data()?;
-
-        assert_eq!(process, injected);
-        let a = default_dict(&injected)
-            .get("a")
-            .and_then(Value::as_dict)
-            .expect("first split component must be a dictionary");
-        let b = a
-            .get("b")
-            .and_then(Value::as_dict)
-            .expect("second split component must be a dictionary");
-        assert_eq!(b.get("c").and_then(Value::to_u128), Some(7));
-        Ok(())
-    });
+    assert_provider_parity_with(
+        CsvEnv::prefixed("APP_").split("_").split("-"),
+        &pairs,
+        |_, injected| {
+            let a = default_dict(injected)
+                .get("a")
+                .and_then(Value::as_dict)
+                .expect("first split component must be a dictionary");
+            let b = a
+                .get("b")
+                .and_then(Value::as_dict)
+                .expect("second split component must be a dictionary");
+            assert_eq!(b.get("c").and_then(Value::to_u128), Some(7));
+        },
+    );
 }
 
 /// Preserve a comma-containing scalar when both providers disable CSV parsing.
@@ -182,20 +179,7 @@ fn chained_split_patterns_match_the_process_backed_mapping() {
 fn csv_can_be_disabled_for_an_injected_source() {
     let pairs = [(String::from("APP_VALUES"), String::from("one,two"))];
 
-    Jail::expect_with(|jail| -> Result<(), figment::Error> {
-        jail.clear_env();
-        jail.set_env("APP_VALUES", "one,two");
-
-        let process = CsvEnv::prefixed("APP_").csv(false);
-        let process_data = process.data()?;
-        jail.clear_env();
-        let injected = CsvEnv::prefixed("APP_")
-            .csv(false)
-            .with_source(Arc::new(pairs.iter().cloned().collect::<MapEnv>()));
-
-        assert_eq!(process_data, injected.data()?);
-        Ok(())
-    });
+    assert_provider_parity(CsvEnv::prefixed("APP_").csv(false), &pairs);
 }
 
 /// Reject unreplayable key closures before injected scanning can change semantics.
