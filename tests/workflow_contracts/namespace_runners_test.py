@@ -74,9 +74,8 @@ def _run_calculation(delay_minutes: str) -> tuple[int, str, str, str]:
         return result.returncode, result.stdout, result.stderr, output
 
 
-def test_comment_job_uses_the_shared_uncached_namespace_profile() -> None:
-    """Keep the low-risk utility-job assignment from drifting."""
-    workflow = _workflow("delayed-pr-comment.yml")
+def _assert_dispatch_contract(workflow: dict[str, object]) -> None:
+    """Assert the delayed-comment workflow's least-privilege inputs."""
     assert workflow.get("permissions") == {}, (
         "delayed-pr-comment.yml must default to no permissions"
     )
@@ -102,7 +101,9 @@ def test_comment_job_uses_the_shared_uncached_namespace_profile() -> None:
         "message": (True, "string"),
     }, "delayed-pr-comment.yml:workflow_dispatch inputs must retain their types"
 
-    job = _job("delayed-pr-comment.yml", "delay_and_comment")
+
+def _assert_job_contract(job: dict[str, object]) -> None:
+    """Assert the delayed-comment job's runner, timeout, and permissions."""
     assert job.get("runs-on") == ("namespace-profile-default"), (
         "delayed-pr-comment.yml:delay_and_comment must use namespace-profile-default"
     )
@@ -112,18 +113,10 @@ def test_comment_job_uses_the_shared_uncached_namespace_profile() -> None:
     assert job.get("permissions") == {"pull-requests": "write"}, (
         "delayed-pr-comment.yml:delay_and_comment must grant only pull-request write"
     )
-    steps = job.get("steps")
-    assert isinstance(steps, list), (
-        "delayed-pr-comment.yml:delay_and_comment must declare steps"
-    )
-    calculation_step = _calculation_step()
-    assert isinstance(calculation_step, dict), (
-        "delayed-pr-comment.yml:delay_and_comment must declare the calc step"
-    )
-    calculation = calculation_step.get("run")
-    assert isinstance(calculation, str), (
-        "delayed-pr-comment.yml:calc must contain a shell calculation"
-    )
+
+
+def _assert_calculation_contract(calculation: str) -> None:
+    """Assert every input guard and decimal conversion in the calc step."""
     assert "*[!0-9]*" in calculation, (
         "delayed-pr-comment.yml:calc must reject non-decimal delay_minutes"
     )
@@ -140,6 +133,9 @@ def test_comment_job_uses_the_shared_uncached_namespace_profile() -> None:
         "delayed-pr-comment.yml:calc must cap delay_minutes below the job timeout"
     )
 
+
+def _assert_wait_and_comment_contract(steps: list[object]) -> None:
+    """Assert the delayed-comment wait and pinned action wiring."""
     wait_step = next(
         (
             step
@@ -171,6 +167,28 @@ def test_comment_job_uses_the_shared_uncached_namespace_profile() -> None:
     assert comment_step.get("uses") == (
         "thollander/actions-comment-pull-request@24bffb9b452ba05a4f3f77933840a6a841d1b32b"
     ), "delayed-pr-comment.yml:comment must pin the comment action by full SHA"
+
+
+def test_comment_job_uses_the_shared_uncached_namespace_profile() -> None:
+    """Keep the low-risk utility-job assignment from drifting."""
+    workflow = _workflow("delayed-pr-comment.yml")
+    _assert_dispatch_contract(workflow)
+    job = _job("delayed-pr-comment.yml", "delay_and_comment")
+    _assert_job_contract(job)
+    steps = job.get("steps")
+    assert isinstance(steps, list), (
+        "delayed-pr-comment.yml:delay_and_comment must declare steps"
+    )
+    calculation_step = _calculation_step()
+    assert isinstance(calculation_step, dict), (
+        "delayed-pr-comment.yml:delay_and_comment must declare the calc step"
+    )
+    calculation = calculation_step.get("run")
+    assert isinstance(calculation, str), (
+        "delayed-pr-comment.yml:calc must contain a shell calculation"
+    )
+    _assert_calculation_contract(calculation)
+    _assert_wait_and_comment_contract(steps)
 
 
 @pytest.mark.parametrize(
