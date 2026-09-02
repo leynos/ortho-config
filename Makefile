@@ -79,7 +79,7 @@ python-test-deps: ## Ensure Python test dependencies are provisioned
 	$(PYTEST) --version > $(NULL_DEVICE)
 
 test-workflow-contracts: ## Validate the mutation-testing caller contract
-	$(UV) run --with 'pytest>=8' --with 'pyyaml>=6' pytest tests/workflow_contracts -q
+	$(UV) run --with 'hypothesis>=6,<7' --with 'pytest>=8' --with 'pyyaml>=6' pytest tests/workflow_contracts -q
 
 # will match target/debug/libmy_library.rlib and target/release/libmy_library.rlib
 target/%/lib$(CRATE).rlib: FORCE ## Build library in debug or release
