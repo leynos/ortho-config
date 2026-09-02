@@ -27,7 +27,10 @@ in [agent-native-cli-design.md](agent-native-cli-design.md).
 - **For End-Users (of the application):** A consistent and predictable
   configuration experience. They can use the most convenient method (CLI, env,
   file) to configure the application, and the rules of precedence will be clear
-  and unambiguous.
+  and unambiguous. For fields that grant capabilities or set security and
+  resource boundaries, preference precedence remains separate from the
+  application-defined policy authority proposed in
+  [RFC 0003](rfcs/0003-trust-aware-policy-composition.md).
 - **For Developers (using `OrthoConfig`):** A dramatic reduction in boilerplate
   and cognitive load. It abstracts away the tedious integration details,
   allowing developers to focus on their application's logic rather than
@@ -48,6 +51,11 @@ The implementation must adhere to the following principles:
   box. Error messages must be rich, informative, and clearly attribute issues
   to their original source (e.g., "Error in `config.toml` at line 5: invalid
   type for `port`").
+- **Orthogonal policy authority:** Layer order resolves ordinary preferences;
+  it does not grant permission to widen protected fields. Applications define
+  source authority, while OrthoConfig provides reusable monotonic composition,
+  delegation, provenance, and diagnostics. See
+  [RFC 0003](rfcs/0003-trust-aware-policy-composition.md).
 - **Mechanical agent assistance:** Agent-native CLI behaviour must be generated
   or linted from metadata wherever possible. OrthoConfig should help developers
   enforce canonical verbs, canonical flags, structured output, bounded list
@@ -58,8 +66,10 @@ The implementation must adhere to the following principles:
   including command metadata, documentation and agent-context IR, renderer
   metadata, vocabulary policy, `skill_manifests` validation, profile metadata,
   delivery and feedback parsers, and execution-ledger metadata. They continue
-  to own command execution, side effects, safety policy, and domain execution
-  engines. The canonical boundary is documented in
+  to own authority classifications, policy choices, enforcement, command
+  execution, side effects, and domain execution engines. OrthoConfig may own
+  reusable policy-composition mechanics without owning those application
+  decisions. The canonical command-contract boundary is documented in
   [agent-native-cli-design.md](agent-native-cli-design.md), and the
   authoritative hard and soft ship-time dependency tiers are recorded in
   [agent-native-cli-design.md](agent-native-cli-design.md) §2.2.
@@ -120,6 +130,13 @@ The primary data flow for a user calling `AppConfig::load()` will be:
 6. The result, either `Ok(AppConfig)` or `Err(Arc<OrthoError>)`, is returned
    via the alias `OrthoResult<T>`. This keeps public `Result` types small while
    preserving rich error variants.
+
+This sequence defines preference composition. A field that opts into the
+trust-aware model proposed in
+[RFC 0003](rfcs/0003-trust-aware-policy-composition.md) additionally receives
+application-supplied authority metadata and a semantic policy family. Its
+policy envelope is composed separately from ordinary scalar and collection
+precedence before the final configuration is returned.
 
 ### Error ergonomics and interop
 
@@ -905,6 +922,29 @@ test helper should run `cargo-<name> <name> --help`, then run
 should reuse that coverage, so a flat direct invocation cannot pass while Cargo
 dispatch fails.
 
+### 4.18. Trust-aware policy composition
+
+Ordinary precedence remains defaults → files → environment → explicit CLI
+arguments, with later layers resolving preference conflicts. Security and
+resource policy needs a separate authority dimension: a later project layer
+must not acquire the right to add a trusted interpreter, enable network access,
+or raise a resource ceiling merely because it appears later.
+
+[RFC 0003](rfcs/0003-trust-aware-policy-composition.md) proposes the opt-in
+contract. Applications define a validated partial order of authority classes,
+classify each participating source deliberately, and supply authoritative
+anchors and typed delegation grants. OrthoConfig supplies semantic monotonic
+families, runtime composition, active-constraint provenance, and bounded
+diagnostics. Scope and origin from
+[RFC 0002](rfcs/0002-config-layer-resolution-policy.md) feed source identity
+but never imply authority by themselves.
+
+The runtime composer precedes derive support. Protected fields use their
+declared policy family instead of `append`, `replace`, or `keyed`; unprotected
+fields retain those strategies unchanged. Applications continue to enforce the
+effective policy at network, filesystem, interpreter, process, and provider
+boundaries.
+
 ## 5. Dependency Strategy
 
 - **`ortho_config_macros`:**
@@ -1026,6 +1066,12 @@ flags on top of the derive macro while keeping the application logic explicit.
   The authoritative consumer dependency tier for those reusable capabilities is
   [agent-native-cli-design.md](agent-native-cli-design.md)
   §2.2.
+- **Trust-aware policy composition:** OrthoConfig should provide the runtime
+  authority graph, monotonic policy families, explicit delegation, provenance,
+  and diagnostics proposed in
+  [RFC 0003](rfcs/0003-trust-aware-policy-composition.md). Applications retain
+  authority classification and enforcement. See [roadmap.md](roadmap.md) phase
+  14.
 - **Async configuration loading:** A version of `load` that uses non-blocking
   IO remains useful, but it is distinct from application-level async job
   metadata such as `--wait`, `jobs get`, or durable job ledgers.
