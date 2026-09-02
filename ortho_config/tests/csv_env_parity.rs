@@ -183,13 +183,16 @@ fn csv_can_be_disabled_for_an_injected_source() {
 }
 
 /// Reject unreplayable key closures before injected scanning can change semantics.
-#[test]
-fn injected_source_rejects_opaque_key_transforms() {
-    let error = CsvEnv::raw()
-        .map(|key| key.into())
+///
+/// Both `map` variants must fail before scanning because their closures cannot
+/// be replayed safely against an injected source.
+fn assert_injected_source_rejects_opaque_transform(transform: impl FnOnce(CsvEnv) -> CsvEnv) {
+    let result = transform(CsvEnv::raw())
         .with_source(Arc::new(MapEnv::new().with_var("APP_HOST", "localhost")))
-        .data()
-        .expect_err("injected arbitrary key transforms must be rejected");
+        .data();
+    let Err(error) = result else {
+        panic!("injected arbitrary key transforms must be rejected");
+    };
 
     assert!(
         error
@@ -199,21 +202,18 @@ fn injected_source_rejects_opaque_key_transforms() {
     );
 }
 
+/// Reject a `map` closure that injected loading cannot replay.
+#[test]
+fn injected_source_rejects_opaque_key_transforms() {
+    assert_injected_source_rejects_opaque_transform(|provider| provider.map(|key| key.into()));
+}
+
 /// An injected source also rejects a `filter_map` closure it cannot replay.
 #[test]
 fn injected_source_rejects_opaque_filter_map_transforms() {
-    let error = CsvEnv::raw()
-        .filter_map(|key| Some(key.into()))
-        .with_source(Arc::new(MapEnv::new().with_var("APP_HOST", "localhost")))
-        .data()
-        .expect_err("injected arbitrary key transforms must be rejected");
-
-    assert!(
-        error
-            .to_string()
-            .contains("injected ScanEnvSource after map or filter_map"),
-        "unexpected error: {error}"
-    );
+    assert_injected_source_rejects_opaque_transform(|provider| {
+        provider.filter_map(|key| Some(key.into()))
+    });
 }
 
 proptest! {
