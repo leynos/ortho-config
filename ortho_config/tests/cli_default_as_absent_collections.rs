@@ -4,10 +4,10 @@ use anyhow::{Context, Result, ensure};
 use cap_std::{ambient_authority, fs::Dir};
 use clap::{CommandFactory, FromArgMatches, Parser};
 use ortho_config::subcommand::Prefix;
-use ortho_config::{OrthoConfig, load_and_merge_subcommand_with_matches};
+use ortho_config::{MapEnv, OrthoConfig, load_and_merge_subcommand_with_matches_with_sources};
 use rstest::{fixture, rstest};
 use serde::{Deserialize, Serialize};
-use serial_test::serial;
+use std::sync::Arc;
 use tempfile::TempDir;
 use test_helpers::cwd;
 
@@ -46,14 +46,18 @@ impl Default for TagsArgs {
 }
 
 #[rstest]
-#[serial]
 fn test_cli_default_as_absent_infers_default_values_t(prefix: Prefix) -> Result<()> {
     let (_temp_dir, _cwd_guard) = config_dir("[cmds.tags]\ntags = [\"file\"]\n")?;
 
     let matches = TagsArgs::command().get_matches_from(["tags"]);
     let args = TagsArgs::from_arg_matches(&matches).context("parse tags args")?;
-    let merged = load_and_merge_subcommand_with_matches(&prefix, &args, &matches)
-        .context("merge tags args without explicit CLI value")?;
+    let merged = load_and_merge_subcommand_with_matches_with_sources(
+        &prefix,
+        &args,
+        &matches,
+        Arc::new(MapEnv::new()),
+    )
+    .context("merge tags args without explicit CLI value")?;
     ensure!(
         merged.tags == vec!["file"],
         "expected file tags, got {:?}",
@@ -63,9 +67,13 @@ fn test_cli_default_as_absent_infers_default_values_t(prefix: Prefix) -> Result<
     let explicit_matches = TagsArgs::command().get_matches_from(["tags", "--tags", "cli"]);
     let explicit_args =
         TagsArgs::from_arg_matches(&explicit_matches).context("parse explicit tags args")?;
-    let explicit_merged =
-        load_and_merge_subcommand_with_matches(&prefix, &explicit_args, &explicit_matches)
-            .context("merge tags args with explicit CLI value")?;
+    let explicit_merged = load_and_merge_subcommand_with_matches_with_sources(
+        &prefix,
+        &explicit_args,
+        &explicit_matches,
+        Arc::new(MapEnv::new()),
+    )
+    .context("merge tags args with explicit CLI value")?;
     ensure!(
         explicit_merged.tags == vec!["cli"],
         "expected cli tags, got {:?}",
@@ -93,14 +101,18 @@ impl Default for RetryArgs {
 }
 
 #[rstest]
-#[serial]
 fn test_cli_default_as_absent_infers_numeric_default_value_t(prefix: Prefix) -> Result<()> {
     let (_temp_dir, _cwd_guard) = config_dir("[cmds.retry]\ncount = 5\n")?;
 
     let matches = RetryArgs::command().get_matches_from(["retry"]);
     let args = RetryArgs::from_arg_matches(&matches).context("parse retry args")?;
-    let merged = load_and_merge_subcommand_with_matches(&prefix, &args, &matches)
-        .context("merge retry args without explicit CLI value")?;
+    let merged = load_and_merge_subcommand_with_matches_with_sources(
+        &prefix,
+        &args,
+        &matches,
+        Arc::new(MapEnv::new()),
+    )
+    .context("merge retry args without explicit CLI value")?;
     ensure!(
         merged.count == 5,
         "expected file count, got {}",
@@ -110,9 +122,13 @@ fn test_cli_default_as_absent_infers_numeric_default_value_t(prefix: Prefix) -> 
     let explicit_matches = RetryArgs::command().get_matches_from(["retry", "--count", "9"]);
     let explicit_args =
         RetryArgs::from_arg_matches(&explicit_matches).context("parse explicit retry args")?;
-    let explicit_merged =
-        load_and_merge_subcommand_with_matches(&prefix, &explicit_args, &explicit_matches)
-            .context("merge retry args with explicit CLI value")?;
+    let explicit_merged = load_and_merge_subcommand_with_matches_with_sources(
+        &prefix,
+        &explicit_args,
+        &explicit_matches,
+        Arc::new(MapEnv::new()),
+    )
+    .context("merge retry args with explicit CLI value")?;
     ensure!(
         explicit_merged.count == 9,
         "expected cli count, got {}",

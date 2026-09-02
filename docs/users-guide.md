@@ -253,6 +253,86 @@ fn main() {
 change. `EnvSource` deliberately supports lookup by name but not enumeration;
 discovery cannot accidentally scan or log unrelated environment values.
 
+## Resolve discovery and merging without process state
+
+Tests and embedded callers can resolve the complete configuration without
+mutating the process environment. Use `ScanEnvSource` for the explicit ability
+to enumerate variables for the merge layer, and pass it to
+`CsvEnv::with_source`. The derive-generated
+`OrthoConfig::load_from_iter_with_sources` entry point accepts both the
+discovery `SharedEnvSource` and merge `SharedScanEnvSource`, so
+configuration-path selection, files, and the environment layer use the same
+supplied values.
+
+`MapEnv` implements both source traits. Create one `Arc<MapEnv>`, then coerce
+cloned `Arc` values to `SharedEnvSource` and `SharedScanEnvSource`; the same
+map can therefore drive discovery lookups and merge enumeration. The ordinary
+`load()` and `load_from_iter()` methods continue to use `ProcessEnv` by default.
+
+For an upgrade checklist covering this opt-in API, see the
+[v0.10.0 migration guide](v0-10-0-migration-guide.md).
+
+For a directly composed environment layer, attach the scan source to `CsvEnv`
+with `with_source`:
+
+<!-- tested-example: guide-csv-env-with-source -->
+```rust
+use ortho_config::{CsvEnv, MapEnv};
+use std::sync::Arc;
+
+let source = Arc::new(
+    MapEnv::new()
+        .with_var("APP_DATABASE__HOST", "localhost")
+        .with_var("APP_TAGS", "one,two"),
+);
+let provider = CsvEnv::prefixed("APP_")
+    .uppercase(true)
+    .split("__")
+    .with_source(source);
+let _figment = ortho_config::figment::Figment::new().merge(provider);
+```
+
+The injected provider follows the same declarative rules as the process-backed
+provider: prefix matching is case-insensitive and strips the matching prefix,
+`uppercase` and `lowercase` transform names at their place in the builder
+chain, and each `split` replaces its separator with a dotted key component. CSV
+parsing is enabled by default; comma-containing scalar values become lists,
+while values beginning with `[`, `{`, or a quote remain structured or quoted
+values. Use `csv(false)` when a comma must remain part of a scalar value. The
+source-aware path rejects `map()` and `filter_map()` providers because
+arbitrary closures cannot be replayed against a `ScanEnvSource`.
+
+For example, this complete load uses one map for the selector and merge layers:
+
+<!-- tested-example: guide-source-aware-load -->
+```rust
+use ortho_config::{
+    MapEnv, OrthoConfig, OrthoResult, SharedEnvSource, SharedScanEnvSource,
+};
+use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+
+#[derive(Debug, Deserialize, Serialize, OrthoConfig)]
+#[ortho_config(prefix = "ACME_")]
+struct Config {
+    #[ortho_config(default = 8080)]
+    port: u16,
+}
+
+fn main() -> OrthoResult<()> {
+    let environment = Arc::new(MapEnv::new().with_var("ACME_PORT", "9000"));
+    let discovery: SharedEnvSource = environment.clone();
+    let merge: SharedScanEnvSource = environment;
+
+    let config = Config::load_from_iter_with_sources(["acme"], discovery, merge)?;
+    println!("port={}", config.port);
+    Ok(())
+}
+```
+
+The example prints `port=9000`. No process variable is read: the discovery
+source handles named lookups, while the scan source supplies the merge layer.
+
 ## Give each subcommand its own settings
 
 Many CLIs have global options plus commands with different configuration. Derive
@@ -301,6 +381,41 @@ For an enum with many variants, derive `SelectedSubcommandMerge` and use
 entry point small. Add `#[ortho_config(cli_default_as_absent)]` to a field when
 a `clap` default should not override a value supplied by a file or environment
 variable.
+
+When a subcommand needs the same hermetic merge boundary, pass a
+`SharedScanEnvSource` to `load_and_merge_with_sources` instead of using the
+process-backed `load_and_merge`. For the `ServeConfig` above, the call is:
+
+Set `ACME_SERVE_CMDS_SERVE_PORT` to `9000`, then bind the map with
+`let environment = Arc::new(
+MapEnv::new().with_var("ACME_SERVE_CMDS_SERVE_PORT", "9000"));`
+and call `let config = cli.load_and_merge_with_sources(environment)?;`.
+
+This supplies the `ACME_SERVE_CMDS_SERVE_PORT` layer while preserving the
+existing CLI precedence. Import `MapEnv` and `std::sync::Arc` when using this
+pattern.
+
+Some commands only parse arguments and do not participate in configuration
+loading. Keep those arguments in a separate clap-only type:
+
+<!-- tested-example: guide-clap-only-parse -->
+```rust
+use clap::Parser;
+
+#[derive(Debug, Parser)]
+struct ParseOnlyArgs {
+    #[arg(long)]
+    format: Option<String>,
+}
+
+let args = ParseOnlyArgs::parse();
+println!("format={:?}", args.format);
+```
+
+This parse-only workflow calls clap directly and does not load files or merge
+environment values. Because `ParseOnlyArgs` does not derive `OrthoConfig`, it
+has no `load_and_merge` or source-aware merge API. Use the `OrthoConfig`-derived
+`ServeConfig` above when a command needs configuration layering.
 
 ## Handle errors at the application boundary
 

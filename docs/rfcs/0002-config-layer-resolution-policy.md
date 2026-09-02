@@ -212,13 +212,13 @@ resolved without mutating the process environment.
 
 This matters for the delivery plan below. Step 2's acceptance criteria call for
 environment snapshotting and for "a test mutating the environment between a
-peek and a replay"; with an injected source that test needs no mutation at
-all, removing process-environment mutation from the policy snapshot test
-itself. (The generated-loader compatibility substrate still reads `figment`
-process-environment data and keeps its shared serial guard until issue #412
-lands.) Whichever type ultimately
-owns the selector chain must therefore carry the `EnvSource` through to the
-point of the read.
+peek and a replay"; with an injected source that test needs no mutation at all,
+removing process-environment mutation from the policy snapshot test itself.
+[ortho-config#412][oc-412] extends that seam to the generated loader: its merge
+layer accepts a separate `ScanEnvSource`, so both environment capabilities can
+use one `MapEnv` without a shared serial guard. Whichever type owns the
+selector chain must therefore carry the `EnvSource` through to the point of the
+read.
 
 ### Ordered explicit selector chain
 
@@ -977,8 +977,16 @@ ______________________________________________________________________
   membership are untouched — but they edit the same code and should not be
   built independently.
 
+- **`ScanEnvSource` completes merge-layer injection.**
+  [ortho-config#412][oc-412] keeps `EnvSource` lookup-only and gives `CsvEnv` a
+  separate scanning capability. Derived loading and subcommand helpers now
+  accept that source, removing the compatibility substrate's serial-guard
+  caveat.
+
 [netsuke-427]: https://github.com/leynos/netsuke/pull/427
 
 [netsuke-adr-004]: https://github.com/leynos/netsuke/blob/main/docs/adr-004-explicit-config-selection-outside-orthoconfig.md
 
 [oc-411]: https://github.com/leynos/ortho-config/pull/411
+
+[oc-412]: https://github.com/leynos/ortho-config/issues/412

@@ -37,6 +37,18 @@ pub(crate) fn generate_ortho_impl(
                 #cli_ident::load_from_iter(iter)
             }
 
+            fn load_from_iter_with_sources<I, T>(
+                iter: I,
+                discovery: #krate::SharedEnvSource,
+                merge: #krate::SharedScanEnvSource,
+            ) -> #krate::OrthoResult<Self>
+            where
+                I: IntoIterator<Item = T>,
+                T: Into<std::ffi::OsString> + Clone,
+            {
+                #cli_ident::load_from_iter_with_sources(iter, discovery, merge)
+            }
+
             #prefix_tokens
         }
 

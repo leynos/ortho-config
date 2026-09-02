@@ -1,13 +1,13 @@
 //! CLI precedence and required-value behaviour tests.
-
 use anyhow::{Result, ensure};
 use clap::Parser;
 use rstest::{fixture, rstest};
 use serde::Deserialize;
-use test_helpers::env;
 
 use super::to_anyhow::ToAnyhow as _;
-use super::util::with_merged_subcommand_cli;
+use super::util::with_merged_subcommand_cli_with_sources;
+use ortho_config::MapEnv;
+use std::sync::Arc;
 
 #[derive(Debug, Deserialize, serde::Serialize, Parser, Default, PartialEq)]
 #[command(name = "test")]
@@ -31,15 +31,11 @@ fn cli_ref_id() -> RequiredCli {
         ref_id: Some("cli".into()),
     }
 }
-
-#[fixture]
-fn env_scope() -> env::EnvScope {
-    env::scope_with(|lock| vec![lock.remove_var("APP_CMDS_TEST_REF_ID")])
-}
-
 #[rstest]
 fn cli_only_values_are_accepted(cli_ref_id: RequiredCli) -> Result<()> {
-    let merged: RequiredCli = with_merged_subcommand_cli(|_j| Ok(()), &cli_ref_id).to_anyhow()?;
+    let merged: RequiredCli =
+        with_merged_subcommand_cli_with_sources(|_j| Ok(()), &cli_ref_id, Arc::new(MapEnv::new()))
+            .to_anyhow()?;
     ensure!(
         merged.ref_id.as_deref() == Some("cli"),
         "expected cli, got {:?}",
@@ -58,18 +54,14 @@ fn error_when_required_cli_value_missing() {
 }
 
 #[rstest]
-fn conflicting_values_cli_takes_precedence(
-    cli_ref_id: RequiredCli,
-    env_scope: env::EnvScope,
-) -> Result<()> {
-    let _scope = env_scope;
-    let merged: RequiredCli = with_merged_subcommand_cli(
+fn conflicting_values_cli_takes_precedence(cli_ref_id: RequiredCli) -> Result<()> {
+    let merged: RequiredCli = with_merged_subcommand_cli_with_sources(
         |j| {
             j.create_file(".app.toml", "[cmds.test]\nref_id = \"config\"")?;
-            j.set_env("APP_CMDS_TEST_REF_ID", "env");
             Ok(())
         },
         &cli_ref_id,
+        Arc::new(MapEnv::new().with_var("APP_CMDS_TEST_REF_ID", "env")),
     )
     .to_anyhow()?;
     ensure!(
@@ -80,16 +72,13 @@ fn conflicting_values_cli_takes_precedence(
     Ok(())
 }
 
-#[rstest]
-fn env_value_used_when_cli_missing(env_scope: env::EnvScope) -> Result<()> {
-    let _scope = env_scope;
+#[test]
+fn env_value_used_when_cli_missing() -> Result<()> {
     let cli = OptionalCli { ref_id: None };
-    let merged: OptionalCli = with_merged_subcommand_cli(
-        |j| {
-            j.set_env("APP_CMDS_TEST_REF_ID", "from-env");
-            Ok(())
-        },
+    let merged: OptionalCli = with_merged_subcommand_cli_with_sources(
+        |_j| Ok(()),
         &cli,
+        Arc::new(MapEnv::new().with_var("APP_CMDS_TEST_REF_ID", "from-env")),
     )
     .to_anyhow()?;
     ensure!(

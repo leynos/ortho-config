@@ -279,6 +279,7 @@ fn load_impl_uses_ortho_config_reexport_paths() -> Result<()> {
         dotfile_name: &dotfile_name,
         legacy_app_name: String::from("app"),
         discovery: None,
+        sources: None,
         krate: &krate,
     };
     let generated = build_load_impl(&LoadImplArgs {
@@ -287,16 +288,11 @@ fn load_impl_uses_ortho_config_reexport_paths() -> Result<()> {
         has_config_path: false,
     });
     let paths = collect_paths(generated.clone())?;
-    let is_anchored = has_path_prefix(&paths, &["ortho_config", "uncased"])
-        && has_path_prefix(&paths, &["ortho_config", "figment"]);
+    let is_anchored = has_path_prefix(&paths, &["ortho_config", "figment"]);
 
     ensure!(
         is_anchored,
-        "expected anchored figment and uncased crate paths via ortho_config re-export: {generated}"
-    );
-    ensure!(
-        !has_path_prefix(&paths, &["uncased"]),
-        "unexpected direct uncased path (without ortho_config re-export): {generated}"
+        "expected anchored figment crate path via ortho_config re-export: {generated}"
     );
     ensure!(
         !has_path_prefix(&paths, &["figment"]),

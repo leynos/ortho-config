@@ -5,7 +5,10 @@
 //! [`SelectedSubcommandMerge`] for deriving merge behaviour on subcommand enums.
 
 #[cfg(feature = "serde_json")]
-use crate::{CliValueExtractor, OrthoMergeExt, OrthoResult, load_config_file, sanitized_provider};
+use crate::{
+    CliValueExtractor, OrthoMergeExt, OrthoResult, SharedScanEnvSource, load_config_file,
+    sanitized_provider,
+};
 #[cfg(feature = "serde_json")]
 use clap::{ArgMatches, CommandFactory};
 #[cfg(feature = "serde_json")]
@@ -22,6 +25,8 @@ use uncased::Uncased;
 mod paths;
 #[cfg(feature = "serde_json")]
 mod selected;
+#[cfg(feature = "serde_json")]
+mod sources;
 mod types;
 
 #[cfg(feature = "serde_json")]
@@ -31,6 +36,12 @@ pub use paths::push_stem_candidates;
 pub use selected::{
     LoadGlobalsAndSelectedSubcommandError, SelectedSubcommandMerge, SelectedSubcommandMergeError,
     load_globals_and_merge_selected_subcommand,
+};
+#[cfg(feature = "serde_json")]
+pub use sources::{
+    load_and_merge_subcommand_for_with_matches_with_sources,
+    load_and_merge_subcommand_for_with_sources,
+    load_and_merge_subcommand_with_matches_with_sources, load_and_merge_subcommand_with_sources,
 };
 pub use types::{CmdName, Prefix};
 
@@ -58,8 +69,20 @@ fn load_from_files(paths: &[PathBuf], name: &CmdName) -> OrthoResult<Figment> {
     Ok(fig)
 }
 
+/// Gather file defaults and the selected subcommand environment layer.
+///
+/// A supplied scanning source changes only the environment provider; file
+/// search remains process-independent and follows the configured prefix.
+///
+/// # Errors
+///
+/// Returns gathering errors from file loading or from the selected environment
+/// provider without exposing either source's raw values in telemetry.
 #[cfg(feature = "serde_json")]
-fn load_file_and_env_defaults<T>(prefix: &Prefix) -> OrthoResult<Figment>
+pub(super) fn load_file_and_env_defaults<T>(
+    prefix: &Prefix,
+    merge_source: Option<SharedScanEnvSource>,
+) -> OrthoResult<Figment>
 where
     T: CommandFactory,
 {
@@ -71,10 +94,14 @@ where
     let raw = prefix.raw();
     let raw_without_suffix = raw.strip_suffix('_').unwrap_or(raw);
     let env_prefix = format!("{raw_without_suffix}_CMDS_{env_name}_");
-    let env_provider = Env::prefixed(&env_prefix)
-        .map(|k| Uncased::from(k))
-        .split("__");
-    fig = fig.merge(env_provider);
+    fig = match merge_source {
+        Some(source) => fig.merge(sources::env_provider(&env_prefix, source)),
+        None => fig.merge(
+            Env::prefixed(&env_prefix)
+                .map(|key| Uncased::from(key))
+                .split("__"),
+        ),
+    };
 
     Ok(fig)
 }
@@ -121,7 +148,7 @@ where
 {
     // Gathering phase: resolve file/env defaults before CLI overrides so any
     // failures here are reported as `Gathering` errors.
-    let fig = load_file_and_env_defaults::<T>(prefix)?;
+    let fig = load_file_and_env_defaults::<T>(prefix, None)?;
 
     // Merge phase: CLI overrides and final extraction failures map to `Merge`.
     fig.merge(sanitized_provider(cli)?)
@@ -218,7 +245,7 @@ where
     T: serde::Serialize + DeserializeOwned + Default + CommandFactory + CliValueExtractor,
 {
     let fig = Figment::from(Serialized::defaults(T::default()))
-        .merge(load_file_and_env_defaults::<T>(prefix)?);
+        .merge(load_file_and_env_defaults::<T>(prefix, None)?);
 
     // Extract only user-provided CLI values, respecting cli_default_as_absent
     let cli_value = cli.extract_user_provided(matches)?;
@@ -294,6 +321,19 @@ pub trait SubcmdConfigMerge: crate::OrthoConfig + CommandFactory + Sized {
         load_and_merge_subcommand_for(self)
     }
 
+    /// Merge configuration defaults using an injected environment merge source.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::OrthoError::Merge`] if CLI values cannot be merged or
+    /// the merged defaults cannot be deserialised.
+    fn load_and_merge_with_sources(&self, merge_source: SharedScanEnvSource) -> OrthoResult<Self>
+    where
+        Self: serde::Serialize + Default,
+    {
+        load_and_merge_subcommand_for_with_sources(self, merge_source)
+    }
+
     /// Merge configuration defaults, respecting `cli_default_as_absent` fields.
     ///
     /// This variant uses the provided `ArgMatches` to distinguish between
@@ -310,6 +350,24 @@ pub trait SubcmdConfigMerge: crate::OrthoConfig + CommandFactory + Sized {
         Self: serde::Serialize + Default + CliValueExtractor,
     {
         load_and_merge_subcommand_for_with_matches(self, matches)
+    }
+
+    /// Merge configuration defaults from an injected source, respecting CLI
+    /// default values marked as absent.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::OrthoError::Merge`] if CLI values cannot be merged or
+    /// the merged defaults cannot be deserialised.
+    fn load_and_merge_with_matches_with_sources(
+        &self,
+        matches: &ArgMatches,
+        merge_source: SharedScanEnvSource,
+    ) -> OrthoResult<Self>
+    where
+        Self: serde::Serialize + Default + CliValueExtractor,
+    {
+        load_and_merge_subcommand_for_with_matches_with_sources(self, matches, merge_source)
     }
 }
 

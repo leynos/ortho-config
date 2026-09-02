@@ -2,12 +2,12 @@
 use anyhow::{Context, Result, ensure};
 use cap_std::{ambient_authority, fs::Dir};
 use clap::Parser;
-use ortho_config::{OrthoConfig, load_and_merge_subcommand_for};
+use ortho_config::{MapEnv, OrthoConfig, load_and_merge_subcommand_for_with_sources};
 use rstest::{fixture, rstest};
 use serde::{Deserialize, Serialize};
-use serial_test::serial;
+use std::sync::Arc;
 use tempfile::TempDir;
-use test_helpers::{cwd, env};
+use test_helpers::cwd;
 
 #[derive(Debug, Parser, Serialize, Deserialize, OrthoConfig, Default, PartialEq)]
 #[command(name = "pr")]
@@ -81,13 +81,13 @@ struct IssuePrecedenceCase {
         expected_files: vec!["file.txt".into()],
     },
 )]
-#[serial]
 fn test_pr_precedence(#[case] case: PrPrecedenceCase) -> Result<()> {
     let (_temp_dir, _cwd_guard) = config_dir(case.config_content)?;
-    let _guard = case
-        .env_val
-        .map(|val| env::set_var("VK_CMDS_PR_REFERENCE", val));
-    let merged = load_and_merge_subcommand_for(&case.cli).context("merge pr args")?;
+    let source = case.env_val.map_or_else(MapEnv::new, |value| {
+        MapEnv::new().with_var("VK_CMDS_PR_REFERENCE", value)
+    });
+    let merged = load_and_merge_subcommand_for_with_sources(&case.cli, Arc::new(source))
+        .context("merge pr args")?;
     ensure!(
         merged.reference.as_deref() == case.expected_reference,
         "expected reference {:?}, got {:?}",
@@ -128,13 +128,13 @@ fn test_pr_precedence(#[case] case: PrPrecedenceCase) -> Result<()> {
         expected_reference: Some("cli_ref"),
     },
 )]
-#[serial]
 fn test_issue_precedence(#[case] case: IssuePrecedenceCase) -> Result<()> {
     let (_temp_dir, _cwd_guard) = config_dir(case.config_content)?;
-    let _guard = case
-        .env_val
-        .map(|val| env::set_var("VK_CMDS_ISSUE_REFERENCE", val));
-    let merged = load_and_merge_subcommand_for(&case.cli).context("merge issue args")?;
+    let source = case.env_val.map_or_else(MapEnv::new, |value| {
+        MapEnv::new().with_var("VK_CMDS_ISSUE_REFERENCE", value)
+    });
+    let merged = load_and_merge_subcommand_for_with_sources(&case.cli, Arc::new(source))
+        .context("merge issue args")?;
     ensure!(
         merged.reference.as_deref() == case.expected_reference,
         "expected reference {:?}, got {:?}",

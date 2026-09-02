@@ -266,17 +266,8 @@ and revisit the boundary in the agent-native design.
 
 ## Behavioural test layout
 
-Behavioural suites live in crate-local integration test targets:
-
-- `ortho_config/tests/rstest_bdd/`
-- `cargo-orthohelp/tests/rstest_bdd/`
-- `examples/hello_world/tests/rstest_bdd/`
-
-Feature files are in:
-
-- `ortho_config/tests/features/`
-- `cargo-orthohelp/tests/features/`
-- `examples/hello_world/tests/features/`
+Behavioural suites live in crate-local integration test targets. The repository
+layout guide records the current target and feature-file inventory.
 
 Step definitions use `rstest-bdd` macros (`#[given]`, `#[when]`, `#[then]`) and
 consume `rstest` fixtures. Scenario-local mutable state is modelled with
@@ -286,39 +277,29 @@ effectively read-only infrastructure.
 
 Keep richer fixture families isolated. For example, `NestedDocsConfig` and
 `NestedDocsContext` back `docs_ir_nested.feature`, and their steps live in a
-fixture-specific `tests/rstest_bdd/behaviour/steps/nested_docs_steps.rs` module
-rather than expanding unrelated step files.
+fixture-specific module rather than expanding unrelated step files.
 
 ### Integration test targets
 
-`ortho_config` also carries plain `rstest` integration suites that are
-distinct from the behavioural (`rstest-bdd`) suites above. Each directory-style
-suite needs its own `[[test]]` stanza in `ortho_config/Cargo.toml`; a suite
-without a stanza is not compiled or run by Cargo:
-
-- `ortho_config/tests/subcommand/mod.rs` (cargo target `subcommand`) — tests
-  for subcommand configuration helpers, covering `basic`, `cli`, `merge`,
-  `nesting`, and `prefix` submodules. It shares `../util.rs` and
-  `../support/to_anyhow.rs` via `#[path]` includes.
-- `ortho_config/tests/clap_integration/mod.rs` (cargo target
-  `clap_integration`) — integration tests for CLI parsing across multiple
-  configuration sources, covering `common`, `config_path`, `error_cases`,
-  `option_cases`, `parsing`, and (on Unix and Redox only) `xdg`.
+`ortho_config` also carries plain `rstest` integration suites that are distinct
+from the behavioural (`rstest-bdd`) suites above. Each directory-style suite
+needs its own `[[test]]` stanza in the crate manifest; a suite without a stanza
+is not compiled or run by Cargo. The repository-layout guide records the
+current suite and module inventory.
 
 Run either suite on its own for focused debugging:
 
 ```bash
-cargo test -p ortho_config --test subcommand
-cargo test -p ortho_config --test clap_integration
+cargo test -p ortho_config --test <target>
 ```
 
 ### Public documentation examples
 
 The root README and `docs/users-guide.md` are executable documentation. Every
 fenced block in either file must have a unique `tested-example` marker on the
-immediately preceding line. `ortho_config/tests/documentation_examples/mod.rs`
-owns parsing and lookup for these examples. It is test infrastructure only;
-production code, other crates, and examples must not depend on it.
+immediately preceding line. The documentation-example test support owns parsing
+and lookup for these examples. It is test infrastructure only; production code,
+other crates, and examples must not depend on it.
 
 The loader is shared by the documentation integration-test targets. Each target
 loads and parses the documents once, then borrows examples from its cached
@@ -335,64 +316,61 @@ ASCII letter, then use lowercase ASCII letters, digits, or single hyphens. The
 parser and temporary workspace both enforce this boundary before constructing
 paths.
 
-`documentation_examples/workspace.rs` owns temporary Cargo package assembly for
-Rust examples. Reuse it only from documentation tests that compile an exact
-fence body. A workspace has one owner: operations that add, build, run, or
-write require an exclusive mutable borrow. Concurrent scenarios must create an
-independent workspace per thread rather than share one workspace. The helper
-may add the dependencies needed to compile a published example, but it must not
-rewrite that source. Keep the expected identifier registry closed so adding an
-example without choosing its behavioural contract fails a test.
-`documentation_examples/cargo_runner.rs` owns isolated Cargo process setup for
-these documentation tests; reuse it only when executing a documented Cargo
-workflow with a caller-owned temporary state directory. Run Cargo and child
-binaries with cleared environments. Cargo receives only the toolchain and
-platform paths it needs; binaries receive only the non-sensitive Windows
-runtime variables named by the workspace allow-list and deliberate scenario
-overrides. Keep fallible host-tool discovery and environment preparation at the
-runner boundary; command construction consumes the prepared values without
-starting subprocesses or writing files. The sibling `process_runner.rs` owns
-bounded execution for these documentation tests only: route Cargo, host-tool,
-and documented-binary commands through it, while keeping command construction
-and exit-status policy with their existing owners. Run-file paths must contain
+The documentation-example workspace helper owns temporary Cargo package
+assembly for Rust examples. Reuse it only from documentation tests that compile
+an exact fence body. A workspace has one owner: operations that add, build,
+run, or write require an exclusive mutable borrow. Concurrent scenarios must
+create an independent workspace per thread rather than share one workspace. The
+helper may add the dependencies needed to compile a published example, but it
+must not rewrite that source. Keep the expected identifier registry closed so
+adding an example without choosing its behavioural contract fails a test. The
+documentation-example Cargo runner owns isolated Cargo process setup for these
+documentation tests; reuse it only when executing a documented Cargo workflow
+with a caller-owned temporary state directory. Run Cargo and child binaries
+with cleared environments. Cargo receives only the toolchain and platform paths
+it needs; binaries receive only the non-sensitive Windows runtime variables
+named by the workspace allow-list and deliberate scenario overrides. Keep
+fallible host-tool discovery and environment preparation at the runner
+boundary; command construction consumes the prepared values without starting
+subprocesses or writing files. The process-runner helper owns bounded execution
+for these documentation tests only: route Cargo, host-tool, and
+documented-binary commands through it, while keeping command construction and
+exit-status policy with their existing owners. Run-file paths must contain
 normal relative components only.
 
 ### Shared test-support helpers
 
-`ortho_config/tests/support/to_anyhow.rs` owns the `ToAnyhow` trait, which
-converts an `OrthoResult<T>` (`Result<T, Arc<OrthoError>>`) into an
-`anyhow::Result<T>`, preserving the original error as the `anyhow` source. It
-is the single conversion point for integration-test targets that report
-failures through `anyhow`; before it existed, each suite grew its own free
-function or inline `map_err(|err| anyhow!(err))` call, and those copies agreed
-on behaviour by accident rather than by construction. New local
-`to_anyhow`-style conversions are not permitted — depend on this module
-instead.
+The shared test-support modules own the `ToAnyhow` trait, which converts an
+`OrthoResult<T>` (`Result<T, Arc<OrthoError>>`) into an `anyhow::Result<T>`,
+preserving the original error as the `anyhow` source. It is the single
+conversion point for integration-test targets that report failures through
+`anyhow`; before it existed, each suite grew its own free function or inline
+`map_err(|err| anyhow!(err))` call, and those copies agreed on behaviour by
+accident rather than by construction. New local `to_anyhow`-style conversions
+are not permitted — depend on this module instead.
 
-`ortho_config/tests/support/discovery_builder.rs` owns `discovery_with`, a
-pure builder that returns an independent `ConfigDiscovery` wired to the
-caller's `MapEnv` only; it reads no other environment variables and touches
-no filesystem, and it resolves its sole project root to `/workspace`. It is
-owned by the injected-source discovery suites — candidates, properties,
-telemetry, and metrics — which need a `ConfigDiscovery` configured
-identically so that their results remain comparable. Any test needing a
-deterministic discovery over an injected environment may reuse it.
+The shared discovery-builder helper owns `discovery_with`, a pure builder that
+returns an independent `ConfigDiscovery` wired to the caller's `MapEnv` only;
+it reads no other environment variables and touches no filesystem, and it
+resolves its sole project root to a fixed test root. It is owned by the
+injected-source discovery suites — candidates, properties, telemetry, and
+metrics — which need a `ConfigDiscovery` configured identically so that their
+results remain comparable. Any test needing a deterministic discovery over an
+injected environment may reuse it.
 
-`ortho_config/tests/rstest_bdd/behaviour/steps/common.rs` owns
-`set_scalar_once`, `set_nonblank_scalar_once`, and the `SlotTakeOrExt`
-extension trait's `take_or`. The first two centralize the repeated "guard,
-validate, and populate a scalar slot" shape used to fill scenario `Slot`
-state exactly once; `take_or` centralizes the repeated "take the slot's
-value or fail with a descriptive error" shape. Both are scoped to step
-modules under `behaviour/steps/`; step modules must use these helpers rather
-than re-implementing slot-guard boilerplate.
+The common behavioural-step helper module owns `set_scalar_once`,
+`set_nonblank_scalar_once`, and the `SlotTakeOrExt` extension trait's
+`take_or`. The first two centralize the repeated "guard, validate, and populate
+a scalar slot" shape used to fill scenario `Slot` state exactly once; `take_or`
+centralizes the repeated "take the slot's value or fail with a descriptive
+error" shape. Both are scoped to behavioural step modules; step modules must
+use these helpers rather than re-implementing slot-guard boilerplate.
 
 ## Snapshot tests
 
 Use `insta` for renderer golden coverage that would be noisy as handwritten
 string assertions. Place snapshots beside the integration test that owns them,
-as `cargo-orthohelp/tests/golden/nested_subcommand_snapshots.rs` does, and
-redact dates, absolute paths, and other environment-specific substrings with
+and redact dates, absolute paths, and other environment-specific substrings with
 `insta::with_settings!` filters before committing baselines.
 
 Review snapshot changes with `cargo insta review`. For non-interactive baseline
@@ -478,6 +456,39 @@ as additional metric families or span fields used across crates, should be
 mentioned in the relevant design or component architecture document, so the
 contract stays discoverable.
 
+### Environment merge telemetry
+
+The environment merge boundary emits a `merge.layer` tracing event at the
+decision and terminal points of source-aware work. Events use only these
+bounded fields:
+
+- `operation`: `csv_env`, `derived_load`, or `subcommand_load`;
+- `source`: `process` or `injected`;
+- `outcome`: `attempt`, `success`, or `failure`; and
+- `category`: `none`, `opaque_key_transform`, `invalid_nesting`, `cli`,
+  `file`, `cyclic_extends`, `gathering`, `merge`, `validation`, or
+  `aggregate`.
+
+`CsvEnv` emits process-backed and injected events. Derive-generated loads and
+subcommand loads emit events when their source-aware entry points are used.
+The events never contain environment values, keys, paths, configuration data,
+caller-supplied prefixes, or raw error text. Error categories are reduced to
+the closed vocabulary before emission so subscribers can aggregate failures
+without receiving sensitive input.
+
+Capture tests must cover successful and failing paths for each emitting
+operation. They assert the operation, source, outcome, and category fields,
+and verify that captured events contain neither injected values nor keys or
+paths from the test inputs. The library does not install a global subscriber;
+applications attach their own capture or export layer at the boundary.
+
+With the optional `metrics` feature enabled, the same merge boundaries also
+increment `ortho_config.merge.attempts` and
+`ortho_config.merge.outcomes`. Both counter families use only the bounded
+`operation`, `source`, `outcome`, and `category` labels described above; the
+attempt counter uses `attempt` and `none` for its outcome and category. No
+metrics recorder is installed by the library.
+
 ## Digest rendering
 
 `cargo-orthohelp` hashes cache inputs with SHA-256 and renders the digest as 64
@@ -487,10 +498,10 @@ does not implement `core::fmt::LowerHex`, so the `{:x}` formatting the cache
 previously used no longer compiles. `sha2` 0.11 also no longer implements
 `std::io::Write`, so `std::io::copy` cannot stream into a hasher.
 
-- Render digest bytes through the crate-internal `to_lower_hex` helper in
-  `cargo-orthohelp/src/hex.rs`. It is scoped to `cargo-orthohelp`, owns no
-  state, and may be called from any crate-internal site that needs lowercase
-  hex. Do not reintroduce `{:x}` or per-byte `format!` calls.
+- Render digest bytes through the crate-internal `to_lower_hex` helper. It is
+  scoped to `cargo-orthohelp`, owns no state, and may be called from any
+  crate-internal site that needs lowercase hex. Do not reintroduce `{:x}` or
+  per-byte `format!` calls.
 - The helper maps each nibble arithmetically rather than indexing a digit
   table, because the workspace denies `clippy::indexing_slicing`. Keep it that
   way instead of adding a scoped suppression.
@@ -508,10 +519,10 @@ previously used no longer compiles. `sha2` 0.11 also no longer implements
   0.13. Apply the same rules when introducing any of them.
 
 The rendered form is byte-for-byte identical to the previous `{:x}` output, so
-the change does not invalidate cache directories. A bounded exhaustive unit test
-covers the whole `u8` range, and `cache.rs` pins the canonical SHA-256 digest of
-`b"abc"` so a self-consistent but wrongly ordered or zero-truncated encoder
-cannot pass.
+the change does not invalidate cache directories. A bounded exhaustive unit
+test covers the whole `u8` range, and `cache.rs` pins the canonical SHA-256
+digest of `b"abc"` so a self-consistent but wrongly ordered or zero-truncated
+encoder cannot pass.
 
 ### Discovery telemetry
 
@@ -554,7 +565,7 @@ Rules for extending this set:
   closed vocabulary. The same property keeps the `metrics` labels bounded; an
   unbounded label here becomes an unbounded time-series in a consumer's
   monitoring system.
-- **`tests/discovery_telemetry.rs` enforces it.** The suite feeds discovery
+- **The discovery telemetry suite enforces it.** The suite feeds discovery
   distinctive values and asserts no captured field contains any of them. Adding
   a field that formats a path fails that test rather than shipping.
 - **Counters go behind the optional `metrics` feature**, per the library
@@ -569,17 +580,20 @@ failure, not a precaution.
 
 ## Environment access boundary
 
-`EnvSource` (`ortho_config/src/env_source.rs`) is the crate's injectable
-environment. `ProcessEnv` is the default and preserves the historical behaviour;
-`MapEnv` models a closed set of variables for tests.
+`EnvSource` is the crate's injectable environment. `ProcessEnv` is the default
+and preserves the historical behaviour; `MapEnv` models a closed set of
+variables for tests.
 
 ### Ownership and permitted call sites
 
 - `EnvSource` is owned by the discovery subsystem. `ConfigDiscovery` holds one
   as `Arc<dyn EnvSource>`, supplied through
   `ConfigDiscoveryBuilder::env_source` and defaulting to `ProcessEnv`.
-- `discovery/candidates.rs` is the only module that reads through it, and holds
-  no `std::env::var_os` call of its own.
+- `ScanEnvSource` is owned by the merge boundary. `CsvEnv` accepts one through
+  `with_source`, and the derived loader receives it through
+  `OrthoConfig::load_from_iter_with_sources`.
+- The discovery candidate reader is the only production reader, and holds no
+  `std::env::var_os` call of its own.
 - It is **not** a general environment service. Adding readers elsewhere in the
   crate requires a decision about scope, not a call site.
 
@@ -591,14 +605,17 @@ environment. `ProcessEnv` is the default and preserves the historical behaviour;
   them enumerated, copied, or logged. An enumeration method here would void
   that guarantee for every holder of an `EnvSource`, however careful individual
   callers were.
-- **The merge layer needs a different abstraction.** `CsvEnv` legitimately scans
-  a prefix because `figment::providers::Env` does. When it gains an injectable
-  source ([#412](https://github.com/leynos/ortho-config/issues/412)) it must
-  take a separate, explicitly named type, so the scanning capability is visible
-  in the signature rather than latent in a trait whose other users must not
-  scan. Until then, `CsvEnv` injection is out of scope and a consumer needing
-  to control `APP_*` configuration-value variables must still set them in the
-  process.
+- **The merge layer uses a different abstraction.** `CsvEnv` legitimately scans
+  a prefix because `figment::providers::Env` does, so its injectable path takes
+  `ScanEnvSource`, a separate explicitly named type. The scanning capability is
+  visible in the signature rather than latent in a trait whose other users must
+  not scan. Callers can use one `Arc<MapEnv>` by coercing cloned `Arc`s to
+  `SharedEnvSource` and `SharedScanEnvSource`;
+  [#412](https://github.com/leynos/ortho-config/issues/412) completed this path.
+- **Injected merge providers are declarative.** Injected `CsvEnv` loading
+  replays only the declarative prefix, case, split, and CSV options. Calling
+  `CsvEnv::with_source` after `map()` or `filter_map()` is rejected because
+  arbitrary closures cannot be replayed against an injected `ScanEnvSource`.
 - **Owned returns, deliberately.** An `impl Iterator` return would be
   return-position `impl Trait` in traits (RPITIT) and make the trait unusable
   behind a trait object, forcing `ConfigDiscovery<S>` generics to leak through

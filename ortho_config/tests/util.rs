@@ -9,8 +9,8 @@ use clap::CommandFactory;
 use figment::Error as FigmentError;
 use ortho_config::subcommand::Prefix;
 use ortho_config::{
-    OrthoConfig, OrthoError, OrthoResult, OrthoResultExt, ResultIntoFigment, SubcmdConfigMerge,
-    load_and_merge_subcommand,
+    OrthoConfig, OrthoError, OrthoResult, OrthoResultExt, ResultIntoFigment, SharedScanEnvSource,
+    SubcmdConfigMerge, load_and_merge_subcommand, load_and_merge_subcommand_with_sources,
 };
 use serde::de::DeserializeOwned;
 
@@ -77,6 +77,26 @@ where
 {
     with_jail(setup, || {
         load_and_merge_subcommand(&Prefix::new("APP_"), cli)
+    })
+}
+
+/// Runs `setup` in a jailed file environment, then merges an injected
+/// environment source over the `APP_` subcommand defaults.
+///
+/// # Errors
+///
+/// Returns an error if file setup, configuration loading, or merging fails.
+pub fn with_merged_subcommand_cli_with_sources<F, T>(
+    setup: F,
+    cli: &T,
+    merge_source: SharedScanEnvSource,
+) -> OrthoResult<T>
+where
+    F: FnOnce(&mut figment::Jail) -> figment::error::Result<()>,
+    T: serde::Serialize + DeserializeOwned + Default + CommandFactory,
+{
+    with_jail(setup, || {
+        load_and_merge_subcommand_with_sources(&Prefix::new("APP_"), cli, merge_source)
     })
 }
 

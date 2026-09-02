@@ -279,6 +279,7 @@ fn build_load_impl_args<'a>(
         dotfile_name,
         legacy_app_name: legacy_app_name_storage.clone(),
         discovery: config.discovery_tokens,
+        sources: None,
         krate,
     };
     let args = LoadImplArgs {

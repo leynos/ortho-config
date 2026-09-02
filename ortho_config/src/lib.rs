@@ -53,6 +53,7 @@ mod error;
 pub mod file;
 mod localizer;
 mod merge;
+mod merge_telemetry;
 mod post_merge;
 mod result_ext;
 pub mod subcommand;
@@ -88,7 +89,10 @@ pub use subcommand::{
 #[cfg_attr(docsrs, doc(cfg(feature = "serde_json")))]
 pub use subcommand::{
     load_and_merge_subcommand, load_and_merge_subcommand_for,
-    load_and_merge_subcommand_for_with_matches, load_and_merge_subcommand_with_matches,
+    load_and_merge_subcommand_for_with_matches,
+    load_and_merge_subcommand_for_with_matches_with_sources,
+    load_and_merge_subcommand_for_with_sources, load_and_merge_subcommand_with_matches,
+    load_and_merge_subcommand_with_matches_with_sources, load_and_merge_subcommand_with_sources,
 };
 
 /// Normalize a prefix by trimming trailing underscores and converting
@@ -118,7 +122,10 @@ pub use discovery::{
     ConfigDiscovery, ConfigDiscoveryBuilder, DiscoveryLayersOutcome, DiscoveryLoadOutcome,
     LayerDiscoveryOutcome,
 };
-pub use env_source::{EnvSource, MapEnv, ProcessEnv, SharedEnvSource, process_env_source};
+pub use env_source::{
+    EnvSource, MapEnv, ProcessEnv, ScanEnvSource, SharedEnvSource, SharedScanEnvSource,
+    process_env_source, process_scan_env_source,
+};
 pub use error::{OrthoError, is_display_request};
 pub use file::{FileLayerChain, load_config_file, load_config_file_as_chain};
 pub use localizer::{
@@ -150,6 +157,24 @@ pub use merge::{CliValueExtractor, sanitize_value, sanitized_provider, value_wit
 pub use post_merge::{PostMergeContext, PostMergeHook};
 use std::sync::Arc;
 pub use unic_langid::{LanguageIdentifier, langid};
+
+#[doc(hidden)]
+pub mod __private {
+    //! Runtime hooks emitted by derive-generated source-aware loading methods.
+    //!
+    //! This boundary keeps macro expansion independent of `tracing` while
+    //! ensuring it can record only the merge layer's bounded telemetry fields.
+
+    /// Record the start of a derived configuration load using injected sources.
+    pub fn source_aware_derived_load_started() {
+        crate::merge_telemetry::source_aware_derived_load_started();
+    }
+
+    /// Record a derived injected-load result using its bounded error category.
+    pub fn source_aware_derived_load_finished<T>(result: &crate::OrthoResult<T>) {
+        crate::merge_telemetry::source_aware_derived_load_finished(result);
+    }
+}
 
 /// Trait implemented for structs that represent application configuration.
 pub trait OrthoConfig: Sized + serde::de::DeserializeOwned {
@@ -195,6 +220,36 @@ pub trait OrthoConfig: Sized + serde::de::DeserializeOwned {
     where
         I: IntoIterator<Item = T>,
         T: Into<std::ffi::OsString> + Clone;
+
+    /// Loads configuration using injected discovery and merge environment
+    /// sources.
+    ///
+    /// The discovery source resolves named configuration-path and platform
+    /// directory variables. The merge source enumerates the application
+    /// variables that form the environment layer. A single [`MapEnv`] can back
+    /// both: coerce separate `Arc` clones to [`SharedEnvSource`] and
+    /// [`SharedScanEnvSource`].
+    ///
+    /// Manual implementations retain process-backed behaviour unless they
+    /// override this method. Derived implementations use both sources for the
+    /// complete configuration resolution.
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`crate::OrthoError`] if parsing command-line arguments,
+    /// reading files, or deserializing configuration fails.
+    fn load_from_iter_with_sources<I, T>(
+        iter: I,
+        discovery: SharedEnvSource,
+        merge: SharedScanEnvSource,
+    ) -> OrthoResult<Self>
+    where
+        I: IntoIterator<Item = T>,
+        T: Into<std::ffi::OsString> + Clone,
+    {
+        let _ = (discovery, merge);
+        Self::load_from_iter(iter)
+    }
 
     /// Prefix used for environment variables and subcommand configuration.
     #[must_use]

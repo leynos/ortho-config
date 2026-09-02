@@ -58,6 +58,52 @@ Table 1 describes the repository paths that define the workspace shape.
 | `test_helpers/`         | Shared test helper crate. Put cross-crate fixtures, environment guards, and reusable assertions here rather than duplicating test infrastructure.                                                                                                                                          |
 | `tests/fixtures/`       | Workspace-level fixture crates and data used by integration, documentation, and generator tests. Fixtures should be minimal but representative.                                                                                                                                            |
 
+## Integration test inventory
+
+`ortho_config` carries plain `rstest` integration suites as distinct Cargo
+targets. Each directory-style suite needs its own `[[test]]` stanza in
+`ortho_config/Cargo.toml`; a suite without one is not compiled or run by Cargo:
+
+- `ortho_config/tests/subcommand/mod.rs` (target `subcommand`) contains tests
+  for subcommand configuration helpers in the `basic`, `cli`, `merge`,
+  `nesting`, and `prefix` modules. It shares `../util.rs` and
+  `../support/to_anyhow.rs` through `#[path]` includes.
+- `ortho_config/tests/clap_integration/mod.rs` (target `clap_integration`)
+  contains CLI parsing tests across configuration sources in the `common`,
+  `config_path`, `error_cases`, `option_cases`, and `parsing` modules, plus
+  `xdg` on Unix and Redox.
+
+Run either target independently with
+`cargo test -p ortho_config --test subcommand` or
+`cargo test -p ortho_config --test clap_integration`.
+
+## Behavioural test inventory
+
+Behavioural suites use crate-local integration targets. Their feature files are
+kept alongside the targets that consume them:
+
+- `ortho_config/tests/rstest_bdd/` and `ortho_config/tests/features/`
+- `cargo-orthohelp/tests/rstest_bdd/` and `cargo-orthohelp/tests/features/`
+- `examples/hello_world/tests/rstest_bdd/` and
+  `examples/hello_world/tests/features/`
+
+## Shared test-support modules
+
+These modules provide shared integration-test infrastructure:
+
+- `ortho_config/tests/support/to_anyhow.rs` owns the `ToAnyhow` trait. It
+  converts `OrthoResult<T>` to `anyhow::Result<T>`, preserving the original
+  error as the `anyhow` source. Integration targets that report failures with
+  `anyhow` should use this single conversion point.
+- `ortho_config/tests/support/discovery_builder.rs` owns the `discovery_with`
+  builder. It creates an independent `ConfigDiscovery` over the caller's
+  `MapEnv`, with no other environment or filesystem access, for deterministic
+  injected-source discovery tests.
+- `ortho_config/tests/rstest_bdd/behaviour/steps/common.rs` owns the
+  `set_scalar_once`, `set_nonblank_scalar_once`, and `SlotTakeOrExt::take_or`
+  helpers. Step modules under `behaviour/steps/` use them for scalar-slot
+  validation and descriptive missing-slot errors.
+
 ## Important root files
 
 Table 2 lists root files that carry project policy or workspace behaviour.
