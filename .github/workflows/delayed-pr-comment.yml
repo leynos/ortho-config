@@ -20,6 +20,7 @@ permissions: {}
 jobs:
   delay_and_comment:
     runs-on: namespace-profile-default
+    timeout-minutes: 360
     permissions:
       pull-requests: write   # needed to post comments
     steps:
@@ -34,8 +35,8 @@ jobs:
               exit 1
               ;;
           esac
-          if (( DELAY_MINUTES < 1 || DELAY_MINUTES > 1440 )); then
-            echo 'delay_minutes must be between 1 and 1440' >&2
+          if (( DELAY_MINUTES < 1 || DELAY_MINUTES > 350 )); then
+            echo 'delay_minutes must be between 1 and 350' >&2
             exit 1
           fi
           echo "secs=$(( DELAY_MINUTES * 60 ))" >> "$GITHUB_OUTPUT"
