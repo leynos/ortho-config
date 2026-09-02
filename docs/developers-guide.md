@@ -7,8 +7,9 @@ highest maintenance cost when patterns drift.
 ## GitHub Actions runner profiles
 
 The delayed pull-request comment job runs on the shared uncached
-`namespace-profile-default` runner. The [Namespace profile record](https://github.com/leynos/git-donkey/pull/70)
-specifies Ubuntu 22.04, amd64, 4 vCPU, and 16 GB. Its cache volume is
+`namespace-profile-default` runner. The [Namespace profile record]
+specifies Ubuntu 22.04, amd64,
+4 vCPU, and 16 GB. Its cache volume is
 disabled, so this controlled initial slice does not add a second cache backend.
 
 The Continuous Integration (CI) workflow retains its current Linux and Windows
@@ -26,6 +27,13 @@ The workspace runs one unified test workflow via Make targets:
 - `make check-fmt`
 - `make lint`
 - `make test`
+
+The workflow-specific checks are:
+
+```bash
+make test-workflow-contracts
+actionlint -ignore shellcheck -config-file .github/actionlint.yaml .github/workflows/*.yml
+```
 
 These are required quality gates for code changes. Behavioural coverage runs
 inside the standard Rust test harness, not a bespoke test runner.
@@ -326,6 +334,8 @@ Run either suite on its own for focused debugging:
 cargo test -p ortho_config --test subcommand
 cargo test -p ortho_config --test clap_integration
 ```
+
+[Namespace profile record]: https://github.com/leynos/git-donkey/pull/70
 
 ### Public documentation examples
 

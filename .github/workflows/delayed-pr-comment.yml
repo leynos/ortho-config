@@ -30,16 +30,17 @@ jobs:
           DELAY_MINUTES: ${{ github.event.inputs.delay_minutes }}
         run: |
           case "$DELAY_MINUTES" in
-            ''|*[!0-9]*)
+            ''|*[!0-9]*|????*)
               echo 'delay_minutes must be a whole number' >&2
               exit 1
               ;;
           esac
-          if (( DELAY_MINUTES < 1 || DELAY_MINUTES > 350 )); then
+          delay_minutes=$((10#$DELAY_MINUTES))
+          if (( delay_minutes < 1 || delay_minutes > 350 )); then
             echo 'delay_minutes must be between 1 and 350' >&2
             exit 1
           fi
-          echo "secs=$(( DELAY_MINUTES * 60 ))" >> "$GITHUB_OUTPUT"
+          echo "secs=$(( delay_minutes * 60 ))" >> "$GITHUB_OUTPUT"
       - name: Wait requested time
         run: sleep "${{ steps.calc.outputs.secs }}"
         shell: bash
