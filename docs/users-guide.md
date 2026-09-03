@@ -735,7 +735,6 @@ changes for existing v0.8.0 users, and the
 [API documentation](https://docs.rs/ortho_config) is the source for complete
 type and method signatures.
 
-
 ### Profile metadata
 
 Opted-in applications advertise profile support in agent context. The
