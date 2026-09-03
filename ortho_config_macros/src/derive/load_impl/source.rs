@@ -44,7 +44,7 @@ pub(crate) fn build_source_aware_compose_layers_impl(
     };
     let composition = build_compose_layers_impl(&source_aware_args);
     if args.profiles {
-        quote! { (#composition).0 }
+        quote! {{ #composition }.0 }
     } else {
         composition
     }

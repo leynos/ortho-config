@@ -79,10 +79,11 @@ impl AvailableProfileNames {
     /// Maximum number of names retained in the structured error payload.
     pub const DISPLAY_CAP: usize = 16;
 
-    /// Build a sorted, capped list from `names`.
+    /// Build a sorted, deduplicated, capped list from `names`.
     #[must_use]
     pub fn new(mut names: Vec<String>) -> Self {
         names.sort();
+        names.dedup();
         let omitted_count = names.len().saturating_sub(Self::DISPLAY_CAP);
         names.truncate(Self::DISPLAY_CAP);
         Self {

@@ -225,3 +225,39 @@ fn available_list_display_caps_at_sixteen() {
     assert_that!(message, contains_substring("profile_0"));
     assert_that!(message, contains_substring("profile_15"));
 }
+
+#[test]
+fn available_list_deduplicates_before_capping() {
+    let mut layers: Vec<_> = (0..20)
+        .map(|index| {
+            file_layer(
+                json!({ "profile": { "shared": {} } }),
+                &format!("shared-{index}.toml"),
+            )
+        })
+        .collect();
+    layers.extend((0..16).map(|index| {
+        file_layer(
+            json!({ "profile": { format!("profile_{index}"): {} } }),
+            &format!("unique-{index}.toml"),
+        )
+    }));
+    let err = extract_profile_layers(
+        layers,
+        Some(&selection("staging").expect("valid test name")),
+    )
+    .expect_err("unknown profile must error");
+    let OrthoError::UnknownProfile { ref available, .. } = *err else {
+        panic!("expected UnknownProfile error");
+    };
+    assert_eq!(available.as_slice().len(), 16);
+    assert_eq!(
+        available
+            .as_slice()
+            .iter()
+            .filter(|name| *name == "shared")
+            .count(),
+        0
+    );
+    assert_that!(err.to_string(), contains_substring("and 1 more"));
+}
