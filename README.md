@@ -48,6 +48,19 @@ ortho_config = "0.9.0"
 serde = { version = "1.0", features = ["derive"] }
 ```
 
+The `cargo-orthohelp` documentation tool ships prebuilt binaries for Linux,
+macOS, and Windows on x86-64, and for Linux and macOS on aarch64. Install one
+without compiling:
+
+<!-- tested-example: readme-binstall -->
+```console
+cargo binstall --disable-strategies compile cargo-orthohelp
+```
+
+Each release archive is published with a `.sha256` sidecar, so a download can
+be verified with `sha256sum --check`. `cargo install cargo-orthohelp` remains
+available where a source build is preferred.
+
 ### Basic usage
 
 Define the settings your application needs and call `load()`:

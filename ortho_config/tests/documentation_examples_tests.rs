@@ -38,6 +38,7 @@ const EXPECTED_EXAMPLE_IDS: &[&str] = &[
     "guide-tracing",
     "guide-tracing-install",
     "guide-yaml",
+    "readme-binstall",
     "readme-install",
     "readme-main",
     "readme-run",
@@ -95,6 +96,43 @@ fn installation_manifests_select_the_documented_release() -> Result<()> {
                 .any(|value| value.as_str() == Some("env-filter"))),
         "tracing-subscriber manifest should enable env-filter"
     );
+    Ok(())
+}
+
+#[test]
+fn documented_binstall_command_matches_the_packaged_crate() -> Result<()> {
+    let example = documented_example("readme-binstall")?;
+    ensure!(example.language == "console");
+    ensure!(
+        example.body == "cargo binstall --disable-strategies compile cargo-orthohelp\n",
+        "documented cargo-binstall command drifted"
+    );
+
+    // The command only avoids a source build if the named crate publishes the
+    // binstall metadata that resolves its release archives.
+    let repository = Dir::open_ambient_dir(repository_root(), ambient_authority())
+        .context("open the repository root")?;
+    let manifest: toml::Value = toml::from_str(
+        &repository
+            .read_to_string("cargo-orthohelp/Cargo.toml")
+            .context("read the cargo-orthohelp manifest")?,
+    )
+    .context("parse the cargo-orthohelp manifest")?;
+    let package = manifest
+        .get("package")
+        .context("cargo-orthohelp should declare [package]")?;
+    ensure!(package.get("name").and_then(toml::Value::as_str) == Some("cargo-orthohelp"));
+    let binstall = package
+        .get("metadata")
+        .and_then(|metadata| metadata.get("binstall"))
+        .context("cargo-orthohelp should declare [package.metadata.binstall]")?;
+    ensure!(binstall.get("pkg-fmt").and_then(toml::Value::as_str) == Some("tgz"));
+    for key in ["pkg-url", "bin-dir"] {
+        ensure!(
+            binstall.get(key).and_then(toml::Value::as_str).is_some(),
+            "binstall metadata should declare {key}"
+        );
+    }
     Ok(())
 }
 

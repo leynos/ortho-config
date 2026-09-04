@@ -41,3 +41,8 @@ scripts/.venv/
 .vtcode/
 *.swp
 *.swo
+
+# Release archives staged by scripts/release_archive.py
+dist/
+extracted/
+release-dist/

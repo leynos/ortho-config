@@ -51,6 +51,16 @@ All notable changes to this project will be documented in this file.
 - Add the [v0.9.0 migration guide](docs/v0-9-0-migration-guide.md) covering
   the injectable environment source, discovery telemetry, and the `metrics`
   feature.
+- Publish prebuilt `cargo-orthohelp` release archives with `.sha256` sidecars
+  for `x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu`,
+  `x86_64-apple-darwin`, `aarch64-apple-darwin`, and `x86_64-pc-windows-msvc`,
+  and declare `[package.metadata.binstall]` so
+  `cargo binstall --disable-strategies compile cargo-orthohelp` installs them
+  instead of compiling from source (closes #479).
+- Add `scripts/release_archive.py` and `scripts/verify_release_archives.py`,
+  covered by `scripts/tests/test_release_archive.py`,
+  `tests/workflow_contracts/release_workflow_test.py`, and a pull-request
+  packaging dry run on Linux, macOS, and Windows.
 
 ### Changed
 
