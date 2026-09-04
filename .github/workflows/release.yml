@@ -1,0 +1,283 @@
+name: Release
+
+'on':
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing Git tag to publish, for example v0.10.0
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+# A tag push and a manual dispatch for the same tag would otherwise both pass
+# the `gh release view` check before either creates the draft, and the loser
+# would fail. Serializing on the effective tag makes the second run wait.
+concurrency:
+  group: release-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: Resolve release tag
+    runs-on: ubuntu-24.04
+    outputs:
+      tag: ${{ steps.resolve.outputs.tag }}
+      version: ${{ steps.resolve.outputs.version }}
+      prerelease: ${{ steps.resolve.outputs.prerelease }}
+    steps:
+      - name: Resolve tag and version
+        id: resolve
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_TAG: ${{ inputs.tag }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            tag="$INPUT_TAG"
+          else
+            tag="$REF_NAME"
+          fi
+
+          if ! [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::Release tags must match vMAJOR.MINOR.PATCH: $tag"
+            exit 1
+          fi
+
+          # A tag with a suffix such as v1.2.3-beta.1 is a prerelease, and must
+          # not be offered to consumers expecting a stable release.
+          if [[ "$tag" == *-* ]]; then
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+
+  create-release:
+    name: Create draft release
+    needs: prepare
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      # This job deliberately skips actions/checkout: it only calls the GitHub
+      # API. GH_REPO supplies the repository that gh would otherwise infer from
+      # a git remote, and the API tag check replaces `gh release create
+      # --verify-tag`, which needs a local clone.
+      - name: Create draft release when missing
+        env:
+          GH_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          IS_PRERELEASE: ${{ needs.prepare.outputs.prerelease }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+        run: |
+          set -euo pipefail
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists in $GH_REPO"
+            exit 0
+          fi
+
+          if ! gh api "repos/$GH_REPO/git/ref/tags/$TAG" >/dev/null 2>&1; then
+            echo "::error::Tag $TAG does not exist in $GH_REPO"
+            exit 1
+          fi
+
+          gh release create "$TAG" \
+            --draft \
+            --generate-notes \
+            --title "$TAG" \
+            --prerelease="$IS_PRERELEASE"
+
+  build-assets:
+    name: Build ${{ matrix.target }}
+    needs: [prepare, create-release]
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+          - runner: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+          - runner: macos-15-intel
+            target: x86_64-apple-darwin
+          - runner: macos-latest
+            target: aarch64-apple-darwin
+          - runner: windows-latest
+            target: x86_64-pc-windows-msvc
+    permissions:
+      contents: write
+    env:
+      CARGO_TERM_COLOR: always
+    steps:
+      # The tag is the source of truth for the binary, so the packaging script
+      # comes from the tagged tree while the workflow comes from the default
+      # branch. Tags cut before this workflow landed carry no packaging script
+      # and cannot be republished; cut a new tag instead.
+      - name: Checkout release tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ needs.prepare.outputs.tag }}
+      - name: Build release binary
+        uses: leynos/shared-actions/.github/actions/rust-build-release@e041cb75c35c3524201a32d5e57c87408fbd5874
+        with:
+          target: ${{ matrix.target }}
+          manifest-path: cargo-orthohelp/Cargo.toml
+          bin-name: cargo-orthohelp
+          # cargo-orthohelp renders its own man pages through the `roff`
+          # module rather than a clap_mangen build script, so the action's
+          # man-page discovery would fail on an artefact that never exists.
+          skip-man-page-discovery: 'true'
+      - name: Setup uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d  # v10.0.1
+        with:
+          enable-cache: false
+      - name: Package release archive
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+          TARGET: ${{ matrix.target }}
+        run: >-
+          uv run --script scripts/release_archive.py "$TARGET"
+          --release-version "$RELEASE_VERSION" --skip-build
+      # The auditor is the single definition of a well-formed asset; running it
+      # here means a layout mistake fails the producing job rather than only
+      # the aggregate audit, and it guarantees the sidecar exists before upload.
+      - name: Verify staged archive and sidecar
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+          TARGET: ${{ matrix.target }}
+        run: >-
+          uv run --script scripts/verify_release_archives.py --dist-dir dist
+          --release-version "$RELEASE_VERSION" --target "$TARGET"
+      - name: Upload release archive and checksum sidecar
+        shell: bash
+        env:
+          GH_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+        run: gh release upload "$TAG" dist/*.tgz dist/*.tgz.sha256 --clobber
+
+  audit-draft-assets:
+    name: Audit draft assets
+    needs: [prepare, build-assets]
+    runs-on: ubuntu-24.04
+    permissions:
+      # Draft releases are invisible to read-scoped tokens, so downloading the
+      # draft assets needs write scope even though this job only reads them.
+      contents: write
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ needs.prepare.outputs.tag }}
+      - name: Setup uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d  # v10.0.1
+        with:
+          enable-cache: false
+      - name: Download draft release assets
+        shell: bash
+        env:
+          GH_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+        run: |
+          set -euo pipefail
+
+          rm -rf release-dist
+          mkdir -p release-dist
+          gh release download "$TAG" \
+            --dir release-dist \
+            --pattern '*.tgz' \
+            --pattern '*.tgz.sha256'
+      - name: Audit every published target
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+        run: >-
+          uv run --script scripts/verify_release_archives.py
+          --dist-dir release-dist --release-version "$RELEASE_VERSION"
+      - name: Smoke test the Linux x86-64 archive
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          stem="cargo-orthohelp-x86_64-unknown-linux-gnu-v${RELEASE_VERSION}"
+          rm -rf smoke
+          mkdir -p smoke
+          tar -xzf "release-dist/${stem}.tgz" -C smoke
+          "smoke/${stem}/cargo-orthohelp" orthohelp --help
+
+  publish-release:
+    name: Publish release
+    needs: [prepare, audit-draft-assets]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      # Like create-release, this job has no checkout, so gh needs GH_REPO.
+      - name: Publish draft release
+        env:
+          GH_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+        run: gh release edit "$TAG" --draft=false
+
+  verify-published-assets:
+    name: Verify published asset URLs
+    needs: [prepare, publish-release]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    env:
+      CARGO_TERM_COLOR: always
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ needs.prepare.outputs.tag }}
+      - name: Setup Rust
+        uses: leynos/shared-actions/.github/actions/setup-rust@32c8ea649ea44d40119f348ad48861212532061f
+      # Resolves the real pkg-url for every target against the published
+      # release, so a template that renders an unreachable URL fails here
+      # rather than in a consumer's install.
+      - name: Dry-run cargo-binstall against the published assets
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          for target in \
+            x86_64-unknown-linux-gnu \
+            aarch64-unknown-linux-gnu \
+            x86_64-apple-darwin \
+            aarch64-apple-darwin \
+            x86_64-pc-windows-msvc
+          do
+            cargo binstall -y \
+              --manifest-path cargo-orthohelp/Cargo.toml \
+              --targets "$target" \
+              --strategies crate-meta-data \
+              --disable-strategies compile \
+              --install-path "$RUNNER_TEMP/binstall-url-dry-run" \
+              --force \
+              --dry-run \
+              cargo-orthohelp
+          done

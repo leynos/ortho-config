@@ -686,6 +686,88 @@ If a workflow's behaviour genuinely depends on a feature only present from a
 particular commit onwards, express that as a comment or a changelog note, not
 as a test assertion on the SHA string.
 
+## Releasing `cargo-orthohelp` binaries
+
+`cargo-orthohelp` is installed by downstream continuous integration (CI) under
+a no-source-build policy, so every release must carry prebuilt archives that
+`cargo binstall` can resolve. `.github/workflows/release.yml` publishes them
+for five targets, each built on a runner of its own architecture and operating
+system rather than cross-compiled:
+
+| Target                       | Runner            |
+| ---------------------------- | ----------------- |
+| `x86_64-unknown-linux-gnu`   | `ubuntu-24.04`    |
+| `aarch64-unknown-linux-gnu`  | `ubuntu-24.04-arm`|
+| `x86_64-apple-darwin`        | `macos-15-intel`  |
+| `aarch64-apple-darwin`       | `macos-latest`    |
+| `x86_64-pc-windows-msvc`     | `windows-latest`  |
+
+### Archive layout
+
+`scripts/release_archive.py` builds one target and writes
+`dist/cargo-orthohelp-<target>-v<version>.tgz`, holding exactly one member,
+`cargo-orthohelp-<target>-v<version>/cargo-orthohelp` (with `.exe` on
+Windows), plus a `sha256sum`-compatible `.sha256` sidecar. Member metadata and
+the gzip timestamp are fixed, so rebuilding a tag reproduces the same bytes.
+
+That layout is a contract with the `[package.metadata.binstall]` templates in
+`cargo-orthohelp/Cargo.toml`: `pkg-url` renders the archive name and `bin-dir`
+renders the member path. Change one and the other must change with it.
+`scripts/tests/test_release_archive.py` renders the real templates against the
+staged archive, and `tests/workflow_contracts/release_workflow_test.py` pins
+the workflow shape, so a mismatch fails on the pull request.
+`scripts/verify_release_archives.py` applies the same checks to a directory of
+archives; the workflow runs it on the staged output and again on the
+downloaded draft assets.
+
+### Release flow
+
+The workflow creates a draft release, builds and uploads every target's
+archive and sidecar, audits the draft, publishes it, then resolves the real
+asset URLs with `cargo binstall --dry-run`. Two details are load-bearing and
+have broken releases elsewhere in the estate:
+
+- The jobs that call `gh` without an `actions/checkout` step set `GH_REPO`.
+  Otherwise `gh` infers the repository from a git remote and fails with
+  `not a git repository`, skipping every downstream job.
+- The auditing job requests `contents: write` even though it only reads.
+  Draft releases are invisible to read-scoped tokens.
+
+A tag with a suffix, such as `v1.2.3-beta.1`, is published as a prerelease. The
+workflow serializes on the effective tag, so a tag push and a manual dispatch
+for the same tag cannot both pass the "does this release exist" check before
+either creates it.
+
+Build jobs check the release tag out, so the packaging script comes from the
+tagged tree. Tags cut before this workflow landed carry no packaging script and
+cannot be republished; cut a new tag instead.
+
+`cargo binstall` reads `[package.metadata.binstall]` from the crates.io
+release, not from this repository, so a version must be published to crates.io
+with that metadata before `cargo binstall cargo-orthohelp@<version>` resolves
+the archives. 0.9.1 is the first such version.
+
+`cargo-orthohelp` carries its own version rather than inheriting the workspace
+one, so a tooling-only release is a patch bump of that crate alone. Edit
+`cargo-orthohelp/Cargo.toml`, refresh the lock with
+`cargo update -p cargo-orthohelp`, and tag `v<version>`. Use
+`scripts/bump_version.py` only when the whole workspace is being released.
+
+### Verifying the packaging locally
+
+`make test` covers the packager and the auditor;
+`make test-workflow-contracts` covers the workflow shape. To exercise the real
+build:
+
+```bash
+uv run --script scripts/release_archive.py "$(rustc -vV | sed -n 's|host: ||p')"
+uv run --script scripts/verify_release_archives.py --dist-dir dist \
+  --target "$(rustc -vV | sed -n 's|host: ||p')"
+```
+
+The pull-request job `binstall-packaging` runs those two commands plus a smoke
+test of the extracted binary on Linux, macOS, and Windows.
+
 ## Spelling gate
 
 `make markdownlint` enforces en-GB-oxendict (Oxford) spelling over the

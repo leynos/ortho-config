@@ -31,7 +31,7 @@ jobs:
         # fetch-depth: 0 makes the pull request's merge base reachable so the
         # CodeScene changed-line coverage gate (cs-coverage check) can diff
         # against it.
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           fetch-depth: 0
 
@@ -193,3 +193,78 @@ jobs:
       - name: Publish dry run
         if: ${{ github.event_name == 'workflow_dispatch' }}
         run: make publish-check
+
+  binstall-packaging:
+    name: Packaging dry run (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    env:
+      CARGO_TERM_COLOR: always
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          - os: macos-latest
+            target: aarch64-apple-darwin
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      - name: Setup Rust
+        uses: leynos/shared-actions/.github/actions/setup-rust@32c8ea649ea44d40119f348ad48861212532061f
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d  # v10.0.1
+        with:
+          version: 'latest'
+
+      # Exercises the packaging path the release workflow runs, on each OS
+      # family it publishes for, so an archive-layout or sidecar regression
+      # fails on the pull request rather than during a release.
+      - name: Package the host target
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+        run: uv run --script scripts/release_archive.py "$TARGET"
+
+      - name: Verify the archive against the binstall templates
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+        run: >-
+          uv run --script scripts/verify_release_archives.py --dist-dir dist
+          --target "$TARGET"
+
+      - name: Run the packaged binary
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          set -euo pipefail
+
+          suffix=""
+          if [ "${RUNNER_OS}" = "Windows" ]; then
+            suffix=".exe"
+          fi
+          mkdir -p extracted
+          # Globbed rather than derived from the packager's stdout: that path
+          # is Windows-flavoured on the windows runner. An empty match would
+          # silently skip the smoke test, so the hits are counted.
+          shopt -s nullglob
+          found=0
+          for archive in dist/cargo-orthohelp-"${TARGET}"-v*.tgz; do
+            stem="$(basename "${archive}" .tgz)"
+            tar -xzf "${archive}" -C extracted
+            "extracted/${stem}/cargo-orthohelp${suffix}" orthohelp --help
+            found=$((found + 1))
+          done
+
+          if [ "${found}" -ne 1 ]; then
+            echo "::error::expected exactly one archive for ${TARGET}, found ${found}"
+            exit 1
+          fi

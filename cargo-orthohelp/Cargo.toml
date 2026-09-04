@@ -1,11 +1,22 @@
 [package]
 name = "cargo-orthohelp"
 edition = "2024"
-version = "0.9.0"
+version = "0.9.1"
 rust-version.workspace = true
 description = "OrthoConfig documentation tooling for IR generation."
 license.workspace = true
 repository.workspace = true
+
+# Resolves prebuilt release archives so `cargo binstall cargo-orthohelp`
+# never falls back to compiling from source. The templates must match what
+# scripts/release_archive.py produces; tests/workflow_contracts and
+# scripts/tests/test_release_archive.py pin both sides together. `{ repo }`
+# expands to the workspace `repository` URL and the release tags are `v` +
+# the workspace version, so `pkg-url` addresses this repository's releases.
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ target }-v{ version }{ archive-suffix }"
+bin-dir = "{ name }-{ target }-v{ version }/{ bin }{ binary-ext }"
+pkg-fmt = "tgz"
 
 [lib]
 name = "cargo_orthohelp"
