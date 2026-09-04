@@ -14,6 +14,7 @@ impl ortho_config::DeclarativeMerge for __SampleDeclarativeMergeState {
                 let provenance_label = match provenance {
                     ortho_config::MergeProvenance::Defaults => "defaults",
                     ortho_config::MergeProvenance::File => "file",
+                    ortho_config::MergeProvenance::Profile => "profile",
                     ortho_config::MergeProvenance::Environment => "environment",
                     ortho_config::MergeProvenance::Cli => "CLI",
                     _ => "unknown",
