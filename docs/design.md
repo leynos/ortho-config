@@ -863,9 +863,10 @@ clap::Command::new("cargo")
 ```
 
 The helper shipped in 8.3.1 as `ortho_config::cargo::external_subcommand`.
-Usage renders the Cargo dispatch form (`Usage: cargo <name> [OPTIONS]`) while
-the installed binary name is carried as the inner command's display name, so
-`--version` output names the installed binary; see the ADR-004 amendment.
+Help renders two forms: the top-level usage is `Usage: cargo <COMMAND>`, and
+the inner subcommand usage is `Usage: cargo orthohelp [OPTIONS]`. The installed
+binary name is carried as the inner command's display name, so `--version`
+output names the installed binary; see the ADR-004 amendment.
 
 The helper must preserve the inner command's existing options rather than
 introducing a second source of configuration semantics. Its success criterion
