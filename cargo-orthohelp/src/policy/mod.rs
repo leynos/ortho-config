@@ -6,6 +6,10 @@
 
 use serde::{Deserialize, Serialize};
 
+mod evaluator;
+
+pub use evaluator::evaluate_agent_native;
+
 /// Current policy-report schema version.
 pub const ORTHO_POLICY_REPORT_SCHEMA_VERSION: &str = "1";
 

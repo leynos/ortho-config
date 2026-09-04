@@ -10,6 +10,7 @@
 //! metadata, localization, and output pipeline.
 
 use camino::Utf8PathBuf;
+use cargo_orthohelp::policy::PolicyMode;
 use clap::{ArgAction, Args as ClapArgs, Parser, Subcommand, ValueEnum};
 
 /// Output formats supported by `cargo-orthohelp`.
@@ -25,6 +26,27 @@ pub enum OutputFormat {
     All,
     /// Emit compact agent-context JSON output.
     AgentContext,
+}
+
+/// Policy enforcement modes supported by `--check-agent-native`.
+#[derive(Debug, Clone, Copy, ValueEnum, PartialEq, Eq)]
+pub enum PolicyModeArg {
+    /// Do not evaluate policy rules.
+    Off,
+    /// Emit policy findings without failing the command.
+    Warn,
+    /// Fail the command when a deny-level finding is emitted.
+    Deny,
+}
+
+impl From<PolicyModeArg> for PolicyMode {
+    fn from(value: PolicyModeArg) -> Self {
+        match value {
+            PolicyModeArg::Off => Self::Off,
+            PolicyModeArg::Warn => Self::Warn,
+            PolicyModeArg::Deny => Self::Deny,
+        }
+    }
 }
 
 /// Parsed Cargo external-subcommand entrypoint for `cargo-orthohelp`.
@@ -76,6 +98,12 @@ pub struct Args {
     /// Output format selection.
     #[arg(long, value_enum, default_value_t = OutputFormat::Ir)]
     pub format: OutputFormat,
+    /// Evaluate the minimal agent-native policy and emit a JSON report to stdout.
+    #[arg(long = "check-agent-native")]
+    pub should_check_agent_native: bool,
+    /// Enforcement mode for `--check-agent-native`.
+    #[arg(long, value_enum, default_value_t = PolicyModeArg::Warn)]
+    pub policy_mode: PolicyModeArg,
     /// Man page generation arguments.
     #[command(flatten)]
     pub man: ManArgs,
@@ -153,10 +181,10 @@ mod tests {
     //! Parser tests for Cargo external-subcommand dispatch.
 
     use clap::{CommandFactory, Parser, error::ErrorKind};
-    use proptest::prelude::*;
     use rstest::rstest;
 
-    use super::{CargoSubcommand, Cli, OutputFormat};
+    use super::{CargoSubcommand, Cli, OutputFormat, PolicyModeArg};
+    use cargo_orthohelp::policy::PolicyMode;
 
     #[test]
     fn format_defaults_to_ir() {
@@ -187,6 +215,32 @@ mod tests {
         let CargoSubcommand::Orthohelp(args) = cli.command;
 
         assert!(matches!(args.format, OutputFormat::AgentContext));
+    }
+
+    #[rstest]
+    #[case("off", PolicyMode::Off)]
+    #[case("warn", PolicyMode::Warn)]
+    #[case("deny", PolicyMode::Deny)]
+    fn policy_mode_maps_to_the_policy_contract(#[case] value: &str, #[case] expected: PolicyMode) {
+        let cli = Cli::parse_from([
+            "cargo-orthohelp",
+            "orthohelp",
+            "--check-agent-native",
+            "--policy-mode",
+            value,
+        ]);
+        let CargoSubcommand::Orthohelp(args) = cli.command;
+
+        assert!(args.should_check_agent_native);
+        assert_eq!(PolicyMode::from(args.policy_mode), expected);
+    }
+
+    #[test]
+    fn policy_mode_defaults_to_warn() {
+        let cli = Cli::parse_from(["cargo-orthohelp", "orthohelp"]);
+        let CargoSubcommand::Orthohelp(args) = cli.command;
+
+        assert_eq!(args.policy_mode, PolicyModeArg::Warn);
     }
 
     #[test]
@@ -267,115 +321,10 @@ mod tests {
             "unexpected subcommand help:\n{help}"
         );
     }
-
-    proptest! {
-        #[test]
-        fn parses_option_and_bool_flag_combinations(
-            package in prop::option::of("[a-z][a-z0-9_-]{0,8}"),
-            bin in prop::option::of("[a-z][a-z0-9_-]{0,8}"),
-            root_type in prop::option::of("[A-Z][A-Za-z0-9]{0,8}"),
-            locales in prop::collection::vec("[a-z]{2}(-[A-Z]{2})?", 0..4),
-            should_select_lib in any::<bool>(),
-            should_use_all_locales in any::<bool>(),
-            should_cache in any::<bool>(),
-            should_skip_build in any::<bool>(),
-            should_split_man_subcommands in any::<bool>(),
-            format in prop::sample::select(vec!["ir", "man", "ps", "all", "agent-context"]),
-            man_section in 1_u8..=8,
-            should_split_ps_subcommands in prop::option::of(any::<bool>()),
-            should_include_common_parameters in prop::option::of(any::<bool>()),
-            should_ensure_en_us in any::<bool>(),
-        ) {
-            let mut argv = vec![
-                "cargo-orthohelp".to_owned(),
-                "orthohelp".to_owned(),
-                "--format".to_owned(),
-                format.to_owned(),
-                "--man-section".to_owned(),
-                man_section.to_string(),
-                "--ensure-en-us".to_owned(),
-                should_ensure_en_us.to_string(),
-            ];
-
-            push_optional_arg(&mut argv, "--package", package.as_deref());
-            push_optional_arg(&mut argv, "--bin", bin.as_deref());
-            push_optional_arg(&mut argv, "--root-type", root_type.as_deref());
-            push_bool_flag(&mut argv, "--lib", should_select_lib);
-            push_bool_flag(&mut argv, "--all-locales", should_use_all_locales);
-            push_bool_flag(&mut argv, "--cache", should_cache);
-            push_bool_flag(&mut argv, "--no-build", should_skip_build);
-            push_bool_flag(&mut argv, "--man-split-subcommands", should_split_man_subcommands);
-            push_optional_bool_arg(
-                &mut argv,
-                "--ps-split-subcommands",
-                should_split_ps_subcommands,
-            );
-            push_optional_bool_arg(
-                &mut argv,
-                "--ps-include-common-parameters",
-                should_include_common_parameters,
-            );
-            for locale in &locales {
-                argv.push("--locale".to_owned());
-                argv.push(locale.clone());
-            }
-
-            let cli = Cli::try_parse_from(argv)?;
-            let CargoSubcommand::Orthohelp(args) = cli.command;
-
-            prop_assert_eq!(args.package, package);
-            prop_assert_eq!(args.bin, bin);
-            prop_assert_eq!(args.is_lib, should_select_lib);
-            prop_assert_eq!(args.root_type, root_type);
-            prop_assert_eq!(args.locale, locales);
-            prop_assert_eq!(args.should_use_all_locales, should_use_all_locales);
-            prop_assert_eq!(args.cache.should_cache, should_cache);
-            prop_assert_eq!(args.cache.should_skip_build, should_skip_build);
-            prop_assert_eq!(args.man.section, man_section);
-            prop_assert_eq!(
-                args.man.should_split_subcommands,
-                should_split_man_subcommands
-            );
-            prop_assert_eq!(
-                args.powershell.should_split_subcommands,
-                should_split_ps_subcommands
-            );
-            prop_assert_eq!(
-                args.powershell.should_include_common_parameters,
-                should_include_common_parameters
-            );
-            prop_assert_eq!(args.powershell.should_ensure_en_us, should_ensure_en_us);
-            prop_assert!(matches!(
-                (format, args.format),
-                ("ir", OutputFormat::Ir)
-                    | ("man", OutputFormat::Man)
-                    | ("ps", OutputFormat::Ps)
-                    | ("all", OutputFormat::All)
-                    | ("agent-context", OutputFormat::AgentContext)
-            ));
-        }
-    }
-
-    fn push_optional_arg(argv: &mut Vec<String>, flag: &str, maybe_value: Option<&str>) {
-        if let Some(value) = maybe_value {
-            argv.push(flag.to_owned());
-            argv.push(value.to_owned());
-        }
-    }
-
-    fn push_optional_bool_arg(argv: &mut Vec<String>, flag: &str, maybe_value: Option<bool>) {
-        if let Some(value) = maybe_value {
-            argv.push(flag.to_owned());
-            argv.push(value.to_string());
-        }
-    }
-
-    fn push_bool_flag(argv: &mut Vec<String>, flag: &str, is_enabled: bool) {
-        if is_enabled {
-            argv.push(flag.to_owned());
-        }
-    }
 }
+
+#[cfg(test)]
+mod property_tests;
 
 #[cfg(test)]
 mod reserved_agent_context_tests;

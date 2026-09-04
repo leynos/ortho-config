@@ -6,6 +6,11 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- Add `--check-agent-native` and `--policy-mode <off|warn|deny>` (defaulting
+  to `warn`) to `cargo-orthohelp`, emitting a compact `PolicyReport` JSON
+  document on stdout. `off` suppresses findings, `warn` reports findings
+  without failing, and `deny` returns a validation failure for deny-level
+  findings.
 - Support dependency aliasing via `#[ortho_config(crate = "...")]`
   attribute on `OrthoConfig` and `SelectedSubcommandMerge` derive macros
   (closes #291).

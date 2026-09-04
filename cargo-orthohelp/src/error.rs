@@ -90,6 +90,14 @@ pub enum OrthohelpError {
         message: String,
     },
 
+    /// Agent-native policy reported deny-level findings.
+    #[error("agent-native policy reported deny-level findings")]
+    AgentNativePolicyDenied,
+
+    /// Failed to emit an agent-native policy report to standard output.
+    #[error("failed to emit agent-native policy report: {0}")]
+    PolicyReportOutput(#[from] std::io::Error),
+
     /// A filesystem I/O error occurred.
     #[error("I/O error at {path}: {source}")]
     Io {
