@@ -101,6 +101,136 @@ command identifiers are still a documented runtime panic contract owned by
 runtime panic tests until derive-emitted identifiers move validation to compile
 time.
 
+## CLI localization surface
+
+This section records the intended Phase 11 surface from
+[the CLI localization design](cli-localization-design.md) and
+[roadmap §11](roadmap.md). It is a proposal, not an inventory of available APIs.
+`LocalizeCmd`, `LocalizedParse`, and `parse_localized_command` are implemented
+and form the current parsing boundary described above. The remaining names in
+this section are roadmap work and must not be used as crate APIs until their
+corresponding implementation lands.
+
+### Components and module boundaries
+
+The proposed components remain adapters around the existing configuration
+crate; they do not move application lifecycle or bundle ownership into
+OrthoConfig:
+
+- `BootLocalizer` and the typestate `BootHandle`, `ClapErrorCoverage`, and
+  `MissingTranslationReporter` / `MissingTranslationEvent` belong beside the
+  existing `Localizer`, Fluent adapters, and clap integration in the
+  `ortho_config::localizer` implementation. As with the current parser helpers,
+  the eventual public surface is expected to be re-exported from `ortho_config`.
+- `FluentEmbedLocalizer` is the adapter in that same localizer boundary. It
+  wraps an application-owned `Arc<FluentLanguageLoader>` and is proposed behind
+  the optional `i18n-embed-bridge` feature. It must not create a loader from
+  `I18nAssets`; the application remains responsible for the loader and bundle
+  lifecycle.
+- `OrthoConfigLocalization` is a generated identifier contract owned by the
+  `OrthoConfig` derive in `ortho_config_macros`. Its identifiers are consumed
+  by the CLI localization adapter and may be bridged into the human-facing
+  `ortho_config::docs` IR; the docs IR does not own the identifier constants.
+- Build-time identifier artefacts and translation reports are consumed by
+  `cargo-orthohelp`, which remains a separate workspace crate and reporting
+  boundary. `cargo-orthohelp` must consume the derive output rather than scrape
+  FTL catalogues or make the core crate own translator workflows.
+
+The design does not currently specify a feature gate for the core typestate,
+coverage, reporter, or derive contracts. The `i18n-embed-bridge` gate applies
+only to `FluentEmbedLocalizer` and its optional `i18n-embed` dependency.
+Existing configuration-format gates such as `serde_json` remain independent of
+this proposed localization surface.
+
+### Two-phase localizer lifecycle
+
+`BootLocalizer::build` is proposed to return `BootHandle<Boot>`. The boot
+snapshot is the localizer passed to `try_parse_localized*`, so parse errors use
+the locale available before CLI arguments and merged configuration are known.
+After configuration is merged, `BootHandle<Boot>::finalize` (or `finalize_with`
+when a fresh resolver is needed) consumes the boot handle and returns
+`BootHandle<Final>`. Only the final handle exposes the long-lived localizer and
+merged locale. Dropping the boot-state handle without finalization is proposed
+to emit a warning, making a missed transition observable; already-rendered
+parse errors remain in the boot locale.
+
+Both phases are snapshots. A localizer used for one parse is not a live
+binding, and the finalization step does not provide a process-wide locale
+swapper. A long-lived service that changes locale must own a swap primitive,
+with `arc_swap::ArcSwap<dyn Localizer>` as the design's baseline, and reload
+the snapshot at each request boundary. The crate owns neither the service's
+rebuild policy nor in-place mutation of a Fluent bundle.
+
+### Exhaustive clap error coverage
+
+Phase 11 proposes an exhaustive `CLAP_ERROR_IDS` matrix mapping every shipped
+`clap::error::ErrorKind` to either a translated identifier or a `DisplayOnly`
+sentinel. The coverage gate is intentionally mechanical because `ErrorKind` is
+`#[non_exhaustive]`:
+
+1. The proposed `ortho_config/build.rs` inspects the resolved clap enum and
+   emits `cargo:rustc-env=ORTHO_CONFIG_CLAP_ERROR_KIND_COUNT=<n>` for the total
+   declared variant count, without classifying display-only variants.
+2. A const-evaluated test reads that value and uses `const_assert_eq!` to
+   compare it with `CLAP_ERROR_IDS.len()`.
+
+When clap adds a variant, the length mismatch must fail CI until the matrix is
+updated. The proposed `ClapErrorCoverage` builder then walks the matrix, skips
+`DisplayOnly`, and reports translated identifiers the supplied `Localizer`
+cannot resolve. The authoritative mechanism and matrix contract are
+[design §6.1.1](cli-localization-design.md#611-mechanical-coverage-gate) and
+§6.2; this guide should not duplicate their per-variant table.
+
+### `i18n-embed` bridge
+
+`FluentEmbedLocalizer` is proposed for applications that already own an
+`i18n_embed::fluent::FluentLanguageLoader`, including the `cargo-orthohelp`
+translation tooling path. It should use the loader's public `has` method for
+presence detection, then expose the existing `Localizer` lookup contract.
+Applications without an existing loader continue to use `FluentLocalizer`.
+Locale selection returns a fresh loader, so a swap wraps that loader in a fresh
+`Arc`; concurrent long-lived services still follow the `ArcSwap` snapshot rule
+above. See [design §7](cli-localization-design.md) for the ownership and parity
+requirements.
+
+### Derive-generated identifiers and defaults
+
+The proposed `OrthoConfigLocalization` trait is emitted by
+`#[derive(OrthoConfig)]` in `ortho_config_macros`. It provides constants for
+the command's `about`, `long_about`, usage, and per-argument identifier
+triples. Identifiers are generated from the command path and field `id`, or the
+kebab-cased field name when no `id` is supplied, using the same convention as
+`message_id_for`.
+
+The derive extension is opt-in. A field may set
+`#[ortho_config(localized_default = "help")]` (or `long_help`, `value_name`,
+`help+long_help`, `all`, or `none`) to embed selected doc-comment defaults; the
+struct-level setting supplies an inherited default. It must not change
+behaviour for consumers that do not opt in.
+
+The derive is also proposed to emit `${OUT_DIR}/ortho-config/` identifier
+artefacts. `cli-identifiers.json` records generated identifiers, source spans,
+and embedded defaults; larger inventories split into numbered files with an
+index at the design's 1 MiB boundary. `cargo-orthohelp` consumes these
+artefacts for authoritative translator inventories. See
+[design §8](cli-localization-design.md#8-derive-support).
+
+### Translator diagnostics
+
+The proposed `MissingTranslationReporter` receives a `MissingTranslationEvent`
+containing the identifier, locale, optional fallback locale, and
+`TranslationOrigin` (clap error, command metadata, or application message). It
+is intended to be wired into `FluentLocalizer`, the proposed
+`FluentEmbedLocalizer`, and the clap-error path, with a no-op default so
+diagnostics remain opt-in.
+
+`cargo-orthohelp` is proposed to provide the aggregation boundary: its reporter
+would write JSON coverage data under
+`target/orthohelp/missing-translations/<locale>.json`. The related
+`cargo orthohelp i18n list-ids` and `coverage --locale <tag>` commands remain
+roadmap work, as do the reporter and report schema. See
+[design §9](cli-localization-design.md#9-translator-diagnostics) and §11.
+
 Add agent-native warning and hard-failure report fields to
 `cargo_orthohelp::policy` while `cargo-orthohelp` is the only emitter. Use
 `ORTHO_POLICY_REPORT_SCHEMA_VERSION` for compatibility and keep rule
