@@ -5,8 +5,10 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
 proceeds.
 
-Status: COMPLETE (implementation, documentation, and review follow-ups
-delivered through 2026-08-16; PR #419 ready for review)
+Status: COMPLETE after the 2026-09-04 rebase; post-rebase final gates passed
+(`make check-fmt`, `make test`, `make typecheck`, `make lint`,
+`make markdownlint`, and `make nixie`; implementation, documentation, and
+review follow-ups delivered; pull request 419 ready for review)
 
 ## Purpose / big picture
 
@@ -372,11 +374,12 @@ under `/tmp` and returns a bounded report.
   command as its `display_name`, and the inner `bin_name` is reset.** This
   deviates from the literal `bin_name("cargo-<name>")` text in
   `docs/roadmap.md` §8.3.1 and the code sketch in `docs/design.md` §4.17.
-  Rationale: `bin_name` is what clap prints in `Usage:` lines.
-  `bin_name("cargo")` renders `Usage: cargo <name> [OPTIONS]`, which matches
-  clap's official `cargo-example` cookbook pattern, matches Cargo's help
-  protocol (`cargo help <name>` runs `cargo-<name> <name> --help`), and
-  matches the behaviour `cargo-orthohelp` already pins in its snapshots.
+  Rationale: `bin_name` is what clap prints in `Usage:` lines. The synthetic
+  parent renders `Usage: cargo <COMMAND>`, and its concrete `orthohelp` inner
+  command renders `Usage: cargo orthohelp [OPTIONS]`. This matches clap's
+  official `cargo-example` cookbook pattern, matches Cargo's help protocol
+  (`cargo help <name>` runs `cargo-<name> <name> --help`), and matches the
+  behaviour `cargo-orthohelp` already pins in its snapshots.
   `bin_name("cargo-<name>")` would render `Usage: cargo-<name> <name>
   [OPTIONS]`, which is accurate only for direct invocation and would make the
   hand-built and derive paths disagree. The installed binary name has a real,
@@ -518,6 +521,15 @@ under `/tmp` and returns a bounded report.
   `PATH`. Rationale: this covers the process boundary that clap unit tests
   cannot observe while keeping the fixture local to documentation validation.
   Date/Author: 2026-08-21, CodeRabbit follow-up.
+
+- Decision (D-13): **Preserve both documentation/test intents after the
+  2026-09-04 rebase.** Rebasing onto `origin/main` at `d4b8cd6` retained main's
+  source-aware documentation and test-registry additions alongside the Cargo
+  helper documentation and tests. The behavioural-test-layout documentation
+  overlap was resolved, and the target formatter's module ordering was adopted
+  for Cargo BDD registration. Post-rebase final gates passed:
+  `make check-fmt`, `make test`, `make typecheck`, `make lint`,
+  `make markdownlint`, and `make nixie`.
 
 ## Outcomes & retrospective
 

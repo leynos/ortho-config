@@ -50,10 +50,10 @@ Cargo external-subcommand support remains CLI entry-point structure:
 Roadmap item 8.3.1 shipped `ortho_config::cargo::external_subcommand` on
 2026-08-07. The implementation renders usage in the Cargo dispatch form: the
 synthetic parent is `Command::new("cargo").bin_name("cargo")`, so top-level
-usage renders `Usage: cargo <COMMAND>` and the inner `cargo orthohelp` usage
-renders `Usage: cargo orthohelp [OPTIONS]`. The installed binary name is carried
-as the inner command's `display_name`, so `cargo <name> --version` prints
-`cargo-<name> <version>`. The inner command's `bin_name` is reset so both the
-help and parse paths derive the same `cargo <name>` shape. This deviates from
-the literal `bin_name("cargo-<name>")` wording in the roadmap and the original
-design sketch.
+usage renders `Usage: cargo <COMMAND>` and the inner `orthohelp` command's
+usage renders `Usage: cargo orthohelp [OPTIONS]`. The installed binary name is
+carried as the inner command's `display_name`, so `cargo <name> --version`
+prints `cargo-<name> <version>`. The inner command's `bin_name` is reset so
+both the help and parse paths derive the same `cargo <name>` shape. This choice
+deviates from the literal `bin_name("cargo-<name>")` wording in the roadmap and
+the original design sketch.
