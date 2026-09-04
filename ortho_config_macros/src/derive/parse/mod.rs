@@ -19,6 +19,7 @@ mod doc_attrs;
 mod doc_types;
 mod input;
 mod literals;
+mod localization;
 mod serde_attrs;
 #[cfg(test)]
 mod tests;
@@ -26,7 +27,8 @@ mod type_utils;
 
 pub(crate) use clap_attrs::{
     ClapInferredDefault, clap_arg_id, clap_arg_id_from_attribute, clap_default_value,
-    clap_field_is_subcommand, clap_variant_name, reject_subcommand_ortho_config_attrs,
+    clap_field_is_flattened, clap_field_is_subcommand, clap_variant_name,
+    reject_subcommand_ortho_config_attrs,
 };
 use doc_attrs::{apply_field_doc_attr, apply_struct_doc_attr};
 pub(crate) use doc_types::{
@@ -53,6 +55,8 @@ pub(crate) struct StructAttrs {
     pub prefix: Option<String>,
     pub discovery: Option<DiscoveryAttrs>,
     pub post_merge_hook: bool,
+    /// Fluent catalogue root as a dotted path (D-5); falls back to docs app name.
+    pub localization_base: Option<String>,
     pub doc: DocStructAttrs,
     /// Overrides the generated crate path for dependency aliasing.
     ///
@@ -263,6 +267,9 @@ pub(crate) fn parse_struct_attrs(attrs: &[Attribute]) -> Result<StructAttrs, syn
                 Ok(())
             }
             _ => {
+                if localization::parse_localization_attr(meta, &mut out)? {
+                    return Ok(());
+                }
                 if apply_struct_doc_attr(meta, &mut out.doc)? {
                     return Ok(());
                 }

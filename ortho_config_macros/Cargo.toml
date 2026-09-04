@@ -34,3 +34,9 @@ anyhow = "1"
 rstest = "0.26.1"
 serde = { version = "1", features = ["derive"] }
 figment = { version = "0.10", default-features = false, features = ["test"] }
+proptest = "1.11.0"
+
+# Dev-dependency cycle (permitted by Cargo): the macro crate's property tests
+# drive `ortho_config::message_id_for` directly against the internal normaliser
+# twin to lock the §4.1 identifier convention (Decision D-8).
+ortho_config = { path = "../ortho_config", version = "0.9.0" }

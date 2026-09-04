@@ -102,23 +102,67 @@ pub(crate) fn clap_variant_name(variant: &syn::Variant) -> syn::Result<Option<sy
     Ok(name)
 }
 
-/// Detect whether a struct field is a clap subcommand selector.
-pub(crate) fn clap_field_is_subcommand(field: &syn::Field) -> syn::Result<bool> {
-    let mut is_subcommand = false;
+/// A clap field marker requested from a command attribute.
+///
+/// Drives the shared attribute traversal in [`clap_field_matches_marker`] for
+/// subcommand selectors and flattened argument groups.
+#[derive(Clone, Copy)]
+enum ClapFieldMarker {
+    Subcommand,
+    Flatten,
+}
+
+impl ClapFieldMarker {
+    /// The clap key denoting this marker inside `#[command(...)]` and
+    /// `#[clap(...)]`.
+    const fn ident(self) -> &'static str {
+        match self {
+            Self::Subcommand => "subcommand",
+            Self::Flatten => "flatten",
+        }
+    }
+}
+
+/// Shared attribute traversal for [`clap_field_is_subcommand`] and
+/// [`clap_field_is_flattened`].
+///
+/// Scans every `#[command(...)]`/`#[clap(...)]` attribute on the field, flags
+/// when the requested [`ClapFieldMarker`] key appears, and routes all other
+/// nested metadata through [`consume_unknown_meta`] so unrelated clap keys
+/// parse without error.
+fn clap_field_matches_marker(field: &syn::Field, marker: ClapFieldMarker) -> syn::Result<bool> {
+    let mut matches = false;
     for attr in field
         .attrs
         .iter()
         .filter(|attr| is_clap_command_attribute(attr))
     {
         attr.parse_nested_meta(|meta| {
-            if meta.path.is_ident("subcommand") {
-                is_subcommand = true;
+            if meta.path.is_ident(marker.ident()) {
+                matches = true;
                 return Ok(());
             }
             consume_unknown_meta(&meta)
         })?;
     }
-    Ok(is_subcommand)
+    Ok(matches)
+}
+
+/// Detect whether a struct field is a clap subcommand selector.
+pub(crate) fn clap_field_is_subcommand(field: &syn::Field) -> syn::Result<bool> {
+    clap_field_matches_marker(field, ClapFieldMarker::Subcommand)
+}
+
+/// Detect whether a struct field is a flattened clap args group.
+///
+/// Mirrors [`clap_field_is_subcommand`] so flattened groups are recognised
+/// from both `#[command(flatten)]` and `#[clap(flatten)]`. Flattened fields
+/// surface their arguments under the parent command at runtime but cannot be
+/// enumerated by the parent derive, so they are excluded from generated
+/// `ARG_IDS` (Decision D-12) and are expected to carry their own
+/// `OrthoConfigLocalization` implementation.
+pub(crate) fn clap_field_is_flattened(field: &syn::Field) -> syn::Result<bool> {
+    clap_field_matches_marker(field, ClapFieldMarker::Flatten)
 }
 
 #[derive(Clone)]

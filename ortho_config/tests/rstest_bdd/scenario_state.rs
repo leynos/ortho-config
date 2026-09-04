@@ -183,7 +183,6 @@ pub fn localizer_context() -> LocalizerContext {
         ..LocalizerContext::default()
     }
 }
-
 /// Provides the localizer scenario context under the generic name used by steps.
 #[fixture]
 pub fn context(localizer_context: LocalizerContext) -> LocalizerContext {

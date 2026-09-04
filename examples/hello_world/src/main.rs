@@ -14,6 +14,7 @@ use hello_world::cli::{
 use hello_world::error::{HelloWorldError, Result};
 use hello_world::localizer::DemoLocalizer;
 use hello_world::message::{build_plan, build_take_leave_plan, print_plan, print_take_leave};
+use ortho_config::OrthoConfigLocalization;
 
 use std::io::{self, Write};
 use tracing::{debug, error};
@@ -99,7 +100,7 @@ fn run_take_leave(globals: &HelloWorldCli, merged: &TakeLeaveCommand) -> Result<
 fn parse_command_line() -> Result<ParsedCommandLine> {
     let localizer = DemoLocalizer::default();
     let command = CommandLine::command()
-        .with_base("hello_world.cli")
+        .with_base(CommandLine::LOCALIZATION_BASE)
         .localize(&localizer);
 
     match parse_localized_command::<CommandLine, _, _>(command, std::env::args_os(), &localizer) {
