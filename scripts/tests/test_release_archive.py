@@ -268,6 +268,21 @@ def test_relative_cargo_target_dir_resolves_against_the_repository(
     assert packager.cargo_target_root(tmp_path) == tmp_path / "build-out"
 
 
+def test_auditor_aggregates_failures_across_targets(
+    binstall_metadata: dict[str, str], tmp_path: Path
+) -> None:
+    """Every requested target contributes its own prefixed failures."""
+    _package(tmp_path, "x86_64-unknown-linux-gnu")
+    failures = auditor.audit_targets(
+        tmp_path / "dist",
+        binstall_metadata,
+        ("x86_64-unknown-linux-gnu", "aarch64-apple-darwin"),
+        VERSION,
+    )
+    assert len(failures) == 1
+    assert failures[0].startswith("aarch64-apple-darwin: ")
+
+
 def test_release_targets_cover_the_five_published_triples() -> None:
     """The auditor's target list matches the documented publication set."""
     assert set(auditor.RELEASE_TARGETS) == {target for target, _ in TARGET_CASES}

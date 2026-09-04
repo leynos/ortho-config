@@ -147,6 +147,36 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def _release_context(args: argparse.Namespace) -> tuple[dict[str, str], str]:
+    """Return the binstall metadata and release version the audit compares against.
+
+    Raises
+    ------
+    SystemExit
+        Raised when the manifest is unreadable or declares no binstall table.
+    """
+    try:
+        metadata = binstall_metadata(args.manifest_path)
+        version = args.release_version or manifest_version(args.manifest_path)
+    except ManifestError as err:
+        raise SystemExit(str(err)) from err
+    return metadata, version
+
+
+def audit_targets(
+    dist_dir: Path, metadata: dict[str, str], targets: tuple[str, ...], version: str
+) -> list[str]:
+    """Audit every target, reporting each pass and returning every failure."""
+    failures: list[str] = []
+    for target in targets:
+        target_failures = audit_target(dist_dir, metadata, target, version)
+        if target_failures:
+            failures.extend(f"{target}: {failure}" for failure in target_failures)
+        else:
+            print(f"{target}: archive and sidecar verified")
+    return failures
+
+
 def main(argv: list[str] | None = None) -> None:
     """Audit every requested target and report each failure.
 
@@ -160,19 +190,9 @@ def main(argv: list[str] | None = None) -> None:
     >>> main(["--dist-dir", "release-dist"])  # doctest: +SKIP
     """
     args = _parse_args(argv)
-    try:
-        metadata = binstall_metadata(args.manifest_path)
-        version = args.release_version or manifest_version(args.manifest_path)
-    except ManifestError as err:
-        raise SystemExit(str(err)) from err
-
-    failures: list[str] = []
-    for target in args.targets or RELEASE_TARGETS:
-        target_failures = audit_target(args.dist_dir, metadata, target, version)
-        failures.extend(f"{target}: {failure}" for failure in target_failures)
-        if not target_failures:
-            print(f"{target}: archive and sidecar verified")
-
+    metadata, version = _release_context(args)
+    targets = tuple(args.targets or RELEASE_TARGETS)
+    failures = audit_targets(args.dist_dir, metadata, targets, version)
     if failures:
         raise SystemExit("\n".join(failures))
 
