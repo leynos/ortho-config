@@ -745,7 +745,13 @@ cannot be republished; cut a new tag instead.
 `cargo binstall` reads `[package.metadata.binstall]` from the crates.io
 release, not from this repository, so a version must be published to crates.io
 with that metadata before `cargo binstall cargo-orthohelp@<version>` resolves
-the archives.
+the archives. 0.9.1 is the first such version.
+
+`cargo-orthohelp` carries its own version rather than inheriting the workspace
+one, so a tooling-only release is a patch bump of that crate alone. Edit
+`cargo-orthohelp/Cargo.toml`, refresh the lock with
+`cargo update -p cargo-orthohelp`, and tag `v<version>`. Use
+`scripts/bump_version.py` only when the whole workspace is being released.
 
 ### Verifying the packaging locally
 

@@ -51,6 +51,9 @@ All notable changes to this project will be documented in this file.
 - Add the [v0.9.0 migration guide](docs/v0-9-0-migration-guide.md) covering
   the injectable environment source, discovery telemetry, and the `metrics`
   feature.
+- Bump `cargo-orthohelp` to 0.9.1, the first version whose crates.io release
+  carries binstall metadata and prebuilt archives. The rest of the workspace
+  stays at 0.9.0.
 - Publish prebuilt `cargo-orthohelp` release archives with `.sha256` sidecars
   for `x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu`,
   `x86_64-apple-darwin`, `aarch64-apple-darwin`, and `x86_64-pc-windows-msvc`,
