@@ -27,9 +27,12 @@ import sys
 import tarfile
 from pathlib import Path
 
+# The naming helpers are a sibling module rather than a package, so the
+# script directory must join sys.path before the import can resolve; the
+# import therefore cannot sit at the top of the file.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from release_archive_naming import (  # noqa: E402
+from release_archive_naming import (  # noqa: E402  # see the sys.path note above
     ARCHIVE_SUFFIX,
     ManifestError,
     archive_file_name,
@@ -81,8 +84,12 @@ def _verify_sidecar(archive_path: Path) -> str | None:
     if not sidecar_path.is_file():
         return f"{sidecar_path.name} is missing"
     recorded = sidecar_path.read_text(encoding="utf-8").split()
-    if not recorded:
-        return f"{sidecar_path.name} is empty"
+    # A digest alone is not enough: `sha256sum --check` matches on the recorded
+    # name, so a sidecar naming a different file cannot verify this archive
+    # even when the digest happens to be right. The leading `*` is the binary
+    # marker `sha256sum` writes on platforms that distinguish binary mode.
+    if len(recorded) != 2 or recorded[1].lstrip("*") != archive_path.name:
+        return f"{sidecar_path.name} does not hold one record naming {archive_path.name}"
     actual = hashlib.sha256(archive_path.read_bytes()).hexdigest()
     if recorded[0] != actual:
         return f"{sidecar_path.name} records {recorded[0]}, archive hashes to {actual}"
@@ -93,11 +100,14 @@ def _verify_members(archive_path: Path, member: str) -> str | None:
     """Return a failure description for *archive_path*'s members, else `None`."""
     try:
         with tarfile.open(archive_path, mode="r:gz") as tar:
-            members = [entry.name for entry in tar.getmembers() if entry.isfile()]
+            # Every entry counts, not just the regular files: a directory,
+            # symlink, or device entry alongside the binary would still be
+            # unpacked into a consumer's install path.
+            entries = [(entry.name, entry.type) for entry in tar.getmembers()]
     except (tarfile.TarError, OSError) as err:
         return f"{archive_path.name} could not be read as a gzip tar archive: {err}"
-    if members != [member]:
-        return f"{archive_path.name} holds {members!r}, expected exactly [{member!r}]"
+    if entries != [(member, tarfile.REGTYPE)]:
+        return f"{archive_path.name} holds {entries!r}, expected exactly [{member!r}]"
     return None
 
 

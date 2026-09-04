@@ -733,6 +733,11 @@ have broken releases elsewhere in the estate:
 - The auditing job requests `contents: write` even though it only reads.
   Draft releases are invisible to read-scoped tokens.
 
+A tag with a suffix, such as `v1.2.3-beta.1`, is published as a prerelease. The
+workflow serializes on the effective tag, so a tag push and a manual dispatch
+for the same tag cannot both pass the "does this release exist" check before
+either creates it.
+
 Build jobs check the release tag out, so the packaging script comes from the
 tagged tree. Tags cut before this workflow landed carry no packaging script and
 cannot be republished; cut a new tag instead.

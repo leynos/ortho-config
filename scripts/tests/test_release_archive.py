@@ -22,9 +22,11 @@ SCRIPT_DIRECTORY = REPOSITORY_ROOT / "scripts"
 if str(SCRIPT_DIRECTORY) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIRECTORY))
 
-import release_archive as packager  # noqa: E402
-import release_archive_naming as naming  # noqa: E402
-import verify_release_archives as auditor  # noqa: E402
+# The scripts are standalone modules, not an installed package, so they
+# import only after the block above joins their directory to sys.path.
+import release_archive as packager  # noqa: E402  # see the sys.path note above
+import release_archive_naming as naming  # noqa: E402  # see the sys.path note above
+import verify_release_archives as auditor  # noqa: E402  # see the sys.path note above
 
 MANIFEST_PATH = REPOSITORY_ROOT / "cargo-orthohelp" / "Cargo.toml"
 VERSION = "1.2.3"
@@ -232,6 +234,39 @@ def test_auditor_reports_a_checksum_mismatch(
     archive_path.write_bytes(archive_path.read_bytes() + b"tamper")
     failures = _audit(tmp_path / "dist", "x86_64-unknown-linux-gnu", binstall_metadata)
     assert any("hashes to" in failure for failure in failures)
+
+
+def test_auditor_reports_a_sidecar_naming_another_file(
+    binstall_metadata: dict[str, str], tmp_path: Path
+) -> None:
+    """A digest recorded against a different name cannot verify this archive."""
+    archive_path = _package(tmp_path, "x86_64-unknown-linux-gnu")
+    sidecar_path = archive_path.with_name(f"{archive_path.name}.sha256")
+    digest = hashlib.sha256(archive_path.read_bytes()).hexdigest()
+    sidecar_path.write_text(f"{digest}  some-other-file.tgz\n", encoding="utf-8")
+    failures = _audit(tmp_path / "dist", "x86_64-unknown-linux-gnu", binstall_metadata)
+    assert any("does not hold one record naming" in failure for failure in failures)
+
+
+def test_auditor_reports_an_extra_directory_member(
+    binstall_metadata: dict[str, str], tmp_path: Path
+) -> None:
+    """A directory entry alongside the binary breaks the exact-layout promise."""
+    dist_dir = tmp_path / "dist"
+    dist_dir.mkdir(parents=True)
+    target = "x86_64-unknown-linux-gnu"
+    archive_path = dist_dir / naming.archive_file_name(auditor.PACKAGE_NAME, target, VERSION)
+    member = auditor.expected_member(binstall_metadata, target, VERSION)
+    with tarfile.open(archive_path, mode="w:gz") as tar:
+        directory = tarfile.TarInfo(member.split("/", maxsplit=1)[0])
+        directory.type = tarfile.DIRTYPE
+        tar.addfile(directory)
+        binary = tarfile.TarInfo(member)
+        binary.size = 0
+        tar.addfile(binary)
+    packager.write_checksum_sidecar(archive_path)
+    failures = _audit(dist_dir, target, binstall_metadata)
+    assert any("expected exactly" in failure for failure in failures)
 
 
 def test_auditor_reports_a_wrong_member_path(

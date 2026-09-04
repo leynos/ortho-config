@@ -13,6 +13,7 @@ Run via ``make test-workflow-contracts``.
 
 from __future__ import annotations
 
+import re
 import sys
 import tomllib
 import typing as typ
@@ -26,13 +27,20 @@ SCRIPT_DIRECTORY = REPOSITORY_ROOT / "scripts"
 if str(SCRIPT_DIRECTORY) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIRECTORY))
 
-import release_archive_naming as naming  # noqa: E402
+# The naming helpers are a standalone script module, not an installed
+# package, so this import follows the sys.path setup above.
+import release_archive_naming as naming  # noqa: E402  # see the sys.path note above
 
 RELEASE_WORKFLOW_PATH = REPOSITORY_ROOT / ".github" / "workflows" / "release.yml"
 CI_WORKFLOW_PATH = REPOSITORY_ROOT / ".github" / "workflows" / "ci.yml"
 MANIFEST_PATH = REPOSITORY_ROOT / "cargo-orthohelp" / "Cargo.toml"
 
 PACKAGE_NAME = "cargo-orthohelp"
+
+#: Matches a full 40-hex commit SHA. Release jobs hold write scope, so a
+#: repointed tag would run unreviewed code; the value is Dependabot's to
+#: bump, so only its shape is asserted.
+PINNED_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 
 #: Targets the release publishes, mapped to the runner that builds each one
 #: natively. Cross-compilation is deliberately avoided: every triple has a
@@ -87,7 +95,9 @@ def _steps(job: dict[str, typ.Any]) -> list[dict[str, typ.Any]]:
     return list(job.get("steps") or [])
 
 
-def _step_index(job: dict[str, typ.Any], predicate: typ.Callable[[dict], bool]) -> int:
+def _step_index(
+    job: dict[str, typ.Any], predicate: typ.Callable[[dict[str, typ.Any]], bool]
+) -> int:
     """Return the index of the first step satisfying *predicate*, or -1."""
     return next((index for index, step in enumerate(_steps(job)) if predicate(step)), -1)
 
@@ -156,6 +166,45 @@ def test_create_release_verifies_the_tag_through_the_api(
     assert "git/ref/tags" in script
     assert "--verify-tag" not in script
     assert "--draft" in script
+
+
+def test_runs_for_one_tag_are_serialized(release_workflow: dict[str, typ.Any]) -> None:
+    """A tag push and a dispatch for the same tag cannot race to create it."""
+    concurrency = release_workflow["concurrency"]
+    assert "inputs.tag" in concurrency["group"]
+    assert "github.ref_name" in concurrency["group"]
+    assert concurrency["cancel-in-progress"] is False
+
+
+def test_suffixed_tags_are_published_as_prereleases(
+    release_workflow: dict[str, typ.Any],
+) -> None:
+    """A tag such as v1.2.3-beta.1 must not reach stable-release consumers."""
+    prepare_script = "\n".join(
+        step.get("run", "") for step in _steps(release_workflow["jobs"]["prepare"])
+    )
+    assert "prerelease=true" in prepare_script
+    assert "prerelease=false" in prepare_script
+    outputs = release_workflow["jobs"]["prepare"]["outputs"]
+    assert "steps.resolve.outputs.prerelease" in outputs["prerelease"]
+    create_script = "\n".join(
+        step.get("run", "") for step in _steps(release_workflow["jobs"]["create-release"])
+    )
+    assert "--prerelease=" in create_script
+
+
+def test_checkout_steps_are_pinned_to_a_commit(release_workflow: dict[str, typ.Any]) -> None:
+    """Release jobs hold write scope, so a mutable tag ref is not acceptable.
+
+    The SHA value itself is not asserted: Dependabot owns it.
+    """
+    for job_name, job in release_workflow["jobs"].items():
+        for step in _steps(job):
+            uses = str(step.get("uses", ""))
+            if not uses.startswith("actions/checkout@"):
+                continue
+            ref = uses.split("@", maxsplit=1)[1]
+            assert PINNED_SHA_RE.match(ref), f"{job_name}: checkout ref {ref!r} is not a SHA"
 
 
 def test_build_matrix_covers_every_published_target(

@@ -58,8 +58,12 @@ cargo binstall --disable-strategies compile cargo-orthohelp
 ```
 
 Each release archive is published with a `.sha256` sidecar, so a download can
-be verified with `sha256sum --check`. `cargo install cargo-orthohelp` remains
-available where a source build is preferred.
+be verified with `sha256sum --check`.
+
+Prebuilt archives start with the first release published after this tooling
+landed; 0.9.0 and earlier carry none. Until that release is on crates.io, use
+`cargo install cargo-orthohelp`, which builds from source. `cargo install`
+also remains the option where a source build is preferred.
 
 ### Basic usage
 

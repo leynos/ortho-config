@@ -31,9 +31,12 @@ import tarfile
 from dataclasses import dataclass
 from pathlib import Path
 
+# The naming helpers are a sibling module rather than a package, so the
+# script directory must join sys.path before the import can resolve; the
+# import therefore cannot sit at the top of the file.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from release_archive_naming import (  # noqa: E402
+from release_archive_naming import (  # noqa: E402  # see the sys.path note above
     ManifestError,
     archive_file_name,
     archive_stem,
@@ -126,6 +129,9 @@ def build_release_binary(repo: Path, target: str, manifest_path: Path, cargo: st
         "--bin",
         PACKAGE_NAME,
     ]
+    # The S603 suppression below is safe: the argument list is built here from
+    # a validated target triple and the caller's cargo executable, and no shell
+    # interprets it.
     result = subprocess.run(command, cwd=repo, check=False)  # noqa: S603
     if result.returncode != 0:
         message = f"cargo build failed for {target} with exit code {result.returncode}"
