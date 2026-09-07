@@ -162,22 +162,7 @@ def test_the_required_ceiling_is_monotone_in_every_term(
 def _workflow(
     *, steps: int = 2, ceiling: int | None = 135, watchdog: int | None = 1800
 ) -> dict[str, dict[str, object]]:
-    """Return one synthetic workflow containing one coverage job.
-
-    Parameters
-    ----------
-    steps : int
-        How many coverage steps the job runs.
-    ceiling : int or None
-        The job's `timeout-minutes`, or None to omit it.
-    watchdog : int or None
-        The job-level watchdog value, or None to omit it.
-
-    Returns
-    -------
-    dict
-        A document with a single `build-test` job.
-    """
+    """Return one synthetic workflow containing one coverage job."""
     job: dict[str, object] = {
         "steps": [
             {"name": f"cover {index}", "uses": COVERAGE_STEP} for index in range(steps)
@@ -245,4 +230,90 @@ def test_a_malformed_or_unrelated_workflow_yields_no_job(
     """
     assert not coverage_jobs_of({"ci.yml": document}), (
         f"{document!r} declares no coverage job"
+    )
+
+
+@pytest.mark.parametrize(
+    "document",
+    [
+        pytest.param({"jobs": "not a mapping"}, id="jobs-is-a-scalar"),
+        pytest.param({"jobs": ["build"]}, id="jobs-is-a-list"),
+        pytest.param({"jobs": {"build": "not a mapping"}}, id="a-job-is-a-scalar"),
+    ],
+    ids=str,
+)
+def test_a_malformed_jobs_container_yields_no_lane(
+    document: dict[str, object],
+) -> None:
+    """A shape the reading does not expect is not a coverage lane.
+
+    A non-empty scalar reaches `.items()` and raises, which fails the
+    whole contract on a workflow that has nothing to do with coverage.
+    Reporting no lane is the honest answer: the document declares none
+    that this contract can see, and a workflow that will not parse is
+    the loader's business rather than the budgets'.
+    """
+    assert not coverage_jobs_of({"ci.yml": document}), (
+        f"{document!r} declares no coverage job"
+    )
+
+
+@pytest.mark.parametrize(
+    ("ceiling", "expected"),
+    [
+        pytest.param(135, 8100.0, id="a-whole-number-of-minutes"),
+        pytest.param("135", 8100.0, id="minutes-as-a-string"),
+        pytest.param("soon", None, id="not-a-number"),
+        pytest.param(True, None, id="a-boolean"),
+        pytest.param([135], None, id="a-list"),
+        pytest.param(None, None, id="absent"),
+    ],
+)
+def test_an_unreadable_ceiling_reads_as_absent(
+    ceiling: object, expected: float | None
+) -> None:
+    """A ceiling that is not a number of minutes is not a ceiling.
+
+    Converting it directly raised during collection, so a workflow with
+    a mistyped `timeout-minutes` failed the contract with a Python
+    fault rather than with the assertion that the job declares no
+    usable ceiling. Reading it as absent puts the failure where a
+    maintainer can act on it.
+    """
+    (job,) = coverage_jobs_of({"ci.yml": _workflow(ceiling=ceiling)})
+
+    if expected is None:
+        assert job.job_timeout is None, f"{ceiling!r} is not a usable ceiling"
+    else:
+        assert job.job_timeout == pytest.approx(expected), f"{ceiling!r} is {expected}s"
+
+
+@pytest.mark.parametrize(
+    "environment",
+    ["not a mapping", ["RUN_RUST_CARGO_WAIT_TIMEOUT=1800"], 1800],
+    ids=["a-string", "a-list", "a-number"],
+)
+def test_a_malformed_environment_reads_as_setting_nothing(
+    environment: object,
+) -> None:
+    """An `env` that is not a mapping sets no watchdog.
+
+    Raising here would fail the contract on the shape of an unrelated
+    field; inventing a budget would certify a lane nobody bounded.
+    """
+    document = {
+        "jobs": {
+            "build-test": {
+                "timeout-minutes": 135,
+                "env": environment,
+                "steps": [{"uses": COVERAGE_STEP}],
+            }
+        }
+    }
+
+    (job,) = coverage_jobs_of({"ci.yml": typ.cast("dict[str, typ.Any]", document)})
+
+    assert job.watchdogs == (None,), (
+        f"an env of {environment!r} sets no watchdog, so the lane inherits "
+        f"the action's default and must read as unset"
     )

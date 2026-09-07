@@ -939,6 +939,18 @@ makes the two invocations visible to the arithmetic. It reads a step's own
 environment before the job's, as GitHub resolves it, and it fails on a
 coverage-invoking job that declares no ceiling at all.
 
+It pins the condition each lane carries, which is none today. A skipped step
+runs no `cargo`, so its watchdog never arms and the tiers say nothing about it:
+`if: false` on the step or on its job would leave a lane that looks bounded and
+is not. Adding a condition has to change the contract and this section with it.
+
+A document whose shape the reading does not expect yields no lane rather than
+raising. A `jobs` value that is a scalar reaches `.items()`, an `env` that is
+not a mapping and a `timeout-minutes` that is not a number all raise during
+derivation, and each would fail the contract with a Python fault on a workflow
+that has nothing to do with coverage. The malformed cases now read as a lane
+with nothing set, which is what a maintainer can act on.
+
 It also pins how many coverage steps each job runs. The ceiling's requirement
 is the sum of the watchdogs found, so deleting one of a job's two coverage
 steps lowers that requirement by 1,800 s and every timing assertion still
