@@ -835,6 +835,95 @@ is pinned once in the Makefile `TYPOS_VERSION` variable and run through
 and regenerates the configuration, and fails when the tracked output drifts.
 When bumping the version, update `TYPOS_VERSION` and rerun the gate.
 
+## Test timeouts: the tiers this repository sets
+
+Four independent timers can end a test run, and the canonical statement of how
+they must be ordered lives in the `generate-coverage` README in
+[`leynos/shared-actions`][shared-actions-coverage]. Three of the four are set
+here.
+
+| Tier | What it bounds | Where it is set | Current value |
+| --- | --- | --- | --- |
+| Per-test `slow-timeout` | one test | `.config/nextest.toml` | 600 s (120 s x 5) for the longest override |
+| nextest `global-timeout` | the whole test run | `.config/nextest.toml` | **not set** |
+| Cargo watchdog | one `cargo` invocation, wall clock | `RUN_RUST_CARGO_WAIT_TIMEOUT` at job level | 1,800 s (30 m) |
+| Job `timeout-minutes` | the whole job | job level | 120 m in `ci.yml`, 90 m in `coverage-main.yml` |
+
+*Table: the timers that can end a run, innermost first.*
+
+### The outermost tier was missing
+
+Neither coverage job declared `timeout-minutes` before this was written, so
+both inherited GitHub's six-hour default. That is not a budget anyone chose,
+and the Windows leg of `ci.yml` already runs for 86 minutes, so a hang there
+cost six hours of a paid runner before anything stopped it.
+
+### Two watchdogs per job, not one
+
+Each coverage job runs the action twice, once with `serde_saphyr` and once
+without, and each invocation gets its own watchdog. So the job must be able to
+contain both budgets before it contains anything else, and the requirement is
+the watchdog multiplied by the number of coverage steps in that job, plus the
+work outside them. The canonical rule does not spell this out because most
+callers invoke the action once.
+
+### The per-test budget is a product, not a period
+
+`terminate-after` counts warning periods, so the budget a test gets is
+`period` multiplied by it. The longest override here is 120 s with a multiplier
+of five, so reading the period alone would report 120 s where the real figure
+is 600 s. The contract asserts that reading outright rather than leaving it
+implied.
+
+### The whole-run budget is a gap, not a decision
+
+No `global-timeout` is set. This repository runs nextest, so the budget exists
+to be set and has not been, and until it is the watchdog is doing tier two's
+job as well as its own. The contract binds a `global-timeout` the moment one
+appears, above the largest per-test allowance and inside the watchdog once
+termination and a cold build are counted, so adding one lands in the right
+place rather than merely somewhere.
+
+### What the ceilings are sized against
+
+The allowance for work outside the watchdogs is per lane, because the two
+differ by an order of magnitude and holding the trunk lane to the pull-request
+lane's figure would demand a ceiling its own runs cannot justify.
+
+| Lane | Coverage steps | Worst whole job | Outside those steps | Run |
+| --- | --- | --- | --- | --- |
+| `ci.yml` `build-test` (windows-latest) | 1,307 s + 1,172 s | 5,196 s | 2,717 s | 34069372116 |
+| `ci.yml` `build-test` (ubuntu-latest) | 636 s + 554 s | 2,017 s | 827 s | 34069372116 |
+| `coverage-main.yml` `coverage-upload` | 1,204 s total | 1,272 s | 68 s | 33581587296 |
+
+*Table: measured coverage-step and whole-job durations, read across ten
+successful runs of each workflow.*
+
+On the Windows leg the work outside the coverage steps is dominated by cache
+saving: 679 s and 567 s for the two save steps on that run alone. So `ci.yml`
+is allowed 45 minutes and `coverage-main.yml` 15, making the requirements 105
+and 75 minutes against ceilings of 120 and 90. A lane in a workflow the
+contract has not measured is held to the larger allowance until someone
+measures it and records a run id.
+
+None of those runs was genuinely cold. One run is the coldest seen so far, not
+a measurement of the cold case.
+
+### The contract
+
+`tests/workflow_contracts/timeout_ordering_test.py` asserts this by value over
+every job invoking the coverage action, in both the `.yml` and `.yaml`
+extensions. Jobs are its unit rather than steps, because the ceiling belongs to
+a job and has to contain every watchdog inside it; counting the steps is what
+makes the two invocations visible to the arithmetic. It reads a step's own
+environment before the job's, as GitHub resolves it, and it fails on a
+coverage-invoking job that declares no ceiling at all.
+
+The `binstall-packaging` job also declares no ceiling. It invokes no coverage
+step, so it is outside this contract, and bounding it is separate work.
+
+[shared-actions-coverage]: https://github.com/leynos/shared-actions/blob/main/.github/actions/generate-coverage/README.md
+
 ## Command checklist
 
 Run from repository root:
