@@ -939,6 +939,20 @@ makes the two invocations visible to the arithmetic. It reads a step's own
 environment before the job's, as GitHub resolves it, and it fails on a
 coverage-invoking job that declares no ceiling at all.
 
+It also pins how many coverage steps each job runs. The ceiling's requirement
+is the sum of the watchdogs found, so deleting one of a job's two coverage
+steps lowers that requirement by 1,800 s and every timing assertion still
+passes while the lane measures half of what it did.
+
+`tests/workflow_contracts/timeout_budget_properties_test.py` holds the readings
+themselves, driven with synthetic workflows and synthetic nextest
+configurations rather than the repository's own. Every ceiling here sits well
+above its requirement, so a missing term in the derivation changes nothing
+observable in this tree; against controlled numbers it does not. The lane
+reading takes its documents as a parameter, defaulting to the repository's own
+workflows, so the filesystem access and the YAML parsing sit at one named
+boundary rather than inside the derivations.
+
 The `binstall-packaging` job also declares no ceiling. It invokes no coverage
 step, so it is outside this contract, and bounding it is separate work.
 

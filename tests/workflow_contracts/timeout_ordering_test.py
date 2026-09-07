@@ -309,9 +309,12 @@ def _watchdog_of(job: dict[str, typ.Any], step: dict[str, typ.Any]) -> float | N
     return None
 
 
-def _workflow_documents() -> dict[str, dict[str, typ.Any]]:
-    """Return every workflow document, keyed by file name.
+def workflow_documents() -> dict[str, dict[str, typ.Any]]:
+    """Return every workflow document in the repository, keyed by name.
 
+    This is the one place the contract touches the filesystem or the
+    YAML parser, so an unreadable or unparsable workflow fails here
+    rather than inside a budget derivation several frames away.
     Both extensions are read. A coverage lane in the other one would
     otherwise escape every assertion below without failing anything.
 
@@ -421,21 +424,37 @@ def _coverage_job(
     )
 
 
-def coverage_jobs_of() -> tuple[CoverageJob, ...]:
+def coverage_jobs_of(
+    documents: dict[str, dict[str, typ.Any]] | None = None,
+) -> tuple[CoverageJob, ...]:
     """Return every job invoking the coverage action, with its budgets.
 
     Jobs are the unit rather than steps, because the ceiling is a job's
     and it has to contain every watchdog inside it. Counting steps is
     what makes the two invocations here visible to the arithmetic.
 
+    The documents are a parameter so the reading can be driven with
+    synthetic workflows. Reading the repository's own is the default
+    rather than the only option, which keeps the filesystem access and
+    the YAML parsing at one named boundary instead of inside the
+    derivations.
+
+    Parameters
+    ----------
+    documents : dict[str, dict[str, typ.Any]] or None
+        Parsed workflow documents keyed by file name. When None, the
+        repository's own `.github/workflows` is read.
+
     Returns
     -------
     tuple[CoverageJob, ...]
         One entry per coverage-invoking job.
     """
+    if documents is None:
+        documents = workflow_documents()
     return tuple(
         found
-        for name, document in _workflow_documents().items()
+        for name, document in documents.items()
         for job_name, job in (document.get("jobs") or {}).items()
         if isinstance(job, dict)
         and (found := _coverage_job(name, str(job_name), job)) is not None
