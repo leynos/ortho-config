@@ -84,6 +84,19 @@ OUTSIDE_WATCHDOG_ALLOWANCE_SECONDS: typ.Final[dict[str, float]] = {
 #: measures it and adds its own figure with a run id.
 DEFAULT_OUTSIDE_WATCHDOG_ALLOWANCE_SECONDS: typ.Final[float] = 60 * 60.0
 
+#: The condition each coverage lane legitimately carries, keyed by
+#: workflow and job, as the step's ``if`` and its job's.
+#:
+#: A skipped step runs no `cargo`, so its watchdog never arms and every
+#: assertion below says nothing about it. `if: false` on either would
+#: leave a lane that looks bounded and is not. The values are pinned
+#: rather than merely tolerated, because a lane gaining, losing or
+#: changing a condition changes when it runs at all.
+REQUIRED_CONDITIONS: typ.Final[dict[tuple[str, str], tuple[object, object]]] = {
+    ("ci.yml", "build-test"): (None, None),
+    ("coverage-main.yml", "coverage-upload"): (None, None),
+}
+
 #: How many coverage steps each job is required to run, pinned by
 #: coordinate. The ceiling requirement is derived from the number of
 #: steps found, so deleting one lowers the requirement and every
@@ -271,6 +284,7 @@ class CoverageJob(typ.NamedTuple):
     steps: int
     watchdogs: tuple[float | None, ...]
     job_timeout: float | None
+    conditions: tuple[tuple[object, object], ...] = ()
 
     def __str__(self) -> str:
         """Return a location suitable for a failure message.
@@ -302,11 +316,28 @@ def _watchdog_of(job: dict[str, typ.Any], step: dict[str, typ.Any]) -> float | N
     float or None
         The budget in seconds, or None when neither sets one.
     """
-    for source in ((step.get("env") or {}), (job.get("env") or {})):
-        raw = source.get(WATCHDOG_VARIABLE)
-        if raw is not None:
-            return float(str(raw))
+    for owner in (step, job):
+        environment = owner.get("env")
+        if not isinstance(environment, dict):
+            continue
+        budget = _budget_from(environment.get(WATCHDOG_VARIABLE))
+        if budget is not None:
+            return budget
     return None
+
+
+def _budget_from(raw: object) -> float | None:
+    """Return one source's watchdog budget, or None when it sets none."""
+    if raw is None:
+        return None
+    text = str(raw).strip()
+    if not text:
+        return None
+    try:
+        seconds = float(text)
+    except ValueError:
+        return None
+    return seconds if seconds > 0 else None
 
 
 def workflow_documents() -> dict[str, dict[str, typ.Any]]:
@@ -369,19 +400,28 @@ def required_ceiling(budgets: typ.Sequence[float], allowance: float) -> float:
     return sum(budgets) + allowance + CEILING_MARGIN_SECONDS
 
 
+def _jobs_in(document: dict[str, typ.Any]) -> dict[str, dict[str, typ.Any]]:
+    """Return a document's jobs, ignoring anything that is not one."""
+    jobs = document.get("jobs")
+    if not isinstance(jobs, dict):
+        return {}
+    return {
+        str(name): job for name, job in jobs.items() if isinstance(job, dict)
+    }
+
+
+def _ceiling_seconds(raw: object) -> float | None:
+    """Return a job's ``timeout-minutes`` in seconds, or None."""
+    if raw is None or isinstance(raw, bool) or not isinstance(raw, (int, float, str)):
+        return None
+    try:
+        return float(raw) * 60.0
+    except ValueError:
+        return None
+
+
 def _coverage_steps(job: dict[str, typ.Any]) -> list[dict[str, typ.Any]]:
-    """Return the steps in one job that invoke the coverage action.
-
-    Parameters
-    ----------
-    job : dict[str, typ.Any]
-        The parsed job.
-
-    Returns
-    -------
-    list[dict[str, typ.Any]]
-        The matching steps, in the order the job runs them.
-    """
+    """Return one job's coverage steps, in the order it runs them."""
     steps = job.get("steps")
     if not isinstance(steps, list):
         return []
@@ -395,22 +435,7 @@ def _coverage_steps(job: dict[str, typ.Any]) -> list[dict[str, typ.Any]]:
 def _coverage_job(
     workflow: str, job_name: str, job: dict[str, typ.Any]
 ) -> CoverageJob | None:
-    """Return one job's budgets, or None when it runs no coverage step.
-
-    Parameters
-    ----------
-    workflow : str
-        The workflow file's name.
-    job_name : str
-        The job's identifier.
-    job : dict[str, typ.Any]
-        The parsed job.
-
-    Returns
-    -------
-    CoverageJob or None
-        The job's budgets, or None when it invokes no coverage step.
-    """
+    """Return one job's budgets, or None when it runs no coverage step."""
     steps = _coverage_steps(job)
     if not steps:
         return None
@@ -420,7 +445,8 @@ def _coverage_job(
         job=job_name,
         steps=len(steps),
         watchdogs=tuple(_watchdog_of(job, step) for step in steps),
-        job_timeout=None if raw_timeout is None else float(raw_timeout) * 60.0,
+        job_timeout=_ceiling_seconds(raw_timeout),
+        conditions=tuple((step.get("if"), job.get("if")) for step in steps),
     )
 
 
@@ -455,9 +481,8 @@ def coverage_jobs_of(
     return tuple(
         found
         for name, document in documents.items()
-        for job_name, job in (document.get("jobs") or {}).items()
-        if isinstance(job, dict)
-        and (found := _coverage_job(name, str(job_name), job)) is not None
+        for job_name, job in _jobs_in(document).items()
+        if (found := _coverage_job(name, str(job_name), job)) is not None
     )
 
 
@@ -670,4 +695,32 @@ def test_the_required_ceiling_carries_all_three_terms() -> None:
     ), "the margin applies even when nothing runs outside the watchdog"
     assert required_ceiling([], 0.0) == pytest.approx(CEILING_MARGIN_SECONDS), (
         "the margin is a term of its own, not a fraction of the others"
+    )
+
+
+def test_each_coverage_lane_carries_the_condition_it_is_meant_to(
+    coverage_jobs: tuple[CoverageJob, ...],
+) -> None:
+    """A skipped step runs no `cargo`, so its watchdog never arms.
+
+    Every assertion above reads a lane's declared budgets and says
+    nothing about whether the step runs. `if: false` on the step or on
+    its job would leave a lane that looks bounded and is not, and this
+    contract would certify it. So would a plausible condition that
+    quietly excluded the event the lane exists for.
+
+    Neither coverage lane here carries one today, so the pin is that
+    they carry none: adding a condition has to change this contract and
+    the guide with it.
+    """
+    found = {(job.workflow, job.job): job.conditions for job in coverage_jobs}
+    wrong = {
+        coordinate: (expected, found.get(coordinate))
+        for coordinate, expected in REQUIRED_CONDITIONS.items()
+        if not found.get(coordinate) or set(found[coordinate]) != {expected}
+    }
+    assert not wrong, (
+        f"these coverage lanes do not carry the conditions the developers' "
+        f"guide records, as expected versus found: {wrong}; a lane that is "
+        f"skipped runs no cargo, so its watchdog never arms"
     )
