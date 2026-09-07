@@ -4,6 +4,7 @@
 //! identifiers agree with `ortho_config::message_id_for`.
 
 mod identifier;
+mod suffix;
 #[cfg(test)]
 mod tests;
 
@@ -16,6 +17,7 @@ use syn::Ident;
 use crate::derive::parse::{FieldAttrs, StructAttrs, clap_arg_id, clap_field_is_flattened};
 
 pub(crate) use identifier::{join_identifier, normalize_segment};
+use suffix::MessageSuffix;
 
 #[derive(Debug, Clone)]
 pub(crate) struct LocalizationBase(String);
@@ -106,47 +108,9 @@ impl AsRef<str> for FluentMessageId {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
-enum MessageSuffix {
-    About,
-    LongAbout,
-    Usage,
-    Version,
-    LongVersion,
-    AfterHelp,
-    AfterLongHelp,
-    Args,
-    Help,
-    LongHelp,
-    ValueName,
-}
-
-impl AsRef<str> for MessageSuffix {
-    fn as_ref(&self) -> &str {
-        match self {
-            Self::About => "about",
-            Self::LongAbout => "long_about",
-            Self::Usage => "usage",
-            Self::Version => "version",
-            Self::LongVersion => "long_version",
-            Self::AfterHelp => "after_help",
-            Self::AfterLongHelp => "after_long_help",
-            Self::Args => "args",
-            Self::Help => "help",
-            Self::LongHelp => "long_help",
-            Self::ValueName => "value_name",
-        }
-    }
-}
-
-impl From<MessageSuffix> for String {
-    fn from(value: MessageSuffix) -> Self {
-        value.as_ref().to_owned()
-    }
-}
-
 #[derive(Debug, Clone)]
 pub(crate) struct ArgIdsModel {
+    pub field_name: String,
     pub name: ClapArgId,
     pub help_id: FluentMessageId,
     pub long_help_id: FluentMessageId,
@@ -350,6 +314,7 @@ fn build_arg_models(
         );
 
         args.push(ArgIdsModel {
+            field_name: name_ident.to_string(),
             name: arg_id,
             help_id: arg_id_composed(
                 base_segments,

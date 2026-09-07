@@ -81,6 +81,11 @@ pub fn derive_ortho_config(input_tokens: TokenStream) -> TokenStream {
         components.post_merge_hook,
         &krate,
     );
+    let localization_ids =
+        match generate_localization_ids(&struct_attrs, &ident, &fields, &field_attrs) {
+            Ok(model) => model,
+            Err(err) => return err.to_compile_error().into(),
+        };
     let docs_impl = match generate_docs_impl(&DocsArgs {
         ident: &ident,
         fields: &fields,
@@ -88,18 +93,13 @@ pub fn derive_ortho_config(input_tokens: TokenStream) -> TokenStream {
         struct_attrs: &struct_attrs,
         serde_rename_all,
         cli_fields: &components.cli_field_metadata,
+        localization_ids: &localization_ids,
         krate: &krate,
     }) {
         Ok(tokens) => tokens,
         Err(err) => return err.to_compile_error().into(),
     };
-    let localization_impl =
-        match generate_localization_ids(&struct_attrs, &ident, &fields, &field_attrs)
-            .map(|model| emit_localization_impl(&model, &ident, &krate))
-        {
-            Ok(tokens) => tokens,
-            Err(err) => return err.to_compile_error().into(),
-        };
+    let localization_impl = emit_localization_impl(&localization_ids, &ident, &krate);
     let expanded = quote! {
         #core_tokens
         #declarative_impl

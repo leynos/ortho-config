@@ -47,6 +47,16 @@ fn nested_greet_command_has_expected_fields_and_examples(
 
     ensure!(greet.app_name == "greet", "expected greet command metadata");
     ensure!(
+        greet.about_id == "nested-app-greet-about",
+        "expected mounted greet about identifier, got {}",
+        greet.about_id,
+    );
+    ensure!(
+        recipient.help_id == "nested-app-greet-args-recipient-help",
+        "expected mounted recipient help identifier, got {}",
+        recipient.help_id,
+    );
+    ensure!(
         field_names(greet) == ["excited", "recipient"],
         "expected greet fields to include its flag and value",
     );
@@ -140,14 +150,44 @@ fn nested_admin_audit_has_inherited_fluent_id_pattern(nested_metadata: DocMetada
     let dry_run = field_by_name(audit, "dry_run")?;
 
     ensure!(
-        audit.about_id == "audit.about",
+        audit.about_id == "nested-app-admin-audit-about",
         "expected audit about_id default, got {}",
         audit.about_id,
     );
     ensure!(
-        dry_run.help_id == "audit.fields.dry_run.help",
+        dry_run.help_id == "nested-app-admin-audit-args-dry-run-help",
         "expected audit field help_id default, got {}",
         dry_run.help_id,
+    );
+    ensure!(
+        dry_run.help_id != "audit-args-dry_run-help",
+        "audit help_id must not use the standalone path or dotted field name",
+    );
+    Ok(())
+}
+
+#[rstest]
+fn nested_grant_preserves_explicit_identifier_overrides(
+    nested_metadata: DocMetadata,
+) -> Result<()> {
+    let admin = command_by_name(&nested_metadata, "admin")?;
+    let grant = command_by_name(admin, "grant-access")?;
+    let principal = field_by_name(grant, "principal")?;
+
+    ensure!(
+        grant.about_id == "nested.grant.about",
+        "expected literal grant about identifier, got {}",
+        grant.about_id,
+    );
+    ensure!(
+        grant.synopsis_id.as_deref() == Some("nested.grant.usage"),
+        "expected literal grant usage identifier, got {:?}",
+        grant.synopsis_id,
+    );
+    ensure!(
+        principal.help_id == "nested.grant.principal.help",
+        "expected literal principal help identifier, got {}",
+        principal.help_id,
     );
     Ok(())
 }
