@@ -11,7 +11,6 @@ expression: snapshot
       "path": [
         "nested_fixture"
       ],
-      "summary": "Nested fixture command tree.",
       "canonical_verb": null,
       "inputs": [
         {
@@ -36,7 +35,6 @@ expression: snapshot
         "nested_fixture",
         "admin"
       ],
-      "summary": "Administers fixture state.",
       "canonical_verb": null,
       "inputs": [
         {
@@ -62,7 +60,6 @@ expression: snapshot
         "admin",
         "audit"
       ],
-      "summary": "Audits fixture state.",
       "canonical_verb": null,
       "inputs": [
         {
@@ -88,7 +85,6 @@ expression: snapshot
         "admin",
         "grant-access"
       ],
-      "summary": "Grants access to a principal.",
       "canonical_verb": null,
       "inputs": [
         {
@@ -113,7 +109,6 @@ expression: snapshot
         "nested_fixture",
         "greet"
       ],
-      "summary": "Greets a named recipient.",
       "canonical_verb": null,
       "inputs": [
         {
@@ -146,7 +141,6 @@ expression: snapshot
         "nested_fixture",
         "version"
       ],
-      "summary": "Prints version information.",
       "canonical_verb": null,
       "inputs": [],
       "output_modes": [],
