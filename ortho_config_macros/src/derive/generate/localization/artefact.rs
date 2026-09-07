@@ -38,6 +38,12 @@ struct Entry {
     embedded_default: Option<String>,
 }
 
+/// Borrows shared schema fields while building entries for one derive expansion.
+struct EntryContext<'a> {
+    type_name: &'a str,
+    source: &'a Source,
+}
+
 #[derive(Debug, Deserialize, Serialize)]
 struct Document {
     schema_version: u8,
@@ -75,113 +81,94 @@ fn source(span: Span) -> Source {
 }
 
 /// Builds one schema entry for a command or argument identifier.
-#[expect(
-    clippy::too_many_arguments,
-    reason = "the fixed schema entry owns every serialised field explicitly"
-)]
 fn entry(
     id: impl AsRef<str>,
     kind: MessageSuffix,
-    type_name: &str,
     field: Option<String>,
-    source: &Source,
+    context: &EntryContext<'_>,
 ) -> Entry {
     Entry {
         id: id.as_ref().to_owned(),
         kind: kind.as_ref().to_owned(),
-        type_name: type_name.to_owned(),
+        type_name: context.type_name.to_owned(),
         field,
         path_scope: String::from("standalone"),
-        source: source.clone(),
+        source: context.source.clone(),
         embedded_default: None,
     }
 }
 
-/// Converts a localization model into its ordered identifier entries.
-#[expect(
-    clippy::too_many_lines,
-    reason = "the fixed schema mapping stays auditable as one ordered identifier list"
-)]
-fn entries(model: &LocalizationIds, ident: &Ident, span: Span) -> Vec<Entry> {
-    let source = source(span);
-    let crate_name = std::env::var("CARGO_CRATE_NAME").unwrap_or_else(|_| String::from("unknown"));
-    let type_name = format!("{crate_name}::{ident}");
-    let command = &model.command;
-    let mut output = vec![
-        entry(
-            &command.about_id,
-            MessageSuffix::About,
-            &type_name,
-            None,
-            &source,
-        ),
+/// Builds entries for the fixed command-level identifiers in schema order.
+fn command_entries(command: &super::CommandIds, context: &EntryContext<'_>) -> Vec<Entry> {
+    vec![
+        entry(&command.about_id, MessageSuffix::About, None, context),
         entry(
             &command.long_about_id,
             MessageSuffix::LongAbout,
-            &type_name,
             None,
-            &source,
+            context,
         ),
-        entry(
-            &command.usage_id,
-            MessageSuffix::Usage,
-            &type_name,
-            None,
-            &source,
-        ),
-        entry(
-            &command.version_id,
-            MessageSuffix::Version,
-            &type_name,
-            None,
-            &source,
-        ),
+        entry(&command.usage_id, MessageSuffix::Usage, None, context),
+        entry(&command.version_id, MessageSuffix::Version, None, context),
         entry(
             &command.long_version_id,
             MessageSuffix::LongVersion,
-            &type_name,
             None,
-            &source,
+            context,
         ),
         entry(
             &command.after_help_id,
             MessageSuffix::AfterHelp,
-            &type_name,
             None,
-            &source,
+            context,
         ),
         entry(
             &command.after_long_help_id,
             MessageSuffix::AfterLongHelp,
-            &type_name,
             None,
-            &source,
+            context,
         ),
-    ];
-    for arg in &model.args {
+    ]
+}
+
+/// Builds entries for every argument while preserving model and suffix order.
+fn argument_entries(args: &[super::ArgIdsModel], context: &EntryContext<'_>) -> Vec<Entry> {
+    let mut output = Vec::with_capacity(args.len() * 3);
+    for arg in args {
         let field = Some(arg.field_name.clone());
         output.push(entry(
             &arg.help_id,
             MessageSuffix::Help,
-            &type_name,
             field.clone(),
-            &source,
+            context,
         ));
         output.push(entry(
             &arg.long_help_id,
             MessageSuffix::LongHelp,
-            &type_name,
             field.clone(),
-            &source,
+            context,
         ));
         output.push(entry(
             &arg.value_name_id,
             MessageSuffix::ValueName,
-            &type_name,
             field,
-            &source,
+            context,
         ));
     }
+    output
+}
+
+/// Converts a localization model into command entries followed by argument entries.
+fn entries(model: &LocalizationIds, ident: &Ident, span: Span) -> Vec<Entry> {
+    let source = source(span);
+    let crate_name = std::env::var("CARGO_CRATE_NAME").unwrap_or_else(|_| String::from("unknown"));
+    let type_name = format!("{crate_name}::{ident}");
+    let context = EntryContext {
+        type_name: &type_name,
+        source: &source,
+    };
+    let mut output = command_entries(&model.command, &context);
+    output.extend(argument_entries(&model.args, &context));
     output
 }
 
@@ -335,3 +322,7 @@ pub(super) fn emit(model: &LocalizationIds, ident: &Ident, span: Span) -> syn::R
     }
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "artefact_tests.rs"]
+mod tests;
