@@ -938,8 +938,19 @@ a job and has to contain every watchdog inside it; counting the steps is what
 makes the two invocations visible to the arithmetic. It reads a step's own
 environment before the job's, as GitHub resolves it, and it fails on a
 coverage-invoking job that declares no ceiling at all. The readings it rests on
-live in `timeout_budgets.py` and `coverage_lanes.py`, and are driven with
-controlled values in `timeout_reading_test.py`.
+live in `nextest_budgets.py`, `timeout_budgets.py` and `coverage_lanes.py`, and
+are driven with controlled values in `timeout_reading_test.py`.
+
+The nextest configuration is parsed with `tomllib` rather than matched as text.
+A text match finds a key inside a comment, inside a `filter` string, or in a
+table nextest never consults, and reports a budget the runner does not use. That
+matters most for the whole-run budget, which this repository does not set: the
+ordering assertion skips when it is absent, and a scraping reader would turn
+that skip into a comparison against a budget nobody had written.
+`terminate-after` is optional, and a `slow-timeout` without it marks a test slow
+and never stops it, so the reading refuses that form rather than reporting one
+period as the budget. Every table in `.config/nextest.toml` sets it explicitly,
+so no value here changes.
 
 It pins the condition each lane carries, which is none today. A skipped step
 runs no `cargo`, so its watchdog never arms and the tiers say nothing about it:

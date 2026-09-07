@@ -11,15 +11,17 @@ from __future__ import annotations
 import re
 
 import pytest
+from nextest_budgets import (
+    largest_test_allowance,
+    seconds,
+    termination_allowance,
+)
 from timeout_budgets import (
     CEILING_MARGIN_SECONDS,
     NEXTEST_CONFIG,
     NEXTEST_DEFAULT_GRACE_PERIOD_SECONDS,
     TERMINATION_SAFETY_MARGIN_SECONDS,
-    largest_test_allowance,
     required_ceiling,
-    seconds,
-    termination_allowance,
 )
 
 
@@ -69,15 +71,21 @@ def test_the_termination_allowance_is_the_grace_period_plus_the_margin() -> None
         NEXTEST_DEFAULT_GRACE_PERIOD_SECONDS + TERMINATION_SAFETY_MARGIN_SECONDS
     ), "an unnamed grace period must fall back to nextest's own default"
     configured = termination_allowance(
-        'slow-timeout = { period = "60s", grace-period = "30s" }'
+        "[profile.default]\n"
+        'slow-timeout = { period = "60s", terminate-after = 1, '
+        'grace-period = "30s" }\n'
     )
     assert configured == pytest.approx(30.0 + TERMINATION_SAFETY_MARGIN_SECONDS), (
         "a grace period below the margin must still raise the allowance; "
         "a maximum over the two terms would have discarded it"
     )
     largest = termination_allowance(
-        'slow-timeout = { grace-period = "5s" }\n'
-        'slow-timeout = { grace-period = "45s" }'
+        "[profile.default]\n"
+        'slow-timeout = { period = "60s", terminate-after = 1, '
+        'grace-period = "5s" }\n'
+        "\n[[profile.default.overrides]]\n"
+        'slow-timeout = { period = "60s", terminate-after = 1, '
+        'grace-period = "45s" }\n'
     )
     assert largest == pytest.approx(45.0 + TERMINATION_SAFETY_MARGIN_SECONDS), (
         "the largest configured grace period governs the allowance"

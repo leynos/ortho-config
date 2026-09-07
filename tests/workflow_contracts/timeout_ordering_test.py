@@ -33,6 +33,11 @@ import typing as typ
 
 import pytest
 from coverage_lanes import CoverageJob, coverage_jobs_of
+from nextest_budgets import (
+    global_timeout,
+    largest_test_allowance,
+    termination_allowance,
+)
 from timeout_budgets import (
     CEILING_MARGIN_SECONDS,
     COLD_BUILD_ALLOWANCE_SECONDS,
@@ -41,10 +46,7 @@ from timeout_budgets import (
     NEXTEST_CONFIG,
     OUTSIDE_WATCHDOG_ALLOWANCE_SECONDS,
     WATCHDOG_VARIABLE,
-    global_timeout,
-    largest_test_allowance,
     required_ceiling,
-    termination_allowance,
 )
 
 #: The condition each coverage lane legitimately carries, keyed by
@@ -68,6 +70,7 @@ REQUIRED_COVERAGE_STEPS: typ.Final[dict[tuple[str, str], int]] = {
     ("ci.yml", "build-test"): 2,
     ("coverage-main.yml", "coverage-upload"): 2,
 }
+
 
 #: How far a ceiling must sit above its requirement rather than merely
 #: reaching it. A ceiling equal to the sum it has to contain cancels the
@@ -215,9 +218,7 @@ def test_a_whole_run_budget_would_sit_inside_each_watchdog(
         f"could use its budget"
     )
     required = (
-        whole_run
-        + termination_allowance(nextest_config)
-        + COLD_BUILD_ALLOWANCE_SECONDS
+        whole_run + termination_allowance(nextest_config) + COLD_BUILD_ALLOWANCE_SECONDS
     )
     for job in coverage_jobs:
         for index, watchdog in enumerate(job.watchdogs):
