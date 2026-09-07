@@ -693,21 +693,38 @@ in §3) need identifiers without dragging in the docs surface:
 
 ```rust
 pub trait OrthoConfigLocalization {
+    /// The dotted catalogue base passed to `Command::with_base`.
+    const LOCALIZATION_BASE: &'static str;
     /// Identifier for the command's `about` text.
     const ABOUT_ID: &'static str;
     /// Identifier for `long_about`.
     const LONG_ABOUT_ID: &'static str;
     /// Identifier for the override usage string.
     const USAGE_ID: &'static str;
-    /// Identifier triples for every argument, in declaration order. Each
-    /// element is `(help_id, long_help_id, value_name_id)`.
-    const ARG_IDS: &'static [(&'static str, &'static str, &'static str)];
+    /// Identifier for `version`.
+    const VERSION_ID: &'static str;
+    /// Identifier for `long_version`.
+    const LONG_VERSION_ID: &'static str;
+    /// Identifier for `after_help`.
+    const AFTER_HELP_ID: &'static str;
+    /// Identifier for `after_long_help`.
+    const AFTER_LONG_HELP_ID: &'static str;
+    /// Named identifiers for every own argument, in declaration order.
+    const ARG_IDS: &'static [ArgLocalizationIds];
 }
 ```
 
-`OrthoConfigDocs::ABOUT_ID` (and friends) is implemented via a blanket impl
-that delegates to `OrthoConfigLocalization`, so the docs pipeline picks up the
-same identifiers without taking ownership of them.
+`ArgLocalizationIds` contains the Clap argument name and its `help_id`,
+`long_help_id`, and `value_name_id`. The `OrthoConfig` derive emits the trait
+implementation and all of these constants. It normalizes dotted base and
+argument segments using the §4.1 convention, then joins them with hyphens;
+normalized argument-id collisions are compile-time errors.
+
+The derive also emits the `OrthoConfigDocs` implementation. Its path-aware
+methods delegate default metadata to the same identifier convention, starting
+from `LOCALIZATION_BASE` and extending the accumulated path for nested
+subcommands. Handwritten docs implementations retain the provided fallback;
+this is generated delegation rather than a Rust blanket implementation.
 
 ### 8.2 Derive behaviour
 

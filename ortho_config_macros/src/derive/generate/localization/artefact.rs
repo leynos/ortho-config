@@ -62,6 +62,7 @@ pub(super) struct ArtefactFile {
     pub(super) contents: Vec<u8>,
 }
 
+/// Captures the source location associated with one derive expansion.
 fn source(span: Span) -> Source {
     let start = span.start();
     Source {
@@ -73,6 +74,7 @@ fn source(span: Span) -> Source {
     }
 }
 
+/// Builds one schema entry for a command or argument identifier.
 #[expect(
     clippy::too_many_arguments,
     reason = "the fixed schema entry owns every serialised field explicitly"
@@ -95,6 +97,7 @@ fn entry(
     }
 }
 
+/// Converts a localization model into its ordered identifier entries.
 #[expect(
     clippy::too_many_lines,
     reason = "the fixed schema mapping stays auditable as one ordered identifier list"
@@ -182,10 +185,12 @@ fn entries(model: &LocalizationIds, ident: &Ident, span: Span) -> Vec<Entry> {
     output
 }
 
+/// Serializes an artefact value using the stable pretty JSON representation.
 fn json<T: Serialize>(value: &T) -> Result<Vec<u8>, serde_json::Error> {
     serde_json::to_vec_pretty(value)
 }
 
+/// Sorts entries so repeated builds produce deterministic output.
 fn ordered(mut entries: Vec<Entry>) -> Vec<Entry> {
     entries.sort_by(|left, right| {
         (&left.id, &left.kind, &left.type_name, &left.field).cmp(&(
@@ -198,6 +203,7 @@ fn ordered(mut entries: Vec<Entry>) -> Vec<Entry> {
     entries
 }
 
+/// Renders one JSON file or a capped set of split files.
 fn render(source_entries: Vec<Entry>) -> Result<Vec<ArtefactFile>, serde_json::Error> {
     let ordered_entries = ordered(source_entries);
     let single = json(&Document {
@@ -256,27 +262,32 @@ fn render(source_entries: Vec<Entry>) -> Result<Vec<ArtefactFile>, serde_json::E
     Ok(output)
 }
 
+/// Returns whether the consuming build explicitly requested artefact output.
 fn requested() -> bool {
     std::env::var("ORTHO_CONFIG_EMIT_IDENTIFIERS").as_deref() == Ok("1")
 }
 
+/// Replaces a generated file atomically through a sibling temporary file.
 fn atomic_write(path: &Path, contents: &[u8]) -> std::io::Result<()> {
     let temporary = path.with_extension("tmp");
     fs::write(&temporary, contents)?;
     fs::rename(temporary, path)
 }
 
+/// Hashes a source path for a stable per-expansion fragment name.
 fn hash(value: &str) -> u64 {
     let mut hasher = DefaultHasher::new();
     value.hash(&mut hasher);
     hasher.finish()
 }
 
+/// Computes the fragment path for one deriving type and source file.
 fn fragment_path(root: &Path, ident: &Ident, source: &Source) -> PathBuf {
     root.join(FRAGMENT_DIR)
         .join(format!("{ident}-{:016x}.json", hash(&source.file)))
 }
 
+/// Reads JSON fragments and drops fragments for removed source files.
 fn merge_fragments(root: &Path) -> Result<Vec<Entry>, String> {
     let fragments = root.join(FRAGMENT_DIR);
     let mut output = Vec::new();
