@@ -55,30 +55,60 @@ COVERAGE_ACTION: typ.Final[str] = (
 #:
 #: Per workflow, because the two lanes differ by an order of magnitude
 #: and holding the trunk lane to the pull-request lane's figure would
-#: demand a ceiling its own runs cannot justify. Measured from the worst
-#: of several runs rather than one:
+#: demand a ceiling its own runs cannot justify.
 #:
-#: - `ci.yml`: 2,717 s on the Windows leg of run 34069372116, where the
-#:   two cache-save steps alone took 679 s and 567 s. Read across ten
-#:   successful runs. Allowed 45 minutes.
-#: - `coverage-main.yml`: 138 s on run 31908409573, read across ten.
-#:   Allowed 15 minutes.
+#: Measured from the worst of many runs rather than one, and across runs
+#: of every conclusion rather than successful ones only, since a run
+#: cancelled at its ceiling is the case the sizing exists to prevent.
+#: The gap is the job's duration less its two watchdog-bounded coverage
+#: steps, so it is exactly the work the job timer covers and the
+#: watchdogs do not.
 #:
-#: None of those runs was genuinely cold.
+#: - `ci.yml`: 3,257 s on the Windows leg of run 33447440225, whose two
+#:   coverage steps took 1,323 s and 950 s of a 5,530 s job. Read across
+#:   103 jobs, 100 successful and the rest failed or cancelled. Allowed
+#:   60 minutes.
+#: - `coverage-main.yml`: 284 s on run 31908409573, read across 31 runs,
+#:   29 successful and 2 failed. Allowed 15 minutes.
+#:
+#: No run in either sample was ended by any of these four timers: the
+#: worst `ci.yml` job reached 5,530 s of its ceiling. None of them was
+#: genuinely cold either.
 OUTSIDE_WATCHDOG_ALLOWANCE_SECONDS: typ.Final[dict[str, float]] = {
-    "ci.yml": 45 * 60.0,
+    "ci.yml": 60 * 60.0,
     "coverage-main.yml": 15 * 60.0,
 }
 
 #: What an unmeasured workflow is held to. The larger of the two above,
 #: so a new coverage lane meets the stricter requirement until someone
 #: measures it and adds its own figure with a run id.
-DEFAULT_OUTSIDE_WATCHDOG_ALLOWANCE_SECONDS: typ.Final[float] = 45 * 60.0
+DEFAULT_OUTSIDE_WATCHDOG_ALLOWANCE_SECONDS: typ.Final[float] = 60 * 60.0
 
-#: Floor for the termination allowance, used when the configuration sets
-#: no grace period, as this one does not. Generous against nextest's
-#: ten-second default and far too small to hide a real overrun.
-MINIMUM_TERMINATION_ALLOWANCE_SECONDS: typ.Final[float] = 60.0
+#: How many coverage steps each job is required to run, pinned by
+#: coordinate. The ceiling requirement is derived from the number of
+#: steps found, so deleting one lowers the requirement and every
+#: assertion still passes while the lane loses half its instrumentation.
+REQUIRED_COVERAGE_STEPS: typ.Final[dict[tuple[str, str], int]] = {
+    ("ci.yml", "build-test"): 2,
+    ("coverage-main.yml", "coverage-upload"): 2,
+}
+
+#: How far a ceiling must sit above its requirement rather than merely
+#: reaching it. A ceiling equal to the sum it has to contain cancels the
+#: job at the moment the innermost timer would have reported the
+#: overrun, so the report is lost exactly when it is wanted. Fifteen
+#: minutes is the margin the other lanes in this estate carry.
+CEILING_MARGIN_SECONDS: typ.Final[float] = 15 * 60.0
+
+#: What nextest allows a test between `SIGTERM` and `SIGKILL` when the
+#: configuration names no `grace-period`, as this one does not.
+NEXTEST_DEFAULT_GRACE_PERIOD_SECONDS: typ.Final[float] = 10.0
+
+#: Added to that grace period to cover the teardown and report writing
+#: that follow it. A separate term rather than a floor over the two, so
+#: raising a grace period raises the requirement instead of vanishing
+#: into it.
+TERMINATION_SAFETY_MARGIN_SECONDS: typ.Final[float] = 60.0
 
 #: Build time inside a `cargo` invocation before nextest starts its own
 #: clock. Only used if a `global-timeout` appears.
@@ -153,12 +183,12 @@ def largest_test_allowance(config_text: str) -> float:
     return max(budgets)
 
 
-def termination_allowance(config_text: str) -> float:
-    """Return the time nextest may take to stop the run, in seconds.
+def grace_period(config_text: str) -> float:
+    """Return the longest grace period the configuration names, in seconds.
 
     Read from the configuration rather than fixed, so a profile that
-    raised its grace period raises the requirement too. This file sets
-    none, so the floor applies.
+    raised its grace period raises the requirement too. nextest's own
+    default applies when none is named, as none is here.
 
     Parameters
     ----------
@@ -168,11 +198,35 @@ def termination_allowance(config_text: str) -> float:
     Returns
     -------
     float
-        The largest configured grace period, or the floor.
+        The largest configured grace period, or nextest's default.
     """
     periods = _GRACE_PERIOD.findall(config_text)
-    largest = max((seconds(period) for period in periods), default=0.0)
-    return max(largest, MINIMUM_TERMINATION_ALLOWANCE_SECONDS)
+    return max(
+        (seconds(period) for period in periods),
+        default=NEXTEST_DEFAULT_GRACE_PERIOD_SECONDS,
+    )
+
+
+def termination_allowance(config_text: str) -> float:
+    """Return the time nextest may take to stop the run, in seconds.
+
+    Two terms, not one: what nextest promises a test after ``SIGTERM``,
+    plus a margin for the teardown and report writing that follow it.
+    A single floor over the two would absorb every grace period below
+    the margin, so raising one would look free until the run it
+    cancelled.
+
+    Parameters
+    ----------
+    config_text : str
+        The nextest configuration file's text.
+
+    Returns
+    -------
+    float
+        The grace period plus the safety margin.
+    """
+    return grace_period(config_text) + TERMINATION_SAFETY_MARGIN_SECONDS
 
 
 def global_timeout(config_text: str) -> float | None:
@@ -287,8 +341,87 @@ def nextest_config() -> str:
     return NEXTEST_CONFIG.read_text(encoding="utf-8")
 
 
-@pytest.fixture(scope="module")
-def coverage_jobs() -> tuple[CoverageJob, ...]:
+def required_ceiling(budgets: typ.Sequence[float], allowance: float) -> float:
+    """Return the smallest acceptable ceiling for one coverage job.
+
+    Three terms. Each coverage step may legitimately spend its whole
+    watchdog, so the sum is the floor. The measured work outside those
+    windows is added because the job timer covers it and the watchdogs
+    do not. The margin is added because a ceiling equal to that sum
+    cancels the job at the moment the watchdog would have reported the
+    overrun, and the report is the only thing that makes it actionable.
+
+    Parameters
+    ----------
+    budgets : typ.Sequence[float]
+        One watchdog budget per coverage step, in seconds.
+    allowance : float
+        The measured work outside those windows, in seconds.
+
+    Returns
+    -------
+    float
+        The smallest acceptable ceiling, in seconds.
+    """
+    return sum(budgets) + allowance + CEILING_MARGIN_SECONDS
+
+
+def _coverage_steps(job: dict[str, typ.Any]) -> list[dict[str, typ.Any]]:
+    """Return the steps in one job that invoke the coverage action.
+
+    Parameters
+    ----------
+    job : dict[str, typ.Any]
+        The parsed job.
+
+    Returns
+    -------
+    list[dict[str, typ.Any]]
+        The matching steps, in the order the job runs them.
+    """
+    steps = job.get("steps")
+    if not isinstance(steps, list):
+        return []
+    return [
+        step
+        for step in steps
+        if isinstance(step, dict) and COVERAGE_ACTION in str(step.get("uses", ""))
+    ]
+
+
+def _coverage_job(
+    workflow: str, job_name: str, job: dict[str, typ.Any]
+) -> CoverageJob | None:
+    """Return one job's budgets, or None when it runs no coverage step.
+
+    Parameters
+    ----------
+    workflow : str
+        The workflow file's name.
+    job_name : str
+        The job's identifier.
+    job : dict[str, typ.Any]
+        The parsed job.
+
+    Returns
+    -------
+    CoverageJob or None
+        The job's budgets, or None when it invokes no coverage step.
+    """
+    steps = _coverage_steps(job)
+    if not steps:
+        return None
+    raw_timeout = job.get("timeout-minutes")
+    return CoverageJob(
+        workflow=workflow,
+        job=job_name,
+        steps=len(steps),
+        watchdogs=tuple(_watchdog_of(job, step) for step in steps),
+        job_timeout=None if raw_timeout is None else float(raw_timeout) * 60.0,
+    )
+
+
+def coverage_jobs_of() -> tuple[CoverageJob, ...]:
     """Return every job invoking the coverage action, with its budgets.
 
     Jobs are the unit rather than steps, because the ceiling is a job's
@@ -300,32 +433,25 @@ def coverage_jobs() -> tuple[CoverageJob, ...]:
     tuple[CoverageJob, ...]
         One entry per coverage-invoking job.
     """
-    found: list[CoverageJob] = []
-    for name, document in _workflow_documents().items():
-        for job_name, job in (document.get("jobs") or {}).items():
-            if not isinstance(job, dict):
-                continue
-            steps = [
-                step
-                for step in (job.get("steps") or [])
-                if isinstance(step, dict)
-                and COVERAGE_ACTION in str(step.get("uses", ""))
-            ]
-            if not steps:
-                continue
-            raw_timeout = job.get("timeout-minutes")
-            found.append(
-                CoverageJob(
-                    workflow=name,
-                    job=str(job_name),
-                    steps=len(steps),
-                    watchdogs=tuple(_watchdog_of(job, step) for step in steps),
-                    job_timeout=(
-                        None if raw_timeout is None else float(raw_timeout) * 60.0
-                    ),
-                )
-            )
-    return tuple(found)
+    return tuple(
+        found
+        for name, document in _workflow_documents().items()
+        for job_name, job in (document.get("jobs") or {}).items()
+        if isinstance(job, dict)
+        and (found := _coverage_job(name, str(job_name), job)) is not None
+    )
+
+
+@pytest.fixture(scope="module")
+def coverage_jobs() -> tuple[CoverageJob, ...]:
+    """Return every coverage-invoking job, read once for the module.
+
+    Returns
+    -------
+    tuple[CoverageJob, ...]
+        One entry per coverage-invoking job.
+    """
+    return coverage_jobs_of()
 
 
 def test_the_coverage_action_is_invoked_somewhere(
@@ -340,6 +466,27 @@ def test_the_coverage_action_is_invoked_somewhere(
     assert coverage_jobs, (
         f"no workflow job uses {COVERAGE_ACTION}; either coverage moved or "
         f"this contract stopped recognizing it"
+    )
+
+
+def test_each_coverage_job_runs_the_steps_it_is_meant_to() -> None:
+    """The ceiling's requirement is derived from the steps that are there.
+
+    ``required`` is the sum of the watchdogs found plus the allowance, so
+    deleting one of a job's two coverage steps lowers the requirement by
+    1,800 s and every timing assertion still passes, while the lane
+    silently measures half of what it did. Pinning the count by
+    coordinate is what makes that deletion fail.
+    """
+    found = {(job.workflow, job.job): job.steps for job in coverage_jobs_of()}
+    wrong = {
+        coordinate: (expected, found.get(coordinate))
+        for coordinate, expected in REQUIRED_COVERAGE_STEPS.items()
+        if found.get(coordinate) != expected
+    }
+    assert not wrong, (
+        f"these jobs do not run the number of coverage steps recorded in the "
+        f"developers' guide, as expected versus found: {wrong}"
     )
 
 
@@ -387,7 +534,7 @@ def test_the_job_ceiling_contains_every_watchdog_and_the_work_around_them(
         allowance = OUTSIDE_WATCHDOG_ALLOWANCE_SECONDS.get(
             job.workflow, DEFAULT_OUTSIDE_WATCHDOG_ALLOWANCE_SECONDS
         )
-        required = sum(budgets) + allowance
+        required = required_ceiling(budgets, allowance)
         assert job.job_timeout is not None, (
             f"{job} runs {job.steps} watchdog-bounded cargo invocation(s) in a "
             f"job with no timeout-minutes; the outermost tier is missing and "
@@ -396,8 +543,9 @@ def test_the_job_ceiling_contains_every_watchdog_and_the_work_around_them(
         assert job.job_timeout >= required, (
             f"{job} has a ceiling of {job.job_timeout:.0f}s, below the "
             f"{required:.0f}s needed to contain {job.steps} watchdog(s) "
-            f"totalling {sum(budgets):.0f}s plus {allowance:.0f}s of measured "
-            f"work outside them; an overrun would be cancelled rather than "
+            f"totalling {sum(budgets):.0f}s, {allowance:.0f}s of measured "
+            f"work outside them, and a {CEILING_MARGIN_SECONDS:.0f}s margin "
+            f"above that sum; an overrun would be cancelled rather than "
             f"reported"
         )
 
@@ -455,4 +603,52 @@ def test_the_largest_per_test_allowance_counts_the_multiplier(
     assert largest > max(periods), (
         f"the largest per-test allowance came out as {largest:.0f}s, no more "
         f"than the longest bare period; terminate-after was not counted"
+    )
+
+
+def test_the_termination_allowance_is_the_grace_period_plus_the_margin() -> None:
+    """The two terms are added, not maximized over.
+
+    A single floor over the grace period and the margin would absorb
+    every grace period below the margin, so adding a thirty-second one
+    to this configuration would demand nothing more of the watchdog. No
+    ``global-timeout`` is set here, so the ordering assertion that uses
+    this reading is skipped entirely, which leaves this test the only
+    thing standing behind it.
+    """
+    assert termination_allowance("") == pytest.approx(
+        NEXTEST_DEFAULT_GRACE_PERIOD_SECONDS + TERMINATION_SAFETY_MARGIN_SECONDS
+    ), "an unnamed grace period must fall back to nextest's own default"
+    configured = termination_allowance(
+        'slow-timeout = { period = "60s", grace-period = "30s" }'
+    )
+    assert configured == pytest.approx(30.0 + TERMINATION_SAFETY_MARGIN_SECONDS), (
+        "a grace period below the margin must still raise the allowance; "
+        "a maximum over the two terms would have discarded it"
+    )
+    largest = termination_allowance(
+        'slow-timeout = { grace-period = "5s" }\n'
+        'slow-timeout = { grace-period = "45s" }'
+    )
+    assert largest == pytest.approx(45.0 + TERMINATION_SAFETY_MARGIN_SECONDS), (
+        "the largest configured grace period governs the allowance"
+    )
+
+
+def test_the_required_ceiling_carries_all_three_terms() -> None:
+    """Watchdogs, measured work, and the margin above their sum.
+
+    Every ceiling in this tree already sits well above its requirement,
+    so dropping a term from the derivation changes nothing observable
+    here and the assertion over the workflows still passes. Driving the
+    derivation with controlled numbers is what makes the loss visible.
+    """
+    assert required_ceiling([1800.0, 1800.0], 3600.0) == pytest.approx(
+        3600.0 + 3600.0 + CEILING_MARGIN_SECONDS
+    ), "two watchdogs, the allowance, and the margin are all added"
+    assert required_ceiling([1800.0], 0.0) == pytest.approx(
+        1800.0 + CEILING_MARGIN_SECONDS
+    ), "the margin applies even when nothing runs outside the watchdog"
+    assert required_ceiling([], 0.0) == pytest.approx(CEILING_MARGIN_SECONDS), (
+        "the margin is a term of its own, not a fraction of the others"
     )

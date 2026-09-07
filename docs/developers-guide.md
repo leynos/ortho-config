@@ -842,12 +842,12 @@ they must be ordered lives in the `generate-coverage` README in
 [`leynos/shared-actions`][shared-actions-coverage]. Three of the four are set
 here.
 
-| Tier | What it bounds | Where it is set | Current value |
-| --- | --- | --- | --- |
-| Per-test `slow-timeout` | one test | `.config/nextest.toml` | 600 s (120 s x 5) for the longest override |
-| nextest `global-timeout` | the whole test run | `.config/nextest.toml` | **not set** |
-| Cargo watchdog | one `cargo` invocation, wall clock | `RUN_RUST_CARGO_WAIT_TIMEOUT` at job level | 1,800 s (30 m) |
-| Job `timeout-minutes` | the whole job | job level | 120 m in `ci.yml`, 90 m in `coverage-main.yml` |
+| Tier                     | What it bounds                     | Where it is set                            | Current value                                  |
+| ------------------------ | ---------------------------------- | ------------------------------------------ | ---------------------------------------------- |
+| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`                     | 600 s (120 s x 5) for the longest override     |
+| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`                     | **not set**                                    |
+| Cargo watchdog           | one `cargo` invocation, wall clock | `RUN_RUST_CARGO_WAIT_TIMEOUT` at job level | 1,800 s (30 m)                                 |
+| Job `timeout-minutes`    | the whole job                      | job level                                  | 135 m in `ci.yml`, 90 m in `coverage-main.yml` |
 
 *Table: the timers that can end a run, innermost first.*
 
@@ -869,11 +869,10 @@ callers invoke the action once.
 
 ### The per-test budget is a product, not a period
 
-`terminate-after` counts warning periods, so the budget a test gets is
-`period` multiplied by it. The longest override here is 120 s with a multiplier
-of five, so reading the period alone would report 120 s where the real figure
-is 600 s. The contract asserts that reading outright rather than leaving it
-implied.
+`terminate-after` counts warning periods, so the budget a test gets is `period`
+multiplied by it. The longest override here is 120 s with a multiplier of five,
+so reading the period alone would report 120 s where the real figure is 600 s.
+The contract asserts that reading outright rather than leaving it implied.
 
 ### The whole-run budget is a gap, not a decision
 
@@ -895,21 +894,37 @@ The allowance for work outside the watchdogs is per lane, because the two
 differ by an order of magnitude and holding the trunk lane to the pull-request
 lane's figure would demand a ceiling its own runs cannot justify.
 
-| Lane | Coverage steps | Worst whole job | Outside those steps | Run |
-| --- | --- | --- | --- | --- |
-| `ci.yml` `build-test` (windows-latest) | 1,307 s + 1,172 s | 5,196 s | 2,717 s | 34069372116 |
-| `ci.yml` `build-test` (ubuntu-latest) | 636 s + 554 s | 2,017 s | 827 s | 34069372116 |
-| `coverage-main.yml` `coverage-upload` | 1,204 s total | 1,272 s | 68 s | 33581587296 |
+| Lane                                   | Coverage steps  | Worst whole job | Outside those steps | Run         |
+| -------------------------------------- | --------------- | --------------- | ------------------- | ----------- |
+| `ci.yml` `build-test` (windows-latest) | 1,323 s + 950 s | 5,530 s         | 3,257 s             | 33447440225 |
+| `coverage-main.yml` `coverage-upload`  | 563 s + 495 s   | 1,342 s         | 284 s               | 31908409573 |
 
-*Table: measured coverage-step and whole-job durations, read across ten
-successful runs of each workflow.*
+*Table: measured coverage-step and whole-job durations. The last column is the
+job's duration less its two watchdog-bounded coverage steps, so it is the work
+the job timer covers and the watchdogs do not.*
+
+The sample is 103 `ci.yml` coverage jobs, 100 successful and the rest failed or
+cancelled, and 31 runs of `coverage-main.yml`, 29 successful and 2 failed. Runs
+of every conclusion are read, not only successful ones: a run cancelled at its
+ceiling is the case the sizing exists to prevent. No run in either sample was
+ended by any of the four timers, the worst `ci.yml` job reaching 5,530 s.
 
 On the Windows leg the work outside the coverage steps is dominated by cache
-saving: 679 s and 567 s for the two save steps on that run alone. So `ci.yml`
-is allowed 45 minutes and `coverage-main.yml` 15, making the requirements 105
-and 75 minutes against ceilings of 120 and 90. A lane in a workflow the
-contract has not measured is held to the larger allowance until someone
-measures it and records a run id.
+saving. So `ci.yml` is allowed 60 minutes and `coverage-main.yml` 15, making
+the requirements 120 and 75 minutes. The contract asks for 15 minutes above
+each requirement rather than merely reaching it, because a ceiling equal to the
+sum it contains cancels the job at the moment the watchdog would have reported
+the overrun, and the report is the only thing that makes an overrun actionable.
+The ceilings are therefore 135 and 90 minutes.
+
+A lane in a workflow the contract has not measured is held to the larger
+allowance until someone measures it and records a run id.
+
+The first version of this section recorded 2,717 s for `ci.yml` and two
+different figures for `coverage-main.yml`, 68 s here and 138 s in the contract.
+Both came from counting the coverage steps differently: the numbers above
+subtract the two `generate-coverage` steps and nothing else, which is exactly
+what the watchdogs bound.
 
 None of those runs was genuinely cold. One run is the coldest seen so far, not
 a measurement of the cold case.
