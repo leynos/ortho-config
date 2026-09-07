@@ -410,12 +410,23 @@ def _jobs_in(document: dict[str, typ.Any]) -> dict[str, dict[str, typ.Any]]:
     }
 
 
+#: What GitHub accepts as a number of minutes. `bool` is excluded
+#: rather than merely unlisted, because it is an `int` in Python and
+#: `timeout-minutes: true` would otherwise read as one minute.
+_MINUTE_TYPES: typ.Final[tuple[type, ...]] = (int, float, str)
+
+
+def _is_minutes(raw: object) -> bool:
+    """Return whether a value could be a number of minutes."""
+    return isinstance(raw, _MINUTE_TYPES) and not isinstance(raw, bool)
+
+
 def _ceiling_seconds(raw: object) -> float | None:
     """Return a job's ``timeout-minutes`` in seconds, or None."""
-    if raw is None or isinstance(raw, bool) or not isinstance(raw, (int, float, str)):
+    if not _is_minutes(raw):
         return None
     try:
-        return float(raw) * 60.0
+        return float(typ.cast("int | float | str", raw)) * 60.0
     except ValueError:
         return None
 
