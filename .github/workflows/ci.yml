@@ -8,6 +8,13 @@ on:
 jobs:
   build-test:
     runs-on: ${{ matrix.os }}
+    # Two coverage steps run in this job, each under its own 1,800 s cargo
+    # watchdog, so the ceiling must contain both before it contains anything
+    # else. On the Windows leg the work outside them, dominated by cache save
+    # and restore, reached 2,717 s on run 34069372116, which makes the
+    # requirement 3,600 + 2,717 = 105 minutes. The job had no ceiling at all
+    # before this and so inherited GitHub's six-hour default.
+    timeout-minutes: 120
     permissions:
       contents: read
     env:
