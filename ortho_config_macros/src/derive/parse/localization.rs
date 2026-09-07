@@ -1,6 +1,6 @@
 //! Parsing for struct-level localization attributes.
 //!
-//! Recognises `localization_base` (the Fluent catalogue root for the derive)
+//! Recognizes `localization_base` (the Fluent catalogue root for the derive)
 //! and deliberately rejects `localized_default` with a deferral diagnostic
 //! (Decision D-4) rather than silently discarding it.
 

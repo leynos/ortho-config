@@ -4,7 +4,7 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
 and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
-Status: IN PROGRESS
+Status: COMPLETE
 
 ## Purpose / big picture
 
@@ -568,7 +568,13 @@ contracts, alternatives, scaling, failure modes, viability).
 
 ## Outcomes & retrospective
 
-(To be completed as milestones land.)
+All milestones are complete. The derive now emits the public localization
+constants with compile-time argument-id collision diagnostics; generated docs
+IR delegates path-aware defaults and reports version `2.0`; and identifier
+artefacts are emitted only when explicitly requested with
+`ORTHO_CONFIG_EMIT_IDENTIFIERS=1`. The design, ADRs, guides, changelog, and
+roadmap record these contracts and their migration boundaries. The final
+workspace gates and identifier-artefact end-to-end coverage passed.
 
 ## Context and orientation
 
@@ -582,8 +588,8 @@ The workspace (`Cargo.toml`, version 0.8.0, edition 2024) contains:
   `LocalizeCmd`, `WithBase`, `default_base_for`, per-parent collision
   `assert!`s), and localized parsing (`clap_command/parse.rs`: `LocalizedParse`,
   `parse_localized_command`). The docs IR lives under `ortho_config/src/docs/`
-  (`OrthoConfigDocs` with a single `get_doc_metadata()` method, `DocMetadata`
-  and friends in `ir.rs`, `ORTHO_DOCS_IR_VERSION = "1.1"`).
+  (`OrthoConfigDocs` with path-aware `get_doc_metadata_for_path` delegation,
+  `DocMetadata` and friends in `ir.rs`, `ORTHO_DOCS_IR_VERSION = "2.0"`).
 - `ortho_config_macros/` — the proc-macro crate implementing
   `#[derive(OrthoConfig)]` (`src/lib.rs`, `derive_ortho_config`). Parsing lives
   under `src/derive/parse/` (`StructAttrs`, `FieldAttrs`, `clap_attrs.rs` with
@@ -613,7 +619,7 @@ Terms used below:
 - "Docs IR": the JSON-serializable `DocMetadata` structure the derive emits
   for documentation generators.
 
-Prior work this task builds on: 11.1.1 promoted `LocalizeCmd` and
+This task builds on prior work: 11.1.1 promoted `LocalizeCmd` and
 `message_id_for`; 11.1.2 promoted `LocalizedParse` and added an
 identifier-coverage test (`ortho_config/tests/localized_parse.rs`, the
 `RecordingLocalizer` and `identifier_coverage_matches_message_id_for`) that
@@ -1254,3 +1260,9 @@ documentation work. The downstream artefact contract now marks JSON entries as
 standalone declaration ids and makes compiled docs IR authoritative for mounted
 paths, avoiding a second context-free overclaim. Remaining Milestone 4 work now
 includes subcommand metadata rather than deferring it to a follow-up.
+
+2026-09-07: implementation complete. Milestones 3 through 6 are checked off;
+the design now records generated path-aware docs delegation, the guides describe
+the opt-in artefact workflow, and the roadmap reflects the completed delegation
+and collision checks. The docs IR migration to version `2.0` and the standalone
+artefact boundary are now the implemented contracts.

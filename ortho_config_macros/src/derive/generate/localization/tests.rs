@@ -157,12 +157,12 @@ fn default_base_resolves_to_kebab_struct_name() -> Result<()> {
     };
     let model = model_for(&input)?;
     ensure!(
-        model.base.as_ref() == "app_config",
+        model.base.as_ref() == "app-config",
         "default base should be kebabed struct name, got {}",
         model.base.as_ref()
     );
     ensure!(
-        model.command.about_id.as_ref() == "app_config-about",
+        model.command.about_id.as_ref() == "app-config-about",
         "about id mismatch: {}",
         model.command.about_id.as_ref()
     );

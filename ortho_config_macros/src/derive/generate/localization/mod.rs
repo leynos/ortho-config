@@ -24,6 +24,7 @@ use suffix::MessageSuffix;
 pub(crate) struct LocalizationBase(String);
 
 impl LocalizationBase {
+    /// Normalizes each dotted catalogue-base segment for Fluent.
     fn normalize(&self, span: Span) -> syn::Result<FluentSegments> {
         self.0
             .split('.')
@@ -34,6 +35,7 @@ impl LocalizationBase {
 }
 
 impl AsRef<str> for LocalizationBase {
+    /// Returns the original dotted catalogue base.
     fn as_ref(&self) -> &str {
         &self.0
     }
@@ -43,6 +45,7 @@ impl AsRef<str> for LocalizationBase {
 pub(crate) struct ClapArgId(String);
 
 impl ClapArgId {
+    /// Normalizes each dotted Clap argument-id segment for Fluent.
     fn normalize(&self, span: Span) -> syn::Result<FluentSegments> {
         self.0
             .split('.')
@@ -53,6 +56,7 @@ impl ClapArgId {
 }
 
 impl AsRef<str> for ClapArgId {
+    /// Returns the raw Clap argument id for code emission.
     fn as_ref(&self) -> &str {
         &self.0
     }
@@ -62,6 +66,7 @@ impl AsRef<str> for ClapArgId {
 pub(crate) struct FluentSegments(Vec<String>);
 
 impl FluentSegments {
+    /// Ensures the first normalized segment starts with an ASCII letter.
     fn ensure_leading_ascii_letter(&self, span: Span) -> syn::Result<()> {
         let Some(first) = self.0.first() else {
             return Err(syn::Error::new(
@@ -85,16 +90,19 @@ impl FluentSegments {
         }
     }
 
+    /// Returns a copy with one additional segment.
     fn with_segment(&self, segment: impl Into<String>) -> Self {
         let mut segments = self.0.clone();
         segments.push(segment.into());
         Self(segments)
     }
 
+    /// Returns a copy with one fixed message suffix.
     fn with_suffix(&self, suffix: MessageSuffix) -> Self {
         self.with_segment(suffix.as_ref())
     }
 
+    /// Joins the segments into a validated Fluent message id.
     fn join(&self, span: Span) -> syn::Result<FluentMessageId> {
         join_identifier(&self.0, span).map(FluentMessageId)
     }
@@ -104,6 +112,7 @@ impl FluentSegments {
 pub(crate) struct FluentMessageId(String);
 
 impl AsRef<str> for FluentMessageId {
+    /// Returns the joined Fluent message id.
     fn as_ref(&self) -> &str {
         &self.0
     }
@@ -142,16 +151,18 @@ pub(crate) struct LocalizationIds {
 
 /// Resolves the dotted catalogue base for a deriving struct (Decision D-5).
 ///
-/// Precedence: `#[ortho_config(localization_base = "…")]`, then the docs app
-/// name resolution (`discovery.app_name` if present, else the derive's default
-/// app name), matching `generate::docs::sections::resolve_app_name`.
+/// Precedence: `#[ortho_config(localization_base = "…")]`, then
+/// `discovery.app_name`, then the kebab-cased derive default app name.
 fn resolve_base(struct_attrs: &StructAttrs, ident: &Ident) -> LocalizationBase {
-    LocalizationBase(
+    LocalizationBase(struct_attrs.localization_base.clone().unwrap_or_else(|| {
         struct_attrs
-            .localization_base
-            .clone()
-            .unwrap_or_else(|| super::docs::sections::resolve_app_name(struct_attrs, ident)),
-    )
+            .discovery
+            .as_ref()
+            .and_then(|discovery| discovery.app_name.clone())
+            .unwrap_or_else(|| {
+                crate::derive::build::default_app_name(struct_attrs, ident).to_kebab_case()
+            })
+    }))
 }
 
 /// Builds the identifier model for a deriving struct.
@@ -242,18 +253,22 @@ pub(crate) fn emit_identifier_artefact(model: &LocalizationIds, ident: &Ident) -
     artefact::emit(model, ident, ident.span())
 }
 
+/// Converts a domain message id into a literal for generated code.
 fn lit(value: &FluentMessageId) -> syn::LitStr {
     syn::LitStr::new(value.as_ref(), Span::call_site())
 }
 
+/// Normalizes the resolved localization base.
 fn normalize_base(base: &LocalizationBase, span: Span) -> syn::Result<FluentSegments> {
     base.normalize(span)
 }
 
+/// Validates the root segment required by Fluent identifiers.
 fn check_leading_letter(base_segments: &FluentSegments, span: Span) -> syn::Result<()> {
     base_segments.ensure_leading_ascii_letter(span)
 }
 
+/// Builds all fixed command-level message identifiers.
 fn build_command_ids(base_segments: &FluentSegments) -> syn::Result<CommandIds> {
     let span = Span::call_site();
     Ok(CommandIds {
@@ -267,7 +282,7 @@ fn build_command_ids(base_segments: &FluentSegments) -> syn::Result<CommandIds> 
     })
 }
 
-/// Joins base segments plus extra segments into one identifier.
+/// Joins the base with one fixed command-level suffix.
 fn composed_id(
     base: &FluentSegments,
     suffix: MessageSuffix,
@@ -276,6 +291,7 @@ fn composed_id(
     base.with_suffix(suffix).join(span)
 }
 
+/// Builds and validates identifiers for eligible struct fields.
 fn build_arg_models(
     fields: &[syn::Field],
     field_attrs: &[FieldAttrs],
@@ -346,9 +362,10 @@ fn build_arg_models(
     Ok(args)
 }
 
-/// Normalises a (possibly dotted) clap argument id into its joined form plus
+/// Normalizes a (possibly dotted) clap argument id into its joined form plus
 /// its per-segment parts. Mirrors the runtime `message_id_for` suffix handling:
-/// `args.<arg_id>.help` is split on `.`, with each segment normalised.
+/// `args.<arg_id>.help` is split on `.`, with each segment normalized.
+/// Normalizes a Clap argument id into its joined and segment forms.
 fn normalise_arg_id(
     arg_id: &ClapArgId,
     span: Span,
@@ -359,6 +376,7 @@ fn normalise_arg_id(
 }
 
 /// Builds an argument identifier: base + `args` + arg segments + suffix.
+/// Joins a base, argument path, and suffix into one argument id.
 fn arg_id_composed(
     base: &FluentSegments,
     arg_segments: &FluentSegments,
