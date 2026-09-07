@@ -16,9 +16,10 @@ jobs:
     runs-on: ubuntu-latest
     # Two coverage steps run in this job, each under its own 1,800 s cargo
     # watchdog, so the ceiling must contain both. The work outside them
-    # reached 138 s on run 31908409573, and the contract allows 15 minutes
-    # against that, which makes the requirement 3,600 + 900 = 75 minutes.
-    # This job had no ceiling either.
+    # reached 284 s on run 31908409573, read across 31 runs of every
+    # conclusion, and the contract allows 15 minutes against that, which
+    # makes the requirement 3,600 + 900 = 75 minutes with 15 more asked for
+    # above it. This job had no ceiling either.
     timeout-minutes: 90
     permissions:
       contents: read
