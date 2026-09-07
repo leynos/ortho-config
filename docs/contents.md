@@ -48,6 +48,8 @@
 - [ADR-007: Downstream context command naming](adr-007-downstream-context-command-naming.md):
   review the accepted `context --json` downstream command convention and `kind`
   discriminator rule for agent-context payloads.
+- [ADR-008: Opt-in identifier artefact emission](adr-008-opt-in-identifier-artefact-emission.md):
+  review the guarded build-time export for derived CLI identifiers.
 - [Archived v0.8.0 roadmap](archive/v0-8-0-roadmap.md): review completed
   phases, steps, and tasks from the roadmap that preceded the active
   agent-native plan.

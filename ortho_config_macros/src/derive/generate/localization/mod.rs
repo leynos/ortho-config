@@ -3,6 +3,7 @@
 //! This pass converts a deriving struct's fields and base into a model whose
 //! identifiers agree with `ortho_config::message_id_for`.
 
+mod artefact;
 mod identifier;
 mod suffix;
 #[cfg(test)]
@@ -234,6 +235,11 @@ pub(crate) fn emit_localization_impl(
             const ARG_IDS: &'static [#krate::ArgLocalizationIds] = &[ #( #arg_entries ),* ];
         }
     }
+}
+
+/// Emits the optional identifier artefact after model validation succeeds.
+pub(crate) fn emit_identifier_artefact(model: &LocalizationIds, ident: &Ident) -> syn::Result<()> {
+    artefact::emit(model, ident, ident.span())
 }
 
 fn lit(value: &FluentMessageId) -> syn::LitStr {

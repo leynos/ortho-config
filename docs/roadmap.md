@@ -580,17 +580,17 @@ later progressively add opinion.
     `preparing_sandbox` with no findings or rate-limit message; this is
     recorded in the 11.1.2 execplan.
 
-- [ ] 11.1.3. Add the `OrthoConfigLocalization` trait and derive emission.
+- [x] 11.1.3. Add the `OrthoConfigLocalization` trait and derive emission.
   - Requires 11.1.2.
   - See cli-localization-design.md §8.1 and §8.2.
-  - [ ] Define `OrthoConfigLocalization` with `ABOUT_ID`, `LONG_ABOUT_ID`,
+  - [x] Define `OrthoConfigLocalization` with `ABOUT_ID`, `LONG_ABOUT_ID`,
     `USAGE_ID`, and per-argument `ARG_IDS` constants.
-  - [ ] Extend the `OrthoConfig` derive to emit `OrthoConfigLocalization`
+  - [x] Extend the `OrthoConfig` derive to emit `OrthoConfigLocalization`
     impls. Generate identifiers from command path and field `id` (or
     kebab-cased field name).
   - [ ] Add a blanket `OrthoConfigDocs` impl that delegates to
     `OrthoConfigLocalization` so the docs IR picks up the same identifiers.
-  - [ ] Emit `${OUT_DIR}/ortho-config/cli-identifiers.json` with a 1 MiB
+  - [x] Emit `${OUT_DIR}/ortho-config/cli-identifiers.json` with a 1 MiB
     cap and split-file behaviour for larger trees.
   - [ ] Add a compile-time `compile_error!` for fields whose normalized
     identifiers collide.

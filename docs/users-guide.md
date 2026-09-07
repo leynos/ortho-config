@@ -453,6 +453,20 @@ explicit at integration boundaries.
 
 ## Localize help and parse failures together
 
+Derived configurations implement `OrthoConfigLocalization`. Use
+`CommandLine::LOCALIZATION_BASE` with `LocalizeCmd::with_base` and the
+generated command and argument constants rather than repeating identifier
+strings; this prevents catalogue and command declarations from drifting.
+Duplicate normalized argument ids are rejected at compile time. Flattened,
+subcommand, and `skip_cli` fields do not receive argument constants.
+
+Documentation IR version 2.0 derives default command and eligible field ids
+from the mounted command path, replacing the older dotted defaults. To export
+standalone derived ids for tooling, run
+`cargo clean -p <package> && ORTHO_CONFIG_EMIT_IDENTIFIERS=1 cargo build -p <package>`.
+The resulting `${OUT_DIR}/ortho-config/cli-identifiers.json` is opt-in and
+provisional; do not set the variable globally, and use docs IR for mounted ids.
+
 Localization is most reliable when the command metadata is translated before
 parsing and any resulting error goes through the same localizer.
 `LocalizedParse` provides that path for the common case:

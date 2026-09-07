@@ -101,6 +101,13 @@ command identifiers are still a documented runtime panic contract owned by
 runtime panic tests until derive-emitted identifiers move validation to compile
 time.
 
+The runtime and macro normalizers are deliberate twins, locked by their shared
+version marker and property tests against `message_id_for`. Generated docs IR
+receives mounted paths through path-aware trait methods; handwritten trait
+implementations use their provided fallback. The optional identifier artefact
+uses per-expansion fragments and a deterministic merge below `OUT_DIR`; its
+schema has standalone scope until a downstream consumer joins it to docs IR.
+
 Add agent-native warning and hard-failure report fields to
 `cargo_orthohelp::policy` while `cargo-orthohelp` is the only emitter. Use
 `ORTHO_POLICY_REPORT_SCHEMA_VERSION` for compatibility and keep rule

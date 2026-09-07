@@ -284,8 +284,14 @@ review's findings are folded into the Decision Log and milestones below.
     locale catalogues, BDD expectations, and golden coverage migrated with it.
   - Full gates passed: `make check-fmt`, `make typecheck`, `make lint`, and
     `make test`.
-- [ ] Milestone 5: opt-in build-time identifier artefact.
-- [ ] Milestone 6: documentation, ADR-008, roadmap completion, final gates.
+- [x] Milestone 5: opt-in build-time identifier artefact.
+  - The macro writes schema-versioned standalone identifier fragments only for
+    `ORTHO_CONFIG_EMIT_IDENTIFIERS=1`, atomically merges them below `OUT_DIR`,
+    and splits output above the 1 MiB cap. The e2e fixture validates the schema
+    and warm-build no-write behaviour.
+- [x] Milestone 6: documentation, ADR-008, roadmap completion, final gates.
+  - ADR-008, the localization design, guides, ADR-006, changelog, and roadmap
+    document the path-aware IR migration and explicitly opt-in artefact flow.
 
 ## Surprises & discoveries
 
