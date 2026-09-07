@@ -271,8 +271,19 @@ review's findings are folded into the Decision Log and milestones below.
     `OrthoConfig` simultaneously without conflict (verified empirically).
   - CodeRabbit (`coderabbit review --agent --base-commit 40e5aa6`): 0
     findings across the 6 changed files.
-- [ ] Milestone 4: path-aware docs IR delegation to the localization
+- [x] Milestone 4: path-aware docs IR delegation to the localization
   identifiers (redesign approved 2026-08-17).
+  - `OrthoConfigDocs` and `OrthoConfigSubcommandDocs` now provide path-aware
+    fallbacks for handwritten implementations. Generated structs start from
+    `LOCALIZATION_BASE`; generated subcommands append each resolved clap label.
+  - Default about, synopsis, and localization-eligible field identifiers now
+    use `message_id_for` at the mounted path, while explicit and docs-only
+    values remain literal. Nested tests cover `greet`, `admin audit`, renamed
+    `admin grant-access`, and the standalone-path regression.
+  - The docs IR is version `2.0`; the `cargo-orthohelp` schema, fixture IR,
+    locale catalogues, BDD expectations, and golden coverage migrated with it.
+  - Full gates passed: `make check-fmt`, `make typecheck`, `make lint`, and
+    `make test`.
 - [ ] Milestone 5: opt-in build-time identifier artefact.
 - [ ] Milestone 6: documentation, ADR-008, roadmap completion, final gates.
 

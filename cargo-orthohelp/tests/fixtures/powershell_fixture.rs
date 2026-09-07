@@ -6,7 +6,7 @@ use cargo_orthohelp::schema::{CliMetadata, DefaultValue, EnvMetadata, FileMetada
 /// Builds minimal localized metadata used by `PowerShell` golden tests.
 pub(crate) fn minimal_doc() -> LocalizedDocMetadata {
     LocalizedDocMetadata {
-        ir_version: "1.1".to_owned(),
+        ir_version: "2.0".to_owned(),
         locale: "en-US".to_owned(),
         app_name: "fixture".to_owned(),
         bin_name: None,

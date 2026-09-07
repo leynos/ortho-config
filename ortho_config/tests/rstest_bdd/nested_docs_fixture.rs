@@ -117,9 +117,17 @@ pub struct NestedAuditArgs {
 
 /// Access-grant command that exercises `#[command(name = ...)]` overrides.
 #[derive(Debug, Args, Default, Deserialize, Serialize, OrthoConfig)]
-#[ortho_config(prefix = "NESTED_APP_")]
+#[ortho_config(
+    prefix = "NESTED_APP_",
+    about_id = "nested.grant.about",
+    synopsis_id = "nested.grant.usage"
+)]
 pub struct NestedGrantArgs {
     #[arg(long)]
+    #[ortho_config(
+        help_id = "nested.grant.principal.help",
+        long_help_id = "nested.grant.principal.long_help"
+    )]
     pub principal: String,
 }
 
