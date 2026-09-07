@@ -17,8 +17,8 @@ at the derive site.
 
 Roadmap item 7.2.1 asks for metadata that represents whether a command is
 non-interactive, may prompt, or requires a bypass flag, and whether the command
-reads, writes, deletes, or submits asynchronous work, plus a lint for destructive
-commands without `--force` or equivalent approved metadata.
+reads, writes, deletes, or submits asynchronous work, plus a lint for
+destructive commands without `--force` or equivalent approved metadata.
 
 The design document (`docs/agent-native-cli-design.md`) §6.1 and §6.4 define
 the required semantics, and §8.2 defines the agent-context schema v1
@@ -88,19 +88,19 @@ expressive gain. The pair `interaction` × `bypass` maps the three states as:
 
 This mirrors the MCP tool-annotation style of orthogonal declared hints.
 
-| Topic                    | Option A           | Option B      | Option C         |
-| ------------------------ | ------------------ | ------------- | ---------------- |
-| Attribute shape          | Nested group       | Variant-level | Nested group     |
-| Existing parse path      | Yes                | No            | Yes              |
-| Wire-schema impact       | Additive           | Additive      | New enum variant |
-| Three-state model        | interaction×bypass | Same          | Third variant    |
+| Topic               | Option A           | Option B      | Option C         |
+| ------------------- | ------------------ | ------------- | ---------------- |
+| Attribute shape     | Nested group       | Variant-level | Nested group     |
+| Existing parse path | Yes                | No            | Yes              |
+| Wire-schema impact  | Additive           | Additive      | New enum variant |
+| Three-state model   | interaction×bypass | Same          | Third variant    |
 
 _Table 1: Comparison of attribute-surface options._
 
 ## Decision outcome / proposed direction
 
-The accepted surface is a single struct-level
-`#[ortho_config(behaviour(...))]` group with the keys:
+The accepted surface is a single struct-level `#[ortho_config(behaviour(...))]`
+group with the keys:
 
 - `interaction = "non_interactive" | "interactive"`;
 - `mutation = "read_only" | "write" | "delete" | "submit"`;
@@ -162,8 +162,8 @@ The phases were implemented as milestones B–F of the 7.2.1 execplan:
 ## Architectural rationale
 
 The accepted surface keeps the no-inference rule (design doc §8.1): the derive
-and the bridge transport declarations, they never verify runtime behaviour.
-The attribute group stays scoped to execution semantics so later roadmap items
+and the bridge transport declarations, they never verify runtime behaviour. The
+attribute group stays scoped to execution semantics so later roadmap items
 (dual renderer, structured output) can add sibling groups without churn to
 existing declarations. The IR version bump follows the conservative precedent
 for additive schema changes, and the version-skew contract (documented in the
