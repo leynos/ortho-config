@@ -64,9 +64,9 @@
   ],
   "policies": {
     "apply_patch": "prompt",
-    "exec_command": "allow",
+    "exec_command": "prompt",
     "search_tools": "allow",
-    "write_stdin": "allow",
+    "write_stdin": "prompt",
     "mcp::codegraph::codegraph_get_symbol_info": "prompt",
     "mcp::codegraph::codegraph_analyze_complexity": "prompt",
     "mcp::context_pack::output": "prompt",
