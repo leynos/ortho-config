@@ -884,6 +884,11 @@ appears, above the largest per-test allowance and inside the watchdog once
 termination and a cold build are counted, so adding one lands in the right
 place rather than merely somewhere.
 
+[Issue 483](https://github.com/leynos/ortho-config/issues/483) holds the
+measurements a later pass needs to choose the value, and the constraints it has
+to satisfy, including that each coverage job invokes the action twice so
+raising the watchdog costs twice as much ceiling here.
+
 ### What the ceilings are sized against
 
 The allowance for work outside the watchdogs is per lane, because the two
