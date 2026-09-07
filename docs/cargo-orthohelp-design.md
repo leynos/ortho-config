@@ -70,9 +70,9 @@ roadmap boundary:
 4. Agent-native linting is now a `cargo-orthohelp` responsibility: the
    `--check-agent-native[=off|warn|deny]` flag runs the behaviour lint over the
    compiled agent context, writes a JSON policy report to stdout, writes a
-   one-line summary to stderr, and exits `3` after generation when a
-   deny-level finding remains. Strict policy and future extensions are defined
-   in [agent-native-cli-design.md](agent-native-cli-design.md).
+   one-line summary to stderr, and exits `3` after generation when a deny-level
+   finding remains. Strict policy and future extensions are defined in
+   [agent-native-cli-design.md](agent-native-cli-design.md).
 5. Consumer applications such as Weaver and Netsuke depend on the same generic
    metadata for renderer policy, JSON mode contracts, exit-code classes, skill
    manifests, context naming, capability provenance, profile redaction,
@@ -710,8 +710,8 @@ cargo orthohelp \
 `ir`, `man`, `ps`, `agent-context`, and `all` are the currently implemented
 formats. The current default is `ir`; unsupported format values fail during
 Clap parsing before generation begins. `--check-agent-native[=off|warn|deny]`
-is implemented: it runs the agent-native behaviour lint over the compiled
-agent context, writes exactly one JSON policy report to stdout and a one-line
+is implemented: it runs the agent-native behaviour lint over the compiled agent
+context, writes exactly one JSON policy report to stdout and a one-line
 human-readable summary to stderr, and exits `3` when the report contains a
 deny-level finding (after writing any explicitly requested `--format`
 artefacts). The `--json` result mode remains a planned agent-native addition.

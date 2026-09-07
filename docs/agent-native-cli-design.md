@@ -408,8 +408,8 @@ configure that convention once and expose it in agent context.
 This is realized in the derive attribute surface as
 `behaviour(interaction = ...)` with the optional `behaviour(bypass = ...)`
 flag, and in agent context as `interaction_mode` plus `bypass_flag`. See
-[ADR-008](adr-008-behavioural-metadata-attribute-surface.md) and the §8.1
-table below for the defaulting and compatibility contract.
+[ADR-008](adr-008-behavioural-metadata-attribute-surface.md) and the §8.1 table
+below for the defaulting and compatibility contract.
 
 ### 6.2 Structured output
 
@@ -504,9 +504,9 @@ submit asynchronous work. Destructive commands should declare their
 confirmation bypass flag. Consequential commands should declare whether
 `--dry-run` exists.
 
-This is realized in the derive attribute surface as
-`behaviour(mutation = ...)` with the optional `behaviour(dry_run = ...)` flag,
-and in agent context as `mutation_effect` plus `dry_run_flag`. See
+This is realized in the derive attribute surface as `behaviour(mutation = ...)`
+with the optional `behaviour(dry_run = ...)` flag, and in agent context as
+`mutation_effect` plus `dry_run_flag`. See
 [ADR-008](adr-008-behavioural-metadata-attribute-surface.md) for the attribute
 grammar and the no-inference rule.
 
