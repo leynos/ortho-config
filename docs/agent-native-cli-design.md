@@ -423,6 +423,12 @@ The preferred non-interactive flag is `--no-input`. The preferred destructive
 bypass flag is `--force`. If a project chooses a different convention, it must
 configure that convention once and expose it in agent context.
 
+This is realized in the derive attribute surface as
+`behaviour(interaction = ...)` with the optional `behaviour(bypass = ...)`
+flag, and in agent context as `interaction_mode` plus `bypass_flag`. See
+[ADR-008](adr-008-behavioural-metadata-attribute-surface.md) and the §8.1 table
+below for the defaulting and compatibility contract.
+
 ### 6.2 Structured output
 
 Data-returning commands should support `--json`. Structured data belongs on
@@ -515,6 +521,12 @@ Mutating commands should declare whether they are read-only, write, delete, or
 submit asynchronous work. Destructive commands should declare their
 confirmation bypass flag. Consequential commands should declare whether
 `--dry-run` exists.
+
+This is realized in the derive attribute surface as `behaviour(mutation = ...)`
+with the optional `behaviour(dry_run = ...)` flag, and in agent context as
+`mutation_effect` plus `dry_run_flag`. See
+[ADR-008](adr-008-behavioural-metadata-attribute-surface.md) for the attribute
+grammar and the no-inference rule.
 
 Create-like commands should prefer idempotency tokens or natural keys where the
 application domain supports them. OrthoConfig should model and lint the
