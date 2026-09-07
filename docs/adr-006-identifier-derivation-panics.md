@@ -27,6 +27,10 @@ sibling commands or arguments normalize to the same identifier. These failures
 come from command declarations, not from user input, locale selection, or
 catalogue contents.
 
+`OrthoConfig` now detects normalized argument-id collisions within one derived
+struct at compile time. Hand-built trees and sibling subcommand-name collisions
+remain runtime panic cases because they are assembled outside the derive.
+
 The question is whether the public identifier helpers should return `Result`,
 panic, or silently leave invalid command-tree nodes unlocalized.
 

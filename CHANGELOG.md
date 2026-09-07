@@ -56,6 +56,8 @@ All notable changes to this project will be documented in this file.
   in agent context (roadmap item 6.3.1).
 - Add the public `LocalizedParse` blanket trait so any `clap::Parser` can
   parse arguments with localized command metadata and parse errors.
+- Add `OrthoConfigLocalization` derive constants, compile-time normalized
+  argument-id collision diagnostics, and opt-in identifier artefact emission.
 - Add the public `parse_localized_command` helper for applications that need
   to parse an already-localized `clap::Command` with a custom message-id base.
 - Introduce the `EnvSource` trait so configuration discovery reads the
@@ -102,6 +104,8 @@ All notable changes to this project will be documented in this file.
   while retaining both JSON artefacts. When policy checking and an explicit
   generator format are combined, the policy report is the sole JSON document on
   stdout (closes #329).
+- Bump documentation IR to 2.0: generated default identifiers now use mounted
+  command paths; see the localization migration guidance in the user's guide.
 - Adopt `sha2` 0.11 in `cargo-orthohelp` and render cache digests through a new
   crate-internal lowercase hexadecimal encoder, because `sha2` 0.11 returns
   `hybrid_array::Array<u8, _>` from `finalize`, which no longer implements

@@ -228,6 +228,13 @@ time, and ADR-006 records why the promoted runtime API panics rather than
 returning `Result` when a hand-built command tree cannot produce unique Fluent
 identifiers.
 
+`OrthoConfigLocalization` exposes the localization base, all command-level
+identifiers, and named argument-id records. The derive also delegates docs IR
+through the mounted command path, so nested defaults agree with runtime lookup;
+flattened fields remain excluded. Artefact emission is opt-in and described by
+[ADR-008](adr-008-opt-in-identifier-artefact-emission.md); `localized_default`
+remains deliberately deferred.
+
 ### 4.2 `try_parse_localized` helpers
 
 ```rust
