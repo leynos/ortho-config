@@ -1,6 +1,7 @@
 //! End-to-end coverage for opt-in identifier artefact emission.
 
 use std::fs;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use anyhow::{Context, Result, ensure};
@@ -28,21 +29,58 @@ fn build_fixture(emit: bool) -> Result<()> {
     Ok(())
 }
 
-fn artefact() -> Result<String> {
-    let build_root = fs::read_dir(format!("{TARGET_DIR}/debug/build"))?;
-    for entry in build_root {
-        let path = entry?.path().join("out/ortho-config/cli-identifiers.json");
-        if path.exists() {
-            return fs::read_to_string(path).context("read identifier artefact");
-        }
-    }
-    anyhow::bail!("fixture identifier artefact was not emitted")
+fn clean_fixture() -> Result<()> {
+    let status = Command::new("cargo")
+        .args([
+            "clean",
+            "-p",
+            "orthohelp_fixture",
+            "--target-dir",
+            TARGET_DIR,
+        ])
+        .status()
+        .context("clean fixture build")?;
+    ensure!(status.success(), "fixture clean should succeed");
+    Ok(())
 }
 
-/// Verifies schema output and warm-build preservation for opt-in emission.
+fn artefact_path() -> Result<Option<PathBuf>> {
+    let build_root = Path::new(TARGET_DIR).join("debug/build");
+    if !build_root.exists() {
+        return Ok(None);
+    }
+    let build_entries = fs::read_dir(build_root)?;
+    for entry in build_entries {
+        let path = entry?.path().join("out/ortho-config/cli-identifiers.json");
+        if path.exists() {
+            return Ok(Some(path));
+        }
+    }
+    Ok(None)
+}
+
+fn artefact() -> Result<String> {
+    let path = artefact_path()?.context("fixture identifier artefact was not emitted")?;
+    fs::read_to_string(path).context("read identifier artefact")
+}
+
+fn reset_target_dir() -> Result<()> {
+    let target = Path::new(TARGET_DIR);
+    if target.exists() {
+        fs::remove_dir_all(target).context("remove stale identifier artefact target")?;
+    }
+    Ok(())
+}
+
+/// Verifies schema output, warm-build preservation, and forced opt-in refresh.
 #[test]
 #[serial]
 fn opt_in_artefact_is_schema_versioned_and_survives_a_warm_build() -> Result<()> {
+    reset_target_dir()?;
+    ensure!(
+        artefact_path()?.is_none(),
+        "fresh build target must not contain a stale artefact"
+    );
     build_fixture(true)?;
     let first = artefact()?;
     let document: Value = serde_json::from_str(&first)?;
@@ -71,6 +109,17 @@ fn opt_in_artefact_is_schema_versioned_and_survives_a_warm_build() -> Result<()>
     ensure!(
         artefact()? == first,
         "warm build without opt-in must not rewrite artefact"
+    );
+
+    clean_fixture()?;
+    ensure!(
+        artefact_path()?.is_none(),
+        "clean must remove the previous opt-in artefact"
+    );
+    build_fixture(true)?;
+    ensure!(
+        artefact()? == first,
+        "forced opt-in rebuild must recreate the identifier artefact"
     );
     Ok(())
 }

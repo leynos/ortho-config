@@ -121,8 +121,9 @@ invalid segments, and avoid changing the existing panic contract.
   become a process panic.
 - `LocalizedParse` widens the reachable panic surface from explicit command
   localization calls to every `clap::Parser` that opts into localized parsing.
-  This is accepted until the planned derive-time guard in 11.1.3 can emit a
-  compile-time error for generated identifiers.
+  The derive now rejects normalized argument-ID collisions within one deriving
+  struct at compile time; hand-built and dynamic command trees retain the
+  runtime panic contract.
 - Panic contracts are harder to relax than ordinary internal implementation
   choices because downstream tests may begin to rely on the exact failure
   surface.
