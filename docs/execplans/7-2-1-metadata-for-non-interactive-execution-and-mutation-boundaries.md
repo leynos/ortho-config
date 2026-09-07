@@ -169,24 +169,23 @@ escalation, not workarounds.
   CodeRabbit review (`coderabbit review --agent`) returned 0 findings across
   the branch diff (Milestones B+C+D); pass clear.
 - [x] (2026-08-14) Milestone E: `--check-agent-native` lint with policy
-  report; step order implementation (`cli::CheckMode`, `PolicyMode`
-  conversion, `policy::rules::behaviour::check_behaviour`, the stdout/stderr
-  report contract with exit 3 iff any deny finding, and default-format
-  artefact suppression when the lint runs without an explicit `--format`),
-  rstest unit tests, insta snapshot, BDD feature `orthohelp_policy.feature`
-  with 3 scenarios, and proptests for totality, no-deny-in-warn/off, and
-  empty-off. All gates green (check-fmt, lint, typecheck, markdownlint),
-  lib tests 112/112, BDD 14/14. CodeRabbit review (`coderabbit review
-  --agent --committed --base origin/main`) returned 0 findings across 79
-  reviewed files (Milestones B through E), pass clear.
+  report; step order implementation (`cli::CheckMode`, `PolicyMode` conversion,
+  `policy::rules::behaviour::check_behaviour`, the stdout/stderr report
+  contract with exit 3 iff any deny finding, and default-format artefact
+  suppression when the lint runs without an explicit `--format`), rstest unit
+  tests, insta snapshot, BDD feature `orthohelp_policy.feature` with 3
+  scenarios, and proptests for totality, no-deny-in-warn/off, and empty-off.
+  All gates green (check-fmt, lint, typecheck, markdownlint), lib tests
+  112/112, BDD 14/14. CodeRabbit review
+  (`coderabbit review --agent --committed --base origin/main`) returned 0
+  findings across 79 reviewed files (Milestones B through E), pass clear.
 - [x] (2026-08-14) Post-E P1 fix: explicitly requested output generation is
   preserved in deny mode. `run_agent_native_check` no longer calls
   `std::process::exit(3)` mid-run; it returns whether the report contains any
   deny finding, and `run` defers the exit-code-3 decision until after the
   `GenerationPlan`-gated artefact generators complete. BDD scenario "deny mode
-  still writes explicitly requested output" added to
-  `orthohelp_policy.feature` and passes (exit 3 plus `agent-context.json`
-  written).
+  still writes explicitly requested output" added to `orthohelp_policy.feature`
+  and passes (exit 3 plus `agent-context.json` written).
 - [x] (2026-08-14) Post-E P1 fix: the `non_interactive` + `bypass`
   contradiction is now validated against the merged `BehaviourAttrs` state, so
   the declaration split across repeated `#[ortho_config(behaviour(...))]`
@@ -209,24 +208,34 @@ escalation, not workarounds.
   closure — `make check-fmt`, `make typecheck`, `make lint` (rustdoc, clippy,
   Whitaker), `make test` (all test binaries 0 failures incl. the docs-loader
   and golden-ID contract tests), and `make markdownlint` (incl. Oxford-spelling
-  gate) all exit 0. Final `coderabbit review --agent --committed --base
-  origin/main` returned 0 findings. Log: `/tmp/codereview_final.out`.
+  gate) all exit 0. Final
+  `coderabbit review --agent --committed --base origin/main` returned 0
+  findings. Log: `/tmp/codereview_final.out`.
 - [x] (2026-08-24) Post-closure review: `make markdownlint` re-run green after
-  the Revision 3 stale-statement fix in `docs/cargo-orthohelp-design.md`
-  (commit `aedb9d1`). The design doc now consistently states that
+  the Revision 3 stale-statement fix in `docs/cargo-orthohelp-design.md` (commit
+  `aedb9d1`). The design doc now consistently states that
   `--check-agent-native[=off|warn|deny]` is implemented; future work is scoped
   to explicitly deferred policy extensions only.
+- [x] (2026-09-07) Rebased the completed branch onto `origin/main` at
+  `f803dea`. Weave auto-merged the complementary design and guide updates. Its
+  sole conflict was the documentation-example ID registry: the target branch
+  added four source-aware environment and release-installation examples, while
+  this branch added three behaviour-policy examples. The resolution is the
+  alphabetized union; every added ID has its corresponding `tested-example`
+  marker. No Cargo manifests or lockfiles were in the branch range. The full
+  post-rebase gate suite passed: `make check-fmt`, `make test`,
+  `make typecheck`, `make lint`, `make markdownlint`, and `make nixie`.
 
 ## Surprises & discoveries
 
 - Observation: the Milestone D plan step "annotate one hello_world command and
-  refresh its snapshot" does not apply: `examples/hello_world/src/cli/context.rs`
-  hand-authors `AgentCommand` values directly (setting
-  `InteractionMode::NonInteractive`/`MutationEffect::ReadOnly` literally) and
-  never passes through the derive IR or the bridge, so there is no
-  `behaviour(...)` annotation or golden refresh to perform there. The plan's
-  fixture-annotation and BDD work in `orthohelp_fixture` exercises the real
-  derive-to-bridge path.
+  refresh its snapshot" does not apply:
+  `examples/hello_world/src/cli/context.rs` hand-authors `AgentCommand` values
+  directly (setting `InteractionMode::NonInteractive`/
+  `MutationEffect::ReadOnly` literally) and never passes through the derive IR
+  or the bridge, so there is no `behaviour(...)` annotation or golden refresh
+  to perform there. The plan's fixture-annotation and BDD work in
+  `orthohelp_fixture` exercises the real derive-to-bridge path.
 - Observation: agent-context schema v1 already reserves `interaction_mode`
   and `mutation_effect` as realized v1 fields defaulting to `"unknown"` (design
   doc §8.1 table), and the Rust enums already exist with the exact variants the
@@ -279,30 +288,30 @@ escalation, not workarounds.
   (`module_max_lines`), which newly-added and pre-existing modules exceeded
   once Milestone E's code landed. Impact: `policy/rules/behaviour.rs` and
   `cli/mod.rs` were split test-first — implementation files keep the rule
-  logic, with `#[cfg(test)] mod tests;` sibling files (`tests.rs`) holding
-  the test bodies, matching the existing `agent_context` convention. Evidence:
-  the split reduced `cli/mod.rs` 411→185 lines and `behaviour.rs` 489→208;
-  gates are green after the split.
+  logic, with `#[cfg(test)] mod tests;` sibling files (`tests.rs`) holding the
+  test bodies, matching the existing `agent_context` convention. Evidence: the
+  split reduced `cli/mod.rs` 411→185 lines and `behaviour.rs` 489→208; gates
+  are green after the split.
 - Observation: `cargo-orthohelp/tests/cli_dispatch.rs` fails its
-  `direct_invocation_without_subcommand_includes_cargo_hint` test on the
-  base branch as well as this branch. The test invokes the binary directly as
+  `direct_invocation_without_subcommand_includes_cargo_hint` test on the base
+  branch as well as this branch. The test invokes the binary directly as
   `cargo-orthohelp --format ir` (no `orthohelp` subcommand token) and clap
-  rejects the top-level `--format` before the cargo-hint code path can run.
-  The file is unmodified by Milestone E and the failure predates this work;
-  it is recorded here as a pre-existing defect to address separately (fixed in
-  a follow-up not part of Milestones E/F's scope).
+  rejects the top-level `--format` before the cargo-hint code path can run. The
+  file is unmodified by Milestone E and the failure predates this work; it is
+  recorded here as a pre-existing defect to address separately (fixed in a
+  follow-up not part of Milestones E/F's scope).
 - Observation: Milestone E's deny-mode implementation called
-  `std::process::exit(3)` from inside `run_agent_native_check`, which ran
-  before `GenerationPlan::for_run` and the generation phases. Any explicit
-  `--format` was therefore never generated when the lint found deny-level
-  findings — `cargo orthohelp --format=agent-context --check-agent-native=deny`
-  produced no `agent-context.json`. This is a post-milestone P1 defect fixed by
-  deferring the exit decision to the end of `run`; the BDD scenario proves the
+  `std::process::exit(3)` from inside `run_agent_native_check`, which ran before
+  `GenerationPlan::for_run` and the generation phases. Any explicit `--format`
+  was therefore never generated when the lint found deny-level findings —
+  `cargo orthohelp --format=agent-context --check-agent-native=deny` produced no
+  `agent-context.json`. This is a post-milestone P1 defect fixed by deferring
+  the exit decision to the end of `run`; the BDD scenario proves the
   composition contract.
 - Observation: `parse_behaviour_meta` validated the contradiction against only
-  the keys parsed within one `behaviour(...)` group. Because `apply_struct_doc_attr`
-  merges repeated groups into one `BehaviourAttrs` (via the `out.behaviour.take()`
-  pattern), a declaration split across two attributes
+  the keys parsed within one `behaviour(...)` group. Because
+  `apply_struct_doc_attr` merges repeated groups into one `BehaviourAttrs` (via
+  the `out.behaviour.take()` pattern), a declaration split across two attributes
   (`behaviour(interaction = "non_interactive")` plus
   `behaviour(bypass = "--force")`) slipped past validation. The check now runs
   on the merged state after each group parses, so both spellings in either
@@ -316,6 +325,10 @@ escalation, not workarounds.
   `--format` generation), with only explicitly deferred policy extensions left
   as future work. The `make markdownlint` gate was re-run green on the fix
   (commit `aedb9d1`).
+- Observation: `EXPECTED_EXAMPLE_IDS` is a single golden registry spanning
+  independent documentation changes. During the rebase, the correct conflict
+  test was whether each branch-only ID still named a live `tested-example`
+  marker, rather than choosing one side of the registry.
 
 ## Decision log
 
@@ -463,10 +476,26 @@ escalation, not workarounds.
   a declared non-delete mutation (7.1 policy work); threading source spans into
   `PolicyResult.location` (7.1). Date/Author: 2026-08-06, added after expert
   review.
+- Decision: retain the union of independent `EXPECTED_EXAMPLE_IDS` additions
+  when rebasing documentation changes. Rationale: the registry asserts the
+  complete set of executable documentation fences, so dropping either branch's
+  IDs would turn unrelated documentation coverage into an untracked exception.
+  Date/Author: 2026-09-07, rebase validation.
 
 ## Outcomes & retrospective
 
-To be completed at milestones and at the end.
+Roadmap item 7.2.1 is complete. Authors can declare interaction, mutation,
+bypass, and dry-run behaviour through the derive attribute; the generated IR
+and agent context carry those declarations without inference; and
+`cargo orthohelp --check-agent-native` reports stable, mode-sensitive policy
+findings for incomplete declarations. The checked roadmap item and this
+ExecPlan preserve the scope boundary: later capability, renderer, output, and
+execution-ledger metadata remain separate roadmap work.
+
+The final rebase retained both the branch implementation and target-branch
+documentation improvements. The only shared registry was resolved by evidence
+from the live documentation markers, keeping executable-documentation coverage
+complete.
 
 ## Context and orientation
 
@@ -1038,8 +1067,8 @@ Green evidence: after adding `BehaviourAttrs` (parse) plus the `behaviour`
 match arms, the grammar/contradiction checks, the generate-side
 `build_behaviour_metadata`, and the emission wiring in `generate_docs_impl`,
 all 10 parser unit tests pass and the full `ortho_config_macros` lib suite is
-green (133 passed). The integration tests in `ortho_config/tests/docs_ir.rs`
-(3 new derive-emission cases) and `docs_ir_subcommands.rs` (3 new ADR-005
+green (133 passed). The integration tests in `ortho_config/tests/docs_ir.rs` (3
+new derive-emission cases) and `docs_ir_subcommands.rs` (3 new ADR-005
 delegation cases, including the reused-args pinning test) pass. Full workspace
 `make test` reports 902 passed / 0 failed (up from 886 in Milestone B).
 
@@ -1050,8 +1079,8 @@ Two implementation adaptations worth recording:
   the `LitStr` span once and report errors against it. Without this, invalid
   values surfaced as a confusing "expected `=`" parse error.
 - The flag grammar requires the `--` prefix: `strip_prefix("--").unwrap_or(...)`
-  would accept a bare word. `unwrap_or("")` makes `force` invalid and
-  `--force` valid, matching ADR-008's pinned grammar.
+  would accept a bare word. `unwrap_or("")` makes `force` invalid and `--force`
+  valid, matching ADR-008's pinned grammar.
 
 Trybuild compile-fail fixtures (7) added under `ortho_config/tests/ui/` with
 `.stderr` goldens: `behaviour_invalid_interaction.rs`,
@@ -1064,9 +1093,9 @@ The derive doctest example on `OrthoConfigSubcommandDocs` in
 `ortho_config/src/docs/mod.rs` gained a `behaviour(...)` declaration on the
 `RunArgs` struct.
 
-Gate state at milestone commit: `make check-fmt`, `make typecheck`,
-`make lint` (rustdoc, clippy, Whitaker), and `make test` all green. CodeRabbit
-pass for the milestone is run after this update is committed (see Progress).
+Gate state at milestone commit: `make check-fmt`, `make typecheck`, `make lint`
+(rustdoc, clippy, Whitaker), and `make test` all green. CodeRabbit pass for the
+milestone is run after this update is committed (see Progress).
 
 Note: when Milestone C work began, the working tree already held incomplete,
 non-compiling edits to the parse files from before this session; these were
@@ -1075,8 +1104,8 @@ cleanly from the committed tree.
 
 ### Milestone C closure (2026-08-12)
 
-The `#[ortho_config(behaviour(...))]` surface is parsed, validated, and
-emitted by the derive, committed as `a2ee0e5` and pushed.
+The `#[ortho_config(behaviour(...))]` surface is parsed, validated, and emitted
+by the derive, committed as `a2ee0e5` and pushed.
 
 - Parser (`ortho_config_macros/src/derive/parse/behaviour_attrs.rs`):
   nested keys `interaction`, `mutation`, `bypass`, `dry_run`; hard `syn::Error`
@@ -1086,8 +1115,8 @@ emitted by the derive, committed as `a2ee0e5` and pushed.
   en-GB spelling hint and field-level rejection of both spellings.
 - Emitter (`ortho_config_macros/src/derive/generate/docs/behaviour.rs`):
   builds the `Option<BehaviourMetadata>` token stream, mapping validated
-  strings onto `InteractionKind`/`MutationKind`; undeclared stays `None`
-  (no inference). Replaces the Milestone B `behaviour: None` placeholder in
+  strings onto `InteractionKind`/`MutationKind`; undeclared stays `None` (no
+  inference). Replaces the Milestone B `behaviour: None` placeholder in
   `generate/docs/mod.rs`. `unreachable!` arms were replaced with total
   `None`-mapping matches during gate fixing (clippy denies `unreachable`).
 - Tests: rstest parser tests (`parse/tests/behaviour_attrs.rs`), derive
