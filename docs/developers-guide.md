@@ -86,6 +86,19 @@ duplicating ASCII normalization rules. Keep the tolerant catalogue load path in
 resource ids such as dotted catalogue keys before Fluent parses them, and must
 not be used to validate generated command ids.
 
+`#[derive(OrthoConfig)]` emits `OrthoConfigLocalization` for the deriving
+configuration. Its `LOCALIZATION_BASE` is the dotted catalogue root from
+`#[ortho_config(localization_base = "…")]` (or the normalized application-name
+default), while the command-level constants and `ARG_IDS` use the normalized,
+hyphen-joined Fluent ids. Each `ArgLocalizationIds` entry records the Clap
+argument name and its help, long-help, and value-name ids. Argument ids are
+validated for normalized collisions during expansion; flattened, subcommand,
+and `skip_cli` fields are excluded from `ARG_IDS`.
+Set `ORTHO_CONFIG_EMIT_IDENTIFIERS=1` for an opt-in standalone inventory at
+`${OUT_DIR}/ortho-config/cli-identifiers.json`; the derive writes this file
+through per-expansion fragments and merges them deterministically. Mounted
+command-tree identifiers remain owned by the path-aware documentation IR.
+
 Use `LocalizedParse` for default-base localized clap parsing and
 `parse_localized_command` when callers need to pass a command that has already
 been localized with `LocalizeCmd::with_base`. Keep the two parse-error paths in

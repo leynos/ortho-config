@@ -1,3 +1,5 @@
+//! Localisation-identifier collision fixture.
+
 use ortho_config::OrthoConfig;
 
 #[derive(OrthoConfig)]

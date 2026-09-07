@@ -39,6 +39,7 @@ fn artefact() -> Result<String> {
     anyhow::bail!("fixture identifier artefact was not emitted")
 }
 
+/// Verifies schema output and warm-build preservation for opt-in emission.
 #[test]
 #[serial]
 fn opt_in_artefact_is_schema_versioned_and_survives_a_warm_build() -> Result<()> {

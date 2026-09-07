@@ -457,6 +457,15 @@ Derived configurations implement `OrthoConfigLocalization`. Use
 `CommandLine::LOCALIZATION_BASE` with `LocalizeCmd::with_base` and the
 generated command and argument constants rather than repeating identifier
 strings; this prevents catalogue and command declarations from drifting.
+Set the catalogue root explicitly with
+`#[ortho_config(localization_base = "acme.cli")]`; when it is omitted, the
+derived application name supplies the default base. `ARG_IDS` contains one
+`ArgLocalizationIds` record per eligible argument, with its Clap name and
+`help_id`, `long_help_id`, and `value_name_id` constants.
+Identifiers normalize each dotted base or argument segment to a Fluent-safe
+form and join segments with hyphens. The generated command constants are
+`ABOUT_ID`, `LONG_ABOUT_ID`, `USAGE_ID`, `VERSION_ID`, `LONG_VERSION_ID`,
+`AFTER_HELP_ID`, and `AFTER_LONG_HELP_ID`.
 Duplicate normalized argument ids are rejected at compile time. Flattened,
 subcommand, and `skip_cli` fields do not receive argument constants.
 

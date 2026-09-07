@@ -588,11 +588,11 @@ later progressively add opinion.
   - [x] Extend the `OrthoConfig` derive to emit `OrthoConfigLocalization`
     impls. Generate identifiers from command path and field `id` (or
     kebab-cased field name).
-  - [ ] Add a blanket `OrthoConfigDocs` impl that delegates to
-    `OrthoConfigLocalization` so the docs IR picks up the same identifiers.
+  - [x] Add generated path-aware `OrthoConfigDocs` delegation so the docs IR
+    picks up the same identifiers.
   - [x] Emit `${OUT_DIR}/ortho-config/cli-identifiers.json` with a 1 MiB
     cap and split-file behaviour for larger trees.
-  - [ ] Add a compile-time `compile_error!` for fields whose normalized
+  - [x] Add a compile-time `compile_error!` for fields whose normalized
     identifiers collide.
 
 ### 11.2. Widen clap-error coverage and preserve clap's rich context
