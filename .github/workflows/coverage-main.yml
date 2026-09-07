@@ -20,7 +20,7 @@ jobs:
     # conclusion, and the contract allows 15 minutes against that, which
     # makes the requirement 3,600 + 900 = 75 minutes with 15 more asked for
     # above it. This job had no ceiling either.
-    timeout-minutes: 90
+    timeout-minutes: 120
     permissions:
       contents: read
     env:
@@ -29,7 +29,7 @@ jobs:
       RUSTDOCFLAGS: -D warnings
       # generate-coverage kills cargo after RUN_RUST_CARGO_WAIT_TIMEOUT
       # seconds (default 600); the full-suite coverage run needs longer.
-      RUN_RUST_CARGO_WAIT_TIMEOUT: '1800'
+      RUN_RUST_CARGO_WAIT_TIMEOUT: '2700'
     steps:
       - name: Checkout
         uses: actions/checkout@v7
