@@ -1,0 +1,9 @@
+[package]
+name = "orthohelp_policy_adoption_fixture"
+version = "0.9.0"
+edition = "2024"
+rust-version.workspace = true
+publish = false
+
+[lints]
+workspace = true
