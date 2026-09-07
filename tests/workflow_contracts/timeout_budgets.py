@@ -11,7 +11,6 @@ See "Test timeouts: four tiers, outermost last" in
 
 from __future__ import annotations
 
-import re
 import typing as typ
 from pathlib import Path
 
@@ -79,137 +78,6 @@ TERMINATION_SAFETY_MARGIN_SECONDS: typ.Final[float] = 60.0
 #: clock. Only used if a `global-timeout` appears.
 COLD_BUILD_ALLOWANCE_SECONDS: typ.Final[float] = 10 * 60.0
 
-_DURATION: typ.Final[re.Pattern[str]] = re.compile(
-    r"^\s*(?P<value>\d+(?:\.\d+)?)\s*(?P<unit>ms|s|m|h)\s*$"
-)
-
-_UNIT_SECONDS: typ.Final[dict[str, float]] = {
-    "ms": 0.001,
-    "s": 1.0,
-    "m": 60.0,
-    "h": 3600.0,
-}
-
-#: One `slow-timeout` inline table, captured whole so the period and the
-#: multiplier that scales it are read together. nextest warns once per
-#: `period` and terminates after `terminate-after` of them, so the budget
-#: is their product; reading the period alone understates it fivefold
-#: here.
-_SLOW_TIMEOUT: typ.Final[re.Pattern[str]] = re.compile(
-    r"slow-timeout\s*=\s*\{(?P<body>[^}]*)\}"
-)
-
-_GRACE_PERIOD: typ.Final[re.Pattern[str]] = re.compile(
-    r'grace-period\s*=\s*"([^"]+)"'
-)
-
-
-def seconds(duration: str) -> float:
-    """Convert a nextest duration to seconds.
-
-    Parameters
-    ----------
-    duration : str
-        A duration as nextest spells it, such as ``"120s"``.
-
-    Returns
-    -------
-    float
-        The duration in seconds.
-    """
-    match = _DURATION.match(duration)
-    assert match is not None, f"unrecognized nextest duration {duration!r}"
-    return float(match["value"]) * _UNIT_SECONDS[match["unit"]]
-
-
-def largest_test_allowance(config_text: str) -> float:
-    """Return the longest a single test may run, in seconds.
-
-    Parameters
-    ----------
-    config_text : str
-        The nextest configuration file's text.
-
-    Returns
-    -------
-    float
-        The longest per-test budget, period multiplied by
-        ``terminate-after``.
-    """
-    budgets: list[float] = []
-    for match in _SLOW_TIMEOUT.finditer(config_text):
-        body = match["body"]
-        period = re.search(r'period\s*=\s*"([^"]+)"', body)
-        assert period is not None, f"slow-timeout without a period: {body!r}"
-        terminate = re.search(r"terminate-after\s*=\s*(\d+)", body)
-        multiplier = 1 if terminate is None else int(terminate[1])
-        budgets.append(seconds(period[1]) * multiplier)
-    assert budgets, "nextest.toml must set at least one slow-timeout"
-    return max(budgets)
-
-
-def grace_period(config_text: str) -> float:
-    """Return the longest grace period the configuration names, in seconds.
-
-    Read from the configuration rather than fixed, so a profile that
-    raised its grace period raises the requirement too. nextest's own
-    default applies when none is named, as none is here.
-
-    Parameters
-    ----------
-    config_text : str
-        The nextest configuration file's text.
-
-    Returns
-    -------
-    float
-        The largest configured grace period, or nextest's default.
-    """
-    periods = _GRACE_PERIOD.findall(config_text)
-    return max(
-        (seconds(period) for period in periods),
-        default=NEXTEST_DEFAULT_GRACE_PERIOD_SECONDS,
-    )
-
-
-def termination_allowance(config_text: str) -> float:
-    """Return the time nextest may take to stop the run, in seconds.
-
-    Two terms, not one: what nextest promises a test after ``SIGTERM``,
-    plus a margin for the teardown and report writing that follow it.
-    A single floor over the two would absorb every grace period below
-    the margin, so raising one would look free until the run it
-    cancelled.
-
-    Parameters
-    ----------
-    config_text : str
-        The nextest configuration file's text.
-
-    Returns
-    -------
-    float
-        The grace period plus the safety margin.
-    """
-    return grace_period(config_text) + TERMINATION_SAFETY_MARGIN_SECONDS
-
-
-def global_timeout(config_text: str) -> float | None:
-    """Return the whole-run budget, or None when none is set.
-
-    Parameters
-    ----------
-    config_text : str
-        The nextest configuration file's text.
-
-    Returns
-    -------
-    float or None
-        The whole-run budget in seconds, or None.
-    """
-    match = re.search(r'^global-timeout\s*=\s*"([^"]+)"', config_text, re.MULTILINE)
-    return None if match is None else seconds(match[1])
-
 
 def required_ceiling(budgets: typ.Sequence[float], allowance: float) -> float:
     """Return the smallest acceptable ceiling for one coverage job.
@@ -234,5 +102,3 @@ def required_ceiling(budgets: typ.Sequence[float], allowance: float) -> float:
         The smallest acceptable ceiling, in seconds.
     """
     return sum(budgets) + allowance + CEILING_MARGIN_SECONDS
-
-
