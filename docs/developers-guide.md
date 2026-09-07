@@ -839,15 +839,16 @@ When bumping the version, update `TYPOS_VERSION` and rerun the gate.
 
 Four independent timers can end a test run, and the canonical statement of how
 they must be ordered lives in the `generate-coverage` README in
-[`leynos/shared-actions`][shared-actions-coverage]. Three of the four are set
-here.
+[`leynos/shared-actions`][shared-actions-coverage]. All four are set here now;
+until this branch, tier one covered two trybuild binaries and nothing else, and
+tier two did not exist at all.
 
-| Tier                     | What it bounds                     | Where it is set                            | Current value                                  |
-| ------------------------ | ---------------------------------- | ------------------------------------------ | ---------------------------------------------- |
-| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`                     | 600 s (120 s x 5) for the longest override     |
-| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`                     | **not set**                                    |
-| Cargo watchdog           | one `cargo` invocation, wall clock | `RUN_RUST_CARGO_WAIT_TIMEOUT` at job level | 1,800 s (30 m)                                 |
-| Job `timeout-minutes`    | the whole job                      | job level                                  | 135 m in `ci.yml`, 90 m in `coverage-main.yml` |
+| Tier                     | What it bounds                     | Where it is set                            | Current value                                          |
+| ------------------------ | ---------------------------------- | ------------------------------------------ | ------------------------------------------------------ |
+| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`                     | 600 s (60 s x 10); the trybuild override is also 600 s |
+| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`                     | 1,800 s (30 m)                                         |
+| Cargo watchdog           | one `cargo` invocation, wall clock | `RUN_RUST_CARGO_WAIT_TIMEOUT` at job level | 2,700 s (45 m)                                         |
+| Job `timeout-minutes`    | the whole job                      | job level                                  | 165 m in `ci.yml`, 120 m in `coverage-main.yml`        |
 
 *Table: the timers that can end a run, innermost first.*
 
@@ -874,19 +875,49 @@ multiplied by it. The longest override here is 120 s with a multiplier of five,
 so reading the period alone would report 120 s where the real figure is 600 s.
 The contract asserts that reading outright rather than leaving it implied.
 
-### The whole-run budget is a gap, not a decision
+### Tier one covered two binaries, and tier two did not exist
 
-No `global-timeout` is set. This repository runs nextest, so the budget exists
-to be set and has not been, and until it is the watchdog is doing tier two's
-job as well as its own. The contract binds a `global-timeout` the moment one
-appears, above the largest per-test allowance and inside the watchdog once
-termination and a cold build are counted, so adding one lands in the right
-place rather than merely somewhere.
+The only `slow-timeout` in `.config/nextest.toml` was the trybuild override.
+Two binaries were bounded at 600 s and every other test in the suite ran with
+nothing under the job ceiling to stop it, because nextest's built-in 60 s
+`slow-timeout` warns and never terminates: it names no `terminate-after`. The
+sampled Windows run below reported 22 tests as slow and terminated none of
+them. No `global-timeout` was set either, so a hung run was bounded only by the
+cargo watchdog, which names `cargo` rather than the test still running.
 
-[Issue 483](https://github.com/leynos/ortho-config/issues/483) holds the
-measurements a later pass needs to choose the value, and the constraints it has
-to satisfy, including that each coverage job invokes the action twice so
-raising the watchdog costs twice as much ceiling here.
+Both are set now, and both were sized from this repository's own run history
+rather than chosen. Three `build-test` jobs were read line by line, across
+successful and failed runs and both platforms:
+
+| Sample                                | Slowest single test | Longest nextest run | Run         |
+| ------------------------------------- | ------------------- | ------------------- | ----------- |
+| `build-test (windows-latest)`         | 364.8 s             | 1,023.6 s           | 34119577952 |
+| `build-test (ubuntu-latest)`          | 301.8 s             | 620.0 s             | 34120845807 |
+| `build-test (windows-latest)`, failed | no test output      | none                | 34124529877 |
+
+*Table: per-test and whole-run durations, read from the nextest output of each
+job. Each job runs the suite twice, so the two successful samples carry four
+runs between them: 1,023.6 s and 648.2 s on Windows, 620.0 s and 417.7 s on
+Linux, over 2,228 and 2,244 timed test results.*
+
+The slowest test outside the trybuild override was
+`cargo-orthohelp::compile_time must_use_compile_tests` at 364.8 s. The base
+allowance is 600 s, ten warning periods of 60 s, about 1.6 times that worst
+case: enough that a legitimately slow test finishes, small enough that a hang
+is caught well inside the whole-run budget.
+
+The whole-run budget is 30 minutes, about 1.76 times the 1,023.6 s worst run.
+It has to fit inside the watchdog with nextest's termination procedure and a
+cold build counted, which is 1,800 s plus 70 s plus 600 s, or 2,470 s. The
+watchdog was 1,800 s and could not have carried it, so it rises to 2,700 s.
+That is what moves the ceilings: the requirement is the watchdogs a job
+contains plus the work outside them plus the margin, and each job runs the
+action twice.
+
+[Issue 483](https://github.com/leynos/ortho-config/issues/483) asked for these
+measurements and named the constraint they had to satisfy, that each coverage
+job invokes the action twice so raising the watchdog costs twice as much
+ceiling here. It is answered above.
 
 ### What the ceilings are sized against
 
@@ -910,12 +941,13 @@ ceiling is the case the sizing exists to prevent. No run in either sample was
 ended by any of the four timers, the worst `ci.yml` job reaching 5,530 s.
 
 On the Windows leg the work outside the coverage steps is dominated by cache
-saving. So `ci.yml` is allowed 60 minutes and `coverage-main.yml` 15, making
-the requirements 120 and 75 minutes. The contract asks for 15 minutes above
-each requirement rather than merely reaching it, because a ceiling equal to the
-sum it contains cancels the job at the moment the watchdog would have reported
-the overrun, and the report is the only thing that makes an overrun actionable.
-The ceilings are therefore 135 and 90 minutes.
+saving. So `ci.yml` is allowed 60 minutes and `coverage-main.yml` 15. With the
+watchdog at 2,700 s and two coverage steps per job, the requirements are 165
+and 120 minutes: 5,400 s of watchdog, plus the lane's allowance, plus a 900 s
+margin. The margin is a term of the requirement rather than slack above it,
+because a ceiling equal to the sum it contains cancels the job at the moment
+the watchdog would have reported the overrun, and the report is the only thing
+that makes an overrun actionable. The ceilings equal their requirements.
 
 A lane in a workflow the contract has not measured is held to the larger
 allowance until someone measures it and records a run id.

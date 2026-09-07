@@ -17,7 +17,7 @@ jobs:
     # it so a ceiling never fires at the moment the watchdog would have
     # reported. The job had no ceiling at all before this and so inherited
     # GitHub's six-hour default.
-    timeout-minutes: 135
+    timeout-minutes: 165
     permissions:
       contents: read
     env:
@@ -29,7 +29,7 @@ jobs:
       # seconds (default 600). The windows coverage run legitimately takes
       # ~12 min (the compile_fail trybuild test alone is ~200s), and the
       # 927edd4 action now emits full per-line data, so raise the ceiling.
-      RUN_RUST_CARGO_WAIT_TIMEOUT: '1800'
+      RUN_RUST_CARGO_WAIT_TIMEOUT: '2700'
     strategy:
       fail-fast: false
       matrix:

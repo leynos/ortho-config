@@ -34,6 +34,7 @@ import typing as typ
 import pytest
 from coverage_lanes import CoverageJob, coverage_jobs_of
 from nextest_budgets import (
+    bounds_a_single_test,
     global_timeout,
     largest_test_allowance,
     termination_allowance,
@@ -66,6 +67,13 @@ REQUIRED_CONDITIONS: typ.Final[dict[tuple[str, str], tuple[object, object]]] = {
 #: coordinate. The ceiling requirement is derived from the number of
 #: steps found, so deleting one lowers the requirement and every
 #: assertion still passes while the lane loses half its instrumentation.
+#: The per-test allowance and whole-run budget the guide states, both
+#: added by this branch. Pinned by value as well as ordered, because the
+#: ordering holds for a wide range of both and would not notice either
+#: drifting away from the sample it was sized against.
+REQUIRED_LARGEST_TEST_ALLOWANCE_SECONDS: typ.Final[float] = 600.0
+REQUIRED_GLOBAL_TIMEOUT_SECONDS: typ.Final[float] = 30 * 60.0
+
 REQUIRED_COVERAGE_STEPS: typ.Final[dict[tuple[str, str], int]] = {
     ("ci.yml", "build-test"): 2,
     ("coverage-main.yml", "coverage-upload"): 2,
@@ -268,4 +276,57 @@ def test_each_coverage_lane_carries_the_condition_it_is_meant_to(
         f"these coverage lanes do not carry the conditions the developers' "
         f"guide records, as expected versus found: {wrong}; a lane that is "
         f"skipped runs no cargo, so its watchdog never arms"
+    )
+
+
+def test_the_default_profile_bounds_a_test_no_override_matches(
+    nextest_config: str,
+) -> None:
+    """An override bounds its filter's tests; the profile bounds the rest.
+
+    This is the tier this branch added. Before it, the only
+    `slow-timeout` in the file was the trybuild override, so two
+    binaries were bounded and every other test ran with nothing under
+    the job ceiling to stop it: nextest's built-in 60 s slow-timeout
+    warns and never terminates, and the sampled runs show 22 tests
+    crossing it on Windows.
+
+    `largest_test_allowance` alone cannot catch that, because it reports
+    the largest budget anywhere in the file, which the override supplies.
+
+    Proved by mutation: commenting out `[profile.default]`'s own
+    `slow-timeout` fails this test and nothing else.
+    """
+    assert bounds_a_single_test(nextest_config), (
+        "[profile.default] itself must set slow-timeout with terminate-after; "
+        "an override satisfies the file as a whole while leaving every test it "
+        "does not match unbounded"
+    )
+
+
+def test_the_two_nextest_tiers_carry_the_values_the_guide_states(
+    nextest_config: str,
+) -> None:
+    """Both were sized from run history, so both are pinned.
+
+    The ordering assertions hold for a wide range of values: any
+    whole-run budget between the per-test allowance and the watchdog's
+    room passes them. Only these pins tie the file to the sample the
+    guide records, so a change to either has to change that section too.
+    """
+    largest = largest_test_allowance(nextest_config)
+    assert largest == pytest.approx(REQUIRED_LARGEST_TEST_ALLOWANCE_SECONDS), (
+        f"the largest per-test allowance is {largest:.0f}s, not the "
+        f"{REQUIRED_LARGEST_TEST_ALLOWANCE_SECONDS:.0f}s the developers' guide "
+        f"states"
+    )
+    whole_run = global_timeout(nextest_config)
+    assert whole_run is not None, (
+        "`.config/nextest.toml` must set a global-timeout; without it a hung "
+        "run is bounded only by the cargo watchdog, which names cargo rather "
+        "than the test still running"
+    )
+    assert whole_run == pytest.approx(REQUIRED_GLOBAL_TIMEOUT_SECONDS), (
+        f"the global-timeout is {whole_run:.0f}s, not the "
+        f"{REQUIRED_GLOBAL_TIMEOUT_SECONDS:.0f}s the developers' guide states"
     )
