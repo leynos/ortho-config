@@ -31,7 +31,9 @@ use derive::build::{
 };
 use derive::generate::declarative::generate_declarative_impl;
 use derive::generate::docs::{DocsArgs, generate_docs_impl};
-use derive::generate::localization::{emit_localization_impl, generate_localization_ids};
+use derive::generate::localization::{
+    emit_identifier_artefact, emit_localization_impl, generate_localization_ids,
+};
 use derive::generate::ortho_impl::generate_trait_implementation;
 use derive::load_impl::{
     DiscoveryTokens, LoadImplArgs, LoadImplIdents, LoadImplTokens, build_load_impl,
@@ -86,6 +88,9 @@ pub fn derive_ortho_config(input_tokens: TokenStream) -> TokenStream {
             Ok(model) => model,
             Err(err) => return err.to_compile_error().into(),
         };
+    if let Err(err) = emit_identifier_artefact(&localization_ids, &ident) {
+        return err.to_compile_error().into();
+    }
     let docs_impl = match generate_docs_impl(&DocsArgs {
         ident: &ident,
         fields: &fields,
