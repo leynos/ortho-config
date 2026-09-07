@@ -13,10 +13,12 @@ use quote::quote;
 use syn::Ident;
 
 use crate::derive::build::CliFieldMetadata;
+use crate::derive::generate::localization::{ArgIdsModel, LocalizationIds};
 use crate::derive::parse::{FieldAttrs, SerdeRenameAll, serde_serialized_field_key};
 
 use self::resolution::{resolve_required, resolve_value_type};
 use super::AppName;
+use super::sections::string_tokens;
 use super::{example_tokens, link_tokens, note_tokens, option_char_tokens, option_string_tokens};
 use defaults::{default_env_name, default_field_id};
 use tokens::{build_possible_values, default_tokens, deprecated_tokens};
@@ -30,6 +32,7 @@ pub(super) struct FieldDocArgs<'a> {
     pub field_attrs: &'a [FieldAttrs],
     pub serde_rename_all: Option<SerdeRenameAll>,
     pub cli_fields: &'a [CliFieldMetadata],
+    pub localization_ids: &'a LocalizationIds,
     /// Resolved crate path for generated code references.
     pub krate: &'a proc_macro2::TokenStream,
 }
@@ -57,6 +60,12 @@ pub(super) fn build_fields_metadata(args: &FieldDocArgs<'_>) -> syn::Result<Vec<
         prefix: args.prefix,
         serde_rename_all: args.serde_rename_all,
         cli_lookup,
+        localization_args: args
+            .localization_ids
+            .args
+            .iter()
+            .map(|arg| (arg.field_name.as_str(), arg))
+            .collect(),
         env_seen: HashMap::new(),
         file_seen: HashMap::new(),
         krate: args.krate,
@@ -78,6 +87,7 @@ struct FieldMetaBuilder<'a> {
     prefix: Option<&'a str>,
     serde_rename_all: Option<SerdeRenameAll>,
     cli_lookup: HashMap<&'a str, &'a CliFieldMetadata>,
+    localization_args: HashMap<&'a str, &'a ArgIdsModel>,
     env_seen: HashMap<String, proc_macro2::Span>,
     file_seen: HashMap<String, proc_macro2::Span>,
     krate: &'a proc_macro2::TokenStream,
@@ -94,16 +104,9 @@ impl<'a> FieldMetaBuilder<'a> {
             .as_ref()
             .ok_or_else(|| syn::Error::new_spanned(field, "tuple fields are not supported"))?;
         let field_name = name.to_string();
-        let help_id = attrs
-            .doc
-            .help_id
-            .clone()
-            .unwrap_or_else(|| default_field_id(self.app_name, &field_name, "help"));
-        let long_help_id = attrs
-            .doc
-            .long_help_id
-            .clone()
-            .unwrap_or_else(|| default_field_id(self.app_name, &field_name, "long_help"));
+        let help_id = self.identifier_tokens(attrs.doc.help_id.as_deref(), &field_name, "help");
+        let long_help_id =
+            self.identifier_tokens(attrs.doc.long_help_id.as_deref(), &field_name, "long_help");
         let value_type = resolve_value_type(attrs, field);
         let required = resolve_required(field, attrs)?;
         let value_context = ValueContext {
@@ -122,8 +125,8 @@ impl<'a> FieldMetaBuilder<'a> {
         let meta_parts = render_meta_parts(attrs, self.krate);
         let identity = FieldIdentity {
             field_name: &field_name,
-            help_id: &help_id,
-            long_help_id: &long_help_id,
+            help_id,
+            long_help_id,
         };
         let components = FieldMetadataComponents {
             identity: identity.into_tokens(),
@@ -141,6 +144,26 @@ impl<'a> FieldMetaBuilder<'a> {
             env: self.build_env_tokens(context)?,
             file: self.build_file_tokens(context)?,
         })
+    }
+
+    fn identifier_tokens(
+        &self,
+        explicit: Option<&str>,
+        field_name: &str,
+        suffix: &str,
+    ) -> TokenStream {
+        if let Some(identifier) = explicit {
+            return string_tokens(identifier);
+        }
+        if let Some(arg) = self.localization_args.get(field_name) {
+            let message_suffix = syn::LitStr::new(
+                &format!("args.{}.{}", arg.name.as_ref(), suffix),
+                proc_macro2::Span::call_site(),
+            );
+            let krate = self.krate;
+            return quote! { #krate::message_id_for(command_path, #message_suffix) };
+        }
+        string_tokens(&default_field_id(self.app_name, field_name, suffix))
     }
 
     fn build_cli_tokens(&self, context: &FieldContext<'_>) -> syn::Result<TokenStream> {
@@ -221,8 +244,8 @@ struct FieldContext<'a> {
 
 struct FieldIdentity<'a> {
     field_name: &'a str,
-    help_id: &'a str,
-    long_help_id: &'a str,
+    help_id: TokenStream,
+    long_help_id: TokenStream,
 }
 
 struct ValueContext {
@@ -262,19 +285,19 @@ struct FieldMetadataComponents {
     meta_parts: MetaParts,
 }
 
-/// Pre-computed string literals for field identity.
+/// Pre-computed expressions for field identity.
 struct FieldIdentityTokens {
     field_name: syn::LitStr,
-    help_id: syn::LitStr,
-    long_help: syn::LitStr,
+    help_id: TokenStream,
+    long_help: TokenStream,
 }
 
 impl FieldIdentity<'_> {
     fn into_tokens(self) -> FieldIdentityTokens {
         FieldIdentityTokens {
             field_name: syn::LitStr::new(self.field_name, proc_macro2::Span::call_site()),
-            help_id: syn::LitStr::new(self.help_id, proc_macro2::Span::call_site()),
-            long_help: syn::LitStr::new(self.long_help_id, proc_macro2::Span::call_site()),
+            help_id: self.help_id,
+            long_help: self.long_help_id,
         }
     }
 }
@@ -311,8 +334,8 @@ fn render_identity_tokens(identity: FieldIdentityTokens) -> TokenStream {
     let long_help = identity.long_help;
     quote! {
         name: String::from(#field_name),
-        help_id: String::from(#help_id),
-        long_help_id: Some(String::from(#long_help)),
+        help_id: #help_id,
+        long_help_id: Some(#long_help),
     }
 }
 

@@ -115,7 +115,7 @@ impl DocSpec {
 /// Expands a compact test specification into documentation metadata.
 pub(super) fn doc(spec: DocSpec) -> DocMetadata {
     DocMetadata {
-        ir_version: "1.1".to_owned(),
+        ir_version: "2.0".to_owned(),
         app_name: spec.app_name.to_owned(),
         bin_name: spec.bin_name.map(str::to_owned),
         about_id: spec.about_id.to_owned(),
