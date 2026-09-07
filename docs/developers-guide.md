@@ -295,6 +295,9 @@ redundant exception, one scoped exception) and
 `tests/fixtures/orthohelp_policy_deny_fixture/` (mode `deny`, one malformed
 exception) back the policy golden and behavioural suites; `orthohelp_fixture`
 keeps no policy table and serves the "off by default" scenario (Decision D10).
+`tests/fixtures/orthohelp_policy_adoption_fixture/` omits `root_type` and the
+`ortho_config` dependency so the check-first pipeline (Decision D11) stays
+covered for packages still adopting the toolchain.
 The CLI-level policy behaviour is exercised end-to-end by
 `cargo-orthohelp/tests/features/orthohelp_policy.feature` with steps in
 `cargo-orthohelp/tests/rstest_bdd/behaviour/steps_policy.rs`, and the report
