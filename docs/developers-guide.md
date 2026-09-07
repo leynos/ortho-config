@@ -937,12 +937,16 @@ extensions. Jobs are its unit rather than steps, because the ceiling belongs to
 a job and has to contain every watchdog inside it; counting the steps is what
 makes the two invocations visible to the arithmetic. It reads a step's own
 environment before the job's, as GitHub resolves it, and it fails on a
-coverage-invoking job that declares no ceiling at all.
+coverage-invoking job that declares no ceiling at all. The readings it rests on
+live in `timeout_budgets.py` and `coverage_lanes.py`, and are driven with
+controlled values in `timeout_reading_test.py`.
 
 It pins the condition each lane carries, which is none today. A skipped step
 runs no `cargo`, so its watchdog never arms and the tiers say nothing about it:
 `if: false` on the step or on its job would leave a lane that looks bounded and
-is not. Adding a condition has to change the contract and this section with it.
+is not. Adding a condition has to change the contract and this section with it,
+and the lane coordinates are compared both ways, so a coverage lane appearing
+without an entry fails rather than passing unexamined.
 
 A document whose shape the reading does not expect yields no lane rather than
 raising. A `jobs` value that is a scalar reaches `.items()`, an `env` that is
