@@ -25,7 +25,7 @@ const CANONICAL_VERBS: &[&str] = &[
 /// use cargo_orthohelp::schema::{DocMetadata, HeadingIds, SectionsMetadata};
 ///
 /// let metadata = DocMetadata {
-///     ir_version: "1.1".to_owned(),
+///     ir_version: "2.0".to_owned(),
 ///     app_name: "example".to_owned(),
 ///     bin_name: None,
 ///     about_id: "example.about".to_owned(),

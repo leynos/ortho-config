@@ -12,12 +12,21 @@ pub use ir::{
 };
 
 /// Current IR schema version.
-pub const ORTHO_DOCS_IR_VERSION: &str = "1.1";
+pub const ORTHO_DOCS_IR_VERSION: &str = "2.0";
 
 /// Trait implemented for configs that can emit documentation metadata.
 pub trait OrthoConfigDocs {
     /// Returns the complete documentation metadata for this config.
     fn get_doc_metadata() -> DocMetadata;
+
+    /// Returns documentation metadata for this config mounted at `command_path`.
+    ///
+    /// Handwritten implementations may rely on this compatibility fallback when
+    /// they do not need path-sensitive generated identifiers.
+    #[must_use]
+    fn get_doc_metadata_for_path(_command_path: &[String]) -> DocMetadata {
+        Self::get_doc_metadata()
+    }
 }
 
 /// Trait implemented for `clap::Subcommand` enums that emit per-variant
@@ -56,4 +65,14 @@ pub trait OrthoConfigDocs {
 pub trait OrthoConfigSubcommandDocs {
     /// Returns one [`DocMetadata`] per subcommand variant.
     fn get_subcommand_doc_metadata() -> Vec<DocMetadata>;
+
+    /// Returns one [`DocMetadata`] per subcommand variant mounted below
+    /// `parent_path`.
+    ///
+    /// Handwritten implementations may rely on this compatibility fallback when
+    /// they do not need path-sensitive generated identifiers.
+    #[must_use]
+    fn get_subcommand_doc_metadata_for_path(_parent_path: &[String]) -> Vec<DocMetadata> {
+        Self::get_subcommand_doc_metadata()
+    }
 }
