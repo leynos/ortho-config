@@ -296,6 +296,7 @@ def test_whitaker_provisioning_requires_authenticated_binaries(
     assert "exit 127" in script
     assert script.count("--disable-strategies compile") == 2
     assert script.count("--no-discover-github-token") == 2
+    assert "--bin whitaker-installer" in script
     assert "whitaker-installer@${WHITAKER_INSTALLER_VERSION}" in script
     assert "dylint-link@6.0.1" in script
 
@@ -317,6 +318,7 @@ if [[ $1 == binstall && $2 == -V ]]; then
 fi
 printf '%s\\n' \"$*\" >> \"$CALL_LOG\"
 if [[ $* == *whitaker-installer@* ]]; then
+    [[ $* == *"--bin whitaker-installer"* ]] || exit 94
     printf '#!/bin/sh\\nexit 0\\n' > \"$FAKE_BIN/whitaker-installer\"
     /usr/bin/chmod +x \"$FAKE_BIN/whitaker-installer\"
 fi
@@ -339,6 +341,7 @@ fi
     )
     assert result.returncode == 0, result.stderr
     recorded = calls.read_text(encoding="utf-8")
+    assert "--bin whitaker-installer" in recorded
     assert "whitaker-installer@0.2.8" in recorded
     assert "dylint-link@6.0.1" in recorded
 
