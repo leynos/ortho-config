@@ -15,6 +15,17 @@ The workspace runs one unified test workflow via Make targets:
 These are required quality gates for code changes. Behavioural coverage runs
 inside the standard Rust test harness, not a bespoke test runner.
 
+### Scoped use of `googletest` and `pretty_assertions`
+
+The `googletest` and `pretty_assertions` dev dependencies (decision D9 of
+[execplan 9-1-1](execplans/9-1-1-profile-metadata.md)) are scoped to the
+profile test modules and the profile-layer tests only. New tests elsewhere
+should keep using the existing `assert_eq!`/`ensure!` conventions; do not
+migrate existing tests to these crates. When a new assertion needs richer
+matcher output, prefer `googletest::assert_that!` with matchers for shape
+inspection and `pretty_assertions::assert_eq!` for scalar equality, and keep
+the use local to the module that needs it.
+
 ### Nextest test-group serialization
 
 `.config/nextest.toml` assigns two test binaries to single-threaded groups:
@@ -77,6 +88,18 @@ Skill manifest descriptors are part of this agent-context contract: keep
 `SkillManifest`, `SkillCommandRef`, and `AgentContext.skill_manifests` in
 `ortho_config::agent_context`, and keep downstream manifest prose
 application-owned.
+
+Profile support (roadmap 9.1.1) adds two agent-context fields with an
+omitted-when-absent rule: `ProfilesDeclaration.selection` and
+`ProfilesDeclaration.list_command` are `Option` fields that serialize only when
+present, so the unsupported `{ "supported": false }` case stays byte-identical
+to the pre-profile schema. New optional fields must follow that rule and the
+`ProfilesDeclaration::unsupported()`/`supported()` constructor convention so
+struct-literal construction keeps working. The derive emits the matching IR
+`DocMetadata.profiles` only for opted-in structs; the `cargo-orthohelp` bridge
+maps it into the declaration. The runtime "which profile is active" concern is
+`SelectedProfile`/`ProfileLoadOutcome`, deliberately separate from the static
+agent-context contract.
 
 `localizer::identifier::normalize_segment` is the single source of truth for
 strict runtime and derive-time Fluent identifier segments. Reuse it from

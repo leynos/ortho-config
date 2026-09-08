@@ -41,10 +41,6 @@ fn render_long_help(help_state: &HelpState) -> Result<()> {
         .with_ref(Clone::clone)
         .unwrap_or_else(|| String::from("en_US.UTF-8"));
 
-    #[expect(
-        deprecated,
-        reason = "cargo_bin is the standard assert_cmd API in this test suite"
-    )]
     let mut command = AssertCommand::cargo_bin("hello_world")?;
     command
         .env_remove("LC_ALL")

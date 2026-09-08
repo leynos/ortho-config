@@ -20,7 +20,6 @@ use rstest::rstest;
 /// (e.g., `[("LC_ALL", "ja_JP.UTF-8"), ("LANG", "en_US.UTF-8")]`).
 fn run_with_env(locale_env: &[(&str, &str)], args: &[&str]) -> String {
     #[expect(
-        deprecated,
         clippy::expect_used,
         reason = "cargo_bin is the standard assert_cmd API and test panics are acceptable"
     )]
@@ -74,7 +73,6 @@ fn run_with_locale(locale: &str, args: &[&str]) -> String {
 
 fn assert_display_request_succeeds(locale: &str, args: &[&str]) {
     #[expect(
-        deprecated,
         clippy::expect_used,
         reason = "cargo_bin is the standard assert_cmd API and test panics are acceptable"
     )]

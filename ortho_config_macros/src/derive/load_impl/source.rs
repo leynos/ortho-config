@@ -1,9 +1,8 @@
 //! Source-aware fragments for generated configuration loading.
 
+use super::{LoadImplArgs, LoadImplIdents, LoadImplTokens, build_compose_layers_impl};
 use quote::quote;
 use syn::Ident;
-
-use super::{LoadImplArgs, LoadImplIdents, LoadImplTokens, build_compose_layers_impl};
 
 /// Runtime names used by a generated source-aware loading method.
 pub(crate) struct LoadSourceTokens<'a> {
@@ -39,18 +38,15 @@ pub(crate) fn build_source_aware_compose_layers_impl(
             krate: args.tokens.krate,
         },
         has_config_path: args.has_config_path,
+        profiles: args.profiles,
+        profile_env_var: args.profile_env_var.clone(),
+        cli_arg_ids: args.cli_arg_ids.clone(),
     };
-    build_compose_layers_impl(&source_aware_args)
-}
-
-/// Build a generated load method that calls its selected composition method.
-pub(crate) fn build_load_from_iter_impl(
-    config_ident: &Ident,
-    compose_method: &Ident,
-) -> proc_macro2::TokenStream {
-    quote! {
-        let composition = Self::#compose_method(iter);
-        composition.into_merge_result(|layers| #config_ident::merge_from_layers(layers))
+    let composition = build_compose_layers_impl(&source_aware_args);
+    if args.profiles {
+        quote! {{ #composition }.0 }
+    } else {
+        composition
     }
 }
 

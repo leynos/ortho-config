@@ -3,6 +3,8 @@
 use figment::Error as FigmentError;
 use thiserror::Error;
 
+use crate::profile::{AvailableProfileNames, ProfileSource};
+
 use super::aggregate::AggregatedErrors;
 
 /// Errors that can occur while loading configuration.
@@ -49,6 +51,44 @@ pub enum OrthoError {
         key: String,
         /// Human-readable explanation of the validation failure.
         message: String,
+    },
+
+    /// A selected profile does not exist in the file chain.
+    #[error("unknown profile '{selected}' selected via {selection_source}: {available}")]
+    UnknownProfile {
+        /// The selected profile name that could not be found.
+        selected: String,
+        /// How the selection was supplied.
+        ///
+        /// Named `selection_source` because thiserror reserves the field name
+        /// `source` for the error source chain, and this field holds
+        /// selection metadata rather than an error.
+        selection_source: ProfileSource,
+        /// Sorted profile names the file chain defines, rendered capped.
+        available: AvailableProfileNames,
+    },
+
+    /// A profile name violates the `[A-Za-z0-9_-]+` grammar.
+    #[error("invalid profile name '{name}': names must match [A-Za-z0-9_-]+")]
+    InvalidProfileName {
+        /// The offending name.
+        name: String,
+    },
+
+    /// A profile name is reserved.
+    #[error("profile name '{name}' is reserved")]
+    ReservedProfileName {
+        /// The reserved name.
+        name: String,
+    },
+
+    /// A profile table defines a key `OrthoConfig` reserves.
+    #[error("profile '{profile}' must not define the forbidden key '{key}'")]
+    ProfileForbiddenKey {
+        /// The profile name.
+        profile: String,
+        /// The forbidden key.
+        key: String,
     },
 
     /// Multiple errors occurred while loading configuration.

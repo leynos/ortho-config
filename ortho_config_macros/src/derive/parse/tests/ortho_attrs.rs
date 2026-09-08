@@ -120,6 +120,13 @@ pub(super) fn assert_post_merge_hook(
     Ok(())
 }
 
+/// Verify that the `profiles` struct attribute is correctly parsed.
+pub(super) fn assert_profiles(input: &DeriveInput, expected: bool, error_msg: &str) -> Result<()> {
+    let (_, _, struct_attrs, _) = parse_input(input).map_err(|err| anyhow!(err))?;
+    ensure!(struct_attrs.profiles == expected, "{error_msg}");
+    Ok(())
+}
+
 /// Verify that `#[ortho_config(crate = "...")]` is correctly parsed.
 pub(super) fn assert_crate_path(
     input: &DeriveInput,

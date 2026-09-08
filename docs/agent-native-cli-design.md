@@ -554,6 +554,24 @@ If implementation work decides that profiles are named config overlays, the
 roadmap must document the exact merge order and migration impact before code is
 changed.
 
+That documentation requirement is satisfied by
+[ADR-008](adr-008-profile-selection-and-layering.md), recorded before any
+behavioural code under roadmap 9.1.1. Profiles are named config overlays:
+`[profile.<name>]` tables inside the resolved configuration file chain,
+selected statelessly by a `--profile <name>` flag with a `<PREFIX>PROFILE`
+environment-variable fallback. The exact merge order is:
+
+```text
+built-in defaults < config files < selected profile < environment < flags
+```
+
+Profile support is opt-in via `#[ortho_config(profiles)]`; derives that do not
+opt in keep the four-tier order and keep reporting
+`profiles: { "supported": false }`. An explicitly provided flag beats the
+selected profile even when the flag value equals the built-in default. The
+migration impact, including the Rust-level `AgentContext.profiles` retype and
+the rollback story, is recorded in ADR-008's migration plan.
+
 Agent context should expose whether profiles are supported, how to list them,
 which flag selects one, and which profile fields are redacted or
 reference-only. Profile metadata should support secret redaction, profile names
@@ -638,25 +656,27 @@ forward-looking fields planned for later schema versions. Readers for schema v1
 apply defaults only to realized fields; planned rows record the intended future
 contract and do not imply that those fields exist today.
 
-| Field                  | Default                  | Status  | Rationale                                                                  |
-| ---------------------- | ------------------------ | ------- | -------------------------------------------------------------------------- |
-| `canonical_verb`       | `null`                   | v1      | Legacy command metadata did not classify verbs.                            |
-| `supports_json`        | `false`                  | planned | Structured output must be declared before tools rely on it.                |
-| `json_stdout_contract` | `null`                   | planned | No JSON stream invariant exists until the command opts in.                 |
-| `json_stderr_contract` | `null`                   | planned | Diagnostics remain unspecified for legacy commands.                        |
-| `exit_classes`         | `[]`                     | planned | Exit-code semantics are unavailable unless documented.                     |
-| `interaction_mode`     | `"unknown"`              | v1      | Legacy derives cannot prove whether a command prompts.                     |
-| `mutation_effect`      | `"unknown"`              | v1      | Read/write/delete boundaries must not be inferred from names.              |
-| `pagination`           | `null`                   | v1      | List bounds and cursors require explicit command metadata.                 |
-| `profiles.supported`   | `false`                  | v1      | Profiles are opt-in persistent state.                                      |
-| `delivery_route`       | `null`                   | v1      | Delivery sinks change artefact routing and must be explicit.               |
-| `feedback.supported`   | `false`                  | v1      | Feedback storage or upload must be explicitly available.                   |
-| `execution_ledger`     | `{ "supported": false }` | planned | Jobs, runs, or tasks require application-owned execution state.            |
-| `skill_manifests`      | `[]`                     | v1      | Skill manifests are absent until declared; validation lands in 6.3.2.      |
-| `capability_id`        | `null`                   | planned | Capability routing is optional downstream metadata.                        |
-| `provider_provenance`  | `{ "reported": false }`  | planned | Provider names are not emitted unless the application declares provenance. |
-| `renderer.human`       | `{ "supported": true }`  | planned | Existing documentation IR already supports human help material.            |
-| `renderer.machine`     | `{ "supported": false }` | planned | Machine renderer support must be declared before agents depend on it.      |
+| Field                   | Default                  | Status  | Rationale                                                                  |
+| ----------------------- | ------------------------ | ------- | -------------------------------------------------------------------------- |
+| `canonical_verb`        | `null`                   | v1      | Legacy command metadata did not classify verbs.                            |
+| `supports_json`         | `false`                  | planned | Structured output must be declared before tools rely on it.                |
+| `json_stdout_contract`  | `null`                   | planned | No JSON stream invariant exists until the command opts in.                 |
+| `json_stderr_contract`  | `null`                   | planned | Diagnostics remain unspecified for legacy commands.                        |
+| `exit_classes`          | `[]`                     | planned | Exit-code semantics are unavailable unless documented.                     |
+| `interaction_mode`      | `"unknown"`              | v1      | Legacy derives cannot prove whether a command prompts.                     |
+| `mutation_effect`       | `"unknown"`              | v1      | Read/write/delete boundaries must not be inferred from names.              |
+| `pagination`            | `null`                   | v1      | List bounds and cursors require explicit command metadata.                 |
+| `profiles.supported`    | `false`                  | v1      | Profiles are opt-in persistent state.                                      |
+| `profiles.selection`    | `null`                   | v1      | Selection contract exists only once a derive opts into profiles.           |
+| `profiles.list_command` | `null`                   | v1      | Profile listing commands arrive with the 9.1.3 store helpers.              |
+| `delivery_route`        | `null`                   | v1      | Delivery sinks change artefact routing and must be explicit.               |
+| `feedback.supported`    | `false`                  | v1      | Feedback storage or upload must be explicitly available.                   |
+| `execution_ledger`      | `{ "supported": false }` | planned | Jobs, runs, or tasks require application-owned execution state.            |
+| `skill_manifests`       | `[]`                     | v1      | Skill manifests are absent until declared; validation lands in 6.3.2.      |
+| `capability_id`         | `null`                   | planned | Capability routing is optional downstream metadata.                        |
+| `provider_provenance`   | `{ "reported": false }`  | planned | Provider names are not emitted unless the application declares provenance. |
+| `renderer.human`        | `{ "supported": true }`  | planned | Existing documentation IR already supports human help material.            |
+| `renderer.machine`      | `{ "supported": false }` | planned | Machine renderer support must be declared before agents depend on it.      |
 
 Lint behaviour for omitted metadata follows the selected mode. In `off` mode,
 the check is not run. In `warn` mode, omitted fields that block an agent-native
@@ -728,9 +748,10 @@ wire-contract snapshot is byte-sensitive. Field or key reordering therefore
 requires a deliberate snapshot review even when the schema meaning does not
 change.
 
-`AgentCommand.summary` is intentionally omitted when absent. Other optional
-schema v1 fields serialize as explicit `null` when absent. This asymmetry is
-part of the wire contract; changing it is breaking.
+`AgentCommand.summary` is intentionally omitted when absent, as are the optional
+`ProfilesDeclaration` fields (`selection` and `list_command`) added by roadmap
+9.1.1. Other optional schema v1 fields serialize as explicit `null` when
+absent. This asymmetry is part of the wire contract; changing it is breaking.
 
 `AgentInput.default` is a best-effort human-readable display. It is useful for
 selection and review, but it is not normative, executable, or
@@ -751,6 +772,11 @@ Schema v1 history:
 - `1`: locked by roadmap item 6.2.2. The lock standardizes agent-context enum
   wire strings to snake_case, records the null-versus-omitted optional-field
   policy, and includes agent-context output in `cargo orthohelp --format all`.
+- `1` (extended by 9.1.1): `profiles` retyped to `ProfilesDeclaration` at the
+  Rust level (a pre-approved pre-1.0 break per
+  [ADR-008](adr-008-profile-selection-and-layering.md)); the new optional fields
+  `selection` and `list_command` follow the omitted-when-absent rule, and the
+  unsupported case remains byte-identical to `{ "supported": false }`.
 
 ## 9. Current gaps to resolve
 

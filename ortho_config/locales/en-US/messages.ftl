@@ -5,3 +5,7 @@ clap-error-missing-argument = Missing required argument: { $argument }
 clap-error-unknown-argument = Unknown argument: { $argument }
 clap-error-invalid-value = Invalid value for { $argument }: { $value }
 clap-error-missing-subcommand = Missing subcommand. Available options: { $valid_subcommands }
+profile-error-unknown-profile = Unknown profile '{ $selected }' selected via { $source }: { $available }
+profile-error-invalid-name = Invalid profile name '{ $name }': names must match [A-Za-z0-9_-]+
+profile-error-reserved-name = Profile name '{ $name }' is reserved
+profile-error-forbidden-key = Profile '{ $profile }' must not define the forbidden key '{ $key }'

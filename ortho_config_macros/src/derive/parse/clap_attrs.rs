@@ -102,6 +102,29 @@ pub(crate) fn clap_variant_name(variant: &syn::Variant) -> syn::Result<Option<sy
     Ok(name)
 }
 
+/// Read a clap field's `env = "NAME"` binding, if present.
+///
+/// Used by the profile flag collision check (decision D6): a user field that
+/// claims the generated `<PREFIX>PROFILE` binding is a compile-time error on an
+/// opted-in struct.
+pub(crate) fn clap_field_env(field: &syn::Field) -> syn::Result<Option<String>> {
+    let mut env: Option<syn::LitStr> = None;
+    for attr in field.attrs.iter().filter(|attr| is_clap_attribute(attr)) {
+        let syn::Meta::List(list) = &attr.meta else {
+            continue;
+        };
+        list.parse_nested_meta(|meta| {
+            if meta.path.is_ident("env") && meta.input.peek(syn::Token![=]) {
+                let value = meta.value()?;
+                env = Some(value.parse()?);
+                return Ok(());
+            }
+            consume_unknown_meta(&meta)
+        })?;
+    }
+    Ok(env.map(|lit| lit.value()))
+}
+
 /// Detect whether a struct field is a clap subcommand selector.
 pub(crate) fn clap_field_is_subcommand(field: &syn::Field) -> syn::Result<bool> {
     let mut is_subcommand = false;

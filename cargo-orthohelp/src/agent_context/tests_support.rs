@@ -124,6 +124,7 @@ pub(super) fn doc(spec: DocSpec) -> DocMetadata {
         fields: spec.fields,
         subcommands: spec.subcommands,
         windows: None,
+        profiles: None,
     }
 }
 
