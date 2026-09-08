@@ -247,8 +247,16 @@ fn inferred_default_value_preserves_clap_parsers() -> Result<()> {
         source.clone(),
     )
     .context("merge parser-faithful defaults")?;
-    ensure!(merged.count == 5, "expected file count, got {}", merged.count);
-    ensure!(merged.mode == Mode::Safe, "expected file mode, got {:?}", merged.mode);
+    ensure!(
+        merged.count == 5,
+        "expected file count, got {}",
+        merged.count
+    );
+    ensure!(
+        merged.mode == Mode::Safe,
+        "expected file mode, got {:?}",
+        merged.mode
+    );
     ensure!(merged.port == 6, "expected file port, got {}", merged.port);
     ensure!(
         merged.label.as_deref() == Some("file"),
@@ -276,9 +284,21 @@ fn inferred_default_value_preserves_clap_parsers() -> Result<()> {
         source,
     )
     .context("merge explicit values")?;
-    ensure!(explicit.count == 9, "expected cli count, got {}", explicit.count);
-    ensure!(explicit.mode == Mode::Fast, "expected cli mode, got {:?}", explicit.mode);
-    ensure!(explicit.port == 10, "expected cli port, got {}", explicit.port);
+    ensure!(
+        explicit.count == 9,
+        "expected cli count, got {}",
+        explicit.count
+    );
+    ensure!(
+        explicit.mode == Mode::Fast,
+        "expected cli mode, got {:?}",
+        explicit.mode
+    );
+    ensure!(
+        explicit.port == 10,
+        "expected cli port, got {}",
+        explicit.port
+    );
     ensure!(
         explicit.label.as_deref() == Some("cli"),
         "expected cli label, got {:?}",
@@ -298,7 +318,9 @@ struct ExplicitDefaultArgs {
 }
 
 impl Default for ExplicitDefaultArgs {
-    fn default() -> Self { Self { count: 11 } }
+    fn default() -> Self {
+        Self { count: 11 }
+    }
 }
 
 #[rstest]
@@ -315,7 +337,11 @@ fn explicit_ortho_default_overrides_inferred_default_value() -> Result<()> {
         Arc::new(MapEnv::new()),
     )
     .context("merge explicit OrthoConfig default")?;
-    ensure!(merged.count == 11, "expected explicit default, got {}", merged.count);
+    ensure!(
+        merged.count == 11,
+        "expected explicit default, got {}",
+        merged.count
+    );
     Ok(())
 }
 
@@ -330,7 +356,9 @@ struct InvalidDefaultArgs {
 }
 
 impl Default for InvalidDefaultArgs {
-    fn default() -> Self { Self { port: 7 } }
+    fn default() -> Self {
+        Self { port: 7 }
+    }
 }
 
 fn contains_default_value_conversion(error: &OrthoError) -> bool {

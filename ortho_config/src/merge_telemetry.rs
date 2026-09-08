@@ -38,6 +38,8 @@ const CATEGORY_OPAQUE_KEY_TRANSFORM: &str = "opaque_key_transform";
 const CATEGORY_INVALID_NESTING: &str = "invalid_nesting";
 /// Command-line parsing prevented a complete source-aware load.
 const CATEGORY_CLI: &str = "cli";
+/// An inferred clap string default could not be parsed by its value parser.
+const CATEGORY_DEFAULT_VALUE_CONVERSION: &str = "default_value_conversion";
 /// Configuration-file gathering prevented a complete source-aware load.
 const CATEGORY_FILE: &str = "file";
 /// A configuration `extends` cycle prevented loading.
@@ -157,6 +159,7 @@ fn result_outcome<T>(operation: &'static str, result: &OrthoResult<T>) {
 const fn error_category(error: &OrthoError) -> &'static str {
     match error {
         OrthoError::CliParsing(_) => CATEGORY_CLI,
+        OrthoError::DefaultValueConversion { .. } => CATEGORY_DEFAULT_VALUE_CONVERSION,
         OrthoError::File { .. } => CATEGORY_FILE,
         OrthoError::CyclicExtends { .. } => CATEGORY_CYCLIC_EXTENDS,
         OrthoError::Gathering(_) => CATEGORY_GATHERING,
