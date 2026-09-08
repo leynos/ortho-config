@@ -108,7 +108,7 @@ fn generate_declarative_merge_impl_handles_map_fields(
         .replace(" :: ", "::")
         .replace(' ', "");
     for token in expected_tokens {
-        ensure!(norm.contains(token), "expected merge logic for {token}",);
+        ensure!(norm.contains(token), "expected merge logic for {token}");
     }
     if let Some((first, second)) = ordering {
         let first_index = norm.find(first).expect("first merge logic should render");
