@@ -42,6 +42,7 @@ pub use uncased;
 pub use xdg;
 
 pub mod agent_context;
+pub mod cargo;
 mod csv_env;
 #[cfg(feature = "serde_json")]
 #[cfg_attr(docsrs, doc(cfg(feature = "serde_json")))]

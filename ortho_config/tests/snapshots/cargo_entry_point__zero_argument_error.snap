@@ -1,0 +1,5 @@
+---
+source: ortho_config/tests/cargo_entry_point.rs
+expression: usage_lines(&rendered)
+---
+Usage: cargo <COMMAND>
