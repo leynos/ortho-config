@@ -101,19 +101,18 @@ fn test_basic_metadata(docs_metadata: DocMetadata) -> Result<()> {
 }
 
 #[rstest]
-fn test_sections_headings(docs_metadata: DocMetadata) -> Result<()> {
+fn test_sections_headings(docs_metadata: DocMetadata) {
     let headings = &docs_metadata.sections.headings_ids;
-    ensure!(
+    assert!(
         headings.options == "demo.headings.options",
         "expected options heading override, got {}",
         headings.options
     );
-    ensure!(
+    assert!(
         headings.name == "ortho.headings.name",
         "expected default name heading, got {}",
         headings.name
     );
-    Ok(())
 }
 
 #[rstest]
