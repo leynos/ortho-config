@@ -12,6 +12,10 @@ use crate::derive::parse::StructAttrs;
 
 use super::cli::{validate_cli_long, validate_user_cli_short};
 
+/// Builds the generated `--config-path` field after validating its CLI metadata.
+///
+/// Returns a `syn::Error` when generated names or requested flags conflict with
+/// user-defined fields.
 pub(crate) fn build_config_flag_field(
     struct_attrs: &StructAttrs,
     used_shorts: &HashSet<char>,
