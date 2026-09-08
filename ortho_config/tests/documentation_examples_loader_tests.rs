@@ -164,15 +164,14 @@ fn matching_closing_fence_allows_horizontal_whitespace(#[case] suffix: &str) -> 
 }
 
 #[test]
-fn matching_closing_fence_rejects_non_whitespace_suffix() -> Result<()> {
+fn matching_closing_fence_rejects_non_whitespace_suffix() {
     let contents = "<!-- tested-example: sample -->\n```toml\nport = 8080\n```toml\n";
     let error = parse_document("fixture.md", contents)
         .expect_err("closing-fence text should leave the fence unterminated");
-    ensure!(
+    assert!(
         error.to_string().contains("fence is not terminated"),
         "unexpected closing-fence error: {error}"
     );
-    Ok(())
 }
 
 #[test]

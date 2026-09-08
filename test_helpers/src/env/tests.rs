@@ -1,6 +1,7 @@
 //! Unit tests for environment helpers.
 
 use super::*;
+use anyhow::{Context, Result, ensure};
 use std::ffi::OsStr;
 use std::sync::{Arc, Barrier};
 use std::thread;
@@ -23,9 +24,17 @@ fn run_env_worker(barrier: Arc<Barrier>, key: String, iterations: usize) {
     for iter in 0..iterations {
         let value = format!("value-{key}-{iter}");
         let guard = set_var(&key, &value);
-        assert_eq!(env_value(&key), value);
+        let observed = match env_value(&key) {
+            Ok(temporary_value) => temporary_value,
+            Err(error) => panic!("worker environment value should be readable: {error:#}"),
+        };
+        assert_eq!(observed, value);
         drop(guard);
-        assert_eq!(env_value(&key), "original");
+        let restored = match env_value(&key) {
+            Ok(restored_value) => restored_value,
+            Err(error) => panic!("worker original environment value should be readable: {error:#}"),
+        };
+        assert_eq!(restored, "original");
     }
 }
 
@@ -35,13 +44,9 @@ fn assert_join_success(handle: thread::JoinHandle<()>) {
     }
 }
 
-// Centralizes environment variable lookups for the tests; panics on
-// missing/invalid values so failures are loud and easy to diagnose.
-fn env_value(key: &str) -> String {
-    match std::env::var(key) {
-        Ok(value) => value,
-        Err(err) => panic!("expected environment variable {key}: {err}"),
-    }
+// Centralizes environment variable lookups while retaining the original error.
+fn env_value(key: &str) -> Result<String> {
+    std::env::var(key).with_context(|| format!("read required environment variable {key}"))
 }
 
 fn setup_test_env(key: &str, value: &str) {
@@ -58,38 +63,66 @@ fn cleanup_test_env(key: &str) {
     });
 }
 
-fn test_guard_lifecycle<F, A>(key: &str, original: &str, create_guard: F, assert_during: A)
+fn test_guard_lifecycle<F, A>(
+    key: &str,
+    original: &str,
+    create_guard: F,
+    assert_during: A,
+) -> Result<()>
 where
     F: FnOnce(&str) -> EnvVarGuard,
-    A: FnOnce(&str),
+    A: FnOnce(&str) -> Result<()>,
 {
     setup_test_env(key, original);
-    {
+    let during_guard = {
         let _guard = create_guard(key);
-        assert_during(key);
-    }
-    assert_eq!(env_value(key), original);
+        assert_during(key)
+    };
+    let result = (|| {
+        during_guard?;
+        let restored = env_value(key)?;
+        ensure!(
+            restored == original,
+            "environment guard must restore its original value"
+        );
+        Ok(())
+    })();
     cleanup_test_env(key);
+    result
 }
 
 #[test]
-fn set_var_restores_original() {
+fn set_var_restores_original() -> Result<()> {
     test_guard_lifecycle(
         "TEST_HELPERS_SET_VAR",
         "orig",
         |key| set_var(key, "temp"),
-        |key| assert_eq!(env_value(key), "temp"),
-    );
+        |key| {
+            let temporary = env_value(key)?;
+            ensure!(
+                temporary == "temp",
+                "environment guard must expose its temporary value"
+            );
+            Ok(())
+        },
+    )
 }
 
 #[test]
-fn remove_var_restores_value() {
+fn remove_var_restores_value() -> Result<()> {
     test_guard_lifecycle(
         "TEST_HELPERS_REMOVE_VAR",
         "to-be-removed",
         |key| remove_var(key),
-        |key| assert!(std::env::var(key).is_err()),
-    );
+        |key| {
+            let removed = std::env::var(key).is_err();
+            ensure!(
+                removed,
+                "environment guard must remove its value while held"
+            );
+            Ok(())
+        },
+    )
 }
 
 #[test]
@@ -98,9 +131,29 @@ fn set_var_unsets_when_absent() {
     cleanup_test_env(key);
     {
         let _guard = set_var(key, "tmp");
-        assert_eq!(env_value(key), "tmp");
+        let temporary = env_value(key).expect("temporary environment value should be readable");
+        assert_eq!(temporary, "tmp");
     }
-    assert!(std::env::var(key).is_err());
+    let unset = std::env::var(key).is_err();
+    assert!(unset);
+}
+
+#[test]
+fn env_value_reports_missing_variable() {
+    let key = "TEST_HELPERS_MISSING";
+    cleanup_test_env(key);
+
+    let error = env_value(key).expect_err("missing environment values should be reported");
+    let rendered = format!("{error:#}");
+
+    assert!(
+        rendered.contains(key),
+        "missing-variable error should name its key: {rendered}"
+    );
+    assert!(
+        !rendered.contains("{key}"),
+        "missing-variable error must interpolate the key: {rendered}"
+    );
 }
 
 #[test]
@@ -125,20 +178,28 @@ fn concurrent_mutations_restore_values() {
     handles.into_iter().for_each(assert_join_success);
 
     for key in keys {
-        assert_eq!(env_value(&key), "original");
+        let original =
+            env_value(&key).expect("original worker environment value should be readable");
+        assert_eq!(original, "original");
         cleanup_test_env(&key);
     }
 
     let same_key = "TEST_HELPERS_CONCURRENT_SAME_KEY";
     setup_test_env(same_key, "base");
     let guard1 = set_var(same_key, "v1");
-    assert_eq!(env_value(same_key), "v1");
+    let first = env_value(same_key).expect("first stacked environment value should be readable");
+    assert_eq!(first, "v1");
     let guard2 = set_var(same_key, "v2");
-    assert_eq!(env_value(same_key), "v2");
+    let second = env_value(same_key).expect("second stacked environment value should be readable");
+    assert_eq!(second, "v2");
     drop(guard2);
-    assert_eq!(env_value(same_key), "v1");
+    let restored_first =
+        env_value(same_key).expect("first stacked environment value should be restored");
+    assert_eq!(restored_first, "v1");
     drop(guard1);
-    assert_eq!(env_value(same_key), "base");
+    let original =
+        env_value(same_key).expect("original stacked environment value should be restored");
+    assert_eq!(original, "base");
     cleanup_test_env(same_key);
 }
 
@@ -151,13 +212,18 @@ fn stacking_restores_in_lifo() {
         unsafe { super::env_remove_var(key) }
     });
     let guard1 = set_var(key, "v1");
-    assert_eq!(env_value(key), "v1");
+    let first = env_value(key).expect("first stacked environment value should be readable");
+    assert_eq!(first, "v1");
 
     let guard2 = set_var(key, "v2");
-    assert_eq!(env_value(key), "v2");
+    let second = env_value(key).expect("second stacked environment value should be readable");
+    assert_eq!(second, "v2");
     drop(guard2);
 
-    assert_eq!(env_value(key), "v1");
+    let restored_first =
+        env_value(key).expect("first stacked environment value should be restored");
+    assert_eq!(restored_first, "v1");
     drop(guard1);
-    assert!(std::env::var(key).is_err());
+    let unset = std::env::var(key).is_err();
+    assert!(unset);
 }
