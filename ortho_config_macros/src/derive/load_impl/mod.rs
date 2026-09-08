@@ -328,7 +328,7 @@ pub(crate) fn build_load_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStre
 
     quote! {
         impl #cli_ident {
-            #[expect(dead_code, reason = "Generated method may not be used in all builds")]
+            #[allow(dead_code, reason = "Generated method may not be used in all builds")]
             pub fn compose_layers_from_iter<I, T>(iter: I) -> #krate::declarative::LayerComposition
             where
                 I: IntoIterator<Item = T>,
@@ -342,7 +342,7 @@ pub(crate) fn build_load_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStre
             /// Generated code keeps the two source capabilities separate so a
             /// lookup-only discovery source cannot accidentally enumerate the
             /// environment layer.
-            #[expect(dead_code, reason = "Generated method may not be used in all builds")]
+            #[allow(dead_code, reason = "Generated method may not be used in all builds")]
             pub fn compose_layers_from_iter_with_sources<I, T>(
                 iter: I,
                 discovery_source: #krate::SharedEnvSource,
@@ -355,7 +355,7 @@ pub(crate) fn build_load_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStre
                 #source_aware_compose_layers_impl
             }
 
-            #[expect(dead_code, reason = "Generated method may not be used in all builds")]
+            #[allow(dead_code, reason = "Generated method may not be used in all builds")]
             pub fn compose_layers() -> #krate::declarative::LayerComposition {
                 Self::compose_layers_from_iter(std::env::args_os())
             }
