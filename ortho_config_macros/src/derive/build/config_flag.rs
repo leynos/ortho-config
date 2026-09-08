@@ -33,7 +33,7 @@ pub(crate) fn build_config_flag_field(
     if used_longs.contains(&long) {
         return Err(syn::Error::new_spanned(
             &name,
-            format!("duplicate `cli_long` value '{long}' conflicts with the generated config flag",),
+            format!("duplicate `cli_long` value '{long}' conflicts with the generated config flag"),
         ));
     }
     let long_lit = syn::LitStr::new(&long, proc_macro2::Span::call_site());
