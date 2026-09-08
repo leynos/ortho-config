@@ -27,6 +27,7 @@ target/
 
 # Python tooling
 scripts/.venv/
+scripts/.tools/
 **/__pycache__/
 .grepai
 .grepai/

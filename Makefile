@@ -1,18 +1,31 @@
-.PHONY: help all clean test build release lint lint-clippy lint-whitaker fmt check-fmt markdownlint spellcheck spelling-config spelling-phrase-check spelling-helper-test nixie typecheck python-test-deps publish-check powershell-wrapper-validate test-workflow-contracts FORCE
+.PHONY: help all clean test build release lint lint-clippy lint-whitaker fmt check-fmt markdownlint spellcheck spelling-config spelling-phrase-check spelling-helper-test nixie typecheck python-test-deps publish-check powershell-wrapper-validate test-workflow-contracts test-markdown-format provision-mdtablefix FORCE
+.NOTPARALLEL: all lint
 
 CRATE ?= ortho_config
 CARGO ?= cargo
 WHITAKER ?= whitaker
+BUN ?= bun
+MDTABLEFIX_VERSION ?= 0.5.1
+MDTABLEFIX_BIN_DIR ?= $(CURDIR)/scripts/.tools/mdtablefix/$(MDTABLEFIX_VERSION)
 PUBLISH_CHECK_CARGO_REAL ?= $(shell command -v $(CARGO))
 BUILD_JOBS ?=
 CLIPPY_FLAGS ?= --all-targets --all-features -- -D warnings
-MDLINT ?= markdownlint-cli2
+MDTABLEFIX ?= scripts/mdtablefix.sh
+# Keep the local formatter on the same markdownlint-cli2 version embedded by
+# the pinned CI action. The action itself remains the CI linting provider.
+MARKDOWNLINT_VERSION ?= 0.23.2
+MDLINT ?= scripts/markdownlint-cli2.sh
+MDLINT_NORMAL_CONFIG ?= .markdownlint-cli2-normal.jsonc
+MDLINT_ROOT_CONFIG ?= .markdownlint-cli2.jsonc
+MDTABLEFIX_ARGS ?= --wrap --renumber --breaks --ellipsis --fences --in-place
+MDLINT_FIX_ARGS ?= --fix --no-globs
 NIXIE ?= nixie
 # Single source of truth for the typos version; CI consumes it through the
 # spellcheck target, so the Makefile and CI cannot drift apart.
 TYPOS_VERSION ?= 1.48.0
 RUFF_VERSION ?= 0.15.12
 UV_ENV = UV_CACHE_DIR=.uv-cache UV_TOOL_DIR=.uv-tools
+export BUN CARGO MARKDOWNLINT_VERSION MDLINT_NORMAL_CONFIG MDLINT_ROOT_CONFIG MDTABLEFIX_ARGS MDLINT_FIX_ARGS MDTABLEFIX_VERSION MDTABLEFIX_BIN_DIR
 # Markdown file list shared by the spelling gate. markdownlint-cli2 does its
 # own globbing via .markdownlint-cli2.jsonc; typos takes an explicit list.
 MD_FILES_FIND ?= find . -type f -name '*.md' -not -path './target/*' -not -path './$(PYTHON_VENV)/*' -not -path './.git/*' -not -path './.memdb/*' -print0
@@ -83,6 +96,12 @@ python-test-deps: ## Ensure Python test dependencies are provisioned
 test-workflow-contracts: ## Validate the mutation-testing caller contract
 	$(UV) run --with 'pytest>=8' --with 'pyyaml>=6' pytest tests/workflow_contracts -q
 
+test-markdown-format: ## Validate tracked-Markdown formatter contracts
+	$(PYTEST) scripts/tests/test_markdown_formatting.py scripts/tests/test_markdown_tooling.py -q
+
+provision-mdtablefix: ## Provision the pinned Markdown table formatter locally
+	scripts/provision-mdtablefix.sh "$(CARGO)" "$(MDTABLEFIX_VERSION)" "$(MDTABLEFIX_BIN_DIR)"
+
 # will match target/debug/libmy_library.rlib and target/release/libmy_library.rlib
 target/%/lib$(CRATE).rlib: FORCE ## Build library in debug or release
 	$(BUILD_LIBRARY_COMMAND)
@@ -101,15 +120,18 @@ lint-whitaker: ## Run the Whitaker Dylint suite with warnings denied
 typecheck: ## Typecheck workspace (cargo check)
 	RUSTFLAGS="-D warnings" $(CARGO) check --workspace --all-targets --all-features $(BUILD_JOBS)
 
-fmt: ## Format Rust and Markdown sources
+fmt: provision-mdtablefix ## Format Rust and Markdown sources
 	$(CARGO) fmt --all
-	mdformat-all
+	scripts/with-tracked-markdown.sh scripts/format-tracked-markdown.sh \
+		"$(MDTABLEFIX)" "$(MDLINT)"
 
-check-fmt: ## Verify formatting
+check-fmt: provision-mdtablefix ## Verify formatting
 	$(CARGO) fmt --all -- --check
+	scripts/with-tracked-markdown.sh scripts/check-markdown-format.sh \
+		--formatter "$(MDTABLEFIX)"
 
 markdownlint: ## Lint Markdown files and enforce en-GB-oxendict spelling
-	$(MDLINT) "**/*.md"
+	$(MDLINT) --config "$(MDLINT_NORMAL_CONFIG)" "**/*.md"
 	$(MAKE) spellcheck
 
 spellcheck: spelling-phrase-check ## Enforce en-GB-oxendict (Oxford) spelling over Markdown prose
