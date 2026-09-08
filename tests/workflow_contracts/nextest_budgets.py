@@ -84,44 +84,16 @@ def seconds(duration: str) -> float:
 
 
 def _table(value: object) -> dict[str, object]:
-    """Return a parsed value as a table, or an empty one.
-
-    ``tomllib`` returns whatever the document said, so a configuration
-    naming a scalar where a table belongs yields nothing here rather
-    than raising several frames away, and the assertion that finds no
-    budget reports the absence.
-
-    Parameters
-    ----------
-    value : object
-        Any value ``tomllib`` produced.
-
-    Returns
-    -------
-    dict[str, object]
-        The table, or an empty one when the value is not a table.
-    """
+    """Return a parsed value as a table, or an empty one."""
+    # `tomllib` returns whatever the document said, so a configuration
+    # naming a scalar where a table belongs yields nothing here rather
+    # than raising several frames away, and the assertion that finds no
+    # budget reports the absence.
     return dict(value) if isinstance(value, dict) else {}
 
 
 def _parsed(config_text: str) -> dict[str, object]:
-    """Return the nextest configuration as TOML.
-
-    Parameters
-    ----------
-    config_text : str
-        The nextest configuration file's text.
-
-    Returns
-    -------
-    dict[str, object]
-        The parsed document.
-
-    Raises
-    ------
-    NextestConfigurationError
-        If the text is not valid TOML.
-    """
+    """Return the nextest configuration as TOML, or raise."""
     try:
         return tomllib.loads(config_text)
     except tomllib.TOMLDecodeError as error:
@@ -130,22 +102,10 @@ def _parsed(config_text: str) -> dict[str, object]:
 
 
 def _budget_tables(config_text: str) -> list[tuple[str, dict[str, object]]]:
-    """Return every table nextest reads a per-test budget from.
-
-    Each profile's own table and each of its ``[[overrides]]`` entries,
-    with the dotted path that names it so a failure can say which one is
-    at fault.
-
-    Parameters
-    ----------
-    config_text : str
-        The nextest configuration file's text.
-
-    Returns
-    -------
-    list of tuple
-        The dotted path and the table, in file order.
-    """
+    """Return every table nextest reads a per-test budget from."""
+    # Each profile's own table and each of its `[[overrides]]` entries,
+    # paired with the dotted path that names it so a failure can say
+    # which one is at fault.
     tables: list[tuple[str, dict[str, object]]] = []
     for name, raw in _table(_parsed(config_text).get("profile")).items():
         profile = _table(raw)
@@ -160,18 +120,7 @@ def _budget_tables(config_text: str) -> list[tuple[str, dict[str, object]]]:
 
 
 def _slow_timeouts(config_text: str) -> list[tuple[str, object]]:
-    """Return every ``slow-timeout`` the configuration declares.
-
-    Parameters
-    ----------
-    config_text : str
-        The nextest configuration file's text.
-
-    Returns
-    -------
-    list of tuple
-        The dotted path of the declaring table and the value.
-    """
+    """Return each ``slow-timeout`` with the path of the table declaring it."""
     return [
         (path, table["slow-timeout"])
         for path, table in _budget_tables(config_text)
@@ -180,30 +129,12 @@ def _slow_timeouts(config_text: str) -> list[tuple[str, object]]:
 
 
 def _budget_of(path: str, value: object) -> float:
-    """Return the per-test budget one ``slow-timeout`` declares.
-
-    Parameters
-    ----------
-    path : str
-        The dotted path of the declaring table, for the message.
-    value : object
-        The parsed value, a table or a bare duration.
-
-    Returns
-    -------
-    float
-        The budget in seconds.
-
-    Raises
-    ------
-    UnboundedTestError
-        If the value names no ``terminate-after``, in either spelling.
-        nextest then marks the test slow and lets it run on, so there is
-        no per-test tier to compare against.
-    NextestConfigurationError
-        If the value is a table with no ``period``, or is neither a
-        table nor a duration.
-    """
+    """Return the per-test budget one ``slow-timeout`` declares, or raise."""
+    # A value naming no `terminate-after`, in either spelling, raises
+    # `UnboundedTestError`: nextest marks the test slow and lets it run
+    # on, so there is no per-test tier to compare against. A table with
+    # no `period`, or a value that is neither a table nor a duration,
+    # raises `NextestConfigurationError`.
     match value:
         case str():
             message = (
@@ -230,6 +161,38 @@ def _budget_of(path: str, value: object) -> float:
         )
         raise UnboundedTestError(message)
     return seconds(period) * float(str(multiplier))
+
+
+def configured_periods(config_text: str) -> list[float]:
+    """Return every warning period nextest reads, in seconds.
+
+    The period a ``slow-timeout`` names, whether it is a bare duration
+    or the ``period`` key of a table, for each profile and each of its
+    overrides. Read from the parsed document rather than matched as
+    text, so a period written inside a comment, inside an override's
+    ``filter`` expression, or in a table nextest never consults is not
+    counted as one in force.
+
+    Parameters
+    ----------
+    config_text : str
+        The nextest configuration file's text.
+
+    Returns
+    -------
+    list of float
+        Each configured period in seconds, in file order.
+    """
+    periods: list[float] = []
+    for _, value in _slow_timeouts(config_text):
+        match value:
+            case str():
+                periods.append(seconds(value))
+            case {"period": str() as period}:
+                periods.append(seconds(period))
+            case _:
+                continue
+    return periods
 
 
 def largest_test_allowance(config_text: str) -> float:

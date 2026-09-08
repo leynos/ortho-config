@@ -192,8 +192,10 @@ def test_the_job_ceiling_contains_every_watchdog_and_the_work_around_them(
         required = required_ceiling(budgets, allowance)
         assert job.job_timeout is not None, (
             f"{job} runs {job.steps} watchdog-bounded cargo invocation(s) in a "
-            f"job with no timeout-minutes; the outermost tier is missing and "
-            f"GitHub's six-hour default applies"
+            f"job with no usable timeout-minutes: either it declares none, or "
+            f"it declares something GitHub will not honour as one, which is "
+            f"anything but a positive whole number of minutes. The outermost "
+            f"tier is missing and GitHub's six-hour default applies"
         )
         assert job.job_timeout >= required, (
             f"{job} has a ceiling of {job.job_timeout:.0f}s, below the "
@@ -208,13 +210,16 @@ def test_the_job_ceiling_contains_every_watchdog_and_the_work_around_them(
 def test_a_whole_run_budget_would_sit_inside_each_watchdog(
     coverage_jobs: tuple[CoverageJob, ...], nextest_config: str
 ) -> None:
-    """Tier three must not pre-empt tier two, if tier two appears.
+    """Tier three must not pre-empt tier two, and must fit inside tier one.
 
-    No ``global-timeout`` is set today, so this asserts nothing about the
-    current tree and is not a licence to leave it that way: the guide
-    records the gap. What it does is bind the value the moment one is
-    added, so it arrives above the largest per-test allowance and inside
-    the watchdog rather than merely somewhere.
+    ``.config/nextest.toml`` sets ``global-timeout = "30m"``, so this
+    runs against the current tree: the whole-run budget has to sit above
+    the largest per-test allowance, or the run ends before the slowest
+    test can use its budget, and below the watchdog with nextest's
+    termination procedure and a cold build counted, or cargo is killed
+    mid-teardown and the report that would name the hung test is lost.
+    The skip below is what a configuration setting none reads as, and
+    the guide records that as a gap rather than a licence.
     """
     whole_run = global_timeout(nextest_config)
     if whole_run is None:

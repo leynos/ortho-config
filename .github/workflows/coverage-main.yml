@@ -14,12 +14,13 @@ on:
 jobs:
   coverage-upload:
     runs-on: ubuntu-latest
-    # Two coverage steps run in this job, each under its own 1,800 s cargo
-    # watchdog, so the ceiling must contain both. The work outside them
-    # reached 284 s on run 31908409573, read across 31 runs of every
-    # conclusion, and the contract allows 15 minutes against that, which
-    # makes the requirement 3,600 + 900 = 75 minutes with 15 more asked for
-    # above it. This job had no ceiling either.
+    # Two coverage steps run in this job, each under its own 2,700 s cargo
+    # watchdog (RUN_RUST_CARGO_WAIT_TIMEOUT below), so the ceiling must
+    # contain both. The work outside them reached 284 s on run 31908409573,
+    # read across 31 runs of every conclusion, and the contract allows 15
+    # minutes against that, which makes the requirement
+    # 5,400 + 900 = 6,300 s = 105 minutes with 15 more asked for above it.
+    # This job had no ceiling either.
     timeout-minutes: 120
     permissions:
       contents: read

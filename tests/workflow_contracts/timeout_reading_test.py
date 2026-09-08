@@ -8,12 +8,10 @@ the ways they can be, so they are driven with controlled values here.
 
 from __future__ import annotations
 
-import re
-
 import pytest
 from nextest_budgets import (
+    configured_periods,
     largest_test_allowance,
-    seconds,
     termination_allowance,
 )
 from timeout_budgets import (
@@ -45,12 +43,16 @@ def test_the_largest_per_test_allowance_counts_the_multiplier(
     This is the reading that decides every comparison above, and it is
     the one easy to get wrong: a contract reading the period alone would
     report a 120 s largest allowance where the real figure is 600 s.
+
+    The periods it is compared against come from the parsed document.
+    Scanning the text for ``period = "..."`` also found the ones written
+    inside comments, so commenting a period out of the configuration
+    could fail this test while the configuration nextest reads was
+    unchanged.
     """
     largest = largest_test_allowance(nextest_config)
-    periods = [
-        seconds(match[1])
-        for match in re.finditer(r'period\s*=\s*"([^"]+)"', nextest_config)
-    ]
+    periods = configured_periods(nextest_config)
+
     assert largest > max(periods), (
         f"the largest per-test allowance came out as {largest:.0f}s, no more "
         f"than the longest bare period; terminate-after was not counted"
@@ -62,10 +64,10 @@ def test_the_termination_allowance_is_the_grace_period_plus_the_margin() -> None
 
     A single floor over the grace period and the margin would absorb
     every grace period below the margin, so adding a thirty-second one
-    to this configuration would demand nothing more of the watchdog. No
-    ``global-timeout`` is set here, so the ordering assertion that uses
-    this reading is skipped entirely, which leaves this test the only
-    thing standing behind it.
+    to this configuration would demand nothing more of the watchdog.
+    This repository names no grace period at all, so the ordering
+    assertion that uses this reading exercises only the fallback, which
+    leaves the configured cases to this test alone.
     """
     assert termination_allowance("") == pytest.approx(
         NEXTEST_DEFAULT_GRACE_PERIOD_SECONDS + TERMINATION_SAFETY_MARGIN_SECONDS
@@ -108,4 +110,33 @@ def test_the_required_ceiling_carries_all_three_terms() -> None:
     ), "the margin applies even when nothing runs outside the watchdog"
     assert required_ceiling([], 0.0) == pytest.approx(CEILING_MARGIN_SECONDS), (
         "the margin is a term of its own, not a fraction of the others"
+    )
+
+
+def test_a_commented_period_is_not_a_configured_period() -> None:
+    """Only the periods nextest reads count as configured ones.
+
+    The reading above scanned the file's text for ``period = "..."``,
+    which found the ones inside comments too. Commenting a period out
+    could then raise the largest period this test compares against and
+    fail it, while the configuration nextest actually reads had not
+    changed at all.
+    """
+    periods = configured_periods(
+        "[profile.default]\n"
+        '# slow-timeout = { period = "2h", terminate-after = 1 }\n'
+        'slow-timeout = { period = "60s", terminate-after = 5 }\n'
+    )
+
+    assert periods == [pytest.approx(60.0)], (
+        f"a period inside a comment is not in force; read {periods!r}"
+    )
+
+
+def test_a_bare_slow_timeout_names_a_period_too() -> None:
+    """``slow-timeout = "90s"`` is a warning period, spelled shorter."""
+    periods = configured_periods('[profile.default]\nslow-timeout = "90s"\n')
+
+    assert periods == [pytest.approx(90.0)], (
+        f"a bare duration is the period it names; read {periods!r}"
     )

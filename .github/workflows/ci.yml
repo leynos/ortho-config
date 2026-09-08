@@ -8,13 +8,14 @@ on:
 jobs:
   build-test:
     runs-on: ${{ matrix.os }}
-    # Two coverage steps run in this job, each under its own 1,800 s cargo
-    # watchdog, so the ceiling must contain both before it contains anything
-    # else. On the Windows leg the work outside them, dominated by cache save
-    # and restore, reached 3,257 s on run 33447440225, read across 103 jobs of
-    # every conclusion. The contract allows 60 minutes for that, making the
-    # requirement 3,600 + 3,600 = 120 minutes, and asks for 15 minutes above
-    # it so a ceiling never fires at the moment the watchdog would have
+    # Two coverage steps run in this job, each under its own 2,700 s cargo
+    # watchdog (RUN_RUST_CARGO_WAIT_TIMEOUT below), so the ceiling must
+    # contain both before it contains anything else. On the Windows leg the
+    # work outside them, dominated by cache save and restore, reached 3,257 s
+    # on run 33447440225, read across 103 jobs of every conclusion. The
+    # contract allows 60 minutes for that, making the requirement
+    # 5,400 + 3,600 = 9,000 s = 150 minutes, and asks for 15 minutes above it
+    # so a ceiling never fires at the moment the watchdog would have
     # reported. The job had no ceiling at all before this and so inherited
     # GitHub's six-hour default.
     timeout-minutes: 165

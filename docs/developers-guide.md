@@ -975,10 +975,12 @@ are driven with controlled values in `timeout_reading_test.py`.
 
 The nextest configuration is parsed with `tomllib` rather than matched as text.
 A text match finds a key inside a comment, inside a `filter` string, or in a
-table nextest never consults, and reports a budget the runner does not use. That
-matters most for the whole-run budget, which this repository does not set: the
-ordering assertion skips when it is absent, and a scraping reader would turn
-that skip into a comparison against a budget nobody had written.
+table nextest never consults, and reports a budget the runner does not use.
+`.config/nextest.toml` sets `global-timeout = "30m"`, and the ordering assertion
+requires that value to sit above the largest per-test allowance and inside the
+watchdog; it skips only when no whole-run budget is set at all. A scraping
+reader would read a commented-out or filtered budget as one in force, and
+comparing against a budget nobody had written is the failure this avoids.
 `terminate-after` is optional, and a `slow-timeout` without it marks a test slow
 and never stops it, so the reading refuses that form rather than reporting one
 period as the budget. Every table in `.config/nextest.toml` sets it explicitly,
@@ -991,12 +993,21 @@ is not. Adding a condition has to change the contract and this section with it,
 and the lane coordinates are compared both ways, so a coverage lane appearing
 without an entry fails rather than passing unexamined.
 
-A document whose shape the reading does not expect yields no lane rather than
-raising. A `jobs` value that is a scalar reaches `.items()`, an `env` that is
-not a mapping and a `timeout-minutes` that is not a number all raise during
-derivation, and each would fail the contract with a Python fault on a workflow
-that has nothing to do with coverage. The malformed cases now read as a lane
-with nothing set, which is what a maintainer can act on.
+A document whose shape the reading does not expect fails on the assertion it
+belongs to rather than with a Python fault several frames away. Each malformed
+shape had its own way of raising during derivation: a `jobs` value that is a
+scalar reaches `.items()`, and a non-mapping `env` or an unreadable
+`timeout-minutes` reached arithmetic they could not survive. Each would have
+failed the contract on a workflow that has nothing to do with coverage.
+
+The two outcomes are not the same. A `jobs` value that is not a mapping yields
+no lane at all: nothing in that document is a coverage job, so the document
+contributes nothing to the assertions. A malformed value inside a job that does
+run coverage keeps the lane, because the lane is real, and reads the affected
+budget as unset: an `env` that is not a mapping leaves the watchdog unset, and a
+`timeout-minutes` that is not a positive whole number of minutes leaves the
+ceiling unset. Both then fail the assertion that a coverage lane must declare
+the tier in question, which is what a maintainer can act on.
 
 It also pins how many coverage steps each job runs. The ceiling's requirement
 is the sum of the watchdogs found, so deleting one of a job's two coverage

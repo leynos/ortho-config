@@ -388,7 +388,10 @@ def test_a_malformed_jobs_container_yields_no_lane(
     ("ceiling", "expected"),
     [
         pytest.param(135, 8100.0, id="a-whole-number-of-minutes"),
-        pytest.param("135", 8100.0, id="minutes-as-a-string"),
+        pytest.param("135", None, id="minutes-as-a-string"),
+        pytest.param(164.5, None, id="a-fraction-of-a-minute"),
+        pytest.param(0, None, id="zero-minutes"),
+        pytest.param(-135, None, id="negative-minutes"),
         pytest.param("soon", None, id="not-a-number"),
         pytest.param(True, None, id="a-boolean"),
         pytest.param([135], None, id="a-list"),
@@ -405,6 +408,12 @@ def test_an_unreadable_ceiling_reads_as_absent(
     fault rather than with the assertion that the job declares no
     usable ceiling. Reading it as absent puts the failure where a
     maintainer can act on it.
+
+    `timeout-minutes` is a positive whole number of minutes, so the
+    values that convert cleanly but GitHub refuses are read as absent
+    too. A quoted `"135"` and a fractional `164.5` would otherwise
+    satisfy the ceiling arithmetic for a job GitHub never starts, and
+    zero or a negative would describe a ceiling no job can fit inside.
     """
     (job,) = coverage_jobs_of({"ci.yml": _workflow(ceiling=ceiling)})
 
