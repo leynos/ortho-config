@@ -547,6 +547,10 @@ records fields, source names, precedence, discovery, defaults, and nested
 subcommands. Derive `OrthoConfigSubcommandDocs` on a `clap::Subcommand` enum so
 the generated tree includes every variant.
 
+In v0.10.0, generated `compose_layers` and `compose_layers_from_iter` helpers
+use `#[allow(dead_code, ...)]`. After upgrading, `build.rs` consumers can
+remove their `#![allow(unfulfilled_lint_expectations, ...)]` suppression.
+
 Inspect the metadata in code:
 
 <!-- tested-example: guide-orthohelp-metadata -->

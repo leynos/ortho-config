@@ -97,7 +97,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ### Remove build-script lint suppressions
 
-After updating to `ortho_config` v0.9.0 or later, delete the following
+After updating to `ortho_config` v0.10.0 or later, delete the following
 suppression from `build.rs`:
 
 ```rust
@@ -107,7 +107,7 @@ suppression from `build.rs`:
 )]
 ```
 
-Version 0.9.0 changes the generated `compose_layers` and
+Version 0.10.0 changes the generated `compose_layers` and
 `compose_layers_from_iter` helpers from `#[expect(dead_code, ...)]` to
 `#[allow(dead_code, ...)]`. The generated helpers therefore remain valid when
 the build script already allows `dead_code`.

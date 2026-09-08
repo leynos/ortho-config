@@ -300,8 +300,8 @@ fn load_impl_uses_ortho_config_reexport_paths() -> Result<()> {
         "unexpected direct figment path (without ortho_config re-export): {generated}"
     );
     ensure!(
-        generated_text.matches("allow (dead_code").count() == 2,
-        "expected both generated compose helpers to allow dead code: {generated}"
+        generated_text.matches("allow (dead_code").count() == 3,
+        "expected all generated compose helpers to allow dead code: {generated}"
     );
     ensure!(
         !generated_text.contains("expect (dead_code"),
