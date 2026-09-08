@@ -114,8 +114,11 @@ jobs:
             echo "cargo-binstall is required for binary-only Whitaker provisioning" >&2
             exit 127
           fi
+          # The release archives only this runtime binary; select it because the
+          # crate also declares packaging-helper binaries that are not shipped.
           cargo binstall --no-confirm --locked --disable-strategies compile \
-            --no-discover-github-token "whitaker-installer@${WHITAKER_INSTALLER_VERSION}"
+            --no-discover-github-token --bin whitaker-installer \
+            "whitaker-installer@${WHITAKER_INSTALLER_VERSION}"
           # Older whitaker-installer releases probe binstall with the same
           # broken `--version` flag, so their dylint-link fallback compiles
           # from crates.io and needs rustc >= 1.91 — newer than this
