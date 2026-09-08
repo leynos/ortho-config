@@ -845,6 +845,199 @@ is pinned once in the Makefile `TYPOS_VERSION` variable and run through
 and regenerates the configuration, and fails when the tracked output drifts.
 When bumping the version, update `TYPOS_VERSION` and rerun the gate.
 
+## Test timeouts: the tiers this repository sets
+
+Four independent timers can end a test run, and the canonical statement of how
+they must be ordered lives in the `generate-coverage` README in
+[`leynos/shared-actions`][shared-actions-coverage]. All four are set here now;
+until this branch, tier one covered two trybuild binaries and nothing else, and
+tier two did not exist at all.
+
+| Tier                     | What it bounds                     | Where it is set                            | Current value                                          |
+| ------------------------ | ---------------------------------- | ------------------------------------------ | ------------------------------------------------------ |
+| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`                     | 600 s (60 s x 10); the trybuild override is also 600 s |
+| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`                     | 1,800 s (30 m)                                         |
+| Cargo watchdog           | one `cargo` invocation, wall clock | `RUN_RUST_CARGO_WAIT_TIMEOUT` at job level | 2,700 s (45 m)                                         |
+| Job `timeout-minutes`    | the whole job                      | job level                                  | 165 m in `ci.yml`, 120 m in `coverage-main.yml`        |
+
+*Table: the timers that can end a run, innermost first.*
+
+### The outermost tier was missing
+
+Neither coverage job declared `timeout-minutes` before this was written, so
+both inherited GitHub's six-hour default. That is not a budget anyone chose,
+and the Windows leg of `ci.yml` already runs for 86 minutes, so a hang there
+cost six hours of a paid runner before anything stopped it.
+
+### Two watchdogs per job, not one
+
+Each coverage job runs the action twice, once with `serde_saphyr` and once
+without, and each invocation gets its own watchdog. So the job must be able to
+contain both budgets before it contains anything else, and the requirement is
+the watchdog multiplied by the number of coverage steps in that job, plus the
+work outside them. The canonical rule does not spell this out because most
+callers invoke the action once.
+
+### The per-test budget is a product, not a period
+
+`terminate-after` counts warning periods, so the budget a test gets is `period`
+multiplied by it. The longest override here is 120 s with a multiplier of five,
+so reading the period alone would report 120 s where the real figure is 600 s.
+The contract asserts that reading outright rather than leaving it implied.
+
+### Tier one covered two binaries, and tier two did not exist
+
+The only `slow-timeout` in `.config/nextest.toml` was the trybuild override.
+Two binaries were bounded at 600 s and every other test in the suite ran with
+nothing under the job ceiling to stop it, because nextest's built-in 60 s
+`slow-timeout` warns and never terminates: it names no `terminate-after`. The
+sampled Windows run below reported 22 tests as slow and terminated none of
+them. No `global-timeout` was set either, so a hung run was bounded only by the
+cargo watchdog, which names `cargo` rather than the test still running.
+
+Both are set now, and both were sized from this repository's own run history
+rather than chosen. Three `build-test` jobs were read line by line, across
+successful and failed runs and both platforms:
+
+| Sample                                | Slowest single test | Longest nextest run | Run         |
+| ------------------------------------- | ------------------- | ------------------- | ----------- |
+| `build-test (windows-latest)`         | 364.8 s             | 1,023.6 s           | 34119577952 |
+| `build-test (ubuntu-latest)`          | 301.8 s             | 620.0 s             | 34120845807 |
+| `build-test (windows-latest)`, failed | no test output      | none                | 34124529877 |
+
+*Table: per-test and whole-run durations, read from the nextest output of each
+job. Each job runs the suite twice, so the two successful samples carry four
+runs between them: 1,023.6 s and 648.2 s on Windows, 620.0 s and 417.7 s on
+Linux, over 2,228 and 2,244 timed test results.*
+
+The slowest test outside the trybuild override was
+`cargo-orthohelp::compile_time must_use_compile_tests` at 364.8 s. The base
+allowance is 600 s, ten warning periods of 60 s, about 1.6 times that worst
+case: enough that a legitimately slow test finishes, small enough that a hang
+is caught well inside the whole-run budget.
+
+The whole-run budget is 30 minutes, about 1.76 times the 1,023.6 s worst run.
+It has to fit inside the watchdog with nextest's termination procedure and a
+cold build counted, which is 1,800 s plus 70 s plus 600 s, or 2,470 s. The
+watchdog was 1,800 s and could not have carried it, so it rises to 2,700 s.
+That is what moves the ceilings: the requirement is the watchdogs a job
+contains plus the work outside them plus the margin, and each job runs the
+action twice.
+
+[Issue 483](https://github.com/leynos/ortho-config/issues/483) asked for these
+measurements and named the constraint they had to satisfy, that each coverage
+job invokes the action twice so raising the watchdog costs twice as much
+ceiling here. It is answered above.
+
+### What the ceilings are sized against
+
+The allowance for work outside the watchdogs is per lane, because the two
+differ by an order of magnitude and holding the trunk lane to the pull-request
+lane's figure would demand a ceiling its own runs cannot justify.
+
+| Lane                                   | Coverage steps  | Worst whole job | Outside those steps | Run         |
+| -------------------------------------- | --------------- | --------------- | ------------------- | ----------- |
+| `ci.yml` `build-test` (windows-latest) | 1,323 s + 950 s | 5,530 s         | 3,257 s             | 33447440225 |
+| `coverage-main.yml` `coverage-upload`  | 563 s + 495 s   | 1,342 s         | 284 s               | 31908409573 |
+
+*Table: measured coverage-step and whole-job durations. The last column is the
+job's duration less its two watchdog-bounded coverage steps, so it is the work
+the job timer covers and the watchdogs do not.*
+
+The sample is 103 `ci.yml` coverage jobs, 100 successful and the rest failed or
+cancelled, and 31 runs of `coverage-main.yml`, 29 successful and 2 failed. Runs
+of every conclusion are read, not only successful ones: a run cancelled at its
+ceiling is the case the sizing exists to prevent. No run in either sample was
+ended by any of the four timers, the worst `ci.yml` job reaching 5,530 s.
+
+On the Windows leg the work outside the coverage steps is dominated by cache
+saving. So `ci.yml` is allowed 60 minutes and `coverage-main.yml` 15. With the
+watchdog at 2,700 s and two coverage steps per job, the requirements are 165
+and 120 minutes: 5,400 s of watchdog, plus the lane's allowance, plus a 900 s
+margin. The margin is a term of the requirement rather than slack above it,
+because a ceiling equal to the sum it contains cancels the job at the moment
+the watchdog would have reported the overrun, and the report is the only thing
+that makes an overrun actionable. The ceilings equal their requirements.
+
+A lane in a workflow the contract has not measured is held to the larger
+allowance until someone measures it and records a run id.
+
+The first version of this section recorded 2,717 s for `ci.yml` and two
+different figures for `coverage-main.yml`, 68 s here and 138 s in the contract.
+Both came from counting the coverage steps differently: the numbers above
+subtract the two `generate-coverage` steps and nothing else, which is exactly
+what the watchdogs bound.
+
+None of those runs was genuinely cold. One run is the coldest seen so far, not
+a measurement of the cold case.
+
+### The contract
+
+`tests/workflow_contracts/timeout_ordering_test.py` asserts this by value over
+every job invoking the coverage action, in both the `.yml` and `.yaml`
+extensions. Jobs are its unit rather than steps, because the ceiling belongs to
+a job and has to contain every watchdog inside it; counting the steps is what
+makes the two invocations visible to the arithmetic. It reads a step's own
+environment before the job's, as GitHub resolves it, and it fails on a
+coverage-invoking job that declares no ceiling at all. The readings it rests on
+live in `nextest_budgets.py`, `timeout_budgets.py` and `coverage_lanes.py`, and
+are driven with controlled values in `timeout_reading_test.py`.
+
+The nextest configuration is parsed with `tomllib` rather than matched as text.
+A text match finds a key inside a comment, inside a `filter` string, or in a
+table nextest never consults, and reports a budget the runner does not use.
+`.config/nextest.toml` sets `global-timeout = "30m"`, and the ordering assertion
+requires that value to sit above the largest per-test allowance and inside the
+watchdog; it skips only when no whole-run budget is set at all. A scraping
+reader would read a commented-out or filtered budget as one in force, and
+comparing against a budget nobody had written is the failure this avoids.
+`terminate-after` is optional, and a `slow-timeout` without it marks a test slow
+and never stops it, so the reading refuses that form rather than reporting one
+period as the budget. Every table in `.config/nextest.toml` sets it explicitly,
+so no value here changes.
+
+It pins the condition each lane carries, which is none today. A skipped step
+runs no `cargo`, so its watchdog never arms and the tiers say nothing about it:
+`if: false` on the step or on its job would leave a lane that looks bounded and
+is not. Adding a condition has to change the contract and this section with it,
+and the lane coordinates are compared both ways, so a coverage lane appearing
+without an entry fails rather than passing unexamined.
+
+A document whose shape the reading does not expect fails on the assertion it
+belongs to rather than with a Python fault several frames away. Each malformed
+shape had its own way of raising during derivation: a `jobs` value that is a
+scalar reaches `.items()`, and a non-mapping `env` or an unreadable
+`timeout-minutes` reached arithmetic they could not survive. Each would have
+failed the contract on a workflow that has nothing to do with coverage.
+
+The two outcomes are not the same. A `jobs` value that is not a mapping yields
+no lane at all: nothing in that document is a coverage job, so the document
+contributes nothing to the assertions. A malformed value inside a job that does
+run coverage keeps the lane, because the lane is real, and reads the affected
+budget as unset: an `env` that is not a mapping leaves the watchdog unset, and a
+`timeout-minutes` that is not a positive whole number of minutes leaves the
+ceiling unset. Both then fail the assertion that a coverage lane must declare
+the tier in question, which is what a maintainer can act on.
+
+It also pins how many coverage steps each job runs. The ceiling's requirement
+is the sum of the watchdogs found, so deleting one of a job's two coverage
+steps lowers that requirement by 1,800 s and every timing assertion still
+passes while the lane measures half of what it did.
+
+`tests/workflow_contracts/timeout_budget_properties_test.py` holds the readings
+themselves, driven with synthetic workflows and synthetic nextest
+configurations rather than the repository's own. Every ceiling here sits well
+above its requirement, so a missing term in the derivation changes nothing
+observable in this tree; against controlled numbers it does not. The lane
+reading takes its documents as a parameter, defaulting to the repository's own
+workflows, so the filesystem access and the YAML parsing sit at one named
+boundary rather than inside the derivations.
+
+The `binstall-packaging` job also declares no ceiling. It invokes no coverage
+step, so it is outside this contract, and bounding it is separate work.
+
+[shared-actions-coverage]: https://github.com/leynos/shared-actions/blob/main/.github/actions/generate-coverage/README.md
+
 ## Command checklist
 
 Run from repository root:
