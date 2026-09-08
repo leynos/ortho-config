@@ -630,8 +630,8 @@ consumer-package/locales/
 The library maintains its own English `en-US/messages.ftl` resource; it does
 not alias an `en-GB` catalogue, and no such library resource exists. The
 localizer matches language-only, so English tags including `en-GB` reuse the
-embedded `en-US` resources. Additional shipped library resources use their
-own locale paths, such as `ja/messages.ftl`.
+embedded `en-US` resources. Additional shipped library resources use their own
+locale paths, such as `ja/messages.ftl`.
 
 PowerShell note: always emit `en-US` help XML. If generating another locale
 only (for example, `en-GB`), copy it to `en-US` as a fallback because
