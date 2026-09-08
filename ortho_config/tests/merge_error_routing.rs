@@ -13,7 +13,7 @@ use serde_json::json;
 
 /// Tests that type mismatches during final deserialization produce `Merge` errors.
 #[rstest]
-fn merge_deserialization_error_produces_merge_variant() -> Result<()> {
+fn merge_deserialization_error_produces_merge_variant() {
     let mut composer = MergeComposer::new();
     composer.push_defaults(json!({
         "port": "not_a_number"
@@ -22,29 +22,25 @@ fn merge_deserialization_error_produces_merge_variant() -> Result<()> {
     let result = MergeErrorSample::merge_from_layers(composer.layers());
     let error = result.expect_err("expected merge to fail due to invalid port type");
 
-    ensure!(
+    assert!(
         matches!(&*error, OrthoError::Merge { .. }),
         "expected Merge error variant, got {error:?}"
     );
-
-    Ok(())
 }
 
 /// Tests that vector append deserialization errors produce `Merge` errors.
 #[rstest]
-fn vector_append_deserialization_error_produces_merge_variant() -> Result<()> {
+fn vector_append_deserialization_error_produces_merge_variant() {
     let mut composer = MergeComposer::new();
     composer.push_defaults(json!({ "items": ["not_a_number"] }));
 
     let result = VecAppendSample::merge_from_layers(composer.layers());
     let error = result.expect_err("expected merge to fail due to invalid vector element");
 
-    ensure!(
+    assert!(
         matches!(&*error, OrthoError::Merge { .. }),
         "expected Merge error variant for vector deserialization, got {error:?}"
     );
-
-    Ok(())
 }
 
 /// Tests that successful merges continue to work correctly.
@@ -71,7 +67,7 @@ fn successful_merge_produces_correct_result() -> Result<()> {
 
 /// Tests that error messages contain helpful context.
 #[rstest]
-fn merge_error_contains_helpful_message() -> Result<()> {
+fn merge_error_contains_helpful_message() {
     let mut composer = MergeComposer::new();
     composer.push_defaults(json!({
         "port": "invalid"
@@ -81,12 +77,10 @@ fn merge_error_contains_helpful_message() -> Result<()> {
     let error = result.expect_err("expected merge to fail");
 
     let message = error.to_string();
-    ensure!(
+    assert!(
         message.to_lowercase().contains("merge"),
         "error message should reference merge context: {message}"
     );
-
-    Ok(())
 }
 
 /// Tests that successful vector appending works correctly.
