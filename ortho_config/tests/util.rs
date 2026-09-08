@@ -53,10 +53,6 @@ where
 /// let utf8 = path_to_utf8_string(dir, "tmp")?;
 /// assert_eq!(utf8, "/tmp");
 /// ```
-#[expect(
-    clippy::result_large_err,
-    reason = "figment::Error must be returned directly to integrate with Jail closures"
-)]
 pub fn path_to_utf8_string(path: &Path, context: &str) -> Result<String, FigmentError> {
     path.to_str().map(str::to_owned).ok_or_else(|| {
         let display = path.display();
