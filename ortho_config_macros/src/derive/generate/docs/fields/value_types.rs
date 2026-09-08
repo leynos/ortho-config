@@ -18,8 +18,8 @@ pub(super) enum ValueTypeModel {
     Hostname,
     Url,
     Enum { variants: Vec<String> },
-    List { of: Box<ValueTypeModel> },
-    Map { of: Box<ValueTypeModel> },
+    List { of: Box<Self> },
+    Map { of: Box<Self> },
     Custom { name: String },
 }
 
