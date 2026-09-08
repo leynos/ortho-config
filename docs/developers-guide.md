@@ -653,12 +653,22 @@ integration (CI) environments.
 
 ### Workflow pins and Dependabot
 
-Dependabot owns the upgrade of GitHub Actions and reusable workflows, including
-calls into `leynos/shared-actions`. Contract tests that assert a caller's exact
-commit SHA create a lockstep dependency: every time Dependabot opens a bump PR,
-the test fails until a human edits the pinned constant to match. That defeats
-the purpose of automated dependency updates and turns a routine bump into a
-manual chore.
+Dependabot owns scheduled dependency updates through `.github/dependabot.yml`:
+
+- Root GitHub Actions updates run weekly and use the `dependencies` and
+  `github-actions` labels.
+- Root Cargo workspace updates run daily and use the `dependencies` and
+  `cargo` labels.
+- Python test requirements in `scripts/` update daily and use the
+  `dependencies` and `python` labels.
+- The root `rust-toolchain.toml` updates weekly through the independent
+  `rust-toolchain` route, using the `dependencies` and `rust-toolchain` labels.
+
+GitHub Actions updates include calls into `leynos/shared-actions`. Contract
+tests that assert a caller's exact commit SHA create a lockstep dependency:
+every time Dependabot opens a bump PR, the test fails until a human edits the
+pinned constant to match. That defeats the purpose of automated dependency
+updates and turns a routine bump into a manual chore.
 
 Contract tests may still verify the *shape* of a reusable-workflow caller. They
 must not verify the specific SHA value.
