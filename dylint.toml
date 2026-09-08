@@ -12,6 +12,10 @@ excluded_crates = [
     # stages configuration trees in ambient temp directories so the derive
     # macro's discovery attributes resolve them exactly as end users would.
     "discovery_attributes",
+    # Integration test crate (ortho_config/tests/scoped_layers.rs): stages
+    # drive-qualified temporary configuration paths through std::fs so the
+    # scope-loader regression exercises the native Windows path behaviour.
+    "scoped_layers",
     # Cargo subcommand binary: operates on the ambient cargo workspace,
     # target directory, and bridge scratch space that `cargo` itself
     # resolves ambiently; its tests stage the same ambient layouts.
