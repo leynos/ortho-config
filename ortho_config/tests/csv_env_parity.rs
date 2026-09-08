@@ -97,22 +97,25 @@ fn lowercase_can_be_disabled_after_a_key_mapping() {
 }
 
 /// Return the default-profile dictionary from a provider result.
+#[expect(
+    clippy::expect_used,
+    reason = "test helper: providers always collect into the default profile"
+)]
 fn default_dict(data: &Map<Profile, Dict>) -> &Dict {
-    data.get(&Profile::Default).map_or_else(
-        || panic!("CsvEnv providers always collect into the default profile"),
-        |dictionary| dictionary,
-    )
+    data.get(&Profile::Default)
+        .expect("CsvEnv providers always collect into the default profile")
 }
 
 /// Assert the recursively merged database value retains both sibling keys.
+#[expect(
+    clippy::expect_used,
+    reason = "test helper: the corpus guarantees a nested database dictionary"
+)]
 fn assert_database_siblings(data: &Map<Profile, Dict>) {
     let database = default_dict(data)
         .get("database")
         .and_then(Value::as_dict)
-        .map_or_else(
-            || panic!("database must be a nested dictionary"),
-            |dictionary| dictionary,
-        );
+        .expect("database must be a nested dictionary");
     assert_eq!(
         database.get("host").and_then(Value::as_str),
         Some("db.example.test")
