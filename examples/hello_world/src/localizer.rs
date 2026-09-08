@@ -12,18 +12,20 @@
 
 use ortho_config::{
     FluentLocalizer, FluentLocalizerBuilder, FluentLocalizerError, LanguageIdentifier,
-    LocalizationArgs, Localizer, NoOpLocalizer, langid,
+    LocalizationArgs, Localizer, NoOpLocalizer, OrthoConfigLocalization, langid,
 };
 use tracing::warn;
 
-/// Base identifier for the hello world CLI catalogue.
-pub const CLI_BASE_MESSAGE_ID: &str = "hello_world.cli";
-/// Identifier used for the short CLI description.
-pub const CLI_ABOUT_MESSAGE_ID: &str = "hello_world.cli.about";
-/// Identifier used for the long CLI description.
-pub const CLI_LONG_ABOUT_MESSAGE_ID: &str = "hello_world.cli.long_about";
-/// Identifier for the usage string presented on `--help`.
-pub const CLI_USAGE_MESSAGE_ID: &str = "hello_world.cli.usage";
+use crate::cli::CommandLine;
+
+/// Base identifier for the hello world CLI catalogue (derive-derived).
+pub const CLI_BASE_MESSAGE_ID: &str = CommandLine::LOCALIZATION_BASE;
+/// Identifier used for the short CLI description (derive-derived).
+pub const CLI_ABOUT_MESSAGE_ID: &str = CommandLine::ABOUT_ID;
+/// Identifier used for the long CLI description (derive-derived).
+pub const CLI_LONG_ABOUT_MESSAGE_ID: &str = CommandLine::LONG_ABOUT_ID;
+/// Identifier for the usage string presented on `--help` (derive-derived).
+pub const CLI_USAGE_MESSAGE_ID: &str = CommandLine::USAGE_ID;
 
 const HELLO_WORLD_EN_US: &str = include_str!("../locales/en-US/messages.ftl");
 const HELLO_WORLD_JA: &str = include_str!("../locales/ja/messages.ftl");
@@ -52,10 +54,11 @@ impl DemoLocalizer {
     /// use clap::CommandFactory;
     /// use hello_world::cli::{CommandLine, LocalizeCmd};
     /// use hello_world::localizer::DemoLocalizer;
+    /// use ortho_config::OrthoConfigLocalization;
     ///
     /// let localizer = DemoLocalizer::new();
     /// let command = CommandLine::command()
-    ///     .with_base("hello_world.cli")
+    ///     .with_base(CommandLine::LOCALIZATION_BASE)
     ///     .localize(&localizer);
     /// assert!(command.get_about().is_some());
     /// ```

@@ -81,10 +81,11 @@ fn metadata_expr(variant: &syn::Variant, krate: &TokenStream) -> syn::Result<Tok
     let label = command_label(variant)?;
     Ok(quote! {
         {
-            let mut metadata =
-                <#args_ty as #krate::docs::OrthoConfigDocs>::get_doc_metadata();
+            let mut command_path = parent_path.to_vec();
+            command_path.push(#label.to_string());
+            let mut metadata = <#args_ty as #krate::docs::OrthoConfigDocs>
+                ::get_doc_metadata_for_path(&command_path);
             metadata.app_name = #label.to_string();
-            metadata.about_id = format!("{}.about", metadata.app_name);
             metadata
         }
     })
@@ -115,6 +116,12 @@ pub(crate) fn derive_subcommand_docs(input: DeriveInput) -> syn::Result<TokenStr
     Ok(quote! {
         impl #impl_generics #krate::docs::OrthoConfigSubcommandDocs for #ident #ty_generics #where_clause {
             fn get_subcommand_doc_metadata() -> Vec<#krate::docs::DocMetadata> {
+                Self::get_subcommand_doc_metadata_for_path(&[])
+            }
+
+            fn get_subcommand_doc_metadata_for_path(
+                parent_path: &[String],
+            ) -> Vec<#krate::docs::DocMetadata> {
                 vec![#(#metadata_exprs),*]
             }
         }

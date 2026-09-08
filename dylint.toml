@@ -8,6 +8,12 @@ excluded_crates = [
     # capability root to thread through. Unit tests stage config trees in
     # ambient temp directories to exercise the same discovery paths.
     "ortho_config",
+    # The procedural macro writes an explicitly requested, Cargo-scoped
+    # identifier artefact below OUT_DIR; it has no capability root to receive.
+    "ortho_config_macros",
+    # The artefact integration test deliberately observes Cargo's ambient
+    # scratch target directory after driving a subprocess build.
+    "identifier_artefact_e2e",
     # Integration test crate (ortho_config/tests/discovery_attributes.rs):
     # stages configuration trees in ambient temp directories so the derive
     # macro's discovery attributes resolve them exactly as end users would.

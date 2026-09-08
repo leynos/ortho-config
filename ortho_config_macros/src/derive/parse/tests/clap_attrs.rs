@@ -2,11 +2,16 @@
 
 use super::super::parse_input;
 use crate::derive::parse::{
-    ClapInferredDefault, FieldAttrs, clap_field_is_subcommand, clap_variant_name,
+    ClapInferredDefault, FieldAttrs, clap_field_is_flattened, clap_field_is_subcommand,
+    clap_variant_name,
 };
 use anyhow::{Result, anyhow, ensure};
+use proc_macro2::TokenStream;
 use quote::ToTokens;
+use quote::quote;
 use syn::{DeriveInput, parse_quote};
+
+type ClapFieldPredicate = fn(&syn::Field) -> syn::Result<bool>;
 
 fn expr_tokens(expr: &syn::Expr) -> String {
     expr.to_token_stream().to_string()
@@ -65,6 +70,22 @@ fn first_field(input: &DeriveInput) -> Result<&syn::Field> {
         .iter()
         .next()
         .ok_or_else(|| anyhow!("missing first field"))
+}
+
+fn assert_clap_field_marker_cases(
+    marker_name: &str,
+    predicate: ClapFieldPredicate,
+    cases: &[(TokenStream, bool)],
+) -> Result<()> {
+    for (tokens, expected) in cases {
+        let input: DeriveInput = syn::parse2(tokens.clone())?;
+        let actual = predicate(first_field(&input)?)?;
+        ensure!(
+            actual == *expected,
+            "input `{tokens}`: expected {marker_name}={expected}, got {actual}",
+        );
+    }
+    Ok(())
 }
 
 #[test]
@@ -242,9 +263,6 @@ fn clap_variant_name_cases() -> Result<()> {
 
 #[test]
 fn clap_field_is_subcommand_cases() -> Result<()> {
-    use proc_macro2::TokenStream;
-    use quote::quote;
-
     let cases: &[(TokenStream, bool)] = &[
         (
             quote! { struct Cli { #[command(subcommand)] command: Commands, } },
@@ -261,13 +279,26 @@ fn clap_field_is_subcommand_cases() -> Result<()> {
         (quote! { struct Cli { #[arg(long)] name: String, } }, false),
     ];
 
-    for (tokens, expected) in cases {
-        let input: DeriveInput = syn::parse2(tokens.clone())?;
-        let actual = clap_field_is_subcommand(first_field(&input)?)?;
-        ensure!(
-            actual == *expected,
-            "input `{tokens}`: expected subcommand={expected}, got {actual}",
-        );
-    }
-    Ok(())
+    assert_clap_field_marker_cases("subcommand", clap_field_is_subcommand, cases)
+}
+
+#[test]
+fn clap_field_is_flattened_cases() -> Result<()> {
+    let cases: &[(TokenStream, bool)] = &[
+        (
+            quote! { struct Cli { #[command(flatten)] common: CommonArgs, } },
+            true,
+        ),
+        (
+            quote! { struct Cli { #[clap(flatten)] common: CommonArgs, } },
+            true,
+        ),
+        (
+            quote! { struct Cli { #[command(flatten, help = "common")] common: CommonArgs, } },
+            true,
+        ),
+        (quote! { struct Cli { #[arg(long)] name: String, } }, false),
+    ];
+
+    assert_clap_field_marker_cases("flattened", clap_field_is_flattened, cases)
 }

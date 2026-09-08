@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 /// Top-level documentation metadata for a configuration command.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct DocMetadata {
-    /// IR schema version string (for example, "1.1").
+    /// IR schema version string (for example, "2.0").
     pub ir_version: String,
     /// Application name used for display and identifier generation.
     pub app_name: String,

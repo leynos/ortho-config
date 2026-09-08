@@ -4,7 +4,7 @@
 //! `DocMetadata` IR used by `cargo-orthohelp`.
 
 mod fields;
-mod sections;
+pub(crate) mod sections;
 mod types;
 
 pub(crate) use types::AppName;
@@ -14,6 +14,7 @@ use quote::quote;
 use syn::Ident;
 
 use crate::derive::build::CliFieldMetadata;
+use crate::derive::generate::localization::LocalizationIds;
 use crate::derive::parse::{
     DocExampleAttr, DocLinkAttr, DocNoteAttr, FieldAttrs, SerdeRenameAll, StructAttrs,
 };
@@ -25,6 +26,10 @@ pub(crate) struct DocsArgs<'a> {
     pub struct_attrs: &'a StructAttrs,
     pub serde_rename_all: Option<SerdeRenameAll>,
     pub cli_fields: &'a [CliFieldMetadata],
+    /// Localization identifiers determine which field defaults follow the
+    /// mounted command path. Fields absent from this model retain docs-only
+    /// dotted defaults.
+    pub localization_ids: &'a LocalizationIds,
     /// Resolved crate path for generated code references.
     pub krate: &'a TokenStream,
 }
@@ -33,7 +38,6 @@ pub(crate) fn generate_docs_impl(args: &DocsArgs<'_>) -> syn::Result<TokenStream
     let krate = args.krate;
     let app_name = sections::resolve_app_name(args.struct_attrs, args.ident);
     let app_name_value = AppName::new(app_name);
-    let about_id = sections::resolve_about_id(&app_name_value, &args.struct_attrs.doc);
     let headings = sections::build_sections_metadata(&app_name_value, args.struct_attrs, krate)?;
     let windows = sections::build_windows_metadata(args.struct_attrs, krate);
     let fields = fields::build_fields_metadata(&fields::FieldDocArgs {
@@ -43,25 +47,36 @@ pub(crate) fn generate_docs_impl(args: &DocsArgs<'_>) -> syn::Result<TokenStream
         field_attrs: args.field_attrs,
         serde_rename_all: args.serde_rename_all,
         cli_fields: args.cli_fields,
+        localization_ids: args.localization_ids,
         krate,
     })?;
     let subcommands = build_subcommands_metadata(args)?;
 
     let app_name_lit = syn::LitStr::new(&app_name_value, proc_macro2::Span::call_site());
-    let about_id_lit = syn::LitStr::new(&about_id, proc_macro2::Span::call_site());
+    let about_id = sections::about_id_tokens(&args.struct_attrs.doc, krate);
     let bin_name_tokens = option_string_tokens(args.struct_attrs.doc.bin_name.as_deref());
-    let synopsis_tokens = option_string_tokens(args.struct_attrs.doc.synopsis_id.as_deref());
+    let synopsis_tokens = sections::synopsis_id_tokens(&args.struct_attrs.doc, krate);
 
     let ident = args.ident;
 
     Ok(quote! {
         impl #krate::docs::OrthoConfigDocs for #ident {
             fn get_doc_metadata() -> #krate::docs::DocMetadata {
+                let command_path = <Self as #krate::OrthoConfigLocalization>::LOCALIZATION_BASE
+                    .split('.')
+                    .map(String::from)
+                    .collect::<Vec<_>>();
+                Self::get_doc_metadata_for_path(&command_path)
+            }
+
+            fn get_doc_metadata_for_path(
+                command_path: &[String],
+            ) -> #krate::docs::DocMetadata {
                 #krate::docs::DocMetadata {
                     ir_version: #krate::docs::ORTHO_DOCS_IR_VERSION.to_string(),
                     app_name: #app_name_lit.to_string(),
                     bin_name: #bin_name_tokens,
-                    about_id: #about_id_lit.to_string(),
+                    about_id: #about_id,
                     synopsis_id: #synopsis_tokens,
                     sections: #headings,
                     fields: vec![ #( #fields ),* ],
@@ -89,7 +104,7 @@ fn build_subcommands_metadata(args: &DocsArgs<'_>) -> syn::Result<TokenStream> {
             let krate = args.krate;
             Ok(quote! {
                 <#inner_ty as #krate::docs::OrthoConfigSubcommandDocs>
-                    ::get_subcommand_doc_metadata()
+                    ::get_subcommand_doc_metadata_for_path(command_path)
             })
         }
         [first, ..] => Err(syn::Error::new_spanned(
