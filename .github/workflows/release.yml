@@ -130,7 +130,7 @@ jobs:
           persist-credentials: false
           ref: ${{ needs.prepare.outputs.tag }}
       - name: Build release binary
-        uses: leynos/shared-actions/.github/actions/rust-build-release@e041cb75c35c3524201a32d5e57c87408fbd5874
+        uses: leynos/shared-actions/.github/actions/rust-build-release@6b5cdc2d4c0bb72cafd5a66d24d248ac25827db9
         with:
           target: ${{ matrix.target }}
           manifest-path: cargo-orthohelp/Cargo.toml
