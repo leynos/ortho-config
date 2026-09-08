@@ -142,9 +142,12 @@ project:
 
     ```sh
     cargo fmt --workspace -- --check
+    scripts/with-tracked-markdown.sh scripts/check-markdown-format.sh mdtablefix
     ```
 
-    validating formatting across the entire workspace without modifying files.
+    validating Rust formatting and every tracked, regular Markdown-like file
+    without modifying tracked files. The Markdown checker formats copies with
+    the pinned `mdtablefix` policy and accepts either LF or CRLF checkout form.
   - `make lint` executes rustdoc and Clippy followed by the Whitaker Dylint
     suite:
 
@@ -168,9 +171,8 @@ project:
     cargo test --workspace
     ```
 
-    running the full workspace test suite. Use `make fmt`
-    (`cargo fmt --workspace`) to apply formatting fixes reported by the
-    formatter check.
+    running the full workspace test suite. Use `make fmt` to apply Rust and
+    tracked-Markdown formatting fixes reported by the formatter check.
 - Clippy warnings MUST be disallowed.
 - Fix any warnings emitted during tests in the code itself rather than
   silencing them.
@@ -333,8 +335,9 @@ project:
   are ignored, but inline code is spellchecked. Add a narrowly backtick-bound
   pattern to `typos.local.toml` for an upstream API or identifier, regenerate,
   and avoid word-level exceptions.
-- Run `make fmt` after any documentation changes to format all Markdown
-  files and fix table markup.
+- Run `make fmt` after documentation changes to format every tracked regular
+  Markdown-like file and fix table markup. It intentionally skips symlinks and
+  reports if the Markdown lint configuration excludes a selected tracked file.
 - Validate Mermaid diagrams in Markdown files by running `make nixie`.
 - Markdown paragraphs and bullet points must be wrapped at 80 columns.
 - Code blocks must be wrapped at 120 columns.

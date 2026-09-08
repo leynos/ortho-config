@@ -15,6 +15,30 @@ The workspace runs one unified test workflow via Make targets:
 These are required quality gates for code changes. Behavioural coverage runs
 inside the standard Rust test harness, not a bespoke test runner.
 
+### Markdown formatter
+
+`make fmt` applies the Rust formatter and then formats every tracked regular
+`.md`, `.markdown`, and `.mdx` file. It runs `mdtablefix` through the
+`MDTABLEFIX` command and the pinned `markdownlint-cli2` version through
+`MDLINT`; the Makefile owns both tool version variables. The source list comes
+from `git ls-files`, so untracked files are never rewritten. Symlinks are
+skipped to avoid duplicate or out-of-tree writes. There are currently no
+byte-exact Markdown fixture exclusions. `make fmt` and `make check-fmt`
+provision `mdtablefix` 0.5.1 into `scripts/.tools/`; the provisioner uses
+`cargo-binstall` with source compilation disabled and verifies the installed
+version before either formatter runs. CI sets the same isolated prefix under
+the runner temporary directory, so the formatter wrapper verifies and reuses
+the preinstalled release instead of downloading it a second time.
+
+`make check-fmt` checks Rust formatting and compares temporary `mdtablefix`
+copies with every selected Markdown source. It accepts either LF or CRLF source
+bytes and never rewrites the checkout. The root `.markdownlint-cli2.jsonc`
+contains the shared rules without exclusions, so formatter calls over explicit
+tracked paths remain universal. `make markdownlint` selects
+`.markdownlint-cli2-normal.jsonc` for the ordinary generated-directory
+exclusions; CI carries the same exclusions as action globs. CI provisions the
+pinned prebuilt `mdtablefix` release before running this gate.
+
 ### Nextest test-group serialization
 
 `.config/nextest.toml` assigns two test binaries to single-threaded groups:
