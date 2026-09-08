@@ -14,6 +14,7 @@ Run via ``make test-workflow-contracts``.
 from __future__ import annotations
 
 import re
+import subprocess
 import sys
 import tomllib
 import typing as typ
@@ -281,6 +282,92 @@ def test_packaging_dry_run_covers_three_os_families(ci_workflow: dict[str, typ.A
     script = "\n".join(step.get("run", "") for step in _steps(job))
     assert "release_archive.py" in script
     assert "verify_release_archives.py" in script
+
+
+def test_whitaker_provisioning_requires_authenticated_binaries(
+    ci_workflow: dict[str, typ.Any],
+) -> None:
+    """Whitaker provisioning authenticates release lookups and forbids builds."""
+    job = ci_workflow["jobs"]["build-test"]
+    step = next(step for step in _steps(job) if step.get("name") == "Install Whitaker")
+    assert step["env"]["GITHUB_TOKEN"] == "${{ github.token }}"
+    script = step["run"]
+    assert "cargo install" not in script
+    assert "exit 127" in script
+    assert script.count("--disable-strategies compile") == 2
+    assert script.count("--no-discover-github-token") == 2
+    installer_crate = "whitaker-installer@${WHITAKER_INSTALLER_VERSION}"
+    selected_binary = "--bin whitaker-installer"
+    assert selected_binary in script
+    assert installer_crate in script
+    assert script.index(installer_crate) < script.index(selected_binary)
+    assert "dylint-link@6.0.1" in script
+
+
+def test_whitaker_provisioning_reaches_binstall_from_a_cold_state(
+    ci_workflow: dict[str, typ.Any], tmp_path: Path
+) -> None:
+    """A missing Whitaker binary is installed through the binary-only path."""
+    job = ci_workflow["jobs"]["build-test"]
+    step = next(step for step in _steps(job) if step.get("name") == "Install Whitaker")
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    calls = tmp_path / "calls"
+    fake_cargo = fake_bin / "cargo"
+    fake_cargo.write_text(
+        """#!/usr/bin/bash
+if [[ $1 == binstall && $2 == -V ]]; then
+    exit 0
+fi
+printf '%s\\n' \"$*\" >> \"$CALL_LOG\"
+if [[ $* == *whitaker-installer@* ]]; then
+    [[ $* == *"whitaker-installer@0.2.8 --bin whitaker-installer"* ]] || exit 94
+    printf '#!/bin/sh\\nexit 0\\n' > \"$FAKE_BIN/whitaker-installer\"
+    /usr/bin/chmod +x \"$FAKE_BIN/whitaker-installer\"
+fi
+""",
+        encoding="utf-8",
+    )
+    fake_cargo.chmod(0o755)
+    result = subprocess.run(
+        ["/usr/bin/bash", "-euo", "pipefail", "-c", step["run"]],
+        capture_output=True,
+        check=False,
+        env={
+            "CALL_LOG": str(calls),
+            "FAKE_BIN": str(fake_bin),
+            "GITHUB_TOKEN": "test-token",
+            "PATH": str(fake_bin),
+            "WHITAKER_INSTALLER_VERSION": "0.2.8",
+        },
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    recorded = calls.read_text(encoding="utf-8")
+    assert "--bin whitaker-installer" in recorded
+    assert "whitaker-installer@0.2.8" in recorded
+    assert "dylint-link@6.0.1" in recorded
+
+
+def test_whitaker_provisioning_fails_without_binstall(
+    ci_workflow: dict[str, typ.Any], tmp_path: Path
+) -> None:
+    """A missing binary installer fails instead of taking a source fallback."""
+    job = ci_workflow["jobs"]["build-test"]
+    step = next(step for step in _steps(job) if step.get("name") == "Install Whitaker")
+    result = subprocess.run(
+        ["/usr/bin/bash", "-euo", "pipefail", "-c", step["run"]],
+        capture_output=True,
+        check=False,
+        env={
+            "GITHUB_TOKEN": "test-token",
+            "PATH": str(tmp_path),
+            "WHITAKER_INSTALLER_VERSION": "0.2.8",
+        },
+        text=True,
+    )
+    assert result.returncode == 127
+    assert "binary-only Whitaker provisioning" in result.stderr
 
 
 @pytest.mark.parametrize("target", sorted(EXPECTED_TARGET_RUNNERS))
