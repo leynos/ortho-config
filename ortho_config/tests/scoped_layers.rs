@@ -1,25 +1,22 @@
 //! Regression coverage for scoped discovery and file-layer policies.
 
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use anyhow::{Result, anyhow, ensure};
-use cap_std::{ambient_authority, fs::Dir};
+use anyhow::{Context, Result, ensure};
 use ortho_config::{
     AutomaticMode, ConfigDiscovery, ConfigFilePolicy, ConfigPathSelector, DiscoveryLayersOutcome,
     DiscoveryScope, ExplicitMode, FileLayerOutcome, MapEnv, OrthoError, declarative::merge_value,
 };
 
 fn write_config(path: &Path, value: u32) -> Result<()> {
-    let root = Dir::open_ambient_dir(Path::new("/"), ambient_authority())?;
-    let relative = path
-        .strip_prefix("/")
-        .map_err(|_| anyhow!("fixture path must be absolute"))?;
-    let parent = relative
-        .parent()
-        .ok_or_else(|| anyhow!("test fixture path has no parent: {}", path.display()))?;
-    root.create_dir_all(parent)?;
-    root.write(relative, format!("value = {value}\n"))?;
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .with_context(|| format!("create parent directory for {}", parent.display()))?;
+    }
+    fs::write(path, format!("value = {value}\n"))
+        .with_context(|| format!("write config file {}", path.display()))?;
     Ok(())
 }
 
