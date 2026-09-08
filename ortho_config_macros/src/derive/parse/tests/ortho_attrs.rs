@@ -15,6 +15,10 @@ struct MergeStrategyCase<'a> {
     field_type: proc_macro2::TokenStream,
 }
 
+/// Parses a representative field attribute and verifies its merge strategy.
+///
+/// Returns a contextual error when the generated input cannot be parsed or its
+/// field attributes do not match the expected strategy.
 fn assert_merge_strategy(case: &MergeStrategyCase<'_>) -> Result<()> {
     let input: DeriveInput = syn::parse_str(&format!(
         r#"
@@ -26,7 +30,7 @@ fn assert_merge_strategy(case: &MergeStrategyCase<'_>) -> Result<()> {
         struct_name = case.struct_name,
         strategy_name = case.strategy_name,
         field_name = case.field_name,
-        field_type = &case.field_type,
+        field_type = case.field_type,
     ))
     .map_err(|err| anyhow!("failed to parse input: {err}"))?;
 
