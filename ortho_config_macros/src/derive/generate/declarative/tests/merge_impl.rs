@@ -94,6 +94,10 @@ fn mixed_strategies() -> Result<CollectionStrategies> {
     vec!["replace_rules", "append_items", "serde_json::Map::new"],
     Some(("replace_rules", "append_items")),
 )]
+/// Verifies generated map-field merge logic and its ordering with append fields.
+///
+/// Mixed strategies must render map replacement before append handling, so the
+/// generated implementation preserves the intended merge order.
 fn generate_declarative_merge_impl_handles_map_fields(
     #[case] strategies_fn: fn() -> Result<CollectionStrategies>,
     #[case] expected_tokens: Vec<&'static str>,
