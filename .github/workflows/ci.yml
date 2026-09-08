@@ -194,6 +194,35 @@ jobs:
         if: ${{ github.event_name == 'workflow_dispatch' }}
         run: make publish-check
 
+  # Early-warning job for Clippy lints landing on the Rust beta channel.
+  # It is advisory (`continue-on-error`) so new lints surface on the pull
+  # request without blocking merges; the pinned-toolchain lint job above
+  # remains required. `CARGO="cargo +beta"` overrides the Makefile default
+  # with an explicit `+beta` selection, which bypasses the rust-toolchain.toml
+  # directory override that would otherwise pin this job to stable.
+  clippy-beta:
+    name: Clippy (beta, advisory)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    continue-on-error: true
+    env:
+      CARGO_TERM_COLOR: always
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      - name: Install Rust beta with Clippy
+        uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772  # master
+        with:
+          toolchain: beta
+          components: clippy
+
+      - name: Clippy (beta)
+        env:
+          CARGO: cargo +beta
+        run: make lint-clippy
+
   binstall-packaging:
     name: Packaging dry run (${{ matrix.target }})
     runs-on: ${{ matrix.os }}

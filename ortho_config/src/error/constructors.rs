@@ -56,6 +56,11 @@ impl OrthoError {
         I: IntoIterator<Item = E>,
         E: Into<Arc<Self>>,
     {
+        #[expect(
+            clippy::unnecessary_option_map_or_else,
+            reason = "the panicking default closure cannot use `unwrap_or_else` without \
+                      tripping Whitaker's `no_unwrap_or_else_panic` lint"
+        )]
         Self::try_aggregate(errors).map_or_else(
             || panic!("aggregate requires at least one error"),
             |err| err,
