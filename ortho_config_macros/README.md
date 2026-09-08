@@ -12,9 +12,9 @@ ______________________________________________________________________
 
 ## Why OrthoConfig?
 
-Configuration plumbing starts small, then quietly takes over the kitchen.
-Every new setting needs a CLI flag, an environment variable, a file key, merge
-rules, and useful errors when something goes wrong.
+Configuration plumbing starts small, then quietly takes over the kitchen. Every
+new setting needs a CLI flag, an environment variable, a file key, merge rules,
+and useful errors when something goes wrong.
 
 OrthoConfig lets you describe that setting once, in the Rust struct your
 application already needs. From there it gives you:
@@ -119,8 +119,7 @@ policy flags inconsistent vocabulary, missing machine-readable results, unsafe
 mutation surfaces, and unbounded list commands. `cargo-orthohelp` will dogfood
 those contracts with structured results, actionable errors, and atomic output;
 later metadata will describe profiles, delivery targets, and long-running jobs
-so agents can reuse predictable workflows instead of inventing integration
-glue.
+so agents can reuse predictable workflows instead of inventing integration glue.
 
 See the [completed v0.8.0 roadmap][archived-roadmap] for the foundation and the
 [active roadmap][roadmap] for the detailed sequence.

@@ -40,10 +40,10 @@ All notable changes to this project will be documented in this file.
   unaffected (closes #410).
 - Emit structured `tracing` events at each configuration-discovery decision
   point (source selection, selector resolution, XDG/Windows/home resolution,
-  attempt/candidate/outcome), drawn from a closed vocabulary that never
-  carries environment values, paths, or file contents. A successful
-  `discovery.load` event also carries `source`, naming the rung that produced
-  the winning candidate.
+  attempt/candidate/outcome), drawn from a closed vocabulary that never carries
+  environment values, paths, or file contents. A successful `discovery.load`
+  event also carries `source`, naming the rung that produced the winning
+  candidate.
 - Add the optional `metrics` feature, emitting
   `ortho_config.discovery.attempts`, `ortho_config.discovery.outcomes`, and
   `ortho_config.discovery.candidate_failures` counters through the `metrics`
