@@ -63,6 +63,10 @@
   review the proposed generic file-layer resolution policy — ordered explicit
   selectors, multi-scope stacking, and a reusable resolver — with Netsuke as
   the proof case.
+- [RFC 0003: Trust-aware policy composition](rfcs/0003-trust-aware-policy-composition.md):
+  review the proposed separation of preference precedence from
+  application-defined policy authority, with monotonic policy families,
+  explicit delegation, and bounded provenance diagnostics.
 
 ## Feature and migration notes
 

@@ -18,7 +18,8 @@ The source documents for this roadmap are:
 - [ADR-001: Replace `serde_yaml` with `serde-saphyr`](adr-001-replace-serde-yaml-with-serde-saphyr.md);
 - [ADR-002: Replace `cucumber-rs` with `rstest-bdd`](adr-002-replace-cucumber-with-rstest-bdd.md);
 - [ADR-004: Cargo external-subcommand entry-point architecture](adr-004-cargo-external-subcommand-entry-point.md);
-- [ADR-005: Subcommand docs companion trait](adr-005-subcommand-docs-companion-trait.md).
+- [ADR-005: Subcommand docs companion trait](adr-005-subcommand-docs-companion-trait.md);
+- [RFC 0003: Trust-aware policy composition](rfcs/0003-trust-aware-policy-composition.md).
 
 The first downstream consumers for the expanded agent-native contract are
 Weaver and Netsuke. Their plans make several generic requirements explicit:
@@ -1123,3 +1124,242 @@ reimplementing all eleven identifiers. See cargo-orthohelp-design.md §4.2.1.
   - [ ] Success: a fixture crate with no Fluent catalogue renders a complete man
     page in English and a complete man page in a second shipped locale, and
     neither output contains a raw identifier.
+
+## 14. Separate configuration precedence from policy authority
+
+Idea: if OrthoConfig treats source authority as an application-defined
+dimension separate from preference order, lower-authority configuration can
+strengthen operator policy without gaining an accidental capability-granting
+path. If it cannot, every downstream application must rebuild the same trust
+engine and later project layers remain able to widen security boundaries.
+
+This phase depends on the scope and origin foundation from RFC 0002, but may
+proceed independently of phases 11-13. It delivers an opt-in runtime contract
+before derive syntax, preserves existing field strategies for unprotected
+fields, and uses Netsuke's fetch, shell, interpreter, and resource boundaries
+as downstream proof cases. See RFC 0003.
+
+### 14.1. Define the authority model before stabilizing policy APIs
+
+This step answers whether applications can describe authority, source identity,
+anchors, and bounded delegation without path scope or preference order silently
+conferring trust. Its outcome fixes the contracts that the runtime algebra and
+diagnostics consume. See RFC 0003 §§5-6.3 and §6.8.
+
+- [ ] 14.1.1. Review and accept RFC 0003's authority and enforcement
+  decisions.
+  - Confirm the application-defined partial order, explicit anchors,
+    incomparable-authority behaviour, typed delegation, and fail-closed default.
+  - Resolve the deferred public naming and disclosure-default questions needed
+    by the runtime surface; leave derive spelling to 14.2.7.
+  - Success: RFC 0003 is accepted with no unresolved question that blocks the
+    runtime implementation.
+
+- [ ] 14.1.2. Split the accepted implementation into review-sized child
+  issues.
+  - Requires 14.1.1.
+  - Create one issue for each independently reviewable task in 14.1.3-14.4.4,
+    preserving dotted task references and cross-issue dependencies.
+  - Link every child issue back to RFC 0003 and issue #475.
+  - Success: no implementation issue combines runtime algebra, derive code,
+    diagnostics, and downstream adoption into one review.
+
+- [ ] 14.1.3. Implement validated application-defined authority classes and
+  partial orders.
+  - Requires 14.1.1.
+  - Add stable class identifiers, graph construction, dominance comparison,
+    and validation for duplicate identifiers, unknown classes, and cycles.
+  - Keep the graph inspectable data rather than an opaque comparison callback.
+  - Success: property tests cover reflexivity, transitivity, incomparability,
+    cycle rejection, and deterministic comparison. See RFC 0003 §§5.2 and 6.1.
+
+- [ ] 14.1.4. Attach deliberate authority metadata to every protected source
+  shape.
+  - Requires 14.1.3 and the scope/origin foundation from RFC 0002.
+  - Model defaults, explicit selectors, automatic scopes, inherited files,
+    environment, CLI, and named custom providers without deriving authority
+    from their path or preference position.
+  - Preserve the resolved class, stable source identifier, selection kind, and
+    disclosure-controlled source label in a sidecar to `MergeLayer`.
+  - Success: missing and ambiguous classifications fail only protected fields,
+    while unprotected fields retain existing merges. See RFC 0003 §6.2.
+
+- [ ] 14.1.5. Implement explicit policy anchors and typed bounded delegation
+  grants.
+  - Requires 14.1.3 and 14.1.4.
+  - Reject protected fields without a nominated anchor and validate delegation
+    issuer authority, delegate scope, exact field or family, and maximum bound.
+  - Keep grants out of ordinary delegated-layer keys and retain issuer and use
+    provenance.
+  - Success: a project source cannot create, broaden, or retarget its own grant,
+    and a valid grant cannot exceed its issuer's envelope. See RFC 0003 §§6.3
+    and 6.8.
+
+### 14.2. Deliver monotonic composition through the runtime API
+
+This step answers whether the built-in algebra and authority algorithm can
+compose real protected fields before macro syntax freezes the wrong
+abstraction. Its outcome supplies a standalone runtime path that derive support
+can reuse. See RFC 0003 §§6.4-6.9 and §6.11.
+
+- [ ] 14.2.1. Define the inspectable policy-family contract and capability-set
+  families.
+  - Requires 14.1.3.
+  - Add stable family descriptors, `Equal`/`Narrower`/`Wider`/`Mixed`
+    relationships, disclosure-safe summaries, and restrictive reduction.
+  - Implement allowed-capability intersection and denied-capability union with
+    set semantics over domain values.
+  - Success: law-based property tests prove deterministic, associative,
+    commutative, idempotent, and restrictive reduction. See RFC 0003 §§6.4-6.5.
+
+- [ ] 14.2.2. Implement resource-limit and boolean-protection families.
+  - Requires 14.2.1.
+  - Add maximum limits by minimum, minimum requirements by maximum, permissions
+    by logical AND, and required protections by logical OR.
+  - Keep permission and required-protection booleans semantically distinct in
+    public metadata and diagnostics.
+  - Success: lower-authority inputs can lower maxima, raise minima, remove
+    permissions, and add protections, but cannot perform the inverse. See
+    RFC 0003 §6.5.
+
+- [ ] 14.2.3. Implement keyed capability maps with declared value reducers.
+  - Requires 14.2.1.
+  - Intersect keys, reduce shared values through another policy family, and
+    reject maps without a declared reducer.
+  - Success: a lower-authority source cannot add a key or relax a retained
+    key's value, including in mixed add/remove requests. See RFC 0003 §6.6.
+
+- [ ] 14.2.4. Implement authority-aware runtime field composition.
+  - Requires 14.1.4, 14.1.5, and tasks 14.2.1-14.2.3.
+  - Track active constraints, let equal or dominant classes supersede the
+    constraints they are authorized to relax, and restrict incomparable
+    authorities.
+  - Accept delegated widening only within a matching grant and its typed bound.
+  - Success: ordered-layer and property tests cover narrowing, same-class
+    replacement, dominant widening, incomparable constraints, mixed requests,
+    and bounded delegation. See RFC 0003 §6.7.
+
+- [ ] 14.2.5. Add fail-closed rejection and explicit observable clamp modes.
+  - Requires 14.2.4.
+  - Make rejection the default semantic error and allow clamp mode only through
+    the application-owned policy plan.
+  - Return every clamped result with a mandatory non-empty policy report; do
+    not provide an API that silently discards it.
+  - Success: unauthorized widening never changes the effective envelope in
+    either mode, and no ordinary source can select clamp mode. See RFC 0003
+    §6.9.
+
+- [ ] 14.2.6. Integrate protected-field runtime composition with existing
+  ordered layers.
+  - Requires 14.2.5.
+  - Feed protected and ordinary fields from the same `MergeLayer` sequence,
+    while routing protected fields only through their semantic policy family.
+  - Support standalone domain-policy composition so adopters can migrate before
+    deriving a complete configuration.
+  - Success: existing `append`, `replace`, and `keyed` fixtures remain unchanged
+    for unprotected fields, and contradictory policy/ordinary strategies cannot
+    run on one field. See RFC 0003 §§6.11 and 9.1.
+
+- [ ] 14.2.7. Add declarative policy metadata after the runtime model settles.
+  - Requires 14.2.6 and step 14.3.
+  - Select semantic field attributes for built-in families, custom family
+    identifiers, keyed value reducers, and authority-plan requirements.
+  - Generate calls into the runtime implementation rather than a second macro
+    policy engine, and reject contradictory `merge_strategy` and `policy`
+    attributes at compile time.
+  - Success: derive and runtime paths produce equivalent decisions and
+    provenance, while a derive with no policy fields generates unchanged merge
+    behaviour. See RFC 0003 §6.12.
+
+### 14.3. Make every policy decision observable without exposing values
+
+This step answers whether operators and machine consumers can explain a
+rejection, clamp, authoritative widening, or delegated widening from bounded
+records rather than raw configuration. Its output makes enforcement auditable
+before downstream canaries adopt it. See RFC 0003 §6.10.
+
+- [ ] 14.3.1. Preserve active-constraint and delegation decision provenance.
+  - Requires 14.2.4.
+  - Record field and family identifiers, decision kind, requesting source and
+    authority, decisive boundary, relationship, and delegation issuer and
+    identifier when used.
+  - Preserve enough active constraints to explain incomparable authorities and
+    later supersession.
+  - Success: each runtime decision names its authority reason without
+    reconstructing it from the final value. See RFC 0003 §§6.7-6.10.
+
+- [ ] 14.3.2. Add bounded secret-safe summaries and structured diagnostics.
+  - Requires 14.2.5 and 14.3.1.
+  - Default set members, paths, interpreter names, provider parameters, and
+    custom values to opaque or cardinality-only summaries; force secret fields
+    opaque.
+  - Cap detailed violations per field and run, report omitted counts, and emit
+    human and JSON forms from the same typed record.
+  - Success: rejected and clamped requests identify the requesting and ceiling
+    sources and their relationship without logging protected values. See
+    RFC 0003 §6.10.
+
+- [ ] 14.3.3. Expose safe policy reports, tracing, and low-cardinality metrics.
+  - Requires 14.3.2.
+  - Add human and JSON report consumers plus structured events for accepted
+    delegation, rejection, and clamping.
+  - Keep field-family, decision, and authority labels bounded; exclude raw
+    paths, values, request identifiers, and error strings from metric labels.
+  - Success: applications can audit policy uptake and violations without
+    installing a recorder or subscriber in the library. See RFC 0003 §6.10.
+
+- [ ] 14.3.4. Document runtime adoption, migration, and custom-family laws.
+  - Requires 14.2.6 and 14.3.3.
+  - Update the users' and developers' guides with authority classification,
+    anchor selection, rejection versus clamp mode, delegation issuance,
+    redaction, and custom-family property-test requirements.
+  - Distinguish runtime policy composition from roadmap task 7.2.7's
+    agent-context metadata and from downstream enforcement.
+  - Success: an adopter can protect one runtime field without inferring trust
+    from RFC 0002 scope or rewriting an application policy engine. See RFC 0003
+    §§3.2-3.3, 6.13, and 9.2.
+
+### 14.4. Validate downstream canaries and layer combinations
+
+This step answers whether the generic model closes the Netsuke boundaries that
+motivated it and remains monotonic across interacting sources and families. The
+canaries decide whether derive support and downstream migration are safe to
+recommend. See RFC 0003 §7.
+
+- [ ] 14.4.1. Prove Netsuke project configuration cannot widen operator fetch
+  policy.
+  - Requires 14.2.6 and 14.3.2.
+  - Exercise explicit and automatic project sources against host, scheme,
+    redirect, timeout, network-permission, and transport-protection policies.
+  - Success: project configuration can narrow allowed endpoints and add blocks,
+    but cannot add metadata, internal, or alternative-scheme endpoints without
+    a bounded delegation. See RFC 0003 §7.1 and netsuke#644.
+
+- [ ] 14.4.2. Prove trusted shells, interpreters, executable roots, and
+  providers remain authority-bounded.
+  - Requires 14.2.6 and 14.3.2.
+  - Compose the policy envelope with Netsuke's structured-command shell
+    selection while keeping provider selection and execution downstream.
+  - Success: a project can remove trusted choices but cannot add a workspace
+    executable, arbitrary absolute path, interpreter, root, or provider key
+    without explicit delegation. See RFC 0003 §§7.2-7.3 and netsuke#638.
+
+- [ ] 14.4.3. Prove resource ceilings and required protections remain
+  monotonic.
+  - Requires 14.2.6 and 14.3.2.
+  - Cover render bytes, timeouts, recursion, redirects, file-read budgets,
+    process counts, permission booleans, and required-protection booleans.
+  - Success: project sources can reduce ceilings and permissions or strengthen
+    requirements, but cannot raise, enable, or weaken them without delegation.
+    See RFC 0003 §§7.4-7.5.
+
+- [ ] 14.4.4. Add an end-to-end combinatorial policy-layer matrix.
+  - Requires 14.4.1, 14.4.2, and 14.4.3.
+  - Cover defaults, RFC 0002 explicit selectors and automatic scopes,
+    environment, CLI, custom providers, equal, dominant, subordinate and
+    incomparable classes, rejection, clamping, and delegation.
+  - Assert blocklists and required protections across every supported layer
+    order, including mixed wider-and-narrower requests.
+  - Success: the matrix fails on silent widening, silent clamping, missing
+    provenance, secret disclosure, or changed unprotected-field semantics. See
+    RFC 0003 §§5.2, 6.7-6.10, and 8.2.
