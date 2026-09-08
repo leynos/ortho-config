@@ -1,25 +1,21 @@
 //! Candidate-ordering tests for discovery.
 
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use anyhow::{Result, anyhow, ensure};
 use camino::Utf8PathBuf;
 use rstest::rstest;
-use test_helpers::env::{self as test_env, EnvScope};
 
 use super::super::*;
-use super::fixtures::{config_temp_dir, env_guards, env_override_discovery};
+use super::fixtures::{config_temp_dir, env_override_discovery};
+use crate::MapEnv;
 
 #[rstest]
 fn env_override_precedes_other_candidates(
-    env_override_discovery: Result<(
-        ConfigDiscovery,
-        Utf8PathBuf,
-        EnvScope,
-        test_env::EnvVarGuard,
-    )>,
+    env_override_discovery: Result<(ConfigDiscovery, Utf8PathBuf)>,
 ) -> Result<()> {
-    let (discovery, path, _scope, _env) = env_override_discovery?;
+    let (discovery, path) = env_override_discovery?;
     let candidates = discovery.candidates();
     ensure!(
         candidates.first().map(PathBuf::as_path) == Some(path.as_std_path()),
@@ -29,17 +25,15 @@ fn env_override_precedes_other_candidates(
 }
 
 #[rstest]
-fn xdg_candidates_follow_explicit_paths(
-    env_guards: EnvScope,
-    config_temp_dir: Result<tempfile::TempDir>,
-) -> Result<()> {
-    let _guards = env_guards;
+fn xdg_candidates_follow_explicit_paths(config_temp_dir: Result<tempfile::TempDir>) -> Result<()> {
     let temp_dir = config_temp_dir?;
     let xdg_path = temp_dir.path().join("hello_world");
     std::fs::create_dir_all(&xdg_path).map_err(anyhow::Error::new)?;
-    let _home = test_env::set_var("XDG_CONFIG_HOME", temp_dir.path());
-
-    let discovery = ConfigDiscovery::builder("hello_world").build();
+    let discovery = ConfigDiscovery::builder("hello_world")
+        .env_source(Arc::new(
+            MapEnv::new().with_var("XDG_CONFIG_HOME", temp_dir.path()),
+        ))
+        .build();
     let candidates = discovery.candidates();
     let expected_first = xdg_path.join("config.toml");
     let expected_second = temp_dir.path().join(".hello_world.toml");
@@ -56,11 +50,10 @@ fn xdg_candidates_follow_explicit_paths(
 
 #[cfg(any(unix, target_os = "redox"))]
 #[rstest]
-fn xdg_dirs_empty_falls_back_to_default(env_guards: EnvScope) -> Result<()> {
-    let _guards = env_guards;
-    let _dirs = test_env::set_var("XDG_CONFIG_DIRS", "");
-
-    let discovery = ConfigDiscovery::builder("hello_world").build();
+fn xdg_dirs_empty_falls_back_to_default() -> Result<()> {
+    let discovery = ConfigDiscovery::builder("hello_world")
+        .env_source(Arc::new(MapEnv::new().with_var("XDG_CONFIG_DIRS", "")))
+        .build();
     let candidates = discovery.candidates();
 
     let default_base = PathBuf::from("/etc/xdg");
@@ -80,11 +73,12 @@ fn xdg_dirs_empty_falls_back_to_default(env_guards: EnvScope) -> Result<()> {
 
 #[cfg(any(unix, target_os = "redox"))]
 #[rstest]
-fn xdg_dirs_with_values_excludes_default(env_guards: EnvScope) -> Result<()> {
-    let _guards = env_guards;
-    let _dirs = test_env::set_var("XDG_CONFIG_DIRS", "/opt/example:/etc/custom");
-
-    let discovery = ConfigDiscovery::builder("hello_world").build();
+fn xdg_dirs_with_values_excludes_default() -> Result<()> {
+    let discovery = ConfigDiscovery::builder("hello_world")
+        .env_source(Arc::new(
+            MapEnv::new().with_var("XDG_CONFIG_DIRS", "/opt/example:/etc/custom"),
+        ))
+        .build();
     let candidates = discovery.candidates();
 
     let default_base = PathBuf::from("/etc/xdg");
@@ -111,14 +105,9 @@ fn xdg_dirs_with_values_excludes_default(env_guards: EnvScope) -> Result<()> {
 
 #[rstest]
 fn utf8_candidates_prioritise_env_paths(
-    env_override_discovery: Result<(
-        ConfigDiscovery,
-        Utf8PathBuf,
-        EnvScope,
-        test_env::EnvVarGuard,
-    )>,
+    env_override_discovery: Result<(ConfigDiscovery, Utf8PathBuf)>,
 ) -> Result<()> {
-    let (discovery, path, _scope, _env) = env_override_discovery?;
+    let (discovery, path) = env_override_discovery?;
     let candidates = discovery.utf8_candidates();
     let first = candidates
         .first()
@@ -132,9 +121,9 @@ fn utf8_candidates_prioritise_env_paths(
 }
 
 #[rstest]
-fn project_roots_append_last(env_guards: EnvScope) -> Result<()> {
-    let _guards = env_guards;
+fn project_roots_append_last() -> Result<()> {
     let discovery = ConfigDiscovery::builder("hello_world")
+        .env_source(Arc::new(MapEnv::new()))
         .clear_project_roots()
         .add_project_root("proj")
         .build();
@@ -147,9 +136,9 @@ fn project_roots_append_last(env_guards: EnvScope) -> Result<()> {
 }
 
 #[rstest]
-fn project_roots_replaces_existing_entries(env_guards: EnvScope) -> Result<()> {
-    let _guards = env_guards;
+fn project_roots_replaces_existing_entries() -> Result<()> {
     let discovery = ConfigDiscovery::builder("hello_world")
+        .env_source(Arc::new(MapEnv::new()))
         .add_project_root("legacy")
         .project_roots([PathBuf::from("alpha"), PathBuf::from("beta")])
         .build();
