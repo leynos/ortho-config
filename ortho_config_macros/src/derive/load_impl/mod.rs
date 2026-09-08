@@ -223,6 +223,8 @@ fn build_compose_layers_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStrea
     } = args;
     let defaults_ident = idents.defaults_ident;
     let default_struct_init = tokens.default_struct_init;
+    let default_resolutions = &default_struct_init.resolutions;
+    let default_fields = &default_struct_init.fields;
     let krate = tokens.krate;
     let file_discovery = build_file_discovery(tokens, *has_config_path);
     let env_section = build_env_section(tokens);
@@ -244,8 +246,8 @@ fn build_compose_layers_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStrea
         };
 
         let mut composer = #krate::MergeComposer::with_capacity(4);
-        #(#default_struct_init.resolutions)*
-        let defaults = #defaults_ident { #( #default_struct_init.fields, )* };
+        #(#default_resolutions)*
+        let defaults = #defaults_ident { #( #default_fields, )* };
         let mut defaults_value = None;
         match #krate::sanitize_value(&defaults) {
             Ok(value) => {
