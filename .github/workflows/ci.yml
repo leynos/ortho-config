@@ -104,25 +104,25 @@ jobs:
         if: ${{ matrix.os == 'ubuntu-latest' }}
         env:
           WHITAKER_INSTALLER_VERSION: ${{ steps.whitaker.outputs.version }}
+          # cargo-binstall uses this authenticated API credential to resolve
+          # the trusted release assets for Whitaker and Dylint.
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
-          # `cargo binstall --version` exits non-zero (the flag requires a
-          # value), so probe availability with `-V` instead.
-          if ! command -v whitaker-installer >/dev/null 2>&1; then
-            if cargo binstall -V >/dev/null 2>&1; then
-              cargo binstall --no-confirm --locked "whitaker-installer@${WHITAKER_INSTALLER_VERSION}"
-            else
-              echo "cargo-binstall unavailable; building whitaker-installer from crates.io"
-              cargo install --locked whitaker-installer --version "${WHITAKER_INSTALLER_VERSION}"
-            fi
+          # The CI policy permits only trusted prebuilt tools. Do not silently
+          # replace an unavailable binary with a source build on Rust 1.89.
+          if ! cargo binstall -V >/dev/null 2>&1; then
+            echo "cargo-binstall is required for binary-only Whitaker provisioning" >&2
+            exit 127
           fi
+          cargo binstall --no-confirm --locked --disable-strategies compile \
+            --no-discover-github-token "whitaker-installer@${WHITAKER_INSTALLER_VERSION}"
           # Older whitaker-installer releases probe binstall with the same
           # broken `--version` flag, so their dylint-link fallback compiles
           # from crates.io and needs rustc >= 1.91 — newer than this
           # repository's pinned nightly. Preinstall the prebuilt dylint-link
           # the installer expects so it detects the tool and skips that path.
-          if cargo binstall -V >/dev/null 2>&1; then
-            cargo binstall --no-confirm dylint-link@6.0.1
-          fi
+          cargo binstall --no-confirm --locked --disable-strategies compile \
+            --no-discover-github-token dylint-link@6.0.1
           whitaker-installer
 
       - name: Lint
