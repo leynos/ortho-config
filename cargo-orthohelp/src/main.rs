@@ -31,7 +31,7 @@ use crate::error::OrthohelpError;
 use crate::metadata::PackageSelection;
 use crate::schema::{DocMetadata, ORTHO_DOCS_IR_VERSION};
 use camino::Utf8PathBuf;
-use clap::{Error as ClapError, Parser, error::ErrorKind};
+use clap::{CommandFactory, Error as ClapError, FromArgMatches, error::ErrorKind};
 use ortho_config::{FluentLocalizer, LanguageIdentifier, Localizer};
 use std::io::Write;
 use std::str::FromStr;
@@ -45,23 +45,75 @@ struct GenerationContext<'a> {
     en_us_localizer: Option<&'a (LanguageIdentifier, FluentLocalizer)>,
 }
 
+/// Decides which artefact families a run should generate.
+///
+/// The five booleans each gate one distinct artefact family (IR, man page,
+/// `PowerShell`, agent context, localized docs), so collapsing them into
+/// two-variant enums would obscure the per-family skip decisions made in
+/// [`GenerationPlan::for_run`]. The lint is suppressed with that rationale.
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "each boolean gates one distinct artefact family; collapsing them into enums would obscure the per-family skip decisions"
+)]
+struct GenerationPlan {
+    should_generate_ir: bool,
+    should_generate_man: bool,
+    should_generate_ps: bool,
+    should_generate_agent_context: bool,
+    should_generate_localized_docs: bool,
+}
+
+impl GenerationPlan {
+    /// Builds the plan for a run.
+    ///
+    /// When only the lint flag is present and the default `--format ir` was
+    /// not explicitly requested, artefact generation is skipped entirely: the
+    /// answer to the check is on stdout and no files were asked for.
+    const fn for_run(args: &Args, check_flag_present: bool, format_was_explicit: bool) -> Self {
+        let should_skip_artefacts = check_flag_present && !format_was_explicit;
+        let should_generate_ir =
+            !should_skip_artefacts && matches!(args.format, OutputFormat::Ir | OutputFormat::All);
+        let should_generate_man =
+            !should_skip_artefacts && matches!(args.format, OutputFormat::Man | OutputFormat::All);
+        let should_generate_ps =
+            !should_skip_artefacts && matches!(args.format, OutputFormat::Ps | OutputFormat::All);
+        let should_generate_agent_context = !should_skip_artefacts
+            && matches!(args.format, OutputFormat::AgentContext | OutputFormat::All);
+        let should_generate_localized_docs =
+            should_generate_ir || should_generate_man || should_generate_ps;
+        Self {
+            should_generate_ir,
+            should_generate_man,
+            should_generate_ps,
+            should_generate_agent_context,
+            should_generate_localized_docs,
+        }
+    }
+}
 fn main() -> Result<(), OrthohelpError> {
     init_tracing();
-    let cli = match parse_cli() {
-        Ok(cli) => cli,
+    let (cli, format_was_explicit) = match parse_cli() {
+        Ok(parsed) => parsed,
         Err(error) => exit_for_clap_error(&error),
     };
-    run(cli)
+    run(cli, format_was_explicit)
 }
 
 fn init_tracing() {
     let _result = tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
+        .with_writer(std::io::stderr)
         .try_init();
 }
 
-fn parse_cli() -> Result<Cli, ClapError> {
-    Cli::try_parse()
+fn parse_cli() -> Result<(Cli, bool), ClapError> {
+    let matches = Cli::command().try_get_matches()?;
+    let cli = Cli::from_arg_matches(&matches)?;
+    let format_was_explicit = matches
+        .subcommand()
+        .and_then(|(_, sub_matches)| sub_matches.value_source("format"))
+        .is_some_and(|source| source != clap::parser::ValueSource::DefaultValue);
+    Ok((cli, format_was_explicit))
 }
 
 fn exit_for_clap_error(error: &ClapError) -> ! {
@@ -86,7 +138,7 @@ fn write_augmented_clap_error(error: &ClapError) -> std::io::Result<()> {
     )
 }
 
-fn run(cli: Cli) -> Result<(), OrthohelpError> {
+fn run(cli: Cli, format_was_explicit: bool) -> Result<(), OrthohelpError> {
     let Cli {
         command: CargoSubcommand::Orthohelp(args),
     } = cli;
@@ -117,11 +169,16 @@ fn run(cli: Cli) -> Result<(), OrthohelpError> {
     let ir_json = bridge::load_or_build_ir(&config, &paths, should_use_cache, should_skip_build)?;
     let doc_metadata: DocMetadata = serde_json::from_str(&ir_json)?;
 
-    let should_generate_ir = matches!(args.format, OutputFormat::Ir | OutputFormat::All);
-    let should_generate_man = matches!(args.format, OutputFormat::Man | OutputFormat::All);
-    let should_generate_ps = matches!(args.format, OutputFormat::Ps | OutputFormat::All);
-    let should_generate_localized_docs =
-        should_generate_ir || should_generate_man || should_generate_ps;
+    let check_flag_present = args.check_agent_native.is_some();
+    let mut check_has_deny_findings = false;
+    if let Some(mode) = args
+        .check_agent_native
+        .map(cargo_orthohelp::policy::PolicyMode::from)
+    {
+        check_has_deny_findings = run_agent_native_check(&doc_metadata, &selection, mode)?;
+    }
+
+    let plan = GenerationPlan::for_run(&args, check_flag_present, format_was_explicit);
 
     let en_us_localizer = build_agent_context_localizer_if_requested(&args, &selection);
     let generation_context = GenerationContext {
@@ -130,31 +187,42 @@ fn run(cli: Cli) -> Result<(), OrthohelpError> {
         out_dir: &out_dir,
         en_us_localizer: en_us_localizer.as_ref(),
     };
-    generate_agent_context_if_requested(&args, &generation_context)?;
+    if plan.should_generate_agent_context {
+        generate_agent_context_if_requested(&args, &generation_context)?;
+    }
 
-    let locales = if should_generate_localized_docs {
+    let locales = if plan.should_generate_localized_docs {
         locale::resolve_locales(&args, &selection)?
     } else {
         Vec::new()
     };
 
     let localized_docs = localize_docs_if_requested(
-        should_generate_localized_docs,
+        plan.should_generate_localized_docs,
         &generation_context,
         &locales,
     )?;
 
-    if should_generate_ir {
+    if plan.should_generate_ir {
         generate_ir(&localized_docs, &out_dir)?;
     }
 
-    if should_generate_man {
+    if plan.should_generate_man {
         generate_man(&localized_docs, &out_dir, &args.man)?;
     }
 
-    if should_generate_ps {
+    if plan.should_generate_ps {
         let ps_config = build_powershell_config(&args, &selection, &doc_metadata, &out_dir);
         generate_powershell(&localized_docs, &ps_config)?;
+    }
+
+    // The lint's report is emitted before generation so a CI pipeline can
+    // parse it regardless of the exit path. The failure exit for deny-level
+    // findings must not pre-empt explicitly requested artefact generation
+    // (milestone E composition contract): when `--format` is explicit, the
+    // command still writes its artefacts and only then exits 3.
+    if check_has_deny_findings {
+        std::process::exit(3);
     }
 
     Ok(())
@@ -194,6 +262,55 @@ fn generate_agent_context_if_requested(
     Ok(())
 }
 
+/// Runs the agent-native behaviour lint, emits its report, and reports whether
+/// deny-level findings are present.
+///
+/// The policy report is written to stdout as exactly one JSON document, a
+/// human-readable summary goes to stderr, and the returned boolean is `true`
+/// if and only if the report contains at least one `deny` finding. The caller
+/// (`run`) delays the exit-code-3 decision until after explicitly requested
+/// artefact generation completes. Runtime errors keep exit code 1; clap usage
+/// errors keep exit code 2.
+fn run_agent_native_check(
+    doc_metadata: &DocMetadata,
+    selection: &metadata::PackageSelection,
+    mode: cargo_orthohelp::policy::PolicyMode,
+) -> Result<bool, OrthohelpError> {
+    let maybe_localizer = build_en_us_localizer(&selection.package_root)
+        .ok()
+        .map(|(_, localizer)| localizer);
+    let summary_localizer = maybe_localizer
+        .as_ref()
+        .map(|localizer| localizer as &dyn ortho_config::Localizer);
+    let agent_context = agent_context::bridge_ir_to_agent_context(
+        doc_metadata,
+        &selection.package_name,
+        summary_localizer,
+    );
+    let report = cargo_orthohelp::policy::rules::behaviour::check_behaviour(&agent_context, mode);
+    let report_json = serde_json::to_string(&report)?;
+    {
+        let mut stdout = std::io::stdout().lock();
+        writeln!(stdout, "{report_json}").map_err(|source| OrthohelpError::Io {
+            path: Utf8PathBuf::from("<stdout>"),
+            source,
+        })?;
+    }
+
+    {
+        let mut stderr = std::io::stderr().lock();
+        writeln!(
+            stderr,
+            "agent-native behaviour check: {} finding(s) ({} deny)",
+            report.summary.total, report.summary.deny
+        )
+        .map_err(|source| OrthohelpError::Io {
+            path: Utf8PathBuf::from("<stderr>"),
+            source,
+        })?;
+    }
+    Ok(report.summary.deny > 0)
+}
 /// Builds the optional en-US localizer shared by agent-context and localized output.
 fn build_agent_context_localizer_if_requested(
     args: &Args,

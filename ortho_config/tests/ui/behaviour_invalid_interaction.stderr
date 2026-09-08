@@ -1,0 +1,5 @@
+error: unknown interaction 'sometimes'; expected "non_interactive" or "interactive"
+ --> tests/ui/behaviour_invalid_interaction.rs:7:40
+  |
+7 | #[ortho_config(behaviour(interaction = "sometimes"))]
+  |                                        ^^^^^^^^^^^

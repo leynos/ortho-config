@@ -108,6 +108,25 @@ identifiers, finding codes, severities, and source locations machine-stable.
 Extract the report model into `ortho_config` only after a new ADR approves
 shared ownership.
 
+The `--check-agent-native[=off|warn|deny]` lint runs over the compiled agent
+context and emits exactly one JSON `PolicyReport` document to stdout plus a
+one-line human-readable summary to stderr. The stable behaviour rule IDs live
+under `agent-native.behaviour.*` and their machine codes are stable across runs:
+
+- `agent-native.behaviour.destructive-bypass` / `destructive_bypass_missing`;
+- `agent-native.behaviour.prompt-bypass` / `prompt_bypass_missing`;
+- `agent-native.behaviour.bypass-unknown` / `bypass_flag_unknown`;
+- `agent-native.behaviour.undeclared` / `interaction_unknown` and
+  `mutation_unknown`.
+
+Each `PolicyResult.location` is currently `null` because agent context carries
+no source spans; keep the `message` self-contained (command path plus the exact
+annotation to add). The process exits with code `3` if and only if the report
+contains at least one deny-level finding. Runtime errors keep exit code `1` and
+clap usage errors keep exit code `2`; this `3 = policy findings` contract is
+provisional and is scheduled to be superseded by the exit-code taxonomy in
+roadmap item 7.2.5.
+
 Use `rstest` for schema unit tests. Add `rstest-bdd` behavioural scenarios and
 end-to-end tests when a change affects observable CLI behaviour, generated
 artefacts, persisted output, integration contracts, stdout, stderr, or exit
@@ -162,6 +181,20 @@ ownership decision.
 
 Treat `AgentInput.default` as display-only. It is normalized for stable
 goldens, but it is not executable or machine-parseable.
+
+`AgentCommand` carries the declared behaviour surface populated by the bridge
+from the documentation IR `behaviour` block:
+
+- `interaction_mode` — `InteractionMode::Unknown` when undeclared;
+- `mutation_effect` — `MutationEffect::Unknown` when undeclared;
+- `bypass_flag` — `Option<String>`, explicit `null` when absent;
+- `dry_run_flag` — `Option<String>`, explicit `null` when absent.
+
+The bridge maps IR `InteractionKind`/`MutationKind` onto the agent-context
+enums, copying `bypass` and `dry_run` verbatim. It never infers these values
+from command names, verbs, or flags: absence stays `unknown`/`null` (design doc
+§8.1). The derive-side keys and grammar are recorded in
+[ADR-008](adr-008-behavioural-metadata-attribute-surface.md).
 
 Evolve the schema through the compatibility policy in
 [agent-native-cli-design.md](agent-native-cli-design.md) §8.2. Bump
@@ -466,28 +499,27 @@ bounded fields:
 - `source`: `process` or `injected`;
 - `outcome`: `attempt`, `success`, or `failure`; and
 - `category`: `none`, `opaque_key_transform`, `invalid_nesting`, `cli`,
-  `file`, `cyclic_extends`, `gathering`, `merge`, `validation`, or
-  `aggregate`.
+  `file`, `cyclic_extends`, `gathering`, `merge`, `validation`, or `aggregate`.
 
 `CsvEnv` emits process-backed and injected events. Derive-generated loads and
-subcommand loads emit events when their source-aware entry points are used.
-The events never contain environment values, keys, paths, configuration data,
+subcommand loads emit events when their source-aware entry points are used. The
+events never contain environment values, keys, paths, configuration data,
 caller-supplied prefixes, or raw error text. Error categories are reduced to
 the closed vocabulary before emission so subscribers can aggregate failures
 without receiving sensitive input.
 
 Capture tests must cover successful and failing paths for each emitting
-operation. They assert the operation, source, outcome, and category fields,
-and verify that captured events contain neither injected values nor keys or
-paths from the test inputs. The library does not install a global subscriber;
+operation. They assert the operation, source, outcome, and category fields, and
+verify that captured events contain neither injected values nor keys or paths
+from the test inputs. The library does not install a global subscriber;
 applications attach their own capture or export layer at the boundary.
 
 With the optional `metrics` feature enabled, the same merge boundaries also
-increment `ortho_config.merge.attempts` and
-`ortho_config.merge.outcomes`. Both counter families use only the bounded
-`operation`, `source`, `outcome`, and `category` labels described above; the
-attempt counter uses `attempt` and `none` for its outcome and category. No
-metrics recorder is installed by the library.
+increment `ortho_config.merge.attempts` and `ortho_config.merge.outcomes`. Both
+counter families use only the bounded `operation`, `source`, `outcome`, and
+`category` labels described above; the attempt counter uses `attempt` and
+`none` for its outcome and category. No metrics recorder is installed by the
+library.
 
 ## Digest rendering
 
@@ -704,21 +736,21 @@ a no-source-build policy, so every release must carry prebuilt archives that
 for five targets, each built on a runner of its own architecture and operating
 system rather than cross-compiled:
 
-| Target                       | Runner            |
-| ---------------------------- | ----------------- |
-| `x86_64-unknown-linux-gnu`   | `ubuntu-24.04`    |
-| `aarch64-unknown-linux-gnu`  | `ubuntu-24.04-arm`|
-| `x86_64-apple-darwin`        | `macos-15-intel`  |
-| `aarch64-apple-darwin`       | `macos-latest`    |
-| `x86_64-pc-windows-msvc`     | `windows-latest`  |
+| Target                      | Runner             |
+| --------------------------- | ------------------ |
+| `x86_64-unknown-linux-gnu`  | `ubuntu-24.04`     |
+| `aarch64-unknown-linux-gnu` | `ubuntu-24.04-arm` |
+| `x86_64-apple-darwin`       | `macos-15-intel`   |
+| `aarch64-apple-darwin`      | `macos-latest`     |
+| `x86_64-pc-windows-msvc`    | `windows-latest`   |
 
 ### Archive layout
 
 `scripts/release_archive.py` builds one target and writes
 `dist/cargo-orthohelp-<target>-v<version>.tgz`, holding exactly one member,
-`cargo-orthohelp-<target>-v<version>/cargo-orthohelp` (with `.exe` on
-Windows), plus a `sha256sum`-compatible `.sha256` sidecar. Member metadata and
-the gzip timestamp are fixed, so rebuilding a tag reproduces the same bytes.
+`cargo-orthohelp-<target>-v<version>/cargo-orthohelp` (with `.exe` on Windows),
+plus a `sha256sum`-compatible `.sha256` sidecar. Member metadata and the gzip
+timestamp are fixed, so rebuilding a tag reproduces the same bytes.
 
 That layout is a contract with the `[package.metadata.binstall]` templates in
 `cargo-orthohelp/Cargo.toml`: `pkg-url` renders the archive name and `bin-dir`
@@ -727,15 +759,15 @@ renders the member path. Change one and the other must change with it.
 staged archive, and `tests/workflow_contracts/release_workflow_test.py` pins
 the workflow shape, so a mismatch fails on the pull request.
 `scripts/verify_release_archives.py` applies the same checks to a directory of
-archives; the workflow runs it on the staged output and again on the
-downloaded draft assets.
+archives; the workflow runs it on the staged output and again on the downloaded
+draft assets.
 
 ### Release flow
 
-The workflow creates a draft release, builds and uploads every target's
-archive and sidecar, audits the draft, publishes it, then resolves the real
-asset URLs with `cargo binstall --dry-run`. Two details are load-bearing and
-have broken releases elsewhere in the estate:
+The workflow creates a draft release, builds and uploads every target's archive
+and sidecar, audits the draft, publishes it, then resolves the real asset URLs
+with `cargo binstall --dry-run`. Two details are load-bearing and have broken
+releases elsewhere in the estate:
 
 - The jobs that call `gh` without an `actions/checkout` step set `GH_REPO`.
   Otherwise `gh` infers the repository from a git remote and fails with
@@ -765,9 +797,8 @@ one, so a tooling-only release is a patch bump of that crate alone. Edit
 
 ### Verifying the packaging locally
 
-`make test` covers the packager and the auditor;
-`make test-workflow-contracts` covers the workflow shape. To exercise the real
-build:
+`make test` covers the packager and the auditor; `make test-workflow-contracts`
+covers the workflow shape. To exercise the real build:
 
 ```bash
 uv run --script scripts/release_archive.py "$(rustc -vV | sed -n 's|host: ||p')"
