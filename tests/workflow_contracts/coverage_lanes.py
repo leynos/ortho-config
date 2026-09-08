@@ -29,7 +29,10 @@ class CoverageJob(typ.NamedTuple):
         with None where neither the step nor the job sets one.
     job_timeout : float or None
         The job's ``timeout-minutes`` in seconds, or None when it
-        declares none and so inherits GitHub's six-hour default.
+        declares no ceiling GitHub would honour: absent, or a value that
+        is not a positive whole number of minutes. Either way the job
+        inherits GitHub's six-hour default, so the two are the same
+        thing to the budgets and the contract refuses both.
     """
 
     workflow: str
@@ -126,25 +129,24 @@ def _jobs_in(document: dict[str, typ.Any]) -> dict[str, dict[str, typ.Any]]:
     }
 
 
-#: What GitHub accepts as a number of minutes. `bool` is excluded
-#: rather than merely unlisted, because it is an `int` in Python and
-#: `timeout-minutes: true` would otherwise read as one minute.
-_MINUTE_TYPES: typ.Final[tuple[type, ...]] = (int, float, str)
-
-
 def _is_minutes(raw: object) -> bool:
-    """Return whether a value could be a number of minutes."""
-    return isinstance(raw, _MINUTE_TYPES) and not isinstance(raw, bool)
+    """Return whether a value is a ceiling GitHub would honour."""
+    # `timeout-minutes` is a positive whole number of minutes. Anything
+    # else is a workflow GitHub refuses to run, and reading it as a
+    # ceiling would let this contract pass on a job that never starts:
+    # `164.5` and a quoted `"135"` both convert cleanly through
+    # `float(...)` and would satisfy the arithmetic below. `bool` is
+    # excluded rather than merely unlisted, because it is an `int` in
+    # Python and `timeout-minutes: true` would otherwise read as one
+    # minute.
+    return isinstance(raw, int) and not isinstance(raw, bool) and raw > 0
 
 
 def _ceiling_seconds(raw: object) -> float | None:
     """Return a job's ``timeout-minutes`` in seconds, or None."""
     if not _is_minutes(raw):
         return None
-    try:
-        return float(typ.cast("int | float | str", raw)) * 60.0
-    except ValueError:
-        return None
+    return float(typ.cast("int", raw)) * 60.0
 
 
 def _coverage_steps(job: dict[str, typ.Any]) -> list[dict[str, typ.Any]]:
