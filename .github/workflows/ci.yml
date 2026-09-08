@@ -163,7 +163,7 @@ jobs:
           # crate manifest declares additional packaging helpers.
           GH_TOKEN="${INSTALL_TOKEN}" GITHUB_TOKEN="${INSTALL_TOKEN}" \
             cargo binstall --no-confirm --locked --disable-strategies compile \
-            --bin whitaker-installer "whitaker-installer@${WHITAKER_INSTALLER_VERSION}"
+            "whitaker-installer@${WHITAKER_INSTALLER_VERSION}" --bin whitaker-installer
           # Preinstall dylint-link to avoid the installer's source fallback.
           GH_TOKEN="${INSTALL_TOKEN}" GITHUB_TOKEN="${INSTALL_TOKEN}" \
             cargo binstall --no-confirm --locked --disable-strategies compile \
