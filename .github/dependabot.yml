@@ -6,6 +6,7 @@ updates:
       github-actions:
         patterns:
           - '*'
+    # `/` covers `.github/workflows` and root action manifests.
     directory: "/"
     open-pull-requests-limit: 5
     labels:
@@ -18,6 +19,7 @@ updates:
 
   # Enable version updates for Cargo
   - package-ecosystem: "cargo"
+    # The root manifest owns all six Cargo workspace members.
     directory: "/"
     open-pull-requests-limit: 5
     labels:
@@ -41,3 +43,13 @@ updates:
     cooldown:
       default-days: 7
       semver-major-days: 14
+
+  # Keep the pinned Rust toolchain current independently of Cargo crates.
+  - package-ecosystem: "rust-toolchain"
+    directory: "/"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "rust-toolchain"
+    schedule:
+      interval: "weekly"
