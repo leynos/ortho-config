@@ -304,11 +304,31 @@ attribute mirrors the builder surface and lists:
 - `config_cli_long`
 - `config_cli_short`
 - `config_cli_visible`
+- `env_vars`
+- `explicit_mode`
+- `automatic_mode`
+- `scope_order`
+- `project_root_from`
 
 It retains the previous defaults when callers omit these properties.
 Behavioural tests in the `hello_world` example exercise the new `--config`/`-c`
 flags alongside the environment overrides to confirm the precedence order is
 preserved.
+
+Automatic candidates are partitioned into `System`, `User`, and `Project`
+scopes. `compose_layers()` retains its historic first-successful-file behaviour.
+Consumers that need layered configuration select `AutomaticMode::StackScopes`
+and an ordered scope list; the first successful extends chain in each requested
+scope is appended in that order, so project layers naturally override user
+layers through `MergeComposer`'s existing last-pushed-wins semantics. Canonical
+paths are de-duplicated across scopes, retaining the earliest layer.
+
+`ConfigFilePolicy` adds an ordered chain of explicit selectors above automatic
+discovery. A winning CLI or environment selector suppresses later selectors and
+automatic probing. `RequiredExclusive` reports a selected-file failure without
+falling back; `Optional` accepts an absent selected path. The policy returns a
+replayable `FileLayerOutcome`, allowing callers to inspect scalar file values
+early and then add the same layers to a `MergeComposer`.
 
 `ConfigDiscovery::load_first` delegates to `load_config_file`, short-circuiting
 once a readable file is found. Failed reads are skipped so later candidates can

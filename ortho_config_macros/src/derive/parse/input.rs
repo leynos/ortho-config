@@ -5,7 +5,7 @@
 
 use syn::{Data, DeriveInput, Fields};
 
-use super::{FieldAttrs, StructAttrs, parse_field_attrs, parse_struct_attrs};
+use super::{FieldAttrs, StructAttrs, option_inner, parse_field_attrs, parse_struct_attrs};
 
 /// Gathers information from the user-provided struct.
 ///
@@ -46,5 +46,47 @@ pub(crate) fn parse_input(
     for f in &fields {
         field_attrs.push(parse_field_attrs(f)?);
     }
+    validate_project_root_field(&fields, &field_attrs, &struct_attrs)?;
     Ok((ident, fields, struct_attrs, field_attrs))
+}
+
+fn is_path_buf(ty: &syn::Type) -> bool {
+    let syn::Type::Path(path) = ty else {
+        return false;
+    };
+    path.path
+        .segments
+        .last()
+        .is_some_and(|segment| segment.ident == "PathBuf")
+}
+
+fn validate_project_root_field(
+    fields: &[syn::Field],
+    attrs: &[FieldAttrs],
+    struct_attrs: &StructAttrs,
+) -> syn::Result<()> {
+    let Some(discovery) = &struct_attrs.discovery else {
+        return Ok(());
+    };
+    let Some(name) = &discovery.project_root_from else {
+        return Ok(());
+    };
+    let Some((field, field_attrs)) = fields
+        .iter()
+        .zip(attrs)
+        .find(|(field, _)| field.ident.as_ref().is_some_and(|ident| ident == name))
+    else {
+        return Err(syn::Error::new(
+            proc_macro2::Span::call_site(),
+            format!("`project_root_from` must name a CLI PathBuf field; `{name}` was not found"),
+        ));
+    };
+    let valid_type = is_path_buf(&field.ty) || option_inner(&field.ty).is_some_and(is_path_buf);
+    if field_attrs.skip_cli || !valid_type {
+        return Err(syn::Error::new_spanned(
+            field,
+            "`project_root_from` must name a non-skipped `PathBuf` or `Option<PathBuf>` field",
+        ));
+    }
+    Ok(())
 }

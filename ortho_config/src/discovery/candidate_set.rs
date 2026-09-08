@@ -6,8 +6,8 @@
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
-use super::ConfigDiscovery;
 use super::telemetry;
+use super::{ConfigDiscovery, DiscoveryScope};
 
 /// Normalizes a path according to Windows' case-insensitive comparison rules by
 /// lowercasing ASCII code points on the original wide path representation and
@@ -70,6 +70,7 @@ pub(super) type DedupKey = std::ffi::OsString;
 pub(super) struct Candidate {
     pub(super) path: PathBuf,
     pub(super) source: &'static str,
+    pub(super) scope: Option<DiscoveryScope>,
 }
 
 /// Accumulates candidates while deduplicating per the platform's path rules.
@@ -80,7 +81,12 @@ pub(super) struct CandidateAccumulator {
 }
 
 impl CandidateAccumulator {
-    pub(super) fn push_unique(&mut self, candidate: PathBuf, source: &'static str) -> bool {
+    pub(super) fn push_unique(
+        &mut self,
+        candidate: PathBuf,
+        source: &'static str,
+        scope: Option<DiscoveryScope>,
+    ) -> bool {
         if candidate.as_os_str().is_empty() {
             return false;
         }
@@ -89,6 +95,7 @@ impl CandidateAccumulator {
             self.candidates.push(Candidate {
                 path: candidate,
                 source,
+                scope,
             });
             true
         } else {
