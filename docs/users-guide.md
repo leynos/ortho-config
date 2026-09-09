@@ -612,7 +612,6 @@ Fill `AgentCommand` entries only with claims the executable honours.
 replace command validation or grant an agent capabilities that the CLI does not
 have.
 
-
 ### Agent-native policy checking
 
 `cargo orthohelp --check-agent-native` runs an opt-in agent-native policy check

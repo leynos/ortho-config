@@ -279,7 +279,6 @@ Keep richer fixture families isolated. For example, `NestedDocsConfig` and
 `NestedDocsContext` back `docs_ir_nested.feature`, and their steps live in a
 fixture-specific module rather than expanding unrelated step files.
 
-
 ### Policy configuration test layout
 
 Agent-native policy configuration (roadmap 7.1.1) follows the same layout. The
