@@ -319,7 +319,6 @@ options; bare invocation without the injected token is rejected), also isolated
 in a fixture-specific steps module. Future contributors should extend the
 existing fixture families rather than duplicate them.
 
-
 ### Policy configuration test layout
 
 Agent-native policy configuration (roadmap 7.1.1) follows the same layout. The
