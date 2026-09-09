@@ -78,6 +78,11 @@ fn policy_report_json_snapshot_covers_wire_contract() {
         "warn": 1,
         "deny": 0,
         "total": 1
+      },
+      "exceptions": [],
+      "vocabulary": {
+        "verbs": [],
+        "flags": []
       }
     }
     "###);

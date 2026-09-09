@@ -54,7 +54,14 @@
     "supported": false
   },
   "policy": {
-    "agent_native": "warn"
+    "agent_native": "warn",
+    "exceptions": [
+      {
+        "kind": "flag",
+        "name": "--json",
+        "command_path": null
+      }
+    ]
   },
   "skill_manifests": [
     {

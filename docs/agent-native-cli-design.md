@@ -240,9 +240,10 @@ The policy should support `off`, `warn`, and `deny` modes. Early adoption
 should default to warnings so existing users can see the work required before
 turning on hard failures.
 
-`cargo orthohelp --check-agent-native` must emit a machine-stable policy report
-when JSON output is requested. Tests and CI should parse `rule_id` and `code`
-for deterministic handling; prose in `message` is explanatory and may improve
+`cargo orthohelp --check-agent-native` always emits a machine-stable policy
+report written atomically to the output directory, and prints a short human
+summary to standard error. Tests and CI should parse `rule_id` and `code` for
+deterministic handling; prose in `message` is explanatory and may improve
 without changing the machine contract.
 
 ```json
@@ -252,20 +253,12 @@ without changing the machine contract.
   "mode": "warn",
   "results": [
     {
-      "rule_id": "agent-native.vocabulary.canonical-flag",
+      "rule_id": "agent-native.config.redundant-exception",
       "severity": "warn",
-      "code": "canonical_flag_missing",
-      "message": "Use --json for structured output instead of --format=json.",
-      "file": "Cargo.toml",
-      "range": {
-        "start": {
-          "line": 12,
-          "column": 1
-        },
-        "end": {
-          "line": 12,
-          "column": 20
-        }
+      "code": "redundant_exception",
+      "message": "exception for verb 'get' is redundant: the item is already canonical",
+      "location": {
+        "file": "Cargo.toml"
       }
     }
   ],
@@ -274,6 +267,18 @@ without changing the machine contract.
     "warn": 1,
     "deny": 0,
     "total": 1
+  },
+  "exceptions": [
+    {
+      "kind": "verb",
+      "name": "get",
+      "reason": "redundant but part of the migration surface",
+      "command_path": null
+    }
+  ],
+  "vocabulary": {
+    "verbs": ["get", "list", "create", "update", "delete", "jobs", "profile", "feedback"],
+    "flags": ["--json", "--no-input", "--force", "--dry-run", "--limit", "--cursor", "--wait", "--profile", "--deliver"]
   }
 }
 ```
@@ -284,12 +289,24 @@ Each result must contain:
 - `severity`: one of `off`, `warn`, or `deny`;
 - `code`: stable machine-readable finding code;
 - `message`: human-readable diagnostic text;
-- `file`: source file path when available;
-- `range` or `span`: optional source location metadata.
+- `location`: optional nested source location object whose `file` is the
+  repository-relative or package-relative path, and whose optional `range`
+  holds one-based `start`/`end` positions (matching the shipped
+  `cargo_orthohelp::policy` types rather than the draft's flat `file`/`range`
+  pair).
 
 Mode handling is direct: `off` suppresses checks, `warn` emits findings without
 failing the command, and `deny` exits with a validation-class failure when any
 deny-level finding is present.
+
+The configuration surface is `[package.metadata.ortho_config.policy]` in the
+target package's `Cargo.toml` (see ADR-008). The enforcement default is `off`
+(the check is opt-in and checks nothing without a policy table); the
+agent-context advertisement default remains the shipped `warn` value. Both
+defaults are distinct, and the transient `--policy-mode` override affects only
+the report's effective mode, never the generated agent context. Configured
+exceptions are visible in the report with their reasons and in agent context
+without reasons (see ADR-008).
 
 ### 3.4 Long-form workflow material
 

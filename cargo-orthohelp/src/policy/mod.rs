@@ -4,7 +4,18 @@
 //! and hard failures. It is owned by this tool until a later design decision
 //! extracts a reusable report model into a lower crate.
 
+use std::fmt;
+
+use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
+
+pub mod check;
+pub mod config;
+pub mod evaluate;
+pub mod vocabulary;
+
+pub use config::{ExceptionKind, PolicyConfig, PolicyException, PolicyInputs};
+pub use evaluate::evaluate;
 
 /// Current policy-report schema version.
 pub const ORTHO_POLICY_REPORT_SCHEMA_VERSION: &str = "1";
@@ -28,6 +39,19 @@ pub struct PolicyReport {
     pub results: Vec<PolicyResult>,
     /// Count summary grouped by severity.
     pub summary: PolicySummary,
+    /// Explicit project exceptions honoured by the run.
+    ///
+    /// Schema-version-1 additive field (`#[serde(default)]`); the full
+    /// exception shape including `reason` is published here, not in agent
+    /// context (Decision D12).
+    #[serde(default)]
+    pub exceptions: Vec<config::PolicyException>,
+    /// Canonical vocabulary the policy holds the project to.
+    ///
+    /// Schema-version-1 additive field (`#[serde(default)]`), populated from
+    /// the [`vocabulary`] constants (Decision D14).
+    #[serde(default)]
+    pub vocabulary: Vocabulary,
 }
 
 impl PolicyReport {
@@ -50,6 +74,8 @@ impl PolicyReport {
             mode,
             results: Vec::new(),
             summary: PolicySummary::default(),
+            exceptions: Vec::new(),
+            vocabulary: Vocabulary::default(),
         }
     }
 
@@ -71,10 +97,57 @@ impl PolicyReport {
             ..Self::empty(mode)
         }
     }
+
+    /// Creates a report with findings, exceptions, and a vocabulary block.
+    ///
+    /// The summary is derived from `results`; `exceptions` and `vocabulary`
+    /// are attached verbatim so the caller controls the advertised surface.
+    /// # Examples
+    ///
+    /// ```rust
+    /// use cargo_orthohelp::policy::{PolicyMode, PolicyReport, Vocabulary};
+    ///
+    /// let report = PolicyReport::with_details(
+    ///     PolicyMode::Warn,
+    ///     Vec::new(),
+    ///     Vec::new(),
+    ///     Vocabulary::default(),
+    /// );
+    /// assert_eq!(report.mode, PolicyMode::Warn);
+    /// assert!(report.vocabulary.verbs.is_empty());
+    /// ```
+    #[must_use]
+    pub fn with_details(
+        mode: PolicyMode,
+        results: Vec<PolicyResult>,
+        exceptions: Vec<config::PolicyException>,
+        vocabulary: Vocabulary,
+    ) -> Self {
+        Self {
+            summary: PolicySummary::from_results(&results),
+            results,
+            exceptions,
+            vocabulary,
+            ..Self::empty(mode)
+        }
+    }
+}
+
+/// Canonical vocabulary defaults advertised by a policy report.
+///
+/// Values mirror the [`vocabulary`] constants so a report
+/// consumer can see exactly what the policy holds the project to without
+/// importing the tool's internal list.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct Vocabulary {
+    /// Canonical command verbs, such as `get` and `list`.
+    pub verbs: Vec<String>,
+    /// Canonical long flags, written with the leading `--`.
+    pub flags: Vec<String>,
 }
 
 /// Enforcement mode selected for policy evaluation.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ValueEnum)]
 #[serde(rename_all = "snake_case")]
 pub enum PolicyMode {
     /// Do not evaluate policy checks.
@@ -83,6 +156,16 @@ pub enum PolicyMode {
     Warn,
     /// Treat deny-level findings as hard failures.
     Deny,
+}
+
+impl fmt::Display for PolicyMode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Off => f.write_str("off"),
+            Self::Warn => f.write_str("warn"),
+            Self::Deny => f.write_str("deny"),
+        }
+    }
 }
 
 /// One policy finding.

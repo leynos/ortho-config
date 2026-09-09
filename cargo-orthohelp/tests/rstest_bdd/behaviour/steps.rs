@@ -34,6 +34,7 @@ pub struct OrthoHelpContext {
     pub last_output: Slot<std::process::Output>,
     pub cache_ir_path: Slot<Utf8PathBuf>,
     pub cache_ir_content: Slot<String>,
+    pub policy_package: Slot<String>,
 }
 
 impl Default for OrthoHelpContext {
@@ -48,6 +49,7 @@ impl Default for OrthoHelpContext {
             last_output: Slot::new(),
             cache_ir_path: Slot::new(),
             cache_ir_content: Slot::new(),
+            policy_package: Slot::new(),
         }
     }
 }
