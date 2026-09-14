@@ -1,5 +1,6 @@
 //! Behavioural step modules registered with `rstest-bdd`.
 
+pub mod cargo_steps;
 #[cfg(feature = "serde_json")]
 pub mod cli_default_as_absent_steps;
 pub mod cli_steps;

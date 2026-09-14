@@ -1,5 +1,6 @@
 //! Binds the `ortho_config` behavioural feature files to the step registry.
 
+use super::steps::cargo_steps::{CargoContext, cargo_context};
 use crate::scenario_state::{
     CliDefaultContext, CollectionContext, ComposerContext, DocsContext, ErrorContext,
     ExtendsContext, FlattenContext, LocalizerContext, MergeErrorContext, NestedDocsContext,
@@ -9,6 +10,10 @@ use crate::scenario_state::{
 };
 use rstest_bdd_macros::scenarios;
 
+scenarios!(
+    "tests/features/cargo_entry_point.feature",
+    fixtures = [cargo_context: CargoContext]
+);
 scenarios!(
     "tests/features/cli_default_as_absent.feature",
     fixtures = [cli_default_context: CliDefaultContext]

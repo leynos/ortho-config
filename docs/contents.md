@@ -86,7 +86,8 @@
 - [v0.9.0 migration guide](v0-9-0-migration-guide.md): identify required,
   recommended, and optional changes when upgrading from v0.8.0.
 - [v0.10.0 migration guide](v0-10-0-migration-guide.md): adopt injected
-  environment sources while preserving process-backed defaults.
+  environment sources or the Cargo external-subcommand helper while preserving
+  process-backed defaults.
 
 ## Testing and documentation references
 
@@ -158,5 +159,7 @@
     the behavioural testing migration.
   - [Prepare the v0.9.0 user documentation](execplans/prepare-v0-9-0-user-documentation.md):
     plan for the public guides and executable documentation-example contract.
+  - [Cargo helper for hand-built clap commands](execplans/8-3-1-ortho-config-cargo-helper-for-hand-built-clap-commands.md):
+    plan and implementation record for the Cargo external-subcommand helper.
   - [Ortho agent CLI roadmap](execplans/ortho-agent-cli-roadmap.md): plan for
     the agent-native documentation and roadmap overhaul.
