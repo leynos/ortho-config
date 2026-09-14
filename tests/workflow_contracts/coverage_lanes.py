@@ -204,7 +204,7 @@ def coverage_jobs_of(
     what makes the two invocations here visible to the arithmetic.
 
     The documents are required rather than defaulted, so this query
-    reaches no filesystem and no parser at all. `coverage_jobs` is the
+    reaches no filesystem and no parser at all. `coverage_jobs_in` is the
     acquisition around it. A default that read the repository when the
     argument was omitted left the two indistinguishable at the call
     site, and a reading that can fetch its own input is one whose

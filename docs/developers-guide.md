@@ -1028,7 +1028,9 @@ they read is YAML and TOML; `make test` does not run them.
 Each reading takes what it reads rather than fetching it. `coverage_jobs_of`
 queries supplied workflow documents and reaches no filesystem and no parser,
 `workflow_documents` is the acquisition that reads a directory, and
-`coverage_jobs_in` is the two together. The pair is named for what each takes,
+`coverage_jobs_in` is the two together, defaulting its directory to the
+repository's own so the contract can call it with no argument at all while the
+query below it can never reach a file. The pair is named for what each takes,
 because a call site has to say which it is doing. The budget readings are driven
 with Hypothesis as well as with named cases, in
 `timeout_budget_properties_test.py`: the unit table and the duration grammar are
@@ -1069,17 +1071,34 @@ text: its parser special-cases `0` before reading a character, so `" 0 "` is
 refused and a reader that stripped whitespace first would accept a duration
 nextest rejects. Case is significant, so `m` is minutes and `M` is months.
 
-The arithmetic is exact, in whole nanoseconds, because that is what humantime
-counts in. A component that does not land on a nanosecond will not load:
-`0.0000000015s` is a second and a half of nanoseconds and is refused, while
-`1.999999999s` is accepted. Reading the value through a float instead would
-round the first to something plausible and certify a configuration nextest
-cannot load, which is why the unit table holds integer nanoseconds rather than
-fractional seconds. Two ceilings come with it: a numeric literal must fit the
-`u64` humantime reads it into, so `1000000000000000000000ns` is refused even
-though its value in seconds is small, and the accumulated seconds must fit the
-`u64` they are summed into, so `18446744073709551615s` loads and one second more
-does not.
+The arithmetic is exact and in integers, because humantime's is: its parser
+works in checked `u64` throughout and reports every failure as an overflow.
+Reading a value through a float instead rounds what humantime refuses into
+something plausible and certifies a configuration nextest cannot load.
+
+Which integer depends on the unit, and this is the part a reader working in
+nanoseconds alone gets wrong. A fraction of an hour or anything longer is
+converted into whole *seconds*, so `0.000001h` is refused although 3,600 ns is a
+whole nanosecond, while `0.25h` is fifteen minutes. A fraction of a minute or
+anything shorter is converted into whole nanoseconds, so `1.999999999s` is
+accepted and `0.0000000015s` is not. A fraction of a nanosecond is refused
+outright, whatever it spells, so even `1.0ns` will not load. The unit tables are
+therefore split by which of the two a unit is measured in.
+
+Three ceilings come with it, and they are different. A numeric literal must fit
+the `u64` humantime reads it into, so `1000000000000000000000ns` is refused even
+though its value in seconds is small. A fraction's own arithmetic is checked, so
+`0.1000000000000000000s` overflows on the multiplication and
+`1.00000000000000000000s` on the denominator, although both would fit as
+durations. And the accumulated seconds must fit the `u64` they are summed into,
+so `18446744073709551615s` loads and one second more does not.
+
+The reading was checked against the parser rather than against its
+documentation: 4,016 generated durations, spanning every unit spelling,
+fractions of up to twenty-one digits, values around the `u64` boundary and
+humantime's tolerated whitespace, were run through both this reader and
+humantime 2.3.0 compiled from the pinned release, and the two agreed on every
+one.
 
 It pins the condition each lane carries, which is none today. A skipped step
 runs no `cargo`, so its watchdog never arms and the tiers say nothing about it:

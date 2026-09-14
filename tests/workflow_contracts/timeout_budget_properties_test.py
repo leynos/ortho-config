@@ -103,13 +103,22 @@ whole_numbers = st.integers(min_value=1, max_value=10_000)
 fractional_parts = st.integers(min_value=0, max_value=999)
 units = st.sampled_from(sorted(UNITS))
 
-#: The units a three-digit fraction can be written against. humantime
-#: counts in whole nanoseconds and refuses a component that does not
-#: land on one, so a thousandth of a nanosecond is not a duration and
-#: `1.1nanos` will not load. Every unit from the microsecond up divides
-#: evenly by a thousand, so the fraction is representable there.
+#: The units any three-digit fraction can be written against. humantime
+#: converts a fraction differently either side of the hour: below it the
+#: fraction becomes whole nanoseconds, at it and above it whole seconds,
+#: and a fraction of a nanosecond is refused outright. So `1.1M` is not
+#: a duration, because a tenth of a month is not a whole number of
+#: seconds, and neither is `1.0ns`. Between the microsecond and the
+#: minute the nanosecond scale divides by a thousand whatever the
+#: numerator, so every three-digit fraction lands. The two excluded ends
+#: are asserted by name instead, as acceptances where they land and
+#: refusals where they do not.
 fractional_units = st.sampled_from(
-    sorted(unit for unit, length in UNITS.items() if round(length * 1e9) % 1000 == 0)
+    sorted(
+        unit
+        for unit, length in UNITS.items()
+        if 1e-6 <= length <= 60.0 and round(length * 1e9) % 1000 == 0
+    )
 )
 multipliers = st.integers(min_value=1, max_value=20)
 
@@ -226,6 +235,9 @@ def test_a_sequence_of_components_sums_to_its_parts(
         pytest.param("1 2 . 3 4 s", 12.34, id="whitespace-throughout-the-number"),
         pytest.param("1.999999999s", 1.999999999, id="nanosecond-precision"),
         pytest.param("0.000001ms", 1e-9, id="a-fraction-that-lands-on-a-nanosecond"),
+        pytest.param("0.25h", 900.0, id="a-fraction-of-an-hour-in-whole-seconds"),
+        pytest.param("0.5m", 30.0, id="a-fraction-of-a-minute"),
+        pytest.param("0.5y", 15778800.0, id="a-fraction-of-a-year"),
     ],
 )
 def test_a_duration_nextest_accepts_is_read_rather_than_refused(
@@ -266,6 +278,11 @@ def test_a_duration_nextest_accepts_is_read_rather_than_refused(
         "1000000000000000000000ns",
         "18446744073709551615s 1s",
         "0.0000000004s 0.0000000006s",
+        "1.0ns",
+        "2.0ns",
+        "0.000001h",
+        "0.1000000000000000000s",
+        "1.00000000000000000000s",
     ],
     ids=[
         "empty",
@@ -287,6 +304,11 @@ def test_a_duration_nextest_accepts_is_read_rather_than_refused(
         "a-literal-past-the-u64-humantime-reads-it-into",
         "a-sum-past-the-u64-humantime-accumulates-into",
         "components-that-are-whole-only-together",
+        "a-whole-fraction-of-a-nanosecond",
+        "a-larger-whole-fraction-of-a-nanosecond",
+        "an-hour-fraction-that-is-not-whole-seconds",
+        "a-fraction-whose-product-leaves-the-u64",
+        "a-fraction-whose-denominator-leaves-the-u64",
     ],
 )
 def test_an_unreadable_duration_is_refused(duration: str) -> None:

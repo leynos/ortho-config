@@ -16,6 +16,14 @@ import re
 import typing as typ
 
 from nextest_errors import NextestConfigurationError
+from nextest_units import (
+    NANOSECONDS_PER_SECOND,
+    SUBSECOND_NANOSECONDS,
+    U64_MAX,
+    UNIT_SECONDS,
+    Overflow,
+    component_parts,
+)
 
 #: One value-and-unit pair of a duration as ``humantime`` spells it.
 #: nextest deserializes every duration with ``humantime_serde``, which
@@ -55,122 +63,9 @@ _COMPONENT: typ.Final[re.Pattern[str]] = re.compile(
 #: reader that stripped first would accept a duration nextest rejects.
 _BARE_ZERO: typ.Final[str] = "0"
 
-#: Every unit spelling ``humantime`` accepts, with its length in whole
-#: nanoseconds. Nanoseconds rather than seconds because humantime works
-#: in them: a component whose value is not a whole number of them is
-#: refused, and reading the table in floating-point seconds could not
-#: tell such a component from a representable one. Case is not folded:
-#: ``m`` is minutes and ``M`` is months, so folding would read a
-#: thirty-minute budget as a two-and-a-half-year one. A month is a
-#: twelfth of a Julian year and a year is 365.25 days, which is how
-#: ``humantime`` defines them. Spelt out in full rather than trimmed to
-#: the spellings this repository happens to use, because refusing a unit
-#: nextest accepts fails a configuration the runner is happy with.
-_UNIT_NANOSECONDS: typ.Final[dict[str, int]] = {
-    "nanos": 1,
-    "nsec": 1,
-    "ns": 1,
-    "usec": 1000,
-    "us": 1000,
-    "\u00b5s": 1000,
-    "millis": 1000000,
-    "msec": 1000000,
-    "ms": 1000000,
-    "seconds": 1000000000,
-    "second": 1000000000,
-    "secs": 1000000000,
-    "sec": 1000000000,
-    "s": 1000000000,
-    "minutes": 60000000000,
-    "minute": 60000000000,
-    "mins": 60000000000,
-    "min": 60000000000,
-    "m": 60000000000,
-    "hours": 3600000000000,
-    "hour": 3600000000000,
-    "hrs": 3600000000000,
-    "hr": 3600000000000,
-    "h": 3600000000000,
-    "days": 86400000000000,
-    "day": 86400000000000,
-    "d": 86400000000000,
-    "weeks": 604800000000000,
-    "week": 604800000000000,
-    "wks": 604800000000000,
-    "wk": 604800000000000,
-    "w": 604800000000000,
-    "months": 2630016000000000,
-    "month": 2630016000000000,
-    "M": 2630016000000000,
-    "years": 31557600000000000,
-    "year": 31557600000000000,
-    "yrs": 31557600000000000,
-    "yr": 31557600000000000,
-    "y": 31557600000000000,
-}
 
-
-#: How many nanoseconds humantime counts to a second.
-_NANOSECONDS_PER_SECOND: typ.Final[int] = 1_000_000_000
-
-#: The largest value humantime will read, for a numeric literal and for
-#: the accumulated seconds alike. Its parser holds both in a ``u64``,
-#: so ``"18446744073709551615s"`` loads and one second more does not.
-_U64_MAX: typ.Final[int] = 2**64 - 1
-
-
-def _nanoseconds_of(duration: str, value: str, unit_nanos: int) -> int:
-    """Return one component's length in whole nanoseconds.
-
-    humantime accumulates a duration in nanoseconds and refuses a
-    component that does not land on one: ``"0.0000000015s"`` is a second
-    and a half of nanoseconds and will not load, while
-    ``"1.999999999s"`` will. Reading the value through ``float`` instead
-    silently rounds the first to something plausible, so the contract
-    would certify a configuration nextest cannot load. The arithmetic is
-    therefore exact, in integers.
-
-    Parameters
-    ----------
-    duration : str
-        The whole duration, for the message.
-    value : str
-        The component's digits, with humantime's tolerated whitespace
-        already removed.
-    unit_nanos : int
-        The unit's length in nanoseconds.
-
-    Returns
-    -------
-    int
-        The component's length in whole nanoseconds.
-
-    Raises
-    ------
-    NextestConfigurationError
-        If the literal is larger than humantime reads, or the component
-        is not a whole number of nanoseconds.
-    """
-    whole, _, fraction = value.partition(".")
-    scale = 10 ** len(fraction)
-    if int(whole) > _U64_MAX:
-        message = (
-            f"nextest duration {duration!r} names {whole!r}, which is larger "
-            f"than the u64 humantime reads a number into"
-        )
-        raise NextestConfigurationError(message)
-    scaled = (int(whole) * scale + int(fraction or 0)) * unit_nanos
-    if scaled % scale:
-        message = (
-            f"nextest duration {duration!r} is not a whole number of "
-            f"nanoseconds, and humantime supports no finer precision"
-        )
-        raise NextestConfigurationError(message)
-    return scaled // scale
-
-
-def _component_at(duration: str, text: str, position: int) -> tuple[int, int]:
-    """Return one component's length in nanoseconds and where it ends.
+def _component_at(duration: str, text: str, position: int) -> tuple[int, int, int]:
+    """Return one component's seconds and nanoseconds, and where it ends.
 
     Parameters
     ----------
@@ -184,9 +79,9 @@ def _component_at(duration: str, text: str, position: int) -> tuple[int, int]:
 
     Returns
     -------
-    tuple of (int, int)
-        The component's length in nanoseconds, and the offset at which
-        the next component starts.
+    tuple of (int, int, int)
+        The component's whole seconds, its nanoseconds, and the offset
+        at which the next component starts.
 
     Raises
     ------
@@ -203,8 +98,7 @@ def _component_at(duration: str, text: str, position: int) -> tuple[int, int]:
         )
         raise NextestConfigurationError(message)
     unit = component["unit"]
-    unit_nanos = _UNIT_NANOSECONDS.get(unit)
-    if unit_nanos is None:
+    if unit not in SUBSECOND_NANOSECONDS and unit not in UNIT_SECONDS:
         message = (
             f"nextest duration {duration!r} names the unit {unit!r}, which "
             f"humantime does not accept; note that 'm' is minutes and 'M' "
@@ -215,7 +109,18 @@ def _component_at(duration: str, text: str, position: int) -> tuple[int, int]:
     # the matched value can read "1 . 5"; the digits are joined before
     # the arithmetic reads them.
     value = "".join(component["value"].split())
-    return _nanoseconds_of(duration, value, unit_nanos), component.end()
+    try:
+        seconds_part, nanoseconds_part = component_parts(value, unit)
+    except Overflow:
+        message = (
+            f"nextest duration {duration!r} carries a component humantime "
+            f"cannot represent: its arithmetic is checked u64 throughout, it "
+            f"converts a fraction of an hour or longer into whole seconds and "
+            f"a shorter one into whole nanoseconds, and it refuses any "
+            f"fraction of a nanosecond"
+        )
+        raise NextestConfigurationError(message) from None
+    return seconds_part, nanoseconds_part, component.end()
 
 
 def seconds(duration: str) -> float:
@@ -246,18 +151,25 @@ def seconds(duration: str) -> float:
             f"humantime reads no duration from nothing"
         )
         raise NextestConfigurationError(message)
-    total = 0
+    total_seconds = 0
+    total_nanoseconds = 0
     position = 0
     while position < len(text):
-        length, position = _component_at(duration, text, position)
-        total += length
-    # humantime accumulates the whole seconds in a u64 beside a
-    # nanosecond remainder, so a sum past that ceiling will not load even
-    # though each component did.
-    if total // _NANOSECONDS_PER_SECOND > _U64_MAX:
-        message = (
-            f"nextest duration {duration!r} totals more seconds than the u64 "
-            f"humantime accumulates them in"
+        component_seconds, component_nanoseconds, position = _component_at(
+            duration, text, position
         )
-        raise NextestConfigurationError(message)
-    return total / _NANOSECONDS_PER_SECOND
+        # humantime carries the running total as whole seconds beside a
+        # nanosecond remainder, and both are checked, so a sum past that
+        # ceiling will not load even though each component did.
+        total_nanoseconds += component_nanoseconds
+        if total_nanoseconds > NANOSECONDS_PER_SECOND:
+            component_seconds += total_nanoseconds // NANOSECONDS_PER_SECOND
+            total_nanoseconds %= NANOSECONDS_PER_SECOND
+        total_seconds += component_seconds
+        if total_seconds > U64_MAX:
+            message = (
+                f"nextest duration {duration!r} totals more seconds than the "
+                f"u64 humantime accumulates them in"
+            )
+            raise NextestConfigurationError(message)
+    return total_seconds + total_nanoseconds / NANOSECONDS_PER_SECOND
