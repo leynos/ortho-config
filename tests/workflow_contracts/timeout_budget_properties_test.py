@@ -48,8 +48,9 @@ if typ.TYPE_CHECKING:
 #: table is the one place in the reading where a single wrong entry
 #: would go unnoticed, because every comparison downstream would still
 #: be an inequality between two plausible numbers. Measured against
-#: humantime 2.4.0, the version nextest resolves, by compiling that
-#: parser and running every spelling through it. Case is significant,
+#: humantime 2.3.0, which is what the lockfile of the pinned
+#: cargo-nextest release resolves, by compiling that parser and running
+#: every spelling through it. Case is significant,
 #: ``m`` being minutes and ``M`` months.
 UNITS: typ.Final[dict[str, float]] = {
     "nanos": 1e-9,
@@ -206,6 +207,8 @@ def test_a_sequence_of_components_sums_to_its_parts(
         pytest.param("3yrs", 94672800.0, id="the-short-plural-year-spelling"),
         pytest.param("1\u00b5s", 1e-6, id="the-micro-sign-spelling"),
         pytest.param("0", 0.0, id="the-bare-zero-humantime-reads-without-a-unit"),
+        pytest.param("1 0s", 10.0, id="whitespace-inside-the-number"),
+        pytest.param("1 2 . 3 4 s", 12.34, id="whitespace-throughout-the-number"),
     ],
 )
 def test_a_duration_nextest_accepts_is_read_rather_than_refused(
@@ -226,7 +229,20 @@ def test_a_duration_nextest_accepts_is_read_rather_than_refused(
 
 @pytest.mark.parametrize(
     "duration",
-    ["", "300", "s", "five minutes", "-30s", ".5s", "5.s", "1.5.5s", "1S", "00"],
+    [
+        "",
+        "300",
+        "s",
+        "five minutes",
+        "-30s",
+        ".5s",
+        "5.s",
+        "1.5.5s",
+        "1S",
+        "00",
+        " 0 ",
+        "0 ",
+    ],
     ids=[
         "empty",
         "no-unit",
@@ -238,6 +254,8 @@ def test_a_duration_nextest_accepts_is_read_rather_than_refused(
         "a-second-point",
         "a-unit-whose-case-is-wrong",
         "a-zero-that-is-not-the-bare-one",
+        "a-bare-zero-carrying-whitespace",
+        "a-bare-zero-with-a-trailing-space",
     ],
 )
 def test_an_unreadable_duration_is_refused(duration: str) -> None:
@@ -246,9 +264,13 @@ def test_an_unreadable_duration_is_refused(duration: str) -> None:
     Returning something plausible would put a comparison against a
     budget nextest never applies, and the contract would pass while the
     ordering it claims to hold did not. Each spelling here was refused
-    by humantime 2.4.0, the version nextest resolves, when the cases
-    were run through that parser; `300 sec` and `30d` used to sit in
-    this list and are configuration nextest loads.
+    by humantime 2.3.0, which is what the lockfile of the pinned
+    cargo-nextest release resolves, when the cases were run through that
+    parser; `300 sec` and `30d` used to sit in this list and are
+    configuration nextest loads. The bare zero is the sharpest case:
+    humantime special-cases the exact text before reading a character,
+    so a reader that stripped whitespace before comparing would accept
+    `" 0 "`, which nextest rejects.
     """
     with pytest.raises(NextestConfigurationError):
         seconds(duration)

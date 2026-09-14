@@ -1056,12 +1056,18 @@ take one value and one of four short units, so `2h 37m`, `300 sec` and `30d`
 were each refused as malformed while nextest loads all three, and two of them
 sat in the contract's refusal list asserting the reader's own limitation as
 though it were the file's fault. The grammar was measured against humantime
-2.4.0, the version nextest resolves, by compiling that parser and running the
-cases through it. A value may carry a fractional part, and whitespace is
-tolerated around the point, so `1.5m` and `1 . 5 m` are both ninety seconds. The
-short spellings `wk`, `wks`, `yr` and `yrs` are units alongside the longer ones,
-and the bare `0` is the one duration humantime reads without a unit. Case is
-significant, so `m` is minutes and `M` is months.
+2.3.0, which is what the lockfile of the pinned cargo-nextest release resolves,
+by compiling that parser and running the cases through it. Naming the version
+matters: an earlier note here cited 2.4.0, which is the newest release rather
+than the one the shared coverage action installs, `cargo-nextest@0.9.120`. A
+value may carry a fractional part, and whitespace is tolerated around the point,
+so `1.5m` and `1 . 5 m` are both ninety seconds. Whitespace inside the number is
+ignored too, so `1 0s` is ten seconds and `1 2 . 3 4 s` is 12.34. The short
+spellings `wk`, `wks`, `yr` and `yrs` are units alongside the longer ones. The
+bare `0` is the one duration humantime reads without a unit, and it is the exact
+text: its parser special-cases `0` before reading a character, so `" 0 "` is
+refused and a reader that stripped whitespace first would accept a duration
+nextest rejects. Case is significant, so `m` is minutes and `M` is months.
 
 It pins the condition each lane carries, which is none today. A skipped step
 runs no `cargo`, so its watchdog never arms and the tiers say nothing about it:
