@@ -102,6 +102,15 @@ COVERAGE_STEP: typ.Final[str] = (
 whole_numbers = st.integers(min_value=1, max_value=10_000)
 fractional_parts = st.integers(min_value=0, max_value=999)
 units = st.sampled_from(sorted(UNITS))
+
+#: The units a three-digit fraction can be written against. humantime
+#: counts in whole nanoseconds and refuses a component that does not
+#: land on one, so a thousandth of a nanosecond is not a duration and
+#: `1.1nanos` will not load. Every unit from the microsecond up divides
+#: evenly by a thousand, so the fraction is representable there.
+fractional_units = st.sampled_from(
+    sorted(unit for unit, length in UNITS.items() if round(length * 1e9) % 1000 == 0)
+)
 multipliers = st.integers(min_value=1, max_value=20)
 
 
@@ -147,7 +156,7 @@ def test_every_unit_scales_its_value(value: int, unit: str) -> None:
     )
 
 
-@given(whole=whole_numbers, fraction=fractional_parts, unit=units)
+@given(whole=whole_numbers, fraction=fractional_parts, unit=fractional_units)
 def test_a_fractional_value_scales_its_unit(
     whole: int, fraction: int, unit: str
 ) -> None:
@@ -157,6 +166,10 @@ def test_a_fractional_value_scales_its_unit(
     read only by accident of its shape and `2h 37m` was refused. nextest
     loads both, and a contract that refuses configuration the runner
     accepts fails a correct file and blames the file for it.
+
+    The units are those a three-digit fraction can be written against.
+    humantime counts in whole nanoseconds, so a fraction of a nanosecond
+    is not a duration at all and is asserted as a refusal instead.
     """
     written = f"{whole}.{fraction}"
     assert seconds(f"{written}{unit}") == pytest.approx(float(written) * UNITS[unit]), (
@@ -166,7 +179,9 @@ def test_a_fractional_value_scales_its_unit(
 
 @given(
     components=st.lists(
-        st.tuples(whole_numbers, fractional_parts, units), min_size=1, max_size=6
+        st.tuples(whole_numbers, fractional_parts, fractional_units),
+        min_size=1,
+        max_size=6,
     ),
     separators=st.lists(st.sampled_from(["", " ", "  "]), min_size=6, max_size=6),
 )
@@ -209,6 +224,8 @@ def test_a_sequence_of_components_sums_to_its_parts(
         pytest.param("0", 0.0, id="the-bare-zero-humantime-reads-without-a-unit"),
         pytest.param("1 0s", 10.0, id="whitespace-inside-the-number"),
         pytest.param("1 2 . 3 4 s", 12.34, id="whitespace-throughout-the-number"),
+        pytest.param("1.999999999s", 1.999999999, id="nanosecond-precision"),
+        pytest.param("0.000001ms", 1e-9, id="a-fraction-that-lands-on-a-nanosecond"),
     ],
 )
 def test_a_duration_nextest_accepts_is_read_rather_than_refused(
@@ -242,6 +259,13 @@ def test_a_duration_nextest_accepts_is_read_rather_than_refused(
         "00",
         " 0 ",
         "0 ",
+        "0.0000000002s",
+        "0.0000000015s",
+        "0.5ns",
+        "18446744073709551616s",
+        "1000000000000000000000ns",
+        "18446744073709551615s 1s",
+        "0.0000000004s 0.0000000006s",
     ],
     ids=[
         "empty",
@@ -256,6 +280,13 @@ def test_a_duration_nextest_accepts_is_read_rather_than_refused(
         "a-zero-that-is-not-the-bare-one",
         "a-bare-zero-carrying-whitespace",
         "a-bare-zero-with-a-trailing-space",
+        "below-one-nanosecond",
+        "a-fraction-of-a-nanosecond",
+        "half-a-nanosecond",
+        "one-second-past-the-u64-humantime-accumulates-into",
+        "a-literal-past-the-u64-humantime-reads-it-into",
+        "a-sum-past-the-u64-humantime-accumulates-into",
+        "components-that-are-whole-only-together",
     ],
 )
 def test_an_unreadable_duration_is_refused(duration: str) -> None:

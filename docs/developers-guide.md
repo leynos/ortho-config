@@ -1069,6 +1069,18 @@ text: its parser special-cases `0` before reading a character, so `" 0 "` is
 refused and a reader that stripped whitespace first would accept a duration
 nextest rejects. Case is significant, so `m` is minutes and `M` is months.
 
+The arithmetic is exact, in whole nanoseconds, because that is what humantime
+counts in. A component that does not land on a nanosecond will not load:
+`0.0000000015s` is a second and a half of nanoseconds and is refused, while
+`1.999999999s` is accepted. Reading the value through a float instead would
+round the first to something plausible and certify a configuration nextest
+cannot load, which is why the unit table holds integer nanoseconds rather than
+fractional seconds. Two ceilings come with it: a numeric literal must fit the
+`u64` humantime reads it into, so `1000000000000000000000ns` is refused even
+though its value in seconds is small, and the accumulated seconds must fit the
+`u64` they are summed into, so `18446744073709551615s` loads and one second more
+does not.
+
 It pins the condition each lane carries, which is none today. A skipped step
 runs no `cargo`, so its watchdog never arms and the tiers say nothing about it:
 `if: false` on the step or on its job would leave a lane that looks bounded and
