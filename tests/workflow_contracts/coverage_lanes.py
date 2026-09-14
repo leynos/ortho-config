@@ -12,6 +12,10 @@ import typing as typ
 import yaml
 from timeout_budgets import COVERAGE_ACTION, WATCHDOG_VARIABLE, WORKFLOWS_DIRECTORY
 
+if typ.TYPE_CHECKING:
+    from pathlib import Path
+
+
 class CoverageJob(typ.NamedTuple):
     """One job that invokes the coverage action, with its budgets.
 
@@ -96,14 +100,25 @@ def _budget_from(raw: object) -> float | None:
     return seconds if seconds > 0 else None
 
 
-def workflow_documents() -> dict[str, dict[str, typ.Any]]:
-    """Return every workflow document in the repository, keyed by name.
+def workflow_documents(
+    directory: Path = WORKFLOWS_DIRECTORY,
+) -> dict[str, dict[str, typ.Any]]:
+    """Return every workflow document in a directory, keyed by name.
 
     This is the one place the contract touches the filesystem or the
     YAML parser, so an unreadable or unparsable workflow fails here
     rather than inside a budget derivation several frames away.
     Both extensions are read. A coverage lane in the other one would
     otherwise escape every assertion below without failing anything.
+
+    The directory is a parameter rather than the module global alone, so
+    the acquisition can be pointed at a temporary tree and asserted in
+    its own right instead of only through the repository it guards.
+
+    Parameters
+    ----------
+    directory : Path
+        Directory of workflow files. Defaults to the repository's own.
 
     Returns
     -------
@@ -112,7 +127,7 @@ def workflow_documents() -> dict[str, dict[str, typ.Any]]:
     """
     documents: dict[str, dict[str, typ.Any]] = {}
     for pattern in ("*.yml", "*.yaml"):
-        for path in sorted(WORKFLOWS_DIRECTORY.glob(pattern)):
+        for path in sorted(directory.glob(pattern)):
             parsed = yaml.safe_load(path.read_text(encoding="utf-8"))
             if isinstance(parsed, dict):
                 documents[path.name] = parsed
@@ -180,33 +195,31 @@ def _coverage_job(
 
 
 def coverage_jobs_of(
-    documents: dict[str, dict[str, typ.Any]] | None = None,
+    documents: dict[str, dict[str, typ.Any]],
 ) -> tuple[CoverageJob, ...]:
-    """Return every job invoking the coverage action, with its budgets.
+    """Return every job in those documents that invokes the action.
 
     Jobs are the unit rather than steps, because the ceiling is a job's
     and it has to contain every watchdog inside it. Counting steps is
     what makes the two invocations here visible to the arithmetic.
 
-    The documents are a parameter so the reading can be driven with
-    synthetic workflows. Reading the repository's own is the default
-    rather than the only option, which keeps the filesystem access and
-    the YAML parsing at one named boundary instead of inside the
-    derivations.
+    The documents are required rather than defaulted, so this query
+    reaches no filesystem and no parser at all. `coverage_jobs` is the
+    acquisition around it. A default that read the repository when the
+    argument was omitted left the two indistinguishable at the call
+    site, and a reading that can fetch its own input is one whose
+    failures arrive from a frame the caller never named.
 
     Parameters
     ----------
-    documents : dict[str, dict[str, typ.Any]] or None
-        Parsed workflow documents keyed by file name. When None, the
-        repository's own `.github/workflows` is read.
+    documents : dict[str, dict[str, typ.Any]]
+        Parsed workflow documents keyed by file name.
 
     Returns
     -------
     tuple[CoverageJob, ...]
         One entry per coverage-invoking job.
     """
-    if documents is None:
-        documents = workflow_documents()
     return tuple(
         found
         for name, document in documents.items()
@@ -215,3 +228,24 @@ def coverage_jobs_of(
     )
 
 
+def coverage_jobs_in(
+    directory: Path = WORKFLOWS_DIRECTORY,
+) -> tuple[CoverageJob, ...]:
+    """Return every coverage-invoking job in a directory of workflows.
+
+    This is the acquisition half: it reads and parses the workflow files
+    in a directory, then hands the documents to ``coverage_jobs_of``.
+    The two are named for what they take, a directory and the documents
+    themselves, because a call site has to say which it is doing.
+
+    Parameters
+    ----------
+    directory : Path
+        Directory of workflow files. Defaults to the repository's own.
+
+    Returns
+    -------
+    tuple[CoverageJob, ...]
+        One entry per coverage-invoking job.
+    """
+    return coverage_jobs_of(workflow_documents(directory))

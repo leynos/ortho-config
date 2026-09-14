@@ -18,7 +18,7 @@ from __future__ import annotations
 import typing as typ
 
 import pytest
-from coverage_lanes import coverage_jobs_of
+from coverage_lanes import coverage_jobs_in, coverage_jobs_of, workflow_documents
 from hypothesis import given
 from hypothesis import strategies as st
 from nextest_budgets import (
@@ -32,11 +32,15 @@ from nextest_budgets import (
 )
 from timeout_budgets import (
     CEILING_MARGIN_SECONDS,
+    COVERAGE_ACTION,
     NEXTEST_DEFAULT_GRACE_PERIOD_SECONDS,
     TERMINATION_SAFETY_MARGIN_SECONDS,
     WATCHDOG_VARIABLE,
     required_ceiling,
 )
+
+if typ.TYPE_CHECKING:
+    import pathlib
 
 #: Every unit spelling nextest accepts, with its length in seconds.
 #: nextest deserializes durations with ``humantime_serde``, so this is
@@ -586,3 +590,35 @@ def test_a_malformed_environment_reads_as_setting_nothing(
         f"an env of {environment!r} sets no watchdog, so the lane inherits "
         f"the action's default and must read as unset"
     )
+
+
+def test_the_acquisition_reads_both_extensions_and_nothing_else(
+    tmp_path: pathlib.Path,
+) -> None:
+    """GitHub accepts `.yaml` as readily as `.yml`, and neither is prose.
+
+    Scanning one extension would let a coverage lane in the other escape
+    every assertion this contract makes without failing anything, and
+    parsing every file in the directory would hand the reading a
+    document out of a note nobody meant as a workflow. The acquisition
+    is asserted in its own right here, against a directory this
+    repository does not have, because the two lanes it does have cannot
+    tell either mistake from correct behaviour.
+    """
+    lane = (
+        "name: controlled\non: push\njobs:\n  coverage:\n"
+        "    runs-on: ubuntu-latest\n    timeout-minutes: 30\n"
+        "    env:\n"
+        f"      {WATCHDOG_VARIABLE}: 600\n"
+        "    steps:\n"
+        f"      - uses: {COVERAGE_ACTION}@abc123\n"
+    )
+    for name in ("first.yml", "second.yaml", "notes.txt"):
+        (tmp_path / name).write_text(lane, encoding="utf-8")
+    assert sorted(workflow_documents(tmp_path)) == ["first.yml", "second.yaml"], (
+        "both workflow extensions must be read, and nothing else"
+    )
+    assert [job.workflow for job in coverage_jobs_in(tmp_path)] == [
+        "first.yml",
+        "second.yaml",
+    ], "a lane in either extension must reach the assertions"

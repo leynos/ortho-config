@@ -32,7 +32,7 @@ from __future__ import annotations
 import typing as typ
 
 import pytest
-from coverage_lanes import CoverageJob, coverage_jobs_of
+from coverage_lanes import CoverageJob, coverage_jobs_in
 from nextest_budgets import (
     bounds_a_single_test,
     global_timeout,
@@ -106,7 +106,7 @@ def coverage_jobs() -> tuple[CoverageJob, ...]:
     tuple[CoverageJob, ...]
         One entry per coverage-invoking job.
     """
-    return coverage_jobs_of()
+    return coverage_jobs_in()
 
 
 def test_the_coverage_action_is_invoked_somewhere(
@@ -133,7 +133,7 @@ def test_each_coverage_job_runs_the_steps_it_is_meant_to() -> None:
     silently measures half of what it did. Pinning the count by
     coordinate is what makes that deletion fail.
     """
-    found = {(job.workflow, job.job): job.steps for job in coverage_jobs_of()}
+    found = {(job.workflow, job.job): job.steps for job in coverage_jobs_in()}
     wrong = {
         coordinate: (expected, found.get(coordinate))
         for coordinate, expected in REQUIRED_COVERAGE_STEPS.items()

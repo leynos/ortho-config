@@ -1019,6 +1019,23 @@ live in `nextest_budgets.py`, `nextest_durations.py`, `nextest_errors.py`,
 `timeout_budgets.py` and `coverage_lanes.py`, and are driven with controlled
 values in `timeout_reading_test.py`.
 
+Run them with `make test-workflow-contracts`. The target provisions `pytest`,
+`pyyaml` and `hypothesis` through `uv run --with` rather than from the project's
+own dependencies, so the contracts need no virtual environment of their own and
+nothing they need reaches the published package. They are Python because what
+they read is YAML and TOML; `make test` does not run them.
+
+Each reading takes what it reads rather than fetching it. `coverage_jobs_of`
+queries supplied workflow documents and reaches no filesystem and no parser,
+`workflow_documents` is the acquisition that reads a directory, and
+`coverage_jobs_in` is the two together. The pair is named for what each takes,
+because a call site has to say which it is doing. The budget readings are driven
+with Hypothesis as well as with named cases, in
+`timeout_budget_properties_test.py`: the unit table and the duration grammar are
+where a single wrong entry would leave every comparison downstream an inequality
+between two plausible numbers, which a fixed case only catches when it happens
+to be the case somebody wrote.
+
 The nextest configuration is parsed with `tomllib` rather than matched as text.
 A text match finds a key inside a comment, inside a `filter` string, or in a
 table nextest never consults, and reports a budget the runner does not use.
