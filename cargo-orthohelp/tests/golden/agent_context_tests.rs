@@ -21,6 +21,10 @@ use crate::fixtures;
     Some("orthohelp_fixture::NestedFixtureConfig"),
     "agent_context__nested_fixture.json"
 )]
+#[case::profile(
+    Some("orthohelp_fixture::ProfileFixtureConfig"),
+    "agent_context__profile_fixture.json"
+)]
 fn fixture_agent_context_matches_snapshot(
     #[case] root_type: Option<&str>,
     #[case] snapshot_name: &str,

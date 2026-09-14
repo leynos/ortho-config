@@ -29,6 +29,18 @@ pub struct DocMetadata {
     pub subcommands: Vec<DocMetadata>,
     /// Optional Windows metadata for `PowerShell` help output.
     pub windows: Option<WindowsMetadata>,
+    /// Profile selection metadata for opted-in structs (roadmap 9.1.1).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub profiles: Option<DocProfilesMeta>,
+}
+
+/// Profile selection metadata (decision D15).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct DocProfilesMeta {
+    /// The generated flag name (no leading `--`).
+    pub flag: String,
+    /// The selector environment variable name.
+    pub env_var: String,
 }
 
 /// Section-level metadata and supporting content.

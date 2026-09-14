@@ -9,15 +9,14 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, PoisonError};
-
 #[cfg(test)]
 #[path = "scenario_state_tests.rs"]
 mod scenario_state_tests;
-
 /// Re-exported so BDD merge-error steps can reference the sample config
 /// struct without reaching into the shared fixtures module directly.
 pub use super::fixtures::merge_fixtures::MergeErrorSample;
 pub use super::nested_docs_fixture::*;
+pub use scenario_state_profiles::{ProfilesConfig, ProfilesContext, profiles_context};
 
 /// Scenario state for rules-oriented precedence scenarios (CLI, env, config path, ignore).
 #[derive(Debug, Default, ScenarioState)]
@@ -53,8 +52,8 @@ pub struct ExtendsContext {
 pub struct ComposerContext {
     pub layers: Slot<Vec<MergeLayer<'static>>>,
     pub config: Slot<RulesConfig>,
+    pub profile_value: Slot<String>,
 }
-
 /// Scenario state for aggregated error reporting scenarios.
 #[derive(Debug, Default, ScenarioState)]
 pub struct ErrorContext {
@@ -156,7 +155,6 @@ pub fn extends_context() -> ExtendsContext {
 pub fn composer_context() -> ComposerContext {
     ComposerContext::default()
 }
-
 /// Provides a clean error context for aggregated error scenarios.
 #[fixture]
 pub fn error_context() -> ErrorContext {
@@ -303,7 +301,6 @@ pub struct RulesConfig {
 pub struct DynamicRule {
     pub enabled: bool,
 }
-
 /// Configuration struct with replacement strategy for rules.
 ///
 /// Used to test that `merge_strategy = "replace"` restores replacement
@@ -398,3 +395,6 @@ pub fn cli_default_context() -> CliDefaultContext {
 pub struct ErrorConfig {
     pub port: Option<u32>,
 }
+
+#[path = "scenario_state_profiles.rs"]
+mod scenario_state_profiles;

@@ -48,6 +48,8 @@ const CATEGORY_GATHERING: &str = "gathering";
 const CATEGORY_MERGE: &str = "merge";
 /// A loaded value did not meet the configuration's validation rules.
 const CATEGORY_VALIDATION: &str = "validation";
+/// Profile selection or profile-table validation prevented loading.
+const CATEGORY_PROFILE: &str = "profile";
 /// Several loading errors were retained for reporting together.
 const CATEGORY_AGGREGATE: &str = "aggregate";
 
@@ -162,6 +164,10 @@ const fn error_category(error: &OrthoError) -> &'static str {
         OrthoError::Gathering(_) => CATEGORY_GATHERING,
         OrthoError::Merge { .. } => CATEGORY_MERGE,
         OrthoError::Validation { .. } => CATEGORY_VALIDATION,
+        OrthoError::UnknownProfile { .. }
+        | OrthoError::InvalidProfileName { .. }
+        | OrthoError::ReservedProfileName { .. }
+        | OrthoError::ProfileForbiddenKey { .. } => CATEGORY_PROFILE,
         OrthoError::Aggregate(_) => CATEGORY_AGGREGATE,
     }
 }
