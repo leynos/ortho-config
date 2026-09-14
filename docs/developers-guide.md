@@ -1015,8 +1015,9 @@ a job and has to contain every watchdog inside it; counting the steps is what
 makes the two invocations visible to the arithmetic. It reads a step's own
 environment before the job's, as GitHub resolves it, and it fails on a
 coverage-invoking job that declares no ceiling at all. The readings it rests on
-live in `nextest_budgets.py`, `timeout_budgets.py` and `coverage_lanes.py`, and
-are driven with controlled values in `timeout_reading_test.py`.
+live in `nextest_budgets.py`, `nextest_durations.py`, `nextest_errors.py`,
+`timeout_budgets.py` and `coverage_lanes.py`, and are driven with controlled
+values in `timeout_reading_test.py`.
 
 The nextest configuration is parsed with `tomllib` rather than matched as text.
 A text match finds a key inside a comment, inside a `filter` string, or in a
@@ -1030,6 +1031,20 @@ comparing against a budget nobody had written is the failure this avoids.
 and never stops it, so the reading refuses that form rather than reporting one
 period as the budget. Every table in `.config/nextest.toml` sets it explicitly,
 so no value here changes.
+
+Durations are read with the grammar `humantime` accepts, which is what nextest
+deserializes them with: a sequence of components each carrying a unit, written
+`60s`, `2h 37m` or `2h37m`, with the long unit spellings. The reader used to
+take one value and one of four short units, so `2h 37m`, `300 sec` and `30d`
+were each refused as malformed while nextest loads all three, and two of them
+sat in the contract's refusal list asserting the reader's own limitation as
+though it were the file's fault. The grammar was measured against humantime
+2.4.0, the version nextest resolves, by compiling that parser and running the
+cases through it. A value may carry a fractional part, and whitespace is
+tolerated around the point, so `1.5m` and `1 . 5 m` are both ninety seconds. The
+short spellings `wk`, `wks`, `yr` and `yrs` are units alongside the longer ones,
+and the bare `0` is the one duration humantime reads without a unit. Case is
+significant, so `m` is minutes and `M` is months.
 
 It pins the condition each lane carries, which is none today. A skipped step
 runs no `cargo`, so its watchdog never arms and the tiers say nothing about it:
@@ -1048,7 +1063,7 @@ failed the contract on a workflow that has nothing to do with coverage.
 The two outcomes are not the same. A `jobs` value that is not a mapping yields
 no lane at all: nothing in that document is a coverage job, so the document
 contributes nothing to the assertions. A malformed value inside a job that does
-run coverage keeps the lane, because the lane is real, and reads the affected
+run coverage keeps the lane because the lane is real. It reads the affected
 budget as unset: an `env` that is not a mapping leaves the watchdog unset, and a
 `timeout-minutes` that is not a positive whole number of minutes leaves the
 ceiling unset. Both then fail the assertion that a coverage lane must declare

@@ -38,14 +38,64 @@ from timeout_budgets import (
     required_ceiling,
 )
 
-#: The units nextest accepts, with their length in seconds.
-UNITS: typ.Final[dict[str, float]] = {"ms": 0.001, "s": 1.0, "m": 60.0, "h": 3600.0}
+#: Every unit spelling nextest accepts, with its length in seconds.
+#: nextest deserializes durations with ``humantime_serde``, so this is
+#: humantime's table, written out again rather than imported: the unit
+#: table is the one place in the reading where a single wrong entry
+#: would go unnoticed, because every comparison downstream would still
+#: be an inequality between two plausible numbers. Measured against
+#: humantime 2.4.0, the version nextest resolves, by compiling that
+#: parser and running every spelling through it. Case is significant,
+#: ``m`` being minutes and ``M`` months.
+UNITS: typ.Final[dict[str, float]] = {
+    "nanos": 1e-9,
+    "nsec": 1e-9,
+    "ns": 1e-9,
+    "usec": 1e-6,
+    "us": 1e-6,
+    "\u00b5s": 1e-6,
+    "millis": 0.001,
+    "msec": 0.001,
+    "ms": 0.001,
+    "seconds": 1.0,
+    "second": 1.0,
+    "secs": 1.0,
+    "sec": 1.0,
+    "s": 1.0,
+    "minutes": 60.0,
+    "minute": 60.0,
+    "mins": 60.0,
+    "min": 60.0,
+    "m": 60.0,
+    "hours": 3600.0,
+    "hour": 3600.0,
+    "hrs": 3600.0,
+    "hr": 3600.0,
+    "h": 3600.0,
+    "days": 86400.0,
+    "day": 86400.0,
+    "d": 86400.0,
+    "weeks": 604800.0,
+    "week": 604800.0,
+    "wks": 604800.0,
+    "wk": 604800.0,
+    "w": 604800.0,
+    "months": 2630016.0,
+    "month": 2630016.0,
+    "M": 2630016.0,
+    "years": 31557600.0,
+    "year": 31557600.0,
+    "yrs": 31557600.0,
+    "yr": 31557600.0,
+    "y": 31557600.0,
+}
 
 COVERAGE_STEP: typ.Final[str] = (
     "leynos/shared-actions/.github/actions/generate-coverage@abc123"
 )
 
 whole_numbers = st.integers(min_value=1, max_value=10_000)
+fractional_parts = st.integers(min_value=0, max_value=999)
 units = st.sampled_from(sorted(UNITS))
 multipliers = st.integers(min_value=1, max_value=20)
 
@@ -92,17 +142,98 @@ def test_every_unit_scales_its_value(value: int, unit: str) -> None:
     )
 
 
+@given(whole=whole_numbers, fraction=fractional_parts, unit=units)
+def test_a_fractional_value_scales_its_unit(
+    whole: int, fraction: int, unit: str
+) -> None:
+    """A fractional value scales by its unit, as humantime reads it.
+
+    An earlier reader took one value and one short unit, so `1.5m` was
+    read only by accident of its shape and `2h 37m` was refused. nextest
+    loads both, and a contract that refuses configuration the runner
+    accepts fails a correct file and blames the file for it.
+    """
+    written = f"{whole}.{fraction}"
+    assert seconds(f"{written}{unit}") == pytest.approx(float(written) * UNITS[unit]), (
+        f"{written}{unit} must scale its fractional value by the unit"
+    )
+
+
+@given(
+    components=st.lists(
+        st.tuples(whole_numbers, fractional_parts, units), min_size=1, max_size=6
+    ),
+    separators=st.lists(st.sampled_from(["", " ", "  "]), min_size=6, max_size=6),
+)
+def test_a_sequence_of_components_sums_to_its_parts(
+    components: list[tuple[int, int, str]], separators: list[str]
+) -> None:
+    """humantime sums a sequence, and the reader must sum the same one.
+
+    This is the invariant underneath the fixed spellings: however many
+    components a duration carries, whatever their units, and whether or
+    not they are spaced apart, the reading is the sum of the components
+    read separately. A reader that stopped at the first component would
+    satisfy every fixed case whose total happened to survive.
+    """
+    written = "".join(
+        f"{whole}.{fraction}{unit}{separator}"
+        for (whole, fraction, unit), separator in zip(components, separators)
+    )
+    expected = sum(
+        float(f"{whole}.{fraction}") * UNITS[unit]
+        for whole, fraction, unit in components
+    )
+    assert seconds(written) == pytest.approx(expected), (
+        f"{written!r} must read as the sum of its components"
+    )
+
+
+@pytest.mark.parametrize(
+    ("duration", "expected"),
+    [
+        pytest.param("2h 37m", 9420.0, id="two-components-spaced"),
+        pytest.param("2h37m", 9420.0, id="two-components-joined"),
+        pytest.param("300 sec", 300.0, id="a-long-unit-spelling"),
+        pytest.param("30d", 2592000.0, id="days"),
+        pytest.param("1.5m", 90.0, id="a-fractional-value"),
+        pytest.param("1 . 5 m", 90.0, id="a-fractional-value-spaced-around-the-point"),
+        pytest.param("2wk", 1209600.0, id="the-short-week-spelling"),
+        pytest.param("3yrs", 94672800.0, id="the-short-plural-year-spelling"),
+        pytest.param("1\u00b5s", 1e-6, id="the-micro-sign-spelling"),
+        pytest.param("0", 0.0, id="the-bare-zero-humantime-reads-without-a-unit"),
+    ],
+)
+def test_a_duration_nextest_accepts_is_read_rather_than_refused(
+    duration: str, expected: float
+) -> None:
+    """The spellings a configuration is likely to carry are all read.
+
+    The reader used to take one value and one of four short units, so
+    `2h 37m`, `300 sec` and `30d` were each refused as malformed while
+    nextest loads all three. Two of them sat in the refusal list above,
+    asserting the reader's own limitation as though it were the file's
+    fault.
+    """
+    assert seconds(duration) == pytest.approx(expected), (
+        f"{duration!r} must read as {expected} seconds"
+    )
+
+
 @pytest.mark.parametrize(
     "duration",
-    ["", "300", "s", "300 sec", "five minutes", "-30s", "30d"],
+    ["", "300", "s", "five minutes", "-30s", ".5s", "5.s", "1.5.5s", "1S", "00"],
     ids=[
         "empty",
         "no-unit",
         "no-value",
-        "an-unsupported-spelling",
         "words",
         "negative",
-        "days-are-not-a-nextest-unit",
+        "only-a-fractional-part",
+        "a-missing-fractional-part",
+        "a-second-point",
+        "a-unit-whose-case-is-wrong",
+        "a-zero-that-is-not-the-bare-one",
     ],
 )
 def test_an_unreadable_duration_is_refused(duration: str) -> None:
@@ -110,7 +241,10 @@ def test_an_unreadable_duration_is_refused(duration: str) -> None:
 
     Returning something plausible would put a comparison against a
     budget nextest never applies, and the contract would pass while the
-    ordering it claims to hold did not.
+    ordering it claims to hold did not. Each spelling here was refused
+    by humantime 2.4.0, the version nextest resolves, when the cases
+    were run through that parser; `300 sec` and `30d` used to sit in
+    this list and are configuration nextest loads.
     """
     with pytest.raises(NextestConfigurationError):
         seconds(duration)
