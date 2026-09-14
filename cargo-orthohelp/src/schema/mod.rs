@@ -6,12 +6,12 @@
 use serde::{Deserialize, Serialize};
 
 /// Current IR schema version.
-pub const ORTHO_DOCS_IR_VERSION: &str = "1.1";
+pub const ORTHO_DOCS_IR_VERSION: &str = "2.0";
 
 /// Top-level documentation metadata for a configuration command.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct DocMetadata {
-    /// IR schema version string (for example, "1.1").
+    /// IR schema version string (for example, "2.0").
     pub ir_version: String,
     /// Application name used for display and identifier generation.
     pub app_name: String,

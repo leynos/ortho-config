@@ -41,7 +41,7 @@ fn make_test_metadata(
     about: &str,
 ) -> LocalizedDocMetadata {
     LocalizedDocMetadata {
-        ir_version: "1.1".to_owned(),
+        ir_version: "2.0".to_owned(),
         locale: "en-US".to_owned(),
         app_name: name.to_owned(),
         bin_name: None,

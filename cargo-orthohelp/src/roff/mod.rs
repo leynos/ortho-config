@@ -269,7 +269,7 @@ mod tests {
     #[fixture]
     fn minimal_metadata() -> LocalizedDocMetadata {
         LocalizedDocMetadata {
-            ir_version: "1.1".to_owned(),
+            ir_version: "2.0".to_owned(),
             locale: "en-US".to_owned(),
             app_name: "test-app".to_owned(),
             bin_name: None,

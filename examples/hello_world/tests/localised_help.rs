@@ -3,13 +3,14 @@
 //! Uses `assert_cmd` to run the compiled binary with different `LANG`
 //! environment settings and `insta` to snapshot the `--help` output.
 
-use assert_cmd::Command as AssertCommand;
+use assert_cmd::cargo::cargo_bin_cmd;
 use clap::CommandFactory;
 use hello_world::cli::{CommandLine, LocalizeCmd};
 use hello_world::localizer::DemoLocalizer;
 use insta::assert_snapshot;
 use ortho_config::LanguageIdentifier;
 use ortho_config::NoOpLocalizer;
+use ortho_config::OrthoConfigLocalization;
 use ortho_config::langid;
 use rstest::rstest;
 
@@ -19,12 +20,7 @@ use rstest::rstest;
 /// The `locale_env` parameter specifies which locale environment variables to set
 /// (e.g., `[("LC_ALL", "ja_JP.UTF-8"), ("LANG", "en_US.UTF-8")]`).
 fn run_with_env(locale_env: &[(&str, &str)], args: &[&str]) -> String {
-    #[expect(
-        deprecated,
-        clippy::expect_used,
-        reason = "cargo_bin is the standard assert_cmd API and test panics are acceptable"
-    )]
-    let mut cmd = AssertCommand::cargo_bin("hello_world").expect("binary should exist");
+    let mut cmd = cargo_bin_cmd!("hello_world");
 
     // Clear locale-related env vars to ensure isolation
     cmd.env_remove("LC_ALL");
@@ -73,12 +69,7 @@ fn run_with_locale(locale: &str, args: &[&str]) -> String {
 }
 
 fn assert_display_request_succeeds(locale: &str, args: &[&str]) {
-    #[expect(
-        deprecated,
-        clippy::expect_used,
-        reason = "cargo_bin is the standard assert_cmd API and test panics are acceptable"
-    )]
-    let mut cmd = AssertCommand::cargo_bin("hello_world").expect("binary should exist");
+    let mut cmd = cargo_bin_cmd!("hello_world");
     cmd.env_remove("LC_ALL");
     cmd.env_remove("LC_MESSAGES");
     cmd.env_remove("LANG");
@@ -105,7 +96,7 @@ fn assert_display_request_succeeds(locale: &str, args: &[&str]) {
 
 fn render_localized_long_help(localizer: &dyn ortho_config::Localizer) -> String {
     let mut command = CommandLine::command()
-        .with_base("hello_world.cli")
+        .with_base(CommandLine::LOCALIZATION_BASE)
         .localize(localizer);
     command.render_long_help().to_string()
 }

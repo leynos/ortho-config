@@ -228,6 +228,13 @@ time, and ADR-006 records why the promoted runtime API panics rather than
 returning `Result` when a hand-built command tree cannot produce unique Fluent
 identifiers.
 
+`OrthoConfigLocalization` exposes the localization base, all command-level
+identifiers, and named argument-id records. The derive also delegates docs IR
+through the mounted command path, so nested defaults agree with runtime lookup;
+flattened fields remain excluded. Artefact emission is opt-in and described by
+[ADR-008](adr-008-opt-in-identifier-artefact-emission.md); `localized_default`
+remains deliberately deferred.
+
 ### 4.2 `try_parse_localized` helpers
 
 ```rust
@@ -686,21 +693,38 @@ in §3) need identifiers without dragging in the docs surface:
 
 ```rust
 pub trait OrthoConfigLocalization {
+    /// The dotted catalogue base passed to `Command::with_base`.
+    const LOCALIZATION_BASE: &'static str;
     /// Identifier for the command's `about` text.
     const ABOUT_ID: &'static str;
     /// Identifier for `long_about`.
     const LONG_ABOUT_ID: &'static str;
     /// Identifier for the override usage string.
     const USAGE_ID: &'static str;
-    /// Identifier triples for every argument, in declaration order. Each
-    /// element is `(help_id, long_help_id, value_name_id)`.
-    const ARG_IDS: &'static [(&'static str, &'static str, &'static str)];
+    /// Identifier for `version`.
+    const VERSION_ID: &'static str;
+    /// Identifier for `long_version`.
+    const LONG_VERSION_ID: &'static str;
+    /// Identifier for `after_help`.
+    const AFTER_HELP_ID: &'static str;
+    /// Identifier for `after_long_help`.
+    const AFTER_LONG_HELP_ID: &'static str;
+    /// Named identifiers for every own argument, in declaration order.
+    const ARG_IDS: &'static [ArgLocalizationIds];
 }
 ```
 
-`OrthoConfigDocs::ABOUT_ID` (and friends) is implemented via a blanket impl
-that delegates to `OrthoConfigLocalization`, so the docs pipeline picks up the
-same identifiers without taking ownership of them.
+`ArgLocalizationIds` contains the Clap argument name and its `help_id`,
+`long_help_id`, and `value_name_id`. The `OrthoConfig` derive emits the trait
+implementation and all of these constants. It normalizes dotted base and
+argument segments using the §4.1 convention, then joins them with hyphens;
+normalized argument-id collisions are compile-time errors.
+
+The derive also emits the `OrthoConfigDocs` implementation. Its path-aware
+methods delegate default metadata to the same identifier convention, starting
+from `LOCALIZATION_BASE` and extending the accumulated path for nested
+subcommands. Handwritten docs implementations retain the provided fallback;
+this is generated delegation rather than a Rust blanket implementation.
 
 ### 8.2 Derive behaviour
 
@@ -710,36 +734,19 @@ The extended derive:
   path and the field's `id` (or, when absent, the kebab-cased field name).
   Identifiers are exposed as `OrthoConfigLocalization` associated constants so
   application code can refer to them without string concatenation.
-- Optionally embeds the doc-comment-derived default English text into the
-  binary. The flag is **per-field**, not per-struct, because help strings
-  dominate binary size while value names are tiny and the cost should be paid
-  per field:
-
-  ```rust
-  #[derive(OrthoConfig)]
-  struct Cli {
-      /// Recipient of the greeting.
-      #[ortho_config(localized_default = "help")] // embed help, skip value_name
-      recipient: Option<String>,
-
-      /// Quiet mode.
-      #[ortho_config(localized_default = "all")] // embed everything for this field
-      is_quiet: bool,
-  }
-  ```
-
-  Permitted values are `none` (default), `help`, `long_help`, `value_name`,
-  `help+long_help`, and `all`. A struct-level
-  `#[ortho_config( localized_default = "...")]` sets the default that fields
-  inherit unless they override it.
+- Recognizes `localized_default` but rejects it with a deferral diagnostic;
+  embedding localized defaults remains planned work. Consequently,
+  `embedded_default` is always `null` in emitted artefact entries.
 
 - Emits a build-time artefact at `${OUT_DIR}/ortho-config/cli-identifiers.json`
-  listing every generated identifier, its source span, and its embedded
-  default. The artefact is capped at 1 MiB; larger trees split across files
-  named `cli-identifiers.<n>.json` with an index file. `cargo-orthohelp`
-  consumes the artefact (see §11) so translators receive an authoritative
-  identifier inventory without scraping Fluent Translation List (FTL) files by
-  hand.
+  only when `ORTHO_CONFIG_EMIT_IDENTIFIERS=1` is set. The artefact lists each
+  generated identifier and its source span, uses `path_scope: "standalone"`,
+  and is capped at 1 MiB; larger trees split across files named
+  `cli-identifiers.<n>.json` with an index file. It is a provisional
+  declaration inventory, not an authoritative mounted command-tree inventory:
+  path-aware compiled docs IR owns identifiers after command trees are
+  mounted, and future tooling must join that IR with standalone artefact
+  entries.
 
 The convention matches §4.1 exactly so identifiers generated by the derive,
 emitted by `message_id_for`, and referenced in hand-authored FTL agree
@@ -794,9 +801,11 @@ error-localization path is the eager pipeline in §6.4; the
 that delegates to the eager path with a deprecation warning, and is removed in
 0.10.
 
-The derive change is opt-in via `localized_default` on fields (or as a
-struct-level default). Consumers that do not set the attribute see no
-behavioural change.
+The derive emits localization identifiers and delegates path-aware docs IR for
+derived configurations. Identifier artefact emission is separately opt-in via
+`ORTHO_CONFIG_EMIT_IDENTIFIERS=1`; builds without that variable do not write an
+artefact. `localized_default` is recognized and rejected as deferred work, so
+using it produces a diagnostic rather than embedding defaults.
 
 `FluentEmbedLocalizer` adds an optional dependency on `i18n-embed` behind a new
 `i18n-embed-bridge` cargo feature so the existing dependency footprint is

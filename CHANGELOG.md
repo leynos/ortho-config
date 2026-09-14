@@ -30,6 +30,8 @@ All notable changes to this project will be documented in this file.
   in agent context (roadmap item 6.3.1).
 - Add the public `LocalizedParse` blanket trait so any `clap::Parser` can
   parse arguments with localized command metadata and parse errors.
+- Add `OrthoConfigLocalization` derive constants, compile-time normalized
+  argument-id collision diagnostics, and opt-in identifier artefact emission.
 - Add the public `parse_localized_command` helper for applications that need
   to parse an already-localized `clap::Command` with a custom message-id base.
 - Introduce the `EnvSource` trait so configuration discovery reads the
@@ -40,10 +42,10 @@ All notable changes to this project will be documented in this file.
   unaffected (closes #410).
 - Emit structured `tracing` events at each configuration-discovery decision
   point (source selection, selector resolution, XDG/Windows/home resolution,
-  attempt/candidate/outcome), drawn from a closed vocabulary that never
-  carries environment values, paths, or file contents. A successful
-  `discovery.load` event also carries `source`, naming the rung that produced
-  the winning candidate.
+  attempt/candidate/outcome), drawn from a closed vocabulary that never carries
+  environment values, paths, or file contents. A successful `discovery.load`
+  event also carries `source`, naming the rung that produced the winning
+  candidate.
 - Add the optional `metrics` feature, emitting
   `ortho_config.discovery.attempts`, `ortho_config.discovery.outcomes`, and
   `ortho_config.discovery.candidate_failures` counters through the `metrics`
@@ -66,6 +68,9 @@ All notable changes to this project will be documented in this file.
   packaging dry run on Linux, macOS, and Windows.
 
 ### Changed
+
+- Bump documentation IR to 2.0: generated default identifiers now use mounted
+  command paths; see the localization migration guidance in the user's guide.
 
 - Adopt `sha2` 0.11 in `cargo-orthohelp` and render cache digests through a new
   crate-internal lowercase hexadecimal encoder, because `sha2` 0.11 returns
