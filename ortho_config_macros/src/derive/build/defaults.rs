@@ -44,6 +44,7 @@ pub(crate) fn build_default_struct_fields(
 pub(crate) struct DefaultStructInit {
     pub resolutions: Vec<proc_macro2::TokenStream>,
     pub fields: Vec<proc_macro2::TokenStream>,
+    pub cli_default_as_absent_fields: Vec<syn::LitStr>,
 }
 
 pub(crate) fn build_default_struct_init(
@@ -53,6 +54,7 @@ pub(crate) fn build_default_struct_init(
 ) -> DefaultStructInit {
     let mut resolutions = Vec::new();
     let mut default_fields = Vec::new();
+    let mut cli_default_as_absent_fields = Vec::new();
     fields
         .iter()
         .zip(field_attrs.iter())
@@ -65,6 +67,9 @@ pub(crate) fn build_default_struct_init(
                     return;
                 }
             };
+            if attr.cli_default_as_absent {
+                cli_default_as_absent_fields.push(syn::LitStr::new(&name.to_string(), name.span()));
+            }
             if let Some(expr) = &attr.default {
                 default_fields.push(quote! { #name: Some(#expr) });
                 return;
@@ -77,16 +82,9 @@ pub(crate) fn build_default_struct_init(
                     resolutions.push(quote! {
                         let #resolution_ident = match #value_expr {
                             Ok(value) => Some(value),
-                            Err(source) => {
-                                #krate::tracing::warn!(
-                                    operation = "clap_default_value_replay",
-                                    field = #field_key,
-                                    error_category = "conversion_failed",
-                                    "failed to convert inferred clap default",
-                                );
+                            Err(()) => {
                                 errors.push(#krate::OrthoError::default_value_conversion_arc(
                                     #field_key,
-                                    source,
                                 ));
                                 None
                             }
@@ -111,6 +109,7 @@ pub(crate) fn build_default_struct_init(
     DefaultStructInit {
         resolutions,
         fields: default_fields,
+        cli_default_as_absent_fields,
     }
 }
 
@@ -139,25 +138,15 @@ fn clap_value_default_expr(default: &ClapDefaultValue) -> proc_macro2::TokenStre
         ClapDefaultValueShape::Scalar | ClapDefaultValueShape::Option => quote! {
             matches
                 .try_remove_one::<#leaf_type>("value")
-                .map_err(|error| {
-                    ::clap::Error::raw(
-                        ::clap::error::ErrorKind::InvalidValue,
-                        error.to_string(),
-                    )
-                })?
-                .ok_or_else(|| missing_clap_default_error())
+                .map_err(|_| ())?
+                .ok_or(())
         },
         ClapDefaultValueShape::Vec => quote! {
             matches
                 .try_remove_many::<#leaf_type>("value")
-                .map_err(|error| {
-                    ::clap::Error::raw(
-                        ::clap::error::ErrorKind::InvalidValue,
-                        error.to_string(),
-                    )
-                })?
+                .map_err(|_| ())?
                 .map(|values| values.collect::<::std::vec::Vec<_>>())
-                .ok_or_else(|| missing_clap_default_error())
+                .ok_or(())
         },
     };
 
@@ -172,13 +161,9 @@ fn clap_value_default_expr(default: &ClapDefaultValue) -> proc_macro2::TokenStre
                         #value_delimiter
                         #ignore_case,
                 );
-            let mut matches = command.try_get_matches_from_mut(["ortho-config-default"])?;
-            let missing_clap_default_error = || {
-                ::clap::Error::raw(
-                    ::clap::error::ErrorKind::InvalidValue,
-                    "clap did not resolve the inferred default value",
-                )
-            };
+            let mut matches = command
+                .try_get_matches_from_mut(["ortho-config-default"])
+                .map_err(|_| ())?;
             #extraction
         })()
     }

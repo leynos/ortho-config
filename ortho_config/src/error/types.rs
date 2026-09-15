@@ -24,13 +24,10 @@ pub enum OrthoError {
     },
 
     /// Error converting an inferred clap string default for a field.
-    #[error("Failed to convert inferred clap default for '{key}': {source}")]
+    #[error("Failed to convert inferred clap default for '{key}'")]
     DefaultValueConversion {
         /// Configuration key whose inferred default could not be converted.
         key: String,
-        /// Underlying clap parser error.
-        #[source]
-        source: Box<dyn std::error::Error + Send + Sync>,
     },
 
     /// Cycle detected while resolving `extends`.

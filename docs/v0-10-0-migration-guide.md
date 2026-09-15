@@ -66,7 +66,6 @@ This injects the subcommand environment layer while retaining the existing
 command-line precedence. A clap-only argument type that does not derive
 `OrthoConfig` remains parse-only and does not support source-aware merge APIs.
 
-
 ## Infer parser-faithful string defaults
 
 Enable `cli_default_as_absent` on a field whose clap default should remain
@@ -100,7 +99,6 @@ case-insensitive enum parsing, are replayed with the generated argument. An
 explicit `#[ortho_config(default = ...)]` always takes precedence over an
 inferred clap default.
 
-
 ## Review unsupported shapes and errors
 
 Nested `Option`/`Vec` wrappers and map fields are rejected at compile time when
@@ -118,6 +116,7 @@ No migration is required for fields using only typed defaults. For fields that
 duplicated a string default in both clap and `#[ortho_config(default = ...)]`,
 the duplicate can be removed after confirming that the field shape and parser
 are supported by this guide.
+
 ## Adopt the Cargo external-subcommand helper
 
 Cargo invokes `cargo <name>` by executing `cargo-<name>` with `<name>` injected

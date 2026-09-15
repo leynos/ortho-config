@@ -205,66 +205,96 @@ impl Default for DefaultParityArgs {
 #[rstest]
 #[serial]
 fn inferred_default_value_preserves_clap_parsers() -> Result<()> {
-    {
-        let no_file_dir = tempfile::tempdir().context("create no-file config dir")?;
-        let _cwd_guard = cwd::set_dir(no_file_dir.path())?;
-        let inferred = DefaultParityArgs::load_from_iter(["default-parity"])
-            .context("load inferred clap defaults")?;
-        ensure!(
-            inferred.count == 8,
-            "expected inferred count, got {}",
-            inferred.count
-        );
-        ensure!(
-            inferred.mode == Mode::Fast,
-            "expected inferred fast mode, got {:?}",
-            inferred.mode
-        );
-        ensure!(
-            inferred.port == 7,
-            "expected inferred port, got {}",
-            inferred.port
-        );
-        ensure!(
-            inferred.label.as_deref() == Some("default"),
-            "expected inferred label, got {:?}",
-            inferred.label,
-        );
-    }
+    assert_inferred_default_parity()?;
+    assert_file_overrides_inferred_default_parity()?;
+    assert_explicit_cli_overrides_default_parity()?;
+    Ok(())
+}
 
+#[derive(Clone, Copy)]
+struct DefaultParityExpected {
+    count: u16,
+    mode: Mode,
+    port: u16,
+    label: &'static str,
+}
+
+fn assert_default_parity(
+    actual: &DefaultParityArgs,
+    expected: DefaultParityExpected,
+) -> Result<()> {
+    ensure!(
+        actual.count == expected.count,
+        "expected count {}, got {}",
+        expected.count,
+        actual.count
+    );
+    ensure!(
+        actual.mode == expected.mode,
+        "expected mode {:?}, got {:?}",
+        expected.mode,
+        actual.mode
+    );
+    ensure!(
+        actual.port == expected.port,
+        "expected port {}, got {}",
+        expected.port,
+        actual.port
+    );
+    ensure!(
+        actual.label.as_deref() == Some(expected.label),
+        "expected label {:?}, got {:?}",
+        expected.label,
+        actual.label,
+    );
+    Ok(())
+}
+
+fn assert_inferred_default_parity() -> Result<()> {
+    let no_file_dir = tempfile::tempdir().context("create no-file config dir")?;
+    let _cwd_guard = cwd::set_dir(no_file_dir.path())?;
+    let inferred =
+        DefaultParityArgs::load_from_iter(["default-parity"]).context("load inferred defaults")?;
+    assert_default_parity(
+        &inferred,
+        DefaultParityExpected {
+            count: 8,
+            mode: Mode::Fast,
+            port: 7,
+            label: "default",
+        },
+    )
+}
+
+fn assert_file_overrides_inferred_default_parity() -> Result<()> {
     let (_temp_dir, _cwd_guard) = config_dir(
         "[cmds.default-parity]\ncount = 5\nmode = \"safe\"\nport = 6\nlabel = \"file\"\n",
     )?;
-    let prefix = Prefix::new("APP_");
-    let source = Arc::new(MapEnv::new());
-
     let matches = DefaultParityArgs::command().get_matches_from(["default-parity"]);
     let args = DefaultParityArgs::from_arg_matches(&matches).context("parse defaults")?;
     let merged = load_and_merge_subcommand_with_matches_with_sources(
-        &prefix,
+        &Prefix::new("APP_"),
         &args,
         &matches,
-        source.clone(),
+        Arc::new(MapEnv::new()),
     )
     .context("merge parser-faithful defaults")?;
-    ensure!(
-        merged.count == 5,
-        "expected file count, got {}",
-        merged.count
-    );
-    ensure!(
-        merged.mode == Mode::Safe,
-        "expected file mode, got {:?}",
-        merged.mode
-    );
-    ensure!(merged.port == 6, "expected file port, got {}", merged.port);
-    ensure!(
-        merged.label.as_deref() == Some("file"),
-        "expected file label, got {:?}",
-        merged.label,
-    );
+    assert_default_parity(
+        &merged,
+        DefaultParityExpected {
+            count: 5,
+            mode: Mode::Safe,
+            port: 6,
+            label: "file",
+        },
+    )
+}
 
-    let explicit_matches = DefaultParityArgs::command().get_matches_from([
+fn assert_explicit_cli_overrides_default_parity() -> Result<()> {
+    let (_temp_dir, _cwd_guard) = config_dir(
+        "[cmds.default-parity]\ncount = 5\nmode = \"safe\"\nport = 6\nlabel = \"file\"\n",
+    )?;
+    let matches = DefaultParityArgs::command().get_matches_from([
         "default-parity",
         "--count",
         "9",
@@ -275,35 +305,98 @@ fn inferred_default_value_preserves_clap_parsers() -> Result<()> {
         "--label",
         "cli",
     ]);
-    let explicit_args =
-        DefaultParityArgs::from_arg_matches(&explicit_matches).context("parse explicit values")?;
-    let explicit = load_and_merge_subcommand_with_matches_with_sources(
-        &prefix,
-        &explicit_args,
-        &explicit_matches,
-        source,
+    let args = DefaultParityArgs::from_arg_matches(&matches).context("parse explicit values")?;
+    let merged = load_and_merge_subcommand_with_matches_with_sources(
+        &Prefix::new("APP_"),
+        &args,
+        &matches,
+        Arc::new(MapEnv::new()),
     )
     .context("merge explicit values")?;
+    assert_default_parity(
+        &merged,
+        DefaultParityExpected {
+            count: 9,
+            mode: Mode::Fast,
+            port: 10,
+            label: "cli",
+        },
+    )
+}
+
+#[rstest]
+#[serial]
+fn generated_cli_uses_captured_value_parser() -> Result<()> {
+    let no_file_dir = tempfile::tempdir().context("create no-file config dir")?;
+    let _cwd_guard = cwd::set_dir(no_file_dir.path())?;
+    let parsed = DefaultParityArgs::load_from_iter(["default-parity", "--port", "tcp:10"])
+        .context("parse explicit custom CLI value")?;
     ensure!(
-        explicit.count == 9,
-        "expected cli count, got {}",
-        explicit.count
+        parsed.port == 10,
+        "expected parsed port 10, got {}",
+        parsed.port
     );
-    ensure!(
-        explicit.mode == Mode::Fast,
-        "expected cli mode, got {:?}",
-        explicit.mode
-    );
-    ensure!(
-        explicit.port == 10,
-        "expected cli port, got {}",
-        explicit.port
-    );
-    ensure!(
-        explicit.label.as_deref() == Some("cli"),
-        "expected cli label, got {:?}",
-        explicit.label,
-    );
+    Ok(())
+}
+
+/// Subcommand that ensures inferred true defaults are absent until explicitly set.
+#[derive(Debug, Parser, Serialize, Deserialize, OrthoConfig, PartialEq)]
+#[command(name = "bool-default")]
+#[ortho_config(prefix = "APP_")]
+struct BoolDefaultArgs {
+    #[arg(long, default_value = "true")]
+    #[ortho_config(cli_default_as_absent)]
+    enabled: bool,
+}
+
+impl Default for BoolDefaultArgs {
+    fn default() -> Self {
+        Self { enabled: true }
+    }
+}
+
+#[rstest]
+#[serial]
+fn inferred_true_bool_default_preserves_source_precedence() -> Result<()> {
+    {
+        let no_file_dir = tempfile::tempdir().context("create no-file config dir")?;
+        let _cwd_guard = cwd::set_dir(no_file_dir.path())?;
+        let loaded = BoolDefaultArgs::load_from_iter(["bool-default"])?;
+        ensure!(
+            loaded.enabled,
+            "expected inferred bool default to remain true"
+        );
+    }
+    {
+        let (_temp_dir, _cwd_guard) = config_dir("enabled = false\n")?;
+        let source = Arc::new(MapEnv::new());
+        let loaded =
+            BoolDefaultArgs::load_from_iter_with_sources(["bool-default"], source.clone(), source)?;
+        ensure!(
+            !loaded.enabled,
+            "expected file value to override bool default"
+        );
+    }
+    {
+        let (_temp_dir, _cwd_guard) = config_dir("enabled = true\n")?;
+        let source = Arc::new(MapEnv::new().with_var("APP_ENABLED", "false"));
+        let loaded =
+            BoolDefaultArgs::load_from_iter_with_sources(["bool-default"], source.clone(), source)?;
+        ensure!(
+            !loaded.enabled,
+            "expected environment value to override file value"
+        );
+    }
+    {
+        let (_temp_dir, _cwd_guard) = config_dir("enabled = false\n")?;
+        let source = Arc::new(MapEnv::new().with_var("APP_ENABLED", "false"));
+        let loaded = BoolDefaultArgs::load_from_iter_with_sources(
+            ["bool-default", "--enabled"],
+            source.clone(),
+            source,
+        )?;
+        ensure!(loaded.enabled, "expected explicit CLI value to win");
+    }
     Ok(())
 }
 
@@ -382,6 +475,17 @@ fn invalid_inferred_default_is_reported_without_panicking() -> Result<()> {
         contains_default_value_conversion(error.as_ref()),
         "expected DefaultValueConversion, got {error:?}",
     );
+    let rendered = error.to_string();
+    ensure!(
+        rendered.contains("port"),
+        "expected field key, got {rendered}"
+    );
+    for sensitive_fragment in ["udp:7", "tcp:7", "expected a tcp: port"] {
+        ensure!(
+            !rendered.contains(sensitive_fragment),
+            "expected conversion error to redact {sensitive_fragment:?}, got {rendered}",
+        );
+    }
     Ok(())
 }
 

@@ -85,19 +85,12 @@ impl OrthoError {
     ///
     /// ```
     /// use ortho_config::OrthoError;
-    /// let source = clap::Error::raw(clap::error::ErrorKind::InvalidValue, "bad value");
-    /// let error = OrthoError::default_value_conversion("mode", source);
+    /// let error = OrthoError::default_value_conversion("mode");
     /// assert!(matches!(error, OrthoError::DefaultValueConversion { .. }));
     /// ```
     #[must_use]
-    pub fn default_value_conversion<E>(key: impl Into<String>, source: E) -> Self
-    where
-        E: std::error::Error + Send + Sync + 'static,
-    {
-        Self::DefaultValueConversion {
-            key: key.into(),
-            source: Box::new(source),
-        }
+    pub fn default_value_conversion(key: impl Into<String>) -> Self {
+        Self::DefaultValueConversion { key: key.into() }
     }
 
     /// Construct a shared conversion error for an inferred clap string default.
@@ -106,16 +99,12 @@ impl OrthoError {
     ///
     /// ```
     /// use ortho_config::OrthoError;
-    /// let source = clap::Error::raw(clap::error::ErrorKind::InvalidValue, "bad value");
-    /// let error = OrthoError::default_value_conversion_arc("mode", source);
+    /// let error = OrthoError::default_value_conversion_arc("mode");
     /// assert!(matches!(&*error, OrthoError::DefaultValueConversion { .. }));
     /// ```
     #[must_use]
-    pub fn default_value_conversion_arc<E>(key: impl Into<String>, source: E) -> Arc<Self>
-    where
-        E: std::error::Error + Send + Sync + 'static,
-    {
-        Arc::new(Self::default_value_conversion(key, source))
+    pub fn default_value_conversion_arc(key: impl Into<String>) -> Arc<Self> {
+        Arc::new(Self::default_value_conversion(key))
     }
 
     /// Construct a gathering error from a [`figment::Error`].

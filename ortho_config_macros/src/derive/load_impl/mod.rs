@@ -10,6 +10,9 @@ use syn::Ident;
 
 use crate::derive::build::DefaultStructInit;
 
+mod cli;
+use cli::{build_cli_layer_tokens, build_cli_parse_tokens};
+
 mod source;
 use source::{
     LoadSourceTokens, build_load_from_iter_impl, build_load_from_iter_with_sources_impl,
@@ -225,25 +228,22 @@ fn build_compose_layers_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStrea
     let default_struct_init = tokens.default_struct_init;
     let default_resolutions = &default_struct_init.resolutions;
     let default_fields = &default_struct_init.fields;
+    let cli_default_as_absent_fields = &default_struct_init.cli_default_as_absent_fields;
     let krate = tokens.krate;
     let file_discovery = build_file_discovery(tokens, *has_config_path);
     let env_section = build_env_section(tokens);
+    let cli_parse = build_cli_parse_tokens();
+    let cli_layer = build_cli_layer_tokens(krate, cli_default_as_absent_fields);
 
     quote! {
-        use clap::Parser as _;
+        use clap::{CommandFactory as _, FromArgMatches as _, Parser as _};
         // Keep this path anchored under the resolved crate so derive users
         // do not need a direct `figment` dependency for macro-generated code.
         use #krate::figment::Figment;
         use #krate::OrthoMergeExt as _;
 
         let mut errors: Vec<std::sync::Arc<#krate::OrthoError>> = Vec::new();
-        let cli = match Self::try_parse_from(iter) {
-            Ok(c) => Some(c),
-            Err(e) => {
-                errors.push(std::sync::Arc::new(e.into()));
-                None
-            }
-        };
+        #cli_parse
 
         let mut composer = #krate::MergeComposer::with_capacity(4);
         #(#default_resolutions)*
@@ -271,19 +271,7 @@ fn build_compose_layers_impl(args: &LoadImplArgs<'_>) -> proc_macro2::TokenStrea
             Err(err) => errors.push(err),
         }
 
-        if let Some(ref cli) = cli {
-            match #krate::sanitize_value(cli) {
-                Ok(value) => {
-                    let differs_from_defaults = defaults_value
-                        .as_ref()
-                        .map_or(true, |defaults| defaults != &value);
-                    if differs_from_defaults {
-                        composer.push_cli(value);
-                    }
-                }
-                Err(err) => errors.push(err),
-            }
-        }
+        #cli_layer
 
         #krate::declarative::LayerComposition::new(composer.layers(), errors)
     }
