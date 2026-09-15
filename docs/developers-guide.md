@@ -1078,8 +1078,8 @@ something plausible and certifies a configuration nextest cannot load.
 
 Which integer depends on the unit, and this is the part a reader working in
 nanoseconds alone gets wrong. A fraction of an hour or anything longer is
-converted into whole *seconds*, so `0.000001h` is refused although 3,600 ns is a
-whole nanosecond, while `0.25h` is fifteen minutes. A fraction of a minute or
+converted into whole *seconds*, so `0.000001h` is refused although its value is
+a whole 3,600,000 ns, while `0.25h` is fifteen minutes. A fraction of a minute or
 anything shorter is converted into whole nanoseconds, so `1.999999999s` is
 accepted and `0.0000000015s` is not. A fraction of a nanosecond is refused
 outright, whatever it spells, so even `1.0ns` will not load. The unit tables are
@@ -1133,9 +1133,11 @@ themselves, driven with synthetic workflows and synthetic nextest
 configurations rather than the repository's own. Every ceiling here sits well
 above its requirement, so a missing term in the derivation changes nothing
 observable in this tree; against controlled numbers it does not. The lane
-reading takes its documents as a parameter, defaulting to the repository's own
-workflows, so the filesystem access and the YAML parsing sit at one named
-boundary rather than inside the derivations.
+reading requires its documents, so `coverage_jobs_of(documents)` reaches no
+filesystem and no parser; `workflow_documents(directory)` is where the
+filesystem access and the YAML parsing happen, defaulting its directory to the
+repository's own; and `coverage_jobs_in(directory)` composes the two. The
+boundary is one named function rather than a default inside the derivations.
 
 The `binstall-packaging` job also declares no ceiling. It invokes no coverage
 step, so it is outside this contract, and bounding it is separate work.

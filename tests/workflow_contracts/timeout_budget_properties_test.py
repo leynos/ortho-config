@@ -21,6 +21,7 @@ import pytest
 from coverage_lanes import coverage_jobs_in, coverage_jobs_of, workflow_documents
 from hypothesis import given
 from hypothesis import strategies as st
+from nextest_units import Overflow
 from nextest_budgets import (
     NextestConfigurationError,
     UnboundedTestError,
@@ -277,6 +278,7 @@ def test_a_duration_nextest_accepts_is_read_rather_than_refused(
         "18446744073709551616s",
         "1000000000000000000000ns",
         "18446744073709551615s 1s",
+        "18446744073709551615s 1000ms",
         "0.0000000004s 0.0000000006s",
         "1.0ns",
         "2.0ns",
@@ -303,6 +305,7 @@ def test_a_duration_nextest_accepts_is_read_rather_than_refused(
         "one-second-past-the-u64-humantime-accumulates-into",
         "a-literal-past-the-u64-humantime-reads-it-into",
         "a-sum-past-the-u64-humantime-accumulates-into",
+        "a-carry-that-completes-a-second-past-the-u64",
         "components-that-are-whole-only-together",
         "a-whole-fraction-of-a-nanosecond",
         "a-larger-whole-fraction-of-a-nanosecond",
@@ -324,9 +327,34 @@ def test_an_unreadable_duration_is_refused(duration: str) -> None:
     humantime special-cases the exact text before reading a character,
     so a reader that stripped whitespace before comparing would accept
     `" 0 "`, which nextest rejects.
+
+    One case leaves the parser by a different door. A thousand
+    milliseconds on top of the largest whole second reach exactly a
+    billion nanoseconds, which humantime's carry declines to move and
+    `Duration::new` then moves regardless, panicking on the overflow.
+    humantime returns no error for that text because it never returns
+    at all, so nextest cannot load it either way, and a reader carrying
+    only past a complete second would report a duration for it.
     """
     with pytest.raises(NextestConfigurationError):
         seconds(duration)
+
+
+def test_a_refusal_names_the_arithmetic_that_produced_it() -> None:
+    """The overflow that refused a component survives the translation.
+
+    `NextestConfigurationError` says which configuration is at fault;
+    `Overflow` says which of humantime's checked operations declined.
+    The message names all three rules in one sentence, so on its own a
+    traceback cannot separate a literal past the `u64` from a
+    multiplication that left it from a division with a remainder.
+    Suppressing the cause throws that away.
+    """
+    with pytest.raises(NextestConfigurationError) as refusal:
+        seconds("1.0ns")
+    assert isinstance(refusal.value.__cause__, Overflow), (
+        "the parser failure is the cause of the refusal, not a detail to drop"
+    )
 
 
 @given(
