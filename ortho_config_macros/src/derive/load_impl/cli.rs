@@ -26,31 +26,60 @@ pub(super) fn build_cli_layer_tokens(
     krate: &proc_macro2::TokenStream,
     cli_default_as_absent_fields: &[syn::LitStr],
 ) -> proc_macro2::TokenStream {
+    let sanitized_layer = build_sanitized_cli_layer_tokens(krate, cli_default_as_absent_fields);
     quote! {
         if let (Some(cli), Some(matches)) = (cli.as_ref(), matches.as_ref()) {
-            match #krate::sanitize_value(cli) {
-                Ok(mut value) => {
-                    let has_explicit_default_as_absent_value = false
-                        #( || matches.value_source(#cli_default_as_absent_fields)
-                            == Some(clap::parser::ValueSource::CommandLine) )*;
-                    if let Some(values) = value.as_object_mut() {
-                        #(
-                            if matches.value_source(#cli_default_as_absent_fields)
-                                != Some(clap::parser::ValueSource::CommandLine)
-                            {
-                                values.remove(#cli_default_as_absent_fields);
-                            }
-                        )*
-                    }
-                    let differs_from_defaults = defaults_value
-                        .as_ref()
-                        .map_or(true, |defaults| defaults != &value);
-                    if differs_from_defaults || has_explicit_default_as_absent_value {
-                        composer.push_cli(value);
-                    }
-                }
-                Err(err) => errors.push(err),
+            #sanitized_layer
+        }
+    }
+}
+
+/// Generate sanitisation handling for the generated CLI layer.
+fn build_sanitized_cli_layer_tokens(
+    krate: &proc_macro2::TokenStream,
+    cli_default_as_absent_fields: &[syn::LitStr],
+) -> proc_macro2::TokenStream {
+    let prune_defaults = build_default_as_absent_pruning_tokens(cli_default_as_absent_fields);
+    let push_cli = build_cli_push_tokens();
+    quote! {
+        match #krate::sanitize_value(cli) {
+            Ok(mut value) => {
+                #prune_defaults
+                #push_cli
             }
+            Err(err) => errors.push(err),
+        }
+    }
+}
+
+/// Generate removal of default-derived fields from the generated CLI JSON object.
+fn build_default_as_absent_pruning_tokens(
+    cli_default_as_absent_fields: &[syn::LitStr],
+) -> proc_macro2::TokenStream {
+    quote! {
+        let has_explicit_default_as_absent_value = false
+            #( || matches.value_source(#cli_default_as_absent_fields)
+                == Some(clap::parser::ValueSource::CommandLine) )*;
+        if let Some(values) = value.as_object_mut() {
+            #(
+                if matches.value_source(#cli_default_as_absent_fields)
+                    != Some(clap::parser::ValueSource::CommandLine)
+                {
+                    values.remove(#cli_default_as_absent_fields);
+                }
+            )*
+        }
+    }
+}
+
+/// Generate the comparison that avoids pushing a CLI layer made only of defaults.
+fn build_cli_push_tokens() -> proc_macro2::TokenStream {
+    quote! {
+        let differs_from_defaults = defaults_value
+            .as_ref()
+            .map_or(true, |defaults| defaults != &value);
+        if differs_from_defaults || has_explicit_default_as_absent_value {
+            composer.push_cli(value);
         }
     }
 }
