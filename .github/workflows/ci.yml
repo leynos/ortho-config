@@ -31,6 +31,19 @@ jobs:
       # ~12 min (the compile_fail trybuild test alone is ~200s), and the
       # 927edd4 action now emits full per-line data, so raise the ceiling.
       RUN_RUST_CARGO_WAIT_TIMEOUT: '2700'
+      # sccache. The shared Rust setup action installs it and, from this
+      # pin, exports RUSTC_WRAPPER as the absolute path of the sccache it
+      # installed. Before this pin it installed sccache and exported
+      # neither the wrapper nor a backend, so every Rust job here paid the
+      # install and compiled uncached.
+      #
+      # RUSTC_WRAPPER is deliberately absent. Setting it by name leaves
+      # invocations wrapped by whichever sccache is on PATH, and any that
+      # resolve none compile uncached without entering the hit-rate
+      # denominator; whitaker #409 measured 69 such invocations. The
+      # action stands aside when a caller has already set the variable, so
+      # a value here would replace the absolute path with a bare name.
+      SCCACHE_GHA_ENABLED: "true"
     strategy:
       fail-fast: false
       matrix:
@@ -47,7 +60,7 @@ jobs:
           fetch-depth: 0
 
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@32c8ea649ea44d40119f348ad48861212532061f
+        uses: leynos/shared-actions/.github/actions/setup-rust@0e3c4d24e43aa48b511d94f3b902711eb02138df
 
       - name: Install bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6  # v2
@@ -203,7 +216,7 @@ jobs:
         # Broadest feature set, so this leg carries the coverage ratchet
         # (one baseline per job). Ratchet only on the ubuntu leg, which
         # compares against the baseline written by coverage-main.yml.
-        uses: leynos/shared-actions/.github/actions/generate-coverage@32c8ea649ea44d40119f348ad48861212532061f
+        uses: leynos/shared-actions/.github/actions/generate-coverage@0e3c4d24e43aa48b511d94f3b902711eb02138df
         with:
           output-path: lcov-serde-saphyr.info
           format: lcov
@@ -215,7 +228,7 @@ jobs:
           with-ratchet: ${{ matrix.os == 'ubuntu-latest' }}
 
       - name: Test and Measure Coverage (without serde_saphyr)
-        uses: leynos/shared-actions/.github/actions/generate-coverage@32c8ea649ea44d40119f348ad48861212532061f
+        uses: leynos/shared-actions/.github/actions/generate-coverage@0e3c4d24e43aa48b511d94f3b902711eb02138df
         with:
           output-path: lcov-no-serde-saphyr.info
           format: lcov
@@ -238,7 +251,7 @@ jobs:
         if: >-
           env.CS_ACCESS_TOKEN != '' && github.event_name == 'pull_request' &&
           matrix.os == 'ubuntu-latest'
-        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@32c8ea649ea44d40119f348ad48861212532061f
+        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@0e3c4d24e43aa48b511d94f3b902711eb02138df
         with:
           format: lcov
           mode: check
@@ -261,6 +274,19 @@ jobs:
       contents: read
     env:
       CARGO_TERM_COLOR: always
+      # sccache. The shared Rust setup action installs it and, from this
+      # pin, exports RUSTC_WRAPPER as the absolute path of the sccache it
+      # installed. Before this pin it installed sccache and exported
+      # neither the wrapper nor a backend, so every Rust job here paid the
+      # install and compiled uncached.
+      #
+      # RUSTC_WRAPPER is deliberately absent. Setting it by name leaves
+      # invocations wrapped by whichever sccache is on PATH, and any that
+      # resolve none compile uncached without entering the hit-rate
+      # denominator; whitaker #409 measured 69 such invocations. The
+      # action stands aside when a caller has already set the variable, so
+      # a value here would replace the absolute path with a bare name.
+      SCCACHE_GHA_ENABLED: "true"
     strategy:
       fail-fast: false
       matrix:
@@ -276,7 +302,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@32c8ea649ea44d40119f348ad48861212532061f
+        uses: leynos/shared-actions/.github/actions/setup-rust@0e3c4d24e43aa48b511d94f3b902711eb02138df
 
       - name: Setup uv
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d  # v10.0.1
