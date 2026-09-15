@@ -825,9 +825,25 @@ named individually and with their reasons rather than as a blanket allowance.
 The discovery is itself pinned, because the other assertions are all satisfied
 by a sweep that finds no jobs.
 
-Five mutations are caught: one reference left at the old pin, the backend
+Each caching job also ends with a `Report sccache statistics` step, and the
+contract requires it. The wiring is invisible from the outside: a job with a
+wrapper and a job without one both succeed, and only sccache's own compile
+request and hit counts tell them apart. The step invokes the binary through
+`SCCACHE_PATH` rather than by name, for the same reason the wrapper is not set
+by name, and it runs on failure too, because the statistics of a failed build
+are often what explain it.
+
+Read the second run of a branch, not the first. The first stores into an empty
+cache, so its hit rate says nothing about whether the wiring works. Compare
+compile requests as well as hit rates: an invocation that resolved no wrapper
+never enters the denominator, so a wrapper defect raises the request count
+rather than lowering the rate.
+
+Seven mutations are caught: one reference left at the old pin, the backend
 removed from a job, `RUSTC_WRAPPER` set by name, the sweep narrowed so it finds
-nothing, and an excluded job quietly gaining a backend.
+nothing, an excluded job quietly gaining a backend, the statistics step removed,
+and the statistics reported through a bare `sccache` rather than
+`SCCACHE_PATH`.
 
 ## Releasing `cargo-orthohelp` binaries
 

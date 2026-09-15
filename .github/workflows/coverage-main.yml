@@ -94,3 +94,22 @@ jobs:
           format: lcov
           access-token: ${{ env.CS_ACCESS_TOKEN }}
           installer-checksum: ${{ vars.CODESCENE_CLI_SHA256 }}
+
+      # Invoked through SCCACHE_PATH rather than the bare name, for the same
+      # reason RUSTC_WRAPPER is not set by name: a bare `sccache` reports on
+      # whichever binary PATH resolves, which may not be the one that did the
+      # compiling. Always runs, because the statistics of a failed build are
+      # often what explains it.
+      - name: Report sccache statistics (coverage-upload)
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            printf '### sccache (coverage-upload)\n\n'
+            printf -- '- backend: %s\n\n' \
+              "${{ env.SCCACHE_GHA_ENABLED == 'true' && 'GitHub Actions cache' || 'local disk' }}"
+            printf '```\n'
+            "${SCCACHE_PATH:-sccache}" --show-stats
+            printf '```\n'
+          } | tee -a "$GITHUB_STEP_SUMMARY"

@@ -234,3 +234,31 @@ def test_every_rust_job_selects_a_backend(job_name: str) -> None:
         "does not set SCCACHE_GHA_ENABLED and would cache into a discarded "
         "local directory"
     )
+
+
+@pytest.mark.parametrize("job_name", sorted(_jobs_running_setup_rust()))
+def test_every_job_with_a_backend_reports_its_statistics(job_name: str) -> None:
+    """Assert each caching job prints sccache's own statistics.
+
+    The wiring is invisible from the outside: a job with no wrapper and a
+    job with one both succeed, and only the compile-request and hit
+    counts tell them apart. Without this step there is no way to prove
+    the cache is being used, or to notice later that it stopped.
+
+    The command is asserted, not the step name, and it must invoke the
+    binary through `SCCACHE_PATH`. A bare `sccache --show-stats` reports
+    on whichever binary `PATH` resolves, which is the same defect the
+    wrapper half of this contract exists to prevent.
+    """
+    job = _jobs_running_setup_rust()[job_name]
+    if job_name in NO_BACKEND_EXPECTED:
+        pytest.skip(f"{job_name} caches nothing: {NO_BACKEND_EXPECTED[job_name]}")
+    commands = "\n".join(str(step.get("run", "")) for step in job.get("steps") or [])
+    assert "--show-stats" in commands, (
+        f"{job_name} selects an sccache backend but never reports its "
+        "statistics, so the wiring cannot be verified from a run"
+    )
+    assert "SCCACHE_PATH" in commands, (
+        f"{job_name} reports sccache statistics without invoking it through "
+        "SCCACHE_PATH, so it may report on a different binary"
+    )
