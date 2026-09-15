@@ -235,6 +235,11 @@ def test_a_sequence_of_components_sums_to_its_parts(
         pytest.param("1 0s", 10.0, id="whitespace-inside-the-number"),
         pytest.param("1 2 . 3 4 s", 12.34, id="whitespace-throughout-the-number"),
         pytest.param("1.999999999s", 1.999999999, id="nanosecond-precision"),
+        pytest.param(
+            "18446744073709551615s 999999999ns",
+            18446744073709551615 + 0.999999999,
+            id="the-largest-duration-humantime-holds",
+        ),
         pytest.param("0.000001ms", 1e-9, id="a-fraction-that-lands-on-a-nanosecond"),
         pytest.param("0.25h", 900.0, id="a-fraction-of-an-hour-in-whole-seconds"),
         pytest.param("0.5m", 30.0, id="a-fraction-of-a-minute"),
@@ -278,7 +283,9 @@ def test_a_duration_nextest_accepts_is_read_rather_than_refused(
         "18446744073709551616s",
         "1000000000000000000000ns",
         "18446744073709551615s 1s",
-        "18446744073709551615s 1000ms",
+        "18446744073709551615s 500ms 500ms",
+        "\u0663\u0660\u0660s",
+        "3\u0660\u0660s",
         "0.0000000004s 0.0000000006s",
         "1.0ns",
         "2.0ns",
@@ -306,6 +313,8 @@ def test_a_duration_nextest_accepts_is_read_rather_than_refused(
         "a-literal-past-the-u64-humantime-reads-it-into",
         "a-sum-past-the-u64-humantime-accumulates-into",
         "a-carry-that-completes-a-second-past-the-u64",
+        "a-run-of-unicode-digits",
+        "a-unicode-digit-after-an-ascii-one",
         "components-that-are-whole-only-together",
         "a-whole-fraction-of-a-nanosecond",
         "a-larger-whole-fraction-of-a-nanosecond",
@@ -315,7 +324,7 @@ def test_a_duration_nextest_accepts_is_read_rather_than_refused(
     ],
 )
 def test_an_unreadable_duration_is_refused(duration: str) -> None:
-    """A duration nextest would reject must not become a number.
+    r"""A duration nextest would reject must not become a number.
 
     Returning something plausible would put a comparison against a
     budget nextest never applies, and the contract would pass while the
@@ -328,13 +337,24 @@ def test_an_unreadable_duration_is_refused(duration: str) -> None:
     so a reader that stripped whitespace before comparing would accept
     `" 0 "`, which nextest rejects.
 
-    One case leaves the parser by a different door. A thousand
-    milliseconds on top of the largest whole second reach exactly a
-    billion nanoseconds, which humantime's carry declines to move and
-    `Duration::new` then moves regardless, panicking on the overflow.
-    humantime returns no error for that text because it never returns
-    at all, so nextest cannot load it either way, and a reader carrying
-    only past a complete second would report a duration for it.
+    One case leaves the parser by a different door. Two half-seconds on
+    top of the largest whole second reach exactly a billion nanoseconds,
+    which humantime's carry declines to move and `Duration::new` then
+    moves regardless, panicking on the overflow. humantime returns no
+    error for that text because it never returns at all, so nextest
+    cannot load it either way, and a reader carrying only past a
+    complete second would report a duration for it. One nanosecond
+    short of that carry is the largest duration humantime does hold,
+    and it sits in the acceptance cases as the other half of the pair.
+
+    The two runs of Unicode digits are the reader's own width rather
+    than the parser's. Python's `\d` matches every Unicode decimal
+    digit and `int` reads them, so both spellings were three hundred
+    seconds here; humantime compares against `'0'..='9'` and refuses
+    them, reporting "expected number at 0" for the run that opens with
+    one and "invalid character at 1" for the run that does not. The
+    mixed spelling is the sharper of the two, because a reader that
+    checked only its first character would still accept it.
     """
     with pytest.raises(NextestConfigurationError):
         seconds(duration)
