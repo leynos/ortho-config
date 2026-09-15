@@ -61,7 +61,7 @@ def _modules_with_examples() -> frozenset[pathlib.Path]:
 
 
 def test_every_script_with_an_example_is_collected() -> None:
-    """Assert the hand-written list covers every module with examples.
+    """Assert the list in the Makefile covers every module with examples.
 
     A module is covered either by its own name or by an ancestor
     directory the list names, which is how `scripts/tests` covers the
