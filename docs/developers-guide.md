@@ -378,6 +378,30 @@ documented-binary commands through it, while keeping command construction and
 exit-status policy with their existing owners. Run-file paths must contain
 normal relative components only.
 
+### Python docstring examples
+
+The helper scripts under `scripts/` carry NumPy-style `Examples` sections, and
+those examples are executed rather than read. `PYTEST_FLAGS` in the Makefile
+hands `--doctest-modules` the modules to collect, and `make test` runs them
+beside the script tests.
+
+The list is written by hand, which is the mechanism that fails. A module that
+gains an example is collected only if somebody remembers to name it, and one
+already had not been: `scripts/typos_rollout_http.py` carried an example that
+nothing ran, so it could have gone untrue without a gate noticing.
+
+`scripts/tests/test_doctest_collection.py` is the guard. It sweeps `scripts/`
+for modules containing `>>>` and fails when one is neither named by
+`PYTEST_FLAGS` nor covered by a directory the list names, which is how
+`scripts/tests` covers the test modules. A second contract fails when the list
+names a path that no longer exists, because that ends the whole lane rather
+than quietly collecting less. A third pins the sweep itself: both of the others
+are satisfied by a discovery that returns nothing, so the sweep must find
+`scripts/bump_version.py`, which carries fifty-odd examples.
+
+Three mutations are caught: a module dropped from the list, a named path
+misspelled, and a sweep narrowed to a suffix no file uses.
+
 ### Shared test-support helpers
 
 The shared test-support modules own the `ToAnyhow` trait, which converts an
