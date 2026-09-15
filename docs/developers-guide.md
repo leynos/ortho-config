@@ -873,6 +873,49 @@ and a Rust job declared in a `.yaml` workflow without a backend. The last two
 passed before the sweeps were widened, which is how they were shown to be real
 rather than theoretical.
 
+## Publish dry run
+
+`make publish-check` runs `lading publish` over the workspace. lading copies
+the workspace, then packages and dry-run publishes each crate in the order
+`lading.toml` declares. That per-crate packaging is the point: `cargo package`
+builds each crate from its own packaged sources, so it is the only thing here
+that sees what a published crate exports. A symbol that is public within the
+workspace but missing from a crate root compiles under the workspace test run
+and under Clippy, and fails only in this step. Issue #414 is this repository's
+own instance: `OrthoConfigSubcommandDocs` is exported by the workspace
+`ortho_config_macros` but not by its published release of the same version, so
+tarball verification resolves the re-export against the published crate and
+fails with "no `OrthoConfigSubcommandDocs` in the root". Nothing else in CI
+sees that.
+
+Before it packages, lading runs a pre-flight: `cargo check --workspace
+--all-targets`, then `cargo test`, both into a throwaway target directory.
+`lading.toml` sets `preflight.unit_tests_only`, which narrows the second of
+those to the library and binary unit tests.
+
+In CI the pre-flight is skipped outright. The `Publish dry run` step sets
+`LADING_SKIP_PREFLIGHT`, because both `Test and Measure Coverage` steps are
+unconditional and run ahead of it, so the pre-flight would be a second
+execution of a workspace this job has already passed and failed its lane on.
+The skip drops the auxiliary builds and the cargo check and test pair, and
+nothing else. The `Cargo.lock` freshness guard still runs, and the
+working-tree guard is unaffected: it is opt-in through `--forbid-dirty`
+either way, and `PUBLISH_CHECK_FLAGS` is empty, so neither a skipped nor an
+executed pre-flight enforces a clean tree here. The packaging still runs.
+
+The variable is set on the step rather than in `lading.toml`, because a
+configuration file cannot tell a CI run from a local one. On a workstation
+nothing has run the tests first, so `make publish-check` still runs the full
+pre-flight. `tests/workflow_contracts/publish_preflight_scope_test.py` pins
+both halves of that arrangement, and pins the packaging from both ends: the
+step's command as tokens, and the Make target's recipe handing lading the
+`publish` subcommand. Either half alone is defeatable.
+
+lading itself is pinned. `LADING_REF` in the Makefile names the v0.3.1 tag,
+which is the first release carrying the skip; without a pin, `uvx --from
+git+...` would change what the release gate runs with no edit to this
+repository.
+
 ## Releasing `cargo-orthohelp` binaries
 
 `cargo-orthohelp` is installed by downstream continuous integration (CI) under

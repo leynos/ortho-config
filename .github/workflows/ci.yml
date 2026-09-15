@@ -286,6 +286,30 @@ jobs:
 
       - name: Publish dry run
         if: ${{ github.event_name == 'workflow_dispatch' }}
+        env:
+          # Skip lading's pre-flight here, and only here. Both
+          # `Test and Measure Coverage` steps are unconditional, so every
+          # lane reaches this step having already executed this workspace
+          # and failed its own lane if anything broke. The pre-flight's
+          # cargo check and cargo test would be a second execution of a
+          # suite this job has already passed. See leynos/lading#261.
+          #
+          # Set on the step rather than in lading.toml because a config
+          # file cannot tell a CI run from a local one: `make
+          # publish-check` on a workstation, where nothing has run the
+          # tests first, must still run the full pre-flight.
+          #
+          # The skip drops the auxiliary builds and the cargo check and
+          # test pair, and nothing else. The Cargo.lock freshness guard
+          # still runs, and the working-tree guard is unaffected: it is
+          # opt-in through `--forbid-dirty` either way. Nor does the skip
+          # drop the packaging: `cargo package` still builds each crate
+          # from its own packaged sources, which is the only thing here
+          # that sees what a published crate exports.
+          #
+          # `publish_preflight_scope_test.py` pins the premise: both test
+          # steps are unconditional and both run ahead of this step.
+          LADING_SKIP_PREFLIGHT: 'true'
         run: make publish-check
 
   binstall-packaging:
