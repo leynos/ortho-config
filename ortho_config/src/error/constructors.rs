@@ -79,6 +79,34 @@ impl OrthoError {
         }
     }
 
+    /// Construct a conversion error for an inferred clap string default.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ortho_config::OrthoError;
+    /// let error = OrthoError::default_value_conversion("mode");
+    /// assert!(matches!(error, OrthoError::DefaultValueConversion { .. }));
+    /// ```
+    #[must_use]
+    pub fn default_value_conversion(key: impl Into<String>) -> Self {
+        Self::DefaultValueConversion { key: key.into() }
+    }
+
+    /// Construct a shared conversion error for an inferred clap string default.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ortho_config::OrthoError;
+    /// let error = OrthoError::default_value_conversion_arc("mode");
+    /// assert!(matches!(&*error, OrthoError::DefaultValueConversion { .. }));
+    /// ```
+    #[must_use]
+    pub fn default_value_conversion_arc(key: impl Into<String>) -> Arc<Self> {
+        Arc::new(Self::default_value_conversion(key))
+    }
+
     /// Construct a gathering error from a [`figment::Error`].
     ///
     /// # Examples

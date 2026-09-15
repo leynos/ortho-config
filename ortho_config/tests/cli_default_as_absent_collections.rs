@@ -2,11 +2,15 @@
 
 use anyhow::{Context, Result, ensure};
 use cap_std::{ambient_authority, fs::Dir};
-use clap::{CommandFactory, FromArgMatches, Parser};
+use clap::Parser;
 use ortho_config::subcommand::Prefix;
-use ortho_config::{MapEnv, OrthoConfig, load_and_merge_subcommand_with_matches_with_sources};
+use ortho_config::{
+    CliValueExtractor, MapEnv, OrthoConfig, load_and_merge_subcommand_with_matches_with_sources,
+};
 use rstest::{fixture, rstest};
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
+use serial_test::serial;
 use std::sync::Arc;
 use tempfile::TempDir;
 use test_helpers::cwd;
@@ -24,6 +28,39 @@ fn config_dir(#[default("")] cfg: &str) -> Result<(TempDir, cwd::CwdGuard)> {
         .context("write config")?;
     let guard = cwd::set_dir(dir.path())?;
     Ok((dir, guard))
+}
+
+/// Merge a subcommand without and with an explicit CLI value.
+fn merge_default_and_explicit<T>(
+    prefix: &Prefix,
+    default_args: &[&str],
+    explicit_args: &[&str],
+) -> Result<(T, T)>
+where
+    T: Parser + Serialize + DeserializeOwned + Default + CliValueExtractor,
+{
+    let matches = T::command().get_matches_from(default_args.iter().copied());
+    let args = T::from_arg_matches(&matches).context("parse clap defaults")?;
+    let merged = load_and_merge_subcommand_with_matches_with_sources(
+        prefix,
+        &args,
+        &matches,
+        Arc::new(MapEnv::new()),
+    )
+    .context("merge clap defaults")?;
+
+    let explicit_matches = T::command().get_matches_from(explicit_args.iter().copied());
+    let explicit_cli =
+        T::from_arg_matches(&explicit_matches).context("parse explicit CLI values")?;
+    let explicit = load_and_merge_subcommand_with_matches_with_sources(
+        prefix,
+        &explicit_cli,
+        &explicit_matches,
+        Arc::new(MapEnv::new()),
+    )
+    .context("merge explicit CLI values")?;
+
+    Ok((merged, explicit))
 }
 
 /// Verifies typed clap list defaults (`default_values_t`) are inferred and
@@ -45,42 +82,23 @@ impl Default for TagsArgs {
     }
 }
 
-#[rstest]
-fn test_cli_default_as_absent_infers_default_values_t(prefix: Prefix) -> Result<()> {
-    let (_temp_dir, _cwd_guard) = config_dir("[cmds.tags]\ntags = [\"file\"]\n")?;
+/// Verifies string clap list defaults are parsed through clap and treated as
+/// absent during layered merging.
+#[derive(Debug, Parser, Serialize, Deserialize, OrthoConfig, PartialEq)]
+#[command(name = "string-tags")]
+#[ortho_config(prefix = "APP_")]
+struct StringTagsArgs {
+    #[arg(long, default_value = "alpha,beta", value_delimiter = ',')]
+    #[ortho_config(cli_default_as_absent)]
+    tags: Vec<String>,
+}
 
-    let matches = TagsArgs::command().get_matches_from(["tags"]);
-    let args = TagsArgs::from_arg_matches(&matches).context("parse tags args")?;
-    let merged = load_and_merge_subcommand_with_matches_with_sources(
-        &prefix,
-        &args,
-        &matches,
-        Arc::new(MapEnv::new()),
-    )
-    .context("merge tags args without explicit CLI value")?;
-    ensure!(
-        merged.tags == vec!["file"],
-        "expected file tags, got {:?}",
-        merged.tags
-    );
-
-    let explicit_matches = TagsArgs::command().get_matches_from(["tags", "--tags", "cli"]);
-    let explicit_args =
-        TagsArgs::from_arg_matches(&explicit_matches).context("parse explicit tags args")?;
-    let explicit_merged = load_and_merge_subcommand_with_matches_with_sources(
-        &prefix,
-        &explicit_args,
-        &explicit_matches,
-        Arc::new(MapEnv::new()),
-    )
-    .context("merge tags args with explicit CLI value")?;
-    ensure!(
-        explicit_merged.tags == vec!["cli"],
-        "expected cli tags, got {:?}",
-        explicit_merged.tags
-    );
-
-    Ok(())
+impl Default for StringTagsArgs {
+    fn default() -> Self {
+        Self {
+            tags: vec![String::from("alpha"), String::from("beta")],
+        }
+    }
 }
 
 /// Verifies numeric typed defaults preserve literal inference when inferred from
@@ -100,40 +118,62 @@ impl Default for RetryArgs {
     }
 }
 
+/// Verifies typed and string collection defaults preserve merge precedence.
 #[rstest]
-fn test_cli_default_as_absent_infers_numeric_default_value_t(prefix: Prefix) -> Result<()> {
-    let (_temp_dir, _cwd_guard) = config_dir("[cmds.retry]\ncount = 5\n")?;
+#[serial]
+fn test_cli_default_as_absent_collection_defaults(prefix: Prefix) -> Result<()> {
+    {
+        let (_temp_dir, _cwd_guard) = config_dir("[cmds.tags]\ntags = [\"file\"]\n")?;
+        let (merged, explicit) =
+            merge_default_and_explicit::<TagsArgs>(&prefix, &["tags"], &["tags", "--tags", "cli"])?;
+        ensure!(merged.tags == vec!["file"]);
+        ensure!(explicit.tags == vec!["cli"]);
+    }
 
-    let matches = RetryArgs::command().get_matches_from(["retry"]);
-    let args = RetryArgs::from_arg_matches(&matches).context("parse retry args")?;
-    let merged = load_and_merge_subcommand_with_matches_with_sources(
-        &prefix,
-        &args,
-        &matches,
-        Arc::new(MapEnv::new()),
-    )
-    .context("merge retry args without explicit CLI value")?;
+    {
+        let (_temp_dir, _cwd_guard) = config_dir("[cmds.string-tags]\ntags = [\"file\"]\n")?;
+        let (merged, explicit) = merge_default_and_explicit::<StringTagsArgs>(
+            &prefix,
+            &["string-tags"],
+            &["string-tags", "--tags", "cli"],
+        )?;
+        ensure!(merged.tags == vec!["file"]);
+        ensure!(explicit.tags == vec!["cli"]);
+    }
+
+    {
+        let (_temp_dir, _cwd_guard) = config_dir("[cmds.retry]\ncount = 5\n")?;
+        let (merged, explicit) = merge_default_and_explicit::<RetryArgs>(
+            &prefix,
+            &["retry"],
+            &["retry", "--count", "9"],
+        )?;
+        ensure!(merged.count == 5);
+        ensure!(explicit.count == 9);
+    }
+
+    Ok(())
+}
+
+/// Verifies generated defaults replay clap parsing without a config file or CLI override.
+#[rstest]
+#[serial]
+fn generated_collection_defaults_match_clap() -> Result<()> {
+    let no_file_dir = tempfile::tempdir().context("create no-file config dir")?;
+    let _cwd_guard = cwd::set_dir(no_file_dir.path())?;
+
+    let tags = TagsArgs::load_from_iter(["tags"]).context("load typed tag defaults")?;
+    ensure!(tags.tags == vec!["alpha", "beta"], "got {:?}", tags.tags);
+
+    let string_tags = StringTagsArgs::load_from_iter(["string-tags"])
+        .context("load delimiter-separated tag defaults")?;
     ensure!(
-        merged.count == 5,
-        "expected file count, got {}",
-        merged.count
+        string_tags.tags == vec!["alpha", "beta"],
+        "got {:?}",
+        string_tags.tags
     );
 
-    let explicit_matches = RetryArgs::command().get_matches_from(["retry", "--count", "9"]);
-    let explicit_args =
-        RetryArgs::from_arg_matches(&explicit_matches).context("parse explicit retry args")?;
-    let explicit_merged = load_and_merge_subcommand_with_matches_with_sources(
-        &prefix,
-        &explicit_args,
-        &explicit_matches,
-        Arc::new(MapEnv::new()),
-    )
-    .context("merge retry args with explicit CLI value")?;
-    ensure!(
-        explicit_merged.count == 9,
-        "expected cli count, got {}",
-        explicit_merged.count
-    );
-
+    let retry = RetryArgs::load_from_iter(["retry"]).context("load retry defaults")?;
+    ensure!(retry.count == 8, "got {}", retry.count);
     Ok(())
 }

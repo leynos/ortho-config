@@ -264,7 +264,11 @@ fn load_impl_uses_ortho_config_reexport_paths() -> Result<()> {
     let env_provider = quote! {
         ortho_config::figment::providers::Env::prefixed("APP_")
     };
-    let default_struct_init = vec![quote! { value: 7 }];
+    let default_struct_init = crate::derive::build::DefaultStructInit {
+        resolutions: vec![],
+        fields: vec![quote! { value: 7 }],
+        cli_default_as_absent_fields: vec![],
+    };
     let config_env_var = quote! { "APP_CONFIG_PATH" };
     let dotfile_name = syn::LitStr::new(".app.toml", proc_macro2::Span::call_site());
     let idents = LoadImplIdents {

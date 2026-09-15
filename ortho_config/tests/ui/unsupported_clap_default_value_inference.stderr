@@ -1,7 +1,7 @@
-error: inferring defaults from clap `default_value` is not yet supported for `cli_default_as_absent`; use `default_value_t`/`default_values_t` or add `#[ortho_config(default = ...)]`. Parser-faithful `default_value` inference is planned as a day-2 follow-up.
+error: clap `default_value` inference for `cli_default_as_absent` does not support nested `Option` and `Vec` wrappers; use a scalar, `Option<T>`, or `Vec<T>`, or provide `#[ortho_config(default = ...)]`
   --> tests/ui/unsupported_clap_default_value_inference.rs:10:5
    |
-10 | /     #[arg(long, default_value = "42")]
+10 | /     #[arg(long, default_value = "value")]
 11 | |     #[ortho_config(cli_default_as_absent)]
-12 | |     answer: u32,
-   | |_______________^
+12 | |     values: Option<Vec<String>>,
+   | |_______________________________^
