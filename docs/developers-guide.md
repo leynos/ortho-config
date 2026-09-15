@@ -762,6 +762,73 @@ If a workflow's behaviour genuinely depends on a feature only present from a
 particular commit onwards, express that as a comment or a changelog note, not
 as a test assertion on the SHA string.
 
+One narrow exception exists, and it is worth stating because it looks like a
+violation. `sccache_wiring_test.py` names `32c8ea64` in a set of pins that
+install sccache while exporting neither half of its wiring, and fails if the
+workflows return to one of them. That is not a lockstep on the current value:
+it never fails a forward bump, it hard-codes nothing that Dependabot will
+change, and it exists because reverting the pin is the one edit that would
+undo this wiring while leaving every other assertion here green.
+
+### sccache: the wrapper and the backend
+
+sccache needs two halves to do anything. The rustc wrapper makes the compiler
+run through it; the backend gives the cache somewhere to live. Either half
+alone is worse than neither, because the job pays the install and reports
+nothing amiss.
+
+This repository ran with neither. The shared Rust setup action installs sccache
+whenever `use-sccache` is true, which is its default, and at pin `32c8ea64` it
+exported no wrapper and selected no backend. Every Rust job installed sccache
+and compiled uncached, which is visible only as a slow build.
+
+The two halves are now set in different places, deliberately:
+
+| Half | Where it is set | Why there |
+| --- | --- | --- |
+| `RUSTC_WRAPPER` | the shared action, not this repository | it must be the absolute path of the sccache the action installed |
+| `SCCACHE_GHA_ENABLED` | job-level `env:` in this repository | it is a choice about where the cache lives, and the action stands aside when a caller has made it |
+
+`RUSTC_WRAPPER` is deliberately absent from every workflow here. A bare
+`RUSTC_WRAPPER: sccache` resolves through `PATH`, and an invocation that
+resolves nothing compiles uncached without entering the hit-rate denominator,
+so the statistic a reader would check cannot show the failure; whitaker #409
+measured 69 such invocations after switching to the action's absolute path. The
+action also stands aside when the caller has already set the variable, so a
+value here would silently replace the path with the bare name.
+
+Three jobs run the shared Rust setup and select the backend: `build-test` and
+`binstall-packaging` in `ci.yml`, and `coverage-upload` in `coverage-main.yml`.
+
+Two Rust lanes are outside this, each for its own reason:
+
+- `mutation-testing.yml` calls a reusable workflow. Caller job `env:` does not
+  propagate into one, and that workflow exposes no sccache input, so there is
+  nothing to set from here.
+- `verify-published-assets` in `release.yml` runs the setup but compiles
+  nothing: it dry-runs `cargo binstall` against already published archives.
+  Note that it is *not* excluded by the action's own
+  `github.event_name != 'release'` guard, which a reader might assume. This
+  workflow triggers on a tag push and on `workflow_dispatch`, never on the
+  `release` event, so that guard never fires here.
+
+`rust-build-release` and `mutation-cargo` stay at their own pin, `6b5cdc2d`.
+Neither serves a lane this wiring governs, and moving them is a separate change
+that needs its own evidence.
+
+`sccache_wiring_test.py` holds four things: that every reference into the
+shared-actions tree sits at one SHA, so a partial repin cannot pass while the
+guide claims otherwise; that the pin is not one of the revisions known to
+export neither half; that no workflow sets `RUSTC_WRAPPER`; and that every job
+discovered to run the shared Rust setup selects a backend, with the exclusions
+named individually and with their reasons rather than as a blanket allowance.
+The discovery is itself pinned, because the other assertions are all satisfied
+by a sweep that finds no jobs.
+
+Five mutations are caught: one reference left at the old pin, the backend
+removed from a job, `RUSTC_WRAPPER` set by name, the sweep narrowed so it finds
+nothing, and an excluded job quietly gaining a backend.
+
 ## Releasing `cargo-orthohelp` binaries
 
 `cargo-orthohelp` is installed by downstream continuous integration (CI) under

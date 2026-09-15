@@ -31,12 +31,25 @@ jobs:
       # generate-coverage kills cargo after RUN_RUST_CARGO_WAIT_TIMEOUT
       # seconds (default 600); the full-suite coverage run needs longer.
       RUN_RUST_CARGO_WAIT_TIMEOUT: '2700'
+      # sccache. The shared Rust setup action installs it and, from this
+      # pin, exports RUSTC_WRAPPER as the absolute path of the sccache it
+      # installed. Before this pin it installed sccache and exported
+      # neither the wrapper nor a backend, so every Rust job here paid the
+      # install and compiled uncached.
+      #
+      # RUSTC_WRAPPER is deliberately absent. Setting it by name leaves
+      # invocations wrapped by whichever sccache is on PATH, and any that
+      # resolve none compile uncached without entering the hit-rate
+      # denominator; whitaker #409 measured 69 such invocations. The
+      # action stands aside when a caller has already set the variable, so
+      # a value here would replace the absolute path with a bare name.
+      SCCACHE_GHA_ENABLED: "true"
     steps:
       - name: Checkout
         uses: actions/checkout@v7
 
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@32c8ea649ea44d40119f348ad48861212532061f
+        uses: leynos/shared-actions/.github/actions/setup-rust@0e3c4d24e43aa48b511d94f3b902711eb02138df
 
       - name: Install bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6  # v2
@@ -47,7 +60,7 @@ jobs:
         # Broadest feature set, so this leg carries the coverage ratchet
         # (one baseline per job); it writes the authoritative baseline that
         # pull-request runs compare against.
-        uses: leynos/shared-actions/.github/actions/generate-coverage@32c8ea649ea44d40119f348ad48861212532061f
+        uses: leynos/shared-actions/.github/actions/generate-coverage@0e3c4d24e43aa48b511d94f3b902711eb02138df
         with:
           output-path: lcov-serde-saphyr.info
           format: lcov
@@ -56,7 +69,7 @@ jobs:
           with-ratchet: 'true'
 
       - name: Test and Measure Coverage (without serde_saphyr)
-        uses: leynos/shared-actions/.github/actions/generate-coverage@32c8ea649ea44d40119f348ad48861212532061f
+        uses: leynos/shared-actions/.github/actions/generate-coverage@0e3c4d24e43aa48b511d94f3b902711eb02138df
         with:
           output-path: lcov-no-serde-saphyr.info
           format: lcov
@@ -76,7 +89,7 @@ jobs:
         env:
           CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}
         if: env.CS_ACCESS_TOKEN != ''
-        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@32c8ea649ea44d40119f348ad48861212532061f
+        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@0e3c4d24e43aa48b511d94f3b902711eb02138df
         with:
           format: lcov
           access-token: ${{ env.CS_ACCESS_TOKEN }}
