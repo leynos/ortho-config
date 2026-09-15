@@ -32,7 +32,9 @@ from pathlib import Path
 import pytest
 import yaml
 
-WORKFLOWS: typ.Final[Path] = Path(__file__).resolve().parents[2] / ".github" / "workflows"
+WORKFLOWS: typ.Final[Path] = (
+    Path(__file__).resolve().parents[2] / ".github" / "workflows"
+)
 
 #: The action whose presence marks a job as one the shared Rust setup
 #: prepares, and therefore one where sccache is installed.
@@ -56,9 +58,11 @@ SAME_TREE_ACTIONS: typ.Final[tuple[str, ...]] = (
 #: to one of these is the regression this contract exists to catch, and
 #: naming them is cheaper and more honest than fetching the action's text
 #: over the network from a test that must run offline.
-PINS_WITHOUT_THE_WRAPPER: typ.Final[frozenset[str]] = frozenset({
-    "32c8ea649ea44d40119f348ad48861212532061f",
-})
+PINS_WITHOUT_THE_WRAPPER: typ.Final[frozenset[str]] = frozenset(
+    {
+        "32c8ea649ea44d40119f348ad48861212532061f",
+    }
+)
 
 #: Jobs that run the shared Rust setup and are nevertheless allowed no
 #: backend, each with the reason it compiles nothing worth caching.
@@ -75,32 +79,58 @@ NO_BACKEND_EXPECTED: typ.Final[dict[str, str]] = {
 _SHA = re.compile(r"@([0-9a-f]{40})\b")
 
 
-def _workflow_documents() -> dict[str, dict[str, typ.Any]]:
-    """Read every workflow document in the repository.
-
-    Returns
-    -------
-    dict[str, dict]
-        File name to parsed document.
-    """
-    return {
-        path.name: yaml.safe_load(path.read_text(encoding="utf-8"))
-        for path in sorted(WORKFLOWS.glob("*.yml"))
-    }
-
-
 def _workflow_text() -> dict[str, str]:
     """Read every workflow document as text.
 
     Returns
     -------
     dict[str, str]
-        File name to raw text.
+        File name to raw text. The single reader; the parsed view below
+        is derived from it so the two cannot disagree about which files
+        are in scope.
     """
     return {
         path.name: path.read_text(encoding="utf-8")
         for path in sorted(WORKFLOWS.glob("*.yml"))
     }
+
+
+def _workflow_documents() -> dict[str, dict[str, typ.Any]]:
+    """Parse every workflow document.
+
+    Returns
+    -------
+    dict[str, dict]
+        File name to parsed document.
+    """
+    return {name: yaml.safe_load(text) for name, text in _workflow_text().items()}
+
+
+def _pinned_shas() -> dict[str, set[str]]:
+    """Map each SHA a same-tree reference names to the files naming it.
+
+    Returns
+    -------
+    dict[str, set[str]]
+        Commit SHA to the workflow file names that pin it.
+
+    Raises
+    ------
+    AssertionError
+        If a reference is not pinned to a 40-hex commit SHA.
+    """
+    found: dict[str, set[str]] = {}
+    for name, text in _workflow_text().items():
+        for line in text.splitlines():
+            action = next((a for a in SAME_TREE_ACTIONS if a in line), None)
+            if action is None:
+                continue
+            match = _SHA.search(line)
+            assert match is not None, (
+                f"{name}: {action} is not pinned to a 40-hex commit SHA"
+            )
+            found.setdefault(match.group(1), set()).add(name)
+    return found
 
 
 def _jobs_running_setup_rust() -> dict[str, dict[str, typ.Any]]:
@@ -129,16 +159,7 @@ def test_the_shared_action_references_share_one_sha() -> None:
     both claim one SHA, and a single reference left behind makes that
     claim false while looking like housekeeping in a diff.
     """
-    found: dict[str, set[str]] = {}
-    for name, text in _workflow_text().items():
-        for action in SAME_TREE_ACTIONS:
-            for line in text.splitlines():
-                if action in line:
-                    match = _SHA.search(line)
-                    assert match is not None, (
-                        f"{name}: {action} is not pinned to a 40-hex commit SHA"
-                    )
-                    found.setdefault(match.group(1), set()).add(name)
+    found = _pinned_shas()
     assert found, "no shared-actions references were found to check"
     assert len(found) == 1, (
         "the shared-actions references are split across more than one SHA: "
@@ -157,8 +178,7 @@ def test_the_pin_is_not_one_that_exports_no_wrapper() -> None:
     text = "\n".join(_workflow_text().values())
     offending = sorted(pin for pin in PINS_WITHOUT_THE_WRAPPER if pin in text)
     assert not offending, (
-        "these pins install sccache without exporting the rustc wrapper: "
-        f"{offending}"
+        f"these pins install sccache without exporting the rustc wrapper: {offending}"
     )
 
 
