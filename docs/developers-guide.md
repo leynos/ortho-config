@@ -888,20 +888,20 @@ tarball verification resolves the re-export against the published crate and
 fails with "no `OrthoConfigSubcommandDocs` in the root". Nothing else in CI
 sees that.
 
-Before it packages, lading runs a pre-flight: `cargo check --workspace
---all-targets`, then `cargo test`, both into a throwaway target directory.
-`lading.toml` sets `preflight.unit_tests_only`, which narrows the second of
-those to the library and binary unit tests.
+Before it packages, lading runs a pre-flight:
+`cargo check --workspace --all-targets`, then `cargo test`, both into a
+throwaway target directory. `lading.toml` sets `preflight.unit_tests_only`,
+which narrows the second of those to the library and binary unit tests.
 
 In CI the pre-flight is skipped outright. The `Publish dry run` step sets
 `LADING_SKIP_PREFLIGHT`, because both `Test and Measure Coverage` steps are
 unconditional and run ahead of it, so the pre-flight would be a second
 execution of a workspace this job has already passed and failed its lane on.
 The skip drops the auxiliary builds and the cargo check and test pair, and
-nothing else. The `Cargo.lock` freshness guard still runs, and the
-working-tree guard is unaffected: it is opt-in through `--forbid-dirty`
-either way, and `PUBLISH_CHECK_FLAGS` is empty, so neither a skipped nor an
-executed pre-flight enforces a clean tree here. The packaging still runs.
+nothing else. The `Cargo.lock` freshness guard still runs, and the working-tree
+guard is unaffected: it is opt-in through `--forbid-dirty` either way, and
+`PUBLISH_CHECK_FLAGS` is empty, so neither a skipped nor an executed pre-flight
+enforces a clean tree here. The packaging still runs.
 
 The variable is set on the step rather than in `lading.toml`, because a
 configuration file cannot tell a CI run from a local one. On a workstation
@@ -911,9 +911,9 @@ both halves of that arrangement, and pins the packaging from both ends: the
 step's command as tokens, and the Make target's recipe handing lading the
 `publish` subcommand. Either half alone is defeatable.
 
-lading itself is pinned. `LADING_REF` in the Makefile holds the full commit
-SHA of the v0.3.1 release commit, which is the first release carrying the skip.
-A SHA rather than the tag, because a tag can be repointed; without any pin,
+lading itself is pinned. `LADING_REF` in the Makefile holds the full commit SHA
+of the v0.3.1 release commit, which is the first release carrying the skip. A
+SHA rather than the tag, because a tag can be repointed; without any pin,
 `uvx --from git+...` tracks lading's default branch and would change what the
 release gate runs with no edit to this repository.
 
