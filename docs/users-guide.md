@@ -428,8 +428,8 @@ section.
 
 ## Cargo external-subcommand entry points
 
-Cargo runs `cargo <name> [OPTIONS]` by locating a binary named `cargo-<name>`
-on `PATH` and executing it with the subcommand name injected as the second
+Cargo runs `cargo <name> [OPTIONS]` by locating a binary named `cargo-<name>` on
+`PATH` and executing it with the subcommand name injected as the second
 argument: argv becomes `["<path>/cargo-<name>", "<name>", OPTIONS...]`. A
 parser that models only `cargo-<name> [OPTIONS]` rejects that injected `<name>`
 token before any application logic can run.
@@ -467,14 +467,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 The returned command accepts both invocation forms with the same inner options
 and no duplicated parser setup:
 
-- `cargo demo --verbose` (Cargo dispatch: argv `['cargo-demo', 'demo',
-  '--verbose']`), and
+- `cargo demo --verbose` (Cargo dispatch: argv
+  `['cargo-demo', 'demo', '--verbose']`), and
 - `cargo-demo demo --verbose` (direct invocation with the same injected
   token).
 
-The adoption cost is that options move one level down: callers read them
-through `subcommand_matches("demo")` on the parsed matches rather than from
-the top-level matches.
+The adoption cost is that options move one level down: callers read them through
+`subcommand_matches("demo")` on the parsed matches rather than from the
+top-level matches.
 
 The wrapper is CLI entry-point structure, not configuration loading. It does
 not change `OrthoConfig`'s merge precedence (defaults → files → environment →
@@ -483,9 +483,9 @@ configuration-loading pathway.
 
 Derive-based callers do not need the helper. Wrap the `Args` struct in a
 single-variant `#[command(subcommand)]` enum, as `cargo-orthohelp` does in
-`cargo-orthohelp/src/cli/mod.rs`; the [Generate help from the same
-metadata](#generate-help-from-the-same-metadata) section above is the in-repo
-reference for that derive path.
+`cargo-orthohelp/src/cli/mod.rs`; the
+[Generate help from the same metadata](#generate-help-from-the-same-metadata)
+section above is the in-repo reference for that derive path.
 
 ### Binary-level obligations
 
@@ -533,11 +533,10 @@ fn write_augmented_clap_error(error: &clap::Error) -> std::io::Result<()> {
 - **Tracing.** Per ADR-004, Cargo-facing binaries should initialize a tracing
   subscriber before parsing and emit a debug event at the dispatch boundary
   once the injected token is accepted. `cargo-orthohelp/src/main.rs` is the
-  reference implementation: `init_tracing` installs a
-  `tracing_subscriber::fmt` subscriber from the default environment filter,
-  and a `tracing::debug!` event records the dispatch once parsing succeeds.
-  The library helper does not and must not install a subscriber; libraries must
-  not install global recorders.
+  reference implementation: `init_tracing` installs a `tracing_subscriber::fmt`
+  subscriber from the default environment filter, and a `tracing::debug!` event
+  records the dispatch once parsing succeeds. The library helper does not and
+  must not install a subscriber; libraries must not install global recorders.
 
 The README now signposts the shipped helper. Full derive-template examples
 remain deferred to roadmap item 8.3.2.

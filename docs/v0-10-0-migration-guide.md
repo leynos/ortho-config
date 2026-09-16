@@ -2,17 +2,17 @@
 
 ## Who should read this
 
-Read this guide when adopting source-aware environment merging,
-parser-faithful clap string defaults, or the Cargo external-subcommand helper.
-Existing callers can upgrade without changing their loading code:
-process-backed behaviour remains the default, and applications that do not use
-the Cargo helper require no changes.
+Read this guide when adopting source-aware environment merging, parser-faithful
+clap string defaults, or the Cargo external-subcommand helper. Existing callers
+can upgrade without changing their loading code: process-backed behaviour
+remains the default, and applications that do not use the Cargo helper require
+no changes.
 
 ## Keep the default process behaviour
 
-`load()`, `load_from_iter()`, and the existing subcommand merge methods continue
-to read the process environment. No migration is required for applications
-that do not need a hermetic environment boundary.
+`load()`, `load_from_iter()`, and the existing subcommand merge methods
+continue to read the process environment. No migration is required for
+applications that do not need a hermetic environment boundary.
 
 ## Opt into injected environment sources
 
@@ -52,8 +52,8 @@ rather than silently changing its key mapping.
 
 ## Inject a subcommand merge source
 
-For an `OrthoConfig`-derived subcommand, pass a
-`SharedScanEnvSource` to `load_and_merge_with_sources`:
+For an `OrthoConfig`-derived subcommand, pass a `SharedScanEnvSource` to
+`load_and_merge_with_sources`:
 
 ```rust
 let environment = Arc::new(

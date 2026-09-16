@@ -336,14 +336,14 @@ a variable name may still request, copy, or log that variable's value.
 supplies a fixed, deterministic set of values for tests and for embedding
 `OrthoConfig` in another tool. The environment merge layer has a deliberately
 separate `ScanEnvSource` capability: `CsvEnv::with_source` enumerates only
-through that explicit type, retaining `EnvSource`'s lookup-only safety property.
-The injected `CsvEnv` path replays only its declarative prefix, case, split, and
-CSV transforms; arbitrary `map` and `filter_map` closures are opaque and are
-rejected when a source is injected. The process-backed path remains delegated to
-figment and keeps its existing behaviour. Source-aware derived loading uses
-`OrthoConfig::load_from_iter_with_sources`, so one `MapEnv` can drive discovery
-and `APP_*` merging without a process environment mutation. This completes
-[issue #412](https://github.com/leynos/ortho-config/issues/412).
+through that explicit type, retaining `EnvSource`'s lookup-only safety
+property. The injected `CsvEnv` path replays only its declarative prefix, case,
+split, and CSV transforms; arbitrary `map` and `filter_map` closures are opaque
+and are rejected when a source is injected. The process-backed path remains
+delegated to figment and keeps its existing behaviour. Source-aware derived
+loading uses `OrthoConfig::load_from_iter_with_sources`, so one `MapEnv` can
+drive discovery and `APP_*` merging without a process environment mutation.
+This completes [issue #412](https://github.com/leynos/ortho-config/issues/412).
 
 Default project-root resolution is a distinct boundary.
 `ConfigDiscoveryBuilder` stores a private resolver closure that defaults to
@@ -862,9 +862,9 @@ clap::Command::new("cargo")
     )
 ```
 
-The helper shipped in 8.3.1 as `ortho_config::cargo::external_subcommand`.
-Help renders two forms: the top-level usage is `Usage: cargo <COMMAND>`, and
-the inner subcommand usage is `Usage: cargo orthohelp [OPTIONS]`. The installed
+The helper shipped in 8.3.1 as `ortho_config::cargo::external_subcommand`. Help
+renders two forms: the top-level usage is `Usage: cargo <COMMAND>`, and the
+inner subcommand usage is `Usage: cargo orthohelp [OPTIONS]`. The installed
 binary name is carried as the inner command's display name, so `--version`
 output names the installed binary; see the ADR-004 amendment.
 
