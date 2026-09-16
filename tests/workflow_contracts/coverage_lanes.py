@@ -76,13 +76,20 @@ def _watchdog_of(job: dict[str, typ.Any], step: dict[str, typ.Any]) -> float | N
     float or None
         The budget in seconds, or None when neither sets one.
     """
+    # Stop at the innermost scope that declares the variable, blank
+    # included. GitHub takes the most specific declaration, and an empty
+    # string is a declaration: a step setting the variable to "" gives
+    # the process an empty value, not the job's. Carrying on outward
+    # past a blank credits the lane with a budget its process never
+    # sees, which is the reading that certifies a ceiling nothing
+    # enforces.
     for owner in (step, job):
         environment = owner.get("env")
         if not isinstance(environment, dict):
             continue
-        budget = _budget_from(environment.get(WATCHDOG_VARIABLE))
-        if budget is not None:
-            return budget
+        if WATCHDOG_VARIABLE not in environment:
+            continue
+        return _budget_from(environment[WATCHDOG_VARIABLE])
     return None
 
 
@@ -139,9 +146,7 @@ def _jobs_in(document: dict[str, typ.Any]) -> dict[str, dict[str, typ.Any]]:
     jobs = document.get("jobs")
     if not isinstance(jobs, dict):
         return {}
-    return {
-        str(name): job for name, job in jobs.items() if isinstance(job, dict)
-    }
+    return {str(name): job for name, job in jobs.items() if isinstance(job, dict)}
 
 
 def _is_minutes(raw: object) -> bool:

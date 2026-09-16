@@ -1095,6 +1095,15 @@ text: its parser special-cases `0` before reading a character, so `" 0 "` is
 refused and a reader that stripped whitespace first would accept a duration
 nextest rejects. Case is significant, so `m` is minutes and `M` is months.
 
+The watchdog is resolved at the innermost scope that declares it, blank
+included. GitHub takes the most specific declaration of an environment
+variable, and an empty string is a declaration: a step setting
+`RUN_RUST_CARGO_WAIT_TIMEOUT` to `""` hands that step's process an empty value,
+not the job's. A reader that skips blanks and carries on outward credits the
+lane with a budget nothing enforces, and the ordering assertion then passes
+over a ceiling that does not exist. A case covers it, and restoring the
+skip-and-continue reading fails that case alone.
+
 Whitespace is Rust's, not Python's, and the class is written out for the same
 reason the digit class below is. Rust's `char::is_whitespace` is the Unicode
 White_Space property; Python's `\s` is that property plus U+001C to U+001F, the

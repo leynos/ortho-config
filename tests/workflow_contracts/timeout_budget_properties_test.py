@@ -596,6 +596,26 @@ def test_a_job_is_read_from_a_synthetic_workflow() -> None:
     assert job.job_timeout == pytest.approx(8100.0), "minutes convert to seconds"
 
 
+def test_a_step_declaring_the_watchdog_empty_overrides_its_job() -> None:
+    """A blank is a declaration, and the innermost one wins.
+
+    GitHub takes the most specific declaration of an environment
+    variable, and an empty string is a declaration: a step setting the
+    watchdog to "" hands the process an empty value, not the job's
+    1,800. A reader that skips blanks and carries on outward credits the
+    lane with a budget nothing enforces, and the ordering assertion then
+    passes over a ceiling that does not exist.
+    """
+    document = _workflow()
+    job = document["jobs"]["build-test"]
+    job["steps"][0]["env"] = {WATCHDOG_VARIABLE: ""}
+    (read,) = coverage_jobs_of({"ci.yml": document})
+    assert read.watchdogs == (None, 1800.0), (
+        "the step's empty declaration must override its job's value for that "
+        "step alone, rather than being skipped in favour of the job's"
+    )
+
+
 def test_a_job_without_a_ceiling_reads_as_none_rather_than_absent() -> None:
     """An absent entry would make the ceiling assertion skip the lane.
 
