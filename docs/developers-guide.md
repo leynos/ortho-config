@@ -773,10 +773,11 @@ both halves of that arrangement, and pins the packaging from both ends: the
 step's command as tokens, and the Make target's recipe handing lading the
 `publish` subcommand. Either half alone is defeatable.
 
-lading itself is pinned. `LADING_REF` in the Makefile names the v0.3.1 tag,
-which is the first release carrying the skip; without a pin, `uvx --from
-git+...` would change what the release gate runs with no edit to this
-repository.
+lading itself is pinned. `LADING_REF` in the Makefile holds the full commit
+SHA of the v0.3.1 release commit, which is the first release carrying the skip.
+A SHA rather than the tag, because a tag can be repointed; without any pin,
+`uvx --from git+...` tracks lading's default branch and would change what the
+release gate runs with no edit to this repository.
 
 ## Releasing `cargo-orthohelp` binaries
 

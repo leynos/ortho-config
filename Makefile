@@ -79,8 +79,14 @@ python-test-deps: ## Ensure Python test dependencies are provisioned
 # rather than displayed: they document how a Makefile recipe is parsed, and
 # an example that has drifted from the parser is worse than none. Collection
 # moved from 43 to 46 when this was added.
+#
+# Upper bounds as well as lower: this target bypasses
+# scripts/requirements-test.txt and has no lockfile, so an unbounded
+# requirement lets a future major release change collection or doctest
+# behaviour with no edit to this repository.
 test-workflow-contracts: ## Validate the workflow caller contracts
-	$(UV) run --with 'pytest>=8' --with 'pyyaml>=6' pytest tests/workflow_contracts \
+	$(UV) run --with 'pytest>=8,<10' --with 'pyyaml>=6,<7' pytest \
+		tests/workflow_contracts \
 		--doctest-modules -q
 
 # will match target/debug/libmy_library.rlib and target/release/libmy_library.rlib
