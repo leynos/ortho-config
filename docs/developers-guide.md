@@ -821,8 +821,23 @@ test of the extracted binary on Linux, macOS, and Windows.
 `make markdownlint` enforces en-GB-oxendict (Oxford) spelling over the
 repository's Markdown prose with [`typos`](https://github.com/crate-ci/typos),
 as required by the [documentation style guide](documentation-style-guide.md).
-Run the gate on its own with `make spellcheck`. The generated configuration
-lives in the repository-root `typos.toml` and works in three layers:
+Run the gate on its own with `make spellcheck`. The whole gate is the shared
+[`typos-config-builder`](https://github.com/leynos/typos-config-builder), run
+through `uv tool run` and pinned by the Makefile `TYPOS_CONFIG_BUILDER_VERSION`
+variable, so local runs and CI use the same version of both the builder and the
+`typos` binary it pins:
+
+```bash
+make spellcheck
+```
+
+The gate renders `typos.toml`, runs `typos` over the tracked Markdown files,
+and then enforces the shared `[phrases.corrections]` policy, which rejects the
+hyphenated form of "handwritten". Any stage that reports findings fails the
+gate.
+
+The generated configuration lives in the repository-root `typos.toml` and works
+in three layers:
 
 1. The `en-gb` locale corrects American spellings (`color` to `colour`,
    `behavior` to `behaviour`, `analyzed` to `analysed`).
@@ -834,14 +849,13 @@ lives in the repository-root `typos.toml` and works in three layers:
 3. `typos.local.toml` adds only repository-specific names, quotations,
    deliberate fixtures, and exclusions that do not belong in the shared base.
 
-`typos.toml` is a generated file. Never edit its entries by hand. The generator
-refreshes the shared dictionary into untracked `.typos-oxendict-base.toml` only
-when its configured authority is newer, merges `typos.local.toml`, and writes
-deterministic output:
-
-```bash
-uv run scripts/generate_typos_config.py
-```
+`typos.toml` is a generated file. Never edit its entries by hand. The gate
+regenerates it on every run from the live shared dictionary, which it refreshes
+into untracked `.typos-oxendict-base.toml`, merged with the `typos.local.toml`
+overlay. A word added to the shared dictionary therefore reaches this
+repository on its next run, with no change here. Because the dictionary is live,
+`typos.toml` must never be drift checked in continuous integration; any hand
+edit is overwritten on the next run.
 
 Generic Oxford stems and corrections belong in the shared dictionary maintained
 by `leynos/agent-helper-scripts`. Keep local entries narrow: this repository's
@@ -850,38 +864,21 @@ names, and ExecPlan headings. Quoted APIs keep US spelling per the
 documentation style guide. Inline code is spellchecked, so add a narrowly
 backtick-bound pattern to `typos.local.toml` for an upstream API or identifier
 rather than adding a word-level exception. Fenced code blocks remain ignored.
-The helper tests cover dictionary validation, source-scoped HTTP validators,
-freshness decisions, offline fallback, deterministic rendering, and generated
-configuration drift.
 
-`scripts/typos_rollout_http.py` owns shared-cache freshness, HTTPS transport
-security and persistence coordination. Only `scripts/typos_rollout.py` may
-compose it with dictionary validation. The established
-`scripts/generate_typos_config.py` adapter retains its no-argument
-`render_config()` and positional `main(output)` interfaces for operator
-automation; application and release code must not reuse these spelling-policy
-internals.
-
-The gate runs over the `MD_FILES_FIND` Markdown file list with
-`--force-exclude` so the `typos.toml` excludes also apply to explicitly passed
-paths (for example, Markdown that appears inside `target` build output). To fix
-findings mechanically, rerun the gate's `typos` command with `--write-changes`
-appended, substituting the version from the Makefile `TYPOS_VERSION` variable:
+The gate passes `--force-exclude` so the `typos.toml` excludes also apply to
+explicitly passed paths, for example Markdown that appears inside `target`
+build output. To fix findings mechanically, run `typos` directly against the
+generated configuration with `--write-changes`:
 
 ```bash
-uv tool run typos@<TYPOS_VERSION> --config typos.toml --force-exclude \
-  --write-changes <files>
+uv tool run typos --config typos.toml --force-exclude --write-changes <files>
 ```
 
 Review automated rewrites before committing; spelling corrections must not
 touch code samples, API names, or quoted material.
 
-`typos` is a Rust binary rather than a locked Python dependency, so its version
-is pinned once in the Makefile `TYPOS_VERSION` variable and run through
-`uv tool run typos@$(TYPOS_VERSION)`. CI inherits the pin by calling
-`make spellcheck`. The target first runs the isolated helper tests, refreshes
-and regenerates the configuration, and fails when the tracked output drifts.
-When bumping the version, update `TYPOS_VERSION` and rerun the gate.
+Bumping `TYPOS_CONFIG_BUILDER_VERSION` is only needed for builder code changes;
+dictionary changes need no bump.
 
 ## Command checklist
 
