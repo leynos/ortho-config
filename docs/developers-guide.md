@@ -789,6 +789,8 @@ The two halves are now set in different places, deliberately:
 | `RUSTC_WRAPPER` | the shared action, not this repository | it must be the absolute path of the sccache the action installed |
 | `SCCACHE_GHA_ENABLED` | job-level `env:` in this repository | it is a choice about where the cache lives, and the action stands aside when a caller has made it |
 
+*Table 1: Which half of the sccache wiring is set where, and why.*
+
 `RUSTC_WRAPPER` is deliberately absent from every workflow here. A bare
 `RUSTC_WRAPPER: sccache` resolves through `PATH`, and an invocation that
 resolves nothing compiles uncached without entering the hit-rate denominator,
@@ -825,6 +827,16 @@ named individually and with their reasons rather than as a blanket allowance.
 The discovery is itself pinned, because the other assertions are all satisfied
 by a sweep that finds no jobs.
 
+Two of its sweeps are open rather than enumerated, and both had to be widened
+after review found them closed. References are matched by the
+`leynos/shared-actions/` prefix with `rust-build-release` and `mutation-cargo`
+named as the exceptions, rather than by listing the four paths in use today: a
+governed reference added later under an unlisted path would otherwise sit at
+any SHA it liked while the contract reported agreement. And workflows are read
+from both `*.yml` and `*.yaml`, because GitHub runs either, so a sweep over one
+suffix claims repository-wide coverage while ignoring half the places a Rust
+job can be declared.
+
 Each caching job also ends with a `Report sccache statistics` step, and the
 contract requires it. The wiring is invisible from the outside: a job with a
 wrapper and a job without one both succeed, and only sccache's own compile
@@ -839,11 +851,14 @@ compile requests as well as hit rates: an invocation that resolved no wrapper
 never enters the denominator, so a wrapper defect raises the request count
 rather than lowering the rate.
 
-Seven mutations are caught: one reference left at the old pin, the backend
+Nine mutations are caught: one reference left at the old pin, the backend
 removed from a job, `RUSTC_WRAPPER` set by name, the sweep narrowed so it finds
 nothing, an excluded job quietly gaining a backend, the statistics step removed,
-and the statistics reported through a bare `sccache` rather than
-`SCCACHE_PATH`.
+the statistics reported through a bare `sccache` rather than `SCCACHE_PATH`, a
+governed reference added under a new path at a different SHA, and a Rust job
+declared in a `.yaml` workflow without a backend. The last two passed before the
+sweeps were widened, which is how they were shown to be real rather than
+theoretical.
 
 ## Releasing `cargo-orthohelp` binaries
 
