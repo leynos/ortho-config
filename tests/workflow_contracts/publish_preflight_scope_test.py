@@ -16,7 +16,6 @@ Run via ``make test-workflow-contracts``.
 
 from __future__ import annotations
 
-import itertools
 import re
 import shlex
 import tomllib
@@ -25,6 +24,7 @@ from pathlib import Path
 
 import pytest
 import yaml
+from makefile_support import lading_subcommand, recipe_lines
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 CI_WORKFLOW_PATH = REPOSITORY_ROOT / ".github" / "workflows" / "ci.yml"
@@ -125,91 +125,6 @@ def step_index(job: dict[str, typ.Any], name: str) -> int:
             return index
     message = f"{BUILD_TEST_JOB!r} declares no step named {name!r}"
     raise AssertionError(message)
-
-
-def recipe_lines(makefile: str, target: str) -> list[str]:
-    r"""Return the recipe lines of one Make target.
-
-    Parameters
-    ----------
-    makefile : str
-        The text of a Makefile.
-    target : str
-        The target to read.
-
-    Returns
-    -------
-    list of str
-        The target's tab-indented recipe lines, empty when no rule defines
-        that target.
-
-    Examples
-    --------
-    >>> recipe_lines("all:\n\techo hi\n", "all")
-    ['echo hi']
-    >>> recipe_lines("all:\n\techo hi\n", "absent")
-    []
-    """
-    rule = re.compile(rf"^{re.escape(target)}\s*:(?!=)", re.MULTILINE)
-    match = rule.search(makefile)
-    if match is None:
-        return []
-    body = makefile[match.end() :].splitlines()[1:]
-    return [line[1:] for line in itertools.takewhile(is_recipe_line, body)]
-
-
-def is_recipe_line(line: str) -> bool:
-    r"""Report whether a line belongs to the recipe currently being read.
-
-    Returns
-    -------
-    bool
-        True for a tab-indented line, which Make treats as a recipe line.
-
-    Examples
-    --------
-    >>> is_recipe_line("\techo hi"), is_recipe_line("other:")
-    (True, False)
-    """
-    return line.startswith("\t")
-
-
-def lading_subcommand(makefile: str, target: str) -> str | None:
-    r"""Return the lading subcommand a Make target's recipe invokes.
-
-    The recipe names lading through a variable, so the token is matched by
-    suffix: `$(LADING)` expands to a `uvx --from ... lading` invocation.
-
-    Returns
-    -------
-    str or None
-        The first token after the one naming lading, or ``None`` when the
-        recipe runs no lading command or names no subcommand.
-
-    Examples
-    --------
-    >>> lading_subcommand("publish-check:\n\t$(LADING) publish .\n",
-    ...                   "publish-check")
-    'publish'
-    >>> lading_subcommand("publish-check:\n\techo nothing\n",
-    ...                   "publish-check") is None
-    True
-    """
-    for line in recipe_lines(makefile, target):
-        tokens = shlex.split(line, comments=True)
-        named = next(
-            (
-                index
-                for index, token in enumerate(tokens)
-                if token == "lading" or token.upper().endswith("LADING)")
-            ),
-            None,
-        )
-        if named is None:
-            continue
-        following = tokens[named + 1 :]
-        return following[0] if following else None
-    return None
 
 
 def test_the_preflight_runs_unit_tests_only(
@@ -340,4 +255,70 @@ def test_the_packaging_target_invokes_lading_publish() -> None:
         f"the {PACKAGING_TARGET!r} target runs `lading {subcommand}`, not "
         f"`lading {PACKAGING_SUBCOMMAND}`; only the publish subcommand builds "
         f"each crate from its own packaged sources"
+    )
+
+
+#: The variable the Makefile must resolve lading through, and the shape its
+#: value must take. A full commit SHA, because a tag can be repointed and an
+#: absent pin tracks lading's default branch: either way the release gate
+#: would change what it runs with no edit to this repository. The value
+#: itself is not asserted, so bumping the pin stays a one-line change.
+LADING_PIN_VARIABLE: typ.Final[str] = "LADING_REF"
+LADING_PIN_RE: typ.Final = re.compile(
+    rf"^{LADING_PIN_VARIABLE}\s*\?=\s*([0-9a-f]{{40}})\s*$", re.MULTILINE
+)
+
+#: The `uvx --from` spec the lading command must use, with the pin
+#: interpolated rather than a bare repository URL.
+LADING_SPEC_RE: typ.Final = re.compile(
+    rf"^LADING\s*\?=.*git\+https://github\.com/leynos/lading@\$\("
+    rf"{LADING_PIN_VARIABLE}\).*$",
+    re.MULTILINE,
+)
+
+#: The flag that makes the contract helpers' own examples run.
+DOCTEST_FLAG: typ.Final[str] = "--doctest-modules"
+CONTRACT_TARGET: typ.Final[str] = "test-workflow-contracts"
+
+
+def test_lading_is_pinned_to_a_commit() -> None:
+    """An unpinned lading changes the release gate with no edit here.
+
+    Before this was pinned, `uvx --from git+...` resolved lading's default
+    branch on every run, so what the gate did depended on when it ran. The
+    SHA's shape is asserted rather than its value, so bumping the pin does not
+    become a two-file chore.
+    """
+    makefile = MAKEFILE_PATH.read_text(encoding="utf-8")
+    assert LADING_PIN_RE.search(makefile), (
+        f"the Makefile sets no {LADING_PIN_VARIABLE} to a full 40-hex commit "
+        f"SHA; without one the publish gate follows lading's default branch"
+    )
+
+
+def test_the_lading_command_uses_the_pin() -> None:
+    """Declaring the pin is not enough: the command must interpolate it.
+
+    A `LADING_REF` nothing reads is a comment. The companion to the test
+    above, because either half alone leaves the gate unpinned in practice.
+    """
+    makefile = MAKEFILE_PATH.read_text(encoding="utf-8")
+    assert LADING_SPEC_RE.search(makefile), (
+        f"the LADING command does not resolve lading at "
+        f"$({LADING_PIN_VARIABLE}); the pin above would then be unused"
+    )
+
+
+def test_the_contract_gate_runs_its_own_examples() -> None:
+    """The helpers here carry examples, so they must be executed.
+
+    They document how a Makefile recipe is parsed. An example that has
+    drifted from the parser is worse than none, because it reads as verified.
+    """
+    makefile = MAKEFILE_PATH.read_text(encoding="utf-8")
+    recipe = " ".join(recipe_lines(makefile, CONTRACT_TARGET))
+    assert recipe, f"the Makefile defines no {CONTRACT_TARGET!r} recipe"
+    assert DOCTEST_FLAG in recipe, (
+        f"the {CONTRACT_TARGET!r} recipe does not pass {DOCTEST_FLAG}, so the "
+        f"examples in these helpers are displayed rather than run"
     )
