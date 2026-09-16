@@ -48,6 +48,11 @@ def recipe_lines(makefile: str, target: str) -> list[str]:
 def is_recipe_line(line: str) -> bool:
     r"""Report whether a line belongs to the recipe currently being read.
 
+    Parameters
+    ----------
+    line : str
+        One line of a Makefile, taken in the order they appear.
+
     Returns
     -------
     bool
@@ -66,6 +71,13 @@ def lading_subcommand(makefile: str, target: str) -> str | None:
 
     The recipe names lading through a variable, so the token is matched by
     suffix: `$(LADING)` expands to a `uvx --from ... lading` invocation.
+
+    Parameters
+    ----------
+    makefile : str
+        The text of a Makefile.
+    target : str
+        The target whose recipe is read.
 
     Returns
     -------
