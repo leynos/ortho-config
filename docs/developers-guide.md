@@ -22,17 +22,16 @@ and generated loader code. `ortho_config_macros/src/derive/parse/clap_attrs.rs`
 retains the raw `default_value`, the leaf type and field shape, and parser
 hints such as `value_parser`, `value_enum`, delimiters, and enum case handling.
 Keep this metadata in the parse intermediate representation (IR); do not
-reconstruct it from generated tokens later in the pipeline.
-The parser-faithful approach is recorded in the
-[design decision log](design.md#9-decision-log).
+reconstruct it from generated tokens later in the pipeline. The parser-faithful
+approach is recorded in the [design decision log](design.md#9-decision-log).
 
 The parse layer accepts scalar, `Option<T>`, and `Vec<T>` fields. It rejects
 nested wrappers and map fields when their clap string default cannot be
 replayed faithfully. Unsupported shapes should receive a focused compile-time
 diagnostic that points to an explicit `#[ortho_config(default = ...)]`
-alternative. Parser settings that change tokenization or accepted spelling
-must either be retained in the IR and applied to the synthetic argument, or
-cause the shape to be rejected during parsing.
+alternative. Parser settings that change tokenization or accepted spelling must
+either be retained in the IR and applied to the synthetic argument, or cause
+the shape to be rejected during parsing.
 
 `ortho_config_macros/src/derive/build/defaults.rs` owns the replay boundary.
 `DefaultStructInit` keeps fallible default resolutions separate from the
@@ -46,9 +45,9 @@ metadata.
 
 When changing this path, update parse-IR tests, generated-loader integration
 tests, and compile-fail coverage for unsupported shapes. Include cases where a
-file or environment value overrides the inferred default, while an explicit
-CLI value still wins. Run the standard quality gates before requesting a
-CodeRabbit review.
+file or environment value overrides the inferred default, while an explicit CLI
+value still wins. Run the standard quality gates before requesting a CodeRabbit
+review.
 
 ### Nextest test-group serialization
 
@@ -313,13 +312,12 @@ effectively read-only infrastructure.
 Keep richer fixture families isolated. For example, `NestedDocsConfig` and
 `NestedDocsContext` back `docs_ir_nested.feature`, and their steps live in a
 fixture-specific module rather than expanding unrelated step files. Likewise,
-`CargoContext` and its
-`#[fixture]` provider plus the `cargo` steps live in
+`CargoContext` and its `#[fixture]` provider plus the `cargo` steps live in
 `tests/rstest_bdd/behaviour/steps/cargo_steps.rs`, backing
 `cargo_entry_point.feature` (scenarios: Cargo dispatch parses the inner
-options; bare invocation without the injected token is rejected), also
-isolated in a fixture-specific steps module. Future contributors should extend
-the existing fixture families rather than duplicate them.
+options; bare invocation without the injected token is rejected), also isolated
+in a fixture-specific steps module. Future contributors should extend the
+existing fixture families rather than duplicate them.
 
 ### Integration test targets
 
@@ -508,28 +506,27 @@ bounded fields:
 - `source`: `process` or `injected`;
 - `outcome`: `attempt`, `success`, or `failure`; and
 - `category`: `none`, `opaque_key_transform`, `invalid_nesting`, `cli`,
-  `file`, `cyclic_extends`, `gathering`, `merge`, `validation`, or
-  `aggregate`.
+  `file`, `cyclic_extends`, `gathering`, `merge`, `validation`, or `aggregate`.
 
 `CsvEnv` emits process-backed and injected events. Derive-generated loads and
-subcommand loads emit events when their source-aware entry points are used.
-The events never contain environment values, keys, paths, configuration data,
+subcommand loads emit events when their source-aware entry points are used. The
+events never contain environment values, keys, paths, configuration data,
 caller-supplied prefixes, or raw error text. Error categories are reduced to
 the closed vocabulary before emission so subscribers can aggregate failures
 without receiving sensitive input.
 
 Capture tests must cover successful and failing paths for each emitting
-operation. They assert the operation, source, outcome, and category fields,
-and verify that captured events contain neither injected values nor keys or
-paths from the test inputs. The library does not install a global subscriber;
+operation. They assert the operation, source, outcome, and category fields, and
+verify that captured events contain neither injected values nor keys or paths
+from the test inputs. The library does not install a global subscriber;
 applications attach their own capture or export layer at the boundary.
 
 With the optional `metrics` feature enabled, the same merge boundaries also
-increment `ortho_config.merge.attempts` and
-`ortho_config.merge.outcomes`. Both counter families use only the bounded
-`operation`, `source`, `outcome`, and `category` labels described above; the
-attempt counter uses `attempt` and `none` for its outcome and category. No
-metrics recorder is installed by the library.
+increment `ortho_config.merge.attempts` and `ortho_config.merge.outcomes`. Both
+counter families use only the bounded `operation`, `source`, `outcome`, and
+`category` labels described above; the attempt counter uses `attempt` and
+`none` for its outcome and category. No metrics recorder is installed by the
+library.
 
 ## Digest rendering
 
@@ -746,21 +743,21 @@ a no-source-build policy, so every release must carry prebuilt archives that
 for five targets, each built on a runner of its own architecture and operating
 system rather than cross-compiled:
 
-| Target                       | Runner            |
-| ---------------------------- | ----------------- |
-| `x86_64-unknown-linux-gnu`   | `ubuntu-24.04`    |
-| `aarch64-unknown-linux-gnu`  | `ubuntu-24.04-arm`|
-| `x86_64-apple-darwin`        | `macos-15-intel`  |
-| `aarch64-apple-darwin`       | `macos-latest`    |
-| `x86_64-pc-windows-msvc`     | `windows-latest`  |
+| Target                      | Runner             |
+| --------------------------- | ------------------ |
+| `x86_64-unknown-linux-gnu`  | `ubuntu-24.04`     |
+| `aarch64-unknown-linux-gnu` | `ubuntu-24.04-arm` |
+| `x86_64-apple-darwin`       | `macos-15-intel`   |
+| `aarch64-apple-darwin`      | `macos-latest`     |
+| `x86_64-pc-windows-msvc`    | `windows-latest`   |
 
 ### Archive layout
 
 `scripts/release_archive.py` builds one target and writes
 `dist/cargo-orthohelp-<target>-v<version>.tgz`, holding exactly one member,
-`cargo-orthohelp-<target>-v<version>/cargo-orthohelp` (with `.exe` on
-Windows), plus a `sha256sum`-compatible `.sha256` sidecar. Member metadata and
-the gzip timestamp are fixed, so rebuilding a tag reproduces the same bytes.
+`cargo-orthohelp-<target>-v<version>/cargo-orthohelp` (with `.exe` on Windows),
+plus a `sha256sum`-compatible `.sha256` sidecar. Member metadata and the gzip
+timestamp are fixed, so rebuilding a tag reproduces the same bytes.
 
 That layout is a contract with the `[package.metadata.binstall]` templates in
 `cargo-orthohelp/Cargo.toml`: `pkg-url` renders the archive name and `bin-dir`
@@ -769,15 +766,15 @@ renders the member path. Change one and the other must change with it.
 staged archive, and `tests/workflow_contracts/release_workflow_test.py` pins
 the workflow shape, so a mismatch fails on the pull request.
 `scripts/verify_release_archives.py` applies the same checks to a directory of
-archives; the workflow runs it on the staged output and again on the
-downloaded draft assets.
+archives; the workflow runs it on the staged output and again on the downloaded
+draft assets.
 
 ### Release flow
 
-The workflow creates a draft release, builds and uploads every target's
-archive and sidecar, audits the draft, publishes it, then resolves the real
-asset URLs with `cargo binstall --dry-run`. Two details are load-bearing and
-have broken releases elsewhere in the estate:
+The workflow creates a draft release, builds and uploads every target's archive
+and sidecar, audits the draft, publishes it, then resolves the real asset URLs
+with `cargo binstall --dry-run`. Two details are load-bearing and have broken
+releases elsewhere in the estate:
 
 - The jobs that call `gh` without an `actions/checkout` step set `GH_REPO`.
   Otherwise `gh` infers the repository from a git remote and fails with
@@ -807,9 +804,8 @@ one, so a tooling-only release is a patch bump of that crate alone. Edit
 
 ### Verifying the packaging locally
 
-`make test` covers the packager and the auditor;
-`make test-workflow-contracts` covers the workflow shape. To exercise the real
-build:
+`make test` covers the packager and the auditor; `make test-workflow-contracts`
+covers the workflow shape. To exercise the real build:
 
 ```bash
 uv run --script scripts/release_archive.py "$(rustc -vV | sed -n 's|host: ||p')"

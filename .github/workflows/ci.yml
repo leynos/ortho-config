@@ -43,8 +43,22 @@ jobs:
         with:
           bun-version: '1.2.21'
 
+      - name: Install mdtablefix
+        # `make check-fmt` runs `mdtablefix --check --git`; 0.6.0 is the
+        # first release with `--check` and `--git`. The Markdown check is
+        # platform-independent, so it runs on the Linux lane only.
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        uses: leynos/shared-actions/.github/actions/install-mdtablefix@c5a54701c8603a0fa756a6b34c49bc2af75a6c11
+        with:
+          version: "0.6.0"
+
       - name: Check formatting
+        if: ${{ matrix.os == 'ubuntu-latest' }}
         run: make check-fmt
+
+      - name: Check Rust formatting
+        if: ${{ matrix.os != 'ubuntu-latest' }}
+        run: cargo fmt --all -- --check
 
       - name: Install Mermaid CLI
         shell: bash
