@@ -53,7 +53,7 @@ Table 1 describes the repository paths that define the workspace shape.
 | `ortho_config/src/`     | Runtime source modules for configuration discovery, file parsing, merge behaviour, docs metadata, error handling, localization, and supporting utilities. Every module should start with a module-level `//!` comment.                                                                     |
 | `ortho_config/tests/`   | Core crate integration and behavioural tests. Use shared helpers rather than direct environment mutation.                                                                                                                                                                                  |
 | `ortho_config_macros/`  | Procedural macro crate for deriving OrthoConfig-related implementations. Macro parsing, build, and generation code lives under `ortho_config_macros/src/`.                                                                                                                                 |
-| `scripts/`              | Python and shell-adjacent maintenance scripts, including shared spelling-policy cache management, the renderer, and the `generate_typos_config.py` entrypoint. Focused script tests live under `scripts/tests/`.                                                                           |
+| `scripts/`              | Python and shell-adjacent maintenance scripts for version bumping and release archives. Focused script tests live under `scripts/tests/`.                                                                                                                                                  |
 | `target/`               | Cargo build output, generated documentation, trybuild artefacts, and temporary build products. Do not edit or commit files from this directory.                                                                                                                                            |
 | `test_helpers/`         | Shared test helper crate. Put cross-crate fixtures, environment guards, and reusable assertions here rather than duplicating test infrastructure.                                                                                                                                          |
 | `tests/fixtures/`       | Workspace-level fixture crates and data used by integration, documentation, and generator tests. Fixtures should be minimal but representative.                                                                                                                                            |
@@ -108,19 +108,19 @@ These modules provide shared integration-test infrastructure:
 
 Table 2 lists root files that carry project policy or workspace behaviour.
 
-| Path                       | Responsibility and conventions                                                                                                                   |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `AGENTS.md`                | Repository instructions for automated coding agents and contributors working through the same workflow. Read it before making changes.           |
-| `Cargo.toml`               | Workspace manifest. Keep dependency and member changes deliberate and consistent with the dependency policy in `AGENTS.md`.                      |
-| `Cargo.lock`               | Workspace lock file. For rebase conflicts, prefer the `main` branch version first, then rebuild the lock file through Cargo.                     |
-| `Makefile`                 | Canonical local task runner. Prefer Make targets over raw commands for formatting, linting, tests, documentation checks, and release validation. |
-| `.markdownlint-cli2.jsonc` | Markdown lint configuration. Documentation changes should pass `make markdownlint`.                                                              |
-| `typos.local.toml`         | Narrow repository-specific spelling policy merged with the shared estate dictionary.                                                             |
-| `typos.toml`               | Generated en-GB-oxendict spelling configuration for the `typos` gate. Regenerate with `scripts/generate_typos_config.py`; do not hand-edit.      |
-| `clippy.toml`              | Clippy configuration. Lint suppressions should be rare, tightly scoped, and justified.                                                           |
-| `rust-toolchain.toml`      | Rust toolchain pin. Do not change it incidentally while working on unrelated tasks.                                                              |
-| `CHANGELOG.md`             | Release history. Update it when user-visible behaviour changes or migration notes are required.                                                  |
-| `README.md`                | Repository-level introduction. Keep deep design and contributor detail in `docs/` and link to it from the README when needed.                    |
+| Path                       | Responsibility and conventions                                                                                                                              |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `AGENTS.md`                | Repository instructions for automated coding agents and contributors working through the same workflow. Read it before making changes.                      |
+| `Cargo.toml`               | Workspace manifest. Keep dependency and member changes deliberate and consistent with the dependency policy in `AGENTS.md`.                                 |
+| `Cargo.lock`               | Workspace lock file. For rebase conflicts, prefer the `main` branch version first, then rebuild the lock file through Cargo.                                |
+| `Makefile`                 | Canonical local task runner. Prefer Make targets over raw commands for formatting, linting, tests, documentation checks, and release validation.            |
+| `.markdownlint-cli2.jsonc` | Markdown lint configuration. Documentation changes should pass `make markdownlint`.                                                                         |
+| `typos.local.toml`         | Narrow repository-specific spelling policy merged with the shared estate dictionary.                                                                        |
+| `typos.toml`               | Generated en-GB-oxendict spelling configuration. Regenerated by `make spellcheck` from the live shared dictionary and `typos.local.toml`; do not hand-edit. |
+| `clippy.toml`              | Clippy configuration. Lint suppressions should be rare, tightly scoped, and justified.                                                                      |
+| `rust-toolchain.toml`      | Rust toolchain pin. Do not change it incidentally while working on unrelated tasks.                                                                         |
+| `CHANGELOG.md`             | Release history. Update it when user-visible behaviour changes or migration notes are required.                                                             |
+| `README.md`                | Repository-level introduction. Keep deep design and contributor detail in `docs/` and link to it from the README when needed.                               |
 
 ## Generated and scratch artefacts
 
