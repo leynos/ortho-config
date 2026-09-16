@@ -767,8 +767,8 @@ violation. `sccache_wiring_test.py` names `32c8ea64` in a set of pins that
 install sccache while exporting neither half of its wiring, and fails if the
 workflows return to one of them. That is not a lockstep on the current value:
 it never fails a forward bump, it hard-codes nothing that Dependabot will
-change, and it exists because reverting the pin is the one edit that would
-undo this wiring while leaving every other assertion here green.
+change, and it exists because reverting the pin is the one edit that would undo
+this wiring while leaving every other assertion here green.
 
 ### sccache: the wrapper and the backend
 
@@ -784,10 +784,10 @@ and compiled uncached, which is visible only as a slow build.
 
 The two halves are now set in different places, deliberately:
 
-| Half | Where it is set | Why there |
-| --- | --- | --- |
-| `RUSTC_WRAPPER` | the shared action, not this repository | it must be the absolute path of the sccache the action installed |
-| `SCCACHE_GHA_ENABLED` | job-level `env:` in this repository | it is a choice about where the cache lives, and the action stands aside when a caller has made it |
+| Half                  | Where it is set                        | Why there                                                                                         |
+| --------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `RUSTC_WRAPPER`       | the shared action, not this repository | it must be the absolute path of the sccache the action installed                                  |
+| `SCCACHE_GHA_ENABLED` | job-level `env:` in this repository    | it is a choice about where the cache lives, and the action stands aside when a caller has made it |
 
 *Table 1: Which half of the sccache wiring is set where, and why.*
 
@@ -853,12 +853,12 @@ rather than lowering the rate.
 
 Nine mutations are caught: one reference left at the old pin, the backend
 removed from a job, `RUSTC_WRAPPER` set by name, the sweep narrowed so it finds
-nothing, an excluded job quietly gaining a backend, the statistics step removed,
-the statistics reported through a bare `sccache` rather than `SCCACHE_PATH`, a
-governed reference added under a new path at a different SHA, and a Rust job
-declared in a `.yaml` workflow without a backend. The last two passed before the
-sweeps were widened, which is how they were shown to be real rather than
-theoretical.
+nothing, an excluded job quietly gaining a backend, the statistics step
+removed, the statistics reported through a bare `sccache` rather than
+`SCCACHE_PATH`, a governed reference added under a new path at a different SHA,
+and a Rust job declared in a `.yaml` workflow without a backend. The last two
+passed before the sweeps were widened, which is how they were shown to be real
+rather than theoretical.
 
 ## Releasing `cargo-orthohelp` binaries
 
