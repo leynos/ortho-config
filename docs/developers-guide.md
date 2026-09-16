@@ -1099,12 +1099,11 @@ A digit is `0` to `9` and nothing else. Python's `\d` matches every Unicode
 decimal digit and `int` reads them, so a reader written with it returns three
 hundred seconds for `\u0663\u0660\u0660s` and for the mixed `3\u0660\u0660s`,
 both of which humantime refuses: its parser compares against `'0'..='9'`,
-reporting
-"expected number at 0" for the run that opens with such a digit and "invalid
-character at 1" for the run that does not. The mixed spelling is the sharper
-case, because a reader that checked only its first character would still accept
-it. That is the wrong direction for a contract, which would then certify a
-configuration nextest cannot load.
+reporting "expected number at 0" for the run that opens with such a digit and
+"invalid character at 1" for the run that does not. The mixed spelling is the
+sharper case because a reader that checked only its first character would still
+accept it. That is the wrong direction for a contract, which would then certify
+a configuration nextest cannot load.
 
 The arithmetic is exact and in integers, because humantime's is: its parser
 works in checked `u64` throughout and reports every failure as an overflow.
@@ -1114,8 +1113,8 @@ something plausible and certifies a configuration nextest cannot load.
 Which integer depends on the unit, and this is the part a reader working in
 nanoseconds alone gets wrong. A fraction of an hour or anything longer is
 converted into whole *seconds*, so `0.000001h` is refused although its value is
-a whole 3,600,000 ns, while `0.25h` is fifteen minutes. A fraction of a minute or
-anything shorter is converted into whole nanoseconds, so `1.999999999s` is
+a whole 3,600,000 ns, while `0.25h` is fifteen minutes. A fraction of a minute
+or anything shorter is converted into whole nanoseconds, so `1.999999999s` is
 accepted and `0.0000000015s` is not. A fraction of a nanosecond is refused
 outright, whatever it spells, so even `1.0ns` will not load. The unit tables are
 therefore split by which of the two a unit is measured in.
@@ -1133,9 +1132,11 @@ catches a reader summing into an unbounded integer. `add_current` opens with
 `(out.subsec_nanos() as u64).add(nsec)?`, before any carry, so the remainder
 held so far plus the component's nanoseconds must fit a `u64` by themselves.
 Two values of `u64::MAX` nanoseconds carry the first to 18,446,744,073 seconds
-and then overflow on the second, although the duration they name is about
-thirty-six seconds. Checking only the accumulated seconds afterwards reports a
-duration for text nextest will not start under.
+and then overflow on the second. The duration they name, about 36.9 billion
+seconds or some 1,169 years, is nowhere near the seconds ceiling; it is the
+remainder that overflows, and it overflows first. That is exactly why checking
+only the accumulated seconds afterwards reports a duration for text nextest
+will not start under.
 
 The reading was checked against the parser rather than against its
 documentation: 4,016 generated durations, spanning every unit spelling,

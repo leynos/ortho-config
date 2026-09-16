@@ -25,19 +25,10 @@ _ASSIGNMENT: typ.Final[re.Pattern[str]] = re.compile(
 
 
 def _doctest_paths() -> frozenset[str]:
-    """Read the paths `PYTEST_FLAGS` hands to ``--doctest-modules``.
-
-    Returns
-    -------
-    frozenset[str]
-        Repository-relative paths, directories included.
-
-    Raises
-    ------
-    AssertionError
-        If the Makefile carries no ``PYTEST_FLAGS`` assignment, which
-        would leave this contract asserting nothing.
-    """
+    """Return the paths ``PYTEST_FLAGS`` hands to ``--doctest-modules``."""
+    # Both reads are asserted rather than tolerated: without the
+    # assignment, or without the flag, every contract in this module
+    # would pass over an empty set.
     match = _ASSIGNMENT.search(MAKEFILE.read_text(encoding="utf-8"))
     assert match is not None, "PYTEST_FLAGS is not assigned in the Makefile"
     words = match.group(1).replace("\\\n", " ").split()
@@ -46,13 +37,7 @@ def _doctest_paths() -> frozenset[str]:
 
 
 def _modules_with_examples() -> frozenset[pathlib.Path]:
-    """Find every script module carrying a docstring example.
-
-    Returns
-    -------
-    frozenset[pathlib.Path]
-        Paths relative to the repository root.
-    """
+    """Return repository-relative script paths that carry an example."""
     return frozenset(
         path.relative_to(REPOSITORY)
         for path in sorted(SCRIPTS.rglob("*.py"))
