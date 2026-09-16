@@ -100,28 +100,16 @@ _BARE_ZERO: typ.Final[str] = "0"
 
 
 def _joined_digits(value: str) -> str:
-    """Join a spaced number's digits, dropping only Rust's whitespace.
-
-    humantime tolerates whitespace inside and around the number, so the
-    matched value can read ``"1 . 5"``. ``str.split`` would drop the four
-    C0 separators too, which the pattern above refuses, so the set is
-    named explicitly here as well.
-
-    Nothing reaching this function through `seconds` can tell the two
-    apart, because the pattern refuses a separator before the join ever
-    sees one. It is written this way so that a later widening of the
-    pattern cannot turn a refusal into a silently different number.
-
-    Parameters
-    ----------
-    value : str
-        The matched number, whitespace included.
-
-    Returns
-    -------
-    str
-        The same digits with the whitespace removed.
-    """
+    """Join a spaced number's digits, dropping only Rust's whitespace."""
+    # humantime tolerates whitespace inside and around the number, so the
+    # matched value can read "1 . 5". `str.split` would drop the four C0
+    # separators too, which the pattern above refuses, so the set is named
+    # explicitly here as well.
+    #
+    # Nothing reaching this function through `seconds` can tell the two
+    # apart, because the pattern refuses a separator before the join ever
+    # sees one. It is written this way so that a later widening of the
+    # pattern cannot turn a refusal into a silently different number.
     return "".join(
         character for character in value if character not in _WHITESPACE_CHARS
     )
