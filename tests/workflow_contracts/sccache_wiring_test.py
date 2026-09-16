@@ -40,19 +40,24 @@ WORKFLOWS: typ.Final[Path] = (
 #: prepares, and therefore one where sccache is installed.
 SETUP_RUST: typ.Final[str] = "leynos/shared-actions/.github/actions/setup-rust@"
 
-#: Every reference into the shared-actions tree that must move as one.
-#: A partial repin leaves the repository unable to say which SHA it is
-#: on, and the half left behind is the half that silently keeps the old
-#: behaviour. ``rust-build-release`` and ``mutation-cargo`` are excluded
-#: deliberately: they sit at their own pin, neither installs sccache for
-#: a lane this contract governs, and moving them is a separate change
-#: with its own evidence.
-SAME_TREE_ACTIONS: typ.Final[tuple[str, ...]] = (
-    "leynos/shared-actions/.github/actions/setup-rust@",
-    "leynos/shared-actions/.github/actions/generate-coverage@",
-    "leynos/shared-actions/.github/actions/upload-codescene-coverage@",
-    "leynos/shared-actions/.github/workflows/dependabot-automerge.yml@",
-)
+#: Every reference into the shared-actions tree must move as one. A
+#: partial repin leaves the repository unable to say which SHA it is on,
+#: and the half left behind is the half that silently keeps the old
+#: behaviour.
+#:
+#: Matched by repository prefix rather than by an enumerated list of
+#: paths. A list is closed: a governed reference added later under a
+#: path nobody thought to add would sit at any SHA it liked and this
+#: contract would report agreement.
+SHARED_ACTIONS_PREFIX: typ.Final[str] = "leynos/shared-actions/"
+
+#: The references deliberately left at their own pin, each with the
+#: reason. Named individually rather than allowed as a class, so adding
+#: a third is a decision somebody has to write down.
+PINNED_SEPARATELY: typ.Final[dict[str, str]] = {
+    "rust-build-release": "serves the release build, which the action excludes from sccache",
+    "mutation-cargo": "a reusable workflow, which caller job env cannot reach",
+}
 
 #: Pins known to install sccache while exporting neither half. Reverting
 #: to one of these is the regression this contract exists to catch, and
@@ -89,9 +94,13 @@ def _workflow_text() -> dict[str, str]:
         is derived from it so the two cannot disagree about which files
         are in scope.
     """
+    # Both suffixes. GitHub runs a workflow named either way, so a sweep
+    # over one of them reports repository-wide coverage while ignoring
+    # half the places a Rust job can be declared.
     return {
         path.name: path.read_text(encoding="utf-8")
-        for path in sorted(WORKFLOWS.glob("*.yml"))
+        for pattern in ("*.yml", "*.yaml")
+        for path in sorted(WORKFLOWS.glob(pattern))
     }
 
 
@@ -122,12 +131,14 @@ def _pinned_shas() -> dict[str, set[str]]:
     found: dict[str, set[str]] = {}
     for name, text in _workflow_text().items():
         for line in text.splitlines():
-            action = next((a for a in SAME_TREE_ACTIONS if a in line), None)
-            if action is None:
+            if SHARED_ACTIONS_PREFIX not in line:
+                continue
+            if any(excluded in line for excluded in PINNED_SEPARATELY):
                 continue
             match = _SHA.search(line)
             assert match is not None, (
-                f"{name}: {action} is not pinned to a 40-hex commit SHA"
+                f"{name}: a {SHARED_ACTIONS_PREFIX} reference is not pinned "
+                f"to a 40-hex commit SHA: {line.strip()}"
             )
             found.setdefault(match.group(1), set()).add(name)
     return found
