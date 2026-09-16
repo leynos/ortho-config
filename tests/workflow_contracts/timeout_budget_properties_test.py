@@ -15,13 +15,13 @@ rather than turned into a plausible number.
 
 from __future__ import annotations
 
+import re
 import typing as typ
 
 import pytest
 from coverage_lanes import coverage_jobs_in, coverage_jobs_of, workflow_documents
 from hypothesis import given
 from hypothesis import strategies as st
-from nextest_units import Overflow
 from nextest_budgets import (
     NextestConfigurationError,
     UnboundedTestError,
@@ -31,6 +31,8 @@ from nextest_budgets import (
     seconds,
     termination_allowance,
 )
+from nextest_durations import _WHITESPACE_CHARS
+from nextest_units import Overflow
 from timeout_budgets import (
     CEILING_MARGIN_SECONDS,
     COVERAGE_ACTION,
@@ -287,6 +289,10 @@ def test_a_duration_nextest_accepts_is_read_rather_than_refused(
         "18446744073709551615s 500ms 500ms",
         "\u0663\u0660\u0660s",
         "3\u0660\u0660s",
+        "1\u001cs",
+        "\u001c45m",
+        "45m\u001f",
+        "1\u001d0s",
         "18446744073709551615ns 18446744073709551615ns",
         "0.0000000004s 0.0000000006s",
         "1.0ns",
@@ -317,6 +323,10 @@ def test_a_duration_nextest_accepts_is_read_rather_than_refused(
         "a-carry-that-completes-a-second-past-the-u64",
         "a-run-of-unicode-digits",
         "a-unicode-digit-after-an-ascii-one",
+        "a-file-separator-between-a-digit-and-its-unit",
+        "a-file-separator-before-the-number",
+        "a-unit-separator-after-the-unit",
+        "a-group-separator-inside-the-number",
         "a-nanosecond-sum-past-the-u64-before-it-carries",
         "components-that-are-whole-only-together",
         "a-whole-fraction-of-a-nanosecond",
@@ -759,3 +769,52 @@ def test_the_acquisition_reads_both_extensions_and_nothing_else(
         "first.yml",
         "second.yaml",
     ], "a lane in either extension must reach the assertions"
+
+
+def test_the_whitespace_class_is_rusts_and_not_pythons() -> None:
+    """Pin the class in both directions, over the whole of Unicode.
+
+    Rust's ``char::is_whitespace`` is the Unicode White_Space property.
+    Python's ``\\s`` is that property plus U+001C to U+001F, the file,
+    group, record and unit separators, and ``str.strip`` and
+    ``str.split`` carry the same excess. A reader spelling its whitespace
+    ``\\s`` skips a separator wherever it skips a space, and reports a
+    budget for a configuration nextest refuses at startup.
+
+    Both directions are asserted. The excess is what the refusal cases
+    above catch; the deficit is not, and a class that had lost a genuine
+    space would make this reader refuse configurations nextest loads,
+    which is the opposite failure and equally wrong. Pinning both means
+    a change to either language's notion of whitespace fails here rather
+    than in a runner months later.
+    """
+    ours = set(_WHITESPACE_CHARS)
+    pythons = {chr(cp) for cp in range(0x110000) if re.match(r"\s", chr(cp))}
+    separators = {"\u001c", "\u001d", "\u001e", "\u001f"}
+    assert pythons - ours == separators, (
+        "Python's whitespace exceeds this reader's by something other than "
+        f"the four C0 separators: {sorted(pythons - ours - separators)!r}"
+    )
+    assert not ours - pythons, (
+        "this reader treats as whitespace something Python does not: "
+        f"{sorted(ours - pythons)!r}"
+    )
+
+
+@pytest.mark.parametrize(
+    "spelling",
+    ["1 0s", "1\u00a00s", "1\u20080s"],
+    ids=["a-space", "a-no-break-space", "a-punctuation-space"],
+)
+def test_the_digit_join_drops_every_whitespace_the_class_allows(spelling: str) -> None:
+    """Exercise the join through the widest whitespace the class allows.
+
+    The digits of a spaced number are joined after the pattern has
+    matched, so while the pattern refuses a separator the join can never
+    meet one, and no input through `seconds` can tell a correct join
+    from `str.split`. The join is changed anyway, because a later
+    widening of the pattern would turn a refusal into a silently
+    different number, and a line nothing can reach is a line nothing
+    proves. These three spellings do reach it.
+    """
+    assert seconds(spelling) == 10.0
