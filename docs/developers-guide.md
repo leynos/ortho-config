@@ -1044,10 +1044,10 @@ live in `nextest_budgets.py`, `nextest_durations.py`, `nextest_errors.py`,
 values in `timeout_reading_test.py`.
 
 Run them with `make test-workflow-contracts`. The target provisions `pytest`,
-`pyyaml` and `hypothesis` through `uv run --with` rather than from the project's
-own dependencies, so the contracts need no virtual environment of their own and
-nothing they need reaches the published package. They are Python because what
-they read is YAML and TOML; `make test` does not run them.
+`pyyaml` and `hypothesis` through `uv run --with` rather than from the
+project's own dependencies, so the contracts need no virtual environment of
+their own and nothing they need reaches the published package. They are Python
+because what they read is YAML and TOML; `make test` does not run them.
 
 Each reading takes what it reads rather than fetching it. `coverage_jobs_of`
 queries supplied workflow documents and reaches no filesystem and no parser,
@@ -1055,25 +1055,25 @@ queries supplied workflow documents and reaches no filesystem and no parser,
 `coverage_jobs_in` is the two together, defaulting its directory to the
 repository's own so the contract can call it with no argument at all while the
 query below it can never reach a file. The pair is named for what each takes,
-because a call site has to say which it is doing. The budget readings are driven
-with Hypothesis as well as with named cases, in
-`timeout_budget_properties_test.py`: the unit table and the duration grammar are
-where a single wrong entry would leave every comparison downstream an inequality
-between two plausible numbers, which a fixed case only catches when it happens
-to be the case somebody wrote.
+because a call site has to say which it is doing. The budget readings are
+driven with Hypothesis as well as with named cases, in
+`timeout_budget_properties_test.py`: the unit table and the duration grammar
+are where a single wrong entry would leave every comparison downstream an
+inequality between two plausible numbers, which a fixed case only catches when
+it happens to be the case somebody wrote.
 
 The nextest configuration is parsed with `tomllib` rather than matched as text.
 A text match finds a key inside a comment, inside a `filter` string, or in a
 table nextest never consults, and reports a budget the runner does not use.
-`.config/nextest.toml` sets `global-timeout = "30m"`, and the ordering assertion
-requires that value to sit above the largest per-test allowance and inside the
-watchdog; it skips only when no whole-run budget is set at all. A scraping
-reader would read a commented-out or filtered budget as one in force, and
-comparing against a budget nobody had written is the failure this avoids.
-`terminate-after` is optional, and a `slow-timeout` without it marks a test slow
-and never stops it, so the reading refuses that form rather than reporting one
-period as the budget. Every table in `.config/nextest.toml` sets it explicitly,
-so no value here changes.
+`.config/nextest.toml` sets `global-timeout = "30m"`, and the ordering
+assertion requires that value to sit above the largest per-test allowance and
+inside the watchdog; it skips only when no whole-run budget is set at all. A
+scraping reader would read a commented-out or filtered budget as one in force,
+and comparing against a budget nobody had written is the failure this avoids.
+`terminate-after` is optional, and a `slow-timeout` without it marks a test
+slow and never stops it, so the reading refuses that form rather than reporting
+one period as the budget. Every table in `.config/nextest.toml` sets it
+explicitly, so no value here changes.
 
 Durations are read with the grammar `humantime` accepts, which is what nextest
 deserializes them with: a sequence of components each carrying a unit, written
@@ -1086,14 +1086,15 @@ though it were the file's fault. The grammar was measured against humantime
 by compiling that parser and running the cases through it. Naming the version
 matters: an earlier note here cited 2.4.0, which is the newest release rather
 than the one the shared coverage action installs, `cargo-nextest@0.9.120`. A
-value may carry a fractional part, and whitespace is tolerated around the point,
-so `1.5m` and `1 . 5 m` are both ninety seconds. Whitespace inside the number is
-ignored too, so `1 0s` is ten seconds and `1 2 . 3 4 s` is 12.34. The short
-spellings `wk`, `wks`, `yr` and `yrs` are units alongside the longer ones. The
-bare `0` is the one duration humantime reads without a unit, and it is the exact
-text: its parser special-cases `0` before reading a character, so `" 0 "` is
-refused and a reader that stripped whitespace first would accept a duration
-nextest rejects. Case is significant, so `m` is minutes and `M` is months.
+value may carry a fractional part, and whitespace is tolerated around the
+point, so `1.5m` and `1 . 5 m` are both ninety seconds. Whitespace inside the
+number is ignored too, so `1 0s` is ten seconds and `1 2 . 3 4 s` is 12.34. The
+short spellings `wk`, `wks`, `yr` and `yrs` are units alongside the longer
+ones. The bare `0` is the one duration humantime reads without a unit, and it
+is the exact text: its parser special-cases `0` before reading a character, so
+`" 0 "` is refused and a reader that stripped whitespace first would accept a
+duration nextest rejects. Case is significant, so `m` is minutes and `M` is
+months.
 
 The watchdog is resolved at the innermost scope that declares it, blank
 included. GitHub takes the most specific declaration of an environment
@@ -1151,16 +1152,16 @@ converted into whole *seconds*, so `0.000001h` is refused although its value is
 a whole 3,600,000 ns, while `0.25h` is fifteen minutes. A fraction of a minute
 or anything shorter is converted into whole nanoseconds, so `1.999999999s` is
 accepted and `0.0000000015s` is not. A fraction of a nanosecond is refused
-outright, whatever it spells, so even `1.0ns` will not load. The unit tables are
-therefore split by which of the two a unit is measured in.
+outright, whatever it spells, so even `1.0ns` will not load. The unit tables
+are therefore split by which of the two a unit is measured in.
 
 Four ceilings come with it, and they are different. A numeric literal must fit
-the `u64` humantime reads it into, so `1000000000000000000000ns` is refused even
-though its value in seconds is small. A fraction's own arithmetic is checked, so
-`0.1000000000000000000s` overflows on the multiplication and
+the `u64` humantime reads it into, so `1000000000000000000000ns` is refused
+even though its value in seconds is small. A fraction's own arithmetic is
+checked, so `0.1000000000000000000s` overflows on the multiplication and
 `1.00000000000000000000s` on the denominator, although both would fit as
-durations. The accumulated seconds must fit the `u64` they are summed into,
-so `18446744073709551615s` loads and one second more does not.
+durations. The accumulated seconds must fit the `u64` they are summed into, so
+`18446744073709551615s` loads and one second more does not.
 
 And the nanosecond remainder has a ceiling of its own, which is the one that
 catches a reader summing into an unbounded integer. `add_current` opens with
