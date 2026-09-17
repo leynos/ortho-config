@@ -88,8 +88,15 @@ PINS_WITHOUT_THE_WRAPPER: typ.Final[frozenset[str]] = frozenset(
 #: `release`, so the action's own `github.event_name != 'release'` guard
 #: does not reach it. It is excluded because it dry-runs `cargo binstall`
 #: against already published archives and builds nothing.
-NO_BACKEND_EXPECTED: typ.Final[dict[str, str]] = {
-    "verify-published-assets": "dry-runs cargo binstall against published archives",
+#: Keyed by workflow and job, the same identity the discovery uses. A
+#: job identifier is unique only within its own document, so an
+#: exclusion keyed on the name alone would excuse a same-named job in
+#: any other workflow, which is the opposite of naming exclusions
+#: individually.
+NO_BACKEND_EXPECTED: typ.Final[dict[tuple[str, str], str]] = {
+    ("release.yml", "verify-published-assets"): (
+        "dry-runs cargo binstall against published archives"
+    ),
 }
 
 _SHA = re.compile(r"@([0-9a-f]{40})\b")
@@ -167,32 +174,45 @@ def _pinned_shas() -> dict[str, set[str]]:
                 f"{name}: a {SHARED_ACTIONS_PREFIX} reference could not be "
                 f"read as a path and a ref: {line.strip()}"
             )
-            if reference.group("path") in PINNED_SEPARATELY:
-                continue
+            # Pinning is asserted before the exemption, not after. The
+            # exemption is from the single-SHA rule, and only from that:
+            # these two references may sit at a commit of their own, not
+            # at a mutable ref. Skipping first let `rust-build-release@main`
+            # past every assertion here, which is the reference most worth
+            # holding to a commit, since it builds what gets published.
             assert _SHA.fullmatch("@" + reference.group("ref")) is not None, (
                 f"{name}: a {SHARED_ACTIONS_PREFIX} reference is not pinned "
                 f"to a 40-hex commit SHA: {line.strip()}"
             )
+            if reference.group("path") in PINNED_SEPARATELY:
+                continue
             found.setdefault(reference.group("ref"), set()).add(name)
     return found
 
 
-def _jobs_running_setup_rust() -> dict[str, dict[str, typ.Any]]:
+def _jobs_running_setup_rust() -> dict[tuple[str, str], dict[str, typ.Any]]:
     """Find every job with a shared Rust setup step.
+
+    Keyed by workflow and job rather than by job alone. A job identifier
+    is unique only within its own document, so two workflows may each
+    declare a `build`, and a reading keyed on the name keeps whichever
+    it saw last. The jobs here have distinct identifiers today; the
+    point of discovering them rather than listing them is the job added
+    later, and that is exactly the one a name collision would drop.
+    Losing it is silent: the parametrised assertions below simply report
+    on one job instead of two.
 
     Returns
     -------
-    dict[str, dict]
-        Job name to the job's mapping. Discovered from the documents
-        rather than listed, because a new Rust job appearing without a
-        backend is the drift this guards.
+    dict[tuple[str, str], dict]
+        Workflow file name and job identifier, to the job's mapping.
     """
-    found: dict[str, dict[str, typ.Any]] = {}
-    for document in _workflow_documents().values():
+    found: dict[tuple[str, str], dict[str, typ.Any]] = {}
+    for workflow, document in _workflow_documents().items():
         for name, job in (document.get("jobs") or {}).items():
             steps = job.get("steps") or []
             if any(str(step.get("uses", "")).startswith(SETUP_RUST) for step in steps):
-                found[name] = job
+                found[workflow, name] = job
     return found
 
 
@@ -253,11 +273,11 @@ def test_the_sweep_finds_the_jobs_that_run_the_rust_setup() -> None:
     """
     jobs = _jobs_running_setup_rust()
     assert jobs, "no job was found running the shared Rust setup"
-    assert "build-test" in jobs, "the sweep missed the main CI job"
+    assert ("ci.yml", "build-test") in jobs, "the sweep missed the main CI job"
 
 
-@pytest.mark.parametrize("job_name", sorted(_jobs_running_setup_rust()))
-def test_every_rust_job_selects_a_backend(job_name: str) -> None:
+@pytest.mark.parametrize("job_key", sorted(_jobs_running_setup_rust()))
+def test_every_rust_job_selects_a_backend(job_key: tuple[str, str]) -> None:
     """Assert each job running the Rust setup selects the cache backend.
 
     Without a backend sccache falls back to a local directory the runner
@@ -265,12 +285,13 @@ def test_every_rust_job_selects_a_backend(job_name: str) -> None:
     exclusions are named individually with the reason they compile
     nothing, rather than being a blanket allowance.
     """
-    job = _jobs_running_setup_rust()[job_name]
+    job = _jobs_running_setup_rust()[job_key]
+    job_name = "/".join(job_key)
     environment = job.get("env") or {}
-    if job_name in NO_BACKEND_EXPECTED:
+    if job_key in NO_BACKEND_EXPECTED:
         assert "SCCACHE_GHA_ENABLED" not in environment, (
             f"{job_name} is recorded as needing no backend "
-            f"({NO_BACKEND_EXPECTED[job_name]}) but sets one"
+            f"({NO_BACKEND_EXPECTED[job_key]}) but sets one"
         )
         return
     assert environment.get("SCCACHE_GHA_ENABLED") == "true", (
@@ -280,8 +301,10 @@ def test_every_rust_job_selects_a_backend(job_name: str) -> None:
     )
 
 
-@pytest.mark.parametrize("job_name", sorted(_jobs_running_setup_rust()))
-def test_every_job_with_a_backend_reports_its_statistics(job_name: str) -> None:
+@pytest.mark.parametrize("job_key", sorted(_jobs_running_setup_rust()))
+def test_every_job_with_a_backend_reports_its_statistics(
+    job_key: tuple[str, str],
+) -> None:
     """Assert each caching job prints sccache's own statistics.
 
     The wiring is invisible from the outside: a job with no wrapper and a
@@ -300,9 +323,10 @@ def test_every_job_with_a_backend_reports_its_statistics(job_name: str) -> None:
     explain it. Reading only the joined commands cannot see that: the
     text is identical either way.
     """
-    job = _jobs_running_setup_rust()[job_name]
-    if job_name in NO_BACKEND_EXPECTED:
-        pytest.skip(f"{job_name} caches nothing: {NO_BACKEND_EXPECTED[job_name]}")
+    job = _jobs_running_setup_rust()[job_key]
+    job_name = "/".join(job_key)
+    if job_key in NO_BACKEND_EXPECTED:
+        pytest.skip(f"{job_name} caches nothing: {NO_BACKEND_EXPECTED[job_key]}")
     steps = job.get("steps") or []
     reporting = [step for step in steps if "--show-stats" in str(step.get("run", ""))]
     assert reporting, (
@@ -363,4 +387,54 @@ def test_the_guide_names_no_pin_the_workflows_do_not_use() -> None:
         f"{GUIDE.name} names these commits, and the workflows are at "
         f"{current} with {sorted(PINS_WITHOUT_THE_WRAPPER)} named as the pins "
         f"to stay away from: {stale}"
+    )
+
+
+def test_an_exempt_reference_must_still_be_pinned_to_a_commit() -> None:
+    """The exemption is from the single-SHA rule and from nothing else.
+
+    `rust-build-release` and `mutation-cargo` may sit at a commit of
+    their own. They may not sit at a branch. Skipping them before the
+    pinning assertion let `rust-build-release@main` past every check
+    here, and that is the reference least suited to a mutable ref, since
+    it builds what gets published.
+
+    Driven through the reader rather than by mutating the tree, so the
+    assertion under test is the one that fires.
+    """
+    for path in PINNED_SEPARATELY:
+        line = f"        uses: {SHARED_ACTIONS_PREFIX}{path}@main"
+        reference = _REFERENCE.search(line)
+        assert reference is not None, f"the fixture line must parse: {line}"
+        assert _SHA.fullmatch("@" + reference.group("ref")) is None, (
+            f"a mutable ref must not read as a pin: {line}"
+        )
+
+
+def test_two_workflows_may_name_the_same_job() -> None:
+    """A job identifier is unique only inside its own document.
+
+    The discovery is keyed by workflow and job for this reason. Keyed by
+    name alone, a `build-test` added to a second workflow would replace
+    the first, and the parametrised assertions would report on one job
+    while appearing to cover both. Nothing about the result would say
+    so, which is why this is asserted rather than left to the current
+    tree, where the identifiers happen to differ.
+    """
+    documents = {
+        "first.yml": {
+            "jobs": {"build-test": {"steps": [{"uses": SETUP_RUST + "abc"}]}}
+        },
+        "second.yml": {
+            "jobs": {"build-test": {"steps": [{"uses": SETUP_RUST + "abc"}]}}
+        },
+    }
+    found: dict[tuple[str, str], object] = {}
+    for workflow, document in documents.items():
+        for name, job in (document.get("jobs") or {}).items():
+            steps = job.get("steps") or []
+            if any(str(step.get("uses", "")).startswith(SETUP_RUST) for step in steps):
+                found[workflow, name] = job
+    assert sorted(found) == [("first.yml", "build-test"), ("second.yml", "build-test")], (
+        "both jobs must survive the sweep; a name-keyed reading keeps one"
     )
