@@ -390,7 +390,10 @@ def test_the_guide_names_no_pin_the_workflows_do_not_use() -> None:
     )
 
 
-def test_an_exempt_reference_must_still_be_pinned_to_a_commit() -> None:
+@pytest.mark.parametrize("path", sorted(PINNED_SEPARATELY))
+def test_an_exempt_reference_must_still_be_pinned_to_a_commit(
+    path: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """The exemption is from the single-SHA rule and from nothing else.
 
     `rust-build-release` and `mutation-cargo` may sit at a commit of
@@ -399,16 +402,57 @@ def test_an_exempt_reference_must_still_be_pinned_to_a_commit() -> None:
     here, and that is the reference least suited to a mutable ref, since
     it builds what gets published.
 
-    Driven through the reader rather than by mutating the tree, so the
-    assertion under test is the one that fires.
+    The reader is driven with a controlled document rather than the
+    patterns being checked in isolation. My first version of this test
+    asserted only that `_SHA` rejects `@main`, which is a property of
+    the pattern and not of the reader: it never called `_pinned_shas`,
+    so restoring the unsafe ordering left it passing. A fixture that
+    survives the mutation it exists to catch discriminates nothing.
+
+    Every exempt path is driven, so an exemption added later cannot
+    bypass the pinning rule without somebody noticing.
     """
-    for path in PINNED_SEPARATELY:
-        line = f"        uses: {SHARED_ACTIONS_PREFIX}{path}@main"
-        reference = _REFERENCE.search(line)
-        assert reference is not None, f"the fixture line must parse: {line}"
-        assert _SHA.fullmatch("@" + reference.group("ref")) is None, (
-            f"a mutable ref must not read as a pin: {line}"
-        )
+    monkeypatch.setattr(
+        "sccache_wiring_test._workflow_text",
+        lambda: {
+            "controlled.yml": (
+                "jobs:\n"
+                "  build:\n"
+                "    steps:\n"
+                f"      - uses: {SHARED_ACTIONS_PREFIX}{path}@main\n"
+            )
+        },
+    )
+    with pytest.raises(AssertionError, match=r"not pinned"):
+        _pinned_shas()
+
+
+def test_an_exempt_reference_at_its_own_commit_is_still_allowed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Assert the refusal above is narrow as well as sufficient.
+
+    The exemption has to keep working: these two references may sit at a
+    commit of their own without the one-SHA assertion reporting a
+    partial repin. A reader that refused every exempt reference would
+    pass the test above and break the thing the exemption exists for.
+    """
+    other = "1" * 40
+    monkeypatch.setattr(
+        "sccache_wiring_test._workflow_text",
+        lambda: {
+            "controlled.yml": (
+                "jobs:\n"
+                "  build:\n"
+                "    steps:\n"
+                f"      - uses: {SHARED_ACTIONS_PREFIX}.github/actions/setup-rust@{'0' * 40}\n"
+                f"      - uses: {SHARED_ACTIONS_PREFIX}.github/actions/rust-build-release@{other}\n"
+            )
+        },
+    )
+    assert sorted(_pinned_shas()) == ["0" * 40], (
+        "the exempt reference's own commit must stay out of the one-SHA set"
+    )
 
 
 def test_two_workflows_may_name_the_same_job() -> None:
