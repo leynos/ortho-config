@@ -1080,6 +1080,23 @@ generated documentation, generated agent context, and enforceable CLI policy.
   timeouts, and binds feature files with compile-time tag filters so
   feature-gated scenarios disappear from unsupported builds.
 
+- **Wire sccache through the action's wrapper, not a workflow name
+  (2026-09-17):** Every Rust job selects the GitHub Actions cache backend with
+  `SCCACHE_GHA_ENABLED`, and no workflow sets `RUSTC_WRAPPER`. The wrapper
+  comes from the shared Rust setup action, which exports the absolute path of
+  the sccache it installed and stands aside when a caller has already set the
+  variable; a bare `RUSTC_WRAPPER: sccache` would replace that path with a name
+  resolved through `PATH`, and an invocation resolving nothing compiles
+  uncached without entering the hit-rate denominator, so the failure is
+  invisible in the statistic a reader would check. `verify-published-assets` is
+  the one job allowed no backend, because it dry-runs `cargo binstall` against
+  published archives and builds nothing. `rust-build-release` and
+  `mutation-cargo` are exempt from the single-SHA rule so they may diverge
+  later; they do not diverge today.
+  `tests/workflow_contracts/sccache_wiring_test.py` holds all of this, and each
+  caching job reports sccache's own statistics unconditionally, because the
+  wiring is otherwise invisible from outside the run.
+
 - **Define downstream agent-context command naming (2026-06-14):**
   Downstream applications expose `context --json` and emit
   `kind: "<tool>.agent_context"`, while `cargo-orthohelp` retains

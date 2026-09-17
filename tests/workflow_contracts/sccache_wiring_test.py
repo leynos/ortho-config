@@ -94,6 +94,16 @@ NO_BACKEND_EXPECTED: typ.Final[dict[str, str]] = {
 
 _SHA = re.compile(r"@([0-9a-f]{40})\b")
 
+#: The developers' guide, which states the pin in prose beside the
+#: contract that holds it.
+GUIDE: typ.Final[Path] = (
+    Path(__file__).resolve().parents[2] / "docs" / "developers-guide.md"
+)
+
+#: Any commit-looking token in that prose. Eight is the shortest
+#: abbreviation this repository writes.
+_GUIDE_SHA = re.compile(r"\b[0-9a-f]{8,40}\b")
+
 #: A same-tree reference, split into the path inside the shared-actions
 #: tree and whatever follows the ``@``. The reference is read as a whole
 #: rather than scanned for a SHA, so the path can be compared exactly and
@@ -312,4 +322,45 @@ def test_every_job_with_a_backend_reports_its_statistics(job_name: str) -> None:
     assert not unconditional, (
         f"{job_name} reports sccache statistics from a step that does not run "
         f"unconditionally, so a failed build reports nothing: {unconditional}"
+    )
+
+
+def test_the_guide_names_no_pin_the_workflows_do_not_use() -> None:
+    """Assert the prose's pin claim matches the workflows.
+
+    This contract exists because the claim was wrong. The guide said the
+    two exempt references stayed "at their own pin, `6b5cdc2d`", and no
+    reference in the tree was at that SHA: every one of them sat at the
+    same pin as the rest. A reader repinning the tree, or judging
+    whether a partial repin had happened, would have been reading a
+    number from nowhere.
+
+    Nothing else catches it. The one-SHA assertion reads the workflows
+    and says nothing about the prose, and prose is exactly where a stale
+    pin survives a repin, because the repin touches the workflows only.
+
+    The sweep is over commit-looking tokens rather than over a sentence,
+    so it does not break when the paragraph is reworded. Two answers are
+    allowed: a prefix of the SHA in use, and a pin named in
+    `PINS_WITHOUT_THE_WRAPPER`, which the guide cites precisely because
+    the tree must not be at it.
+    """
+    in_use = set(_pinned_shas())
+    assert len(in_use) == 1, (
+        "this contract reads the single pin in use, which the assertion above "
+        f"establishes; found {sorted(in_use)}"
+    )
+    current = next(iter(in_use))
+    stale = sorted(
+        {
+            token
+            for token in _GUIDE_SHA.findall(GUIDE.read_text(encoding="utf-8"))
+            if not current.startswith(token)
+            and not any(pin.startswith(token) for pin in PINS_WITHOUT_THE_WRAPPER)
+        }
+    )
+    assert not stale, (
+        f"{GUIDE.name} names these commits, and the workflows are at "
+        f"{current} with {sorted(PINS_WITHOUT_THE_WRAPPER)} named as the pins "
+        f"to stay away from: {stale}"
     )
