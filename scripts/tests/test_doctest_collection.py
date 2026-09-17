@@ -1,10 +1,13 @@
 """Guard the doctest list in the Makefile against drift.
 
 `PYTEST_FLAGS` names the modules `--doctest-modules` collects. The list
-is written by hand, so a module that gains an ``Examples`` section is
-collected only if somebody remembers to add it. One already had not
-been: `scripts/typos_rollout_http.py` carried an example that nothing
-ran. The contract below is the reason that cannot recur silently.
+is written by hand, so it drifts from the tree in both directions: a
+module that gains an ``Examples`` section is collected only if somebody
+remembers to add it, and a module the list still names after a deletion
+ends the whole lane. Both have happened here. The spelling helper
+carried an example that nothing ran until it was named, and it was then
+deleted with the legacy generator while the list still named it. The
+contracts below are the reason neither can recur silently.
 """
 
 from __future__ import annotations

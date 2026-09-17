@@ -385,10 +385,13 @@ those examples are executed rather than read. `PYTEST_FLAGS` in the Makefile
 hands `--doctest-modules` the modules to collect, and `make test` runs them
 beside the script tests.
 
-The list is written by hand, which is the mechanism that fails. A module that
-gains an example is collected only if somebody remembers to name it, and one
-already had not been: `scripts/typos_rollout_http.py` carried an example that
-nothing ran, so it could have gone untrue without a gate noticing.
+The list is written by hand, which is the mechanism that fails, and it fails in
+both directions. A module that gains an example is collected only if somebody
+remembers to name it, and the spelling helper had gained one that nothing ran,
+so it could have gone untrue without a gate noticing. A module the list still
+names after a deletion is the other direction, and the same helper supplied it:
+it was removed with the legacy spelling generator while the list still named
+it, which ends the whole lane rather than quietly collecting less.
 
 `scripts/tests/test_doctest_collection.py` is the guard. It sweeps `scripts/`
 for modules containing `>>>` and fails when one is neither named by

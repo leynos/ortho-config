@@ -31,7 +31,6 @@ PYTHON_VERSION ?= 3.13
 PYTHON_DEPS_FILE ?= scripts/requirements-test.txt
 PYTEST_FLAGS ?= --doctest-modules scripts/bump_version.py \
 	scripts/release_archive.py scripts/release_archive_naming.py \
-	scripts/typos_rollout_http.py \
 	scripts/verify_release_archives.py scripts/tests -q
 LADING ?= uvx --from git+https://github.com/leynos/lading lading
 POWERSHELL ?= pwsh
