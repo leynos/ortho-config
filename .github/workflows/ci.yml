@@ -129,12 +129,20 @@ jobs:
         if: ${{ matrix.os == 'ubuntu-latest' }}
         env:
           WHITAKER_INSTALLER_VERSION: ${{ steps.whitaker.outputs.version }}
+          # binstall reads the release metadata from the GitHub API. Without a
+          # token those requests are anonymous and share the runner's IP rate
+          # limit with every other job on the fleet, and a 403 sends binstall
+          # down the path below. The resolve step above already uses this
+          # token for the same API.
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           # `cargo binstall --version` exits non-zero (the flag requires a
           # value), so probe availability with `-V` instead.
           if ! command -v whitaker-installer >/dev/null 2>&1; then
             if cargo binstall -V >/dev/null 2>&1; then
-              cargo binstall --no-confirm --locked "whitaker-installer@${WHITAKER_INSTALLER_VERSION}"
+              cargo binstall --no-confirm --locked --disable-strategies compile \
+                "whitaker-installer@${WHITAKER_INSTALLER_VERSION}"
             else
               echo "cargo-binstall unavailable; building whitaker-installer from crates.io"
               cargo install --locked whitaker-installer --version "${WHITAKER_INSTALLER_VERSION}"
@@ -145,8 +153,15 @@ jobs:
           # from crates.io and needs rustc >= 1.91 — newer than this
           # repository's pinned nightly. Preinstall the prebuilt dylint-link
           # the installer expects so it detects the tool and skips that path.
+          #
+          # `--disable-strategies compile` is what makes that preinstall
+          # dependable. Without it an unreachable release is not an error:
+          # binstall falls back to building from source, which is the very
+          # thing this line exists to avoid, and the job then fails several
+          # minutes later on a rustc version rather than on the download.
           if cargo binstall -V >/dev/null 2>&1; then
-            cargo binstall --no-confirm dylint-link@6.0.1
+            cargo binstall --no-confirm --disable-strategies compile \
+              dylint-link@6.0.1
           fi
           whitaker-installer
 
