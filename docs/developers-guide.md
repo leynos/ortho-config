@@ -1209,7 +1209,7 @@ the tier in question, which is what a maintainer can act on.
 
 It also pins how many coverage steps each job runs. The ceiling's requirement
 is the sum of the watchdogs found, so deleting one of a job's two coverage
-steps lowers that requirement by 1,800 s and every timing assertion still
+steps lowers that requirement by 2,700 s and every timing assertion still
 passes while the lane measures half of what it did.
 
 `tests/workflow_contracts/timeout_budget_properties_test.py` holds the readings
