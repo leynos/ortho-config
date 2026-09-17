@@ -814,9 +814,21 @@ Two Rust lanes are outside this, each for its own reason:
   workflow triggers on a tag push and on `workflow_dispatch`, never on the
   `release` event, so that guard never fires here.
 
-`rust-build-release` and `mutation-cargo` stay at their own pin, `6b5cdc2d`.
-Neither serves a lane this wiring governs, and moving them is a separate change
-that needs its own evidence.
+`rust-build-release` and `mutation-cargo` are exempt from the one-SHA
+assertion, not pinned apart from it. Every reference into the shared-actions
+tree, those two included, sits at `0e3c4d24` today. The exemption is an
+allowance for them to diverge later without the contract reporting a partial
+repin: neither serves a lane this wiring governs, `rust-build-release` is the
+release build the action excludes from sccache, and `mutation-cargo` is a
+reusable workflow, which caller job environments cannot reach. Moving either is
+a separate change that needs its own evidence.
+
+The allowance is proved in both directions rather than assumed. Moving
+`rust-build-release` to a SHA of its own leaves the contract passing, which is
+the exemption working; adding a sibling whose path merely begins with an exempt
+one, such as a `rust-build-release-extra`, fails it, because the exemption is
+keyed by the whole path inside the shared-actions tree and matched by equality
+rather than by prefix.
 
 `sccache_wiring_test.py` holds four things: that every reference into the
 shared-actions tree sits at one SHA, so a partial repin cannot pass while the
