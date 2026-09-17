@@ -933,6 +933,9 @@ system rather than cross-compiled:
 | `aarch64-apple-darwin`      | `macos-latest`     |
 | `x86_64-pc-windows-msvc`    | `windows-latest`   |
 
+Table: Release targets for `cargo-orthohelp` and the runner each archive is
+built on, one runner per target architecture and operating system.
+
 ### Archive layout
 
 `scripts/release_archive.py` builds one target and writes
