@@ -54,9 +54,20 @@ SHARED_ACTIONS_PREFIX: typ.Final[str] = "leynos/shared-actions/"
 #: The references deliberately left at their own pin, each with the
 #: reason. Named individually rather than allowed as a class, so adding
 #: a third is a decision somebody has to write down.
+#:
+#: Keyed by the whole path inside the shared-actions tree and matched by
+#: equality. A substring match would exempt every sibling whose path
+#: merely begins with one of these: a later
+#: ``.github/actions/rust-build-release-extra`` is a different action at
+#: a pin of its own, and skipping it would drop its SHA from the set the
+#: one-SHA assertion reads, so a partial repin would report agreement.
 PINNED_SEPARATELY: typ.Final[dict[str, str]] = {
-    "rust-build-release": "serves the release build, which the action excludes from sccache",
-    "mutation-cargo": "a reusable workflow, which caller job env cannot reach",
+    ".github/actions/rust-build-release": (
+        "serves the release build, which the action excludes from sccache"
+    ),
+    ".github/workflows/mutation-cargo.yml": (
+        "a reusable workflow, which caller job env cannot reach"
+    ),
 }
 
 #: Pins known to install sccache while exporting neither half. Reverting
@@ -82,6 +93,14 @@ NO_BACKEND_EXPECTED: typ.Final[dict[str, str]] = {
 }
 
 _SHA = re.compile(r"@([0-9a-f]{40})\b")
+
+#: A same-tree reference, split into the path inside the shared-actions
+#: tree and whatever follows the ``@``. The reference is read as a whole
+#: rather than scanned for a SHA, so the path can be compared exactly and
+#: an unpinned ``@v1`` still reaches the assertion below.
+_REFERENCE = re.compile(
+    re.escape("leynos/shared-actions/") + r"(?P<path>[^@\s'\"]+)@(?P<ref>[^\s'\"]+)"
+)
 
 
 def _workflow_text() -> dict[str, str]:
@@ -133,14 +152,18 @@ def _pinned_shas() -> dict[str, set[str]]:
         for line in text.splitlines():
             if SHARED_ACTIONS_PREFIX not in line:
                 continue
-            if any(excluded in line for excluded in PINNED_SEPARATELY):
+            reference = _REFERENCE.search(line)
+            assert reference is not None, (
+                f"{name}: a {SHARED_ACTIONS_PREFIX} reference could not be "
+                f"read as a path and a ref: {line.strip()}"
+            )
+            if reference.group("path") in PINNED_SEPARATELY:
                 continue
-            match = _SHA.search(line)
-            assert match is not None, (
+            assert _SHA.fullmatch("@" + reference.group("ref")) is not None, (
                 f"{name}: a {SHARED_ACTIONS_PREFIX} reference is not pinned "
                 f"to a 40-hex commit SHA: {line.strip()}"
             )
-            found.setdefault(match.group(1), set()).add(name)
+            found.setdefault(reference.group("ref"), set()).add(name)
     return found
 
 
@@ -260,6 +283,7 @@ def test_every_job_with_a_backend_reports_its_statistics(job_name: str) -> None:
     binary through `SCCACHE_PATH`. A bare `sccache --show-stats` reports
     on whichever binary `PATH` resolves, which is the same defect the
     wrapper half of this contract exists to prevent.
+
     """
     job = _jobs_running_setup_rust()[job_name]
     if job_name in NO_BACKEND_EXPECTED:
