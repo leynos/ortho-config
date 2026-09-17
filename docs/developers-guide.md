@@ -735,6 +735,35 @@ If a workflow's behaviour genuinely depends on a feature only present from a
 particular commit onwards, express that as a comment or a changelog note, not
 as a test assertion on the SHA string.
 
+### Workflow contract gate
+
+`make test-workflow-contracts` runs the contracts in `tests/workflow_contracts`
+against the checked-in workflow and Make sources. It is a separate target from
+`make test` because it needs neither a Rust toolchain nor the workspace's
+Python test requirements:
+
+```bash
+uv run --with 'pytest>=8,<10' --with 'pyyaml>=6,<7' pytest \
+    tests/workflow_contracts --doctest-modules -q
+```
+
+Three things about that command are deliberate. The requirements are named
+inline rather than taken from `scripts/requirements-test.txt`, so the gate
+stays runnable on a checkout with no virtual environment. Both carry an upper
+bound, because the target has no lockfile and a future major release of either
+could change collection or doctest behaviour with no edit to this repository.
+And `--doctest-modules` collects the examples in the support modules, so an
+example that stops matching the helper it documents fails the gate rather than
+ageing quietly.
+
+`tests/workflow_contracts/makefile_support.py` holds the helpers the contracts
+share for reading a Makefile: recognizing a recipe line, and extracting the
+subcommand a target hands to a tool. It is support code, not a contract, so it
+contains no test functions; its own executable examples are what
+`--doctest-modules` collects. Contracts that read a workflow parse the YAML
+document rather than matching its text, so a re-indentation cannot change a
+verdict.
+
 ## Publish dry run
 
 `make publish-check` runs `lading publish` over the workspace. lading copies
