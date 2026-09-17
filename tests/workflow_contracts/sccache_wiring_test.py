@@ -284,16 +284,32 @@ def test_every_job_with_a_backend_reports_its_statistics(job_name: str) -> None:
     on whichever binary `PATH` resolves, which is the same defect the
     wrapper half of this contract exists to prevent.
 
+    The step's condition is asserted too. A step with no condition, or
+    one guarded on success, reports nothing when the build fails, and a
+    failed build is exactly the run whose compile-request and hit counts
+    explain it. Reading only the joined commands cannot see that: the
+    text is identical either way.
     """
     job = _jobs_running_setup_rust()[job_name]
     if job_name in NO_BACKEND_EXPECTED:
         pytest.skip(f"{job_name} caches nothing: {NO_BACKEND_EXPECTED[job_name]}")
-    commands = "\n".join(str(step.get("run", "")) for step in job.get("steps") or [])
-    assert "--show-stats" in commands, (
+    steps = job.get("steps") or []
+    reporting = [step for step in steps if "--show-stats" in str(step.get("run", ""))]
+    assert reporting, (
         f"{job_name} selects an sccache backend but never reports its "
         "statistics, so the wiring cannot be verified from a run"
     )
+    commands = "\n".join(str(step.get("run", "")) for step in reporting)
     assert "SCCACHE_PATH" in commands, (
         f"{job_name} reports sccache statistics without invoking it through "
         "SCCACHE_PATH, so it may report on a different binary"
+    )
+    unconditional = [
+        str(step.get("name", "<unnamed>"))
+        for step in reporting
+        if str(step.get("if", "")).strip() != "always()"
+    ]
+    assert not unconditional, (
+        f"{job_name} reports sccache statistics from a step that does not run "
+        f"unconditionally, so a failed build reports nothing: {unconditional}"
     )
