@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import pytest
 from nextest_budgets import (
+    NextestConfigurationError,
     configured_periods,
     largest_test_allowance,
     termination_allowance,
@@ -139,4 +140,52 @@ def test_a_bare_slow_timeout_names_a_period_too() -> None:
 
     assert periods == [pytest.approx(90.0)], (
         f"a bare duration is the period it names; read {periods!r}"
+    )
+
+
+@pytest.mark.parametrize(
+    "declared",
+    [
+        pytest.param("1.5", id="a-float"),
+        pytest.param('"2"', id="a-quoted-number"),
+        pytest.param("true", id="a-boolean"),
+        pytest.param("0", id="zero"),
+        pytest.param("-1", id="a-negative-integer"),
+    ],
+)
+def test_a_terminate_after_nextest_refuses_yields_no_budget(declared: str) -> None:
+    """nextest reads the field as a positive integer and nothing else.
+
+    It deserializes into an ``Option<NonZeroUsize>``, so each of these
+    makes the runner refuse the whole file, and a reading that
+    multiplied the period by them anyway would report a per-test tier
+    for a configuration that cannot run.
+
+    The boolean is the case the review found, and it failed loudest
+    rather than worst: ``float(str(True))`` raises a bare ``ValueError``
+    out of the parser instead of the configuration error every caller
+    here handles. The other four are the quiet half, and a fix that only
+    wrapped the conversion would have left every one of them accepted.
+    """
+    config_text = (
+        "[profile.default]\n"
+        f'slow-timeout = {{ period = "300s", terminate-after = {declared} }}\n'
+    )
+    with pytest.raises(NextestConfigurationError, match=r"terminate-after"):
+        largest_test_allowance(config_text)
+
+
+def test_the_positive_integer_this_repository_writes_is_accepted() -> None:
+    """Assert the refusal above is narrow as well as sufficient.
+
+    A guard that rejected everything would pass every case in the table
+    and reject the file this repository ships, so the accepted shape is
+    pinned beside the rejected ones.
+    """
+    config_text = (
+        "[profile.default]\n"
+        'slow-timeout = { period = "300s", terminate-after = 2 }\n'
+    )
+    assert largest_test_allowance(config_text) == pytest.approx(600.0), (
+        "a period of 300 s terminated after two of them is a 600 s budget"
     )

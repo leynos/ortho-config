@@ -114,7 +114,89 @@ def _budget_of(path: str, value: object) -> float:
             f"compare against"
         )
         raise UnboundedTestError(message)
-    return seconds(period) * float(str(multiplier))
+    return seconds(period) * _terminate_after(path, multiplier)
+
+
+def _is_positive_integer(value: object) -> bool:
+    """Return whether a parsed value is a TOML positive integer.
+
+    Matched rather than tested with a chained condition, so each shape
+    is answered on its own line. ``bool`` is answered first because it
+    is a subclass of ``int`` in Python and is not one in TOML: without
+    its own arm, ``terminate-after = true`` reads as a multiplier of
+    one.
+
+    Parameters
+    ----------
+    value : object
+        The parsed value.
+
+    Returns
+    -------
+    bool
+        True when nextest would accept it as a ``NonZeroUsize``.
+
+    Examples
+    --------
+    >>> _is_positive_integer(2)
+    True
+    >>> _is_positive_integer(True)
+    False
+    >>> _is_positive_integer(1.5)
+    False
+    """
+    match value:
+        case bool():
+            return False
+        case int():
+            return value >= 1
+        case _:
+            return False
+
+
+def _terminate_after(path: str, value: object) -> int:
+    """Return a ``terminate-after`` as nextest deserializes one.
+
+    nextest reads this field into an ``Option<NonZeroUsize>``, so it is
+    a positive integer and nothing else. Reading it through
+    ``float(str(...))`` accepted three shapes the runner refuses and
+    misread a fourth: a TOML float such as ``1.5``, a quoted ``"2"``,
+    and zero or a negative integer all became budgets, and a boolean
+    raised ``ValueError`` out of this module rather than the
+    configuration error every caller here handles.
+
+    The refusal is by shape rather than by catching the conversion's
+    exception. Wrapping ``float`` would report the boolean properly and
+    still accept ``1.5``, ``"2"`` and zero, which is the larger half of
+    the defect: a contract that multiplies a period by a multiplier
+    nextest will not load reports a per-test tier for a file that
+    cannot run.
+
+    Parameters
+    ----------
+    path : str
+        The dotted path of the declaring table, for the message.
+    value : object
+        The parsed value.
+
+    Returns
+    -------
+    int
+        The multiplier.
+
+    Raises
+    ------
+    NextestConfigurationError
+        If the value is not a positive integer.
+    """
+    if not _is_positive_integer(value):
+        message = (
+            f"{path}.slow-timeout sets terminate-after = {value!r}; nextest "
+            f"reads it as a positive integer and refuses the file otherwise, "
+            f"so no budget can be derived from it"
+        )
+        raise NextestConfigurationError(message)
+    return value
 
 
 def configured_periods(config_text: str) -> list[float]:
