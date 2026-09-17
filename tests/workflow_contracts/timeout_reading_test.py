@@ -11,6 +11,7 @@ from __future__ import annotations
 import pytest
 from nextest_budgets import (
     NextestConfigurationError,
+    bounds_a_single_test,
     configured_periods,
     largest_test_allowance,
     termination_allowance,
@@ -188,4 +189,57 @@ def test_the_positive_integer_this_repository_writes_is_accepted() -> None:
     )
     assert largest_test_allowance(config_text) == pytest.approx(600.0), (
         "a period of 300 s terminated after two of them is a 600 s budget"
+    )
+
+
+@pytest.mark.parametrize(
+    ("declared", "bounded"),
+    [
+        pytest.param("2", True, id="a-positive-integer"),
+        pytest.param("1", True, id="one"),
+        pytest.param("1.5", False, id="a-float"),
+        pytest.param('"2"', False, id="a-quoted-number"),
+        pytest.param("true", False, id="a-boolean"),
+        pytest.param("0", False, id="zero"),
+        pytest.param("-1", False, id="a-negative-integer"),
+    ],
+)
+def test_a_profile_bounds_a_test_only_on_a_value_nextest_accepts(
+    declared: str, bounded: bool
+) -> None:
+    """The presence reading and the budget reading must agree.
+
+    `bounds_a_single_test` counted any non-null `terminate-after`, so it
+    reported a profile as bounding a single test for the five shapes
+    `largest_test_allowance` refuses. The two readings disagreed about
+    the same field, and the disagreement ran in the dangerous direction:
+    the ordering contract asks this one whether the default profile
+    bounds a test at all, and it answered yes for a configuration
+    nextest will not load.
+
+    Both accepted values are driven, not just one, so a rule that
+    happened to accept only the number this repository writes would not
+    pass.
+    """
+    config_text = (
+        "[profile.default]\n"
+        f'slow-timeout = {{ period = "300s", terminate-after = {declared} }}\n'
+    )
+    assert bounds_a_single_test(config_text) is bounded, (
+        f"terminate-after = {declared} is "
+        f"{'accepted' if bounded else 'refused'} by nextest, so the bound "
+        f"reading must say so"
+    )
+
+
+def test_a_profile_with_no_slow_timeout_table_bounds_nothing() -> None:
+    """A bare duration names a warning period and terminates nothing.
+
+    Kept beside the table above because the shape check must not be the
+    only thing standing: a profile whose `slow-timeout` is a string has
+    no `terminate-after` to judge, and the answer is still no.
+    """
+    config_text = "[profile.default]\nslow-timeout = \"300s\"\n"
+    assert bounds_a_single_test(config_text) is False, (
+        "a bare duration sets a warning period, not a termination"
     )

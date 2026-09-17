@@ -285,15 +285,26 @@ def bounds_a_single_test(config_text: str, profile: str = "default") -> bool:
     profile : str
         The profile to read.
 
+    The value is judged by the same rule the budget derivation uses,
+    not merely by being present. nextest reads ``terminate-after`` as an
+    ``Option<NonZeroUsize>``, so a boolean, a quoted number, a float,
+    zero and a negative integer each make it refuse the file. Reading
+    any non-null value as a bound reported the profile as bounding a
+    single test for a configuration that cannot run, while
+    :func:`largest_test_allowance` refused the same text: the two
+    readings disagreed about the same field.
+
     Returns
     -------
     bool
-        True when that profile's own ``slow-timeout`` is a table setting
-        ``terminate-after``.
+        True when that profile's own ``slow-timeout`` is a table whose
+        ``terminate-after`` nextest would accept.
     """
     own = _table(_table(_parsed(config_text).get("profile")).get(profile))
     table = own.get("slow-timeout")
-    return isinstance(table, dict) and table.get("terminate-after") is not None
+    if not isinstance(table, dict):
+        return False
+    return _is_positive_integer(table.get("terminate-after"))
 
 
 def grace_period(config_text: str) -> float:
