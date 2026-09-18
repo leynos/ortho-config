@@ -378,6 +378,33 @@ documented-binary commands through it, while keeping command construction and
 exit-status policy with their existing owners. Run-file paths must contain
 normal relative components only.
 
+### Python docstring examples
+
+The helper scripts under `scripts/` carry NumPy-style `Examples` sections, and
+those examples are executed rather than read. `PYTEST_FLAGS` in the Makefile
+hands `--doctest-modules` the modules to collect, and `make test` runs them
+beside the script tests.
+
+The list is written by hand, which is the mechanism that fails, and it fails in
+both directions. A module that gains an example is collected only if somebody
+remembers to name it, and the spelling helper had gained one that nothing ran,
+so it could have gone untrue without a gate noticing. A module the list still
+names after a deletion is the other direction, and the same helper supplied it:
+it was removed with the legacy spelling generator while the list still named
+it, which ends the whole lane rather than quietly collecting less.
+
+`scripts/tests/test_doctest_collection.py` is the guard. It sweeps `scripts/`
+for modules containing `>>>` and fails when one is neither named by
+`PYTEST_FLAGS` nor covered by a directory the list names, which is how
+`scripts/tests` covers the test modules. A second contract fails when the list
+names a path that no longer exists, because that ends the whole lane rather
+than quietly collecting less. A third pins the sweep itself: both of the others
+are satisfied by a discovery that returns nothing, so the sweep must find
+`scripts/bump_version.py`, which carries fifty-odd examples.
+
+Three mutations are caught: a module dropped from the list, a named path
+misspelled, and a sweep narrowed to a suffix no file uses.
+
 ### Shared test-support helpers
 
 The shared test-support modules own the `ToAnyhow` trait, which converts an
@@ -879,6 +906,327 @@ touch code samples, API names, or quoted material.
 
 Bumping `TYPOS_CONFIG_BUILDER_VERSION` is only needed for builder code changes;
 dictionary changes need no bump.
+
+## Test timeouts: the tiers this repository sets
+
+Four independent timers can end a test run, and the canonical statement of how
+they must be ordered lives in the `generate-coverage` README in
+[`leynos/shared-actions`][shared-actions-coverage]. All four are set here now;
+until this branch, tier one covered two trybuild binaries and nothing else, and
+tier two did not exist at all.
+
+| Tier                     | What it bounds                     | Where it is set                            | Current value                                          |
+| ------------------------ | ---------------------------------- | ------------------------------------------ | ------------------------------------------------------ |
+| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`                     | 600 s (60 s x 10); the trybuild override is also 600 s |
+| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`                     | 1,800 s (30 m)                                         |
+| Cargo watchdog           | one `cargo` invocation, wall clock | `RUN_RUST_CARGO_WAIT_TIMEOUT` at job level | 2,700 s (45 m)                                         |
+| Job `timeout-minutes`    | the whole job                      | job level                                  | 165 m in `ci.yml`, 120 m in `coverage-main.yml`        |
+
+*Table: the timers that can end a run, innermost first.*
+
+### The outermost tier was missing
+
+Neither coverage job declared `timeout-minutes` before this was written, so
+both inherited GitHub's six-hour default. That is not a budget anyone chose,
+and the Windows leg of `ci.yml` already runs for 86 minutes, so a hang there
+cost six hours of a paid runner before anything stopped it.
+
+### Two watchdogs per job, not one
+
+Each coverage job runs the action twice, once with `serde_saphyr` and once
+without, and each invocation gets its own watchdog. So the job must be able to
+contain both budgets before it contains anything else, and the requirement is
+the watchdog multiplied by the number of coverage steps in that job, plus the
+work outside them. The canonical rule does not spell this out because most
+callers invoke the action once.
+
+### The per-test budget is a product, not a period
+
+`terminate-after` counts warning periods, so the budget a test gets is `period`
+multiplied by it. The longest override here is 120 s with a multiplier of five,
+so reading the period alone would report 120 s where the real figure is 600 s.
+The contract asserts that reading outright rather than leaving it implied.
+
+### Tier one covered two binaries, and tier two did not exist
+
+The only `slow-timeout` in `.config/nextest.toml` was the trybuild override.
+Two binaries were bounded at 600 s and every other test in the suite ran with
+nothing under the job ceiling to stop it, because nextest's built-in 60 s
+`slow-timeout` warns and never terminates: it names no `terminate-after`. The
+sampled Windows run below reported 22 tests as slow and terminated none of
+them. No `global-timeout` was set either, so a hung run was bounded only by the
+cargo watchdog, which names `cargo` rather than the test still running.
+
+Both are set now, and both were sized from this repository's own run history
+rather than chosen. Three `build-test` jobs were read line by line, across
+successful and failed runs and both platforms:
+
+| Sample                                | Slowest single test | Longest nextest run | Run         |
+| ------------------------------------- | ------------------- | ------------------- | ----------- |
+| `build-test (windows-latest)`         | 364.8 s             | 1,023.6 s           | 34119577952 |
+| `build-test (ubuntu-latest)`          | 301.8 s             | 620.0 s             | 34120845807 |
+| `build-test (windows-latest)`, failed | no test output      | none                | 34124529877 |
+
+*Table: per-test and whole-run durations, read from the nextest output of each
+job. Each job runs the suite twice, so the two successful samples carry four
+runs between them: 1,023.6 s and 648.2 s on Windows, 620.0 s and 417.7 s on
+Linux, over 2,228 and 2,244 timed test results.*
+
+The slowest test outside the trybuild override was
+`cargo-orthohelp::compile_time must_use_compile_tests` at 364.8 s. The base
+allowance is 600 s, ten warning periods of 60 s, about 1.6 times that worst
+case: enough that a legitimately slow test finishes, small enough that a hang
+is caught well inside the whole-run budget.
+
+The whole-run budget is 30 minutes, about 1.76 times the 1,023.6 s worst run.
+It has to fit inside the watchdog with nextest's termination procedure and a
+cold build counted, which is 1,800 s plus 70 s plus 600 s, or 2,470 s. The
+watchdog was 1,800 s and could not have carried it, so it rises to 2,700 s.
+That is what moves the ceilings: the requirement is the watchdogs a job
+contains plus the work outside them plus the margin, and each job runs the
+action twice.
+
+[Issue 483](https://github.com/leynos/ortho-config/issues/483) asked for these
+measurements and named the constraint they had to satisfy, that each coverage
+job invokes the action twice so raising the watchdog costs twice as much
+ceiling here. It is answered above.
+
+### What the ceilings are sized against
+
+The allowance for work outside the watchdogs is per lane, because the two
+differ by an order of magnitude and holding the trunk lane to the pull-request
+lane's figure would demand a ceiling its own runs cannot justify.
+
+| Lane                                   | Coverage steps  | Worst whole job | Outside those steps | Run         |
+| -------------------------------------- | --------------- | --------------- | ------------------- | ----------- |
+| `ci.yml` `build-test` (windows-latest) | 1,323 s + 950 s | 5,530 s         | 3,257 s             | 33447440225 |
+| `coverage-main.yml` `coverage-upload`  | 563 s + 495 s   | 1,342 s         | 284 s               | 31908409573 |
+
+*Table: measured coverage-step and whole-job durations. The last column is the
+job's duration less its two watchdog-bounded coverage steps, so it is the work
+the job timer covers and the watchdogs do not.*
+
+The sample is 103 `ci.yml` coverage jobs, 100 successful and the rest failed or
+cancelled, and 31 runs of `coverage-main.yml`, 29 successful and 2 failed. Runs
+of every conclusion are read, not only successful ones: a run cancelled at its
+ceiling is the case the sizing exists to prevent. No run in either sample was
+ended by any of the four timers, the worst `ci.yml` job reaching 5,530 s.
+
+On the Windows leg the work outside the coverage steps is dominated by cache
+saving. So `ci.yml` is allowed 60 minutes and `coverage-main.yml` 15. With the
+watchdog at 2,700 s and two coverage steps per job, the requirements are 165
+and 120 minutes: 5,400 s of watchdog, plus the lane's allowance, plus a 900 s
+margin. The margin is a term of the requirement rather than slack above it,
+because a ceiling equal to the sum it contains cancels the job at the moment
+the watchdog would have reported the overrun, and the report is the only thing
+that makes an overrun actionable. The ceilings equal their requirements.
+
+A lane in a workflow the contract has not measured is held to the larger
+allowance until someone measures it and records a run id.
+
+The first version of this section recorded 2,717 s for `ci.yml` and two
+different figures for `coverage-main.yml`, 68 s here and 138 s in the contract.
+Both came from counting the coverage steps differently: the numbers above
+subtract the two `generate-coverage` steps and nothing else, which is exactly
+what the watchdogs bound.
+
+None of those runs was genuinely cold. One run is the coldest seen so far, not
+a measurement of the cold case.
+
+### The contract
+
+`tests/workflow_contracts/timeout_ordering_test.py` asserts this by value over
+every job invoking the coverage action, in both the `.yml` and `.yaml`
+extensions. Jobs are its unit rather than steps, because the ceiling belongs to
+a job and has to contain every watchdog inside it; counting the steps is what
+makes the two invocations visible to the arithmetic. It reads a step's own
+environment before the job's, as GitHub resolves it, and it fails on a
+coverage-invoking job that declares no ceiling at all. The readings it rests on
+live in `nextest_budgets.py`, `nextest_durations.py`, `nextest_errors.py`,
+`timeout_budgets.py` and `coverage_lanes.py`, and are driven with controlled
+values in `timeout_reading_test.py`.
+
+Run them with `make test-workflow-contracts`. The target provisions `pytest`,
+`pyyaml` and `hypothesis` through `uv run --with` rather than from the
+project's own dependencies, so the contracts need no virtual environment of
+their own and nothing they need reaches the published package. They are Python
+because what they read is YAML and TOML; `make test` does not run them.
+
+Each reading takes what it reads rather than fetching it. `coverage_jobs_of`
+queries supplied workflow documents and reaches no filesystem and no parser,
+`workflow_documents` is the acquisition that reads a directory, and
+`coverage_jobs_in` is the two together, defaulting its directory to the
+repository's own so the contract can call it with no argument at all while the
+query below it can never reach a file. The pair is named for what each takes,
+because a call site has to say which it is doing. The budget readings are
+driven with Hypothesis as well as with named cases, in
+`timeout_budget_properties_test.py`: the unit table and the duration grammar
+are where a single wrong entry would leave every comparison downstream an
+inequality between two plausible numbers, which a fixed case only catches when
+it happens to be the case somebody wrote.
+
+The nextest configuration is parsed with `tomllib` rather than matched as text.
+A text match finds a key inside a comment, inside a `filter` string, or in a
+table nextest never consults, and reports a budget the runner does not use.
+`.config/nextest.toml` sets `global-timeout = "30m"`, and the ordering
+assertion requires that value to sit above the largest per-test allowance and
+inside the watchdog; it skips only when no whole-run budget is set at all. A
+scraping reader would read a commented-out or filtered budget as one in force,
+and comparing against a budget nobody had written is the failure this avoids.
+`terminate-after` is optional, and a `slow-timeout` without it marks a test
+slow and never stops it, so the reading refuses that form rather than reporting
+one period as the budget. Every table in `.config/nextest.toml` sets it
+explicitly, so no value here changes.
+
+Durations are read with the grammar `humantime` accepts, which is what nextest
+deserializes them with: a sequence of components each carrying a unit, written
+`60s`, `2h 37m` or `2h37m`, with the long unit spellings. The reader used to
+take one value and one of four short units, so `2h 37m`, `300 sec` and `30d`
+were each refused as malformed while nextest loads all three, and two of them
+sat in the contract's refusal list asserting the reader's own limitation as
+though it were the file's fault. The grammar was measured against humantime
+2.3.0, which is what the lockfile of the pinned cargo-nextest release resolves,
+by compiling that parser and running the cases through it. Naming the version
+matters: an earlier note here cited 2.4.0, which is the newest release rather
+than the one the shared coverage action installs, `cargo-nextest@0.9.120`. A
+value may carry a fractional part, and whitespace is tolerated around the
+point, so `1.5m` and `1 . 5 m` are both ninety seconds. Whitespace inside the
+number is ignored too, so `1 0s` is ten seconds and `1 2 . 3 4 s` is 12.34. The
+short spellings `wk`, `wks`, `yr` and `yrs` are units alongside the longer
+ones. The bare `0` is the one duration humantime reads without a unit, and it
+is the exact text: its parser special-cases `0` before reading a character, so
+`" 0 "` is refused and a reader that stripped whitespace first would accept a
+duration nextest rejects. Case is significant, so `m` is minutes and `M` is
+months.
+
+The watchdog is resolved at the innermost scope that declares it, blank
+included. GitHub takes the most specific declaration of an environment
+variable, and an empty string is a declaration: a step setting
+`RUN_RUST_CARGO_WAIT_TIMEOUT` to `""` hands that step's process an empty value,
+not the job's. A reader that skips blanks and carries on outward credits the
+lane with a budget nothing enforces, and the ordering assertion then passes
+over a ceiling that does not exist. A case covers it, and restoring the
+skip-and-continue reading fails that case alone.
+
+Whitespace is Rust's, not Python's, and the class is written out for the same
+reason the digit class below is. Rust's `char::is_whitespace` is the Unicode
+White_Space property; Python's `\s` is that property plus U+001C to U+001F, the
+file, group, record and unit separators, and `str.strip` and `str.split` carry
+the same excess. Measured over the whole of Unicode, that is the only
+disagreement, and it runs one way: Rust matches nothing Python does not. So a
+reader spelling its whitespace `\s` skips a separator wherever it skips a
+space, and reads `1\x1cs` as one second from a configuration nextest refuses at
+startup.
+
+Five sites carry the class, not one: the digit run, the fraction, the unit, the
+outer trim, and the join that collapses a spaced number's digits. The join
+cannot change an answer while the pattern refuses a separator, so no input
+through the reader distinguishes a correct join from `str.split`; it is written
+correctly anyway and tested through the widest whitespace the class allows,
+because a later widening of the pattern would otherwise turn a refusal into a
+silently different number.
+
+Two contracts hold it. Four refusal cases name the separators, including one
+between a digit and its unit, which is the shape nobody would notice in a file.
+The other pins the class in both directions: Python's whitespace must exceed
+the reader's by exactly those four, and the reader's must exceed Python's by
+nothing. The second direction is the one the refusal cases cannot see, because
+a class that had lost a genuine space would make the reader refuse
+configurations nextest loads.
+
+A digit is `0` to `9` and nothing else. Python's `\d` matches every Unicode
+decimal digit and `int` reads them, so a reader written with it returns three
+hundred seconds for `\u0663\u0660\u0660s` and for the mixed `3\u0660\u0660s`,
+both of which humantime refuses: its parser compares against `'0'..='9'`,
+reporting "expected number at 0" for the run that opens with such a digit and
+"invalid character at 1" for the run that does not. The mixed spelling is the
+sharper case because a reader that checked only its first character would still
+accept it. That is the wrong direction for a contract, which would then certify
+a configuration nextest cannot load.
+
+The arithmetic is exact and in integers, because humantime's is: its parser
+works in checked `u64` throughout and reports every failure as an overflow.
+Reading a value through a float instead rounds what humantime refuses into
+something plausible and certifies a configuration nextest cannot load.
+
+Which integer depends on the unit, and this is the part a reader working in
+nanoseconds alone gets wrong. A fraction of an hour or anything longer is
+converted into whole *seconds*, so `0.000001h` is refused although its value is
+a whole 3,600,000 ns, while `0.25h` is fifteen minutes. A fraction of a minute
+or anything shorter is converted into whole nanoseconds, so `1.999999999s` is
+accepted and `0.0000000015s` is not. A fraction of a nanosecond is refused
+outright, whatever it spells, so even `1.0ns` will not load. The unit tables
+are therefore split by which of the two a unit is measured in.
+
+Four ceilings come with it, and they are different. A numeric literal must fit
+the `u64` humantime reads it into, so `1000000000000000000000ns` is refused
+even though its value in seconds is small. A fraction's own arithmetic is
+checked, so `0.1000000000000000000s` overflows on the multiplication and
+`1.00000000000000000000s` on the denominator, although both would fit as
+durations. The accumulated seconds must fit the `u64` they are summed into, so
+`18446744073709551615s` loads and one second more does not.
+
+And the nanosecond remainder has a ceiling of its own, which is the one that
+catches a reader summing into an unbounded integer. `add_current` opens with
+`(out.subsec_nanos() as u64).add(nsec)?`, before any carry, so the remainder
+held so far plus the component's nanoseconds must fit a `u64` by themselves.
+Two values of `u64::MAX` nanoseconds carry the first to 18,446,744,073 seconds
+and then overflow on the second. The duration they name, about 36.9 billion
+seconds or some 1,169 years, is nowhere near the seconds ceiling; it is the
+remainder that overflows, and it overflows first. That is exactly why checking
+only the accumulated seconds afterwards reports a duration for text nextest
+will not start under.
+
+The reading was checked against the parser rather than against its
+documentation: 4,016 generated durations, spanning every unit spelling,
+fractions of up to twenty-one digits, values around the `u64` boundary and
+humantime's tolerated whitespace, were run through both this reader and
+humantime 2.3.0 compiled from the pinned release, and the two agreed on every
+one.
+
+It pins the condition each lane carries, which is none today. A skipped step
+runs no `cargo`, so its watchdog never arms and the tiers say nothing about it:
+`if: false` on the step or on its job would leave a lane that looks bounded and
+is not. Adding a condition has to change the contract and this section with it,
+and the lane coordinates are compared both ways, so a coverage lane appearing
+without an entry fails rather than passing unexamined.
+
+A document whose shape the reading does not expect fails on the assertion it
+belongs to rather than with a Python fault several frames away. Each malformed
+shape had its own way of raising during derivation: a `jobs` value that is a
+scalar reaches `.items()`, and a non-mapping `env` or an unreadable
+`timeout-minutes` reached arithmetic they could not survive. Each would have
+failed the contract on a workflow that has nothing to do with coverage.
+
+The two outcomes are not the same. A `jobs` value that is not a mapping yields
+no lane at all: nothing in that document is a coverage job, so the document
+contributes nothing to the assertions. A malformed value inside a job that does
+run coverage keeps the lane because the lane is real. It reads the affected
+budget as unset: an `env` that is not a mapping leaves the watchdog unset, and a
+`timeout-minutes` that is not a positive whole number of minutes leaves the
+ceiling unset. Both then fail the assertion that a coverage lane must declare
+the tier in question, which is what a maintainer can act on.
+
+It also pins how many coverage steps each job runs. The ceiling's requirement
+is the sum of the watchdogs found, so deleting one of a job's two coverage
+steps lowers that requirement by 2,700 s and every timing assertion still
+passes while the lane measures half of what it did.
+
+`tests/workflow_contracts/timeout_budget_properties_test.py` holds the readings
+themselves, driven with synthetic workflows and synthetic nextest
+configurations rather than the repository's own. Every ceiling here sits well
+above its requirement, so a missing term in the derivation changes nothing
+observable in this tree; against controlled numbers it does not. The lane
+reading requires its documents, so `coverage_jobs_of(documents)` reaches no
+filesystem and no parser; `workflow_documents(directory)` is where the
+filesystem access and the YAML parsing happen, defaulting its directory to the
+repository's own; and `coverage_jobs_in(directory)` composes the two. The
+boundary is one named function rather than a default inside the derivations.
+
+The `binstall-packaging` job also declares no ceiling. It invokes no coverage
+step, so it is outside this contract, and bounding it is separate work.
+
+[shared-actions-coverage]: https://github.com/leynos/shared-actions/blob/main/.github/actions/generate-coverage/README.md
 
 ## Command checklist
 

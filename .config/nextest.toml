@@ -1,3 +1,30 @@
+# Tier one and tier two, sized from this repository's own run history.
+#
+# Before this, the only slow-timeout in the file was the trybuild
+# override below, so two binaries were bounded and every other test ran
+# with nothing under the job ceiling to stop it; nextest's built-in 60s
+# slow-timeout warns and never terminates. There was no global-timeout
+# either, so a hung run was bounded only by the cargo watchdog, which
+# names cargo rather than the test still running.
+#
+# The base allowance is 600s: ten warning periods of 60s. The slowest
+# single test outside the trybuild override reached 364.8s on the worst
+# Windows run sampled (run 34119577952, `must_use_compile_tests`), and
+# 301.8s on Linux (run 34120845807), so 600s is about 1.6 times the
+# worst seen and still catches a hang inside the whole-run budget.
+#
+# The whole-run budget is 30m. The longest nextest run in that sample
+# was 1,023.6s, on Windows with serde_saphyr; the other three runs
+# sampled took 648.2s, 620.0s and 417.7s. 1,800s is about 1.76 times the
+# worst, and sits inside the 2,700s cargo watchdog with the cold build
+# and nextest's termination procedure counted.
+#
+# See "Test timeouts" in docs/developers-guide.md, which carries the
+# sample and the arithmetic.
+[profile.default]
+slow-timeout = { period = "60s", terminate-after = 10 }
+global-timeout = "30m"
+
 # These trybuild binaries spawn child cargo processes in a separate target
 # directory, so they do not share cargo-llvm-cov's warmed llvm-cov target cache.
 [[profile.default.overrides]]

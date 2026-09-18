@@ -1,0 +1,840 @@
+"""Unit and property coverage for the timeout readings.
+
+The ordering contract compares four numbers, and its assertions over the
+repository's own workflows are satisfied by several plausibly wrong
+readings. Every ceiling here sits well above its requirement, so a
+missing term in the derivation changes nothing observable; the two
+coverage steps always carry the same watchdog, so a reading that took
+one of them would agree with a correct one.
+
+These tests drive the readings with synthetic workflows and synthetic
+nextest configurations instead, where a wrong reading has nowhere to
+hide, and they fix the error paths so a malformed input is refused
+rather than turned into a plausible number.
+"""
+
+from __future__ import annotations
+
+import re
+import typing as typ
+
+import pytest
+from coverage_lanes import coverage_jobs_in, coverage_jobs_of, workflow_documents
+from hypothesis import given
+from hypothesis import strategies as st
+from nextest_budgets import (
+    NextestConfigurationError,
+    UnboundedTestError,
+    global_timeout,
+    grace_period,
+    largest_test_allowance,
+    seconds,
+    termination_allowance,
+)
+from nextest_durations import _WHITESPACE_CHARS
+from nextest_units import Overflow
+from timeout_budgets import (
+    CEILING_MARGIN_SECONDS,
+    COVERAGE_ACTION,
+    NEXTEST_DEFAULT_GRACE_PERIOD_SECONDS,
+    TERMINATION_SAFETY_MARGIN_SECONDS,
+    WATCHDOG_VARIABLE,
+    required_ceiling,
+)
+
+if typ.TYPE_CHECKING:
+    import pathlib
+
+#: Every unit spelling nextest accepts, with its length in seconds.
+#: nextest deserializes durations with ``humantime_serde``, so this is
+#: humantime's table, written out again rather than imported: the unit
+#: table is the one place in the reading where a single wrong entry
+#: would go unnoticed, because every comparison downstream would still
+#: be an inequality between two plausible numbers. Measured against
+#: humantime 2.3.0, which is what the lockfile of the pinned
+#: cargo-nextest release resolves, by compiling that parser and running
+#: every spelling through it. Case is significant,
+#: ``m`` being minutes and ``M`` months.
+UNITS: typ.Final[dict[str, float]] = {
+    "nanos": 1e-9,
+    "nsec": 1e-9,
+    "ns": 1e-9,
+    "usec": 1e-6,
+    "us": 1e-6,
+    "\u00b5s": 1e-6,
+    "millis": 0.001,
+    "msec": 0.001,
+    "ms": 0.001,
+    "seconds": 1.0,
+    "second": 1.0,
+    "secs": 1.0,
+    "sec": 1.0,
+    "s": 1.0,
+    "minutes": 60.0,
+    "minute": 60.0,
+    "mins": 60.0,
+    "min": 60.0,
+    "m": 60.0,
+    "hours": 3600.0,
+    "hour": 3600.0,
+    "hrs": 3600.0,
+    "hr": 3600.0,
+    "h": 3600.0,
+    "days": 86400.0,
+    "day": 86400.0,
+    "d": 86400.0,
+    "weeks": 604800.0,
+    "week": 604800.0,
+    "wks": 604800.0,
+    "wk": 604800.0,
+    "w": 604800.0,
+    "months": 2630016.0,
+    "month": 2630016.0,
+    "M": 2630016.0,
+    "years": 31557600.0,
+    "year": 31557600.0,
+    "yrs": 31557600.0,
+    "yr": 31557600.0,
+    "y": 31557600.0,
+}
+
+COVERAGE_STEP: typ.Final[str] = (
+    "leynos/shared-actions/.github/actions/generate-coverage@abc123"
+)
+
+whole_numbers = st.integers(min_value=1, max_value=10_000)
+fractional_parts = st.integers(min_value=0, max_value=999)
+units = st.sampled_from(sorted(UNITS))
+
+#: The units any three-digit fraction can be written against. humantime
+#: converts a fraction differently either side of the hour: below it the
+#: fraction becomes whole nanoseconds, at it and above it whole seconds,
+#: and a fraction of a nanosecond is refused outright. So `1.1M` is not
+#: a duration, because a tenth of a month is not a whole number of
+#: seconds, and neither is `1.0ns`. Between the microsecond and the
+#: minute the nanosecond scale divides by a thousand whatever the
+#: numerator, so every three-digit fraction lands. The two excluded ends
+#: are asserted by name instead, as acceptances where they land and
+#: refusals where they do not.
+fractional_units = st.sampled_from(
+    sorted(
+        unit
+        for unit, length in UNITS.items()
+        if 1e-6 <= length <= 60.0 and round(length * 1e9) % 1000 == 0
+    )
+)
+multipliers = st.integers(min_value=1, max_value=20)
+
+
+def document(*tables: str, profile: str = "default") -> str:
+    """Return a nextest document declaring those slow-timeouts.
+
+    The reading parses the file, so a configuration it is driven with
+    has to be shaped the way nextest reads one: the first table is the
+    profile's own and the rest are its overrides. A bare key at the root
+    of the document is not configuration to nextest and is not read as
+    any here either.
+
+    Parameters
+    ----------
+    *tables : str
+        The ``slow-timeout`` assignments, profile's own first.
+    profile : str
+        The profile to declare them under.
+
+    Returns
+    -------
+    str
+        A configuration document.
+    """
+    lines = [f"[profile.{profile}]"]
+    if tables:
+        lines.append(tables[0])
+    for override in tables[1:]:
+        lines += ["", f"[[profile.{profile}.overrides]]", override]
+    return "\n".join(lines) + "\n"
+
+
+@given(value=whole_numbers, unit=units)
+def test_every_unit_scales_its_value(value: int, unit: str) -> None:
+    """A duration is its number times the length of its unit.
+
+    The unit table decides every comparison the contract makes, so a
+    single wrong entry would leave each of them an inequality between
+    two plausible numbers rather than a check.
+    """
+    assert seconds(f"{value}{unit}") == pytest.approx(value * UNITS[unit]), (
+        f"{value}{unit} must scale by the length of its unit"
+    )
+
+
+@given(whole=whole_numbers, fraction=fractional_parts, unit=fractional_units)
+def test_a_fractional_value_scales_its_unit(
+    whole: int, fraction: int, unit: str
+) -> None:
+    """A fractional value scales by its unit, as humantime reads it.
+
+    An earlier reader took one value and one short unit, so `1.5m` was
+    read only by accident of its shape and `2h 37m` was refused. nextest
+    loads both, and a contract that refuses configuration the runner
+    accepts fails a correct file and blames the file for it.
+
+    The units are those a three-digit fraction can be written against.
+    humantime counts in whole nanoseconds, so a fraction of a nanosecond
+    is not a duration at all and is asserted as a refusal instead.
+    """
+    written = f"{whole}.{fraction}"
+    assert seconds(f"{written}{unit}") == pytest.approx(float(written) * UNITS[unit]), (
+        f"{written}{unit} must scale its fractional value by the unit"
+    )
+
+
+@given(
+    components=st.lists(
+        st.tuples(whole_numbers, fractional_parts, fractional_units),
+        min_size=1,
+        max_size=6,
+    ),
+    separators=st.lists(st.sampled_from(["", " ", "  "]), min_size=6, max_size=6),
+)
+def test_a_sequence_of_components_sums_to_its_parts(
+    components: list[tuple[int, int, str]], separators: list[str]
+) -> None:
+    """humantime sums a sequence, and the reader must sum the same one.
+
+    This is the invariant underneath the fixed spellings: however many
+    components a duration carries, whatever their units, and whether or
+    not they are spaced apart, the reading is the sum of the components
+    read separately. A reader that stopped at the first component would
+    satisfy every fixed case whose total happened to survive.
+    """
+    written = "".join(
+        f"{whole}.{fraction}{unit}{separator}"
+        for (whole, fraction, unit), separator in zip(components, separators)
+    )
+    expected = sum(
+        float(f"{whole}.{fraction}") * UNITS[unit]
+        for whole, fraction, unit in components
+    )
+    assert seconds(written) == pytest.approx(expected), (
+        f"{written!r} must read as the sum of its components"
+    )
+
+
+@pytest.mark.parametrize(
+    ("duration", "expected"),
+    [
+        pytest.param("2h 37m", 9420.0, id="two-components-spaced"),
+        pytest.param("2h37m", 9420.0, id="two-components-joined"),
+        pytest.param("300 sec", 300.0, id="a-long-unit-spelling"),
+        pytest.param("30d", 2592000.0, id="days"),
+        pytest.param("1.5m", 90.0, id="a-fractional-value"),
+        pytest.param("1 . 5 m", 90.0, id="a-fractional-value-spaced-around-the-point"),
+        pytest.param("2wk", 1209600.0, id="the-short-week-spelling"),
+        pytest.param("3yrs", 94672800.0, id="the-short-plural-year-spelling"),
+        pytest.param("1\u00b5s", 1e-6, id="the-micro-sign-spelling"),
+        pytest.param("0", 0.0, id="the-bare-zero-humantime-reads-without-a-unit"),
+        pytest.param("1 0s", 10.0, id="whitespace-inside-the-number"),
+        pytest.param("1 2 . 3 4 s", 12.34, id="whitespace-throughout-the-number"),
+        pytest.param("1.999999999s", 1.999999999, id="nanosecond-precision"),
+        pytest.param(
+            "18446744073709551615s 999999999ns",
+            18446744073709551615 + 0.999999999,
+            id="the-largest-duration-humantime-holds",
+        ),
+        pytest.param("0.5s 0.5s", 1.0, id="two-half-seconds-that-carry-to-one"),
+        pytest.param("0.000001ms", 1e-9, id="a-fraction-that-lands-on-a-nanosecond"),
+        pytest.param("0.25h", 900.0, id="a-fraction-of-an-hour-in-whole-seconds"),
+        pytest.param("0.5m", 30.0, id="a-fraction-of-a-minute"),
+        pytest.param("0.5y", 15778800.0, id="a-fraction-of-a-year"),
+    ],
+)
+def test_a_duration_nextest_accepts_is_read_rather_than_refused(
+    duration: str, expected: float
+) -> None:
+    """The spellings a configuration is likely to carry are all read.
+
+    The reader used to take one value and one of four short units, so
+    `2h 37m`, `300 sec` and `30d` were each refused as malformed while
+    nextest loads all three. Two of them sat in the refusal list above,
+    asserting the reader's own limitation as though it were the file's
+    fault.
+    """
+    assert seconds(duration) == pytest.approx(expected), (
+        f"{duration!r} must read as {expected} seconds"
+    )
+
+
+@pytest.mark.parametrize(
+    "duration",
+    [
+        "",
+        "300",
+        "s",
+        "five minutes",
+        "-30s",
+        ".5s",
+        "5.s",
+        "1.5.5s",
+        "1S",
+        "00",
+        " 0 ",
+        "0 ",
+        "0.0000000002s",
+        "0.0000000015s",
+        "0.5ns",
+        "18446744073709551616s",
+        "1000000000000000000000ns",
+        "18446744073709551615s 1s",
+        "18446744073709551615s 500ms 500ms",
+        "\u0663\u0660\u0660s",
+        "3\u0660\u0660s",
+        "1\u001cs",
+        "\u001c45m",
+        "45m\u001f",
+        "1\u001d0s",
+        "18446744073709551615ns 18446744073709551615ns",
+        "0.0000000004s 0.0000000006s",
+        "1.0ns",
+        "2.0ns",
+        "0.000001h",
+        "0.1000000000000000000s",
+        "1.00000000000000000000s",
+    ],
+    ids=[
+        "empty",
+        "no-unit",
+        "no-value",
+        "words",
+        "negative",
+        "only-a-fractional-part",
+        "a-missing-fractional-part",
+        "a-second-point",
+        "a-unit-whose-case-is-wrong",
+        "a-zero-that-is-not-the-bare-one",
+        "a-bare-zero-carrying-whitespace",
+        "a-bare-zero-with-a-trailing-space",
+        "below-one-nanosecond",
+        "a-fraction-of-a-nanosecond",
+        "half-a-nanosecond",
+        "one-second-past-the-u64-humantime-accumulates-into",
+        "a-literal-past-the-u64-humantime-reads-it-into",
+        "a-sum-past-the-u64-humantime-accumulates-into",
+        "a-carry-that-completes-a-second-past-the-u64",
+        "a-run-of-unicode-digits",
+        "a-unicode-digit-after-an-ascii-one",
+        "a-file-separator-between-a-digit-and-its-unit",
+        "a-file-separator-before-the-number",
+        "a-unit-separator-after-the-unit",
+        "a-group-separator-inside-the-number",
+        "a-nanosecond-sum-past-the-u64-before-it-carries",
+        "components-that-are-whole-only-together",
+        "a-whole-fraction-of-a-nanosecond",
+        "a-larger-whole-fraction-of-a-nanosecond",
+        "an-hour-fraction-that-is-not-whole-seconds",
+        "a-fraction-whose-product-leaves-the-u64",
+        "a-fraction-whose-denominator-leaves-the-u64",
+    ],
+)
+def test_an_unreadable_duration_is_refused(duration: str) -> None:
+    r"""A duration nextest would reject must not become a number.
+
+    Returning something plausible would put a comparison against a
+    budget nextest never applies, and the contract would pass while the
+    ordering it claims to hold did not. Each spelling here was refused
+    by humantime 2.3.0, which is what the lockfile of the pinned
+    cargo-nextest release resolves, when the cases were run through that
+    parser; `300 sec` and `30d` used to sit in this list and are
+    configuration nextest loads. The bare zero is the sharpest case:
+    humantime special-cases the exact text before reading a character,
+    so a reader that stripped whitespace before comparing would accept
+    `" 0 "`, which nextest rejects.
+
+    One case leaves the parser by a different door. Two half-seconds on
+    top of the largest whole second reach exactly a billion nanoseconds,
+    which humantime's carry declines to move and `Duration::new` then
+    moves regardless, panicking on the overflow. humantime returns no
+    error for that text because it never returns at all, so nextest
+    cannot load it either way, and a reader carrying only past a
+    complete second would report a duration for it. One nanosecond
+    short of that carry is the largest duration humantime does hold,
+    and it sits in the acceptance cases as the other half of the pair.
+
+    The two runs of Unicode digits are the reader's own width rather
+    than the parser's. Python's `\d` matches every Unicode decimal
+    digit and `int` reads them, so both spellings were three hundred
+    seconds here; humantime compares against `'0'..='9'` and refuses
+    them, reporting "expected number at 0" for the run that opens with
+    one and "invalid character at 1" for the run that does not. The
+    mixed spelling is the sharper of the two, because a reader that
+    checked only its first character would still accept it.
+
+    The nanosecond accumulator has a ceiling of its own, and it is not
+    the seconds' one. humantime's `add_current` opens with
+    `(out.subsec_nanos() as u64).add(nsec)?`, before any carry, so the
+    remainder held so far plus this component's nanoseconds must fit a
+    `u64` by itself: two values of `u64::MAX` nanoseconds carry the
+    first to 18,446,744,073 seconds and then overflow on the second. The
+    duration they name, about 36.9 billion seconds, is far below the
+    seconds ceiling, so a reader summing into Python's unbounded integer
+    and checking only the seconds afterwards finds nothing wrong and
+    reports a duration nextest will not start under.
+    """
+    with pytest.raises(NextestConfigurationError):
+        seconds(duration)
+
+
+def test_a_refusal_names_the_arithmetic_that_produced_it() -> None:
+    """The overflow that refused a component survives the translation.
+
+    `NextestConfigurationError` says which configuration is at fault;
+    `Overflow` says which of humantime's checked operations declined.
+    The message names all three rules in one sentence, so on its own a
+    traceback cannot separate a literal past the `u64` from a
+    multiplication that left it from a division with a remainder.
+    Suppressing the cause throws that away.
+    """
+    with pytest.raises(NextestConfigurationError) as refusal:
+        seconds("1.0ns")
+    assert isinstance(refusal.value.__cause__, Overflow), (
+        "the parser failure is the cause of the refusal, not a detail to drop"
+    )
+
+
+@given(
+    budgets=st.lists(
+        st.tuples(whole_numbers, units, multipliers), min_size=1, max_size=8
+    )
+)
+def test_the_largest_budget_is_the_largest_product(
+    budgets: list[tuple[int, str, int]],
+) -> None:
+    """Every `slow-timeout` counts, and each counts as a product.
+
+    A reading that took the first entry, or the largest period without
+    its multiplier, agrees with a correct one whenever the two happen to
+    coincide. Over generated configurations they stop coinciding.
+    """
+    config = document(
+        *(
+            f'slow-timeout = {{ period = "{value}{unit}", terminate-after = {times} }}'
+            for value, unit, times in budgets
+        )
+    )
+    expected = max(value * UNITS[unit] * times for value, unit, times in budgets)
+    assert largest_test_allowance(config) == pytest.approx(expected), (
+        "the largest budget is the largest period times its own multiplier"
+    )
+
+
+@given(periods=st.lists(st.tuples(whole_numbers, units), min_size=1, max_size=6))
+def test_the_termination_allowance_tracks_the_largest_grace_period(
+    periods: list[tuple[int, str]],
+) -> None:
+    """The allowance is the largest grace period plus the fixed margin."""
+    config = document(
+        *(
+            f'slow-timeout = {{ period = "1s", terminate-after = 1, '
+            f'grace-period = "{value}{unit}" }}'
+            for value, unit in periods
+        )
+    )
+    largest = max(value * UNITS[unit] for value, unit in periods)
+    assert grace_period(config) == pytest.approx(largest), (
+        "the largest configured grace period governs"
+    )
+    assert termination_allowance(config) == pytest.approx(
+        largest + TERMINATION_SAFETY_MARGIN_SECONDS
+    ), "the allowance is the grace period plus the margin, not the larger"
+
+
+@given(
+    periods=st.lists(st.tuples(whole_numbers, units), min_size=1, max_size=6),
+    profile=st.sampled_from(["default", "ci"]),
+)
+def test_an_unconfigured_grace_period_falls_back_to_nextest_s_default(
+    periods: list[tuple[int, str]], profile: str
+) -> None:
+    """Assuming zero would understate what nextest needs to stop a run."""
+    config = document(
+        *(
+            f'slow-timeout = {{ period = "{value}{unit}", terminate-after = 1 }}'
+            for value, unit in periods
+        ),
+        profile=profile,
+    )
+    assert grace_period(config) == pytest.approx(
+        NEXTEST_DEFAULT_GRACE_PERIOD_SECONDS
+    ), "an absent grace period must fall back to nextest's default"
+
+
+@pytest.mark.parametrize(
+    "table",
+    [
+        pytest.param('slow-timeout = "2m"', id="a-bare-duration"),
+        pytest.param(
+            'slow-timeout = { period = "2m" }', id="a-table-without-terminate-after"
+        ),
+    ],
+)
+def test_a_slow_timeout_that_never_terminates_is_refused(table: str) -> None:
+    """`terminate-after` is optional, and without it nothing is bounded.
+
+    nextest marks the test slow, warns once per period, and lets it run
+    on. Reading such a configuration as a period-long budget would put a
+    number on the tier that is missing. Every table in
+    `.config/nextest.toml` sets it explicitly, so nothing here relies on
+    the looser reading.
+    """
+    with pytest.raises(UnboundedTestError, match=r"terminate-after"):
+        largest_test_allowance(document(table))
+
+
+@pytest.mark.parametrize(
+    "config",
+    [
+        "",
+        "[profile.default]\nfail-fast = false\n",
+        'slow-timeout = { period = "30s", terminate-after = 1 }\n',
+        '# slow-timeout = { period = "30s", terminate-after = 1 }\n',
+    ],
+    ids=["empty", "no-slow-timeout", "outside-any-profile", "commented-out"],
+)
+def test_a_configuration_with_no_readable_budget_is_refused(config: str) -> None:
+    """Returning zero would make every whole-run budget look comfortable.
+
+    The last two cases are what parsing buys. A key at the root of the
+    document is in no profile, and a commented-out one is not
+    configuration at all; a text match counted both.
+    """
+    with pytest.raises(NextestConfigurationError):
+        largest_test_allowance(config)
+
+
+@pytest.mark.parametrize(
+    ("config", "expected"),
+    [
+        pytest.param("", None, id="absent"),
+        pytest.param('global-timeout = "45m"', None, id="outside-any-profile"),
+        pytest.param(
+            '[profile.default]\nglobal-timeout = "600s"\n', 600.0, id="in-the-default"
+        ),
+        pytest.param(
+            '[profile.ci]\nglobal-timeout = "600s"\n', None, id="another-profile"
+        ),
+        pytest.param(
+            '[profile.default]\n# global-timeout = "45m"\n',
+            None,
+            id="commented-out-is-not-set",
+        ),
+    ],
+)
+def test_the_whole_run_budget_is_read_or_reported_absent(
+    config: str, expected: float | None
+) -> None:
+    """Tier two is absent here, so both branches need proving.
+
+    The contract skips its ordering assertion when the budget is absent.
+    If the reading returned a number for a commented-out line, that skip
+    would become a comparison against a budget nextest never applies.
+    """
+    result = global_timeout(config)
+    if expected is None:
+        assert result is None, f"{config!r} sets no global-timeout"
+    else:
+        assert result == pytest.approx(expected), f"{config!r} sets {expected}s"
+
+
+@given(
+    budgets=st.lists(st.floats(min_value=1.0, max_value=7200.0), max_size=4),
+    allowance=st.floats(min_value=0.0, max_value=7200.0),
+)
+def test_the_required_ceiling_is_monotone_in_every_term(
+    budgets: list[float], allowance: float
+) -> None:
+    """More watchdogs, or more work outside them, can only ask for more.
+
+    A derivation that took the largest watchdog rather than their sum,
+    or dropped the allowance, would still be an increasing function of
+    something, so this pairs the shape with the exact value below.
+    """
+    required = required_ceiling(budgets, allowance)
+    assert required == pytest.approx(
+        sum(budgets) + allowance + CEILING_MARGIN_SECONDS
+    ), "the requirement is the watchdogs, the allowance, and the margin"
+    assert required >= sum(budgets) + allowance, (
+        "the requirement can never fall below the work it has to contain"
+    )
+    assert required_ceiling([*budgets, 60.0], allowance) > required, (
+        "adding a watchdog must raise the requirement"
+    )
+
+
+def _workflow(
+    *, steps: int = 2, ceiling: int | None = 135, watchdog: int | None = 1800
+) -> dict[str, dict[str, object]]:
+    """Return one synthetic workflow containing one coverage job."""
+    job: dict[str, object] = {
+        "steps": [
+            {"name": f"cover {index}", "uses": COVERAGE_STEP} for index in range(steps)
+        ]
+    }
+    if ceiling is not None:
+        job["timeout-minutes"] = ceiling
+    if watchdog is not None:
+        job["env"] = {WATCHDOG_VARIABLE: watchdog}
+    return {"jobs": {"build-test": job}}
+
+
+def test_a_job_is_read_from_a_synthetic_workflow() -> None:
+    """The reading is driven without touching the repository."""
+    (job,) = coverage_jobs_of({"ci.yml": _workflow()})
+    assert job.workflow == "ci.yml", "the entry carries its file name"
+    assert job.job == "build-test", "the entry carries its job identifier"
+    assert job.steps == 2, "both coverage steps are counted"
+    assert job.watchdogs == (1800.0, 1800.0), "the job's watchdog reaches both steps"
+    assert job.job_timeout == pytest.approx(8100.0), "minutes convert to seconds"
+
+
+def test_a_step_declaring_the_watchdog_empty_overrides_its_job() -> None:
+    """A blank is a declaration, and the innermost one wins.
+
+    GitHub takes the most specific declaration of an environment
+    variable, and an empty string is a declaration: a step setting the
+    watchdog to "" hands the process an empty value, not the job's
+    1,800. A reader that skips blanks and carries on outward credits the
+    lane with a budget nothing enforces, and the ordering assertion then
+    passes over a ceiling that does not exist.
+    """
+    document = _workflow()
+    job = document["jobs"]["build-test"]
+    job["steps"][0]["env"] = {WATCHDOG_VARIABLE: ""}
+    (read,) = coverage_jobs_of({"ci.yml": document})
+    assert read.watchdogs == (None, 1800.0), (
+        "the step's empty declaration must override its job's value for that "
+        "step alone, rather than being skipped in favour of the job's"
+    )
+
+
+def test_a_job_without_a_ceiling_reads_as_none_rather_than_absent() -> None:
+    """An absent entry would make the ceiling assertion skip the lane.
+
+    That is the failure this contract exists to prevent, so a missing
+    ceiling has to survive the reading as `None` rather than dropping
+    the job from the list.
+    """
+    (job,) = coverage_jobs_of({"ci.yml": _workflow(ceiling=None)})
+    assert job.job_timeout is None, "a job with no timeout-minutes reads as None"
+
+
+def test_a_step_without_a_watchdog_reads_as_none_rather_than_absent() -> None:
+    """The same argument, one tier in.
+
+    A lane that lost its watchdog override silently takes the action's
+    1,800 s default, so the reading has to show `None` rather than
+    omitting the step and shrinking the requirement.
+    """
+    (job,) = coverage_jobs_of({"ci.yml": _workflow(watchdog=None)})
+    assert job.watchdogs == (None, None), "an unset watchdog reads as None"
+
+
+@pytest.mark.parametrize(
+    "document",
+    [
+        pytest.param({"jobs": {"build": "not a mapping"}}, id="a-job-that-is-a-scalar"),
+        pytest.param({"jobs": {}}, id="no-jobs"),
+        pytest.param({}, id="an-empty-document"),
+        pytest.param({"jobs": {"build": {"steps": "not a list"}}}, id="steps-as-text"),
+        pytest.param(
+            {"jobs": {"build": {"steps": [{"run": "make test"}]}}},
+            id="no-coverage-step",
+        ),
+    ],
+)
+def test_a_malformed_or_unrelated_workflow_yields_no_job(
+    document: dict[str, object],
+) -> None:
+    """A shape the reading does not expect must not become a job.
+
+    Raising here would fail the whole contract on an unrelated workflow;
+    inventing a job would assert budgets nobody wrote.
+    """
+    assert not coverage_jobs_of({"ci.yml": document}), (
+        f"{document!r} declares no coverage job"
+    )
+
+
+@pytest.mark.parametrize(
+    "document",
+    [
+        pytest.param({"jobs": "not a mapping"}, id="jobs-is-a-scalar"),
+        pytest.param({"jobs": ["build"]}, id="jobs-is-a-list"),
+        pytest.param({"jobs": {"build": "not a mapping"}}, id="a-job-is-a-scalar"),
+    ],
+    ids=str,
+)
+def test_a_malformed_jobs_container_yields_no_lane(
+    document: dict[str, object],
+) -> None:
+    """A shape the reading does not expect is not a coverage lane.
+
+    A non-empty scalar reaches `.items()` and raises, which fails the
+    whole contract on a workflow that has nothing to do with coverage.
+    Reporting no lane is the honest answer: the document declares none
+    that this contract can see, and a workflow that will not parse is
+    the loader's business rather than the budgets'.
+    """
+    assert not coverage_jobs_of({"ci.yml": document}), (
+        f"{document!r} declares no coverage job"
+    )
+
+
+@pytest.mark.parametrize(
+    ("ceiling", "expected"),
+    [
+        pytest.param(135, 8100.0, id="a-whole-number-of-minutes"),
+        pytest.param("135", None, id="minutes-as-a-string"),
+        pytest.param(164.5, None, id="a-fraction-of-a-minute"),
+        pytest.param(0, None, id="zero-minutes"),
+        pytest.param(-135, None, id="negative-minutes"),
+        pytest.param("soon", None, id="not-a-number"),
+        pytest.param(True, None, id="a-boolean"),
+        pytest.param([135], None, id="a-list"),
+        pytest.param(None, None, id="absent"),
+    ],
+)
+def test_an_unreadable_ceiling_reads_as_absent(
+    ceiling: object, expected: float | None
+) -> None:
+    """A ceiling that is not a number of minutes is not a ceiling.
+
+    Converting it directly raised during collection, so a workflow with
+    a mistyped `timeout-minutes` failed the contract with a Python
+    fault rather than with the assertion that the job declares no
+    usable ceiling. Reading it as absent puts the failure where a
+    maintainer can act on it.
+
+    `timeout-minutes` is a positive whole number of minutes, so the
+    values that convert cleanly but GitHub refuses are read as absent
+    too. A quoted `"135"` and a fractional `164.5` would otherwise
+    satisfy the ceiling arithmetic for a job GitHub never starts, and
+    zero or a negative would describe a ceiling no job can fit inside.
+    """
+    (job,) = coverage_jobs_of({"ci.yml": _workflow(ceiling=ceiling)})
+
+    if expected is None:
+        assert job.job_timeout is None, f"{ceiling!r} is not a usable ceiling"
+    else:
+        assert job.job_timeout == pytest.approx(expected), f"{ceiling!r} is {expected}s"
+
+
+@pytest.mark.parametrize(
+    "environment",
+    ["not a mapping", ["RUN_RUST_CARGO_WAIT_TIMEOUT=1800"], 1800],
+    ids=["a-string", "a-list", "a-number"],
+)
+def test_a_malformed_environment_reads_as_setting_nothing(
+    environment: object,
+) -> None:
+    """An `env` that is not a mapping sets no watchdog.
+
+    Raising here would fail the contract on the shape of an unrelated
+    field; inventing a budget would certify a lane nobody bounded.
+    """
+    document = {
+        "jobs": {
+            "build-test": {
+                "timeout-minutes": 135,
+                "env": environment,
+                "steps": [{"uses": COVERAGE_STEP}],
+            }
+        }
+    }
+
+    (job,) = coverage_jobs_of({"ci.yml": typ.cast("dict[str, typ.Any]", document)})
+
+    assert job.watchdogs == (None,), (
+        f"an env of {environment!r} sets no watchdog, so the lane inherits "
+        f"the action's default and must read as unset"
+    )
+
+
+def test_the_acquisition_reads_both_extensions_and_nothing_else(
+    tmp_path: pathlib.Path,
+) -> None:
+    """GitHub accepts `.yaml` as readily as `.yml`, and neither is prose.
+
+    Scanning one extension would let a coverage lane in the other escape
+    every assertion this contract makes without failing anything, and
+    parsing every file in the directory would hand the reading a
+    document out of a note nobody meant as a workflow. The acquisition
+    is asserted in its own right here, against a directory this
+    repository does not have, because the two lanes it does have cannot
+    tell either mistake from correct behaviour.
+    """
+    lane = (
+        "name: controlled\non: push\njobs:\n  coverage:\n"
+        "    runs-on: ubuntu-latest\n    timeout-minutes: 30\n"
+        "    env:\n"
+        f"      {WATCHDOG_VARIABLE}: 600\n"
+        "    steps:\n"
+        f"      - uses: {COVERAGE_ACTION}@abc123\n"
+    )
+    for name in ("first.yml", "second.yaml", "notes.txt"):
+        (tmp_path / name).write_text(lane, encoding="utf-8")
+    assert sorted(workflow_documents(tmp_path)) == ["first.yml", "second.yaml"], (
+        "both workflow extensions must be read, and nothing else"
+    )
+    assert [job.workflow for job in coverage_jobs_in(tmp_path)] == [
+        "first.yml",
+        "second.yaml",
+    ], "a lane in either extension must reach the assertions"
+
+
+def test_the_whitespace_class_is_rusts_and_not_pythons() -> None:
+    """Pin the class in both directions, over the whole of Unicode.
+
+    Rust's ``char::is_whitespace`` is the Unicode White_Space property.
+    Python's ``\\s`` is that property plus U+001C to U+001F, the file,
+    group, record and unit separators, and ``str.strip`` and
+    ``str.split`` carry the same excess. A reader spelling its whitespace
+    ``\\s`` skips a separator wherever it skips a space, and reports a
+    budget for a configuration nextest refuses at startup.
+
+    Both directions are asserted. The excess is what the refusal cases
+    above catch; the deficit is not, and a class that had lost a genuine
+    space would make this reader refuse configurations nextest loads,
+    which is the opposite failure and equally wrong. Pinning both means
+    a change to either language's notion of whitespace fails here rather
+    than in a runner months later.
+    """
+    ours = set(_WHITESPACE_CHARS)
+    pythons = {chr(cp) for cp in range(0x110000) if re.match(r"\s", chr(cp))}
+    separators = {"\u001c", "\u001d", "\u001e", "\u001f"}
+    assert pythons - ours == separators, (
+        "Python's whitespace exceeds this reader's by something other than "
+        f"the four C0 separators: {sorted(pythons - ours - separators)!r}"
+    )
+    assert not ours - pythons, (
+        "this reader treats as whitespace something Python does not: "
+        f"{sorted(ours - pythons)!r}"
+    )
+
+
+@pytest.mark.parametrize(
+    "spelling",
+    ["1 0s", "1\u00a00s", "1\u20080s"],
+    ids=["a-space", "a-no-break-space", "a-punctuation-space"],
+)
+def test_the_digit_join_drops_every_whitespace_the_class_allows(spelling: str) -> None:
+    """Exercise the join through the widest whitespace the class allows.
+
+    The digits of a spaced number are joined after the pattern has
+    matched, so while the pattern refuses a separator the join can never
+    meet one, and no input through `seconds` can tell a correct join
+    from `str.split`. The join is changed anyway, because a later
+    widening of the pattern would turn a refusal into a silently
+    different number, and a line nothing can reach is a line nothing
+    proves. These three spellings do reach it.
+    """
+    assert seconds(spelling) == 10.0
