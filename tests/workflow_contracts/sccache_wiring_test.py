@@ -475,9 +475,9 @@ def test_two_workflows_may_name_the_same_job(
     made at `_workflow_text`, the single reader the parsed view is
     derived from, so the YAML parse is exercised on the way through.
     """
-    monkeypatch.setattr(
-        "sccache_wiring_test._workflow_text",
-        lambda: {
+    def workflow_text() -> dict[str, str]:
+        """Return two documents whose only Rust job shares one identifier."""
+        return {
             "first.yml": (
                 "jobs:\n"
                 "  build-test:\n"
@@ -490,13 +490,20 @@ def test_two_workflows_may_name_the_same_job(
                 "    steps:\n"
                 f"      - uses: {SETUP_RUST}{'b' * 40}\n"
             ),
-        },
-    )
+        }
+
+    monkeypatch.setattr("sccache_wiring_test._workflow_text", workflow_text)
     found = _jobs_running_setup_rust()
     assert sorted(found) == [
         ("first.yml", "build-test"),
         ("second.yml", "build-test"),
     ], "both jobs must survive the sweep; a name-keyed reading keeps one"
-    assert found["first.yml", "build-test"]["steps"][0]["uses"].endswith("a" * 40), (
-        "each key must carry its own document's job, not the other's"
-    )
+    # Both keys, not one. A reader that kept the tuple keys and assigned
+    # whichever job it saw last to both of them satisfies the assertion
+    # above perfectly, and is the same loss wearing the right shape.
+    for workflow, expected in (("first.yml", "a"), ("second.yml", "b")):
+        step = found[workflow, "build-test"]["steps"][0]["uses"]
+        assert step.endswith(expected * 40), (
+            f"{workflow} must carry its own document's job, not the other's; "
+            f"it carries {step!r}"
+        )
