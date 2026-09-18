@@ -91,12 +91,12 @@ def lading_configuration_fixture() -> dict[str, typ.Any]:
     return tomllib.loads(LADING_CONFIGURATION_PATH.read_text(encoding="utf-8"))
 
 
-def steps(job: dict[str, typ.Any]) -> list[dict[str, typ.Any]]:
+def _steps(job: dict[str, typ.Any]) -> list[dict[str, typ.Any]]:
     """Return a job's steps."""
     return list(job.get("steps") or [])
 
 
-def step_named(job: dict[str, typ.Any], name: str) -> dict[str, typ.Any]:
+def _step_named(job: dict[str, typ.Any], name: str) -> dict[str, typ.Any]:
     """Return the one step called *name*, failing when it is absent.
 
     Returns
@@ -104,7 +104,7 @@ def step_named(job: dict[str, typ.Any], name: str) -> dict[str, typ.Any]:
     dict
         The named step.
     """
-    matches = [step for step in steps(job) if step.get("name") == name]
+    matches = [step for step in _steps(job) if step.get("name") == name]
     assert len(matches) == 1, (
         f"expected exactly one step named {name!r} in {BUILD_TEST_JOB!r}, "
         f"found {len(matches)}"
@@ -112,7 +112,7 @@ def step_named(job: dict[str, typ.Any], name: str) -> dict[str, typ.Any]:
     return matches[0]
 
 
-def step_index(job: dict[str, typ.Any], name: str) -> int:
+def _step_index(job: dict[str, typ.Any], name: str) -> int:
     """Return the position of the step called *name*.
 
     Returns
@@ -120,7 +120,7 @@ def step_index(job: dict[str, typ.Any], name: str) -> int:
     int
         The step's index within the job.
     """
-    for index, step in enumerate(steps(job)):
+    for index, step in enumerate(_steps(job)):
         if step.get("name") == name:
             return index
     message = f"{BUILD_TEST_JOB!r} declares no step named {name!r}"
@@ -157,8 +157,8 @@ def test_every_lane_tests_before_it_packages(
     step order that packaged first, or a test step that was removed, would
     leave the job packaging code nothing in it had executed.
     """
-    tests_at = step_index(build_test_job, step_name)
-    packages_at = step_index(build_test_job, DRY_RUN_STEP)
+    tests_at = _step_index(build_test_job, step_name)
+    packages_at = _step_index(build_test_job, DRY_RUN_STEP)
     assert tests_at < packages_at, (
         f"{step_name!r} runs at index {tests_at}, after the {DRY_RUN_STEP!r} "
         f"step at index {packages_at}; the skipped pre-flight assumes the lane "
@@ -178,7 +178,7 @@ def test_every_lane_is_covered_by_both_test_steps(
     here is the change that needs re-reading, so the absence is pinned rather
     than any particular expression.
     """
-    declared = step_named(build_test_job, step_name).get("if")
+    declared = _step_named(build_test_job, step_name).get("if")
     assert declared is None, (
         f"{step_name!r} is now conditional on {declared!r}; the dry run packages "
         f"on every lane, so a lane this no longer selects would package without "
@@ -196,7 +196,7 @@ def test_the_skip_is_enabled_on_the_step_that_packages(
     any existence check, and runs the whole pre-flight anyway. That failure is
     silent, which is what makes it worth a contract.
     """
-    environment = step_named(build_test_job, DRY_RUN_STEP).get("env") or {}
+    environment = _step_named(build_test_job, DRY_RUN_STEP).get("env") or {}
     assert environment.get(SKIP_VARIABLE) == SKIP_ENABLED, (
         f"the {DRY_RUN_STEP!r} step sets {SKIP_VARIABLE}="
         f"{environment.get(SKIP_VARIABLE)!r}, not {SKIP_ENABLED!r}"
@@ -230,7 +230,7 @@ def test_the_publish_step_still_runs_the_packaging_command(
     that is public within the workspace but missing from a crate root compiles
     under the workspace test run and Clippy, and fails only here.
     """
-    run = str(step_named(build_test_job, DRY_RUN_STEP).get("run", ""))
+    run = str(_step_named(build_test_job, DRY_RUN_STEP).get("run", ""))
     assert tuple(shlex.split(run, comments=True)) == PACKAGING_COMMAND, (
         f"the {DRY_RUN_STEP!r} step runs {run.strip()!r}, not "
         f"{' '.join(PACKAGING_COMMAND)!r}; per-crate packaging is what this step "
