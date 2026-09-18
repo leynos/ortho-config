@@ -111,6 +111,42 @@ GUIDE: typ.Final[Path] = (
 #: abbreviation this repository writes.
 _GUIDE_SHA = re.compile(r"\b[0-9a-f]{8,40}\b")
 
+#: The lengths this repository writes a commit at: an eight-character
+#: abbreviation, or the whole forty.
+_PIN_LENGTHS: typ.Final[frozenset[int]] = frozenset({8, 40})
+
+
+def _is_commit_like(token: str) -> bool:
+    """Return whether a token in the guide's prose could be a commit.
+
+    An all-decimal token of some other length is a GitHub Actions run
+    identifier, not a commit. The guide cites five of them beside its
+    timeout measurements, and they are eleven digits, which is inside
+    `_GUIDE_SHA`'s range and made entirely of characters `[0-9a-f]`
+    accepts. Sweeping them as stale pins reported five commits that do
+    not exist.
+
+    The discrimination is by length rather than by "contains a letter",
+    and the difference matters in the direction that would hurt. An
+    eight-character abbreviation of a real commit is all decimal digits
+    about one time in forty-three, so a letter test would quietly stop
+    sweeping those, which is the class of pin this contract exists to
+    catch. A run identifier is never eight or forty digits long.
+
+    Parameters
+    ----------
+    token : str
+        A token `_GUIDE_SHA` matched.
+
+    Returns
+    -------
+    bool
+        True when the token is a length this repository writes a commit
+        at, or carries a hex letter and so cannot be a decimal
+        identifier.
+    """
+    return len(token) in _PIN_LENGTHS or not token.isdigit()
+
 #: A same-tree reference, split into the path inside the shared-actions
 #: tree and whatever follows the ``@``. The reference is read as a whole
 #: rather than scanned for a SHA, so the path can be compared exactly and
@@ -368,6 +404,9 @@ def test_the_guide_names_no_pin_the_workflows_do_not_use() -> None:
     allowed: a prefix of the SHA in use, and a pin named in
     `PINS_WITHOUT_THE_WRAPPER`, which the guide cites precisely because
     the tree must not be at it.
+
+    Run identifiers are excluded by `_is_commit_like`, which is where
+    that judgement and its cost are written down.
     """
     in_use = set(_pinned_shas())
     assert len(in_use) == 1, (
@@ -379,7 +418,8 @@ def test_the_guide_names_no_pin_the_workflows_do_not_use() -> None:
         {
             token
             for token in _GUIDE_SHA.findall(GUIDE.read_text(encoding="utf-8"))
-            if not current.startswith(token)
+            if _is_commit_like(token)
+            and not current.startswith(token)
             and not any(pin.startswith(token) for pin in PINS_WITHOUT_THE_WRAPPER)
         }
     )
@@ -507,3 +547,37 @@ def test_two_workflows_may_name_the_same_job(
             f"{workflow} must carry its own document's job, not the other's; "
             f"it carries {step!r}"
         )
+
+
+@pytest.mark.parametrize(
+    ("token", "swept", "why"),
+    [
+        pytest.param("34119577952", False, "an eleven-digit run identifier", id="run-id"),
+        pytest.param("31908409573", False, "an eleven-digit run identifier", id="run-id-2"),
+        pytest.param("12345678", True, "an all-decimal eight-character pin", id="decimal-pin"),
+        pytest.param("1" * 40, True, "an all-decimal whole commit", id="decimal-sha"),
+        pytest.param("0e3c4d24", True, "an ordinary abbreviation", id="abbreviation"),
+        pytest.param("0e3c4d24e43aa48b511d94f3b902711eb02138df", True, "a whole commit", id="whole"),
+    ],
+)
+def test_the_run_identifier_exclusion_is_narrow(
+    token: str, swept: bool, why: str
+) -> None:
+    """Assert the exclusion drops run identifiers and nothing else.
+
+    The sweep above went red on the guide's five run identifiers, which
+    are eleven digits and so inside the pattern's range and made of
+    characters it accepts. Excluding them is easy to do too widely: a
+    "contains a hex letter" test reads naturally and silently stops
+    sweeping an eight-character abbreviation that happens to be all
+    decimal, which is about one commit in forty-three and is exactly the
+    class this contract exists to catch.
+
+    So the discrimination is by length, and both directions are pinned
+    here rather than left to the guide's current text, which contains no
+    all-decimal abbreviation to fail on.
+    """
+    assert _is_commit_like(token) is swept, (
+        f"{token!r} is {why}, so the sweep must "
+        f"{'include' if swept else 'skip'} it"
+    )
