@@ -22,11 +22,19 @@ runner's address-based rate limit with every other job on the fleet, so the
 403 is a matter of neighbours rather than of this repository. The resolve step
 above already uses `github.token` for the same API.
 
-And binstall must not be allowed to compile. With `--disable-strategies
-compile` an unreachable release is an error at the download, naming the
-release; without it the job spends minutes building and then fails on a rustc
-version, which reads as a toolchain problem and sends the reader to the wrong
-place entirely.
+And binstall must not be allowed to compile `dylint-link`. With
+`--disable-strategies compile` an unreachable release is an error at the
+download, naming the release; without it the job spends minutes building and
+then fails on a rustc version, which reads as a toolchain problem and sends the
+reader to the wrong place entirely.
+
+The `whitaker-installer` install is exempt, and the exemption is asserted
+rather than left to a reader's judgement. binstall cannot install that crate
+from its release at all: on 2026-09-18 it resolved the asset, downloaded it,
+and reported `bin whitaker-installer is not found` for a path the tarball does
+contain. Its `--locked` source build is therefore the only working path, and
+unlike the dylint-link one it completes, because the lockfile keeps
+`cargo-platform` off the version that requires rustc 1.91.
 
 Run via ``make test-workflow-contracts``.
 """
@@ -149,34 +157,92 @@ def test_the_install_step_is_authenticated(variable: str) -> None:
     )
 
 
-def test_every_binstall_install_refuses_to_compile() -> None:
-    """Assert no binstall invocation may fall back to building from source.
+def _invocation_installing(package: str) -> str:
+    """Return the single binstall invocation that installs one package.
 
-    This is the property that actually failed. binstall's fallback is
-    fail-open: an unreachable release becomes a source build, and the
-    source build needs a newer rustc than this repository pins, so the
-    job dies several minutes later on a toolchain message that sends the
-    reader nowhere near the download that failed.
+    Parameters
+    ----------
+    package : str
+        The crate name the invocation must name.
 
-    Every installing invocation is checked rather than the one that
-    broke, because the step installs two things and either can be the
-    one whose release is unreachable next time.
+    Returns
+    -------
+    str
+        The invocation, with its line continuations joined.
+
+    Raises
+    ------
+    AssertionError
+        If the step makes no such invocation, or more than one.
     """
     script = _joined(str(_install_step().get("run", "")))
-    invocations = _BINSTALL_INSTALL.findall(script)
-    assert invocations, (
-        f"{STEP_NAME} runs no `cargo binstall --no-confirm` invocation, so "
-        f"this contract is reading the wrong step or the wrong workflow"
-    )
-    uncapped = [
+    matches = [
         invocation.strip()
-        for invocation in invocations
-        if NO_COMPILE not in invocation
+        for invocation in _BINSTALL_INSTALL.findall(script)
+        if package in invocation
     ]
-    assert not uncapped, (
-        f"these {STEP_NAME} invocations may fall back to a source build, "
-        f"which this repository's pinned toolchain cannot complete; each "
-        f"needs {NO_COMPILE!r}: {uncapped}"
+    assert len(matches) == 1, (
+        f"expected exactly one `cargo binstall` invocation installing "
+        f"{package} in {STEP_NAME}; found {len(matches)}: {matches}"
+    )
+    return matches[0]
+
+
+def test_the_dylint_link_install_refuses_to_compile() -> None:
+    """Assert the install that cannot be compiled is not allowed to try.
+
+    This is the property that actually failed. `dylint-link@6.0.1` is
+    installed without `--locked`, so a source build resolves
+    `cargo-platform` 0.3.3, which declares rustc 1.91 against this
+    repository's 1.89 pin and cannot complete. binstall's fallback is
+    fail-open: an unreachable release quietly becomes that build, and
+    the job dies several minutes later on a toolchain message that
+    sends the reader nowhere near the download that failed.
+
+    Asserted on this invocation by name rather than on every one, and
+    the neighbouring test says why the other is exempt.
+    """
+    invocation = _invocation_installing("dylint-link")
+    assert NO_COMPILE in invocation, (
+        f"the dylint-link install may fall back to a source build, which "
+        f"this repository's pinned toolchain cannot complete; it needs "
+        f"{NO_COMPILE!r}: {invocation!r}"
+    )
+
+
+def test_the_installer_install_keeps_its_locked_source_fallback() -> None:
+    """Assert the exemption above is narrow, and pin why it exists.
+
+    binstall cannot install `whitaker-installer` from its GitHub release
+    today. On 2026-09-18 it resolved the asset, downloaded it, and then
+    reported `bin whitaker-installer is not found`, although the tarball
+    contains `whitaker-installer-x86_64-unknown-linux-gnu-v0.2.8/whitaker-installer`,
+    which is the exact path the message names.
+
+    So the `--locked` source build is the only path that works for this
+    crate, and it does work: the lockfile keeps `cargo-platform` off
+    0.3.3, so the rustc 1.91 requirement that breaks the dylint-link
+    build never arises here.
+
+    Refusing the fallback on this invocation therefore fails a working
+    lane rather than protecting it, which is what happened when this
+    contract first asserted the flag on both. The assertion is inverted
+    deliberately: adding the flag here must fail, so nobody restores it
+    from the symmetry of the two lines alone. It comes back when the
+    binstall failure is understood, and this test is where the reason is
+    recorded.
+    """
+    invocation = _invocation_installing("whitaker-installer")
+    assert NO_COMPILE not in invocation, (
+        f"the whitaker-installer install must keep its --locked source "
+        f"fallback: binstall cannot install this crate from its release, "
+        f"so {NO_COMPILE!r} fails the job on the only path that works; "
+        f"{invocation!r}"
+    )
+    assert "--locked" in invocation, (
+        f"the whitaker-installer source fallback must be --locked, which is "
+        f"what keeps cargo-platform off the version that needs rustc 1.91; "
+        f"{invocation!r}"
     )
 
 

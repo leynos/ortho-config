@@ -139,9 +139,20 @@ jobs:
         run: |
           # `cargo binstall --version` exits non-zero (the flag requires a
           # value), so probe availability with `-V` instead.
+          #
+          # No `--disable-strategies compile` on this one, deliberately.
+          # binstall cannot install whitaker-installer from its release
+          # today: it resolves the asset, downloads it, and then reports
+          # `bin whitaker-installer is not found`, although the tarball
+          # does contain `whitaker-installer-<target>-v<version>/whitaker-installer`,
+          # the exact path it names. Until that is understood, the
+          # `--locked` source build below it is the only path that
+          # works, and it completes: the lockfile keeps cargo-platform
+          # off 0.3.3, so the 1.91 requirement never arises. Refusing
+          # the fallback here would fail the job on a working lane.
           if ! command -v whitaker-installer >/dev/null 2>&1; then
             if cargo binstall -V >/dev/null 2>&1; then
-              cargo binstall --no-confirm --locked --disable-strategies compile \
+              cargo binstall --no-confirm --locked \
                 "whitaker-installer@${WHITAKER_INSTALLER_VERSION}"
             else
               echo "cargo-binstall unavailable; building whitaker-installer from crates.io"
