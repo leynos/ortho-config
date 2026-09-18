@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import tomllib
 from itertools import starmap
+from typing import TypeGuard
 
 from nextest_durations import seconds
 from nextest_errors import (
@@ -117,7 +118,7 @@ def _budget_of(path: str, value: object) -> float:
     return seconds(period) * _terminate_after(path, multiplier)
 
 
-def _is_positive_integer(value: object) -> bool:
+def _is_positive_integer(value: object) -> TypeGuard[int]:
     """Return whether a parsed value is a TOML positive integer.
 
     Matched rather than tested with a chained condition, so each shape
@@ -126,6 +127,14 @@ def _is_positive_integer(value: object) -> bool:
     its own arm, ``terminate-after = true`` reads as a multiplier of
     one.
 
+    Narrowing is declared with ``TypeGuard`` rather than ``TypeIs``
+    because the two say different things and only the looser one is
+    true here. ``TypeIs`` asserts the predicate answers True for every
+    ``int``; this one refuses ``True`` and refuses zero and negatives,
+    all of which are ``int``. ``TypeGuard`` asserts only that a True
+    answer implies the type, which is what ``_terminate_after`` needs
+    to return its ``object`` argument as an ``int``.
+
     Parameters
     ----------
     value : object
@@ -133,8 +142,9 @@ def _is_positive_integer(value: object) -> bool:
 
     Returns
     -------
-    bool
-        True when nextest would accept it as a ``NonZeroUsize``.
+    TypeGuard[int]
+        True when nextest would accept it as a ``NonZeroUsize``,
+        narrowing the argument to ``int`` for the caller.
 
     Examples
     --------
