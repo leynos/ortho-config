@@ -762,6 +762,116 @@ If a workflow's behaviour genuinely depends on a feature only present from a
 particular commit onwards, express that as a comment or a changelog note, not
 as a test assertion on the SHA string.
 
+One narrow exception exists, and it is worth stating because it looks like a
+violation. `sccache_wiring_test.py` names `32c8ea64` in a set of pins that
+install sccache while exporting neither half of its wiring, and fails if the
+workflows return to one of them. That is not a lockstep on the current value:
+it never fails a forward bump, it hard-codes nothing that Dependabot will
+change, and it exists because reverting the pin is the one edit that would undo
+this wiring while leaving every other assertion here green.
+
+### sccache: the wrapper and the backend
+
+sccache needs two halves to do anything. The rustc wrapper makes the compiler
+run through it; the backend gives the cache somewhere to live. Either half
+alone is worse than neither, because the job pays the install and reports
+nothing amiss.
+
+This repository ran with neither. The shared Rust setup action installs sccache
+whenever `use-sccache` is true, which is its default, and at pin `32c8ea64` it
+exported no wrapper and selected no backend. Every Rust job installed sccache
+and compiled uncached, which is visible only as a slow build.
+
+The two halves are now set in different places, deliberately:
+
+| Half                  | Where it is set                        | Why there                                                                                         |
+| --------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `RUSTC_WRAPPER`       | the shared action, not this repository | it must be the absolute path of the sccache the action installed                                  |
+| `SCCACHE_GHA_ENABLED` | job-level `env:` in this repository    | it is a choice about where the cache lives, and the action stands aside when a caller has made it |
+
+*Table 1: Which half of the sccache wiring is set where, and why.*
+
+`RUSTC_WRAPPER` is deliberately absent from every workflow here. A bare
+`RUSTC_WRAPPER: sccache` resolves through `PATH`, and an invocation that
+resolves nothing compiles uncached without entering the hit-rate denominator,
+so the statistic a reader would check cannot show the failure; whitaker #409
+measured 69 such invocations after switching to the action's absolute path. The
+action also stands aside when the caller has already set the variable, so a
+value here would silently replace the path with the bare name.
+
+Three jobs run the shared Rust setup and select the backend: `build-test` and
+`binstall-packaging` in `ci.yml`, and `coverage-upload` in `coverage-main.yml`.
+
+Two Rust lanes are outside this, each for its own reason:
+
+- `mutation-testing.yml` calls a reusable workflow. Caller job `env:` does not
+  propagate into one, and that workflow exposes no sccache input, so there is
+  nothing to set from here.
+- `verify-published-assets` in `release.yml` runs the setup but compiles
+  nothing: it dry-runs `cargo binstall` against already published archives.
+  Note that it is *not* excluded by the action's own
+  `github.event_name != 'release'` guard, which a reader might assume. This
+  workflow triggers on a tag push and on `workflow_dispatch`, never on the
+  `release` event, so that guard never fires here.
+
+`rust-build-release` and `mutation-cargo` are exempt from the one-SHA
+assertion, not pinned apart from it. Every reference into the shared-actions
+tree, those two included, sits at `0e3c4d24` today. The exemption is an
+allowance for them to diverge later without the contract reporting a partial
+repin: neither serves a lane this wiring governs, `rust-build-release` is the
+release build the action excludes from sccache, and `mutation-cargo` is a
+reusable workflow, which caller job environments cannot reach. Moving either is
+a separate change that needs its own evidence.
+
+The allowance is proved in both directions rather than assumed. Moving
+`rust-build-release` to a SHA of its own leaves the contract passing, which is
+the exemption working; adding a sibling whose path merely begins with an exempt
+one, such as a `rust-build-release-extra`, fails it, because the exemption is
+keyed by the whole path inside the shared-actions tree and matched by equality
+rather than by prefix.
+
+`sccache_wiring_test.py` holds four things: that every reference into the
+shared-actions tree sits at one SHA, so a partial repin cannot pass while the
+guide claims otherwise; that the pin is not one of the revisions known to
+export neither half; that no workflow sets `RUSTC_WRAPPER`; and that every job
+discovered to run the shared Rust setup selects a backend, with the exclusions
+named individually and with their reasons rather than as a blanket allowance.
+The discovery is itself pinned, because the other assertions are all satisfied
+by a sweep that finds no jobs.
+
+Two of its sweeps are open rather than enumerated, and both had to be widened
+after review found them closed. References are matched by the
+`leynos/shared-actions/` prefix with `rust-build-release` and `mutation-cargo`
+named as the exceptions, rather than by listing the four paths in use today: a
+governed reference added later under an unlisted path would otherwise sit at
+any SHA it liked while the contract reported agreement. And workflows are read
+from both `*.yml` and `*.yaml`, because GitHub runs either, so a sweep over one
+suffix claims repository-wide coverage while ignoring half the places a Rust
+job can be declared.
+
+Each caching job also ends with a `Report sccache statistics` step, and the
+contract requires it. The wiring is invisible from the outside: a job with a
+wrapper and a job without one both succeed, and only sccache's own compile
+request and hit counts tell them apart. The step invokes the binary through
+`SCCACHE_PATH` rather than by name, for the same reason the wrapper is not set
+by name, and it runs on failure too, because the statistics of a failed build
+are often what explain it.
+
+Read the second run of a branch, not the first. The first stores into an empty
+cache, so its hit rate says nothing about whether the wiring works. Compare
+compile requests as well as hit rates: an invocation that resolved no wrapper
+never enters the denominator, so a wrapper defect raises the request count
+rather than lowering the rate.
+
+Nine mutations are caught: one reference left at the old pin, the backend
+removed from a job, `RUSTC_WRAPPER` set by name, the sweep narrowed so it finds
+nothing, an excluded job quietly gaining a backend, the statistics step
+removed, the statistics reported through a bare `sccache` rather than
+`SCCACHE_PATH`, a governed reference added under a new path at a different SHA,
+and a Rust job declared in a `.yaml` workflow without a backend. The last two
+passed before the sweeps were widened, which is how they were shown to be real
+rather than theoretical.
+
 ## Releasing `cargo-orthohelp` binaries
 
 `cargo-orthohelp` is installed by downstream continuous integration (CI) under

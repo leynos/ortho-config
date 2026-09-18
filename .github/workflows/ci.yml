@@ -31,6 +31,19 @@ jobs:
       # ~12 min (the compile_fail trybuild test alone is ~200s), and the
       # 927edd4 action now emits full per-line data, so raise the ceiling.
       RUN_RUST_CARGO_WAIT_TIMEOUT: '2700'
+      # sccache. The shared Rust setup action installs it and, from this
+      # pin, exports RUSTC_WRAPPER as the absolute path of the sccache it
+      # installed. Before this pin it installed sccache and exported
+      # neither the wrapper nor a backend, so every Rust job here paid the
+      # install and compiled uncached.
+      #
+      # RUSTC_WRAPPER is deliberately absent. Setting it by name leaves
+      # invocations wrapped by whichever sccache is on PATH, and any that
+      # resolve none compile uncached without entering the hit-rate
+      # denominator; whitaker #409 measured 69 such invocations. The
+      # action stands aside when a caller has already set the variable, so
+      # a value here would replace the absolute path with a bare name.
+      SCCACHE_GHA_ENABLED: "true"
     strategy:
       fail-fast: false
       matrix:
@@ -47,7 +60,7 @@ jobs:
           fetch-depth: 0
 
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@32c8ea649ea44d40119f348ad48861212532061f
+        uses: leynos/shared-actions/.github/actions/setup-rust@0e3c4d24e43aa48b511d94f3b902711eb02138df
 
       - name: Install bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6  # v2
@@ -59,7 +72,7 @@ jobs:
         # first release with `--check` and `--git`. The Markdown check is
         # platform-independent, so it runs on the Linux lane only.
         if: ${{ matrix.os == 'ubuntu-latest' }}
-        uses: leynos/shared-actions/.github/actions/install-mdtablefix@c5a54701c8603a0fa756a6b34c49bc2af75a6c11
+        uses: leynos/shared-actions/.github/actions/install-mdtablefix@0e3c4d24e43aa48b511d94f3b902711eb02138df
         with:
           version: "0.6.0"
 
@@ -168,7 +181,7 @@ jobs:
         # Broadest feature set, so this leg carries the coverage ratchet
         # (one baseline per job). Ratchet only on the ubuntu leg, which
         # compares against the baseline written by coverage-main.yml.
-        uses: leynos/shared-actions/.github/actions/generate-coverage@32c8ea649ea44d40119f348ad48861212532061f
+        uses: leynos/shared-actions/.github/actions/generate-coverage@0e3c4d24e43aa48b511d94f3b902711eb02138df
         with:
           output-path: lcov-serde-saphyr.info
           format: lcov
@@ -180,7 +193,7 @@ jobs:
           with-ratchet: ${{ matrix.os == 'ubuntu-latest' }}
 
       - name: Test and Measure Coverage (without serde_saphyr)
-        uses: leynos/shared-actions/.github/actions/generate-coverage@32c8ea649ea44d40119f348ad48861212532061f
+        uses: leynos/shared-actions/.github/actions/generate-coverage@0e3c4d24e43aa48b511d94f3b902711eb02138df
         with:
           output-path: lcov-no-serde-saphyr.info
           format: lcov
@@ -203,13 +216,32 @@ jobs:
         if: >-
           env.CS_ACCESS_TOKEN != '' && github.event_name == 'pull_request' &&
           matrix.os == 'ubuntu-latest'
-        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@32c8ea649ea44d40119f348ad48861212532061f
+        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@0e3c4d24e43aa48b511d94f3b902711eb02138df
         with:
           format: lcov
           mode: check
           project-url: https://api.codescene.io/v2/projects/69279
           access-token: ${{ env.CS_ACCESS_TOKEN }}
           installer-checksum: ${{ vars.CODESCENE_CLI_SHA256 }}
+
+      # Invoked through SCCACHE_PATH rather than the bare name, for the same
+      # reason RUSTC_WRAPPER is not set by name: a bare `sccache` reports on
+      # whichever binary PATH resolves, which may not be the one that did the
+      # compiling. Always runs, because the statistics of a failed build are
+      # often what explains it.
+      - name: Report sccache statistics (build-test)
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            printf '### sccache (build-test)\n\n'
+            printf -- '- backend: %s\n\n' \
+              "${{ env.SCCACHE_GHA_ENABLED == 'true' && 'GitHub Actions cache' || 'local disk' }}"
+            printf '```\n'
+            "${SCCACHE_PATH:-sccache}" --show-stats
+            printf '```\n'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Validate PowerShell wrapper
         if: ${{ matrix.os == 'windows-latest' }}
@@ -226,6 +258,19 @@ jobs:
       contents: read
     env:
       CARGO_TERM_COLOR: always
+      # sccache. The shared Rust setup action installs it and, from this
+      # pin, exports RUSTC_WRAPPER as the absolute path of the sccache it
+      # installed. Before this pin it installed sccache and exported
+      # neither the wrapper nor a backend, so every Rust job here paid the
+      # install and compiled uncached.
+      #
+      # RUSTC_WRAPPER is deliberately absent. Setting it by name leaves
+      # invocations wrapped by whichever sccache is on PATH, and any that
+      # resolve none compile uncached without entering the hit-rate
+      # denominator; whitaker #409 measured 69 such invocations. The
+      # action stands aside when a caller has already set the variable, so
+      # a value here would replace the absolute path with a bare name.
+      SCCACHE_GHA_ENABLED: "true"
     strategy:
       fail-fast: false
       matrix:
@@ -241,7 +286,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@32c8ea649ea44d40119f348ad48861212532061f
+        uses: leynos/shared-actions/.github/actions/setup-rust@0e3c4d24e43aa48b511d94f3b902711eb02138df
 
       - name: Setup uv
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d  # v10.0.1
@@ -264,6 +309,25 @@ jobs:
         run: >-
           uv run --script scripts/verify_release_archives.py --dist-dir dist
           --target "$TARGET"
+
+      # Invoked through SCCACHE_PATH rather than the bare name, for the same
+      # reason RUSTC_WRAPPER is not set by name: a bare `sccache` reports on
+      # whichever binary PATH resolves, which may not be the one that did the
+      # compiling. Always runs, because the statistics of a failed build are
+      # often what explains it.
+      - name: Report sccache statistics (binstall-packaging)
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            printf '### sccache (binstall-packaging)\n\n'
+            printf -- '- backend: %s\n\n' \
+              "${{ env.SCCACHE_GHA_ENABLED == 'true' && 'GitHub Actions cache' || 'local disk' }}"
+            printf '```\n'
+            "${SCCACHE_PATH:-sccache}" --show-stats
+            printf '```\n'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Run the packaged binary
         shell: bash
