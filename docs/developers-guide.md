@@ -735,6 +735,79 @@ If a workflow's behaviour genuinely depends on a feature only present from a
 particular commit onwards, express that as a comment or a changelog note, not
 as a test assertion on the SHA string.
 
+### Workflow contract gate
+
+`make test-workflow-contracts` runs the contracts in `tests/workflow_contracts`
+against the checked-in workflow and Make sources. It is a separate target from
+`make test` because it needs neither a Rust toolchain nor the workspace's
+Python test requirements:
+
+```bash
+uv run --with 'pytest>=8,<10' --with 'pyyaml>=6,<7' pytest \
+    tests/workflow_contracts --doctest-modules -q
+```
+
+Three things about that command are deliberate. The requirements are named
+inline rather than taken from `scripts/requirements-test.txt`, so the gate
+stays runnable on a checkout with no virtual environment. Both carry an upper
+bound, because the target has no lockfile and a future major release of either
+could change collection or doctest behaviour with no edit to this repository.
+And `--doctest-modules` collects the examples in the support modules, so an
+example that stops matching the helper it documents fails the gate rather than
+ageing quietly.
+
+`tests/workflow_contracts/makefile_support.py` holds the helpers the contracts
+share for reading a Makefile: recognizing a recipe line, and extracting the
+subcommand a target hands to a tool. It is support code, not a contract, so it
+contains no test functions; its own executable examples are what
+`--doctest-modules` collects. Contracts that read a workflow parse the YAML
+document rather than matching its text, so a re-indentation cannot change a
+verdict.
+
+## Publish dry run
+
+`make publish-check` runs `lading publish` over the workspace. lading copies
+the workspace, then packages and dry-run publishes each crate in the order
+`lading.toml` declares. That per-crate packaging is the point: `cargo package`
+builds each crate from its own packaged sources, so it is the only thing here
+that sees what a published crate exports. A symbol that is public within the
+workspace but missing from a crate root compiles under the workspace test run
+and under Clippy, and fails only in this step. Issue #414 is this repository's
+own instance: `OrthoConfigSubcommandDocs` is exported by the workspace
+`ortho_config_macros` but not by its published release of the same version, so
+tarball verification resolves the re-export against the published crate and
+fails with "no `OrthoConfigSubcommandDocs` in the root". Nothing else in CI
+sees that.
+
+Before it packages, lading runs a pre-flight:
+`cargo check --workspace --all-targets`, then `cargo test`, both into a
+throwaway target directory. `lading.toml` sets `preflight.unit_tests_only`,
+which narrows the second of those to the library and binary unit tests.
+
+In CI the pre-flight is skipped outright. The `Publish dry run` step sets
+`LADING_SKIP_PREFLIGHT`, because both `Test and Measure Coverage` steps are
+unconditional and run ahead of it, so the pre-flight would be a second
+execution of a workspace this job has already passed and failed its lane on.
+The skip drops the auxiliary builds and the cargo check and test pair, and
+nothing else. The `Cargo.lock` freshness guard still runs, and the working-tree
+guard is unaffected: it is opt-in through `--forbid-dirty` either way, and
+`PUBLISH_CHECK_FLAGS` is empty, so neither a skipped nor an executed pre-flight
+enforces a clean tree here. The packaging still runs.
+
+The variable is set on the step rather than in `lading.toml`, because a
+configuration file cannot tell a CI run from a local one. On a workstation
+nothing has run the tests first, so `make publish-check` still runs the full
+pre-flight. `tests/workflow_contracts/publish_preflight_scope_test.py` pins
+both halves of that arrangement, and pins the packaging from both ends: the
+step's command as tokens, and the Make target's recipe handing lading the
+`publish` subcommand. Either half alone is defeatable.
+
+lading itself is pinned. `LADING_REF` in the Makefile holds the full commit SHA
+of the v0.3.1 release commit, which is the first release carrying the skip. A
+SHA rather than the tag, because a tag can be repointed; without any pin,
+`uvx --from git+...` tracks lading's default branch and would change what the
+release gate runs with no edit to this repository.
+
 ## Releasing `cargo-orthohelp` binaries
 
 `cargo-orthohelp` is installed by downstream continuous integration (CI) under
@@ -750,6 +823,9 @@ system rather than cross-compiled:
 | `x86_64-apple-darwin`       | `macos-15-intel`   |
 | `aarch64-apple-darwin`      | `macos-latest`     |
 | `x86_64-pc-windows-msvc`    | `windows-latest`   |
+
+Table: Release targets for `cargo-orthohelp` and the runner each archive is
+built on, one runner per target architecture and operating system.
 
 ### Archive layout
 
