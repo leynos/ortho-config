@@ -61,10 +61,22 @@ STEP_NAME: typ.Final[str] = "Install Whitaker"
 #: exactly like this does in a diff.
 TOKEN_EXPRESSION: typ.Final[str] = "${{ github.token }}"
 
-#: Every name binstall and the GitHub CLI read a token from. Both are
-#: set because the step runs both kinds of tool, and a reader should not
-#: have to know which of them consults which.
+#: Every name binstall reads a token from. Both are assigned because a
+#: reader should not have to know which of them the tool consults, and
+#: the two installs are the only commands that get either.
 TOKEN_VARIABLES: typ.Final[frozenset[str]] = frozenset({"GH_TOKEN", "GITHUB_TOKEN"})
+
+#: The step-level variable the token is carried in. Deliberately not a
+#: name any tool reads: a step-level `GH_TOKEN` is in the environment of
+#: everything the step runs, which here is the `cargo install` fallback,
+#: `whitaker-installer` itself, and every build script either of them
+#: executes. Only the two commands that talk to the GitHub API need it.
+TOKEN_CARRIER: typ.Final[str] = "INSTALL_TOKEN"
+
+#: The command-local assignment each install must carry.
+_ASSIGNMENTS: typ.Final[str] = " ".join(
+    f'{variable}="${{{TOKEN_CARRIER}}}"' for variable in sorted(TOKEN_VARIABLES)
+)
 
 #: The flag that makes an unreachable release an error rather than a
 #: source build.
@@ -81,7 +93,18 @@ NO_COMPILE: typ.Final[str] = "--disable-strategies compile"
 #: tried to match the continuation itself and silently found only the
 #: first line of each; the count assertion below is what caught it.
 _BINSTALL_INSTALL: typ.Final[re.Pattern[str]] = re.compile(
-    r"cargo binstall\s+--no-confirm\b[^\n]*"
+    r"[A-Z_=\"$\{\} ]*cargo binstall\s+--no-confirm\b[^\n]*"
+)
+
+#: The `cargo install` fallback, which runs when binstall is absent
+#: from the runner altogether. A separate pattern because it is a
+#: different command: `_BINSTALL_INSTALL` does not match it, so every
+#: assertion about the binstall invocations passed straight over the
+#: one path that has to work when there is no binstall to fall back
+#: from. `--locked` matters most here, since this is the build that
+#: would otherwise resolve `cargo-platform` 0.3.3 against the 1.89 pin.
+_CARGO_INSTALL: typ.Final[re.Pattern[str]] = re.compile(
+    r"(?<!bin)cargo install\b[^\n]*"
 )
 
 
@@ -102,8 +125,13 @@ def _joined(script: str) -> str:
     return re.sub(r"\\\n\s*", " ", script)
 
 
-def _install_step() -> dict[str, typ.Any]:
-    """Return the Install Whitaker step's mapping.
+@pytest.fixture(scope="module")
+def install_step() -> dict[str, typ.Any]:
+    """Return the Install Whitaker step's mapping, parsed once.
+
+    Module scoped because every assertion here reads the same step of
+    the same document, and parsing it per test read the file five
+    times to produce five identical results.
 
     Returns
     -------
@@ -135,33 +163,61 @@ def _install_step() -> dict[str, typ.Any]:
     return matches[0]
 
 
-@pytest.mark.parametrize("variable", sorted(TOKEN_VARIABLES))
-def test_the_install_step_is_authenticated(variable: str) -> None:
-    """Assert the step passes the workflow's token to the tools it runs.
+def test_the_step_carries_the_token_by_value(
+    install_step: dict[str, typ.Any],
+) -> None:
+    """Assert the token is present and is the workflow's own.
 
     Anonymous GitHub API requests are rate limited by address, so this
     step competes with every other job on the runner fleet. The 403 that
     broke it was a neighbour's traffic, not this repository's, which is
     why the remedy is a token rather than a retry.
 
-    Asserted by value. A token variable set to an empty string, or to
-    some other expression, authenticates nothing and looks identical in
-    a diff to one that works.
+    Asserted by value. A carrier set to an empty string, or to some
+    other expression, authenticates nothing and looks identical in a
+    diff to one that works.
     """
-    environment = _install_step().get("env") or {}
-    assert environment.get(variable) == TOKEN_EXPRESSION, (
-        f"{STEP_NAME} must set {variable} to {TOKEN_EXPRESSION} so its GitHub "
-        f"API requests are authenticated and not subject to the anonymous "
-        f"rate limit shared across the runner fleet; it sets "
-        f"{environment.get(variable)!r}"
+    environment = install_step.get("env") or {}
+    assert environment.get(TOKEN_CARRIER) == TOKEN_EXPRESSION, (
+        f"{STEP_NAME} must set {TOKEN_CARRIER} to {TOKEN_EXPRESSION} so its "
+        f"GitHub API requests are authenticated and not subject to the "
+        f"anonymous rate limit shared across the runner fleet; it sets "
+        f"{environment.get(TOKEN_CARRIER)!r}"
     )
 
 
-def _invocation_installing(package: str) -> str:
+@pytest.mark.parametrize("variable", sorted(TOKEN_VARIABLES))
+def test_no_token_name_is_set_on_the_step(
+    install_step: dict[str, typ.Any], variable: str
+) -> None:
+    """Assert the token reaches only the commands that need it.
+
+    A step-level `GH_TOKEN` is in the environment of everything the step
+    runs. Here that is the `cargo install` fallback, `whitaker-installer`
+    itself, and every build script either of them executes, none of
+    which talks to the GitHub API. Two `cargo binstall` commands do, and
+    they get it by command-local assignment instead.
+
+    The names are asserted absent rather than the carrier asserted
+    present, because the carrier being right says nothing about whether
+    a token name was left behind beside it.
+    """
+    environment = install_step.get("env") or {}
+    assert variable not in environment, (
+        f"{STEP_NAME} sets {variable} at step level, so every command it "
+        f"runs inherits the token, not only the two that authenticate to "
+        f"the GitHub API; carry it in {TOKEN_CARRIER} and assign it per "
+        f"command. It is set to {environment.get(variable)!r}"
+    )
+
+
+def _invocation_installing(step: dict[str, typ.Any], package: str) -> str:
     """Return the single binstall invocation that installs one package.
 
     Parameters
     ----------
+    step : dict
+        The parsed Install Whitaker step.
     package : str
         The crate name the invocation must name.
 
@@ -175,7 +231,7 @@ def _invocation_installing(package: str) -> str:
     AssertionError
         If the step makes no such invocation, or more than one.
     """
-    script = _joined(str(_install_step().get("run", "")))
+    script = _joined(str(step.get("run", "")))
     matches = [
         invocation.strip()
         for invocation in _BINSTALL_INSTALL.findall(script)
@@ -188,7 +244,9 @@ def _invocation_installing(package: str) -> str:
     return matches[0]
 
 
-def test_the_dylint_link_install_refuses_to_compile() -> None:
+def test_the_dylint_link_install_refuses_to_compile(
+    install_step: dict[str, typ.Any],
+) -> None:
     """Assert the install that cannot be compiled is not allowed to try.
 
     This is the property that actually failed. `dylint-link@6.0.1` is
@@ -202,7 +260,7 @@ def test_the_dylint_link_install_refuses_to_compile() -> None:
     Asserted on this invocation by name rather than on every one, and
     the neighbouring test says why the other is exempt.
     """
-    invocation = _invocation_installing("dylint-link")
+    invocation = _invocation_installing(install_step, "dylint-link")
     assert NO_COMPILE in invocation, (
         f"the dylint-link install may fall back to a source build, which "
         f"this repository's pinned toolchain cannot complete; it needs "
@@ -210,7 +268,9 @@ def test_the_dylint_link_install_refuses_to_compile() -> None:
     )
 
 
-def test_the_installer_install_keeps_its_locked_source_fallback() -> None:
+def test_the_installer_install_keeps_its_locked_source_fallback(
+    install_step: dict[str, typ.Any],
+) -> None:
     """Assert the exemption above is narrow, and pin why it exists.
 
     binstall cannot install `whitaker-installer` from its GitHub release
@@ -232,7 +292,7 @@ def test_the_installer_install_keeps_its_locked_source_fallback() -> None:
     binstall failure is understood, and this test is where the reason is
     recorded.
     """
-    invocation = _invocation_installing("whitaker-installer")
+    invocation = _invocation_installing(install_step, "whitaker-installer")
     assert NO_COMPILE not in invocation, (
         f"the whitaker-installer install must keep its --locked source "
         f"fallback: binstall cannot install this crate from its release, "
@@ -246,7 +306,75 @@ def test_the_installer_install_keeps_its_locked_source_fallback() -> None:
     )
 
 
-def test_the_sweep_finds_both_invocations() -> None:
+@pytest.mark.parametrize("package", ["whitaker-installer", "dylint-link"])
+def test_each_binstall_install_carries_the_token(
+    install_step: dict[str, typ.Any], package: str
+) -> None:
+    """Assert the two commands that need the token are the ones that get it.
+
+    The companion to the step-level absence. Removing the names from the
+    step without adding them to these commands leaves the installs
+    anonymous and satisfies that test perfectly, so the two are asserted
+    together and each fails on its own mutation.
+
+    Both names, and both from the carrier by value: an assignment to a
+    literal, or to a variable that does not exist, reads the same in a
+    diff and authenticates nothing.
+    """
+    invocation = _invocation_installing(install_step, package)
+    for variable in sorted(TOKEN_VARIABLES):
+        assignment = f'{variable}="${{{TOKEN_CARRIER}}}"'
+        assert assignment in invocation, (
+            f"the {package} install must carry {assignment} so its GitHub "
+            f"API requests are authenticated; it reads {invocation!r}"
+        )
+
+
+def test_the_cargo_install_fallback_is_locked(
+    install_step: dict[str, typ.Any],
+) -> None:
+    """Assert the path taken when there is no binstall at all.
+
+    `_BINSTALL_INSTALL` does not match `cargo install`, so every
+    assertion above passes straight over this line. It is the one that
+    runs when binstall is missing from the runner, and it is a source
+    build by definition, so `--locked` is the whole of its safety: the
+    lockfile is what keeps `cargo-platform` off 0.3.3 and its rustc 1.91
+    requirement away from this repository's 1.89 pin.
+
+    The package and the version are pinned alongside the flag, because a
+    fallback installing something else, or at whatever version resolves
+    today, is a different command wearing this one's shape.
+    """
+    script = _joined(str(install_step.get("run", "")))
+    matches = [
+        invocation.strip() for invocation in _CARGO_INSTALL.findall(script)
+    ]
+    assert len(matches) == 1, (
+        f"expected exactly one `cargo install` fallback in {STEP_NAME}; "
+        f"found {len(matches)}: {matches}"
+    )
+    fallback = matches[0]
+    for required in (
+        "--locked",
+        "whitaker-installer",
+        '--version "${WHITAKER_INSTALLER_VERSION}"',
+    ):
+        assert required in fallback, (
+            f"the cargo install fallback must carry {required!r}; without "
+            f"the lockfile it resolves cargo-platform 0.3.3, which needs "
+            f"rustc 1.91 against this repository's 1.89 pin. It reads "
+            f"{fallback!r}"
+        )
+    assert TOKEN_CARRIER not in fallback, (
+        "the fallback talks to crates.io rather than the GitHub API, so it "
+        f"must not be given the token: {fallback!r}"
+    )
+
+
+def test_the_sweep_finds_both_invocations(
+    install_step: dict[str, typ.Any],
+) -> None:
     """Assert the reading finds the two installs the step actually makes.
 
     Both assertions above are satisfied by a pattern that matches
@@ -255,7 +383,7 @@ def test_the_sweep_finds_both_invocations() -> None:
     pinned: a pattern that quietly stopped matching the continuation
     lines would otherwise report one and pass.
     """
-    script = _joined(str(_install_step().get("run", "")))
+    script = _joined(str(install_step.get("run", "")))
     invocations = _BINSTALL_INSTALL.findall(script)
     assert len(invocations) == 2, (
         f"{STEP_NAME} installs whitaker-installer and dylint-link, so the "

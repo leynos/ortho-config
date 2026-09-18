@@ -134,8 +134,15 @@ jobs:
           # limit with every other job on the fleet, and a 403 sends binstall
           # down the path below. The resolve step above already uses this
           # token for the same API.
-          GH_TOKEN: ${{ github.token }}
-          GITHUB_TOKEN: ${{ github.token }}
+          #
+          # Carried under a name no tool reads, and assigned to the two
+          # binstall commands alone. Named `GH_TOKEN` or `GITHUB_TOKEN`
+          # here it would be in the environment of everything else this
+          # step runs: the `cargo install` fallback, `whitaker-installer`
+          # itself, and every build script either of them executes. The
+          # two commands that talk to the GitHub API are the only ones
+          # that need it.
+          INSTALL_TOKEN: ${{ github.token }}
         run: |
           # `cargo binstall --version` exits non-zero (the flag requires a
           # value), so probe availability with `-V` instead.
@@ -152,7 +159,8 @@ jobs:
           # the fallback here would fail the job on a working lane.
           if ! command -v whitaker-installer >/dev/null 2>&1; then
             if cargo binstall -V >/dev/null 2>&1; then
-              cargo binstall --no-confirm --locked \
+              GH_TOKEN="${INSTALL_TOKEN}" GITHUB_TOKEN="${INSTALL_TOKEN}" \
+                cargo binstall --no-confirm --locked \
                 "whitaker-installer@${WHITAKER_INSTALLER_VERSION}"
             else
               echo "cargo-binstall unavailable; building whitaker-installer from crates.io"
@@ -171,7 +179,8 @@ jobs:
           # thing this line exists to avoid, and the job then fails several
           # minutes later on a rustc version rather than on the download.
           if cargo binstall -V >/dev/null 2>&1; then
-            cargo binstall --no-confirm --disable-strategies compile \
+            GH_TOKEN="${INSTALL_TOKEN}" GITHUB_TOKEN="${INSTALL_TOKEN}" \
+              cargo binstall --no-confirm --disable-strategies compile \
               dylint-link@6.0.1
           fi
           whitaker-installer
