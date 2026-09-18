@@ -455,7 +455,9 @@ def test_an_exempt_reference_at_its_own_commit_is_still_allowed(
     )
 
 
-def test_two_workflows_may_name_the_same_job() -> None:
+def test_two_workflows_may_name_the_same_job(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """A job identifier is unique only inside its own document.
 
     The discovery is keyed by workflow and job for this reason. Keyed by
@@ -464,21 +466,37 @@ def test_two_workflows_may_name_the_same_job() -> None:
     while appearing to cover both. Nothing about the result would say
     so, which is why this is asserted rather than left to the current
     tree, where the identifiers happen to differ.
+
+    `_jobs_running_setup_rust` is driven with its input replaced rather
+    than reimplemented here. An earlier version of this test built its
+    own correctly keyed mapping and asserted that; it therefore held a
+    property of the loop it had just written, and left the reader free
+    to regress to name-only keys without failing. The substitution is
+    made at `_workflow_text`, the single reader the parsed view is
+    derived from, so the YAML parse is exercised on the way through.
     """
-    documents = {
-        "first.yml": {
-            "jobs": {"build-test": {"steps": [{"uses": SETUP_RUST + "abc"}]}}
+    monkeypatch.setattr(
+        "sccache_wiring_test._workflow_text",
+        lambda: {
+            "first.yml": (
+                "jobs:\n"
+                "  build-test:\n"
+                "    steps:\n"
+                f"      - uses: {SETUP_RUST}{'a' * 40}\n"
+            ),
+            "second.yml": (
+                "jobs:\n"
+                "  build-test:\n"
+                "    steps:\n"
+                f"      - uses: {SETUP_RUST}{'b' * 40}\n"
+            ),
         },
-        "second.yml": {
-            "jobs": {"build-test": {"steps": [{"uses": SETUP_RUST + "abc"}]}}
-        },
-    }
-    found: dict[tuple[str, str], object] = {}
-    for workflow, document in documents.items():
-        for name, job in (document.get("jobs") or {}).items():
-            steps = job.get("steps") or []
-            if any(str(step.get("uses", "")).startswith(SETUP_RUST) for step in steps):
-                found[workflow, name] = job
-    assert sorted(found) == [("first.yml", "build-test"), ("second.yml", "build-test")], (
-        "both jobs must survive the sweep; a name-keyed reading keeps one"
+    )
+    found = _jobs_running_setup_rust()
+    assert sorted(found) == [
+        ("first.yml", "build-test"),
+        ("second.yml", "build-test"),
+    ], "both jobs must survive the sweep; a name-keyed reading keeps one"
+    assert found["first.yml", "build-test"]["steps"][0]["uses"].endswith("a" * 40), (
+        "each key must carry its own document's job, not the other's"
     )
