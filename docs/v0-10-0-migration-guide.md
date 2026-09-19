@@ -151,6 +151,29 @@ precedence or add another configuration-loading pathway.
 The helper is for hand-built commands. Derive-based callers can keep the
 single-variant `#[command(subcommand)]` wrapper used by `cargo-orthohelp`.
 
+## Adopt derived CLI localization
+
+`#[derive(OrthoConfig)]` now implements `OrthoConfigLocalization` for the
+derived configuration. Use `CommandLine::LOCALIZATION_BASE` and the generated
+command and argument identifiers when referring to Fluent messages. Set
+`#[ortho_config(localization_base = "acme.cli")]` to choose the dotted
+catalogue base; when omitted, the application name supplies the default.
+
+The derive normalizes dotted base and argument segments to Fluent-safe,
+hyphen-joined identifiers. Normalized argument-ID collisions within one derived
+struct are compile-time errors. Update catalogues to use the generated IDs,
+including `long-help`, and retain any hand-built command-tree validation
+because those trees keep the runtime panic contract.
+
+Identifier artefact emission is opt-in. Run
+`cargo clean -p <package> && ORTHO_CONFIG_EMIT_IDENTIFIERS=1 cargo build -p <package>`
+to force a fresh expansion, then inspect
+`${OUT_DIR}/ortho-config/cli-identifiers.json`. Cargo does not fingerprint
+proc-macro environment reads, so a warm build can leave an existing artefact
+unchanged. The artefact is a standalone declaration inventory; mounted command
+tree identifiers remain owned by the path-aware documentation IR. If output
+exceeds 1 MiB, read the `cli-identifiers.<n>.json` parts listed by the index.
+
 ## No migration required for other users
 
 The helper is additive. Existing configuration loading, derive usage, and

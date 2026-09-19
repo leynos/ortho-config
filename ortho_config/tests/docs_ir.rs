@@ -245,7 +245,7 @@ fn test_field_log_level(docs_metadata: DocMetadata) -> Result<()> {
         "expected log_level help_id default"
     );
     ensure!(
-        log_level.long_help_id.as_deref() == Some("demo-app-args-log-level-long_help"),
+        log_level.long_help_id.as_deref() == Some("demo-app-args-log-level-long-help"),
         "expected log_level long_help_id default"
     );
     ensure!(!log_level.required, "expected log_level optional");
