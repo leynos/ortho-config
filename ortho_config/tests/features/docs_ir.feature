@@ -7,7 +7,7 @@ Feature: OrthoConfigDocs IR
     Then the IR version is 2.0
     And the about id is demo-app-about
     And the help id for field log_level is demo-app-args-log-level-help
-    And the long help id for field log_level is demo-app-args-log-level-long_help
+    And the long help id for field log_level is demo-app-args-log-level-long-help
     And the environment variable for field log_level is APP_LOG_LEVEL
     And the windows module name is Demo
     And the windows metadata includes common parameters

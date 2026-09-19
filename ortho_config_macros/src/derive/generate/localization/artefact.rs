@@ -159,9 +159,8 @@ fn argument_entries(args: &[super::ArgIdsModel], context: &EntryContext<'_>) -> 
 }
 
 /// Converts a localization model into command entries followed by argument entries.
-fn entries(model: &LocalizationIds, ident: &Ident, span: Span) -> Vec<Entry> {
+fn entries(model: &LocalizationIds, ident: &Ident, span: Span, crate_name: &str) -> Vec<Entry> {
     let source = source(span);
-    let crate_name = std::env::var("CARGO_CRATE_NAME").unwrap_or_else(|_| String::from("unknown"));
     let type_name = format!("{crate_name}::{ident}");
     let context = EntryContext {
         type_name: &type_name,
@@ -249,9 +248,18 @@ fn render(source_entries: Vec<Entry>) -> Result<Vec<ArtefactFile>, serde_json::E
     Ok(output)
 }
 
+/// Returns whether an artefact-emission environment value explicitly opts in.
+fn requested_value(value: Option<&str>) -> bool {
+    value == Some("1")
+}
+
 /// Returns whether the consuming build explicitly requested artefact output.
 fn requested() -> bool {
-    std::env::var("ORTHO_CONFIG_EMIT_IDENTIFIERS").as_deref() == Ok("1")
+    requested_value(
+        std::env::var("ORTHO_CONFIG_EMIT_IDENTIFIERS")
+            .ok()
+            .as_deref(),
+    )
 }
 
 /// Replaces a generated file atomically through a sibling temporary file.
@@ -268,10 +276,14 @@ fn hash(value: &str) -> u64 {
     hasher.finish()
 }
 
-/// Computes the fragment path for one deriving type and source file.
+/// Computes the fragment path for one deriving type and source location.
 fn fragment_path(root: &Path, ident: &Ident, source: &Source) -> PathBuf {
-    root.join(FRAGMENT_DIR)
-        .join(format!("{ident}-{:016x}.json", hash(&source.file)))
+    root.join(FRAGMENT_DIR).join(format!(
+        "{ident}-{}-{}-{:016x}.json",
+        source.line,
+        source.column,
+        hash(&source.file)
+    ))
 }
 
 /// Reads JSON fragments and drops fragments for removed source files.
@@ -301,10 +313,11 @@ pub(super) fn emit(model: &LocalizationIds, ident: &Ident, span: Span) -> syn::R
     let out_dir = std::env::var("OUT_DIR").map_err(|_| syn::Error::new(span, "identifier artefact emission requires OUT_DIR; unset ORTHO_CONFIG_EMIT_IDENTIFIERS or add a build.rs"))?;
     let root = Path::new(&out_dir).join(ARTEFACT_DIR);
     let source = source(span);
+    let crate_name = std::env::var("CARGO_CRATE_NAME").unwrap_or_else(|_| String::from("unknown"));
     fs::create_dir_all(root.join(FRAGMENT_DIR)).map_err(|error| syn::Error::new(span, format!("cannot create identifier artefact directory {}: {error}; unset ORTHO_CONFIG_EMIT_IDENTIFIERS or fix permissions", root.display())))?;
     let fragment = Fragment {
         source_file: source.file.clone(),
-        entries: entries(model, ident, span),
+        entries: entries(model, ident, span, &crate_name),
     };
     let path = fragment_path(&root, ident, &source);
     let contents = json(&fragment).map_err(|error| {
@@ -326,3 +339,7 @@ pub(super) fn emit(model: &LocalizationIds, ident: &Ident, span: Span) -> syn::R
 #[cfg(test)]
 #[path = "artefact_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "artefact_fragment_tests.rs"]
+mod fragment_tests;

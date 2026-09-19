@@ -89,9 +89,6 @@ pub fn derive_ortho_config(input_tokens: TokenStream) -> TokenStream {
             Ok(model) => model,
             Err(err) => return err.to_compile_error().into(),
         };
-    if let Err(err) = emit_identifier_artefact(&localization_ids, &ident) {
-        return err.to_compile_error().into();
-    }
     let docs_impl = match generate_docs_impl(&DocsArgs {
         ident: &ident,
         fields: &fields,
@@ -105,6 +102,9 @@ pub fn derive_ortho_config(input_tokens: TokenStream) -> TokenStream {
         Ok(tokens) => tokens,
         Err(err) => return err.to_compile_error().into(),
     };
+    if let Err(err) = emit_identifier_artefact(&localization_ids, &ident) {
+        return err.to_compile_error().into();
+    }
     let localization_impl = emit_localization_impl(&localization_ids, &ident, &krate);
     let expanded = quote! {
         #core_tokens

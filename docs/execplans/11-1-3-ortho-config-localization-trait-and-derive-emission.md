@@ -284,14 +284,18 @@ review's findings are folded into the Decision Log and milestones below.
     locale catalogues, BDD expectations, and golden coverage migrated with it.
   - Full gates passed: `make check-fmt`, `make typecheck`, `make lint`, and
     `make test`.
-- [x] Milestone 5: opt-in build-time identifier artefact.
+- [ ] Milestone 5: opt-in build-time identifier artefact.
   - The macro writes schema-versioned standalone identifier fragments only for
     `ORTHO_CONFIG_EMIT_IDENTIFIERS=1`, atomically merges them below `OUT_DIR`,
     and splits output above the 1 MiB cap. The e2e fixture validates the schema
-    and warm-build no-write behaviour.
-- [x] Milestone 6: documentation, ADR-008, roadmap completion, final gates.
+    and warm-build no-write behaviour. Validation remains pending for forced
+    refresh, stale-output isolation, and the pure renderer's ordering, split,
+    cap-boundary, and fragment lifecycle behaviour.
+- [ ] Milestone 6: documentation, ADR-008, roadmap completion, final gates.
   - ADR-008, the localization design, guides, ADR-006, changelog, and roadmap
     document the path-aware IR migration and explicitly opt-in artefact flow.
+    Completion remains pending until the added validation and documentation
+    reconciliation pass the final gates.
 
 ## Surprises & discoveries
 
@@ -1262,7 +1266,7 @@ paths, avoiding a second context-free overclaim. Remaining Milestone 4 work now
 includes subcommand metadata rather than deferring it to a follow-up.
 
 2026-09-07: implementation complete. Milestones 3 through 6 are checked off;
-the design now records generated path-aware docs delegation, the guides describe
-the opt-in artefact workflow, and the roadmap reflects the completed delegation
-and collision checks. The docs IR migration to version `2.0` and the standalone
-artefact boundary are now the implemented contracts.
+the design now records generated path-aware docs delegation, the guides
+describe the opt-in artefact workflow, and the roadmap reflects the completed
+delegation and collision checks. The docs IR migration to version `2.0` and the
+standalone artefact boundary are now the implemented contracts.

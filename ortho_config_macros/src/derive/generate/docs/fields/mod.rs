@@ -106,7 +106,7 @@ impl<'a> FieldMetaBuilder<'a> {
         let field_name = name.to_string();
         let help_id = self.identifier_tokens(attrs.doc.help_id.as_deref(), &field_name, "help");
         let long_help_id =
-            self.identifier_tokens(attrs.doc.long_help_id.as_deref(), &field_name, "long_help");
+            self.identifier_tokens(attrs.doc.long_help_id.as_deref(), &field_name, "long-help");
         let value_type = resolve_value_type(attrs, field);
         let required = resolve_required(field, attrs)?;
         let value_context = ValueContext {

@@ -81,9 +81,9 @@ distinguished.
 In the context of deriving Fluent identifiers from compile-time-fixed clap
 command trees, facing the need to surface unrepresentable or colliding ids, we
 decided to panic (matching clap's `mut_arg` convention and the §4.1 mandate)
-and neglected a `Result`-returning API, accepting that hand-built dynamic trees
-must validate names before localizing, because the inputs are
-developer-authored constants surfaced at first run.
+and deliberately rejected a `Result`-returning API for the default path,
+accepting that hand-built dynamic trees must validate names before localizing,
+because the inputs are developer-authored constants surfaced at first run.
 
 `message_id_for` owns the strict segment normalization rule. The command-tree
 walker owns collision detection while it traverses each parent node. Collision

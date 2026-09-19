@@ -365,7 +365,6 @@ fn build_arg_models(
 /// Normalizes a (possibly dotted) clap argument id into its joined form plus
 /// its per-segment parts. Mirrors the runtime `message_id_for` suffix handling:
 /// `args.<arg_id>.help` is split on `.`, with each segment normalized.
-/// Normalizes a Clap argument id into its joined and segment forms.
 fn normalise_arg_id(
     arg_id: &ClapArgId,
     span: Span,
