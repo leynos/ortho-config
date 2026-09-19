@@ -201,31 +201,53 @@ struct ReadOnlyNonInteractiveConfig {
 }
 
 #[rstest]
-fn test_derive_emits_declared_behaviour_block() -> Result<()> {
-    let metadata = DeclaredBehaviourConfig::get_doc_metadata();
+#[case::fully_declared(
+    DeclaredBehaviourConfig::get_doc_metadata,
+    Some(InteractionKind::Interactive),
+    Some(MutationKind::Delete),
+    (Some("--force"), Some("--dry-run"))
+)]
+#[case::partial(
+    ReadOnlyNonInteractiveConfig::get_doc_metadata,
+    Some(InteractionKind::NonInteractive),
+    Some(MutationKind::ReadOnly),
+    (None, None)
+)]
+fn test_derive_emits_behaviour_block(
+    #[case] metadata_producer: fn() -> DocMetadata,
+    #[case] expected_interaction: Option<InteractionKind>,
+    #[case] expected_mutation: Option<MutationKind>,
+    #[case] expected_flags: (Option<&str>, Option<&str>),
+) -> Result<()> {
+    let metadata = metadata_producer();
+    let (expected_bypass, expected_dry_run) = expected_flags;
     let behaviour = metadata
         .behaviour
         .as_ref()
-        .ok_or_else(|| anyhow!("expected declared behaviour block"))?;
+        .ok_or_else(|| anyhow!("expected behaviour metadata to be present"))?;
 
     ensure!(
-        behaviour.interaction == Some(InteractionKind::Interactive),
-        "expected interactive, got {:?}",
+        behaviour.interaction == expected_interaction,
+        "expected interaction {:?}, got {:?}",
+        expected_interaction,
         behaviour.interaction
     );
     ensure!(
-        behaviour.mutation == Some(MutationKind::Delete),
-        "expected delete, got {:?}",
+        behaviour.mutation == expected_mutation,
+        "expected mutation {:?}, got {:?}",
+        expected_mutation,
         behaviour.mutation
     );
     ensure!(
-        behaviour.bypass.as_deref() == Some("--force"),
-        "expected --force bypass, got {:?}",
+        behaviour.bypass.as_deref() == expected_bypass,
+        "expected bypass {:?}, got {:?}",
+        expected_bypass,
         behaviour.bypass
     );
     ensure!(
-        behaviour.dry_run.as_deref() == Some("--dry-run"),
-        "expected --dry-run, got {:?}",
+        behaviour.dry_run.as_deref() == expected_dry_run,
+        "expected dry_run {:?}, got {:?}",
+        expected_dry_run,
         behaviour.dry_run
     );
     Ok(())
@@ -237,35 +259,6 @@ fn test_derive_keeps_behaviour_none_when_undeclared() -> Result<()> {
     ensure!(
         metadata.behaviour.is_none(),
         "expected no behaviour block for undeclared config"
-    );
-    Ok(())
-}
-
-#[rstest]
-fn test_derive_emits_partial_behaviour_block() -> Result<()> {
-    let metadata = ReadOnlyNonInteractiveConfig::get_doc_metadata();
-    let behaviour = metadata
-        .behaviour
-        .as_ref()
-        .ok_or_else(|| anyhow!("expected declared behaviour block"))?;
-
-    ensure!(
-        behaviour.interaction == Some(InteractionKind::NonInteractive),
-        "expected non_interactive, got {:?}",
-        behaviour.interaction
-    );
-    ensure!(
-        behaviour.mutation == Some(MutationKind::ReadOnly),
-        "expected read_only, got {:?}",
-        behaviour.mutation
-    );
-    ensure!(
-        behaviour.bypass.is_none(),
-        "expected no bypass in partial declaration"
-    );
-    ensure!(
-        behaviour.dry_run.is_none(),
-        "expected no dry_run in partial declaration"
     );
     Ok(())
 }
