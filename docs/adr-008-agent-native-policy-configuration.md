@@ -157,8 +157,7 @@ found); nothing was checked; report: …`.
 Strict unknown-key handling applies *inside* the policy table only; a misspelt
 table name still resolves to `off` (the residual typo gap), so the users' guide
 documents a CI recipe asserting the mode
-(`jq -e '.mode != "off"' policy-report.json`) and the `--policy-mode warn|deny`
-"fail if unconfigured" pattern.
+(`jq -e '.mode != "off"' policy-report.json`) to reject off mode.
 
 ## Goals and non-goals
 

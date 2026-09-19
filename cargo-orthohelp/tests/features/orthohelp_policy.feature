@@ -8,6 +8,12 @@ Feature: Agent-native policy check
     And the policy report lists the configured exceptions
     And the policy report lists the canonical vocabulary
 
+  Scenario: Explicit format continues generation after the policy check
+    Given the policy warn fixture package
+    When cargo orthohelp runs with --check-agent-native and format agent-context
+    Then the command succeeds
+    And the policy report and agent context are written
+
   Scenario: Deny mode fails on deny findings
     Given the policy deny fixture package
     When cargo orthohelp runs with --check-agent-native
@@ -27,6 +33,10 @@ Feature: Agent-native policy check
     Then the command succeeds
     And the policy report records mode off and no findings
     And standard error notes that nothing was checked
+
+  Scenario: Package selection requires an explicit package in this workspace
+    When cargo orthohelp runs with --check-agent-native without --package
+    Then the command reports a missing workspace root package
 
   Scenario: Command-line mode override wins for the report
     Given the policy warn fixture package

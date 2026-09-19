@@ -48,7 +48,7 @@
 - [ADR-007: Downstream context command naming](adr-007-downstream-context-command-naming.md):
   review the accepted `context --json` downstream command convention and `kind`
   discriminator rule for agent-context payloads.
-- [ADR-008: Opt-in agent-native policy configuration](adr-008-agent-native-policy-configuration.md):
+- [ADR-008: Opt-in agent-native policy configuration][adr-008]:
   review the accepted 7.1.1 policy configuration surface, the enforcement and
   advertisement defaults, the report contract, and the reserved 7.1.2 seam.
 - [Archived v0.8.0 roadmap](archive/v0-8-0-roadmap.md): review completed
@@ -166,3 +166,5 @@
     plan and implementation record for the Cargo external-subcommand helper.
   - [Ortho agent CLI roadmap](execplans/ortho-agent-cli-roadmap.md): plan for
     the agent-native documentation and roadmap overhaul.
+
+[adr-008]: adr-008-agent-native-policy-configuration.md

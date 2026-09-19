@@ -14,8 +14,8 @@ Run `cargo orthohelp --check-agent-native` to write a policy report for a
 package. Configure it in the `[package.metadata.ortho_config.policy]` metadata
 table. The `off`, `warn`, and `deny` modes select disabled, advisory, and
 failing policy behaviour. See the
-[agent-native policy section in the user's guide](users-guide.md#agent-native-policy-checking)
-for the report shape, exceptions, and command-line override.
+[agent-native policy section in the user's guide][users-guide-policy] for the
+report shape, exceptions, and command-line override.
 
 ## Keep the default process behaviour
 
@@ -165,3 +165,5 @@ single-variant `#[command(subcommand)]` wrapper used by `cargo-orthohelp`.
 The helper is additive. Existing configuration loading, derive usage, and
 subcommand merging continue unchanged. Add the helper only when adopting the
 Cargo external-subcommand entry-point shape.
+
+[users-guide-policy]: users-guide.md#agent-native-policy-checking

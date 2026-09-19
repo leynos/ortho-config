@@ -815,13 +815,6 @@ cargo orthohelp --check-agent-native --out-dir out
 jq -e '.mode != "off"' out/policy-report.json
 ```
 
-or use the override as a "fail if unconfigured" pattern:
-
-<!-- tested-example: guide-policy-mode-override -->
-```console
-cargo orthohelp --check-agent-native --policy-mode deny --out-dir out
-```
-
 ## Use an aliased dependency
 
 Cargo permits dependency aliases. In v0.9.0 the derive macros can generate

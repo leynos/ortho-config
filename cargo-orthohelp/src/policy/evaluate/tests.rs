@@ -2,6 +2,7 @@
 
 use super::*;
 use crate::policy::config::{PolicyConfig, PolicyException};
+use proptest::prelude::*;
 use rstest::rstest;
 
 fn config_with(exceptions: Vec<PolicyException>) -> PolicyConfig {
@@ -205,4 +206,137 @@ fn findings_are_ordered_malformed_then_redundant_then_duplicate() {
             "duplicate_exception"
         ]
     );
+}
+
+#[derive(Debug, Clone, Copy)]
+enum ExceptionForm {
+    EmptyFlag,
+    SpacedVerb,
+    CanonicalFlag,
+    CanonicalVerb,
+    CustomFlag,
+    CustomVerb,
+    ScopedCanonicalFlagA,
+    ScopedCanonicalFlagB,
+}
+
+impl ExceptionForm {
+    fn into_exception(self) -> PolicyException {
+        match self {
+            Self::EmptyFlag => exception(ExceptionKind::Flag, ""),
+            Self::SpacedVerb => exception(ExceptionKind::Verb, "not a verb"),
+            Self::CanonicalFlag => exception(ExceptionKind::Flag, "--json"),
+            Self::CanonicalVerb => exception(ExceptionKind::Verb, "get"),
+            Self::CustomFlag => exception(ExceptionKind::Flag, "--custom"),
+            Self::CustomVerb => exception(ExceptionKind::Verb, "custom"),
+            Self::ScopedCanonicalFlagA => scoped_exception("first"),
+            Self::ScopedCanonicalFlagB => scoped_exception("second"),
+        }
+    }
+
+    const fn is_malformed(self) -> bool {
+        matches!(self, Self::EmptyFlag | Self::SpacedVerb)
+    }
+
+    const fn is_redundant(self) -> bool {
+        matches!(
+            self,
+            Self::CanonicalFlag
+                | Self::CanonicalVerb
+                | Self::ScopedCanonicalFlagA
+                | Self::ScopedCanonicalFlagB
+        )
+    }
+}
+
+fn scoped_exception(scope: &str) -> PolicyException {
+    let mut exception = exception(ExceptionKind::Flag, "--json");
+    exception.command_path = Some(scope.to_owned());
+    exception
+}
+
+fn any_exception_form() -> impl Strategy<Value = ExceptionForm> {
+    prop_oneof![
+        Just(ExceptionForm::EmptyFlag),
+        Just(ExceptionForm::SpacedVerb),
+        Just(ExceptionForm::CanonicalFlag),
+        Just(ExceptionForm::CanonicalVerb),
+        Just(ExceptionForm::CustomFlag),
+        Just(ExceptionForm::CustomVerb),
+        Just(ExceptionForm::ScopedCanonicalFlagA),
+        Just(ExceptionForm::ScopedCanonicalFlagB),
+    ]
+}
+
+fn any_policy_mode() -> impl Strategy<Value = PolicyMode> {
+    prop_oneof![
+        Just(PolicyMode::Off),
+        Just(PolicyMode::Warn),
+        Just(PolicyMode::Deny),
+    ]
+}
+
+fn duplicate_count(exceptions: &[PolicyException]) -> usize {
+    exceptions
+        .iter()
+        .enumerate()
+        .filter(|(index, exception)| {
+            exceptions.iter().take(*index).any(|previous| {
+                previous.kind == exception.kind
+                    && previous.name == exception.name
+                    && previous.command_path == exception.command_path
+            })
+        })
+        .count()
+}
+
+proptest! {
+    #[test]
+    fn evaluation_preserves_policy_finding_invariants(
+        mode in any_policy_mode(),
+        forms in prop::collection::vec(any_exception_form(), 0..24),
+    ) {
+        let exceptions = forms
+            .iter()
+            .copied()
+            .map(ExceptionForm::into_exception)
+            .collect::<Vec<_>>();
+        let report = evaluate(
+            &PolicyConfig { mode, exceptions: exceptions.clone() },
+            &PolicyInputs::default(),
+        );
+
+        prop_assert_eq!(&report.exceptions, &exceptions);
+        if mode == PolicyMode::Off {
+            prop_assert!(report.results.is_empty());
+            prop_assert_eq!(report.summary.total, 0);
+        } else {
+            let malformed = forms.iter().filter(|form| form.is_malformed()).count();
+            let redundant = forms.iter().filter(|form| form.is_redundant()).count();
+            let duplicates = duplicate_count(&report.exceptions);
+            let actual_codes = report
+                .results
+                .iter()
+                .map(|result| result.code.as_str())
+                .collect::<Vec<_>>();
+            let expected_codes = std::iter::repeat_n("malformed_exception", malformed)
+                .chain(std::iter::repeat_n("redundant_exception", redundant))
+                .chain(std::iter::repeat_n("duplicate_exception", duplicates))
+                .collect::<Vec<_>>();
+            let actual_severities = report
+                .results
+                .iter()
+                .map(|result| result.severity.clone())
+                .collect::<Vec<_>>();
+            let expected_severities = std::iter::repeat_n(PolicySeverity::Deny, malformed)
+                .chain(std::iter::repeat_n(
+                    PolicySeverity::Warn,
+                    redundant + duplicates,
+                ))
+                .collect::<Vec<_>>();
+
+            prop_assert_eq!(actual_codes, expected_codes);
+            prop_assert_eq!(actual_severities, expected_severities);
+        }
+    }
 }

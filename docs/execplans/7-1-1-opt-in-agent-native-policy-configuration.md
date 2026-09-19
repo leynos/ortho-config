@@ -115,9 +115,10 @@ escalation, not workarounds.
 - Risk: the deny exit shares exit code 1 with generic tool failure, so a
   CI log alone cannot distinguish policy failure from tool breakage. Severity:
   low. Likelihood: medium. Mitigation: the report artefact (`summary.deny`) is
-  documented as the authoritative CI signal; the stderr summary prints even
-  when the artefact write fails; ADR-008 records that the exit code is
-  provisional until roadmap 7.2.3/7.2.5 document stable exit classes.
+  documented as the authoritative CI signal; if artefact writing fails, the
+  error is returned before the advisory stderr summary is attempted. ADR-008
+  records that the exit code is provisional until roadmap 7.2.3/7.2.5 document
+  stable exit classes.
 
 ## Progress
 
@@ -381,7 +382,8 @@ revision note at the end of this document).
   exits with the standard failure code (1) via `main`'s existing `Result`
   termination, which prints the Debug representation; the human-facing channel
   is therefore the D5 stderr summary, which is printed before the error is
-  returned and even when the artefact write fails. ADR-008 records that exit
+  returned after a successful artefact write. If the artefact write fails, the
+  error is returned before the summary is attempted. ADR-008 records that exit
   code 1 is shared with generic tool failure, that `policy-report.json`
   (`summary.deny`) is the authoritative CI signal, and that the code is
   provisional until roadmap 7.2.3 documents stable exit classes. Rationale:
@@ -495,14 +497,13 @@ revision note at the end of this document).
   [package.metadata.ortho_config.policy] table found); nothing was
   checked`,
   and the users' guide documents a CI recipe asserting the mode
-  (`jq -e '.mode != "off"' policy-report.json`) plus the
-  `--policy-mode warn|deny` override as a "fail if unconfigured" pattern.
-  ADR-008 also records the residual typo gap honestly: strict unknown-key
-  handling applies *inside* the policy table; a misspelt table name still
-  resolves to `off`, which is why the loud summary and CI recipe exist.
-  Rationale: the designed default failure mode of CI gating is a never-gating
-  gate; prevention is cheap wording and documentation now. Date/Author:
-  2026-08-06, planning agent, after design review.
+  (`jq -e '.mode != "off"' policy-report.json`) to reject off mode. ADR-008
+  also records the residual typo gap honestly: strict unknown-key handling
+  applies *inside* the policy table; a misspelt table name still resolves to
+  `off`, which is why the loud summary and CI recipe exist. Rationale: the
+  designed default failure mode of CI gating is a never-gating gate; prevention
+  is cheap wording and documentation now. Date/Author: 2026-08-06, planning
+  agent, after design review.
 - Decision D14 (from review): the evaluator seam is
   `evaluate(config: &PolicyConfig, inputs: &PolicyInputs) -> PolicyReport` where
   `PolicyInputs` is a `#[non_exhaustive]` struct that is empty in 7.1.1

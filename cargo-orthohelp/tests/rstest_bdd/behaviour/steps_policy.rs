@@ -66,6 +66,11 @@ fn run_policy_check(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> 
     run_policy_check_args(orthohelp_context, &[])
 }
 
+#[when("cargo orthohelp runs with --check-agent-native and format agent-context")]
+fn run_policy_check_with_agent_context(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
+    run_policy_check_args(orthohelp_context, &["--format", "agent-context"])
+}
+
 #[when("cargo orthohelp runs with --check-agent-native --policy-mode {mode}")]
 fn run_policy_check_override(
     orthohelp_context: &mut OrthoHelpContext,
@@ -85,6 +90,13 @@ fn run_policy_check_args(
     let mut args = vec!["--check-agent-native", "--package", package.as_str()];
     args.extend_from_slice(extra_args);
     let output = run_orthohelp(orthohelp_context, &args)?;
+    orthohelp_context.last_output.set(output);
+    Ok(())
+}
+
+#[when("cargo orthohelp runs with --check-agent-native without --package")]
+fn run_policy_check_without_package(orthohelp_context: &mut OrthoHelpContext) -> StepResult<()> {
+    let output = run_orthohelp(orthohelp_context, &["--check-agent-native"])?;
     orthohelp_context.last_output.set(output);
     Ok(())
 }
@@ -121,6 +133,26 @@ fn command_fails_with_policy_violation(orthohelp_context: &mut OrthoHelpContext)
     } else {
         Err("expected a deny-mode policy violation".into())
     }
+}
+
+#[then("the command reports a missing workspace root package")]
+fn command_reports_missing_workspace_root_package(
+    orthohelp_context: &mut OrthoHelpContext,
+) -> StepResult<()> {
+    let output = orthohelp_context
+        .last_output
+        .with_ref(Clone::clone)
+        .ok_or("last_output should be set")?;
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        !output.status.success(),
+        "the virtual workspace has no root package"
+    );
+    assert!(
+        stderr.contains("WorkspaceRootMissing"),
+        "expected a workspace-root selection error: {stderr}"
+    );
+    Ok(())
 }
 
 #[then("the policy report lists one warning with code {code}")]
@@ -268,6 +300,19 @@ fn policy_report_is_the_only_artefact(orthohelp_context: &mut OrthoHelpContext) 
         !scenario_target.join("orthohelp").exists(),
         "the bridge build directory should not be created for a policy-only run"
     );
+    Ok(())
+}
+
+#[then("the policy report and agent context are written")]
+fn policy_report_and_agent_context_are_written(
+    orthohelp_context: &mut OrthoHelpContext,
+) -> StepResult<()> {
+    let out_root = get_out_dir(orthohelp_context)?;
+    let dir = Dir::open_ambient_dir(&out_root, ambient_authority())?;
+    for artefact in ["policy-report.json", "agent-context.json"] {
+        dir.open(artefact)
+            .map_err(|error| format!("expected {artefact} to be written: {error}"))?;
+    }
     Ok(())
 }
 
