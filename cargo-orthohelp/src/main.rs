@@ -8,6 +8,7 @@
 //! configuration, localized IR, and renderer-specific outputs.
 
 pub mod agent_context;
+mod agent_native;
 mod bridge;
 mod cache;
 mod cli;
@@ -24,6 +25,9 @@ mod rustflags;
 pub mod schema;
 #[cfg(test)]
 mod test_support;
+use crate::agent_native::{
+    AgentContextResources, GenerationPlan, build_resources, run_check, write_agent_context,
+};
 use crate::bridge::BridgeConfig;
 use crate::cache::CacheKey;
 use crate::cli::{Args, CargoSubcommand, Cli, OutputFormat};
@@ -31,14 +35,14 @@ use crate::error::OrthohelpError;
 use crate::metadata::PackageSelection;
 use crate::schema::{DocMetadata, ORTHO_DOCS_IR_VERSION};
 use camino::Utf8PathBuf;
-use clap::{Error as ClapError, Parser, error::ErrorKind};
-use ortho_config::{FluentLocalizer, LanguageIdentifier, Localizer};
+use clap::{CommandFactory, Error as ClapError, FromArgMatches, error::ErrorKind};
+use ortho_config::{FluentLocalizer, LanguageIdentifier};
 use std::io::Write;
-use std::str::FromStr;
 use tracing_subscriber::EnvFilter;
 
 /// Run-scoped inputs borrowed by the output-generation phases.
 struct GenerationContext<'a> {
+    args: &'a Args,
     selection: &'a PackageSelection,
     doc_metadata: &'a DocMetadata,
     out_dir: &'a Utf8PathBuf,
@@ -47,21 +51,28 @@ struct GenerationContext<'a> {
 
 fn main() -> Result<(), OrthohelpError> {
     init_tracing();
-    let cli = match parse_cli() {
-        Ok(cli) => cli,
+    let (cli, format_was_explicit) = match parse_cli() {
+        Ok(parsed) => parsed,
         Err(error) => exit_for_clap_error(&error),
     };
-    run(cli)
+    run(cli, format_was_explicit)
 }
 
 fn init_tracing() {
     let _result = tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
+        .with_writer(std::io::stderr)
         .try_init();
 }
 
-fn parse_cli() -> Result<Cli, ClapError> {
-    Cli::try_parse()
+fn parse_cli() -> Result<(Cli, bool), ClapError> {
+    let matches = Cli::command().try_get_matches()?;
+    let cli = Cli::from_arg_matches(&matches)?;
+    let format_was_explicit = matches
+        .subcommand()
+        .and_then(|(_, sub_matches)| sub_matches.value_source("format"))
+        .is_some_and(|source| source != clap::parser::ValueSource::DefaultValue);
+    Ok((cli, format_was_explicit))
 }
 
 fn exit_for_clap_error(error: &ClapError) -> ! {
@@ -86,7 +97,7 @@ fn write_augmented_clap_error(error: &ClapError) -> std::io::Result<()> {
     )
 }
 
-fn run(cli: Cli) -> Result<(), OrthohelpError> {
+fn run(cli: Cli, format_was_explicit: bool) -> Result<(), OrthohelpError> {
     let Cli {
         command: CargoSubcommand::Orthohelp(args),
     } = cli;
@@ -117,114 +128,91 @@ fn run(cli: Cli) -> Result<(), OrthohelpError> {
     let ir_json = bridge::load_or_build_ir(&config, &paths, should_use_cache, should_skip_build)?;
     let doc_metadata: DocMetadata = serde_json::from_str(&ir_json)?;
 
-    let should_generate_ir = matches!(args.format, OutputFormat::Ir | OutputFormat::All);
-    let should_generate_man = matches!(args.format, OutputFormat::Man | OutputFormat::All);
-    let should_generate_ps = matches!(args.format, OutputFormat::Ps | OutputFormat::All);
-    let should_generate_localized_docs =
-        should_generate_ir || should_generate_man || should_generate_ps;
+    let check_mode = args
+        .check_agent_native
+        .map(cargo_orthohelp::policy::PolicyMode::from)
+        .filter(|mode| *mode != cargo_orthohelp::policy::PolicyMode::Off);
+    let check_flag_present = check_mode.is_some();
+    let requests_agent_context =
+        matches!(args.format, OutputFormat::AgentContext | OutputFormat::All);
+    let agent_context_resources = (check_flag_present || requests_agent_context)
+        .then(|| build_resources(&doc_metadata, &selection));
+    let check_has_deny_findings = match (check_mode, agent_context_resources.as_ref()) {
+        (Some(mode), Some(resources)) => run_check(resources.context(), mode)?,
+        _ => false,
+    };
 
-    let en_us_localizer = build_agent_context_localizer_if_requested(&args, &selection);
+    let plan = GenerationPlan::for_run(args.format, check_flag_present, format_was_explicit);
+
+    let en_us_localizer = agent_context_resources
+        .as_ref()
+        .and_then(AgentContextResources::en_us_localizer);
     let generation_context = GenerationContext {
+        args: &args,
         selection: &selection,
         doc_metadata: &doc_metadata,
         out_dir: &out_dir,
-        en_us_localizer: en_us_localizer.as_ref(),
+        en_us_localizer,
     };
-    generate_agent_context_if_requested(&args, &generation_context)?;
 
-    let locales = if should_generate_localized_docs {
+    let locales = if plan.should_generate_localized_docs {
         locale::resolve_locales(&args, &selection)?
     } else {
         Vec::new()
     };
 
     let localized_docs = localize_docs_if_requested(
-        should_generate_localized_docs,
+        plan.should_generate_localized_docs,
         &generation_context,
         &locales,
     )?;
 
-    if should_generate_ir {
-        generate_ir(&localized_docs, &out_dir)?;
-    }
+    generate_requested_artefacts(
+        &plan,
+        &generation_context,
+        &localized_docs,
+        agent_context_resources.as_ref(),
+    )?;
 
-    if should_generate_man {
-        generate_man(&localized_docs, &out_dir, &args.man)?;
-    }
-
-    if should_generate_ps {
-        let ps_config = build_powershell_config(&args, &selection, &doc_metadata, &out_dir);
-        generate_powershell(&localized_docs, &ps_config)?;
+    // The lint's report is emitted before generation so a CI pipeline can
+    // parse it regardless of the exit path. The failure exit for deny-level
+    // findings must not pre-empt explicitly requested artefact generation
+    // (milestone E composition contract): when `--format` is explicit, the
+    // command still writes its artefacts and only then exits 3.
+    if check_has_deny_findings {
+        std::process::exit(3);
     }
 
     Ok(())
 }
 
-fn generate_agent_context_if_requested(
-    args: &Args,
+fn generate_requested_artefacts(
+    plan: &GenerationPlan,
     context: &GenerationContext<'_>,
+    localized_docs: &[ir::LocalizedDocMetadata],
+    agent_context_resources: Option<&AgentContextResources>,
 ) -> Result<(), OrthohelpError> {
-    if !matches!(args.format, OutputFormat::AgentContext | OutputFormat::All) {
-        tracing::debug!(
-            package = %context.selection.package_name,
-            format = ?args.format,
-            "agent-context generation skipped for requested format",
+    if plan.should_generate_agent_context
+        && let Some(resources) = agent_context_resources
+    {
+        write_agent_context(context.out_dir, resources)?;
+    }
+    if plan.should_generate_ir {
+        generate_ir(localized_docs, context.out_dir)?;
+    }
+    if plan.should_generate_man {
+        generate_man(localized_docs, context.out_dir, &context.args.man)?;
+    }
+    if plan.should_generate_ps {
+        let ps_config = build_powershell_config(
+            context.args,
+            context.selection,
+            context.doc_metadata,
+            context.out_dir,
         );
-        return Ok(());
+        generate_powershell(localized_docs, &ps_config)?;
     }
-    tracing::debug!(
-        package = %context.selection.package_name,
-        format = "agent-context",
-        "starting agent-context transformation",
-    );
-    let summary_localizer = context
-        .en_us_localizer
-        .map(|(_, resolved_localizer)| resolved_localizer as &dyn Localizer);
-    let agent_context = agent_context::bridge_ir_to_agent_context(
-        context.doc_metadata,
-        &context.selection.package_name,
-        summary_localizer,
-    );
-    tracing::debug!(
-        package = %agent_context.package,
-        command_count = agent_context.commands.len(),
-        "agent-context transformation complete",
-    );
-    output::write_agent_context(context.out_dir.as_path(), &agent_context)?;
     Ok(())
-}
-
-/// Builds the optional en-US localizer shared by agent-context and localized output.
-fn build_agent_context_localizer_if_requested(
-    args: &Args,
-    selection: &PackageSelection,
-) -> Option<(LanguageIdentifier, FluentLocalizer)> {
-    if !matches!(args.format, OutputFormat::AgentContext | OutputFormat::All) {
-        return None;
-    }
-    match build_en_us_localizer(&selection.package_root) {
-        Ok(localizer) => Some(localizer),
-        Err(error) => {
-            tracing::warn!(
-                error = %error,
-                "no en-US localizer available; agent-context summaries will be omitted",
-            );
-            None
-        }
-    }
-}
-
-fn build_en_us_localizer(
-    package_root: &Utf8PathBuf,
-) -> Result<(LanguageIdentifier, FluentLocalizer), OrthohelpError> {
-    let locale =
-        LanguageIdentifier::from_str("en-US").map_err(|err| OrthohelpError::InvalidLocale {
-            value: "en-US".to_owned(),
-            message: err.to_string(),
-        })?;
-    let resources = locale::load_consumer_resources(package_root, &locale)?;
-    let localizer = locale::build_localizer(&locale, resources)?;
-    Ok((locale, localizer))
 }
 
 fn localize_docs_if_requested(

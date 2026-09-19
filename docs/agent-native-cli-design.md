@@ -220,9 +220,8 @@ directly.
 
 ### 3.3 Agent-native lint policy
 
-The lint policy is the enforcement layer. It should be exposed through
-`cargo-orthohelp` and should also be reusable by tests or continuous
-integration.
+The lint policy is the enforcement layer. It is exposed through
+`cargo-orthohelp` and is reusable by tests or continuous integration.
 
 The policy-report schema is initially owned by `cargo_orthohelp::policy`,
 including `ORTHO_POLICY_REPORT_SCHEMA_VERSION`. This keeps warnings, hard
@@ -230,21 +229,22 @@ failures, source locations, rule identifiers, machine-readable codes, and mode
 handling close to the reference CLI that emits them. A later ADR can extract a
 shared report model if downstream libraries need to construct identical reports.
 
-The planned command shape is:
+The implemented command is:
 
 ```console
-cargo orthohelp --check-agent-native
+cargo orthohelp --check-agent-native[=off|warn|deny]
 ```
 
-The policy should support `off`, `warn`, and `deny` modes. Early adoption
-should default to warnings so existing users can see the work required before
-turning on hard failures.
+When the flag is present without a value, the mode defaults to `warn`. The
+check evaluates the compiled agent context and writes exactly one machine-stable
+`PolicyReport` JSON document to stdout. It writes a one-line human-readable
+summary to stderr.
 
-`cargo orthohelp --check-agent-native` must emit a machine-stable policy report
-when JSON output is requested. Tests and CI should parse `rule_id` and `code`
-for deterministic handling; prose in `message` is explanatory and may improve
-without changing the machine contract.
+Tests and CI should parse `rule_id` and `code` for deterministic handling;
+prose in `message` is explanatory and may improve without changing the machine
+contract.
 
+<!-- markdownlint-disable MD013 -->
 ```json
 {
   "version": "1",
@@ -252,31 +252,29 @@ without changing the machine contract.
   "mode": "warn",
   "results": [
     {
-      "rule_id": "agent-native.vocabulary.canonical-flag",
+      "rule_id": "agent-native.behaviour.undeclared",
+      "code": "interaction_unknown",
       "severity": "warn",
-      "code": "canonical_flag_missing",
-      "message": "Use --json for structured output instead of --format=json.",
-      "file": "Cargo.toml",
-      "range": {
-        "start": {
-          "line": 12,
-          "column": 1
-        },
-        "end": {
-          "line": 12,
-          "column": 20
-        }
-      }
+      "message": "command `purge` has undeclared interaction behaviour; add `behaviour(interaction = \"non_interactive\")` or `behaviour(interaction = \"interactive\")` to its arguments struct",
+      "location": null
+    },
+    {
+      "rule_id": "agent-native.behaviour.undeclared",
+      "code": "mutation_unknown",
+      "severity": "warn",
+      "message": "command `purge` has undeclared mutation boundary; add `behaviour(mutation = \"read_only\")`, `behaviour(mutation = \"write\")`, `behaviour(mutation = \"delete\")`, or `behaviour(mutation = \"submit\")` to its arguments struct",
+      "location": null
     }
   ],
   "summary": {
     "off": 0,
-    "warn": 1,
+    "warn": 2,
     "deny": 0,
-    "total": 1
+    "total": 2
   }
 }
 ```
+<!-- markdownlint-enable MD013 -->
 
 Each result must contain:
 
@@ -284,12 +282,14 @@ Each result must contain:
 - `severity`: one of `off`, `warn`, or `deny`;
 - `code`: stable machine-readable finding code;
 - `message`: human-readable diagnostic text;
-- `file`: source file path when available;
-- `range` or `span`: optional source location metadata.
+- `location`: `{ "file": "...", "range": { ... } }` when source metadata is
+  available, or `null`. Current findings use `null` because agent context does
+  not carry source spans.
 
 Mode handling is direct: `off` suppresses checks, `warn` emits findings without
-failing the command, and `deny` exits with a validation-class failure when any
-deny-level finding is present.
+failing the command, and `deny` exits with code 3 when any deny-level finding
+is present. Runtime errors keep exit code 1 and clap usage errors keep exit
+code 2.
 
 ### 3.4 Long-form workflow material
 
@@ -403,6 +403,12 @@ The preferred non-interactive flag is `--no-input`. The preferred destructive
 bypass flag is `--force`. If a project chooses a different convention, it must
 configure that convention once and expose it in agent context.
 
+This is realized in the derive attribute surface as
+`behaviour(interaction = ...)` with the optional `behaviour(bypass = ...)`
+flag, and in agent context as `interaction_mode` plus `bypass_flag`. See
+[ADR-008](adr-008-behavioural-metadata-attribute-surface.md) and the §8.1 table
+below for the defaulting and compatibility contract.
+
 ### 6.2 Structured output
 
 Data-returning commands should support `--json`. Structured data belongs on
@@ -495,6 +501,12 @@ Mutating commands should declare whether they are read-only, write, delete, or
 submit asynchronous work. Destructive commands should declare their
 confirmation bypass flag. Consequential commands should declare whether
 `--dry-run` exists.
+
+This is realized in the derive attribute surface as `behaviour(mutation = ...)`
+with the optional `behaviour(dry_run = ...)` flag, and in agent context as
+`mutation_effect` plus `dry_run_flag`. See
+[ADR-008](adr-008-behavioural-metadata-attribute-surface.md) for the attribute
+grammar and the no-inference rule.
 
 Create-like commands should prefer idempotency tokens or natural keys where the
 application domain supports them. OrthoConfig should model and lint the
@@ -615,7 +627,7 @@ table-stakes agent-native behaviours:
   policy modes;
 - stable exit classes documented in its README;
 - atomic writes for generated files;
-- agent-native lint and agent-context output once the metadata exists.
+- agent-native lint and agent-context output from the compiled metadata.
 
 This gives downstream users an executable reference rather than only a design
 document.
@@ -638,25 +650,27 @@ forward-looking fields planned for later schema versions. Readers for schema v1
 apply defaults only to realized fields; planned rows record the intended future
 contract and do not imply that those fields exist today.
 
-| Field                  | Default                  | Status  | Rationale                                                                  |
-| ---------------------- | ------------------------ | ------- | -------------------------------------------------------------------------- |
-| `canonical_verb`       | `null`                   | v1      | Legacy command metadata did not classify verbs.                            |
-| `supports_json`        | `false`                  | planned | Structured output must be declared before tools rely on it.                |
-| `json_stdout_contract` | `null`                   | planned | No JSON stream invariant exists until the command opts in.                 |
-| `json_stderr_contract` | `null`                   | planned | Diagnostics remain unspecified for legacy commands.                        |
-| `exit_classes`         | `[]`                     | planned | Exit-code semantics are unavailable unless documented.                     |
-| `interaction_mode`     | `"unknown"`              | v1      | Legacy derives cannot prove whether a command prompts.                     |
-| `mutation_effect`      | `"unknown"`              | v1      | Read/write/delete boundaries must not be inferred from names.              |
-| `pagination`           | `null`                   | v1      | List bounds and cursors require explicit command metadata.                 |
-| `profiles.supported`   | `false`                  | v1      | Profiles are opt-in persistent state.                                      |
-| `delivery_route`       | `null`                   | v1      | Delivery sinks change artefact routing and must be explicit.               |
-| `feedback.supported`   | `false`                  | v1      | Feedback storage or upload must be explicitly available.                   |
-| `execution_ledger`     | `{ "supported": false }` | planned | Jobs, runs, or tasks require application-owned execution state.            |
-| `skill_manifests`      | `[]`                     | v1      | Skill manifests are absent until declared; validation lands in 6.3.2.      |
-| `capability_id`        | `null`                   | planned | Capability routing is optional downstream metadata.                        |
-| `provider_provenance`  | `{ "reported": false }`  | planned | Provider names are not emitted unless the application declares provenance. |
-| `renderer.human`       | `{ "supported": true }`  | planned | Existing documentation IR already supports human help material.            |
-| `renderer.machine`     | `{ "supported": false }` | planned | Machine renderer support must be declared before agents depend on it.      |
+| Field                  | Default                  | Status  | Rationale                                                                   |
+| ---------------------- | ------------------------ | ------- | --------------------------------------------------------------------------- |
+| `canonical_verb`       | `null`                   | v1      | Legacy command metadata did not classify verbs.                             |
+| `supports_json`        | `false`                  | planned | Structured output must be declared before tools rely on it.                 |
+| `json_stdout_contract` | `null`                   | planned | No JSON stream invariant exists until the command opts in.                  |
+| `json_stderr_contract` | `null`                   | planned | Diagnostics remain unspecified for legacy commands.                         |
+| `exit_classes`         | `[]`                     | planned | Exit-code semantics are unavailable unless documented.                      |
+| `interaction_mode`     | `"unknown"`              | v1      | Legacy derives cannot prove whether a command prompts.                      |
+| `mutation_effect`      | `"unknown"`              | v1      | Read/write/delete boundaries must not be inferred from names.               |
+| `bypass_flag`          | `null`                   | v1      | Confirmation/prompt bypass flag declared via `behaviour(...)`; not guessed. |
+| `dry_run_flag`         | `null`                   | v1      | Dry-run flag name declared via `behaviour(...)`; not guessed.               |
+| `pagination`           | `null`                   | v1      | List bounds and cursors require explicit command metadata.                  |
+| `profiles.supported`   | `false`                  | v1      | Profiles are opt-in persistent state.                                       |
+| `delivery_route`       | `null`                   | v1      | Delivery sinks change artefact routing and must be explicit.                |
+| `feedback.supported`   | `false`                  | v1      | Feedback storage or upload must be explicitly available.                    |
+| `execution_ledger`     | `{ "supported": false }` | planned | Jobs, runs, or tasks require application-owned execution state.             |
+| `skill_manifests`      | `[]`                     | v1      | Skill manifests are absent until declared; validation lands in 6.3.2.       |
+| `capability_id`        | `null`                   | planned | Capability routing is optional downstream metadata.                         |
+| `provider_provenance`  | `{ "reported": false }`  | planned | Provider names are not emitted unless the application declares provenance.  |
+| `renderer.human`       | `{ "supported": true }`  | planned | Existing documentation IR already supports human help material.             |
+| `renderer.machine`     | `{ "supported": false }` | planned | Machine renderer support must be declared before agents depend on it.       |
 
 Lint behaviour for omitted metadata follows the selected mode. In `off` mode,
 the check is not run. In `warn` mode, omitted fields that block an agent-native
@@ -756,7 +770,6 @@ Schema v1 history:
 
 The design and roadmap updates must address these known gaps:
 
-- no agent-native lint command exists;
 - the improved `MissingRequiredValues` diagnostic is reconciled as proposed
   phase 7 work, but is not yet implemented;
 - `cargo-orthohelp` has no structured `--json` result mode;

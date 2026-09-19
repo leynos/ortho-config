@@ -3,7 +3,7 @@
 use rstest::rstest;
 
 use super::{bridge_ir_to_agent_context, normalize_default_display};
-use crate::schema::ValueType;
+use crate::schema::{InteractionKind, MutationKind, ValueType};
 
 #[test]
 fn transform_flattens_commands_with_summaries_and_canonical_verbs() {
@@ -104,6 +104,7 @@ fn transform_maps_visible_cli_fields_and_sorts_inputs() {
             non_cli_field("file_only"),
         ],
         subcommands: Vec::new(),
+        behaviour: None,
     });
 
     let context = bridge_ir_to_agent_context(&metadata, "demo_pkg", None);
@@ -136,6 +137,7 @@ fn transform_recovers_enum_values_from_cli_metadata_for_custom_types() {
             ["Debug", "Info", "Warn", "Error"],
         )],
         subcommands: Vec::new(),
+        behaviour: None,
     });
 
     let context = bridge_ir_to_agent_context(&metadata, "demo_pkg", None);
@@ -173,6 +175,7 @@ fn transform_normalizes_default_path_separators() {
             required: false,
         })],
         subcommands: Vec::new(),
+        behaviour: None,
     });
 
     let context = bridge_ir_to_agent_context(&metadata, "demo_pkg", None);
@@ -246,6 +249,139 @@ fn transform_omits_missing_or_blank_summaries(
         .as_deref();
 
     assert_eq!(summary, expected);
+}
+
+/// Carries one declared-behaviour scenario for [`transform_maps_declared_behaviour`].
+struct DeclaredBehaviourCase {
+    app_name: &'static str,
+    about_id: &'static str,
+    interaction: InteractionKind,
+    mutation: MutationKind,
+    declared_bypass: Option<&'static str>,
+    declared_dry_run: Option<&'static str>,
+    expected_interaction: ortho_config::InteractionMode,
+    expected_mutation: ortho_config::MutationEffect,
+    expected_bypass: Option<&'static str>,
+    expected_dry_run: Option<&'static str>,
+}
+
+#[rstest]
+#[case::interactive_destructive(DeclaredBehaviourCase {
+    app_name: "purge",
+    about_id: "cmd.purge",
+    interaction: InteractionKind::Interactive,
+    mutation: MutationKind::Delete,
+    declared_bypass: Some("--force"),
+    declared_dry_run: None,
+    expected_interaction: ortho_config::InteractionMode::Interactive,
+    expected_mutation: ortho_config::MutationEffect::Delete,
+    expected_bypass: Some("--force"),
+    expected_dry_run: None,
+})]
+#[case::non_interactive_read_only(DeclaredBehaviourCase {
+    app_name: "inspect",
+    about_id: "cmd.inspect",
+    interaction: InteractionKind::NonInteractive,
+    mutation: MutationKind::ReadOnly,
+    declared_bypass: None,
+    declared_dry_run: Some("--dry-run"),
+    expected_interaction: ortho_config::InteractionMode::NonInteractive,
+    expected_mutation: ortho_config::MutationEffect::ReadOnly,
+    expected_bypass: None,
+    expected_dry_run: Some("--dry-run"),
+})]
+fn transform_maps_declared_behaviour(#[case] case: DeclaredBehaviourCase) {
+    let metadata = doc(DocSpec {
+        app_name: case.app_name,
+        bin_name: None,
+        about_id: case.about_id,
+        fields: Vec::new(),
+        subcommands: Vec::new(),
+        behaviour: Some(declared_behaviour(
+            case.interaction,
+            case.mutation,
+            case.declared_bypass,
+            case.declared_dry_run,
+        )),
+    });
+
+    let context = bridge_ir_to_agent_context(&metadata, "demo_pkg", None);
+    let command = context
+        .commands
+        .first()
+        .expect("command should be generated");
+
+    assert_eq!(command.interaction_mode, case.expected_interaction);
+    assert_eq!(command.mutation_effect, case.expected_mutation);
+    assert_eq!(command.bypass_flag.as_deref(), case.expected_bypass);
+    assert_eq!(command.dry_run_flag.as_deref(), case.expected_dry_run);
+}
+
+#[test]
+fn transform_keeps_behaviour_fields_unknown_when_undeclared() {
+    let metadata = doc(DocSpec::child("version", "cmd.version"));
+
+    let context = bridge_ir_to_agent_context(&metadata, "demo_pkg", None);
+    let command = context
+        .commands
+        .first()
+        .expect("version command should be generated");
+
+    assert_eq!(
+        command.interaction_mode,
+        ortho_config::InteractionMode::Unknown
+    );
+    assert_eq!(
+        command.mutation_effect,
+        ortho_config::MutationEffect::Unknown
+    );
+    assert_eq!(command.bypass_flag, None);
+    assert_eq!(command.dry_run_flag, None);
+}
+
+#[test]
+fn transform_maps_behaviour_on_nested_subcommands() {
+    let metadata = metadata_with_subcommands(vec![
+        doc(DocSpec {
+            app_name: "prune",
+            bin_name: None,
+            about_id: "cmd.prune",
+            fields: Vec::new(),
+            subcommands: Vec::new(),
+            behaviour: Some(declared_behaviour(
+                InteractionKind::Interactive,
+                MutationKind::Delete,
+                None,
+                None,
+            )),
+        }),
+        doc(DocSpec::child("list", "cmd.list")),
+    ]);
+
+    let context = bridge_ir_to_agent_context(&metadata, "demo_pkg", None);
+    let prune = context
+        .commands
+        .iter()
+        .find(|command| command.path == ["demo-bin", "prune"])
+        .expect("prune command should be generated");
+
+    assert_eq!(
+        prune.interaction_mode,
+        ortho_config::InteractionMode::Interactive
+    );
+    assert_eq!(prune.mutation_effect, ortho_config::MutationEffect::Delete);
+    assert_eq!(prune.bypass_flag, None);
+
+    let list = context
+        .commands
+        .iter()
+        .find(|command| command.path == ["demo-bin", "list"])
+        .expect("list command should be generated");
+    assert_eq!(
+        list.interaction_mode,
+        ortho_config::InteractionMode::Unknown
+    );
+    assert_eq!(list.mutation_effect, ortho_config::MutationEffect::Unknown);
 }
 
 #[path = "tests_support.rs"]
