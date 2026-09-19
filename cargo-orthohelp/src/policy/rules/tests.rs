@@ -138,6 +138,63 @@ fn undeclared_metadata_produces_interaction_unknown_and_mutation_unknown() {
 }
 
 #[test]
+fn findings_are_emitted_in_command_path_order() {
+    let mut context = AgentContext::new("fixture");
+    context.commands.push(command(
+        &["zebra"],
+        InteractionMode::Unknown,
+        MutationEffect::Unknown,
+    ));
+    context.commands.push(command(
+        &["alpha"],
+        InteractionMode::Unknown,
+        MutationEffect::Unknown,
+    ));
+
+    let report = check_behaviour(&context, PolicyMode::Warn);
+    let command_paths = report
+        .results
+        .iter()
+        .map(|result| {
+            if result.message.contains("`alpha`") {
+                "alpha"
+            } else if result.message.contains("`zebra`") {
+                "zebra"
+            } else {
+                "unexpected"
+            }
+        })
+        .collect::<Vec<_>>();
+
+    assert_eq!(command_paths, ["alpha", "alpha", "zebra", "zebra"]);
+}
+
+#[test]
+fn undeclared_mutation_remedy_lists_every_supported_boundary() {
+    let context = ctx_for_command(command(
+        &["apply"],
+        InteractionMode::NonInteractive,
+        MutationEffect::Unknown,
+    ));
+
+    let report = check_behaviour(&context, PolicyMode::Warn);
+    let message = report
+        .results
+        .iter()
+        .find(|result| result.code == "mutation_unknown")
+        .expect("undeclared mutation should produce a finding")
+        .message
+        .as_str();
+
+    for mutation in ["read_only", "write", "delete", "submit"] {
+        assert!(
+            message.contains(mutation),
+            "remedy should include `{mutation}`, got {message}"
+        );
+    }
+}
+
+#[test]
 fn bypass_on_non_destructive_command_produces_no_finding() {
     let mut cmd = command(
         &["list"],

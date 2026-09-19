@@ -9,17 +9,18 @@ Status: COMPLETE
 ## Purpose / big picture
 
 Agents that drive a command-line tool need to know, before running a command,
-whether it will block on a prompt and whether it mutates state. Today the
-agent-context output of `cargo orthohelp` (the machine-readable summary of a
-CLI that OrthoConfig generates for AI agents) emits
+whether it will block on a prompt and whether it mutates state. Before this
+work, the agent-context output of `cargo orthohelp` (the machine-readable
+summary of a CLI that OrthoConfig generates for AI agents) emitted
 `"interaction_mode": "unknown"` and `"mutation_effect": "unknown"` for every
-command, because no mechanism exists for a project author to declare those
-facts.
+command because the derive, documentation IR, and bridge had no declaration
+path. The completed implementation lets a project author declare those facts
+and carries them through the generated outputs.
 
 After this change, a project author can annotate a command's arguments struct:
 
 ```rust
-#[derive(OrthoConfig, OrthoConfigDocs)]
+#[derive(OrthoConfig)]
 #[ortho_config(
     prefix = "APP",
     behaviour(interaction = "interactive", mutation = "delete", bypass = "--force")
@@ -29,16 +30,18 @@ struct PurgeArgs {
 }
 ```
 
-and three things become observable:
+With this implementation, three things become observable:
 
-1. The generated documentation intermediate representation (IR) carries a
-   `behaviour` block for that command.
+1. The generated documentation intermediate representation (IR) v1.2 carries
+   an optional `behaviour` block for that command.
 2. The agent-context JSON emitted by `cargo orthohelp --format agent-context`
    reports `"interaction_mode": "interactive"`, `"mutation_effect": "delete"`,
    and `"bypass_flag": "--force"` for that command instead of `"unknown"`.
-3. Running `cargo orthohelp --check-agent-native` lints the command tree and
-   reports destructive commands that lack a declared confirmation bypass flag
-   (such as `--force`), as a machine-stable policy report.
+3. Running `cargo orthohelp --check-agent-native[=off|warn|deny]` transforms
+   the same IR into agent context, evaluates the behaviour rules, and emits a
+   machine-stable policy report on stdout plus a human-readable summary on
+   stderr. Deny findings produce exit code 3 after explicitly requested
+   artefacts are generated.
 
 This realizes roadmap item 7.2.1 and implements
 `docs/agent-native-cli-design.md` §6.1 (non-interactive execution) and §6.4
@@ -500,19 +503,24 @@ complete.
 ## Context and orientation
 
 OrthoConfig is a Rust workspace providing layered configuration and
-agent-native CLI documentation. The relevant crates:
+agent-native CLI documentation. The notes below identify the pre-implementation
+baseline where it explains the change; current implementation details are
+labelled explicitly. The relevant crates are:
 
 - `ortho_config/` — the library. `ortho_config/src/docs/ir.rs` defines the
   documentation IR: `DocMetadata` (one node per command, recursive via
-  `subcommands: Vec<DocMetadata>`), with `ORTHO_DOCS_IR_VERSION = "1.1"`
-  declared in `ortho_config/src/docs/mod.rs`. That module also declares the
-  traits `OrthoConfigDocs` (`get_doc_metadata() -> DocMetadata`) and
+  `subcommands: Vec<DocMetadata>`), now at `ORTHO_DOCS_IR_VERSION = "1.2"`
+  declared in `ortho_config/src/docs/mod.rs`. `DocMetadata.behaviour` is an
+  optional declaration populated by the derive; absent interaction or mutation
+  remains absent at this layer. That module also declares the traits
+  `OrthoConfigDocs` (`get_doc_metadata() -> DocMetadata`) and
   `OrthoConfigSubcommandDocs`
   (`get_subcommand_doc_metadata() -> Vec<DocMetadata>`, ADR-005).
   `ortho_config/src/agent_context/mod.rs` owns the compact agent-facing schema:
-  `AgentContext`, `AgentCommand` (which already has
-  `interaction_mode: InteractionMode` and `mutation_effect: MutationEffect`,
-  both defaulting to `Unknown`), and `ORTHO_AGENT_CONTEXT_SCHEMA_VERSION = "1"`.
+  `AgentContext`, `AgentCommand`, and
+  `ORTHO_AGENT_CONTEXT_SCHEMA_VERSION = "1"`. The existing `interaction_mode`
+  and `mutation_effect` fields default to `Unknown`; the additive `bypass_flag`
+  and `dry_run_flag` fields are nullable.
 - `ortho_config_macros/` — proc macros. Struct- and field-level
   `#[ortho_config(...)]` attributes are parsed in
   `ortho_config_macros/src/derive/parse/` (`mod.rs`, `doc_attrs.rs`,
@@ -530,21 +538,24 @@ agent-native CLI documentation. The relevant crates:
   mirror of the IR in `cargo-orthohelp/src/schema/mod.rs` ("Keep this in sync
   with `ortho_config::docs`"); a test in
   `cargo-orthohelp/src/schema/tests/mod.rs` pins the mirrored version constant.
-  `cargo-orthohelp/src/agent_context/mod.rs` contains
-  `bridge_ir_to_agent_context`, whose internal `walk` currently sets
-  `interaction_mode: InteractionMode::default()` and
-  `mutation_effect: MutationEffect::default()` unconditionally — the wiring gap
-  this plan closes. `cargo-orthohelp/src/policy/mod.rs` defines the
+  **Current implementation:** `cargo-orthohelp/src/agent_context/mod.rs`
+  contains `bridge_ir_to_agent_context`, whose `walk` maps declared IR
+  interaction and mutation values and copies `bypass` and `dry_run`. Absent
+  declarations remain `Unknown` or `None`; the bridge does not infer semantics
+  from names, verbs, or flags. `cargo-orthohelp/src/policy/mod.rs` defines the
   policy-report schema (`PolicyReport`, `PolicyResult`,
-  `PolicyMode { Off, Warn, Deny }`, `ORTHO_POLICY_REPORT_SCHEMA_VERSION = "1"`)
-  but no rule or runner exists yet. The CLI (`cargo-orthohelp/src/cli/mod.rs`)
-  has `--format <ir|man|ps|all|agent-context>` (defaulting to `ir`); dispatch
-  lives in `cargo-orthohelp/src/main.rs` (`run`): the bridge compile
-  (`bridge::load_or_build_ir`) runs once per invocation before any format
-  branching, and `bridge_ir_to_agent_context` is a pure in-memory transform
-  over the resulting `DocMetadata` — so the lint re-runs the transform, not the
-  bridge. Format generators write files to `out_dir`; nothing currently writes
-  to stdout.
+  `PolicyMode { Off, Warn, Deny }`,
+  `ORTHO_POLICY_REPORT_SCHEMA_VERSION = "1"`), and
+  `cargo-orthohelp/src/policy/rules/behaviour.rs` supplies the behaviour rules.
+  `cargo-orthohelp/src/main.rs` loads the bridge IR once, runs the in-memory
+  bridge transform for `--check-agent-native`, and calls `check_behaviour`. The
+  runner writes exactly one JSON report to stdout and a one-line summary to
+  stderr. At the rule layer, `Off` produces an empty report; the CLI treats
+  `--check-agent-native=off` as disabled and does not invoke the runner or
+  suppress normal artefacts. `Warn` produces non-fatal findings, and `Deny`
+  produces deny findings and makes the command exit 3 after explicitly
+  requested artefacts are generated. With no explicit `--format`, an enforcing
+  check skips artefact generation.
 - `tests/fixtures/orthohelp_fixture/` — a fixture crate compiled by
   cargo-orthohelp's ephemeral bridge during tests (`SimpleFixtureConfig`,
   `FixtureConfig`, `NestedFixtureConfig` with a three-level subcommand tree
