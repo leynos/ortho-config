@@ -875,6 +875,7 @@ cargo orthohelp --check-agent-native=warn
 
 The report is exactly one JSON document on stdout:
 
+<!-- markdownlint-disable MD013 -->
 <!-- tested-example: guide-check-report -->
 ```json
 {
@@ -886,13 +887,21 @@ The report is exactly one JSON document on stdout:
       "rule_id": "agent-native.behaviour.undeclared",
       "code": "interaction_unknown",
       "severity": "warn",
-      "message": "command `purge` has undeclared interaction; add `behaviour(interaction = \"interactive\")`",
+      "message": "command `purge` has undeclared interaction behaviour; add `behaviour(interaction = \"non_interactive\")` or `behaviour(interaction = \"interactive\")` to its arguments struct",
+      "location": null
+    },
+    {
+      "rule_id": "agent-native.behaviour.undeclared",
+      "code": "mutation_unknown",
+      "severity": "warn",
+      "message": "command `purge` has undeclared mutation boundary; add `behaviour(mutation = \"read_only\")`, `behaviour(mutation = \"write\")`, `behaviour(mutation = \"delete\")`, or `behaviour(mutation = \"submit\")` to its arguments struct",
       "location": null
     }
   ],
-  "summary": { "off": 0, "warn": 1, "deny": 0, "total": 1 }
+  "summary": { "off": 0, "warn": 2, "deny": 0, "total": 2 }
 }
 ```
+<!-- markdownlint-enable MD013 -->
 
 Each result carries a stable `rule_id` and `code`. `location` is always `null`
 for now: the check runs on agent context, which has no source spans, so the

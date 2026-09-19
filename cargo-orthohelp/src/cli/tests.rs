@@ -4,7 +4,9 @@ use clap::{CommandFactory, Parser, error::ErrorKind};
 use proptest::prelude::*;
 use rstest::rstest;
 
-use super::{CargoSubcommand, Cli, OutputFormat};
+use cargo_orthohelp::policy::PolicyMode;
+
+use super::{CargoSubcommand, CheckMode, Cli, OutputFormat};
 
 #[test]
 fn format_defaults_to_ir() {
@@ -35,6 +37,42 @@ fn format_accepts_agent_context() {
     let CargoSubcommand::Orthohelp(args) = cli.command;
 
     assert!(matches!(args.format, OutputFormat::AgentContext));
+}
+
+#[rstest]
+#[case::bare(&["cargo-orthohelp", "orthohelp", "--check-agent-native"], CheckMode::Warn)]
+#[case::off(&["cargo-orthohelp", "orthohelp", "--check-agent-native=off"], CheckMode::Off)]
+#[case::warn(&["cargo-orthohelp", "orthohelp", "--check-agent-native=warn"], CheckMode::Warn)]
+#[case::deny(&["cargo-orthohelp", "orthohelp", "--check-agent-native=deny"], CheckMode::Deny)]
+fn check_agent_native_accepts_supported_values(#[case] argv: &[&str], #[case] expected: CheckMode) {
+    let cli = Cli::parse_from(argv);
+    let CargoSubcommand::Orthohelp(args) = cli.command;
+
+    assert_eq!(args.check_agent_native, Some(expected));
+}
+
+#[test]
+fn check_agent_native_rejects_space_separated_values() {
+    let error = Cli::try_parse_from([
+        "cargo-orthohelp",
+        "orthohelp",
+        "--check-agent-native",
+        "warn",
+    ])
+    .expect_err("the check mode must be supplied with an equals sign");
+
+    assert_eq!(error.kind(), ErrorKind::UnknownArgument);
+}
+
+#[rstest]
+#[case::off(CheckMode::Off, PolicyMode::Off)]
+#[case::warn(CheckMode::Warn, PolicyMode::Warn)]
+#[case::deny(CheckMode::Deny, PolicyMode::Deny)]
+fn check_mode_converts_to_the_matching_policy_mode(
+    #[case] check_mode: CheckMode,
+    #[case] expected: PolicyMode,
+) {
+    assert_eq!(PolicyMode::from(check_mode), expected);
 }
 
 #[test]

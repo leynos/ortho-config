@@ -220,9 +220,8 @@ directly.
 
 ### 3.3 Agent-native lint policy
 
-The lint policy is the enforcement layer. It should be exposed through
-`cargo-orthohelp` and should also be reusable by tests or continuous
-integration.
+The lint policy is the enforcement layer. It is exposed through
+`cargo-orthohelp` and is reusable by tests or continuous integration.
 
 The policy-report schema is initially owned by `cargo_orthohelp::policy`,
 including `ORTHO_POLICY_REPORT_SCHEMA_VERSION`. This keeps warnings, hard
@@ -230,15 +229,16 @@ failures, source locations, rule identifiers, machine-readable codes, and mode
 handling close to the reference CLI that emits them. A later ADR can extract a
 shared report model if downstream libraries need to construct identical reports.
 
-The planned command shape is:
+The implemented command is:
 
 ```console
-cargo orthohelp --check-agent-native
+cargo orthohelp --check-agent-native[=off|warn|deny]
 ```
 
-The policy should support `off`, `warn`, and `deny` modes. Early adoption
-should default to warnings so existing users can see the work required before
-turning on hard failures.
+When the flag is present without a value, the mode defaults to `warn`. The
+check evaluates the compiled agent context and writes exactly one machine-stable
+`PolicyReport` JSON document to stdout. It writes a one-line human-readable
+summary to stderr.
 
 `cargo orthohelp --check-agent-native` always emits a machine-stable policy
 report written atomically to the output directory, and prints a short human
@@ -246,6 +246,7 @@ summary to standard error. Tests and CI should parse `rule_id` and `code` for
 deterministic handling; prose in `message` is explanatory and may improve
 without changing the machine contract.
 
+<!-- markdownlint-disable MD013 -->
 ```json
 {
   "version": "1",
@@ -264,7 +265,7 @@ without changing the machine contract.
   ],
   "summary": {
     "off": 0,
-    "warn": 1,
+    "warn": 2,
     "deny": 0,
     "total": 1
   },
@@ -285,6 +286,7 @@ without changing the machine contract.
   }
 }
 ```
+<!-- markdownlint-enable MD013 -->
 
 Each result must contain:
 
@@ -297,10 +299,13 @@ Each result must contain:
   holds one-based `start`/`end` positions (matching the shipped
   `cargo_orthohelp::policy` types rather than the draft's flat `file`/`range`
   pair).
+  The behaviour lint runs over agent context, which carries no source
+  spans, so its findings use `null`.
 
 Mode handling is direct: `off` suppresses checks, `warn` emits findings without
-failing the command, and `deny` exits with a validation-class failure when any
-deny-level finding is present.
+failing the command, and `deny` exits with code 3 when any deny-level finding
+is present. Runtime errors keep exit code 1 and clap usage errors keep exit
+code 2.
 
 The configuration surface is `[package.metadata.ortho_config.policy]` in the
 target package's `Cargo.toml` (see ADR-008). The enforcement default is `off`
@@ -647,7 +652,7 @@ table-stakes agent-native behaviours:
   policy modes;
 - stable exit classes documented in its README;
 - atomic writes for generated files;
-- agent-native lint and agent-context output once the metadata exists.
+- agent-native lint and agent-context output from the compiled metadata.
 
 This gives downstream users an executable reference rather than only a design
 document.
@@ -787,7 +792,6 @@ Schema v1 history:
 
 The design and roadmap updates must address these known gaps:
 
-- no agent-native lint command exists;
 - the improved `MissingRequiredValues` diagnostic is reconciled as proposed
   phase 7 work, but is not yet implemented;
 - `cargo-orthohelp` has no structured `--json` result mode;
