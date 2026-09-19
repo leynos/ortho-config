@@ -730,7 +730,7 @@ this shape:
   "commands": [],
   "profiles": { "supported": false },
   "feedback": { "supported": false },
-  "policy": { "agent_native": "warn" },
+  "policy": { "agent_native": "warn", "exceptions": [] },
   "skill_manifests": []
 }
 ```
@@ -752,10 +752,15 @@ packages still adopting the toolchain:
 cargo orthohelp --check-agent-native --package my-cli --out-dir out
 ```
 
-The command always writes a machine-stable `policy-report.json` atomically to
-the output directory, then prints a one-line summary to standard error. The
+With `--check-agent-native` alone, the command writes only a machine-stable
+`policy-report.json` atomically to the output directory, prints a one-line
+summary to standard error, and skips generation. Supplying `--format` runs the
+policy check before generation, including an explicit `--format ir`; the
+default format is treated as implicit when the check flag is used alone. The
 policy is configured under `[package.metadata.ortho_config.policy]` in the
 target package's `Cargo.toml`:
+
+_Table 2: Agent-native policy configuration keys._
 
 | Key                         | Type                      | Default  | Meaning                                        |
 | --------------------------- | ------------------------- | -------- | ---------------------------------------------- |
@@ -787,11 +792,14 @@ command_path = "fixture"
 The enforcement default is `off`: a package with no policy table checks
 nothing. In `warn` mode, findings are reported without failing the command; in
 `deny` mode, deny-level findings cause a non-zero exit after the report has
-been written. The report includes the effective mode, the findings, the
-configured exceptions (with their reasons), and the canonical vocabulary
-(`vocabulary.verbs` and `vocabulary.flags`) the policy holds the project to.
-Exception reasons appear in `policy-report.json` but not in agent context,
-which carries only the exception kind, name, and optional command scope.
+been written. The report includes the effective mode, findings, configured
+exceptions (with their reasons), and the canonical vocabulary in
+`vocabulary.verbs` and `vocabulary.flags`. In 7.1.1, the check validates only
+policy configuration and reports that vocabulary; it does not lint command
+verbs or flags against it. Off-policy verb and flag linting is deferred to
+roadmap item 7.1.2. Exception reasons appear in `policy-report.json` but not in
+agent context, which carries only the exception kind, name, and optional
+command scope.
 
 `--policy-mode <off|warn|deny>` overrides the configured mode for the report
 and requires `--check-agent-native`. It never changes the generated agent

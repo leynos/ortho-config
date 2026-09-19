@@ -36,17 +36,22 @@ fn policy_table_absent_when_missing() {
 }
 
 #[rstest]
-fn off_summary_names_the_missing_table() {
+#[case::absent_policy_table(false, "no [package.metadata.ortho_config.policy] table found")]
+#[case::configured_policy_table(true, "configured or overridden to off")]
+fn off_summary_explains_why_nothing_was_checked(
+    #[case] table_found: bool,
+    #[case] expected_reason: &str,
+) {
     let report = report_with(PolicyMode::Off, 0, 0);
     let line = summary_line(
         &report,
         Utf8Path::new("out/policy-report.json"),
-        false,
+        table_found,
         "demo",
     );
 
     assert!(line.contains("policy mode off"));
-    assert!(line.contains("no [package.metadata.ortho_config.policy] table found"));
+    assert!(line.contains(expected_reason));
     assert!(line.contains("out/policy-report.json"));
 }
 

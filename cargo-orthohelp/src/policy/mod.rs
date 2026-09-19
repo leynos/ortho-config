@@ -6,7 +6,6 @@
 
 use std::fmt;
 
-use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
 
 pub mod check;
@@ -147,7 +146,7 @@ pub struct Vocabulary {
 }
 
 /// Enforcement mode selected for policy evaluation.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ValueEnum)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PolicyMode {
     /// Do not evaluate policy checks.

@@ -29,7 +29,7 @@ fn parses_policy_mode_override(#[case] wire: &str, #[case] expected: PolicyMode)
     ]);
     let CargoSubcommand::Orthohelp(args) = cli.command;
 
-    assert_eq!(args.policy_mode, Some(expected));
+    assert_eq!(args.policy_mode.map(PolicyMode::from), Some(expected));
 }
 
 #[rstest]

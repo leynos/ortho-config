@@ -8,4 +8,7 @@
 fn must_use_compile_tests() {
     let t = trybuild::TestCases::new();
     t.compile_fail("tests/ui/must_use_bridge_ir.rs");
+    t.pass("tests/ui/policy_public_api.rs");
+    t.compile_fail("tests/ui/must_use_policy_evaluate.rs");
+    t.compile_fail("tests/ui/policy_inputs_non_exhaustive.rs");
 }
