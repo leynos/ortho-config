@@ -6,7 +6,7 @@
 //! (IR, man pages, `PowerShell`) live here, while `main.rs` orchestrates
 //! them.
 
-use camino::Utf8PathBuf;
+use camino::{Utf8Path, Utf8PathBuf};
 
 use crate::cli::{Args, OutputFormat};
 use crate::error::OrthohelpError;
@@ -29,6 +29,11 @@ pub struct GenerationContext<'a> {
     pub en_us_localizer: Option<&'a (LanguageIdentifier, FluentLocalizer)>,
 }
 
+/// Reports whether an output format requires agent-context generation.
+const fn needs_agent_context(format: OutputFormat) -> bool {
+    matches!(format, OutputFormat::AgentContext | OutputFormat::All)
+}
+
 /// Generates the agent-context JSON when the requested format needs it.
 ///
 /// # Errors
@@ -38,7 +43,7 @@ pub fn generate_agent_context_if_requested(
     args: &Args,
     context: &GenerationContext<'_>,
 ) -> Result<(), OrthohelpError> {
-    if !matches!(args.format, OutputFormat::AgentContext | OutputFormat::All) {
+    if !needs_agent_context(args.format) {
         tracing::debug!(
             package = %context.selection.package_name,
             format = ?args.format,
@@ -79,7 +84,7 @@ pub fn build_agent_context_localizer_if_requested(
     args: &Args,
     selection: &PackageSelection,
 ) -> Option<(LanguageIdentifier, FluentLocalizer)> {
-    if !matches!(args.format, OutputFormat::AgentContext | OutputFormat::All) {
+    if !needs_agent_context(args.format) {
         return None;
     }
     match build_en_us_localizer(&selection.package_root) {
@@ -275,8 +280,14 @@ pub fn generate_powershell(
     Ok(())
 }
 
+/// Builds the conventional `orthohelp/out` directory below a Cargo target
+/// directory.
+pub(crate) fn default_out_dir(target_directory: &Utf8Path) -> Utf8PathBuf {
+    target_directory.join("orthohelp").join("out")
+}
+
 /// Resolves the output directory, defaulting to the selected package's
 /// conventional `orthohelp/out` directory.
 pub fn resolve_out_dir(out_dir: Option<Utf8PathBuf>, selection: &PackageSelection) -> Utf8PathBuf {
-    out_dir.unwrap_or_else(|| selection.target_directory.join("orthohelp").join("out"))
+    out_dir.unwrap_or_else(|| default_out_dir(&selection.target_directory))
 }

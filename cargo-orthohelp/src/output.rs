@@ -13,7 +13,7 @@ use ortho_config::AgentContext;
 
 // Process-wide suffix for atomic JSON artefact temp names. `Relaxed` ordering
 // hands out distinct values; the `create_new` and rename operations provide
-// the actual synchronisation, so any collision is a hard failure.
+// the actual synchronization, so any collision is a hard failure.
 static JSON_ARTEFACT_TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 /// Writes the localized IR JSON for a single locale.
@@ -297,103 +297,5 @@ fn ensure_dir(path: &Utf8Path) -> Result<Dir, OrthohelpError> {
 }
 
 #[cfg(test)]
-mod tests {
-    //! Unit tests for atomic JSON artefact writing.
-
-    use super::*;
-    use camino::Utf8Path;
-    use std::collections::HashSet;
-    use std::sync::Arc;
-    use tempfile::TempDir;
-
-    #[test]
-    fn concurrent_writes_do_not_corrupt_output() {
-        let temp_dir = TempDir::new().expect("create temporary output directory");
-        let out_dir = Utf8Path::from_path(temp_dir.path()).expect("temporary path is UTF-8");
-        let payload = Arc::new(AgentContext::new("test-package"));
-
-        let handles = (0..8)
-            .map(|_| {
-                let thread_payload = Arc::clone(&payload);
-                let thread_out_dir = out_dir.to_path_buf();
-                std::thread::spawn(move || write_agent_context(&thread_out_dir, &thread_payload))
-            })
-            .collect::<Vec<_>>();
-
-        for handle in handles {
-            let result = handle.join().expect("thread panicked");
-            assert!(result.is_ok(), "write_agent_context failed: {result:?}");
-        }
-
-        let content =
-            std::fs::read_to_string(out_dir.join("agent-context.json")).expect("read output JSON");
-        serde_json::from_str::<serde_json::Value>(&content).expect("parse output JSON");
-    }
-
-    #[test]
-    fn temp_file_collision_fails_hard() {
-        let temp_dir = TempDir::new().expect("create temporary output directory");
-        let out_dir = Utf8Path::from_path(temp_dir.path()).expect("temporary path is UTF-8");
-        let dir = ensure_dir(out_dir).expect("open output directory");
-        let target = JsonArtefactWriteTarget::new(out_dir, "agent-context.json");
-
-        // The first `create_new` open succeeds and leaves the temp file in place.
-        let _first = open_json_temp_file(&dir, &target, "agent-context")
-            .expect("first temp file creation should succeed");
-
-        // A second open with the same temp name must fail hard: `create_new(true)`
-        // refuses to clobber an existing temp file, preserving atomicity even
-        // when a stale file lingers from a crashed run with a reused PID.
-        let second = open_json_temp_file(&dir, &target, "agent-context");
-        assert!(
-            matches!(
-                &second,
-                Err(OrthohelpError::Io { source, .. })
-                    if source.kind() == std::io::ErrorKind::AlreadyExists
-            ),
-            "expected create_new collision to report AlreadyExists, got {second:?}"
-        );
-    }
-
-    #[test]
-    fn temp_file_open_fails_when_file_already_exists() {
-        let temp_dir = TempDir::new().expect("create temp dir");
-        let out_dir = Utf8Path::from_path(temp_dir.path()).expect("path is UTF-8");
-
-        // `Dir` and `ambient_authority` are in scope via `use super::*`.
-        // `open_ambient_dir` requires `AsRef<Utf8Path>`, so the `Utf8Path`
-        // `out_dir` is passed directly rather than via `as_std_path()`.
-        let dir = Dir::open_ambient_dir(out_dir, ambient_authority()).expect("open temp dir");
-
-        std::fs::File::create(out_dir.join("collision.tmp")).expect("pre-create collision file");
-        let target = JsonArtefactWriteTarget {
-            filename: "agent-context.json",
-            path: out_dir.join("agent-context.json"),
-            temp_filename: "collision.tmp".to_owned(),
-            temp_path: out_dir.join("collision.tmp"),
-        };
-
-        let result = open_json_temp_file(&dir, &target, "agent-context");
-        assert!(
-            matches!(
-                &result,
-                Err(OrthohelpError::Io { source, .. })
-                    if source.kind() == std::io::ErrorKind::AlreadyExists
-            ),
-            "expected create_new collision to report AlreadyExists, got {result:?}"
-        );
-    }
-
-    #[test]
-    fn concurrent_writes_produce_unique_temp_names() {
-        let temp_dir = TempDir::new().expect("create temporary output directory");
-        let out_dir = Utf8Path::from_path(temp_dir.path()).expect("temporary path is UTF-8");
-
-        let temp_filenames = (0..8)
-            .map(|_| JsonArtefactWriteTarget::new(out_dir, "agent-context.json").temp_filename)
-            .collect::<Vec<_>>();
-        let unique_temp_filenames = temp_filenames.iter().collect::<HashSet<_>>();
-
-        assert_eq!(unique_temp_filenames.len(), temp_filenames.len());
-    }
-}
+#[path = "output_tests.rs"]
+mod tests;

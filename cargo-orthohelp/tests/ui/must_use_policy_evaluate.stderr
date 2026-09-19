@@ -1,0 +1,15 @@
+error: unused return value of `evaluate` that must be used
+ --> tests/ui/must_use_policy_evaluate.rs:8:5
+  |
+8 |     evaluate(&PolicyConfig::default(), &PolicyInputs::default());
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+note: the lint level is defined here
+ --> tests/ui/must_use_policy_evaluate.rs:3:9
+  |
+3 | #![deny(unused_must_use)]
+  |         ^^^^^^^^^^^^^^^
+help: use `let _ = ...` to ignore the resulting value
+  |
+8 |     let _ = evaluate(&PolicyConfig::default(), &PolicyInputs::default());
+  |     +++++++

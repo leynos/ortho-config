@@ -30,8 +30,9 @@ pub struct PolicyCheckOutcome {
 ///
 /// Reads the optional policy table from the package's Cargo metadata, applies
 /// the `--policy-mode` override to the *report* mode, evaluates, writes the
-/// report atomically (Decision D5), and prints the human summary before any
-/// write (so it appears even when the artefact write fails). In `deny` mode
+/// report atomically (Decision D5), and attempts a human summary after the
+/// write. Summary output is advisory, so a stderr failure never prevents the
+/// machine-readable artefact. In `deny` mode
 /// with at least one deny finding, a [`OrthohelpError::PolicyViolation`] is
 /// returned after the report has been written (Decision D6).
 ///
@@ -53,13 +54,14 @@ pub fn run_policy_check(
         config.mode = override_mode;
     }
     let report = evaluate(&config, &PolicyInputs::default());
-    let report_path = out_dir.join("policy-report.json");
-    write_summary(&report, &report_path, table_found, &package.name)?;
-    output::write_policy_report(out_dir, &report)?;
+    let report_path = output::write_policy_report(out_dir, &report)?;
+    if let Err(error) = write_summary(&report, &report_path, table_found, &package.name) {
+        tracing::debug!(error = %error, "failed to write advisory policy summary");
+    }
     if config.mode == PolicyMode::Deny && report.summary.deny > 0 {
         return Err(OrthohelpError::PolicyViolation {
             deny_count: report.summary.deny,
-            report_path: report_path.to_string(),
+            report_path: report_path.clone(),
         });
     }
     Ok(PolicyCheckOutcome {
@@ -86,16 +88,12 @@ fn write_summary(
     report_path: &Utf8Path,
     table_found: bool,
     package_name: &str,
-) -> Result<(), OrthohelpError> {
+) -> std::io::Result<()> {
     writeln!(
         std::io::stderr().lock(),
         "{}",
         summary_line(report, report_path, table_found, package_name),
     )
-    .map_err(|io_err| OrthohelpError::Io {
-        path: report_path.to_path_buf(),
-        source: io_err,
-    })
 }
 
 /// Renders the one-line human summary for the check.

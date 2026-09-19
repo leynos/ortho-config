@@ -278,7 +278,10 @@ without changing the machine contract.
   ],
   "vocabulary": {
     "verbs": ["get", "list", "create", "update", "delete", "jobs", "profile", "feedback"],
-    "flags": ["--json", "--no-input", "--force", "--dry-run", "--limit", "--cursor", "--wait", "--profile", "--deliver"]
+    "flags": [
+      "--json", "--no-input", "--force", "--dry-run", "--limit", "--cursor",
+      "--wait", "--profile", "--deliver"
+    ]
   }
 }
 ```
@@ -675,13 +678,12 @@ contract and do not imply that those fields exist today.
 | `renderer.human`       | `{ "supported": true }`  | planned | Existing documentation IR already supports human help material.            |
 | `renderer.machine`     | `{ "supported": false }` | planned | Machine renderer support must be declared before agents depend on it.      |
 
-Lint behaviour for omitted metadata follows the selected mode. In `off` mode,
-the check is not run. In `warn` mode, omitted fields that block an agent-native
-guarantee emit warnings but do not fail the command. In `deny` mode, the same
-omitted fields fail CI with validation-class diagnostics. Projects should opt
-into warning mode first, fix emitted findings, then move to deny mode once the
-documentation IR, agent-context schema, and man-page generation are complete
-enough for their command surface.
+In roadmap 7.1.1, `PolicyInputs` is empty and the evaluator does not inspect
+bridge metadata. Omitted bridge metadata therefore produces no `warn` or `deny`
+findings. Bridge-metadata findings and their mode-dependent behaviour are
+planned for roadmap 7.1.2. Once those rules exist, omitted metadata will follow
+the selected mode: `off` suppresses checks, `warn` reports findings without
+failing the command, and `deny` fails CI with validation diagnostics.
 
 The first implementation phase should introduce agent-native support behind
 explicit formats, commands, or metadata attributes. Existing generated

@@ -199,7 +199,7 @@ documents a CI recipe asserting the mode
 
 - [Agent-native CLI assistance design](agent-native-cli-design.md) §3.3 and
   §5.
-- [OrthoConfig IR documentation design for cargo-orthohelp](cargo-orthohelp-design.md)
-  §6.3.2.
+- [OrthoConfig IR documentation design for
+  cargo-orthohelp](cargo-orthohelp-design.md) §6.3.2.
 - [Execution plan for roadmap 7.1.1](execplans/7-1-1-opt-in-agent-native-policy-configuration.md).
 - [ADR-003: Define schema ownership for agent-native contracts](adr-003-define-schema-ownership-for-agent-native-contracts.md).

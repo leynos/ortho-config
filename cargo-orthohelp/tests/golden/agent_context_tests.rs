@@ -13,20 +13,28 @@ use crate::fixtures;
 
 #[rstest]
 #[case::simple(
+    "orthohelp_fixture",
     Some("orthohelp_fixture::SimpleFixtureConfig"),
     "agent_context__simple_fixture.json"
 )]
-#[case::enum_root(None, "agent_context__fixture.json")]
+#[case::enum_root("orthohelp_fixture", None, "agent_context__fixture.json")]
 #[case::nested(
+    "orthohelp_fixture",
     Some("orthohelp_fixture::NestedFixtureConfig"),
     "agent_context__nested_fixture.json"
 )]
+#[case::policy_warn(
+    "orthohelp_policy_warn_fixture",
+    Some("orthohelp_policy_warn_fixture::SimplePolicyConfig"),
+    "agent_context__policy_warn_fixture.json"
+)]
 fn fixture_agent_context_matches_snapshot(
+    #[case] package_name: &str,
     #[case] root_type: Option<&str>,
     #[case] snapshot_name: &str,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     let out_dir = tempfile::tempdir()?;
-    let output = run_agent_context(&out_dir, root_type)?;
+    let output = run_agent_context(&out_dir, package_name, root_type)?;
     if !output.status.success() {
         return Err(format!(
             "cargo-orthohelp should succeed: {:?}",
@@ -47,6 +55,7 @@ fn fixture_agent_context_matches_snapshot(
 
 fn run_agent_context(
     out_dir: &TempDir,
+    package_name: &str,
     root_type: Option<&str>,
 ) -> Result<Output, Box<dyn Error + Send + Sync>> {
     let exe = fixtures::cargo_orthohelp_exe()?;
@@ -59,49 +68,9 @@ fn run_agent_context(
         .arg("--format")
         .arg("agent-context")
         .arg("--package")
-        .arg("orthohelp_fixture");
+        .arg(package_name);
     if let Some(selected_root_type) = root_type {
         command.arg("--root-type").arg(selected_root_type);
     }
-    Ok(command.output()?)
-}
-
-#[rstest]
-fn policy_warn_fixture_agent_context_matches_snapshot() -> Result<(), Box<dyn Error + Send + Sync>>
-{
-    let out_dir = tempfile::tempdir()?;
-    let output = run_policy_fixture_agent_context(&out_dir)?;
-    if !output.status.success() {
-        return Err(format!(
-            "cargo-orthohelp should succeed: {:?}",
-            String::from_utf8_lossy(&output.stderr)
-        )
-        .into());
-    }
-
-    let out_path = Utf8PathBuf::from_path_buf(out_dir.path().to_path_buf())
-        .map_err(|path| format!("non-UTF-8 output path: {}", path.display()))?;
-    let dir = Dir::open_ambient_dir(&out_path, ambient_authority())?;
-    let snapshot = dir.read_to_string("agent-context.json")?;
-    with_settings!({snapshot_path => ".", prepend_module_to_snapshot => false}, {
-        assert_snapshot!("agent_context__policy_warn_fixture.json", snapshot);
-    });
-    Ok(())
-}
-
-fn run_policy_fixture_agent_context(
-    out_dir: &TempDir,
-) -> Result<Output, Box<dyn Error + Send + Sync>> {
-    let exe = fixtures::cargo_orthohelp_exe()?;
-    let mut command = Command::new(exe.as_str());
-    command
-        .current_dir(fixtures::workspace_root()?.as_std_path())
-        .arg("orthohelp")
-        .arg("--out-dir")
-        .arg(out_dir.path())
-        .arg("--format")
-        .arg("agent-context")
-        .arg("--package")
-        .arg("orthohelp_policy_warn_fixture");
     Ok(command.output()?)
 }

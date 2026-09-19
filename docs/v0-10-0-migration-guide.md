@@ -8,6 +8,15 @@ can upgrade without changing their loading code: process-backed behaviour
 remains the default, and applications that do not use the Cargo helper require
 no changes.
 
+## Adopt the opt-in agent-native policy check
+
+Run `cargo orthohelp --check-agent-native` to write a policy report for a
+package. Configure it in the `[package.metadata.ortho_config.policy]` metadata
+table. The `off`, `warn`, and `deny` modes select disabled, advisory, and
+failing policy behaviour. See the
+[agent-native policy section in the user's guide](users-guide.md#agent-native-policy-checking)
+for the report shape, exceptions, and command-line override.
+
 ## Keep the default process behaviour
 
 `load()`, `load_from_iter()`, and the existing subcommand merge methods

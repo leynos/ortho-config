@@ -323,11 +323,12 @@ existing fixture families rather than duplicate them.
 
 Agent-native policy configuration (roadmap 7.1.1) follows the same layout. The
 canonical vocabulary is a single source of truth in
-`cargo-orthohelp/src/policy/vocabulary.rs` (Decision D2); the agent-context
-verb mapper and the 7.1.2 lint rules both import its constants, so the two
-consumers cannot drift. Assertions in new policy tests split by crate:
-`assert!`-style boolean checks in `cargo-orthohelp`, and matcher- or
-collection-shaped checks in `ortho_config` agent-context tests (Decision D8).
+`cargo-orthohelp/src/policy/vocabulary/mod.rs` (Decision D2); the agent-context
+verb mapper currently imports its constants, so that consumer cannot drift. The
+unimplemented 7.1.2 lint rules do not import them yet. Assertions in new policy
+tests split by crate: `assert!`-style boolean checks in `cargo-orthohelp`, and
+matcher- or collection-shaped checks in `ortho_config` agent-context tests
+(Decision D8).
 
 Fixtures: `tests/fixtures/orthohelp_policy_warn_fixture/` (mode `warn`, one
 redundant exception, one scoped exception) and
@@ -336,12 +337,22 @@ exception) back the policy golden and behavioural suites; `orthohelp_fixture`
 keeps no policy table and serves the "off by default" scenario (Decision D10).
 `tests/fixtures/orthohelp_policy_adoption_fixture/` omits `root_type` and the
 `ortho_config` dependency so the check-first pipeline (Decision D11) stays
-covered for packages still adopting the toolchain.
-The CLI-level policy behaviour is exercised end-to-end by
+covered for packages still adopting the toolchain. The CLI-level policy
+behaviour is exercised end-to-end by
 `cargo-orthohelp/tests/features/orthohelp_policy.feature` with steps in
 `cargo-orthohelp/tests/rstest_bdd/behaviour/steps_policy.rs`, and the report
 wire format is snapshotted in
 `cargo-orthohelp/tests/golden/policy_report_tests.rs`.
+
+The policy boundary keeps `PolicyConfig` and `evaluate` as pure domain code.
+`run_policy_check` performs the check early, before generation, and writes the
+machine-readable report through `output::write_policy_report`, which uses an
+atomic artefact write. `apply_policy_to_context` maps the configured policy to
+agent context while deliberately excluding exception reasons. The CLI exposes
+`--check-agent-native` and the `--policy-mode <off|warn|deny>` report override;
+the latter requires the check flag. The fixture layout above remains the
+canonical policy coverage, and `googletest` plus `pretty_assertions` are
+`cargo-orthohelp` development dependencies used by those tests.
 
 ### Integration test targets
 

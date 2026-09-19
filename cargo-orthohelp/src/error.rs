@@ -106,7 +106,7 @@ pub enum OrthohelpError {
         /// Number of deny-level findings.
         deny_count: usize,
         /// Path of the written policy report.
-        report_path: String,
+        report_path: Utf8PathBuf,
     },
 
     /// A generic error message.

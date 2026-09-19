@@ -29,8 +29,8 @@ use crate::cli::{Args, CargoSubcommand, Cli, OutputFormat};
 use crate::error::OrthohelpError;
 use crate::generation::{
     GenerationContext, build_agent_context_localizer_if_requested, build_powershell_config,
-    generate_agent_context_if_requested, generate_ir, generate_man, generate_powershell,
-    localize_docs_if_requested, resolve_out_dir,
+    default_out_dir, generate_agent_context_if_requested, generate_ir, generate_man,
+    generate_powershell, localize_docs_if_requested, resolve_out_dir,
 };
 use crate::metadata::PackageSelection;
 use crate::schema::{DocMetadata, ORTHO_DOCS_IR_VERSION};
@@ -98,9 +98,9 @@ fn run_policy_check_if_requested(
     let out_dir = args
         .out_dir
         .clone()
-        .unwrap_or_else(|| metadata.target_directory.join("orthohelp").join("out"));
+        .unwrap_or_else(|| default_out_dir(&metadata.target_directory));
     let package = metadata::select_policy_package(metadata, args)?;
-    policy::check::run_policy_check(package, args.policy_mode, &out_dir)?;
+    policy::check::run_policy_check(package, args.policy_mode.map(Into::into), &out_dir)?;
     Ok(!format_was_explicit)
 }
 
