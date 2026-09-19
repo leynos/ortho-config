@@ -584,7 +584,7 @@ later progressively add opinion.
     `preparing_sandbox` with no findings or rate-limit message; this is
     recorded in the 11.1.2 execplan.
 
-- [x] 11.1.3. Add the `OrthoConfigLocalization` trait and derive emission.
+- [ ] 11.1.3. Add the `OrthoConfigLocalization` trait and derive emission.
   - Requires 11.1.2.
   - See cli-localization-design.md §8.1 and §8.2.
   - [x] Define `OrthoConfigLocalization` with `ABOUT_ID`, `LONG_ABOUT_ID`,
@@ -598,6 +598,8 @@ later progressively add opinion.
     cap and split-file behaviour for larger trees.
   - [x] Add a compile-time `compile_error!` for fields whose normalized
     identifiers collide.
+  - [ ] Validate forced refresh, stale-output isolation, pure renderer
+    lifecycle behaviour, and documentation reconciliation before completion.
 
 ### 11.2. Widen clap-error coverage and preserve clap's rich context
 

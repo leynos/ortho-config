@@ -1,6 +1,7 @@
 //! Focused ordering and schema-preservation tests for identifier artefacts.
 
 use anyhow::{Context, Result, ensure};
+use proptest::prelude::*;
 
 use super::super::{ArgIdsModel, ClapArgId, CommandIds, FluentMessageId};
 use super::*;
@@ -45,6 +46,31 @@ fn entry_with_type_name(id: &str, type_name: String) -> Entry {
         source: fixture_source(),
         embedded_default: None,
     }
+}
+
+/// Generates entries that force the renderer through its split-file path.
+fn split_entry_strategy() -> impl Strategy<Value = Entry> {
+    (
+        "[a-z]{1,8}",
+        prop_oneof![
+            Just(String::from("about")),
+            Just(String::from("long-about")),
+            Just(String::from("help")),
+            Just(String::from("value-name")),
+        ],
+        "[a-z]{1,8}",
+        proptest::option::of("[a-z]{1,8}"),
+        262_144_usize..327_680,
+    )
+        .prop_map(|(id, kind, type_name, field, payload_bytes)| Entry {
+            id,
+            kind,
+            type_name: format!("fixture::{type_name}{}", "x".repeat(payload_bytes)),
+            field,
+            path_scope: String::from("standalone"),
+            source: fixture_source(),
+            embedded_default: None,
+        })
 }
 
 /// Returns files as `(name, contents)` pairs for byte-for-byte comparisons.
@@ -305,4 +331,48 @@ fn renderer_keeps_one_oversized_entry_in_a_single_part() -> Result<()> {
         "single oversized entry must round-trip through the index"
     );
     Ok(())
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(32))]
+
+    /// Verifies split rendering round-trips arbitrary entries in every input order.
+    #[test]
+    fn split_renderer_round_trips_arbitrary_entries(
+        entries in proptest::collection::vec(split_entry_strategy(), 5..8),
+        offset in 0_usize..5,
+    ) {
+        let expected = ordered(entries.clone());
+        let files = render(entries.clone()).map_err(|error| TestCaseError::fail(error.to_string()))?;
+        let round_tripped = round_trip_entries(&files)
+            .map_err(|error| TestCaseError::fail(error.to_string()))?;
+        let mut permuted = entries;
+        permuted.rotate_left(offset);
+        let permuted_files = render(permuted).map_err(|error| TestCaseError::fail(error.to_string()))?;
+
+        prop_assert!(
+            files.first().is_some_and(|file| file.name == "cli-identifiers.index.json"),
+            "large generated inputs must use an index"
+        );
+        prop_assert_eq!(
+            json(&round_tripped).map_err(|error| TestCaseError::fail(error.to_string()))?,
+            json(&expected).map_err(|error| TestCaseError::fail(error.to_string()))?,
+            "split output must round-trip every ordered entry"
+        );
+        prop_assert_eq!(
+            file_bytes(&files),
+            file_bytes(&permuted_files),
+            "permuted input must render identical file bytes"
+        );
+        for file in &files {
+            if file.name != "cli-identifiers.index.json" {
+                let document = serde_json::from_slice::<Document>(&file.contents)
+                    .map_err(|error| TestCaseError::fail(error.to_string()))?;
+                prop_assert!(
+                    file.contents.len() <= CAP_BYTES || document.entries.len() == 1,
+                    "split parts must respect the cap unless one entry alone exceeds it"
+                );
+            }
+        }
+    }
 }
