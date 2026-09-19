@@ -54,8 +54,10 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [dev-dependencies]
+googletest = "0.14"
 insta = "1"
 proptest = "1"
+pretty_assertions = "1"
 rstest = "0.26.1"
 rstest-bdd.workspace = true
 rstest-bdd-macros.workspace = true

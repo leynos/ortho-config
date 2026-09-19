@@ -1,0 +1,42 @@
+[package]
+name = "orthohelp_policy_off_fixture"
+version = "0.9.0"
+edition = "2024"
+rust-version.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+ortho_config = { path = "../../../ortho_config", version = "0.9.0" }
+serde = { version = "1", features = ["derive"] }
+clap = { version = "4", features = ["derive"] }
+
+[package.metadata.ortho_config]
+root_type = "orthohelp_policy_off_fixture::SimplePolicyConfig"
+
+[package.metadata.ortho_config.policy]
+mode = "off"
+
+[[package.metadata.ortho_config.policy.exceptions]]
+kind = "flag"
+name = "bad flag"
+reason = "malformed on purpose"
+
+[[package.metadata.ortho_config.policy.exceptions]]
+kind = "verb"
+name = "get"
+reason = "redundant but part of the migration surface"
+
+[[package.metadata.ortho_config.policy.exceptions]]
+kind = "flag"
+name = "--format"
+reason = "duplicated scoped legacy flag"
+command_path = "fixture"
+
+[[package.metadata.ortho_config.policy.exceptions]]
+kind = "flag"
+name = "--format"
+reason = "duplicated scoped legacy flag repeat"
+command_path = "fixture"
