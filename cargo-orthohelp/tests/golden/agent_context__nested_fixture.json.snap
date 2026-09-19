@@ -153,6 +153,14 @@ expression: snapshot
       "canonical_verb": null,
       "inputs": [
         {
+          "name": "force",
+          "long": "force",
+          "value_type": "bool",
+          "required": true,
+          "default": null,
+          "enum_values": []
+        },
+        {
           "name": "target",
           "long": "target",
           "value_type": "string",

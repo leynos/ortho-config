@@ -8,6 +8,7 @@
 //! configuration, localized IR, and renderer-specific outputs.
 
 pub mod agent_context;
+mod agent_native;
 mod bridge;
 mod cache;
 mod cli;
@@ -24,6 +25,9 @@ mod rustflags;
 pub mod schema;
 #[cfg(test)]
 mod test_support;
+use crate::agent_native::{
+    AgentContextResources, GenerationPlan, build_resources, run_check, write_agent_context,
+};
 use crate::bridge::BridgeConfig;
 use crate::cache::CacheKey;
 use crate::cli::{Args, CargoSubcommand, Cli, OutputFormat};
@@ -32,64 +36,19 @@ use crate::metadata::PackageSelection;
 use crate::schema::{DocMetadata, ORTHO_DOCS_IR_VERSION};
 use camino::Utf8PathBuf;
 use clap::{CommandFactory, Error as ClapError, FromArgMatches, error::ErrorKind};
-use ortho_config::{FluentLocalizer, LanguageIdentifier, Localizer};
+use ortho_config::{FluentLocalizer, LanguageIdentifier};
 use std::io::Write;
-use std::str::FromStr;
 use tracing_subscriber::EnvFilter;
 
 /// Run-scoped inputs borrowed by the output-generation phases.
 struct GenerationContext<'a> {
+    args: &'a Args,
     selection: &'a PackageSelection,
     doc_metadata: &'a DocMetadata,
     out_dir: &'a Utf8PathBuf,
     en_us_localizer: Option<&'a (LanguageIdentifier, FluentLocalizer)>,
 }
 
-/// Decides which artefact families a run should generate.
-///
-/// The five booleans each gate one distinct artefact family (IR, man page,
-/// `PowerShell`, agent context, localized docs), so collapsing them into
-/// two-variant enums would obscure the per-family skip decisions made in
-/// [`GenerationPlan::for_run`]. The lint is suppressed with that rationale.
-#[expect(
-    clippy::struct_excessive_bools,
-    reason = "each boolean gates one distinct artefact family; collapsing them into enums would obscure the per-family skip decisions"
-)]
-struct GenerationPlan {
-    should_generate_ir: bool,
-    should_generate_man: bool,
-    should_generate_ps: bool,
-    should_generate_agent_context: bool,
-    should_generate_localized_docs: bool,
-}
-
-impl GenerationPlan {
-    /// Builds the plan for a run.
-    ///
-    /// When only the lint flag is present and the default `--format ir` was
-    /// not explicitly requested, artefact generation is skipped entirely: the
-    /// answer to the check is on stdout and no files were asked for.
-    const fn for_run(args: &Args, check_flag_present: bool, format_was_explicit: bool) -> Self {
-        let should_skip_artefacts = check_flag_present && !format_was_explicit;
-        let should_generate_ir =
-            !should_skip_artefacts && matches!(args.format, OutputFormat::Ir | OutputFormat::All);
-        let should_generate_man =
-            !should_skip_artefacts && matches!(args.format, OutputFormat::Man | OutputFormat::All);
-        let should_generate_ps =
-            !should_skip_artefacts && matches!(args.format, OutputFormat::Ps | OutputFormat::All);
-        let should_generate_agent_context = !should_skip_artefacts
-            && matches!(args.format, OutputFormat::AgentContext | OutputFormat::All);
-        let should_generate_localized_docs =
-            should_generate_ir || should_generate_man || should_generate_ps;
-        Self {
-            should_generate_ir,
-            should_generate_man,
-            should_generate_ps,
-            should_generate_agent_context,
-            should_generate_localized_docs,
-        }
-    }
-}
 fn main() -> Result<(), OrthohelpError> {
     init_tracing();
     let (cli, format_was_explicit) = match parse_cli() {
@@ -169,27 +128,32 @@ fn run(cli: Cli, format_was_explicit: bool) -> Result<(), OrthohelpError> {
     let ir_json = bridge::load_or_build_ir(&config, &paths, should_use_cache, should_skip_build)?;
     let doc_metadata: DocMetadata = serde_json::from_str(&ir_json)?;
 
-    let check_flag_present = args.check_agent_native.is_some();
-    let mut check_has_deny_findings = false;
-    if let Some(mode) = args
+    let check_mode = args
         .check_agent_native
         .map(cargo_orthohelp::policy::PolicyMode::from)
-    {
-        check_has_deny_findings = run_agent_native_check(&doc_metadata, &selection, mode)?;
-    }
+        .filter(|mode| *mode != cargo_orthohelp::policy::PolicyMode::Off);
+    let check_flag_present = check_mode.is_some();
+    let requests_agent_context =
+        matches!(args.format, OutputFormat::AgentContext | OutputFormat::All);
+    let agent_context_resources = (check_flag_present || requests_agent_context)
+        .then(|| build_resources(&doc_metadata, &selection));
+    let check_has_deny_findings = match (check_mode, agent_context_resources.as_ref()) {
+        (Some(mode), Some(resources)) => run_check(resources.context(), mode)?,
+        _ => false,
+    };
 
-    let plan = GenerationPlan::for_run(&args, check_flag_present, format_was_explicit);
+    let plan = GenerationPlan::for_run(args.format, check_flag_present, format_was_explicit);
 
-    let en_us_localizer = build_agent_context_localizer_if_requested(&args, &selection);
+    let en_us_localizer = agent_context_resources
+        .as_ref()
+        .and_then(AgentContextResources::en_us_localizer);
     let generation_context = GenerationContext {
+        args: &args,
         selection: &selection,
         doc_metadata: &doc_metadata,
         out_dir: &out_dir,
-        en_us_localizer: en_us_localizer.as_ref(),
+        en_us_localizer,
     };
-    if plan.should_generate_agent_context {
-        generate_agent_context_if_requested(&args, &generation_context)?;
-    }
 
     let locales = if plan.should_generate_localized_docs {
         locale::resolve_locales(&args, &selection)?
@@ -203,18 +167,12 @@ fn run(cli: Cli, format_was_explicit: bool) -> Result<(), OrthohelpError> {
         &locales,
     )?;
 
-    if plan.should_generate_ir {
-        generate_ir(&localized_docs, &out_dir)?;
-    }
-
-    if plan.should_generate_man {
-        generate_man(&localized_docs, &out_dir, &args.man)?;
-    }
-
-    if plan.should_generate_ps {
-        let ps_config = build_powershell_config(&args, &selection, &doc_metadata, &out_dir);
-        generate_powershell(&localized_docs, &ps_config)?;
-    }
+    generate_requested_artefacts(
+        &plan,
+        &generation_context,
+        &localized_docs,
+        agent_context_resources.as_ref(),
+    )?;
 
     // The lint's report is emitted before generation so a CI pipeline can
     // parse it regardless of the exit path. The failure exit for deny-level
@@ -228,120 +186,33 @@ fn run(cli: Cli, format_was_explicit: bool) -> Result<(), OrthohelpError> {
     Ok(())
 }
 
-fn generate_agent_context_if_requested(
-    args: &Args,
+fn generate_requested_artefacts(
+    plan: &GenerationPlan,
     context: &GenerationContext<'_>,
+    localized_docs: &[ir::LocalizedDocMetadata],
+    agent_context_resources: Option<&AgentContextResources>,
 ) -> Result<(), OrthohelpError> {
-    if !matches!(args.format, OutputFormat::AgentContext | OutputFormat::All) {
-        tracing::debug!(
-            package = %context.selection.package_name,
-            format = ?args.format,
-            "agent-context generation skipped for requested format",
+    if plan.should_generate_agent_context
+        && let Some(resources) = agent_context_resources
+    {
+        write_agent_context(context.out_dir, resources)?;
+    }
+    if plan.should_generate_ir {
+        generate_ir(localized_docs, context.out_dir)?;
+    }
+    if plan.should_generate_man {
+        generate_man(localized_docs, context.out_dir, &context.args.man)?;
+    }
+    if plan.should_generate_ps {
+        let ps_config = build_powershell_config(
+            context.args,
+            context.selection,
+            context.doc_metadata,
+            context.out_dir,
         );
-        return Ok(());
+        generate_powershell(localized_docs, &ps_config)?;
     }
-    tracing::debug!(
-        package = %context.selection.package_name,
-        format = "agent-context",
-        "starting agent-context transformation",
-    );
-    let summary_localizer = context
-        .en_us_localizer
-        .map(|(_, resolved_localizer)| resolved_localizer as &dyn Localizer);
-    let agent_context = agent_context::bridge_ir_to_agent_context(
-        context.doc_metadata,
-        &context.selection.package_name,
-        summary_localizer,
-    );
-    tracing::debug!(
-        package = %agent_context.package,
-        command_count = agent_context.commands.len(),
-        "agent-context transformation complete",
-    );
-    output::write_agent_context(context.out_dir.as_path(), &agent_context)?;
     Ok(())
-}
-
-/// Runs the agent-native behaviour lint, emits its report, and reports whether
-/// deny-level findings are present.
-///
-/// The policy report is written to stdout as exactly one JSON document, a
-/// human-readable summary goes to stderr, and the returned boolean is `true`
-/// if and only if the report contains at least one `deny` finding. The caller
-/// (`run`) delays the exit-code-3 decision until after explicitly requested
-/// artefact generation completes. Runtime errors keep exit code 1; clap usage
-/// errors keep exit code 2.
-fn run_agent_native_check(
-    doc_metadata: &DocMetadata,
-    selection: &metadata::PackageSelection,
-    mode: cargo_orthohelp::policy::PolicyMode,
-) -> Result<bool, OrthohelpError> {
-    let maybe_localizer = build_en_us_localizer(&selection.package_root)
-        .ok()
-        .map(|(_, localizer)| localizer);
-    let summary_localizer = maybe_localizer
-        .as_ref()
-        .map(|localizer| localizer as &dyn ortho_config::Localizer);
-    let agent_context = agent_context::bridge_ir_to_agent_context(
-        doc_metadata,
-        &selection.package_name,
-        summary_localizer,
-    );
-    let report = cargo_orthohelp::policy::rules::behaviour::check_behaviour(&agent_context, mode);
-    let report_json = serde_json::to_string(&report)?;
-    {
-        let mut stdout = std::io::stdout().lock();
-        writeln!(stdout, "{report_json}").map_err(|source| OrthohelpError::Io {
-            path: Utf8PathBuf::from("<stdout>"),
-            source,
-        })?;
-    }
-
-    {
-        let mut stderr = std::io::stderr().lock();
-        writeln!(
-            stderr,
-            "agent-native behaviour check: {} finding(s) ({} deny)",
-            report.summary.total, report.summary.deny
-        )
-        .map_err(|source| OrthohelpError::Io {
-            path: Utf8PathBuf::from("<stderr>"),
-            source,
-        })?;
-    }
-    Ok(report.summary.deny > 0)
-}
-/// Builds the optional en-US localizer shared by agent-context and localized output.
-fn build_agent_context_localizer_if_requested(
-    args: &Args,
-    selection: &PackageSelection,
-) -> Option<(LanguageIdentifier, FluentLocalizer)> {
-    if !matches!(args.format, OutputFormat::AgentContext | OutputFormat::All) {
-        return None;
-    }
-    match build_en_us_localizer(&selection.package_root) {
-        Ok(localizer) => Some(localizer),
-        Err(error) => {
-            tracing::warn!(
-                error = %error,
-                "no en-US localizer available; agent-context summaries will be omitted",
-            );
-            None
-        }
-    }
-}
-
-fn build_en_us_localizer(
-    package_root: &Utf8PathBuf,
-) -> Result<(LanguageIdentifier, FluentLocalizer), OrthohelpError> {
-    let locale =
-        LanguageIdentifier::from_str("en-US").map_err(|err| OrthohelpError::InvalidLocale {
-            value: "en-US".to_owned(),
-            message: err.to_string(),
-        })?;
-    let resources = locale::load_consumer_resources(package_root, &locale)?;
-    let localizer = locale::build_localizer(&locale, resources)?;
-    Ok((locale, localizer))
 }
 
 fn localize_docs_if_requested(

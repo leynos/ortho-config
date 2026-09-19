@@ -803,6 +803,8 @@ a no-source-build policy, so every release must carry prebuilt archives that
 for five targets, each built on a runner of its own architecture and operating
 system rather than cross-compiled:
 
+*Table: `cargo-orthohelp` release targets and native runners.*
+
 | Target                      | Runner             |
 | --------------------------- | ------------------ |
 | `x86_64-unknown-linux-gnu`  | `ubuntu-24.04`     |

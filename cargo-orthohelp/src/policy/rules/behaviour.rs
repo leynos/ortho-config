@@ -51,8 +51,11 @@ pub fn check_behaviour(context: &AgentContext, mode: PolicyMode) -> PolicyReport
         _ => RuleSeverity::Deny,
     };
 
+    let mut commands = context.commands.iter().collect::<Vec<_>>();
+    commands.sort_unstable_by(|left, right| left.path.cmp(&right.path));
+
     let mut results = Vec::new();
-    for command in &context.commands {
+    for command in commands {
         check_bypass_requirements(command, severity, &mut results);
         check_bypass_known(command, severity, &mut results);
         check_undeclared(command, severity, &mut results);
@@ -182,7 +185,7 @@ fn check_undeclared(command: &AgentCommand, severity: RuleSeverity, out: &mut Ve
             &Rule::UNDECLARED_MUTATION,
             severity,
             format!(
-                "command `{}` has undeclared mutation boundary; add `behaviour(mutation = \"read_only\")` or `behaviour(mutation = \"delete\")` to its arguments struct",
+                "command `{}` has undeclared mutation boundary; add `behaviour(mutation = \"read_only\")`, `behaviour(mutation = \"write\")`, `behaviour(mutation = \"delete\")`, or `behaviour(mutation = \"submit\")` to its arguments struct",
                 command.path.join(" ")
             ),
             out,
