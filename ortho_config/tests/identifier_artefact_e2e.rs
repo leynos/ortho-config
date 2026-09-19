@@ -81,6 +81,13 @@ fn opt_in_artefact_is_schema_versioned_and_survives_a_warm_build() -> Result<()>
         artefact_path()?.is_none(),
         "fresh build target must not contain a stale artefact"
     );
+    build_fixture(false)?;
+    ensure!(
+        artefact_path()?.is_none(),
+        "fresh build without opt-in must not emit an identifier artefact"
+    );
+
+    reset_target_dir()?;
     build_fixture(true)?;
     let first = artefact()?;
     let document: Value = serde_json::from_str(&first)?;

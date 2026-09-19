@@ -26,7 +26,7 @@ pub(crate) struct DocsArgs<'a> {
     pub struct_attrs: &'a StructAttrs,
     pub serde_rename_all: Option<SerdeRenameAll>,
     pub cli_fields: &'a [CliFieldMetadata],
-    /// Localization identifiers determine which field defaults follow the
+    /// Localisation identifiers determine which field defaults follow the
     /// mounted command path. Fields absent from this model retain docs-only
     /// dotted defaults.
     pub localization_ids: &'a LocalizationIds,

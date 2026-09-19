@@ -4,7 +4,11 @@
 
 Accepted.
 
-## Context and decision
+## Date
+
+2026-09-07.
+
+## Context and Problem Statement
 
 Procedural macros must not perform ambient writes during ordinary compilation.
 When explicitly requested with `ORTHO_CONFIG_EMIT_IDENTIFIERS=1`, the derive

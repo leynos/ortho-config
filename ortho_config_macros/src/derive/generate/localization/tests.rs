@@ -58,7 +58,7 @@ fn dotted_localization_base_normalizes_to_fluent_segments() -> Result<()> {
     assert_fluent_message_id(
         &segments,
         "acme-cli",
-        "dotted localization base should normalise per segment",
+        "dotted localization base should normalize per segment",
     )
 }
 
@@ -69,7 +69,7 @@ fn dotted_clap_arg_id_normalizes_to_fluent_segments() -> Result<()> {
     assert_fluent_message_id(
         &segments,
         "kebab-tail",
-        "dotted clap id should normalise per segment",
+        "dotted clap id should normalize per segment",
     )
 }
 
