@@ -48,7 +48,7 @@ Authors declare behaviour with a single nested struct-level attribute group
 `#[ortho_config(behaviour(...))]` on the command's arguments struct:
 
 ```rust,no_run
-#[derive(OrthoConfig, OrthoConfigDocs)]
+#[derive(OrthoConfig)]
 #[ortho_config(
     prefix = "APP",
     behaviour(interaction = "interactive", mutation = "delete", bypass = "--force")

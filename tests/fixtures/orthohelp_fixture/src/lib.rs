@@ -239,6 +239,9 @@ pub struct NestedGrantAccessCommand {
     behaviour(interaction = "interactive", mutation = "delete", bypass = "--force")
 )]
 pub struct NestedPurgeCommand {
+    /// Confirms the destructive purge without an interactive prompt.
+    #[arg(long)]
+    pub force: bool,
     /// Target of the destructive purge.
     pub target: Option<String>,
 }
