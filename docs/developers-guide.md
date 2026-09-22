@@ -881,18 +881,19 @@ against the checked-in workflow and Make sources. It is a separate target from
 Python test requirements:
 
 ```bash
-uv run --with 'pytest>=8,<10' --with 'pyyaml>=6,<7' pytest \
+uv run --with 'pytest>=8,<10' --with 'pyyaml>=6,<7' \
+    --with 'hypothesis>=6,<7' pytest \
     tests/workflow_contracts --doctest-modules -q
 ```
 
 Three things about that command are deliberate. The requirements are named
 inline rather than taken from `scripts/requirements-test.txt`, so the gate
-stays runnable on a checkout with no virtual environment. Both carry an upper
-bound, because the target has no lockfile and a future major release of either
-could change collection or doctest behaviour with no edit to this repository.
-And `--doctest-modules` collects the examples in the support modules, so an
-example that stops matching the helper it documents fails the gate rather than
-ageing quietly.
+stays runnable on a checkout with no virtual environment. Each carries an upper
+bound, because the target has no lockfile and a future major release of any of
+them could change collection or doctest behaviour with no edit to this
+repository. And `--doctest-modules` collects the examples in the support
+modules, so an example that stops matching the helper it documents fails the
+gate rather than ageing quietly.
 
 `tests/workflow_contracts/makefile_support.py` holds the helpers the contracts
 share for reading a Makefile: recognizing a recipe line, and extracting the

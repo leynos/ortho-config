@@ -97,13 +97,7 @@ def _steps(job: dict[str, typ.Any]) -> list[dict[str, typ.Any]]:
 
 
 def _step_named(job: dict[str, typ.Any], name: str) -> dict[str, typ.Any]:
-    """Return the one step called *name*, failing when it is absent.
-
-    Returns
-    -------
-    dict
-        The named step.
-    """
+    """Return the one step called *name*, failing when it is absent."""
     matches = [step for step in _steps(job) if step.get("name") == name]
     assert len(matches) == 1, (
         f"expected exactly one step named {name!r} in {BUILD_TEST_JOB!r}, "
@@ -113,13 +107,7 @@ def _step_named(job: dict[str, typ.Any], name: str) -> dict[str, typ.Any]:
 
 
 def _step_index(job: dict[str, typ.Any], name: str) -> int:
-    """Return the position of the step called *name*.
-
-    Returns
-    -------
-    int
-        The step's index within the job.
-    """
+    """Return the position of the step called *name*."""
     for index, step in enumerate(_steps(job)):
         if step.get("name") == name:
             return index
