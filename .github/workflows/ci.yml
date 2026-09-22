@@ -38,6 +38,19 @@ jobs:
       # ~12 min (the compile_fail trybuild test alone is ~200s), and the
       # 927edd4 action now emits full per-line data, so raise the ceiling.
       RUN_RUST_CARGO_WAIT_TIMEOUT: '2700'
+      # sccache. The shared Rust setup action installs it and, from this
+      # pin, exports RUSTC_WRAPPER as the absolute path of the sccache it
+      # installed. Before this pin it installed sccache and exported
+      # neither the wrapper nor a backend, so every Rust job here paid the
+      # install and compiled uncached.
+      #
+      # RUSTC_WRAPPER is deliberately absent. Setting it by name leaves
+      # invocations wrapped by whichever sccache is on PATH, and any that
+      # resolve none compile uncached without entering the hit-rate
+      # denominator; whitaker #409 measured 69 such invocations. The
+      # action stands aside when a caller has already set the variable, so
+      # a value here would replace the absolute path with a bare name.
+      SCCACHE_GHA_ENABLED: "true"
     strategy:
       fail-fast: false
       matrix:
@@ -66,7 +79,7 @@ jobs:
         # first release with `--check` and `--git`. The Markdown check is
         # platform-independent, so it runs on the Linux lane only.
         if: ${{ matrix.os == 'ubuntu-latest' }}
-        uses: leynos/shared-actions/.github/actions/install-mdtablefix@c5a54701c8603a0fa756a6b34c49bc2af75a6c11
+        uses: leynos/shared-actions/.github/actions/install-mdtablefix@a5765019912a8ab6882b12db049c7cde635f3a85
         with:
           version: "0.6.0"
 
@@ -239,6 +252,34 @@ jobs:
         # write the merged result via stdout.
         run: bun x lcov-result-merger 'lcov-*.info' > lcov.info
 
+      # Invoked through SCCACHE_PATH rather than the bare name, for the same
+      # reason RUSTC_WRAPPER is not set by name: a bare `sccache` reports on
+      # whichever binary PATH resolves, which may not be the one that did the
+      # compiling.
+      #
+      # No `:-sccache` fallback, deliberately. A default would reintroduce
+      # the bare name at exactly the moment it matters, when the setup
+      # action has not exported the variable, and the statistics would then
+      # describe some other binary while reading as a healthy report. Under
+      # `set -u` the unset case fails the step instead, which is the loud
+      # answer.
+      #
+      # Always runs, because the statistics of a failed build are often what
+      # explains it.
+      - name: Report sccache statistics (build-test)
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            printf '### sccache (build-test)\n\n'
+            printf -- '- backend: %s\n\n' \
+              "${{ env.SCCACHE_GHA_ENABLED == 'true' && 'GitHub Actions cache' || 'local disk' }}"
+            printf '```\n'
+            "${SCCACHE_PATH}" --show-stats
+            printf '```\n'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
       - name: Validate PowerShell wrapper
         if: ${{ matrix.os == 'windows-latest' }}
         run: make powershell-wrapper-validate
@@ -254,6 +295,19 @@ jobs:
       contents: read
     env:
       CARGO_TERM_COLOR: always
+      # sccache. The shared Rust setup action installs it and, from this
+      # pin, exports RUSTC_WRAPPER as the absolute path of the sccache it
+      # installed. Before this pin it installed sccache and exported
+      # neither the wrapper nor a backend, so every Rust job here paid the
+      # install and compiled uncached.
+      #
+      # RUSTC_WRAPPER is deliberately absent. Setting it by name leaves
+      # invocations wrapped by whichever sccache is on PATH, and any that
+      # resolve none compile uncached without entering the hit-rate
+      # denominator; whitaker #409 measured 69 such invocations. The
+      # action stands aside when a caller has already set the variable, so
+      # a value here would replace the absolute path with a bare name.
+      SCCACHE_GHA_ENABLED: "true"
     strategy:
       fail-fast: false
       matrix:
@@ -292,6 +346,34 @@ jobs:
         run: >-
           uv run --script scripts/verify_release_archives.py --dist-dir dist
           --target "$TARGET"
+
+      # Invoked through SCCACHE_PATH rather than the bare name, for the same
+      # reason RUSTC_WRAPPER is not set by name: a bare `sccache` reports on
+      # whichever binary PATH resolves, which may not be the one that did the
+      # compiling.
+      #
+      # No `:-sccache` fallback, deliberately. A default would reintroduce
+      # the bare name at exactly the moment it matters, when the setup
+      # action has not exported the variable, and the statistics would then
+      # describe some other binary while reading as a healthy report. Under
+      # `set -u` the unset case fails the step instead, which is the loud
+      # answer.
+      #
+      # Always runs, because the statistics of a failed build are often what
+      # explains it.
+      - name: Report sccache statistics (binstall-packaging)
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            printf '### sccache (binstall-packaging)\n\n'
+            printf -- '- backend: %s\n\n' \
+              "${{ env.SCCACHE_GHA_ENABLED == 'true' && 'GitHub Actions cache' || 'local disk' }}"
+            printf '```\n'
+            "${SCCACHE_PATH}" --show-stats
+            printf '```\n'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Run the packaged binary
         shell: bash

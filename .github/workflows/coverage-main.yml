@@ -53,6 +53,19 @@ jobs:
       # generate-coverage kills cargo after RUN_RUST_CARGO_WAIT_TIMEOUT
       # seconds (default 600); the full-suite coverage run needs longer.
       RUN_RUST_CARGO_WAIT_TIMEOUT: '2700'
+      # sccache. The shared Rust setup action installs it and, from this
+      # pin, exports RUSTC_WRAPPER as the absolute path of the sccache it
+      # installed. Before this pin it installed sccache and exported
+      # neither the wrapper nor a backend, so every Rust job here paid the
+      # install and compiled uncached.
+      #
+      # RUSTC_WRAPPER is deliberately absent. Setting it by name leaves
+      # invocations wrapped by whichever sccache is on PATH, and any that
+      # resolve none compile uncached without entering the hit-rate
+      # denominator; whitaker #409 measured 69 such invocations. The
+      # action stands aside when a caller has already set the variable, so
+      # a value here would replace the absolute path with a bare name.
+      SCCACHE_GHA_ENABLED: "true"
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -127,3 +140,31 @@ jobs:
           # digest, so carrying the value across under the new name
           # would fail every run. The action pins the CLI through its
           # own manifest now, which is what that variable stood in for.
+
+      # Invoked through SCCACHE_PATH rather than the bare name, for the same
+      # reason RUSTC_WRAPPER is not set by name: a bare `sccache` reports on
+      # whichever binary PATH resolves, which may not be the one that did the
+      # compiling.
+      #
+      # No `:-sccache` fallback, deliberately. A default would reintroduce
+      # the bare name at exactly the moment it matters, when the setup
+      # action has not exported the variable, and the statistics would then
+      # describe some other binary while reading as a healthy report. Under
+      # `set -u` the unset case fails the step instead, which is the loud
+      # answer.
+      #
+      # Always runs, because the statistics of a failed build are often what
+      # explains it.
+      - name: Report sccache statistics (coverage-upload)
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            printf '### sccache (coverage-upload)\n\n'
+            printf -- '- backend: %s\n\n' \
+              "${{ env.SCCACHE_GHA_ENABLED == 'true' && 'GitHub Actions cache' || 'local disk' }}"
+            printf '```\n'
+            "${SCCACHE_PATH}" --show-stats
+            printf '```\n'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
