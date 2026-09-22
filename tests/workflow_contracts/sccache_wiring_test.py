@@ -200,7 +200,47 @@ def _pinned_shas() -> dict[str, set[str]]:
     AssertionError
         If a reference is not pinned to a 40-hex commit SHA.
     """
+    found, _ = _references_by_pin()
+    return found
+
+
+def _exempt_shas() -> frozenset[str]:
+    """Return the commits the separately pinned references sit at.
+
+    The exemption in `PINNED_SEPARATELY` is from the single-SHA rule,
+    and those references may therefore sit at a commit of their own. The
+    guide is entitled to record which, so the guide sweep has to treat
+    those commits as answers rather than as stale pins; without this it
+    would report a correctly documented exempt revision as a pin nothing
+    uses.
+
+    Returns
+    -------
+    frozenset of str
+        Every commit an exempt reference names. Read from the workflows
+        rather than listed, so a repin of one of them needs no edit
+        here.
+    """
+    _, exempt = _references_by_pin()
+    return exempt
+
+
+def _references_by_pin() -> tuple[dict[str, set[str]], frozenset[str]]:
+    """Return the same-tree pins and the separately pinned ones apart.
+
+    Returns
+    -------
+    tuple
+        The mapping every caller of `_pinned_shas` wants, and the set of
+        commits the exempt references name.
+
+    Raises
+    ------
+    AssertionError
+        If a reference is not pinned to a 40-hex commit SHA.
+    """
     found: dict[str, set[str]] = {}
+    exempt: set[str] = set()
     for name, text in _workflow_text().items():
         for line in text.splitlines():
             if SHARED_ACTIONS_PREFIX not in line:
@@ -221,9 +261,10 @@ def _pinned_shas() -> dict[str, set[str]]:
                 f"to a 40-hex commit SHA: {line.strip()}"
             )
             if reference.group("path") in PINNED_SEPARATELY:
+                exempt.add(reference.group("ref"))
                 continue
             found.setdefault(reference.group("ref"), set()).add(name)
-    return found
+    return found, frozenset(exempt)
 
 
 def _jobs_running_setup_rust() -> dict[tuple[str, str], dict[str, typ.Any]]:
@@ -385,6 +426,21 @@ def test_every_job_with_a_backend_reports_its_statistics(
     )
 
 
+def _guide_naming(text: str) -> Path:
+    """Return a path whose `read_text` yields the supplied prose."""
+
+    class _Guide:
+        name = "developers-guide.md"
+
+        @staticmethod
+        def read_text(encoding: str = "utf-8") -> str:
+            """Return the supplied prose, ignoring the encoding."""
+            del encoding
+            return text
+
+    return typ.cast("Path", _Guide())
+
+
 def test_the_guide_names_no_pin_the_workflows_do_not_use() -> None:
     """Assert the prose's pin claim matches the workflows.
 
@@ -403,7 +459,10 @@ def test_the_guide_names_no_pin_the_workflows_do_not_use() -> None:
     so it does not break when the paragraph is reworded. Two answers are
     allowed: a prefix of the SHA in use, and a pin named in
     `PINS_WITHOUT_THE_WRAPPER`, which the guide cites precisely because
-    the tree must not be at it.
+    the tree must not be at it, and the commit a separately pinned
+    reference sits at, because the exemption in `PINNED_SEPARATELY` is
+    an allowance for those references to diverge and the guide is
+    entitled to say where they have.
 
     Run identifiers are excluded by `_is_commit_like`, which is where
     that judgement and its cost are written down.
@@ -414,19 +473,28 @@ def test_the_guide_names_no_pin_the_workflows_do_not_use() -> None:
         f"establishes; found {sorted(in_use)}"
     )
     current = next(iter(in_use))
+    # Three kinds of commit the guide may name: the one in use, the one
+    # a separately pinned reference sits at, and one this contract
+    # exists to keep the tree away from. The exempt revisions are read
+    # from the workflows rather than listed, so repinning one of them
+    # needs no edit here; without them the guide could not record an
+    # exempt pin at all, though the exemption exists precisely so that
+    # those references may diverge.
+    exempt = _exempt_shas()
+    permitted = {current, *exempt, *PINS_WITHOUT_THE_WRAPPER}
     stale = sorted(
         {
             token
             for token in _GUIDE_SHA.findall(GUIDE.read_text(encoding="utf-8"))
             if _is_commit_like(token)
-            and not current.startswith(token)
-            and not any(pin.startswith(token) for pin in PINS_WITHOUT_THE_WRAPPER)
+            and not any(pin.startswith(token) for pin in permitted)
         }
     )
     assert not stale, (
-        f"{GUIDE.name} names these commits, and the workflows are at "
-        f"{current} with {sorted(PINS_WITHOUT_THE_WRAPPER)} named as the pins "
-        f"to stay away from: {stale}"
+        f"{GUIDE.name} names these commits, and none of them is in use: the "
+        f"workflows are at {current}, the separately pinned references are at "
+        f"{sorted(exempt)}, and {sorted(PINS_WITHOUT_THE_WRAPPER)} are named "
+        f"as the pins to stay away from: {stale}"
     )
 
 
@@ -581,3 +649,68 @@ def test_the_run_identifier_exclusion_is_narrow(
         f"{token!r} is {why}, so the sweep must "
         f"{'include' if swept else 'skip'} it"
     )
+
+
+def test_the_guide_may_record_a_separately_pinned_revision(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The exemption is an allowance to diverge; the guide may say where.
+
+    `PINNED_SEPARATELY` exists so two references can sit at a commit of
+    their own, and the guide's whole job is to record what the tree
+    does. A sweep permitting only the common pin reports a correctly
+    documented exempt revision as stale, which pushes the next reader
+    into deleting an accurate sentence to make a contract pass.
+
+    Driven with the tree and the guide both replaced, because this
+    repository's exempt references happen to sit at the common pin
+    today, so the real files cannot tell the two readings apart.
+    """
+    common = "0" * 40
+    other = "1" * 40
+    exempt_path = next(iter(PINNED_SEPARATELY))
+    monkeypatch.setattr(
+        "sccache_wiring_test._workflow_text",
+        lambda: {
+            "ci.yml": (
+                f"      - uses: {SHARED_ACTIONS_PREFIX}"
+                f".github/actions/setup-rust@{common}\n"
+                f"      - uses: {SHARED_ACTIONS_PREFIX}{exempt_path}@{other}\n"
+            )
+        },
+    )
+    monkeypatch.setattr(
+        "sccache_wiring_test.GUIDE",
+        _guide_naming(f"The tree is at {common}; {exempt_path} is at {other}."),
+    )
+    test_the_guide_names_no_pin_the_workflows_do_not_use()
+
+
+def test_the_guide_still_cannot_name_a_pin_nothing_uses(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Assert the allowance above is narrow as well as sufficient.
+
+    A sweep widened until it permitted anything would satisfy the case
+    above and stop catching the defect this contract was written for: a
+    repin that moved the workflows and left the prose behind.
+    """
+    common = "0" * 40
+    other = "1" * 40
+    stale = "2" * 40
+    exempt_path = next(iter(PINNED_SEPARATELY))
+    monkeypatch.setattr(
+        "sccache_wiring_test._workflow_text",
+        lambda: {
+            "ci.yml": (
+                f"      - uses: {SHARED_ACTIONS_PREFIX}"
+                f".github/actions/setup-rust@{common}\n"
+                f"      - uses: {SHARED_ACTIONS_PREFIX}{exempt_path}@{other}\n"
+            )
+        },
+    )
+    monkeypatch.setattr(
+        "sccache_wiring_test.GUIDE", _guide_naming(f"The tree is at {stale}.")
+    )
+    with pytest.raises(AssertionError, match="none of them is in use"):
+        test_the_guide_names_no_pin_the_workflows_do_not_use()
