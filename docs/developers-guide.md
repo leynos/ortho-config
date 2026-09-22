@@ -1301,7 +1301,11 @@ transitively. A call is recognized by shape rather than by a list of prefixes:
 a leading `./` is stripped, and the remainder must be a file directly under
 `.github/workflows/`. `pull_request_closure_test.py` holds a `workflow_call`
 probe that curls the CodeScene API with an inherited token and asserts that
-both the token clause and the host clause catch it.
+both the token clause and the host clause catch it. The host clause reads every
+value in each parsed workflow rather than a list of expected places, because a
+URL reaches a step through the workflow's, the job's or the step's `env`, a
+step's inputs, or a reusable-workflow call's `with`; comments are not read,
+because the parser discards them.
 
 **The ratchet has to stay switched on.** Pairing the legs' selections proves
 the comparison is fair, not that it happens, so the contract also holds each
