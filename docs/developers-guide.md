@@ -1228,6 +1228,74 @@ step, so it is outside this contract, and bounding it is separate work.
 
 [shared-actions-coverage]: https://github.com/leynos/shared-actions/blob/main/.github/actions/generate-coverage/README.md
 
+## CodeScene coverage belongs to main
+
+`coverage-main.yml` is the only workflow in this repository that runs a
+CodeScene action. It runs on pushes to main, generates ratcheted coverage, and
+uploads with `mode: upload`. No workflow serving pull requests names a
+CodeScene action, invokes `cs-coverage`, or puts `CS_ACCESS_TOKEN` in reach of
+any process.
+
+This is the estate rule `main-owned-codescene-coverage`, and it is a policy
+rather than a gap. A pull request from a fork cannot read the repository's
+secrets, so the changed-line check on that lane was a silent skip for exactly
+the contributions least likely to have been measured already. On a branch it
+put a second tool on the critical path, and when this CodeScene project stopped
+returning a gates configuration that tool failed every pull request here over a
+defect in none of them.
+
+What a pull-request lane keeps is the ratchet. `ci.yml` runs
+`generate-coverage` with `with-ratchet` on the ubuntu leg, comparing against
+the baseline `coverage-main.yml` writes, which applies the same "do not go
+backwards" gate from this repository's own history with no token and no second
+tool.
+
+**The two lanes must be built the same way.** Both run two feature legs, paired
+by the report each writes. The ratchet compares this commit's report against
+that baseline, so the inputs deciding *what* is measured must agree across the
+pair: the output path, the format and the feature selection.
+
+That was wrong before this adoption. The pull-request leg compiled `metrics`
+and the publisher's did not, so every line of the metrics facade read as newly
+uncovered against a baseline that had never compiled it. The failure is silent,
+because the ratchet reports a number either way: nothing distinguishes a fall
+in coverage from two runs having built different code. The fix is on the
+publisher rather than the lane, since the comment on that leg records why
+`metrics` is there at all, namely that it is off by default and the facade
+would otherwise never be compiled in CI.
+
+**The publisher is guarded on the ref, and runs one at a time.** It declares no
+`workflow_dispatch` today, so `github.ref` is always main and the guard changes
+nothing now; it is there because a dispatch can be aimed at any branch and the
+upload carries no ref, so adding one later would let a run from a feature
+branch publish that branch's coverage as the trunk's. The concurrency group
+cancels a superseded run, because the baseline has one writer and two runs
+racing decide it by which finished last.
+
+**No checksum input.** `installer-checksum` is rejected outright when non-empty
+from the pinned uploader, and `archive-checksum` is not a rename of it: it
+digests the action's CLI manifest archive, while the `CODESCENE_CLI_SHA256`
+repository variable holds the installer script's digest. Carrying the old value
+across under the new name fails every run. The action pins the CLI through its
+own manifest now, which is what that variable stood in for; the variable is
+unreferenced and can be removed from the repository's settings.
+
+`tests/workflow_contracts/codescene_coverage_test.py` holds the shape, reading
+through `codescene_coverage.py`, and `codescene_reader_test.py` drives those
+readings on documents this repository does not contain.
+
+Two properties of that reading are worth knowing before changing it. The
+publisher is "pushes to main **and serves no pull request**": a repository's
+main workflow often declares both, so a predicate reading only the push makes
+one file simultaneously required to upload and forbidden from uploading. And
+the trigger reader looks under both `"on"` and the boolean `True`, because YAML
+1.1 resolves an unquoted `on:` to a boolean; a reader finding nothing makes
+every rule above pass over an empty set, which reports compliance rather than
+an error. `load_workflow` uses `yaml.BaseLoader` and keeps the string, which is
+precisely why narrowing the reader to the string key alone fails nothing
+against the real files, and why the constructed case in
+`codescene_reader_test.py` exists.
+
 ## Command checklist
 
 Run from repository root:
