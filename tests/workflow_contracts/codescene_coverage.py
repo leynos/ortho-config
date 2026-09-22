@@ -60,6 +60,12 @@ PINNED_COMMIT: typ.Final[re.Pattern[str]] = re.compile(r"^[0-9a-f]{40}$")
 #: The command no pull-request lane may run.
 CLI_COMMAND: typ.Final[str] = "cs-coverage"
 
+#: The name of the environment variable no pull-request lane may put in
+#: reach. The name rather than any value: the expression supplying it
+#: may be a secret, a repository variable or a literal, and all three
+#: reach the process the same way.
+FORBIDDEN_VARIABLE: typ.Final[str] = "CS_ACCESS_TOKEN"
+
 #: Triggers that mean a workflow serves pull requests. ``pull_request``
 #: and ``pull_request_target`` both run with a pull request's head in
 #: view, and the second runs with the base repository's secrets, which
@@ -406,3 +412,52 @@ def coverage_steps(
         if steps:
             found[name] = steps
     return found
+
+
+def _environment_names(mapping: object) -> bool:
+    """Return whether an ``env`` mapping declares the forbidden variable."""
+    return isinstance(mapping, dict) and FORBIDDEN_VARIABLE in mapping
+
+
+def _job_token_sites(name: str, job_name: str, job: dict[str, object]) -> list[str]:
+    """Return every place one job puts the forbidden variable in reach."""
+    sites = [f"{name}: job {job_name} env"] if _environment_names(job.get("env")) else []
+    steps = job.get("steps")
+    if not isinstance(steps, list):
+        return sites
+    return sites + [
+        f"{name}: job {job_name} step {index + 1} env"
+        for index, step in enumerate(steps)
+        if isinstance(step, dict) and _environment_names(step.get("env"))
+    ]
+
+
+def token_sites(name: str, document: WorkflowDocument) -> list[str]:
+    """Return every place one workflow puts the forbidden variable in reach.
+
+    Structural rather than textual, and the distinction is the point.
+    Both workflows explain in prose why the CodeScene check is gone, and
+    that explanation names the variable; a sweep over the raw file would
+    read the explanation as the violation and push the next person into
+    deleting the reason rather than the reference.
+
+    Parameters
+    ----------
+    name : str
+        The workflow's file name, for the message.
+    document : WorkflowDocument
+        The parsed workflow.
+
+    Returns
+    -------
+    list of str
+        One entry per site, naming where it is.
+    """
+    sites = [f"{name}: workflow env"] if _environment_names(document.get("env")) else []
+    jobs = document.get("jobs")
+    if not isinstance(jobs, dict):
+        return sites
+    for job_name, job in jobs.items():
+        if isinstance(job, dict):
+            sites += _job_token_sites(name, str(job_name), job)
+    return sites

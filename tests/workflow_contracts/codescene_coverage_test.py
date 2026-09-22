@@ -36,10 +36,12 @@ from codescene_coverage import (
     CODESCENE_ACTION,
     COVERAGE_ACTION,
     PINNED_COMMIT,
+    FORBIDDEN_VARIABLE,
     coverage_steps,
     publishers,
     pull_request_workflows,
     read_workflows,
+    token_sites,
     workflow_steps,
 )
 
@@ -48,12 +50,6 @@ if typ.TYPE_CHECKING:  # pragma: no cover - typing only
 
 REPOSITORY_ROOT: typ.Final[pathlib.Path] = pathlib.Path(__file__).resolve().parents[2]
 WORKFLOWS: typ.Final[pathlib.Path] = REPOSITORY_ROOT / ".github" / "workflows"
-
-#: The name of the environment variable no pull-request lane may put in
-#: reach. The name rather than any value: the expression supplying it
-#: may be a secret, a repository variable or a literal, and all three
-#: reach the process the same way.
-FORBIDDEN_VARIABLE: typ.Final[str] = "CS_ACCESS_TOKEN"
 
 #: The repository variable this adoption retires. ``installer-checksum``
 #: is rejected when non-empty from the pinned uploader, and the value
@@ -133,34 +129,20 @@ def test_no_pull_request_workflow_receives_the_token(
 ) -> None:
     """A token no fork can read is a gate no fork is held to.
 
-    Swept over the step and job environments rather than the raw file,
-    because both workflows explain in prose why the check is gone and
-    that explanation names the variable. A comment is not a token.
+    Swept at workflow, job and step level, because all three reach a
+    process, and structurally rather than over the raw file: both
+    workflows explain in prose why the check is gone, and a comment is
+    not a token.
     """
-    offenders: list[str] = []
-    for name, document in pull_request_workflows(documents).items():
-        jobs = document.get("jobs")
-        if not isinstance(jobs, dict):
-            continue
-        for job_name, job in jobs.items():
-            if not isinstance(job, dict):
-                continue
-            environments = [("job", job.get("env"))]
-            environments += [
-                (f"step {index + 1}", step.get("env"))
-                for index, step in enumerate(job.get("steps") or [])
-                if isinstance(step, dict)
-            ]
-            offenders += [
-                f"{name}: {job_name} {where}"
-                for where, mapping in environments
-                if isinstance(mapping, dict) and FORBIDDEN_VARIABLE in mapping
-            ]
-    assert not sorted(offenders), (
+    offenders = sorted(
+        site
+        for name, document in pull_request_workflows(documents).items()
+        for site in token_sites(name, document)
+    )
+    assert not offenders, (
         f"these pull-request lanes put {FORBIDDEN_VARIABLE} in reach; a "
         f"fork cannot read it, so the gate it guards is skipped for exactly "
-        f"the contributions least likely to have been measured: "
-        f"{sorted(offenders)}"
+        f"the contributions least likely to have been measured: {offenders}"
     )
 
 
