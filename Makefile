@@ -70,8 +70,13 @@ test: python-test-deps ## Run tests with warnings treated as errors
 python-test-deps: ## Ensure Python test dependencies are provisioned
 	$(PYTEST) --version > $(NULL_DEVICE)
 
+# `--doctest-modules` collects the examples in the contract support
+# modules. AGENTS.md asks function documentation to carry an example, and
+# an example nothing runs stops matching the helper it documents without
+# anything saying so.
 test-workflow-contracts: ## Validate the mutation-testing caller contract
-	$(UV) run --with 'pytest>=8' --with 'pyyaml>=6' --with 'hypothesis>=6' pytest tests/workflow_contracts -q
+	$(UV) run --with 'pytest>=8' --with 'pyyaml>=6' --with 'hypothesis>=6' \
+		pytest tests/workflow_contracts --doctest-modules -q
 
 # will match target/debug/libmy_library.rlib and target/release/libmy_library.rlib
 target/%/lib$(CRATE).rlib: FORCE ## Build library in debug or release
