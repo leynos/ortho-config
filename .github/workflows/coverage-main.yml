@@ -98,8 +98,17 @@ jobs:
       # Invoked through SCCACHE_PATH rather than the bare name, for the same
       # reason RUSTC_WRAPPER is not set by name: a bare `sccache` reports on
       # whichever binary PATH resolves, which may not be the one that did the
-      # compiling. Always runs, because the statistics of a failed build are
-      # often what explains it.
+      # compiling.
+      #
+      # No `:-sccache` fallback, deliberately. A default would reintroduce
+      # the bare name at exactly the moment it matters, when the setup
+      # action has not exported the variable, and the statistics would then
+      # describe some other binary while reading as a healthy report. Under
+      # `set -u` the unset case fails the step instead, which is the loud
+      # answer.
+      #
+      # Always runs, because the statistics of a failed build are often what
+      # explains it.
       - name: Report sccache statistics (coverage-upload)
         if: always()
         shell: bash
@@ -110,6 +119,6 @@ jobs:
             printf -- '- backend: %s\n\n' \
               "${{ env.SCCACHE_GHA_ENABLED == 'true' && 'GitHub Actions cache' || 'local disk' }}"
             printf '```\n'
-            "${SCCACHE_PATH:-sccache}" --show-stats
+            "${SCCACHE_PATH}" --show-stats
             printf '```\n'
           } | tee -a "$GITHUB_STEP_SUMMARY"

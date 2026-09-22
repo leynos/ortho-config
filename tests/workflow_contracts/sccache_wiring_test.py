@@ -293,6 +293,13 @@ def _jobs_running_setup_rust() -> dict[tuple[str, str], dict[str, typ.Any]]:
     return found
 
 
+#: The exact statistics invocation. Asserted by value rather than by
+#: the presence of `SCCACHE_PATH`, because a substring check accepts
+#: `${SCCACHE_PATH:-sccache}`, which defaults back to the bare name this
+#: contract exists to keep out.
+STATISTICS_INVOCATION: typ.Final[str] = '"${SCCACHE_PATH}" --show-stats'
+
+
 def test_the_shared_action_references_share_one_sha() -> None:
     """Assert every same-tree reference sits at a single commit.
 
@@ -390,9 +397,13 @@ def test_every_job_with_a_backend_reports_its_statistics(
     the cache is being used, or to notice later that it stopped.
 
     The command is asserted, not the step name, and it must invoke the
-    binary through `SCCACHE_PATH`. A bare `sccache --show-stats` reports
-    on whichever binary `PATH` resolves, which is the same defect the
-    wrapper half of this contract exists to prevent.
+    binary through `SCCACHE_PATH` with no default. A bare
+    `sccache --show-stats` reports on whichever binary `PATH` resolves,
+    which is the same defect the wrapper half of this contract exists to
+    prevent, and `${SCCACHE_PATH:-sccache}` is that bare name wearing
+    the variable's clothes: it reintroduces the fallback at exactly the
+    moment it matters, when the setup action has not exported the
+    variable. Checking for the substring alone accepted it.
 
     The step's condition is asserted too. A step with no condition, or
     one guarded on success, reports nothing when the build fails, and a
@@ -411,9 +422,22 @@ def test_every_job_with_a_backend_reports_its_statistics(
         "statistics, so the wiring cannot be verified from a run"
     )
     commands = "\n".join(str(step.get("run", "")) for step in reporting)
-    assert "SCCACHE_PATH" in commands, (
-        f"{job_name} reports sccache statistics without invoking it through "
-        "SCCACHE_PATH, so it may report on a different binary"
+    assert STATISTICS_INVOCATION in commands, (
+        f"{job_name} must report statistics with "
+        f"{STATISTICS_INVOCATION!r}; it reports them with something else, so "
+        f"it may describe a different binary"
+    )
+    defaulted = sorted(
+        line.strip()
+        for line in commands.splitlines()
+        if "SCCACHE_PATH" in line and STATISTICS_INVOCATION not in line
+    )
+    assert not defaulted, (
+        f"{job_name} reaches SCCACHE_PATH through a form that can fall back "
+        f"to a bare name: {defaulted}. A default reintroduces the bare name "
+        f"at exactly the moment it matters, when the variable is unset, and "
+        f"the report then describes whichever binary PATH resolves while "
+        f"reading as a healthy one"
     )
     unconditional = [
         str(step.get("name", "<unnamed>"))
