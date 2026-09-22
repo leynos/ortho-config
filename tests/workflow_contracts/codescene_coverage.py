@@ -3,7 +3,8 @@
 The CodeScene-specific half. The parsing and the trigger grammar are in
 ``workflow_reading``, which knows nothing about CodeScene; what is here
 is the selection of subjects those rules apply to, and it is all pure
-over supplied documents.
+over supplied documents. What a workflow must not do once selected is
+read in ``codescene_reach``.
 
 Each reading treats finding nothing as a fault rather than an answer.
 The rules built on them are refusals, and a refusal over an empty
@@ -19,6 +20,7 @@ from workflow_reading import (
     WorkflowReadingError,
     pushes_to_main,
     serves_pull_requests,
+    workflow_jobs,
     workflow_steps,
 )
 
@@ -55,15 +57,36 @@ CLI_COMMAND: typ.Final[str] = "cs-coverage"
 FORBIDDEN_VARIABLE: typ.Final[str] = "CS_ACCESS_TOKEN"
 
 
+#: Where a same-repository reusable workflow lives, relative to the
+#: repository root. GitHub resolves ``./.github/workflows/x.yml`` from
+#: there, and a workflow outside this directory cannot be called at all.
+WORKFLOW_DIRECTORY: typ.Final[str] = ".github/workflows/"
+
+
+def _local_workflow(reference: object, documents: dict[str, WorkflowDocument]) -> str | None:
+    """Return the file a ``uses:`` value names in this tree, if any.
+
+    Matched by shape rather than by an enumerated prefix list: strip a
+    leading ``./`` and ask whether what remains is a file directly under
+    the workflow directory. A list of accepted spellings drops every
+    spelling nobody thought to list, silently, while a pull request
+    still runs the workflow it names; a cross-repository reference
+    (``owner/repo/.github/workflows/x.yml@ref``) fails the shape because
+    it does not start at the workflow directory.
+    """
+    if not isinstance(reference, str):
+        return None
+    path = reference.removeprefix("./")
+    if not path.startswith(WORKFLOW_DIRECTORY):
+        return None
+    name = path.removeprefix(WORKFLOW_DIRECTORY)
+    return name if name in documents else None
+
+
 def called_workflows(
     document: WorkflowDocument, documents: dict[str, WorkflowDocument]
 ) -> frozenset[str]:
     """Return the same-repository reusable workflows one document calls.
-
-    GitHub accepts two spellings for a local reusable workflow,
-    ``./.github/workflows/x.yml`` and ``$/.github/workflows/x.yml``, the
-    second being the documented recommendation. A reader that knows only
-    the first silently drops callers written the other way.
 
     A reference to another repository is not followed. Its content is
     not in this tree, so nothing here could read it, and claiming to
@@ -93,22 +116,25 @@ def called_workflows(
     >>> called_workflows(caller, {})
     frozenset()
     """
-    jobs = document.get("jobs")
-    if not isinstance(jobs, dict):
-        return frozenset()
-    called: set[str] = set()
-    for job in jobs.values():
-        if not isinstance(job, dict):
-            continue
-        reference = job.get("uses")
-        if not isinstance(reference, str):
-            continue
-        for prefix in ("./", "$/"):
-            if reference.startswith(prefix):
-                name = reference.removeprefix(prefix).rsplit("/", 1)[-1]
-                if name in documents:
-                    called.add(name)
-    return frozenset(called)
+    names = (
+        _local_workflow(job.get("uses"), documents)
+        for job in workflow_jobs(document).values()
+    )
+    return frozenset(name for name in names if name is not None)
+
+
+def _reachable(
+    seeds: list[str], documents: dict[str, WorkflowDocument]
+) -> dict[str, WorkflowDocument]:
+    """Return the seeds and every workflow they call, transitively."""
+    found: dict[str, WorkflowDocument] = {}
+    pending = list(seeds)
+    while pending:
+        name = pending.pop()
+        if name not in found:
+            found[name] = documents[name]
+            pending.extend(called_workflows(documents[name], documents) - found.keys())
+    return found
 
 
 def pull_request_workflows(
@@ -154,16 +180,10 @@ def pull_request_workflows(
     >>> sorted(pull_request_workflows(documents))
     ['ci.yml']
     """
-    found: dict[str, WorkflowDocument] = {}
-    pending = [
-        name for name, document in documents.items() if serves_pull_requests(document)
-    ]
-    while pending:
-        name = pending.pop()
-        if name in found:
-            continue
-        found[name] = documents[name]
-        pending.extend(called_workflows(documents[name], documents) - found.keys())
+    found = _reachable(
+        [name for name, document in documents.items() if serves_pull_requests(document)],
+        documents,
+    )
     if not found:
         message = (
             "this reading found no workflow serving a pull request; the "
@@ -252,107 +272,3 @@ def coverage_steps(
         if steps:
             found[name] = steps
     return found
-
-
-#: An expression reading the secret, under any context GitHub resolves
-#: one from. Matched on the reference rather than the bare name so that
-#: prose naming the variable is not mistaken for access: what puts it in
-#: reach is ``${{ secrets.NAME }}``.
-_REFERENCE: typ.Final[re.Pattern[str]] = re.compile(
-    rf"\$\{{\{{\s*(?:secrets|env|vars)\.{re.escape(FORBIDDEN_VARIABLE)}\s*\}}\}}"
-)
-
-
-def _reads(value: object) -> bool:
-    """Return whether a value reads the secret by reference."""
-    return bool(_REFERENCE.search(str(value)))
-
-
-def _environment_names(mapping: object) -> bool:
-    """Return whether an ``env`` mapping declares or forwards the variable."""
-    if not isinstance(mapping, dict):
-        return False
-    return FORBIDDEN_VARIABLE in mapping or any(
-        _reads(value) for value in mapping.values()
-    )
-
-
-def _forwarding_sites(name: str, job_name: str, forwarded: object) -> list[str]:
-    """Return sites where a reusable-workflow call forwards the secret.
-
-    ``secrets: inherit`` is the sharp one. It names nothing, so a
-    reading looking for the variable finds no mention of it while the
-    called workflow receives every secret the caller holds.
-    """
-    match forwarded:
-        case str() if forwarded.strip() == "inherit":
-            return [f"{name}: job {job_name} secrets: inherit"]
-        case dict():
-            return [
-                f"{name}: job {job_name} secrets {key}"
-                for key, value in forwarded.items()
-                if key == FORBIDDEN_VARIABLE or _reads(value)
-            ]
-        case _:
-            return []
-
-
-def _job_token_sites(name: str, job_name: str, job: dict[str, object]) -> list[str]:
-    """Return every place one job puts the forbidden variable in reach."""
-    sites = [f"{name}: job {job_name} env"] if _environment_names(job.get("env")) else []
-    sites += _forwarding_sites(name, job_name, job.get("secrets"))
-    steps = job.get("steps")
-    if not isinstance(steps, list):
-        return sites
-    for index, step in enumerate(steps):
-        if not isinstance(step, dict):
-            continue
-        where = f"job {job_name} step {index + 1}"
-        if _environment_names(step.get("env")):
-            sites.append(f"{name}: {where} env")
-        inputs = step.get("with")
-        if isinstance(inputs, dict) and any(_reads(v) for v in inputs.values()):
-            sites.append(f"{name}: {where} inputs")
-        if _reads(step.get("run", "")):
-            sites.append(f"{name}: {where} run")
-    return sites
-
-
-def token_sites(name: str, document: WorkflowDocument) -> list[str]:
-    """Return every place one workflow puts the forbidden variable in reach.
-
-    Structural rather than textual, and the distinction is the point.
-    Both workflows explain in prose why the CodeScene check is gone, and
-    that explanation names the variable; a sweep over the raw file would
-    read the explanation as the violation and push the next person into
-    deleting the reason rather than the reference.
-
-    Parameters
-    ----------
-    name : str
-        The workflow's file name, for the message.
-    document : WorkflowDocument
-        The parsed workflow.
-
-    Returns
-    -------
-    list of str
-        One entry per site, naming where it is.
-
-    Examples
-    --------
-    >>> from workflow_reading import load_workflow
-    >>> body = f"env:\\n  {FORBIDDEN_VARIABLE}: x\\njobs:\\n  a:\\n    steps: []\\n"
-    >>> token_sites("ci.yml", load_workflow(body))
-    ['ci.yml: workflow env']
-    >>> token_sites("ci.yml", load_workflow("jobs:\\n  a:\\n    steps: []\\n"))
-    []
-    """
-    sites = [f"{name}: workflow env"] if _environment_names(document.get("env")) else []
-    jobs = document.get("jobs")
-    if not isinstance(jobs, dict):
-        return sites
-    for job_name, job in jobs.items():
-        if isinstance(job, dict):
-            sites += _job_token_sites(name, str(job_name), job)
-    return sites

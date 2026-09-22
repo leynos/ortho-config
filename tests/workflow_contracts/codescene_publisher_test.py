@@ -95,6 +95,14 @@ def test_the_publisher_passes_no_deprecated_checksum(
         )
 
 
+def _conjuncts(condition: str) -> list[str]:
+    """Return an ``if:`` condition's ``&&`` terms, whitespace-normalized."""
+    body = condition.strip()
+    if body.startswith("${{") and body.endswith("}}"):
+        body = body[3:-2]
+    return [" ".join(term.split()) for term in body.split("&&")]
+
+
 def test_the_publisher_uploads_only_from_main(
     documents: dict[str, WorkflowDocument],
 ) -> None:
@@ -106,22 +114,35 @@ def test_the_publisher_uploads_only_from_main(
     would otherwise let a run from a feature branch publish that
     branch's coverage as the trunk's, silently, and every pull request
     would then ratchet against it.
+
+    The guard must be a conjunct, not merely present. Finding the ref
+    comparison as a substring passes ``... && ref == main || dispatch``,
+    in which ``&&`` binds tighter and every conjunct becomes optional,
+    so a dispatch from any branch uploads. An ``||`` anywhere is refused
+    rather than parsed: no correct guard here needs one.
     """
     condition = str(_publisher_upload(documents).get("if", ""))
-    assert MAIN_REF in condition, (
-        f"the publisher's upload step must be guarded on {MAIN_REF}; it is "
-        f"guarded on {condition!r}"
+    assert "||" not in condition, (
+        f"the publisher's upload guard contains `||`, which makes the ref "
+        f"check optional: {condition!r}"
+    )
+    assert MAIN_REF in _conjuncts(condition), (
+        f"the publisher's upload step must be guarded on {MAIN_REF} as one "
+        f"`&&` term; it is guarded on {condition!r}"
     )
 
 
 def test_the_publisher_runs_one_at_a_time(
     documents: dict[str, WorkflowDocument],
 ) -> None:
-    """Two publisher runs racing decide the baseline by finishing order.
+    """Publisher runs queue; a superseded one is never cancelled.
 
-    The baseline this workflow writes is what every pull request
-    ratchets against, so a superseded run finishing last makes its
-    figures the trunk's.
+    Two runs racing would decide the baseline by finishing order, so the
+    workflow names a concurrency group. Cancelling within it is the
+    wrong remedy: a cancelled run abandons both its upload and its
+    ratchet baseline write, while a queued one publishes later and the
+    later push's baseline still wins, because it runs last. The
+    pull-request lanes cancel superseded runs; the publisher must not.
     """
     ((name, document),) = publishers(documents).items()
     concurrency = document.get("concurrency")
@@ -132,9 +153,9 @@ def test_the_publisher_runs_one_at_a_time(
     assert concurrency.get("group"), (
         f"{name}'s concurrency block must name a group: {concurrency!r}"
     )
-    assert concurrency.get("cancel-in-progress") == "true", (
-        f"{name} must cancel a superseded publisher run; without it the "
-        f"older run can still write the baseline after the newer one"
+    cancels = str(concurrency.get("cancel-in-progress", "false")).strip()
+    assert cancels == "false", (
+        f"{name} must queue superseded publisher runs rather than cancel "
+        f"them; a cancelled run abandons its upload and its baseline "
+        f"write. It declares cancel-in-progress {cancels!r}"
     )
-
-

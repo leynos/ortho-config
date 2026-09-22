@@ -226,6 +226,72 @@ def test_an_unparseable_workflow_names_its_file(tmp_path: pathlib.Path) -> None:
     assert "broken.yml" in (raised.value.path or ""), raised.value
 
 
+@pytest.mark.parametrize(
+    "body",
+    [
+        pytest.param("on: [\n", id="unclosed-flow-sequence"),
+        pytest.param("on:\n  push:\n bad: indentation\n", id="bad-indentation"),
+        pytest.param(
+            "jobs:\n  a:\n    runs-on: ubuntu-latest\n    runs-on: windows-latest\n",
+            id="duplicate-key",
+        ),
+    ],
+)
+def test_a_file_that_is_not_yaml_names_its_file(
+    tmp_path: pathlib.Path, body: str
+) -> None:
+    """A parser failure is reported at the boundary, with the file.
+
+    ``yaml.YAMLError`` is neither a ``TypeError`` nor a ``ValueError``,
+    so a boundary catching only those lets a file that is not YAML
+    escape as a parser error naming no file. The case above cannot catch
+    that: ``- not a mapping`` parses, and exercises only the shape
+    branch. A duplicated key is in the same family, since the loader
+    refuses it rather than keep one half silently.
+    """
+    (tmp_path / "broken.yml").write_text(body, encoding="utf-8")
+    with pytest.raises(WorkflowReadingError) as raised:
+        read_workflows(tmp_path)
+    assert raised.value.reader == "read_workflows", raised.value
+    assert "broken.yml" in (raised.value.path or ""), raised.value
+
+
+@pytest.mark.parametrize(
+    ("body", "key"),
+    [
+        pytest.param(
+            "jobs:\n  a:\n    runs-on: ubuntu-latest\n    runs-on: windows-latest\n",
+            "runs-on",
+            id="job-key",
+        ),
+        pytest.param("on:\n  push:\non:\n  pull_request:\n", "on", id="top-level"),
+    ],
+)
+def test_a_duplicated_key_is_refused_rather_than_resolved(body: str, key: str) -> None:
+    """PyYAML keeps the last of two equal keys and says nothing.
+
+    A job declaring ``runs-on`` twice would parse into a document holding
+    only the second label, so a lane could carry a paid label in the
+    discarded half and read as hosted. Refusing is the one reading that
+    cannot be wrong about which half GitHub runs.
+    """
+    with pytest.raises(yaml.YAMLError, match=f"duplicate key '{key}'"):
+        load_workflow(body)
+
+
+def test_distinct_keys_at_different_levels_are_not_duplicates() -> None:
+    """Assert the refusal is narrow: one key per mapping, not per file.
+
+    Every workflow repeats ``runs-on`` and ``steps`` across jobs; a
+    loader tracking keys across the document instead of within one
+    mapping would refuse them all.
+    """
+    body = "jobs:\n  a:\n    runs-on: x\n  b:\n    runs-on: y\n"
+    jobs = load_workflow(body)["jobs"]
+    assert isinstance(jobs, dict), jobs
+    assert sorted(jobs) == ["a", "b"], "each job keeps its own runs-on"
+
+
 def test_no_pull_request_workflow_is_a_reader_fault() -> None:
     """The same argument one layer up.
 

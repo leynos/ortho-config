@@ -1268,9 +1268,13 @@ would otherwise never be compiled in CI.
 `workflow_dispatch` today, so `github.ref` is always main and the guard changes
 nothing now; it is there because a dispatch can be aimed at any branch and the
 upload carries no ref, so adding one later would let a run from a feature
-branch publish that branch's coverage as the trunk's. The concurrency group
-cancels a superseded run, because the baseline has one writer and two runs
-racing decide it by which finished last.
+branch publish that branch's coverage as the trunk's. The contract holds the
+guard as one `&&` term and refuses any `||`, because a substring match passes
+`... && ref == main || dispatch`, which makes every conjunct optional. The
+concurrency group queues a superseded run rather than cancelling it: two runs
+racing would decide the baseline by which finished last, and a cancelled run
+abandons both its upload and its baseline write, while a queued one publishes
+later and the later push still wins.
 
 **No checksum input.** `installer-checksum` is rejected outright when non-empty
 from the pinned uploader, and `archive-checksum` is not a rename of it: it
@@ -1281,8 +1285,35 @@ own manifest now, which is what that variable stood in for; the variable is
 unreferenced and can be removed from the repository's settings.
 
 `tests/workflow_contracts/codescene_coverage_test.py` holds the shape, reading
-through `codescene_coverage.py`, and `codescene_reader_test.py` drives those
-readings on documents this repository does not contain.
+through `codescene_coverage.py` (which workflows a rule applies to) and
+`codescene_reach.py` (what a selected workflow must not do). The generic
+parsing is in `workflow_reading.py`. `codescene_reader_test.py` drives those
+readings on documents this repository does not contain, and
+`codescene_reader_properties_test.py` drives the step and token readings with
+Hypothesis over generated workflows of any number of jobs and steps.
+
+**The pull-request lane is a closure, not a trigger list.** A workflow
+declaring only `workflow_call` runs on a pull request when a pull-request
+workflow calls it, and `secrets: inherit` hands it the token. Every
+pull-request clause (the action, the command, the token and the `codescene.io`
+host) runs over the pull-request workflows and everything they call,
+transitively. A call is recognized by shape rather than by a list of prefixes:
+a leading `./` is stripped, and the remainder must be a file directly under
+`.github/workflows/`. `pull_request_closure_test.py` holds a `workflow_call`
+probe that curls the CodeScene API with an inherited token and asserts that
+both the token clause and the host clause catch it.
+
+**The ratchet has to stay switched on.** Pairing the legs' selections proves
+the comparison is fair, not that it happens, so the contract also holds each
+pull-request leg to the publisher's choice: a leg whose baseline is written
+ratchets on the Linux leg, and a leg whose baseline is not written does not
+ratchet at all.
+
+**Workflows are loaded strictly.** The loader refuses a mapping that declares
+one key twice, since PyYAML otherwise keeps the last value silently and a job
+declaring `runs-on` twice would read as the half GitHub may not run. A file
+that is not YAML at all is reported as a `WorkflowReadingError` naming the
+file, not as a parser error naming none.
 
 Two properties of that reading are worth knowing before changing it. The
 publisher is "pushes to main **and serves no pull request**": a repository's

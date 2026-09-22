@@ -40,8 +40,8 @@ from codescene_coverage import (
     coverage_steps,
     publishers,
     pull_request_workflows,
-    token_sites,
 )
+from codescene_reach import CODESCENE_HOST, codescene_contacts, token_sites
 from workflow_reading import (
     read_workflows,
     workflow_steps,
@@ -142,6 +142,28 @@ def test_no_pull_request_workflow_receives_the_token(
         f"these pull-request lanes put {FORBIDDEN_VARIABLE} in reach; a "
         f"fork cannot read it, so the gate it guards is skipped for exactly "
         f"the contributions least likely to have been measured: {offenders}"
+    )
+
+
+def test_no_pull_request_workflow_contacts_codescene(
+    documents: dict[str, WorkflowDocument],
+) -> None:
+    """The action and the command are not the only roads to the service.
+
+    A ``curl`` to the API, or a third-party action handed the URL,
+    escapes both clauses above, and escapes the token clause too when
+    the credential travels under another name. Read over what each step
+    executes or passes on, so the prose explaining the policy is not
+    read as a breach of it.
+    """
+    offenders = sorted(
+        site
+        for name, document in pull_request_workflows(documents).items()
+        for site in codescene_contacts(name, document)
+    )
+    assert not offenders, (
+        f"these pull-request lanes name {CODESCENE_HOST}; CV-005 keeps "
+        f"CodeScene off the pull-request lane by any road: {offenders}"
     )
 
 
@@ -275,6 +297,50 @@ def test_the_ratcheting_lane_matches_its_baseline(
                 f"{name}'s {output!r} leg is built differently from "
                 f"{publisher}'s, so the ratchet would compare two builds "
                 f"rather than two commits: {theirs} against {ours}"
+            )
+
+
+#: The pull-request spelling that enables the ratchet on the Linux leg
+#: alone. generate-coverage keys its baseline by ``runner.os`` and the
+#: publisher runs on Linux, so the Linux leg is the one with a baseline
+#: to compare against.
+LINUX_RATCHET: typ.Final[str] = "${{ matrix.os == 'ubuntu-latest' }}"
+
+
+def _ratchet(step: dict[str, object]) -> str:
+    """Return a coverage step's ``with-ratchet`` value, whitespace-normalized."""
+    inputs = step.get("with") or {}
+    assert isinstance(inputs, dict), f"a coverage step's `with:` is {inputs!r}"
+    return " ".join(str(inputs.get("with-ratchet", "false")).split())
+
+
+def test_the_lane_ratchets_exactly_where_the_baseline_is_written(
+    documents: dict[str, WorkflowDocument],
+) -> None:
+    """The ratchet is the gate CV-005 leaves, so it has to stay switched on.
+
+    Pairing the legs' selections proves the comparison is fair; it says
+    nothing about whether the comparison happens. Deleting
+    ``with-ratchet`` from the pull-request leg leaves every other clause
+    green while the lane stops gating anything, so each leg is held to
+    the publisher's choice: a leg whose baseline is written must ratchet
+    on Linux, and a leg whose baseline is not must not ratchet at all,
+    since it would compare against nothing.
+    """
+    steps = coverage_steps(documents)
+    (publisher,) = publishers(documents)
+    baseline = _by_output_path(steps[publisher])
+    written = sorted(out for out, step in baseline.items() if _ratchet(step) == "true")
+    assert written, f"{publisher} ratchets no leg, so no pull request has a baseline"
+    for name, lane in steps.items():
+        if name == publisher:
+            continue
+        for output, step in _by_output_path(lane).items():
+            enabled = _ratchet(step) in {"true", LINUX_RATCHET}
+            assert enabled is (output in written), (
+                f"{name}'s {output!r} leg sets with-ratchet {_ratchet(step)!r}, "
+                f"but {publisher} writes baselines for {written}; a leg must "
+                f"ratchet on Linux exactly when its baseline is written"
             )
 
 

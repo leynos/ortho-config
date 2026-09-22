@@ -17,7 +17,8 @@ from __future__ import annotations
 import typing as typ
 
 import pytest
-from codescene_coverage import called_workflows, pull_request_workflows, token_sites
+from codescene_coverage import called_workflows, pull_request_workflows
+from codescene_reach import codescene_contacts, token_sites
 from workflow_reading import load_workflow, serves_pull_requests
 
 #: A workflow that declares only ``workflow_call`` and reaches CodeScene
@@ -46,15 +47,16 @@ def _caller(prefix: str) -> str:
 
 @pytest.mark.parametrize(
     "prefix",
-    [pytest.param("./", id="dot-slash"), pytest.param("$/", id="dollar-slash")],
+    [pytest.param("./", id="dot-slash"), pytest.param("", id="root-relative")],
 )
 def test_the_lane_reaches_a_called_workflow(prefix: str) -> None:
-    """Both spellings GitHub accepts reach the same file.
+    """A call is recognized by where it points, not by how it is spelt.
 
     Parametrised rather than combined, so each fails on its own and
-    neither can be carried by the other. A reader knowing only ``./``
-    silently drops callers written the other way, and the documented
-    recommendation is the one it would drop.
+    neither can be carried by the other. A reader enumerating accepted
+    prefixes drops every spelling nobody thought to list; one that
+    strips ``./`` and asks whether the rest is a file under the workflow
+    directory reaches both of these.
     """
     caller = load_workflow(_caller(prefix))
     documents = {"ci.yml": caller, "probe.yml": load_workflow(PROBE)}
@@ -66,13 +68,38 @@ def test_the_lane_reaches_a_called_workflow(prefix: str) -> None:
     )
 
 
+@pytest.mark.parametrize(
+    "reference",
+    [
+        pytest.param("./scripts/probe.yml", id="outside-the-workflow-directory"),
+        pytest.param("./.github/workflows/nested/probe.yml", id="nested-directory"),
+        pytest.param("./.github/workflows/absent.yml", id="no-such-workflow"),
+    ],
+)
+def test_a_reference_of_the_wrong_shape_is_not_a_local_call(reference: str) -> None:
+    """Assert the shape match is narrow as well as broad.
+
+    Matching on the file name alone would read any path ending in
+    ``probe.yml`` as a call to the workflow of that name, and GitHub
+    calls nothing outside the workflow directory.
+    """
+    caller = load_workflow(f"on:\n  pull_request:\njobs:\n  call:\n    uses: {reference}\n")
+    documents = {"ci.yml": caller, "probe.yml": load_workflow(PROBE)}
+    assert called_workflows(caller, documents) == frozenset(), (
+        f"{reference!r} does not name a workflow in this directory"
+    )
+
+
 def test_the_probe_is_caught_once_the_lane_includes_it() -> None:
     """The closure is only worth having if a clause then fails on it.
 
     This is the measurement the change rests on, asserted in both
     directions in one place: the trigger-only reading reaches `ci.yml`
     alone, and the closure puts the probe in reach of the secret clause
-    along with the caller's own ``secrets: inherit``.
+    along with the caller's own ``secrets: inherit``, and of the host
+    clause. The two clauses travel together: run over a trigger list,
+    they would share one blind spot while each looked like it covered
+    the other.
     """
     documents = {
         "ci.yml": load_workflow(_caller("./")),
@@ -95,6 +122,15 @@ def test_the_probe_is_caught_once_the_lane_includes_it() -> None:
     ], (
         f"the closure must put the probe in reach of the secret clause, and "
         f"the caller's `secrets: inherit` with it; it found {offenders}"
+    )
+    contacts = sorted(
+        site
+        for name, document in pull_request_workflows(documents).items()
+        for site in codescene_contacts(name, document)
+    )
+    assert contacts == ["probe.yml: step 1"], (
+        f"the host clause runs over the same closure, so the probe's curl "
+        f"is caught there too; it found {contacts}"
     )
 
 

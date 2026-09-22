@@ -78,6 +78,41 @@ class WorkflowReadingError(RuntimeError):
         self.path = path
 
 
+class _UniqueKeyLoader(yaml.BaseLoader):
+    """``yaml.BaseLoader`` refusing a mapping that declares a key twice.
+
+    PyYAML keeps the last of two equal keys and says nothing. A job
+    declaring ``runs-on`` twice then parses into a document holding only
+    the second value, so a lane can carry a label in the discarded half
+    and every contract reads the half GitHub may not. Refusing the
+    document is the only reading that cannot be wrong about which half
+    runs.
+    """
+
+    def construct_mapping(
+        self, node: yaml.MappingNode, deep: bool = False
+    ) -> dict[object, object]:
+        """Construct one mapping, refusing a key already seen in it.
+
+        Raises
+        ------
+        yaml.constructor.ConstructorError
+            If a key appears twice, naming it and where it appears.
+        """
+        seen: set[object] = set()
+        for key_node, _ in node.value:
+            key = self.construct_object(key_node, deep=deep)
+            if key in seen:
+                raise yaml.constructor.ConstructorError(
+                    "while constructing a mapping",
+                    node.start_mark,
+                    f"found duplicate key {key!r}",
+                    key_node.start_mark,
+                )
+            seen.add(key)
+        return super().construct_mapping(node, deep=deep)
+
+
 def load_workflow(text: str) -> WorkflowDocument:
     r"""Parse a workflow while retaining every scalar as a string.
 
@@ -95,13 +130,15 @@ def load_workflow(text: str) -> WorkflowDocument:
     ------
     TypeError
         If the document does not parse to a mapping.
+    yaml.YAMLError
+        If it is not YAML, or a mapping in it declares one key twice.
 
     Examples
     --------
     >>> load_workflow("on:\n  push:\n")
     {'on': {'push': ''}}
     """
-    parsed = yaml.load(text, Loader=yaml.BaseLoader)  # noqa: S506 - BaseLoader is safe
+    parsed = yaml.load(text, Loader=_UniqueKeyLoader)  # noqa: S506 - BaseLoader is safe
     if not isinstance(parsed, dict):
         message = "a workflow must parse to a top-level mapping"
         raise TypeError(message)
@@ -216,6 +253,33 @@ def pushes_to_main(document: WorkflowDocument) -> bool:
     # excluding main, so the answer there is still yes.
     return not {"tags", "tags-ignore"} & set(filters)
 
+def workflow_jobs(document: WorkflowDocument) -> dict[str, dict[str, object]]:
+    """Return a workflow's jobs that are mappings, by job name.
+
+    A job that is not a mapping is dropped rather than raising, for the
+    reason ``workflow_steps`` gives.
+
+    Parameters
+    ----------
+    document : WorkflowDocument
+        A parsed workflow.
+
+    Returns
+    -------
+    dict
+        Job name to job, in declaration order.
+
+    Examples
+    --------
+    >>> sorted(workflow_jobs(load_workflow("jobs:\\n  a:\\n    steps: []\\n  b: x\\n")))
+    ['a']
+    """
+    jobs = document.get("jobs")
+    if not isinstance(jobs, dict):
+        return {}
+    return {str(name): job for name, job in jobs.items() if isinstance(job, dict)}
+
+
 def workflow_steps(document: WorkflowDocument) -> list[dict[str, object]]:
     """Return every step of every job in one workflow.
 
@@ -242,16 +306,13 @@ def workflow_steps(document: WorkflowDocument) -> list[dict[str, object]]:
     >>> workflow_steps(load_workflow("jobs: not-a-mapping\\n"))
     []
     """
-    jobs = document.get("jobs")
-    if not isinstance(jobs, dict):
-        return []
     return [
         step
-        for job in jobs.values()
-        if isinstance(job, dict)
+        for job in workflow_jobs(document).values()
         for step in (job.get("steps") or [])
         if isinstance(step, dict)
     ]
+
 
 def _read_one(path: pathlib.Path) -> WorkflowDocument:
     """Return one workflow's parsed document, naming the file on failure."""
@@ -264,7 +325,10 @@ def _read_one(path: pathlib.Path) -> WorkflowDocument:
         ) from error
     try:
         return load_workflow(text)
-    except (TypeError, ValueError) as error:
+    except (TypeError, ValueError, yaml.YAMLError) as error:
+        # `yaml.YAMLError` is neither of the other two, so without it a
+        # file that is not YAML at all escapes this boundary as a parser
+        # error naming no file.
         message = f"{path} is not a workflow document: {error}"
         raise WorkflowReadingError(
             message, reader="read_workflows", path=str(path)
