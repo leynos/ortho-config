@@ -155,6 +155,34 @@ def test_every_lane_tests_before_it_packages(
 
 
 @pytest.mark.parametrize("step_name", TEST_STEPS, ids=str)
+def test_a_failing_test_step_stops_the_lane(
+    build_test_job: dict[str, typ.Any], step_name: str
+) -> None:
+    """A test that may fail without stopping the job tests nothing here.
+
+    `continue-on-error: true` lets the job carry on to the dry run after
+    the step has failed, and the skip means lading will not rerun it: the
+    pre-flight that would have caught the failure is exactly what this
+    branch removes. The lane would then package code whose tests failed
+    and report success.
+
+    Absence is asserted as well as the false value, because the input is
+    optional and its default is what the lane relies on. `safe_load`
+    resolves the YAML boolean, so `false` arrives as `False` rather than
+    as a string; an expression would arrive as text and is refused for
+    the same reason a condition is refused above, namely that whether it
+    stops the lane could then depend on the run.
+    """
+    declared = _step_named(build_test_job, step_name).get("continue-on-error")
+    assert declared in (None, False), (
+        f"{step_name!r} sets continue-on-error to {declared!r}; a failure "
+        f"there would reach the {DRY_RUN_STEP!r} step, and the skipped "
+        f"pre-flight will not rerun it, so the lane would package code whose "
+        f"tests failed"
+    )
+
+
+@pytest.mark.parametrize("step_name", TEST_STEPS, ids=str)
 def test_every_lane_is_covered_by_both_test_steps(
     build_test_job: dict[str, typ.Any], step_name: str
 ) -> None:
