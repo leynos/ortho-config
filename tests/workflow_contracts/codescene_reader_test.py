@@ -21,10 +21,12 @@ import typing as typ
 import pytest
 import yaml
 from codescene_coverage import (
-    WorkflowReadingError,
-    load_workflow,
     publishers,
     pull_request_workflows,
+)
+from workflow_reading import (
+    WorkflowReadingError,
+    load_workflow,
     pushes_to_main,
     read_workflows,
     serves_pull_requests,

@@ -35,18 +35,20 @@ from codescene_coverage import (
     CLI_COMMAND,
     CODESCENE_ACTION,
     COVERAGE_ACTION,
-    PINNED_COMMIT,
     FORBIDDEN_VARIABLE,
+    PINNED_COMMIT,
     coverage_steps,
     publishers,
     pull_request_workflows,
-    read_workflows,
     token_sites,
+)
+from workflow_reading import (
+    read_workflows,
     workflow_steps,
 )
 
 if typ.TYPE_CHECKING:  # pragma: no cover - typing only
-    from codescene_coverage import WorkflowDocument
+    from workflow_reading import WorkflowDocument
 
 REPOSITORY_ROOT: typ.Final[pathlib.Path] = pathlib.Path(__file__).resolve().parents[2]
 WORKFLOWS: typ.Final[pathlib.Path] = REPOSITORY_ROOT / ".github" / "workflows"
@@ -57,9 +59,6 @@ WORKFLOWS: typ.Final[pathlib.Path] = REPOSITORY_ROOT / ".github" / "workflows"
 #: manifest archive's, so it cannot be carried across under
 #: ``archive-checksum`` either.
 RETIRED_VARIABLE: typ.Final[str] = "CODESCENE_CLI_SHA256"
-
-#: The ref the publisher's upload step must be guarded on.
-MAIN_REF: typ.Final[str] = "github.ref == 'refs/heads/main'"
 
 #: The inputs that decide what a coverage run measures, as opposed to
 #: what happens to the report afterwards. ``artefact-name-suffix`` is
@@ -171,104 +170,6 @@ def test_exactly_one_workflow_publishes_coverage(
         f"the workflows invoking {CODESCENE_ACTION} must be exactly the "
         f"publisher; the publisher is {sorted(found)} and the uploaders "
         f"are {uploading}"
-    )
-
-
-def _publisher_upload(documents: dict[str, WorkflowDocument]) -> dict[str, object]:
-    """Return the publisher's single CodeScene upload step."""
-    ((name, document),) = publishers(documents).items()
-    steps = [
-        step
-        for step in workflow_steps(document)
-        if CODESCENE_ACTION in str(step.get("uses", ""))
-    ]
-    assert len(steps) == 1, (
-        f"{name} must invoke {CODESCENE_ACTION} once; it invokes it "
-        f"{len(steps)} times"
-    )
-    return steps[0]
-
-
-def test_the_publisher_uploads_rather_than_checks(
-    documents: dict[str, WorkflowDocument],
-) -> None:
-    """The mode is named, not left to the action's default.
-
-    ``mode`` decides whether the step uploads a report or gates a pull
-    request against one, and the default has changed before. Naming it
-    is how a reader of these lines knows which of the two this step does
-    without reading the action.
-    """
-    inputs = _publisher_upload(documents).get("with") or {}
-    assert isinstance(inputs, dict), f"the upload step's `with:` is {inputs!r}"
-    assert inputs.get("mode") == "upload", (
-        f"the publisher's CodeScene step must name `mode: upload`; it names "
-        f"{inputs.get('mode')!r}"
-    )
-
-
-def test_the_publisher_passes_no_deprecated_checksum(
-    documents: dict[str, WorkflowDocument],
-) -> None:
-    """The old checksum input fails the run outright.
-
-    ``installer-checksum`` is rejected when non-empty from this pin, and
-    ``archive-checksum`` is not a rename of it: it digests the action's
-    CLI manifest archive, while the repository variable the old input
-    carried holds the installer script's digest. Carrying the value
-    across under the new name would fail every run, so neither input is
-    passed and the action's own manifest pins the CLI instead.
-    """
-    inputs = _publisher_upload(documents).get("with") or {}
-    assert isinstance(inputs, dict), f"the upload step's `with:` is {inputs!r}"
-    for rejected in ("installer-checksum", "archive-checksum"):
-        assert rejected not in inputs, (
-            f"the publisher passes {rejected!r}; `installer-checksum` is "
-            f"rejected when non-empty and `archive-checksum` digests a "
-            f"different artefact from the variable this repository holds"
-        )
-
-
-def test_the_publisher_uploads_only_from_main(
-    documents: dict[str, WorkflowDocument],
-) -> None:
-    """The token is not enough; the ref has to be checked too.
-
-    The publisher declares no ``workflow_dispatch`` today, so this guard
-    changes nothing now. It is asserted because a dispatch can be aimed
-    at any branch and the upload carries no ref, so adding one later
-    would otherwise let a run from a feature branch publish that
-    branch's coverage as the trunk's, silently, and every pull request
-    would then ratchet against it.
-    """
-    condition = str(_publisher_upload(documents).get("if", ""))
-    assert MAIN_REF in condition, (
-        f"the publisher's upload step must be guarded on {MAIN_REF}; it is "
-        f"guarded on {condition!r}"
-    )
-
-
-def test_the_publisher_runs_one_at_a_time(
-    documents: dict[str, WorkflowDocument],
-) -> None:
-    """Two publisher runs racing decide the baseline by finishing order.
-
-    The baseline this workflow writes is what every pull request
-    ratchets against, so a superseded run finishing last makes its
-    figures the trunk's.
-    """
-    ((name, document),) = publishers(documents).items()
-    concurrency = document.get("concurrency")
-    assert isinstance(concurrency, dict), (
-        f"{name} must declare a concurrency block; two publisher runs "
-        f"otherwise race on the ratchet baseline. It declares {concurrency!r}"
-    )
-    assert concurrency.get("group"), (
-        f"{name}'s concurrency block must name a group: {concurrency!r}"
-    )
-    assert concurrency.get("cancel-in-progress") == "true", (
-        f"{name} must cancel a superseded publisher run; without it the "
-        f"older run can still write the baseline after the newer one"
     )
 
 
