@@ -115,10 +115,10 @@ escalation, not workarounds.
 - Risk: the deny exit shares exit code 1 with generic tool failure, so a
   CI log alone cannot distinguish policy failure from tool breakage. Severity:
   low. Likelihood: medium. Mitigation: the report artefact (`summary.deny`) is
-  documented as the authoritative CI signal; if artefact writing fails, the
-  error is returned before the advisory stderr summary is attempted. ADR-008
-  records that the exit code is provisional until roadmap 7.2.3/7.2.5 document
-  stable exit classes.
+  documented as the authoritative CI signal; if `write_policy_report` fails,
+  `run_policy_check` returns that error before calling `write_summary`, so no
+  advisory stderr summary is attempted. ADR-008 records that the exit code is
+  provisional until roadmap 7.2.3/7.2.5 document stable exit classes.
 
 ## Progress
 
@@ -132,7 +132,7 @@ escalation, not workarounds.
   match.
 - [x] Milestone 1: canonical vocabulary defaults module (red, green,
   refactor).
-  - `cargo-orthohelp/src/policy/vocabulary.rs` added with
+  - `cargo-orthohelp/src/policy/vocabulary/mod.rs` added with
     `CANONICAL_VERBS`, `CANONICAL_FLAGS`, `is_canonical_verb`, and
     `is_canonical_flag`; 27 rstest cases green
     (`cargo test -p cargo-orthohelp policy::vocabulary`).
@@ -150,7 +150,7 @@ escalation, not workarounds.
     `vocabulary/mod.rs` — then green). CodeRabbit review on `bd2aff8`:
     0 findings across all 7 reviewed files.
 - [x] Milestone 2: policy configuration model and Cargo metadata parsing.
-  - `cargo-orthohelp/src/policy/config.rs` adds `PolicyConfig`,
+  - `cargo-orthohelp/src/policy/config/mod.rs` adds `PolicyConfig`,
     `PolicyConfigMetadata` (strict `deny_unknown_fields`), `PolicyException`,
     `ExceptionKind` (wire `verb`/`flag`), `PolicyInputs`
     (`#[non_exhaustive]`), the `From` conversions to `PolicyConfig`, and
@@ -165,24 +165,26 @@ escalation, not workarounds.
     `PolicyConfigMetadata::from_package_metadata` directly, so introducing the
     extension field in M2 would have produced `dead_code` warnings (the field
     is unread until M4). `select_policy_package` (the light package resolver
-    for the check) is likewise deferred to Milestone 3, when `check.rs` calls
+    for the check) is likewise deferred to Milestone 3, when the check module
+    calls
     it. The config model itself is self-contained and fully exercised here.
   - Gates green on commit `b53589c` (scrutineer run; `make lint` was red once
     on three clippy/rustdoc findings in the new `config*` files — a broken
     intra-doc link to the future `evaluate` module, `self_named_module_files`
-    on `config.rs`, and two clippy findings in `config/tests.rs` — then
+    on `config/mod.rs`, and two clippy findings in `config/tests.rs` — then
     green). CodeRabbit review on `b53589c`: 0 findings across all 4 reviewed
     files.
 - [x] Milestone 3: `--check-agent-native` CLI wiring, report emission, and
   deny-mode exit path.
   - CLI: `--check-agent-native` and `--policy-mode` (`requires =
-    "check_agent_native"`) on `Args`; clap `ValueEnum` + `Display` added to
-    `PolicyMode`; rstest cases in `src/cli/policy_tests.rs`.
-  - `policy/evaluate.rs` implements the D7 sanity findings
+    "check_agent_native"`) on `Args`; the CLI-only `PolicyModeArg` uses
+    clap's `ValueEnum` and converts to the domain `PolicyMode`; rstest cases in
+    `src/cli/policy_tests.rs`.
+  - `policy/evaluate/mod.rs` implements the D7 sanity findings
     (`malformed_exception` deny, `redundant_exception` warn,
     `duplicate_exception` warn) with the exact boundary cases under test;
     `PolicyReport` gains the additive `exceptions` and `vocabulary` fields
-    plus `with_details`; `policy/check.rs` implements `run_policy_check`
+    plus `with_details`; `policy/check/mod.rs` implements `run_policy_check`
     (light package resolution, atomic report write, loud off-mode summary,
     deny `PolicyViolation` return); `error.rs` gains the `PolicyViolation`
     variant; `output.rs` refactors the atomic writer into a shared
@@ -236,14 +238,19 @@ escalation, not workarounds.
     `policy.agent_native = "warn"` and the two configured exceptions
     (kind, name, scope — no reasons). 17 golden tests green.
 - [x] Milestone 5a: behavioural tests and policy fixture packages.
-  - `cargo-orthohelp/tests/features/orthohelp_policy.feature` added with the
-    four scenarios from the plan (warn, deny, off, mode override); step
+  - `cargo-orthohelp/tests/features/orthohelp_policy.feature` added with
+    eight scenarios covering warn, explicit-format generation, deny, off,
+    explicit off, package selection, mode override, and a package without
+    generator preconditions; step
     module `tests/rstest_bdd/behaviour/steps_policy.rs` (given/when/then)
     wired into `scenarios.rs` and `behaviour/mod.rs`; `OrthoHelpContext` gains
-    a `policy_package` slot. The three fixture packages already existed from
-    M4 (D10). 4 rstest-bdd scenarios green on commit `5736d89`
+    a `policy_package` slot. The four policy fixture packages are
+    `orthohelp_policy_warn_fixture`, `orthohelp_policy_deny_fixture`,
+    `orthohelp_policy_off_fixture`, and `orthohelp_policy_adoption_fixture`;
+    the existing `orthohelp_fixture` covers the absent-table case. Eight
+    rstest-bdd scenarios green on the completed branch
     (`cargo test -p cargo-orthohelp --test rstest_bdd -- policy`), full BDD
-    suite 14/14 green, `cargo test -p cargo-orthohelp` green, and
+    suite green, `cargo test -p cargo-orthohelp` green, and
     `make check-fmt` plus `cargo clippy` (pedantic) clean after removing the
     unnecessary `Result` wraps from the three infallible `given` steps
     (`unnecessary_wraps`).
@@ -296,15 +303,15 @@ escalation, not workarounds.
   `use cargo_orthohelp::policy::vocabulary::CANONICAL_VERBS` (the lib cannot
   self-reference by crate name) and when it used `crate::policy` (the bin had no
   `policy` module). Impact: `main.rs` must declare `pub mod policy;` so shared
-  policy files (`config.rs`, `evaluate.rs`, `check.rs`, `vocabulary.rs`) resolve
-  `crate::policy::*` in both crates. `check.rs` may not reference the bin-only
-  `cli`/`metadata` modules; its `run_policy_check` signature takes
-  `&cargo_metadata::Package` and `Option<PolicyMode>` instead of the bin's
-  `Args`, and the policy table is read via a shared helper on
-  `PolicyConfigMetadata` rather than through `crate::metadata`. The lib will
-  gain `pub mod output;` so `check.rs` can call `output::write_policy_report`
-  in both crates. This obeys the plan's interface list
-  (`cargo_orthohelp::policy::check::run_policy_check` and
+  policy files (`config/mod.rs`, `evaluate/mod.rs`, `check/mod.rs`,
+  `vocabulary/mod.rs`) resolve `crate::policy::*` in both crates. The check
+  module may not reference the bin-only `cli`/`metadata` modules; its
+  `run_policy_check` signature takes `&cargo_metadata::Package` and
+  `Option<PolicyMode>` instead of the bin's `Args`, and the policy table is
+  read via a shared helper on `PolicyConfigMetadata` rather than through
+  `crate::metadata`. The lib will gain `pub mod output;` so the check module
+  can call `output::write_policy_report` in both crates. This obeys the plan's
+  interface list (`cargo_orthohelp::policy::check::run_policy_check` and
   `output::write_policy_report`) without a bin/lib `Args` type mismatch.
 
 ## Decision log
@@ -331,10 +338,10 @@ revision note at the end of this document).
   `jobs`, `profile`, `feedback`) and `CANONICAL_FLAGS: &[&str]` (`--json`,
   `--no-input`, `--force`, `--dry-run`, `--limit`, `--cursor`, `--wait`,
   `--profile`, `--deliver`). Slices, not fixed-length arrays, so vocabulary
-  growth in 7.1.3 does not change a public type. The private `CANONICAL_VERBS`
-  constant currently in `cargo-orthohelp/src/agent_context/mod.rs` is removed
-  and that module imports the policy constant instead, so there is exactly one
-  source of truth. Rationale: 7.1.2 (lint rules) and the agent-context verb
+  growth in 7.1.3 does not change a public type. The former private
+  `CANONICAL_VERBS` constant in `cargo-orthohelp/src/agent_context/mod.rs` was
+  removed, and that module now imports the policy constant, so there is exactly
+  one source of truth. Rationale: 7.1.2 (lint rules) and the agent-context verb
   mapper must agree on the same list; duplication would drift. The full verb
   list follows design §5, which is a superset of the roadmap bullet list.
   Date/Author: 2026-08-06, planning agent.
@@ -377,7 +384,8 @@ revision note at the end of this document).
   planning agent; amended same day after review.
 - Decision D6 (amended after review): deny-mode failures exit through a
   new
-  `OrthohelpError::PolicyViolation { deny_count: usize, report_path: String }`
+  `OrthohelpError::PolicyViolation { deny_count: usize,
+  report_path: Utf8PathBuf }`
   variant, returned after the report artefact has been written. The process
   exits with the standard failure code (1) via `main`'s existing `Result`
   termination, which prints the Debug representation; the human-facing channel
@@ -451,6 +459,12 @@ revision note at the end of this document).
   static and shared by every other suite, so mutating it would poison unrelated
   tests and bridge-cache fingerprints. Date/Author: 2026-08-06, planning agent,
   after design review.
+
+  The completed implementation also adds `orthohelp_policy_off_fixture` to
+  exercise malformed, redundant, and duplicate exceptions under explicit `off`,
+  and `orthohelp_policy_adoption_fixture` to exercise policy checking without a
+  generator `root_type`. These fixtures remain separate so their metadata
+  states stay mutually exclusive.
 - Decision D11 (from review): pipeline placement. `--check-agent-native`
   resolves the package and parses `[package.metadata.ortho_config]` only, then
   evaluates and writes the report, *without* building the bridge crate or
@@ -459,9 +473,10 @@ revision note at the end of this document).
   the check runs first and the generator pipeline follows; the default
   `--format ir` is treated as "not explicitly requested" when
   `--check-agent-native` is present (clap default detection via `ValueSource`).
-  Orchestration lives in a new `cargo-orthohelp/src/policy/check.rs` exposing
+  Orchestration lives in a new `cargo-orthohelp/src/policy/check/mod.rs`
+  exposing
   `run_policy_check(...) -> Result<PolicyCheckOutcome, OrthohelpError>`, called
-  from a thin branch in `main.rs`, keeping both 381-line files under the
+  from a thin branch in `main.rs`, keeping the affected source files under the
   400-line cap. `--policy-mode` declares `requires = "check_agent_native"` so
   it cannot be silently ignored. Rationale: a policy check is most useful to
   packages still adopting the toolchain; inheriting generator preconditions
@@ -541,9 +556,12 @@ Delivered surface (verified by the acceptance suite in
 - `ortho_config::agent_context::AgentPolicy.exceptions` (additive,
   serde-defaulted, reason-confined) with the single-point D12 conversions and
   the D9 advertisement-versus-enforcement default split.
-- Dedicated D10 fixture packages, the four-scenario
+- Dedicated policy fixture packages (`orthohelp_policy_warn_fixture`,
+  `orthohelp_policy_deny_fixture`, `orthohelp_policy_off_fixture`, and
+  `orthohelp_policy_adoption_fixture`), the eight-scenario
   `orthohelp_policy.feature` behavioural suite, golden policy-report and
-  agent-context snapshots, and unit/property coverage per milestone.
+  agent-context snapshots, unit/property coverage for configuration and
+  evaluation, output round-trip coverage, and trybuild API-contract tests.
 - ADR-008, design updates (§3.3, §6.3.2, §12), users'- and developers'-guide
   updates, the Unreleased changelog entries, and the roadmap 7.1.1 tick.
 
@@ -559,7 +577,7 @@ Retrospective notes for future phases:
 
 - The binary/lib module-tree duplication (`main.rs` re-declares its module
   tree) forced `pub mod policy;` in both crates and shaped the shared
-  `check.rs` signature; revisit the duplication when the binary grows, rather
+  check-module signature; revisit the duplication when the binary grows, rather
   than adding more shared modules that must be declared twice.
 - Vocabulary growth (7.1.3) only needs the slice constants extended; the
   predicates and the report `vocabulary` block read from the same source of
@@ -589,17 +607,19 @@ The workspace (`/` refers to the repository root) contains, among others:
   forward-compatibility test. `AgentPolicy::default()` is `Warn` (see D9).
 - `cargo-orthohelp/` — the generator binary and library. Key modules:
   `src/cli/mod.rs` (clap definitions: `Cli` → `CargoSubcommand::Orthohelp` →
-  `Args` with `--package`, `--format`, `--out-dir`, and others; 381 lines),
+  `Args` with `--package`, `--format`, `--out-dir`, and others),
   `src/metadata.rs` (parses `[package.metadata.ortho_config]` into
   `OrthoConfigMetadata`; `select_package` enforces generator preconditions such
   as `root_type` presence), `src/bridge.rs` (builds and runs an ephemeral
   bridge crate that emits the target CLI's `DocMetadata` IR JSON),
   `src/schema/mod.rs` (`DocMetadata`, `FieldMetadata`, `CliMetadata` — where
   command paths and flag longs live), `src/agent_context/mod.rs`
-  (`bridge_ir_to_agent_context`, currently holding a private `CANONICAL_VERBS`),
-  `src/policy/mod.rs` (the shipped report schema), `src/output.rs` (atomic
-  artefact writers: temp file, rename, fsync), `src/error.rs`
-  (`OrthohelpError`), and `src/main.rs` (pipeline orchestration; 381 lines;
+  (`bridge_ir_to_agent_context`, importing the canonical vocabulary from
+  `src/policy/vocabulary/mod.rs`), `src/policy/mod.rs` plus its `config/mod.rs`,
+  `evaluate/mod.rs`, `check/mod.rs`, and `vocabulary/mod.rs` children (the
+  policy model and orchestration), `src/output.rs` (atomic artefact writers:
+  temp file, rename, fsync), `src/error.rs` (`OrthohelpError`), and
+  `src/main.rs` (pipeline orchestration; 191 lines;
   `fn main() -> Result<(), OrthohelpError>` exits 1 on error printing the Debug
   representation).
 - `tests/fixtures/orthohelp_fixture/` — a fixture package exercised by
@@ -639,7 +659,7 @@ pre-existing failure is recorded and reported, not fixed here.
 
 ### Milestone 1 — canonical vocabulary defaults (red, green, refactor)
 
-Create `cargo-orthohelp/src/policy/vocabulary.rs` declaring
+Create `cargo-orthohelp/src/policy/vocabulary/mod.rs` declaring
 `pub const CANONICAL_VERBS: &[&str]` and `pub const CANONICAL_FLAGS: &[&str]`
 with rustdoc linking design §5, plus `pub fn is_canonical_verb(&str) -> bool`
 and `pub fn is_canonical_flag(&str) -> bool` (flag matching accepts the long
@@ -660,7 +680,7 @@ golden tests still pass unchanged (this refactor is snapshot-neutral).
 
 ### Milestone 2 — policy configuration model and metadata parsing
 
-In `cargo-orthohelp/src/policy/config.rs` define:
+In `cargo-orthohelp/src/policy/config/mod.rs` define:
 
 ```rust
 pub struct PolicyConfig {
@@ -702,19 +722,20 @@ Add to `Args` in `cargo-orthohelp/src/cli/mod.rs`: `--check-agent-native`
 mode; command-line wins over metadata for the *report*, mirroring the
 `--root-type` precedent; clap `requires = "check_agent_native"` per D11).
 
-Add `cargo-orthohelp/src/policy/evaluate.rs` implementing D14's
+Add `cargo-orthohelp/src/policy/evaluate/mod.rs` implementing D14's
 `evaluate(config, inputs) -> PolicyReport` with the D7 findings, the D3
 exceptions attached, and the D14 `vocabulary` block populated; extend
 `policy/mod.rs` with the additive `exceptions` and `vocabulary` report fields
 (all `#[serde(default)]`, doc-commented as schema-version-1 additive) and the
 `with_details` constructor.
 
-Add `cargo-orthohelp/src/policy/check.rs` with `run_policy_check` implementing
-D11's placement (package + metadata resolution only, no bridge), D5's report
-write via a new `output::write_policy_report`, the D5/D13 stderr summary
-(including the report path; loud wording when the mode is `off`), and the D6
-deny return (`OrthohelpError::PolicyViolation { deny_count, report_path }`).
-Wire a thin branch into `main.rs::run` honouring the D11 `--format` interaction.
+Add `cargo-orthohelp/src/policy/check/mod.rs` with `run_policy_check`
+implementing D11's placement (package + metadata resolution only, no bridge),
+D5's report write via a new `output::write_policy_report`, the D5/D13 stderr
+summary (including the report path; loud wording when the mode is `off`), and
+the D6 deny return
+(`OrthohelpError::PolicyViolation { deny_count, report_path }`). Wire a thin
+branch into `main.rs::run` honouring the D11 `--format` interaction.
 
 Red first: unit tests for `evaluate` (empty config → empty report with
 vocabulary block; each sanity finding, including the exact D7 boundary cases;
@@ -909,7 +930,8 @@ At completion the following must exist:
   serde-defaulted) plus `PolicyReport::with_details(...)`.
 - `cargo_orthohelp::policy::check::run_policy_check` and
   `output::write_policy_report` (atomic).
-- `OrthohelpError::PolicyViolation { deny_count: usize, report_path: String }`.
+- `OrthohelpError::PolicyViolation` contains `deny_count: usize` and a
+  `Utf8PathBuf` `report_path`.
 - `ortho_config::agent_context::AgentPolicy` gains
   `exceptions: Vec<PolicyException>` (additive, defaulted, always serialized;
   string-typed `kind`; no `reason` field).
@@ -917,8 +939,10 @@ At completion the following must exist:
   exception mirrors (D12).
 - CLI: `--check-agent-native` and `--policy-mode` (with `requires`) on
   `cargo orthohelp`.
-- Fixture packages `orthohelp_policy_warn_fixture` and
-  `orthohelp_policy_deny_fixture` under `tests/fixtures/`.
+- Fixture packages `orthohelp_policy_warn_fixture`,
+  `orthohelp_policy_deny_fixture`, `orthohelp_policy_off_fixture`, and
+  `orthohelp_policy_adoption_fixture` under `tests/fixtures`, plus the existing
+  `orthohelp_fixture` for the absent-policy case.
 - Dev-dependencies added to `cargo-orthohelp`: `googletest`,
   `pretty_assertions` (caret requirements).
 

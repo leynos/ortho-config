@@ -10,10 +10,12 @@ no changes.
 
 ## Adopt the opt-in agent-native policy check
 
-Run `cargo orthohelp --check-agent-native` to write a policy report for a
-package. Configure it in the `[package.metadata.ortho_config.policy]` metadata
-table. The `off`, `warn`, and `deny` modes select disabled, advisory, and
-failing policy behaviour. See the
+Run `cargo orthohelp --check-agent-native --package <package>` to write a
+policy report for a package. The `--package <package>` argument is required
+when the workspace has no root package, such as a virtual workspace. Configure
+the policy in the `[package.metadata.ortho_config.policy]` metadata table. The
+`off`, `warn`, and `deny` modes select disabled, advisory, and failing policy
+behaviour. See the
 [agent-native policy section in the user's guide][users-guide-policy] for the
 report shape, exceptions, and command-line override.
 
