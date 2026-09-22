@@ -32,7 +32,12 @@ PYTHON_DEPS_FILE ?= scripts/requirements-test.txt
 PYTEST_FLAGS ?= --doctest-modules scripts/bump_version.py \
 	scripts/release_archive.py scripts/release_archive_naming.py \
 	scripts/verify_release_archives.py scripts/tests -q
-LADING ?= uvx --from git+https://github.com/leynos/lading lading
+# Pinned rather than tracking the default branch: the publish step depends
+# on the pre-flight skip, which v0.3.1 is the first release to carry
+# (leynos/lading#261). An unpinned `uvx --from git+...` would also change
+# what the release gate runs without anyone editing this repository.
+LADING_REF ?= b771852411b428ff6fc779cc3a68b153a8f2439a
+LADING ?= uvx --from git+https://github.com/leynos/lading@$(LADING_REF) lading
 POWERSHELL ?= pwsh
 ifeq ($(OS),Windows_NT)
 NULL_DEVICE ?= NUL
@@ -70,13 +75,20 @@ test: python-test-deps ## Run tests with warnings treated as errors
 python-test-deps: ## Ensure Python test dependencies are provisioned
 	$(PYTEST) --version > $(NULL_DEVICE)
 
-# `--doctest-modules` collects the examples in the contract support
-# modules. AGENTS.md asks function documentation to carry an example, and
-# an example nothing runs stops matching the helper it documents without
-# anything saying so.
-test-workflow-contracts: ## Validate the mutation-testing caller contract
-	$(UV) run --with 'pytest>=8' --with 'pyyaml>=6' --with 'hypothesis>=6' \
-		pytest tests/workflow_contracts --doctest-modules -q
+# --doctest-modules so the examples in the contract helpers are executed
+# rather than displayed: they document how a Makefile recipe is parsed, and
+# an example that has drifted from the parser is worse than none.
+#
+# Upper bounds as well as lower: this target bypasses
+# scripts/requirements-test.txt and has no lockfile, so an unbounded
+# requirement lets a future major release change collection or doctest
+# behaviour with no edit to this repository. hypothesis arrived with the
+# coverage-ceiling contract (#482) and is bounded for the same reason.
+test-workflow-contracts: ## Validate the workflow caller contracts
+	$(UV) run --with 'pytest>=8,<10' --with 'pyyaml>=6,<7' \
+		--with 'hypothesis>=6,<7' pytest \
+		tests/workflow_contracts \
+		--doctest-modules -q
 
 # will match target/debug/libmy_library.rlib and target/release/libmy_library.rlib
 target/%/lib$(CRATE).rlib: FORCE ## Build library in debug or release
