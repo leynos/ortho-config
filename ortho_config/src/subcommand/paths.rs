@@ -106,20 +106,20 @@ fn collect_unix_paths(prefix: &Prefix, source: &dyn EnvSource, paths: &mut Vec<P
 
 #[cfg(not(any(unix, target_os = "redox")))]
 fn collect_non_unix_paths(prefix: &Prefix, source: &dyn EnvSource, paths: &mut Vec<PathBuf>) {
-    let home = source.get("HOME").or_else(|| source.get("USERPROFILE"));
-    if let Some(home) = home {
+    let configured_home = source.get("HOME").or_else(|| source.get("USERPROFILE"));
+    if let Some(home) = configured_home {
         push_stem_candidates(Path::new(&home), &dotted(prefix), paths);
-    } else if let Some(home) = source.home_fallback() {
-        push_stem_candidates(&home, &dotted(prefix), paths);
+    } else if let Some(fallback_home) = source.home_fallback() {
+        push_stem_candidates(&fallback_home, &dotted(prefix), paths);
     }
 
     if let Some(config_dir) = source.config_dir_fallback() {
-        let config_dir = if prefix.as_str().is_empty() {
+        let scoped_config_dir = if prefix.as_str().is_empty() {
             config_dir
         } else {
             config_dir.join(prefix.as_str())
         };
-        push_stem_candidates(&config_dir, "config", paths);
+        push_stem_candidates(&scoped_config_dir, "config", paths);
     }
 }
 
