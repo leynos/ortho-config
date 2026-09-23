@@ -39,6 +39,20 @@ fn dotted(prefix: &Prefix) -> String {
 /// Adds candidate configuration file paths under `dir` using `base` as the file stem.
 ///
 /// The `base` string should include any desired prefix such as a leading dot.
+///
+/// # Examples
+///
+/// ```
+/// use std::path::Path;
+///
+/// use ortho_config::subcommand::push_stem_candidates;
+///
+/// let directory = Path::new("config");
+/// let mut candidates = Vec::new();
+/// push_stem_candidates(directory, ".myapp", &mut candidates);
+///
+/// assert!(candidates.contains(&directory.join(".myapp.toml")));
+/// ```
 pub fn push_stem_candidates(dir: &Path, base: &str, paths: &mut Vec<PathBuf>) {
     push_candidates(paths, base, |file| dir.join(file));
 }
