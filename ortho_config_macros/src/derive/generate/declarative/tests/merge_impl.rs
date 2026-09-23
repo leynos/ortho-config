@@ -83,6 +83,10 @@ fn mixed_strategies() -> Result<CollectionStrategies> {
     })
 }
 
+/// Verifies generated map-field merge logic and its ordering with append fields.
+///
+/// Mixed strategies must render map replacement before append handling, so the
+/// generated implementation preserves the intended merge order.
 #[rstest]
 #[case(
     map_only_strategies as fn() -> Result<CollectionStrategies>,
@@ -108,7 +112,7 @@ fn generate_declarative_merge_impl_handles_map_fields(
         .replace(" :: ", "::")
         .replace(' ', "");
     for token in expected_tokens {
-        ensure!(norm.contains(token), "expected merge logic for {token}",);
+        ensure!(norm.contains(token), "expected merge logic for {token}");
     }
     if let Some((first, second)) = ordering {
         let first_index = norm.find(first).expect("first merge logic should render");

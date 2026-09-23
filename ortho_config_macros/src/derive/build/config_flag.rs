@@ -12,6 +12,19 @@ use crate::derive::parse::StructAttrs;
 
 use super::cli::{validate_cli_long, validate_user_cli_short};
 
+/// Builds the generated `--config-path` field after validating its CLI metadata.
+///
+/// For empty discovery metadata and no conflicting field or flags, the emitted
+/// token stream contains:
+///
+/// ```text
+/// #[arg(long = "config-path", hide = true, value_name = "PATH")]
+/// #[serde(skip_serializing_if = "Option::is_none")]
+/// pub config_path: Option<std::path::PathBuf>
+/// ```
+///
+/// Returns a `syn::Error` when generated names or requested flags conflict with
+/// user-defined fields.
 pub(crate) fn build_config_flag_field(
     struct_attrs: &StructAttrs,
     used_shorts: &HashSet<char>,
@@ -33,7 +46,7 @@ pub(crate) fn build_config_flag_field(
     if used_longs.contains(&long) {
         return Err(syn::Error::new_spanned(
             &name,
-            format!("duplicate `cli_long` value '{long}' conflicts with the generated config flag",),
+            format!("duplicate `cli_long` value '{long}' conflicts with the generated config flag"),
         ));
     }
     let long_lit = syn::LitStr::new(&long, proc_macro2::Span::call_site());
