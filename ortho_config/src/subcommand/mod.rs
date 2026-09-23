@@ -6,8 +6,8 @@
 
 #[cfg(feature = "serde_json")]
 use crate::{
-    CliValueExtractor, OrthoMergeExt, OrthoResult, SharedScanEnvSource, load_config_file,
-    sanitized_provider,
+    CliValueExtractor, OrthoMergeExt, OrthoResult, ProcessEnv, SharedScanEnvSource,
+    load_config_file, sanitized_provider,
 };
 #[cfg(feature = "serde_json")]
 use clap::{ArgMatches, CommandFactory};
@@ -18,7 +18,7 @@ use figment::{Figment, providers::Env};
 #[cfg(feature = "serde_json")]
 use serde::de::DeserializeOwned;
 #[cfg(feature = "serde_json")]
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 #[cfg(feature = "serde_json")]
 use uncased::Uncased;
 
@@ -30,7 +30,7 @@ mod sources;
 mod types;
 
 #[cfg(feature = "serde_json")]
-use paths::candidate_paths;
+use paths::candidate_paths_at;
 pub use paths::push_stem_candidates;
 #[cfg(feature = "serde_json")]
 pub use selected::{
@@ -39,9 +39,13 @@ pub use selected::{
 };
 #[cfg(feature = "serde_json")]
 pub use sources::{
+    SubcommandCliMatches, SubcommandFileContext,
     load_and_merge_subcommand_for_with_matches_with_sources,
-    load_and_merge_subcommand_for_with_sources,
-    load_and_merge_subcommand_with_matches_with_sources, load_and_merge_subcommand_with_sources,
+    load_and_merge_subcommand_for_with_matches_with_sources_at,
+    load_and_merge_subcommand_for_with_sources, load_and_merge_subcommand_for_with_sources_at,
+    load_and_merge_subcommand_with_matches_with_sources,
+    load_and_merge_subcommand_with_matches_with_sources_at, load_and_merge_subcommand_with_sources,
+    load_and_merge_subcommand_with_sources_at,
 };
 pub use types::{CmdName, Prefix};
 
@@ -86,8 +90,25 @@ pub(super) fn load_file_and_env_defaults<T>(
 where
     T: CommandFactory,
 {
+    let process_env = ProcessEnv;
+    load_file_and_env_defaults_at::<T>(
+        prefix,
+        SubcommandFileContext::new(Path::new("."), &process_env),
+        merge_source,
+    )
+}
+
+/// Gather defaults using an explicit base and lookup-only source.
+pub(super) fn load_file_and_env_defaults_at<T>(
+    prefix: &Prefix,
+    files: SubcommandFileContext<'_>,
+    merge_source: Option<SharedScanEnvSource>,
+) -> OrthoResult<Figment>
+where
+    T: CommandFactory,
+{
     let name = CmdName::new(T::command().get_name());
-    let paths = candidate_paths(prefix);
+    let paths = candidate_paths_at(prefix, files.base, files.discovery);
     let mut fig = load_from_files(&paths, &name)?;
 
     let env_name = name.env_key();
