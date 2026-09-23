@@ -658,6 +658,22 @@ variables for tests.
 - `ScanEnvSource` is owned by the merge boundary. `CsvEnv` accepts one through
   `with_source`, and the derived loader receives it through
   `OrthoConfig::load_from_iter_with_sources`.
+- `GlobalConfigSources` is the `hello_world` application's narrow composition
+  context. Its global and greeting-default loaders pass lookup and scan sources
+  to the appropriate boundaries. Greeting-default loading also requires an
+  explicit file base for `SubcommandFileContext`, so its source-aware path does
+  not inspect the process working directory. It supplies clap match metadata
+  with no explicit options so a clap default does not override an injected file
+  or environment value. The existing no-argument loaders remain process-backed.
+  File-only greeting overrides take a lookup source without acquiring the scan
+  capability. This context belongs only at the example's configuration-loading
+  call sites, not in command construction.
+- Example tests may pass a `ConfigDiscovery` with explicit project roots to the
+  crate-private override loader. Source injection alone does not disable
+  project-root or current-directory candidates. Tests needing no ambient
+  candidates must configure the discovery builder and set `XDG_CONFIG_DIRS` to
+  a fixture directory when applicable, since an unset value selects the
+  platform's system fallback.
 - The discovery candidate reader is the only production reader, and holds no
   `std::env::var_os` call of its own.
 - It is **not** a general environment service. Adding readers elsewhere in the

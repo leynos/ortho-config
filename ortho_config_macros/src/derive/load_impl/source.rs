@@ -71,3 +71,51 @@ pub(crate) fn build_load_from_iter_with_sources_impl(
         result
     }
 }
+
+/// Build config-type composition delegates, including the injected-source API.
+pub(crate) fn build_config_impl_delegates(
+    krate: &proc_macro2::TokenStream,
+    cli_ident: &Ident,
+    config_ident: &Ident,
+) -> proc_macro2::TokenStream {
+    quote! {
+        impl #config_ident {
+            /// Compose merge layers using the current process arguments.
+            pub fn compose_layers() -> #krate::declarative::LayerComposition {
+                #cli_ident::compose_layers()
+            }
+
+            /// Compose merge layers from an iterator of command-line arguments.
+            pub fn compose_layers_from_iter<I, T>(iter: I) -> #krate::declarative::LayerComposition
+            where
+                I: IntoIterator<Item = T>,
+                T: Into<std::ffi::OsString> + Clone,
+            {
+                #cli_ident::compose_layers_from_iter(iter)
+            }
+
+            /// Compose layers from arguments and explicit environment sources.
+            ///
+            /// For example, arguments `["app"]`, a lookup source containing
+            /// `APP_CONFIG_PATH=/srv/app.toml`, and a scan source containing
+            /// `APP_PORT=9000` produce a composition with that selected file
+            /// and injected environment layer. The sources stay separate so
+            /// discovery cannot enumerate the merge environment.
+            pub fn compose_layers_from_iter_with_sources<I, T>(
+                iter: I,
+                discovery_source: #krate::SharedEnvSource,
+                merge_source: #krate::SharedScanEnvSource,
+            ) -> #krate::declarative::LayerComposition
+            where
+                I: IntoIterator<Item = T>,
+                T: Into<std::ffi::OsString> + Clone,
+            {
+                #cli_ident::compose_layers_from_iter_with_sources(
+                    iter,
+                    discovery_source,
+                    merge_source,
+                )
+            }
+        }
+    }
+}
