@@ -8,8 +8,8 @@ use std::path::Path;
 use super::{Prefix, load_file_and_env_defaults, load_file_and_env_defaults_at};
 use crate::merge_telemetry;
 use crate::{
-    CliValueExtractor, CsvEnv, EnvSource, OrthoMergeExt, OrthoResult, SharedScanEnvSource,
-    sanitized_provider,
+    CliValueExtractor, CsvEnv, EnvSource, OrthoMergeExt, OrthoResult, ProcessEnv,
+    SharedScanEnvSource, sanitized_provider,
 };
 use clap::{ArgMatches, CommandFactory};
 use figment::{Figment, providers::Serialized};
@@ -195,15 +195,13 @@ pub fn load_and_merge_subcommand_with_sources<T>(
 where
     T: serde::Serialize + DeserializeOwned + Default + CommandFactory,
 {
-    merge_telemetry::source_aware_subcommand_load_started();
-    let result = (|| {
-        let fig = load_file_and_env_defaults::<T>(prefix, Some(merge_source))?;
-        fig.merge(sanitized_provider(cli)?)
-            .extract()
-            .into_ortho_merge()
-    })();
-    merge_telemetry::source_aware_subcommand_load_finished(&result);
-    result
+    let process_env = ProcessEnv;
+    load_and_merge_subcommand_with_sources_at(
+        prefix,
+        cli,
+        SubcommandFileContext::new(Path::new("."), &process_env),
+        merge_source,
+    )
 }
 
 /// Wrapper around [`load_and_merge_subcommand_with_sources`] using the
