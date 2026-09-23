@@ -18,6 +18,16 @@ die() {
 }
 
 
+report_status() {
+    case "$1" in
+        cache=download | cache=repair | cache=reused | verification=passed | verification=failed)
+            printf 'whitaker-installer: %s\n' "$1" >&2
+            ;;
+        *) die "invalid Whitaker installer status" ;;
+    esac
+}
+
+
 cleanup_temporary_directory() {
     rm -rf -- "$temporary_directory"
 }
@@ -121,26 +131,45 @@ main() {
     IFS=$'\t' read -r checksum_id checksum_digest < <(
         asset_metadata "$release_path" "$checksum_name"
     )
-    is_sha256_digest "$archive_digest" || die "archive has no SHA-256 API digest"
-    is_sha256_digest "$checksum_digest" || die "checksum has no SHA-256 API digest"
+    if ! is_sha256_digest "$archive_digest"; then
+        report_status "verification=failed"
+        die "archive has no SHA-256 API digest"
+    fi
+    if ! is_sha256_digest "$checksum_digest"; then
+        report_status "verification=failed"
+        die "checksum has no SHA-256 API digest"
+    fi
 
     mkdir -p "$CACHE_DIRECTORY"
     archive_path="${CACHE_DIRECTORY}/${archive_name}"
     checksum_path="${CACHE_DIRECTORY}/${checksum_name}"
-    if ! cached_assets_verify "$archive_path" "$checksum_path" "$archive_name" \
+    if cached_assets_verify "$archive_path" "$checksum_path" "$archive_name" \
         "$archive_digest" "$checksum_digest"; then
+        report_status "cache=reused"
+    else
+        if [[ -e "$archive_path" || -e "$checksum_path" ]]; then
+            report_status "cache=repair"
+        else
+            report_status "cache=download"
+        fi
         rm -f -- "$archive_path" "$checksum_path"
         download_asset "$archive_id" "${temporary_directory}/${archive_name}"
         download_asset "$checksum_id" "${temporary_directory}/${checksum_name}"
-        cached_assets_verify "${temporary_directory}/${archive_name}" \
+        if ! cached_assets_verify "${temporary_directory}/${archive_name}" \
             "${temporary_directory}/${checksum_name}" "$archive_name" "$archive_digest" \
-            "$checksum_digest" || die "downloaded Whitaker release assets failed verification"
+            "$checksum_digest"; then
+            report_status "verification=failed"
+            die "downloaded Whitaker release assets failed verification"
+        fi
         install -m 0644 "${temporary_directory}/${archive_name}" "$archive_path"
         install -m 0644 "${temporary_directory}/${checksum_name}" "$checksum_path"
     fi
-    cached_assets_verify "$archive_path" "$checksum_path" "$archive_name" \
-        "$archive_digest" "$checksum_digest" \
-        || die "cached Whitaker release assets failed verification"
+    if ! cached_assets_verify "$archive_path" "$checksum_path" "$archive_name" \
+        "$archive_digest" "$checksum_digest"; then
+        report_status "verification=failed"
+        die "cached Whitaker release assets failed verification"
+    fi
+    report_status "verification=passed"
 
     tar --extract --gzip --no-same-owner --file "$archive_path" \
         --directory "$temporary_directory" "$member_name"

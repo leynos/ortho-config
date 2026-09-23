@@ -30,6 +30,7 @@ MEMBER_NAME = f"whitaker-installer-{TARGET}-v{VERSION}/whitaker-installer"
 ARCHIVE_ID = "101"
 CHECKSUM_ID = "102"
 BINARY_MODE = 0o755
+STATUS_PREFIX = "whitaker-installer: "
 
 
 def _sha256(path: Path) -> str:
@@ -149,6 +150,19 @@ def _run_installer(environment: dict[str, str]) -> subprocess.CompletedProcess[s
     )
 
 
+def _status_lines(result: subprocess.CompletedProcess[str]) -> list[str]:
+    """Return the bounded installer statuses emitted to the CI job log."""
+    return [line for line in result.stderr.splitlines() if line.startswith(STATUS_PREFIX)]
+
+
+def _assert_secret_free_statuses(
+    result: subprocess.CompletedProcess[str], expected: list[str]
+) -> None:
+    """Assert the expected fixed statuses without exposing the fixture token."""
+    assert _status_lines(result) == [f"{STATUS_PREFIX}{status}" for status in expected]
+    assert "test-token" not in result.stderr, result.stderr
+
+
 def test_cold_install_verifies_and_installs_the_release_binary(
     install_environment: dict[str, str]
 ) -> None:
@@ -168,6 +182,7 @@ def test_cold_install_verifies_and_installs_the_release_binary(
     assert all(call.endswith("|present|") for call in calls), (
         f"only command-local GH_TOKEN must reach the GitHub client: {calls!r}"
     )
+    _assert_secret_free_statuses(result, ["cache=download", "verification=passed"])
 
 
 def test_valid_cached_assets_are_revalidated_without_a_second_download(
@@ -192,26 +207,36 @@ def test_valid_cached_assets_are_revalidated_without_a_second_download(
     assert calls == ["repos/leynos/whitaker/releases/tags/v0.2.8|present|"], (
         f"cache validation must need metadata but no asset download: {calls!r}"
     )
+    _assert_secret_free_statuses(second, ["cache=reused", "verification=passed"])
 
 
-def test_a_corrupt_cache_is_repaired_from_verified_release_assets(
-    install_environment: dict[str, str]
+@pytest.mark.parametrize("cache_name", [ARCHIVE_NAME, CHECKSUM_NAME])
+def test_corrupt_cached_assets_are_repaired_from_verified_release_assets(
+    install_environment: dict[str, str], cache_name: str
 ) -> None:
-    """A damaged cache is discarded before the expected member is extracted."""
+    """Each damaged cache input is replaced before the expected member is extracted."""
     first = _run_installer(install_environment)
     assert first.returncode == 0, first.stderr
-    archive = (
+    cached_asset = (
         Path(install_environment["XDG_CACHE_HOME"])
         / "ortho-config"
         / "whitaker-installer"
-        / ARCHIVE_NAME
+        / cache_name
     )
-    archive.write_bytes(b"corrupt archive")
+    cached_asset.write_bytes(b"corrupt cached asset")
     Path(install_environment["GH_CALLS"]).unlink()
     second = _run_installer(install_environment)
     calls = Path(install_environment["GH_CALLS"]).read_text(encoding="utf-8").splitlines()
+    installed = Path(install_environment["CARGO_HOME"]) / "bin" / "whitaker-installer"
     assert second.returncode == 0, second.stderr
     assert len(calls) == 3, f"corrupt cache must trigger fresh asset downloads: {calls!r}"
+    assert installed.read_bytes() == Path(install_environment["FAKE_BINARY"]).read_bytes(), (
+        "a repaired cache must restore the exact verified release member"
+    )
+    assert stat.S_IMODE(installed.stat().st_mode) == BINARY_MODE, (
+        "a repaired cache must restore the expected executable mode"
+    )
+    _assert_secret_free_statuses(second, ["cache=repair", "verification=passed"])
 
 
 def test_a_bad_release_sidecar_fails_before_installing(
@@ -229,6 +254,33 @@ def test_a_bad_release_sidecar_fails_before_installing(
     assert result.returncode != 0, "a mismatched archive digest must fail closed"
     assert "failed verification" in result.stderr, result.stderr
     assert not installed.exists(), "a failed verification must not install a binary"
+    _assert_secret_free_statuses(result, ["cache=download", "verification=failed"])
+
+
+@pytest.mark.parametrize(
+    ("asset_index", "digest"),
+    [
+        (0, "sha256:not-a-digest"),
+        (0, f"sha256:{'0' * 64}"),
+        (1, "sha256:not-a-digest"),
+    ],
+)
+def test_invalid_release_metadata_never_installs_a_binary(
+    install_environment: dict[str, str], asset_index: int, digest: str
+) -> None:
+    """Malformed or mismatched API digests fail closed before installation."""
+    release = Path(install_environment["FAKE_RELEASE"])
+    metadata: dict[str, typ.Any] = json.loads(release.read_text(encoding="utf-8"))
+    metadata["assets"][asset_index]["digest"] = digest
+    release.write_text(json.dumps(metadata), encoding="utf-8")
+    result = _run_installer(install_environment)
+    installed = Path(install_environment["CARGO_HOME"]) / "bin" / "whitaker-installer"
+    assert result.returncode != 0, "invalid release metadata must fail closed"
+    assert not installed.exists(), "invalid release metadata must not install a binary"
+    expected = ["verification=failed"]
+    if digest.endswith("0" * 64):
+        expected.insert(0, "cache=download")
+    _assert_secret_free_statuses(result, expected)
 
 
 def test_a_missing_github_client_fails_clearly(install_environment: dict[str, str]) -> None:

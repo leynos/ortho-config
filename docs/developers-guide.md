@@ -885,6 +885,13 @@ hit is revalidated. Do not reuse this helper for local installation, releases,
 or other repositories: its token boundary, archive names, target map, and cache
 ownership are specific to this CI consumer.
 
+The helper emits only these credential-free, bounded stderr messages to the CI
+job log: `cache=download`, `cache=repair`, `cache=reused`,
+`verification=passed`, and `verification=failed`, each prefixed with
+`whitaker-installer:`. They describe the installer decision, never tokens,
+release metadata, cache paths, digests, or asset contents. The subprocess tests
+exercise each status alongside the cache and verification behaviour it reports.
+
 `dylint-link@6.0.1` is separately preinstalled through `cargo binstall`. That
 command alone receives `GH_TOKEN` and `GITHUB_TOKEN` through command-scoped
 assignments and uses `--disable-strategies compile`, so a missing prebuilt
