@@ -67,7 +67,7 @@ jobs:
           fetch-depth: 0
 
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@a5765019912a8ab6882b12db049c7cde635f3a85
+        uses: leynos/shared-actions/.github/actions/setup-rust@dbe2e22ceaf498d85512679ccded38be9dbe7777
 
       - name: Install bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6  # v2
@@ -79,7 +79,7 @@ jobs:
         # first release with `--check` and `--git`. The Markdown check is
         # platform-independent, so it runs on the Linux lane only.
         if: ${{ matrix.os == 'ubuntu-latest' }}
-        uses: leynos/shared-actions/.github/actions/install-mdtablefix@a5765019912a8ab6882b12db049c7cde635f3a85
+        uses: leynos/shared-actions/.github/actions/install-mdtablefix@dbe2e22ceaf498d85512679ccded38be9dbe7777
         with:
           version: "0.6.0"
 
@@ -100,7 +100,7 @@ jobs:
           mmdc --version
 
       - name: Setup uv
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d  # v10.0.1
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4  # v10.1.0
         with:
           version: 'latest'
 
@@ -108,7 +108,7 @@ jobs:
         run: uv tool install nixie-cli@1.1.0
 
       - name: Setup Rust for Merman
-        uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772  # master
+        uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de  # master
         with:
           toolchain: '1.95.0'
 
@@ -223,7 +223,7 @@ jobs:
         # Broadest feature set, so this leg carries the coverage ratchet
         # (one baseline per job). Ratchet only on the ubuntu leg, which
         # compares against the baseline written by coverage-main.yml.
-        uses: leynos/shared-actions/.github/actions/generate-coverage@a5765019912a8ab6882b12db049c7cde635f3a85
+        uses: leynos/shared-actions/.github/actions/generate-coverage@dbe2e22ceaf498d85512679ccded38be9dbe7777
         with:
           output-path: lcov-serde-saphyr.info
           format: lcov
@@ -235,7 +235,7 @@ jobs:
           with-ratchet: ${{ matrix.os == 'ubuntu-latest' }}
 
       - name: Test and Measure Coverage (without serde_saphyr)
-        uses: leynos/shared-actions/.github/actions/generate-coverage@a5765019912a8ab6882b12db049c7cde635f3a85
+        uses: leynos/shared-actions/.github/actions/generate-coverage@dbe2e22ceaf498d85512679ccded38be9dbe7777
         with:
           output-path: lcov-no-serde-saphyr.info
           format: lcov
@@ -347,10 +347,10 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@a5765019912a8ab6882b12db049c7cde635f3a85
+        uses: leynos/shared-actions/.github/actions/setup-rust@dbe2e22ceaf498d85512679ccded38be9dbe7777
 
       - name: Setup uv
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d  # v10.0.1
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4  # v10.1.0
         with:
           version: 'latest'
 

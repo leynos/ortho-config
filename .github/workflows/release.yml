@@ -130,7 +130,7 @@ jobs:
           persist-credentials: false
           ref: ${{ needs.prepare.outputs.tag }}
       - name: Build release binary
-        uses: leynos/shared-actions/.github/actions/rust-build-release@0e3c4d24e43aa48b511d94f3b902711eb02138df
+        uses: leynos/shared-actions/.github/actions/rust-build-release@dbe2e22ceaf498d85512679ccded38be9dbe7777
         with:
           target: ${{ matrix.target }}
           manifest-path: cargo-orthohelp/Cargo.toml
@@ -140,7 +140,7 @@ jobs:
           # man-page discovery would fail on an artefact that never exists.
           skip-man-page-discovery: 'true'
       - name: Setup uv
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d  # v10.0.1
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4  # v10.1.0
         with:
           enable-cache: false
       - name: Package release archive
@@ -185,7 +185,7 @@ jobs:
           persist-credentials: false
           ref: ${{ needs.prepare.outputs.tag }}
       - name: Setup uv
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d  # v10.0.1
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4  # v10.1.0
         with:
           enable-cache: false
       - name: Download draft release assets
@@ -253,7 +253,7 @@ jobs:
           persist-credentials: false
           ref: ${{ needs.prepare.outputs.tag }}
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@a5765019912a8ab6882b12db049c7cde635f3a85
+        uses: leynos/shared-actions/.github/actions/setup-rust@dbe2e22ceaf498d85512679ccded38be9dbe7777
       # Resolves the real pkg-url for every target against the published
       # release, so a template that renders an unreachable URL fails here
       # rather than in a consumer's install.
