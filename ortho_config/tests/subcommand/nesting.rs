@@ -1,11 +1,11 @@
 //! Nested environment-key mapping tests for subcommand loading.
 
-use anyhow::{Result, ensure};
+use anyhow::{Context as _, Result, ensure};
 use clap::Parser;
+use ortho_config::subcommand::Prefix;
+use ortho_config::{MapEnv, SubcommandFileContext, load_and_merge_subcommand_with_sources_at};
 use serde::{Deserialize, Serialize};
-
-use super::to_anyhow::ToAnyhow as _;
-use super::util::with_merged_subcommand_cli;
+use std::sync::Arc;
 
 #[derive(Debug, Deserialize, Serialize, Default, PartialEq, Parser)]
 #[command(name = "test")]
@@ -56,19 +56,19 @@ fn env_values_support_nesting_cases(
     #[case] expect_host: Option<&str>,
     #[case] expect_port: Option<u16>,
 ) -> Result<()> {
-    let cfg: NestedCfg = with_merged_subcommand_cli(
-        |j| {
-            if let Some((k, v)) = host_kv {
-                j.set_env(k, v);
-            }
-            if let Some((k, v)) = port_kv {
-                j.set_env(k, v);
-            }
-            Ok(())
-        },
+    let root = tempfile::tempdir().context("create nested environment fixture")?;
+    let merge: MapEnv = host_kv.into_iter().chain(port_kv).collect();
+    #[cfg(any(unix, target_os = "redox"))]
+    let discovery = MapEnv::new().with_var("XDG_CONFIG_DIRS", root.path());
+    #[cfg(not(any(unix, target_os = "redox")))]
+    let discovery = MapEnv::new();
+    let cfg = load_and_merge_subcommand_with_sources_at(
+        &Prefix::new("APP_"),
         &NestedCfg::default(),
+        SubcommandFileContext::new(root.path(), &discovery),
+        Arc::new(merge),
     )
-    .to_anyhow()?;
+    .context("merge nested injected environment defaults")?;
     ensure!(
         cfg.nested.host.as_deref() == expect_host,
         "expected host {:?}, got {:?}",
@@ -102,16 +102,19 @@ fn env_values_support_deeper_nesting(
     #[case] kv: Option<(&str, &str)>,
     #[case] expect_host: Option<&str>,
 ) -> Result<()> {
-    let cfg: DeepNestedCfg = with_merged_subcommand_cli(
-        |j| {
-            if let Some((k, v)) = kv {
-                j.set_env(k, v);
-            }
-            Ok(())
-        },
+    let root = tempfile::tempdir().context("create deep nested environment fixture")?;
+    let merge: MapEnv = kv.into_iter().collect();
+    #[cfg(any(unix, target_os = "redox"))]
+    let discovery = MapEnv::new().with_var("XDG_CONFIG_DIRS", root.path());
+    #[cfg(not(any(unix, target_os = "redox")))]
+    let discovery = MapEnv::new();
+    let cfg = load_and_merge_subcommand_with_sources_at(
+        &Prefix::new("APP_"),
         &DeepNestedCfg::default(),
+        SubcommandFileContext::new(root.path(), &discovery),
+        Arc::new(merge),
     )
-    .to_anyhow()?;
+    .context("merge deeply nested injected environment defaults")?;
     ensure!(
         cfg.deep.nest.host.as_deref() == expect_host,
         "expected host {:?}, got {:?}",
