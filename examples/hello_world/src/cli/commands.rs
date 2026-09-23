@@ -14,6 +14,7 @@ use crate::error::ValidationError;
 /// The `post_merge_hook` attribute enables a [`PostMergeHook`] implementation
 /// that normalizes empty preambles to `None` after configuration layers merge.
 #[derive(Debug, Clone, PartialEq, Eq, Parser, Deserialize, Serialize, OrthoConfig)]
+#[command(name = "greet")]
 #[ortho_config(prefix = "HELLO_WORLD", post_merge_hook)]
 pub struct GreetCommand {
     /// Optional preamble printed before the greeting.
