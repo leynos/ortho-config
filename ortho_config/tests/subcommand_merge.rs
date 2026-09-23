@@ -2,12 +2,13 @@
 use anyhow::{Context, Result, ensure};
 use cap_std::{ambient_authority, fs::Dir};
 use clap::Parser;
-use ortho_config::{MapEnv, OrthoConfig, load_and_merge_subcommand_for_with_sources};
+use ortho_config::{
+    MapEnv, OrthoConfig, SubcommandFileContext, load_and_merge_subcommand_for_with_sources_at,
+};
 use rstest::{fixture, rstest};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tempfile::TempDir;
-use test_helpers::cwd;
 
 #[derive(Debug, Parser, Serialize, Deserialize, OrthoConfig, Default, PartialEq)]
 #[command(name = "pr")]
@@ -29,13 +30,12 @@ struct IssueArgs {
 }
 
 #[fixture]
-fn config_dir(#[default("")] cfg: &str) -> Result<(TempDir, cwd::CwdGuard)> {
+fn config_dir(#[default("")] cfg: &str) -> Result<TempDir> {
     let dir = tempfile::tempdir().context("create temp dir")?;
     let cap = Dir::open_ambient_dir(dir.path(), ambient_authority()).context("open temp dir")?;
     cap.write(".vk.toml", cfg.as_bytes())
         .context("write config")?;
-    let guard = cwd::set_dir(dir.path())?;
-    Ok((dir, guard))
+    Ok(dir)
 }
 
 struct PrPrecedenceCase {
@@ -82,12 +82,16 @@ struct IssuePrecedenceCase {
     },
 )]
 fn test_pr_precedence(#[case] case: PrPrecedenceCase) -> Result<()> {
-    let (_temp_dir, _cwd_guard) = config_dir(case.config_content)?;
+    let temp_dir = config_dir(case.config_content)?;
     let source = case.env_val.map_or_else(MapEnv::new, |value| {
         MapEnv::new().with_var("VK_CMDS_PR_REFERENCE", value)
     });
-    let merged = load_and_merge_subcommand_for_with_sources(&case.cli, Arc::new(source))
-        .context("merge pr args")?;
+    let merged = load_and_merge_subcommand_for_with_sources_at(
+        &case.cli,
+        SubcommandFileContext::new(temp_dir.path(), &MapEnv::new()),
+        Arc::new(source),
+    )
+    .context("merge pr args")?;
     ensure!(
         merged.reference.as_deref() == case.expected_reference,
         "expected reference {:?}, got {:?}",
@@ -129,12 +133,16 @@ fn test_pr_precedence(#[case] case: PrPrecedenceCase) -> Result<()> {
     },
 )]
 fn test_issue_precedence(#[case] case: IssuePrecedenceCase) -> Result<()> {
-    let (_temp_dir, _cwd_guard) = config_dir(case.config_content)?;
+    let temp_dir = config_dir(case.config_content)?;
     let source = case.env_val.map_or_else(MapEnv::new, |value| {
         MapEnv::new().with_var("VK_CMDS_ISSUE_REFERENCE", value)
     });
-    let merged = load_and_merge_subcommand_for_with_sources(&case.cli, Arc::new(source))
-        .context("merge issue args")?;
+    let merged = load_and_merge_subcommand_for_with_sources_at(
+        &case.cli,
+        SubcommandFileContext::new(temp_dir.path(), &MapEnv::new()),
+        Arc::new(source),
+    )
+    .context("merge issue args")?;
     ensure!(
         merged.reference.as_deref() == case.expected_reference,
         "expected reference {:?}, got {:?}",

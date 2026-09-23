@@ -31,6 +31,9 @@ use std::ffi::{OsStr, OsString};
 use std::fmt;
 use std::sync::Arc;
 
+#[cfg(not(any(unix, target_os = "redox")))]
+use directories::BaseDirs;
+
 /// Read-only environment access used during configuration discovery.
 ///
 /// The trait is deliberately object-safe so it can be held as
@@ -86,6 +89,26 @@ pub trait EnvSource: fmt::Debug + Send + Sync {
     fn home_fallback(&self) -> Option<std::path::PathBuf> {
         None
     }
+
+    /// Return the platform configuration directory when named values are insufficient.
+    ///
+    /// Only non-Unix and non-Redox subcommand discovery uses this fallback.
+    /// The default keeps injected sources closed over their supplied values, so
+    /// a test does not accidentally load configuration from the host's native
+    /// platform directory. [`ProcessEnv`] preserves the established
+    /// `directories::BaseDirs` behaviour, while custom sources can supply a
+    /// native path without reintroducing process access.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use ortho_config::{EnvSource, MapEnv};
+    ///
+    /// assert!(MapEnv::new().config_dir_fallback().is_none());
+    /// ```
+    fn config_dir_fallback(&self) -> Option<std::path::PathBuf> {
+        None
+    }
 }
 
 /// Enumerate variables for a configuration merge layer.
@@ -121,6 +144,11 @@ impl EnvSource for ProcessEnv {
 
     fn home_fallback(&self) -> Option<std::path::PathBuf> {
         dirs::home_dir()
+    }
+
+    #[cfg(not(any(unix, target_os = "redox")))]
+    fn config_dir_fallback(&self) -> Option<std::path::PathBuf> {
+        BaseDirs::new().map(|dirs| dirs.config_dir().to_path_buf())
     }
 }
 

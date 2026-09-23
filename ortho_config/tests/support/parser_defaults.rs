@@ -116,15 +116,15 @@ fn assert_inferred_default_parity() -> Result<()> {
 }
 
 fn assert_file_overrides_inferred_default_parity() -> Result<()> {
-    let (_temp_dir, _cwd_guard) = config_dir(
+    let temp_dir = config_dir(
         "[cmds.default-parity]\ncount = 5\nmode = \"safe\"\nport = 6\nlabel = \"file\"\n",
     )?;
     let matches = DefaultParityArgs::command().get_matches_from(["default-parity"]);
     let args = DefaultParityArgs::from_arg_matches(&matches).context("parse defaults")?;
-    let merged = load_and_merge_subcommand_with_matches_with_sources(
+    let merged = load_and_merge_subcommand_with_matches_with_sources_at(
         &Prefix::new("APP_"),
-        &args,
-        &matches,
+        &SubcommandCliMatches::new(&args, &matches),
+        SubcommandFileContext::new(temp_dir.path(), &MapEnv::new()),
         Arc::new(MapEnv::new()),
     )
     .context("merge parser-faithful defaults")?;
@@ -140,7 +140,7 @@ fn assert_file_overrides_inferred_default_parity() -> Result<()> {
 }
 
 fn assert_explicit_cli_overrides_default_parity() -> Result<()> {
-    let (_temp_dir, _cwd_guard) = config_dir(
+    let temp_dir = config_dir(
         "[cmds.default-parity]\ncount = 5\nmode = \"safe\"\nport = 6\nlabel = \"file\"\n",
     )?;
     let matches = DefaultParityArgs::command().get_matches_from([
@@ -155,10 +155,10 @@ fn assert_explicit_cli_overrides_default_parity() -> Result<()> {
         "cli",
     ]);
     let args = DefaultParityArgs::from_arg_matches(&matches).context("parse explicit values")?;
-    let merged = load_and_merge_subcommand_with_matches_with_sources(
+    let merged = load_and_merge_subcommand_with_matches_with_sources_at(
         &Prefix::new("APP_"),
-        &args,
-        &matches,
+        &SubcommandCliMatches::new(&args, &matches),
+        SubcommandFileContext::new(temp_dir.path(), &MapEnv::new()),
         Arc::new(MapEnv::new()),
     )
     .context("merge explicit values")?;
@@ -217,7 +217,7 @@ fn inferred_true_bool_default_preserves_source_precedence() -> Result<()> {
         );
     }
     {
-        let (_temp_dir, _cwd_guard) = config_dir("enabled = false\n")?;
+        let (_temp_dir, _cwd_guard) = config_dir_with_cwd("enabled = false\n")?;
         let source = Arc::new(MapEnv::new());
         let loaded =
             BoolDefaultArgs::load_from_iter_with_sources(["bool-default"], source.clone(), source)?;
@@ -227,7 +227,7 @@ fn inferred_true_bool_default_preserves_source_precedence() -> Result<()> {
         );
     }
     {
-        let (_temp_dir, _cwd_guard) = config_dir("enabled = true\n")?;
+        let (_temp_dir, _cwd_guard) = config_dir_with_cwd("enabled = true\n")?;
         let source = Arc::new(MapEnv::new().with_var("APP_ENABLED", "false"));
         let loaded =
             BoolDefaultArgs::load_from_iter_with_sources(["bool-default"], source.clone(), source)?;
@@ -237,7 +237,7 @@ fn inferred_true_bool_default_preserves_source_precedence() -> Result<()> {
         );
     }
     {
-        let (_temp_dir, _cwd_guard) = config_dir("enabled = false\n")?;
+        let (_temp_dir, _cwd_guard) = config_dir_with_cwd("enabled = false\n")?;
         let source = Arc::new(MapEnv::new().with_var("APP_ENABLED", "false"));
         let loaded = BoolDefaultArgs::load_from_iter_with_sources(
             ["bool-default", "--enabled"],
@@ -266,16 +266,15 @@ impl Default for ExplicitDefaultArgs {
 }
 
 #[rstest]
-#[serial]
 fn explicit_ortho_default_overrides_inferred_default_value() -> Result<()> {
-    let (_temp_dir, _cwd_guard) = config_dir("")?;
+    let temp_dir = config_dir("")?;
     let prefix = Prefix::new("APP_");
     let matches = ExplicitDefaultArgs::command().get_matches_from(["explicit-default"]);
     let args = ExplicitDefaultArgs::from_arg_matches(&matches).context("parse defaults")?;
-    let merged = load_and_merge_subcommand_with_matches_with_sources(
+    let merged = load_and_merge_subcommand_with_matches_with_sources_at(
         &prefix,
-        &args,
-        &matches,
+        &SubcommandCliMatches::new(&args, &matches),
+        SubcommandFileContext::new(temp_dir.path(), &MapEnv::new()),
         Arc::new(MapEnv::new()),
     )
     .context("merge explicit OrthoConfig default")?;
@@ -316,7 +315,7 @@ fn contains_default_value_conversion(error: &OrthoError) -> bool {
 #[rstest]
 #[serial]
 fn invalid_inferred_default_is_reported_without_panicking() -> Result<()> {
-    let (_temp_dir, _cwd_guard) = config_dir("")?;
+    let (_temp_dir, _cwd_guard) = config_dir_with_cwd("")?;
     let error = InvalidDefaultArgs::load_from_iter(["invalid-default"])
         .err()
         .ok_or_else(|| anyhow::anyhow!("expected invalid default to fail"))?;
