@@ -127,20 +127,21 @@ const DEFAULT_PARITY_FILE: &str =
 
 /// Parses `cli_args` and merges them over [`DEFAULT_PARITY_FILE`].
 ///
-/// The temporary directory and current-directory guard live until the merge
-/// completes, so discovery always sees the shared configuration file.
+/// The temporary directory lives until the merge completes and is passed as
+/// the explicit discovery base, so discovery always sees the shared
+/// configuration file.
 fn merge_default_parity_over_file(
     cli_args: &[&str],
     parse_context: &'static str,
     merge_context: &'static str,
 ) -> Result<DefaultParityArgs> {
-    let (_temp_dir, _cwd_guard) = config_dir(DEFAULT_PARITY_FILE)?;
+    let temp_dir = config_dir(DEFAULT_PARITY_FILE)?;
     let matches = DefaultParityArgs::command().get_matches_from(cli_args);
     let args = DefaultParityArgs::from_arg_matches(&matches).context(parse_context)?;
-    load_and_merge_subcommand_with_matches_with_sources(
+    load_and_merge_subcommand_with_matches_with_sources_at(
         &Prefix::new("APP_"),
-        &args,
-        &matches,
+        &SubcommandCliMatches::new(&args, &matches),
+        SubcommandFileContext::new(temp_dir.path(), &MapEnv::new()),
         Arc::new(MapEnv::new()),
     )
     .context(merge_context)
@@ -241,7 +242,7 @@ fn inferred_true_bool_default_preserves_source_precedence() -> Result<()> {
         );
     }
     {
-        let (_temp_dir, _cwd_guard) = config_dir("enabled = false\n")?;
+        let (_temp_dir, _cwd_guard) = config_dir_with_cwd("enabled = false\n")?;
         let source = Arc::new(MapEnv::new());
         let loaded =
             BoolDefaultArgs::load_from_iter_with_sources(["bool-default"], source.clone(), source)?;
@@ -251,7 +252,7 @@ fn inferred_true_bool_default_preserves_source_precedence() -> Result<()> {
         );
     }
     {
-        let (_temp_dir, _cwd_guard) = config_dir("enabled = true\n")?;
+        let (_temp_dir, _cwd_guard) = config_dir_with_cwd("enabled = true\n")?;
         let source = Arc::new(MapEnv::new().with_var("APP_ENABLED", "false"));
         let loaded =
             BoolDefaultArgs::load_from_iter_with_sources(["bool-default"], source.clone(), source)?;
@@ -261,7 +262,7 @@ fn inferred_true_bool_default_preserves_source_precedence() -> Result<()> {
         );
     }
     {
-        let (_temp_dir, _cwd_guard) = config_dir("enabled = false\n")?;
+        let (_temp_dir, _cwd_guard) = config_dir_with_cwd("enabled = false\n")?;
         let source = Arc::new(MapEnv::new().with_var("APP_ENABLED", "false"));
         let loaded = BoolDefaultArgs::load_from_iter_with_sources(
             ["bool-default", "--enabled"],
@@ -293,16 +294,15 @@ impl Default for ExplicitDefaultArgs {
 /// An explicit `#[ortho_config(default = ...)]` takes precedence over the
 /// inferred clap `default_value`.
 #[rstest]
-#[serial]
 fn explicit_ortho_default_overrides_inferred_default_value() -> Result<()> {
-    let (_temp_dir, _cwd_guard) = config_dir("")?;
+    let temp_dir = config_dir("")?;
     let prefix = Prefix::new("APP_");
     let matches = ExplicitDefaultArgs::command().get_matches_from(["explicit-default"]);
     let args = ExplicitDefaultArgs::from_arg_matches(&matches).context("parse defaults")?;
-    let merged = load_and_merge_subcommand_with_matches_with_sources(
+    let merged = load_and_merge_subcommand_with_matches_with_sources_at(
         &prefix,
-        &args,
-        &matches,
+        &SubcommandCliMatches::new(&args, &matches),
+        SubcommandFileContext::new(temp_dir.path(), &MapEnv::new()),
         Arc::new(MapEnv::new()),
     )
     .context("merge explicit OrthoConfig default")?;
@@ -348,7 +348,7 @@ fn contains_default_value_conversion(error: &OrthoError) -> bool {
 #[rstest]
 #[serial]
 fn invalid_inferred_default_is_reported_without_panicking() -> Result<()> {
-    let (_temp_dir, _cwd_guard) = config_dir("")?;
+    let (_temp_dir, _cwd_guard) = config_dir_with_cwd("")?;
     let error = InvalidDefaultArgs::load_from_iter(["invalid-default"])
         .err()
         .ok_or_else(|| anyhow::anyhow!("expected invalid default to fail"))?;
