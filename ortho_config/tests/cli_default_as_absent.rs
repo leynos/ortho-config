@@ -17,8 +17,9 @@ use cap_std::{ambient_authority, fs::Dir};
 use clap::{CommandFactory, FromArgMatches, Parser, ValueEnum};
 use ortho_config::subcommand::Prefix;
 use ortho_config::{
-    CliValueExtractor, MapEnv, OrthoConfig, OrthoError,
-    load_and_merge_subcommand_with_matches_with_sources, load_and_merge_subcommand_with_sources,
+    CliValueExtractor, MapEnv, OrthoConfig, OrthoError, SubcommandCliMatches,
+    SubcommandFileContext, load_and_merge_subcommand_with_matches_with_sources_at,
+    load_and_merge_subcommand_with_sources_at,
 };
 use rstest::{fixture, rstest};
 use serde::{Deserialize, Serialize};
@@ -56,11 +57,16 @@ impl Default for GreetArgs {
 }
 
 #[fixture]
-fn config_dir(#[default("")] cfg: &str) -> Result<(TempDir, cwd::CwdGuard)> {
+fn config_dir(#[default("")] cfg: &str) -> Result<TempDir> {
     let dir = tempfile::tempdir().context("create temp dir")?;
     let cap = Dir::open_ambient_dir(dir.path(), ambient_authority()).context("open temp dir")?;
     cap.write(".app.toml", cfg.as_bytes())
         .context("write config")?;
+    Ok(dir)
+}
+
+fn config_dir_with_cwd(cfg: &str) -> Result<(TempDir, cwd::CwdGuard)> {
+    let dir = config_dir(cfg)?;
     let guard = cwd::set_dir(dir.path())?;
     Ok((dir, guard))
 }
@@ -115,7 +121,7 @@ struct GreetPrecedenceCase {
     },
 )]
 fn test_cli_default_as_absent_precedence(#[case] case: GreetPrecedenceCase) -> Result<()> {
-    let (_temp_dir, _cwd_guard) = config_dir(case.config_content)?;
+    let temp_dir = config_dir(case.config_content)?;
     let source = case.env_val.map_or_else(MapEnv::new, |value| {
         MapEnv::new().with_var("APP_CMDS_GREET_PUNCTUATION", value)
     });
@@ -136,10 +142,10 @@ fn test_cli_default_as_absent_precedence(#[case] case: GreetPrecedenceCase) -> R
     }
     let args = GreetArgs::from_arg_matches(&matches).context("parse CLI args")?;
     let prefix = Prefix::new("APP_");
-    let merged = load_and_merge_subcommand_with_matches_with_sources(
+    let merged = load_and_merge_subcommand_with_matches_with_sources_at(
         &prefix,
-        &args,
-        &matches,
+        &SubcommandCliMatches::new(&args, &matches),
+        SubcommandFileContext::new(temp_dir.path(), &MapEnv::new()),
         Arc::new(source),
     )
     .context("merge greet args")?;
@@ -159,13 +165,18 @@ mod parser_defaults;
 /// Test that `load_and_merge_subcommand` keeps clap defaults over file configuration.
 #[test]
 fn test_load_and_merge_subcommand_keeps_clap_default() -> Result<()> {
-    let (_temp_dir, _cwd_guard) = config_dir("[cmds.greet]\npunctuation = \"?\"\n")?;
+    let temp_dir = config_dir("[cmds.greet]\npunctuation = \"?\"\n")?;
 
     let matches = GreetArgs::command().get_matches_from(["greet"]);
     let args = GreetArgs::from_arg_matches(&matches).context("parse greet args")?;
     let prefix = Prefix::new("APP_");
-    let merged = load_and_merge_subcommand_with_sources(&prefix, &args, Arc::new(MapEnv::new()))
-        .context("merge greet args")?;
+    let merged = load_and_merge_subcommand_with_sources_at(
+        &prefix,
+        &args,
+        SubcommandFileContext::new(temp_dir.path(), &MapEnv::new()),
+        Arc::new(MapEnv::new()),
+    )
+    .context("merge greet args")?;
 
     ensure!(
         merged.punctuation == default_punct::default_punct(),

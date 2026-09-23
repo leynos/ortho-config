@@ -1,17 +1,12 @@
 //! Utilities for discovering configuration file paths for subcommands.
 //!
 //! Enumerates candidate configuration files under the user's home directory,
-//! platform-specific configuration directories (e.g. XDG locations), and the
-//! current working directory.
+//! platform-specific configuration directories, and an explicit local base.
 
 use std::path::{Path, PathBuf};
 
 use super::types::Prefix;
-
-#[cfg(not(any(unix, target_os = "redox")))]
-use directories::BaseDirs;
-#[cfg(any(unix, target_os = "redox"))]
-use xdg::BaseDirectories;
+use crate::EnvSource;
 
 const EXT_GROUPS: &[&[&str]] = &[
     &["toml"],
@@ -33,159 +28,113 @@ where
 }
 
 fn dotted(prefix: &Prefix) -> String {
-    let p = prefix.as_str();
-    if p.is_empty() {
+    let prefix_name = prefix.as_str();
+    if prefix_name.is_empty() {
         String::new()
     } else {
-        format!(".{p}")
+        format!(".{prefix_name}")
     }
 }
 
 /// Adds candidate configuration file paths under `dir` using `base` as the file stem.
 ///
 /// The `base` string should include any desired prefix such as a leading dot.
-/// Supported configuration extensions are appended and each candidate is joined
-/// with `dir` before being pushed onto `paths`.
-///
-/// # Examples
-///
-/// ```rust,ignore
-/// use std::path::{Path, PathBuf};
-/// use ortho_config::subcommand::paths::push_stem_candidates;
-/// let mut candidates: Vec<PathBuf> = Vec::new();
-/// // Populate the vector with common configuration file names under `/tmp`.
-/// push_stem_candidates(Path::new("/tmp"), ".myapp", &mut candidates);
-/// assert!(candidates.iter().any(|p| p.ends_with(".myapp.toml")));
-/// ```
 pub fn push_stem_candidates(dir: &Path, base: &str, paths: &mut Vec<PathBuf>) {
-    push_candidates(paths, base, |f| dir.join(f));
+    push_candidates(paths, base, |file| dir.join(file));
 }
 
-fn push_local_candidates(prefix: &Prefix, paths: &mut Vec<PathBuf>) {
-    push_stem_candidates(Path::new("."), &dotted(prefix), paths);
+fn push_local_candidates(prefix: &Prefix, base: &Path, paths: &mut Vec<PathBuf>) {
+    push_stem_candidates(base, &dotted(prefix), paths);
 }
 
-/// Adds XDG configuration files for the provided extensions.
-///
-/// Iterates over `exts`, searching `xdg_dirs` for `config.<ext>` and pushes each
-/// discovered path onto `paths`.
-///
-/// # Examples
-///
-/// ```rust,ignore
-/// use std::path::PathBuf;
-/// use xdg::BaseDirectories;
-/// use ortho_config::subcommand::paths::push_xdg_candidates;
-/// let dirs = BaseDirectories::new();
-/// let mut paths: Vec<PathBuf> = Vec::new();
-/// push_xdg_candidates(&dirs, &["toml"], &mut paths);
-/// assert!(paths.iter().all(|p| p.ends_with("config.toml")));
-/// ```
 #[cfg(any(unix, target_os = "redox"))]
-fn push_xdg_candidates(xdg_dirs: &BaseDirectories, exts: &[&str], paths: &mut Vec<PathBuf>) {
-    for ext in exts {
-        if let Some(p) = xdg_dirs.find_config_file(format!("config.{ext}")) {
-            paths.push(p);
+fn source_xdg_bases(prefix: &Prefix, source: &dyn EnvSource) -> Vec<PathBuf> {
+    let mut bases = Vec::new();
+    let prefix_path = Path::new(prefix.as_str());
+    let config_home_result = source
+        .get("XDG_CONFIG_HOME")
+        .map(PathBuf::from)
+        .filter(|path| path.is_absolute())
+        .or_else(|| {
+            source
+                .get("HOME")
+                .map(PathBuf::from)
+                .or_else(|| source.home_fallback())
+                .map(|home| home.join(".config"))
+        });
+    if let Some(config_home) = config_home_result {
+        bases.push(config_home.join(prefix_path));
+    }
+
+    let config_dirs = source
+        .get("XDG_CONFIG_DIRS")
+        .map(|dirs| {
+            std::env::split_paths(&dirs)
+                .filter(|path| path.is_absolute())
+                .collect::<Vec<_>>()
+        })
+        .filter(|dirs| !dirs.is_empty())
+        .unwrap_or_else(|| vec![PathBuf::from("/etc/xdg")]);
+    bases.extend(config_dirs.into_iter().map(|dir| dir.join(prefix_path)));
+    bases
+}
+
+#[cfg(any(unix, target_os = "redox"))]
+fn push_xdg_candidates(prefix: &Prefix, source: &dyn EnvSource, paths: &mut Vec<PathBuf>) {
+    let bases = source_xdg_bases(prefix, source);
+    for group in EXT_GROUPS {
+        for ext in *group {
+            let file = format!("config.{ext}");
+            if let Some(path) = bases
+                .iter()
+                .map(|base| base.join(&file))
+                .find(|path| path.try_exists().unwrap_or(false))
+            {
+                paths.push(path);
+            }
         }
     }
 }
 
 #[cfg(any(unix, target_os = "redox"))]
-pub(crate) fn collect_unix_paths(prefix: &Prefix, paths: &mut Vec<PathBuf>) {
-    let dotted = dotted(prefix);
-    if let Some(home) = std::env::var_os("HOME") {
-        push_stem_candidates(Path::new(&home), &dotted, paths);
+fn collect_unix_paths(prefix: &Prefix, source: &dyn EnvSource, paths: &mut Vec<PathBuf>) {
+    if let Some(home) = source.get("HOME") {
+        push_stem_candidates(Path::new(&home), &dotted(prefix), paths);
     }
-
-    let xdg_dirs = if prefix.as_str().is_empty() {
-        BaseDirectories::new()
-    } else {
-        BaseDirectories::with_prefix(prefix.as_str())
-    };
-
-    // Only search for canonical XDG config filenames under the XDG dirs:
-    // - config.toml (always)
-    // - config.yaml and config.yml when the `yaml` feature is enabled
-    // - config.json and config.json5 when the `json5` feature is enabled
-    push_xdg_candidates(&xdg_dirs, &["toml"], paths);
-    #[cfg(feature = "json5")]
-    push_xdg_candidates(&xdg_dirs, &["json", "json5"], paths);
-    #[cfg(feature = "yaml")]
-    push_xdg_candidates(&xdg_dirs, &["yaml", "yml"], paths);
+    push_xdg_candidates(prefix, source, paths);
 }
 
 #[cfg(not(any(unix, target_os = "redox")))]
-pub(crate) fn collect_non_unix_paths(prefix: &Prefix, paths: &mut Vec<PathBuf>) {
-    let dotted = dotted(prefix);
-
-    if let Some(home) = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")) {
-        push_stem_candidates(Path::new(&home), &dotted, paths);
+fn collect_non_unix_paths(prefix: &Prefix, source: &dyn EnvSource, paths: &mut Vec<PathBuf>) {
+    let home = source.get("HOME").or_else(|| source.get("USERPROFILE"));
+    if let Some(home) = home {
+        push_stem_candidates(Path::new(&home), &dotted(prefix), paths);
+    } else if let Some(home) = source.home_fallback() {
+        push_stem_candidates(&home, &dotted(prefix), paths);
     }
 
-    if let Some(dirs) = BaseDirs::new() {
-        if std::env::var_os("HOME").is_none() && std::env::var_os("USERPROFILE").is_none() {
-            push_stem_candidates(dirs.home_dir(), &dotted, paths);
-        }
-
-        let cfg_dir = if prefix.as_str().is_empty() {
-            dirs.config_dir().to_path_buf()
+    if let Some(config_dir) = source.config_dir_fallback() {
+        let config_dir = if prefix.as_str().is_empty() {
+            config_dir
         } else {
-            dirs.config_dir().join(prefix.as_str())
+            config_dir.join(prefix.as_str())
         };
-        push_stem_candidates(&cfg_dir, "config", paths);
+        push_stem_candidates(&config_dir, "config", paths);
     }
 }
 
-/// Returns candidate configuration file paths for `prefix`.
-///
-/// Paths are yielded in the following order:
-/// 1. The user's home directory, e.g. `~/.app.toml`.
-/// 2. Platform configuration directories such as
-///    `$XDG_CONFIG_HOME/app/config.toml`.
-/// 3. The current working directory, e.g. `./.app.toml`.
-///
-/// The [`Prefix`] normalises user input and is incorporated into file stems and
-/// directory names. When `prefix` is empty, home and working directories yield
-/// dotfiles with only an extension (e.g. `~/.toml`, `./.toml`). Platform
-/// configuration directories are searched solely for their canonical
-/// `config.<ext>` names as defined by the platform (e.g. `config.toml` under
-/// `$XDG_CONFIG_HOME`).
-#[cfg_attr(
-    feature = "json5",
-    doc = "On Unix-like platforms these may also be `config.json` and `config.json5`."
-)]
-/// This restriction applies only to platform directories; home and working
-/// directories still emit extension-only dotfiles.
-///
-/// # Examples
-///
-/// ```rust,ignore
-/// use ortho_config::subcommand::{paths::candidate_paths, Prefix};
-///
-/// let paths = candidate_paths(&Prefix::new("app"));
-/// // prints something like:
-/// // ["/home/alice/.app.toml",
-/// //  "/home/alice/.config/app/config.toml",
-/// //  "./.app.toml"]
-/// println!("{paths:?}");
-/// ```
-///
-/// ```rust,ignore
-/// // Empty prefix: home/local dotfiles with no stem plus platform config.* files
-/// let paths = candidate_paths(&Prefix::new(""));
-/// // e.g. ["/home/alice/.toml", "/home/alice/.config/config.toml", "./.toml"]
-/// println!("{paths:?}");
-/// ```
-pub(crate) fn candidate_paths(prefix: &Prefix) -> Vec<PathBuf> {
+/// Returns candidate paths for an explicit base and named environment source.
+pub(super) fn candidate_paths_at(
+    prefix: &Prefix,
+    base: &Path,
+    source: &dyn EnvSource,
+) -> Vec<PathBuf> {
     let mut paths = Vec::new();
-
     #[cfg(any(unix, target_os = "redox"))]
-    collect_unix_paths(prefix, &mut paths);
-
+    collect_unix_paths(prefix, source, &mut paths);
     #[cfg(not(any(unix, target_os = "redox")))]
-    collect_non_unix_paths(prefix, &mut paths);
-
-    push_local_candidates(prefix, &mut paths);
+    collect_non_unix_paths(prefix, source, &mut paths);
+    push_local_candidates(prefix, base, &mut paths);
     paths
 }
 
