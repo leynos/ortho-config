@@ -885,6 +885,11 @@ hit is revalidated. Do not reuse this helper for local installation, releases,
 or other repositories: its token boundary, archive names, target map, and cache
 ownership are specific to this CI consumer.
 
+`dylint-link@6.0.1` is separately preinstalled through `cargo binstall`. That
+command alone receives `GH_TOKEN` and `GITHUB_TOKEN` through command-scoped
+assignments and uses `--disable-strategies compile`, so a missing prebuilt
+release fails rather than building from source.
+
 ### Workflow contract gate
 
 `make test-workflow-contracts` runs the contracts in `tests/workflow_contracts`
