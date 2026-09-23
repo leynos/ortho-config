@@ -1,13 +1,13 @@
 //! Baseline loading behaviour for subcommand configuration.
 
-use anyhow::{Result, ensure};
+use anyhow::{Context as _, Result, ensure};
+use cap_std::{ambient_authority, fs::Dir};
 use clap::Parser;
-#[cfg(any(unix, target_os = "redox"))]
-use figment::Error as FigmentError;
+use ortho_config::subcommand::Prefix;
+use ortho_config::{MapEnv, SubcommandFileContext, load_and_merge_subcommand_with_sources_at};
 use serde::{Deserialize, Serialize};
-
-use super::to_anyhow::ToAnyhow as _;
-use super::util::{path_to_utf8_string, with_merged_subcommand_cli};
+use std::path::Path;
+use std::sync::Arc;
 
 #[derive(Debug, Serialize, Deserialize, Default, PartialEq, Parser)]
 #[command(name = "test")]
@@ -20,17 +20,56 @@ struct CmdCfg {
     bar: Option<bool>,
 }
 
+/// Write one fixture below `root` through an explicitly scoped capability.
+///
+/// This stays private to the baseline-loading module: its callers need the
+/// same simple file shape, while the other subcommand suites exercise distinct
+/// configuration boundaries and should keep those arrangements explicit.
+fn write_config(root: &Path, relative: &Path, contents: &str) -> Result<()> {
+    let directory = Dir::open_ambient_dir(root, ambient_authority())
+        .context("open basic subcommand fixture directory")?;
+    if let Some(parent) = relative
+        .parent()
+        .filter(|path| !path.as_os_str().is_empty())
+    {
+        directory
+            .create_dir_all(parent)
+            .context("create basic subcommand fixture parent")?;
+    }
+    directory
+        .write(relative, contents.as_bytes())
+        .context("write basic subcommand fixture")?;
+    Ok(())
+}
+
+/// Return a closed discovery source with the Unix global rung pinned to `root`.
+#[cfg(any(unix, target_os = "redox"))]
+fn isolated_discovery(root: &Path) -> MapEnv {
+    MapEnv::new().with_var("XDG_CONFIG_DIRS", root)
+}
+
+/// Return a closed discovery source on non-Unix and non-Redox targets.
+#[cfg(not(any(unix, target_os = "redox")))]
+fn isolated_discovery(_root: &Path) -> MapEnv {
+    MapEnv::new()
+}
+
 #[test]
 fn file_and_env_loading() -> Result<()> {
-    let cfg: CmdCfg = with_merged_subcommand_cli(
-        |j| {
-            j.create_file(".app.toml", "[cmds.test]\nfoo = \"file\"\nbar = true")?;
-            j.set_env("APP_CMDS_TEST_FOO", "env");
-            Ok(())
-        },
+    let root = tempfile::tempdir().context("create file and environment fixture")?;
+    write_config(
+        root.path(),
+        Path::new(".app.toml"),
+        "[cmds.test]\nfoo = \"file\"\nbar = true",
+    )?;
+    let discovery = isolated_discovery(root.path());
+    let cfg = load_and_merge_subcommand_with_sources_at(
+        &Prefix::new("APP_"),
         &CmdCfg::default(),
+        SubcommandFileContext::new(root.path(), &discovery),
+        Arc::new(MapEnv::new().with_var("APP_CMDS_TEST_FOO", "env")),
     )
-    .to_anyhow()?;
+    .context("merge file and injected environment defaults")?;
     ensure!(
         cfg.foo.as_deref() == Some("env"),
         "expected env, got {:?}",
@@ -42,19 +81,22 @@ fn file_and_env_loading() -> Result<()> {
 
 #[test]
 fn loads_from_home() -> Result<()> {
-    let cfg: CmdCfg = with_merged_subcommand_cli(
-        |j| {
-            let home = j.create_dir("home")?;
-            j.create_file(home.join(".app.toml"), "[cmds.test]\nfoo = \"home\"")?;
-            let home_str = path_to_utf8_string(&home, "home")?;
-            j.set_env("HOME", &home_str);
-            #[cfg(windows)]
-            j.set_env("USERPROFILE", &home_str);
-            Ok(())
-        },
+    let root = tempfile::tempdir().context("create home fixture")?;
+    let home = root.path().join("home");
+    let base = root.path().join("base");
+    write_config(
+        root.path(),
+        Path::new("home/.app.toml"),
+        "[cmds.test]\nfoo = \"home\"",
+    )?;
+    let discovery = isolated_discovery(root.path()).with_var("HOME", &home);
+    let cfg = load_and_merge_subcommand_with_sources_at(
+        &Prefix::new("APP_"),
         &CmdCfg::default(),
+        SubcommandFileContext::new(&base, &discovery),
+        Arc::new(MapEnv::new()),
     )
-    .to_anyhow()?;
+    .context("merge home defaults from injected source")?;
     ensure!(
         cfg.foo.as_deref() == Some("home"),
         "expected home, got {:?}",
@@ -65,20 +107,27 @@ fn loads_from_home() -> Result<()> {
 
 #[test]
 fn local_overrides_home() -> Result<()> {
-    let cfg: CmdCfg = with_merged_subcommand_cli(
-        |j| {
-            let home = j.create_dir("home")?;
-            j.create_file(home.join(".app.toml"), "[cmds.test]\nfoo = \"home\"")?;
-            let home_str = path_to_utf8_string(&home, "home")?;
-            j.set_env("HOME", &home_str);
-            #[cfg(windows)]
-            j.set_env("USERPROFILE", &home_str);
-            j.create_file(".app.toml", "[cmds.test]\nfoo = \"local\"")?;
-            Ok(())
-        },
+    let root = tempfile::tempdir().context("create local-overrides-home fixture")?;
+    let home = root.path().join("home");
+    let base = root.path().join("base");
+    write_config(
+        root.path(),
+        Path::new("home/.app.toml"),
+        "[cmds.test]\nfoo = \"home\"",
+    )?;
+    write_config(
+        root.path(),
+        Path::new("base/.app.toml"),
+        "[cmds.test]\nfoo = \"local\"",
+    )?;
+    let discovery = isolated_discovery(root.path()).with_var("HOME", &home);
+    let cfg = load_and_merge_subcommand_with_sources_at(
+        &Prefix::new("APP_"),
         &CmdCfg::default(),
+        SubcommandFileContext::new(&base, &discovery),
+        Arc::new(MapEnv::new()),
     )
-    .to_anyhow()?;
+    .context("merge local defaults after injected home defaults")?;
     ensure!(
         cfg.foo.as_deref() == Some("local"),
         "expected local, got {:?}",
@@ -91,20 +140,22 @@ fn local_overrides_home() -> Result<()> {
 #[cfg(any(unix, target_os = "redox"))]
 #[test]
 fn loads_from_xdg_config() -> Result<()> {
-    let cfg: CmdCfg = with_merged_subcommand_cli(
-        |j| {
-            let xdg = j.create_dir("xdg")?;
-            let abs = ortho_config::file::canonicalise(&xdg)
-                .map_err(|err| FigmentError::from(err.to_string()))?;
-            j.create_dir(abs.join("app"))?;
-            j.create_file(abs.join("app/config.toml"), "[cmds.test]\nfoo = \"xdg\"")?;
-            let xdg_path = path_to_utf8_string(&abs, "xdg config")?;
-            j.set_env("XDG_CONFIG_HOME", &xdg_path);
-            Ok(())
-        },
+    let root = tempfile::tempdir().context("create XDG fixture")?;
+    let xdg = root.path().join("xdg");
+    let base = root.path().join("base");
+    write_config(
+        root.path(),
+        Path::new("xdg/app/config.toml"),
+        "[cmds.test]\nfoo = \"xdg\"",
+    )?;
+    let discovery = isolated_discovery(root.path()).with_var("XDG_CONFIG_HOME", &xdg);
+    let cfg = load_and_merge_subcommand_with_sources_at(
+        &Prefix::new("APP_"),
         &CmdCfg::default(),
+        SubcommandFileContext::new(&base, &discovery),
+        Arc::new(MapEnv::new()),
     )
-    .to_anyhow()?;
+    .context("merge XDG defaults from injected source")?;
     ensure!(
         cfg.foo.as_deref() == Some("xdg"),
         "expected xdg, got {:?}",
@@ -116,14 +167,20 @@ fn loads_from_xdg_config() -> Result<()> {
 #[cfg(feature = "yaml")]
 #[test]
 fn loads_yaml_file() -> Result<()> {
-    let cfg: CmdCfg = with_merged_subcommand_cli(
-        |j| {
-            j.create_file(".app.yml", "cmds:\n  test:\n    foo: yaml")?;
-            Ok(())
-        },
+    let root = tempfile::tempdir().context("create YAML fixture")?;
+    write_config(
+        root.path(),
+        Path::new(".app.yml"),
+        "cmds:\n  test:\n    foo: yaml",
+    )?;
+    let discovery = isolated_discovery(root.path());
+    let cfg = load_and_merge_subcommand_with_sources_at(
+        &Prefix::new("APP_"),
         &CmdCfg::default(),
+        SubcommandFileContext::new(root.path(), &discovery),
+        Arc::new(MapEnv::new()),
     )
-    .to_anyhow()?;
+    .context("merge YAML defaults from explicit base")?;
     ensure!(
         cfg.foo.as_deref() == Some("yaml"),
         "expected yaml, got {:?}",

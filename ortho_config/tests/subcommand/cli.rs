@@ -1,12 +1,12 @@
 //! CLI precedence and required-value behaviour tests.
-use anyhow::{Result, ensure};
+
+use anyhow::{Context as _, Result, ensure};
+use cap_std::{ambient_authority, fs::Dir};
 use clap::Parser;
+use ortho_config::subcommand::Prefix;
+use ortho_config::{MapEnv, SubcommandFileContext, load_and_merge_subcommand_with_sources_at};
 use rstest::{fixture, rstest};
 use serde::Deserialize;
-
-use super::to_anyhow::ToAnyhow as _;
-use super::util::with_merged_subcommand_cli_with_sources;
-use ortho_config::MapEnv;
 use std::sync::Arc;
 
 #[derive(Debug, Deserialize, serde::Serialize, Parser, Default, PartialEq)]
@@ -33,9 +33,18 @@ fn cli_ref_id() -> RequiredCli {
 }
 #[rstest]
 fn cli_only_values_are_accepted(cli_ref_id: RequiredCli) -> Result<()> {
-    let merged: RequiredCli =
-        with_merged_subcommand_cli_with_sources(|_j| Ok(()), &cli_ref_id, Arc::new(MapEnv::new()))
-            .to_anyhow()?;
+    let root = tempfile::tempdir().context("create CLI-only fixture")?;
+    #[cfg(any(unix, target_os = "redox"))]
+    let discovery = MapEnv::new().with_var("XDG_CONFIG_DIRS", root.path());
+    #[cfg(not(any(unix, target_os = "redox")))]
+    let discovery = MapEnv::new();
+    let merged = load_and_merge_subcommand_with_sources_at(
+        &Prefix::new("APP_"),
+        &cli_ref_id,
+        SubcommandFileContext::new(root.path(), &discovery),
+        Arc::new(MapEnv::new()),
+    )
+    .context("merge CLI-only injected defaults")?;
     ensure!(
         merged.ref_id.as_deref() == Some("cli"),
         "expected cli, got {:?}",
@@ -55,15 +64,23 @@ fn error_when_required_cli_value_missing() {
 
 #[rstest]
 fn conflicting_values_cli_takes_precedence(cli_ref_id: RequiredCli) -> Result<()> {
-    let merged: RequiredCli = with_merged_subcommand_cli_with_sources(
-        |j| {
-            j.create_file(".app.toml", "[cmds.test]\nref_id = \"config\"")?;
-            Ok(())
-        },
+    let root = tempfile::tempdir().context("create conflicting-values fixture")?;
+    let directory = Dir::open_ambient_dir(root.path(), ambient_authority())
+        .context("open conflicting-values fixture directory")?;
+    directory
+        .write(".app.toml", b"[cmds.test]\nref_id = \"config\"")
+        .context("write conflicting-values fixture")?;
+    #[cfg(any(unix, target_os = "redox"))]
+    let discovery = MapEnv::new().with_var("XDG_CONFIG_DIRS", root.path());
+    #[cfg(not(any(unix, target_os = "redox")))]
+    let discovery = MapEnv::new();
+    let merged = load_and_merge_subcommand_with_sources_at(
+        &Prefix::new("APP_"),
         &cli_ref_id,
+        SubcommandFileContext::new(root.path(), &discovery),
         Arc::new(MapEnv::new().with_var("APP_CMDS_TEST_REF_ID", "env")),
     )
-    .to_anyhow()?;
+    .context("merge conflicting injected defaults")?;
     ensure!(
         merged.ref_id.as_deref() == Some("cli"),
         "expected cli, got {:?}",
@@ -74,13 +91,19 @@ fn conflicting_values_cli_takes_precedence(cli_ref_id: RequiredCli) -> Result<()
 
 #[test]
 fn env_value_used_when_cli_missing() -> Result<()> {
+    let root = tempfile::tempdir().context("create environment-only fixture")?;
+    #[cfg(any(unix, target_os = "redox"))]
+    let discovery = MapEnv::new().with_var("XDG_CONFIG_DIRS", root.path());
+    #[cfg(not(any(unix, target_os = "redox")))]
+    let discovery = MapEnv::new();
     let cli = OptionalCli { ref_id: None };
-    let merged: OptionalCli = with_merged_subcommand_cli_with_sources(
-        |_j| Ok(()),
+    let merged = load_and_merge_subcommand_with_sources_at(
+        &Prefix::new("APP_"),
         &cli,
+        SubcommandFileContext::new(root.path(), &discovery),
         Arc::new(MapEnv::new().with_var("APP_CMDS_TEST_REF_ID", "from-env")),
     )
-    .to_anyhow()?;
+    .context("merge injected environment defaults")?;
     ensure!(
         merged.ref_id.as_deref() == Some("from-env"),
         "expected from-env, got {:?}",
