@@ -873,6 +873,18 @@ and a Rust job declared in a `.yaml` workflow without a backend. The last two
 passed before the sweeps were widened, which is how they were shown to be real
 rather than theoretical.
 
+### Whitaker release installer
+
+`scripts/install_whitaker_binary.sh` belongs only to the Linux
+`Install Whitaker` step in `.github/workflows/ci.yml`. It downloads the
+resolved Whitaker release archive and its checksum sidecar through the GitHub
+API, checks both asset API digests and the sidecar's archive digest, then
+extracts only the expected binary member into the CI Cargo home. The cache
+holds those verified release inputs rather than an executable, so every cache
+hit is revalidated. Do not reuse this helper for local installation, releases,
+or other repositories: its token boundary, archive names, target map, and cache
+ownership are specific to this CI consumer.
+
 ### Workflow contract gate
 
 `make test-workflow-contracts` runs the contracts in `tests/workflow_contracts`

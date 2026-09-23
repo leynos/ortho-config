@@ -140,9 +140,10 @@ jobs:
         if: ${{ matrix.os == 'ubuntu-latest' }}
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
-          path: |
-            ~/.cargo/bin/whitaker-installer
-            ~/.cache/cargo-binstall
+          # Cache the release assets rather than an unverified executable.
+          # The installer revalidates these files against release metadata
+          # and the sidecar before extracting the exact binary member.
+          path: ~/.cache/ortho-config/whitaker-installer
           key: whitaker-installer-${{ runner.os }}-${{ runner.arch }}-${{ steps.whitaker.outputs.version }}
 
       - name: Install Whitaker
@@ -152,18 +153,9 @@ jobs:
           # Carry the API token under a name no tool reads; only the release
           # lookups below receive it through command-local assignments.
           INSTALL_TOKEN: ${{ github.token }}
+          RUNNER_ARCH: ${{ runner.arch }}
         run: |
-          # CI accepts prebuilt tools only. A missing binstall must fail rather
-          # than silently changing the trust boundary to a source build.
-          if ! cargo binstall -V >/dev/null 2>&1; then
-            echo "cargo-binstall is required for binary-only Whitaker provisioning" >&2
-            exit 127
-          fi
-          # The release archive ships this runtime executable while the
-          # crate manifest declares additional packaging helpers.
-          GH_TOKEN="${INSTALL_TOKEN}" GITHUB_TOKEN="${INSTALL_TOKEN}" \
-            cargo binstall --no-confirm --locked --disable-strategies compile \
-            "whitaker-installer@${WHITAKER_INSTALLER_VERSION}" --bin whitaker-installer
+          scripts/install_whitaker_binary.sh
           # Preinstall dylint-link to avoid the installer's source fallback.
           GH_TOKEN="${INSTALL_TOKEN}" GITHUB_TOKEN="${INSTALL_TOKEN}" \
             cargo binstall --no-confirm --locked --disable-strategies compile \
