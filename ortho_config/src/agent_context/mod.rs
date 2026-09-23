@@ -251,10 +251,11 @@ pub enum PolicyMode {
 }
 
 /// Prompting or interaction behaviour for a command.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum InteractionMode {
     /// Legacy or undeclared interaction behaviour.
+    #[default]
     Unknown,
     /// Command does not prompt and can run unattended.
     NonInteractive,
@@ -262,17 +263,12 @@ pub enum InteractionMode {
     Interactive,
 }
 
-impl Default for InteractionMode {
-    fn default() -> Self {
-        Self::Unknown
-    }
-}
-
 /// Mutation boundary for a command.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum MutationEffect {
     /// Legacy or undeclared mutation behaviour.
+    #[default]
     Unknown,
     /// Read-only command.
     ReadOnly,
@@ -282,12 +278,6 @@ pub enum MutationEffect {
     Delete,
     /// Command submits asynchronous work.
     Submit,
-}
-
-impl Default for MutationEffect {
-    fn default() -> Self {
-        Self::Unknown
-    }
 }
 
 /// Pagination metadata for list-style commands.

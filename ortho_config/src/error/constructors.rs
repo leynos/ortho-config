@@ -56,10 +56,10 @@ impl OrthoError {
         I: IntoIterator<Item = E>,
         E: Into<Arc<Self>>,
     {
-        Self::try_aggregate(errors).map_or_else(
-            || panic!("aggregate requires at least one error"),
-            |err| err,
-        )
+        let Some(err) = Self::try_aggregate(errors) else {
+            panic!("aggregate requires at least one error");
+        };
+        err
     }
 
     /// Construct a merge error from a [`figment::Error`].
