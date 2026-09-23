@@ -160,6 +160,7 @@ jobs:
           GH_TOKEN="${INSTALL_TOKEN}" GITHUB_TOKEN="${INSTALL_TOKEN}" \
             cargo binstall --no-confirm --locked --disable-strategies compile \
             dylint-link@6.0.1
+          unset INSTALL_TOKEN
           whitaker-installer
 
       - name: Lint

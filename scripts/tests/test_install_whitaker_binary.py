@@ -29,6 +29,7 @@ CHECKSUM_NAME = f"{ARCHIVE_NAME}.sha256"
 MEMBER_NAME = f"whitaker-installer-{TARGET}-v{VERSION}/whitaker-installer"
 ARCHIVE_ID = "101"
 CHECKSUM_ID = "102"
+BINARY_MODE = 0o755
 
 
 def _sha256(path: Path) -> str:
@@ -41,7 +42,7 @@ def _write_release_assets(directory: Path) -> dict[str, Path]:
     staged_binary = directory / MEMBER_NAME
     staged_binary.parent.mkdir(parents=True)
     staged_binary.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
-    staged_binary.chmod(0o755)
+    staged_binary.chmod(BINARY_MODE)
     archive = directory / ARCHIVE_NAME
     with tarfile.open(archive, mode="w:gz") as tar:
         tar.add(staged_binary, arcname=MEMBER_NAME)
@@ -69,7 +70,12 @@ def _write_release_assets(directory: Path) -> dict[str, Path]:
         ),
         encoding="utf-8",
     )
-    return {"archive": archive, "checksum": checksum, "release": release}
+    return {
+        "archive": archive,
+        "binary": staged_binary,
+        "checksum": checksum,
+        "release": release,
+    }
 
 
 def _write_fake_gh(directory: Path) -> Path:
@@ -122,6 +128,7 @@ def install_environment(tmp_path: Path) -> dict[str, str]:
         "RUNNER_ARCH": "X64",
         "INSTALL_TOKEN": "test-token",
         "FAKE_ARCHIVE": str(assets["archive"]),
+        "FAKE_BINARY": str(assets["binary"]),
         "FAKE_CHECKSUM": str(assets["checksum"]),
         "FAKE_RELEASE": str(assets["release"]),
         "GH_CALLS": str(tmp_path / "gh-calls"),
@@ -151,7 +158,12 @@ def test_cold_install_verifies_and_installs_the_release_binary(
     calls = Path(install_environment["GH_CALLS"]).read_text(encoding="utf-8").splitlines()
     assert result.returncode == 0, result.stderr
     assert installed.is_file(), "the verified release member must enter the isolated Cargo home"
-    assert os.access(installed, os.X_OK), "the installed release member must be executable"
+    assert installed.read_bytes() == Path(install_environment["FAKE_BINARY"]).read_bytes(), (
+        "the installed binary must be the exact verified release member"
+    )
+    assert stat.S_IMODE(installed.stat().st_mode) == BINARY_MODE, (
+        "the installed release member must have the expected executable mode"
+    )
     assert len(calls) == 3, f"cold install must read metadata and two assets: {calls!r}"
     assert all(call.endswith("|present|") for call in calls), (
         f"only command-local GH_TOKEN must reach the GitHub client: {calls!r}"
@@ -164,11 +176,19 @@ def test_valid_cached_assets_are_revalidated_without_a_second_download(
     """A cache hit uses the same verified assets and never trusts a bare binary."""
     first = _run_installer(install_environment)
     assert first.returncode == 0, first.stderr
+    installed = Path(install_environment["CARGO_HOME"]) / "bin" / "whitaker-installer"
+    installed.unlink()
     Path(install_environment["GH_CALLS"]).unlink()
     install_environment["DENY_ASSET_DOWNLOADS"] = "1"
     second = _run_installer(install_environment)
     calls = Path(install_environment["GH_CALLS"]).read_text(encoding="utf-8").splitlines()
     assert second.returncode == 0, second.stderr
+    assert installed.read_bytes() == Path(install_environment["FAKE_BINARY"]).read_bytes(), (
+        "a valid asset cache must recreate the verified release member"
+    )
+    assert stat.S_IMODE(installed.stat().st_mode) == BINARY_MODE, (
+        "a cache-hit installation must restore the expected executable mode"
+    )
     assert calls == ["repos/leynos/whitaker/releases/tags/v0.2.8|present|"], (
         f"cache validation must need metadata but no asset download: {calls!r}"
     )
@@ -197,9 +217,13 @@ def test_a_corrupt_cache_is_repaired_from_verified_release_assets(
 def test_a_bad_release_sidecar_fails_before_installing(
     install_environment: dict[str, str]
 ) -> None:
-    """A source whose sidecar disagrees with release metadata is rejected."""
+    """A sidecar with a valid API digest but bad archive digest is rejected."""
     checksum = Path(install_environment["FAKE_CHECKSUM"])
     checksum.write_text(f"{'0' * 64}  {ARCHIVE_NAME}\n", encoding="utf-8")
+    release = Path(install_environment["FAKE_RELEASE"])
+    metadata = json.loads(release.read_text(encoding="utf-8"))
+    metadata["assets"][1]["digest"] = f"sha256:{_sha256(checksum)}"
+    release.write_text(json.dumps(metadata), encoding="utf-8")
     result = _run_installer(install_environment)
     installed = Path(install_environment["CARGO_HOME"]) / "bin" / "whitaker-installer"
     assert result.returncode != 0, "a mismatched archive digest must fail closed"

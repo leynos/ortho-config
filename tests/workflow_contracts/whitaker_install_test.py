@@ -124,3 +124,21 @@ def test_dylint_link_remains_authenticated_and_binary_only(
         "dylint-link must not fall back to a source build"
     )
     assert DYLINT_LINK_PACKAGE in dylint_command, "the Dylint preinstall must name its package"
+
+
+def test_the_token_does_not_reach_the_whitaker_process_tree(
+    install_step: dict[str, typ.Any],
+) -> None:
+    """The release credential ends before the installed tool can run."""
+    script = str(install_step.get("run", ""))
+    dylint_position = script.index(DYLINT_LINK_PACKAGE)
+    token_boundary = f"unset {TOKEN_CARRIER}"
+    boundary_position = script.index(token_boundary)
+    installer_position = script.index("whitaker-installer", boundary_position)
+    assert dylint_position < boundary_position < installer_position, (
+        f"{TOKEN_CARRIER} must remain through authenticated Dylint installation "
+        "and be unset before Whitaker runs"
+    )
+    assert TOKEN_CARRIER not in script[boundary_position + len(token_boundary) :], (
+        f"{TOKEN_CARRIER} must not reach the Whitaker process tree"
+    )
