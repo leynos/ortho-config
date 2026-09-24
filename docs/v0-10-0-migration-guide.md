@@ -165,6 +165,14 @@ struct are compile-time errors. Update catalogues to use the generated IDs,
 including `long-help`, and retain any hand-built command-tree validation
 because those trees keep the runtime panic contract.
 
+Documentation IR version rises from `1.1` to `2.0` because the identifier
+*values* change meaning for consumers keyed on the old shapes. The old dotted
+`{app}.fields.{field}.help` form becomes the hyphenated
+`{mounted-path}-args-{field}-help`, and nested command defaults now extend the
+mounted command path rather than a standalone base. Read
+`ortho_config::docs::ORTHO_DOCS_IR_VERSION` instead of hard-coding the version,
+and re-key any Fluent catalogue whose entries used the dotted forms.
+
 Identifier artefact emission is opt-in. Run
 `cargo clean -p <package> && ORTHO_CONFIG_EMIT_IDENTIFIERS=1 cargo build -p <package>`
 to force a fresh expansion, then inspect

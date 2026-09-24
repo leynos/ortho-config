@@ -584,7 +584,7 @@ later progressively add opinion.
     `preparing_sandbox` with no findings or rate-limit message; this is
     recorded in the 11.1.2 execplan.
 
-- [ ] 11.1.3. Add the `OrthoConfigLocalization` trait and derive emission.
+- [x] 11.1.3. Add the `OrthoConfigLocalization` trait and derive emission.
   - Requires 11.1.2.
   - See cli-localization-design.md §8.1 and §8.2.
   - [x] Define `OrthoConfigLocalization` with `ABOUT_ID`, `LONG_ABOUT_ID`,
@@ -598,8 +598,40 @@ later progressively add opinion.
     cap and split-file behaviour for larger trees.
   - [x] Add a compile-time `compile_error!` for fields whose normalized
     identifiers collide.
-  - [ ] Validate forced refresh, stale-output isolation, pure renderer
+  - [x] Validate forced refresh, stale-output isolation, pure renderer
     lifecycle behaviour, and documentation reconciliation before completion.
+  - Decision: the `OrthoConfigDocs` "blanket impl" is realized as generated
+    path-aware delegation, because a literal blanket impl conflicts with the
+    derive-emitted impls under coherence rules and cannot supply per-field
+    metadata.
+  - Decision: artefact emission is opt-in behind
+    `ORTHO_CONFIG_EMIT_IDENTIFIERS=1` (ADR-008); ambient proc-macro writes are
+    rejected per Cargo team guidance. Refreshing requires a forced
+    recompilation, because Cargo does not fingerprint proc-macro environment
+    reads; see ADR-008 for the exact invocation.
+  - Decision: the trait is wider than the design §8.1 sketch — it carries
+    every command-level suffix the runtime walker requests, and `ARG_IDS`
+    entries are a named `ArgLocalizationIds` struct rather than positional
+    tuples.
+  - Decision: `localized_default` is recognized and rejected with a deferral
+    diagnostic; `embedded_default` is always `null`. Embedding is deferred to
+    11.5.1 rather than delivered here.
+  - Finding: JSON artefact entries are standalone per-struct declarations
+    (`path_scope: "standalone"`), not a mounted-tree inventory; mounted ids
+    come from the path-aware compiled docs IR.
+  - Finding: forced refresh and stale-output isolation are locked by
+    `ortho_config/tests/identifier_artefact_e2e.rs`; fragment pruning by
+    `merge_fragments_prunes_removed_sources`; and renderer ordering, splitting,
+    the 1 MiB boundary, one oversized entry, and split round-tripping by
+    `artefact_tests.rs` (including a `proptest` property).
+  - Limitation: a rename within one source file leaves an unpruned fragment
+    until the next forced refresh. Accepted in Decision D-11 and documented in
+    ADR-008.
+  - Follow-up: flattened fields are excluded from `ARG_IDS` for now; their
+    arguments surface at runtime under the parent command. Item 11.6.2 covers
+    closing that gap.
+  - Validation: `make check-fmt`, `make typecheck`, `make lint`, `make test`,
+    `make markdownlint`, and `make nixie` passed on 2026-09-20.
 
 ### 11.2. Widen clap-error coverage and preserve clap's rich context
 
@@ -740,6 +772,10 @@ later progressively add opinion.
 - [ ] 11.5.1. Add per-field `localized_default` attribute support.
   - Requires 11.1.3.
   - See cli-localization-design.md §8.2.
+  - Note: 11.1.3 shipped only the guard rail — the derive recognizes
+    `localized_default` and rejects it with a deferral diagnostic, and artefact
+    entries always carry `embedded_default: null`. This item delivers the
+    embedding behaviour itself.
   - [ ] Accept values `none`, `help`, `long_help`, `value_name`,
     `help+long_help`, and `all` on field-level
     `#[ortho_config(localized_default = "...")]`.
@@ -776,6 +812,18 @@ later progressively add opinion.
     `target/orthohelp/missing-translations/<locale>.json`.
   - [ ] Document the reporter API in the developers' guide alongside the
     existing `FormattingIssueReporter`.
+
+- [ ] 11.6.2. Derive localization constants for flattened argument groups.
+  - Requires 11.1.3.
+  - See cli-localization-design.md §8.1 and §8.2.
+  - Follow-up to 11.1.3, which excludes `#[clap(flatten)]` /
+    `#[command(flatten)]` fields from `ARG_IDS` because a deriving struct
+    cannot enumerate another type's fields.
+  - [ ] Surface the flattened type's `OrthoConfigLocalization::ARG_IDS` under
+    the parent command so flattened arguments stop being a documented gap in
+    the constants-equal-coverage contract.
+  - [ ] Extend the `localized_parse.rs` subset-with-remainder fixture so the
+    flattened group's ids are asserted rather than listed as an exception.
 
 ### 11.7. Migrate the example and downstream guidance
 
