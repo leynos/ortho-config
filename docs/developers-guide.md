@@ -685,6 +685,15 @@ variables for tests.
   XDG, or local-app-data fixture and return its closed `MapEnv`. They belong
   only to the override scenario table; other tests use `ConfigFixture` and
   select their own source to keep setup and precedence assertions visible.
+- The `extends` integration tests keep their `ConfigFixture` in
+  `ortho_config/tests/support/extends_fixture.rs`. It writes a temporary
+  `.config.toml` through `cap_std::fs::Dir`, requires it with the generated
+  `--config-path` flag, and passes an injected discovery `MapEnv` plus a
+  separate merge `MapEnv`. Keep discovery tests on explicit builder setups so
+  their candidate and environment cases remain visible; this fixture composes
+  the existing lookup and merge boundaries rather than expanding the
+  environment API. Cycle and missing-file cases inject a valid merge value to
+  isolate the file error.
 - The discovery candidate reader is the only production reader, and holds no
   `std::env::var_os` call of its own.
 - It is **not** a general environment service. Adding readers elsewhere in the
