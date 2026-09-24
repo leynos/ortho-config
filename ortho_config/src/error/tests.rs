@@ -91,12 +91,9 @@ where
 }
 
 #[test]
+#[should_panic(expected = "aggregate requires at least one error")]
 fn aggregate_panics_on_empty() {
-    let empty: Vec<Arc<OrthoError>> = vec![];
-    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        OrthoError::aggregate(empty)
-    }));
-    assert!(result.is_err());
+    let _aggregate = OrthoError::aggregate(Vec::<Arc<OrthoError>>::new());
 }
 
 #[test]
