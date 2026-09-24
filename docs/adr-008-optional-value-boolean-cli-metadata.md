@@ -19,8 +19,8 @@ knowledge of clap internals. Reporting such flags with `takes_value: false`
 would tell those consumers that no value can follow, which is precisely the
 information an agent needs to decide whether `--flag=false` is well formed.
 
-The question is whether the existing `CliMetadata` fields can express
-"accepts an optional value" or whether the IR needs a new marker.
+The question is whether the existing `CliMetadata` fields can express "accepts
+an optional value" or whether the IR needs a new marker.
 
 ## Decision drivers
 
@@ -57,8 +57,7 @@ print `--flag[=<BOOL>]` when the marker is set. This is the accepted option.
 
 ### Option C: Generate a separate negating flag
 
-Boolean fields would generate an extra `--no-flag` argument alongside
-`--flag`.
+Boolean fields would generate an extra `--no-flag` argument alongside `--flag`.
 
 This is rejected. It breaks the one-argument-identifier-per-field model that
 the derive relies on for extraction, and it contradicts the preference against
@@ -89,11 +88,11 @@ missing field.
 
 Table 1 compares the accepted option with the rejected alternatives.
 
-| Option | IR shape                          | Outcome                                        |
-| ------ | --------------------------------- | ---------------------------------------------- |
-| A      | Reuse `takes_value` only          | Rejected: ambiguous with required values       |
-| B      | New `value_optional` marker       | Accepted                                       |
-| C      | Separate `--no-flag` argument     | Rejected: breaks one-identifier-per-field model |
+| Option | IR shape                      | Outcome                                         |
+| ------ | ----------------------------- | ----------------------------------------------- |
+| A      | Reuse `takes_value` only      | Rejected: ambiguous with required values        |
+| B      | New `value_optional` marker   | Accepted                                        |
+| C      | Separate `--no-flag` argument | Rejected: breaks one-identifier-per-field model |
 
 _Table 1: Comparison of optional-value boolean metadata options._
 

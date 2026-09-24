@@ -1,7 +1,7 @@
 # Allow generated boolean CLI options to override with `false` (#444)
 
-This ExecPlan is a living document. Keep `Progress`, `Surprises &
-discoveries`, and `Decision log` up to date as work proceeds.
+This ExecPlan is a living document. Keep `Progress`, `Surprises & discoveries`,
+and `Decision log` up to date as work proceeds.
 
 ## Purpose / Big Picture
 
@@ -26,8 +26,8 @@ generated help, the documentation IR, and the roff/PowerShell renderers are
 updated so the `[=<BOOL>]` spelling is discoverable rather than folklore.
 
 Observable success: a config file that sets `enabled = true` combined with
-`--enabled=false` on the command line resolves to `false`, while `enabled =
-true` alone still resolves to `true`.
+`--enabled=false` on the command line resolves to `false`, while
+`enabled = true` alone still resolves to `true`.
 
 ## Progress
 
@@ -72,11 +72,11 @@ true` alone still resolves to `true`.
   `CommandLine`.
 - **`differs_from_defaults` was broken, and the earlier note that it "still
   gates correctly" was wrong.** The guard compared the whole sanitised CLI
-  object against the whole defaults object and skipped `composer.push_cli`
-  when the two were equal. For any configuration whose explicit CLI value
-  equals its struct default, the entire CLI layer was discarded, so a lower
-  file or environment value silently won over an explicit user argument. The
-  one-field case is the minimal reproduction:
+  object against the whole defaults object and skipped `composer.push_cli` when
+  the two were equal. For any configuration whose explicit CLI value equals its
+  struct default, the entire CLI layer was discarded, so a lower file or
+  environment value silently won over an explicit user argument. The one-field
+  case is the minimal reproduction:
 
   ```plaintext
   # Defaults={"excited":false}  Environment={"excited":true}
@@ -88,10 +88,10 @@ true` alone still resolves to `true`.
   `ACME_PORT=9000` ignored an explicit `--port 8080` in exactly the same way.
   It is pre-existing (introduced with `LayerComposition` in #246) and was
   previously masked because every test fixture carried enough other fields to
-  make the two objects unequal. Boolean `--flag=false` is simply the value
-  most likely to coincide with a default, which is why #444's acceptance
-  criteria expose it. `defaults_value` was removed from the generated code and
-  the guard now asks clap's per-argument `matches.value_source()` instead.
+  make the two objects unequal. Boolean `--flag=false` is simply the value most
+  likely to coincide with a default, which is why #444's acceptance criteria
+  expose it. `defaults_value` was removed from the generated code and the guard
+  now asks clap's per-argument `matches.value_source()` instead.
 - **Do not run `cargo test --workspace` while editing.** The `cargo-orthohelp`
   behavioural scenarios spawn the real `target/debug/cargo-orthohelp` binary;
   recompiling it mid-run produced nine spurious failures that vanish when the
@@ -104,8 +104,8 @@ true` alone still resolves to `true`.
 - **Single value-taking flag, not a `--flag`/`--no-flag` pair.** A negation
   pair breaks the one-`arg_id`-per-field model that `CliValueExtractor` and
   `value_source()` rely on, and contradicts the preference against
-  auto-generated `--no-x` pairs recorded in
-  `docs/agent-native-cli-design.md` §5.
+  auto-generated `--no-x` pairs recorded in `docs/agent-native-cli-design.md`
+  §5.
 - **Add a marker to `CliMetadata` rather than overloading existing fields.**
   `takes_value` cannot express "value is optional"; the docs IR version bumps
   and the schema mirror stays byte-for-byte aligned per ADR-003.
@@ -136,7 +136,8 @@ true` alone still resolves to `true`.
 ## Risks
 
 - Golden snapshots across `cargo-orthohelp` and `examples/hello_world` bake in
-  the bare `--is-excited` spelling; each must be re-reviewed, not blind-accepted.
+  the bare `--is-excited` spelling; each must be re-reviewed, not
+  blind-accepted.
 - `arg_takes_value` in the localizer matches `ArgAction::Set | Append`, so a
   value-taking boolean becomes localisable for `value_name`.
 - Downstream struct-literal consumers of `CliMetadata` face a source break
