@@ -4,10 +4,17 @@ use anyhow::{Context as _, Result, ensure};
 use cap_std::{ambient_authority, fs::Dir};
 use clap::Parser;
 use ortho_config::subcommand::Prefix;
-use ortho_config::{MapEnv, SubcommandFileContext, load_and_merge_subcommand_with_sources_at};
+use ortho_config::{
+    EnvSource, MapEnv, ProcessEnv, SubcommandFileContext, load_and_merge_subcommand,
+    load_and_merge_subcommand_with_sources_at,
+};
 use serde::{Deserialize, Serialize};
+use std::io::Write;
 use std::path::Path;
+use std::process::Command;
 use std::sync::Arc;
+
+const PROCESS_PROBE_MARKER: &str = "ORTHO_SUBCOMMAND_PROCESS_PROBE_OK";
 
 #[derive(Debug, Serialize, Deserialize, Default, PartialEq, Parser)]
 #[command(name = "test")]
@@ -52,6 +59,69 @@ fn isolated_discovery(root: &Path) -> MapEnv {
 #[cfg(not(any(unix, target_os = "redox")))]
 fn isolated_discovery(_root: &Path) -> MapEnv {
     MapEnv::new()
+}
+
+/// Check the process-backed default entrypoint without mutating the test process.
+#[test]
+fn process_backed_wrapper_merges_file_and_environment_defaults() -> Result<()> {
+    let root = tempfile::tempdir().context("create process-backed subcommand fixture")?;
+    write_config(
+        root.path(),
+        Path::new(".app.toml"),
+        "[cmds.test]\nfoo = \"file\"\nbar = true",
+    )?;
+    let executable = std::env::current_exe().context("locate subcommand test executable")?;
+    let mut child = Command::new(executable);
+    child
+        .args([
+            "--ignored",
+            "--exact",
+            "--nocapture",
+            "basic::process_backed_probe",
+        ])
+        .current_dir(root.path())
+        .env_clear()
+        .env("APP_CMDS_TEST_FOO", "env")
+        .env("XDG_CONFIG_DIRS", root.path());
+    if let Some(profile_file) = ProcessEnv.get("LLVM_PROFILE_FILE") {
+        child.env("LLVM_PROFILE_FILE", profile_file);
+    }
+    let output = child
+        .output()
+        .context("run isolated process-backed subcommand probe")?;
+    ensure!(
+        output.status.success(),
+        "process-backed subcommand probe failed: stdout={}, stderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    ensure!(
+        String::from_utf8_lossy(&output.stdout).contains(PROCESS_PROBE_MARKER),
+        "process-backed subcommand probe did not execute: {}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+    Ok(())
+}
+
+#[test]
+#[ignore = "run by the isolated process-backed wrapper test"]
+fn process_backed_probe() -> Result<()> {
+    let cfg = load_and_merge_subcommand(&Prefix::new("APP_"), &CmdCfg::default())
+        .context("merge process-backed subcommand defaults")?;
+    ensure!(
+        cfg.foo.as_deref() == Some("env"),
+        "expected environment value over file value, got {:?}",
+        cfg.foo
+    );
+    ensure!(
+        cfg.bar == Some(true),
+        "expected file-backed bar value, got {:?}",
+        cfg.bar
+    );
+    std::io::stdout()
+        .write_all(PROCESS_PROBE_MARKER.as_bytes())
+        .context("signal process-backed probe completion")?;
+    Ok(())
 }
 
 #[test]
