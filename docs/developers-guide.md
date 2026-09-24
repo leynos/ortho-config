@@ -683,6 +683,15 @@ variables for tests.
   files from its explicit base. On non-Unix and non-Redox targets it may also
   use the source's native platform configuration-directory fallback. It must
   not enumerate variables or become a general-purpose environment service.
+- The derived `SelectedSubcommandMerge::load_and_merge_selected_with_sources`
+  uses that file context and a separate `SharedScanEnvSource` to merge the
+  selected enum variant. Its file base and environment values are supplied by
+  the caller; the existing `load_and_merge_selected` remains process-backed.
+  `SelectedSubcommandSources` groups the two capabilities only for
+  `load_globals_and_merge_selected_subcommand_with_sources`; its global loader
+  remains caller-owned. Manual trait implementations must override the injected
+  method or receive `SourceInjectionUnsupported`, without falling back to the
+  process environment.
 
 ### Composition rules
 
