@@ -1,0 +1,5 @@
+error[E0639]: cannot create non-exhaustive struct using struct expression
+ --> tests/ui/policy_inputs_non_exhaustive.rs:6:19
+  |
+6 |     let _inputs = PolicyInputs {};
+  |                   ^^^^^^^^^^^^^^^

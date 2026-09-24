@@ -13,20 +13,28 @@ use crate::fixtures;
 
 #[rstest]
 #[case::simple(
+    "orthohelp_fixture",
     Some("orthohelp_fixture::SimpleFixtureConfig"),
     "agent_context__simple_fixture.json"
 )]
-#[case::enum_root(None, "agent_context__fixture.json")]
+#[case::enum_root("orthohelp_fixture", None, "agent_context__fixture.json")]
 #[case::nested(
+    "orthohelp_fixture",
     Some("orthohelp_fixture::NestedFixtureConfig"),
     "agent_context__nested_fixture.json"
 )]
+#[case::policy_warn(
+    "orthohelp_policy_warn_fixture",
+    Some("orthohelp_policy_warn_fixture::SimplePolicyConfig"),
+    "agent_context__policy_warn_fixture.json"
+)]
 fn fixture_agent_context_matches_snapshot(
+    #[case] package_name: &str,
     #[case] root_type: Option<&str>,
     #[case] snapshot_name: &str,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     let out_dir = tempfile::tempdir()?;
-    let output = run_agent_context(&out_dir, root_type)?;
+    let output = run_agent_context(&out_dir, package_name, root_type)?;
     if !output.status.success() {
         return Err(format!(
             "cargo-orthohelp should succeed: {:?}",
@@ -47,6 +55,7 @@ fn fixture_agent_context_matches_snapshot(
 
 fn run_agent_context(
     out_dir: &TempDir,
+    package_name: &str,
     root_type: Option<&str>,
 ) -> Result<Output, Box<dyn Error + Send + Sync>> {
     let exe = fixtures::cargo_orthohelp_exe()?;
@@ -59,7 +68,7 @@ fn run_agent_context(
         .arg("--format")
         .arg("agent-context")
         .arg("--package")
-        .arg("orthohelp_fixture");
+        .arg(package_name);
     if let Some(selected_root_type) = root_type {
         command.arg("--root-type").arg(selected_root_type);
     }

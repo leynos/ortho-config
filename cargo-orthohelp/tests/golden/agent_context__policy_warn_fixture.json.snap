@@ -1,0 +1,57 @@
+---
+source: cargo-orthohelp/tests/golden/agent_context_tests.rs
+assertion_line: 86
+expression: snapshot
+---
+{
+  "schema_version": "1",
+  "kind": "orthohelp_policy_warn_fixture.agent_context",
+  "package": "orthohelp_policy_warn_fixture",
+  "commands": [
+    {
+      "path": [
+        "policy_fixture"
+      ],
+      "canonical_verb": null,
+      "inputs": [
+        {
+          "name": "host",
+          "long": "host",
+          "value_type": "string",
+          "required": false,
+          "default": "String::from(\"localhost\")",
+          "enum_values": []
+        }
+      ],
+      "output_modes": [],
+      "interaction_mode": "unknown",
+      "mutation_effect": "unknown",
+      "async_submission": null,
+      "delivery_route": null,
+      "pagination": null,
+      "examples": []
+    }
+  ],
+  "profiles": {
+    "supported": false
+  },
+  "feedback": {
+    "supported": false
+  },
+  "policy": {
+    "agent_native": "warn",
+    "exceptions": [
+      {
+        "kind": "verb",
+        "name": "get",
+        "command_path": null
+      },
+      {
+        "kind": "flag",
+        "name": "--format",
+        "command_path": "fixture"
+      }
+    ]
+  },
+  "skill_manifests": []
+}

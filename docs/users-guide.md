@@ -730,7 +730,7 @@ this shape:
   "commands": [],
   "profiles": { "supported": false },
   "feedback": { "supported": false },
-  "policy": { "agent_native": "warn" },
+  "policy": { "agent_native": "warn", "exceptions": [] },
   "skill_manifests": []
 }
 ```
@@ -739,6 +739,81 @@ Fill `AgentCommand` entries only with claims the executable honours.
 `SkillManifest` and `SkillCommandRef` link skills to real commands. They do not
 replace command validation or grant an agent capabilities that the CLI does not
 have.
+
+### Agent-native policy checking
+
+`cargo orthohelp --check-agent-native` runs an opt-in agent-native policy check
+against a target package. It does not build the bridge crate or require
+`root_type`, a library target, or an `ortho_config` dependency, so it works for
+packages still adopting the toolchain:
+
+<!-- tested-example: guide-policy-check -->
+```console
+cargo orthohelp --check-agent-native --package my-cli --out-dir out
+```
+
+With `--check-agent-native` alone, the command writes only a machine-stable
+`policy-report.json` atomically to the output directory, prints a one-line
+summary to standard error, and skips generation. Supplying `--format` runs the
+policy check before generation, including an explicit `--format ir`; the
+default format is treated as implicit when the check flag is used alone. The
+policy is configured under `[package.metadata.ortho_config.policy]` in the
+target package's `Cargo.toml`:
+
+_Table 2: Agent-native policy configuration keys._
+
+| Key                         | Type                      | Default  | Meaning                                        |
+| --------------------------- | ------------------------- | -------- | ---------------------------------------------- |
+| `mode`                      | `"off"`/`"warn"`/`"deny"` | `"off"`  | Enforcement mode for the check.                |
+| `exceptions[].kind`         | `"verb"`/`"flag"`         | required | Whether the exception names a verb or a flag.  |
+| `exceptions[].name`         | string                    | required | The verb or flag as typed on the command line. |
+| `exceptions[].reason`       | string                    | required | Why the project exempts this vocabulary item.  |
+| `exceptions[].command_path` | string                    | absent   | Optional space-separated command path scope.   |
+
+For example:
+
+<!-- tested-example: guide-policy-config -->
+```toml
+[package.metadata.ortho_config.policy]
+mode = "warn"
+
+[[package.metadata.ortho_config.policy.exceptions]]
+kind = "verb"
+name = "get"
+reason = "redundant but part of the migration surface"
+
+[[package.metadata.ortho_config.policy.exceptions]]
+kind = "flag"
+name = "--format"
+reason = "scoped legacy flag"
+command_path = "fixture"
+```
+
+The enforcement default is `off`: a package with no policy table checks
+nothing. In `warn` mode, findings are reported without failing the command; in
+`deny` mode, deny-level findings cause a non-zero exit after the report has
+been written. The report includes the effective mode, findings, configured
+exceptions (with their reasons), and the canonical vocabulary in
+`vocabulary.verbs` and `vocabulary.flags`. In 7.1.1, the check validates only
+policy configuration and reports that vocabulary; it does not lint command
+verbs or flags against it. Off-policy verb and flag linting is deferred to
+roadmap item 7.1.2. Exception reasons appear in `policy-report.json` but not in
+agent context, which carries only the exception kind, name, and optional
+command scope.
+
+`--policy-mode <off|warn|deny>` overrides the configured mode for the report
+and requires `--check-agent-native`. It never changes the generated agent
+context, which records what the project has committed to.
+
+Because a misspelt table _name_ still resolves to `off`, gate on the mode
+rather than assuming the check ran. The loud off-mode summary ("nothing was
+checked") is one signal; a `jq`-based assertion is a stronger CI recipe:
+
+<!-- tested-example: guide-policy-ci -->
+```console
+cargo orthohelp --check-agent-native --out-dir out
+jq -e '.mode != "off"' out/policy-report.json
+```
 
 ## Use an aliased dependency
 

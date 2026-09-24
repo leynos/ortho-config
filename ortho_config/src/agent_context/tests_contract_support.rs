@@ -56,6 +56,7 @@ fn assert_legacy_default_support_declarations(context: &AgentContext) {
 
 fn assert_legacy_default_policy_and_skills(context: &AgentContext) {
     assert_eq!(context.policy.agent_native, PolicyMode::Warn);
+    assert!(context.policy.exceptions.is_empty());
     assert!(context.skill_manifests.is_empty());
 }
 
@@ -131,6 +132,7 @@ fn assert_legacy_context_support_defaults(context: &AgentContext) {
 
 fn assert_legacy_context_policy_defaults(context: &AgentContext) {
     assert_eq!(context.policy.agent_native, PolicyMode::Warn);
+    assert!(context.policy.exceptions.is_empty());
     assert!(context.skill_manifests.is_empty());
 }
 
