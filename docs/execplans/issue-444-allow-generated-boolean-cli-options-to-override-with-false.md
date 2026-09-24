@@ -38,9 +38,19 @@ true` alone still resolves to `true`.
 - [x] (2026-09-24) ExecPlan drafted.
 - [x] M1 (Task 1): derive macro emits the optional-value form; unit tests
       updated; `make test` for `ortho_config_macros` green (131 passed).
-- [ ] M2 (Task 2): runtime merge/precedence verified with integration fixtures.
-- [ ] M3 (Task 3): docs IR `value_optional` marker, ADR-008, renderers, goldens.
-- [ ] M4 (Task 4): user documentation, changelog, migration guide.
+- [x] (2026-09-24) Fixed the pre-existing `differs_from_defaults` layering
+      defect that discarded the whole CLI layer when its sanitised object
+      equalled the defaults object. Red→green verified with two new
+      `compose_layers` regression tests over a one-field struct; all
+      `clap_integration`, `cli_default_as_absent*`, subcommand, BDD, and
+      `hello_world` suites green afterwards.
+- [x] M2 (Task 2): runtime merge/precedence verified with integration fixtures
+      (10-case matrix in `clap_integration` plus the doc-example flow).
+- [x] M3 (Task 3): docs IR `value_optional` marker, ADR-008, renderers,
+      goldens.
+- [x] M4 (Task 4): users-guide section, changelog entries, v0.10.0 migration
+      guide sections (flag spellings, explicit-value precedence) with impact
+      table and upgrade checklist.
 - [ ] Gates via `scrutineer`; CodeRabbit review; draft PR.
 
 ## Surprises & discoveries

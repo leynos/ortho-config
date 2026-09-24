@@ -4,11 +4,23 @@
 
 Read this guide when adopting source-aware environment merging and layer
 composition, parser-faithful clap string defaults, agent-native behaviour
-metadata, optional profile overlays, or the Cargo external-subcommand helper.
+metadata, the optional-value boolean flags, optional profile overlays, or the
+Cargo external-subcommand helper.
 Existing callers can upgrade without changing their loading code:
 process-backed behaviour remains the default, profile support is opt-in, and
 applications that do not use the new opt-in metadata, profiles, or the Cargo
 helper require no changes.
+
+## Impact at a glance
+
+| Change                                    | Affects                            | Required?          |
+| ----------------------------------------- | ---------------------------------- | ------------------ |
+| Optional-value boolean flags              | Commands with `bool` CLI fields     | No; additive       |
+| Explicit CLI values always win            | Single-field configuration structs  | No; a defect fix   |
+| Documentation IR version `1.1` to `2.0`   | Consumers pinning the IR version    | No; accept `2.0`   |
+| Injected environment sources              | Tests needing hermetic environments | No; opt-in         |
+| Parser-faithful clap string defaults      | Fields using `cli_default_as_absent`| No; opt-in         |
+| Cargo external-subcommand helper          | Hand-built Cargo subcommands        | No; additive       |
 
 ## Adopt the opt-in agent-native policy check
 
@@ -354,6 +366,75 @@ failures rather than replacing them: a malformed command line and an unknown
 selector are reported together, with the parse error first, so neither root
 cause is masked.
 
+## Review boolean CLI flag spellings
+
+Generated boolean flags accept an optional `=<BOOL>` value. The bare flag and
+omitted flag keep their previous meanings, so the change is additive for every
+caller. Commands that pass a space-separated value are the exception: `--flag
+false` was never accepted and now fails with a clearer error, because the
+value must follow an `=`.
+
+Before, a boolean flag could only express `true`, and a `true` from a
+configuration file or environment variable could not be cleared from the
+command line:
+
+```plaintext
+# config.toml sets excited = true
+$ app --excited=false
+excited = true     # the explicit false was not representable
+```
+
+After, `--flag=false` supplies an explicit `false` that overrides any lower
+layer, while omitting the flag still defers to it:
+
+```plaintext
+# config.toml sets excited = true
+$ app --excited=false
+excited = false    # the command line clears the lower layer
+$ app
+excited = true     # omission still defers
+```
+
+Nothing needs changing to keep the old behaviour. Adopt the explicit form
+where a user needs to override a `true` that originates below the command
+line, and prefer omission when the intent is to defer. The same spelling
+applies to `Option<bool>` fields, which continue to distinguish "supplied
+nowhere" from an explicit `false`.
+
+Generated man pages and PowerShell help now print the `--flag[=<BOOL>]`
+form, and the documentation IR reports `CliMetadata.value_optional = true`
+alongside the `BOOL` value name and the `true`/`false` possible values. The
+IR version advanced to `2.0` alongside the identifier-value change; consumers
+that pin the version should read `ortho_config::docs::ORTHO_DOCS_IR_VERSION`
+rather than hard-code either value. Older documents remain readable, because
+the field carries a serde default.
+
+## Expect explicit CLI values to win
+
+An explicit command-line value now wins even when it equals the struct
+default. This corrects a layering defect: the generated guard compared the
+whole parsed CLI object against the whole defaults object and skipped the CLI
+layer when the two matched. A configuration whose command line restated its
+own default therefore discarded that layer, and a lower-precedence file or
+environment value silently won instead.
+
+The defect was invisible in most applications because any other differing
+field made the two objects unequal. It surfaced with single-field
+configurations, and generally whenever the user restated a default:
+
+```plaintext
+# ACME_PORT=9000, struct default port = 8080
+$ app --port 8080
+port = 9000        # before: the explicit value was discarded
+$ app --port 8080
+port = 8080        # after: the command line wins
+```
+
+No migration is required. Applications that came to rely on the discarded
+value can restore the previous outcome by omitting the argument, which still
+defers to the file or environment layer and is the supported way to express
+that intent.
+
 ## Adopt the Cargo external-subcommand helper
 
 Cargo invokes `cargo <name>` by executing `cargo-<name>` with `<name>` injected
@@ -441,6 +522,19 @@ bridge copies. Build the first with the `ProfilesDeclaration` constructors and
 name the second as `profiles: None`. Both are described above under
 [Review agent-context consumers](#review-agent-context-consumers) and
 [Review documentation-metadata consumers](#review-documentation-metadata-consumers).
+
+## Upgrade checklist
+
+- [ ] Update every OrthoConfig crate requirement to v0.10.0.
+- [ ] Run tests with the feature combinations shipped by the application.
+- [ ] Accept documentation IR version `2.0` in any consumer that pins it.
+- [ ] Review generated help text that asserted a bare `--flag` spelling.
+- [ ] Add `--flag=false` to any workflow that needs to clear a configured
+  `true`; leave other invocations unchanged.
+- [ ] Audit single-field configurations for command lines that restate their
+  defaults, which now take effect instead of being discarded.
+- [ ] Adopt injected environment sources and the Cargo helper only where the
+  application needs them.
 
 [users-guide-policy]: users-guide.md#agent-native-policy-checking
 [users-guide-discovery]: users-guide.md#choose-the-file-discovery-source
