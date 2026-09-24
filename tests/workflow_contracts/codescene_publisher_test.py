@@ -159,3 +159,125 @@ def test_the_publisher_runs_one_at_a_time(
         f"them; a cancelled run abandons its upload and its baseline "
         f"write. It declares cancel-in-progress {cancels!r}"
     )
+
+
+#: The token check's sole command, exactly. The expression is evaluated
+#: before the shell runs, so the step writes ``true`` or ``false`` and no
+#: process ever holds the token.
+TOKEN_CHECK_COMMAND: typ.Final[str] = (
+    "echo \"available=${{ secrets.CS_ACCESS_TOKEN != '' }}\" >> \"$GITHUB_OUTPUT\""
+)
+
+#: How the upload receives the token: as the action's input, never as env.
+TOKEN_INPUT: typ.Final[str] = "${{ secrets.CS_ACCESS_TOKEN }}"
+
+
+def _publisher_job(
+    documents: dict[str, WorkflowDocument],
+) -> tuple[str, list[dict[str, object]]]:
+    """Return the publisher's name and the steps of the job that uploads."""
+    ((name, document),) = publishers(documents).items()
+    jobs = document.get("jobs")
+    assert isinstance(jobs, dict), f"{name} declares no jobs mapping"
+    for job in jobs.values():
+        steps = job.get("steps") if isinstance(job, dict) else None
+        if isinstance(steps, list) and any(
+            isinstance(step, dict) and CODESCENE_ACTION in str(step.get("uses", ""))
+            for step in steps
+        ):
+            return name, [step for step in steps if isinstance(step, dict)]
+    pytest.fail(f"no job in {name} invokes {CODESCENE_ACTION}")
+
+
+def _token_check(steps: list[dict[str, object]]) -> tuple[int, dict[str, object]]:
+    """Return the index and step whose sole command is the token check."""
+    found = [
+        (index, step)
+        for index, step in enumerate(steps)
+        if str(step.get("run", "")).strip() == TOKEN_CHECK_COMMAND
+    ]
+    assert len(found) == 1, (
+        f"the upload's job must run `{TOKEN_CHECK_COMMAND}` as one step's "
+        f"sole command; {len(found)} steps do"
+    )
+    return found[0]
+
+
+def test_the_token_check_is_one_exact_unguarded_command(
+    documents: dict[str, WorkflowDocument],
+) -> None:
+    """The upload's precondition is computed where no process sees the token.
+
+    A guard reading ``env.CS_ACCESS_TOKEN`` passes with the binding deleted,
+    after which the upload skips forever, so the check is asserted
+    positively: one step, ahead of the upload in its job, with an ``id``,
+    no ``if:`` (``false && X`` contains X) and no ``env``, whose sole
+    command is the exact echo.
+    """
+    name, steps = _publisher_job(documents)
+    index, check = _token_check(steps)
+    upload = next(
+        position
+        for position, step in enumerate(steps)
+        if CODESCENE_ACTION in str(step.get("uses", ""))
+    )
+    assert index < upload, f"{name} checks the token after the upload runs"
+    assert check.get("id"), f"{name}'s token check has no id to read it by"
+    assert "if" not in check, f"{name}'s token check is guarded: {check.get('if')!r}"
+    assert "env" not in check, f"{name}'s token check binds env: {check.get('env')!r}"
+
+
+def test_the_upload_consumes_the_check_and_the_ref(
+    documents: dict[str, WorkflowDocument],
+) -> None:
+    """The guard is exactly the check's output and the main ref.
+
+    Held as a set, so an extra ``false`` conjunct fails as surely as a
+    missing one; ``||`` is refused by ``test_the_publisher_uploads_only_from_main``.
+    """
+    _, steps = _publisher_job(documents)
+    _, check = _token_check(steps)
+    expected = {f"steps.{check.get('id')}.outputs.available == 'true'", MAIN_REF}
+    condition = str(_publisher_upload(documents).get("if", ""))
+    assert set(_conjuncts(condition)) == expected, (
+        f"the upload must be guarded on exactly {sorted(expected)}; it is "
+        f"guarded on {condition!r}"
+    )
+
+
+def test_the_upload_takes_the_token_as_its_input(
+    documents: dict[str, WorkflowDocument],
+) -> None:
+    """The action binds the token itself from ``access-token``."""
+    inputs = _publisher_upload(documents).get("with") or {}
+    assert isinstance(inputs, dict), f"the upload step's `with:` is {inputs!r}"
+    assert inputs.get("access-token") == TOKEN_INPUT, (
+        f"the upload must pass `access-token: {TOKEN_INPUT}`; it passes "
+        f"{inputs.get('access-token')!r}"
+    )
+
+
+def _env_blocks(document: WorkflowDocument) -> list[object]:
+    """Return every ``env`` mapping in a workflow: top level, job and step."""
+    blocks: list[object] = [document.get("env")]
+    jobs = document.get("jobs")
+    for job in jobs.values() if isinstance(jobs, dict) else []:
+        if isinstance(job, dict):
+            blocks.append(job.get("env"))
+    blocks.extend(step.get("env") for step in workflow_steps(document))
+    return [block for block in blocks if block is not None]
+
+
+def test_no_env_in_the_publisher_carries_the_token(
+    documents: dict[str, WorkflowDocument],
+) -> None:
+    """The composite upload passes its step env to nested steps.
+
+    So the token is refused in every ``env`` block of the publisher, at
+    workflow, job and step level alike.
+    """
+    ((name, document),) = publishers(documents).items()
+    carrying = [
+        block for block in _env_blocks(document) if "CS_ACCESS_TOKEN" in str(block)
+    ]
+    assert not carrying, f"{name} binds the token in env: {carrying}"
