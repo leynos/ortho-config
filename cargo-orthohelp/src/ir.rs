@@ -29,7 +29,7 @@ pub struct LocalizedDocMetadata {
     /// Configuration field definitions.
     pub fields: Vec<LocalizedFieldMetadata>,
     /// Subcommand definitions.
-    pub subcommands: Vec<LocalizedDocMetadata>,
+    pub subcommands: Vec<Self>,
     /// Windows-specific metadata.
     pub windows: Option<WindowsMetadata>,
 }
