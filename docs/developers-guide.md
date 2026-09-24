@@ -1542,6 +1542,20 @@ racing would decide the baseline by which finished last, and a cancelled run
 abandons both its upload and its baseline write, while a queued one publishes
 later and the later push still wins.
 
+**The token reaches the upload as an input, and no environment holds it.** A
+`codescene-token` step with no `if:` and no `env` runs exactly
+`echo "available=${{ secrets.CS_ACCESS_TOKEN != '' }}" >> "$GITHUB_OUTPUT"`.
+The expression is evaluated before the shell starts, so the step writes `true`
+or `false` and no process ever holds the token. The upload is guarded on
+exactly that output and the main ref, and passes the secret directly as
+`access-token`. The upload action is composite and hands its step `env` to its
+nested artefact-upload and cache steps, so the contract refuses the token in
+every `env` block of the publisher. The old guard, `env.CS_ACCESS_TOKEN != ''`
+on a step-level binding, also passed with the binding deleted, after which the
+upload would skip forever. The contract therefore asserts the check step and
+its command positively, and names each of those failures in
+`codescene_publisher_test.py`.
+
 **No checksum input.** `installer-checksum` is rejected outright when non-empty
 from the pinned uploader, and `archive-checksum` is not a rename of it: it
 digests the action's CLI manifest archive, while the `CODESCENE_CLI_SHA256`
