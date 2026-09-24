@@ -3,19 +3,11 @@
 use super::common::SlotTakeOrExt;
 use super::value_parsing::normalize_scalar;
 use crate::scenario_state::{RulesConfig, RulesContext};
-use anyhow::{Result, anyhow, ensure};
-use ortho_config::OrthoConfig;
+use anyhow::{Context as _, Result, anyhow, ensure};
+use cap_std::{ambient_authority, fs::Dir};
+use ortho_config::{MapEnv, OrthoConfig, SharedEnvSource, SharedScanEnvSource};
 use rstest_bdd_macros::{given, then, when};
-use test_helpers::figment as figment_helpers;
-
-fn with_jail_loader<F>(rules_context: &RulesContext, setup: F) -> Result<()>
-where
-    F: FnOnce(&mut figment::Jail) -> figment::error::Result<ortho_config::OrthoResult<RulesConfig>>,
-{
-    let config_result = figment_helpers::with_jail(setup)?;
-    rules_context.result.set(config_result);
-    Ok(())
-}
+use std::sync::Arc;
 
 #[given("the configuration file has rules {value}")]
 fn file_rules(rules_context: &RulesContext, value: String) -> Result<()> {
@@ -37,19 +29,30 @@ fn load_with_cli(rules_context: &RulesContext, cli_rules: String) -> Result<()> 
     let cli_rules = normalize_scalar(&cli_rules);
     let file_val = rules_context.file_value.get();
     let env_val = rules_context.env_value.get();
-    with_jail_loader(rules_context, move |j| {
-        if let Some(value) = file_val.as_ref() {
-            j.create_file(".ddlint.toml", &format!("rules = [\"{value}\"]"))?;
-        }
-        if let Some(value) = env_val.as_ref() {
-            j.set_env("DDLINT_RULES", value);
-        }
-        Ok(RulesConfig::load_from_iter([
-            "prog",
-            "--rules",
-            cli_rules.as_str(),
-        ]))
-    })
+    let fixture_dir = tempfile::tempdir().context("create CLI config fixture directory")?;
+    let fixture = Dir::open_ambient_dir(fixture_dir.path(), ambient_authority())
+        .context("open CLI config fixture directory")?;
+    let file_contents = file_val
+        .map(|value| format!("rules = [\"{value}\"]"))
+        .unwrap_or_default();
+    fixture
+        .write(".ddlint.toml", file_contents.as_bytes())
+        .context("write CLI config fixture")?;
+    let config_path = fixture_dir.path().join(".ddlint.toml");
+    let mut source = MapEnv::new().with_var("DDLINT_CONFIG_PATH", config_path);
+    if let Some(value) = env_val.as_ref() {
+        source = source.with_var("DDLINT_RULES", value);
+    }
+    let source = Arc::new(source);
+    let discovery: SharedEnvSource = source.clone();
+    let merge: SharedScanEnvSource = source;
+    let config_result = RulesConfig::load_from_iter_with_sources(
+        ["prog", "--rules", cli_rules.as_str()],
+        discovery,
+        merge,
+    );
+    rules_context.result.set(config_result);
+    Ok(())
 }
 
 #[then("the loaded rules are {expected}")]

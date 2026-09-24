@@ -3,10 +3,11 @@
 use super::common::{SlotTakeOrExt, set_nonblank_scalar_once};
 use super::value_parsing::{is_cli_parsing_error, normalize_scalar};
 use crate::scenario_state::{RulesConfig, RulesContext};
-use anyhow::{Result, anyhow};
-use ortho_config::OrthoConfig;
+use anyhow::{Context as _, Result, anyhow};
+use cap_std::{ambient_authority, fs::Dir};
+use ortho_config::{MapEnv, OrthoConfig, SharedEnvSource, SharedScanEnvSource};
 use rstest_bdd_macros::{given, then, when};
-use test_helpers::figment as figment_helpers;
+use std::{ffi::OsString, sync::Arc};
 
 #[given("an alternate config file with rule {value}")]
 fn alt_config_file(rules_context: &RulesContext, value: String) -> Result<()> {
@@ -21,11 +22,24 @@ fn load_with_custom_flag(rules_context: &RulesContext, flag: String, path: Strin
     let file_val = rules_context
         .file_value
         .take_or("alternate config file value not provided")?;
-    let config_result = figment_helpers::with_jail(|j| {
-        j.create_file(&path, &format!("rules = [\"{file_val}\"]"))?;
-        let args = ["prog", flag.as_str(), path.as_str()];
-        Ok(RulesConfig::load_from_iter(args))
-    })?;
+    let fixture_dir = tempfile::tempdir().context("create custom-config fixture directory")?;
+    let fixture = Dir::open_ambient_dir(fixture_dir.path(), ambient_authority())
+        .context("open custom-config fixture directory")?;
+    fixture
+        .write(&path, format!("rules = [\"{file_val}\"]").as_bytes())
+        .context("write custom-config fixture")?;
+    let fixture_path = fixture_dir.path().join(&path);
+    let source = Arc::new(MapEnv::new());
+    let discovery: SharedEnvSource = source.clone();
+    let merge: SharedScanEnvSource = source;
+    // The generated `--config` path is required, so this absolute fixture is
+    // attempted before optional selectors and ambient discovery candidates.
+    let args = [
+        OsString::from("prog"),
+        OsString::from(flag),
+        fixture_path.into_os_string(),
+    ];
+    let config_result = RulesConfig::load_from_iter_with_sources(args, discovery, merge);
     rules_context.result.set(config_result);
     Ok(())
 }

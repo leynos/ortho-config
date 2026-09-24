@@ -3,10 +3,11 @@
 use super::common::{SlotTakeOrExt, set_nonblank_scalar_once, set_scalar_once};
 use super::value_parsing::{is_cli_parsing_error, normalize_scalar};
 use crate::scenario_state::{ErrorConfig, ErrorContext};
-use anyhow::{Result, anyhow, ensure};
-use ortho_config::OrthoConfig;
+use anyhow::{Context as _, Result, anyhow, ensure};
+use cap_std::{ambient_authority, fs::Dir};
+use ortho_config::{MapEnv, OrthoConfig, SharedEnvSource, SharedScanEnvSource};
 use rstest_bdd_macros::{given, then, when};
-use test_helpers::figment as figment_helpers;
+use std::sync::Arc;
 
 #[given("an invalid configuration file")]
 fn invalid_file(error_context: &ErrorContext) -> Result<()> {
@@ -27,18 +28,25 @@ fn env_port(error_context: &ErrorContext, value: String) -> Result<()> {
 fn load_invalid_cli(error_context: &ErrorContext) -> Result<()> {
     let file_val = error_context.file_value.get();
     let env_val = error_context.env_value.get();
-    let config_result = figment_helpers::with_jail(|j| {
-        if let Some(value) = file_val.as_ref() {
-            j.create_file(".ddlint.toml", value)?;
-        }
-        if let Some(value) = env_val.as_ref() {
-            j.set_env("DDLINT_PORT", value);
-        } else if file_val.is_none() {
-            // Keep this scenario focused on CLI parsing when no other source is under test.
-            j.set_env("DDLINT_PORT", "8080");
-        }
-        Ok(ErrorConfig::load_from_iter(["prog", "--bogus"]))
-    })?;
+    let fixture_dir = tempfile::tempdir().context("create error config fixture directory")?;
+    let fixture = Dir::open_ambient_dir(fixture_dir.path(), ambient_authority())
+        .context("open error config fixture directory")?;
+    fixture
+        .write(".ddlint.toml", file_val.as_deref().unwrap_or("").as_bytes())
+        .context("write error config fixture")?;
+    let config_path = fixture_dir.path().join(".ddlint.toml");
+    let mut source = MapEnv::new().with_var("DDLINT_CONFIG_PATH", config_path);
+    if let Some(value) = env_val.as_ref() {
+        source = source.with_var("DDLINT_PORT", value);
+    } else if file_val.is_none() {
+        // Keep this scenario focused on CLI parsing when no other source is under test.
+        source = source.with_var("DDLINT_PORT", "8080");
+    }
+    let source = Arc::new(source);
+    let discovery: SharedEnvSource = source.clone();
+    let merge: SharedScanEnvSource = source;
+    let config_result =
+        ErrorConfig::load_from_iter_with_sources(["prog", "--bogus"], discovery, merge);
     error_context.agg_result.set(config_result);
     Ok(())
 }

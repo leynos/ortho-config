@@ -2,10 +2,11 @@
 
 use super::common::{SlotTakeOrExt, set_scalar_once};
 use crate::scenario_state::{CollectionContext, RulesConfig};
-use anyhow::{Result, anyhow, ensure};
-use ortho_config::OrthoConfig;
+use anyhow::{Context as _, Result, anyhow, ensure};
+use cap_std::{ambient_authority, fs::Dir};
+use ortho_config::{MapEnv, OrthoConfig, SharedEnvSource, SharedScanEnvSource};
 use rstest_bdd_macros::{given, then, when};
-use test_helpers::figment as figment_helpers;
+use std::sync::Arc;
 
 #[given("the dynamic rules config enables {rule_name} via the configuration file")]
 fn dynamic_rules_file(collection_context: &CollectionContext, rule_name: String) -> Result<()> {
@@ -46,19 +47,25 @@ fn load_replace_map(collection_context: &CollectionContext) -> Result<()> {
         .dynamic_rules_env
         .take()
         .unwrap_or_else(Vec::new);
-    let config_result = figment_helpers::with_jail(|j| {
-        if let Some(contents) = file.as_ref() {
-            j.create_file(".ddlint.toml", contents)?;
-        }
-        for (name, enabled) in &env_rules {
-            let normalised = name.replace('-', "_").to_ascii_uppercase();
-            j.set_env(
-                format!("DDLINT_DYNAMIC_RULES__{normalised}__ENABLED"),
-                if *enabled { "true" } else { "false" },
-            );
-        }
-        Ok(RulesConfig::load_from_iter(["prog"]))
-    })?;
+    let fixture_dir = tempfile::tempdir().context("create collection config fixture directory")?;
+    let fixture = Dir::open_ambient_dir(fixture_dir.path(), ambient_authority())
+        .context("open collection config fixture directory")?;
+    fixture
+        .write(".ddlint.toml", file.as_deref().unwrap_or("").as_bytes())
+        .context("write collection config fixture")?;
+    let config_path = fixture_dir.path().join(".ddlint.toml");
+    let mut source = MapEnv::new().with_var("DDLINT_CONFIG_PATH", config_path);
+    for (name, enabled) in &env_rules {
+        let normalised = name.replace('-', "_").to_ascii_uppercase();
+        source = source.with_var(
+            format!("DDLINT_DYNAMIC_RULES__{normalised}__ENABLED"),
+            if *enabled { "true" } else { "false" },
+        );
+    }
+    let source = Arc::new(source);
+    let discovery: SharedEnvSource = source.clone();
+    let merge: SharedScanEnvSource = source;
+    let config_result = RulesConfig::load_from_iter_with_sources(["prog"], discovery, merge);
     collection_context.result.set(config_result);
     Ok(())
 }
