@@ -98,13 +98,27 @@ fn build_default_as_absent_pruning_tokens(
     }
 }
 
-/// Generate the comparison that avoids pushing a CLI layer made only of defaults.
+/// Generate the guard that decides whether the CLI layer may be pushed.
+///
+/// The CLI layer must be pushed whenever the user supplied *any* argument,
+/// regardless of whether the resulting sanitised object happens to equal the
+/// defaults object. Comparing whole objects instead silently discards the CLI
+/// layer for a single-field configuration whose explicit value matches the
+/// struct default, letting a lower-precedence file or environment value win
+/// over an explicit `--flag=false`. Ask clap's per-argument `value_source`
+/// instead, which reports `CommandLine` independently of the parsed value.
+///
+/// `has_explicit_default_as_absent_value` is retained in the condition even
+/// though a supplied `cli_default_as_absent` field already implies
+/// `CommandLine`: the pruning helper emits that binding in this same block, and
+/// naming it here is what keeps it read in generated user code compiled under
+/// `-D warnings`.
 fn build_cli_push_tokens() -> proc_macro2::TokenStream {
     quote! {
-        let differs_from_defaults = defaults_value
-            .as_ref()
-            .map_or(true, |defaults| defaults != &value);
-        if differs_from_defaults || has_explicit_default_as_absent_value {
+        let has_command_line_value = matches.ids().any(|id| {
+            matches.value_source(id.as_ref()) == Some(clap::parser::ValueSource::CommandLine)
+        });
+        if has_command_line_value || has_explicit_default_as_absent_value {
             composer.push_cli(value);
         }
     }
