@@ -22,7 +22,10 @@ use crate::derive::parse::{ClapInferredDefault, FieldAttrs};
 /// flag's optional-value form already supplies `default_missing_value`, and
 /// re-adding `default_value` alongside it would make the floor value
 /// indistinguishable from an explicit command-line value.
-pub(super) fn clap_replay_attributes(attrs: &FieldAttrs, is_bool: bool) -> proc_macro2::TokenStream {
+pub(super) fn clap_replay_attributes(
+    attrs: &FieldAttrs,
+    is_bool: bool,
+) -> proc_macro2::TokenStream {
     let Some(ClapInferredDefault::Value(default)) = attrs.inferred_clap_default.as_ref() else {
         return proc_macro2::TokenStream::new();
     };
