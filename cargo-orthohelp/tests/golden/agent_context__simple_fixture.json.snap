@@ -28,7 +28,10 @@ expression: snapshot
           "value_type": "bool",
           "required": false,
           "default": "false",
-          "enum_values": []
+          "enum_values": [
+            "true",
+            "false"
+          ]
         },
         {
           "name": "retries",

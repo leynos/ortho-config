@@ -155,11 +155,31 @@ impl<'a> FieldMetaBuilder<'a> {
         })?;
         let long = option_string_tokens(Some(meta.long.as_str()));
         let short = option_char_tokens(Some(meta.short));
-        let value_name = option_string_tokens(context.attrs.doc.cli_value_name.as_deref());
         let multiple = is_multi_value(&context.field.ty);
-        let takes_value = !meta.is_bool;
         let possible_values = build_possible_values(context.value_type);
         let hide_in_help = context.attrs.doc.cli_hide_in_help;
+
+        // Boolean flags accept an optional `=<BOOL>` value. Report the value
+        // placeholder and allowed literals so renderers can print the
+        // `--flag[=<BOOL>]` form rather than an unexplained bare switch.
+        // Every other option takes a required value, so only boolean flags
+        // mark their value as optional.
+        let (value_name, value_optional, possible_values) = if meta.is_bool {
+            (
+                option_string_tokens(Some("BOOL")),
+                quote! { true },
+                vec![
+                    quote! { String::from("true") },
+                    quote! { String::from("false") },
+                ],
+            )
+        } else {
+            (
+                option_string_tokens(context.attrs.doc.cli_value_name.as_deref()),
+                quote! { false },
+                possible_values,
+            )
+        };
 
         let krate = self.krate;
         Ok(quote! {
@@ -168,7 +188,8 @@ impl<'a> FieldMetaBuilder<'a> {
                 short: #short,
                 value_name: #value_name,
                 multiple: #multiple,
-                takes_value: #takes_value,
+                takes_value: true,
+                value_optional: #value_optional,
                 possible_values: vec![ #( #possible_values ),* ],
                 hide_in_help: #hide_in_help,
             })

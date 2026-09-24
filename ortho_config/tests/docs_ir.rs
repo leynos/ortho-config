@@ -294,8 +294,22 @@ fn test_field_verbose(docs_metadata: DocMetadata) -> Result<()> {
         .as_ref()
         .ok_or_else(|| anyhow!("expected verbose CLI metadata"))?;
     ensure!(
-        !verbose_cli.takes_value,
-        "expected verbose to not take a value"
+        verbose_cli.value_name.as_deref() == Some("BOOL"),
+        "expected verbose value name BOOL, got {:?}",
+        verbose_cli.value_name
+    );
+    ensure!(
+        verbose_cli.takes_value,
+        "expected verbose to accept an optional value"
+    );
+    ensure!(
+        verbose_cli.value_optional,
+        "expected verbose to mark its value optional"
+    );
+    ensure!(
+        verbose_cli.possible_values == ["true", "false"],
+        "expected verbose possible values true/false, got {:?}",
+        verbose_cli.possible_values
     );
     Ok(())
 }

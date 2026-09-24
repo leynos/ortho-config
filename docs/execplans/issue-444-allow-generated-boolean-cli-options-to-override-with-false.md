@@ -60,6 +60,12 @@ true` alone still resolves to `true`.
 - **`default_value` replay still behaves.** With both `default_value = "false"`
   and the new attributes, absent → `DefaultValue` source, explicit forms →
   `CommandLine`. `differs_from_defaults` therefore still gates correctly.
+- **Do not run `cargo test --workspace` while editing.** The `cargo-orthohelp`
+  behavioural scenarios spawn the real `target/debug/cargo-orthohelp` binary;
+  recompiling it mid-run produced nine spurious failures that vanish when the
+  scenario runs against a quiescent tree. Re-verify after edits settle.
+- **The derived short flag for `is_excited` is `i`,** because `r` and `s` are
+  already claimed by `recipient` and `salutations`.
 
 ## Decision log
 

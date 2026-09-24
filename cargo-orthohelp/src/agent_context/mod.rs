@@ -25,7 +25,7 @@ pub use policy::apply_policy_to_context;
 /// use cargo_orthohelp::schema::{DocMetadata, HeadingIds, SectionsMetadata};
 ///
 /// let metadata = DocMetadata {
-///     ir_version: "1.1".to_owned(),
+///     ir_version: "1.2".to_owned(),
 ///     app_name: "example".to_owned(),
 ///     bin_name: None,
 ///     about_id: "example.about".to_owned(),
@@ -195,6 +195,12 @@ const fn should_skip_non_flag_input(field: &FieldMetadata) -> bool {
 }
 
 fn map_input_value_type(field: &FieldMetadata) -> Option<String> {
+    // Booleans advertise `true`/`false` as possible values, which would
+    // otherwise be classified as an enum. Keep the boolean classification so
+    // agents see a flag rather than a choice between named variants.
+    if matches!(&field.value, Some(ValueType::Bool)) {
+        return Some("bool".to_owned());
+    }
     if matches!(&field.value, Some(ValueType::Enum { .. })) {
         return Some("enum".to_owned());
     }

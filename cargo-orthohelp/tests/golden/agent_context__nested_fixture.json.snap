@@ -71,7 +71,10 @@ expression: snapshot
           "value_type": "bool",
           "required": false,
           "default": "false",
-          "enum_values": []
+          "enum_values": [
+            "true",
+            "false"
+          ]
         }
       ],
       "output_modes": [],
@@ -122,7 +125,10 @@ expression: snapshot
           "value_type": "bool",
           "required": false,
           "default": "false",
-          "enum_values": []
+          "enum_values": [
+            "true",
+            "false"
+          ]
         },
         {
           "name": "recipient",

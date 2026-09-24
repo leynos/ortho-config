@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 /// Top-level documentation metadata for a configuration command.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct DocMetadata {
-    /// IR schema version string (for example, "1.1").
+    /// IR schema version string (for example, "1.2").
     pub ir_version: String,
     /// Application name used for display and identifier generation.
     pub app_name: String,
@@ -117,6 +117,16 @@ pub struct CliMetadata {
     pub multiple: bool,
     /// Whether the CLI flag takes a value (false for switches).
     pub takes_value: bool,
+    /// Whether the value is optional, as in `--flag[=<BOOL>]`.
+    ///
+    /// Boolean flags accept a value but do not require one: the bare spelling
+    /// means `true`, and `--flag=false` supplies an explicit `false`. Renderers
+    /// bracket the placeholder when this is set.
+    ///
+    /// Defaults to `false` so IR written before this field existed still reads
+    /// as a plain switch, per ADR-003.
+    #[serde(default)]
+    pub value_optional: bool,
     /// Allowed values for enum-like options.
     pub possible_values: Vec<String>,
     /// Whether the flag is hidden from help output.

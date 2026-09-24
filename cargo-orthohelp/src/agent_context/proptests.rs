@@ -136,7 +136,7 @@ fn field_name(prefix: &'static str) -> impl Strategy<Value = String> {
 
 fn doc(app_name: &str, bin_name: Option<&str>, subcommands: Vec<DocMetadata>) -> DocMetadata {
     DocMetadata {
-        ir_version: "1.1".to_owned(),
+        ir_version: "1.2".to_owned(),
         app_name: app_name.to_owned(),
         bin_name: bin_name.map(str::to_owned),
         about_id: format!("{app_name}.about"),
@@ -163,6 +163,7 @@ fn field(name: &str, hide_in_help: bool) -> FieldMetadata {
             value_name: Some("VALUE".to_owned()),
             multiple: false,
             takes_value: true,
+            value_optional: false,
             possible_values: Vec::new(),
             hide_in_help,
         }),
