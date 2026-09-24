@@ -133,6 +133,7 @@ fn golden_enum_rendering(mut minimal_metadata: LocalizedDocMetadata) {
             value_name: None,
             multiple: false,
             takes_value: true,
+            value_optional: false,
             possible_values: vec![
                 "debug".to_owned(),
                 "info".to_owned(),
@@ -192,6 +193,7 @@ fn golden_environment_section(mut minimal_metadata: LocalizedDocMetadata) {
             value_name: None,
             multiple: false,
             takes_value: true,
+            value_optional: false,
             possible_values: vec![],
             hide_in_help: false,
         }),

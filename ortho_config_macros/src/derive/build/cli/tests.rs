@@ -36,8 +36,8 @@ fn skips_fields_marked_with_skip_cli() -> Result<()> {
 
 /// Renders the generated `#[arg(...)]` attribute for a single-field struct.
 fn generated_attribute(ty: &str) -> Result<String> {
-    let input: syn::DeriveInput = syn::parse_str(&format!("struct Demo {{ excited: {ty} }}"))
-        .map_err(|err| anyhow!(err))?;
+    let input: syn::DeriveInput =
+        syn::parse_str(&format!("struct Demo {{ excited: {ty} }}")).map_err(|err| anyhow!(err))?;
     let (_, fields, _, field_attrs) = crate::derive::parse::parse_input(&input)?;
     let tokens = build_cli_struct_fields(&fields, &field_attrs)?;
     tokens

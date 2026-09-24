@@ -259,6 +259,7 @@ fn field(name: &str, hide_in_help: bool) -> FieldMetadata {
             value_name: Some("VALUE".to_owned()),
             multiple: false,
             takes_value: true,
+            value_optional: false,
             possible_values: Vec::new(),
             hide_in_help,
         }),

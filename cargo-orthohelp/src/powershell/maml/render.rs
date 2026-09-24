@@ -303,6 +303,16 @@ fn push_cli_paragraphs(field: &LocalizedFieldMetadata, paragraphs: &mut Vec<Stri
     if let Some(long) = cli.long.as_ref() {
         paragraphs.push(format!("Long flag: --{long}."));
     }
+    if cli.value_optional {
+        let flag = cli
+            .long
+            .as_ref()
+            .map_or_else(|| String::from("the flag"), |long| format!("--{long}"));
+        paragraphs.push(format!(
+            "The value is optional: `{flag}` means `true`, and `{flag}=false` \
+             supplies an explicit `false`."
+        ));
+    }
     if cli.multiple {
         paragraphs.push("This option may be supplied multiple times.".to_owned());
     }

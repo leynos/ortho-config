@@ -5,7 +5,36 @@
 
 use std::borrow::Cow;
 
-use crate::schema::ValueType;
+use crate::schema::{CliMetadata, ValueType};
+
+/// Formats a CLI option, choosing the optional-value form for boolean flags.
+///
+/// Boolean options render as `--flag[=<BOOL>]`; everything else renders as an
+/// ordinary flag with a required value, or as a bare switch when
+/// [`CliMetadata::takes_value`] is false.
+///
+/// `fallback_placeholder` supplies a value name when the metadata does not
+/// carry one, derived from the field's semantic [`ValueType`].
+#[must_use]
+pub fn format_option(
+    cli: &CliMetadata,
+    fallback_placeholder: Option<&str>,
+    fallback: &str,
+) -> String {
+    if !cli.takes_value {
+        return format_flag(cli.long.as_deref(), cli.short);
+    }
+    let value_name = cli
+        .value_name
+        .as_deref()
+        .or(fallback_placeholder)
+        .unwrap_or(fallback);
+    if cli.value_optional {
+        format_flag_with_optional_value(cli.long.as_deref(), cli.short, value_name)
+    } else {
+        format_flag_with_value(cli.long.as_deref(), cli.short, value_name)
+    }
+}
 
 /// Escapes text for safe inclusion in roff output.
 ///
@@ -179,6 +208,38 @@ pub fn format_flag(long: Option<&str>, short: Option<char>) -> String {
 #[must_use]
 pub fn format_flag_with_value(long: Option<&str>, short: Option<char>, value_name: &str) -> String {
     let value = italic(value_name);
+    match (long, short) {
+        (Some(l), Some(s)) => format!("\\fB\\-\\-{l}\\fR {value}, \\fB\\-{s}\\fR {value}"),
+        (Some(l), None) => format!("\\fB\\-\\-{l}\\fR {value}"),
+        (None, Some(s)) => format!("\\fB\\-{s}\\fR {value}"),
+        (None, None) => value,
+    }
+}
+
+/// Formats a CLI flag whose value is optional, as in `--flag[=<BOOL>]`.
+///
+/// Boolean options accept a value but do not require one: the bare spelling
+/// means `true`, and `--flag=false` supplies an explicit `false`. Bracketing
+/// the placeholder distinguishes the optional value from the required form
+/// produced by [`format_flag_with_value`].
+///
+/// # Examples
+///
+/// ```
+/// use cargo_orthohelp::roff::escape::format_flag_with_optional_value;
+///
+/// assert_eq!(
+///     format_flag_with_optional_value(Some("is-excited"), Some('i'), "BOOL"),
+///     "\\fB\\-\\-is-excited\\fR \\fI[=BOOL]\\fR, \\fB\\-i\\fR \\fI[=BOOL]\\fR"
+/// );
+/// ```
+#[must_use]
+pub fn format_flag_with_optional_value(
+    long: Option<&str>,
+    short: Option<char>,
+    value_name: &str,
+) -> String {
+    let value = italic(&format!("[={value_name}]"));
     match (long, short) {
         (Some(l), Some(s)) => format!("\\fB\\-\\-{l}\\fR {value}, \\fB\\-{s}\\fR {value}"),
         (Some(l), None) => format!("\\fB\\-\\-{l}\\fR {value}"),

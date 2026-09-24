@@ -328,6 +328,12 @@ const fn should_skip_non_flag_input(field: &FieldMetadata) -> bool {
 /// closed value set either way. Fields with no declared value type yield
 /// `None`, which the agent-context schema renders as an absent `value_type`.
 fn map_input_value_type(field: &FieldMetadata) -> Option<String> {
+    // Booleans advertise `true`/`false` as possible values, which would
+    // otherwise be classified as an enum. Keep the boolean classification so
+    // agents see a flag rather than a choice between named variants.
+    if matches!(&field.value, Some(ValueType::Bool)) {
+        return Some("bool".to_owned());
+    }
     if matches!(&field.value, Some(ValueType::Enum { .. })) {
         return Some("enum".to_owned());
     }

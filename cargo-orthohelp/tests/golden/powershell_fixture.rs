@@ -53,6 +53,7 @@ pub(crate) fn minimal_doc() -> LocalizedDocMetadata {
                 value_name: None,
                 multiple: false,
                 takes_value: true,
+                value_optional: false,
                 possible_values: vec![],
                 hide_in_help: false,
             }),
