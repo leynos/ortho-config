@@ -35,6 +35,17 @@ struct TelemetrySubcommand {
     jobs: Option<u16>,
 }
 
+/// A profile-opted-in config, so the profile load boundary is instrumented.
+///
+/// The `jobs` default supplies the success case's value without needing a
+/// file or an environment variable.
+#[derive(Debug, Deserialize, Serialize, OrthoConfig)]
+#[ortho_config(prefix = "MERGE_TELEMETRY_", profiles)]
+struct ProfileTelemetryConfig {
+    #[ortho_config(default = 3)]
+    jobs: u16,
+}
+
 const ALLOWED_FIELDS: &[&str] = &[
     "event",
     "message",
@@ -192,6 +203,38 @@ fn source_aware_derived_load_reports_success_and_failure() {
 }
 
 #[test]
+fn profile_load_reports_success_and_failure() {
+    // The default `jobs` of 3 is present in the composed layers, so the
+    // success case needs no file or environment input at all.
+    let success_events = capture(|| {
+        let result = ProfileTelemetryConfig::load_with_profile_from_iter(["telemetry"]);
+        assert!(
+            result.is_ok(),
+            "profile-aware load should succeed: {result:?}"
+        );
+    });
+    // The profile-aware entry point takes no injected source, so its events
+    // are labelled `process`; only the source-aware entry points are injected.
+    let success = find_event(&success_events, "profile_load", "process", "success");
+    assert_eq!(success.field("category"), "none");
+    assert_bounded_and_redacted(&success_events);
+
+    // An unknown profile is a selection failure, so it must reduce to the
+    // profile category without leaking the selector's value.
+    let failure_events = capture(|| {
+        let result =
+            ProfileTelemetryConfig::load_with_profile_from_iter(["telemetry", "--profile", "nope"]);
+        assert!(
+            result.is_err(),
+            "an unknown profile must fail the profile-aware load"
+        );
+    });
+    let failure = find_event(&failure_events, "profile_load", "process", "failure");
+    assert_eq!(failure.field("category"), "profile");
+    assert_bounded_and_redacted(&failure_events);
+}
+
+#[test]
 fn source_aware_subcommand_load_reports_success_and_failure() {
     let success_events = capture(|| {
         let source = Arc::new(MapEnv::new().with_var("MERGE_CMDS_TELEMETRY_JOBS", "7"));
@@ -291,6 +334,10 @@ mod metrics_tests {
                 merge,
             ));
 
+            drop(ProfileTelemetryConfig::load_with_profile_from_iter([
+                "telemetry",
+            ]));
+
             let subcommand_source =
                 Arc::new(MapEnv::new().with_var("MERGE_CMDS_TELEMETRY_JOBS", "7"));
             drop(load_and_merge_subcommand_with_sources(
@@ -310,26 +357,27 @@ mod metrics_tests {
         counters(snapshotter.snapshot())
     }
 
-    /// Assert each operation emits its expected injected attempt and success counters.
-    fn assert_operation_counters(entries: &[(metrics_util::CompositeKey, u64)]) {
-        for (operation, successes, attempts) in [
-            ("csv_env", 3, 4),
-            ("derived_load", 1, 1),
-            ("subcommand_load", 1, 1),
-        ] {
+    /// Assert each operation emits its expected attempt and success counters
+    /// under the given source label.
+    fn assert_operation_counters(
+        entries: &[(metrics_util::CompositeKey, u64)],
+        source: &'static str,
+        operations: &[(&'static str, u64, u64)],
+    ) {
+        for (operation, successes, attempts) in operations {
             assert_eq!(
                 counter_with_labels(
                     entries,
                     "ortho_config.merge.attempts",
                     &[
                         ("operation", operation),
-                        ("source", "injected"),
+                        ("source", source),
                         ("outcome", "attempt"),
                         ("category", "none"),
                     ],
                 ),
-                attempts,
-                "expected {attempts} injected attempt(s) for {operation}: {entries:?}"
+                *attempts,
+                "expected {attempts} {source} attempt(s) for {operation}: {entries:?}"
             );
             assert_eq!(
                 counter_with_labels(
@@ -337,13 +385,13 @@ mod metrics_tests {
                     "ortho_config.merge.outcomes",
                     &[
                         ("operation", operation),
-                        ("source", "injected"),
+                        ("source", source),
                         ("outcome", "success"),
                         ("category", "none"),
                     ],
                 ),
-                successes,
-                "expected {successes} injected success(es) for {operation}: {entries:?}"
+                *successes,
+                "expected {successes} {source} success(es) for {operation}: {entries:?}"
             );
         }
     }
@@ -370,7 +418,18 @@ mod metrics_tests {
     #[test]
     fn merge_operations_emit_bounded_counters() {
         let entries = recorded_merge_counters();
-        assert_operation_counters(&entries);
+        assert_operation_counters(
+            &entries,
+            "injected",
+            &[
+                ("csv_env", 3, 4),
+                ("derived_load", 1, 1),
+                ("subcommand_load", 1, 1),
+            ],
+        );
+        // The profile-aware entry points take no injected source, so their
+        // boundary is labelled `process` rather than `injected`.
+        assert_operation_counters(&entries, "process", &[("profile_load", 1, 1)]);
         assert_opaque_transform_failure(&entries);
     }
 }

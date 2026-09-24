@@ -150,26 +150,65 @@ fn profiles_load(profiles_context: &ProfilesContext) -> Result<()> {
         .set(profile_load(profiles_context, &[]));
     Ok(())
 }
+/// Names the `OrthoError` variant carried by `err`.
+///
+/// The name identifies the variant without rendering its payload, so a
+/// scenario can assert which errors a load retained against the precedence
+/// contract rather than against message text.
+fn variant_name(err: &OrthoError) -> &'static str {
+    match err {
+        OrthoError::CliParsing(_) => "CliParsing",
+        OrthoError::UnknownProfile { .. } => "UnknownProfile",
+        OrthoError::ProfileForbiddenKey { .. } => "ProfileForbiddenKey",
+        OrthoError::InvalidProfileName { .. } => "InvalidProfileName",
+        OrthoError::ReservedProfileName { .. } => "ReservedProfileName",
+        OrthoError::Aggregate(_) => "Aggregate",
+        _ => "Other",
+    }
+}
+
+/// Flattens a load error into the errors a caller actually sees.
+///
+/// An aggregated failure reports every sub-error it retained; any other
+/// failure reports itself. A scenario asserting on one sub-error must look
+/// through the aggregate, since combining a parse error with a selection error
+/// is exactly the case the precedence contract describes.
+fn flatten_load_error(err: &OrthoError) -> Vec<&OrthoError> {
+    match err {
+        OrthoError::Aggregate(aggregated) => aggregated.iter().collect(),
+        single => vec![single],
+    }
+}
+
 /// Records the structured fields of a load error for later assertions.
 fn record_load_error(profiles_context: &ProfilesContext, err: &OrthoError) {
     profiles_context.error_message.set(err.to_string());
-    match err {
-        OrthoError::UnknownProfile {
-            selected,
-            selection_source,
-            available,
-        } => {
-            profiles_context.error_selected.set(selected.clone());
-            profiles_context.error_source.set(*selection_source);
-            profiles_context
-                .error_available
-                .set(available.as_slice().to_vec());
+    let reported = flatten_load_error(err);
+    profiles_context.error_variants.set(
+        reported
+            .iter()
+            .map(|inner| variant_name(inner).to_owned())
+            .collect(),
+    );
+    for inner in reported {
+        match inner {
+            OrthoError::UnknownProfile {
+                selected,
+                selection_source,
+                available,
+            } => {
+                profiles_context.error_selected.set(selected.clone());
+                profiles_context.error_source.set(*selection_source);
+                profiles_context
+                    .error_available
+                    .set(available.as_slice().to_vec());
+            }
+            OrthoError::ProfileForbiddenKey { profile, key } => {
+                profiles_context.error_profile.set(profile.clone());
+                profiles_context.error_key.set(key.clone());
+            }
+            _ => {}
         }
-        OrthoError::ProfileForbiddenKey { profile, key } => {
-            profiles_context.error_profile.set(profile.clone());
-            profiles_context.error_key.set(key.clone());
-        }
-        _ => {}
     }
 }
 
@@ -225,11 +264,17 @@ fn profile_load(
 }
 
 /// Builds the CLI argument vector from the parsed `--flag value` pairs.
+///
+/// An empty value marks a valueless flag, so only the flag itself is pushed.
+/// The malformed-flag scenario needs clap to see `--bogus` with nothing after
+/// it, which is what makes the argument unrecognised.
 fn build_cli_args(flags: &[(String, String)]) -> Vec<String> {
     let mut args = vec!["profile-cli".to_owned()];
     for (flag, value) in flags {
         args.push(format!("--{flag}"));
-        args.push(value.clone());
+        if !value.is_empty() {
+            args.push(value.clone());
+        }
     }
     args
 }
@@ -265,17 +310,25 @@ fn build_file_value(profiles_context: &ProfilesContext) -> Value {
     Value::Object(file)
 }
 
-/// Parses `--flag value` pairs from a whitespace-separated flag string.
+/// Parses a whitespace-separated flag string into `(name, value)` pairs.
+///
+/// A token beginning with `--` starts a pair; the token after it is its value
+/// only when that token is not itself flag-like. A flag with no value — the
+/// malformed-flag scenario's `--bogus` — is therefore still emitted, with an
+/// empty value, rather than being silently dropped by a fixed-stride grouping.
 fn parse_flags(flags: &str) -> Vec<(String, String)> {
-    let tokens: Vec<&str> = flags.split_whitespace().collect();
-    tokens
-        .chunks(2)
-        .filter_map(|pair| {
-            let flag = pair.first()?.trim_start_matches("--").to_owned();
-            let value = (*pair.get(1)?).to_owned();
-            Some((flag, value))
-        })
-        .collect()
+    let mut parsed: Vec<(String, String)> = Vec::new();
+    for token in flags.split_whitespace() {
+        match token.strip_prefix("--") {
+            Some(name) => parsed.push((name.to_owned(), String::new())),
+            None => {
+                if let Some(last) = parsed.last_mut() {
+                    token.clone_into(&mut last.1);
+                }
+            }
+        }
+    }
+    parsed
 }
 
 /// Converts a scalar placeholder to a JSON value, preserving numbers.
