@@ -21,6 +21,7 @@ const SENSITIVE_INPUTS: &[&str] = &[
     "MERGE_TELEMETRY_JOBS",
     "MERGE_CMDS_TELEMETRY_JOBS",
     "UNRELATED_SECRET_KEY",
+    super::PROCESS_INPUT_SENTINEL,
     "secret-injected-value",
     "/secret/injected/path",
 ];
