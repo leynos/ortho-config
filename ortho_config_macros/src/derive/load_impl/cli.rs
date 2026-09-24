@@ -133,10 +133,9 @@ pub(super) fn build_profile_cli_layer_tokens(
                     let differs_from_defaults = defaults_value
                         .as_ref()
                         .map_or(true, |defaults| defaults != &value);
-                    if differs_from_defaults
-                        || has_explicit_default_as_absent_value
-                        || has_explicitly_provided_value
-                    {
+                    let has_user_input = has_explicitly_provided_value
+                        || has_explicit_default_as_absent_value;
+                    if differs_from_defaults || has_user_input {
                         composer.push_cli(value);
                     }
                 }

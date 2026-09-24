@@ -58,22 +58,11 @@ pub fn extract_profile_layers(
     for layer in layers {
         let path = layer.path().map(Utf8Path::to_path_buf);
         let mut value = layer.into_value();
-        let mut file_profile_layer = None;
-
-        if let Some(profile_value) = value.get("profile") {
-            if let Some(profile_map) = profile_value.as_object() {
-                let (selected_body, found, names) = collect_profile_tables(profile_map, selected)?;
-                selected_found |= found;
-                file_profile_layer = selected_body.cloned();
-                available.extend(names);
-            }
-            if let Some(object) = value.as_object_mut() {
-                object.remove("profile");
-            }
-        }
+        let (selected_body, found) = take_profile_tables(&mut value, selected, &mut available)?;
+        selected_found |= found;
 
         file_layers.push(MergeLayer::file(Cow::Owned(value), path.clone()));
-        if let Some(body) = file_profile_layer {
+        if let Some(body) = selected_body {
             profile_layers.push(MergeLayer::profile(Cow::Owned(body), path));
         }
     }
@@ -101,18 +90,44 @@ pub fn extract_profile_layers(
     })
 }
 
+/// Strip the reserved `profile` root key from one file layer and validate it.
+///
+/// Returns the selected profile's table (when the selection matches a name
+/// defined here) and whether the selection was found. Candidate names are
+/// appended to `available` for the unknown-profile error.
+///
+/// A `profile` key that is present but not a table is still stripped: the key
+/// is reserved across all three projections once a struct opts in, so it never
+/// merges as an ordinary value (decision D12).
+fn take_profile_tables(
+    value: &mut Value,
+    selected: Option<&SelectedProfile>,
+    available: &mut Vec<String>,
+) -> OrthoResult<(Option<Value>, bool)> {
+    let Some(object) = value.as_object_mut() else {
+        return Ok((None, false));
+    };
+    // One pattern handles all three misses at once: no `profile` key, a
+    // `profile` key holding a non-table, and a non-object file layer. The key
+    // is removed either way, so it never survives into the file layer.
+    let Some(Value::Object(profile_map)) = object.remove("profile") else {
+        return Ok((None, false));
+    };
+    let (selected_body, found) = collect_profile_tables(&profile_map, selected, available)?;
+    Ok((selected_body.cloned(), found))
+}
+
 /// Validate every profile table in one file and return the selected body.
 ///
-/// Returns the selected profile's table (when selected matches a name), whether
-/// the selected profile was found, and the sorted-candidate names for the
-/// unknown-profile error.
+/// Returns the selected profile's table (when selected matches a name) and
+/// whether the selected profile was found.
 fn collect_profile_tables<'a>(
     profile_map: &'a serde_json::Map<String, Value>,
     selected: Option<&SelectedProfile>,
-) -> OrthoResult<(Option<&'a Value>, bool, Vec<String>)> {
+    available: &mut Vec<String>,
+) -> OrthoResult<(Option<&'a Value>, bool)> {
     let mut selected_body = None;
     let mut found = false;
-    let mut available = Vec::new();
     for (raw_name, body) in profile_map {
         let name = super::ProfileName::new(raw_name)?;
         validate_profile_body(&name, body)?;
@@ -122,7 +137,7 @@ fn collect_profile_tables<'a>(
         }
         available.push(raw_name.clone());
     }
-    Ok((selected_body, found, available))
+    Ok((selected_body, found))
 }
 
 /// Reject profile-body keys `OrthoConfig` reserves for future work.

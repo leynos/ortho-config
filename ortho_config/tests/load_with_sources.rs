@@ -44,6 +44,14 @@ struct UnprefixedConfig {
     database: Database,
 }
 
+/// Opts into profile support so the selector lookup path is exercised.
+#[derive(Debug, Deserialize, Serialize, OrthoConfig)]
+#[ortho_config(prefix = "PROFILED_CONFIG_", profiles)]
+struct ProfiledConfig {
+    #[ortho_config(default = 1)]
+    retries: u8,
+}
+
 /// Write a selector fixture through a capability handle.
 fn write_selector_fixture(dir: &Path) -> Result<PathBuf> {
     let cap = Dir::open_ambient_dir(dir, ambient_authority())
@@ -53,7 +61,62 @@ fn write_selector_fixture(dir: &Path) -> Result<PathBuf> {
     Ok(dir.join("selected.toml"))
 }
 
+/// Write a config file defining profile `ci`, returning its path.
+///
+/// The write goes through a `cap_std::fs::Dir` handle rather than `std::fs`,
+/// as the repository's lint suite requires.
+fn write_profiled_fixture(dir: &Path) -> Result<PathBuf> {
+    let cap = Dir::open_ambient_dir(dir, ambient_authority())
+        .context("open profiled loading fixture directory")?;
+    cap.write("profiled.toml", b"retries = 3\n[profile.ci]\nretries = 7\n")
+        .context("write profiled loading fixture")?;
+    Ok(dir.join("profiled.toml"))
+}
+
+/// A selector present only in the injected map must steer the selection.
+///
+/// The map also supplies the config-file selector, so the profile table is
+/// reachable only if discovery, selection, and extraction all read through the
+/// injected source. If the generated loader fell back to `std::env::var` for
+/// the selector, the injected `PROFILED_CONFIG_PROFILE` would be ignored and
+/// the profile value would never reach the merge.
+#[test]
+fn profiled_loading_reads_the_selector_from_the_injected_source() -> Result<()> {
+    let fixture_dir = tempfile::tempdir().context("create profiled loading fixture")?;
+    let config_path = write_profiled_fixture(fixture_dir.path())?;
+    // Prove the test cannot pass by reading the process environment.
+    ensure!(
+        std::env::var_os("PROFILED_CONFIG_PROFILE").is_none(),
+        "the process must not already define the selector this test injects"
+    );
+    let source = Arc::new(
+        MapEnv::new()
+            .with_var("PROFILED_CONFIG_CONFIG_PATH", &config_path)
+            .with_var("PROFILED_CONFIG_PROFILE", "ci"),
+    );
+    let discovery: SharedEnvSource = source.clone();
+    let merge: SharedScanEnvSource = source;
+
+    let config = ProfiledConfig::load_from_iter_with_sources(["profiled-config"], discovery, merge)
+        .map_err(|error| anyhow::anyhow!(error))
+        .context("load a profile-selected configuration from an injected source")?;
+
+    // Three distinguishable outcomes make this assertion decisive: the struct
+    // default is 1, the discovered file sets 3, and only profile `ci` sets 7.
+    // A selector that read the process instead would return 3 here.
+    ensure!(
+        config.retries == 7,
+        "expected the injected selector to select profile `ci`, got {}",
+        config.retries
+    );
+    Ok(())
+}
+
 /// One map drives both the selector lookup and the complete merge layer.
+///
+/// The process-backed selector path is covered by the `profiles.feature` BDD
+/// suite, which owns the process-environment scenarios; this file stays free of
+/// process mutation so its cases keep running concurrently.
 #[test]
 fn derived_loading_uses_one_map_for_both_environment_capabilities() -> Result<()> {
     let mut test_result = Ok(());
