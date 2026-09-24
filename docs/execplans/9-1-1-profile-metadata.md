@@ -494,7 +494,7 @@ D11–D15 added after the Logisphere design-review panel (see Decision log).
       `scenario_state_profiles.rs` split.
 - [x] (2026-09-24) Review round on PR #418. Six findings, three failed checks,
       and two warnings addressed:
-      1. `docs/contents.md` — ADR-008 list item rewrapped to 80 columns.
+      1. `docs/contents.md` — ADR-009 list item rewrapped to 80 columns.
       2. `cli_tokens.rs` — the effective config long is registered in
          `used_longs` *before* `build_profile_flag_field`, so a config long of
          `profile` collides at compile time instead of producing two `--profile`
@@ -575,6 +575,54 @@ D11–D15 added after the Logisphere design-review panel (see Decision log).
       maintainability biomarkers on a non-required check, carried forward to
       the next round rather than pre-emptively refactored while a review is
       queued.
+- [x] (2026-09-25) Second rebase onto `origin/main` (`8835347c`), absorbing
+      PR #416 "Opt-in agent-native policy configuration (7.1.1)". Six files
+      conflicted, all resolved by keeping both sides' intent — this branch's
+      profile machinery and `main`'s policy machinery are orthogonal, with one
+      exception recorded below. Conflict resolutions:
+      1. `cargo-orthohelp/src/agent_context/mod.rs` — `main` hoisted
+         `CANONICAL_VERBS` into a new `policy::vocabulary` module and added
+         `mod policy`; this branch added `mod normalize` (its 400-line-cap
+         extraction). Both `mod` declarations kept, the now-duplicated local
+         `const CANONICAL_VERBS` dropped in favour of `main`'s import.
+      2. `cargo-orthohelp/tests/golden/agent_context_tests.rs` — `main` added a
+         `package_name` case parameter and a `policy_warn` case; this branch
+         added a `profile` case. Both cases kept, with the profile case gaining
+         the new leading `"orthohelp_fixture"` argument its fixture needs.
+      3. `ortho_config/src/agent_context/tests_round_trip.rs` — both sides
+         extended `any_agent_context()`'s generator tuple, `main` with
+         `exceptions` and this branch with `profiles`. Merged into a four-field
+         tuple that keeps both `profiles_declaration()` and
+         `any_policy_exception()`.
+      4. `docs/contents.md` — both sides added an ADR-008 entry and an ExecPlan
+         entry. Both kept; this branch's ADR renumbered (see below).
+      5. `docs/v0-10-0-migration-guide.md` — both sides added a section and a
+         link definition. Both kept; the `[users-guide-policy]` definition
+         `main` added survives at the end of the file.
+      6. `ortho_config/tests/documentation_examples_tests.rs` — both sides
+         inserted into the same sorted `EXPECTED_EXAMPLE_IDS` list; both
+         entries kept in order.
+- [x] (2026-09-25) **ADR renumbered 008 → 009.** This is the one genuine
+      semantic collision of the rebase: both this branch and `main` created
+      `ADR-008`. `main`'s (`adr-008-agent-native-policy-configuration.md`)
+      landed 2026-09-24; this branch's profile ADR was authored 2026-08-09 but
+      is still unmerged, so the unlanded record yields. The file was renamed to
+      `docs/adr-009-profile-selection-and-layering.md`, its H1 and all link
+      text updated, and every reference repointed: `docs/contents.md`,
+      `docs/design.md` (3 sites), `docs/roadmap.md`, `docs/agent-native-cli-
+      design.md` (4 sites), and this ExecPlan (8 sites). The two
+      `agent-native-cli-design.md` mentions that refer to the *policy* ADR
+      (the enforcement/advertisement defaults discussion) deliberately kept
+      their `ADR-008` label. `main`'s `[adr-008]` link definition in
+      `contents.md` is untouched. Verified: no `adr-008-profile-selection`
+      reference survives anywhere in the tree.
+- [x] (2026-09-25) Rebase verified before gate re-run: `origin/main` is an
+      ancestor of the branch head, the tree is clean, no conflict markers
+      survive anywhere in the repository, `cargo metadata --locked` exits 0,
+      and `git diff origin/main HEAD -- Cargo.lock` is exactly the two dev
+      dependencies this branch adds (`googletest`, `pretty_assertions`) on top
+      of `main`'s resolution — satisfying the "take `main`'s lock, then
+      rebuild" instruction without discarding either side.
 
 Progress entries from milestone 1 onward must carry timestamps.
 
@@ -726,6 +774,27 @@ Progress entries from milestone 1 onward must carry timestamps.
       output. The upstream fix is to stop tracking the file (the generator
       already writes an untracked `.typos-oxendict-base.toml`); that belongs
       to a separate change, not to this PR.
+- Observation (2026-09-25, second rebase): two branches can allocate the same
+      ADR number, and git reports that as a clean merge rather than a conflict.
+      Evidence: this branch added `docs/adr-008-profile-selection-and-
+      layering.md` on 2026-08-09; `main` added
+      `docs/adr-008-agent-native-policy-configuration.md` on 2026-09-24. The
+      rebase produced *two* distinct `ADR-008` records with no conflict marker
+      anywhere, because the filenames differ and neither commit modified the
+      other's file — the collision was visible only in the shared
+      `docs/contents.md` ADR list, which is where it was caught. Impact: an ADR
+      list is a weak mutual-exclusion primitive for ADR numbers. The
+      unmerged branch yields the number (008 stays with `main`; this branch's
+      record became 009), and a rebase that adds an ADR should re-check the
+      number against the new base rather than trusting a clean merge.
+- Observation (2026-09-25, second rebase): `main`'s #416 and this branch both
+      grew `any_agent_context()`'s proptest generator tuple and the golden
+      snapshot case table, so a rebase conflict there is structural, not
+      textual. Evidence: both diffs add one element to the same tuple literal
+      and one `#[case]` to the same `#[rstest]` table. Impact: the resolution
+      keeps both generators and both cases rather than choosing a side; the
+      profile case additionally had to adopt `main`'s new leading
+      `package_name` parameter.
 
 ## Decision log
 
@@ -762,8 +831,8 @@ Progress entries from milestone 1 onward must carry timestamps.
   resolution as distinct, ancestor-first layers, so no tolerance-6 escalation
   was needed. Status moved to APPROVED; milestone work proceeds per the plan.
   Date/Author: 2026-08-07, implementing agent.
-- Decision: milestone 1 (ADR-008 and design documentation) completed and the
-  ADR flipped to Accepted. ADR-008 was verified against the approved plan —
+- Decision: milestone 1 (ADR-009 and design documentation) completed and the
+  ADR flipped to Accepted. ADR-009 was verified against the approved plan —
   decisions D1–D8 and D11–D15, the five-tier merge order, the reserved selector
   projections, the migration and rollback stories — and the docs gates
   (`make markdownlint`, `make nixie`) plus a CodeRabbit review pass clean.
@@ -1521,3 +1590,15 @@ The roadmap already marks task 9.1.1 complete, so it required no change.
 cap applied only to display text. `AvailableProfileNames` now stores the capped
 sorted payload and an omitted-name count, and the extraction test observes both
 that payload bound and the existing `and 4 more` suffix.
+
+2026-09-25: rebased a second time onto `origin/main` (`8835347c`), absorbing
+the 7.1.1 agent-native policy configuration work (#416), which had landed while
+the first review round was in flight. Six files conflicted and were resolved by
+keeping both branches' intent; the profile and policy features are orthogonal
+apart from their shared extension points in `agent_context`. The one real
+collision was an ADR number: both branches had created `ADR-008`, which git
+reported as a *clean* merge because the filenames differ. This branch's
+unmerged record yielded and was renumbered to `ADR-009`, with every reference
+repointed and the two policy-ADR mentions in `agent-native-cli-design.md`
+deliberately left at 008. `Cargo.lock` took `main`'s resolution plus this
+branch's two dev dependencies. Details in Progress and Surprises & discoveries.
