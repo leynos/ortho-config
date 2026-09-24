@@ -710,6 +710,22 @@ Progress entries from milestone 1 onward must carry timestamps.
       `LoadSourceTokens` and emits `discovery_source.get(..)` when present,
       keeping the injected path and the process path on the same lookup-only
       contract.
+- Observation (2026-09-25, review round): `typos.toml` is tracked *and*
+      regenerated on every `make spellcheck`, so the checked-in snapshot is
+      perpetually one shared-dictionary revision behind and every gate run
+      re-dirties the working tree. Evidence: the committed blob is
+      byte-identical to `origin/main` (git blob `3d1f3c7f`), while two
+      consecutive `make spellcheck` runs both produce the same stable
+      `bfdda131` render
+      (+13 entries such as `HashiCorp`, `currentColor`, `carousel-center`);
+      none of those 13 tokens occurs anywhere in this branch's diff
+      (`git diff origin/main...HEAD`). Impact: reverting is futile — the next
+      gate restores the drift — so the refresh is committed instead, matching
+      what `566d911c` ("Adopt typos-config-builder gate for spelling", #498)
+      itself did when it landed the builder and committed its regenerated
+      output. The upstream fix is to stop tracking the file (the generator
+      already writes an untracked `.typos-oxendict-base.toml`); that belongs
+      to a separate change, not to this PR.
 
 ## Decision log
 
