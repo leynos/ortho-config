@@ -21,8 +21,17 @@ pub enum DiscoveryScope {
 #[non_exhaustive]
 pub enum AutomaticMode {
     /// Retain the historic first-successful-file behaviour.
+    ///
+    /// The candidate list is scanned most-preferred first and the scan stops at
+    /// the first file that loads, whichever scope it belongs to.
     #[default]
     FirstWins,
-    /// Load the first successful extends chain in every requested scope.
+    /// Load every applicable file in every requested scope.
+    ///
+    /// Scopes are applied in the requested order, so a later scope overrides an
+    /// earlier one. Within a scope the candidate list is a preference order:
+    /// the least-preferred candidate that loads is applied first and the
+    /// most-preferred is applied last, so the historic winner still wins. See
+    /// [`crate::discovery::scoped`] for the two orderings this maps between.
     StackScopes,
 }

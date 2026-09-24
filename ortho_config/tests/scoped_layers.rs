@@ -1,25 +1,23 @@
 //! Regression coverage for scoped discovery and file-layer policies.
 
-use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use anyhow::{Context, Result, ensure};
+use anyhow::{Result, anyhow, ensure};
 use ortho_config::{
     AutomaticMode, ConfigDiscovery, ConfigFilePolicy, ConfigPathSelector, DiscoveryLayersOutcome,
-    DiscoveryScope, ExplicitMode, FileLayerOutcome, MapEnv, OrthoError, declarative::merge_value,
+    DiscoveryScope, ExplicitMode, FileLayerOutcome, MapEnv, OrthoError,
 };
 
-fn write_config(path: &Path, value: u32) -> Result<()> {
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)
-            .with_context(|| format!("create parent directory for {}", parent.display()))?;
-    }
-    fs::write(path, format!("value = {value}\n"))
-        .with_context(|| format!("write config file {}", path.display()))?;
-    Ok(())
-}
+#[path = "support/layer_assertions.rs"]
+mod layer_assertions;
+#[path = "support/scoped_fixtures.rs"]
+mod scoped_fixtures;
 
+use layer_assertions::{assert_layer_path, merge_layers};
+use scoped_fixtures::write_config;
+
+/// Build a discovery whose user scope is `user_home` and project scope `project`.
 fn scoped_discovery(user_home: &Path, project: &Path) -> ConfigDiscovery {
     ConfigDiscovery::builder("demo")
         .config_file_name("config.toml")
@@ -46,12 +44,8 @@ fn stack_scopes_places_project_layers_after_user_layers() -> Result<()> {
     );
     ensure!(outcome.required_errors.is_empty());
     ensure!(outcome.optional_errors.is_empty());
-    let mut merged = serde_json::Value::Null;
-    for layer in outcome.value {
-        merge_value(&mut merged, layer.into_value());
-    }
     ensure!(
-        merged.get("value") == Some(&serde_json::json!(2)),
+        merge_layers(outcome.value).get("value") == Some(&serde_json::json!(2)),
         "project value must override user value"
     );
     Ok(())
@@ -86,11 +80,15 @@ fn selected_path_suppresses_automatic_scopes() -> Result<()> {
         layers.len() == 1,
         "selection must suppress automatic layers"
     );
+    let first = layers
+        .first()
+        .ok_or_else(|| anyhow!("selection must yield the selected layer"))?;
+    assert_layer_path(first, &selected)?;
+    // The path assertion alone would still pass if the selected file loaded but
+    // its value lost to a suppressed automatic layer, so pin the value too.
     ensure!(
-        layers
-            .first()
-            .and_then(ortho_config::MergeLayer::path)
-            .is_some_and(|path| path.as_std_path() == selected)
+        merge_layers(layers).get("value") == Some(&serde_json::json!(3)),
+        "the selected file's value must survive"
     );
     Ok(())
 }
@@ -130,7 +128,11 @@ fn scoped_loading_deduplicates_a_file_across_scopes() -> Result<()> {
             AutomaticMode::StackScopes,
             &[DiscoveryScope::User, DiscoveryScope::Project],
         );
-    ensure!(outcome.value.len() == 1);
+    ensure!(
+        outcome.value.len() == 1,
+        "one file reachable from two scopes must contribute one layer, got {}",
+        outcome.value.len()
+    );
     Ok(())
 }
 
@@ -163,12 +165,16 @@ fn compose_layers_remains_first_wins() -> Result<()> {
         .build()
         .compose_layers();
     ensure!(outcome.value.len() == 1);
+    let first_layer = outcome
+        .value
+        .first()
+        .ok_or_else(|| anyhow!("the explicit candidate must yield a layer"))?;
+    assert_layer_path(first_layer, &first)?;
+    // First-wins means the explicit candidate's value survives, not merely that
+    // its path was recorded; a regression to "load everything" would show here.
     ensure!(
-        outcome
-            .value
-            .first()
-            .and_then(ortho_config::MergeLayer::path)
-            .is_some_and(|path| path.as_std_path() == first)
+        merge_layers(outcome.value).get("value") == Some(&serde_json::json!(1)),
+        "the first explicit candidate's value must win"
     );
     Ok(())
 }

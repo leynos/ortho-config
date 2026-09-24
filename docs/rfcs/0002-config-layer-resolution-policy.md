@@ -338,24 +338,41 @@ generator becomes `Project`. Explicit selectors and the builder's single
 any scope. Discovery within any single scope is therefore a slice of today's
 order and behaves identically.
 
-`StackScopes` runs first-wins discovery _within_ each scope's candidate
-sub-list and appends the winning chain's layers, in `scope_order`. For Netsuke
-that yields user-scope layers followed by project-scope layers, which is
-exactly "project overrides user, user-only keys survive". `FirstWins` ignores
+`StackScopes` resolves every requested scope in `scope_order` and appends the
+layers of every applicable candidate that loads, so the result stacks all the
+files that exist rather than only the highest-priority one. For Netsuke that
+yields user-scope layers followed by project-scope layers, which is exactly
+"project overrides user, user-only keys survive". `FirstWins` ignores
 `scope_order`, scans the full flat candidate list, and is unchanged from today.
 The default `scope_order` is `[System, User, Project]`; the Netsuke proof case
 exercises only `User` and `Project`.
 
-Two invariants keep scope stacking deterministic, because today's loader
+Within a scope the candidate list is a _preference_ order — most-preferred
+first, because index 0 is the location first-wins selects — while a composed
+layer list is a _precedence_ order, where the last layer applied wins. The two
+run in opposite directions, so a scope walks its candidates in reverse. The
+least-preferred location is applied first and the most-preferred last, so the
+historic winner still wins and each lower-preferred location contributes a base
+for the keys it alone sets. Emitting candidates in preference order instead
+would let a fallback such as `~/.demo.toml` override
+`$XDG_CONFIG_HOME/demo/config.toml`, inverting established behaviour as soon as
+a second location starts loading. This keeps "later applied wins" as the single
+rule for the whole system.
+
+Three invariants keep scope stacking deterministic, because today's loader
 de-duplicates and detects `extends` cycles only _within_ a single chain. First,
-`extends` resolution is scope-local: each scope resolves its own chain with its
-own visited set, so a parent file is expanded once per scope. Second,
-de-duplication is by canonical path _across_ scopes: when two scopes resolve to
-the same canonical file (for example, a project root that is a symlink into the
-user directory), that file contributes one layer, at its earliest scope
-position, rather than loading twice and silently doubling append-strategy
-vectors. A cross-scope `extends` cycle is reported with the same cyclic-extends
-error as a within-chain cycle.
+`extends` resolution is chain-local: each file in a scope resolves its own
+parents with its own visited set, so a parent file is expanded once per
+reference. Second, de-duplication is by canonical path _across_ scopes: when
+two scopes resolve to the same canonical file (for example, a project root that
+is a symlink into the user directory), that file contributes one layer, at its
+earliest position in application order — within a scope, the lowest-precedence
+position — rather than loading twice and silently doubling append-strategy
+vectors. Third, every candidate in a scope is attempted, so files that
+first-wins never reached are now opened; a malformed one is reported through
+the usual partitioned diagnostics rather than blocking the layers that loaded.
+A cross-scope `extends` cycle is reported with the same cyclic-extends error as
+a within-chain cycle.
 
 ### Reusable file-layer resolver
 
@@ -634,7 +651,7 @@ flowchart TD
     D --> H
     B -- No --> E{Automatic mode}
     E -- FirstWins --> F[First candidate that loads]
-    E -- StackScopes --> G[Stack scopes in order]
+    E -- StackScopes --> G[Every file in each scope, in scope order]
     F --> H
     G --> H
     H --> I[merged_file_value peek]
@@ -713,8 +730,10 @@ diagnostics can be developed and soaked independently of the runtime resolver.
   discovery, and a missing or malformed selected file produces a single
   terminal error rather than an aggregate.
 - Automatic discovery can either take the first file that loads or stack
-  multiple scopes in a caller-defined order, with later scopes overriding
-  earlier ones and `extends` chains preserved as separate layers.
+  multiple scopes in a caller-defined order, loading every applicable file in
+  each scope. Later scopes override earlier ones, within a scope the
+  most-preferred location wins, and `extends` chains are preserved as separate
+  layers.
 - A resolved outcome can be peeked (a merged file value for early reads) and
   replayed into a `MergeComposer` without re-reading files.
 - A present-but-invalid automatic file surfaces as an error even when a later
