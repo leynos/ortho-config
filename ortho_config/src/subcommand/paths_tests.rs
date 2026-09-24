@@ -16,8 +16,8 @@ use tempfile::TempDir;
 #[cfg(any(unix, target_os = "redox"))]
 use test_helpers::env::{self as test_env, EnvVarGuard};
 
-#[cfg(any(unix, target_os = "redox"))]
 /// Creates a temporary XDG config directory and sets `XDG_CONFIG_HOME` for the test.
+#[cfg(any(unix, target_os = "redox"))]
 fn init_xdg_home() -> Result<(TempDir, EnvVarGuard)> {
     let dir = TempDir::new().context("create XDG config temp directory")?;
     let guard = test_env::set_var("XDG_CONFIG_HOME", dir.path());
@@ -80,7 +80,14 @@ fn candidate_paths_ordering(#[case] prefix_raw: &str) -> Result<()> {
         d
     };
 
+    // Populate every XDG candidate so `find_config_file` resolves each one
+    // inside the fixture rather than falling back to host `XDG_CONFIG_DIRS`.
     fs::write(xdg_cfg_dir.join("config.toml"), "").context("write config.toml")?;
+    #[cfg(feature = "json5")]
+    {
+        fs::write(xdg_cfg_dir.join("config.json"), "").context("write config.json")?;
+        fs::write(xdg_cfg_dir.join("config.json5"), "").context("write config.json5")?;
+    }
     #[cfg(feature = "yaml")]
     {
         fs::write(xdg_cfg_dir.join("config.yaml"), "").context("write config.yaml")?;
@@ -97,6 +104,11 @@ fn candidate_paths_ordering(#[case] prefix_raw: &str) -> Result<()> {
         expected_files.push(format!("{dotted_prefix}.{ext}"));
     }
     expected_files.push("config.toml".to_owned());
+    #[cfg(feature = "json5")]
+    {
+        expected_files.push("config.json".to_owned());
+        expected_files.push("config.json5".to_owned());
+    }
     #[cfg(feature = "yaml")]
     {
         expected_files.push("config.yaml".to_owned());
@@ -121,32 +133,27 @@ fn candidate_paths_ordering(#[case] prefix_raw: &str) -> Result<()> {
 
     let group_len: usize = EXT_GROUPS.iter().map(|g| g.len()).sum();
 
-    let home_parent = paths
-        .first()
-        .and_then(|p| p.parent())
-        .ok_or_else(|| anyhow!("HOME candidate must have a parent directory"))?;
     ensure!(
         paths
             .iter()
             .take(group_len)
-            .all(|p| p.parent() == Some(home_parent)),
-        "home candidates must share the same parent directory"
+            .all(|p| p.parent() == Some(home.path())),
+        "home candidates must reside in the HOME fixture directory"
     );
 
-    let total_len = paths.len();
-    if let Some(mid_slice) = paths
-        .get(group_len..total_len.saturating_sub(group_len))
-        .filter(|slice| !slice.is_empty())
-    {
-        let xdg_parent = mid_slice
-            .first()
-            .and_then(|path| path.parent())
-            .ok_or_else(|| anyhow!("platform candidate must have a parent directory"))?;
-        ensure!(
-            mid_slice.iter().all(|p| p.parent() == Some(xdg_parent)),
-            "platform candidates must share the same parent directory"
-        );
-    }
+    let xdg_slice = paths
+        .get(group_len..paths.len().saturating_sub(group_len))
+        .unwrap_or(&[]);
+    ensure!(
+        !xdg_slice.is_empty(),
+        "platform candidates must include the XDG fixture files"
+    );
+    ensure!(
+        xdg_slice
+            .iter()
+            .all(|p| p.parent() == Some(xdg_cfg_dir.as_path())),
+        "platform candidates must reside in the XDG fixture directory"
+    );
 
     let local_slice = paths
         .get(paths.len().saturating_sub(group_len)..)
