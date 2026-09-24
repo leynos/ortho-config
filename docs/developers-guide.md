@@ -1540,7 +1540,11 @@ guard as one `&&` term and refuses any `||`, because a substring match passes
 concurrency group queues a superseded run rather than cancelling it: two runs
 racing would decide the baseline by which finished last, and a cancelled run
 abandons both its upload and its baseline write, while a queued one publishes
-later and the later push still wins.
+later and the later push still wins. The group is exactly
+`coverage-main-${{ github.ref }}`, keyed on the ref alone. A static group would
+let a dispatch aimed at another branch, if one were ever allowed, displace a
+pending main run and then skip its upload on the ref guard. A group keyed on
+the event as well would let an older run upload after a newer one.
 
 **The token reaches the upload as an input, and no environment holds it.** A
 `codescene-token` step with no `if:` and no `env` runs exactly

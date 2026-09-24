@@ -27,6 +27,9 @@ WORKFLOWS: typ.Final[pathlib.Path] = REPOSITORY_ROOT / ".github" / "workflows"
 #: The ref the publisher's upload step must be guarded on.
 MAIN_REF: typ.Final[str] = "github.ref == 'refs/heads/main'"
 
+#: The publisher's concurrency group, exactly (CV-005 sweep item 6).
+PUBLISHER_GROUP: typ.Final[str] = "coverage-main-${{ github.ref }}"
+
 
 @pytest.fixture(scope="module")
 def documents() -> dict[str, WorkflowDocument]:
@@ -150,8 +153,11 @@ def test_the_publisher_runs_one_at_a_time(
         f"{name} must declare a concurrency block; two publisher runs "
         f"otherwise race on the ratchet baseline. It declares {concurrency!r}"
     )
-    assert concurrency.get("group"), (
-        f"{name}'s concurrency block must name a group: {concurrency!r}"
+    assert concurrency.get("group") == PUBLISHER_GROUP, (
+        f"{name}'s concurrency group must be exactly {PUBLISHER_GROUP!r}, keyed "
+        f"on the ref alone: a static group lets a dispatch on another branch "
+        f"displace a pending main run, and one keyed on the event lets an "
+        f"older run upload last. It declares {concurrency.get('group')!r}"
     )
     cancels = str(concurrency.get("cancel-in-progress", "false")).strip()
     assert cancels == "false", (
