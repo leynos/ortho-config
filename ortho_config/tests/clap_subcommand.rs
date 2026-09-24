@@ -16,10 +16,16 @@
 //!   - `prog run`              => `option = "env"` (CLI is `None`, environment wins)
 //!   - no CLI, no environment  => `option = "file"` (file wins)
 
+use anyhow::{Context as _, Result, ensure};
+use cap_std::{ambient_authority, fs::Dir};
 use clap::{Parser, Subcommand};
-use ortho_config::{OrthoConfig, ResultIntoFigment, SubcmdConfigMerge};
+use ortho_config::subcommand::Prefix;
+use ortho_config::{
+    MapEnv, OrthoConfig, SubcommandFileContext, load_and_merge_subcommand_with_sources_at,
+};
 use rstest::rstest;
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 
 #[derive(Debug, Parser)]
 struct Cli {
@@ -45,118 +51,94 @@ struct RunArgs {
 /// Configuration file contents supplying `option` from the file layer.
 const OPTION_FROM_FILE: &str = "[cmds.run]\noption = \"file\"";
 
-/// Describes the sources a jailed test should stage before merging.
-struct JailSetup {
-    /// Contents written to `.app.toml`, when the file layer participates.
+/// Describes a file and injected environment layer for one merge case.
+struct SourceSetup {
     file: Option<&'static str>,
-    /// Environment variable name and value, when the environment participates.
     env: Option<(&'static str, &'static str)>,
-    /// Strips the inherited environment so file fallback stays deterministic.
-    clear_env: bool,
 }
 
-impl JailSetup {
-    /// Stages the described sources inside `jail`.
-    ///
-    /// Boxes the error to keep the `Err` variant small for
-    /// `clippy::result_large_err`; the jail closure unboxes on propagation.
-    /// The process environment is cleared first when `clear_env` is `true`,
-    /// then `.app.toml` is written when `file` is `Some`, then the named
-    /// variable is set when `env` is `Some`.
-    ///
-    /// # Examples
-    /// ```
-    /// figment::Jail::expect_with(|jail| {
-    ///     let setup = JailSetup {
-    ///         file: Some("[cmds.run]\noption = \"file\""),
-    ///         env: None,
-    ///         clear_env: true,
-    ///     };
-    ///     setup.apply(jail).map_err(|error| *error)?;
-    ///     Ok(())
-    /// });
-    /// ```
-    fn apply(&self, jail: &mut figment::Jail) -> Result<(), Box<figment::Error>> {
-        if self.clear_env {
-            jail.clear_env();
-        }
-        if let Some(contents) = self.file {
-            jail.create_file(".app.toml", contents)?;
-        }
-        if let Some((key, value)) = self.env {
-            jail.set_env(key, value);
-        }
-        Ok(())
+/// Stage a file within a temporary root and merge without process mutation.
+fn merge_from_sources<T>(setup: &SourceSetup, args: T) -> Result<RunArgs>
+where
+    T: IntoIterator,
+    T::Item: Into<std::ffi::OsString> + Clone,
+{
+    let fixture = tempfile::tempdir().context("create subcommand source root")?;
+    let directory = Dir::open_ambient_dir(fixture.path(), ambient_authority())
+        .context("open subcommand source root")?;
+    if let Some(contents) = setup.file {
+        directory
+            .write(".app.toml", contents.as_bytes())
+            .context("write subcommand configuration fixture")?;
     }
+    let discovery = MapEnv::new().with_var("XDG_CONFIG_DIRS", fixture.path());
+    let merge_source = match setup.env {
+        Some((key, value)) => MapEnv::new().with_var(key, value),
+        None => MapEnv::new(),
+    };
+    let cli = Cli::try_parse_from(args).context("parse subcommand CLI arguments")?;
+    let Commands::Run(values) = cli.cmd;
+    load_and_merge_subcommand_with_sources_at(
+        &Prefix::new("APP_"),
+        &values,
+        SubcommandFileContext::new(fixture.path(), &discovery),
+        Arc::new(merge_source),
+    )
+    .map_err(|error| anyhow::anyhow!(error))
+    .context("merge subcommand source layers")
 }
 
 /// A successful merge scenario and the `option` value it should yield.
 struct MergeCase {
-    setup: JailSetup,
+    setup: SourceSetup,
     cli_args: &'static [&'static str],
     expected: &'static str,
 }
 
 #[rstest]
 #[case::cli_overrides_file(MergeCase {
-    setup: JailSetup { file: Some(OPTION_FROM_FILE), env: None, clear_env: false },
+    setup: SourceSetup { file: Some(OPTION_FROM_FILE), env: None },
     cli_args: &["prog", "run", "--option", "cli"],
     expected: "cli",
 })]
 #[case::env_when_cli_none(MergeCase {
-    setup: JailSetup {
+    setup: SourceSetup {
         file: Some(OPTION_FROM_FILE),
         env: Some(("APP_CMDS_RUN_OPTION", "env")),
-        clear_env: false,
     },
     cli_args: &["prog", "run"],
     expected: "env",
 })]
 #[case::file_when_cli_none(MergeCase {
-    setup: JailSetup { file: Some(OPTION_FROM_FILE), env: None, clear_env: true },
+    setup: SourceSetup { file: Some(OPTION_FROM_FILE), env: None },
     cli_args: &["prog", "run"],
     expected: "file",
 })]
-fn merge_resolves_option_from_expected_layer(#[case] case: MergeCase) -> anyhow::Result<()> {
-    figment::Jail::try_with(|j| {
-        case.setup.apply(j).map_err(|error| *error)?;
-        let cli = Cli::parse_from(case.cli_args.iter().copied());
-        let Commands::Run(args) = cli.cmd;
-        let cfg = args.load_and_merge().to_figment()?;
-        if cfg.option.as_deref() != Some(case.expected) {
-            return Err(figment::Error::from(format!(
-                "expected option {:?} from the staged layer, got {:?}",
-                case.expected,
-                cfg.option.as_deref()
-            )));
-        }
-        Ok(())
-    })?;
+fn merge_resolves_option_from_expected_layer(#[case] case: MergeCase) -> Result<()> {
+    let cfg = merge_from_sources(&case.setup, case.cli_args.iter().copied())?;
+    ensure!(
+        cfg.option.as_deref() == Some(case.expected),
+        "expected option {:?} from the staged layer, got {:?}",
+        case.expected,
+        cfg.option.as_deref()
+    );
     Ok(())
 }
 
 #[rstest]
-#[case::invalid_file(JailSetup {
+#[case::invalid_file(SourceSetup {
     file: Some("[cmds.run]\noption = 5"),
     env: None,
-    clear_env: false,
 })]
-#[case::invalid_env(JailSetup {
+#[case::invalid_env(SourceSetup {
     file: None,
     env: Some(("APP_CMDS_RUN_COUNT", "not-a-number")),
-    clear_env: false,
 })]
-fn merge_errors_on_malformed_source(#[case] setup: JailSetup) -> anyhow::Result<()> {
-    figment::Jail::try_with(|j| {
-        setup.apply(j).map_err(|error| *error)?;
-        let cli = Cli::parse_from(["prog", "run"]);
-        let Commands::Run(args) = cli.cmd;
-        if args.load_and_merge().is_ok() {
-            return Err(figment::Error::from(
-                "expected the malformed source to fail the merge".to_owned(),
-            ));
-        }
-        Ok(())
-    })?;
+fn merge_errors_on_malformed_source(#[case] setup: SourceSetup) -> Result<()> {
+    let result = merge_from_sources(&setup, ["prog", "run"]);
+    ensure!(
+        result.is_err(),
+        "expected the malformed source to fail the merge"
+    );
     Ok(())
 }
