@@ -10,6 +10,8 @@ use proptest::prelude::*;
 use std::{io::Write, process::Command, sync::Arc};
 
 const PROCESS_DATA_MARKER: &str = "ORTHO_CSV_PROCESS_DATA:";
+/// Keep process probes scoped to supplied keys, including under coverage.
+const PROCESS_PROBE_PREFIX: &str = "PARITY_";
 
 const CORPUS: &[(&str, &str)] = &[
     ("APP_DATABASE__HOST", "db.example.test"),
@@ -109,22 +111,35 @@ fn configured_process_probe() {
 #[test]
 #[ignore = "run by parity tests with an isolated child environment"]
 fn interleaved_process_probe() {
-    emit_process_data(&CsvEnv::raw().split("a").uppercase(true).lowercase(false))
-        .expect("emit interleaved process provider data");
+    emit_process_data(
+        &CsvEnv::prefixed(PROCESS_PROBE_PREFIX)
+            .split("a")
+            .uppercase(true)
+            .lowercase(false),
+    )
+    .expect("emit interleaved process provider data");
 }
 
 #[test]
 #[ignore = "run by parity tests with an isolated child environment"]
 fn reset_lowercase_process_probe() {
-    emit_process_data(&CsvEnv::raw().lowercase(false).split("_"))
-        .expect("emit reset-lowercase process provider data");
+    emit_process_data(
+        &CsvEnv::prefixed(PROCESS_PROBE_PREFIX)
+            .lowercase(false)
+            .split("_"),
+    )
+    .expect("emit reset-lowercase process provider data");
 }
 
 #[test]
 #[ignore = "run by parity tests with an isolated child environment"]
 fn disabled_lowercase_process_probe() {
-    emit_process_data(&CsvEnv::raw().split("_").lowercase(false))
-        .expect("emit disabled-lowercase process provider data");
+    emit_process_data(
+        &CsvEnv::prefixed(PROCESS_PROBE_PREFIX)
+            .split("_")
+            .lowercase(false),
+    )
+    .expect("emit disabled-lowercase process provider data");
 }
 
 #[test]
@@ -151,10 +166,13 @@ fn no_csv_process_probe() {
 /// Figment maps builders in declaration order rather than grouping by mapping kind.
 #[test]
 fn interleaved_key_mappings_match_the_process_backed_provider() {
-    let pairs = [(String::from("data-b"), String::from("7"))];
+    let pairs = [(format!("{PROCESS_PROBE_PREFIX}data-b"), String::from("7"))];
 
     assert_provider_parity(
-        CsvEnv::raw().split("a").uppercase(true).lowercase(false),
+        CsvEnv::prefixed(PROCESS_PROBE_PREFIX)
+            .split("a")
+            .uppercase(true)
+            .lowercase(false),
         "interleaved_process_probe",
         &pairs,
     )
@@ -164,10 +182,15 @@ fn interleaved_key_mappings_match_the_process_backed_provider() {
 /// Every Figment key mapping restores its default lowercase mode.
 #[test]
 fn key_mapping_resets_lowercase_like_the_process_backed_provider() {
-    let pairs = [(String::from("MIXED_CASE"), String::from("7"))];
+    let pairs = [(
+        format!("{PROCESS_PROBE_PREFIX}MIXED_CASE"),
+        String::from("7"),
+    )];
 
     assert_provider_parity(
-        CsvEnv::raw().lowercase(false).split("_"),
+        CsvEnv::prefixed(PROCESS_PROBE_PREFIX)
+            .lowercase(false)
+            .split("_"),
         "reset_lowercase_process_probe",
         &pairs,
     )
@@ -177,10 +200,15 @@ fn key_mapping_resets_lowercase_like_the_process_backed_provider() {
 /// A later lowercase builder remains able to opt out after a key mapping reset.
 #[test]
 fn lowercase_can_be_disabled_after_a_key_mapping() {
-    let pairs = [(String::from("MIXED_CASE"), String::from("7"))];
+    let pairs = [(
+        format!("{PROCESS_PROBE_PREFIX}MIXED_CASE"),
+        String::from("7"),
+    )];
 
     assert_provider_parity(
-        CsvEnv::raw().split("_").lowercase(false),
+        CsvEnv::prefixed(PROCESS_PROBE_PREFIX)
+            .split("_")
+            .lowercase(false),
         "disabled_lowercase_process_probe",
         &pairs,
     )
