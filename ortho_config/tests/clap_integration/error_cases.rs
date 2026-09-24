@@ -2,10 +2,11 @@
 
 use super::common::{
     OptionConfig, OrthoConfig, OrthoError, RequiredConfig, TestConfig, assert_ortho_error,
-    with_jail,
 };
 use anyhow::Result;
+use ortho_config::MapEnv;
 use rstest::rstest;
+use std::sync::Arc;
 
 #[rstest]
 #[case::unknown_flag(&["prog", "--bogus"])]
@@ -31,9 +32,10 @@ fn option_field_rejects_invalid_value() {
 
 #[rstest]
 fn missing_required_field_surfaces_merge_error() -> Result<()> {
-    with_jail(|_| {
-        assert_ortho_error(RequiredConfig::load_from_iter(["prog"]), "merge", |err| {
-            matches!(err, OrthoError::Merge { .. })
-        })
-    })
+    let source = Arc::new(MapEnv::new());
+    assert_ortho_error(
+        RequiredConfig::load_from_iter_with_sources(["prog"], source.clone(), source),
+        "merge",
+        |err| matches!(err, OrthoError::Merge { .. }),
+    )
 }
