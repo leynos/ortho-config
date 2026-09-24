@@ -41,6 +41,7 @@ struct DefaultParityArgs {
 }
 
 impl Default for DefaultParityArgs {
+    /// Mirrors the clap defaults so struct defaults and inferred defaults agree.
     fn default() -> Self {
         Self {
             count: 8,
@@ -51,6 +52,8 @@ impl Default for DefaultParityArgs {
     }
 }
 
+/// Inferred string defaults, file values, and explicit CLI values all pass
+/// through each field's clap parser and respect source precedence.
 #[rstest]
 #[serial]
 fn inferred_default_value_preserves_clap_parsers() -> Result<()> {
@@ -60,6 +63,7 @@ fn inferred_default_value_preserves_clap_parsers() -> Result<()> {
     Ok(())
 }
 
+/// Field values a parity case expects after loading or merging.
 #[derive(Clone, Copy)]
 struct DefaultParityExpected {
     count: u16,
@@ -68,6 +72,7 @@ struct DefaultParityExpected {
     label: &'static str,
 }
 
+/// Checks every parity field, naming the first mismatched field on failure.
 fn assert_default_parity(
     actual: &DefaultParityArgs,
     expected: DefaultParityExpected,
@@ -99,6 +104,7 @@ fn assert_default_parity(
     Ok(())
 }
 
+/// With no file or environment, the parsed clap defaults are loaded.
 fn assert_inferred_default_parity() -> Result<()> {
     let no_file_dir = tempfile::tempdir().context("create no-file config dir")?;
     let _cwd_guard = cwd::set_dir(no_file_dir.path())?;
@@ -140,6 +146,7 @@ fn merge_default_parity_over_file(
     .context(merge_context)
 }
 
+/// File values replace inferred clap defaults that the user did not supply.
 fn assert_file_overrides_inferred_default_parity() -> Result<()> {
     let merged = merge_default_parity_over_file(
         &["default-parity"],
@@ -157,6 +164,7 @@ fn assert_file_overrides_inferred_default_parity() -> Result<()> {
     )
 }
 
+/// Explicit CLI values win over file values and are parsed by clap.
 fn assert_explicit_cli_overrides_default_parity() -> Result<()> {
     let merged = merge_default_parity_over_file(
         &[
@@ -184,6 +192,8 @@ fn assert_explicit_cli_overrides_default_parity() -> Result<()> {
     )
 }
 
+/// The generated CLI applies the field's custom `value_parser` to explicit
+/// arguments.
 #[rstest]
 #[serial]
 fn generated_cli_uses_captured_value_parser() -> Result<()> {
@@ -210,11 +220,14 @@ struct BoolDefaultArgs {
 }
 
 impl Default for BoolDefaultArgs {
+    /// Matches the clap `default_value = "true"`.
     fn default() -> Self {
         Self { enabled: true }
     }
 }
 
+/// A `true` bool default is used only when no file, environment, or CLI value
+/// is supplied, and each higher-precedence source overrides the one below.
 #[rstest]
 #[serial]
 fn inferred_true_bool_default_preserves_source_precedence() -> Result<()> {
@@ -271,11 +284,14 @@ struct ExplicitDefaultArgs {
 }
 
 impl Default for ExplicitDefaultArgs {
+    /// Matches the explicit `OrthoConfig` default rather than the clap default.
     fn default() -> Self {
         Self { count: 11 }
     }
 }
 
+/// An explicit `#[ortho_config(default = ...)]` takes precedence over the
+/// inferred clap `default_value`.
 #[rstest]
 #[serial]
 fn explicit_ortho_default_overrides_inferred_default_value() -> Result<()> {
@@ -309,11 +325,14 @@ struct InvalidDefaultArgs {
 }
 
 impl Default for InvalidDefaultArgs {
+    /// Supplies a valid port so only the clap default is invalid.
     fn default() -> Self {
         Self { port: 7 }
     }
 }
 
+/// Reports whether `error`, or any entry of an aggregate, is a
+/// `DefaultValueConversion` failure.
 fn contains_default_value_conversion(error: &OrthoError) -> bool {
     match error {
         OrthoError::DefaultValueConversion { .. } => true,
@@ -324,6 +343,8 @@ fn contains_default_value_conversion(error: &OrthoError) -> bool {
     }
 }
 
+/// A clap default rejected by the field parser surfaces as a redacted
+/// `DefaultValueConversion` error instead of a panic.
 #[rstest]
 #[serial]
 fn invalid_inferred_default_is_reported_without_panicking() -> Result<()> {
