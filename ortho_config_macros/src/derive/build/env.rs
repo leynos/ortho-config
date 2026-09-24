@@ -99,4 +99,42 @@ mod tests {
         );
         Ok(())
     }
+
+    /// An unprefixed struct names its selector `PROFILE`, not `PROFILE` with a
+    /// stray prefix fragment (decision D8).
+    #[test]
+    fn unprefixed_profile_env_var_is_bare() -> Result<()> {
+        let input: syn::DeriveInput = syn::parse_quote! {
+            #[ortho_config(profiles)]
+            struct Demo {
+                field1: Option<u32>,
+            }
+        };
+        let (_, _, struct_attrs, _) =
+            crate::derive::parse::parse_input(&input).map_err(|err| anyhow!(err))?;
+        ensure!(
+            compute_profile_env_var(&struct_attrs) == "PROFILE",
+            "an unprefixed struct should bind the bare PROFILE selector"
+        );
+        ensure!(
+            compute_config_env_var(&struct_attrs) == "CONFIG_PATH",
+            "an unprefixed struct should bind the bare CONFIG_PATH variable"
+        );
+        Ok(())
+    }
+
+    /// A prefix is echoed verbatim, so `CFG_` gives `CFG_PROFILE`.
+    #[test]
+    fn prefixed_profile_env_var_appends_to_the_prefix() -> Result<()> {
+        let (_, _, struct_attrs) = demo_input()?;
+        ensure!(
+            compute_profile_env_var(&struct_attrs) == "CFG_PROFILE",
+            "a prefixed struct should bind <PREFIX>PROFILE"
+        );
+        ensure!(
+            compute_config_env_var(&struct_attrs) == "CFG_CONFIG_PATH",
+            "a prefixed struct should bind <PREFIX>CONFIG_PATH"
+        );
+        Ok(())
+    }
 }

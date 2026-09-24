@@ -624,6 +624,46 @@ D11–D15 added after the Logisphere design-review panel (see Decision log).
       of `main`'s resolution — satisfying the "take `main`'s lock, then
       rebuild" instruction without discarding either side.
 
+- [x] (2026-09-25) **CodeScene code-health findings paid down, not suppressed.**
+      CodeScene re-ran on the rebased head and re-raised both findings, now
+      anchored to *this branch's* new code rather than an inherited commit:
+      "Bumpy Road Ahead" (critical rule) on `extract_profile_layers` and
+      "Complex Conditional" (advisory) on `build_profile_cli_layer_tokens`.
+      Both were repaired at source rather than suppressed. `extract.rs` gained
+      a `take_profile_tables` helper that flattens the loop body from four
+      levels of nesting to a straight sequence and collapses a redundant
+      double lookup (`get("profile")` then `as_object_mut().remove(...)`) into
+      one `object.remove("profile")` matched directly against
+      `Value::Object`. `cli.rs` names the concept its doc comment already
+      described in prose (`has_user_input`), dropping a three-disjunct chain
+      to a single `||`. The first attempt at the extraction helper regressed
+      `clippy::shadow_reuse` by rebinding `profile_map` in two `let-else`s;
+      `make lint` caught it and the single-pattern form fixed both the lint
+      and the readability.
+- [x] (2026-09-25) **Coverage gaps closed against the pre-merge table.** The
+      CodeRabbit pre-merge table's `Testing (Overall)` error row named four
+      specific gaps; two were already closed and two were real. Added:
+      `invalid_name_is_rejected_even_when_not_selected`,
+      `invalid_name_is_rejected_without_a_selection`, and
+      `forbidden_key_in_a_non_selected_profile_table_is_rejected` (the
+      existing helper only ever validated the *selected* table, leaving
+      non-selected tables unguarded); `profiled_loading_reads_the_selector_
+      from_the_injected_source`, which is decisive by construction because the
+      fixture's three outcomes are distinguishable (struct default 1, file 3,
+      profile `ci` 7) and the process is asserted not to define the selector;
+      `unprefixed_profile_env_var_is_bare` and
+      `prefixed_profile_env_var_appends_to_the_prefix` for the documented
+      bare-`PROFILE` naming contract; and two `extends` x profiles integration
+      tests asserting final precedence, that every profile layer follows every
+      file layer, and that the profile layers carry their source paths
+      (`base.toml` then `.config.toml`).
+- [x] (2026-09-25) Process error, recorded for the next agent: a fifth file
+      (`ortho_config_macros/src/derive/build/env.rs`) was edited while a gate
+      run was in flight, the same mistake made earlier in this task with the
+      first gate run. The rule is absolute — freeze the tree, *then* start the
+      gates, and add nothing until they return. Its cost is a wasted run and
+      evidence that cannot be attributed to a single candidate.
+
 Progress entries from milestone 1 onward must carry timestamps.
 
 ## Surprises & discoveries
