@@ -84,7 +84,8 @@ pub use result_ext::{IntoFigmentError, OrthoMergeExt, OrthoResultExt, ResultInto
 #[cfg_attr(docsrs, doc(cfg(feature = "serde_json")))]
 pub use subcommand::{
     LoadGlobalsAndSelectedSubcommandError, SelectedSubcommandMerge, SelectedSubcommandMergeError,
-    load_globals_and_merge_selected_subcommand,
+    SelectedSubcommandSources, load_globals_and_merge_selected_subcommand,
+    load_globals_and_merge_selected_subcommand_with_sources,
 };
 #[cfg(feature = "serde_json")]
 #[cfg_attr(docsrs, doc(cfg(feature = "serde_json")))]
