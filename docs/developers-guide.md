@@ -668,12 +668,23 @@ variables for tests.
   File-only greeting overrides take a lookup source without acquiring the scan
   capability. This context belongs only at the example's configuration-loading
   call sites, not in command construction.
+- `message::build_take_leave_plan_with_greet_loader` is a private composition
+  seam owned by the `hello_world` message module. The public
+  `build_take_leave_plan` supplies the process-backed greeting loader; message
+  tests may supply explicit defaults or load them through
+  `load_greet_defaults_with_sources` and `GlobalConfigSources`. Keep this seam
+  within greeting/farewell composition and its tests; source selection remains
+  with the configuration-loading caller.
 - Example tests may pass a `ConfigDiscovery` with explicit project roots to the
   crate-private override loader. Source injection alone does not disable
   project-root or current-directory candidates. Tests needing no ambient
   candidates must configure the discovery builder and set `XDG_CONFIG_DIRS` to
   a fixture directory when applicable, since an unset value selects the
   platform's system fallback.
+- The `hello_world` override-test setup functions each stage one explicit,
+  XDG, or local-app-data fixture and return its closed `MapEnv`. They belong
+  only to the override scenario table; other tests use `ConfigFixture` and
+  select their own source to keep setup and precedence assertions visible.
 - The discovery candidate reader is the only production reader, and holds no
   `std::env::var_os` call of its own.
 - It is **not** a general environment service. Adding readers elsewhere in the

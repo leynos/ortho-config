@@ -155,21 +155,30 @@ pub fn build_take_leave_plan(
     config: &HelloWorldCli,
     command: &TakeLeaveCommand,
 ) -> Result<TakeLeavePlan, HelloWorldError> {
+    build_take_leave_plan_with_greet_loader(config, command, crate::cli::load_greet_defaults)
+}
+
+/// Builds a farewell plan with a caller-selected greeting-default loader.
+///
+/// This is the testable composition boundary for callers that select explicit
+/// configuration sources. The public entrypoint above retains process-backed
+/// defaults for the executable.
+fn build_take_leave_plan_with_greet_loader(
+    config: &HelloWorldCli,
+    command: &TakeLeaveCommand,
+    load_greet: impl FnOnce() -> Result<GreetCommand, HelloWorldError>,
+) -> Result<TakeLeavePlan, HelloWorldError> {
     config.validate()?;
     command.validate()?;
 
-    let greeting_defaults = build_greeting_defaults(command)?;
+    let greeting_defaults = build_greeting_defaults(command, load_greet()?);
     let greeting = build_plan(config, &greeting_defaults)?;
     let farewell = format_farewell_message(config, command);
 
     Ok(TakeLeavePlan { greeting, farewell })
 }
 
-/// Builds a `GreetCommand` pre-populated from a farewell command.
-///
-/// # Errors
-///
-/// Returns a [`HelloWorldError`] when greeting defaults cannot be loaded.
+/// Applies farewell greeting options to caller-provided greeting defaults.
 ///
 // Example usage (internal reference):
 //
@@ -177,19 +186,21 @@ pub fn build_take_leave_plan(
 //     farewell.greeting_preamble = Some(String::from("Mind the gap"));
 //     farewell.greeting_punctuation = Some(String::from("?"));
 //
-//     let defaults = build_greeting_defaults(&farewell)?;
+//     let defaults = build_greeting_defaults(&farewell, GreetCommand::default());
 //
 //     assert_eq!(defaults.preamble, Some(String::from("Mind the gap")));
 //     assert_eq!(defaults.punctuation, String::from("?"));
-fn build_greeting_defaults(command: &TakeLeaveCommand) -> Result<GreetCommand, HelloWorldError> {
-    let mut greeting_defaults = crate::cli::load_greet_defaults()?;
+fn build_greeting_defaults(
+    command: &TakeLeaveCommand,
+    mut greeting_defaults: GreetCommand,
+) -> GreetCommand {
     if let Some(preamble) = &command.greeting_preamble {
         greeting_defaults.preamble = Some(preamble.clone());
     }
     if let Some(punctuation) = &command.greeting_punctuation {
         greeting_defaults.punctuation.clone_from(punctuation);
     }
-    Ok(greeting_defaults)
+    greeting_defaults
 }
 
 fn build_farewell_fragments(command: &TakeLeaveCommand) -> Vec<String> {

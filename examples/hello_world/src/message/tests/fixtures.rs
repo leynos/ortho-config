@@ -6,13 +6,13 @@ pub(crate) use crate::cli::tests::helpers::{
     TakeLeaveCommandFixture, greet_command, take_leave_command,
 };
 use crate::cli::{
-    GlobalArgs, GreetCommand, HelloWorldCli, TakeLeaveCommand, load_global_config,
-    load_greet_defaults,
+    GlobalArgs, GreetCommand, HelloWorldCli, TakeLeaveCommand, load_global_config_with_sources,
+    load_greet_defaults_with_sources,
 };
-use crate::test_support::{figment_error, with_jail};
-use anyhow::{Result, anyhow, ensure};
+use crate::test_support::{ConfigFixture, global_sources};
+use anyhow::{Context, Result, anyhow, ensure};
 use camino::Utf8PathBuf;
-use ortho_config::figment;
+use ortho_config::MapEnv;
 use rstest::fixture;
 
 pub(crate) struct Plan {
@@ -49,10 +49,12 @@ pub(crate) fn build_plan_from(
     config: HelloWorldCli,
     greet: &GreetCommand,
     leave: &TakeLeaveCommand,
+    greeting_defaults: GreetCommand,
 ) -> Result<Plan> {
     let greeting = build_plan(&config, greet).map_err(|err| anyhow!(err.to_string()))?;
     let take_leave =
-        build_take_leave_plan(&config, leave).map_err(|err| anyhow!(err.to_string()))?;
+        build_take_leave_plan_with_greet_loader(&config, leave, || Ok(greeting_defaults))
+            .map_err(|err| anyhow!(err.to_string()))?;
 
     Ok(Plan {
         config,
@@ -87,9 +89,9 @@ pub(crate) fn setup_sample_greet(
     config: &mut HelloWorldCli,
     greet: &mut GreetCommand,
 ) -> Result<()> {
-    with_sample_config(|cfg| {
+    with_sample_config(|cfg, sample_greet| {
         *config = cfg.clone();
-        *greet = load_greet_defaults().map_err(figment_error)?;
+        *greet = sample_greet.clone();
         Ok(())
     })
 }
@@ -136,52 +138,38 @@ pub(crate) fn build_plan_variant(
     variant: PlanVariant,
 ) -> Result<Plan> {
     match variant {
-        PlanVariant::Direct => with_jail(|jail| {
-            jail.clear_env();
-            plan_from_inputs(config, greet, leave)
-        }),
-        PlanVariant::SampleEnv => with_sample_config(move |cfg| {
+        PlanVariant::Direct => build_plan_from(config, greet, leave, GreetCommand::default()),
+        PlanVariant::SampleEnv => with_sample_config(move |cfg, defaults| {
             let sample_greet = greet.clone();
             let sample_leave = leave.clone();
-            plan_from_inputs(cfg.clone(), &sample_greet, &sample_leave)
+            build_plan_from(cfg.clone(), &sample_greet, &sample_leave, defaults.clone())
         }),
     }
 }
 
-#[expect(
-    clippy::result_large_err,
-    reason = "figment::Error originates upstream and remains unboxed elsewhere"
-)]
-fn plan_from_inputs(
-    config: HelloWorldCli,
-    greet: &GreetCommand,
-    leave: &TakeLeaveCommand,
-) -> figment::error::Result<Plan> {
-    build_plan_from(config, greet, leave).map_err(figment_error)
-}
-
 pub(crate) fn with_sample_config<R, F>(action: F) -> Result<R>
 where
-    F: FnOnce(&HelloWorldCli) -> figment::error::Result<R>,
+    F: FnOnce(&HelloWorldCli, &GreetCommand) -> Result<R>,
 {
-    with_jail(|jail| {
-        jail.clear_env();
-        let manifest_dir = Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        let config_dir = cap_std::fs::Dir::open_ambient_dir(
-            manifest_dir.join("config").as_std_path(),
-            cap_std::ambient_authority(),
-        )
-        .map_err(figment_error)?;
-        let baseline = config_dir
-            .read_to_string("baseline.toml")
-            .map_err(figment_error)?;
-        let overrides = config_dir
-            .read_to_string("overrides.toml")
-            .map_err(figment_error)?;
-        jail.create_file("baseline.toml", &baseline)?;
-        jail.create_file(".hello_world.toml", &overrides)?;
-        let config = load_global_config(&GlobalArgs::default(), None, "hello-world")
-            .map_err(figment_error)?;
-        action(&config)
-    })
+    let fixture = ConfigFixture::new()?;
+    let manifest_dir = Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let config_dir = cap_std::fs::Dir::open_ambient_dir(
+        manifest_dir.join("config").as_std_path(),
+        cap_std::ambient_authority(),
+    )
+    .context("open sample configuration")?;
+    let baseline = config_dir.read_to_string("baseline.toml")?;
+    let overrides = config_dir.read_to_string("overrides.toml")?;
+    fixture.write("baseline.toml", &baseline)?;
+    let selected = fixture.write(".hello_world.toml", &overrides)?;
+    let discovery = MapEnv::new().with_var("HELLO_WORLD_CONFIG_PATH", selected);
+    let config = load_global_config_with_sources(
+        &GlobalArgs::default(),
+        None,
+        "hello-world",
+        global_sources(discovery.clone(), MapEnv::new()),
+    )?;
+    let greet =
+        load_greet_defaults_with_sources(fixture.path(), global_sources(discovery, MapEnv::new()))?;
+    action(&config, &greet)
 }
