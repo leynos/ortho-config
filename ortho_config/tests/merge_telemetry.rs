@@ -5,13 +5,15 @@
 //! source-aware entry point that makes a terminal loading decision.
 
 use clap::Parser;
-use figment::{Jail, Provider};
+use figment::Provider;
 use ortho_config::{
     CsvEnv, MapEnv, OrthoConfig, SharedEnvSource, SharedScanEnvSource,
     load_and_merge_subcommand_with_sources, subcommand::Prefix,
 };
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
+use std::{io::Write, process::Command, sync::Arc};
+
+const PROCESS_PROBE_MARKER: &str = "ORTHO_TELEMETRY_PROCESS_PROBE_OK";
 
 #[path = "support/tracing_capture.rs"]
 #[expect(
@@ -43,10 +45,12 @@ const ALLOWED_FIELDS: &[&str] = &[
     "outcome",
     "category",
 ];
+const PROCESS_INPUT_SENTINEL: &str = "27183";
 const SENSITIVE_INPUTS: &[&str] = &[
     "MERGE_TELEMETRY_JOBS",
     "MERGE_CMDS_TELEMETRY_JOBS",
     "UNRELATED_SECRET_KEY",
+    PROCESS_INPUT_SENTINEL,
     "secret-injected-value",
     "/secret/injected/path",
 ];
@@ -101,36 +105,56 @@ fn assert_bounded_and_redacted(events: &[Captured]) {
 
 #[test]
 fn csv_env_reports_process_and_injected_success_without_input_data() {
-    Jail::expect_with(|jail| -> Result<(), figment::Error> {
-        jail.clear_env();
-        jail.set_env("MERGE_TELEMETRY_JOBS", "7");
-        let process_events = capture(|| {
-            let result = CsvEnv::prefixed("MERGE_TELEMETRY_").data();
-            assert!(result.is_ok(), "process provider should load: {result:?}");
-        });
-        let process_success = find_event(&process_events, "csv_env", "process", "success");
-        assert_eq!(process_success.field("category"), "none");
+    let executable = std::env::current_exe().expect("locate the integration-test executable");
+    let output = Command::new(executable)
+        .args([
+            "--ignored",
+            "--exact",
+            "--show-output",
+            "process_csv_env_success_probe",
+        ])
+        .env_clear()
+        .env("MERGE_TELEMETRY_JOBS", PROCESS_INPUT_SENTINEL)
+        .output()
+        .expect("run the process-backed telemetry probe");
+    let child_stdout = String::from_utf8_lossy(&output.stdout);
+    let child_stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(output.status.success(), "{child_stdout}\n{child_stderr}");
+    assert!(
+        child_stdout.contains(PROCESS_PROBE_MARKER),
+        "process-backed telemetry probe did not execute: {child_stdout}"
+    );
 
-        jail.clear_env();
-        let injected = Arc::new(
-            MapEnv::new()
-                .with_var("MERGE_TELEMETRY_JOBS", "7")
-                .with_var("UNRELATED_SECRET_KEY", "secret-injected-value")
-                .with_var("UNRELATED_PATH", "/secret/injected/path"),
-        );
-        let injected_events = capture(|| {
-            let result = CsvEnv::prefixed("MERGE_TELEMETRY_")
-                .with_source(injected)
-                .data();
-            assert!(result.is_ok(), "injected provider should load: {result:?}");
-        });
-        let injected_success = find_event(&injected_events, "csv_env", "injected", "success");
-        assert_eq!(injected_success.field("category"), "none");
-
-        assert_bounded_and_redacted(&process_events);
-        assert_bounded_and_redacted(&injected_events);
-        Ok(())
+    let injected = Arc::new(
+        MapEnv::new()
+            .with_var("MERGE_TELEMETRY_JOBS", PROCESS_INPUT_SENTINEL)
+            .with_var("UNRELATED_SECRET_KEY", "secret-injected-value")
+            .with_var("UNRELATED_PATH", "/secret/injected/path"),
+    );
+    let injected_events = capture(|| {
+        let result = CsvEnv::prefixed("MERGE_TELEMETRY_")
+            .with_source(injected)
+            .data();
+        assert!(result.is_ok(), "injected provider should load: {result:?}");
     });
+    let injected_success = find_event(&injected_events, "csv_env", "injected", "success");
+    assert_eq!(injected_success.field("category"), "none");
+    assert_bounded_and_redacted(&injected_events);
+}
+
+/// Assert the real process provider's event in a separately scoped process.
+#[test]
+#[ignore = "run by the process-backed telemetry contract"]
+fn process_csv_env_success_probe() {
+    let events = capture(|| {
+        let result = CsvEnv::prefixed("MERGE_TELEMETRY_").data();
+        assert!(result.is_ok(), "process provider should load: {result:?}");
+    });
+    let success = find_event(&events, "csv_env", "process", "success");
+    assert_eq!(success.field("category"), "none");
+    assert_bounded_and_redacted(&events);
+    writeln!(std::io::stdout().lock(), "{PROCESS_PROBE_MARKER}")
+        .expect("write process-backed telemetry probe marker");
 }
 
 #[test]

@@ -1,17 +1,15 @@
 //! Parity coverage for process-backed and injected `CsvEnv` providers.
 
-use anyhow::{Result, anyhow, ensure};
+use anyhow::{Context, Result, anyhow, ensure};
 use figment::{
     Profile, Provider,
     value::{Dict, Map, Value},
 };
 use ortho_config::{CsvEnv, MapEnv};
 use proptest::prelude::*;
-use std::sync::Arc;
+use std::{io::Write, process::Command, sync::Arc};
 
-#[path = "test_utils.rs"]
-mod test_utils;
-use test_utils::with_jail;
+const PROCESS_DATA_MARKER: &str = "ORTHO_CSV_PROCESS_DATA:";
 
 const CORPUS: &[(&str, &str)] = &[
     ("APP_DATABASE__HOST", "db.example.test"),
@@ -35,50 +33,119 @@ fn configured_provider() -> CsvEnv {
 
 /// Check the shared corpus with the generated-loader transform sequence.
 fn assert_parity(pairs: &[(String, String)]) -> Result<()> {
-    assert_provider_parity(configured_provider(), pairs)
+    assert_provider_parity(configured_provider(), "configured_process_probe", pairs)
 }
 
-/// Compare a process provider before clearing the jail with its injected replay.
-///
-/// Keeping those evaluations in separate jail states proves the injected path
-/// reads only its supplied `MapEnv`, not variables retained by Figment's jail.
-fn assert_provider_parity(provider: CsvEnv, pairs: &[(String, String)]) -> Result<()> {
-    assert_provider_parity_with(provider, pairs, |_, _| Ok(()))
+/// Compare a process provider in a fresh child with its injected replay here.
+fn assert_provider_parity(provider: CsvEnv, probe: &str, pairs: &[(String, String)]) -> Result<()> {
+    assert_provider_parity_with(provider, probe, pairs, |_| Ok(()))
 }
 
 /// Run an optional test-specific assertion after establishing provider parity.
 ///
-/// The callback receives data captured from the process-backed provider before
-/// Figment's jail is cleared, then data from the injected provider after it is
-/// cleared. This ordering keeps the injected-source isolation invariant shared
-/// by every parity test in one place.
+/// The child's environment contains only the supplied pairs. The injected
+/// provider runs in this process, so it cannot inherit the child's variables.
 fn assert_provider_parity_with<F>(
     provider: CsvEnv,
+    probe: &str,
     pairs: &[(String, String)],
     check: F,
 ) -> Result<()>
 where
-    F: FnOnce(&Map<Profile, Dict>, &Map<Profile, Dict>) -> Result<()>,
+    F: FnOnce(&Map<Profile, Dict>) -> Result<()>,
 {
-    with_jail(|jail| {
-        jail.clear_env();
-        for (key, value) in pairs {
-            jail.set_env(key, value);
-        }
+    let process_data = process_provider_data(probe, pairs)?;
+    let injected = provider.with_source(Arc::new(pairs.iter().cloned().collect::<MapEnv>()));
+    let injected_data = injected.data()?;
 
-        let process = provider.data()?;
-        jail.clear_env();
-        let injected = provider.with_source(Arc::new(pairs.iter().cloned().collect::<MapEnv>()));
+    ensure!(
+        process_data == format!("{injected_data:?}"),
+        "process and injected providers differ: process={process_data}, injected={injected_data:?}"
+    );
+    check(&injected_data)
+}
 
-        let injected_data = injected.data()?;
+/// Read a provider result from a child with an isolated process environment.
+fn process_provider_data(probe: &str, pairs: &[(String, String)]) -> Result<String> {
+    let executable = std::env::current_exe().context("locate the integration-test executable")?;
+    let output = Command::new(executable)
+        .args(["--ignored", "--exact", "--show-output", probe])
+        .env_clear()
+        .envs(pairs.iter().cloned())
+        .output()
+        .context("run the process-backed CsvEnv probe")?;
+    ensure!(
+        output.status.success(),
+        "process-backed CsvEnv probe `{probe}` failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8(output.stdout).context("decode CsvEnv probe output")?;
+    let results = stdout
+        .lines()
+        .filter_map(|line| line.strip_prefix(PROCESS_DATA_MARKER))
+        .collect::<Vec<_>>();
+    match results.as_slice() {
+        [data] => Ok((*data).to_owned()),
+        _ => Err(anyhow!(
+            "process-backed CsvEnv probe `{probe}` emitted {} results: {stdout}",
+            results.len()
+        )),
+    }
+}
 
-        ensure!(
-            process == injected_data,
-            "process and injected providers differ"
-        );
-        check(&process, &injected_data)?;
-        Ok(())
-    })
+/// Emit the process provider's exact Figment value tree for its parent test.
+fn emit_process_data(provider: &CsvEnv) -> Result<()> {
+    let data = provider.data()?;
+    writeln!(std::io::stdout().lock(), "{PROCESS_DATA_MARKER}{data:?}")
+        .context("write process-backed CsvEnv result")
+}
+
+#[test]
+#[ignore = "run by parity tests with an isolated child environment"]
+fn configured_process_probe() {
+    emit_process_data(&configured_provider()).expect("emit configured process provider data");
+}
+
+#[test]
+#[ignore = "run by parity tests with an isolated child environment"]
+fn interleaved_process_probe() {
+    emit_process_data(&CsvEnv::raw().split("a").uppercase(true).lowercase(false))
+        .expect("emit interleaved process provider data");
+}
+
+#[test]
+#[ignore = "run by parity tests with an isolated child environment"]
+fn reset_lowercase_process_probe() {
+    emit_process_data(&CsvEnv::raw().lowercase(false).split("_"))
+        .expect("emit reset-lowercase process provider data");
+}
+
+#[test]
+#[ignore = "run by parity tests with an isolated child environment"]
+fn disabled_lowercase_process_probe() {
+    emit_process_data(&CsvEnv::raw().split("_").lowercase(false))
+        .expect("emit disabled-lowercase process provider data");
+}
+
+#[test]
+#[ignore = "run by parity tests with an isolated child environment"]
+fn nested_process_probe() {
+    emit_process_data(&CsvEnv::prefixed("APP_").split("__"))
+        .expect("emit nested process provider data");
+}
+
+#[test]
+#[ignore = "run by parity tests with an isolated child environment"]
+fn chained_split_process_probe() {
+    emit_process_data(&CsvEnv::prefixed("APP_").split("_").split("-"))
+        .expect("emit chained-split process provider data");
+}
+
+#[test]
+#[ignore = "run by parity tests with an isolated child environment"]
+fn no_csv_process_probe() {
+    emit_process_data(&CsvEnv::prefixed("APP_").csv(false))
+        .expect("emit no-CSV process provider data");
 }
 
 /// Figment maps builders in declaration order rather than grouping by mapping kind.
@@ -88,6 +155,7 @@ fn interleaved_key_mappings_match_the_process_backed_provider() {
 
     assert_provider_parity(
         CsvEnv::raw().split("a").uppercase(true).lowercase(false),
+        "interleaved_process_probe",
         &pairs,
     )
     .expect("interleaved key mappings should match the process-backed provider");
@@ -98,8 +166,12 @@ fn interleaved_key_mappings_match_the_process_backed_provider() {
 fn key_mapping_resets_lowercase_like_the_process_backed_provider() {
     let pairs = [(String::from("MIXED_CASE"), String::from("7"))];
 
-    assert_provider_parity(CsvEnv::raw().lowercase(false).split("_"), &pairs)
-        .expect("key mappings should reset lowercase mode");
+    assert_provider_parity(
+        CsvEnv::raw().lowercase(false).split("_"),
+        "reset_lowercase_process_probe",
+        &pairs,
+    )
+    .expect("key mappings should reset lowercase mode");
 }
 
 /// A later lowercase builder remains able to opt out after a key mapping reset.
@@ -107,8 +179,12 @@ fn key_mapping_resets_lowercase_like_the_process_backed_provider() {
 fn lowercase_can_be_disabled_after_a_key_mapping() {
     let pairs = [(String::from("MIXED_CASE"), String::from("7"))];
 
-    assert_provider_parity(CsvEnv::raw().split("_").lowercase(false), &pairs)
-        .expect("lowercase should remain disabled after a key mapping");
+    assert_provider_parity(
+        CsvEnv::raw().split("_").lowercase(false),
+        "disabled_lowercase_process_probe",
+        &pairs,
+    )
+    .expect("lowercase should remain disabled after a key mapping");
 }
 
 /// Return the default-profile dictionary from a provider result.
@@ -159,11 +235,9 @@ fn nested_siblings_are_preserved_in_both_paths() {
 
     assert_provider_parity_with(
         CsvEnv::prefixed("APP_").split("__"),
+        "nested_process_probe",
         &pairs,
-        |process, injected| {
-            assert_database_siblings(process)?;
-            assert_database_siblings(injected)
-        },
+        assert_database_siblings,
     )
     .expect("nested siblings should be preserved in both provider paths");
 }
@@ -175,8 +249,9 @@ fn chained_split_patterns_match_the_process_backed_mapping() {
 
     assert_provider_parity_with(
         CsvEnv::prefixed("APP_").split("_").split("-"),
+        "chained_split_process_probe",
         &pairs,
-        |_, injected| {
+        |injected| {
             let a = default_dict(injected)?
                 .get("a")
                 .and_then(Value::as_dict)
@@ -200,8 +275,12 @@ fn chained_split_patterns_match_the_process_backed_mapping() {
 fn csv_can_be_disabled_for_an_injected_source() {
     let pairs = [(String::from("APP_VALUES"), String::from("one,two"))];
 
-    assert_provider_parity(CsvEnv::prefixed("APP_").csv(false), &pairs)
-        .expect("CSV disabling should preserve the injected scalar");
+    assert_provider_parity(
+        CsvEnv::prefixed("APP_").csv(false),
+        "no_csv_process_probe",
+        &pairs,
+    )
+    .expect("CSV disabling should preserve the injected scalar");
 }
 
 /// Reject unreplayable key closures before injected scanning can change semantics.
