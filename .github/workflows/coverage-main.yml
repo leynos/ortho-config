@@ -28,9 +28,12 @@ on:
 # request ratchets against, so two runs racing would decide it by which
 # finished last. A cancelled run abandons both its upload and its
 # baseline write; a queued one publishes later, and the later push's
-# baseline still wins because it runs last.
+# baseline still wins because it runs last. The group is keyed on the
+# ref alone, so a dispatch aimed at another branch, if one is ever
+# allowed, gets its own group and cannot displace a pending main run,
+# while main keeps one group and its runs never overlap.
 concurrency:
-  group: coverage-main
+  group: coverage-main-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
