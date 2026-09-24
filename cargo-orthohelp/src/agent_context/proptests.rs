@@ -4,7 +4,8 @@ use proptest::collection::btree_set;
 use proptest::prelude::*;
 use std::collections::BTreeSet;
 
-use super::{bridge_ir_to_agent_context, normalize_default_display};
+use super::bridge_ir_to_agent_context;
+use super::default_display::normalize_default_display;
 use crate::schema::{CliMetadata, DocMetadata, FieldMetadata, HeadingIds, SectionsMetadata};
 
 proptest! {

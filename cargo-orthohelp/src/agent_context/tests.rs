@@ -2,7 +2,8 @@
 
 use rstest::rstest;
 
-use super::{bridge_ir_to_agent_context, normalize_default_display};
+use super::bridge_ir_to_agent_context;
+use super::default_display::normalize_default_display;
 use crate::schema::ValueType;
 
 #[test]

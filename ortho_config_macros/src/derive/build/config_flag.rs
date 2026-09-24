@@ -208,9 +208,9 @@ mod tests {
 
         // An absent boolean must leave no key behind, so a lower-precedence
         // file or environment value can still supply one.
-        let absent = figment::Figment::from(figment::providers::Serialized::defaults(
-            &__Cli { excited: None },
-        ));
+        let absent = figment::Figment::from(figment::providers::Serialized::defaults(&__Cli {
+            excited: None,
+        }));
         ensure!(
             absent.extract_inner::<bool>("excited").is_err(),
             "absent boolean flags should not appear in Figment"
@@ -218,11 +218,10 @@ mod tests {
 
         // An explicit `false` must survive so it can clear a lower-precedence
         // `true` from a file or environment variable.
-        let explicit_false = figment::Figment::from(figment::providers::Serialized::defaults(
-            &__Cli {
+        let explicit_false =
+            figment::Figment::from(figment::providers::Serialized::defaults(&__Cli {
                 excited: Some(false),
-            },
-        ));
+            }));
         let extracted = explicit_false
             .extract_inner::<bool>("excited")
             .map_err(|err| anyhow!("explicit false should appear in Figment: {err}"))?;
