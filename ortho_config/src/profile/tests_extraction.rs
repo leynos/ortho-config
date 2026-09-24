@@ -129,6 +129,61 @@ fn cmds_key_inside_profile_body_is_forbidden() {
 }
 
 #[test]
+fn invalid_name_is_rejected_even_when_not_selected() {
+    let layers = vec![file_layer(
+        json!({ "profile": { "ci!": { "retries": 7 } } }),
+        "app.toml",
+    )];
+    let err = extract_profile_layers(layers, Some(&selection("local").expect("valid test name")))
+        .expect_err("an invalid name must be rejected even when it is not selected");
+    match *err {
+        OrthoError::InvalidProfileName { ref name } => assert_eq!(name, "ci!"),
+        ref other => panic!("expected InvalidProfileName, got {other:?}"),
+    }
+}
+
+#[test]
+fn invalid_name_is_rejected_without_a_selection() {
+    let layers = vec![file_layer(
+        json!({ "profile": { "ci!": { "retries": 7 } } }),
+        "app.toml",
+    )];
+    let err = extract_profile_layers(layers, None)
+        .expect_err("an invalid name must be rejected even with no selection");
+    match *err {
+        OrthoError::InvalidProfileName { ref name } => assert_eq!(name, "ci!"),
+        ref other => panic!("expected InvalidProfileName, got {other:?}"),
+    }
+}
+
+#[test]
+fn forbidden_key_in_a_non_selected_profile_table_is_rejected() {
+    let layers = vec![file_layer(
+        json!({
+            "retries": 3,
+            "profile": {
+                "ci": { "retries": 7 },
+                "staging": { "cmds": { "run": {} } }
+            }
+        }),
+        "app.toml",
+    )];
+    let err = extract_profile_layers(layers, Some(&selection("ci").expect("valid test name")))
+        .expect_err("a forbidden key must be rejected in a non-selected table too");
+    match *err {
+        OrthoError::ProfileForbiddenKey {
+            ref profile,
+            ref key,
+        } => {
+            // The error names the offending table, not the selected one.
+            assert_eq!(profile, "staging");
+            assert_eq!(key, "cmds");
+        }
+        ref other => panic!("expected ProfileForbiddenKey, got {other:?}"),
+    }
+}
+
+#[test]
 fn unknown_profile_reports_structured_payload() {
     let layers = vec![file_layer(
         json!({ "profile": { "local": {}, "ci": { "retries": 7 } } }),
