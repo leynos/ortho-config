@@ -664,6 +664,42 @@ D11–D15 added after the Logisphere design-review panel (see Decision log).
       gates, and add nothing until they return. Its cost is a wasted run and
       evidence that cannot be attributed to a single candidate.
 
+- [x] (2026-09-25) First fully green gate run on a frozen revision. `59a52ba8`
+      passed all six gates with the working tree clean before and after, and —
+      the datum every earlier run had left unknown — Whitaker *executed* and
+      passed. `make lint` is `lint-clippy lint-whitaker`, so the earlier
+      `clippy::shadow_reuse` failure had made Whitaker's status unknown rather
+      than green. It was confirmed not to be a false pass: `whitaker list
+      --all` reports the `whitaker_suite` library with 9 active lints
+      including the three `deny`-level ones, and the run emitted zero
+      diagnostics under the repository's own `dylint.toml` exclusions.
+      Test gate: 1393 passed, 0 failed, 15 ignored (all with printed platform
+      or subprocess reasons), plus 87 pytest passed.
+- [x] (2026-09-25) Pushed `59a52ba8` as a plain fast-forward (remote head was
+      its direct parent `46f7007f`, so no force was required). The push marked
+      five of the eight review threads outdated and GitHub auto-resolved six,
+      leaving three live.
+- [x] (2026-09-25) Posted the seven prepared thread dispositions. One further
+      thread (`PRRT_kwDOO4Fx5c6ly8hP`, CodeScene "Complex Conditional" on
+      `load_impl/cli.rs`) had been *deleted* by CodeScene before the reply
+      could be posted — a 404 on both the reply and the direct comment GET.
+      That finding was fixed in `59a52ba8` regardless, so no disposition is
+      outstanding for it; the deletion means there is no thread left to reply
+      to, not that the finding was dismissed.
+- [x] (2026-09-25) CodeScene's re-analysis of `59a52ba8` filed one *new*
+      finding: Code Duplication between `invalid_name_is_rejected_even_when_
+      not_selected` and `invalid_name_is_rejected_without_a_selection` in
+      `tests_extraction.rs`, whose bodies differed only in the selection
+      argument. These are tests this branch added, so the finding is in
+      scope. Repaired at source (commit `d3f940b7`) by collapsing them into
+      one `rstest` with a named case per row — the two bodies were the same
+      assertion over a two-row truth table. Module count is unchanged at 16
+      tests and the cases keep distinct names in the output
+      (`case_1_selection_targets_another_profile`,
+      `case_2_without_a_selection`). The offered *Suppress* link was not used;
+      as with the earlier CodeScene round, the correct response to an active
+      suppression is repair at source.
+
 Progress entries from milestone 1 onward must carry timestamps.
 
 ## Surprises & discoveries
