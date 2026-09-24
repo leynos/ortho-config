@@ -284,18 +284,36 @@ review's findings are folded into the Decision Log and milestones below.
     locale catalogues, BDD expectations, and golden coverage migrated with it.
   - Full gates passed: `make check-fmt`, `make typecheck`, `make lint`, and
     `make test`.
-- [ ] Milestone 5: opt-in build-time identifier artefact.
+- [x] Milestone 5: opt-in build-time identifier artefact.
   - The macro writes schema-versioned standalone identifier fragments only for
     `ORTHO_CONFIG_EMIT_IDENTIFIERS=1`, atomically merges them below `OUT_DIR`,
-    and splits output above the 1 MiB cap. The e2e fixture validates the schema
-    and warm-build no-write behaviour. Validation remains pending for forced
-    refresh, stale-output isolation, and the pure renderer's ordering, split,
-    cap-boundary, and fragment lifecycle behaviour.
-- [ ] Milestone 6: documentation, ADR-008, roadmap completion, final gates.
+    and splits output above the 1 MiB cap.
+  - Forced refresh and stale-output isolation are validated by
+    `ortho_config/tests/identifier_artefact_e2e.rs`, which resets the scratch
+    target directory, asserts that neither a fresh opt-in-free build nor the
+    reset leaves an artefact behind, proves a warm opt-in-free build preserves
+    the existing artefact byte-for-byte, and then exercises the documented
+    `cargo clean -p orthohelp_fixture` opt-in refresh back to identical bytes.
+  - Fragment lifecycle is validated by
+    `ortho_config_macros/src/derive/generate/localization/artefact_fragment_tests.rs`,
+    whose `merge_fragments_prunes_removed_sources` proves that entries from a
+    deleted source file are dropped at merge, alongside cases for same-named
+    derives at distinct locations and for malformed, unreadable, and missing
+    fragment inputs.
+  - The pure renderer is validated by
+    `ortho_config_macros/src/derive/generate/localization/artefact_tests.rs`:
+    deterministic ordering, split-file round trips, the 1 MiB cap boundary
+    (exactly at the cap stays whole; one byte over splits), one indivisible
+    oversized entry, and a `proptest` property covering arbitrary entries and
+    input permutations.
+  - Residual limitation: a rename within the same source file keeps its
+    recorded path unchanged, so a stale fragment is not pruned. This is
+    accepted and documented in ADR-008.
+- [x] Milestone 6: documentation, ADR-008, roadmap completion, final gates.
   - ADR-008, the localization design, guides, ADR-006, changelog, and roadmap
     document the path-aware IR migration and explicitly opt-in artefact flow.
-    Completion remains pending until the added validation and documentation
-    reconciliation pass the final gates.
+    The roadmap's 11.1.3 checkboxes and validation checklist are ticked, and
+    the final workspace gates plus Markdown lint pass.
 
 ## Surprises & discoveries
 
@@ -579,6 +597,14 @@ artefacts are emitted only when explicitly requested with
 `ORTHO_CONFIG_EMIT_IDENTIFIERS=1`. The design, ADRs, guides, changelog, and
 roadmap record these contracts and their migration boundaries. The final
 workspace gates and identifier-artefact end-to-end coverage passed.
+
+Deliberately out of scope, and recorded as such rather than implied by
+completion: `localized_default` embedding is rejected with a deferral
+diagnostic and the artefact's `embedded_default` field is always `null`
+(Decision D-4, roadmap 11.5.1); flattened fields are excluded from `ARG_IDS`
+(Decision D-12); sibling-subcommand-name collisions remain runtime panics
+(Decision D-9); and a rename within one source file leaves an unpruned fragment
+whose entries persist until the next forced refresh (Decision D-11).
 
 ## Context and orientation
 
@@ -1204,9 +1230,26 @@ every node via `localize_command` recursion; (b) `ortho_config_macros/src` has
 zero references to `flatten` (grep sweep 2026-08-13), so D-12 flatten exclusion
 is additive, not behaviour-preserving.
 
-(To be populated during implementation: red/green transcripts, the collision
-diagnostic as rendered, a sample `cli-identifiers.json`, e2e cold/warm
-wall-clock.)
+Milestone 5 validation (2026-09-20): `identifier_artefact_e2e.rs` drives the
+fixture build into the scratch `target/identifier-e2e` target directory and
+covers four states — reset with no artefact, opt-in-free fresh build with no
+artefact, opt-in build producing a schema-versioned standalone artefact, and a
+warm opt-in-free build preserving those bytes.
+`cargo clean -p orthohelp_fixture` followed by an opt-in build then recreates
+byte-identical output, which is the documented forced-recompile invocation. The
+pure renderer suite adds `renderer_sorts_entries_deterministically`,
+`split_renderer_round_trips_ordered_entries`,
+`renderer_honours_the_one_mebibyte_boundary`,
+`renderer_keeps_one_oversized_entry_in_a_single_part`, and a `proptest`
+property over arbitrary entries and permutations; the fragment suite adds
+`merge_fragments_prunes_removed_sources` plus same-name, malformed, unreadable,
+and missing-directory cases.
+
+Remaining known gap, carried as future work rather than a Milestone 5
+obligation: a rename within one source file does not change the fragment's
+recorded `source_file`, so that fragment survives pruning and its stale entries
+persist until the next forced refresh. Decision D-11 accepts this and ADR-008
+documents it.
 
 ## Interfaces and dependencies
 
@@ -1270,3 +1313,17 @@ the design now records generated path-aware docs delegation, the guides
 describe the opt-in artefact workflow, and the roadmap reflects the completed
 delegation and collision checks. The docs IR migration to version `2.0` and the
 standalone artefact boundary are now the implemented contracts.
+
+2026-09-20: Milestones 5 and 6 are now checked off against the validation that
+landed with them. The earlier revision left both boxes open while the
+completion status and Outcomes section already reported the work as finished,
+which made the document contradict itself and understated the delivered
+coverage. This revision reconciles the Progress, Artefacts, and Outcomes
+sections with the tests that now exist: artefact forced refresh and
+stale-output isolation in `identifier_artefact_e2e.rs`, fragment pruning in
+`artefact_fragment_tests.rs`, and pure-renderer ordering, splitting, cap, and
+oversized-entry behaviour plus a property test in `artefact_tests.rs`. The
+rename-within-one-file staleness gap is retained as an accepted, documented
+limitation rather than being closed, and the obsolete text claiming that forced
+refresh, stale-output isolation, and renderer validation remain pending is
+removed.
