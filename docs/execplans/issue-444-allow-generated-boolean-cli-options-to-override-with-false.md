@@ -39,7 +39,7 @@ Observable success: a config file that sets `enabled = true` combined with
 - [x] M1 (Task 1): derive macro emits the optional-value form; unit tests
       updated; `make test` for `ortho_config_macros` green (131 passed).
 - [x] (2026-09-24) Fixed the pre-existing `differs_from_defaults` layering
-      defect that discarded the whole CLI layer when its sanitised object
+      defect that discarded the whole CLI layer when its sanitized object
       equalled the defaults object. Red→green verified with two new
       `compose_layers` regression tests over a one-field struct; all
       `clap_integration`, `cli_default_as_absent*`, subcommand, BDD, and
@@ -71,7 +71,7 @@ Observable success: a config file that sets `enabled = true` combined with
   and the new attributes, absent → `DefaultValue` source, explicit forms →
   `CommandLine`.
 - **`differs_from_defaults` was broken, and the earlier note that it "still
-  gates correctly" was wrong.** The guard compared the whole sanitised CLI
+  gates correctly" was wrong.** The guard compared the whole sanitized CLI
   object against the whole defaults object and skipped `composer.push_cli` when
   the two were equal. For any configuration whose explicit CLI value equals its
   struct default, the entire CLI layer was discarded, so a lower file or
@@ -110,7 +110,7 @@ Observable success: a config file that sets `enabled = true` combined with
   `takes_value` cannot express "value is optional"; the docs IR version bumps
   and the schema mirror stays byte-for-byte aligned per ADR-003.
 - **Keep omitting `skip_serializing_if` for booleans.** `strip_nulls` already
-  removes `None`, so absence survives, while `Some(false)` must serialise as
+  removes `None`, so absence survives, while `Some(false)` must serialize as
   `false` to clear lower layers. Adding the skip hook would erase the
   distinction the ticket exists to create.
 
@@ -139,14 +139,14 @@ Observable success: a config file that sets `enabled = true` combined with
   the bare `--is-excited` spelling; each must be re-reviewed, not
   blind-accepted.
 - `arg_takes_value` in the localizer matches `ArgAction::Set | Append`, so a
-  value-taking boolean becomes localisable for `value_name`.
+  value-taking boolean becomes localizable for `value_name`.
 - Downstream struct-literal consumers of `CliMetadata` face a source break
   until roadmap item 13.1.1 (constructors) lands.
 
 ## Verification plan
 
 - M1: `cargo test -p ortho_config_macros` — attribute assertions for both
-  `bool` and `Option<bool>`, plus a figment check that `Some(false)` serialises
+  `bool` and `Option<bool>`, plus a figment check that `Some(false)` serializes
   to `false` and `None` yields no value.
 - M2: `ortho_config/tests/clap_integration/parsing.rs` rstest cases covering
   absent, `--flag`, `--flag=false`, file/env `true` with no flag (lower layer
