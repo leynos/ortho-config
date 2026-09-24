@@ -67,6 +67,10 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
+- Remove the published `ortho_config_test_helpers::figment` module and release
+  the helper crate as v0.10.0. The former Jail adapter could not satisfy the
+  pinned strict Clippy `result_large_err` rule; tests now use injectable
+  sources or local, fallible setup helpers.
 - Adopt `sha2` 0.11 in `cargo-orthohelp` and render cache digests through a new
   crate-internal lowercase hexadecimal encoder, because `sha2` 0.11 returns
   `hybrid_array::Array<u8, _>` from `finalize`, which no longer implements
