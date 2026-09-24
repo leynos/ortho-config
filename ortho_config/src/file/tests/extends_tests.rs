@@ -4,13 +4,13 @@ use super::super::extends::{get_extends, merge_parent, process_extends};
 use super::{to_anyhow, with_fresh_graph};
 use crate::result_ext::ResultIntoFigment;
 use anyhow::{Context, Result, anyhow, ensure};
+use cap_std::fs::Dir;
 use figment::{
     Figment,
     providers::{Format, Toml},
 };
 use rstest::rstest;
 use std::collections::HashSet;
-use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
@@ -88,10 +88,10 @@ fn expect_process_extends_failure<F>(
     expected_fragment: &str,
 ) -> Result<()>
 where
-    F: FnOnce(&Path) -> io::Result<String>,
+    F: FnOnce(&Dir) -> io::Result<String>,
 {
-    with_fresh_graph(|_j, root, current, visited, stack| {
-        let config = setup(root).map_err(|err| anyhow!(err))?;
+    with_fresh_graph(|dir, _root, current, visited, stack| {
+        let config = setup(dir).map_err(|err| anyhow!(err))?;
         let figment = Figment::from(Toml::string(&config));
         match process_extends(figment, current, visited, stack) {
             Ok(_) => Err(anyhow!(failure_message.to_owned())),
@@ -110,8 +110,8 @@ where
 #[case::relative(false)]
 #[case::absolute(true)]
 fn process_extends_handles_relative_and_absolute(#[case] is_abs: bool) -> Result<()> {
-    with_fresh_graph(|j, root, current, visited, stack| {
-        j.create_file("base.toml", "foo = \"base\"")?;
+    with_fresh_graph(|dir, root, current, visited, stack| {
+        dir.write("base.toml", b"foo = \"base\"")?;
         let config = if is_abs {
             format!("extends = '{}'", root.join("base.toml").display())
         } else {
@@ -150,22 +150,16 @@ fn process_extends_errors_when_no_parent() -> Result<()> {
 
 #[rstest]
 #[case::not_regular_file(
-    |root: &Path| {
-        let dir_path = root.join("dir");
-        if !dir_path.exists() {
-            fs::create_dir(&dir_path)?;
-        }
+    |root: &Dir| {
+        root.create_dir("dir")?;
         Ok("extends = \"dir\"".to_owned())
     },
     "expected process_extends to fail when base is not a regular file",
     "not a regular file"
 )]
 #[case::empty_extends(
-    |root: &Path| {
-        let base_path = root.join("base.toml");
-        if !base_path.exists() {
-            fs::write(&base_path, "")?;
-        }
+    |root: &Dir| {
+        root.write("base.toml", b"")?;
         Ok("extends = \"\"".to_owned())
     },
     "expected process_extends to fail when extends value is empty",
@@ -177,7 +171,7 @@ fn process_extends_error_cases<F>(
     #[case] expected_fragment: &str,
 ) -> Result<()>
 where
-    F: FnOnce(&Path) -> io::Result<String>,
+    F: FnOnce(&Dir) -> io::Result<String>,
 {
     expect_process_extends_failure(setup, failure_message, expected_fragment)
 }
