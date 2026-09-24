@@ -50,7 +50,8 @@ expression: snapshot
     "supported": false
   },
   "policy": {
-    "agent_native": "warn"
+    "agent_native": "warn",
+    "exceptions": []
   },
   "skill_manifests": []
 }
