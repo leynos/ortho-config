@@ -13,7 +13,7 @@ an opt-in policy loader. Review established that two objectives are still unmet:
    scope, so it does not load "all applicable files". #318 stays open.
 2. `ortho_config/tests/scoped_layers.rs::compose_layers_remains_first_wins`
    fails on Windows: it compares `MergeLayer::path` with the raw `TempDir`
-   path, while the loader stores the canonicalised path.
+   path, while the loader stores the canonicalized path.
 
 ## Rebase (done)
 
@@ -47,7 +47,7 @@ contributes once, at the lowest-precedence position it occupies.
    under the 400-line ceiling). `compose_scope` visits candidates in reverse,
    accumulates every successful chain, and keeps one per-scope terminal
    telemetry event naming the effective (highest-preference) winner.
-2. **Windows path assertion.** Add a shared canonicalising assertion helper in
+2. **Windows path assertion.** Add a shared canonicalizing assertion helper in
    `scoped_layers.rs`, apply it to both raw-path comparisons, and add fixture
    `value` assertions so first-wins and suppression stay independently verified.
 3. **Tests.** Same-scope multi-file regressions, plus the audited path helper.
@@ -61,9 +61,12 @@ contributes once, at the lowest-precedence position it occupies.
 
 - [x] Rebase onto `origin/main`, audited clean.
 - [x] Scope stacking loads every applicable candidate + tests + docs.
-- [x] Canonicalising path assertion helper + value assertions.
+- [x] Canonicalizing path assertion helper + value assertions.
 - [x] Deduplication case made non-vacuous (mutation-verified).
-- [ ] Local gates green.
+- [x] Lint findings cleared: private doc link, elided lifetime, `shadow_reuse`,
+      and `no_std_fs_operations` in the new fixture module.
+- [x] Local gates green: `check-fmt`, `lint`, `typecheck`, `test` (1144
+      passed, 0 failed), `markdownlint`, `nixie`.
 - [ ] Push; Windows CI reports full suite and coverage artefact.
 
 ## Implementation notes
@@ -89,6 +92,29 @@ Both new properties were verified against deliberate mutations. Replacing
 `scope_stacking_loads_every_applicable_location` and two others. The
 implementation was then restored from a byte copy.
 
+`tests/support/scoped_fixtures.rs` writes through a `cap_std::fs::Dir` handle
+because Whitaker's `no_std_fs_operations` denies `std::fs`. Since the tests
+need nested paths such as `user/demo/config.toml`, the helper opens the deepest
+ancestor that exists, creates the remainder relative to that handle, and writes
+at the *same* relative path. Writing the bare file name instead lands the file
+beside the directory just created — the failure mode is silent, so the first
+version of the rewrite produced "one file reachable from two scopes must
+contribute one layer, got 0" rather than a write error.
+
+Walking to the deepest existing ancestor is also what retires the lint
+exemption the branch previously carried. `c5fe33aa` moved these fixtures to
+`std::fs` and added `"scoped_layers"` to `dylint.toml`, because the helper it
+replaced rooted its capability at `Path::new("/")` and did
+`path.strip_prefix("/")` — which has no meaning for a drive-qualified Windows
+path. That root cause is gone, so the exemption was withdrawn rather than left
+in place: a suppression that outlives its reason hides the next regression.
+
+Note that the exemption never covered the new suite in the first place. The
+shared `#[path]` module is compiled into both test binaries, so the lint fired
+on `scoped_stacking` — which had no exemption — while `scoped_layers` was
+already excused. That asymmetry is why the failure looked like a missing
+exemption rather than a stale one.
+
 That audit later caught a vacuous test of my own. The first version of the
 deduplication case gave both scopes byte-identical path spellings, so it was
 candidate *assembly* (which keys on the literal `OsString`) that collapsed them;
@@ -100,9 +126,21 @@ with "got 2" while the other five pass — the mutation evidence this case
 previously lacked. A test that passes for a different reason than the one it
 names is worse than no test, because it retires the question.
 
-
 ## Lessons
 
+- `make spellcheck` regenerates `typos.toml` in place as a side effect, adding
+  13 ignore patterns for content that does not exist in this repository. Ten of
+  the thirteen match zero files here — vendor names, CSS property fragments,
+  and one misspelled identifier that the pattern preserves verbatim — and the
+  three that do match are a CLI colour-flag pattern, `HashiCorp`, and a test
+  helper name. The regeneration is deterministic and the gate passes with or
+  without it, so it is not a requirement of this change; the file was reverted
+  rather than committed as unrelated churn. The pinned builder (`v0.1.1`)
+  evidently draws on a shared base dictionary broader than this repository, and
+  the tracked copy predates that.
+- Quoting those patterns in this plan was itself a mistake: the misspelled
+  identifier tripped `spellcheck` in prose even though it is a literal from a
+  generated file. Describe such a token rather than reproducing it.
 - The SourceCoder review's "all applicable files" reading of #318 is correct and
   is the blocking objective, not an optional enhancement.
 - No conflicts existed on the rebase because the branch's `parse/mod.rs` edit
