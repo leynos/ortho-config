@@ -1,17 +1,15 @@
 //! Tests for ignore pattern handling across sources.
 use anyhow::{Result, anyhow, ensure};
-use ortho_config::OrthoConfig;
+use ortho_config::{MapEnv, OrthoConfig};
 use rstest::rstest;
 use serde::{Deserialize, Serialize};
 
-#[path = "test_utils.rs"]
-mod test_utils;
-use test_utils::with_jail;
+use std::sync::Arc;
 
 #[derive(Debug, Deserialize, Serialize, OrthoConfig)]
 struct IgnoreCfg {
     #[serde(default)]
-    #[ortho_config(merge_strategy = "append")]
+    #[ortho_config(default = Vec::<String>::new(), merge_strategy = "append")]
     ignore_patterns: Vec<String>,
 }
 
@@ -27,24 +25,24 @@ fn merges_ignore_patterns_matrix(
     #[case] cli: Option<&str>,
     #[case] expected: Vec<&str>,
 ) -> Result<()> {
-    with_jail(|j| {
-        if let Some(val) = env {
-            j.set_env("IGNORE_PATTERNS", val);
-        }
-        let mut args = vec!["prog"];
-        if let Some(val) = cli {
-            args.push("--ignore-patterns");
-            args.push(val.trim());
-        }
-        let cfg = IgnoreCfg::load_from_iter(args).map_err(|err| anyhow!(err))?;
-        let expected_vec: Vec<String> = expected.into_iter().map(str::to_owned).collect();
-        ensure!(
-            cfg.ignore_patterns == expected_vec,
-            "expected {:?}, got {:?}",
-            expected_vec,
-            cfg.ignore_patterns
-        );
-        Ok(())
-    })?;
+    let mut env_map = MapEnv::new();
+    if let Some(value) = env {
+        env_map.insert("IGNORE_PATTERNS", value);
+    }
+    let source = Arc::new(env_map);
+    let mut args = vec!["prog"];
+    if let Some(value) = cli {
+        args.push("--ignore-patterns");
+        args.push(value.trim());
+    }
+    let cfg = IgnoreCfg::load_from_iter_with_sources(args, source.clone(), source)
+        .map_err(|err| anyhow!(err))?;
+    let expected_vec: Vec<String> = expected.into_iter().map(str::to_owned).collect();
+    ensure!(
+        cfg.ignore_patterns == expected_vec,
+        "expected {:?}, got {:?}",
+        expected_vec,
+        cfg.ignore_patterns
+    );
     Ok(())
 }

@@ -1,12 +1,10 @@
 //! Tests for attribute handling in the derive macro.
 use anyhow::{Result, anyhow, ensure};
-use ortho_config::{OrthoConfig, ResultIntoFigment};
+use ortho_config::{MapEnv, OrthoConfig, ResultIntoFigment};
 use rstest::rstest;
 use serde::{Deserialize, Serialize};
 
-#[path = "test_utils.rs"]
-mod test_utils;
-use test_utils::with_jail;
+use std::sync::Arc;
 
 #[derive(Debug, Deserialize, Serialize, OrthoConfig)]
 struct CustomCli {
@@ -41,16 +39,15 @@ fn uses_custom_cli_long() -> Result<()> {
 
 #[rstest]
 fn env_prefix_is_used() -> Result<()> {
-    with_jail(|j| {
-        j.set_env("CFG_VALUE", "env");
-        let cfg = Prefixed::load_from_iter(["prog", "--value", "cli"]).to_figment()?;
-        ensure!(
-            cfg.value.as_deref() == Some("cli"),
-            "expected CLI value cli, got {:?}",
-            cfg.value
-        );
-        Ok(())
-    })?;
+    let source = Arc::new(MapEnv::new().with_var("CFG_VALUE", "env"));
+    let cfg =
+        Prefixed::load_from_iter_with_sources(["prog", "--value", "cli"], source.clone(), source)
+            .to_figment()?;
+    ensure!(
+        cfg.value.as_deref() == Some("cli"),
+        "expected CLI value cli, got {:?}",
+        cfg.value
+    );
     Ok(())
 }
 

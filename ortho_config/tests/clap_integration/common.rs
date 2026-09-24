@@ -1,15 +1,12 @@
 //! Shared types and helpers for the CLI integration tests.
 
 use anyhow::{Result, anyhow, ensure};
-use ortho_config::OrthoResult;
+use cap_std::{ambient_authority, fs::Dir};
+use ortho_config::{MapEnv, OrthoResult};
 use serde::{Deserialize, Serialize};
-use std::fmt;
+use std::{ffi::OsString, fmt, path::Path, sync::Arc};
 
 pub(crate) use ortho_config::{OrthoConfig, OrthoError};
-
-#[path = "../test_utils.rs"]
-mod test_utils;
-pub(crate) use test_utils::with_jail;
 
 #[path = "../clap_test_utils.rs"]
 mod clap_test_utils;
@@ -114,17 +111,48 @@ where
     T: OrthoConfig,
     F: FnOnce(&T) -> Result<()>,
 {
-    with_jail(|j| {
-        for (path, contents) in files {
-            j.create_file(path, contents)?;
+    let temp_dir = tempfile::tempdir()?;
+    let cap = Dir::open_ambient_dir(temp_dir.path(), ambient_authority())?;
+    for (path, contents) in files {
+        cap.write(path, contents.as_bytes())?;
+    }
+
+    // Keep explicit selectors and CLI paths pointed at their temporary files.
+    let fixture_path = |value: &str| -> OsString {
+        if Path::new(value).is_absolute() {
+            OsString::from(value)
+        } else {
+            temp_dir.path().join(value).into_os_string()
         }
-        for (key, value) in env {
-            j.set_env(key, value);
+    };
+    let mut env_map = MapEnv::new();
+    for (key, value) in env {
+        if *key == "CONFIG_PATH" {
+            env_map.insert(*key, fixture_path(value));
+        } else {
+            env_map.insert(*key, value);
         }
-        let config = T::load_from_iter(cli_args.iter().copied()).to_anyhow()?;
-        validate(&config)?;
-        Ok(config)
-    })
+    }
+    if files.iter().any(|(name, _)| *name == ".config.toml")
+        && !env.iter().any(|(name, _)| *name == "CONFIG_PATH")
+    {
+        env_map.insert("CONFIG_PATH", temp_dir.path().join(".config.toml"));
+    }
+    let mut args = Vec::with_capacity(cli_args.len());
+    let mut next_is_path = false;
+    for arg in cli_args {
+        let value = if next_is_path {
+            fixture_path(arg)
+        } else {
+            OsString::from(*arg)
+        };
+        next_is_path = matches!(value.to_str(), Some("--config-path" | "--config"));
+        args.push(value);
+    }
+    let source = Arc::new(env_map);
+    let config = T::load_from_iter_with_sources(args, source.clone(), source).to_anyhow()?;
+    validate(&config)?;
+    Ok(config)
 }
 
 pub(crate) fn assert_ortho_error<T, F>(
