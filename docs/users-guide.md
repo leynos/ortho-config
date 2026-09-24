@@ -194,6 +194,12 @@ variable supply it. Passing `--excited=false` always produces `false`, even
 when a higher-precedence source would otherwise be present. Use the explicit
 form when the intent is to override, and omission when the intent is to defer.
 
+An explicit value always wins over the lower layers, including when it happens
+to repeat the field's own default. `--port 8080` therefore overrides
+`ACME_PORT=9000`, just as `--excited=false` overrides `ACME_EXCITED=true`. Use
+omission, not a repeated default, when the intent is to let the lower layer
+supply the value.
+
 Every boolean field behaves this way, including `Option<bool>` fields. A field
 declared as `Option<bool>` distinguishes "no value was supplied anywhere" from
 an explicit `false`; the ambient merge described in
