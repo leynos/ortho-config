@@ -4,20 +4,20 @@
 
 Read this guide when adopting source-aware environment merging, parser-faithful
 clap string defaults, the optional-value boolean flags, or the Cargo
-external-subcommand helper. Existing callers can upgrade without changing
-their loading code: process-backed behaviour remains the default, and
-applications that do not use the Cargo helper require no changes.
+external-subcommand helper. Existing callers can upgrade without changing their
+loading code: process-backed behaviour remains the default, and applications
+that do not use the Cargo helper require no changes.
 
 ## Impact at a glance
 
-| Change                                    | Affects                            | Required?          |
-| ----------------------------------------- | ---------------------------------- | ------------------ |
-| Optional-value boolean flags              | Commands with `bool` CLI fields     | No; additive       |
-| Explicit CLI values always win            | Single-field configuration structs  | No; a defect fix   |
-| Documentation IR version `1.1` to `1.2`   | Consumers pinning the IR version    | No; accept `1.2`   |
-| Injected environment sources              | Tests needing hermetic environments | No; opt-in         |
-| Parser-faithful clap string defaults      | Fields using `cli_default_as_absent`| No; opt-in         |
-| Cargo external-subcommand helper          | Hand-built Cargo subcommands        | No; additive       |
+| Change                                  | Affects                              | Required?        |
+| --------------------------------------- | ------------------------------------ | ---------------- |
+| Optional-value boolean flags            | Commands with `bool` CLI fields      | No; additive     |
+| Explicit CLI values always win          | Single-field configuration structs   | No; a defect fix |
+| Documentation IR version `1.1` to `1.2` | Consumers pinning the IR version     | No; accept `1.2` |
+| Injected environment sources            | Tests needing hermetic environments  | No; opt-in       |
+| Parser-faithful clap string defaults    | Fields using `cli_default_as_absent` | No; opt-in       |
+| Cargo external-subcommand helper        | Hand-built Cargo subcommands         | No; additive     |
 
 ## Adopt the opt-in agent-native policy check
 
@@ -143,9 +143,9 @@ are supported by this guide.
 
 Generated boolean flags accept an optional `=<BOOL>` value. The bare flag and
 omitted flag keep their previous meanings, so the change is additive for every
-caller. Commands that pass a space-separated value are the exception: `--flag
-false` was never accepted and now fails with a clearer error, because the
-value must follow an `=`.
+caller. Commands that pass a space-separated value are the exception:
+`--flag false` was never accepted and now fails with a clearer error, because
+the value must follow an `=`.
 
 Before, a boolean flag could only express `true`, and a `true` from a
 configuration file or environment variable could not be cleared from the
@@ -168,31 +168,30 @@ $ app
 excited = true     # omission still defers
 ```
 
-Nothing needs changing to keep the old behaviour. Adopt the explicit form
-where a user needs to override a `true` that originates below the command
-line, and prefer omission when the intent is to defer. The same spelling
-applies to `Option<bool>` fields, which continue to distinguish "supplied
-nowhere" from an explicit `false`.
+Nothing needs changing to keep the old behaviour. Adopt the explicit form where
+a user needs to override a `true` that originates below the command line, and
+prefer omission when the intent is to defer. The same spelling applies to
+`Option<bool>` fields, which continue to distinguish "supplied nowhere" from an
+explicit `false`.
 
-Generated man pages and PowerShell help now print the `--flag[=<BOOL>]`
-form, and the documentation IR reports `CliMetadata.value_optional = true`
-alongside the `BOOL` value name and the `true`/`false` possible values. The
-IR version advances to `1.2`; consumers that pin the version should accept
-the new value. Older documents remain readable, because the field carries a
-serde default.
+Generated man pages and PowerShell help now print the `--flag[=<BOOL>]` form,
+and the documentation IR reports `CliMetadata.value_optional = true` alongside
+the `BOOL` value name and the `true`/`false` possible values. The IR version
+advances to `1.2`; consumers that pin the version should accept the new value.
+Older documents remain readable, because the field carries a serde default.
 
 ## Expect explicit CLI values to win
 
-An explicit command-line value now wins even when it equals the struct
-default. This corrects a layering defect: the generated guard compared the
-whole parsed CLI object against the whole defaults object and skipped the CLI
-layer when the two matched. A configuration whose command line restated its
-own default therefore discarded that layer, and a lower-precedence file or
-environment value silently won instead.
+An explicit command-line value now wins even when it equals the struct default.
+This corrects a layering defect: the generated guard compared the whole parsed
+CLI object against the whole defaults object and skipped the CLI layer when the
+two matched. A configuration whose command line restated its own default
+therefore discarded that layer, and a lower-precedence file or environment
+value silently won instead.
 
-The defect was invisible in most applications because any other differing
-field made the two objects unequal. It surfaced with single-field
-configurations, and generally whenever the user restated a default:
+The defect was invisible in most applications because any other differing field
+made the two objects unequal. It surfaced with single-field configurations, and
+generally whenever the user restated a default:
 
 ```plaintext
 # ACME_PORT=9000, struct default port = 8080
@@ -202,10 +201,10 @@ $ app --port 8080
 port = 8080        # after: the command line wins
 ```
 
-No migration is required. Applications that came to rely on the discarded
-value can restore the previous outcome by omitting the argument, which still
-defers to the file or environment layer and is the supported way to express
-that intent.
+No migration is required. Applications that came to rely on the discarded value
+can restore the previous outcome by omitting the argument, which still defers
+to the file or environment layer and is the supported way to express that
+intent.
 
 ## Adopt the Cargo external-subcommand helper
 

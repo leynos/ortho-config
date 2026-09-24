@@ -110,8 +110,7 @@ All notable changes to this project will be documented in this file.
   means `true`, and omitting the flag still leaves the field absent so lower
   layers win. The documentation IR reports the new surface through
   `CliMetadata.value_optional` and `ORTHO_DOCS_IR_VERSION` 1.2, and the roff
-  and PowerShell renderers print the `--flag[=<BOOL>]` form
-  (closes #444).
+  and PowerShell renderers print the `--flag[=<BOOL>]` form (closes #444).
 
 ### Changed (design)
 
@@ -122,13 +121,12 @@ All notable changes to this project will be documented in this file.
 ### Fixed
 
 - Keep the generated CLI layer when an explicit command-line value happens to
-  equal the struct default. The layering guard compared the whole sanitised
-  CLI object against the whole defaults object and skipped the CLI layer when
-  they matched, so for a single-field configuration an explicit `--flag=false`
-  or `--port 8080` was discarded and a lower-precedence file or environment
-  value silently won. The guard now asks clap's per-argument `value_source`,
-  which reports the command line independently of the parsed value
-  (closes #444).
+  equal the struct default. The layering guard compared the whole sanitised CLI
+  object against the whole defaults object and skipped the CLI layer when they
+  matched, so for a single-field configuration an explicit `--flag=false` or
+  `--port 8080` was discarded and a lower-precedence file or environment value
+  silently won. The guard now asks clap's per-argument `value_source`, which
+  reports the command line independently of the parsed value (closes #444).
 - Generate `compose_layers` and `compose_layers_from_iter` with
   `#[allow(dead_code, ...)]` rather than `#[expect(dead_code, ...)]`, so
   downstream `build.rs` files no longer need to allow

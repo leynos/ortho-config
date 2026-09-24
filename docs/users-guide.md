@@ -174,12 +174,12 @@ fn main() -> OrthoResult<()> {
 
 The three spellings behave as follows:
 
-| Command line   | File or environment | Result  | Why                                       |
-| -------------- | ------------------- | ------- | ----------------------------------------- |
-| *(omitted)*    | `excited = true`    | `true`  | The lower-precedence source still wins    |
-| `--excited`    | *(none)*            | `true`  | A bare flag means `true`                  |
-| `--excited=true` | *(none)*          | `true`  | The explicit spelling of the same value   |
-| `--excited=false` | `excited = true` | `false` | The command line clears the lower layer   |
+| Command line      | File or environment | Result  | Why                                     |
+| ----------------- | ------------------- | ------- | --------------------------------------- |
+| _(omitted)_       | `excited = true`    | `true`  | The lower-precedence source still wins  |
+| `--excited`       | _(none)_            | `true`  | A bare flag means `true`                |
+| `--excited=true`  | _(none)_            | `true`  | The explicit spelling of the same value |
+| `--excited=false` | `excited = true`    | `false` | The command line clears the lower layer |
 
 _Table 2: Boolean flag spellings and the resulting value._
 
