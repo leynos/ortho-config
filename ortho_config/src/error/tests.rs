@@ -107,10 +107,10 @@ fn try_aggregate_none_on_empty() {
 #[test]
 fn both_aggregate_behaviours() {
     run_aggregate_tests("try_aggregate", |v| {
-        OrthoError::try_aggregate(v).map_or_else(
-            || panic!("expected error aggregation to yield a value"),
-            |err| err,
-        )
+        let Some(err) = OrthoError::try_aggregate(v) else {
+            panic!("expected error aggregation to yield a value");
+        };
+        err
     });
     run_aggregate_tests("aggregate", OrthoError::aggregate);
 }
